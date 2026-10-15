@@ -38,6 +38,7 @@ import {
   type StaffState,
   scanAction,
   searchLocal,
+  serverReport,
 } from "./model";
 import { type SqlDb, StaffStore } from "./store";
 import {
@@ -609,5 +610,26 @@ describe("file hors ligne puis synchro (SQLite)", () => {
     await store.setTrustedKeys([{ kid: 1, publicKey: newKey(1).publicKey, retiredAt: null }]);
     await store.setTrustedKeys([{ kid: 2, publicKey: newKey(2).publicKey, retiredAt: null }]);
     expect((await store.trustedKeys()).map((k) => k.kid)).toEqual([2]);
+  });
+});
+
+describe("rapport des réponses du serveur", () => {
+  it("regroupe par véhicule les doublons et les refus, sans les éléments refusés après le règlement", () => {
+    const at = "2026-10-15T09:00:00.000Z";
+    const sent = (id: string, payload: PendingAction["payload"], result: Record<string, unknown>) => ({
+      ...action(id, payload, at),
+      sentAt: at,
+      result,
+    });
+    const r = serverReport([
+      sent(uuid(1), { kind: "scan", passId: uuid(5) }, { result: "duplicate_same_device", checkedInAt: at }),
+      sent(uuid(2), { kind: "scan", passId: uuid(5) }, { result: "duplicate_other_device", checkedInAt: at }),
+      sent(uuid(3), { kind: "scan", passId: null, scannedAt: at }, { result: "rejected" }),
+      sent(uuid(4), { kind: "scan", passId: uuid(6) }, { result: "unknown" }),
+      sent(uuid(6), { kind: "manual", applicationId: uuid(9) }, { result: "rejected", reason: "settled" }),
+      sent(uuid(7), { kind: "scan", passId: uuid(8) }, { result: "accepted" }),
+    ]);
+    expect(r.duplicates).toMatchObject([{ passId: uuid(5), count: 2, otherDevice: true }]);
+    expect(r.refused.map((l) => l.result)).toEqual(["rejected", "unknown"]);
   });
 });

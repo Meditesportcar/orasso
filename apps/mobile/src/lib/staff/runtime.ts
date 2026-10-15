@@ -122,6 +122,13 @@ export async function syncEvent(eventId: string, userId: string, full = false): 
             : "Signature de la liste invalide : synchro refusée, la liste du téléphone reste en place.",
       };
     }
+    // Fermé à J+1 : l'API sert encore la liste jusqu'au règlement (J+2), le téléphone ne la garde plus.
+    if (isPurgeDue(sync.event, new Date())) {
+      await store.purgeEvent(eventId);
+      states.delete(eventId);
+      emit();
+      return { ok: false, message: "Mode staff fermé depuis J+1 : la liste n'est plus gardée sur le téléphone." };
+    }
     const merged = mergeSync(
       previous ? { meta: previous, entries: await store.entries(eventId) } : null,
       sync,
@@ -252,22 +259,19 @@ async function doFlush(userId: string) {
       continue;
     }
     try {
-      const { results } = await api.sendScans(eventId, {
-        deviceId: device,
-        items: batch.map((a) => a.payload as BatchItemWire),
-      });
-      const state = states.get(eventId);
-      const { effects, missing } = applyResults(batch, results, (appId) => state?.byApplication.get(appId));
-      await store.markSent(eventId, effects, new Date());
-      if (missing.length) await store.markFailed(missing, "Sans réponse du serveur", later);
-      if (state) {
-        state.local = new Map((await store.localCheckins(eventId)).map((l) => [l.passId, l]));
-      }
+      await sendBatch(store, eventId, device, batch);
     } catch (error) {
       const e = error instanceof ApiRequestError ? error : null;
       if (e?.status === 401) return; // Session expirée : la file attend la reconnexion.
       // Appareil inconnu (révoqué, autre base) : réenregistré au prochain essai.
-      if (e?.status === 400 && /appareil/i.test(e.message)) await kvDel(deviceKey(userId));
+      if (e?.status === 400 && /appareil/i.test(e.message)) {
+        await kvDel(deviceKey(userId));
+      } else if (e?.status === 400) {
+        // Lot refusé en bloc (un élément illisible) : chaque élément part seul ; celui que l'API refuse sort de la
+        // file avec son erreur, visible au rapport, sans bloquer les autres.
+        await sendOneByOne(store, eventId, device, batch);
+        continue;
+      }
       await store.markFailed(
         batch.map((a) => a.id),
         e?.isNetwork ? "Pas de réseau" : (e?.message ?? "Erreur d'envoi"),
@@ -275,7 +279,6 @@ async function doFlush(userId: string) {
       );
     }
   }
-
   for (const action of unsent) {
     if (BATCH_KINDS.includes(action.kind) || Date.parse(action.nextAttemptAt) > now.getTime()) continue;
     await sendOther(store, action);
@@ -283,8 +286,39 @@ async function doFlush(userId: string) {
   emit();
 }
 
+/** Un lot `POST /events/:id/scans` (idempotent) et sa réponse : file et pointages locaux alignés sur le serveur. */
+async function sendBatch(store: Store, eventId: string, device: string, batch: PendingAction[]) {
+  const { results } = await api.sendScans(eventId, {
+    deviceId: device,
+    items: batch.map((a) => a.payload as BatchItemWire),
+  });
+  const state = states.get(eventId);
+  const { effects, missing } = applyResults(batch, results, (appId) => state?.byApplication.get(appId));
+  await store.markSent(eventId, effects, new Date());
+  if (missing.length) await store.markFailed(missing, "Sans réponse du serveur", later);
+  if (state) state.local = new Map((await store.localCheckins(eventId)).map((l) => [l.passId, l]));
+}
+
+async function sendOneByOne(store: Store, eventId: string, device: string, batch: PendingAction[]) {
+  for (const action of batch) {
+    try {
+      await sendBatch(store, eventId, device, [action]);
+    } catch (error) {
+      const e = error instanceof ApiRequestError ? error : null;
+      if (e?.status === 401) return;
+      if (e?.status === 400) {
+        await store.markSent(eventId, [{ id: action.id, result: { error: e.message, status: 400 } }], new Date());
+      } else {
+        await store.markFailed([action.id], e?.isNetwork ? "Pas de réseau" : (e?.message ?? "Erreur d'envoi"), later);
+      }
+    }
+  }
+}
+
 /** Présence, inscription express, incident, alerte : une requête chacune (incident et alerte idempotents). */
-async function sendOther(store: Awaited<ReturnType<typeof staffStore>>, action: PendingAction) {
+type Store = Awaited<ReturnType<typeof staffStore>>;
+
+async function sendOther(store: Store, action: PendingAction) {
   const p = action.payload;
   try {
     let result: Record<string, unknown> = { ok: true };

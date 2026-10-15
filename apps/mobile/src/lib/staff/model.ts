@@ -469,3 +469,63 @@ export function applyResults(
 
 export const isDuplicate = (r: { result?: unknown } | null | undefined) =>
   r?.result === "duplicate_same_device" || r?.result === "duplicate_other_device";
+
+export type ReportLine = {
+  key: string;
+  passId: string | null;
+  applicationId: string | null;
+  /** Doublon : heure d'entrée retenue par le serveur ; refus : heure de la lecture. */
+  at: string | null;
+  otherDevice: boolean;
+  result: string;
+  count: number;
+};
+
+/**
+ * Rapport des réponses du serveur, une ligne par véhicule (un QR relu dix fois n'occupe qu'une ligne « ×10 ») :
+ * doublons (déjà entré, ici ou sur un autre téléphone) et lectures refusées ou inconnues du serveur (hors `settled`).
+ */
+export function serverReport(actions: readonly PendingAction[]): { duplicates: ReportLine[]; refused: ReportLine[] } {
+  const group = (list: PendingAction[], at: (a: PendingAction) => string | null) => {
+    const lines = new Map<string, ReportLine>();
+    for (const a of list) {
+      const passId = typeof a.payload.passId === "string" ? a.payload.passId : null;
+      const applicationId =
+        typeof a.payload.applicationId === "string"
+          ? a.payload.applicationId
+          : typeof a.result?.applicationId === "string"
+            ? a.result.applicationId
+            : null;
+      const key = passId ?? applicationId ?? a.id;
+      const line = lines.get(key);
+      if (line) {
+        line.count++;
+        line.otherDevice ||= a.result?.result === "duplicate_other_device";
+        continue;
+      }
+      lines.set(key, {
+        key,
+        passId,
+        applicationId,
+        at: at(a),
+        otherDevice: a.result?.result === "duplicate_other_device",
+        result: String(a.result?.result ?? ""),
+        count: 1,
+      });
+    }
+    return [...lines.values()];
+  };
+  const sent = actions.filter((a) => a.sentAt && a.result);
+  return {
+    duplicates: group(
+      sent.filter((a) => isDuplicate(a.result)),
+      (a) => (typeof a.result?.checkedInAt === "string" ? a.result.checkedInAt : null),
+    ),
+    refused: group(
+      sent.filter(
+        (a) => (a.result?.result === "rejected" && a.result?.reason !== "settled") || a.result?.result === "unknown",
+      ),
+      (a) => (typeof a.payload.scannedAt === "string" ? a.payload.scannedAt : a.createdAt),
+    ),
+  };
+}

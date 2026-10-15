@@ -13,7 +13,7 @@ import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock } from "@/features/staff/result";
 import { api } from "@/lib/endpoints";
 import { formatDayHour } from "@/lib/format";
-import { counters, isDuplicate } from "@/lib/staff/model";
+import { counters, serverReport } from "@/lib/staff/model";
 import { flushNow, record, syncEvent } from "@/lib/staff/runtime";
 import { useStaffActions, useStaffEvent } from "@/lib/staff/useStaff";
 import { useApi } from "@/lib/useApi";
@@ -71,8 +71,7 @@ export default function StaffHome() {
   }, [userId, state, online, closed]);
 
   const pending = actions.filter((a) => !a.sentAt);
-  const duplicates = actions.filter((a) => isDuplicate(a.result));
-  const refusedByServer = actions.filter((a) => a.result?.result === "rejected" && a.result?.reason !== "settled");
+  const { duplicates, refused: refusedByServer } = serverReport(actions);
   const failed = actions.filter((a) => a.result && typeof a.result.error === "string");
   const count = state ? counters(state) : null;
   const roles = state?.meta.myRoles ?? mine?.roles ?? [];
@@ -230,17 +229,18 @@ export default function StaffHome() {
         <>
           <SectionTitle>Rapport · réponses du serveur</SectionTitle>
           <Plate style={styles.block}>
-            {duplicates.map((a) => (
-              <Text key={a.id} variant="body" color={c.plateInk}>
-                Doublon · {pseudoOf(a.payload.passId, a.payload.applicationId) ?? "véhicule"} déjà entré à{" "}
-                {typeof a.result?.checkedInAt === "string" ? clock(a.result.checkedInAt) : "—"}
-                {a.result?.result === "duplicate_other_device" ? " (autre téléphone)" : ""}
+            {duplicates.map((l) => (
+              <Text key={l.key} variant="body" color={c.plateInk}>
+                Doublon · {pseudoOf(l.passId, l.applicationId) ?? "véhicule"} déjà entré à {l.at ? clock(l.at) : "—"}
+                {l.otherDevice ? " (autre téléphone)" : ""}
+                {l.count > 1 ? ` · ×${l.count}` : ""}
               </Text>
             ))}
-            {refusedByServer.map((a) => (
-              <Text key={a.id} variant="body" color={c.plateInk}>
-                Refusé par le serveur · {pseudoOf(a.payload.passId, a.payload.applicationId) ?? "QR"} ·{" "}
-                {clock(String(a.payload.scannedAt ?? a.createdAt))}
+            {refusedByServer.map((l) => (
+              <Text key={l.key} variant="body" color={c.plateInk}>
+                {l.result === "unknown" ? "Inconnu du serveur" : "Refusé par le serveur"} ·{" "}
+                {pseudoOf(l.passId, l.applicationId) ?? "QR"} · {l.at ? clock(l.at) : "—"}
+                {l.count > 1 ? ` · ×${l.count}` : ""}
               </Text>
             ))}
             {failed.map((a) => (

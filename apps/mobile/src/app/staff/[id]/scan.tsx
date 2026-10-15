@@ -31,7 +31,6 @@ import { ed25519Verify } from "@/lib/staff/crypto";
 import { counters, decideLocal, ScanGate } from "@/lib/staff/model";
 import { newId, record, trustedKeysNow } from "@/lib/staff/runtime";
 import { useStaffEvent } from "@/lib/staff/useStaff";
-import { Muted } from "@/ui/Muted";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -182,9 +181,9 @@ export default function Scan() {
             <Text variant="bodyStrong" color={c.plateInk}>
               {localScanDecisionLabels.unknown_pass}
             </Text>
-            <Muted variant="meta">
+            <Text variant="meta" color={c.plateMuted}>
               QR signé d'Orasso, absent de la liste du téléphone (inscription express d'un collègue ?).
-            </Muted>
+            </Text>
             <View style={styles.row}>
               <Button
                 variant="plate"
