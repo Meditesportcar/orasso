@@ -113,7 +113,7 @@ describe("QR d'inscription", () => {
     expect(second.passId).not.toBe(first.passId);
     expect(second.payload).not.toBe(first.payload);
     const rows = await db.query.accessPasses.findMany({ where: eq(accessPasses.applicationId, applicationId) });
-    expect(rows.map((r) => r.revokedReason).sort()).toEqual([null, "replaced"]);
+    expect(rows.map((r) => r.revokedReason).sort()).toEqual([null, "refused"]);
   });
 
   it("annulation de l'événement : QR révoqués", async () => {

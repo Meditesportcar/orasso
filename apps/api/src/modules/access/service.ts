@@ -1,6 +1,6 @@
 // QR d'inscription (ARCHITECTURE.md § 3.1) : émis quand une candidature est retenue, révoqué (jamais supprimé) quand
 // elle ne l'est plus. Pas de nouveau QR après un scan : un pass n'est remplacé que si la candidature, révoquée, est
-// retenue de nouveau (correction de l'organisateur) ; l'ancien passe alors à `replaced`.
+// retenue de nouveau (correction de l'organisateur) ; l'ancien garde son motif. `replaced` : pass valide remplacé (clé révoquée).
 import { randomUUID } from "node:crypto";
 import { encodePassMessage, encodePassPayload, type PassRevokedReason } from "@orasso/shared";
 import { and, desc, eq, isNull } from "drizzle-orm";
@@ -38,8 +38,8 @@ export const accessService = {
     const { kid, signature } = signing.sign(
       encodePassMessage({ kid: signing.activeKid, eventNo: event.eventNo, passId: id }),
     );
-    // Les pass révoqués de cette candidature sont remplacés par celui-ci.
-    await tx.update(accessPasses).set({ revokedReason: "replaced" }).where(eq(accessPasses.applicationId, app.id));
+    // Les pass déjà révoqués gardent leur motif (historique) ; `replaced` ne sert qu'à un pass valide remplacé
+    // (réémission après la révocation d'une clé).
     const [row] = await tx
       .insert(accessPasses)
       .values({ id, applicationId: app.id, eventId: app.eventId, userId: app.userId, kid, signature, issuedAt: now() })
