@@ -1,9 +1,8 @@
-// Clés de confiance du mode staff (relecture du lot 06, point M9). La signature de la liste synchronisée n'est jamais
-// vérifiée avec les clés livrées dans la même réponse : elle l'est avec les clés de confiance de l'appareil, qui
-// viennent de `GET /api/keys` (appel séparé, en ligne, avec la session du staff) et, si le build en embarque, de la
-// liste épinglée `EXPO_PUBLIC_QR_TRUSTED_KEYS` (seules ces clés sont alors acceptées). La clé de démonstration
-// `kid 0` n'est acceptée que par un build qui parle à une API locale (http://localhost, réseau privé) : jamais par
-// un build qui pointe vers https://dev.orasso.fr ou la production. Fonctions pures, testées dans staff.test.ts.
+// Clés de confiance du mode staff (relecture du lot 06, point M9, et du lot 10). La signature de la liste synchronisée
+// n'est jamais vérifiée avec les clés livrées dans la même réponse. Build vers une API en ligne : seules les clés
+// épinglées au build (`EXPO_PUBLIC_QR_TRUSTED_KEYS`) comptent, `GET /api/keys` peut seulement en retirer une révoquée ;
+// sans clé épinglée, rien n'est accepté. Build vers une API locale (développement) : clés apprises de `/api/keys`,
+// clé de démonstration `kid 0` comprise. Fonctions pures, testées dans staff.test.ts.
 import { accessListSigningText, base64UrlDecode, type StaffSync } from "@orasso/shared";
 
 import { DEMO_PUBLIC_KEY, ed25519Verify, sha256Text } from "./crypto";
@@ -64,35 +63,70 @@ function validKey(kid: number, publicKey: string): boolean {
 
 export const isDemoKey = (k: { kid: number; publicKey: string }) => k.kid === 0 || k.publicKey === DEMO_PUBLIC_KEY;
 
-export type TrustUpdate = { ok: true; keys: TrustedKey[] } | { ok: false; reason: "key_changed"; kid: number };
+type PublicKeyRef = { kid: number; publicKey: string };
+
+export type TrustUpdate =
+  | { ok: true; keys: TrustedKey[]; revoked: PublicKeyRef[] }
+  | { ok: false; reason: "key_changed"; kid: number };
+
+const samePair = (a: PublicKeyRef, b: PublicKeyRef) => a.kid === b.kid && a.publicKey === b.publicKey;
 
 /**
- * Nouvel ensemble de clés de confiance à partir de `GET /api/keys` : clés valides, sans la clé de démonstration
- * (sauf API locale), limitées aux clés épinglées s'il y en a. Il remplace l'ancien (une clé révoquée par l'API, donc
- * absente de `/api/keys`, cesse d'être acceptée). Une clé connue dont le `kid` changerait de valeur fait tout
- * refuser (l'API elle-même refuse de démarrer dans ce cas : c'est une attaque ou une erreur de configuration).
+ * Le build peut-il faire confiance à une clé ? API locale (développement) : oui, apprise de `/api/keys`. API en ligne :
+ * seulement avec des clés épinglées au build (relecture du lot 10 : un build vers dev.orasso.fr ou la production sans
+ * `EXPO_PUBLIC_QR_TRUSTED_KEYS` refuse tout, le mode staff le dit).
+ */
+export const hasTrustAnchor = (policy: TrustPolicy) => policy.allowDemo || (policy.pins?.length ?? 0) > 0;
+
+/** Clés épinglées encore valables (celles que `/api/keys` a cessé de servir sont révoquées pour de bon). */
+export function pinnedKeys(policy: TrustPolicy, revoked: readonly PublicKeyRef[]): TrustedKey[] {
+  return (policy.pins ?? [])
+    .filter((p) => !revoked.some((r) => samePair(r, p)) && (policy.allowDemo || !isDemoKey(p)))
+    .map((p) => ({ kid: p.kid, publicKey: p.publicKey, retiredAt: null }));
+}
+
+/**
+ * Nouvel ensemble de clés de confiance après `GET /api/keys`.
+ * - Clés épinglées : `/api/keys` ne peut qu'en retirer (une clé épinglée qu'il ne sert plus est révoquée, et le reste),
+ *   jamais en ajouter.
+ * - Sans épinglage, API locale : les clés servies (démonstration comprise) remplacent l'ensemble ; une clé connue dont
+ *   le `kid` changerait de valeur fait tout refuser (l'API elle-même refuse de démarrer dans ce cas).
+ * - Sans épinglage, API en ligne : aucune clé.
  */
 export function nextTrustedKeys(
   current: readonly TrustedKey[],
   served: readonly { kid: number; publicKey: string; retiredAt?: string | null }[],
   policy: TrustPolicy,
+  alreadyRevoked: readonly PublicKeyRef[] = [],
 ): TrustUpdate {
+  const valid = served.filter((k) => validKey(k.kid, k.publicKey));
+  if (policy.pins?.length) {
+    const pins = pinnedKeys(policy, alreadyRevoked);
+    for (const p of pins) {
+      const other = valid.find((k) => k.kid === p.kid && k.publicKey !== p.publicKey);
+      if (other) return { ok: false, reason: "key_changed", kid: p.kid };
+    }
+    const keys = pins.filter((p) => valid.some((k) => samePair(k, p)));
+    const revoked = pins
+      .filter((p) => !keys.some((k) => samePair(k, p)))
+      .map(({ kid, publicKey }) => ({ kid, publicKey }));
+    return { ok: true, keys, revoked };
+  }
+  if (!policy.allowDemo) return { ok: true, keys: [], revoked: [] };
   const keys: TrustedKey[] = [];
-  for (const k of served) {
-    if (!validKey(k.kid, k.publicKey)) continue;
-    if (isDemoKey(k) && !policy.allowDemo) continue;
-    if (policy.pins && !policy.pins.some((p) => p.kid === k.kid && p.publicKey === k.publicKey)) continue;
+  for (const k of valid) {
     const known = current.find((c) => c.kid === k.kid);
     if (known && known.publicKey !== k.publicKey) return { ok: false, reason: "key_changed", kid: k.kid };
     if (keys.some((x) => x.kid === k.kid)) continue;
     keys.push({ kid: k.kid, publicKey: k.publicKey, retiredAt: k.retiredAt ?? null });
   }
-  return { ok: true, keys };
+  return { ok: true, keys, revoked: [] };
 }
-
 /** kid → clé de 32 octets, pour `decideScan` et la vérification de la liste. */
 export function keyMap(keys: readonly TrustedKey[], policy: TrustPolicy): Map<number, Uint8Array> {
   const map = new Map<number, Uint8Array>();
+  // Build en ligne sans clé épinglée : aucune clé, quoi qu'il y ait en base.
+  if (!hasTrustAnchor(policy)) return map;
   for (const k of keys) {
     // Défense en profondeur : même stockée, la clé de démonstration ne sert jamais hors API locale.
     if (isDemoKey(k) && !policy.allowDemo) continue;

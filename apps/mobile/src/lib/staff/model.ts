@@ -38,6 +38,11 @@ export type StaffEventMeta = {
   generatedAt: string;
   /** Heure de l'appareil à la dernière synchro réussie (« Liste à jour 09:48 »). */
   syncedAt: string;
+  /**
+   * Écart estimé heure du serveur − heure du téléphone à la dernière synchro (`generatedAt` − réception), en ms :
+   * un téléphone en avance ne purge pas la liste le jour J (relecture du lot 10).
+   */
+  serverOffsetMs?: number;
 };
 
 export type LocalCheckinMethod = "scan" | "override" | "manual" | "plate";
@@ -120,7 +125,7 @@ export function buildState(
 
 export type SyncMerge =
   | { ok: true; meta: StaffEventMeta; entries: AccessListEntry[]; full: boolean }
-  | { ok: false; reason: "stale" };
+  | { ok: false; reason: "stale" | "needs_full" };
 
 /**
  * Fusion d'une synchro (déjà vérifiée) avec la liste locale. Complète (`full`) : remplace tout. Différentielle :
@@ -140,6 +145,11 @@ export function mergeSync(
   ) {
     return { ok: false, reason: "stale" };
   }
+  // Rôles changés (super staff retiré : coordonnées à effacer) : une différentielle ne suffit pas, il faut tout remplacer.
+  const sameRoles =
+    previous !== null && [...previous.meta.myRoles].sort().join(",") === [...sync.myRoles].sort().join(",");
+  if (previous && previous.meta.userId === userId && !sync.full && !sameRoles)
+    return { ok: false, reason: "needs_full" };
   const keepPrevious = previous && previous.meta.userId === userId && !sync.full;
   const map = new Map<string, AccessListEntry>();
   if (keepPrevious) for (const e of previous.entries) map.set(e.passId, e);
@@ -160,13 +170,19 @@ export function mergeSync(
     cursor: keepPrevious || sync.full ? sync.cursor : null,
     generatedAt: sync.generatedAt,
     syncedAt: now.toISOString(),
+    serverOffsetMs: Date.parse(sync.generatedAt) - now.getTime(),
   };
   return { ok: true, meta, entries: [...map.values()], full: sync.full || !keepPrevious };
 }
 
-/** Mode staff refermé à J+1 (fin + 1 jour, comme l'API) : tout est purgé sauf les actions non envoyées. */
-export function isPurgeDue(meta: Pick<StaffEventMeta, "endsAt">, now: Date): boolean {
-  return now >= staffModeClosesAt({ endsAt: new Date(meta.endsAt) });
+/**
+ * Mode staff refermé à J+1 (fin + 1 jour, comme l'API) : tout est purgé sauf les actions non envoyées. Il faut que
+ * l'heure du téléphone **et** l'heure du serveur estimée (`serverOffsetMs`) soient toutes deux passées : un téléphone
+ * en avance ne vide pas la liste le jour J.
+ */
+export function isPurgeDue(meta: Pick<StaffEventMeta, "endsAt" | "serverOffsetMs">, now: Date): boolean {
+  const closes = staffModeClosesAt({ endsAt: new Date(meta.endsAt) }).getTime();
+  return now.getTime() >= closes && now.getTime() + (meta.serverOffsetMs ?? 0) >= closes;
 }
 
 // --- Scan ------------------------------------------------------------------------------------------------------

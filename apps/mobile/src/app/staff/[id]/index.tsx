@@ -14,7 +14,7 @@ import { clock } from "@/features/staff/result";
 import { api } from "@/lib/endpoints";
 import { formatDayHour } from "@/lib/format";
 import { counters, serverReport } from "@/lib/staff/model";
-import { flushNow, record, syncEvent } from "@/lib/staff/runtime";
+import { flushNow, record, syncEvent, TRUST_MISSING } from "@/lib/staff/runtime";
 import { useStaffActions, useStaffEvent } from "@/lib/staff/useStaff";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
@@ -120,6 +120,7 @@ export default function StaffHome() {
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {TRUST_MISSING ? <Notice tone="error">{TRUST_MISSING}</Notice> : null}
       {closed ? (
         <Notice>Mode staff fermé depuis J+1 : la liste et les coordonnées ont été effacées de ce téléphone.</Notice>
       ) : null}

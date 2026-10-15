@@ -42,10 +42,12 @@ import {
 } from "./model";
 import { type SqlDb, StaffStore } from "./store";
 import {
+  hasTrustAnchor,
   isLocalApi,
   keyMap,
   nextTrustedKeys,
   parsePins,
+  pinnedKeys,
   type TrustPolicy,
   trustPolicy,
   verifyStaffSync,
@@ -142,6 +144,8 @@ function syncBody(
 }
 
 const LOCAL: TrustPolicy = trustPolicy("http://localhost:3101", undefined);
+/** Build en ligne avec la clé du serveur épinglée (cas d'un APK vers dev.orasso.fr). */
+const pinnedTo = (k: Key): TrustPolicy => ({ allowDemo: false, pins: [{ kid: k.kid, publicKey: k.publicKey }] });
 const ONLINE: TrustPolicy = trustPolicy("https://dev.orasso.fr", undefined);
 
 function stateWith(entries: AccessListEntry[]): StaffState {
@@ -188,28 +192,30 @@ describe("clés de confiance", () => {
     expect(isLocalApi("http://8.8.8.8")).toBe(false);
   });
 
-  it("refuse la clé de démonstration kid 0 pour un build qui pointe vers dev.orasso.fr", () => {
+  it("refuse toute clé à un build en ligne sans clé épinglée, la démo kid 0 comprise", () => {
     const demo = demoKey();
     const real = newKey(1);
     const served = [
       { kid: 0, publicKey: demo.publicKey, retiredAt: null },
       { kid: 1, publicKey: real.publicKey, retiredAt: null },
     ];
-    const online = nextTrustedKeys([], served, ONLINE);
-    expect(online.ok && online.keys.map((k) => k.kid)).toEqual([1]);
-    // Même la clé de démonstration servie sous un autre kid est refusée.
-    const disguised = nextTrustedKeys([], [{ kid: 9, publicKey: demo.publicKey, retiredAt: null }], ONLINE);
-    expect(disguised.ok && disguised.keys).toEqual([]);
-    // Et une clé de démonstration déjà stockée ne sert jamais hors API locale.
-    expect(keyMap([{ kid: 0, publicKey: demo.publicKey, retiredAt: null }], ONLINE).size).toBe(0);
+    expect(hasTrustAnchor(ONLINE)).toBe(false);
+    expect(nextTrustedKeys([], served, ONLINE)).toEqual({ ok: true, keys: [], revoked: [] });
+    expect(keyMap([{ kid: 1, publicKey: real.publicKey, retiredAt: null }], ONLINE).size).toBe(0);
+    // Épinglée par erreur, la clé de démonstration reste refusée hors API locale.
+    const pinnedDemo: TrustPolicy = { allowDemo: false, pins: [{ kid: 0, publicKey: demo.publicKey }] };
+    expect(keyMap([{ kid: 0, publicKey: demo.publicKey, retiredAt: null }], pinnedDemo).size).toBe(0);
+    expect(pinnedKeys(pinnedDemo, [])).toEqual([]);
     const local = nextTrustedKeys([], served, LOCAL);
     expect(local.ok && local.keys.map((k) => k.kid)).toEqual([0, 1]);
   });
 
-  it("n'accepte que les clés épinglées au build quand il y en a", () => {
+  it("clés épinglées : valables sans /api/keys, qui peut en retirer une révoquée mais jamais en ajouter", () => {
     const pinned = newKey(1);
     const other = newKey(2);
     const policy: TrustPolicy = { allowDemo: false, pins: parsePins(JSON.stringify([pinned])) };
+    expect(hasTrustAnchor(policy)).toBe(true);
+    expect(pinnedKeys(policy, []).map((k) => k.kid)).toEqual([1]);
     const r = nextTrustedKeys(
       [],
       [
@@ -219,27 +225,36 @@ describe("clés de confiance", () => {
       policy,
     );
     expect(r.ok && r.keys.map((k) => k.kid)).toEqual([1]);
+    // L'API ne sert plus la clé épinglée : révoquée, et elle le reste même si elle réapparaît.
+    const gone = nextTrustedKeys([], [{ kid: 2, publicKey: other.publicKey, retiredAt: null }], policy);
+    expect(gone).toEqual({ ok: true, keys: [], revoked: [{ kid: 1, publicKey: pinned.publicKey }] });
+    if (!gone.ok) return;
+    expect(pinnedKeys(policy, gone.revoked)).toEqual([]);
+    const back = nextTrustedKeys([], [{ kid: 1, publicKey: pinned.publicKey, retiredAt: null }], policy, gone.revoked);
+    expect(back.ok && back.keys).toEqual([]);
+    // Même kid, autre valeur servie : refus.
+    const swapped = nextTrustedKeys([], [{ kid: 1, publicKey: other.publicKey, retiredAt: null }], policy);
+    expect(swapped).toEqual({ ok: false, reason: "key_changed", kid: 1 });
     // Liste épinglée illisible : rien n'est accepté (fermé par défaut).
     expect(parsePins("pas du json")).toEqual([]);
     expect(parsePins(undefined)).toBeNull();
   });
 
-  it("oublie une clé révoquée (absente de /api/keys) et refuse qu'un kid change de clé", () => {
+  it("API locale : oublie une clé révoquée (absente de /api/keys) et refuse qu'un kid change de clé", () => {
     const k1 = newKey(1);
     const k2 = newKey(2);
     const current = [
       { kid: 1, publicKey: k1.publicKey, retiredAt: null },
       { kid: 2, publicKey: k2.publicKey, retiredAt: null },
     ];
-    const revoked = nextTrustedKeys(current, [{ kid: 2, publicKey: k2.publicKey, retiredAt: null }], ONLINE);
+    const revoked = nextTrustedKeys(current, [{ kid: 2, publicKey: k2.publicKey, retiredAt: null }], LOCAL);
     expect(revoked.ok && revoked.keys.map((k) => k.kid)).toEqual([2]);
-    const swapped = nextTrustedKeys(current, [{ kid: 1, publicKey: newKey(1).publicKey, retiredAt: null }], ONLINE);
+    const swapped = nextTrustedKeys(current, [{ kid: 1, publicKey: newKey(1).publicKey, retiredAt: null }], LOCAL);
     expect(swapped).toEqual({ ok: false, reason: "key_changed", kid: 1 });
   });
-
   it("vérifie la liste avec les clés de confiance, jamais avec celles de la réponse", () => {
     const server = newKey(1);
-    const trusted = keyMap([{ kid: 1, publicKey: server.publicKey, retiredAt: null }], ONLINE);
+    const trusted = keyMap([{ kid: 1, publicKey: server.publicKey, retiredAt: null }], pinnedTo(server));
     const good = signedSync(server, syncBody([entry(1)]));
     expect(verifyStaffSync(good, EVENT_ID, trusted)).toEqual({ ok: true });
 
@@ -268,7 +283,7 @@ describe("clés de confiance", () => {
 
 describe("décision d'un scan hors ligne", () => {
   const server = newKey(1);
-  const keys = keyMap([{ kid: 1, publicKey: server.publicKey, retiredAt: null }], ONLINE);
+  const keys = keyMap([{ kid: 1, publicKey: server.publicKey, retiredAt: null }], pinnedTo(server));
   const state = () =>
     stateWith([
       entry(1),
@@ -477,7 +492,7 @@ describe("file hors ligne puis synchro (SQLite)", () => {
     const store = new StaffStore(memoryDb());
     await store.init();
     const server = newKey(1);
-    const keys = keyMap([{ kid: 1, publicKey: server.publicKey, retiredAt: null }], ONLINE);
+    const keys = keyMap([{ kid: 1, publicKey: server.publicKey, retiredAt: null }], pinnedTo(server));
     const merged = mergeSync(null, signedSync(server, syncBody([entry(1), entry(2)])), "user-julie", new Date());
     if (!merged.ok) throw new Error("fusion");
     await store.saveSync(merged.meta, merged.entries, merged.full);
@@ -631,5 +646,76 @@ describe("rapport des réponses du serveur", () => {
     ]);
     expect(r.duplicates).toMatchObject([{ passId: uuid(5), count: 2, otherDevice: true }]);
     expect(r.refused.map((l) => l.result)).toEqual(["rejected", "unknown"]);
+  });
+});
+
+describe("corrections après relecture", () => {
+  const t = new Date("2026-10-15T09:00:00Z");
+
+  it("rôles changés (super staff retiré) : une différentielle ne suffit pas, il faut une synchro complète", () => {
+    const contact = { firstName: "A", lastName: "B", phone: "06", email: "a@b.fr" };
+    const first = mergeSync(
+      null,
+      syncBody([entry(1, { contact })], { myRoles: ["scan", "super_staff"] }) as StaffSync,
+      "u",
+      t,
+    );
+    if (!first.ok) throw new Error("fusion");
+    const delta = mergeSync(
+      first,
+      syncBody([entry(2)], { full: false, myRoles: ["scan"], generatedAt: "2026-10-15T08:10:00.000Z" }) as StaffSync,
+      "u",
+      t,
+    );
+    expect(delta).toEqual({ ok: false, reason: "needs_full" });
+    const full = mergeSync(
+      first,
+      syncBody([entry(1)], { myRoles: ["scan"], generatedAt: "2026-10-15T08:10:00.000Z" }) as StaffSync,
+      "u",
+      t,
+    );
+    expect(full.ok && full.entries.some((e) => e.contact)).toBe(false);
+  });
+
+  it("téléphone en avance : pas de purge tant que l'heure du serveur estimée n'a pas passé J+1", () => {
+    // Synchro reçue alors que le téléphone avance de 2 jours sur le serveur.
+    const phone = new Date("2026-10-17T08:00:05Z");
+    const merged = mergeSync(null, syncBody([entry(1)]) as StaffSync, "u", phone);
+    if (!merged.ok) throw new Error("fusion");
+    expect(merged.meta.serverOffsetMs).toBeLessThan(-40 * 3_600_000);
+    expect(isPurgeDue(merged.meta, new Date("2026-10-17T09:00:00Z"))).toBe(false);
+    expect(isPurgeDue(merged.meta, new Date("2026-10-18T18:00:00Z"))).toBe(true);
+    // Téléphone en retard : l'heure du téléphone doit aussi être passée.
+    expect(isPurgeDue({ endsAt: "2026-10-15T17:00:00.000Z", serverOffsetMs: 3 * 86_400_000 }, t)).toBe(false);
+  });
+
+  it("refus définitif d'un lot : sort de la file avec l'erreur et retire les pointages locaux créés", async () => {
+    const store = new StaffStore(memoryDb());
+    await store.init();
+    const at = "2026-10-15T10:00:00.000Z";
+    await store.addAction(action(uuid(950), { kind: "scan", id: uuid(950), passId: uuid(1) }, at), {
+      passId: uuid(1),
+      applicationId: uuid(1001),
+      checkedInAt: at,
+      method: "scan",
+      actionId: uuid(950),
+    });
+    await store.markRejected(EVENT_ID, [uuid(950)], { error: "Réservé au staff", status: 403 }, new Date());
+    expect(await store.actions("user-julie", { unsentOnly: true })).toEqual([]);
+    expect(await store.localCheckins(EVENT_ID)).toEqual([]);
+    expect((await store.actions("user-julie"))[0]?.result).toEqual({ error: "Réservé au staff", status: 403 });
+  });
+
+  it("garde les clés épinglées révoquées, même après une déconnexion, et enregistre une grande liste par paquets", async () => {
+    const store = new StaffStore(memoryDb());
+    await store.init();
+    await store.addRevokedKeys([{ kid: 1, publicKey: "x" }]);
+    await store.purgeAll();
+    expect(await store.revokedKeys()).toEqual([{ kid: 1, publicKey: "x" }]);
+    const many = Array.from({ length: 250 }, (_, i) => entry(i + 1));
+    const merged = mergeSync(null, syncBody(many) as StaffSync, "u", t);
+    if (!merged.ok) throw new Error("fusion");
+    await store.saveSync(merged.meta, merged.entries, true);
+    expect(await store.entries(EVENT_ID)).toHaveLength(250);
   });
 });

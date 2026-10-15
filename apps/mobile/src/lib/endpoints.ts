@@ -132,10 +132,12 @@ export const api = {
       headers: { "x-device-id": batch.deviceId },
       timeout: 30_000,
     }),
-  expressInvite: (eventId: string, email: string) =>
+  /** Délai court (4,5 s) : à l'entrée, sans réponse vite, la demande part en file plutôt que de faire attendre. */
+  expressInvite: (eventId: string, email: string, timeout = 4_500) =>
     request<{ id: string; email: string; expiresAt: string; url: string }>(`/api/events/${eventId}/express-invites`, {
       method: "POST",
       body: { email },
+      timeout,
     }),
   staffAlert: (eventId: string, body: { clientId: string; message?: string | null }) =>
     request<unknown>(`/api/events/${eventId}/alerts`, { method: "POST", body }),

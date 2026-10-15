@@ -25,12 +25,25 @@ import {
   type PendingAction,
   type StaffState,
 } from "./model";
-import { keyMap, nextTrustedKeys, type TrustedKey, trustPolicy, verifyStaffSync } from "./trust";
+import {
+  hasTrustAnchor,
+  keyMap,
+  nextTrustedKeys,
+  pinnedKeys,
+  type TrustedKey,
+  trustPolicy,
+  verifyStaffSync,
+} from "./trust";
 
 /** Politique de confiance du build : API configurée et clés épinglées éventuelles (voir trust.ts). */
 export const policy = trustPolicy(apiUrl(""), process.env.EXPO_PUBLIC_QR_TRUSTED_KEYS);
 
 export const newId = () => randomUUID();
+
+/** Build vers une API en ligne sans clé épinglée : aucune liste ni aucun QR ne peut être vérifié. */
+export const TRUST_MISSING = hasTrustAnchor(policy)
+  ? null
+  : "Build sans clé de confiance (EXPO_PUBLIC_QR_TRUSTED_KEYS) : le mode staff ne peut vérifier ni la liste ni les QR.";
 
 // --- Abonnement des écrans -------------------------------------------------------------------------------------
 
@@ -55,10 +68,14 @@ let keys: { list: TrustedKey[]; map: Map<number, Uint8Array> } | null = null;
 
 export const stateOf = (eventId: string) => states.get(eventId) ?? null;
 
-/** Clés de confiance (kid → clé), lues une fois puis gardées en mémoire. */
+/**
+ * Clés de confiance (kid → clé), lues une fois puis gardées en mémoire : les clés épinglées au build, moins celles que
+ * `/api/keys` a révoquées ; sans épinglage (API locale), celles apprises de `/api/keys`.
+ */
 export async function trustedKeys(): Promise<Map<number, Uint8Array>> {
   if (!keys) {
-    const list = await (await staffStore()).trustedKeys();
+    const store = await staffStore();
+    const list = policy.pins?.length ? pinnedKeys(policy, await store.revokedKeys()) : await store.trustedKeys();
     keys = { list, map: keyMap(list, policy) };
   }
   return keys.map;
@@ -94,24 +111,64 @@ export type SyncOutcome = { ok: true; count: number } | { ok: false; message: st
  * Synchronise la liste d'un événement : clés de confiance d'abord (`GET /api/keys`, appel séparé), puis la liste
  * (différentielle si on en a une, complète sinon ou sur demande), vérifiée avant d'écraser quoi que ce soit.
  */
-export async function syncEvent(eventId: string, userId: string, full = false): Promise<SyncOutcome> {
+const syncing = new Map<string, Promise<SyncOutcome>>();
+
+/** Une seule synchro à la fois par événement : une deuxième demande attend la première. */
+export function syncEvent(eventId: string, userId: string, full = false): Promise<SyncOutcome> {
+  const running = syncing.get(eventId);
+  if (running) return running;
+  const next = doSync(eventId, userId, full).finally(() => syncing.delete(eventId));
+  syncing.set(eventId, next);
+  return next;
+}
+
+/** Clés de confiance mises à jour par `/api/keys` (qui ne peut que retirer une clé épinglée). */
+async function refreshKeys(store: Store): Promise<SyncOutcome | null> {
+  let served: Awaited<ReturnType<typeof api.signingKeys>>;
+  try {
+    served = await api.signingKeys();
+  } catch (error) {
+    // Avec des clés épinglées, on s'en passe : elles valent sans `/api/keys`.
+    if (policy.pins?.length && !(error instanceof ApiRequestError && error.isNetwork)) return null;
+    throw error;
+  }
+  const update = nextTrustedKeys(await store.trustedKeys(), served.keys, policy, await store.revokedKeys());
+  if (!update.ok) {
+    return {
+      ok: false,
+      message: `La clé de signature ${update.kid} a changé côté serveur : synchro refusée. Préviens l'organisateur.`,
+    };
+  }
+  if (update.revoked.length) await store.addRevokedKeys(update.revoked);
+  await store.setTrustedKeys(update.keys);
+  keys = { list: update.keys, map: keyMap(update.keys, policy) };
+  return null;
+}
+
+async function doSync(eventId: string, userId: string, full: boolean): Promise<SyncOutcome> {
+  if (TRUST_MISSING) return { ok: false, message: TRUST_MISSING };
   const store = await staffStore();
   try {
-    const served = await api.signingKeys();
-    const update = nextTrustedKeys(await store.trustedKeys(), served.keys, policy);
-    if (!update.ok) {
-      return {
-        ok: false,
-        message: `La clé de signature ${update.kid} a changé côté serveur : synchro refusée. Préviens l'organisateur.`,
-      };
-    }
-    await store.setTrustedKeys(update.keys);
-    keys = { list: update.keys, map: keyMap(update.keys, policy) };
+    const refused = await refreshKeys(store);
+    if (refused) return refused;
+    await trustedKeys();
+    if (!keys) return { ok: false, message: "Clés de confiance indisponibles." };
 
     const previousMeta = await store.meta(eventId);
     const previous = previousMeta && previousMeta.userId === userId ? previousMeta : null;
     const since = full || !previous ? null : previous.cursor;
-    const sync = await api.staffSync(eventId, since);
+    let sync: Awaited<ReturnType<typeof api.staffSync>>;
+    try {
+      sync = await api.staffSync(eventId, since);
+    } catch (error) {
+      // Plus staff de l'événement, ou événement retiré : la liste et les coordonnées quittent le téléphone.
+      if (error instanceof ApiRequestError && (error.status === 403 || error.status === 404)) {
+        await store.purgeEvent(eventId);
+        states.delete(eventId);
+        emit();
+      }
+      throw error;
+    }
     const check = verifyStaffSync(sync, eventId, keys.map);
     if (!check.ok) {
       return {
@@ -123,7 +180,8 @@ export async function syncEvent(eventId: string, userId: string, full = false): 
       };
     }
     // Fermé à J+1 : l'API sert encore la liste jusqu'au règlement (J+2), le téléphone ne la garde plus.
-    if (isPurgeDue(sync.event, new Date())) {
+    const serverNow = { endsAt: sync.event.endsAt, serverOffsetMs: Date.parse(sync.generatedAt) - Date.now() };
+    if (isPurgeDue(serverNow, new Date())) {
       await store.purgeEvent(eventId);
       states.delete(eventId);
       emit();
@@ -135,6 +193,7 @@ export async function syncEvent(eventId: string, userId: string, full = false): 
       userId,
       new Date(),
     );
+    if (!merged.ok && merged.reason === "needs_full") return doSync(eventId, userId, true);
     if (!merged.ok) return { ok: false, message: "Liste plus ancienne que celle du téléphone : ignorée." };
     await store.saveSync(merged.meta, merged.full ? merged.entries : sync.entries, merged.full);
     const fresh = buildState(merged.meta, merged.entries, await store.localCheckins(eventId));
@@ -170,6 +229,20 @@ export async function refreshOpenEvents(userId: string): Promise<void> {
 }
 
 // --- Actions ---------------------------------------------------------------------------------------------------
+
+/** Dernière écriture ratée sur le téléphone (lecture affichée mais pas enregistrée) : montrée au staff. */
+let writeError: string | null = null;
+export const getWriteError = () => writeError;
+export function reportWriteError(eventId: string, passId: string | null): void {
+  // Le pointage local de cette lecture n'existe pas sur le disque : il ne doit pas faire croire « déjà entré ».
+  if (passId) states.get(eventId)?.local.delete(passId);
+  writeError = "Une lecture n'a pas pu être enregistrée sur le téléphone : refais-la ou pointe-la à la main.";
+  emit();
+}
+export function clearWriteError(): void {
+  writeError = null;
+  emit();
+}
 
 /**
  * Enregistre une action (lecture, pointage, présence, express, incident, alerte) dans la file, avec le pointage
@@ -274,7 +347,12 @@ async function doFlush(userId: string) {
       } else if (e?.status === 400) {
         // Lot refusé en bloc (un élément illisible) : chaque élément part seul ; celui que l'API refuse sort de la
         // file avec son erreur, visible au rapport, sans bloquer les autres.
-        await sendOneByOne(store, eventId, device, batch);
+        await sendOneByOne(store, userId, eventId, device, batch);
+        continue;
+      } else if (e && DEFINITIVE.has(e.status)) {
+        // Plus staff, événement retiré, annulé ou fermé : rejouer ne changera rien. Les éléments sortent de la file,
+        // l'erreur reste au rapport, les pointages locaux qu'ils avaient créés disparaissent.
+        await reject(store, eventId, batch, e);
         continue;
       }
       await store.markFailed(
@@ -311,15 +389,33 @@ async function sendBatch(store: Store, eventId: string, device: string, batch: P
   }
 }
 
-async function sendOneByOne(store: Store, eventId: string, device: string, batch: PendingAction[]) {
+/** Lot refusé définitivement : 403, 404, 409, 423 (et 400 élément par élément). */
+const DEFINITIVE = new Set([403, 404, 409, 423]);
+
+async function reject(store: Store, eventId: string, actions: PendingAction[], e: ApiRequestError) {
+  const ids = actions.map((a) => a.id);
+  await store.markRejected(eventId, ids, { error: e.message, status: e.status }, new Date());
+  const state = states.get(eventId);
+  if (state) {
+    for (const [passId, local] of state.local) if (ids.includes(local.actionId)) state.local.delete(passId);
+  }
+}
+
+async function sendOneByOne(store: Store, userId: string, eventId: string, device: string, batch: PendingAction[]) {
   for (const action of batch) {
     try {
       await sendBatch(store, eventId, device, [action]);
     } catch (error) {
       const e = error instanceof ApiRequestError ? error : null;
       if (e?.status === 401) return;
-      if (e?.status === 400) {
-        await store.markSent(eventId, [{ id: action.id, result: { error: e.message, status: 400 } }], new Date());
+      if (e?.status === 400 && /appareil/i.test(e.message)) {
+        // Même traitement que pour le lot entier : réenregistré au prochain essai.
+        await kvDel(deviceKey(userId));
+        await store.markFailed([action.id], e.message, later);
+        return;
+      }
+      if (e && (e.status === 400 || DEFINITIVE.has(e.status))) {
+        await reject(store, eventId, [action], e);
       } else {
         await store.markFailed([action.id], e?.isNetwork ? "Pas de réseau" : (e?.message ?? "Erreur d'envoi"), later);
       }
@@ -335,7 +431,7 @@ async function sendOther(store: Store, action: PendingAction) {
   try {
     let result: Record<string, unknown> = { ok: true };
     if (action.kind === "presence") await api.setPresence(action.eventId, Boolean(p.present));
-    else if (action.kind === "express") result = await api.expressInvite(action.eventId, String(p.email));
+    else if (action.kind === "express") result = await api.expressInvite(action.eventId, String(p.email), 15_000);
     else if (action.kind === "incident") {
       await api.incident(action.eventId, {
         clientId: action.id,

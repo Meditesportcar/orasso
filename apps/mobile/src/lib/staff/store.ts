@@ -30,6 +30,11 @@ create table if not exists access_entries (
   entry_json text not null,
   primary key (event_id, pass_id)
 );
+create table if not exists revoked_keys (
+  kid integer not null,
+  public_key text not null,
+  primary key (kid, public_key)
+);
 create table if not exists signing_keys (
   kid integer primary key not null,
   public_key text not null,
@@ -183,12 +188,15 @@ export class StaffStore {
            synced_at = excluded.synced_at, ends_at = excluded.ends_at`,
         [meta.eventId, meta.userId, JSON.stringify(meta), meta.syncedAt, meta.endsAt],
       );
-      for (const e of entries) {
+      // Insertions groupées (100 par requête) : une synchro complète tient la base le moins longtemps possible, les
+      // lectures du scan qui attendent derrière elle repartent vite.
+      for (let i = 0; i < entries.length; i += 100) {
+        const chunk = entries.slice(i, i + 100);
         await this.db.runAsync(
-          `insert into access_entries (event_id, pass_id, application_id, entry_json) values (?, ?, ?, ?)
+          `insert into access_entries (event_id, pass_id, application_id, entry_json) values ${chunk.map(() => "(?, ?, ?, ?)").join(", ")}
            on conflict (event_id, pass_id) do update set application_id = excluded.application_id,
              entry_json = excluded.entry_json`,
-          [meta.eventId, e.passId, e.applicationId, JSON.stringify(e)],
+          chunk.flatMap((e) => [meta.eventId, e.passId, e.applicationId, JSON.stringify(e)]),
         );
       }
     });
@@ -215,6 +223,25 @@ export class StaffStore {
           k.kid,
           k.publicKey,
           k.retiredAt,
+        ]);
+      }
+    });
+  }
+
+  /** Clés épinglées que `/api/keys` a cessé de servir : révoquées pour de bon (gardées après une déconnexion). */
+  async revokedKeys(): Promise<{ kid: number; publicKey: string }[]> {
+    const rows = await this.serial(() =>
+      this.db.getAllAsync<{ kid: number; public_key: string }>("select kid, public_key from revoked_keys", []),
+    );
+    return rows.map((r) => ({ kid: r.kid, publicKey: r.public_key }));
+  }
+
+  addRevokedKeys(keys: readonly { kid: number; publicKey: string }[]): Promise<void> {
+    return this.tx(async () => {
+      for (const k of keys) {
+        await this.db.runAsync("insert into revoked_keys (kid, public_key) values (?, ?) on conflict do nothing", [
+          k.kid,
+          k.publicKey,
         ]);
       }
     });
@@ -304,6 +331,27 @@ export class StaffStore {
             c.actionId,
           ]);
         }
+      }
+    });
+  }
+
+  /**
+   * Refus définitif (lot refusé par l'API : 403, 404, 409, 423, élément illisible) : les actions sortent de la file
+   * avec l'erreur (visible au rapport) et les pointages locaux qu'elles avaient créés disparaissent.
+   */
+  markRejected(
+    eventId: string,
+    ids: readonly string[],
+    error: { error: string; status: number },
+    at: Date,
+  ): Promise<void> {
+    return this.tx(async () => {
+      for (const id of ids) {
+        await this.db.runAsync(
+          "update pending_actions set sent_at = ?, result_json = ?, last_error = null where id = ?",
+          [at.toISOString(), JSON.stringify(error), id],
+        );
+        await this.db.runAsync("delete from local_checkins where event_id = ? and action_id = ?", [eventId, id]);
       }
     });
   }
