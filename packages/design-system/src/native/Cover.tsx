@@ -20,7 +20,11 @@ const H = 288;
  * La couverture du système de design : une affiche crème sur le mur, la moutarde et le rouge posés dessus comme
  * des autocollants, la bande de nuit qui sort à droite.
  */
-export function Cover({ title = "Orasso", subtitle = "Affiche de nuit · tout le monde à sa place", style }: CoverProps) {
+export function Cover({
+  title = "Orasso",
+  subtitle = "Affiche de nuit · tout le monde à sa place",
+  style,
+}: CoverProps) {
   const { t } = useTheme();
   const c = t.color;
   const [width, setWidth] = useState(W);
@@ -51,7 +55,12 @@ export function Cover({ title = "Orasso", subtitle = "Affiche de nuit · tout le
         <Text
           variant="posterXl"
           color={c.ink}
-          style={{ fontSize: 96 * scale, lineHeight: 86 * scale, letterSpacing: -0.96 * scale, marginBottom: 12 * scale }}
+          style={{
+            fontSize: 96 * scale,
+            lineHeight: 86 * scale,
+            letterSpacing: -0.96 * scale,
+            marginBottom: 12 * scale,
+          }}
         >
           {title}
         </Text>

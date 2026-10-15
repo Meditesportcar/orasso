@@ -1,21 +1,9 @@
 // Mouvement « tout se gare » : Park, Cascade, Reveal, TabPanel, ScreenTransition, Sheet.
 // Mêmes noms et même rôle que web/components/Motion.tsx. Réduction des animations : fondu `fast` partout.
 
-import {
-  Children,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { Children, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { type LayoutChangeEvent, Pressable, StyleSheet, View, type ViewProps, type ViewStyle } from "react-native";
-import Animated, {
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { withAlpha } from "./color";
 import { duration, easings, park, startPark, useFadeStyle, useParkStyle } from "./motionHooks";
 import { angle, radius, useTheme } from "./theme";
@@ -121,7 +109,14 @@ export function Reveal({ style, children, ...rest }: BoxProps) {
           curtain,
         ]}
       >
-        <View style={{ marginLeft: lean, width: size.width, height: size.height, transform: [{ skewX: `${angle.cut}deg` }] }}>
+        <View
+          style={{
+            marginLeft: lean,
+            width: size.width,
+            height: size.height,
+            transform: [{ skewX: `${angle.cut}deg` }],
+          }}
+        >
           {children}
         </View>
       </Animated.View>
@@ -163,9 +158,7 @@ export function ScreenTransition({ screenKey, children, style }: ScreenTransitio
 
   return (
     <View style={[styles.screens, style]}>
-      {leaving && (
-        <Leaving key={`out-${leaving.key}`}>{leaving.node}</Leaving>
-      )}
+      {leaving && <Leaving key={`out-${leaving.key}`}>{leaving.node}</Leaving>}
       <Entering key={screenKey} animated={entered}>
         {children}
       </Entering>
@@ -177,16 +170,14 @@ function Leaving({ children }: { children: ReactNode }) {
   const { reducedMotion } = useTheme();
   const progress = useSharedValue(1);
   useEffect(() => {
-    progress.value = withTiming(0, { duration: reducedMotion ? duration.fast : duration.screenOut, easing: easings.linear });
+    progress.value = withTiming(0, {
+      duration: reducedMotion ? duration.fast : duration.screenOut,
+      easing: easings.linear,
+    });
   }, [progress, reducedMotion]);
   const animated = useAnimatedStyle(() => ({ opacity: progress.value }));
   return (
-    <Animated.View
-      pointerEvents="none"
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={[StyleSheet.absoluteFill, animated]}
-    >
+    <Animated.View pointerEvents="none" aria-hidden style={[StyleSheet.absoluteFill, animated]}>
       {children}
     </Animated.View>
   );
@@ -253,7 +244,12 @@ export function Sheet({ visible, onClose, from = "bottom", origin, children, acc
   return (
     <View style={[StyleSheet.absoluteFill, styles.overlay]}>
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(t.color.night, 0.8) }, veilStyle]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Fermer" />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Fermer"
+        />
       </Animated.View>
       <View pointerEvents="box-none" style={[styles.anchor, from === "bottom" ? styles.bottom : styles.top]}>
         <Animated.View

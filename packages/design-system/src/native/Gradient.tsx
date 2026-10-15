@@ -31,7 +31,17 @@ function stopElements(stops: GradientStop[], length: number) {
 }
 
 /** Les arrêts d'un dégradé répété ne s'écrivent pas en SVG : voir repeatingBands. */
-function Linear({ gradient, width, height, id }: { gradient: Extract<ParsedGradient, { kind: "linear" }>; width: number; height: number; id: string }) {
+function Linear({
+  gradient,
+  width,
+  height,
+  id,
+}: {
+  gradient: Extract<ParsedGradient, { kind: "linear" }>;
+  width: number;
+  height: number;
+  id: string;
+}) {
   if (gradient.repeating) {
     return repeatingBands(gradient, width, height).map((band, i) => (
       <Polygon

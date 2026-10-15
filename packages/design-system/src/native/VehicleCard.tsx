@@ -133,7 +133,7 @@ export function VehicleThumb({ photo, title, meta, style }: VehicleThumbProps) {
 }
 
 const styles = StyleSheet.create({
-  card: { overflow: "hidden", padding: 0 },
+  card: { overflow: "hidden", paddingVertical: 0, paddingHorizontal: 0 },
   tag: { position: "absolute", top: 10, zIndex: 1, paddingVertical: 3, paddingHorizontal: 8, borderRadius: 4 },
   tagLeft: { left: 12 },
   tagRight: { right: 12 },

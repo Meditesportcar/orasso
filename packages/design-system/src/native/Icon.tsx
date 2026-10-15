@@ -2,6 +2,7 @@
 
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import { type IconName, type IconShape, iconShapes } from "../icons";
+import { Labeled } from "./Labeled";
 
 export type IconProps = {
   name: IconName;
@@ -19,32 +20,27 @@ export type IconProps = {
 
 function renderShape(shape: IconShape, index: number) {
   const [tag, attrs] = shape;
-  // biome-ignore lint/suspicious/noArrayIndexKey: les formes d'une icône sont fixes
   if (tag === "path") return <Path key={index} {...attrs} />;
-  // biome-ignore lint/suspicious/noArrayIndexKey: les formes d'une icône sont fixes
   if (tag === "circle") return <Circle key={index} {...attrs} />;
-  // biome-ignore lint/suspicious/noArrayIndexKey: les formes d'une icône sont fixes
   return <Rect key={index} {...attrs} />;
 }
 
 /** Une icône du jeu Icons : trait arrondi de 2 px sur la grille de 24, la couleur est donnée par le composant. */
 export function Icon({ name, size = 24, color, strokeWidth = 2, filled = false, title }: IconProps) {
   return (
-    <Svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill={filled ? color : "none"}
-      stroke={color}
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      accessibilityRole={title ? "image" : undefined}
-      accessibilityLabel={title}
-      accessible={Boolean(title)}
-      importantForAccessibility={title ? "yes" : "no-hide-descendants"}
-    >
-      {iconShapes[name].map(renderShape)}
-    </Svg>
+    <Labeled label={title}>
+      <Svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill={filled ? color : "none"}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {iconShapes[name].map(renderShape)}
+      </Svg>
+    </Labeled>
   );
 }

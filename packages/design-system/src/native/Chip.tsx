@@ -86,11 +86,7 @@ export function Chip({
     >
       <Animated.View pointerEvents="none" style={[styles.fill, { backgroundColor: fill }, fillStyle]} />
       <View style={variant === "accent" ? { transform: [{ skewX: `${-angle.skew}deg` }] } : undefined}>
-        <Text
-          variant="meta"
-          color={textColor}
-          style={compact ? styles.verifiedText : styles.text}
-        >
+        <Text variant="meta" color={textColor} style={compact ? styles.verifiedText : styles.text}>
           {children}
         </Text>
       </View>

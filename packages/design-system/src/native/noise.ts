@@ -310,7 +310,11 @@ export function textureTile(spec: TextureSpec, width: number, height: number): T
   const cached = cache.get(key);
   if (cached) return cached;
   const [fx, fy] = frequencies(spec);
-  const noise = fractalNoiseTile(width, height, { baseFrequencyX: fx, baseFrequencyY: fy, numOctaves: spec.numOctaves });
+  const noise = fractalNoiseTile(width, height, {
+    baseFrequencyX: fx,
+    baseFrequencyY: fy,
+    numOctaves: spec.numOctaves,
+  });
   const png = encodeAlphaPng(width, height, spec.color, noise, spec.alpha);
   const texture = { uri: `data:image/png;base64,${toBase64(png)}`, width, height };
   cache.set(key, texture);

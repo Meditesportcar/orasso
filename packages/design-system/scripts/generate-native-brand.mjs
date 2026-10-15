@@ -8,7 +8,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const read = (name) => readFileSync(resolve(root, "src/web/assets", name), "utf8").replace(/<metadata>[\s\S]*?<\/metadata>/, "");
+const read = (name) =>
+  readFileSync(resolve(root, "src/web/assets", name), "utf8").replace(/<metadata>[\s\S]*?<\/metadata>/, "");
 
 function must(match, what) {
   if (!match) throw new Error(`Fichier de marque : ${what} introuvable (le SVG a changé ?)`);
@@ -24,7 +25,10 @@ const loaderDark = read("chargement-fond-sombre.svg");
 const fillOf = (svg, re, what) => must(svg.match(re), what)[1];
 
 // Les lettres : <g fill="…"> puis un <path transform="translate(X 0)" d="…"> par lettre.
-const body = must(logoDark.match(/<\/defs><g fill="[^"]+">([\s\S]*?)<\/g><mask id="[^"]*cwin"/), "groupe des lettres")[1];
+const body = must(
+  logoDark.match(/<\/defs><g fill="[^"]+">([\s\S]*?)<\/g><mask id="[^"]*cwin"/),
+  "groupe des lettres",
+)[1];
 const letters = [...body.matchAll(/<path transform="translate\(([-\d.]+) 0\)" d="([^"]+)"/g)].map((m) => ({
   dx: Number(m[1]),
   d: m[2],
@@ -32,9 +36,11 @@ const letters = [...body.matchAll(/<path transform="translate\(([-\d.]+) 0\)" d=
 if (letters.length !== 6) throw new Error(`Logotype : 6 lettres attendues, ${letters.length} trouvées`);
 
 const windowD = must(monoDark.match(/<mask id="[^"]*win"[\s\S]*?<path transform="[^"]*" d="([^"]+)"/), "vitres")[1];
-const carRects = [...must(monoDark.match(/fill="#FFC629">([\s\S]*?)<\/g>/), "voiture")[1].matchAll(
-  /<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="([\d.]+)"/g,
-)].map((m) => ({ x: Number(m[1]), y: Number(m[2]), width: Number(m[3]), height: Number(m[4]), rx: Number(m[5]) }));
+const carRects = [
+  ...must(monoDark.match(/fill="#FFC629">([\s\S]*?)<\/g>/), "voiture")[1].matchAll(
+    /<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="([\d.]+)"/g,
+  ),
+].map((m) => ({ x: Number(m[1]), y: Number(m[2]), width: Number(m[3]), height: Number(m[4]), rx: Number(m[5]) }));
 if (carRects.length !== 2) throw new Error("Voiture : 2 rectangles attendus");
 
 const carFill = fillOf(monoDark, /fill="(#[0-9A-Fa-f]{6})">\s*<rect x="82/, "couleur de la voiture");
@@ -63,7 +69,11 @@ function introFrames(name) {
   const frames = [];
   for (const m of body.matchAll(/([\d.%,\s]+)\{([^}]*)\}/g)) {
     const props = m[2];
-    const curve = props.match(/animation-timing-function:([^;]+)/)?.[1]?.replace(/^cubic-bezier\(/, "").replace(/\)$/, "") ?? "none";
+    const curve =
+      props
+        .match(/animation-timing-function:([^;]+)/)?.[1]
+        ?.replace(/^cubic-bezier\(/, "")
+        .replace(/\)$/, "") ?? "none";
     const x = props.match(/translateX\(([-\d.]+)(?:px)?\)/)?.[1];
     const scale = props.match(/scale\(([-\d.]+)\)/)?.[1];
     const opacity = props.match(/opacity:([-\d.]+)/)?.[1];

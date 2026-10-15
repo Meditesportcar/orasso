@@ -72,7 +72,10 @@ function Cell({
       ]}
     >
       {active && (
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: c.poster }, flashStyle]} />
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: c.poster }, flashStyle]}
+        />
       )}
       <Animated.View style={valueStyle}>
         <Text

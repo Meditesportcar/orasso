@@ -65,7 +65,14 @@ export function useParkStyle(options?: {
   trigger?: unknown;
   enabled?: boolean;
 }) {
-  const { axis = "y", from = park.from, overshoot = park.overshoot, delay = 0, trigger, enabled = true } = options ?? {};
+  const {
+    axis = "y",
+    from = park.from,
+    overshoot = park.overshoot,
+    delay = 0,
+    trigger,
+    enabled = true,
+  } = options ?? {};
   const { reducedMotion } = useTheme();
   const progress = useSharedValue(enabled ? 0 : 2);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `trigger` rejoue l'entrée à la demande

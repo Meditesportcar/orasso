@@ -4,15 +4,21 @@
 
 import { useEffect } from "react";
 import { StyleSheet, View, type ViewStyle } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import { type ScanResultState, scanLabels } from "../labels";
+import { shake } from "../motion";
 import { Credit } from "./Brand";
 import { withAlpha } from "./color";
 import { Icon } from "./Icon";
 import { duration, easings, useFadeStyle, useParkStyle } from "./motionHooks";
 import { useNeonPulse } from "./neon";
 import { playScanSound } from "./scanSounds";
-import { shake } from "../motion";
 import { Text } from "./text";
 import { radius, useTheme } from "./theme";
 
@@ -135,13 +141,7 @@ export function ScanResult({
   const iconSize = big ? 72 : 32;
   const body = (
     <>
-      <View
-        style={[
-          styles.icon,
-          big ? styles.iconBig : null,
-          { borderColor: ink },
-        ]}
-      >
+      <View style={[styles.icon, big ? styles.iconBig : null, { borderColor: ink }]}>
         {state === "ok" && <Icon name="check" size={iconSize} strokeWidth={3} color={ink} />}
         {state === "duplicate" && (
           <Text variant="title" color={ink} style={big ? styles.digitBig : styles.digit}>
@@ -155,7 +155,11 @@ export function ScanResult({
           {kicker}
         </Text>
         {/* Le nom en style title (droit, 15–16 px) : à l'entrée on lit, on ne crie pas. Jamais tronqué. */}
-        <Text variant="title" color={ink} style={[styles.name, big ? styles.nameBig : null, big ? styles.centered : null]}>
+        <Text
+          variant="title"
+          color={ink}
+          style={[styles.name, big ? styles.nameBig : null, big ? styles.centered : null]}
+        >
           {name}
         </Text>
       </View>
@@ -188,7 +192,9 @@ export function ScanResult({
       accessibilityLiveRegion="polite"
       style={[fullscreen ? StyleSheet.absoluteFill : null, fullscreen ? flash : animated ? park : null, style]}
     >
-      <Animated.View style={[surface, fullscreen ? styles.fill : null, state === "refused" && animated ? shaking : null]}>
+      <Animated.View
+        style={[surface, fullscreen ? styles.fill : null, state === "refused" && animated ? shaking : null]}
+      >
         {body}
         {/* Le pic de néon : une couche qui retombe en `poster`. */}
         <Animated.View

@@ -27,21 +27,21 @@ function Tile({
   const texture = useMemo(() => textureTile(spec, width, height), [spec, width, height]);
   // La fusion (overlay, multiply, screen) et l'opacité s'appliquent à la couche entière, comme sur le web.
   return (
-    <View
-      pointerEvents="none"
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={[StyleSheet.absoluteFill, { opacity, mixBlendMode: blend }]}
-    >
-      <Image source={{ uri: texture.uri, width, height }} resizeMode="repeat" style={StyleSheet.absoluteFill} />
+    <View pointerEvents="none" aria-hidden style={[StyleSheet.absoluteFill, { opacity, mixBlendMode: blend }]}>
+      <Image source={{ uri: texture.uri, width, height }} resizeMode="repeat" style={styles.fill} />
     </View>
   );
 }
 
+// La taille de la source (tuile) ne doit pas devenir celle de la couche : width/height explicites à 100 %.
+const styles = StyleSheet.create({ fill: { ...StyleSheet.absoluteFill, width: "100%", height: "100%" } });
+
 /** Le grain d'asphalte du fond : immobile, jamais animé. Overlay à 28 % en Béton, multiply à 32 % en Sable. */
 export function Grain() {
   const { grain } = useTheme().t;
-  return <Tile spec={grain} width={GRAIN_TILE} height={GRAIN_TILE} opacity={grain.opacity} blend={grain.blend as Blend} />;
+  return (
+    <Tile spec={grain} width={GRAIN_TILE} height={GRAIN_TILE} opacity={grain.opacity} blend={grain.blend as Blend} />
+  );
 }
 
 /** Le brossage des barres (feTurbulence très étiré), à poser dans un conteneur isolé, derrière le contenu. */

@@ -8,6 +8,7 @@ import Svg, { Defs, G, Mask, Path, Rect } from "react-native-svg";
 import { brandArt } from "./brandArt";
 import { withAlpha } from "./color";
 import { Icon } from "./Icon";
+import { Labeled } from "./Labeled";
 import { Text } from "./text";
 import { useTheme } from "./theme";
 
@@ -65,7 +66,15 @@ export function LogoLetters({ id, ink, withO = true }: { id: string; ink: string
     <>
       <Defs>
         {brandArt.letters.slice(0, -1).map((letter, i) => (
-          <Mask key={letter.dx} id={`${id}m${i}`} maskUnits="userSpaceOnUse" x={-20} y={-20} width={w + 40} height={140}>
+          <Mask
+            key={letter.dx}
+            id={`${id}m${i}`}
+            maskUnits="userSpaceOnUse"
+            x={-20}
+            y={-20}
+            width={w + 40}
+            height={140}
+          >
             <Rect x={-20} y={-20} width={w + 40} height={140} fill="white" />
             <Path
               transform={`translate(${letter.dx} 0)`}
@@ -101,17 +110,12 @@ export function Logo({ width = 128, tone = "auto" }: LogoProps) {
   const id = `l${useId().replaceAll(":", "")}`;
   const [, , w, h] = brandArt.logoViewBox;
   return (
-    <Svg
-      width={width}
-      height={Math.round((width * h) / w)}
-      viewBox={brandArt.logoViewBox.join(" ")}
-      accessibilityRole="image"
-      accessibilityLabel="Orasso"
-      accessible
-    >
-      <LogoLetters id={id} ink={brandArt.logoInk[version]} />
-      <Car id={`${id}c`} />
-    </Svg>
+    <Labeled label="Orasso">
+      <Svg width={width} height={Math.round((width * h) / w)} viewBox={brandArt.logoViewBox.join(" ")}>
+        <LogoLetters id={id} ink={brandArt.logoInk[version]} />
+        <Car id={`${id}c`} />
+      </Svg>
+    </Labeled>
   );
 }
 
@@ -126,17 +130,12 @@ export function Monogram({ size = 30, tone = "auto", alt = "Orasso" }: MonogramP
   const id = `m${useId().replaceAll(":", "")}`;
   return (
     <View style={styles.monogram}>
-      <Svg
-        width={size}
-        height={size}
-        viewBox={brandArt.viewBox.join(" ")}
-        accessibilityRole="image"
-        accessibilityLabel={alt}
-        accessible
-      >
-        <Path transform={oTransform} d={brandArt.oPath} fill={brandArt.ink[version]} fillRule="evenodd" />
-        <Car id={id} />
-      </Svg>
+      <Labeled label={alt}>
+        <Svg width={size} height={size} viewBox={brandArt.viewBox.join(" ")}>
+          <Path transform={oTransform} d={brandArt.oPath} fill={brandArt.ink[version]} fillRule="evenodd" />
+          <Car id={id} />
+        </Svg>
+      </Labeled>
     </View>
   );
 }
@@ -159,8 +158,7 @@ export function Credit({ surface = "dark-surface" }: CreditProps) {
       variant="credit"
       color={surface === "dark-surface" ? t.color.brandCredit : t.color.brandCreditLight}
       style={styles.credit}
-      accessibilityElementsHidden
-      importantForAccessibility="no"
+      aria-hidden
     >
       Orasso
     </Text>

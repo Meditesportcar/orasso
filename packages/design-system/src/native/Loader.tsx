@@ -15,8 +15,9 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import Svg, { Defs, G, Mask, Path, Rect } from "react-native-svg";
-import { brandArt } from "./brandArt";
 import { type BrandTone, carTransform, oTransform, useTone } from "./Brand";
+import { brandArt } from "./brandArt";
+import { Labeled } from "./Labeled";
 import { duration } from "./motionHooks";
 import { useTheme } from "./theme";
 
@@ -58,10 +59,10 @@ type Frame = { at: number; curve: string };
  * Les segments d'une animation d'images clés : de chaque image à la suivante, `total` ms × l'écart en pour cent,
  * avec la courbe de l'image de départ. `valueOf` donne la valeur animée d'une image clé.
  */
-export function keyframeSteps<F extends Frame>(frames: readonly F[], total: number, valueOf: (frame: F) => number) {
+export function keyframeSteps<F extends Frame>(frames: readonly F[], total: number, pick: (frame: F) => number) {
   return frames.slice(1).map((frame, i) => {
     const previous = frames[i];
-    return withTiming(valueOf(frame), {
+    return withTiming(pick(frame), {
       duration: ((frame.at - (previous?.at ?? 0)) / 100) * total,
       easing: curveOf(previous?.curve ?? "linear"),
     });
@@ -82,10 +83,24 @@ export function AnimatedCar({ id, offset, clipHole }: { id: string; offset: Shar
     <G mask={`url(#${id}c)`}>
       <G transform={carTransform} fill={brandArt.car}>
         {thin && (
-          <AnimatedRect animatedProps={thinProps} x={thin.x} y={thin.y} width={thin.width} height={thin.height} rx={thin.rx} />
+          <AnimatedRect
+            animatedProps={thinProps}
+            x={thin.x}
+            y={thin.y}
+            width={thin.width}
+            height={thin.height}
+            rx={thin.rx}
+          />
         )}
         {big && (
-          <AnimatedRect animatedProps={bigProps} x={big.x} y={big.y} width={big.width} height={big.height} rx={big.rx} />
+          <AnimatedRect
+            animatedProps={bigProps}
+            x={big.x}
+            y={big.y}
+            width={big.width}
+            height={big.height}
+            rx={big.rx}
+          />
         )}
       </G>
     </G>
@@ -119,7 +134,6 @@ export function AnimatedCar({ id, offset, clipHole }: { id: string; offset: Shar
 
 /** Position de la voiture du chargement : les images clés du fichier `chargement`, en boucle de `loader`. */
 function useLoaderOffset(playing: boolean) {
-  const frames = brandArt.loaderKeyframes;
   const offset = useSharedValue(0);
   useEffect(() => {
     if (!playing) {
@@ -127,10 +141,13 @@ function useLoaderOffset(playing: boolean) {
       offset.value = 0;
       return;
     }
-    offset.value = frames[0]?.x ?? 0;
-    offset.value = withRepeat(withSequence(...keyframeSteps(frames, duration.loader, (f) => f.x)), -1);
+    offset.value = brandArt.loaderKeyframes[0]?.x ?? 0;
+    offset.value = withRepeat(
+      withSequence(...keyframeSteps(brandArt.loaderKeyframes, duration.loader, (f) => f.x)),
+      -1,
+    );
     return () => cancelAnimation(offset);
-  }, [playing, frames, offset]);
+  }, [playing, offset]);
   return offset;
 }
 
@@ -147,16 +164,11 @@ export function Loader({ size = 24, tone = "auto" }: LoaderProps) {
   const id = `d${useId().replaceAll(":", "")}`;
   const offset = useLoaderOffset(!reducedMotion);
   return (
-    <Svg
-      width={size}
-      height={size}
-      viewBox={brandArt.viewBox.join(" ")}
-      accessibilityRole="progressbar"
-      accessibilityLabel="Chargement en cours"
-      accessible
-    >
-      <Path transform={oTransform} d={brandArt.oPath} fill={brandArt.ink[version]} fillRule="evenodd" />
-      <AnimatedCar id={id} offset={offset} clipHole />
-    </Svg>
+    <Labeled label="Chargement en cours" role="progressbar">
+      <Svg width={size} height={size} viewBox={brandArt.viewBox.join(" ")}>
+        <Path transform={oTransform} d={brandArt.oPath} fill={brandArt.ink[version]} fillRule="evenodd" />
+        <AnimatedCar id={id} offset={offset} clipHole />
+      </Svg>
+    </Labeled>
   );
 }

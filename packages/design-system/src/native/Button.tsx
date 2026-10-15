@@ -4,9 +4,9 @@ import { type ReactNode, useState } from "react";
 import { Pressable, type PressableProps, StyleSheet, type TextStyle, type ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
 import type { IconName } from "../icons";
-import { Loader } from "./Loader";
 import { withAlpha } from "./color";
 import { Icon } from "./Icon";
+import { Loader } from "./Loader";
 import { usePressScale } from "./motionHooks";
 import { Text } from "./text";
 import { radius, spacing, useTheme } from "./theme";
@@ -124,7 +124,14 @@ export function Button(props: ButtonProps) {
       break;
     case "close":
       box = onPhoto
-        ? { width: 36, height: 36, minHeight: 36, padding: 0, backgroundColor: withAlpha(c.night, 0.55), borderRadius: radius.radiusChip }
+        ? {
+            width: 36,
+            height: 36,
+            minHeight: 36,
+            padding: 0,
+            backgroundColor: withAlpha(c.night, 0.55),
+            borderRadius: radius.radiusChip,
+          }
         : {
             width: 34,
             height: 34,
@@ -144,7 +151,10 @@ export function Button(props: ButtonProps) {
     lineHeight = 13;
   }
   const inactive = disabled || loading;
-  const labelStyle: TextStyle = { color: ink, ...(fontSize ? { fontSize, lineHeight: lineHeight ?? fontSize + 2 } : null) };
+  const labelStyle: TextStyle = {
+    color: ink,
+    ...(fontSize ? { fontSize, lineHeight: lineHeight ?? fontSize + 2 } : null),
+  };
 
   return (
     <AnimatedPressable

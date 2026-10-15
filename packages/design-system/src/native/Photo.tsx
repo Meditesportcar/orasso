@@ -3,7 +3,7 @@
 
 import { useId, useState } from "react";
 import { type ImageSourcePropType, type LayoutChangeEvent, StyleSheet, View, type ViewStyle } from "react-native";
-import Svg, { ClipPath, Defs, Image as SvgImage, Polygon } from "react-native-svg";
+import Svg, { ClipPath, Defs, Polygon, Image as SvgImage } from "react-native-svg";
 import { GradientRect } from "./Gradient";
 
 /** Polygones des coupes, en fractions du cadre (ceux des aperçus du système, voir docs/JOURNAL-DES-CHOIX.md). */

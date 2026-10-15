@@ -6,14 +6,14 @@ import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } f
 import type { IconName } from "../icons";
 import { Credit } from "./Brand";
 import { Button } from "./Button";
+import { withAlpha } from "./color";
 import { GradientFill } from "./Gradient";
-import { duration, easings } from "./motionHooks";
 import { Reveal } from "./Motion";
+import { duration, easings } from "./motionHooks";
 import { useNeonPulse } from "./neon";
 import { Photo, type PhotoProps } from "./Photo";
 import { Text } from "./text";
 import { angle, radius, useTheme } from "./theme";
-import { withAlpha } from "./color";
 
 /** Bandeau en coin : Retenue et Sur place (moutarde), Annulé (rouge), Incertain (hachuré) ; En attente : aucun. */
 export type PosterStatus = "pending" | "retained" | "onsite" | "cancelled" | "uncertain";
@@ -60,7 +60,10 @@ function Band({ status, reveal }: { status: Exclude<PosterStatus, "pending">; re
   // Le bandeau se tamponne : échelle 1,9 → 1 (`poster`).
   const style = useAnimatedStyle(() => ({
     opacity: stamp.value,
-    transform: [{ rotate: `${angle.band}deg` }, { scale: reducedMotion ? 1 : interpolate(stamp.value, [0, 1], [1.9, 1]) }],
+    transform: [
+      { rotate: `${angle.band}deg` },
+      { scale: reducedMotion ? 1 : interpolate(stamp.value, [0, 1], [1.9, 1]) },
+    ],
   }));
 
   let background = c.accent;

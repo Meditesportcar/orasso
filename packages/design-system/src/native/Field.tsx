@@ -2,14 +2,24 @@
 // Dans une plaque graphite (Plate), champs et cases lisent les jetons plate-* comme sur le web.
 
 import { type ReactNode, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, TextInput, type TextInputProps, View, type ViewStyle } from "react-native";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  type TextInputProps,
+  type TextStyle,
+  View,
+  type ViewStyle,
+} from "react-native";
 import Svg, { Path } from "react-native-svg";
+import { withAlpha } from "./color";
 import { Icon } from "./Icon";
 import { useInPlate } from "./Plate";
-import { textStyles } from "./textStyles";
 import { Text } from "./text";
+import { textStyles } from "./textStyles";
 import { radius, spacing, useTheme } from "./theme";
-import { withAlpha } from "./color";
 
 type Shell = {
   label: string;
@@ -66,7 +76,18 @@ export type TextFieldProps = Shell &
   };
 
 /** Champ de saisie : étiquette étroite au-dessus, champ de 48 px, aide en dessous. */
-export function TextField({ label, help, error, tall, style, revealable, secureTextEntry, onFocus, onBlur, ...input }: TextFieldProps) {
+export function TextField({
+  label,
+  help,
+  error,
+  tall,
+  style,
+  revealable,
+  secureTextEntry,
+  onFocus,
+  onBlur,
+  ...input
+}: TextFieldProps) {
   const f = useFieldColors();
   const c = f.t.color;
   const [focused, setFocused] = useState(false);
@@ -131,7 +152,17 @@ export type SelectFieldProps = Shell & {
 };
 
 /** Sélection fermée : même forme que le champ de saisie. L'option « Autre » est toujours la dernière. */
-export function SelectField({ label, help, error, tall, style, options, value, onValueChange, placeholder }: SelectFieldProps) {
+export function SelectField({
+  label,
+  help,
+  error,
+  tall,
+  style,
+  options,
+  value,
+  onValueChange,
+  placeholder,
+}: SelectFieldProps) {
   const f = useFieldColors();
   const c = f.t.color;
   const [open, setOpen] = useState(false);
@@ -158,7 +189,14 @@ export function SelectField({ label, help, error, tall, style, options, value, o
           {current?.label ?? placeholder ?? ""}
         </Text>
         <Svg width={12} height={12} viewBox="0 0 12 12">
-          <Path d="M2 4l4 4 4-4" fill="none" stroke={f.ink} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <Path
+            d="M2 4l4 4 4-4"
+            fill="none"
+            stroke={f.ink}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </Svg>
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -212,10 +250,7 @@ export function CheckboxField({ label, checked, onChange, disabled, style }: Che
       style={[styles.check, disabled && styles.disabled, style]}
     >
       <View
-        style={[
-          styles.box,
-          checked ? { borderColor: c.accent, backgroundColor: c.accent } : { borderColor: f.ink },
-        ]}
+        style={[styles.box, checked ? { borderColor: c.accent, backgroundColor: c.accent } : { borderColor: f.ink }]}
       >
         {checked && <Icon name="check" size={16} strokeWidth={3} color={c.accentInk} />}
       </View>
@@ -235,7 +270,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: radius.radiusMd,
   },
-  noOutline: { outlineStyle: "none" } as unknown as ViewStyle,
+  noOutline: { outlineStyle: "none" } as unknown as TextStyle,
   reveal: {
     position: "absolute",
     top: 0,

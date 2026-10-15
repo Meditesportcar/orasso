@@ -4,12 +4,7 @@
 
 import { useEffect, useId } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, {
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-} from "react-native-reanimated";
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSequence } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 import { type BrandTone, LogoLetters, oTransform, useTone } from "./Brand";
 import { brandArt } from "./brandArt";
@@ -72,12 +67,7 @@ export function OpeningLogo({ width = 240, tone = "dark", onDone }: OpeningLogoP
   const oStyle = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
 
   return (
-    <View
-      accessibilityRole="image"
-      accessibilityLabel="Orasso"
-      accessible
-      style={{ width, height }}
-    >
+    <View accessibilityRole="image" accessibilityLabel="Orasso" accessible style={{ width, height }}>
       {/* Les lettres, découvertes de gauche à droite par le rideau. */}
       <Animated.View style={[styles.layer, { height }, styles.clip, wipeStyle]}>
         <Svg width={width} height={height} viewBox={logoViewBox.join(" ")}>
@@ -86,7 +76,11 @@ export function OpeningLogo({ width = 240, tone = "dark", onDone }: OpeningLogoP
       </Animated.View>
       {/* Le O, qui prend sa place (échelle 1,35 → 1) autour de son centre. */}
       <Animated.View
-        style={[styles.layer, { width, height, transformOrigin: `${O_CENTER.x * k}px ${(O_CENTER.y - viewY) * k}px` }, oStyle]}
+        style={[
+          styles.layer,
+          { width, height, transformOrigin: `${O_CENTER.x * k}px ${(O_CENTER.y - viewY) * k}px` },
+          oStyle,
+        ]}
       >
         <Svg width={width} height={height} viewBox={logoViewBox.join(" ")}>
           <Path transform={oTransform} d={brandArt.oPath} fill={brandArt.ink[version]} fillRule="evenodd" />

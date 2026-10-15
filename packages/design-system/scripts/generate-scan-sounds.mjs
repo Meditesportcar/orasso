@@ -50,7 +50,9 @@ function concat(...parts) {
 
 function wav(samples) {
   const data = Buffer.alloc(samples.length * 2);
-  samples.forEach((s, i) => data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, s)) * 32767), i * 2));
+  for (let i = 0; i < samples.length; i++) {
+    data.writeInt16LE(Math.round(Math.max(-1, Math.min(1, samples[i])) * 32767), i * 2);
+  }
   const header = Buffer.alloc(44);
   header.write("RIFF", 0);
   header.writeUInt32LE(36 + data.length, 4);
@@ -69,7 +71,11 @@ function wav(samples) {
 
 const sounds = {
   ok: concat(tone({ freq: 784, ms: 90 }), tone({ freq: 1175, ms: 190 })),
-  duplicate: concat(tone({ freq: 660, ms: 90, shape: "square", gain: 0.4 }), silence(70), tone({ freq: 660, ms: 90, shape: "square", gain: 0.4 })),
+  duplicate: concat(
+    tone({ freq: 660, ms: 90, shape: "square", gain: 0.4 }),
+    silence(70),
+    tone({ freq: 660, ms: 90, shape: "square", gain: 0.4 }),
+  ),
   refused: tone({ freq: 150, ms: 420, shape: "saw", gain: 0.7, glide: -40 }),
 };
 
