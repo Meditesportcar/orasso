@@ -44,6 +44,14 @@
   - Espace organisateur `/orga/:structure` (Sable imposé, barre latérale) : événements, tri au clavier (V / A / R / Z / Espace, motifs), vue liste (filtres, sélection multiple, décisions en masse), liste d'attente (ordre modifiable), compteurs en temps réel ; jour J : liste, pointage manuel, pointage rapide par plaque, direct. Le staff y accède au jour J seulement.
   - API : `GET /api/pseudo-available`, catégories du référentiel publiques, script `events:simulate-settle` (J+2 simulé, développement).
   - Vérifié : `pnpm test` (shared 66, design-system 32, api 102), `typecheck`, `lint`, build du site ; tests de bout en bout Playwright (`pnpm --filter @orasso/web test:e2e`, 5 tests : parcours passionné → QR → pointage → points, tri, liste d'attente et offre, malus et contestation, captures). Captures Béton / Sable / 390 px : voir le journal du relais.
+- **Appli : parcours n° 1 du passionné (lot 09, 15/10/2026)** — `apps/mobile`. Choix : `docs/JOURNAL-DES-CHOIX.md` (lot 09).
+  - Navigation Expo Router : premier lancement en 3 écrans (jamais revu, pas de demande de notifications), connexion et inscription e-mail + mot de passe (pseudo vérifié pendant la saisie ; Google et Apple masqués), cinq onglets (Accueil, Explorer, Accès au centre, Garage, Boîte en coquille), Journal derrière la cloche, Moi derrière l'avatar (points, grade, thème Béton / Sable / auto mémorisé, déconnexion), page d'un événement ouverte sans compte (`/e/:slug`, retour exactement là où on était après la connexion).
+  - Garage : en-tête (photo, pseudo, grade, points), QR de compte dynamique en grand (HOTP 60 s, secret dans `expo-secure-store`, calculé sans réseau), véhicules actifs en grandes cartes, archivés repliés, ajout d'un véhicule (référentiel marque / modèle / génération avec « Autre », plaque, catégories, photos converties en JPEG), fiche véhicule (photos).
+  - Explorer (segment Événements : recherche, formats, liste) → page événement → candidater en 3 écrans → demande de notifications juste après l'envoi.
+  - Accès : une carte par candidature (statut, désistement avec avertissement de malus, place libérée à accepter avec son délai), « Où je suis staff » (présence), carnet de route (pointage en attente, points, contestation d'un malus) ; « Retenu » arrive en feuille avec le bandeau tamponné.
+  - Mode jour J plein écran (s'ouvre la veille, se ferme après l'entrée ou à J+1) : QR d'inscription en grand, compte à rebours, statut, zone, météo, itinéraire, consignes. Tout vient d'un kit enregistré sur le téléphone dès la retenue (rafraîchi à chaque chargement avec du réseau) : le QR s'affiche sans réseau.
+  - API (petits ajouts) : jeton de session en `Authorization: Bearer` (plugin `bearer` de Better Auth), `CORS_ORIGINS` pour la recette dans un navigateur.
+  - Vérifié : `pnpm test` (dont 12 tests de l'appli : QR de compte identique à celui de l'API, tracé du QR, fenêtre du jour J, formats), `typecheck`, `lint`, `expo export` Android et iOS ; parcours complet dans le navigateur (`expo start --web --port 8091`, API locale avec `CORS_ORIGINS=http://localhost:8091`), QR affiché API arrêtée. **Pas encore sur simulateur ni appareil** (le connecteur Expo demande un projet EAS : lot 11).
 
 ## En cours
 
@@ -51,7 +59,7 @@
 
 ## Prochaine étape
 
-- Site du parcours n° 1 fait (lot 07) ; reste les écrans de l'appli avec les composants natifs (lots 09 et 10), en parallèle, sur l'API complète du parcours n° 1 : types et schémas dans `packages/shared/src/schemas/` (`access.ts` pour le jour J et les points), libellés dans `labels.fr.ts`. Le QR se dessine avec `qrcode` en correction M (version 6 attendue). Le thème choisi par l'utilisateur doit être mémorisé par l'appli (`onPreferenceChange`) ; `AppBar`/`TabBar` reçoivent `useSafeAreaInsets()`.
+- Site (lot 07) et appli du passionné (lot 09) faits ; reste le mode staff de l'appli (lot 10), sur l'API complète du parcours n° 1 : types et schémas dans `packages/shared/src/schemas/` (`access.ts` pour le jour J et les points), libellés dans `labels.fr.ts`. Le QR se dessine avec `qrcode` en correction M (version 6 attendue). Le thème choisi par l'utilisateur doit être mémorisé par l'appli (`onPreferenceChange`) ; `AppBar`/`TabBar` reçoivent `useSafeAreaInsets()`.
 - Déploiement de l'API B sur dev.orasso.fr : ajouter `QR_SIGNING_KEYS` et `QR_SIGNING_ACTIVE_KID` à `/etc/orasso/dev.env` **avant** (l'API refuse de démarrer sans elles en production ; voir `deploy/dev.env.example`).
 - Sauvegardes d'Orasso hors du VPS : validées par Damien et appliquées le 15/10 (deux lignes dans `/etc/vps-backup/files.list`, voir `deploy/README.md`).
 
@@ -78,7 +86,7 @@ Prérequis : Node 24 (déjà installé), Git.
 5. **Lancer** (un terminal par application) :
    - `pnpm dev:api` → http://localhost:3001/api/health
    - `pnpm dev:web` → http://localhost:5173 (l'API est aussi joignable sur http://localhost:5173/api) ; la page de recette du système de design est sur `/_ds`
-   - `pnpm dev:mobile` → Metro (Expo) ; scanner le QR code avec Expo Go, ou `a` pour un émulateur Android.
+   - `pnpm dev:mobile` → Metro (Expo) ; scanner le QR code avec Expo Go, ou `a` pour un émulateur Android. Dans un navigateur : `npx expo start --web` depuis `apps/mobile` (mettre l'origine de Metro dans `CORS_ORIGINS` du `.env` de l'API, ex. `http://localhost:8081`, et l'API dans `EXPO_PUBLIC_API_URL`).
 6. **Vérifier** : `pnpm test` (la base doit tourner ; les tests de l'API créent et migrent eux-mêmes une base séparée `orasso_test`, la base de dev et son seed ne sont pas touchés), `pnpm typecheck`, `pnpm lint` (`pnpm format` corrige la mise en forme). Compilation de l'appli sans téléphone : `pnpm --filter @orasso/mobile export:android`.
 7. **Clés des QR** : sans `QR_SIGNING_KEYS` dans le `.env`, l'API de développement signe avec une clé de démonstration publique (`kid 0`). Pour une vraie clé : `pnpm --filter @orasso/api keys:generate` et coller les deux lignes dans le `.env`. Vérifier un QR hors de l'API, avec les seules clés publiques : `pnpm --filter @orasso/api pass:verify --keys http://localhost:3001/api/keys [--event-no N] <OR1…>`. Clé compromise : `pnpm --filter @orasso/api keys:revoke <kid>` (procédure : `deploy/README.md`).
 8. **E-mails en développement** : transport « journal », chaque e-mail est écrit dans `.data/mail/` (un fichier HTML) et résumé dans la console de l'API. Photos envoyées : `.data/storage/`, servies par `/api/files/…`.
