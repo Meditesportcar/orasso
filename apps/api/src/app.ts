@@ -9,6 +9,7 @@ import { AppError, errorResponse, notFound } from "./lib/errors";
 import { realtime } from "./lib/realtime";
 import { type AppEnv, type AuthUser, loadSession } from "./lib/session";
 import { storage } from "./lib/storage";
+import { accessRoutes } from "./modules/access/routes";
 import { adminRoutes } from "./modules/admin/routes";
 import { applicationsRoutes } from "./modules/applications/routes";
 import { eventsRoutes } from "./modules/events/routes";
@@ -61,6 +62,7 @@ app.use(
 );
 app.use("*", loadSession);
 
+app.route("/", accessRoutes);
 app.route("/", profilesRoutes);
 app.route("/", vehiclesRoutes);
 app.route("/", structuresRoutes);

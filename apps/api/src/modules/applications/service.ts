@@ -10,6 +10,7 @@ import {
   type Decide,
   isLocked,
   lockAt,
+  type PassRevokedReason,
   type RefusalReason,
   refusalReasonLabels,
   registrationOpensAt,
@@ -34,6 +35,7 @@ import { formatDateTime } from "../../lib/format";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { type Tx, withTx } from "../../lib/tx";
+import { accessService } from "../access/service";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { vehiclesRepo } from "../vehicles/repo";
@@ -78,8 +80,20 @@ async function transition(
     reason: reason ?? null,
     at: now(),
   });
+  // QR d'inscription (lot 06) : émis à la retenue, révoqué quand la candidature n'est plus retenue.
+  if (to === "accepted" && app.status !== "accepted") await accessService.issue(tx, row);
+  if (app.status === "accepted" && to !== "accepted") {
+    await accessService.revoke(tx, row.id, PASS_REVOCATION[to] ?? "cancelled");
+  }
   return row;
 }
+
+/** Motif de révocation du pass selon le nouveau statut. */
+const PASS_REVOCATION: Partial<Record<ApplicationStatus, PassRevokedReason>> = {
+  withdrawn: "withdrawn",
+  refused: "refused",
+  cancelled: "cancelled",
+};
 
 async function labelOf(app: ApplicationRow, tx: Tx): Promise<string> {
   if (!app.vehicleId) return "Ta candidature";
@@ -148,6 +162,10 @@ function broadcast(after: After, event: EventRow, changed: ApplicationRow[]) {
       const payload = { applicationId: app.id, eventId: event.id, status: app.status };
       realtime.publish(`event:${event.id}:triage`, "application.changed", payload);
       realtime.publish(`user:${app.userId}`, "application.changed", payload);
+    }
+    // Liste d'accès du staff : l'appli relance une synchro différentielle si elle a du réseau (§ 4.1).
+    if (changed.length) {
+      realtime.publish(`event:${event.id}:access`, "access.changed", { applicationIds: changed.map((a) => a.id) });
     }
     notificationsService.kick();
   });
@@ -310,7 +328,7 @@ async function decideInTx(
   }
   const row = await transition(tx, app, to, actor, patch);
   await notifyDecision(tx, event, row);
-  // Revenir sur une retenue libère une place (le pass sera révoqué au lot 06).
+  // Revenir sur une retenue libère une place (le pass est révoqué par `transition`).
   const offered = app.status === "accepted" ? await offerNext(tx, event, after) : [];
   broadcast(after, event, [row, ...offered]);
   return row;
