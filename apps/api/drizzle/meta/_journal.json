@@ -57,6 +57,48 @@
       "when": 1792086084313,
       "tag": "0007_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792090085498,
+      "tag": "0008_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792090100312,
+      "tag": "0009_staff",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792090124131,
+      "tag": "0010_checkins",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792090143948,
+      "tag": "0011_points",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792090160419,
+      "tag": "0012_field",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792090175593,
+      "tag": "0013_account_qr",
+      "breakpoints": true
     }
   ]
 }

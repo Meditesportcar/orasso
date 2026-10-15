@@ -1,4 +1,4 @@
-import { randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import {
   type DeviceRegister,
   defaultNotificationPrefs,
@@ -44,6 +44,11 @@ async function derivePseudo(name: string): Promise<string> {
   }
 }
 
+/** Identifiant court du QR de compte : 8 premiers octets de SHA-256(user_id) (ARCHITECTURE.md § 3.3). */
+export function accountQrShortId(userId: string): Buffer {
+  return createHash("sha256").update(userId, "utf8").digest().subarray(0, 8);
+}
+
 /**
  * Crée le profil d'un compte (appelé par Better Auth à l'inscription). Le pseudo vient du champ `name`
  * de l'inscription s'il est valide et libre ; il se change ensuite dans le profil.
@@ -56,6 +61,7 @@ export async function ensureProfile(user: Pick<AuthUser, "id" | "name">): Promis
       userId: user.id,
       pseudo: await derivePseudo(user.name),
       accountQrSecret: randomBytes(32),
+      accountQrShortId: accountQrShortId(user.id),
       inviteToken: randomBytes(12).toString("base64url"),
     });
     if (created) return created;
