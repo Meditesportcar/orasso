@@ -510,6 +510,21 @@ describe("inscription express", () => {
     expect((await call(null, "GET", `/express/${token}`)).json.used).toBe(true);
   });
 
+  it("au plus 30 invitations par staff et par heure", async () => {
+    for (let i = 0; i < 30; i++) {
+      expect(
+        (await call(theo, "POST", `/events/${eventId}/express-invites`, { email: `p${i}@exemple.fr` })).status,
+      ).toBe(201);
+    }
+    expect((await call(theo, "POST", `/events/${eventId}/express-invites`, { email: "x@exemple.fr" })).status).toBe(
+      429,
+    );
+    clock.advance(61 * MINUTE);
+    expect((await call(theo, "POST", `/events/${eventId}/express-invites`, { email: "x@exemple.fr" })).status).toBe(
+      201,
+    );
+  });
+
   it("refusée hors de la fenêtre du jour J", async () => {
     clock.set(paris(10, 12, 10));
     const invite = await call(julie, "POST", `/events/${eventId}/express-invites`, { email: "x@exemple.fr" });

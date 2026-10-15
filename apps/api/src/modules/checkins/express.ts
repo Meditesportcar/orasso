@@ -9,7 +9,7 @@ import {
   normalizePlate,
   vehicleCreateSchema,
 } from "@orasso/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, eq, gte, sql } from "drizzle-orm";
 
 import { auth } from "../../auth";
 import { db } from "../../db/client";
@@ -37,7 +37,9 @@ import { eventsRepo } from "../events/repo";
 import { staffService } from "../staff/service";
 import { checkReference } from "../vehicles/service";
 
-const VALIDITY_MS = 24 * 3_600_000;
+const HOUR_MS = 3_600_000;
+const VALIDITY_MS = 24 * HOUR_MS;
+const MAX_INVITES_PER_HOUR = 30;
 
 async function usableInvite(token: string) {
   const invite = await db.query.expressInvites.findFirst({ where: eq(expressInvites.token, token) });
@@ -57,11 +59,24 @@ export const expressService = {
     if (event.status !== "published" || !isStaffModeOpen(event, now())) {
       throw new AppError(423, "locked", "Inscription express : de la veille à la fin de l'événement");
     }
+    // Limite d'envoi : un compte staff ne peut pas servir à arroser des adresses (anti-abus du formulaire).
+    const [sent] = await db
+      .select({ n: count() })
+      .from(expressInvites)
+      .where(
+        and(
+          eq(expressInvites.createdBy, v.user.id),
+          gte(expressInvites.createdAt, new Date(now().getTime() - HOUR_MS)),
+        ),
+      );
+    if ((sent?.n ?? 0) >= MAX_INVITES_PER_HOUR) {
+      throw new AppError(429, "rate_limited", `Au plus ${MAX_INVITES_PER_HOUR} inscriptions express par heure`);
+    }
     const token = randomBytes(24).toString("base64url");
     const expiresAt = new Date(now().getTime() + VALIDITY_MS);
     const [row] = await db
       .insert(expressInvites)
-      .values({ eventId, email: email.toLowerCase(), token, createdBy: v.user.id, expiresAt })
+      .values({ eventId, email: email.toLowerCase(), token, createdBy: v.user.id, expiresAt, createdAt: now() })
       .returning();
     if (!row) throw new Error("Invitation non enregistrée");
     const url = `${env.PUBLIC_URL}/express/${token}`;
