@@ -1,0 +1,259 @@
+import { AppBar, Button, CheckboxField, Chip, ChipRow, VehicleThumb } from "@orasso/design-system/web";
+import {
+  type ApplicationCreate,
+  type EventPublic,
+  type MyApplication,
+  type StructurePublic,
+  type VehicleFull,
+  vehicleTypeLabels,
+} from "@orasso/shared";
+import { useState } from "react";
+import { redirect, useNavigate } from "react-router";
+
+import { apiFetch } from "../lib/api.client";
+import { apiOrThrow, requireMe } from "../lib/api.server";
+import { registrationState } from "../lib/status";
+import type { Route } from "./+types/candidater";
+
+export function meta() {
+  return [{ title: "Candidater · Orasso" }, { name: "robots", content: "noindex" }];
+}
+
+export async function loader({ request, params }: Route.LoaderArgs) {
+  await requireMe(request);
+  const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(params.slug)}`);
+  if ((event.myApplications ?? []).some((a) => ["pending", "accepted", "waitlisted", "offered"].includes(a.status))) {
+    throw redirect("/app/acces");
+  }
+  const [structure, vehicles] = await Promise.all([
+    apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
+    apiOrThrow<VehicleFull[]>(request, "/me/vehicles"),
+  ]);
+  const wanted = new Set(event.criteria?.categoryIds ?? []);
+  const active = vehicles
+    .filter((v) => v.status === "active")
+    // Ceux qui collent aux catégories recherchées d'abord (écran 1 du prototype).
+    .sort(
+      (a, b) => Number(b.categories.some((c) => wanted.has(c.id))) - Number(a.categories.some((c) => wanted.has(c.id))),
+    );
+  const preselected = new URL(request.url).searchParams.get("vehicule");
+  return {
+    event,
+    structure,
+    vehicles: active.map((v) => ({
+      id: v.id,
+      label: v.label,
+      year: v.year,
+      powerHp: v.powerHp,
+      photo: v.photos[0]?.url ?? null,
+      photoCount: v.photos.length,
+      admitted: event.admittedVehicleTypes.includes(v.vehicleType),
+      typeLabel: vehicleTypeLabels[v.vehicleType],
+      matches: v.categories.filter((c) => wanted.has(c.id)).map((c) => c.label),
+    })),
+    preselected,
+    state: registrationState(event, Date.now()),
+  };
+}
+
+type Step = 1 | 2 | 3;
+
+export default function Candidater({ loaderData }: Route.ComponentProps) {
+  const { event, structure, vehicles, preselected, state } = loaderData;
+  const navigate = useNavigate();
+  const backHref = `/e/${event.slug}`;
+  const here = `/e/${event.slug}/candidater`;
+  const selectable = vehicles.filter((v) => v.admitted && v.photoCount > 0);
+  const [step, setStep] = useState<Step>(1);
+  const [selected, setSelected] = useState<string[]>(() => {
+    const first = preselected && selectable.some((v) => v.id === preselected) ? [preselected] : [];
+    if (first.length === 0 && selectable.length === 1 && selectable[0]) return [selectable[0].id];
+    return first;
+  });
+  const [rules, setRules] = useState(false);
+  const [follow, setFollow] = useState(true);
+  const [newsletter, setNewsletter] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (state.kind !== "open") {
+    return (
+      <div className="s-narrow s-stack">
+        <h1 className="s-title">Candidater</h1>
+        <p className="s-notice s-notice--alert">
+          {state.kind === "cancelled"
+            ? "Cet événement est annulé."
+            : state.kind === "locked"
+              ? "Les inscriptions sont closes."
+              : "Les inscriptions ne sont pas encore ouvertes."}
+        </p>
+        <Button variant="secondary" icon="back" href={backHref}>
+          Retour à l'événement
+        </Button>
+      </div>
+    );
+  }
+
+  function toggle(id: string) {
+    setSelected((cur) => {
+      if (cur.includes(id)) return cur.filter((x) => x !== id);
+      if (cur.length >= event.maxVehiclesPerUser) return cur;
+      return [...cur, id];
+    });
+  }
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    const body: ApplicationCreate = {
+      vehicleIds: selected,
+      rulesAccepted: true,
+      followStructure: follow,
+      newsletterOptIn: newsletter,
+      companions: 0,
+      message: null,
+    };
+    const res = await apiFetch<MyApplication[]>(`/events/${event.id}/applications`, { method: "POST", json: body });
+    if (res.ok) {
+      navigate("/app/acces?candidature=envoyee");
+      return;
+    }
+    setBusy(false);
+    setError(res.error.message);
+  }
+
+  return (
+    <div className="s-narrow s-stack">
+      <AppBar kind="flow" title="Candidater" counter={`${step} / 3`} closeHref={backHref} bleed />
+      <div className="s-steps" aria-hidden="true">
+        {[1, 2, 3].map((n) => (
+          <div key={n} className={n <= step ? "s-steps__step is-done" : "s-steps__step"} />
+        ))}
+      </div>
+
+      {step === 1 && (
+        <div className="s-stack" data-step="1">
+          <div>
+            <div className="s-label o-t-label">1 / 3 · {event.title}</div>
+            <h1 className="s-title">Avec quel véhicule ?</h1>
+            <p className="s-muted">
+              Ceux qui collent aux catégories recherchées sont en premier. Limite : {event.maxVehiclesPerUser} par
+              personne pour cet événement.
+            </p>
+          </div>
+          {vehicles.length === 0 ? (
+            <div className="s-card">
+              <p>Ton garage est vide. Ajoute un véhicule, tu reviendras ici juste après.</p>
+              <Button variant="primary" icon="add" href={`/app/garage/nouveau?retour=${encodeURIComponent(here)}`}>
+                Ajouter un véhicule
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="s-vehicles">
+                {vehicles.map((v) => {
+                  const ok = v.admitted && v.photoCount > 0;
+                  return (
+                    <CheckboxField
+                      key={v.id}
+                      checked={selected.includes(v.id)}
+                      disabled={!ok}
+                      onChange={() => toggle(v.id)}
+                      aria-label={v.label}
+                      label={
+                        <VehicleThumb
+                          photo={v.photo ? <img src={v.photo} alt="" /> : undefined}
+                          title={v.label}
+                          meta={
+                            !v.admitted
+                              ? `${v.typeLabel} : type non admis`
+                              : v.photoCount === 0
+                                ? "Ajoute une photo pour candidater"
+                                : [v.year, v.powerHp ? `${v.powerHp} ch` : null, ...v.matches]
+                                    .filter(Boolean)
+                                    .join(" · ")
+                          }
+                        />
+                      }
+                    />
+                  );
+                })}
+              </div>
+              <ChipRow>
+                <Chip>
+                  {selected.length} véhicule{selected.length > 1 ? "s" : ""} · plaque visible par l'organisateur
+                  seulement
+                </Chip>
+              </ChipRow>
+              <Button variant="secondary" icon="add" href={`/app/garage/nouveau?retour=${encodeURIComponent(here)}`}>
+                Ajouter un autre véhicule
+              </Button>
+            </>
+          )}
+          <Button variant="primary" icon="next" disabled={selected.length === 0} onClick={() => setStep(2)} fullWidth>
+            Continuer
+          </Button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="s-stack" data-step="2">
+          <div>
+            <div className="s-label o-t-label">2 / 3 · {event.title}</div>
+            <h1 className="s-title">Règlement</h1>
+          </div>
+          {/* biome-ignore lint/a11y/noNoninteractiveTabindex: zone défilante : elle doit se lire au clavier */}
+          <div className="s-rules" tabIndex={0}>
+            {event.rulesText ??
+              "L'organisateur n'a pas ajouté de règlement particulier. Respecte les consignes sur place et les autres participants."}
+          </div>
+          <CheckboxField
+            checked={rules}
+            onChange={(e) => setRules(e.currentTarget.checked)}
+            label="J'ai lu le règlement de l'événement et je l'accepte."
+          />
+          <div className="s-row">
+            <Button variant="secondary" icon="back" onClick={() => setStep(1)}>
+              Retour
+            </Button>
+            <Button variant="primary" icon="next" disabled={!rules} onClick={() => setStep(3)} className="s-grow">
+              Continuer
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="s-stack" data-step="3">
+          <div>
+            <div className="s-label o-t-label">3 / 3 · {event.title}</div>
+            <h1 className="s-title">Dernier clic</h1>
+          </div>
+          <CheckboxField
+            checked={follow}
+            onChange={(e) => setFollow(e.currentTarget.checked)}
+            label={`Suivre ${structure.name} : ses prochains événements et l'avant-première des inscriptions.`}
+          />
+          <CheckboxField
+            checked={newsletter}
+            onChange={(e) => setNewsletter(e.currentTarget.checked)}
+            label="Recevoir la newsletter Orasso."
+          />
+          {error && (
+            <p className="s-error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="s-row">
+            <Button variant="secondary" icon="back" onClick={() => setStep(2)}>
+              Retour
+            </Button>
+            <Button variant="primary" icon="check" loading={busy} onClick={submit} className="s-grow">
+              Envoyer ma candidature
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
