@@ -1,30 +1,17 @@
+import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
 
-import { apiUrl } from "@/api";
+import { kvGet } from "@/lib/kv";
+import { useSession } from "@/lib/session";
 
-type Health = "loading" | "ok" | "error";
-
-// Écran provisoire du socle : vérifie que l'appli joint l'API. Les vrais écrans arrivent avec le lot 09.
-export default function Home() {
-  const [health, setHealth] = useState<Health>("loading");
-
+// Point d'entrée : l'écran affiché dépend de la session (le fond reste vide le temps de la lire). Le premier
+// lancement (3 écrans) n'est jamais revu : une fois vu, la connexion est l'écran d'accueil du déconnecté.
+export default function Index() {
+  const { status } = useSession();
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
   useEffect(() => {
-    fetch(apiUrl("/api/health"))
-      .then((res) => setHealth(res.ok ? "ok" : "error"))
-      .catch(() => setHealth("error"));
+    void kvGet("onboarded").then((v) => setOnboarded(v === "1"));
   }, []);
-
-  const message = {
-    loading: "Connexion à l'API…",
-    ok: "API joignable",
-    error: "API injoignable",
-  }[health];
-
-  return (
-    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
-      <Text accessibilityRole="header">Orasso</Text>
-      <Text>{message}</Text>
-    </View>
-  );
+  if (status === "loading" || onboarded === null) return null;
+  return <Redirect href={status === "in" ? "/accueil" : onboarded ? "/auth" : "/welcome"} />;
 }
