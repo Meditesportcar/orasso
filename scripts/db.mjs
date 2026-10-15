@@ -35,11 +35,26 @@ async function binaries() {
   }
 }
 
-function run(bin, args, { detached = false } = {}) {
-  // Au démarrage, postgres hérite des sorties de pg_ctl : un tube les garderait ouvertes et bloquerait
-  // le script. Tout est donc ignoré dans ce cas (les messages vont dans le fichier journal).
-  const stdio = detached ? "ignore" : ["ignore", "ignore", "pipe"];
-  return spawnSync(bin, args, { stdio, encoding: "utf8" });
+function run(bin, args) {
+  return spawnSync(bin, args, { stdio: ["ignore", "ignore", "pipe"], encoding: "utf8" });
+}
+
+// PostgreSQL reste lancé après la fin du script. S'il héritait d'un descripteur ouvert (la sortie de pnpm
+// redirigée vers un tube, par exemple), tout programme qui lit cette sortie attendrait indéfiniment.
+// Sous Windows, Start-Process lance pg_ctl sans lui transmettre aucun descripteur ; ailleurs, stdio ignoré suffit.
+function startDetached(bin, args) {
+  if (process.platform !== "win32") return spawnSync(bin, args, { stdio: "ignore" }).status;
+  const quote = (s) => `'${s.replaceAll("'", "''")}'`;
+  const argList = args.map((a) => (/[\s"]/.test(a) ? `"${a.replaceAll('"', '\\"')}"` : a)).join(" ");
+  const command = `$p = Start-Process -FilePath ${quote(bin)} -ArgumentList ${quote(argList)} -WindowStyle Hidden -PassThru; $p.WaitForExit(); exit $p.ExitCode`;
+  const powershell = join(
+    process.env.SystemRoot ?? "C:\\Windows",
+    "System32",
+    "WindowsPowerShell",
+    "v1.0",
+    "powershell.exe",
+  );
+  return spawnSync(powershell, ["-NoProfile", "-NonInteractive", "-Command", command], { stdio: "ignore" }).status;
 }
 
 function isRunning(pgCtl) {
@@ -90,12 +105,17 @@ async function start() {
   const { initdb, pg_ctl: pgCtl } = await binaries();
   if (!existsSync(join(dataDir, "PG_VERSION"))) await initCluster(initdb);
   if (!isRunning(pgCtl)) {
-    const res = run(
-      pgCtl,
-      ["start", "-D", dataDir, "-l", logFile, "-w", "-o", `-p ${port} -c listen_addresses=localhost`],
-      { detached: true },
-    );
-    if (res.status !== 0) {
+    const status = startDetached(pgCtl, [
+      "start",
+      "-D",
+      dataDir,
+      "-l",
+      logFile,
+      "-w",
+      "-o",
+      `-p ${port} -c listen_addresses=localhost`,
+    ]);
+    if (status !== 0) {
       console.error(`Échec du démarrage de PostgreSQL. Voir ${logFile}`);
       process.exit(1);
     }
