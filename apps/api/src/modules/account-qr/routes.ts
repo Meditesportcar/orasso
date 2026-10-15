@@ -1,6 +1,7 @@
 import { accountQrVerifySchema } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body } from "../../lib/validate";
 import { accountQrService } from "./service";
@@ -16,6 +17,7 @@ export const accountQrRoutes = new Hono<AppEnv>()
   })
   .post("/account-qr/verify", async (c) => {
     const v = await requireUser(c);
+    rateLimit("accountQrVerify", v.user.id);
     const { payload } = await body(c, accountQrVerifySchema);
     return c.json(await accountQrService.verify(v, payload));
   });

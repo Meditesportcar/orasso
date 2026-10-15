@@ -10,6 +10,7 @@ import {
 import { Hono } from "hono";
 
 import { validation } from "../../lib/errors";
+import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { expressService } from "./express";
@@ -36,11 +37,13 @@ export const checkinsRoutes = new Hono<AppEnv>()
   })
   .post("/events/:id/checkins/by-plates", async (c) => {
     const v = await requireUser(c);
+    rateLimit("plateCheckins", v.user.id);
     const { plates } = await body(c, checkinsByPlatesSchema);
     return c.json(await checkinsService.byPlates(v, uuidParam(c, "id"), plates));
   })
   .get("/events/:id/search", async (c) => {
     const v = await requireUser(c);
+    rateLimit("staffSearch", v.user.id);
     return c.json(await checkinsService.search(v, uuidParam(c, "id"), query(c, staffSearchQuerySchema).q));
   })
   .get("/events/:id/scan-report", async (c) =>

@@ -1,0 +1,51 @@
+// Limites de débit des routes sensibles de l'API métier (recette du lot 12) : sondage de plaque, vérification du QR
+// de compte, recherche du staff. L'authentification (connexion, inscription, 2FA) est limitée par Better Auth.
+// Compteurs en mémoire, par utilisateur connecté et par fenêtre fixe : une seule instance de l'API (dev.orasso.fr).
+// Plusieurs instances demanderaient un stockage partagé (PostgreSQL ou Redis).
+import { AppError } from "./errors";
+
+export type RateRule = { max: number; windowMs: number; message: string };
+
+export const rateRules = {
+  /** Ajout ou modification d'un véhicule : « plaque déjà enregistrée » permet de savoir si une plaque existe. */
+  vehicleWrite: {
+    max: 20,
+    windowMs: 3_600_000,
+    message: "Trop de véhicules ajoutés ou modifiés : réessaie plus tard.",
+  },
+  /** Vérification d'un QR de compte : code de 8 chiffres deviné par essais successifs. */
+  accountQrVerify: { max: 30, windowMs: 60_000, message: "Trop de vérifications : réessaie dans une minute." },
+  /** Recherche du staff par début de plaque ou pseudo. */
+  staffSearch: { max: 60, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
+  /** Pointage rapide par plaques (jusqu'à 300 plaques par envoi). */
+  plateCheckins: { max: 30, windowMs: 60_000, message: "Trop d'envois de plaques : réessaie dans une minute." },
+} satisfies Record<string, RateRule>;
+
+export type RateRuleName = keyof typeof rateRules;
+
+const buckets = new Map<string, { count: number; resetAt: number }>();
+let lastPrune = 0;
+
+/** Compte un appel ; `429 rate_limited` (avec `retryAfter` en secondes) au-delà du maximum de la fenêtre. */
+export function rateLimit(name: RateRuleName, subject: string, nowMs = Date.now()): void {
+  const rule = rateRules[name];
+  if (nowMs - lastPrune > 60_000) {
+    for (const [k, b] of buckets) if (b.resetAt <= nowMs) buckets.delete(k);
+    lastPrune = nowMs;
+  }
+  const key = `${name}|${subject}`;
+  const bucket = buckets.get(key);
+  if (!bucket || bucket.resetAt <= nowMs) {
+    buckets.set(key, { count: 1, resetAt: nowMs + rule.windowMs });
+    return;
+  }
+  bucket.count++;
+  if (bucket.count > rule.max) {
+    throw new AppError(429, "rate_limited", rule.message, { retryAfter: Math.ceil((bucket.resetAt - nowMs) / 1000) });
+  }
+}
+
+/** Tests : remet les compteurs à zéro. */
+export function resetRateLimits(): void {
+  buckets.clear();
+}
