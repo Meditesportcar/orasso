@@ -1,5 +1,5 @@
 import { ThemeProvider, useOrassoFonts, useTheme } from "@orasso/design-system/native";
-import { Stack } from "expo-router";
+import { Stack, useGlobalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 // Le thème (Béton par défaut, Sable, auto) et les polices Archivo sont posés une fois, à la racine.
@@ -16,9 +16,11 @@ function Shell() {
 
 export default function RootLayout() {
   const fontsReady = useOrassoFonts();
+  // Recette : /_ds?reduce=1 force « réduire les animations » (sinon, le réglage de l'appareil).
+  const { reduce } = useGlobalSearchParams<{ reduce?: string }>();
   if (!fontsReady) return null;
   return (
-    <ThemeProvider>
+    <ThemeProvider reducedMotion={reduce === "1" ? true : undefined}>
       <Shell />
     </ThemeProvider>
   );

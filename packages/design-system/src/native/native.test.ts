@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { tokens } from "../tokens";
 import { withAlpha } from "./color";
 import { archivoFamilies, archivoFamily } from "./fontFamily";
-import { linearLine, parseColor, parseGradient, repeatingBands } from "./gradientCss";
+import { linearLine, parseColor, parseGradient, radialGeometry, repeatingBands } from "./gradientCss";
 import { encodeAlphaPng, fractalNoiseTile, textureTile, toBase64 } from "./noise";
 import { textStyle, textStyles } from "./textStyles";
 
@@ -91,6 +91,15 @@ describe("dégradés des jetons", () => {
     expect(bands.length).toBeGreaterThan(5);
     const first = bands[0];
     expect(first?.points).toHaveLength(4);
+  });
+  it("ellipse : cercle de rayon rx écrasé par gradientTransform (le DOM SVG n'a pas rx/ry)", () => {
+    const g = parseGradient(tokens.groundFx.beton.halo);
+    if (g.kind !== "radial") throw new Error();
+    const geo = radialGeometry(g, 400, 800);
+    expect(geo.cx).toBeCloseTo(380);
+    expect(geo.cy).toBeCloseTo(-80);
+    expect(geo.r).toBeCloseTo(280);
+    expect(geo.transform).toBe(`translate(380 -80) scale(1 ${400 / 280}) translate(-380 80)`);
   });
   it("ligne d'un dégradé à 180° : verticale sur toute la hauteur", () => {
     const line = linearLine(180, 100, 200);

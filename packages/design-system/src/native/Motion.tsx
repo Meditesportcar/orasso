@@ -69,7 +69,8 @@ export function Reveal({ style, children, ...rest }: BoxProps) {
   const onLayout = (event: LayoutChangeEvent) => {
     if (size) return;
     const { width, height } = event.nativeEvent.layout;
-    setSize({ width, height });
+    // Arrondi par excès : une largeur fractionnaire rognée d'un demi-pixel ferait passer un texte à la ligne.
+    setSize({ width: Math.ceil(width), height: Math.ceil(height) });
   };
 
   const lean = size ? size.height * Math.tan((angle.cut * Math.PI) / 180) : 0;

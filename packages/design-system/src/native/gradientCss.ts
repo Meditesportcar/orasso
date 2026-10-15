@@ -145,6 +145,18 @@ export function linearLine(angle: number, width: number, height: number) {
   };
 }
 
+/**
+ * Un dégradé radial elliptique dans une boîte W × H, en pixels : le centre, le rayon horizontal et la matrice
+ * qui écrase le cercle en ellipse (le DOM SVG ignore rx/ry sur radialGradient : on passe par gradientTransform).
+ */
+export function radialGeometry(gradient: Extract<ParsedGradient, { kind: "radial" }>, width: number, height: number) {
+  const cx = gradient.cx * width;
+  const cy = gradient.cy * height;
+  const r = gradient.rx * width;
+  const squash = r === 0 ? 1 : (gradient.ry * height) / r;
+  return { cx, cy, r, transform: `translate(${cx} ${cy}) scale(1 ${squash}) translate(${-cx} ${-cy})` };
+}
+
 export type Band = { color: Rgba; points: [number, number][] };
 
 /**

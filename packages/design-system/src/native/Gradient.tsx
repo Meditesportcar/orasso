@@ -8,11 +8,10 @@ import {
   linearLine,
   type ParsedGradient,
   parseGradient,
+  radialGeometry,
   repeatingBands,
   rgbOf,
 } from "./gradientCss";
-
-const percent = (fraction: number) => `${fraction * 100}%`;
 
 /** Les arrêts d'un dégradé SVG (un tableau : react-native-svg attend des éléments enfants directs). */
 function stopElements(stops: GradientStop[], length: number) {
@@ -67,6 +66,43 @@ function Linear({
 }
 
 /**
+ * Dégradé radial elliptique. Le DOM SVG n'a pas de rx/ry sur radialGradient (le web ne verrait qu'un cercle) :
+ * on trace un cercle de rayon rx, écrasé verticalement par gradientTransform, en pixels.
+ */
+function Radial({
+  gradient,
+  width,
+  height,
+  id,
+}: {
+  gradient: Extract<ParsedGradient, { kind: "radial" }>;
+  width: number;
+  height: number;
+  id: string;
+}) {
+  const { cx, cy, r, transform } = radialGeometry(gradient, width, height);
+  return (
+    <>
+      <Defs>
+        <RadialGradient
+          id={id}
+          gradientUnits="userSpaceOnUse"
+          cx={cx}
+          cy={cy}
+          r={r}
+          fx={cx}
+          fy={cy}
+          gradientTransform={transform}
+        >
+          {stopElements(gradient.stops, 1)}
+        </RadialGradient>
+      </Defs>
+      <Rect x={0} y={0} width={width} height={height} fill={`url(#${id})`} />
+    </>
+  );
+}
+
+/**
  * Un rectangle rempli d'un dégradé linéaire, à poser dans un <Svg> existant (avec un clipPath, par exemple pour
  * un placeholder de photo coupé à 10°). Pour un dégradé qui remplit un conteneur, voir GradientFill.
  */
@@ -105,8 +141,8 @@ export type GradientFillProps = {
 };
 
 /**
- * Remplit son conteneur avec un dégradé CSS des jetons. Le radial est en pourcentages de la boîte (sans mesure) ;
- * le linéaire a besoin de la taille pour garder son angle, il apparaît après la mesure.
+ * Remplit son conteneur avec un dégradé CSS des jetons. Il faut la taille de la boîte (angle d'un dégradé
+ * linéaire, ellipse d'un radial) : le dégradé apparaît après la mesure.
  */
 export function GradientFill({ css, style }: GradientFillProps) {
   const id = `g${useId().replaceAll(":", "")}`;
@@ -117,35 +153,15 @@ export function GradientFill({ css, style }: GradientFillProps) {
     setSize((prev) => (prev && prev.width === width && prev.height === height ? prev : { width, height }));
   };
 
-  if (gradient.kind === "radial") {
-    return (
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
-        <Svg width="100%" height="100%" preserveAspectRatio="none">
-          <Defs>
-            <RadialGradient
-              id={id}
-              gradientUnits="userSpaceOnUse"
-              cx={percent(gradient.cx)}
-              cy={percent(gradient.cy)}
-              rx={percent(gradient.rx)}
-              ry={percent(gradient.ry)}
-              fx={percent(gradient.cx)}
-              fy={percent(gradient.cy)}
-            >
-              {stopElements(gradient.stops, 1)}
-            </RadialGradient>
-          </Defs>
-          <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id})`} />
-        </Svg>
-      </View>
-    );
-  }
-
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} onLayout={onLayout}>
       {size && size.width > 0 && size.height > 0 && (
         <Svg width={size.width} height={size.height}>
-          <Linear gradient={gradient} width={size.width} height={size.height} id={id} />
+          {gradient.kind === "radial" ? (
+            <Radial gradient={gradient} width={size.width} height={size.height} id={id} />
+          ) : (
+            <Linear gradient={gradient} width={size.width} height={size.height} id={id} />
+          )}
         </Svg>
       )}
     </View>

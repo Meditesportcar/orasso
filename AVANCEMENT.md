@@ -15,13 +15,18 @@
   - Page de recette `/_ds` (non liée) : tous les composants dans les deux thèmes ; `?only=<composant>&theme=<beton|sable>`. Les choix et écarts aux aperçus sont dans `docs/JOURNAL-DES-CHOIX.md`.
   - Vérifié : `pnpm --filter @orasso/design-system run build`, `run test` (20 tests : jetons, mouvement, rendu serveur, aucune valeur en dur) et `run typecheck` ; `pnpm lint` ; `pnpm --filter @orasso/web run build`.
 
+- **Système de design natif (lot 04, 15/10/2026)** : `@orasso/design-system/native` fournit à l'appli Expo les mêmes composants que le web (AppBar, Brand, Button, Chip, Counters, Cover, Field, Ground, Icons, Motion, Plate, PosterCard, ScanResult, StatusBadge, TabBar, VehicleCard), alimentés par les mêmes jetons, en Béton et en Sable, avec le mouvement « tout se gare » (Reanimated), le fond vivant et les barres brossées redessinés en `react-native-svg`, Archivo en six instances statiques, l'indicateur de chargement, l'écran d'ouverture (logo animé 1,6 s) et le résultat de scan (carte ou plein écran, trois sons provisoires).
+  - Utilisation : `<ThemeProvider>` à la racine (`apps/mobile/src/app/_layout.tsx`), attendre `useOrassoFonts()`, puis `import { Button, PosterCard, … } from "@orasso/design-system/native"`. Thème : `useTheme()` (`theme`, `preference`, `setPreference`, jetons `t`) ; réduction des animations : réglage de l'appareil (`/_ds?reduce=1` pour la recette).
+  - Recette : route cachée `/_ds` de l'appli (chaque composant en Béton et Sable ; `?only=<composant>&theme=<beton|sable>`), à voir avec `pnpm --filter @orasso/mobile exec expo start --web` (puis http://localhost:8081/_ds, ou le port choisi). Les choix et écarts sont dans `docs/JOURNAL-DES-CHOIX.md`.
+  - Vérifié : `pnpm typecheck`, `pnpm test` (32 tests du design system dont aucune valeur de couleur ou de durée en dur dans les composants natifs), `pnpm lint`, `expo export --platform android` et `--platform ios`, rendu de `/_ds` dans le navigateur. **Pas encore sur simulateur ni appareil.**
+
 ## En cours
 
 - Rien dans ce dépôt. Le chantier est découpé en lots (relais du coordinateur) ; la conception technique du lot 02 (`ARCHITECTURE.md`) sera copiée à la racine par le lot 05.
 
 ## Prochaine étape
 
-- Système de design natif : les composants React Native à partir de `@orasso/design-system` (lot 04). Les écrans du site s'écrivent avec les composants web (lot 07).
+- Écrans de l'appli avec les composants natifs (lots 09 et 10) ; les écrans du site avec les composants web (lot 07). Le thème choisi par l'utilisateur doit être mémorisé par l'appli (`onPreferenceChange`).
 - En parallèle : API du parcours n° 1 (comptes, garage, structures, événements, candidatures, tri, liste d'attente) d'après `ARCHITECTURE.md`, et déploiement de `dev.orasso.fr`.
 
 ## Lancer le projet sur ce PC (Windows)
