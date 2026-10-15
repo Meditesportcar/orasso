@@ -5,6 +5,7 @@ import { Chip, ChipRow, Counters, Plate, PosterCard, Text, tokens, useTheme } fr
 import {
   applicationStatusLabels,
   type EventPublic,
+  type EventReviews,
   eventAdmissionLabels,
   eventFormatLabels,
   eventOutlookLabels,
@@ -12,7 +13,7 @@ import {
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { ReactNode } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/endpoints";
 import { breakTitle, formatDay, formatDayHour, formatHour } from "@/lib/format";
@@ -33,6 +34,7 @@ export default function EventPage() {
   const { status } = useSession();
   const event = useApi(() => api.eventBySlug(slug), [slug, status], { enabled: status !== "loading" });
   const categories = useApi(() => api.categories(), [], { cacheKey: "ref.categories", enabled: status === "in" });
+  const reviews = useApi(() => api.eventReviews(slug), [slug, status], { enabled: status !== "loading" });
   const e = event.data;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/explorer" : "/auth"));
@@ -138,6 +140,9 @@ export default function EventPage() {
       <Info label="Public">{eventPublicAccessLabels[e.publicAccess]}</Info>
       {e.description ? <Info label="À propos">{e.description}</Info> : null}
       {e.instructions ? <Info label="Consignes de l'organisateur">{e.instructions}</Info> : null}
+      {reviews.data && (reviews.data.count > 0 || new Date(e.endsAt).getTime() <= Date.now()) ? (
+        <Reviews data={reviews.data} />
+      ) : null}
     </FlowScreen>
   );
 }
@@ -146,6 +151,51 @@ function posterStatus(e: EventPublic, retained: boolean) {
   if (e.status === "cancelled") return "cancelled" as const;
   if (e.outlook === "uncertain") return "uncertain" as const;
   return retained ? ("retained" as const) : ("pending" as const);
+}
+
+/** Avis des participants pointés : moyenne à partir du minimum d'avis, réponse publique de l'organisateur. */
+function Reviews({ data }: { data: EventReviews }) {
+  const { t } = useTheme();
+  const c = t.color;
+  const average = data.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+  return (
+    <Plate style={styles.info}>
+      <Text variant="label" color={c.plateMuted}>
+        Avis des participants
+      </Text>
+      <Text variant="body" color={c.plateInk}>
+        {data.count === 0
+          ? "Pas encore d'avis. Seuls les participants pointés à l'entrée peuvent noter, pendant la semaine qui suit."
+          : average
+            ? `${average} / 3 · ${data.count} avis`
+            : `${data.count} avis · la moyenne s'affiche à partir de ${data.minForAverage} avis.`}
+      </Text>
+      {data.items.map((r) => (
+        <View key={r.id} style={[styles.review, { borderTopColor: c.plateLine }]}>
+          <View style={styles.reviewHead}>
+            <Text variant="bodyStrong" color={c.plateInk}>
+              {r.pseudo}
+            </Text>
+            <Text
+              variant="bodyStrong"
+              color={c.accent}
+              accessibilityLabel={`${r.rating} étoile${r.rating > 1 ? "s" : ""} sur 3`}
+            >
+              {"★".repeat(r.rating)}
+            </Text>
+          </View>
+          <Text variant="body" color={c.plateInk}>
+            {r.comment}
+          </Text>
+          {r.reply ? (
+            <Text variant="meta" color={c.plateMuted}>
+              Réponse de l'organisateur : {r.reply.text}
+            </Text>
+          ) : null}
+        </View>
+      ))}
+    </Plate>
+  );
 }
 
 function Info({ label, children }: { label: string; children: ReactNode }) {
@@ -164,4 +214,6 @@ function Info({ label, children }: { label: string; children: ReactNode }) {
 
 const styles = StyleSheet.create({
   info: { gap: space1, padding: space3 },
+  review: { gap: space1, paddingTop: space3, marginTop: space1, borderTopWidth: 1 },
+  reviewHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space3 },
 });
