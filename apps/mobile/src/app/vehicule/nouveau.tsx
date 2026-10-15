@@ -230,7 +230,8 @@ export default function NouveauVehicule() {
         Photos · {photos.length} / {MAX_PHOTOS}
       </Text>
       <Text variant="body" color={t.color.inkMuted}>
-        Évite de montrer la plaque : tes photos sont visibles de tous les inscrits. La première est la photo de ta carte.
+        Évite de montrer la plaque : tes photos sont visibles de tous les inscrits. La première est la photo de ta
+        carte. Il en faut au moins une pour candidater.
       </Text>
       {photos.length > 0 ? (
         <View style={styles.photos}>

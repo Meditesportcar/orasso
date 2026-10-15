@@ -134,6 +134,17 @@ export default function Candidater() {
       counter={`${step} / 3`}
       onClose={step > 1 && !result ? () => setStep(step - 1) : close}
       footer={footer}
+      overlays={
+        <ResultSheet
+          result={result}
+          retained={retained}
+          onClose={close}
+          onAccess={() => {
+            setResult(null);
+            router.navigate("/acces");
+          }}
+        />
+      }
     >
       {step === 1 ? (
         <>
@@ -152,13 +163,15 @@ export default function Candidater() {
           {eligible.map((v) => {
             const on = picked.includes(v.id);
             const match = v.categories.some((c) => wanted.has(c.id));
+            // L'API exige une photo pour candidater : sans elle, on renvoie vers la fiche du véhicule.
+            const noPhoto = v.photos.length === 0;
             return (
               <Pressable
                 key={v.id}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: on }}
+                accessibilityRole={noPhoto ? "link" : "checkbox"}
+                accessibilityState={noPhoto ? undefined : { checked: on }}
                 accessibilityLabel={v.label}
-                onPress={() => toggle(v.id)}
+                onPress={() => (noPhoto ? router.push(`/vehicule/${v.id}`) : toggle(v.id))}
               >
                 <Plate
                   style={[styles.vehicle, on && { borderColor: t.color.accent, boxShadow: t.shadow.neonAccentSoft }]}
@@ -177,6 +190,11 @@ export default function Candidater() {
                       {[v.year, v.powerHp ? `${v.powerHp} ch` : null].filter(Boolean).join(" · ")}
                       {wanted.size > 0 && !match ? " · hors des catégories, possible quand même" : ""}
                     </Text>
+                    {noPhoto ? (
+                      <Text variant="meta" color={t.color.accentText}>
+                        Ajoute au moins une photo pour candidater →
+                      </Text>
+                    ) : null}
                     <ChipRow>
                       {v.categories.map((c) => (
                         <Chip key={c.id} surface="plate" lit={wanted.has(c.id)}>
@@ -185,12 +203,14 @@ export default function Candidater() {
                       ))}
                     </ChipRow>
                   </View>
+                  {noPhoto ? null : (
                   <View
                     style={[
                       styles.check,
                       { borderColor: on ? t.color.accent : t.color.plateLine, backgroundColor: on ? t.color.accent : "transparent" },
                     ]}
                   />
+                  )}
                 </Plate>
               </Pressable>
             );
@@ -275,34 +295,40 @@ export default function Candidater() {
           </Text>
         </>
       ) : null}
-
-      <AppSheet visible={Boolean(result)} onClose={close} accessibilityLabel="Candidature envoyée">
-        <Text variant="title" color={t.color.ink}>
-          {retained ? "Tu es retenu" : "Candidature envoyée"}
-        </Text>
-        <Text variant="body" color={t.color.inkMuted}>
-          {retained
-            ? "L'événement est sans sélection : ta place est réservée. Ta carte d'accès t'attend dans l'onglet Accès."
-            : "L'organisateur te répond au fil des candidatures. Tu seras notifié dès qu'il aura décidé."}
-        </Text>
-        <NotificationAsk reason="Active les notifications pour recevoir la réponse tout de suite, même appli fermée." />
-        <Button
-          variant="primary"
-          icon="qr"
-          next
-          onPress={() => {
-            setResult(null);
-            router.navigate("/acces");
-          }}
-          fullWidth
-        >
-          Voir mes accès
-        </Button>
-        <Button variant="plate" icon="back" onPress={close} fullWidth>
-          Retour à l'événement
-        </Button>
-      </AppSheet>
     </FlowScreen>
+  );
+}
+
+function ResultSheet({
+  result,
+  retained,
+  onClose,
+  onAccess,
+}: {
+  result: MyApplication[] | null;
+  retained: boolean;
+  onClose: () => void;
+  onAccess: () => void;
+}) {
+  const { t } = useTheme();
+  return (
+    <AppSheet visible={Boolean(result)} onClose={onClose} accessibilityLabel="Candidature envoyée">
+      <Text variant="title" color={t.color.ink}>
+        {retained ? "Tu es retenu" : "Candidature envoyée"}
+      </Text>
+      <Text variant="body" color={t.color.inkMuted}>
+        {retained
+          ? "L'événement est sans sélection : ta place est réservée. Ta carte d'accès t'attend dans l'onglet Accès."
+          : "L'organisateur te répond au fil des candidatures. Tu seras notifié dès qu'il aura décidé."}
+      </Text>
+      <NotificationAsk reason="Active les notifications pour recevoir la réponse tout de suite, même appli fermée." />
+      <Button variant="primary" icon="qr" next onPress={onAccess} fullWidth>
+        Voir mes accès
+      </Button>
+      <Button variant="plate" icon="back" onPress={onClose} fullWidth>
+        Retour à l'événement
+      </Button>
+    </AppSheet>
   );
 }
 

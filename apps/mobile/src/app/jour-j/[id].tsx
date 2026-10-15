@@ -112,6 +112,19 @@ export default function JourJ() {
       title="Jour J · hors ligne OK"
       onClose={close}
       still
+      overlays={
+        <WithdrawSheet
+          app={withdrawing ? app : null}
+          now={now}
+          onClose={() => setWithdrawing(false)}
+          onConfirm={async (target) => {
+            await api.withdraw(target.id);
+            setWithdrawing(false);
+            await reload();
+            router.replace("/acces");
+          }}
+        />
+      }
       footer={
         state === "open" && app && app.status === "accepted" ? (
           <Button
@@ -242,18 +255,6 @@ export default function JourJ() {
           </Text>
         </Plate>
       ) : null}
-
-      <WithdrawSheet
-        app={withdrawing ? app : null}
-        now={now}
-        onClose={() => setWithdrawing(false)}
-        onConfirm={async (target) => {
-          await api.withdraw(target.id);
-          setWithdrawing(false);
-          await reload();
-          router.replace("/acces");
-        }}
-      />
     </FlowScreen>
   );
 }

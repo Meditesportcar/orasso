@@ -4,7 +4,7 @@ import { gradeLabels, vehicleStatusLabels, type VehicleFull } from "@orasso/shar
 import { Button, Chip, Plate, Text, tokens, useTheme, VehicleCard } from "@orasso/design-system/native";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { AccountQrSheet } from "@/features/AccountQrSheet";
 import { api } from "@/lib/endpoints";
@@ -29,7 +29,11 @@ export default function Garage() {
   const archived = vehicles.data?.filter((v) => v.status !== "active") ?? [];
 
   return (
-    <TabScreen title="Mon garage" onRefresh={vehicles.reload}>
+    <TabScreen
+      title="Mon garage"
+      onRefresh={vehicles.reload}
+      overlays={<AccountQrSheet visible={qr} onClose={() => setQr(false)} />}
+    >
       {vehicles.offline ? <Notice>Hors ligne : ton garage tel que ton téléphone l'a gardé.</Notice> : null}
 
       <Plate style={styles.profile}>
@@ -98,15 +102,16 @@ export default function Garage() {
         </>
       ) : null}
 
-      <AccountQrSheet visible={qr} onClose={() => setQr(false)} />
     </TabScreen>
   );
 }
 
 function GarageCard({ vehicle, first }: { vehicle: VehicleFull; first: boolean }) {
   const { t } = useTheme();
+  const router = useRouter();
   return (
-    <VehicleCard
+    <Pressable accessibilityRole="link" accessibilityLabel={vehicle.label} onPress={() => router.push(`/vehicule/${vehicle.id}`)}>
+      <VehicleCard
       first={first}
       name={vehicle.label}
       year={vehicle.year ?? undefined}
@@ -118,7 +123,9 @@ function GarageCard({ vehicle, first }: { vehicle: VehicleFull; first: boolean }
         placeholder: `linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`,
       }}
       categories={vehicle.categories.map((c) => ({ label: c.label }))}
-    />
+      facts={vehicle.photos.length === 0 ? "Ajoute une photo pour pouvoir candidater" : undefined}
+      />
+    </Pressable>
   );
 }
 

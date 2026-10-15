@@ -7,7 +7,7 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import * as Notifications from "expo-notifications";
-import { Stack, useGlobalSearchParams, useRouter, useSegments } from "expo-router";
+import { Stack, useGlobalSearchParams, useRootNavigationState, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -30,6 +30,7 @@ function Shell() {
   const { status } = useSession();
   const router = useRouter();
   const segments = useSegments();
+  const navigation = useRootNavigationState();
   const [opening, setOpening] = useState(true);
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
@@ -39,11 +40,11 @@ function Shell() {
 
   // Déconnecté (ou jamais connecté) : seuls les écrans publics restent accessibles.
   useEffect(() => {
-    if (status !== "out" || onboarded === null) return;
+    if (status !== "out" || onboarded === null || !navigation?.key) return;
     const root = segments[0] as string | undefined;
     if (root && PUBLIC_ROOTS.has(root)) return;
     router.replace(onboarded ? "/auth" : "/welcome");
-  }, [status, onboarded, segments, router]);
+  }, [status, onboarded, segments, router, navigation?.key]);
 
   // Appareil enregistré auprès de l'API dès que le compte est ouvert (utile aux notifications et au staff).
   useEffect(() => {
@@ -60,7 +61,8 @@ function Shell() {
   return (
     <View style={styles.fill}>
       <StatusBar style={theme === "sable" ? "dark" : "light"} />
-      <Stack screenOptions={{ headerShown: false, animation: "none" }} />
+      {/* Les écrans attendent la lecture de la session : sans jeton, leurs premières requêtes partiraient anonymes. */}
+      {status === "loading" ? null : <Stack screenOptions={{ headerShown: false, animation: "none" }} />}
       <AnnouncementSheet />
       {opening ? (
         <View style={StyleSheet.absoluteFill}>

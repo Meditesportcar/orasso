@@ -22,7 +22,7 @@ export function NotificationAsk({ reason, onDone }: { reason: string; onDone?: (
         {reason}
       </Text>
       <Button
-        variant="primary"
+        variant="secondary"
         icon="bell"
         loading={busy}
         onPress={async () => {

@@ -20,10 +20,20 @@ type Common = {
   footer?: ReactNode;
   /** Fond immobile (modes terrain : jour J, staff). */
   still?: boolean;
+  /** Feuilles de l'écran : posées sur toute la surface de l'écran, hors de la zone qui défile. */
+  overlays?: ReactNode;
 };
 
 /** Écran d'un onglet : AppBar « page » (ou le logotype sur l'Accueil) avec Recherche, Cloche et Avatar. */
-export function TabScreen({ title, home = false, children, onRefresh, footer, still }: Common & { title?: string; home?: boolean }) {
+export function TabScreen({
+  title,
+  home = false,
+  children,
+  onRefresh,
+  footer,
+  still,
+  overlays,
+}: Common & { title?: string; home?: boolean }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { me, refreshMe } = useSession();
@@ -52,6 +62,7 @@ export function TabScreen({ title, home = false, children, onRefresh, footer, st
       {bar}
       <Body onRefresh={onRefresh}>{children}</Body>
       {footer ? <View style={styles.footer}>{footer}</View> : null}
+      {overlays}
       <JournalSheet visible={journal} onClose={() => setJournal(false)} />
     </Ground>
   );
@@ -67,6 +78,7 @@ export function FlowScreen({
   footer,
   still,
   onRefresh,
+  overlays,
 }: Common & { title: string; facts?: string; counter?: string; onClose: () => void }) {
   const insets = useSafeAreaInsets();
   return (
@@ -74,6 +86,7 @@ export function FlowScreen({
       <AppBar kind="flow" title={title} facts={facts} counter={counter} onClose={onClose} safeTop={insets.top} />
       <Body onRefresh={onRefresh}>{children}</Body>
       {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
+      {overlays}
     </Ground>
   );
 }

@@ -60,6 +60,28 @@ export default function Acces() {
       onRefresh={async () => {
         await Promise.all([reload(), staff.reload()]);
       }}
+      overlays={
+        <>
+          <WithdrawSheet
+            app={withdrawing}
+            now={now}
+            onClose={() => setWithdrawing(null)}
+            onConfirm={async (app) => {
+              await api.withdraw(app.id);
+              setWithdrawing(null);
+              await reload();
+            }}
+          />
+          <ContestSheet
+            target={contesting}
+            onClose={() => setContesting(null)}
+            onDone={() => {
+              setContesting(null);
+              void reload();
+            }}
+          />
+        </>
+      }
     >
       {offline ? <Notice>Hors ligne : voici ce que ton téléphone a gardé. Tes QR du jour J restent disponibles.</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -122,25 +144,6 @@ export default function Acces() {
           Ton carnet de route se remplira après ton premier événement : présence, points, avis.
         </Text>
       )}
-
-      <WithdrawSheet
-        app={withdrawing}
-        now={now}
-        onClose={() => setWithdrawing(null)}
-        onConfirm={async (app) => {
-          await api.withdraw(app.id);
-          setWithdrawing(null);
-          await reload();
-        }}
-      />
-      <ContestSheet
-        target={contesting}
-        onClose={() => setContesting(null)}
-        onDone={() => {
-          setContesting(null);
-          void reload();
-        }}
-      />
     </TabScreen>
   );
 }

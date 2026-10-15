@@ -66,6 +66,21 @@ describe("QR d'inscription", () => {
     expect([0, 6].every((x) => matrix.dark(x, 0) && matrix.dark(x, 6))).toBe(true);
     expect(qrPath(matrix).startsWith("M4 4h7")).toBe(true);
   });
+
+  it("le tracé SVG redessine exactement la matrice (zone calme de 4 modules comprise)", () => {
+    const matrix = qrMatrix(`OA1${"B".repeat(30)}.12345678`);
+    const box = qrViewBox(matrix);
+    const grid = Array.from({ length: box }, () => Array<boolean>(box).fill(false));
+    for (const [, x, y, w] of qrPath(matrix).matchAll(/M(\d+) (\d+)h(\d+)v1h-\d+z/g)) {
+      for (let i = 0; i < Number(w); i++) (grid[Number(y)] as boolean[])[Number(x) + i] = true;
+    }
+    for (let y = 0; y < box; y++) {
+      for (let x = 0; x < box; x++) {
+        const inside = x >= 4 && y >= 4 && x < box - 4 && y < box - 4;
+        expect(grid[y]?.[x]).toBe(inside ? matrix.dark(x - 4, y - 4) : false);
+      }
+    }
+  });
 });
 
 describe("Mode jour J : fenêtre d'ouverture", () => {

@@ -41,6 +41,11 @@ export function formatStamp(iso: string | Date, timeZone = BUSINESS_TIMEZONE): s
 /** « 1 h 42 », « 12 min », « 45 s » : durée jusqu'à une échéance (au moins 1 s). */
 export function formatDuration(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
+  if (total >= 24 * 3600) {
+    const d = Math.floor(total / 86400);
+    const rest = Math.floor((total % 86400) / 3600);
+    return rest > 0 ? `${d} j ${rest} h` : `${d} j`;
+  }
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   if (h > 0) return m > 0 ? `${h} h ${String(m).padStart(2, "0")}` : `${h} h`;

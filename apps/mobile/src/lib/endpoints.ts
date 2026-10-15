@@ -78,6 +78,9 @@ export const api = {
 
   // Garage.
   vehicles: () => request<VehicleFull[]>("/api/me/vehicles"),
+  vehicle: (id: string) => request<VehicleFull>(`/api/me/vehicles/${id}`),
+  deleteVehiclePhoto: (vehicleId: string, photoId: string) =>
+    request<unknown>(`/api/me/vehicles/${vehicleId}/photos/${photoId}`, { method: "DELETE" }),
   createVehicle: (body: VehicleCreate) => request<VehicleFull>("/api/me/vehicles", { method: "POST", body }),
   uploadVehiclePhoto: (vehicleId: string, form: FormData) =>
     request<VehiclePhoto>(`/api/me/vehicles/${vehicleId}/photos`, { method: "POST", form, timeout: 60_000 }),
