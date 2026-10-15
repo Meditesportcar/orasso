@@ -272,16 +272,14 @@ async function createVehicle(
   for (let position = 1; position <= photos; position++) {
     const key = `seed/${row.id}-${position}.webp`;
     const info = await fakePhoto(key, pick(PALETTE));
-    await db
-      .insert(t.vehiclePhotos)
-      .values({
-        vehicleId: row.id,
-        position,
-        storageKey: key,
-        width: info.width,
-        height: info.height,
-        bytes: info.size,
-      });
+    await db.insert(t.vehiclePhotos).values({
+      vehicleId: row.id,
+      position,
+      storageKey: key,
+      width: info.width,
+      height: info.height,
+      bytes: info.size,
+    });
   }
   return { ...row, ref };
 }
