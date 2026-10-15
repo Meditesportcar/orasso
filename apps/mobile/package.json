@@ -8,7 +8,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "export:android": "expo export --platform android",
-    "typecheck": "tsc --noEmit",
+    "typegen": "expo customize tsconfig.json",
+    "typecheck": "expo customize tsconfig.json && tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
