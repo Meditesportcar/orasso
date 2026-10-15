@@ -1,0 +1,164 @@
+/* Button : droit, capitales larges, une icône à gauche. Voir docs/design-system/components/Button. */
+
+.o-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: var(--touch);
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--radius-md);
+  font-style: normal;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform var(--timing-fast) var(--ease-inout),
+    box-shadow var(--timing-fast) var(--ease-inout),
+    background-color var(--timing-fast) var(--ease-inout),
+    opacity var(--timing-fast) var(--ease-inout);
+}
+.o-button svg {
+  flex: none;
+}
+.o-button__label {
+  min-width: 0;
+}
+/* Appui : échelle 0,97 et le néon baisse (fast). */
+.o-button:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(var(--press-scale));
+}
+.o-button:disabled,
+.o-button[aria-disabled="true"] {
+  opacity: 0.4;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.o-button.is-loading {
+  cursor: progress;
+  box-shadow: none;
+  opacity: 1;
+}
+.o-button--full {
+  display: flex;
+  width: 100%;
+}
+
+/* Principal : moutarde, néon. Un seul par écran. */
+.o-button--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--neon-accent);
+}
+.o-button--primary:active:not(:disabled) {
+  box-shadow: var(--neon-accent-soft);
+}
+/* Secondaire : contour encre, fond transparent. */
+.o-button--secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+}
+/* Sur affiche : posé sur la carte poster, fond nuit, seul bouton qui écrit en moutarde. */
+.o-button--poster {
+  background: var(--night);
+  color: var(--accent);
+  box-shadow: var(--shadow-card);
+}
+/* Alerte : rouge course, réservé au staff et aux confirmations graves. */
+.o-button--alert {
+  min-height: 56px;
+  padding: 0 28px;
+  background: var(--win);
+  color: var(--win-ink);
+  box-shadow: var(--neon-win);
+}
+/* Sur plaque : fond graphite, texte poster, contour poster à 50 %. */
+.o-button--plate {
+  background: var(--plate);
+  color: var(--plate-ink);
+  border: 1.5px solid color-mix(in srgb, var(--plate-ink) 50%, transparent);
+}
+.o-button--plate.o-button--wait {
+  border-color: var(--status-waitlist-on-plate);
+  color: var(--status-waitlist-on-plate);
+}
+.o-button--dashed {
+  border-style: dashed;
+}
+/* Secours du staff : sur surface, contour encre (2 px en Sable, 1,5 px en Béton). */
+.o-button--rescue {
+  min-height: 56px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+}
+[data-theme="sable"] .o-button--rescue {
+  border-width: 2px;
+}
+.o-button--rescue.o-button--tall {
+  min-height: 72px;
+}
+.o-button--rescue.o-button--dashed {
+  border-style: dashed;
+}
+
+/* Rangée de trois : icône au-dessus du libellé, jamais de libellé qui déborde. */
+.o-button--column {
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 6px;
+  font-size: 11px;
+  line-height: 13px;
+}
+.o-button--column .o-button__label {
+  max-width: 100%;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* Fermer : la pastille ✕ de 34 px, dernier élément à droite de l'en-tête. */
+.o-button--close {
+  width: 34px;
+  min-height: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--radius-chip);
+  border: 1.5px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+}
+[data-theme="sable"] .o-button--close {
+  border: 2px solid var(--ink);
+  background: color-mix(in srgb, var(--night-ink) 22%, transparent);
+}
+.o-button--close.o-button--on-photo {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: color-mix(in srgb, var(--night) 55%, transparent);
+  color: var(--night-ink);
+}
+
+/* Touche de raccourci clavier (site) : 22 px min, contour 1,5 px, rayon 6 px. */
+.o-button__key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border: 1.5px solid currentColor;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+}

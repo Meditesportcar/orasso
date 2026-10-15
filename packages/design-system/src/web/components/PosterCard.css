@@ -1,0 +1,87 @@
+/* PosterCard : la carte affiche, seule carte claire de l'écran. Voir docs/design-system/components/PosterCard. */
+
+.o-poster {
+  position: relative;
+  overflow: hidden;
+  padding-bottom: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--poster);
+  color: var(--poster-ink);
+  box-shadow: var(--shadow-poster);
+}
+.o-poster__label {
+  padding: 16px 16px 0;
+  color: var(--poster-muted);
+}
+.o-poster__title {
+  margin: 0;
+  padding: 6px 16px 0;
+  /* Deux lignes au plus, jamais rognées : le mot long passe à la ligne. */
+  overflow-wrap: anywhere;
+}
+/* En Sable la carte s'inverse (nuit) et son titre passe en moutarde. */
+[data-theme="sable"] .o-poster__title {
+  color: var(--accent);
+}
+.o-poster__facts {
+  padding: 8px 16px 0;
+  color: var(--poster-muted);
+}
+.o-poster__photo {
+  /* La coupe monte vers la droite (angle --cut du logo). */
+  --o-cut-shape: polygon(0 18%, 100% 0, 100% 100%, 0 100%);
+  height: 110px;
+  margin-top: 12px;
+  overflow: hidden;
+  clip-path: var(--o-cut-shape);
+}
+.o-poster__photo > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.o-poster__action {
+  position: relative;
+  margin: -14px 12px 0;
+}
+.o-poster:not(:has(.o-poster__action)) {
+  padding-bottom: 28px;
+}
+.o-poster__credit {
+  bottom: 8px;
+}
+/* En Sable la carte est sombre : la signature est celle des surfaces sombres. */
+[data-theme="sable"] .o-poster .o-credit {
+  color: var(--brand-credit);
+}
+
+/* Bandeau en coin, tourné à --band. */
+.o-poster__band {
+  position: absolute;
+  top: 18px;
+  right: -44px;
+  z-index: 1;
+  padding: 4px 52px;
+  transform: rotate(var(--band));
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--neon-accent-soft);
+}
+.o-poster__band--cancelled {
+  background: var(--status-cancelled);
+  color: var(--win-ink);
+  box-shadow: var(--neon-win);
+}
+.o-poster__band--uncertain {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--status-uncertain) 0 6px,
+    color-mix(in srgb, var(--status-uncertain) 45%, transparent) 6px 10px
+  );
+  color: var(--accent-ink);
+}
+/* Le bandeau se tamponne : 1,9 → 1 en `poster`. */
+.o-anim-stamp {
+  animation: o-stamp var(--timing-poster) var(--ease-out) both;
+}

@@ -1,0 +1,137 @@
+/* AppBar : l'en-tête en métal brossé. Voir docs/design-system/components/AppBar. */
+
+.o-appbar {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--bar-top);
+  padding: 12px 18px 0;
+  background: var(--bar-gradient);
+  color: var(--bar-ink);
+  border-bottom: var(--bar-edge-header) solid var(--bar-edge);
+  box-shadow: var(--shadow-bar-top);
+  text-shadow: var(--emboss-bar);
+  overflow: hidden;
+}
+.o-appbar--bleed {
+  margin-inline: calc(var(--space-4) * -1);
+}
+.o-appbar__spacer {
+  flex: 1;
+}
+.o-appbar__heading {
+  flex: 1;
+  min-width: 0;
+}
+.o-appbar__title {
+  margin: 0;
+  font-size: var(--type-title-size);
+  line-height: var(--type-title-line);
+}
+/* 13 px avec une ligne de faits (Tri, Scan, Direct), 12 px dans les modes plein écran. */
+.o-appbar__title.has-facts {
+  font-size: 13px;
+  line-height: 15px;
+}
+.o-appbar--flow .o-appbar__title.has-facts {
+  font-size: 12px;
+  line-height: 14px;
+}
+.o-appbar__facts {
+  color: var(--bar-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Compteur de contexte (le scan : 62 / 116) : incliné, texte redressé. */
+.o-appbar__counter {
+  flex: none;
+  padding: 4px 8px;
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  color: var(--accent);
+  transform: skewX(var(--skew));
+  text-shadow: none;
+}
+[data-theme="sable"] .o-appbar__counter {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.o-appbar__counter-text {
+  display: inline-block;
+  transform: skewX(calc(var(--skew) * -1));
+}
+
+/* Pastilles d'action : 34 px, contour line 1,5 px en Béton, contour encre 2 px sur crème à 22 % en Sable. */
+.o-appbar__action {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--bar-ink);
+  text-decoration: none;
+  text-shadow: none;
+  cursor: pointer;
+  transition:
+    background-color var(--timing-fast) var(--ease-inout),
+    color var(--timing-fast) var(--ease-inout);
+}
+[data-theme="sable"] .o-appbar__action {
+  border: 2px solid var(--bar-ink);
+  background: color-mix(in srgb, var(--night-ink) 22%, transparent);
+}
+/* Sur l'écran que la pastille ouvre : fond bar-ink, icône inversée. */
+.o-appbar__action.is-on {
+  background: var(--bar-ink);
+  color: var(--bar);
+}
+.o-appbar__avatar {
+  padding: 3px;
+  overflow: visible;
+}
+.o-appbar__avatar > img,
+.o-appbar__avatar > :first-child {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.o-appbar__avatar.has-content {
+  border-radius: var(--radius-chip);
+}
+.o-appbar__count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  padding: 2px 4px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--neon-accent);
+  text-align: center;
+  text-shadow: none;
+}
+.o-appbar__dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--neon-accent-soft);
+}
+.o-appbar__close {
+  flex: none;
+}

@@ -1,0 +1,93 @@
+/* ScanResult : OK (moutarde), déjà entré (crème), refusé (rouge). Voir docs/design-system/components/ScanResult. */
+
+.o-scan {
+  --o-neon-peak: 0 0 60px color-mix(in srgb, var(--accent) 95%, transparent);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 16px 22px;
+  border-radius: var(--radius-lg);
+}
+/* En Sable le soleil éteint les lampadaires : le pic de néon devient une ombre portée. */
+[data-theme="sable"] .o-scan {
+  --o-neon-peak: var(--neon-scan);
+}
+.o-scan--ok {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--neon-scan);
+}
+.o-scan--duplicate {
+  background: var(--poster);
+  color: var(--poster-ink);
+  box-shadow: var(--shadow-card);
+}
+/* En Sable le poster est sombre : la signature est celle des surfaces sombres. */
+[data-theme="sable"] .o-scan--duplicate .o-credit {
+  color: var(--brand-credit);
+}
+.o-scan--refused {
+  background: var(--win);
+  color: var(--win-ink);
+  box-shadow: var(--neon-win);
+}
+.o-scan.is-settled {
+  opacity: 0.88;
+}
+
+.o-scan__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border: 3px solid currentColor;
+  border-radius: 50%;
+}
+.o-scan__digit {
+  font-weight: 900;
+  font-size: 28px;
+  line-height: 1;
+}
+.o-scan__text {
+  flex: 1;
+  min-width: 0;
+}
+.o-scan__kicker {
+  opacity: 0.75;
+}
+/* Le nom en style title (droit, 15–16 px) : à l'entrée on lit, on ne crie pas. Jamais tronqué. */
+.o-scan__name {
+  font-size: 16px;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+}
+.o-scan__zone {
+  flex: none;
+  margin-left: auto;
+  text-align: right;
+}
+.o-scan__zone small {
+  display: block;
+  opacity: 0.75;
+}
+
+/* Entrée : se gare du bas, puis le néon fait un pic et revient en poster (`poster`). */
+.o-anim-scan {
+  animation:
+    o-park var(--timing-base) both,
+    o-scan-neon var(--timing-poster) var(--ease-out) both;
+}
+@keyframes o-scan-neon {
+  from {
+    box-shadow: var(--o-neon-peak);
+  }
+}
+/* Refusé : secoué trois fois, ±7 px (--shake-duration). */
+.o-anim-scan-refused {
+  animation:
+    o-park var(--timing-base) both,
+    o-shake var(--shake-duration) var(--ease-inout) var(--timing-base) both;
+}

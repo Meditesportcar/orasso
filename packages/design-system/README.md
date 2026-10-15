@@ -1,8 +1,28 @@
 # @orasso/design-system
 
-Paquet vide pour l'instant. Il recevra :
+Le système de design Orasso en code, d'après `docs/design-system/` (v1, gelé le 15/10/2026). Aucune valeur en dur : tout vient de `docs/design-system/tokens.json`.
 
-- les jetons, générés depuis `docs/design-system/tokens.json` (seule source des couleurs, typos, rayons, ombres, durées) ;
-- les 15 composants en React (site) et React Native (appli), dans les deux thèmes Béton et Sable.
+## Ce qui est dans le paquet
 
-Référence : `docs/design-system/` (gelé le 15/10/2026). Ne jamais écrire de valeur en dur.
+| Chemin | Rôle |
+|---|---|
+| `scripts/generate-tokens.mjs` | Lit `tokens.json`, écrit `src/tokens.ts`, `src/web/tokens.css`, `src/web/typography.css`. Lancé par `build` et avant `test` (`pnpm --filter @orasso/design-system run generate`). Les sorties sont versionnées. |
+| `src/tokens.ts`, `motion.ts`, `labels.ts`, `icons.ts` | Commun au site et à l'appli (lot 04), sans React : jetons des deux thèmes, durées et courbes, libellés, formes des icônes. Import : `@orasso/design-system`. |
+| `src/web/` | Version web (React, rendu serveur) : thèmes, mouvement, polices, 16 composants. Import : `@orasso/design-system/web` et, une fois, `@orasso/design-system/web/styles.css`. |
+| `src/web/components/` | Un composant = un `.tsx` + un `.css` (classes `o-…`). Aucune couleur ni durée en dur (un test le vérifie). |
+| `scripts/build-preview-harness.mjs` | Prépare les `preview.html` d'origine pour la comparaison avec `/_ds` (sortie ignorée par Git). |
+
+## Utiliser
+
+```tsx
+import "@orasso/design-system/web/styles.css";
+import { Button, PosterCard, ThemeProvider } from "@orasso/design-system/web";
+
+<Button icon="qr" next>Mode jour J</Button>
+```
+
+- Le thème est l'attribut `data-theme` (`beton` par défaut, `sable`) : voir `ThemeProvider`, `ThemeScript`, `readThemeCookie` (cookie `orasso-theme`, lu côté serveur : pas de flash).
+- Tout bouton porte une icône (`icon` est obligatoire sauf pour la pastille ✕). Un seul bouton principal et un seul `PosterCard` par écran.
+- Mouvement : classes `o-anim-*` et composants `Park`, `Cascade`, `Reveal`, `ScreenTransition`. Avec `prefers-reduced-motion`, tout devient un fondu de 120 ms.
+
+Les composants se voient sur la page `/_ds` du site (non liée) ; les choix faits au-delà des docs sont dans `docs/JOURNAL-DES-CHOIX.md`.

@@ -1,0 +1,46 @@
+/* Plate : la plaque graphite. Voir docs/design-system/components/Plate. */
+
+.o-plate {
+  position: relative;
+  padding: 12px 14px;
+  border: 1px solid var(--plate-edge);
+  border-radius: var(--radius-lg);
+  background: var(--plate);
+  color: var(--plate-ink);
+  box-shadow: var(--shadow-card);
+}
+.o-plate--label {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+.o-plate--note {
+  border: 1.5px dashed var(--plate-line);
+  box-shadow: none;
+}
+/* Un champ de saisie dans une plaque est en graphite clair, texte poster, dans les deux thèmes. */
+.o-plate input,
+.o-plate select {
+  background: var(--surface-raised);
+  color: var(--plate-ink);
+}
+/* Les champs et cases dans une plaque lisent leurs couleurs dans les jetons plate-*. */
+.o-plate .o-field,
+.o-plate .o-check,
+.o-plate .o-field__reveal {
+  color: var(--plate-ink);
+}
+.o-plate .o-field__label,
+.o-plate .o-field__help {
+  color: var(--plate-muted);
+}
+.o-plate .o-check__box {
+  border-color: var(--plate-ink);
+}
+.o-plate .o-field__input {
+  border-color: var(--plate-line);
+}
+.o-plate .o-field.has-error .o-field__input {
+  border-color: var(--win-text);
+}

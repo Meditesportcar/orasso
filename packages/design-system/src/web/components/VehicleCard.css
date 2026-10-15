@@ -1,0 +1,109 @@
+/* VehicleCard : photo pleine, nom en italique d'affiche, catégories. Voir docs/design-system/components/VehicleCard. */
+
+.o-vehicle {
+  overflow: hidden;
+  padding: 0;
+}
+.o-vehicle__photo {
+  position: relative;
+  height: 120px;
+  overflow: hidden;
+}
+.o-vehicle__photo.is-first {
+  height: 156px;
+}
+.o-vehicle__photo > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* La photo se fond vers le graphite sur les 45 % du bas. Jamais de filtre de couleur sur la photo. */
+.o-vehicle__photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 55%, var(--photo-fade) 100%);
+  pointer-events: none;
+}
+.o-vehicle__tag,
+.o-vehicle__count {
+  position: absolute;
+  top: 10px;
+  z-index: 1;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 12px;
+  letter-spacing: 0.08em;
+}
+.o-vehicle__tag {
+  left: 12px;
+  background: var(--poster);
+  color: var(--poster-ink);
+}
+.o-vehicle__count {
+  right: 12px;
+  background: var(--scrim);
+  color: var(--night-ink);
+}
+.o-vehicle__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 14px;
+}
+.o-vehicle__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+}
+.o-vehicle__title small {
+  flex: none;
+  color: var(--plate-muted);
+}
+.o-vehicle__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* La catégorie recherchée par l'événement : moutarde telle quelle, pas accent-text. */
+.o-chip--lit {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.o-vehicle__facts {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--plate-muted);
+}
+
+/* Vignette : 150 px, photo de 84 px coupée à --cut. */
+.o-thumb {
+  width: 150px;
+  flex: none;
+}
+.o-thumb__photo {
+  --o-cut-shape: polygon(0 0, 100% 10%, 100% 100%, 0 90%);
+  height: 84px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  clip-path: var(--o-cut-shape);
+}
+.o-thumb__photo > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.o-thumb__title {
+  margin-top: 6px;
+  color: var(--ink);
+}
+.o-thumb__meta {
+  color: var(--ink-muted);
+  font-size: 10px;
+  line-height: 13px;
+}
