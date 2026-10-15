@@ -4,5 +4,6 @@ export * from "./auth";
 export * from "./events";
 export * from "./notifications";
 export * from "./profiles";
+export * from "./relations";
 export * from "./structures";
 export * from "./vehicles";

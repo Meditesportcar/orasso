@@ -29,13 +29,19 @@ const vehicleFields = z.object({
 });
 
 /** Plaque obligatoire pour un véhicule actif, sauf « non immatriculé » (docs/01 « Véhicules et garage »). */
-function plateRule(v: { status?: VehicleStatus; unregistered?: boolean; plate?: string | null }, ctx: z.RefinementCtx) {
-  if (v.unregistered && v.plate) {
-    ctx.addIssue({ code: "custom", path: ["plate"], message: "Pas de plaque pour un véhicule non immatriculé" });
-  }
-  if ((v.status ?? "active") === "active" && !v.unregistered && !v.plate) {
-    ctx.addIssue({ code: "custom", path: ["plate"], message: "Plaque obligatoire" });
-  }
+export function vehiclePlateIssue(v: {
+  status?: VehicleStatus;
+  unregistered?: boolean;
+  plate?: string | null;
+}): string | null {
+  if (v.unregistered && v.plate) return "Pas de plaque pour un véhicule non immatriculé";
+  if ((v.status ?? "active") === "active" && !v.unregistered && !v.plate) return "Plaque obligatoire";
+  return null;
+}
+
+function plateRule(v: Parameters<typeof vehiclePlateIssue>[0], ctx: z.RefinementCtx) {
+  const message = vehiclePlateIssue(v);
+  if (message) ctx.addIssue({ code: "custom", path: ["plate"], message });
 }
 
 export const vehicleCreateSchema = vehicleFields.superRefine(plateRule);
@@ -48,7 +54,6 @@ export const vehicleUpdateSchema = vehicleFields.partial().extend({
   categoryIds: z.array(z.uuid()).max(10).optional(),
 });
 export type VehicleUpdate = z.infer<typeof vehicleUpdateSchema>;
-export { plateRule as vehiclePlateRule };
 
 export const photoOrderSchema = z.object({ photoIds: z.array(z.uuid()).min(1).max(8) });
 
