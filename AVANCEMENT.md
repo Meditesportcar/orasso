@@ -8,7 +8,12 @@
   - API Hono : `GET /api/health` (vérifie la base), Better Auth sur `/api/auth/*` (e-mail + mot de passe ; Google et Apple inactifs sans identifiants), pg-boss démarré (schéma `pgboss`, aucune tâche), WebSocket `/api/ws` (écho).
   - Site React Router 8 en rendu serveur : page provisoire, polices Archivo, favicon, `/api` relayé vers l'API en dev.
   - Appli Expo SDK 57 (Expo Router) : écran provisoire qui interroge `/api/health`, nom « Orasso », identifiant `fr.orasso.app`, icône et écran de démarrage.
-  - `packages/shared` : statuts de candidature, grades, rôles avec les libellés des docs. `packages/design-system` : vide.
+  - `packages/shared` : statuts de candidature, grades, rôles avec les libellés des docs. `packages/design-system` : vide (rempli par le lot 03).
+- **Système de design web (lot 03, 15/10/2026)** : `packages/design-system` fournit au site les jetons (générés depuis `docs/design-system/tokens.json`), les deux thèmes Béton et Sable, le mouvement « tout se gare » et les 16 composants React du système v1 (AppBar, Brand, Button, Chip, Counters, Cover, Field, Ground, Icons, Motion, Plate, PosterCard, ScanResult, StatusBadge, TabBar, VehicleCard).
+  - Import côté site : `import "@orasso/design-system/web/styles.css"` (une fois, dans `root.tsx`) puis `import { Button, … } from "@orasso/design-system/web"`. Commun au natif (lot 04) : `@orasso/design-system` (jetons `tokens`, `duration`/`curve`/`park`, `badgeLabels`, `iconShapes`, `tabSets`), sans React.
+  - Thème : cookie `orasso-theme` (`beton` | `sable` | `auto`, défaut Béton) lu par le serveur, `data-theme` sur `<html>`, sans flash ; `ThemeProvider`, `useTheme`, `ThemeScope`. Archivo variable auto-hébergée (une seule famille, trois largeurs).
+  - Page de recette `/_ds` (non liée) : tous les composants dans les deux thèmes ; `?only=<composant>&theme=<beton|sable>`. Les choix et écarts aux aperçus sont dans `docs/JOURNAL-DES-CHOIX.md`.
+  - Vérifié : `pnpm --filter @orasso/design-system run build`, `run test` (20 tests : jetons, mouvement, rendu serveur, aucune valeur en dur) et `run typecheck` ; `pnpm lint` ; `pnpm --filter @orasso/web run build`.
 
 ## En cours
 
@@ -16,7 +21,7 @@
 
 ## Prochaine étape
 
-- Système de design en code (jetons depuis `docs/design-system/tokens.json`, 15 composants web puis natifs, deux thèmes, mouvement).
+- Système de design natif : les composants React Native à partir de `@orasso/design-system` (lot 04). Les écrans du site s'écrivent avec les composants web (lot 07).
 - En parallèle : API du parcours n° 1 (comptes, garage, structures, événements, candidatures, tri, liste d'attente) d'après `ARCHITECTURE.md`, et déploiement de `dev.orasso.fr`.
 
 ## Lancer le projet sur ce PC (Windows)
@@ -40,7 +45,7 @@ Prérequis : Node 24 (déjà installé), Git.
    - `pnpm db:generate` après une modification du schéma (`apps/api/src/db/schema/`), puis `pnpm db:migrate`. `pnpm db:studio` pour parcourir la base.
 5. **Lancer** (un terminal par application) :
    - `pnpm dev:api` → http://localhost:3001/api/health
-   - `pnpm dev:web` → http://localhost:5173 (l'API est aussi joignable sur http://localhost:5173/api)
+   - `pnpm dev:web` → http://localhost:5173 (l'API est aussi joignable sur http://localhost:5173/api) ; la page de recette du système de design est sur `/_ds`
    - `pnpm dev:mobile` → Metro (Expo) ; scanner le QR code avec Expo Go, ou `a` pour un émulateur Android.
 6. **Vérifier** : `pnpm test` (la base doit tourner et être migrée), `pnpm typecheck`, `pnpm lint` (`pnpm format` corrige la mise en forme). Compilation de l'appli sans téléphone : `pnpm --filter @orasso/mobile export:android`.
 

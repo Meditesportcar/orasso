@@ -1,0 +1,52 @@
+/* Base du système de design web : largeurs d'Archivo, remise à zéro légère, focus visible. */
+
+:root {
+  /* Les trois largeurs d'Archivo (axe wdth). L'étroite est réglée pour égaler Archivo Narrow 700 des aperçus
+     (mesure : même largeur de texte à 0,1 % près) ; voir docs/JOURNAL-DES-CHOIX.md. */
+  --stretch-wide: 125%;
+  --stretch-normal: 100%;
+  --stretch-narrow: 78.4%;
+  /* La pile « narrow » de tokens.json cite Archivo Narrow : ici Archivo seule, à la largeur étroite. */
+  --font-narrow: "Archivo", system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  color: var(--ink);
+  background: var(--ground);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Focus visible : contour moutarde (accent-text est assombri en Sable pour rester lisible). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+/* Un nom de véhicule ne se tronque jamais : il passe à la ligne, le mot long aussi. */
+.o-never-truncate {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.o-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

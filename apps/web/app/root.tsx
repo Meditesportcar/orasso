@@ -1,33 +1,45 @@
-import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+import { readThemeCookie, serverTheme, ThemeProvider, ThemeScript } from "@orasso/design-system/web";
+import "@orasso/design-system/web/styles.css";
+import {
+  isRouteErrorResponse,
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
+  useRouteLoaderData,
+} from "react-router";
 
 import type { Route } from "./+types/root";
 
-// Archivo seule (docs/design-system) : axe de largeur 62–125 et italique, plus Archivo Narrow pour les plaques.
-const fontsHref =
-  "https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Archivo+Narrow:wght@700&display=swap";
-
 export const links: Route.LinksFunction = () => [
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
-  { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-  { rel: "stylesheet", href: fontsHref },
   { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
   { rel: "manifest", href: "/site.webmanifest" },
 ];
 
+// La préférence de thème est un cookie : le serveur écrit le bon `data-theme` dans le HTML, sans flash.
+export function loader({ request }: Route.LoaderArgs) {
+  return { themePreference: readThemeCookie(request.headers.get("cookie")) };
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
+  const data = useRouteLoaderData<typeof loader>("root");
+  const preference = data?.themePreference ?? "beton";
   return (
-    <html lang="fr">
+    // suppressHydrationWarning : pour « auto », ThemeScript corrige data-theme avant la première peinture.
+    <html lang="fr" data-theme={serverTheme(preference)} suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#17191C" />
+        <ThemeScript />
         <Meta />
         <Links />
       </head>
       <body>
-        {children}
+        <ThemeProvider initialPreference={preference}>{children}</ThemeProvider>
         <ScrollRestoration />
         <Scripts />
       </body>

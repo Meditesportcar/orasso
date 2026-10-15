@@ -1,0 +1,159 @@
+/* Fichier généré par scripts/generate-tokens.mjs. Styles de texte du système de design (classes .o-t-<nom>).
+   font-stretch et text-transform sont ajoutés ici, côté consommateur, comme le demande le README du système. */
+.o-t-poster-xl {
+  font-family: var(--font-display);
+  font-size: var(--type-poster-xl-size);
+  line-height: var(--type-poster-xl-line);
+  font-weight: var(--type-poster-xl-weight);
+  font-style: var(--type-poster-xl-style);
+  letter-spacing: var(--type-poster-xl-spacing);
+  font-stretch: var(--stretch-wide);
+  text-transform: uppercase;
+}
+
+.o-t-poster-l {
+  font-family: var(--font-display);
+  font-size: var(--type-poster-l-size);
+  line-height: var(--type-poster-l-line);
+  font-weight: var(--type-poster-l-weight);
+  font-style: var(--type-poster-l-style);
+  letter-spacing: var(--type-poster-l-spacing);
+  font-stretch: var(--stretch-wide);
+  text-transform: uppercase;
+}
+
+.o-t-poster-m {
+  font-family: var(--font-display);
+  font-size: var(--type-poster-m-size);
+  line-height: var(--type-poster-m-line);
+  font-weight: var(--type-poster-m-weight);
+  font-style: var(--type-poster-m-style);
+  letter-spacing: var(--type-poster-m-spacing);
+  font-stretch: var(--stretch-wide);
+  text-transform: uppercase;
+}
+
+.o-t-poster-s {
+  font-family: var(--font-display);
+  font-size: var(--type-poster-s-size);
+  line-height: var(--type-poster-s-line);
+  font-weight: var(--type-poster-s-weight);
+  font-style: var(--type-poster-s-style);
+  letter-spacing: var(--type-poster-s-spacing);
+  font-stretch: var(--stretch-wide);
+  text-transform: uppercase;
+}
+
+.o-t-title {
+  font-family: var(--font-display);
+  font-size: var(--type-title-size);
+  line-height: var(--type-title-line);
+  font-weight: var(--type-title-weight);
+  font-style: var(--type-title-style);
+  letter-spacing: var(--type-title-spacing);
+  font-stretch: var(--stretch-wide);
+  text-transform: uppercase;
+}
+
+.o-t-button {
+  font-family: var(--font-display);
+  font-size: var(--type-button-size);
+  line-height: var(--type-button-line);
+  font-weight: var(--type-button-weight);
+  font-style: var(--type-button-style);
+  letter-spacing: var(--type-button-spacing);
+  font-stretch: var(--stretch-wide);
+  text-transform: uppercase;
+}
+
+.o-t-tab {
+  font-family: var(--font-display);
+  font-size: var(--type-tab-size);
+  line-height: var(--type-tab-line);
+  font-weight: var(--type-tab-weight);
+  font-style: var(--type-tab-style);
+  letter-spacing: var(--type-tab-spacing);
+  font-stretch: var(--stretch-wide);
+  text-transform: uppercase;
+}
+
+.o-t-label {
+  font-family: var(--font-narrow);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+  font-weight: var(--type-label-weight);
+  font-style: var(--type-label-style);
+  letter-spacing: var(--type-label-spacing);
+  font-stretch: var(--stretch-narrow);
+  text-transform: uppercase;
+}
+
+.o-t-meta {
+  font-family: var(--font-narrow);
+  font-size: var(--type-meta-size);
+  line-height: var(--type-meta-line);
+  font-weight: var(--type-meta-weight);
+  font-style: var(--type-meta-style);
+  letter-spacing: var(--type-meta-spacing);
+  font-stretch: var(--stretch-narrow);
+  text-transform: uppercase;
+}
+
+.o-t-zone {
+  font-family: var(--font-narrow);
+  font-size: var(--type-zone-size);
+  line-height: var(--type-zone-line);
+  font-weight: var(--type-zone-weight);
+  font-style: var(--type-zone-style);
+  letter-spacing: var(--type-zone-spacing);
+  font-stretch: var(--stretch-narrow);
+  text-transform: uppercase;
+}
+
+.o-t-credit {
+  font-family: var(--font-narrow);
+  font-size: var(--type-credit-size);
+  line-height: var(--type-credit-line);
+  font-weight: var(--type-credit-weight);
+  font-style: var(--type-credit-style);
+  letter-spacing: var(--type-credit-spacing);
+  font-stretch: var(--stretch-narrow);
+  text-transform: uppercase;
+}
+
+.o-t-body {
+  font-family: var(--font-sans);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  font-weight: var(--type-body-weight);
+  font-style: var(--type-body-style);
+  letter-spacing: var(--type-body-spacing);
+}
+
+.o-t-body-strong {
+  font-family: var(--font-sans);
+  font-size: var(--type-body-strong-size);
+  line-height: var(--type-body-strong-line);
+  font-weight: var(--type-body-strong-weight);
+  font-style: var(--type-body-strong-style);
+  letter-spacing: var(--type-body-strong-spacing);
+}
+
+.o-t-caption {
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+  font-weight: var(--type-caption-weight);
+  font-style: var(--type-caption-style);
+  letter-spacing: var(--type-caption-spacing);
+}
+
+.o-t-number {
+  font-family: var(--font-sans);
+  font-size: var(--type-number-size);
+  line-height: var(--type-number-line);
+  font-weight: var(--type-number-weight);
+  font-style: var(--type-number-style);
+  letter-spacing: var(--type-number-spacing);
+  font-variant-numeric: tabular-nums;
+}
