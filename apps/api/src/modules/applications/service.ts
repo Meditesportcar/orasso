@@ -38,6 +38,7 @@ import { type Tx, withTx } from "../../lib/tx";
 import { accessService } from "../access/service";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
+import { staffService } from "../staff/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 
@@ -269,7 +270,7 @@ async function lockEventThenApplication(tx: Tx, applicationId: string) {
 
 /** Droit de trancher : organisateur, super admin, ou staff de filtration autorisé à décider. */
 async function deciderAccess(v: Viewer, event: EventRow): Promise<StaffAccess> {
-  const access = await staffAccess(v, event.structureId, ["filtering"]);
+  const access = await staffAccess(v, event.structureId, ["filtering"], event.id);
   if (!access) throw forbidden("Réservé à l'organisation");
   if (!access.canDecide) throw forbidden("Ce rôle donne un avis, la décision revient à l'organisateur");
   return access;
@@ -588,7 +589,8 @@ export const applicationsService = {
         });
         expired.push(row);
       }
-      // Rappel de synchronisation au staff : avec `event_staff` (lot 06).
+      // Rappel de synchronisation au staff présent ou qui n'a pas répondu (docs/01 « Un rappel invite le staff… »).
+      if (!event.lockedAt) await staffService.notifySyncReminder(tx, event);
       after(() => realtime.publish(`event:${eventId}:access`, "event.locked", { eventId, lockedAt: t.toISOString() }));
       broadcast(after, event, expired);
       return true;
@@ -633,7 +635,7 @@ export const applicationsService = {
   /** Zone attribuée à la main (organisateur, ou staff placement), choix C19. */
   async assignZone(v: Viewer, eventId: string, applicationId: string, zoneId: string | null) {
     const event = await eventsRepo.byId(eventId);
-    const access = await staffAccess(v, event.structureId, ["placement"]);
+    const access = await staffAccess(v, event.structureId, ["placement"], event.id);
     if (!access) throw forbidden("Réservé à l'organisation");
     if (zoneId) {
       const zone = await db.query.eventZones.findFirst({ where: eq(eventZones.id, zoneId) });
@@ -657,7 +659,8 @@ export const applicationsService = {
     input: { opinion: "keep" | "doubt" | "refuse"; note: string | null },
   ) {
     const event = await eventsRepo.byId(eventId);
-    if (!(await staffAccess(v, event.structureId, ["filtering"]))) throw forbidden("Réservé au staff de filtration");
+    if (!(await staffAccess(v, event.structureId, ["filtering"], event.id)))
+      throw forbidden("Réservé au staff de filtration");
     return withTx(async (tx) => {
       const app = await lockApplication(tx, applicationId);
       if (app.eventId !== eventId) throw notFound("Candidature introuvable");

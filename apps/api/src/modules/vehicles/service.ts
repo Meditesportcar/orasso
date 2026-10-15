@@ -44,7 +44,7 @@ const isUniqueViolation = (error: unknown, constraint: string) => {
 };
 
 /** Cohérence marque → modèle → génération, et type du véhicule (sauf modèle « Autre »). */
-async function checkReference(
+export async function checkReference(
   ex: Executor,
   v: { vehicleType: string; makeId: string; modelId: string; generationId?: string | null },
 ) {

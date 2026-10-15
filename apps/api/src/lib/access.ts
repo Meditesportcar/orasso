@@ -1,9 +1,9 @@
 // Droits : rôles de plateforme, rôles de structure, double authentification obligatoire (ARCHITECTURE.md § 5.2).
-import type { StaffRole, StructureRole } from "@orasso/shared";
+import { staffRoles as ALL_STAFF_ROLES, type StaffRole, type StructureRole } from "@orasso/shared";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../db/client";
-import { adminAuditLog, structureMembers } from "../db/schema";
+import { adminAuditLog, eventStaff, structureMembers } from "../db/schema";
 import { env } from "../env";
 import { AppError, forbidden } from "./errors";
 import type { Viewer } from "./session";
@@ -63,28 +63,39 @@ export async function requirePlatformRole(v: Viewer, role: "moderator" | "super_
   assertTwoFactor(v);
 }
 
-export type StaffAccess = { actor: "organizer" | "admin" | "staff"; canDecide: boolean };
+export type StaffAccess = { actor: "organizer" | "admin" | "staff"; canDecide: boolean; roles: StaffRole[] };
 
 /**
- * Organisateur, ou staff actif ayant l'un des rôles demandés (rôles fixés au niveau de la structure ;
- * l'ajustement par événement arrive avec `event_staff` au lot 06). `null` si aucun droit.
+ * Organisateur, ou staff actif ayant l'un des rôles demandés. Avec `eventId`, les rôles et le droit de trancher
+ * ajustés pour l'événement (`event_staff`, lot 06) remplacent ceux de la structure. `null` si aucun droit.
  */
 export async function staffAccess(
   v: Viewer,
   structureId: string,
-  staffRoles: StaffRole[],
+  staffRoles: readonly StaffRole[],
+  eventId?: string,
 ): Promise<StaffAccess | null> {
   const member = await activeMembership(v.user.id, structureId);
   if (member && (member.role === "owner" || member.role === "co_organizer")) {
     assertTwoFactor(v);
-    return { actor: "organizer", canDecide: true };
+    return { actor: "organizer", canDecide: true, roles: [...ALL_STAFF_ROLES] };
   }
-  if (member?.role === "staff" && member.staffRoles.some((r) => staffRoles.includes(r as StaffRole))) {
-    return { actor: "staff", canDecide: member.canDecide };
+  if (member?.role === "staff") {
+    const perEvent = eventId
+      ? await db.query.eventStaff.findFirst({
+          where: and(eq(eventStaff.eventId, eventId), eq(eventStaff.userId, v.user.id)),
+        })
+      : undefined;
+    const roles = (perEvent?.roles ?? member.staffRoles).filter((r): r is StaffRole =>
+      (ALL_STAFF_ROLES as readonly string[]).includes(r),
+    );
+    if (roles.some((r) => staffRoles.includes(r))) {
+      return { actor: "staff", canDecide: perEvent?.canDecide ?? member.canDecide, roles };
+    }
   }
   if (isSuperAdmin(v)) {
     await requireOrganizer(v, structureId);
-    return { actor: "admin", canDecide: true };
+    return { actor: "admin", canDecide: true, roles: [...ALL_STAFF_ROLES] };
   }
   return null;
 }
