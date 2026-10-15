@@ -35,7 +35,8 @@ describe("composants : aucune valeur en dur", () => {
     for (const file of files) {
       const text = readFileSync(resolve(componentsDir, file), "utf8");
       text.split("\n").forEach((line, i) => {
-        if (/(^|[^&\w/])#[0-9a-fA-F]{3,8}\b/.test(line.replace(/url\(#[^)]*\)/g, ""))) offenders.push(`${file}:${i + 1} couleur hexadécimale`);
+        if (/(^|[^&\w/])#[0-9a-fA-F]{3,8}\b/.test(line.replace(/url\(#[^)]*\)/g, "")))
+          offenders.push(`${file}:${i + 1} couleur hexadécimale`);
         if (/\b(rgba?|hsla?|oklch)\(/.test(line)) offenders.push(`${file}:${i + 1} couleur fonctionnelle`);
         if (/\b\d+(\.\d+)?\s?(ms|s)\b/.test(line)) offenders.push(`${file}:${i + 1} durée`);
       });
@@ -92,19 +93,49 @@ describe("rendu serveur des composants", () => {
 
   it("Button : variantes, icône, lien, chargement, fermer", () => {
     expect(html(<Button icon="qr">Mode jour J</Button>)).toContain("o-button--primary");
-    expect(html(<Button variant="plate" tone="wait" icon="wait">Attente</Button>)).toContain("o-button--wait");
+    expect(
+      html(
+        <Button variant="plate" tone="wait" icon="wait">
+          Attente
+        </Button>,
+      ),
+    ).toContain("o-button--wait");
     expect(html(<Button variant="close" label="Fermer" />)).toContain('aria-label="Fermer"');
-    expect(html(<Button icon="next" href="/x">Aller</Button>)).toMatch(/<a [^>]*href="\/x"/);
-    const loading = html(<Button icon="check" loading>Retenir</Button>);
+    expect(
+      html(
+        <Button icon="next" href="/x">
+          Aller
+        </Button>,
+      ),
+    ).toMatch(/<a [^>]*href="\/x"/);
+    const loading = html(
+      <Button icon="check" loading>
+        Retenir
+      </Button>,
+    );
     expect(loading).toContain("disabled");
     expect(loading).toContain("o-loader");
   });
 
   it("Chip, StatusBadge, Counters", () => {
-    expect(html(<Chip selected onClick={() => {}}>JDM</Chip>)).toContain('aria-pressed="true"');
+    expect(
+      html(
+        <Chip selected onClick={() => {}}>
+          JDM
+        </Chip>,
+      ),
+    ).toContain('aria-pressed="true"');
     expect(html(<StatusBadge status="waitlist" rank={4} />)).toContain("Liste d&#x27;attente · 4e");
     expect(html(<StatusBadge status="refused" />)).toContain("o-badge--refused");
-    const counters = html(<Counters items={[{ value: 34, label: "restantes" }, { value: 27, label: "à trier" }]} active={1} />);
+    const counters = html(
+      <Counters
+        items={[
+          { value: 34, label: "restantes" },
+          { value: 27, label: "à trier" },
+        ]}
+        active={1}
+      />,
+    );
     expect(counters.match(/is-active/g)?.length).toBe(1);
   });
 
@@ -114,7 +145,14 @@ describe("rendu serveur des composants", () => {
     expect(field).toContain('aria-invalid="true"');
     expect(field).toContain('role="alert"');
     const select = html(
-      <SelectField label="Génération" id="g" options={[{ value: "o", label: "Autre" }, { value: "e36", label: "E36" }]} />,
+      <SelectField
+        label="Génération"
+        id="g"
+        options={[
+          { value: "o", label: "Autre" },
+          { value: "e36", label: "E36" },
+        ]}
+      />,
     );
     expect(select.indexOf("E36")).toBeLessThan(select.indexOf("Autre"));
     expect(html(<CheckboxField label="Newsletter Orasso" />)).toContain('type="checkbox"');
@@ -122,7 +160,19 @@ describe("rendu serveur des composants", () => {
 
   it("PosterCard : bandeau, bouton sur affiche, une seule signature", () => {
     const card = html(
-      <PosterCard label="Prochain accès · J-2" title={<>Nocturne<br />de Canet</>} facts="Sam 17 oct" status="retained" action={{ label: "Mode jour J", icon: "qr", next: true }} />,
+      <PosterCard
+        label="Prochain accès · J-2"
+        title={
+          <>
+            Nocturne
+            <br />
+            de Canet
+          </>
+        }
+        facts="Sam 17 oct"
+        status="retained"
+        action={{ label: "Mode jour J", icon: "qr", next: true }}
+      />,
     );
     expect(card).toContain("Retenue");
     expect(card).toContain("o-button--poster");
@@ -130,14 +180,24 @@ describe("rendu serveur des composants", () => {
   });
 
   it("VehicleCard : nom jamais tronqué, catégorie mise en avant", () => {
-    const card = html(<VehicleCard name="Nissan 200SX S14" year={1996} power="250 ch" certified categories={[{ label: "JDM", highlighted: true }]} />);
+    const card = html(
+      <VehicleCard
+        name="Nissan 200SX S14"
+        year={1996}
+        power="250 ch"
+        certified
+        categories={[{ label: "JDM", highlighted: true }]}
+      />,
+    );
     expect(card).toContain("o-never-truncate");
     expect(card).toContain("o-chip--lit");
     expect(html(<VehicleThumb title="Expo Rivesaltes" meta="Dim 25 oct" />)).toContain("o-thumb");
   });
 
   it("ScanResult : trois états, sans vert, refusé secoué", () => {
-    expect(html(<ScanResult state="ok" vehicle="Nissan 200SX" pseudo="Damien_66" zone="JDM" time="il y a 4 s" />)).toContain("o-scan--ok");
+    expect(
+      html(<ScanResult state="ok" vehicle="Nissan 200SX" pseudo="Damien_66" zone="JDM" time="il y a 4 s" />),
+    ).toContain("o-scan--ok");
     expect(html(<ScanResult state="duplicate" time="19:12" />)).toContain("Déjà entré");
     const refused = html(<ScanResult state="refused" reason="QR inconnu" />);
     expect(refused).toContain("o-anim-scan-refused");

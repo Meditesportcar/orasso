@@ -38,8 +38,7 @@ export function ScanResult({
   className,
   ...rest
 }: ScanResultProps) {
-  const kicker =
-    state === "refused" ? scanLabels.refused : [scanLabels[state], time].filter(Boolean).join(" · ");
+  const kicker = state === "refused" ? scanLabels.refused : [scanLabels[state], time].filter(Boolean).join(" · ");
   const name = state === "refused" ? reason : [vehicle, pseudo].filter(Boolean).join(" · ");
   return (
     <div

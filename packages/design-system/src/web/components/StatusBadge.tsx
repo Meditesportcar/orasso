@@ -30,7 +30,13 @@ export function StatusBadge({ status, rank, onPlate = false, animated = true, cl
   return (
     <span
       key={flips}
-      className={cx("o-badge o-t-label", `o-badge--${status}`, onPlate && "o-badge--plate", animated && flips > 0 && "o-anim-flip", className)}
+      className={cx(
+        "o-badge o-t-label",
+        `o-badge--${status}`,
+        onPlate && "o-badge--plate",
+        animated && flips > 0 && "o-anim-flip",
+        className,
+      )}
       {...rest}
     >
       <span className="o-badge__text">{label}</span>

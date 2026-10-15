@@ -61,7 +61,12 @@ export function VehicleCard({
         {categories.length > 0 && (
           <div className="o-vehicle__chips">
             {categories.map((category) => (
-              <Chip key={category.label} surface="plate" selected={false} className={category.highlighted ? "o-chip--lit" : undefined}>
+              <Chip
+                key={category.label}
+                surface="plate"
+                selected={false}
+                className={category.highlighted ? "o-chip--lit" : undefined}
+              >
                 {category.label}
               </Chip>
             ))}

@@ -37,7 +37,9 @@ describe("jetons : tous ceux de tokens.json sont dans tokens.ts et tokens.css", 
           expect(ts[camel(token.name)], `${group}/${token.name} (${theme}) dans tokens.ts`).toBe(expected);
           // Les textures (grain, brossage) sont décrites en texte : leurs nombres sont testés plus bas.
           if (["grain", "bar-brush", "bar-brush-filter"].includes(token.name)) continue;
-          expect(themeCss, `${group}/${token.name} (${theme}) dans tokens.css`).toContain(`--${varName(token.name)}: ${expected};`);
+          expect(themeCss, `${group}/${token.name} (${theme}) dans tokens.css`).toContain(
+            `--${varName(token.name)}: ${expected};`,
+          );
         }
       }
     }
@@ -92,11 +94,23 @@ describe("jetons : tous ceux de tokens.json sont dans tokens.ts et tokens.css", 
   });
 
   it("textures : le grain et le brossage ont leurs nombres dans tokens.ts", () => {
-    expect(tokens.grain.beton).toMatchObject({ baseFrequency: 0.9, numOctaves: 2, alpha: 0.6, opacity: 0.28, blend: "overlay" });
+    expect(tokens.grain.beton).toMatchObject({
+      baseFrequency: 0.9,
+      numOctaves: 2,
+      alpha: 0.6,
+      opacity: 0.28,
+      blend: "overlay",
+    });
     expect(tokens.grain.beton.color).toEqual([1, 1, 1]);
     expect(tokens.grain.sable).toMatchObject({ opacity: 0.32, blend: "multiply" });
     expect(tokens.grain.sable.color).toEqual([0, 0, 0]);
-    expect(tokens.barBrush.beton).toMatchObject({ baseFrequency: "0.012 0.9", numOctaves: 3, alpha: 0.5, opacity: 0.6, blend: "screen" });
+    expect(tokens.barBrush.beton).toMatchObject({
+      baseFrequency: "0.012 0.9",
+      numOctaves: 3,
+      alpha: 0.5,
+      opacity: 0.6,
+      blend: "screen",
+    });
     expect(tokens.barBrush.beton.color).toEqual([0.95, 0.92, 0.85]);
     expect(tokens.barBrush.sable).toMatchObject({ alpha: 1, opacity: 0.38, blend: "multiply" });
     expect(tokens.barBrush.sable.color).toEqual([0.08, 0.07, 0.05]);

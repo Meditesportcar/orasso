@@ -10,7 +10,9 @@
       "!**/.react-router",
       "!**/.expo",
       "!apps/web/public",
-      "!apps/mobile/assets"
+      "!apps/mobile/assets",
+      "!packages/design-system/src/web/assets",
+      "!packages/design-system/src/web/fonts"
     ]
   },
   "formatter": {
@@ -26,5 +28,11 @@
     "enabled": true,
     "rules": { "preset": "recommended" }
   },
+  "overrides": [
+    {
+      "includes": ["packages/design-system/src/web/motion.css"],
+      "linter": { "rules": { "complexity": { "noImportantStyles": "off" } } }
+    }
+  ],
   "assist": { "actions": { "source": { "organizeImports": "on" } } }
 }

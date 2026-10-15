@@ -11,7 +11,11 @@ export type CoverProps = {
  * sur le mur, la moutarde et le rouge posés dessus comme des autocollants, la bande de nuit qui sort à droite.
  * Décorative : sert à la page d'accueil du système et aux fiches partagées.
  */
-export function Cover({ title = "Orasso", subtitle = "Affiche de nuit · tout le monde à sa place", className }: CoverProps) {
+export function Cover({
+  title = "Orasso",
+  subtitle = "Affiche de nuit · tout le monde à sa place",
+  className,
+}: CoverProps) {
   return (
     <figure className={cx("o-cover", className)}>
       <svg

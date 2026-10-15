@@ -17,12 +17,32 @@ export type ChipProps = Omit<HTMLAttributes<HTMLElement>, "children" | "onClick"
 };
 
 /** Une catégorie, un filtre ou un fait, en capitales étroites. */
-export function Chip({ children, selected = false, variant = "default", surface = "surface", onClick, className, ...rest }: ChipProps) {
-  const cls = cx("o-chip o-t-meta", `o-chip--${variant}`, surface === "plate" && "o-chip--plate", selected && "is-selected", className);
+export function Chip({
+  children,
+  selected = false,
+  variant = "default",
+  surface = "surface",
+  onClick,
+  className,
+  ...rest
+}: ChipProps) {
+  const cls = cx(
+    "o-chip o-t-meta",
+    `o-chip--${variant}`,
+    surface === "plate" && "o-chip--plate",
+    selected && "is-selected",
+    className,
+  );
   const inner = variant === "accent" ? <span className="o-chip__text">{children}</span> : children;
   if (onClick) {
     return (
-      <button type="button" className={cls} onClick={onClick} aria-pressed={selected} {...(rest as HTMLAttributes<HTMLButtonElement>)}>
+      <button
+        type="button"
+        className={cls}
+        onClick={onClick}
+        aria-pressed={selected}
+        {...(rest as HTMLAttributes<HTMLButtonElement>)}
+      >
         {inner}
       </button>
     );

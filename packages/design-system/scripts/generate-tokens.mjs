@@ -27,7 +27,8 @@ const themed = (tokens) =>
 const color = themed(json.color.tokens);
 // Dérivé (README Plate et StatusBadge) : sur une plaque graphite, la liste d'attente garde le bleu clair du Béton,
 // dans les deux thèmes, car le bleu panneau foncé du Sable ne se lit pas sur le graphite.
-for (const t of THEMES) color[t]["status-waitlist-on-plate"] = json.color.tokens.find((tk) => tk.name === "status-waitlist").value.beton;
+for (const t of THEMES)
+  color[t]["status-waitlist-on-plate"] = json.color.tokens.find((tk) => tk.name === "status-waitlist").value.beton;
 const shadow = themed(json.shadow.tokens);
 const groundFxRaw = themed(json["ground-fx"].tokens.filter((tk) => tk.name !== "grain"));
 const barFxRaw = themed(json["bar-fx"].tokens);

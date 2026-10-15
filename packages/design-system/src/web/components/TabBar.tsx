@@ -48,11 +48,35 @@ function TabContent({ tab, active }: { tab: TabItem; active: boolean }): ReactNo
   );
 }
 
+function TabEntry({ tab, active, onSelect }: { tab: TabItem; active: boolean; onSelect?: (id: string) => void }) {
+  const cls = cx("o-tabbar__tab o-t-tab", tab.center && "is-center", active && "is-active");
+  const content = <TabContent tab={tab} active={active} />;
+  if (tab.href) {
+    return (
+      <a className={cls} href={tab.href} aria-current={active ? "page" : undefined}>
+        {content}
+      </a>
+    );
+  }
+  return (
+    <button type="button" className={cls} onClick={() => onSelect?.(tab.id)} aria-current={active ? "page" : undefined}>
+      {content}
+    </button>
+  );
+}
+
 /**
  * Cinq onglets sur du métal brossé, avec l'Accès (ou le Tri) au milieu comme une pastille d'affiche. Le mode
  * staff et le mode jour J n'ont pas de barre d'onglets : on en sort par la pastille ✕ de l'en-tête.
  */
-export function TabBar({ set = "fan", tabs, active, onSelect, className, "aria-label": ariaLabel = "Navigation" }: TabBarProps) {
+export function TabBar({
+  set = "fan",
+  tabs,
+  active,
+  onSelect,
+  className,
+  "aria-label": ariaLabel = "Navigation",
+}: TabBarProps) {
   const items: readonly TabItem[] = tabs ?? tabSets[set];
   // Le nouvel onglet se gare, mais seulement quand l'onglet change : pas au premier rendu.
   const previous = useRef(active);
@@ -68,20 +92,9 @@ export function TabBar({ set = "fan", tabs, active, onSelect, className, "aria-l
       <div className="o-tabbar__metal" aria-hidden="true">
         <Brush />
       </div>
-      {items.map((tab) => {
-        const isActive = tab.id === active;
-        const cls = cx("o-tabbar__tab o-t-tab", tab.center && "is-center", isActive && "is-active");
-        const content = <TabContent tab={tab} active={isActive} />;
-        return tab.href ? (
-          <a key={tab.id} className={cls} href={tab.href} aria-current={isActive ? "page" : undefined}>
-            {content}
-          </a>
-        ) : (
-          <button key={tab.id} type="button" className={cls} onClick={() => onSelect?.(tab.id)} aria-current={isActive ? "page" : undefined}>
-            {content}
-          </button>
-        );
-      })}
+      {items.map((tab) => (
+        <TabEntry key={tab.id} tab={tab} active={tab.id === active} onSelect={onSelect} />
+      ))}
     </nav>
   );
 }

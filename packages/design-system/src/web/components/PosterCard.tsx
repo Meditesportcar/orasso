@@ -1,7 +1,7 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import type { IconName } from "../../icons";
-import { Button } from "./Button";
 import { Credit } from "./Brand";
+import { Button } from "./Button";
 import { cx } from "./cx";
 
 /** Bandeau en coin : Retenue et Sur place (moutarde), Annulé (rouge), Incertain (hachuré) ; En attente : aucun. */
@@ -49,10 +49,7 @@ export function PosterCard({
   ...rest
 }: PosterCardProps) {
   return (
-    <article
-      className={cx("o-poster", reveal && "o-anim-cut", className)}
-      {...rest}
-    >
+    <article className={cx("o-poster", reveal && "o-anim-cut", className)} {...rest}>
       {status !== "pending" && (
         <span className={cx("o-poster__band o-t-label", `o-poster__band--${status}`, reveal && "o-anim-stamp")}>
           {bandLabels[status]}
@@ -64,7 +61,14 @@ export function PosterCard({
       {photo && <div className="o-poster__photo">{photo}</div>}
       {action && (
         <div className="o-poster__action">
-          <Button variant="poster" icon={action.icon} next={action.next} onClick={action.onClick} href={action.href} fullWidth>
+          <Button
+            variant="poster"
+            icon={action.icon}
+            next={action.next}
+            onClick={action.onClick}
+            href={action.href}
+            fullWidth
+          >
             {action.label}
           </Button>
         </div>

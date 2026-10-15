@@ -3,7 +3,7 @@
 .o-cover {
   position: relative;
   width: 960px;
-  max-width: 100%;
+  flex: none;
   height: 288px;
   margin: 0;
   overflow: hidden;

@@ -50,3 +50,6 @@ Thumbs.db
 
 # Configuration locale de l'aperçu Claude (non versionnée)
 .claude/launch.json
+
+# Aperçus d origine préparés pour la comparaison visuelle du design system
+apps/web/public/_ds-previews/

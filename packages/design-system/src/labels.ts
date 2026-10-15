@@ -1,7 +1,15 @@
 // Libellés du système de design, communs au site et à l'appli : exactement ceux des docs (README des composants).
 
 /** Les sept états du composant StatusBadge (candidature et événement). */
-export const badgeStatuses = ["pending", "retained", "waitlist", "refused", "onsite", "cancelled", "uncertain"] as const;
+export const badgeStatuses = [
+  "pending",
+  "retained",
+  "waitlist",
+  "refused",
+  "onsite",
+  "cancelled",
+  "uncertain",
+] as const;
 export type BadgeStatus = (typeof badgeStatuses)[number];
 
 export const badgeLabels: Record<BadgeStatus, string> = {

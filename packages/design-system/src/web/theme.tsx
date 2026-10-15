@@ -3,7 +3,16 @@
 // Sans flash au rendu serveur : la préférence est un cookie lu par le serveur (attribut posé dans le HTML) ;
 // pour « auto », ThemeScript corrige l'attribut avant la première peinture.
 
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  type HTMLAttributes,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { ThemeId } from "../tokens";
 
 export type ThemePreference = ThemeId | "auto";
@@ -64,6 +73,7 @@ function prefersLight(): boolean {
 
 function persist(preference: ThemePreference) {
   try {
+    // biome-ignore lint/suspicious/noDocumentCookie: le serveur lit ce cookie pour poser le thème sans flash (l'API Cookie Store n'est pas universelle)
     document.cookie = `${THEME_COOKIE}=${preference}; path=/; max-age=${THEME_COOKIE_MAX_AGE}; samesite=lax`;
     localStorage.setItem(THEME_STORAGE_KEY, preference);
   } catch {
@@ -119,16 +129,10 @@ export function useTheme(): ThemeContextValue {
 export function ThemeScope({
   theme,
   children,
-  className,
-  style,
-}: {
-  theme: ThemeId;
-  children: ReactNode;
-  className?: string;
-  style?: React.CSSProperties;
-}) {
+  ...rest
+}: { theme: ThemeId; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, "children">) {
   return (
-    <div data-theme={theme} className={className} style={style}>
+    <div data-theme={theme} {...rest}>
       {children}
     </div>
   );

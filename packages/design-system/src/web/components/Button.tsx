@@ -103,7 +103,11 @@ export function Button(props: ButtonProps) {
     ) : (
       <>
         {shortcut && <kbd className="o-button__key">{shortcut}</kbd>}
-        {loading ? <Loader size={24} tone="dark" /> : icon && <Icon name={icon} size={iconSize(variant, layout)} />}
+        {loading ? (
+          <Loader size={24} tone={variant === "primary" ? "light" : "dark"} />
+        ) : (
+          icon && <Icon name={icon} size={iconSize(variant, layout)} />
+        )}
         <span className="o-button__label">{children}</span>
         {next && <Icon name="next" size={18} />}
       </>
@@ -113,13 +117,27 @@ export function Button(props: ButtonProps) {
 
   if (href !== undefined) {
     return (
-      <a className={cls} href={disabled || loading ? undefined : href} aria-label={ariaLabel} aria-busy={loading || undefined} aria-disabled={disabled || undefined} {...dom}>
+      <a
+        className={cls}
+        href={disabled || loading ? undefined : href}
+        aria-label={ariaLabel}
+        aria-busy={loading || undefined}
+        aria-disabled={disabled || undefined}
+        {...dom}
+      >
         {content}
       </a>
     );
   }
   return (
-    <button type={type} className={cls} disabled={disabled || loading} aria-label={ariaLabel} aria-busy={loading || undefined} {...dom}>
+    <button
+      type={type}
+      className={cls}
+      disabled={disabled || loading}
+      aria-label={ariaLabel}
+      aria-busy={loading || undefined}
+      {...dom}
+    >
       {content}
     </button>
   );

@@ -1,6 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
-import loaderDark from "../assets/chargement-fond-sombre.svg";
 import loaderLight from "../assets/chargement-fond-clair.svg";
+import loaderDark from "../assets/chargement-fond-sombre.svg";
 import logoLight from "../assets/logo-fond-clair.svg";
 import logoDark from "../assets/logo-fond-sombre.svg";
 import monogramLight from "../assets/monogramme-fond-clair.svg";
@@ -95,7 +95,15 @@ export function Monogram({ size = 30, tone = "auto", className, alt = "Orasso" }
 }
 
 /** L'indicateur de chargement du kit : la voiture qui se gare (cycle `loader`). 72 px plein écran, 24 px dans un bouton. */
-export function Loader({ size = 24, tone = "auto", className }: { size?: number; tone?: BrandTone; className?: string }) {
+export function Loader({
+  size = 24,
+  tone = "auto",
+  className,
+}: {
+  size?: number;
+  tone?: BrandTone;
+  className?: string;
+}) {
   return (
     <ThemedImage
       dark={loaderDark}

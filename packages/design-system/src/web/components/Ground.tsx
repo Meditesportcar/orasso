@@ -16,7 +16,14 @@ export type GroundProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
  * Le fond vivant : cinq couches (halo, reflet, faisceau, marquage, vignette) puis le grain. Jamais un aplat.
  * Le contenu passe au-dessus. Le consommateur ne fournit que le thème (attribut data-theme d'un ancêtre).
  */
-export function Ground({ variant = "screen", animated = false, fixed = false, className, children, ...rest }: GroundProps) {
+export function Ground({
+  variant = "screen",
+  animated = false,
+  fixed = false,
+  className,
+  children,
+  ...rest
+}: GroundProps) {
   const motion = (name: string) => (animated ? `o-anim-ambient-${name}` : undefined);
   return (
     <div className={cx("o-ground", `o-ground--${variant}`, fixed && "o-ground--fixed", className)} {...rest}>

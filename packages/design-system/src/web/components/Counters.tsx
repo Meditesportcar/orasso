@@ -28,7 +28,10 @@ function Cell({ item, active }: { item: CounterItem; active: boolean }) {
   }, [item.value]);
   const changed = changes > 0;
   return (
-    <div className={cx("o-counters__cell", active && "is-active", changed && active && "o-anim-flash")} key={active ? changes : 0}>
+    <div
+      className={cx("o-counters__cell", active && "is-active", changed && active && "o-anim-flash")}
+      key={active ? changes : 0}
+    >
       <b className={cx("o-counters__value o-t-number", changed && "o-anim-counter")} key={changes}>
         {item.value}
       </b>
@@ -43,7 +46,7 @@ function Cell({ item, active }: { item: CounterItem; active: boolean }) {
  */
 export function Counters({ items, active, variant = "plate", size = "phone", className, ...rest }: CountersProps) {
   return (
-    <div className={cx("o-counters", `o-counters--${variant}`, `o-counters--${size}`, className)} role="group" {...rest}>
+    <div className={cx("o-counters", `o-counters--${variant}`, `o-counters--${size}`, className)} {...rest}>
       {items.map((item, i) => (
         <Cell key={item.label} item={item} active={i === active} />
       ))}
