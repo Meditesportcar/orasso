@@ -1,9 +1,12 @@
 // QR de compte dynamique (ARCHITECTURE.md § 3.3) : fenêtres valides et expirées, rejeu, secret régénéré.
+import { createHash, randomBytes } from "node:crypto";
 import { accountQrPayload, fromWallTime } from "@orasso/shared";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
-import { pool } from "../../db/client";
+import { db, pool } from "../../db/client";
+import { profiles } from "../../db/schema";
 import { hmacSha1 } from "./service";
 
 afterAll(async () => {
@@ -57,6 +60,16 @@ describe("QR de compte", () => {
     expect(await verify(old)).toEqual({ valid: false, reason: "expired" });
     secret = Buffer.from(rotated.json.secret, "base64url");
     expect((await verify(payloadAt(clock.now))).valid).toBe(true);
+  });
+
+  it("profil créé sans identifiant court (code du lot 05 après retour arrière) : rempli par la base", async () => {
+    await db.execute(sql`insert into "user" (id, name, email) values ('ancien0001', 'Ancien', 'ancien@orasso.test')`);
+    await db.execute(sql`insert into profiles (user_id, pseudo, account_qr_secret, invite_token)
+      values ('ancien0001', 'Ancien_66', ${randomBytes(32)}, 'jeton-ancien')`);
+    const row = await db.query.profiles.findFirst({ where: eq(profiles.userId, "ancien0001") });
+    expect(row?.accountQrShortId.toString("hex")).toBe(
+      createHash("sha256").update("ancien0001").digest().subarray(0, 8).toString("hex"),
+    );
   });
 
   it("QR inconnu ou mal formé ; connexion requise", async () => {
