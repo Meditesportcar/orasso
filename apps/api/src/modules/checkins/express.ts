@@ -142,8 +142,7 @@ export const expressService = {
       const [locked] = await tx.select().from(expressInvites).where(eq(expressInvites.id, invite.id)).for("update");
       if (!locked || locked.usedAt) throw conflict("conflict", "Lien déjà utilisé");
       const t = now();
-      // Le lien reçu par e-mail prouve l'adresse.
-      await tx.update(user).set({ emailVerified: true }).where(eq(user.id, created.id));
+      // L'adresse n'est pas marquée vérifiée : le lien a pu être montré par le staff au lieu d'être reçu par e-mail.
       await tx
         .update(profiles)
         .set({ firstName: input.firstName, lastName: input.lastName })

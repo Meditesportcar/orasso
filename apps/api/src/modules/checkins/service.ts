@@ -252,6 +252,9 @@ async function applyScan(
   if (!inserted) {
     const stored = await tx.query.scanEvents.findFirst({ where: eq(scanEvents.id, item.id) });
     if (!stored) throw new Error("Lecture introuvable");
+    if (stored.eventId !== event.id || stored.staffUserId !== v.user.id) {
+      return { id: item.id, result: "rejected", applicationId: null, checkedInAt: null, duplicateOf: null, zone: null };
+    }
     return storedResult(stored);
   }
 
