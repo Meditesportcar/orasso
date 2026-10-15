@@ -35,6 +35,7 @@ import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
+import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
 import { scheduleEventJobs } from "./jobs";
 import { type EventRow, eventsRepo } from "./repo";
@@ -303,6 +304,8 @@ export const eventsService = {
           });
         }
       }
+      // Staff de l'événement (relances « je suis là », mode staff) : une ligne par membre staff actif.
+      await staffService.ensureRows(row, tx);
       after(() => scheduleEventJobs(row));
       after(() => notificationsService.kick());
     });
@@ -405,7 +408,7 @@ export const eventsService = {
     if (!e) return false;
     const kind = m[2];
     // triage : organisation et staff de filtration ; live : organisation ; access : tout le staff.
-    const access = await staffAccess(v, e.structureId, kind === "access" ? [...staffRoles] : ["filtering"]).catch(
+    const access = await staffAccess(v, e.structureId, kind === "access" ? [...staffRoles] : ["filtering"], e.id).catch(
       () => null,
     );
     if (!access) return false;

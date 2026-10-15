@@ -9,13 +9,19 @@ import { AppError, errorResponse, notFound } from "./lib/errors";
 import { realtime } from "./lib/realtime";
 import { type AppEnv, type AuthUser, loadSession } from "./lib/session";
 import { storage } from "./lib/storage";
+import { accessRoutes } from "./modules/access/routes";
+import { accountQrRoutes } from "./modules/account-qr/routes";
 import { adminRoutes } from "./modules/admin/routes";
 import { applicationsRoutes } from "./modules/applications/routes";
+import { checkinsRoutes } from "./modules/checkins/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
+import { fieldRoutes } from "./modules/field/routes";
 import { notificationsRoutes } from "./modules/notifications/routes";
+import { pointsRoutes } from "./modules/points/routes";
 import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
+import { staffRoutes } from "./modules/staff/routes";
 import { structuresRoutes } from "./modules/structures/routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { ws } from "./ws";
@@ -61,12 +67,18 @@ app.use(
 );
 app.use("*", loadSession);
 
+app.route("/", accessRoutes);
 app.route("/", profilesRoutes);
 app.route("/", vehiclesRoutes);
 app.route("/", structuresRoutes);
 app.route("/", eventsRoutes);
 app.route("/", applicationsRoutes);
 app.route("/", notificationsRoutes);
+app.route("/", staffRoutes);
+app.route("/", checkinsRoutes);
+app.route("/", fieldRoutes);
+app.route("/", pointsRoutes);
+app.route("/", accountQrRoutes);
 app.route("/", adminRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes.

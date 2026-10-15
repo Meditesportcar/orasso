@@ -2,10 +2,13 @@
 import {
   type ApplicationAlert,
   type ApplicationForTriage,
+  canContest,
+  contestDeadline,
   type EventCounters,
   lockAt,
   type MyApplication,
   type Page,
+  pointsPending,
   type RefusalReason,
   type TriageQuery,
 } from "@orasso/shared";
@@ -14,8 +17,11 @@ import { and, asc, count, desc, eq, gt, ilike, inArray, lte, ne, or, type SQL, s
 import { db } from "../../db/client";
 import {
   applications,
+  checkins,
   events,
   eventZones,
+  malusContests,
+  pointEntries,
   profiles,
   structureBans,
   user,
@@ -30,6 +36,7 @@ import { forbidden, notFound } from "../../lib/errors";
 import { escapeLike } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
 import { type EventRow, eventsRepo } from "../events/repo";
+import { pointsService } from "../points/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleFull, vehicleLabel } from "../vehicles/serializers";
 import type { ApplicationRow } from "./service";
@@ -70,11 +77,22 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
   const zones = zoneIds.length ? await db.query.eventZones.findMany({ where: inArray(eventZones.id, zoneIds) }) : [];
   const zonesById = new Map(zones.map((z) => [z.id, z]));
   const ranks = await waitlistRanks(eventRows.map((e) => e.id));
+  // Jour J et après (lot 06) : entrée, points de la candidature, malus et contestation.
+  const appIds = rows.map((r) => r.id);
+  const entries = await db.query.checkins.findMany({ where: inArray(checkins.applicationId, appIds) });
+  const enteredAt = new Map(entries.map((c) => [c.applicationId, c.checkedInAt]));
+  const pts = await db.query.pointEntries.findMany({ where: inArray(pointEntries.applicationId, appIds) });
+  const contests = await db.query.malusContests.findMany({ where: inArray(malusContests.applicationId, appIds) });
+  const t = now();
   return rows.flatMap((r) => {
     const e = eventsById.get(r.eventId);
     if (!e) return [];
     const v = r.vehicleId ? vehiclesById.get(r.vehicleId) : undefined;
     const z = r.zoneId ? zonesById.get(r.zoneId) : undefined;
+    const mine = pts.filter((p) => p.applicationId === r.id);
+    const malusEntry = mine.find((p) => p.kind === "malus");
+    const reversed = mine.some((p) => p.kind === "malus_reversal");
+    const contest = contests.find((c) => c.applicationId === r.id);
     return [
       {
         id: r.id,
@@ -98,6 +116,17 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
         refusalNote: r.status === "refused" && r.refusalSent ? r.refusalNote : null,
         zone: z && r.status === "accepted" ? { code: z.code, name: z.name } : null,
         createdAt: r.createdAt.toISOString(),
+        checkedInAt: enteredAt.get(r.id)?.toISOString() ?? null,
+        pointsPending:
+          (r.status === "accepted" || r.withdrawnAfterLock) && e.status === "published" && pointsPending(e, t),
+        points: mine.length ? mine.reduce((sum, p) => sum + p.points, 0) : null,
+        malus: malusEntry
+          ? {
+              deadline: contestDeadline(malusEntry.createdAt).toISOString(),
+              canContest: !contest && !reversed && canContest(malusEntry.createdAt, t),
+              contestStatus: contest?.status ?? null,
+            }
+          : null,
       },
     ];
   });
@@ -120,8 +149,9 @@ async function toTriage(
     .where(inArray(profiles.userId, userIds));
   const peopleById = new Map(people.map((x) => [x.p.userId, x]));
 
-  // Nombre d'événements (retenu sur un événement terminé) ; les absences viennent avec le pointage (lot 06).
+  // Nombre d'événements (retenu sur un événement terminé) ; absences = malus de J+2 non annulés (lot 06).
   const t = now();
+  const absences = await pointsService.absences(userIds);
   const past = await db
     .select({ userId: applications.userId, n: count() })
     .from(applications)
@@ -210,7 +240,7 @@ async function toTriage(
         phone: withContact ? (person?.p.phone ?? null) : null,
         email: withContact ? (person?.email ?? null) : null,
         eventsCount: pastById.get(r.userId) ?? 0,
-        absencesCount: 0,
+        absencesCount: absences.get(r.userId) ?? 0,
         historyWithStructure: {
           accepted: h.filter((x) => x.status === "accepted").reduce((a, x) => a + x.n, 0),
           refused: h.filter((x) => x.status === "refused").reduce((a, x) => a + x.n, 0),
@@ -225,7 +255,7 @@ async function toTriage(
 
 /** Organisateur (fiche complète) ou staff de filtration (sans plaque ni coordonnées). */
 async function triageAccess(v: Viewer, event: EventRow): Promise<{ withContact: boolean }> {
-  const access = await staffAccess(v, event.structureId, ["filtering"]);
+  const access = await staffAccess(v, event.structureId, ["filtering"], event.id);
   if (!access) throw forbidden("Réservé à l'organisation");
   return { withContact: access.actor !== "staff" };
 }
@@ -260,7 +290,7 @@ export const applicationsQueries = {
       return card;
     }
     const event = await eventsRepo.byId(app.eventId);
-    const access = await staffAccess(v, event.structureId, ["filtering"]).catch(() => null);
+    const access = await staffAccess(v, event.structureId, ["filtering"], event.id).catch(() => null);
     if (!access) throw notFound("Candidature introuvable");
     const [card] = await toTriage(event, [app], access.actor !== "staff");
     if (!card) throw notFound("Candidature introuvable");

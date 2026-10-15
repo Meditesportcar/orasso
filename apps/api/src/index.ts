@@ -5,7 +5,10 @@ import { app } from "./app";
 import { pool } from "./db/client";
 import { env } from "./env";
 import { startJobs } from "./jobs";
+import { signing } from "./lib/signing";
 
+// Clés publiques des QR recopiées dans `signing_keys` (refus de démarrer si une clé diffère de celle en base).
+await signing.ensureSynced();
 const boss = await startJobs();
 
 const server = serve(

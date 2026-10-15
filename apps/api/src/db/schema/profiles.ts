@@ -55,6 +55,8 @@ export const profiles = pgTable(
     pointsSeason: integer("points_season").notNull().default(0),
     grade: gradeEnum("grade").notNull().default("rodage"),
     accountQrSecret: bytea("account_qr_secret").notNull(),
+    /** 8 premiers octets de SHA-256(user_id) : identifiant court du QR de compte (§ 3.3), stocké pour la recherche. */
+    accountQrShortId: bytea("account_qr_short_id").notNull(),
     inviteToken: text("invite_token").notNull(),
     invitedByUserId: text("invited_by_user_id").references(() => user.id, { onDelete: "set null" }),
     suspendedUntil: tstz("suspended_until"),
@@ -63,6 +65,7 @@ export const profiles = pgTable(
   (t) => [
     uniqueIndex("profiles_pseudo_lower_key").on(sql`lower(${t.pseudo})`),
     uniqueIndex("profiles_invite_token_key").on(t.inviteToken),
+    uniqueIndex("profiles_account_qr_short_id_key").on(t.accountQrShortId),
     index("profiles_departments_idx").using("gin", t.departments),
   ],
 );
@@ -89,6 +92,23 @@ export const profileInterests = pgTable(
       .references(() => categories.id, { onDelete: "cascade" }),
   },
   (t) => [primaryKey({ name: "profile_interests_pkey", columns: [t.userId, t.categoryId] })],
+);
+
+/** Codes de QR de compte déjà présentés (anti-rejeu dans la même fenêtre de 60 s ; purgés après 3 min). */
+export const accountQrUses = pgTable(
+  "account_qr_uses",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Compteur HOTP (minutes Unix). */
+    counter: integer("counter").notNull(),
+    usedAt: tstz("used_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "account_qr_uses_pkey", columns: [t.userId, t.counter] }),
+    index("account_qr_uses_used_at_idx").on(t.usedAt),
+  ],
 );
 
 /** Un appareil = un jeton push et un identifiant de scanner. */

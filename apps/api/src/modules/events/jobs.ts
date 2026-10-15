@@ -1,6 +1,6 @@
 // Tâches liées à un événement (ARCHITECTURE.md § 2.9). Chaque tâche porte l'instant prévu (`at`) : si l'événement
 // a changé entre-temps, l'instant recalculé diffère et la tâche ne fait rien (une nouvelle a été planifiée).
-import { addDays, fromWallTime, lockAt, registrationOpensAt, wallTime } from "@orasso/shared";
+import { addDays, fromWallTime, lockAt, registrationOpensAt, settleAt, wallTime } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -31,11 +31,14 @@ export async function scheduleEventJobs(e: EventRow) {
     ["event.lock", lockAt(e)],
     ["event.reminder-week", reminderWeekAt(e)],
     ["event.reminder-eve", reminderEveAt(e)],
+    // Points et malus à J+2 (lot 06).
+    ["event.settle", settleAt(e)],
   ];
   if (e.previewHours > 0) plan.push(["event.preview-open", registrationOpensAt(e, true)]);
   for (const [name, at] of plan) {
-    // Le verrouillage est toujours planifié (même passé : la tâche pose `locked_at` aussitôt).
-    if (name === "event.lock" || at > t) await deps.jobs.send(name, { eventId: e.id, at: at.toISOString() }, at);
+    // Verrouillage et règlement toujours planifiés (même passés : la tâche agit aussitôt, une seule fois).
+    const always = name === "event.lock" || name === "event.settle";
+    if (always || at > t) await deps.jobs.send(name, { eventId: e.id, at: at.toISOString() }, at);
   }
 }
 

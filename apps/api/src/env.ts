@@ -37,6 +37,14 @@ const schema = z.object({
   /** Dossier des photos (pilote disque). Défaut : DATA_DIR/storage. Sur le VPS : /data/uploads (volume orasso_uploads). */
   UPLOADS_DIR: optional,
   EXPO_ACCESS_TOKEN: optional,
+  /**
+   * Clés privées Ed25519 des QR d'inscription : JSON `[{"kid":1,"privateKey":"<graine de 32 octets en base64>"}]`
+   * (`pnpm --filter @orasso/api keys:generate`). Obligatoire en production ; en développement, une clé de
+   * démonstration publique (kid 0) est utilisée à défaut.
+   */
+  QR_SIGNING_KEYS: optional,
+  /** Clé qui signe les nouveaux pass (les autres restent en vérification, rotation § 3.1). */
+  QR_SIGNING_ACTIVE_KID: optional,
 });
 
 const parsed = schema.safeParse(process.env);
@@ -47,6 +55,10 @@ if (!parsed.success) {
 }
 if (parsed.data.NODE_ENV === "production" && parsed.data.DEV_SKIP_2FA) {
   console.error("Configuration invalide : DEV_SKIP_2FA est interdit en production.");
+  process.exit(1);
+}
+if (parsed.data.NODE_ENV === "production" && (!parsed.data.QR_SIGNING_KEYS || !parsed.data.QR_SIGNING_ACTIVE_KID)) {
+  console.error("Configuration invalide : QR_SIGNING_KEYS et QR_SIGNING_ACTIVE_KID sont obligatoires en production.");
   process.exit(1);
 }
 if (parsed.data.MAIL_TRANSPORT === "brevo" && !parsed.data.BREVO_API_KEY) {

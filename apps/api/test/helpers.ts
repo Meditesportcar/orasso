@@ -32,6 +32,7 @@ const TABLES = [
   "admin_audit_log",
   "notifications",
   "events",
+  "seasons",
 ];
 
 export async function resetDb() {

@@ -128,5 +128,25 @@ export const departmentSchema = z.string().refine((d) => (departments as readonl
   message: "Département inconnu",
 });
 
+// --- Accès et jour J (ARCHITECTURE.md § 1.6, lot 06) ---------------------------------------------------------
+
+/** Présence déclarée par un membre du staff (« Je suis là / pas là »). */
+export const staffPresences = ["unknown", "present", "absent"] as const;
+export type StaffPresence = (typeof staffPresences)[number];
+
+/** Comment un véhicule est entré (une seule entrée par candidature). */
+export const checkinMethods = ["scan", "manual", "plate", "express"] as const;
+export type CheckinMethod = (typeof checkinMethods)[number];
+
+/** Décision du serveur sur une lecture reçue d'un appareil (§ 2.5). */
+export const scanServerResults = [
+  "accepted",
+  "duplicate_same_device",
+  "duplicate_other_device",
+  "rejected",
+  "unknown",
+] as const;
+export type ScanServerResult = (typeof scanServerResults)[number];
+
 /** Fuseau métier unique en V1. */
 export const BUSINESS_TIMEZONE = "Europe/Paris";

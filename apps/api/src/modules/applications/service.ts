@@ -10,6 +10,7 @@ import {
   type Decide,
   isLocked,
   lockAt,
+  type PassRevokedReason,
   type RefusalReason,
   refusalReasonLabels,
   registrationOpensAt,
@@ -34,8 +35,10 @@ import { formatDateTime } from "../../lib/format";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { type Tx, withTx } from "../../lib/tx";
+import { accessService } from "../access/service";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
+import { staffService } from "../staff/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 
@@ -78,8 +81,20 @@ async function transition(
     reason: reason ?? null,
     at: now(),
   });
+  // QR d'inscription (lot 06) : émis à la retenue, révoqué quand la candidature n'est plus retenue.
+  if (to === "accepted" && app.status !== "accepted") await accessService.issue(tx, row);
+  if (app.status === "accepted" && to !== "accepted") {
+    await accessService.revoke(tx, row.id, PASS_REVOCATION[to] ?? "cancelled");
+  }
   return row;
 }
+
+/** Motif de révocation du pass selon le nouveau statut. */
+const PASS_REVOCATION: Partial<Record<ApplicationStatus, PassRevokedReason>> = {
+  withdrawn: "withdrawn",
+  refused: "refused",
+  cancelled: "cancelled",
+};
 
 async function labelOf(app: ApplicationRow, tx: Tx): Promise<string> {
   if (!app.vehicleId) return "Ta candidature";
@@ -148,6 +163,10 @@ function broadcast(after: After, event: EventRow, changed: ApplicationRow[]) {
       const payload = { applicationId: app.id, eventId: event.id, status: app.status };
       realtime.publish(`event:${event.id}:triage`, "application.changed", payload);
       realtime.publish(`user:${app.userId}`, "application.changed", payload);
+    }
+    // Liste d'accès du staff : l'appli relance une synchro différentielle si elle a du réseau (§ 4.1).
+    if (changed.length) {
+      realtime.publish(`event:${event.id}:access`, "access.changed", { applicationIds: changed.map((a) => a.id) });
     }
     notificationsService.kick();
   });
@@ -251,7 +270,7 @@ async function lockEventThenApplication(tx: Tx, applicationId: string) {
 
 /** Droit de trancher : organisateur, super admin, ou staff de filtration autorisé à décider. */
 async function deciderAccess(v: Viewer, event: EventRow): Promise<StaffAccess> {
-  const access = await staffAccess(v, event.structureId, ["filtering"]);
+  const access = await staffAccess(v, event.structureId, ["filtering"], event.id);
   if (!access) throw forbidden("Réservé à l'organisation");
   if (!access.canDecide) throw forbidden("Ce rôle donne un avis, la décision revient à l'organisateur");
   return access;
@@ -310,7 +329,7 @@ async function decideInTx(
   }
   const row = await transition(tx, app, to, actor, patch);
   await notifyDecision(tx, event, row);
-  // Revenir sur une retenue libère une place (le pass sera révoqué au lot 06).
+  // Revenir sur une retenue libère une place (le pass est révoqué par `transition`).
   const offered = app.status === "accepted" ? await offerNext(tx, event, after) : [];
   broadcast(after, event, [row, ...offered]);
   return row;
@@ -570,7 +589,8 @@ export const applicationsService = {
         });
         expired.push(row);
       }
-      // Rappel de synchronisation au staff : avec `event_staff` (lot 06).
+      // Rappel de synchronisation au staff présent ou qui n'a pas répondu (docs/01 « Un rappel invite le staff… »).
+      if (!event.lockedAt) await staffService.notifySyncReminder(tx, event);
       after(() => realtime.publish(`event:${eventId}:access`, "event.locked", { eventId, lockedAt: t.toISOString() }));
       broadcast(after, event, expired);
       return true;
@@ -615,7 +635,7 @@ export const applicationsService = {
   /** Zone attribuée à la main (organisateur, ou staff placement), choix C19. */
   async assignZone(v: Viewer, eventId: string, applicationId: string, zoneId: string | null) {
     const event = await eventsRepo.byId(eventId);
-    const access = await staffAccess(v, event.structureId, ["placement"]);
+    const access = await staffAccess(v, event.structureId, ["placement"], event.id);
     if (!access) throw forbidden("Réservé à l'organisation");
     if (zoneId) {
       const zone = await db.query.eventZones.findFirst({ where: eq(eventZones.id, zoneId) });
@@ -639,7 +659,8 @@ export const applicationsService = {
     input: { opinion: "keep" | "doubt" | "refuse"; note: string | null },
   ) {
     const event = await eventsRepo.byId(eventId);
-    if (!(await staffAccess(v, event.structureId, ["filtering"]))) throw forbidden("Réservé au staff de filtration");
+    if (!(await staffAccess(v, event.structureId, ["filtering"], event.id)))
+      throw forbidden("Réservé au staff de filtration");
     return withTx(async (tx) => {
       const app = await lockApplication(tx, applicationId);
       if (app.eventId !== eventId) throw notFound("Candidature introuvable");

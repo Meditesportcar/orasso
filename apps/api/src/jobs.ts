@@ -6,6 +6,8 @@ import { AppError } from "./lib/errors";
 import { applicationsService } from "./modules/applications/service";
 import { eventJobs } from "./modules/events/jobs";
 import { notificationsService } from "./modules/notifications/service";
+import { pointsService } from "./modules/points/service";
+import { staffService } from "./modules/staff/service";
 
 // Tâches planifiées dans PostgreSQL (schéma « pgboss », créé et mis à jour par pg-boss lui-même).
 // Les gestionnaires n'ont pas de logique : ils appellent un service, qui revérifie l'état en base.
@@ -19,6 +21,12 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "event.reminder-eve": (d) => eventJobs.reminderEve({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "notifications.deliver": () => notificationsService.deliverDue(),
   "waitlist.sweep": () => applicationsService.expireDueOffers(),
+  "staff.remind": () => staffService.remindUnanswered(),
+  "event.settle": (d) => pointsService.settleEvent(d.eventId ?? ""),
+  "contest.escalate": (d) => pointsService.escalateContest(d.contestId ?? ""),
+  "season.rollover": () => pointsService.rolloverSeason(),
+  // Secours (chaque heure) : règlements de J+2, escalades et report de saison dont la tâche n'est pas passée.
+  "points.sweep": () => pointsService.sweep(),
 };
 
 /**
@@ -49,6 +57,11 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("notifications.deliver", "* * * * *", null, { tz: "Europe/Paris" });
     // Offres échues dont la tâche d'expiration n'est pas passée : balayage de secours.
     await boss.schedule("waitlist.sweep", "* * * * *", null, { tz: "Europe/Paris" });
+    // Relance quotidienne du staff qui n'a pas dit « je suis là / pas là » (docs/01), arrêtée le jour J.
+    await boss.schedule("staff.remind", "0 10 * * *", null, { tz: "Europe/Paris" });
+    // Fin de saison : on descend d'un grade et on continue (1er janvier, 00:10).
+    await boss.schedule("season.rollover", "10 0 1 1 *", null, { tz: "Europe/Paris" });
+    await boss.schedule("points.sweep", "5 * * * *", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {
     async send(name, data, startAfter) {

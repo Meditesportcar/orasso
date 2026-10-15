@@ -1,0 +1,1 @@
+ALTER TABLE "signing_keys" ADD COLUMN "revoked_at" timestamp with time zone;
