@@ -1,4 +1,4 @@
-import { deviceRegisterSchema, profileUpdateSchema } from "@orasso/shared";
+import { deviceRegisterSchema, profileUpdateSchema, pseudoSchema } from "@orasso/shared";
 import { Hono } from "hono";
 import sharp from "sharp";
 
@@ -6,9 +6,16 @@ import { AppError, validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, uuidParam } from "../../lib/validate";
 import { MAX_PHOTO_BYTES } from "../vehicles/service";
+import { profilesRepo } from "./repo";
 import { profilesService } from "./service";
 
 export const profilesRoutes = new Hono<AppEnv>()
+  // Public (formulaire d'inscription du site) : le pseudo est-il valide et libre ? Rien d'autre n'est révélé.
+  .get("/pseudo-available", async (c) => {
+    const pseudo = pseudoSchema.safeParse(c.req.query("pseudo") ?? "");
+    if (!pseudo.success) return c.json({ valid: false, available: false });
+    return c.json({ valid: true, available: !(await profilesRepo.pseudoTaken(pseudo.data)) });
+  })
   .get("/me", async (c) => c.json(await profilesService.me(await requireUser(c))))
   .patch("/me/profile", async (c) => {
     const v = await requireUser(c);

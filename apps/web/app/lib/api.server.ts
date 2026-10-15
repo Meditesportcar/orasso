@@ -1,0 +1,87 @@
+// Appels de l'API pendant le rendu serveur (loaders et actions). Le cookie de session du visiteur est transmis tel
+// quel ; les `Set-Cookie` de l'API (connexion, déconnexion) sont renvoyés au navigateur par `withCookies`.
+import type { ApiError, Me } from "@orasso/shared";
+import { redirect } from "react-router";
+
+function apiBase(): string {
+  return process.env.API_INTERNAL_URL ?? `http://localhost:${process.env.API_PORT ?? 3001}`;
+}
+
+/** Origine publique du site, telle que le navigateur la voit (Better Auth contrôle l'en-tête Origin). */
+export function originOf(request: Request): string {
+  const url = new URL(request.url);
+  const proto = request.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? url.host;
+  return `${proto}://${host}`;
+}
+
+export type ApiOk<T> = { ok: true; status: number; data: T; headers: Headers };
+export type ApiFail = { ok: false; status: number; error: ApiError["error"]; headers: Headers };
+export type ApiResult<T> = ApiOk<T> | ApiFail;
+
+type Init = { method?: string; json?: unknown; body?: BodyInit };
+
+export async function api<T>(request: Request, path: string, init: Init = {}): Promise<ApiResult<T>> {
+  const headers = new Headers({ origin: originOf(request), accept: "application/json" });
+  const cookie = request.headers.get("cookie");
+  if (cookie) headers.set("cookie", cookie);
+  let body = init.body;
+  if (init.json !== undefined) {
+    headers.set("content-type", "application/json");
+    body = JSON.stringify(init.json);
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}/api${path}`, { method: init.method ?? "GET", headers, body });
+  } catch {
+    return {
+      ok: false,
+      status: 503,
+      error: { code: "internal", message: "Le service est momentanément indisponible." },
+      headers: new Headers(),
+    };
+  }
+  if (res.ok) {
+    const data = res.status === 204 ? null : await res.json().catch(() => null);
+    return { ok: true, status: res.status, data: data as T, headers: res.headers };
+  }
+  const payload = (await res.json().catch(() => null)) as Partial<ApiError> | null;
+  const error = payload?.error ?? { code: "internal" as const, message: "Erreur inattendue." };
+  return { ok: false, status: res.status, error, headers: res.headers };
+}
+
+/** Résultat ou réponse HTTP d'erreur (404, 403…) : pour les loaders dont la page ne peut pas s'afficher sans. */
+export async function apiOrThrow<T>(request: Request, path: string, init?: Init): Promise<T> {
+  const res = await api<T>(request, path, init);
+  if (res.ok) return res.data;
+  if (res.status === 401) throw redirect(loginUrl(request));
+  throw new Response(res.error.message, { status: res.status, statusText: res.error.message });
+}
+
+/** Renvoie au navigateur les cookies posés par l'API. */
+export function withCookies(from: Headers, to: Headers = new Headers()): Headers {
+  for (const cookie of from.getSetCookie()) to.append("set-cookie", cookie);
+  return to;
+}
+
+export function loginUrl(request: Request): string {
+  const url = new URL(request.url);
+  return `/connexion?retour=${encodeURIComponent(url.pathname + url.search)}`;
+}
+
+/** Retour après connexion : chemin interne uniquement (jamais d'adresse externe). */
+export function safeReturn(value: string | null | undefined, fallback = "/app/acces"): string {
+  if (!value?.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return fallback;
+  return value;
+}
+
+export async function getMe(request: Request): Promise<Me | null> {
+  const res = await api<Me>(request, "/me");
+  return res.ok ? res.data : null;
+}
+
+export async function requireMe(request: Request): Promise<Me> {
+  const me = await getMe(request);
+  if (!me) throw redirect(loginUrl(request));
+  return me;
+}
