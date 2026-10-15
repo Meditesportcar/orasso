@@ -32,16 +32,20 @@
   - Vérifié : `pnpm --filter @orasso/design-system run build`, `run test` (20 tests : jetons, mouvement, rendu serveur, aucune valeur en dur) et `run typecheck` ; `pnpm lint` ; `pnpm --filter @orasso/web run build`.
 - **Version de test en ligne (15/10/2026)** : https://dev.orasso.fr (site protégé par mot de passe, API ouverte sous `/api`, WebSocket `/api/ws`, certificat Let's Encrypt). Conteneurs Docker isolés sur le VPS commun (`orasso-db`, `orasso-api`, `orasso-web`), déploiement en une commande avec retour arrière automatique, sauvegarde nocturne de la base (01:15 UTC, 7 jours, restauration testée). Tout est dans `deploy/` (détail : `deploy/README.md`).
 
+- **Système de design natif (lot 04, 15/10/2026)** : `@orasso/design-system/native` fournit à l'appli Expo les mêmes composants que le web (AppBar, Brand, Button, Chip, Counters, Cover, Field, Ground, Icons, Motion, Plate, PosterCard, ScanResult, StatusBadge, TabBar, VehicleCard), alimentés par les mêmes jetons, en Béton et en Sable, avec le mouvement « tout se gare » (Reanimated), le fond vivant et les barres brossées redessinés en `react-native-svg`, Archivo en six instances statiques, l'indicateur de chargement, l'écran d'ouverture (logo animé 1,6 s) et le résultat de scan (carte ou plein écran, trois sons provisoires).
+  - Utilisation : `<ThemeProvider>` à la racine (`apps/mobile/src/app/_layout.tsx`), attendre `useOrassoFonts()`, puis `import { Button, PosterCard, … } from "@orasso/design-system/native"`. Thème : `useTheme()` (`theme`, `preference`, `setPreference`, jetons `t`) ; réduction des animations : réglage de l'appareil (`/_ds?reduce=1` pour la recette).
+  - Recette : route cachée `/_ds` de l'appli (chaque composant en Béton et Sable ; `?only=<composant>&theme=<beton|sable>`), à voir avec `pnpm --filter @orasso/mobile exec expo start --web` (puis http://localhost:8081/_ds, ou le port choisi). Les choix et écarts sont dans `docs/JOURNAL-DES-CHOIX.md`.
+  - Vérifié : `pnpm typecheck`, `pnpm test` (32 tests du design system dont aucune valeur de couleur ou de durée en dur dans les composants natifs), `pnpm lint`, `expo export --platform android` et `--platform ios`, rendu de `/_ds` dans le navigateur. **Pas encore sur simulateur ni appareil.**
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
 
-- Site (lot 07) et appli (lots 09–10) sur l'API complète du parcours n° 1 : types et schémas dans `packages/shared/src/schemas/` (`access.ts` pour le jour J et les points), libellés dans `labels.fr.ts`. Le QR se dessine avec `qrcode` en correction M (version 6 attendue).
+- Écrans du site avec les composants web (lot 07) et écrans de l'appli avec les composants natifs (lots 09 et 10), en parallèle, sur l'API complète du parcours n° 1 : types et schémas dans `packages/shared/src/schemas/` (`access.ts` pour le jour J et les points), libellés dans `labels.fr.ts`. Le QR se dessine avec `qrcode` en correction M (version 6 attendue). Le thème choisi par l'utilisateur doit être mémorisé par l'appli (`onPreferenceChange`) ; `AppBar`/`TabBar` reçoivent `useSafeAreaInsets()`.
 - Déploiement de l'API B sur dev.orasso.fr : ajouter `QR_SIGNING_KEYS` et `QR_SIGNING_ACTIVE_KID` à `/etc/orasso/dev.env` **avant** (l'API refuse de démarrer sans elles en production ; voir `deploy/dev.env.example`).
-- Système de design natif : les composants React Native à partir de `@orasso/design-system` (lot 04). Les écrans du site s'écrivent avec les composants web (lot 07).
-- En attente de Damien : envoi des sauvegardes d'Orasso hors du VPS (deux lignes dans `/etc/vps-backup/files.list`, voir `deploy/README.md`).
+- Sauvegardes d'Orasso hors du VPS : validées par Damien et appliquées le 15/10 (deux lignes dans `/etc/vps-backup/files.list`, voir `deploy/README.md`).
 
 ## Lancer le projet sur ce PC (Windows)
 
