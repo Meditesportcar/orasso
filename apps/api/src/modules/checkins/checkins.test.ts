@@ -11,7 +11,7 @@ import {
   MINUTE,
   type ScanBatchItem,
 } from "@orasso/shared";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -29,7 +29,7 @@ import {
   viewerOf,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { checkins, devices, emailOutbox, eventStaff, notifications, scanEvents } from "../../db/schema";
+import { accessPasses, checkins, devices, emailOutbox, eventStaff, notifications, scanEvents } from "../../db/schema";
 import type { Viewer } from "../../lib/session";
 import { ed25519Verify } from "../../lib/signing";
 import { applicationsService } from "../applications/service";
@@ -327,7 +327,42 @@ describe("synchronisation du staff", () => {
     expect((await call(people[0]!.u, "GET", `/events/${eventId}/staff/sync`)).status).toBe(403);
   });
 
+  it("le staff ne lit la liste que de la veille au règlement ; l'organisation toujours", async () => {
+    const paths = [`/events/${eventId}/staff/sync`, `/events/${eventId}/checkins`, `/events/${eventId}/search?q=Ke`];
+    clock.set(paris(10, 15, 23, 59));
+    for (const p of paths) expect((await call(theo, "GET", p)).status).toBe(403);
+    for (const p of paths) expect((await call(orga, "GET", p)).status).toBe(200);
+    clock.set(paris(10, 16, 0, 1));
+    for (const p of paths) expect((await call(theo, "GET", p)).status).toBe(200);
+    clock.set(paris(10, 19, 18));
+    for (const p of paths) expect((await call(theo, "GET", p)).status).toBe(403);
+    for (const p of paths) expect((await call(orga, "GET", p)).status).toBe(200);
+  });
+
+  it("delta : une modification validée après la lecture, mais horodatée avant, n'est pas sautée", async () => {
+    const full = (await call(theo, "GET", `/events/${eventId}/staff/sync`)).json;
+    const newest = Math.max(...full.entries.map((e: { updatedAt: string }) => Date.parse(e.updatedAt)));
+    expect(Date.parse(full.cursor)).toBeLessThan(newest);
+    // Écriture faite juste avant la synchro (heure d'écriture < plus récente vue) mais validée juste après.
+    await db
+      .update(accessPasses)
+      .set({ revokedAt: clock.now, revokedReason: "withdrawn", updatedAt: new Date(newest - 1) })
+      .where(eq(accessPasses.id, people[2]!.passId));
+    const delta = (await call(theo, "GET", `/events/${eventId}/staff/sync?since=${encodeURIComponent(full.cursor)}`))
+      .json;
+    expect(delta.entries.find((e: { passId: string }) => e.passId === people[2]!.passId)).toMatchObject({
+      status: "revoked",
+    });
+  });
+
   it("delta : seules les entrées modifiées depuis le curseur", async () => {
+    // Données plus anciennes que la marge du curseur.
+    await db.execute(sql`update access_passes set updated_at = now() - interval '2 minutes'`);
+    await db.execute(sql`update applications set updated_at = now() - interval '2 minutes'`);
+    // La plus récente (celle du curseur, qui peut revenir) : Nina.
+    await db.execute(
+      sql`update access_passes set updated_at = now() - interval '1 minute' where id = ${people[2]!.passId}`,
+    );
     const full = (await call(theo, "GET", `/events/${eventId}/staff/sync`)).json;
     await new Promise((r) => setTimeout(r, 5));
     await checkinsService.receiveBatch(julieV, eventId, {

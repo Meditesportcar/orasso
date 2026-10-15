@@ -15,6 +15,7 @@ import {
   type PassRevokedReason,
   type StaffRole,
   type StaffSync,
+  settleAt,
   staffModeClosesAt,
   staffModeOpensAt,
   wallTime,
@@ -127,6 +128,32 @@ function mapMember(m: Awaited<ReturnType<typeof members>>[number]): EventStaffMe
 
 const lockedError = (message: string) => new AppError(423, "locked", message);
 
+/**
+ * Marge du curseur de synchro : `updated_at` est l'heure de l'écriture, pas celle de la validation de la
+ * transaction. Une modification écrite juste avant la lecture mais validée juste après aurait un `updated_at`
+ * inférieur au plus grand vu, et serait sautée pour toujours. Le curseur reste donc en retrait de l'heure réelle
+ * (heure système, comme `updated_at`, et non l'horloge métier) ; `since` étant inclusif, rien n'est perdu.
+ */
+const CURSOR_MARGIN_MS = 10_000;
+
+export function syncCursor(entries: { updatedAt: string }[]): string {
+  const safe = Date.now() - CURSOR_MARGIN_MS;
+  const max = entries.reduce((m, e) => Math.max(m, Date.parse(e.updatedAt)), Number.NEGATIVE_INFINITY);
+  return new Date(Math.min(Number.isFinite(max) ? max : safe, safe)).toISOString();
+}
+
+/**
+ * Liste d'accès, liste et recherche du staff : de la veille 00:00 jusqu'au règlement de J+2 (ARCHITECTURE.md
+ * § 2.7) ; l'organisation garde l'accès en permanence.
+ */
+export function assertStaffWindow(event: EventRow, access: StaffAccess) {
+  if (access.actor !== "staff") return;
+  const t = now();
+  if (t < staffModeOpensAt(event) || t >= settleAt(event) || event.settledAt) {
+    throw forbidden("Liste du staff : de la veille de l'événement jusqu'au règlement des points");
+  }
+}
+
 export const staffService = {
   ensureRows,
   members,
@@ -236,10 +263,11 @@ export const staffService = {
     if (event.status === "draft") throw notFound("Événement introuvable");
     const access = await requireEventStaff(v, event);
     const t = now();
+    assertStaffWindow(event, access);
     const entries = await accessEntries(event, access);
     // Delta : `>=` sur le curseur (au milliseconde près) ; une entrée renvoyée deux fois est simplement réécrite.
     const delta = since ? entries.filter((e) => Date.parse(e.updatedAt) >= since.getTime()) : entries;
-    const cursor = entries.reduce<string | null>((max, e) => (max && max > e.updatedAt ? max : e.updatedAt), null);
+    const cursor = syncCursor(entries);
     const zones = await db.query.eventZones.findMany({
       where: eq(eventZones.eventId, eventId),
       orderBy: [asc(eventZones.position), asc(eventZones.code)],
@@ -261,7 +289,7 @@ export const staffService = {
       full: !since,
       entries: delta,
       removedPassIds: [],
-      cursor: since && cursor === null ? since.toISOString() : cursor,
+      cursor,
       generatedAt: t.toISOString(),
     };
     const digest = createHash("sha256").update(accessListSigningText(body), "utf8").digest();

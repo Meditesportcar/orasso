@@ -42,7 +42,7 @@ import type { Viewer } from "../../lib/session";
 import { ed25519Verify } from "../../lib/signing";
 import { type Tx, withTx } from "../../lib/tx";
 import { type EventRow, eventsRepo } from "../events/repo";
-import { staffService } from "../staff/service";
+import { assertStaffWindow, staffService } from "../staff/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 
@@ -523,7 +523,8 @@ export const checkinsService = {
 
   /** Liste des retenus et de leur entrée (« Tous / Arrivés / Attendus », filtre « Sans scan » par méthode). */
   async list(v: Viewer, eventId: string, q: { method?: CheckinMethod; zoneId?: string; q?: string }) {
-    await staffEvent(v, eventId);
+    const { event, access } = await staffEvent(v, eventId);
+    assertStaffWindow(event, access);
     const filters: (SQL | undefined)[] = [];
     if (q.method) filters.push(eq(checkins.method, q.method));
     if (q.zoneId) filters.push(eq(applications.zoneId, q.zoneId));
@@ -536,7 +537,8 @@ export const checkinsService = {
 
   /** Recherche en ligne par plaque (début de plaque normalisée) ou pseudo ; la plaque n'est jamais renvoyée. */
   async search(v: Viewer, eventId: string, text: string) {
-    await staffEvent(v, eventId);
+    const { event, access } = await staffEvent(v, eventId);
+    assertStaffWindow(event, access);
     const plate = normalizePlate(text);
     const conditions: SQL[] = [ilike(profiles.pseudo, `${escapeLike(text)}%`)];
     if (plate.length >= 2) conditions.push(like(vehicles.plateNormalized, `${escapeLike(plate)}%`));
