@@ -28,6 +28,10 @@ export async function activeMembership(userId: string, structureId: string) {
 
 export type OrganizerAccess = { role: StructureRole | "super_admin" };
 
+/** Acteur du journal des transitions pour un organisateur ou un super admin. */
+export const organizerActor = (a: OrganizerAccess): "admin" | "organizer" =>
+  a.role === "super_admin" ? "admin" : "organizer";
+
 /**
  * Organisateur de la structure (propriétaire ou co-organisateur), 2FA exigée.
  * Un super admin passe partout ; chaque passage est tracé (`structure.view_as`).
@@ -59,23 +63,28 @@ export async function requirePlatformRole(v: Viewer, role: "moderator" | "super_
   assertTwoFactor(v);
 }
 
-/** Organisateur, ou staff actif ayant l'un des rôles demandés (rôles fixés au niveau de la structure). */
+export type StaffAccess = { actor: "organizer" | "admin" | "staff"; canDecide: boolean };
+
+/**
+ * Organisateur, ou staff actif ayant l'un des rôles demandés (rôles fixés au niveau de la structure ;
+ * l'ajustement par événement arrive avec `event_staff` au lot 06). `null` si aucun droit.
+ */
 export async function staffAccess(
   v: Viewer,
   structureId: string,
   staffRoles: StaffRole[],
-): Promise<{ organizer: boolean; canDecide: boolean } | null> {
+): Promise<StaffAccess | null> {
   const member = await activeMembership(v.user.id, structureId);
   if (member && (member.role === "owner" || member.role === "co_organizer")) {
     assertTwoFactor(v);
-    return { organizer: true, canDecide: true };
+    return { actor: "organizer", canDecide: true };
   }
   if (member?.role === "staff" && member.staffRoles.some((r) => staffRoles.includes(r as StaffRole))) {
-    return { organizer: false, canDecide: member.canDecide };
+    return { actor: "staff", canDecide: member.canDecide };
   }
   if (isSuperAdmin(v)) {
     await requireOrganizer(v, structureId);
-    return { organizer: true, canDecide: true };
+    return { actor: "admin", canDecide: true };
   }
   return null;
 }

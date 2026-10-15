@@ -1,13 +1,22 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 
 import { auth } from "./auth";
 import { db } from "./db/client";
+import { user } from "./db/schema";
 import { AppError, errorResponse, notFound } from "./lib/errors";
-import { type AppEnv, loadSession } from "./lib/session";
+import { realtime } from "./lib/realtime";
+import { type AppEnv, type AuthUser, loadSession } from "./lib/session";
 import { storage } from "./lib/storage";
+import { adminRoutes } from "./modules/admin/routes";
+import { applicationsRoutes } from "./modules/applications/routes";
+import { eventsRoutes } from "./modules/events/routes";
+import { eventsService } from "./modules/events/service";
+import { notificationsRoutes } from "./modules/notifications/routes";
+import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
+import { structuresRoutes } from "./modules/structures/routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { ws } from "./ws";
 
@@ -54,5 +63,18 @@ app.use("*", loadSession);
 
 app.route("/", profilesRoutes);
 app.route("/", vehiclesRoutes);
+app.route("/", structuresRoutes);
+app.route("/", eventsRoutes);
+app.route("/", applicationsRoutes);
+app.route("/", notificationsRoutes);
+app.route("/", adminRoutes);
+
+// Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes.
+realtime.setAuthorizer(async (userId, channel) => {
+  const u = await db.query.user.findFirst({ where: eq(user.id, userId) });
+  const profile = await profilesRepo.byUserId(userId);
+  if (!u || !profile) return false;
+  return eventsService.canSubscribe({ user: u as AuthUser, profile }, channel);
+});
 
 export type App = typeof app;

@@ -120,10 +120,11 @@ export type ApplicationForTriage = {
     userId: string;
     pseudo: string;
     grade: Grade;
+    /** Coordonnées : organisateur seulement (null pour le staff de filtration). */
     firstName: string | null;
     lastName: string | null;
     phone: string | null;
-    email: string;
+    email: string | null;
     eventsCount: number;
     absencesCount: number;
     /** Candidatures passées auprès de la même structure. */

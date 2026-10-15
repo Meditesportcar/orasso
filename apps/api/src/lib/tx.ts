@@ -4,7 +4,7 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /** Base ou transaction : ce que reçoivent les fonctions de `repo.ts`. */
 export type Executor = typeof db | Tx;
 
-type After = () => void | Promise<void>;
+type After = () => unknown;
 
 /**
  * Transaction de service. `after(fn)` diffère un effet hors base (WebSocket, planification de tâche)
