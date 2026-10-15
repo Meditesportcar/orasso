@@ -30,11 +30,17 @@ export function renderMail(title: string, paragraphs: string[], link?: { label: 
 }
 
 async function deliverJournal(id: string, to: string, content: MailContent) {
-  const dir = join(dataDir, "mail");
-  await mkdir(dir, { recursive: true });
-  const stamp = now().toISOString().replaceAll(":", "-");
-  await writeFile(join(dir, `${stamp}-${id}.html`), `<!-- À : ${to} -->\n${content.html}`);
   if (env.NODE_ENV !== "test") console.log(`[e-mail] ${to} · ${content.subject}`);
+  // Copie HTML lisible en dev ; facultative (dossier en lecture seule dans le conteneur du VPS) :
+  // le contenu reste de toute façon dans `email_outbox`.
+  try {
+    const dir = join(dataDir, "mail");
+    await mkdir(dir, { recursive: true });
+    const stamp = now().toISOString().replaceAll(":", "-");
+    await writeFile(join(dir, `${stamp}-${id}.html`), `<!-- À : ${to} -->\n${content.html}`);
+  } catch {
+    // Rien : l'e-mail est journalisé en console et en base.
+  }
 }
 
 async function deliverBrevo(to: string, content: MailContent) {

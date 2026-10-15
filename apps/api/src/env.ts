@@ -34,6 +34,8 @@ const schema = z.object({
   STORAGE_DRIVER: z.enum(["disk"]).default("disk"),
   /** Dossier des fichiers locaux (photos, e-mails du journal), relatif à la racine du dépôt. */
   DATA_DIR: z.string().default(".data"),
+  /** Dossier des photos (pilote disque). Défaut : DATA_DIR/storage. Sur le VPS : /data/uploads (volume orasso_uploads). */
+  UPLOADS_DIR: optional,
   EXPO_ACCESS_TOKEN: optional,
 });
 

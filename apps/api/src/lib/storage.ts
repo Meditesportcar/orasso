@@ -1,4 +1,5 @@
-// Stockage des fichiers (photos, logos, affiches). Pilote « disque » : DATA_DIR/storage, servi par /api/files/*.
+// Stockage des fichiers (photos, logos, affiches). Pilote « disque » : UPLOADS_DIR (défaut DATA_DIR/storage),
+// servi par /api/files/*.
 // Le pilote S3 OVH viendra quand les clés existeront (H7) : même interface.
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
@@ -6,7 +7,7 @@ import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
 import { env, repoRoot } from "../env";
 
 const dataDir = isAbsolute(env.DATA_DIR) ? env.DATA_DIR : resolve(repoRoot, env.DATA_DIR);
-const storageDir = join(dataDir, "storage");
+const storageDir = env.UPLOADS_DIR ? resolve(repoRoot, env.UPLOADS_DIR) : join(dataDir, "storage");
 
 function pathOf(key: string): string {
   const p = normalize(join(storageDir, key));
@@ -36,4 +37,4 @@ export const storage = {
   },
 };
 
-export { dataDir };
+export { dataDir, storageDir };

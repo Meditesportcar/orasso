@@ -17,7 +17,7 @@ import { vehicleReference } from "../src/db/seed/vehicle-reference";
 import { startJobs } from "../src/jobs";
 import { deps } from "../src/lib/deps";
 import { slugify } from "../src/lib/slug";
-import { dataDir, storage } from "../src/lib/storage";
+import { storage, storageDir } from "../src/lib/storage";
 import { scheduleEventJobs } from "../src/modules/events/jobs";
 import type { EventRow } from "../src/modules/events/repo";
 import { ensureProfile } from "../src/modules/profiles/service";
@@ -25,6 +25,11 @@ import { ensureProfile } from "../src/modules/profiles/service";
 const args = new Set(process.argv.slice(2));
 const RESET = args.has("--reset");
 const SMALL = args.has("--small");
+// En production (dev.orasso.fr, en ligne), pas de mot de passe par défaut : les comptes du seed incluent un super admin.
+if (process.env.NODE_ENV === "production" && !process.env.SEED_PASSWORD) {
+  console.error("SEED_PASSWORD manquant : obligatoire en production (comptes de démonstration en ligne).");
+  process.exit(1);
+}
 const PASSWORD = process.env.SEED_PASSWORD || "orasso-demo-2026";
 
 // Hasard reproductible (mêmes données à chaque seed).
@@ -64,7 +69,7 @@ async function reset() {
   if (boss.rows.length) {
     await db.execute(sql`delete from pgboss.job where name like 'event.%' or name like 'waitlist.%'`);
   }
-  await rm(join(dataDir, "storage", "seed"), { recursive: true, force: true });
+  await rm(join(storageDir, "seed"), { recursive: true, force: true });
   console.log("Données vidées.");
 }
 
