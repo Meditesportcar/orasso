@@ -137,7 +137,12 @@ export async function syncEvent(eventId: string, userId: string, full = false): 
     );
     if (!merged.ok) return { ok: false, message: "Liste plus ancienne que celle du téléphone : ignorée." };
     await store.saveSync(merged.meta, merged.full ? merged.entries : sync.entries, merged.full);
-    states.set(eventId, buildState(merged.meta, merged.entries, await store.localCheckins(eventId)));
+    const fresh = buildState(merged.meta, merged.entries, await store.localCheckins(eventId));
+    // Une lecture faite pendant la synchro (écriture encore en file) reste « déjà entré » en mémoire.
+    for (const [passId, local] of states.get(eventId)?.local ?? []) {
+      if (!fresh.local.has(passId)) fresh.local.set(passId, local);
+    }
+    states.set(eventId, fresh);
     emit();
     return { ok: true, count: sync.entries.length };
   } catch (error) {
@@ -296,7 +301,14 @@ async function sendBatch(store: Store, eventId: string, device: string, batch: P
   const { effects, missing } = applyResults(batch, results, (appId) => state?.byApplication.get(appId));
   await store.markSent(eventId, effects, new Date());
   if (missing.length) await store.markFailed(missing, "Sans réponse du serveur", later);
-  if (state) state.local = new Map((await store.localCheckins(eventId)).map((l) => [l.passId, l]));
+  // Mémoire alignée comme la base (sans la relire : une lecture faite entre-temps y reste).
+  const current = states.get(eventId);
+  for (const { checkin } of effects) {
+    const local = checkin ? current?.local.get(checkin.passId) : undefined;
+    if (!checkin || !local || !current) continue;
+    if (checkin.checkedInAt) current.local.set(checkin.passId, { ...local, checkedInAt: checkin.checkedInAt });
+    else if (local.actionId === checkin.actionId) current.local.delete(checkin.passId);
+  }
 }
 
 async function sendOneByOne(store: Store, eventId: string, device: string, batch: PendingAction[]) {
