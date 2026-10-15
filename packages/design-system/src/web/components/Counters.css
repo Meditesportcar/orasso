@@ -1,0 +1,68 @@
+/* Counters : une rangée de chiffres stables. Voir docs/design-system/components/Counters. */
+
+.o-counters {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--plate-edge);
+  border-radius: var(--radius-md);
+  background: var(--plate);
+  color: var(--plate-ink);
+  box-shadow: var(--shadow-card);
+}
+.o-counters--surface {
+  border-color: transparent;
+  background: var(--surface);
+  color: var(--ink);
+}
+.o-counters__cell {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 4px;
+  text-align: center;
+  border-left: 1px solid var(--plate-line);
+}
+.o-counters--surface .o-counters__cell {
+  border-left-color: var(--line);
+}
+.o-counters__cell:first-child {
+  border-left: 0;
+}
+.o-counters__value {
+  display: block;
+  font-size: 18px;
+  line-height: 18px;
+  color: var(--plate-ink);
+}
+.o-counters--site .o-counters__value {
+  font-size: 24px;
+  line-height: 24px;
+}
+.o-counters--surface .o-counters__value {
+  color: var(--ink);
+}
+.o-counters__label {
+  display: block;
+  margin-top: 4px;
+  font-size: 9px;
+  line-height: 11px;
+  letter-spacing: 0.08em;
+  color: var(--plate-muted);
+}
+.o-counters--surface .o-counters__label {
+  color: var(--ink-muted);
+}
+/* La cellule active : fond moutarde, texte noir. Une seule. */
+.o-counters__cell.is-active {
+  background: var(--accent);
+}
+.o-counters__cell.is-active .o-counters__value,
+.o-counters__cell.is-active .o-counters__label {
+  color: var(--accent-ink);
+}
+
+.o-anim-counter {
+  animation: o-counter-in var(--timing-fast) var(--ease-out) both;
+}
+.o-anim-flash {
+  animation: o-counter-flash var(--timing-fast) var(--ease-out) both;
+}

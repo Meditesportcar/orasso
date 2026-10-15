@@ -1,0 +1,18 @@
+/* Le brossage des barres : un SVG par thème posé en z-index −1 dans un conteneur isolé (isolation: isolate).
+   Un seul est affiché, selon data-theme ; opacité et fusion viennent des jetons bar-fx. */
+
+.o-brush {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  display: none;
+  width: 100%;
+  height: 100%;
+  opacity: var(--bar-brush-opacity);
+  mix-blend-mode: var(--bar-brush-blend);
+  pointer-events: none;
+}
+[data-theme="beton"] .o-brush--beton,
+[data-theme="sable"] .o-brush--sable {
+  display: block;
+}

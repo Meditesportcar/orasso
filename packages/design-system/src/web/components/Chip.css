@@ -1,0 +1,92 @@
+/* Chip : une catégorie, un filtre ou un fait. Voir docs/design-system/components/Chip. */
+
+.o-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 5px 11px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: transparent no-repeat;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 15px;
+  letter-spacing: 0.06em;
+  -webkit-tap-highlight-color: transparent;
+}
+button.o-chip {
+  cursor: pointer;
+}
+
+/* Sélectionnée : le fond encre glisse de gauche à droite (fast). */
+.o-chip {
+  background-image: linear-gradient(var(--ink), var(--ink));
+  background-size: 0% 100%;
+  transition:
+    background-size var(--timing-fast) var(--ease-inout),
+    color var(--timing-fast) var(--ease-inout),
+    border-color var(--timing-fast) var(--ease-inout);
+}
+.o-chip.is-selected {
+  border-color: var(--ink);
+  background-size: 100% 100%;
+  color: var(--surface);
+}
+
+/* À toi : inclinée, moutarde, le texte redressé. */
+.o-chip--accent {
+  border-color: var(--accent-text);
+  color: var(--accent-text);
+  box-shadow: var(--neon-accent-soft);
+  transform: skewX(var(--skew));
+}
+.o-chip__text {
+  display: inline-block;
+  transform: skewX(calc(var(--skew) * -1));
+}
+.o-chip--accent.is-selected {
+  color: var(--accent-ink);
+  background-image: linear-gradient(var(--accent-text), var(--accent-text));
+}
+
+/* Vérifié : plus petite, coins à 4 px, toujours en encre, jamais en couleur. */
+.o-chip--verified {
+  padding: 3px 8px;
+  border-color: var(--ink);
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 12px;
+}
+
+/* Sur plaque : contour plate-chip, texte plate-ink ; sélectionnée = moutarde (le filtre actif du tri). */
+.o-chip--plate {
+  border-color: var(--plate-chip);
+  color: var(--plate-ink);
+  background-image: linear-gradient(var(--accent), var(--accent));
+}
+.o-chip--plate.is-selected {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.o-chip--plate.o-chip--accent {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.o-chip--plate.o-chip--accent.is-selected {
+  color: var(--accent-ink);
+}
+
+.o-chip-row {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-block: 2px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+.o-chip-row::-webkit-scrollbar {
+  display: none;
+}
+.o-chip-row > * {
+  scroll-snap-align: start;
+}

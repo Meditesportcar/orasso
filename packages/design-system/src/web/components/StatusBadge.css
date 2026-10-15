@@ -1,0 +1,66 @@
+/* StatusBadge : les sept états. Voir docs/design-system/components/StatusBadge. */
+
+.o-badge {
+  display: inline-block;
+  padding: 5px 11px;
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-pill);
+  transform: skewX(var(--skew));
+}
+.o-badge__text {
+  display: inline-block;
+  transform: skewX(calc(var(--skew) * -1));
+}
+.o-anim-flip {
+  animation: o-flip var(--timing-base) var(--ease-inout) both;
+}
+
+.o-badge--pending {
+  border-color: var(--status-pending);
+  color: var(--status-pending);
+}
+.o-badge--retained {
+  background: var(--status-retained);
+  color: var(--accent-ink);
+  box-shadow: var(--neon-accent-soft);
+}
+.o-badge--waitlist {
+  background: var(--status-waitlist);
+  color: var(--night);
+}
+.o-badge--refused {
+  border-color: var(--status-refused);
+  color: var(--status-refused);
+  text-decoration: line-through;
+}
+.o-badge--onsite {
+  background: var(--status-onsite);
+  color: var(--poster-ink);
+}
+.o-badge--cancelled {
+  background: var(--status-cancelled);
+  color: var(--win-ink);
+  box-shadow: var(--neon-win);
+}
+.o-badge--uncertain {
+  border-color: var(--status-uncertain);
+  background: repeating-linear-gradient(45deg, var(--status-uncertain) 0 6px, transparent 6px 10px);
+  color: var(--ink);
+}
+
+/* Sur plaque graphite : le bleu clair du Béton, et des textes lisibles sur le graphite dans les deux thèmes. */
+.o-badge--plate.o-badge--waitlist {
+  background: var(--status-waitlist-on-plate);
+}
+.o-badge--plate.o-badge--pending,
+.o-badge--plate.o-badge--refused {
+  border-color: var(--plate-muted);
+  color: var(--plate-muted);
+}
+.o-badge--plate.o-badge--uncertain {
+  color: var(--plate-ink);
+}
+.o-badge--plate.o-badge--onsite {
+  background: var(--night-ink);
+  color: var(--night);
+}

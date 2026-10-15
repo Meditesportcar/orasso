@@ -1,0 +1,10 @@
+/* Motion : composants utilitaires de mouvement. Les animations sont dans ../motion.css. */
+
+.o-screens {
+  position: relative;
+}
+.o-screens__leaving {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}

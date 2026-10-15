@@ -1,0 +1,268 @@
+/* Mouvement « tout se gare » : variables et animations de base. Les valeurs qui n'ont pas de jeton dans
+   tokens.json viennent du README « Motion » et sont reprises dans src/motion.ts (un test vérifie l'accord).
+   Un seul mécanisme de repli : avec prefers-reduced-motion, tout devient un fondu de --timing-fast. */
+
+:root {
+  --timing-screen-out: 160ms;
+  --park-overshoot: 6px;
+  --park-overshoot-switch: 4px;
+  --park-from: 16px;
+  --park-screen-from: 24px;
+  --park-tab-rise: 8px;
+  --park-counter-slide: 10px;
+  --press-scale: 0.97;
+  --shake-amplitude: 7px;
+  --shake-duration: 320ms;
+}
+
+/* Ce qui arrive se gare : park jusqu'au dépassement, puis inout jusqu'à la place. */
+@keyframes o-park {
+  from {
+    opacity: 0;
+    transform: translateY(var(--park-from));
+    animation-timing-function: var(--ease-park);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(calc(var(--park-overshoot) * -1));
+    animation-timing-function: var(--ease-inout);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* Une feuille qui monte du bas, avec 6 px de dépassement vers le haut. */
+@keyframes o-park-sheet {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+    animation-timing-function: var(--ease-park);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(calc(var(--park-overshoot) * -1));
+    animation-timing-function: var(--ease-inout);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* Un écran qui arrive se gare depuis la droite. */
+@keyframes o-park-screen {
+  from {
+    opacity: 0;
+    transform: translateX(var(--park-screen-from));
+    animation-timing-function: var(--ease-park);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(calc(var(--park-overshoot) * -1));
+    animation-timing-function: var(--ease-inout);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+/* Changement d'onglet : fondu avec huit pixels de montée. */
+@keyframes o-tab-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--park-tab-rise));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* Fondu : entrée et sortie neutres, et repli de tout le mouvement. */
+@keyframes o-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes o-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* L'affiche se dévoile par la coupe à 10° (clip-path, courbe out). */
+@keyframes o-cut {
+  from {
+    clip-path: polygon(0 0, 0 0, -20% 100%, -20% 100%);
+  }
+  to {
+    clip-path: polygon(0 0, 120% 0, 120% 100%, 0 100%);
+  }
+}
+/* Le bandeau en coin se tamponne : échelle 1,9 → 1. */
+@keyframes o-stamp {
+  from {
+    opacity: 0;
+    transform: rotate(var(--band)) scale(1.9);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--band)) scale(1);
+  }
+}
+/* Badge retourné comme une plaque. */
+@keyframes o-flip {
+  from {
+    opacity: 0;
+    transform: skewX(var(--skew)) rotateX(-180deg);
+  }
+  to {
+    opacity: 1;
+    transform: skewX(var(--skew)) rotateX(0);
+  }
+}
+/* Le chiffre d'un compteur glisse de 10 px, rien ne défile. */
+@keyframes o-counter-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--park-counter-slide));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes o-counter-flash {
+  from {
+    filter: brightness(1.45);
+  }
+  to {
+    filter: brightness(1);
+  }
+}
+/* Refus de scan : secoué trois fois, ±7 px en 320 ms. */
+@keyframes o-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  17%,
+  50%,
+  83% {
+    transform: translateX(calc(var(--shake-amplitude) * -1));
+  }
+  33%,
+  67% {
+    transform: translateX(var(--shake-amplitude));
+  }
+}
+/* Le seul mouvement continu : le fond respire (halo), les phares passent, le faisceau balaie. */
+@keyframes o-breath {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+}
+@keyframes o-phares {
+  0%,
+  8%,
+  50%,
+  100% {
+    opacity: 1;
+  }
+  14%,
+  20%,
+  38%,
+  44% {
+    opacity: 0.45;
+  }
+  26%,
+  32% {
+    opacity: 1;
+  }
+}
+@keyframes o-sweep {
+  from {
+    transform: translateX(-12%);
+  }
+  to {
+    transform: translateX(12%);
+  }
+}
+/* Squelette : la lumière balaie le métal brossé. */
+@keyframes o-sheen {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -20% 0;
+  }
+}
+
+/* Classes utilitaires. Toute classe animée commence par o-anim- : le repli ci-dessous les attrape. */
+.o-anim-park {
+  animation: o-park var(--timing-base) both;
+}
+.o-anim-sheet {
+  animation: o-park-sheet var(--timing-base) both;
+}
+.o-anim-screen {
+  animation: o-park-screen var(--timing-base) both;
+}
+.o-anim-tab {
+  animation: o-tab-rise var(--timing-base) var(--ease-out) both;
+}
+.o-anim-fade {
+  animation: o-fade var(--timing-fast) linear both;
+}
+.o-anim-fade-out {
+  animation: o-fade-out var(--timing-screen-out) linear both;
+}
+.o-anim-cut {
+  animation: o-cut var(--timing-poster) var(--ease-out) both;
+}
+/* Cascade : quatre lignes au plus, les suivantes arrivent d'un bloc. */
+.o-anim-stagger > * {
+  animation: o-park var(--timing-base) both;
+}
+.o-anim-stagger > :nth-child(2) {
+  animation-delay: var(--timing-stagger);
+}
+.o-anim-stagger > :nth-child(3) {
+  animation-delay: calc(var(--timing-stagger) * 2);
+}
+.o-anim-stagger > :nth-child(n + 4) {
+  animation-delay: calc(var(--timing-stagger) * 3);
+}
+
+/* Réduction des animations : tout devient un fondu de --timing-fast, le fond ne bouge plus. */
+@media (prefers-reduced-motion: reduce) {
+  [class*="o-anim-"],
+  .o-anim-stagger > * {
+    animation-name: o-fade !important;
+    animation-duration: var(--timing-fast) !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    animation-timing-function: linear !important;
+    animation-direction: normal !important;
+    animation-fill-mode: both !important;
+  }
+  [class*="o-anim-ambient"] {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-property: opacity, color, background-color, border-color !important;
+    transition-duration: var(--timing-fast) !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
