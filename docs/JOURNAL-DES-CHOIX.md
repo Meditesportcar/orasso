@@ -55,9 +55,31 @@ Fichiers : `packages/design-system/` (jetons, composants), `apps/web/app/routes/
 - **Coupe des photos** : le polygone de l'aperçu (18 % de la hauteur à gauche) plutôt qu'un calcul à 10° exact, qui donnerait une coupe de 60 px sur une carte de 340 px, bien plus marquée que l'aperçu.
 - **Pastilles de l'en-tête** : un compteur moutarde sur la cloche (`neon-accent`) et une pastille de 8 px sur l'avatar quand une autre casquette a quelque chose à traiter, comme le décrit le README AppBar.
 
+### 15/10/2026 — Déploiement de test dev.orasso.fr (lot 08)
+
+- **Images construites sur le VPS** (pas de Docker sur le PC) à partir d'une archive `git archive HEAD` envoyée par `scp` ; pas encore de clé de déploiement GitHub (variante documentée dans `deploy/README.md`). Étiquette d'image = commit court ; 3 versions gardées. Fichiers : `deploy/deploy.sh`, `deploy/remote-deploy.sh`.
+- **Image de l'API sans `devDependencies`**, `tsx` installé à la version exacte du lockfile (438 Mo au lieu de 793 Mo). Conséquence : tout ce que l'API ou son seed importe à l'exécution va dans `dependencies`. Fichier : `apps/api/Dockerfile`.
+- **`--config.strict-dep-builds=false` dans les images** : l'installation filtrée embarque les `devDependencies` de la racine, dont les binaires PostgreSQL Linux d'`embedded-postgres` dont le script est refusé ; plutôt que d'élargir `allowBuilds` (fichier partagé), le contrôle est levé dans les images seulement.
+- **Migrations à chaque démarrage de l'API** (`deploy/api-start.sh`), **seed à chaque déploiement** (et non à chaque redémarrage) si `SEED_DEMO=1` et si `apps/api` a un script `db:seed` (idempotent, `ARCHITECTURE.md`).
+- **Ports sur le VPS** : site `127.0.0.1:3210`, API `127.0.0.1:3211` ; base sans port publié (réseau Docker `orasso` seulement, sauvegarde par `docker exec`). Limites mémoire : base 512 Mo, API 768 Mo, site 384 Mo.
+- **Authentification basique sur le site, pas sur `/api/`** : l'appli mobile appelle l'API directement et l'API a sa propre authentification (Better Auth) ; un jeton spécial pour l'appli aurait dû être embarqué dans l'APK sans protéger davantage. Site non indexé (`X-Robots-Tag`, `robots.txt`).
+- **Pas de `snippets/supervision.conf` dans le vhost** : il réserve `/api/send` (Umami) et `/api/<n>/envelope/` (GlitchTip), qui tombent dans l'espace de l'API Orasso, et injecte ses scripts dans les pages. Orasso enverra ses erreurs par son propre SDK Sentry (DSN GlitchTip à créer).
+- **Sentry : variables prêtes (`SENTRY_DSN` vide = désactivé), SDK pas encore ajouté** : l'ajouter touche `apps/api/package.json` et le lockfile, en cours de modification par le lot 05 ; `ARCHITECTURE.md` place `sentry.ts` dans l'API.
+- **Photos** : volume `orasso_uploads` monté sur `/data/uploads` (`UPLOADS_DIR`), seul dossier inscriptible de l'API.
+- **Taille d'envoi** : 80 Mo par requête sur `/api/` (8 photos par véhicule).
+- **Sauvegarde** : `pg_dump` au format personnalisé chaque nuit à 01:15 UTC (hors 02:30–04:00), 7 jours dans `/var/backups/orasso`, timer systemd `orasso-backup`. Envoi hors VPS préparé, non appliqué (voir « À revoir »).
+- **Corrections après relecture (lot 08)**, qui remplacent les entrées ci-dessus sur ces points :
+  - **Taille d'envoi** : 16 Mo par requête sur l'API, 128 Mo sur la seule route des photos de véhicule (`POST /api/me/vehicles/:id/photos`, 8 photos de 15 Mo au plus), au lieu de 80 Mo partout ; limite de 30 requêtes/s par adresse IP sur l'API (sans mot de passe nginx, elle était exposée au remplissage du disque commun).
+  - **Adresse du client** : nginx transmet `X-Forwarded-For` = adresse réelle seule (et non la chaîne reçue), sinon un client contournerait la limite de tentatives de connexion de Better Auth. Le mot de passe du site (`Authorization: Basic`) n'est pas transmis à l'API.
+  - **Déploiement depuis `main` seulement** par défaut (`ORASSO_ALLOW_BRANCH=1` pour forcer) : les migrations Drizzle s'appliquent par date, une branche non fusionnée déployée avant `main` ferait sauter une migration sans erreur. Verrou contre deux déploiements simultanés, variables manquantes de `dev.env` signalées, seed en échec non bloquant, rotation des journaux des conteneurs (10 Mo × 3).
+  - **Restauration** : base recréée vide avant `pg_restore` (procédure dans `deploy/README.md`).
+  - **Reste ouvert** : `tsx` installé par `npm install -g` à la version du lockfile (ses propres dépendances ne sont pas figées) ; le plus propre serait de passer `tsx` dans les `dependencies` de `@orasso/api` — à faire par le lot 05 qui modifie ce fichier.
+
 ## À revoir avec Damien
 
 - **Icône de l'appli en 1024 px.** Les stores attendent une icône carrée opaque de 1024 px ; le kit n'en a qu'en 512 px (`icon-maskable-512.png`). Proposition : exporter le monogramme sur fond Asphalte en 1024 px, avec une version « premier plan » transparente pour l'icône adaptative Android. En attendant, l'appli utilise la version 512 px.
 - **Compteurs : 18 px (README), 26 px (aperçu isolé) ou 20 px (prototype) ?** J'ai pris le README. Si Damien préfère un chiffre plus grand, c'est une ligne dans `Counters.css`.
 - **Pile `narrow` de `tokens.json`** : elle cite encore « Archivo Narrow » en tête. Proposition : la remplacer par Archivo seule avec `font-stretch` 78,4 % (ce que fait le site) et le consigner dans « Ce qui a changé depuis le gel » du README du système de design (je n'y touche pas sans Damien).
 - **Sable : plaque graphite ou sable clair sur le site organisateur ?** Le README demande des cartes de contenu en sable clair et des champs `#e8e2d3` sur le site, des plaques partout sur téléphone. Les composants gèrent les deux (`Plate`, `Counters variant`, `Field`), mais le choix écran par écran est à confirmer au lot 07.
+- **Sauvegarde d'Orasso hors du VPS (lot 08).** Les dumps restent pour l'instant sur le VPS. Proposition : ajouter `orasso-dev-db:/var/backups/orasso` et `orasso-dev-uploads:/var/lib/docker/volumes/orasso_uploads/_data` à `/etc/vps-backup/files.list`, que `vps-backup.sh` lit déjà (le script lui-même ne change pas). Commande prête dans `deploy/README.md`.
+- **API de test ouverte (lot 08).** Sur dev.orasso.fr, `/api/` n'a pas de mot de passe nginx : n'importe qui connaissant l'adresse peut créer un compte de test. Acceptable pour une version de test non indexée ; à revoir si des données réelles y entrent.

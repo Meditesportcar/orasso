@@ -14,6 +14,7 @@
   - Thème : cookie `orasso-theme` (`beton` | `sable` | `auto`, défaut Béton) lu par le serveur, `data-theme` sur `<html>`, sans flash ; `ThemeProvider`, `useTheme`, `ThemeScope`. Archivo variable auto-hébergée (une seule famille, trois largeurs).
   - Page de recette `/_ds` (non liée) : tous les composants dans les deux thèmes ; `?only=<composant>&theme=<beton|sable>`. Les choix et écarts aux aperçus sont dans `docs/JOURNAL-DES-CHOIX.md`.
   - Vérifié : `pnpm --filter @orasso/design-system run build`, `run test` (20 tests : jetons, mouvement, rendu serveur, aucune valeur en dur) et `run typecheck` ; `pnpm lint` ; `pnpm --filter @orasso/web run build`.
+- **Version de test en ligne (15/10/2026)** : https://dev.orasso.fr (site protégé par mot de passe, API ouverte sous `/api`, WebSocket `/api/ws`, certificat Let's Encrypt). Conteneurs Docker isolés sur le VPS commun (`orasso-db`, `orasso-api`, `orasso-web`), déploiement en une commande avec retour arrière automatique, sauvegarde nocturne de la base (01:15 UTC, 7 jours, restauration testée). Tout est dans `deploy/` (détail : `deploy/README.md`).
 
 ## En cours
 
@@ -22,7 +23,8 @@
 ## Prochaine étape
 
 - Système de design natif : les composants React Native à partir de `@orasso/design-system` (lot 04). Les écrans du site s'écrivent avec les composants web (lot 07).
-- En parallèle : API du parcours n° 1 (comptes, garage, structures, événements, candidatures, tri, liste d'attente) d'après `ARCHITECTURE.md`, et déploiement de `dev.orasso.fr`.
+- En parallèle : API du parcours n° 1 (comptes, garage, structures, événements, candidatures, tri, liste d'attente) d'après `ARCHITECTURE.md`.
+- En attente de Damien : envoi des sauvegardes d'Orasso hors du VPS (deux lignes dans `/etc/vps-backup/files.list`, voir `deploy/README.md`).
 
 ## Lancer le projet sur ce PC (Windows)
 
@@ -55,3 +57,16 @@ Créer un compte de test (API lancée) :
 ```
 curl -X POST http://localhost:3001/api/auth/sign-up/email -H "Content-Type: application/json" -H "Origin: http://localhost:5173" -d "{\"email\":\"test@orasso.test\",\"password\":\"motdepasse-test-123\",\"name\":\"Test\"}"
 ```
+
+## Déployer la version de test (dev.orasso.fr)
+
+Depuis le PC, dans Git Bash, à la racine du dépôt (accès SSH `claude@51.210.242.118` par clé) :
+
+```
+bash deploy/deploy.sh            # envoie le commit courant, construit sur le VPS, démarre, contrôle
+bash deploy/deploy.sh status     # version en ligne, état des conteneurs
+bash deploy/deploy.sh logs api   # journaux (api, web ou db)
+bash deploy/deploy.sh rollback   # version précédente
+```
+
+Seul ce qui est commité part. Migrations appliquées au démarrage de l'API ; seed de démonstration lancé à chaque déploiement si `db:seed` existe. Le VPS est partagé avec d'autres sites en production : lire `deploy/README.md` avant d'y toucher (nginx, secrets, sauvegarde, restauration). Identifiants du site : `C:\Users\DELL\.claude\relais\orasso\secrets-dev.txt`.

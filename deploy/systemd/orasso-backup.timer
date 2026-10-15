@@ -1,0 +1,10 @@
+[Unit]
+Description=Orasso : sauvegarde nocturne de la base (01:15 UTC, avant les sauvegardes du VPS de 02:30-04:00)
+
+[Timer]
+OnCalendar=*-*-* 01:15:00 UTC
+RandomizedDelaySec=5m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
