@@ -67,7 +67,7 @@
 
 ## Prochaine étape
 
-- Lot 11 : APK Android et build simulateur iOS (EAS). Pour un build qui parle à https://dev.orasso.fr, épingler la clé publique des QR : `EXPO_PUBLIC_QR_TRUSTED_KEYS=[{"kid":1,"publicKey":"<clé de /api/keys>"}]` (voir `apps/mobile/.env.example`) ; la clé de démonstration `kid 0` y est de toute façon refusée. Puis essai du mode staff sur téléphone (caméra à travers un pare-brise, son, vibration, mode avion réel, temps de scan).
+- Lot 11 : APK Android et build simulateur iOS (EAS). Un build qui parle à https://dev.orasso.fr **doit** épingler la clé publique des QR (sans elle, le mode staff refuse tout) : `EXPO_PUBLIC_QR_TRUSTED_KEYS=[{"kid":1,"publicKey":"m2FceWYTZw1CBjcfytn1FPL49U6RqVzBVkyfgC9jqjA"}]` dans le profil EAS (voir `apps/mobile/.env.example`) ; la clé de démonstration `kid 0` y est de toute façon refusée. Puis essai du mode staff sur téléphone (caméra à travers un pare-brise, son, vibration, mode avion réel, temps de scan).
 - Déploiement de l'API B sur dev.orasso.fr : ajouter `QR_SIGNING_KEYS` et `QR_SIGNING_ACTIVE_KID` à `/etc/orasso/dev.env` **avant** (l'API refuse de démarrer sans elles en production ; voir `deploy/dev.env.example`).
 - Sauvegardes d'Orasso hors du VPS : validées par Damien et appliquées le 15/10 (deux lignes dans `/etc/vps-backup/files.list`, voir `deploy/README.md`).
 
