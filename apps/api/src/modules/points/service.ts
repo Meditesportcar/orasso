@@ -49,6 +49,8 @@ type EntryRow = typeof pointEntries.$inferSelect;
 type ContestRow = typeof malusContests.$inferSelect;
 
 const pointsLink = { label: "Voir mes points", path: "/app/moi" };
+/** Le balayage ne rattrape que les règlements manqués depuis moins de 14 jours. */
+const SWEEP_HORIZON_MS = 14 * 86_400_000;
 
 /** Saison d'une date (année civile, heure de Paris), créée au besoin. */
 async function seasonFor(ex: Executor, date: Date): Promise<SeasonRow> {
@@ -411,8 +413,13 @@ export const pointsService = {
     return n;
   },
 
-  /** Balayage de secours : événements terminés depuis 48 h et pas encore réglés. */
+  /**
+   * Balayage de secours : événements terminés depuis 48 h et pas encore réglés, mais seulement s'ils ont fini depuis
+   * moins de 14 jours (une tâche manquée se rattrape ; un vieil événement jamais suivi n'est pas réglé d'office :
+   * ses retenus prendraient tous un malus faute de pointage). La migration 0014 marque réglés ceux d'avant le lot 06.
+   */
   async settleDue(): Promise<number> {
+    const t = now().getTime();
     const due = await db
       .select({ id: events.id })
       .from(events)
@@ -420,7 +427,8 @@ export const pointsService = {
         and(
           eq(events.status, "published"),
           isNull(events.settledAt),
-          lte(events.endsAt, new Date(now().getTime() - SETTLE_DELAY_MS)),
+          lte(events.endsAt, new Date(t - SETTLE_DELAY_MS)),
+          gte(events.endsAt, new Date(t - SETTLE_DELAY_MS - SWEEP_HORIZON_MS)),
         ),
       );
     let n = 0;

@@ -99,6 +99,13 @@
       "when": 1792090175593,
       "tag": "0013_account_qr",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792093412060,
+      "tag": "0014_settle_past_events",
+      "breakpoints": true
     }
   ]
 }

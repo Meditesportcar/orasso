@@ -1,6 +1,7 @@
 // Points et malus à J+2, contestation, grades et saisons (ARCHITECTURE.md § 2.6), horloge simulée.
+import { readFileSync } from "node:fs";
 import { type Decide, fromWallTime, HOUR } from "@orasso/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -138,6 +139,30 @@ describe("règlement de J+2", () => {
     // Fiche de tri d'un prochain événement : une absence.
     const triage = (await call(orga, "GET", `/events/${eventId}/applications?status=accepted`)).json.items;
     expect(triage.find((x: { id: string }) => x.id === p.absent.applicationId).applicant.absencesCount).toBe(1);
+  });
+
+  it("balayage de secours : rattrape un règlement manqué récent, jamais un vieil événement", async () => {
+    clock.set(new Date(SETTLE.getTime() + 20 * 24 * HOUR));
+    expect(await pointsService.settleDue()).toBe(0);
+    expect(await db.query.pointEntries.findMany()).toHaveLength(0);
+    clock.set(new Date(SETTLE.getTime() + HOUR));
+    expect(await pointsService.settleDue()).toBe(1);
+  });
+
+  it("migration 0014 : les événements déjà terminés sont marqués réglés sans aucun point", async () => {
+    const ended = new Date(Date.now() - 3 * 24 * HOUR);
+    await db
+      .update(events)
+      .set({ startsAt: new Date(ended.getTime() - 4 * HOUR), endsAt: ended })
+      .where(eq(events.id, eventId));
+    const migration = readFileSync(new URL("../../../drizzle/0014_settle_past_events.sql", import.meta.url), "utf8");
+    await db.execute(sql.raw(migration));
+    const row = await db.query.events.findFirst({ where: eq(events.id, eventId) });
+    expect(row?.settledAt).toBeTruthy();
+    expect(await db.query.pointEntries.findMany()).toHaveLength(0);
+    // Le règlement ne repasse pas dessus.
+    clock.set(new Date(Date.now()));
+    expect(await pointsService.settleEvent(eventId)).toBe(false);
   });
 
   it("événement annulé : aucun point ni malus", async () => {
