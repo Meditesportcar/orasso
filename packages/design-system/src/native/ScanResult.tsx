@@ -151,7 +151,7 @@ export function ScanResult({
         {state === "refused" && <Icon name="close" size={iconSize} strokeWidth={3} color={ink} />}
       </View>
       <View style={[styles.text, big ? styles.textBig : null]}>
-        <Text variant="label" color={ink} style={styles.kicker}>
+        <Text variant="label" color={ink} style={[styles.kicker, big ? styles.centered : null]}>
           {kicker}
         </Text>
         {/* Le nom en style title (droit, 15–16 px) : à l'entrée on lit, on ne crie pas. Jamais tronqué. */}
@@ -233,7 +233,8 @@ const styles = StyleSheet.create({
   digit: { fontSize: 28, lineHeight: 28, letterSpacing: 0 },
   digitBig: { fontSize: 72, lineHeight: 72, letterSpacing: 0 },
   text: { flex: 1, minWidth: 0 },
-  textBig: { flex: 0, alignSelf: "stretch" },
+  // Pas `flex: 0` : react-native-web le traduit en base nulle (texte écrasé sous la zone) ; même rendu en natif.
+  textBig: { flexGrow: 0, flexShrink: 0, flexBasis: "auto", alignSelf: "stretch" },
   kicker: { opacity: 0.75 },
   name: { fontSize: 16, lineHeight: 18, letterSpacing: 0.32 },
   nameBig: { fontSize: 26, lineHeight: 30, letterSpacing: 0.52 },
