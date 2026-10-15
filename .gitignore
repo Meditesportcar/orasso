@@ -1,0 +1,49 @@
+# Dépendances
+node_modules/
+
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+
+# Base locale (embedded-postgres) et fichiers d'exécution
+.data/
+
+# Sorties de compilation
+dist/
+build/
+.react-router/
+*.tsbuildinfo
+coverage/
+
+# Expo / EAS
+.expo/
+apps/mobile/dist/
+apps/mobile/android/
+apps/mobile/ios/
+*.apk
+*.aab
+*.ipa
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+
+# Vidéos lourdes de l'identité (restent sur le PC, hors Git)
+identite/anime/*.mp4
+identite/anime/*.mov
+identite/anime/*.webm
+
+# Notes personnelles de Damien (hors dépôt)
+/Contexte orasso*.txt
+
+# Journaux et système
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
