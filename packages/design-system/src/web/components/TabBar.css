@@ -6,7 +6,8 @@
   display: flex;
   height: var(--bar-tabs);
   background: var(--bar-gradient);
-  border-top: 2px solid var(--bar-edge);
+  /* Filet moutarde de 2 px plein (README : « 2 px plein partout ailleurs » que sous l'en-tête Béton). */
+  border-top: 2px solid var(--accent);
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   box-shadow: var(--shadow-bar-bottom);
   text-shadow: var(--emboss-bar);
