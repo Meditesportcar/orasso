@@ -37,6 +37,7 @@ import { escapeLike } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { pointsService } from "../points/service";
+import { reviewsService } from "../reviews/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleFull, vehicleLabel } from "../vehicles/serializers";
 import type { ApplicationRow } from "./service";
@@ -83,6 +84,8 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
   const enteredAt = new Map(entries.map((c) => [c.applicationId, c.checkedInAt]));
   const pts = await db.query.pointEntries.findMany({ where: inArray(pointEntries.applicationId, appIds) });
   const contests = await db.query.malusContests.findMany({ where: inArray(malusContests.applicationId, appIds) });
+  // Avis après l'événement (lot 12) : candidatures pointées seulement.
+  const myReviews = await reviewsService.mine(rows[0]?.userId ?? "", rows, eventsById, new Set(enteredAt.keys()));
   const t = now();
   return rows.flatMap((r) => {
     const e = eventsById.get(r.eventId);
@@ -127,6 +130,7 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
               contestStatus: contest?.status ?? null,
             }
           : null,
+        review: myReviews.get(r.id) ?? null,
       },
     ];
   });

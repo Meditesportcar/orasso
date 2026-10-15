@@ -9,6 +9,7 @@ export * from "./notifications";
 export * from "./points";
 export * from "./profiles";
 export * from "./relations";
+export * from "./reviews";
 export * from "./staff";
 export * from "./structures";
 export * from "./vehicles";

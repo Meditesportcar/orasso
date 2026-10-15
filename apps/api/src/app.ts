@@ -23,6 +23,7 @@ import { notificationsRoutes } from "./modules/notifications/routes";
 import { pointsRoutes } from "./modules/points/routes";
 import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
+import { reviewsRoutes } from "./modules/reviews/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { structuresRoutes } from "./modules/structures/routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
@@ -97,6 +98,7 @@ app.route("/", staffRoutes);
 app.route("/", checkinsRoutes);
 app.route("/", fieldRoutes);
 app.route("/", pointsRoutes);
+app.route("/", reviewsRoutes);
 app.route("/", accountQrRoutes);
 app.route("/", adminRoutes);
 
