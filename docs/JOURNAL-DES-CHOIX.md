@@ -29,6 +29,22 @@ Ce que les documents de conception ne tranchent pas et que Claude Code a choisi 
 - **Fichier « Contexte orasso ( projet discussion claude ).txt » hors Git** (ignoré) : notes personnelles de Damien, déjà reprises dans `docs/00-contexte-projet.md`. Il reste sur le PC.
 - **Vidéos lourdes de l'identité hors Git** (`identite/anime/*.mp4|*.mov|*.webm`) : elles restent sur le PC ; les GIF et SVG animés sont versionnés.
 
+### 15/10/2026 — Déploiement de test dev.orasso.fr (lot 08)
+
+- **Images construites sur le VPS** (pas de Docker sur le PC) à partir d'une archive `git archive HEAD` envoyée par `scp` ; pas encore de clé de déploiement GitHub (variante documentée dans `deploy/README.md`). Étiquette d'image = commit court ; 3 versions gardées. Fichiers : `deploy/deploy.sh`, `deploy/remote-deploy.sh`.
+- **Image de l'API sans `devDependencies`**, `tsx` installé à la version exacte du lockfile (438 Mo au lieu de 793 Mo). Conséquence : tout ce que l'API ou son seed importe à l'exécution va dans `dependencies`. Fichier : `apps/api/Dockerfile`.
+- **`--config.strict-dep-builds=false` dans les images** : l'installation filtrée embarque les `devDependencies` de la racine, dont les binaires PostgreSQL Linux d'`embedded-postgres` dont le script est refusé ; plutôt que d'élargir `allowBuilds` (fichier partagé), le contrôle est levé dans les images seulement.
+- **Migrations à chaque démarrage de l'API** (`deploy/api-start.sh`), **seed à chaque déploiement** (et non à chaque redémarrage) si `SEED_DEMO=1` et si `apps/api` a un script `db:seed` (idempotent, `ARCHITECTURE.md`).
+- **Ports sur le VPS** : site `127.0.0.1:3210`, API `127.0.0.1:3211` ; base sans port publié (réseau Docker `orasso` seulement, sauvegarde par `docker exec`). Limites mémoire : base 512 Mo, API 768 Mo, site 384 Mo.
+- **Authentification basique sur le site, pas sur `/api/`** : l'appli mobile appelle l'API directement et l'API a sa propre authentification (Better Auth) ; un jeton spécial pour l'appli aurait dû être embarqué dans l'APK sans protéger davantage. Site non indexé (`X-Robots-Tag`, `robots.txt`).
+- **Pas de `snippets/supervision.conf` dans le vhost** : il réserve `/api/send` (Umami) et `/api/<n>/envelope/` (GlitchTip), qui tombent dans l'espace de l'API Orasso, et injecte ses scripts dans les pages. Orasso enverra ses erreurs par son propre SDK Sentry (DSN GlitchTip à créer).
+- **Sentry : variables prêtes (`SENTRY_DSN` vide = désactivé), SDK pas encore ajouté** : l'ajouter touche `apps/api/package.json` et le lockfile, en cours de modification par le lot 05 ; `ARCHITECTURE.md` place `sentry.ts` dans l'API.
+- **Photos** : volume `orasso_uploads` monté sur `/data/uploads` (`UPLOADS_DIR`), seul dossier inscriptible de l'API.
+- **Taille d'envoi** : 80 Mo par requête sur `/api/` (8 photos par véhicule).
+- **Sauvegarde** : `pg_dump` au format personnalisé chaque nuit à 01:15 UTC (hors 02:30–04:00), 7 jours dans `/var/backups/orasso`, timer systemd `orasso-backup`. Envoi hors VPS préparé, non appliqué (voir « À revoir »).
+
 ## À revoir avec Damien
 
 - **Icône de l'appli en 1024 px.** Les stores attendent une icône carrée opaque de 1024 px ; le kit n'en a qu'en 512 px (`icon-maskable-512.png`). Proposition : exporter le monogramme sur fond Asphalte en 1024 px, avec une version « premier plan » transparente pour l'icône adaptative Android. En attendant, l'appli utilise la version 512 px.
+- **Sauvegarde d'Orasso hors du VPS (lot 08).** Les dumps restent pour l'instant sur le VPS. Proposition : ajouter `orasso-dev-db:/var/backups/orasso` et `orasso-dev-uploads:/var/lib/docker/volumes/orasso_uploads/_data` à `/etc/vps-backup/files.list`, que `vps-backup.sh` lit déjà (le script lui-même ne change pas). Commande prête dans `deploy/README.md`.
+- **API de test ouverte (lot 08).** Sur dev.orasso.fr, `/api/` n'a pas de mot de passe nginx : n'importe qui connaissant l'adresse peut créer un compte de test. Acceptable pour une version de test non indexée ; à revoir si des données réelles y entrent.
