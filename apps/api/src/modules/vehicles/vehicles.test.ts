@@ -54,6 +54,14 @@ describe("inscription et profil", () => {
     expect(await (await get("")).json()).toEqual({ valid: false, available: false });
   });
 
+  it("les catégories du référentiel sont publiques (page événement des visiteurs)", async () => {
+    const res = await app.request("/api/vehicle-reference/categories");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(await res.json())).toBe(true);
+    // Les marques et modèles restent réservés aux comptes connectés.
+    expect((await app.request("/api/vehicle-reference/makes")).status).toBe(401);
+  });
+
   it("profil privé : pseudo, grade, marque et modèle seulement", async () => {
     const a = await signUp("Prive_01");
     const b = await signUp("Curieux_02");

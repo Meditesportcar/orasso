@@ -23,8 +23,8 @@ export const vehiclesRoutes = new Hono<AppEnv>()
     await requireUser(c);
     return c.json(await vehiclesRepo.generations(uuidParam(c, "id")), 200, CACHE_1H);
   })
+  // Public : la page d'un événement affiche les catégories recherchées aux visiteurs sans compte.
   .get("/vehicle-reference/categories", async (c) => {
-    await requireUser(c);
     const rows = await vehiclesRepo.categories();
     return c.json(
       rows.map((r) => ({ id: r.id, slug: r.slug, label: r.label, minVehicleAge: r.minVehicleAge })),

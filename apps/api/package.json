@@ -14,7 +14,8 @@
     "db:seed": "tsx scripts/seed.ts",
     "keys:generate": "tsx scripts/keys-generate.ts",
     "keys:revoke": "tsx scripts/keys-revoke.ts",
-    "pass:verify": "tsx scripts/verify-pass-offline.ts"
+    "pass:verify": "tsx scripts/verify-pass-offline.ts",
+    "events:simulate-settle": "tsx scripts/simulate-settle.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
