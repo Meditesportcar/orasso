@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "fr.orasso.app",
+      "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#17191C"
