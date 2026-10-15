@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Accueil · Sable</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,100,600;0,100,800;0,125,900;1,125,900&family=Archivo+Narrow:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif}
+a{color:inherit}a:hover{opacity:.8}
+.ph{--ground:#cfc8b8;--deep:#5a5141;--surface:#ded7c7;--raised:#e8e2d3;--line:#8f8773;--ink:#131417;--muted:#6b6660;--poster:#131417;--pink:#f3ebdd;--pmuted:#9c958a;--night:#131417;--accent:#e9b824;--aink:#131417;--atext:#8a6200;--win:#c8322b;--fade:#ded7c7;--shc:0 8px 24px rgba(40,30,10,.22);--shp:0 18px 40px rgba(20,15,5,.4);--neon:inset 0 0 0 1px rgba(255,220,120,.6),0 8px 18px rgba(0,0,0,.25);--neons:0 2px 6px rgba(0,0,0,.15);--neonw:0 6px 14px rgba(200,50,43,.35);
+ width:390px;height:844px;color:var(--ink);display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;border-radius:30px;position:relative;
+ background:radial-gradient(ellipse 95% 70% at 100% -14%,rgba(19,21,26,1),rgba(31,34,42,.92) 30%,rgba(38,41,50,.55) 55%,transparent 78%),radial-gradient(ellipse 62% 44% at -14% 110%,rgba(255,250,232,.45),rgba(255,250,232,.12) 45%,transparent 65%),linear-gradient(170deg,transparent 0 36%,rgba(19,20,23,.16) 36% 56%,transparent 56%),repeating-linear-gradient(170deg,transparent 0 104px,rgba(19,20,23,.30) 104px 112px),radial-gradient(ellipse 96% 70% at 50% 30%,#e4ddcb 0,#9f9479 55%,#3b3427 100%)}
+.ph>*{position:relative}
+.top,.tabs,[style*="height: 64px"]{text-shadow:0 1px 0 rgba(255,250,235,.45)!important}
+.top svg,.tabs svg,[style*="height: 64px"] svg{filter:drop-shadow(0 1px 0 rgba(255,250,235,.45))}
+.card,.poster,.car,.cnt,.tile,.veh,.kv,.act,.big,.tabs,.top,[style*="height: 64px"],[style*="height: 64px"] *,[style*="background: var(--surface)"],[style*="background: var(--poster)"],[style*="background: var(--win)"],[style*="background: var(--accent)"]{text-shadow:none}
+.grain{position:absolute!important;inset:0;pointer-events:none;opacity:.32;mix-blend-mode:multiply;border-radius:30px}
+.hd{font-stretch:125%;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:-.01em}
+.up{font-stretch:125%;font-weight:900;text-transform:uppercase;letter-spacing:.01em}
+.nar{font-family:"Archivo Narrow",sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.lbl{font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.t{font-size:13px;color:var(--muted);line-height:1.35}
+.ic{width:34px;height:34px;border:2px solid #131417;background:rgba(255,250,235,.22);border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none}
+.card{background:rgba(43,46,54,.92);color:#f3ebdd;border:1px solid rgba(243,235,221,.12);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shc);position:relative}
+.card .lbl,.card .t,.card .nar[style*="var(--muted)"]{color:#c9c2b4!important}
+.card .nar[style*="var(--atext)"]{color:#e9b824!important;border-color:#e9b824!important}
+.tabs{position:relative;isolation:isolate;overflow:hidden;height:80px;display:flex;flex:none;background:linear-gradient(180deg,#9c9685 0%,#8a8472 55%,#7e7765 100%);border-top:2px solid var(--accent);border-radius:0 0 30px 30px;box-shadow:0 -8px 24px rgba(0,0,0,.3)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-stretch:125%;font-weight:900;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:#2a2722}
+.tab svg{width:22px;height:22px}
+.tab.on{color:#131417}
+.tab.c{background:var(--night);color:var(--accent);margin:-16px 6px 12px;border-radius:18px;transform:skewX(-6deg);box-shadow:var(--neon)}
+.tab.c span{display:block;transform:skewX(6deg)}
+.mono{width:30px;height:30px;border-radius:50%;flex:none;margin-left:-1.5px}
+.x{width:34px;height:34px;border:2px solid #131417;background:rgba(255,250,235,.22);border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none;color:#131417;text-decoration:none}
+.credit{position:absolute;right:12px;bottom:8px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:9px;letter-spacing:.14em;color:rgba(233,184,36,.7);pointer-events:none}
+.credit.lt{color:#8a6200}
+</style>
+</helmet>
+<div class="ph">
+  <svg class="grain" aria-hidden="true" width="390" height="844"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .6 0"/></filter><rect width="390" height="844" filter="url(#g)"/></svg>
+  <div style="position: relative; isolation: isolate; height: 64px; display: flex; align-items: center; background: linear-gradient(180deg,#9c9685 0%,#8a8472 55%,#7e7765 100%); border-bottom:2px solid var(--accent); box-shadow:0 6px 18px rgba(0,0,0,.28); color:#131417; gap: 10px; padding: 12px 18px 0; flex: none"><svg aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.38;mix-blend-mode:multiply"><filter id="br"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .08 0 0 0 0 .07 0 0 0 0 .05 0 0 0 1 0"/></filter><rect width="100%" height="100%" filter="url(#br)"/></svg>
+    <img src="/_blob/6451bceaff16d2658388bfa1e072d778" alt="Orasso" style="width: 128px; height: auto; display: block"><div style="flex: 1"></div>
+    <div class="ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131417" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></div>
+    <div class="ic" style="position: relative" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131417" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 17V11a6 6 0 0112 0v6l2 2H4z"/><path d="M10 21h4"/></svg><span style="position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--accent); color: var(--aink); font-size: 10px; font-weight: 900; display: flex; align-items: center; justify-content: center; padding: 0 5px; box-shadow: var(--neons)">3</span></div>
+    <div class="ic" style="padding: 3px; overflow: hidden" aria-label="Moi et mes casquettes"><div style="width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle at 35% 35%,#8a7a58,#3a3326)"></div></div>
+  </div>
+
+  <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 10px 16px">
+    <div style="background: var(--poster); color: var(--pink); border-radius: 18px; box-shadow: var(--shp); position: relative; overflow: hidden">
+      <div style="position: absolute; right: -44px; top: 16px; transform: rotate(14deg); background: var(--accent); color: var(--aink); font-family: 'Archivo Narrow', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: .12em; padding: 4px 52px; text-transform: uppercase">Retenue</div>
+      <div class="lbl" style="color: var(--pmuted); padding: 14px 16px 0">Prochain accès · dans 2 jours</div>
+      <div class="hd" style="font-size: 38px; line-height: 34px; padding: 6px 16px 0; color: var(--accent)">Nocturne<br>de Canet</div>
+      <div class="nar" style="font-size: 12px; padding: 8px 16px 0; color: var(--pmuted)">Sam 17 oct · 19 h · Zone JDM · Maintenu · 21°</div>
+      <div style="height: 96px; margin-top: 12px; clip-path: polygon(0 18%, 100% 0, 100% 100%, 0 100%); background: radial-gradient(ellipse at 28% 32%,#6a5a3a 0,#2b2620 55%,#17181b 100%)"></div>
+      <div style="padding: 0 12px 14px; margin-top: -14px; position: relative"><div class="up" style="background: var(--accent); color: var(--aink); font-size: 15px; letter-spacing: .02em; text-align: center; padding: 13px; border-radius: 12px; box-shadow: var(--neon); display: flex; align-items: center; justify-content: center; gap: 10px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v6h-6v-3"/></svg>Mode jour J<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div></div>
+      <div class="credit">ORASSO</div>
+    </div>
+
+    <div style="display: flex; gap: 10px">
+      <div class="card" style="flex: 1"><div class="lbl">En attente</div><div class="hd" style="font-size: 34px; line-height: 1">02</div><div class="t">Collioure · C&amp;C 66</div></div>
+      <div class="card" style="flex: 1; background: var(--win); color: #f3ebdd; border-color: transparent; box-shadow: var(--neonw)"><div class="lbl" style="color: #f3d9d5 !important">Grade saison</div><div class="hd" style="font-size: 26px; line-height: 1">Sport</div><div class="nar" style="font-size: 11px">340 pts · 160 → Circuit</div><div style="height: 4px; background: rgba(0,0,0,.25); border-radius: 2px; overflow: hidden; margin-top: 2px"><i style="display: block; width: 68%; height: 100%; background: #f3ebdd"></i></div></div>
+    </div>
+
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center"><div class="hd" style="font-size: 16px">Autour de moi</div><div class="nar" style="font-size: 11px; border: 1.5px solid var(--atext); color: var(--atext); padding: 2px 9px; border-radius: 9px; transform: skewX(-8deg)"><span style="display: inline-block; transform: skewX(8deg)">60 km</span></div></div>
+      <div style="display: flex; gap: 8px; overflow: hidden">
+        <div style="width: 150px; flex: none"><div style="height: 84px; border-radius: 12px; clip-path: polygon(0 0, 100% 10%, 100% 100%, 0 90%); background: radial-gradient(ellipse at 60% 40%,#7a4a3a 0,#2b2220 60%,#17181b 100%)"></div><div class="hd" style="font-size: 13px; margin-top: 6px">Expo Rivesaltes</div><div class="nar" style="font-size: 10px; color: var(--muted)">Dim 25 oct · 12 km · 40 pl.</div></div>
+        <div style="width: 150px; flex: none"><div style="height: 84px; border-radius: 12px; clip-path: polygon(0 0, 100% 10%, 100% 100%, 0 90%); background: radial-gradient(ellipse at 30% 60%,#3a5a6a 0,#1f2a30 60%,#17181b 100%)"></div><div class="hd" style="font-size: 13px; margin-top: 6px">C&amp;C Perpignan</div><div class="nar" style="font-size: 10px; color: var(--muted)">Dim 1 nov · 8 km · libre</div></div>
+        <div style="width: 150px; flex: none"><div style="height: 84px; border-radius: 12px; clip-path: polygon(0 0, 100% 10%, 100% 100%, 0 90%); background: radial-gradient(ellipse,#6a5a3a,#17181b)"></div><div class="hd" style="font-size: 13px; margin-top: 6px">Youngtimers</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd" style="font-size: 16px">Agenda</div>
+      <div style="display: flex; gap: 10px; font-size: 13px; align-items: baseline"><b class="nar" style="width: 56px; font-size: 11px; color: var(--atext)">17 oct</b><span>Nocturne de Canet · retenue</span></div>
+      <div style="display: flex; gap: 10px; font-size: 13px; align-items: baseline"><b class="nar" style="width: 56px; font-size: 11px; color: var(--muted)">25 oct</b><span>Expo Collioure · en attente</span></div>
+      <div style="display: flex; gap: 10px; font-size: 13px; align-items: baseline"><b class="nar" style="width: 56px; font-size: 11px; color: var(--muted)">8 nov</b><span>Salon Argelès · staff, scan accueil</span></div>
+    </div>
+  </div>
+
+  <div class="tabs"><svg aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.38;mix-blend-mode:multiply"><filter id="br"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .08 0 0 0 0 .07 0 0 0 0 .05 0 0 0 1 0"/></filter><rect width="100%" height="100%" filter="url(#br)"/></svg>
+    <div class="tab on"><svg viewBox="0 0 24 24" fill="#131417"><path d="M4 11l8-7 8 7v9H4z"/></svg>Accueil</div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M15 9l-2 6-4 2 2-6z"/></svg>Explorer</div>
+    <div class="tab c"><svg viewBox="0 0 24 24" fill="none" stroke="#e9b824" stroke-width="1.8"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 14h2v6h-6v-2"/></svg><span>Accès</span></div>
+    <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l2-5h14l2 5v7H3z"/><circle cx="7" cy="15" r="1.5"/><circle cx="17" cy="15" r="1.5"/></svg>Garage</div>
+    <div class="tab" style="position: relative"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16v10H8l-4 4z"/></svg>Boîte<b style="position: absolute; top: 16px; right: 22px; width: 8px; height: 8px; border-radius: 50%; background: var(--night)"></b></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

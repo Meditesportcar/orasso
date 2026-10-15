@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Appli — squelette passionné</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#17191C}
+a{color:#17191C}a:hover{color:#5E636B}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.tab{background:#17191C;color:#F7F6F2;padding:12px 14px;font-size:16px;font-weight:800;letter-spacing:.02em}
+.tab small{display:block;font-size:11px;font-weight:500;color:#CFCBC2;margin-top:3px;letter-spacing:0}
+.sec{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5E636B;margin-top:6px}
+.b{background:#FFFFFF;border:1.5px solid #17191C;padding:8px 10px;font-size:13px;line-height:1.35}
+.b b{display:block;font-size:13px}
+.b span{color:#5E636B;font-size:12px}
+.sub{margin-left:14px;border-left:1.5px solid #CFCBC2;padding:6px 10px;font-size:12px;line-height:1.4;color:#17191C}
+.q{background:#FFE9A8;border:1.5px solid #5A3E00;padding:8px 10px;font-size:12px;line-height:1.4;color:#5A3E00}
+.q b{display:block}
+.mode{background:#17191C;color:#F7F6F2;padding:14px 16px;display:flex;flex-direction:column;gap:6px;flex:1}
+.mode b{font-size:15px}
+.mode span{font-size:12px;line-height:1.45;color:#CFCBC2}
+</style>
+</helmet>
+<div style="width: 1400px; min-height: 1240px; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 20px; background: #F7F6F2">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #17191C">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5E636B">Appli mobile · casquette par défaut</div>
+    <h1 style="margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -.01em">Squelette passionné : 5 onglets, 1 avatar, 3 modes plein écran</h1>
+    <p style="margin: 0; font-size: 14px; color: #5E636B; max-width: 1100px">Le principe qui nous éloigne d'Instagram : l'appli est organisée autour de l'accès (ta place à l'événement), pas autour de la publication. Pas de fil à l'ouverture, pas de grille de photos, pas d'onglet « profil » : le profil vit derrière l'avatar. L'onglet central est l'objet que tu sors sur le parking.</p>
+  </div>
+
+  <div style="display: flex; gap: 12px; align-items: stretch">
+    <div class="b" style="flex: 1"><b>Barre du haut, identique sur les 5 onglets</b><span>À gauche l'avatar (→ Moi et changement de casquette, pastille si une casquette a quelque chose à traiter). À droite la recherche (personnes, véhicules, crews, événements, pros) et la cloche (→ Journal : notifications et fil d'actualité, pastille avec le nombre). Les messages, eux, sont dans l'onglet Boîte.</span></div>
+    <div class="b" style="flex: 0 0 300px; background: #17191C; color: #F7F6F2"><b>Tranché le 15/10</b><span style="color: #CFCBC2">Une cloche et une boîte : la cloche ouvre le Journal, la Boîte garde messages et demandes.</span></div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px">
+
+    <div class="col">
+      <div class="tab">Accueil<small>tableau de bord, pas un fil</small></div>
+      <div class="b"><b>Prochain accès</b><span>En tête quand un événement approche : date, statut, météo, bouton vers le mode jour J</span></div>
+      <div class="b"><b>Widgets, réglables</b><span>Statuts en attente · suggestions autour de moi (curseur de rayon) · météo · garage favori · lavage et carburant les plus proches</span></div>
+      <div class="b"><b>Agenda</b><span>Mes dates : événements retenus, en attente, où je suis staff</span></div>
+      <div class="b"><b>Incitations</b><span>Ajoute un véhicule, crée ton crew, suis un organisateur… une à la fois</span></div>
+      <div class="b"><b>Emplacement sponsorisé</b><span>Un pro ciblé par département et centres d'intérêt, même apparence que le reste</span></div>
+    </div>
+
+    <div class="col">
+      <div class="tab">Explorer<small>recherche en tête</small></div>
+      <div class="sec">Trois segments</div>
+      <div class="b"><b>Événements</b><span>Liste et carte ; affinités, organisateurs suivis, distance ; filtres format, catégorie, département, date</span></div>
+      <div class="b"><b>Pros</b><span>Même principe : carte, activité, distance, remises par grade</span></div>
+      <div class="b"><b>Personnes et crews</b><span>Par pseudo, par véhicule (marque, modèle, génération), filtres département, centres d'intérêt, grade</span></div>
+      <div class="sec">Pages atteintes</div>
+      <div class="sub">Page événement → Candidater / Réserver / Suivre<br>Page structure → Suivre, événements, partenaires<br>Fiche pro → appeler, itinéraire, garage favori<br>Profil d'un autre (public ou privé) → ami, contact<br>Véhicule d'un autre → « autres propriétaires près de chez moi »<br>Crew → demander à rejoindre</div>
+    </div>
+
+    <div class="col">
+      <div class="tab" style="background: #FFC629; color: #17191C">Accès<small style="color: #5A3E00">l'onglet central, ce que je sors sur le parking</small></div>
+      <div class="sec">À venir</div>
+      <div class="b"><b>Mes candidatures et billets</b><span>Une carte par accès, statut en couleur : en attente, retenue, liste d'attente, refusée (motif). Place libérée à accepter avec son délai. Se désister. Confirmer ma venue en crew.</span></div>
+      <div class="b"><b>Où je suis staff</b><span>Mes événements staff : « je suis là / pas là », puis le bouton vers le mode staff</span></div>
+      <div class="b"><b>Invitations reçues</b><span>D'un organisateur, nominatives</span></div>
+      <div class="sec">Passés</div>
+      <div class="b"><b>Carnet de route</b><span>Historique ; pointage en attente, points reçus, contester un malus, laisser un avis (une semaine)</span></div>
+      <div class="b" style="background: #17191C; color: #F7F6F2"><b>Tranché le 15/10</b><span style="color: #CFCBC2">Accès ne contient que les QR d'inscription et le jour J. Le QR de compte vit dans le Garage, avec le profil.</span></div>
+    </div>
+
+    <div class="col">
+      <div class="tab">Garage<small>mon garage, c'est moi : le profil vit ici</small></div>
+      <div class="b"><b>En-tête de profil</b><span>Photo, pseudo, grade et points de la saison, crews. Une petite pastille QR à côté du grade : un appui, le QR de compte s'ouvre en grand (dynamique, hors ligne). C'est ce que voient les autres sur mon profil, selon public / privé.</span></div>
+      <div class="b"><b>Mes véhicules actifs</b><span>Grandes cartes photo, badge certifié, catégories</span></div>
+      <div class="b"><b>Page véhicule</b><span>Photos, fiche complète, préparation, description, historique d'événements ; partager sur Instagram ; demander la certification</span></div>
+      <div class="b"><b>Ajouter un véhicule</b><span>Listes fermées + Autre, photos avec conseil plaque, plaque privée, transfert si déjà connue</span></div>
+      <div class="b"><b>Archivés</b><span>Vendus, souvenir, accidentés, repliés en bas</span></div>
+      <div class="sec">Si casquette prestataire</div>
+      <div class="sub">Le profil prestataire ne vit pas ici : il est une casquette (voir planche Casquettes)</div>
+    </div>
+
+    <div class="col">
+      <div class="tab">Boîte<small>ce qu'on m'écrit</small></div>
+      <div class="b"><b>Messages</b><span>Conversations : amis, crews, organisateurs, discussions de staff. Confirmation de lecture.</span></div>
+      <div class="b"><b>Demandes</b><span>Rangées à part : demandes d'ami, demandes de contact (une seule possible), invitations à un crew, invitations à un événement, confirmation de venue en crew</span></div>
+      <div class="sec">Derrière la cloche : Journal</div>
+      <div class="b"><b>Journal</b><span>Le fil d'actualité et les notifications fusionnés : acceptations, nouveaux événements, passage de grade, consignes. Chronologique, sans fin de page : il s'arrête à la semaine passée. S'ouvre en feuille par-dessus l'onglet courant.</span></div>
+    </div>
+
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <div class="sec">Derrière l'avatar : Moi</div>
+    <div style="display: flex; gap: 12px">
+      <div class="b" style="flex: 1"><b>Modifier mon profil</b><span>Photo, pseudo, description ; aperçu « ce que voient les autres » (public / privé). Le profil lui-même s'affiche dans Garage.</span></div>
+      <div class="b" style="flex: 1"><b>Points et grade</b><span>Saison en cours, comment gagner des points, avantages du grade, remises chez les pros</span></div>
+      <div class="b" style="flex: 1"><b>Paramètres</b><span>Notifications par type, compte public / privé, secteur et centres d'intérêt, rayon, sécurité (2FA, appareils), supprimer le compte</span></div>
+      <div class="b" style="flex: 1"><b>Mes casquettes</b><span>Liste des structures où je suis membre, ma fiche pro, mon profil prestataire ; créer une structure, une fiche pro, un profil prestataire ; devenir staff</span></div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <div class="sec">Trois modes plein écran (la barre d'onglets disparaît)</div>
+    <div style="display: flex; gap: 12px">
+      <div class="mode"><b>Premier lancement</b><span>Trois écrans : la promesse, ce que tu peux faire, créer un compte. Jamais revus ensuite. Pas de demande de notifications ici.</span></div>
+      <div class="mode" style="background: #FFC629; color: #17191C"><b>Jour J participant</b><span style="color: #5A3E00">S'ouvre depuis Accès à partir de la veille : QR d'inscription en grand, compte à rebours, statut de l'événement, itinéraire, consignes, zone attribuée, météo. Hors ligne. Se ferme après le scan ou à J+1.</span></div>
+      <div class="mode"><b>Staff</b><span>S'ouvre depuis Accès > Où je suis staff, pour cet événement seulement. Scan continu, recherche plaque / pseudo, inscription express, pointage, placement, contrôle, boutique, main courante, alerte, discussion. Détail sur la planche Casquettes.</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

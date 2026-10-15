@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Parcours clés</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#17191C}
+a{color:#17191C}a:hover{color:#5E636B}
+.flow{display:flex;flex-direction:column;gap:8px}
+.flow h3{margin:0;font-size:14px;font-weight:800}
+.flow p{margin:0;font-size:12px;color:#5E636B}
+.row{display:flex;gap:6px;align-items:stretch}
+.s{flex:1;background:#FFFFFF;border:1.5px solid #17191C;padding:7px 9px;font-size:12px;line-height:1.3;min-width:0}
+.s b{display:block;font-size:12px}
+.s i{display:block;font-style:normal;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5E636B;margin-bottom:2px}
+.s.y{background:#FFC629;border-color:#17191C}
+.s.k{background:#17191C;color:#F7F6F2;border-color:#17191C}
+.s.k i{color:#CFCBC2}
+.a{align-self:center;font-size:16px;font-weight:800;color:#5E636B;flex:none}
+</style>
+</helmet>
+<div style="width: 1240px; min-height: 1100px; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 22px; background: #F7F6F2">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #17191C">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5E636B">Parcours clés</div>
+    <h1 style="margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -.01em">Six parcours qui doivent être évidents. Le jaune marque l'écran où tout se joue.</h1>
+    <p style="margin: 0; font-size: 14px; color: #5E636B; max-width: 1100px">Chaque étape indique l'onglet ou l'espace où elle se passe. Ce sont ces parcours qu'on maquettera en gris à l'étape 3 et qu'on prototypera à l'étape 8.</p>
+  </div>
+
+  <div class="flow">
+    <h3>1 · De la découverte à l'avis (passionné)</h3>
+    <div class="row">
+      <div class="s"><i>Explorer ou lien partagé</i><b>Page événement</b>Catégories recherchées, places, amis qui y vont</div><div class="a">→</div>
+      <div class="s y"><i>Page événement</i><b>Candidater</b>Choix du véhicule (ceux qui collent), règlement, 2 cases. 3 écrans max.</div><div class="a">→</div>
+      <div class="s"><i>Cloche · Journal</i><b>Retenue</b>Notification ; demande d'autorisation des notifications ici, à la première fois</div><div class="a">→</div>
+      <div class="s"><i>Accès</i><b>Carte d'accès</b>Statut, date, bouton jour J dès la veille</div><div class="a">→</div>
+      <div class="s k"><i>Mode jour J</i><b>QR en grand</b>Scanné à l'entrée, zone affichée</div><div class="a">→</div>
+      <div class="s"><i>Accès · Passés</i><b>Points et avis</b>Pointage J+2, 1-3 étoiles pendant une semaine</div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <h3>2 · L'entrée d'un véhicule (staff)</h3>
+    <div class="row">
+      <div class="s"><i>Boîte · Demandes</i><b>Invitation staff</b>Rôle scan accueil pour l'événement</div><div class="a">→</div>
+      <div class="s"><i>Accès · Où je suis staff</i><b>« Je suis là »</b>Les relances s'arrêtent</div><div class="a">→</div>
+      <div class="s"><i>Accès · Où je suis staff</i><b>Synchroniser</b>À partir du verrouillage, liste en cache</div><div class="a">→</div>
+      <div class="s k"><i>Mode staff</i><b>Scan continu</b>Caméra ouverte, résultat en 1 s, retour auto</div><div class="a">→</div>
+      <div class="s y"><i>Mode staff</i><b>Si ça bloque</b>Plaque ou pseudo · Express · « entrés sans scan » après coup</div><div class="a">→</div>
+      <div class="s"><i>Mode staff</i><b>Fermeture à J+1</b>Pointage rattrapé, scans envoyés</div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <h3>3 · Inscription express sur place (quelqu'un sans compte)</h3>
+    <div class="row">
+      <div class="s k"><i>Mode staff</i><b>Express</b>Le staff saisit l'e-mail de la personne</div><div class="a">→</div>
+      <div class="s"><i>E-mail</i><b>Lien reçu</b>Sur le téléphone de la personne, sans installer l'appli</div><div class="a">→</div>
+      <div class="s y"><i>Site · /express</i><b>Un seul formulaire</b>Pseudo, mot de passe ×2, nom, prénom, plaque, voiture, photo prise sur place. 2 minutes.</div><div class="a">→</div>
+      <div class="s"><i>Site · Accès</i><b>QR d'inscription</b>Véhicule accepté direct, QR affiché dans le navigateur</div><div class="a">→</div>
+      <div class="s"><i>Mode staff</i><b>Scan</b>Comme les autres</div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <h3>4 · De la structure au bilan (organisateur)</h3>
+    <div class="row">
+      <div class="s"><i>Moi · Casquettes</i><b>Créer la structure</b>Type, nom, logo, adresse…</div><div class="a">→</div>
+      <div class="s"><i>Site · Structure</i><b>Vérification</b>SIRET / RNA auto, justificatif, badge</div><div class="a">→</div>
+      <div class="s y"><i>Site · Événements</i><b>Créer l'événement</b>Formulaire par étapes, le format préremplit</div><div class="a">→</div>
+      <div class="s"><i>Tri (site ou appli)</i><b>Trier</b>3 touches / glissement, décisions immédiates</div><div class="a">→</div>
+      <div class="s k"><i>Casquette · Direct</i><b>Jour J</b>Arrivés / attendus, alertes, main courante</div><div class="a">→</div>
+      <div class="s"><i>Site · Jour J et après</i><b>Bilan</b>Présence, avis, remerciement, édition suivante</div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <h3>5 · Un lien partagé sur Instagram (visiteur)</h3>
+    <div class="row">
+      <div class="s"><i>Instagram</i><b>Story de l'organisateur</b>Lien de la page événement ou lien d'invitation</div><div class="a">→</div>
+      <div class="s y"><i>Site · Page événement</i><b>Tout voir sans compte</b>Affiche, date, adresse, places, prestataires</div><div class="a">→</div>
+      <div class="s"><i>Site · Inscription</i><b>Créer un compte</b>E-mail, Google ou Apple ; suivi de l'organisateur si lien d'invitation</div><div class="a">→</div>
+      <div class="s"><i>Site · Garage</i><b>Ajouter un véhicule</b>Demandé seulement au moment de candidater</div><div class="a">→</div>
+      <div class="s"><i>Site · Page événement</i><b>Candidater</b>Retour exactement là où on était</div><div class="a">→</div>
+      <div class="s"><i>Site · Accueil</i><b>Installer l'appli</b>Proposé après, jamais avant</div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <h3>6 · La remise chez un pro (passionné et pro)</h3>
+    <div class="row">
+      <div class="s"><i>Explorer · Pros</i><b>Fiche pro</b>Remises par grade affichées</div><div class="a">→</div>
+      <div class="s y"><i>Garage · en-tête</i><b>Mon QR de compte</b>Pastille à côté du grade, un appui, en grand, hors ligne</div><div class="a">→</div>
+      <div class="s k"><i>Casquette pro · Scanner</i><b>Scan</b>Pseudo, grade, remise. Rien d'autre.</div><div class="a">→</div>
+      <div class="s"><i>Casquette pro · Stats</i><b>Remise comptée</b>Statistique du pro</div><div class="a">→</div>
+      <div class="s"><i>Cloche · Journal</i><b>Publications du pro</b>Si garage favori</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1240,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

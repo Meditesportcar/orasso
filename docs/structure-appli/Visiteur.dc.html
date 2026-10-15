@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Inventaire — Visiteur du site</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#17191C}
+a{color:#17191C}a:hover{color:#5E636B}
+.g{display:flex;flex-direction:column;gap:6px}
+.g h3{margin:0 0 4px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5E636B}
+.i{display:flex;align-items:flex-start;gap:8px;font-size:14px;line-height:1.35;padding:5px 0;border-bottom:1px solid #E6E3DC}
+.i span{flex:1}
+.t{flex:none;font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:3px;margin-top:2px;min-width:52px;text-align:center}
+.v{background:#17191C;color:#FFFFFF}
+.p{background:#FFE9A8;color:#5A3E00}
+.n{background:#D9E7FF;color:#14387A}
+</style>
+</helmet>
+<div style="width: 640px; min-height: 1000px; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 22px; background: #F7F6F2">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #17191C">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5E636B">Casquette F</div>
+    <h1 style="margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -.01em">Visiteur du site</h1>
+    <p style="margin: 0; font-size: 14px; color: #5E636B">Non connecté. Le site public est la vitrine, le référencement et la porte d'entrée (lien partagé, QR d'affiche, inscription express). Tout ce qui est connecté sur le site reprend l'inventaire des autres casquettes.</p>
+  </div>
+
+  <div class="g">
+    <h3>Pages publiques (référencées, partageables)</h3>
+    <div class="i"><span>Page événement : affiche, date, adresse, organisateur vérifié, programme, catégories recherchées, places, prestataires, statut, avis ; aperçu de lien propre (og-image)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Événements à venir : liste, carte, recherche par département, catégorie, format</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Page publique d'une structure : logo, description, événements à venir et passés, note, partenaires</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Annuaire des pros : fiche de base (nom, activité, ville) ; fiche complète pour les abonnés</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Profils et garages : jamais publics (connexion requise)</span><b class="t v">VALIDÉ</b></div>
+  </div>
+
+  <div class="g">
+    <h3>Actions qui mènent au compte</h3>
+    <div class="i"><span>Candidater, suivre, réserver une place : bouton visible, création de compte au clic, retour sur la page après</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Inscription express sur place (lien reçu par e-mail, formulaire de 2 minutes, sans installer l'appli)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Lien d'invitation d'un organisateur</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Connexion, création de compte, mot de passe oublié, suppression de compte</span><b class="t v">VALIDÉ</b></div>
+  </div>
+
+  <div class="g">
+    <h3>Vitrine</h3>
+    <div class="i"><span>Accueil : la promesse, « Tout le monde à sa place », les prochains événements, les trois entrées (passionné, organisateur, pro)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Page « Organisateurs » : l'outil, la vérification, gratuit, demander à publier</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Page « Pros » : visibilité, remises par grade, abonnement, offre membre fondateur</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Téléchargement de l'appli (App Store, Google Play), badge « Propulsé par Orasso »</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Conditions d'utilisation, politique de confidentialité, mentions légales, contact</span><b class="t v">VALIDÉ</b></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":640,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

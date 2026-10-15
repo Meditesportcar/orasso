@@ -1,0 +1,28 @@
+<!-- @dsCard group="Cartes" height=420 subtitle="La carte affiche : une seule par écran" -->
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,100,600;0,125,900;1,125,900&family=Archivo+Narrow:wght@700&display=swap">
+<style>
+body{margin:0;padding:24px;background:var(--ground);font-family:var(--font-sans);display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
+.poster{width:340px;background:var(--poster);color:var(--poster-ink);border-radius:var(--radius-lg);box-shadow:var(--shadow-poster);position:relative;overflow:hidden}
+.band{position:absolute;right:-44px;top:18px;transform:rotate(var(--band));background:var(--accent);color:var(--accent-ink);font-family:var(--font-narrow);font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:4px 52px;box-shadow:var(--neon-accent-soft)}
+.label{font-family:var(--font-narrow);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--poster-muted);padding:16px 16px 0}
+.title{font-family:var(--font-display);font-stretch:125%;font-style:italic;font-weight:900;font-size:38px;line-height:34px;text-transform:uppercase;letter-spacing:-.01em;padding:6px 16px 0}
+.meta{font-family:var(--font-narrow);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--poster-muted);padding:8px 16px 0}
+.photo{height:110px;margin-top:12px;background:radial-gradient(ellipse at 30% 30%,#4a4232 0,#24211c 60%,#17181b 100%);clip-path:polygon(0 18%,100% 0,100% 100%,0 100%)}
+.cta{margin:-14px 12px 12px;position:relative;background:var(--night);color:var(--accent);font-family:var(--font-display);font-stretch:125%;font-weight:900;font-size:15px;letter-spacing:.02em;text-transform:uppercase;text-align:center;padding:14px;border-radius:var(--radius-md);box-shadow:var(--shadow-card)}
+.note{font-size:13px;color:var(--ink-muted);max-width:260px;line-height:1.4}
+.credit{position:absolute;right:12px;bottom:8px;font-family:var(--font-narrow);font-weight:700;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-credit-light,#8a6200)}
+</style></head>
+<body>
+<div class="poster">
+  <div class="band">Retenue</div>
+  <div class="label">Prochain accès · J-2</div>
+  <div class="title">Nocturne<br>de Canet</div>
+  <div class="meta">Sam 17 oct · 19 h · Zone JDM · 21°</div>
+  <div class="photo"></div>
+  <div class="cta">Mode jour J →</div>
+  <div class="credit">Orasso</div>
+</div>
+<p class="note">Thème Béton : papier crème sur le mur. Thème Sable : la même carte s'inverse (fond night, titre moutarde) et reste la seule carte différente de l'écran.</p>
+</body></html>

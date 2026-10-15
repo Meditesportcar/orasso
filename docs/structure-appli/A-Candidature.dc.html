@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Candidature et place retenue</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,100,600;0,100,800;0,125,900;1,125,900&family=Archivo+Narrow:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif}
+.ph{--surface:#2b2e36;--raised:#363941;--line:#565b66;--ink:#f3ebdd;--muted:#afa89c;--poster:#f3ebdd;--pink:#131417;--pmuted:#6b6660;--night:#131417;--accent:#e9b824;--aink:#131417;--win:#c8322b;--waitlist:#7fa6ff;--shc:0 8px 24px rgba(0,0,0,.4);--shp:0 18px 40px rgba(0,0,0,.5);--neon:inset 0 0 0 1px rgba(255,220,120,.6),0 0 26px rgba(233,184,36,.55),0 6px 14px rgba(0,0,0,.35);--neons:0 0 10px rgba(233,184,36,.4);--neonw:0 0 16px rgba(200,50,43,.6);--neonscan:inset 0 0 0 1px rgba(255,220,120,.6),0 0 34px rgba(233,184,36,.65),0 6px 14px rgba(0,0,0,.35);
+ --park:cubic-bezier(.12,.75,.25,1);--out:cubic-bezier(.2,.8,.2,1);--inout:cubic-bezier(.4,0,.2,1);
+ width:390px;height:844px;color:var(--ink);display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;border-radius:30px;position:relative;background:radial-gradient(ellipse 70% 50% at 95% -10%,rgba(233,184,36,.85),rgba(233,184,36,.30) 40%,transparent 68%),radial-gradient(ellipse 60% 42% at -12% 108%,rgba(255,246,225,.42),rgba(255,246,225,.10) 45%,transparent 65%),linear-gradient(170deg,transparent 0 36%,rgba(255,246,225,.14) 36% 56%,transparent 56%),repeating-linear-gradient(170deg,transparent 0 104px,rgba(243,235,221,.18) 104px 112px),radial-gradient(ellipse 100% 72% at 50% 32%,#262932 0,#15171b 60%,#07080a 100%)}
+.ph>*{position:relative}
+.grain{position:absolute!important;inset:0;pointer-events:none;opacity:.28;mix-blend-mode:overlay;border-radius:30px}
+.hd{font-stretch:125%;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:-.01em}
+.up{font-stretch:125%;font-weight:900;text-transform:uppercase;letter-spacing:.02em}
+.nar{font-family:"Archivo Narrow",sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.lbl{font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.t{font-size:13px;color:var(--muted);line-height:1.4}
+.top{position:relative;isolation:isolate;height:64px;display:flex;align-items:center;gap:10px;padding:12px 18px 0;flex:none;background:linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%);border-bottom:1px solid rgba(233,184,36,.45);box-shadow:0 6px 18px rgba(0,0,0,.45);box-sizing:border-box}
+.mono{width:30px;height:30px;border-radius:50%;flex:none;margin-left:-1.5px}
+.ttl{font-stretch:125%;font-weight:900;font-size:16px;letter-spacing:.02em;text-transform:uppercase;flex:1}
+.ic{width:34px;height:34px;border:1.5px solid var(--line);border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;color:var(--ink)}
+.tabs{position:relative;isolation:isolate;overflow:hidden;height:80px;display:flex;flex:none;background:linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%);border-top:2px solid var(--accent);border-radius:0 0 30px 30px;box-shadow:0 -8px 24px rgba(0,0,0,.5)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-stretch:125%;font-weight:900;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.tab svg{width:22px;height:22px}.tab.on{color:var(--ink)}
+.tab.c{background:var(--accent);color:var(--aink);margin:-16px 6px 12px;border-radius:18px;transform:skewX(-6deg);box-shadow:var(--neon)}.tab.c span{display:block;transform:skewX(6deg)}
+.card{background:var(--surface);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shc);position:relative}
+.credit{position:absolute;right:12px;bottom:8px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:9px;letter-spacing:.14em;color:rgba(233,184,36,.7);pointer-events:none}.credit.lt{color:#8a6200}
+.btn{background:var(--accent);color:var(--aink);font-stretch:125%;font-weight:900;font-size:15px;letter-spacing:.02em;text-transform:uppercase;text-align:center;padding:14px;border-radius:12px;box-shadow:var(--neon);display:flex;align-items:center;justify-content:center;gap:10px;position:relative}
+.chip{display:inline-block;border:1.5px solid var(--line);border-radius:999px;padding:3px 9px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.badge{display:inline-block;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:5px 11px;border-radius:999px;transform:skewX(-8deg);border:1.5px solid transparent}.badge span{display:inline-block;transform:skewX(8deg)}
+.ann{position:absolute;left:12px;right:12px;bottom:14px;background:rgba(19,20,23,.78);border:1px solid rgba(233,184,36,.35);border-radius:10px;padding:8px 10px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#e9b824;line-height:1.5;z-index:5}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.001s!important;animation-iteration-count:1!important}}
+
+.hero{height:170px;position:relative;flex:none;background:radial-gradient(ellipse at 40% 45%,#6a5a3a 0,#2b2620 55%,#17181b 100%)}
+.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.25) 0,transparent 40%,#1f2126 100%)}
+.fl{position:absolute;top:14px;width:36px;height:36px;border-radius:12px;background:rgba(19,20,23,.55);display:flex;align-items:center;justify-content:center;z-index:2;color:var(--ink)}
+.poster{margin:-30px 16px 0;background:var(--poster);color:var(--pink);border-radius:18px;box-shadow:var(--shp);position:relative;overflow:hidden;flex:none;padding:14px 16px 50px;z-index:1}
+.band{position:absolute;right:-44px;top:16px;background:var(--accent);color:var(--aink);font-family:'Archivo Narrow',sans-serif;font-weight:700;font-size:11px;letter-spacing:.12em;padding:4px 52px;text-transform:uppercase;transform:rotate(14deg) scale(1.8);opacity:0;animation:band 9.0s infinite both;transform-origin:50% 50%}
+@keyframes band{0%,60.00%{transform:rotate(14deg) scale(1.9);opacity:0;box-shadow:none}61.67%{opacity:1;transform:rotate(14deg) scale(.96);box-shadow:0 0 30px rgba(233,184,36,.9);animation-timing-function:var(--inout)}63.33%{transform:rotate(14deg) scale(1)}68.89%,100%{transform:rotate(14deg) scale(1);opacity:1;box-shadow:var(--neons)}}
+.stat{position:absolute;right:14px;bottom:14px;transform:translateX(60px);opacity:0;animation:statin 9.0s infinite both}
+@keyframes statin{0%,35.56%{transform:translateX(60px);opacity:0}38.00%{transform:translateX(-6px);opacity:1;animation-timing-function:var(--inout)}38.89%,100%{transform:translateX(0);opacity:1}}
+.b1,.b2{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;backface-visibility:hidden}
+.flip{position:relative;width:132px;height:28px;transform-style:preserve-3d;animation:flip 9.0s infinite both}
+@keyframes flip{0%,61.11%{transform:rotateX(0)}63.56%,100%{transform:rotateX(180deg)}}
+.b1 .badge{border-color:var(--pmuted);color:var(--pmuted)}.b2{transform:rotateX(180deg)}.b2 .badge{background:var(--accent);color:var(--aink);box-shadow:var(--neons)}
+.toast{position:absolute;left:12px;right:12px;top:14px;z-index:9;background:var(--poster);color:var(--pink);border-radius:14px;padding:12px 14px;display:flex;gap:12px;align-items:center;box-shadow:var(--shp);transform:translateY(-130%);animation:toast 9.0s infinite both}
+@keyframes toast{0%,55.56%{transform:translateY(-130%)}58.00%{transform:translateY(6px);animation-timing-function:var(--inout)}58.89%{transform:translateY(0)}86.67%{transform:translateY(0);opacity:1}88.89%,100%{transform:translateY(-130%);opacity:1}}
+.cta{margin:auto 16px 0;position:relative;height:50px;flex:none}
+.cta>div{position:absolute;inset:0;border-radius:12px;display:flex;align-items:center;justify-content:center;gap:10px;font-stretch:125%;font-weight:900;font-size:15px;letter-spacing:.02em;text-transform:uppercase}
+.send{background:var(--accent);color:var(--aink);box-shadow:var(--neon);animation:send 9.0s infinite both}
+@keyframes send{0%,13.33%{transform:scale(1);box-shadow:var(--neon);opacity:1}14.67%{transform:scale(.97);box-shadow:inset 0 0 0 1px rgba(255,220,120,.6),0 0 8px rgba(233,184,36,.3),0 2px 6px rgba(0,0,0,.35)}16.67%{transform:scale(1);box-shadow:var(--neon)}27.78%{opacity:1}30.00%,100%{opacity:0;visibility:hidden}}
+.send .lab{animation:lab 9.0s infinite both}.send .ld{position:absolute;display:flex;align-items:center;gap:10px;opacity:0;animation:ld 9.0s infinite both}
+@keyframes lab{0%,15.56%{opacity:1}16.89%,100%{opacity:0}}
+@keyframes ld{0%,16.11%{opacity:0}17.78%,27.78%{opacity:1}30.00%,100%{opacity:0}}
+.sent{border:1.5px solid var(--ink);color:var(--ink);opacity:0;animation:sent 9.0s infinite both}
+@keyframes sent{0%,28.33%{opacity:0;transform:scale(.96)}31.11%{opacity:1;transform:scale(1)}61.11%{opacity:1}62.78%,100%{opacity:0}}
+.jourj{background:var(--accent);color:var(--aink);box-shadow:var(--neon);opacity:0;animation:jj 9.0s infinite both}
+@keyframes jj{0%,62.22%{opacity:0;transform:translateY(10px)}65.00%{opacity:1;transform:translateY(-4px);animation-timing-function:var(--inout)}66.11%,96.67%{opacity:1;transform:translateY(0)}98.89%,100%{opacity:0}}
+.cntrow{display:flex;margin:12px 16px 0;background:var(--surface);border-radius:12px;box-shadow:var(--shc);overflow:hidden;flex:none}
+.cnt{flex:1;text-align:center;padding:10px 0}.cnt b{display:block;font-weight:800;font-size:22px;line-height:1}.cnt span{display:block;margin-top:4px;font-family:'Archivo Narrow',sans-serif;font-weight:700;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+</style>
+</helmet>
+<div class="ph"><svg class="grain" aria-hidden="true" width="390" height="844"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0"/></filter><rect width="390" height="844" filter="url(#g)"/></svg>
+<div class="toast"><img src="/_blob/f901260f4e1ef37e7dbcb769e0140f66" alt="" style="width:36px;height:36px;border-radius:50%"><div style="flex:1"><div class="lbl" style="color:var(--pmuted)">Nocturne de Canet</div><div class="hd" style="font-size:16px">Tu es retenu · Zone JDM</div></div><svg class="" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+<div class="hero"><span class="fl" style="left:14px"><img src="/_blob/f901260f4e1ef37e7dbcb769e0140f66" alt="Orasso" style="width:24px;height:24px;border-radius:50%"></span><span class="fl" style="right:14px"><svg class="" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+<div class="poster"><div class="band">Retenue</div><div class="lbl" style="color:var(--pmuted)">Nocturne · Rassemblement</div><div class="hd" style="font-size:34px;line-height:31px;margin-top:4px">Nocturne<br>de Canet</div><div class="nar" style="font-size:12px;margin-top:8px;color:var(--pmuted)">Sam 17 oct · 19 h · Parking du port</div><div class="stat"><div class="flip"><div class="b1"><span class="badge"><span>En attente</span></span></div><div class="b2"><span class="badge"><span>Retenue</span></span></div></div></div><div class="credit lt">ORASSO</div></div>
+<div class="cntrow"><div class="cnt"><b>34</b><span>places</span></div><div class="cnt" style="border-left:1px solid var(--line)"><b>116</b><span>retenus</span></div><div class="cnt" style="border-left:1px solid var(--line)"><b>4</b><span>amis y vont</span></div></div>
+<div style="padding:12px 16px 0"><div class="lbl">Recherché</div><div style="margin-top:6px"><span class="chip" style="border-color:var(--ink)">JDM</span> <span class="chip">Youngtimer</span> <span class="chip">Sportive</span></div></div>
+<div class="cta"><div class="send"><span class="lab" style="display:flex;align-items:center;gap:10px"><svg class="" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l18-8-8 18-2-8z"/></svg>Candidater</span><span class="ld"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="-7.3 -25 150 150" aria-hidden="true"><title>Chargement en cours</title><style>.ldcara{animation:ldka 1.6s infinite}@keyframes ldka{0%{transform:translateX(-80px);animation-timing-function:cubic-bezier(.15,.7,.3,1)}40%{transform:translateX(3px);animation-timing-function:cubic-bezier(.4,0,.2,1)}50%{transform:translateX(0);animation-timing-function:linear}74%{transform:translateX(0);animation-timing-function:cubic-bezier(.6,0,.85,.3)}100%{transform:translateX(80px)}}@media (prefers-reduced-motion: reduce){.ldcara{animation:none}}</style><defs><clipPath id="ldcla"><path transform="translate(-7.7 0)" d="M56.2 29L102.2 29C110.49 29 116.02 35.72 114.56 44L112.44 56C110.98 64.28 103.08 71 94.8 71L48.8 71C40.51 71 34.98 64.28 36.44 56L38.56 44C40.02 35.72 47.92 29 56.2 29Z"></path></clipPath></defs><path fill="#F7F6F2" transform="translate(-7.7 0)" d="M69.19 101.74Q49.85 101.74 36.12 96.66Q22.38 91.57 15.04 81.98Q7.7 72.38 7.7 58.87Q7.7 47.38 11.41 37.57Q15.12 27.76 21.8 20.35Q31.69 9.59 47.02 3.92Q62.35 -1.74 81.54 -1.74Q100.87 -1.74 114.61 3.42Q128.34 8.58 135.68 18.17Q143.02 27.76 143.02 41.42Q143.02 53.05 139.17 63.01Q135.32 72.97 128.34 80.38Q118.6 90.84 103.27 96.29Q87.94 101.74 69.19 101.74ZM56.2 29L102.2 29C110.49 29 116.02 35.72 114.56 44L112.44 56C110.98 64.28 103.08 71 94.8 71L48.8 71C40.51 71 34.98 64.28 36.44 56L38.56 44C40.02 35.72 47.92 29 56.2 29Z" fill-rule="evenodd"></path><g clip-path="url(#ldcla)"><g class="ldcara"><mask id="ldcwina" maskUnits="userSpaceOnUse" x="-50" y="-50" width="300" height="200"><rect x="-50" y="-50" width="300" height="200" fill="#fff"></rect><path transform="translate(-7.7 0) translate(75.5 50) skewX(-10) translate(-75.5 -50)" d="M77.48 42.16 L86.06 38.24 L86.06 61.76 L77.48 57.84ZM51.08 39.36 L57.02 41.88 L57.02 58.12 L51.08 60.64Z" fill="#000" stroke="#000" stroke-width="2" stroke-linejoin="round"></path></mask><g mask="url(#ldcwina)"><g transform="translate(-7.7 0) translate(75.5 50) skewX(-10) translate(-75.5 -50)" fill="#FFC629"><rect x="82.1" y="33" width="4.5" height="34" rx="2"></rect><rect x="42.5" y="36" width="66" height="28" rx="11.2"></rect></g></g></g></g></svg>Envoi…</span></div><div class="sent"><svg class="" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Candidature envoyée</div><div class="jourj"><svg class="" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 14h2v6h-6v-2"/></svg>Mode jour J<svg class="" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div></div>
+<div class="ann" style="position:relative;left:auto;right:auto;bottom:auto;margin:12px 16px 24px">Appui : 120 ms, le néon baisse · Envoi : la voiture se gare dans le bouton · Envoyée : contour, 220 ms · Badge « En attente » se gare · Plus tard : notification du haut, bandeau « Retenue » tamponné (420 ms, un flash), badge retourné (220 ms), le bouton devient « Mode jour J »</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

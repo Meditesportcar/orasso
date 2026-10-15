@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Passage de grade</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,100,600;0,100,800;0,125,900;1,125,900&family=Archivo+Narrow:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif}
+.ph{--surface:#2b2e36;--raised:#363941;--line:#565b66;--ink:#f3ebdd;--muted:#afa89c;--poster:#f3ebdd;--pink:#131417;--pmuted:#6b6660;--night:#131417;--accent:#e9b824;--aink:#131417;--win:#c8322b;--waitlist:#7fa6ff;--shc:0 8px 24px rgba(0,0,0,.4);--shp:0 18px 40px rgba(0,0,0,.5);--neon:inset 0 0 0 1px rgba(255,220,120,.6),0 0 26px rgba(233,184,36,.55),0 6px 14px rgba(0,0,0,.35);--neons:0 0 10px rgba(233,184,36,.4);--neonw:0 0 16px rgba(200,50,43,.6);--neonscan:inset 0 0 0 1px rgba(255,220,120,.6),0 0 34px rgba(233,184,36,.65),0 6px 14px rgba(0,0,0,.35);
+ --park:cubic-bezier(.12,.75,.25,1);--out:cubic-bezier(.2,.8,.2,1);--inout:cubic-bezier(.4,0,.2,1);
+ width:390px;height:844px;color:var(--ink);display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;border-radius:30px;position:relative;background:radial-gradient(ellipse 70% 50% at 95% -10%,rgba(233,184,36,.85),rgba(233,184,36,.30) 40%,transparent 68%),radial-gradient(ellipse 60% 42% at -12% 108%,rgba(255,246,225,.42),rgba(255,246,225,.10) 45%,transparent 65%),linear-gradient(170deg,transparent 0 36%,rgba(255,246,225,.14) 36% 56%,transparent 56%),repeating-linear-gradient(170deg,transparent 0 104px,rgba(243,235,221,.18) 104px 112px),radial-gradient(ellipse 100% 72% at 50% 32%,#262932 0,#15171b 60%,#07080a 100%)}
+.ph>*{position:relative}
+.grain{position:absolute!important;inset:0;pointer-events:none;opacity:.28;mix-blend-mode:overlay;border-radius:30px}
+.hd{font-stretch:125%;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:-.01em}
+.up{font-stretch:125%;font-weight:900;text-transform:uppercase;letter-spacing:.02em}
+.nar{font-family:"Archivo Narrow",sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.lbl{font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.t{font-size:13px;color:var(--muted);line-height:1.4}
+.top{position:relative;isolation:isolate;height:64px;display:flex;align-items:center;gap:10px;padding:12px 18px 0;flex:none;background:linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%);border-bottom:1px solid rgba(233,184,36,.45);box-shadow:0 6px 18px rgba(0,0,0,.45);box-sizing:border-box}
+.mono{width:30px;height:30px;border-radius:50%;flex:none;margin-left:-1.5px}
+.ttl{font-stretch:125%;font-weight:900;font-size:16px;letter-spacing:.02em;text-transform:uppercase;flex:1}
+.ic{width:34px;height:34px;border:1.5px solid var(--line);border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;color:var(--ink)}
+.tabs{position:relative;isolation:isolate;overflow:hidden;height:80px;display:flex;flex:none;background:linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%);border-top:2px solid var(--accent);border-radius:0 0 30px 30px;box-shadow:0 -8px 24px rgba(0,0,0,.5)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-stretch:125%;font-weight:900;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.tab svg{width:22px;height:22px}.tab.on{color:var(--ink)}
+.tab.c{background:var(--accent);color:var(--aink);margin:-16px 6px 12px;border-radius:18px;transform:skewX(-6deg);box-shadow:var(--neon)}.tab.c span{display:block;transform:skewX(6deg)}
+.card{background:var(--surface);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shc);position:relative}
+.credit{position:absolute;right:12px;bottom:8px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:9px;letter-spacing:.14em;color:rgba(233,184,36,.7);pointer-events:none}.credit.lt{color:#8a6200}
+.btn{background:var(--accent);color:var(--aink);font-stretch:125%;font-weight:900;font-size:15px;letter-spacing:.02em;text-transform:uppercase;text-align:center;padding:14px;border-radius:12px;box-shadow:var(--neon);display:flex;align-items:center;justify-content:center;gap:10px;position:relative}
+.chip{display:inline-block;border:1.5px solid var(--line);border-radius:999px;padding:3px 9px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.badge{display:inline-block;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:5px 11px;border-radius:999px;transform:skewX(-8deg);border:1.5px solid transparent}.badge span{display:inline-block;transform:skewX(8deg)}
+.ann{position:absolute;left:12px;right:12px;bottom:14px;background:rgba(19,20,23,.78);border:1px solid rgba(233,184,36,.35);border-radius:10px;padding:8px 10px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#e9b824;line-height:1.5;z-index:5}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.001s!important;animation-iteration-count:1!important}}
+
+@property --n{syntax:'<integer>';initial-value:340;inherits:false}
+.plate{margin:12px 16px 0;background:var(--surface);border-radius:18px;padding:12px 14px;display:flex;gap:14px;align-items:center;box-shadow:var(--shc);flex:none;position:relative}
+.grade{margin:12px 16px 0;background:var(--win);color:#f3ebdd;border-radius:18px;padding:16px;box-shadow:var(--neonw);position:relative;overflow:hidden;flex:none;min-height:176px;animation:gflash 9.0s infinite both}
+@keyframes gflash{0%,47.78%{box-shadow:var(--neonw)}49.11%{box-shadow:0 0 60px rgba(200,50,43,1),0 0 120px rgba(233,184,36,.5)}53.33%,100%{box-shadow:var(--neonw)}}
+.num{font-weight:800;font-size:40px;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;animation:cnt 9.0s linear infinite both;counter-reset:n var(--n)}
+.num::after{content:counter(n)}
+@keyframes cnt{0%,14.44%{--n:340}25.56%,38.89%{--n:360}48.89%,100%{--n:400}}
+.bar{height:6px;background:rgba(0,0,0,.3);border-radius:3px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;width:68%;background:#f3ebdd;border-radius:3px;animation:bar 9.0s infinite both}
+@keyframes bar{0%,14.44%{width:68%}19.11%,38.89%{width:72%;animation-timing-function:var(--out)}43.56%,100%{width:100%}}
+.g1,.g2{position:absolute;left:16px;top:16px;right:16px}
+.g1{animation:g1 9.0s infinite both}.g2{animation:g2 9.0s infinite both;clip-path:polygon(100% 0,100% 0,100% 100%,100% 100%)}
+@keyframes g1{0%,48.89%{clip-path:polygon(0 0,100% 0,100% 100%,0 100%)}53.56%,100%{clip-path:polygon(0 0,0 0,-18% 100%,-18% 100%)}}
+@keyframes g2{0%,49.44%{clip-path:polygon(118% 0,100% 0,100% 100%,118% 100%)}54.11%,100%{clip-path:polygon(-18% 0,100% 0,100% 100%,0 100%)}}
+.chipin{position:absolute;right:16px;font-family:'Archivo Narrow',sans-serif;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:var(--aink);padding:5px 10px;border-radius:8px;transform:skewX(-8deg) translateX(140px);opacity:0;box-shadow:var(--neons)}
+.chipin span{display:inline-block;transform:skewX(8deg)}
+.c1{bottom:14px;animation:c1 9.0s infinite both}.c2{bottom:14px;animation:c2 9.0s infinite both}
+@keyframes c1{0%,11.11%{transform:skewX(-8deg) translateX(140px);opacity:0}13.56%{transform:skewX(-8deg) translateX(-6px);opacity:1;animation-timing-function:var(--inout)}14.44%{transform:skewX(-8deg) translateX(0)}33.33%{opacity:1;transform:skewX(-8deg) translateX(0)}35.00%,100%{opacity:0}}
+@keyframes c2{0%,35.56%{transform:skewX(-8deg) translateX(140px);opacity:0}38.00%{transform:skewX(-8deg) translateX(-6px);opacity:1;animation-timing-function:var(--inout)}38.89%{transform:skewX(-8deg) translateX(0)}47.78%{opacity:1;transform:skewX(-8deg) translateX(0)}49.44%,100%{opacity:0}}
+.stamp{position:absolute;right:14px;top:14px;border:2px solid #f3ebdd;color:#f3ebdd;font-family:'Archivo Narrow',sans-serif;font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;padding:5px 10px;border-radius:8px;transform:rotate(-8deg) scale(2);opacity:0;animation:stamp 9.0s infinite both}
+@keyframes stamp{0%,54.44%{transform:rotate(-8deg) scale(2);opacity:0}56.11%{transform:rotate(-8deg) scale(.95);opacity:1;animation-timing-function:var(--inout)}57.22%,100%{transform:rotate(-8deg) scale(1);opacity:1}}
+.unlock{margin:12px 16px 0;background:var(--surface);border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:center;box-shadow:var(--shc);flex:none;opacity:0;transform:translateY(10px);animation:unlock 9.0s infinite both}
+@keyframes unlock{0%,62.22%{opacity:0;transform:translateY(10px)}64.67%{opacity:1;transform:translateY(-3px);animation-timing-function:var(--inout)}65.56%,100%{opacity:1;transform:translateY(0)}}
+</style>
+</helmet>
+<div class="ph"><svg class="grain" aria-hidden="true" width="390" height="844"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0"/></filter><rect width="390" height="844" filter="url(#g)"/></svg>
+<div class="top"><svg aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.6;mix-blend-mode:screen"><filter id="brg"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .95 0 0 0 0 .92 0 0 0 0 .85 0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#brg)"/></svg><img class="mono" src="/_blob/f901260f4e1ef37e7dbcb769e0140f66" alt="Orasso"><span class="ttl">Mon garage</span><span class="ic"><svg class="" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></span><span class="ic"><svg class="" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 17V11a6 6 0 0112 0v6l2 2H4z"/><path d="M10 21h4"/></svg></span></div>
+<div class="plate"><div style="width:64px;height:64px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#8a7a58,#3a3326);flex:none"></div><div style="flex:1;min-width:0"><div class="hd" style="font-size:24px;line-height:1">Damien_66</div><div class="t">Pyrénées-Orientales · Catalan Drift · 12 événements</div></div><div class="credit">ORASSO</div></div>
+<div class="grade">
+  <div class="g1"><div class="lbl" style="color:#f3d9d5">Grade saison</div><div class="hd" style="font-size:30px;line-height:1;margin-top:4px">Sport</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:8px"><span class="num"></span><span class="nar" style="font-size:11px;color:#f3d9d5">pts · 400 → Circuit</span></div><div class="bar"><i></i></div></div>
+  <div class="g2"><div class="lbl" style="color:#f3d9d5">Nouveau grade</div><div class="hd" style="font-size:30px;line-height:1;margin-top:4px">Circuit</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:8px"><span style="font-weight:800;font-size:40px;line-height:1;letter-spacing:-.02em">400</span><span class="nar" style="font-size:11px;color:#f3d9d5">pts · 15 % chez les pros</span></div><div class="bar"><i style="width:100%;animation:none;background:var(--accent)"></i></div></div>
+  <div class="chipin c1"><span>+20 pts · Nocturne de Canet</span></div><div class="chipin c2"><span>+40 pts · certification 200SX</span></div>
+  <div class="stamp">Circuit</div>
+</div>
+<div class="unlock"><svg class="" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M5 3h14v5a7 7 0 01-14 0z"/><path d="M5 5H2v2a3 3 0 003 3M19 5h3v2a3 3 0 01-3 3"/></svg><div style="flex:1"><b style="font-size:13px">Débloqué : tri prioritaire</b><div class="t" style="font-size:12px">Tes candidatures passent en tête de file chez les organisateurs.</div></div></div>
+<div class="ann" style="position:relative;left:auto;right:auto;bottom:auto;margin:14px 16px 0">Points : la pastille se gare (220 ms), le chiffre compte, la barre avance (420 ms) · Grade : un flash rouge et or (120 ms), l'ancien grade sort et le nouveau entre par la coupe à 10° (420 ms), tampon « Circuit », puis la ligne débloquée se gare</div>
+<div style="flex:1"></div>
+<div class="tabs"><svg aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.6;mix-blend-mode:screen"><filter id="brg2"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .95 0 0 0 0 .92 0 0 0 0 .85 0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#brg2)"/></svg><div class="tab"><svg class="" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"/></svg>Accueil</div><div class="tab"><svg class="" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M15 9l-2 6-4 2 2-6z"/></svg>Explorer</div><div class="tab c"><svg class="" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 14h2v6h-6v-2"/></svg><span>Accès</span></div><div class="tab on"><svg class="" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l2-5h14l2 5v7H3z"/><circle cx="7" cy="15" r="1.5"/><circle cx="17" cy="15" r="1.5"/></svg>Garage</div><div class="tab"><svg class="" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16v10H8l-4 4z"/></svg>Boîte</div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

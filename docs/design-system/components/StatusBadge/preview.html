@@ -1,0 +1,25 @@
+<!-- @dsCard group="Statuts" height=140 subtitle="Les sept états d'une candidature et d'un événement" -->
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@700&display=swap">
+<style>
+body{margin:0;padding:20px;background:var(--surface);font-family:var(--font-narrow);display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.b{display:inline-block;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:5px 11px;border-radius:var(--radius-pill);transform:skewX(var(--skew));border:1.5px solid transparent}
+.b span{display:inline-block;transform:skewX(8deg)}
+.pending{border-color:var(--status-pending);color:var(--status-pending)}
+.retained{background:var(--status-retained);color:var(--accent-ink);box-shadow:var(--neon-accent-soft)}
+.waitlist{background:var(--status-waitlist);color:var(--night)}
+.refused{border-color:var(--status-refused);color:var(--status-refused);text-decoration:line-through}
+.onsite{background:var(--status-onsite);color:var(--poster-ink)}
+.cancelled{background:var(--status-cancelled);color:var(--win-ink);box-shadow:var(--neon-win)}
+.uncertain{background:repeating-linear-gradient(45deg,var(--status-uncertain) 0 6px,transparent 6px 10px);color:var(--ink);border-color:var(--status-uncertain)}
+</style></head>
+<body>
+<span class="b pending"><span>En attente</span></span>
+<span class="b retained"><span>Retenue</span></span>
+<span class="b waitlist"><span>Liste d'attente · 4e</span></span>
+<span class="b refused"><span>Refusée</span></span>
+<span class="b onsite"><span>Sur place</span></span>
+<span class="b cancelled"><span>Annulé</span></span>
+<span class="b uncertain"><span>Incertain</span></span>
+</body></html>

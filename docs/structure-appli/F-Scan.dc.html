@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Scan du staff · Béton mouillé</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,100,600;0,125,900&family=Archivo+Narrow:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif}
+a{color:inherit}a:hover{opacity:.8}
+.ph{--ground:#1f2126;--surface:#2b2e36;--line:#565b66;--ink:#f3ebdd;--muted:#afa89c;--accent:#e9b824;--aink:#131417;--win:#c8322b;--neon:inset 0 0 0 1px rgba(255,220,120,.6),0 0 34px rgba(233,184,36,.65),0 6px 14px rgba(0,0,0,.35);--neonw:0 0 16px rgba(200,50,43,.6);--shc:0 8px 24px rgba(0,0,0,.4);
+ width:390px;height:844px;color:var(--ink);display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;border-radius:30px;position:relative;
+ background:radial-gradient(ellipse 70% 50% at 95% -10%,rgba(233,184,36,.85),rgba(233,184,36,.30) 40%,transparent 68%),radial-gradient(ellipse 60% 42% at -12% 108%,rgba(255,246,225,.42),rgba(255,246,225,.10) 45%,transparent 65%),linear-gradient(170deg,transparent 0 36%,rgba(255,246,225,.14) 36% 56%,transparent 56%),repeating-linear-gradient(170deg,transparent 0 104px,rgba(243,235,221,.18) 104px 112px),radial-gradient(ellipse 100% 72% at 50% 32%,#262932 0,#15171b 60%,#07080a 100%)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.28;mix-blend-mode:overlay;border-radius:30px}
+.up{font-stretch:125%;font-weight:900;text-transform:uppercase;letter-spacing:.02em}
+.nar{font-family:"Archivo Narrow",sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.lbl{font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.big{flex:1;border:1.5px solid var(--ink);border-radius:14px;padding:14px 6px;text-align:center;font-stretch:125%;font-weight:900;font-size:13px;text-transform:uppercase;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:72px;box-sizing:border-box;background:var(--surface);box-shadow:var(--shc)}
+.big small{font-family:"Archivo Narrow",sans-serif;font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:none}
+.corner{position:absolute;width:40px;height:40px;border:4px solid var(--ink);border-radius:6px}
+.mono{width:30px;height:30px;border-radius:50%;flex:none;margin-left:-1.5px}
+.x{width:34px;height:34px;border:1.5px solid var(--line);border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none;color:var(--ink);text-decoration:none}
+.credit{position:absolute;right:12px;bottom:8px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:9px;letter-spacing:.14em;color:rgba(233,184,36,.7);pointer-events:none}
+.credit.lt{color:#8a6200}
+</style>
+</helmet>
+<div class="ph">
+  <svg class="grain" aria-hidden="true" width="390" height="844"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0"/></filter><rect width="390" height="844" filter="url(#g)"/></svg>
+  <div style="position: relative; isolation: isolate; height: 64px; display: flex; align-items: center; background: linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%); border-bottom:1px solid rgba(233,184,36,.45); box-shadow:0 6px 18px rgba(0,0,0,.45); gap: 10px; padding: 12px 18px 0; flex: none; position: relative"><svg aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.6;mix-blend-mode:screen"><filter id="br"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .95 0 0 0 0 .92 0 0 0 0 .85 0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#br)"/></svg>
+    <img class="mono" src="/_blob/f901260f4e1ef37e7dbcb769e0140f66" alt="Orasso"><div style="flex: 1; min-width: 0"><div class="up" style="font-size: 12px">Scan accueil · Canet</div><div class="lbl">Liste à jour 17:02 · hors ligne OK</div></div>
+    <div class="nar" style="font-size: 12px; border: 1.5px solid var(--accent); color: var(--accent); padding: 4px 8px; border-radius: 8px; transform: skewX(-8deg)"><span style="display: inline-block; transform: skewX(8deg)">62 / 116</span></div>
+    <a href="F-Accueil.dc.html" class="x" aria-label="Quitter le scan"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></a>
+  </div>
+
+  <div style="position: relative; flex: 1; overflow: hidden; margin: 8px 12px 0; border-radius: 18px; background: radial-gradient(ellipse at 50% 40%, #2c2f36 0, #1a1c21 60%, #121316 100%); box-shadow: var(--shc)">
+    <div class="corner" style="top: 56px; left: 36px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0"></div>
+    <div class="corner" style="top: 56px; right: 36px; border-left: 0; border-bottom: 0; border-radius: 0 6px 0 0"></div>
+    <div class="corner" style="bottom: 120px; left: 36px; border-right: 0; border-top: 0; border-radius: 0 0 0 6px"></div>
+    <div class="corner" style="bottom: 120px; right: 36px; border-left: 0; border-top: 0; border-radius: 0 0 6px 0"></div>
+    <div class="lbl" style="position: absolute; left: 0; right: 0; top: 44%; text-align: center">Caméra ouverte · vise le QR à travers le pare-brise</div>
+
+    <div style="position: absolute; left: 10px; right: 10px; bottom: 10px; background: var(--accent); color: var(--aink); border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; box-shadow: var(--neon)">
+      <div style="width: 56px; height: 56px; border: 3px solid var(--aink); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: none" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#131417" stroke-width="3.5"><path d="M5 12l5 5 9-10"/></svg></div>
+      <div style="flex: 1; min-width: 0">
+        <div class="nar" style="font-size: 10px; opacity: .7">OK · il y a 4 s</div>
+        <div class="up" style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Nissan 200SX · Damien_66</div>
+      </div>
+      <div style="text-align: right; flex: none"><div class="nar" style="font-size: 9px; opacity: .7">Zone</div><div class="nar" style="font-size: 30px; line-height: 1; letter-spacing: .04em">JDM</div></div>
+      <div class="credit lt">ORASSO</div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 8px; padding: 12px 12px 0; flex: none; position: relative">
+    <div class="big"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M6 12h3M11 12h7"/></svg>Plaque<small>ou pseudo</small></div>
+    <div class="big"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Express<small>sans compte</small></div>
+    <div class="big" style="border-style: dashed; border-color: var(--muted); color: var(--muted); background: transparent; box-shadow: none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 4l10 8-10 8z"/><path d="M19 4v16"/></svg>Sans scan<small>pointer après</small></div>
+  </div>
+  <div style="display: flex; gap: 8px; padding: 8px 12px 28px; flex: none; position: relative">
+    <div class="big" style="min-height: 56px; font-size: 11px; border-color: var(--line); color: var(--muted); border-radius: 12px; background: transparent; box-shadow: none; gap: 2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Liste</div>
+    <div class="big" style="min-height: 56px; font-size: 11px; border-color: var(--line); color: var(--muted); border-radius: 12px; background: transparent; box-shadow: none; gap: 2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg>Incident</div>
+    <div class="big" style="min-height: 56px; font-size: 11px; border-color: var(--line); color: var(--muted); border-radius: 12px; background: transparent; box-shadow: none; gap: 2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Discussion</div>
+    <div class="big" style="min-height: 56px; font-size: 12px; background: var(--win); color: #f3ebdd; border-color: var(--win); flex: 0 0 92px; border-radius: 12px; box-shadow: var(--neonw); gap: 2px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>Alerte</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

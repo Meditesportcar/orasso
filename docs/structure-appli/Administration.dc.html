@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Inventaire — Administration</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#17191C}
+a{color:#17191C}a:hover{color:#5E636B}
+.g{display:flex;flex-direction:column;gap:6px}
+.g h3{margin:0 0 4px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5E636B}
+.i{display:flex;align-items:flex-start;gap:8px;font-size:14px;line-height:1.35;padding:5px 0;border-bottom:1px solid #E6E3DC}
+.i span{flex:1}
+.t{flex:none;font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:3px;margin-top:2px;min-width:52px;text-align:center}
+.v{background:#17191C;color:#FFFFFF}
+.p{background:#FFE9A8;color:#5A3E00}
+.n{background:#D9E7FF;color:#14387A}
+.w{flex:none;font-size:10px;font-weight:600;color:#5E636B;margin-top:3px;min-width:44px}
+</style>
+</helmet>
+<div style="width: 640px; min-height: 1000px; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 22px; background: #F7F6F2">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #17191C">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5E636B">Casquette E</div>
+    <h1 style="margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -.01em">Administration Orasso</h1>
+    <p style="margin: 0; font-size: 14px; color: #5E636B">Site uniquement, 2FA obligatoire. Super administrateur (toi) et modérateur (vue restreinte : suspendre sur signalement, rien d'autre). Colonne de gauche : qui y a accès.</p>
+  </div>
+
+  <div class="g">
+    <h3>Files de travail (ce qui attend une décision)</h3>
+    <div class="i"><b class="w">super</b><span>Structures à vérifier : justificatifs, clubs non déclarés (pièce d'identité supprimée après validation), renouvellements de badge, suspensions</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Pros à vérifier ; abonnements (après 21/06/2027)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super + modo</b><span>Signalements : file, preuves, alertes prioritaires (meute), sanctions (avertissement, 7 j, 30 j, bannissement), contestations</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Certifications de véhicules à valider</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Transferts de plaque à arbitrer ; « Autre » saisis dans le garage à traiter</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Tableau de bord d'accueil : une seule page avec toutes les files et leurs compteurs</span><b class="t v">VALIDÉ</b></div>
+  </div>
+
+  <div class="g">
+    <h3>Registres</h3>
+    <div class="i"><b class="w">super</b><span>Utilisateurs : recherche, fiche, suspension, bannissement de la plateforme</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Structures et pros : tout voir, mode assistance (sélecteur de structure, survol, intervention sur demande, journalisé)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Base véhicules : marques, modèles, générations, motorisations ; catégories et règles d'éligibilité</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Journal : accès des administrateurs, consultations tracées, exports</span><b class="t v">VALIDÉ</b></div>
+  </div>
+
+  <div class="g">
+    <h3>Réglages de la plateforme</h3>
+    <div class="i"><b class="w">super</b><span>Interrupteurs : billets gratuits, paiements, inscriptions</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Modèles : règlement général, messages, conditions d'utilisation</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Newsletter Orasso (rédaction, envoi via Brevo)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Liste des types de prestataires, formats d'événements, départements</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">super</b><span>Points par action et seuils de grades (une fois définis)</span><b class="t v">VALIDÉ</b></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":640,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

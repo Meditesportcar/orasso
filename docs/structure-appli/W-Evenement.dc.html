@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Site — page événement publique · Béton</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,100,600;0,100,800;0,125,900;1,125,900&family=Archivo+Narrow:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#f3ebdd;background:radial-gradient(ellipse 46% 60% at 94% 0%,rgba(233,184,36,.85),rgba(233,184,36,.28) 42%,transparent 70%),radial-gradient(ellipse 42% 46% at 2% 100%,rgba(255,246,225,.40),rgba(255,246,225,.10) 45%,transparent 65%),linear-gradient(170deg,transparent 0 34%,rgba(255,246,225,.13) 34% 54%,transparent 54%),repeating-linear-gradient(170deg,transparent 0 190px,rgba(243,235,221,.17) 190px 200px),radial-gradient(ellipse 85% 65% at 50% 28%,#262932 0,#15171b 60%,#07080a 100%)}
+.grain{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;opacity:.26;mix-blend-mode:overlay;z-index:0}
+header,main,footer{position:relative;z-index:1}
+a{color:inherit}a:hover{opacity:.85}
+.hd{font-stretch:125%;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:-.01em}
+.up{font-stretch:125%;font-weight:900;text-transform:uppercase;letter-spacing:.02em}
+.nar{font-family:"Archivo Narrow",sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.lbl{font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#afa89c}
+.t{font-size:15px;color:#afa89c;line-height:1.5}
+.chip{display:inline-block;border:1.5px solid #565b66;border-radius:999px;padding:4px 11px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin:0 6px 6px 0}
+.sec{display:flex;flex-direction:column;gap:8px;padding:20px 0;border-top:1px solid #565b66}
+.sec h2{margin:0;font-stretch:125%;font-style:italic;font-weight:900;text-transform:uppercase;font-size:18px}
+.btn{background:#e9b824;color:#131417;font-stretch:125%;font-weight:900;font-size:15px;letter-spacing:.02em;text-transform:uppercase;text-align:center;padding:15px;border-radius:12px;box-shadow:inset 0 0 0 1px rgba(255,220,120,.6),0 0 26px rgba(233,184,36,.55),0 6px 14px rgba(0,0,0,.35);text-decoration:none;display:block}
+.btn2{background:transparent;color:#f3ebdd;font-stretch:125%;font-weight:900;font-size:14px;letter-spacing:.02em;text-transform:uppercase;text-align:center;padding:13px;border-radius:12px;border:1.5px solid #f3ebdd;text-decoration:none;display:block}
+.nav a{font-size:14px;font-weight:600;text-decoration:none;margin-left:24px}
+.card{background:#2b2e36;border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column">
+  <svg class="grain" aria-hidden="true"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>
+  <header style="position: relative; isolation: isolate; display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid #565b66; flex-wrap: wrap; gap: 10px; background: linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%); border-bottom: 2px solid #e9b824; box-shadow: 0 8px 24px rgba(0,0,0,.5)"><svg aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.6;mix-blend-mode:screen"><filter id="br"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .95 0 0 0 0 .92 0 0 0 0 .85 0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#br)"/></svg>
+    <img src="/_blob/94731b5b473d0ddfef6c83c4d74a32e2" alt="Orasso" style="width: 120px; height: auto; display: block">
+    <nav class="nav" style="display: flex; flex-wrap: wrap; align-items: center"><a href="#evenements">Événements</a><a href="#pros">Pros</a><a href="#organisateurs">Organisateurs</a><a href="#connexion" class="up" style="font-size: 12px; border: 1.5px solid #f3ebdd; padding: 8px 14px; border-radius: 10px">Connexion</a></nav>
+  </header>
+
+  <main style="max-width: 1120px; width: 100%; margin: 0 auto; padding: 32px 24px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 40px">
+    <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+      <div style="height: 380px; position: relative; border-radius: 18px; overflow: hidden; background: radial-gradient(ellipse at 40% 45%,#6a5a3a 0,#2b2620 55%,#17181b 100%); box-shadow: 0 18px 40px rgba(0,0,0,.5)">
+        <div style="position: absolute; inset: 0; background: linear-gradient(180deg, transparent 35%, rgba(52,56,65,.95) 100%)"></div>
+        <div style="position: absolute; right: -60px; top: 28px; transform: rotate(14deg); background: #e9b824; color: #131417; font-family: 'Archivo Narrow', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: .12em; padding: 6px 72px; text-transform: uppercase">Inscriptions ouvertes</div>
+        <div style="position: absolute; left: 28px; right: 28px; bottom: 22px">
+          <div class="lbl">Nocturne · Rassemblement · MéditeSportCar <span style="border: 1.5px solid #f3ebdd; color: #f3ebdd; padding: 1px 6px; border-radius: 4px; margin-left: 6px">Structure vérifiée</span></div>
+          <h1 class="hd" style="margin: 6px 0 0; font-size: 56px; line-height: 50px">Nocturne<br>de Canet</h1>
+          <div class="nar" style="font-size: 13px; margin-top: 10px; color: #afa89c">Sam 17 oct 2026 · 19 h – 23 h · Parking du port, Canet-en-Roussillon (66)</div>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; background: #2b2e36; border-radius: 12px; padding: 10px 16px; margin-top: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.4)">
+        <span class="nar" style="font-size: 12px; color: #e9b824">Maintenu</span>
+        <span class="nar" style="font-size: 12px; color: #afa89c">Météo à l'approche : 21 °C, dégagé</span>
+      </div>
+
+      <div class="sec" style="border: 0; padding-top: 24px"><h2>Véhicules recherchés</h2><div><span class="chip" style="border-color: #f3ebdd">JDM</span><span class="chip">Youngtimer</span><span class="chip">Sportive</span><span class="chip">Voitures</span><span class="chip">Motos</span></div><div class="t">Admission sur filtration. Les décisions sont annoncées au fil des candidatures. Avant-première pour les abonnés de MéditeSportCar jusqu'au vendredi 16 octobre, 19 h.</div></div>
+      <div class="sec"><h2>Programme</h2><div class="t">19 h · arrivée des véhicules exposés<br>21 h · animation<br>22 h · musique coupée<br>23 h · fin de l'événement</div></div>
+      <div class="sec"><h2>Sur place</h2><div><span class="chip">2 food trucks</span><span class="chip">Photographe officiel</span><span class="chip">Barbier</span></div></div>
+      <div class="sec"><h2>Actualité de l'organisateur</h2><div class="t">Hier · « Attention aux travaux sur la D81, prévoyez 10 min de plus. »</div></div>
+      <div class="sec"><h2>Accès et adresse</h2><div style="height: 220px; border-radius: 14px; background: radial-gradient(ellipse at 50% 50%, #363941 0, #2b2e36 70%); position: relative"><div style="position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #e9b824; box-shadow: 0 0 16px rgba(233,184,36,.7)"></div></div><div class="t">Parking du port, 66140 Canet-en-Roussillon · Entrée par la rue du Port</div></div>
+      <div class="sec"><h2>Avis sur l'édition 2025</h2><div class="t"><b style="color: #f3ebdd">2,8 / 3</b> · 61 avis de participants scannés à l'entrée</div><div class="t">« Organisation carrée, placement par zones top. » — Kenji_66</div><div class="t">« Un peu long à l'entrée vers 19 h 30, sinon parfait. » — Lea_11</div></div>
+    </div>
+
+    <aside style="flex: 1 1 300px; max-width: 360px; display: flex; flex-direction: column; gap: 14px; align-self: flex-start">
+      <div class="card" style="display: flex; flex-direction: column; gap: 14px">
+        <div style="display: flex; border-radius: 12px; overflow: hidden; background: #363941">
+          <div style="flex: 1; padding: 12px 0; text-align: center"><div style="font-size: 26px; font-weight: 800; letter-spacing: -.02em">34</div><div class="lbl">places</div></div>
+          <div style="flex: 1; padding: 12px 0; text-align: center; border-left: 1px solid #565b66"><div style="font-size: 26px; font-weight: 800; letter-spacing: -.02em">116</div><div class="lbl">retenus</div></div>
+        </div>
+        <a class="btn" href="#candidater" style="display: flex; align-items: center; justify-content: center; gap: 10px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 13l2-5h14l2 5v6H3z"/><circle cx="7" cy="17" r="1.5"/><circle cx="17" cy="17" r="1.5"/></svg>Candidater avec un véhicule</a>
+        <div class="t" style="text-align: center; font-size: 12px">Crée ton compte ou connecte-toi, tu reviendras ici.</div>
+        <a class="btn2" href="#suivre" style="display: flex; align-items: center; justify-content: center; gap: 10px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20s-7-4.5-7-10a4 4 0 017-2.5A4 4 0 0119 10c0 5.5-7 10-7 10z"/></svg>Suivre MéditeSportCar</a>
+        <div class="t" style="font-size: 13px">Visiteurs : entrée libre, sans réservation.</div>
+      </div>
+      <div class="card" style="display: flex; flex-direction: column; gap: 8px">
+        <div class="lbl">Partager</div>
+        <div class="t" style="font-size: 13px">orasso.fr/e/nocturne-de-canet-2026</div>
+        <div style="display: flex; gap: 8px"><a class="btn2" href="#copier" style="flex: 1; padding: 9px; font-size: 12px">Copier</a><a class="btn2" href="#whatsapp" style="flex: 1; padding: 9px; font-size: 12px">WhatsApp</a><a class="btn2" href="#instagram" style="flex: 1; padding: 9px; font-size: 12px">Instagram</a></div>
+      </div>
+      <div style="border: 1px dashed #565b66; border-radius: 14px; padding: 14px; display: flex; gap: 12px; align-items: center">
+        <img src="/_blob/f901260f4e1ef37e7dbcb769e0140f66" alt="" style="width: 44px; height: 44px; border-radius: 50%; flex: none">
+        <div class="t" style="font-size: 13px">Télécharge l'appli pour ton QR d'accès, le mode jour J et les notifications.</div>
+      </div>
+    </aside>
+  </main>
+
+  <footer style="position: relative; isolation: isolate; margin-top: auto; padding: 22px 32px; border-top: 1px solid #565b66; display: flex; flex-wrap: wrap; gap: 24px; align-items: center; font-size: 13px; color: #afa89c; background: linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%); border-top: 2px solid #e9b824"><svg aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.6;mix-blend-mode:screen"><filter id="br"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .95 0 0 0 0 .92 0 0 0 0 .85 0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#br)"/></svg><span class="nar" style="font-size: 11px">Propulsé par Orasso</span><span>Conditions</span><span>Confidentialité</span><span>Mentions légales</span><span>Contact</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

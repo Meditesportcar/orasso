@@ -1,0 +1,21 @@
+<!-- @dsCard group="Formulaires" height=230 subtitle="Champ, sélection fermée, case à cocher" -->
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600&family=Archivo+Narrow:wght@700&display=swap">
+<style>
+body{margin:0;padding:20px;background:var(--surface);font-family:var(--font-sans);color:var(--ink);display:flex;flex-direction:column;gap:14px;max-width:360px}
+label{display:flex;flex-direction:column;gap:6px}
+.l{font-family:var(--font-narrow);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-muted)}
+input,select{font:inherit;font-size:15px;color:var(--ink);background:var(--surface-raised);border:1.5px solid var(--line);border-radius:var(--radius-md);height:48px;padding:0 14px;outline:0}
+input:focus,select:focus{border-color:var(--accent-text);box-shadow:var(--neon-accent-soft)}
+.help{font-size:13px;color:var(--ink-muted)}
+.cb{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.35;flex-direction:row}
+.box{width:24px;height:24px;border:2px solid var(--ink);border-radius:var(--radius-sm);flex:none;display:flex;align-items:center;justify-content:center;background:var(--accent);color:var(--accent-ink);font-weight:900}
+.box.off{background:transparent}
+</style></head>
+<body>
+<label><span class="l">Plaque d'immatriculation</span><input value="AB-123-CD"><span class="help">Jamais publique. Visible par l'organisateur seulement.</span></label>
+<label><span class="l">Génération</span><select><option>E36 (1990–2000)</option><option>E46</option><option>Autre</option></select></label>
+<label class="cb"><span class="box">✓</span><span>Suivre MéditeSportCar — tu recevras ses consignes et ses prochains événements.</span></label>
+<label class="cb"><span class="box off"></span><span>Newsletter Orasso</span></label>
+</body></html>

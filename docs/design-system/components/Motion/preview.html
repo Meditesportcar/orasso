@@ -1,0 +1,48 @@
+<!-- @dsCard group="Fondations" height=300 subtitle="Tout se gare : la courbe du logo, la coupe à 10°, le badge retourné, le compteur qui flashe, le néon en pic" -->
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,100,800;0,125,900;1,125,900&family=Archivo+Narrow:wght@700&display=swap">
+<style>
+body{margin:0;padding:20px;background:var(--ground);color:var(--ink);font-family:var(--font-sans);display:grid;grid-template-columns:repeat(5,1fr);gap:14px;--park:cubic-bezier(.12,.75,.25,1);--inout:cubic-bezier(.4,0,.2,1);--out:cubic-bezier(.2,.8,.2,1)}
+.tile{background:var(--plate,var(--surface));border:1px solid var(--plate-edge,transparent);border-radius:var(--radius-lg);box-shadow:var(--shadow-card);display:flex;flex-direction:column;min-height:240px;overflow:hidden}
+.demo{flex:1;display:flex;align-items:center;justify-content:center;position:relative;padding:12px}
+.cap{padding:10px 12px;border-top:1px solid var(--plate-line,var(--line));font-family:var(--font-narrow);font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--plate-muted,var(--ink-muted));line-height:1.5}
+.cap b{display:block;color:var(--plate-ink,var(--ink));font-family:var(--font-display);font-stretch:125%;font-weight:900;font-size:11px;letter-spacing:.02em}
+/* park */
+.lane{width:150px;height:22px;border-radius:6px;background:repeating-linear-gradient(90deg,transparent 0 14px,rgba(243,235,221,.18) 14px 16px);position:relative;display:flex;align-items:center;padding:0 4px;box-sizing:border-box}
+.slot{position:absolute;right:2px;top:2px;bottom:2px;width:24px;border:1.5px dashed rgba(233,184,36,.7);border-radius:5px}
+.dot{width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:var(--neon-accent-soft);animation:park 2.4s infinite}
+@keyframes park{0%,10%{transform:translateX(0)}10.01%{animation-timing-function:var(--park)}55%{transform:translateX(120px);animation-timing-function:var(--inout)}65%,80%{transform:translateX(114px)}100%{transform:translateX(0)}}
+/* coupe */
+.cut{width:150px;height:84px;background:var(--poster);color:var(--poster-ink);border-radius:var(--radius-md);padding:10px;box-sizing:border-box;box-shadow:var(--shadow-poster);animation:cut 3s infinite both}
+.cut .l{font-family:var(--font-narrow);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--poster-muted)}
+.cut .h{font-family:var(--font-display);font-stretch:125%;font-style:italic;font-weight:900;font-size:17px;line-height:16px;text-transform:uppercase;margin-top:4px}
+@keyframes cut{0%,15%{clip-path:polygon(0 0,0 0,-20% 100%,-20% 100%)}50%,85%{clip-path:polygon(0 0,120% 0,120% 100%,0 100%);animation-timing-function:var(--out)}100%{clip-path:polygon(0 0,0 0,-20% 100%,-20% 100%)}}
+/* flip */
+.fl{position:relative;width:120px;height:28px;transform-style:preserve-3d;animation:flip 3s infinite both}
+@keyframes flip{0%,40%{transform:rotateX(0)}48%,100%{transform:rotateX(180deg)}}
+.fl>div{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;backface-visibility:hidden}.fl .k{transform:rotateX(180deg)}
+.b{font-family:var(--font-narrow);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:5px 11px;border-radius:var(--radius-pill);transform:skewX(var(--skew));border:1.5px solid}.b span{display:inline-block;transform:skewX(8deg)}
+.b.p{border-color:var(--plate-muted,var(--ink-muted));color:var(--plate-muted,var(--ink-muted))}.b.r{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);box-shadow:var(--neon-accent-soft)}
+/* compteur */
+.mc{display:flex;width:150px;background:var(--surface-raised);border-radius:var(--radius-md);overflow:hidden}
+.mc div{flex:1;text-align:center;padding:8px 0;border-left:1px solid var(--plate-line,var(--line))}.mc div:first-child{border-left:0}
+.mc b{display:block;font-weight:800;font-size:20px;line-height:1;position:relative;height:20px}.mc b i{position:absolute;left:0;right:0;font-style:normal}
+.mc span{display:block;margin-top:3px;font-family:var(--font-narrow);font-weight:700;font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--plate-muted,var(--ink-muted))}
+.live{background:var(--accent);color:var(--accent-ink);animation:lf 3s infinite both}.live span{color:var(--accent-ink)}
+.v1{animation:v1 3s infinite both}.v2{animation:v2 3s infinite both}
+@keyframes v1{0%,48%{opacity:1;transform:translateY(0)}54%,100%{opacity:0;transform:translateY(-10px)}}
+@keyframes v2{0%,48%{opacity:0;transform:translateY(10px)}54%,100%{opacity:1;transform:translateY(0)}}
+@keyframes lf{0%,48%{background:var(--accent)}50%,53%{background:#fff0b8}58%,100%{background:var(--accent)}}
+/* néon */
+.btn{width:150px;height:46px;border-radius:var(--radius-md);background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-stretch:125%;font-weight:900;font-size:13px;text-transform:uppercase;animation:neon 3s infinite both}
+@keyframes neon{0%,30%{box-shadow:var(--neon-accent);transform:scale(1)}34%{transform:scale(.97);box-shadow:inset 0 0 0 1px rgba(255,220,120,.6),0 0 6px rgba(233,184,36,.3)}40%{transform:scale(1);box-shadow:inset 0 0 0 1px rgba(255,220,120,.6),0 0 60px rgba(233,184,36,.95),0 6px 14px rgba(0,0,0,.35)}54%,100%{box-shadow:var(--neon-accent)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style></head>
+<body>
+<div class="tile"><div class="demo"><div class="lane"><div class="slot"></div><div class="dot"></div></div></div><div class="cap"><b>park</b>cubic-bezier(.12,.75,.25,1) · dépasse de 6 px, se range en inout · base 220 ms</div></div>
+<div class="tile"><div class="demo"><div class="cut"><div class="l">Prochain accès</div><div class="h">Nocturne<br>de Canet</div></div></div><div class="cap"><b>Coupe à 10°</b>clip-path, out · poster 420 ms · carte affiche, grade, jour J</div></div>
+<div class="tile"><div class="demo"><div class="fl"><div><span class="b p"><span>En attente</span></span></div><div class="k"><span class="b r"><span>Retenue</span></span></div></div></div><div class="cap"><b>Badge retourné</b>rotateX, base 220 ms · changement d'état</div></div>
+<div class="tile"><div class="demo"><div class="mc"><div><b><i>34</i></b><span>restantes</span></div><div class="live"><b><i class="v1">27</i><i class="v2">26</i></b><span>à trier</span></div></div></div><div class="cap"><b>Compteur</b>flash fast 120 ms, le chiffre glisse de 10 px · rien ne défile</div></div>
+<div class="tile"><div class="demo"><div class="btn">Retenir</div></div><div class="cap"><b>Appui et pic de néon</b>échelle 0,97 et néon qui baisse (fast) · pic pour un événement, retour en poster 420 ms</div></div>
+</body></html>

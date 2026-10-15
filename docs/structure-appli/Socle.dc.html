@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Socle commun et questions de structure</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#F7F6F2}
+a{color:#F7F6F2}a:hover{color:#CFCBC2}
+.g{display:flex;flex-direction:column;gap:6px}
+.g h3{margin:0 0 4px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#CFCBC2}
+.i{font-size:14px;line-height:1.4;padding:6px 0;border-bottom:1px solid #33363B}
+.q{display:flex;flex-direction:column;gap:4px;padding:10px 12px;background:#24272B;border-left:4px solid #FFC629}
+.q b{font-size:13px}
+.q span{font-size:13px;line-height:1.4;color:#CFCBC2}
+</style>
+</helmet>
+<div style="width: 560px; min-height: 1000px; box-sizing: border-box; padding: 36px 36px; display: flex; flex-direction: column; gap: 22px; background: #17191C">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #F7F6F2">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #CFCBC2">Transversal</div>
+    <h1 style="margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -.01em">Socle commun et questions</h1>
+    <p style="margin: 0; font-size: 14px; color: #CFCBC2">Ce qui revient dans plusieurs casquettes se dessine une seule fois. Et les questions à trancher avant le plan de navigation (étape 2).</p>
+  </div>
+
+  <div class="g">
+    <h3>Composants partagés par tout le monde</h3>
+    <div class="i">Messagerie et discussions de groupe (amis, crews, staff, organisateur ↔ participant)</div>
+    <div class="i">Centre de notifications et fil d'actualité</div>
+    <div class="i">Fiche véhicule (vue passionné, vue tri, vue staff : même objet, trois niveaux de détail)</div>
+    <div class="i">Fiche événement (publique, inscrit, organisateur, staff)</div>
+    <div class="i">Statuts de candidature et leurs couleurs (en attente, retenue, liste d'attente, refusée, sur place)</div>
+    <div class="i">Scanner de QR (staff, pro, ami) et affichage de QR (compte, inscription)</div>
+    <div class="i">Carte, sélecteur de départements, sélecteur de véhicule</div>
+    <div class="i">Signaler, bloquer, badge « vérifié », grade</div>
+  </div>
+
+  <div class="g">
+    <h3>Questions à trancher</h3>
+    <div class="q" style="border-left-color: #F7F6F2"><b>1. Une seule appli mobile — tranché le 15/10.</b><span>Un mode jour J qui prend tout l'écran, pas d'appli staff séparée.</span></div>
+    <div class="q" style="border-left-color: #F7F6F2"><b>2. Le staff est un mode, pas une casquette — tranché le 15/10.</b><span>Ouvert depuis « Mes accès » pour l'événement concerné, fermé à J+1. Le changement de casquette couvre : structures organisatrices, fiche pro, profil prestataire.</span></div>
+    <div class="q" style="border-left-color: #F7F6F2"><b>3. Organisateur dans l'appli — tranché le 15/10.</b><span>Tri par glissement, direct du jour J, messagerie, compteurs, écrans du staff. Création d'événement, membres, Stripe, exports : sur le site.</span></div>
+    <div class="q" style="border-left-color: #F7F6F2"><b>4. Les prestataires — tranché le 15/10.</b><span>Casquette séparée (décision de Damien). Le changement de casquette couvre donc : structures organisatrices, fiche pro, profil prestataire.</span></div>
+    <div class="q" style="border-left-color: #F7F6F2"><b>5. Le fil d'actualité — tranché le 15/10.</b><span>Jamais en écran d'accueil : il vit dans la boîte, sous forme de journal. L'accueil reste le tableau de bord.</span></div>
+    <div class="q"><b>6. Manque-t-il quelque chose ?</b><span>Relis chaque casquette : tout écran absent ici sera absent du plan de navigation.</span></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":560,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

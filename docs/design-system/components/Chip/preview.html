@@ -1,0 +1,27 @@
+<!-- @dsCard group="Données" height=190 subtitle="Catégories, filtres, faits — sur surface et sur plaque" -->
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@700&display=swap">
+<style>
+body{margin:0;padding:20px;background:var(--surface);font-family:var(--font-narrow);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:5px 11px;border-radius:var(--radius-pill);border:1.5px solid var(--line);color:var(--ink)}
+.chip.on{border-color:var(--ink);background:var(--ink);color:var(--surface)}
+.chip.accent{border-color:var(--accent-text);color:var(--accent-text);transform:skewX(var(--skew));box-shadow:var(--neon-accent-soft)}
+.chip.accent span{display:inline-block;transform:skewX(8deg)}
+.chip.verified{border-color:var(--ink);font-size:10px;padding:3px 8px;border-radius:4px}
+.plate{width:100%;background:var(--plate,#2b2e36);border:1px solid var(--plate-edge,transparent);border-radius:var(--radius-lg);padding:12px;display:flex;flex-wrap:wrap;gap:8px;box-sizing:border-box}
+.plate .chip{color:var(--plate-ink,#f3ebdd);border-color:var(--plate-chip,rgba(243,235,221,.4))}
+.plate .chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.plate .chip.accent{border-color:var(--accent);color:var(--accent)}
+</style></head>
+<body>
+<span class="chip on">JDM</span>
+<span class="chip">Youngtimer</span>
+<span class="chip">Sportive</span>
+<span class="chip">Motos</span>
+<span class="chip accent"><span>60 km</span></span>
+<span class="chip accent"><span>Zone JDM</span></span>
+<span class="chip verified">Structure vérifiée</span>
+<span class="chip verified">Certifié</span>
+<div class="plate"><span class="chip on">Véhicules</span><span class="chip">Prestataires · 3</span><span class="chip">Liste d'attente · 12</span><span class="chip accent"><span>JDM</span></span><span class="chip">Youngtimer</span></div>
+</body></html>

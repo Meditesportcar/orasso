@@ -1,0 +1,22 @@
+<!-- @dsCard group="Terrain" height=260 subtitle="Résultat de scan : OK, déjà entré, refusé — lus à trois mètres, sans vert" -->
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,125,900&family=Archivo+Narrow:wght@700&display=swap">
+<style>
+body{margin:0;padding:20px;background:var(--ground);font-family:var(--font-sans);display:flex;gap:16px;flex-wrap:wrap}
+.r{width:300px;border-radius:var(--radius-lg);padding:16px;display:flex;align-items:center;gap:14px;position:relative}
+.credit{position:absolute;right:12px;bottom:6px;font-family:var(--font-narrow);font-weight:700;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-credit-light,#8a6200)}
+.ok{background:var(--accent);color:var(--accent-ink);box-shadow:var(--neon-scan)}
+.dup{background:var(--poster);color:var(--poster-ink);box-shadow:var(--shadow-card)}
+.no{background:var(--win);color:var(--win-ink);box-shadow:var(--neon-win)}
+.ico{width:56px;height:56px;border:3px solid currentColor;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:28px}
+.k{font-family:var(--font-narrow);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;opacity:.75}
+.n{font-family:var(--font-display);font-stretch:125%;font-weight:900;font-size:17px;line-height:1.1;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.z{font-family:var(--font-narrow);font-weight:700;font-size:30px;line-height:1;letter-spacing:.04em;text-transform:uppercase;margin-left:auto;flex:none;text-align:right}
+.z small{display:block;font-size:10px;letter-spacing:.1em;opacity:.75}
+</style></head>
+<body>
+<div class="r ok"><div class="ico" aria-hidden="true">✓</div><div style="min-width:0"><div class="k">OK · il y a 4 s</div><div class="n">Nissan 200SX · Damien_66</div></div><div class="z"><small>Zone</small>JDM</div><div class="credit">Orasso</div></div>
+<div class="r dup"><div class="ico" aria-hidden="true">2</div><div style="min-width:0"><div class="k">Déjà entré · 19:12</div><div class="n">Toyota Supra · Kenji_66</div></div><div class="z"><small>Zone</small>JDM</div></div>
+<div class="r no"><div class="ico" aria-hidden="true">✕</div><div style="min-width:0"><div class="k">Refusé</div><div class="n">QR inconnu ou autre événement</div></div></div>
+</body></html>

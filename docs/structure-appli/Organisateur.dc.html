@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Inventaire — Organisateur</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#17191C}
+a{color:#17191C}a:hover{color:#5E636B}
+.g{display:flex;flex-direction:column;gap:6px;break-inside:avoid}
+.g h3{margin:0 0 4px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5E636B}
+.i{display:flex;align-items:flex-start;gap:8px;font-size:14px;line-height:1.35;padding:5px 0;border-bottom:1px solid #E6E3DC}
+.i span{flex:1}
+.t{flex:none;font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:3px;margin-top:2px;min-width:52px;text-align:center}
+.v{background:#17191C;color:#FFFFFF}
+.p{background:#FFE9A8;color:#5A3E00}
+.n{background:#D9E7FF;color:#14387A}
+.w{flex:none;font-size:10px;font-weight:600;color:#5E636B;margin-top:3px;min-width:34px}
+</style>
+</helmet>
+<div style="width: 960px; min-height: 1560px; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 22px; background: #F7F6F2">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #17191C">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5E636B">Casquette B</div>
+    <h1 style="margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -.01em">Organisateur (structure)</h1>
+    <p style="margin: 0; font-size: 14px; color: #5E636B">Propriétaire et co-organisateurs d'une structure vérifiée. La gestion lourde se fait sur le site, optimisé pour le téléphone ; l'appli reprend ce qui sert en déplacement. S = site d'abord, A = utile dans l'appli.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 32px">
+
+    <div class="g">
+      <h3>Ma structure</h3>
+      <div class="i"><b class="w">S</b><span>Créer la structure : type (association, club, circuit, entreprise ; collectivité plus tard), nom, logo, description, adresse, départements, réseaux, site</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Vérification : SIRET / RNA automatique, justificatif à la main, badge « structure vérifiée », renouvellement annuel avec rappels</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Page publique de la structure (aperçu de ce que voient les passionnés)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Membres et rôles : propriétaire, co-organisateurs, staff (scan accueil, boutique, placement, contrôle, filtration, super staff), invitations et demandes</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Abonnés : liste avec coordonnées, contact direct, recherche de véhicules pour invitations</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Lien d'invitation de la structure (story Instagram)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Partenaires pros liés à la structure</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Connexion Stripe (propriétaire seul), suppression de la structure</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Bannis de mes événements ; notes internes sur participants et prestataires</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Événements</h3>
+      <div class="i"><b class="w">S+A</b><span>Liste de mes événements : brouillons, publiés, incertains, annulés, passés</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Créer / modifier : format (rassemblement, exposition, cars &amp; coffee, salon, portes ouvertes, nocturne), véhicules admis, places, prestataires acceptés, public (libre, réservation, payant, fermé), admission (sans sélection, filtration, invitation), critères, avant-première, règlement, infos, multi-jours</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Dupliquer en un clic ; événements récurrents</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Statut Maintenu / Incertain / Annulé, suggestion météo, prévenir tout le monde si date ou adresse change</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Inviter nominativement une personne ou un véhicule</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Zones de placement de l'événement (JDM, Allemandes, Exposants…)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Billetterie : activer billets gratuits / payants, suivi, lien externe sinon</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Trier les candidatures</h3>
+      <div class="i"><b class="w">S+A</b><span>Compteurs : places restantes, retenus, à trier, liste d'attente, refusés</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>File de tri : une candidature à la fois, grandes photos, fiche complète ; 3 décisions au clavier (ordi) ou par glissement (téléphone)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Vue liste : filtres (catégorie, marque, origine, année, grade, crew, statut), tri, sélection multiple</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Fiche candidature : véhicule, candidat (grade, événements, absences), historique avec nous, crew, avis du staff de filtration, alertes (plaque en double, banni, non immatriculé)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Motifs de refus à cocher, envoyés par défaut</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Liste d'attente triable ; onglet prestataires ; candidatures de crews</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Communiquer</h3>
+      <div class="i"><b class="w">S+A</b><span>Consignes et annonces de l'événement ; fil d'actualité public</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Messages groupés par segment (acceptés, liste d'attente, prestataires, staff, abonnés avec limite)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Modèles de messages réutilisables (consignes, remerciement…)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Staff : présence « je suis là / pas là », relances automatiques, qui n'a jamais répondu</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Discussion permanente du staff + discussion par événement (fermée J+1, lisible J+7)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Messagerie avec les participants (confirmation de lecture)</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Le jour J</h3>
+      <div class="i"><b class="w">A+S</b><span>Tableau de bord en direct : arrivés / attendus par catégorie, prestataires arrivés, staff présent</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A</b><span>Alertes staff reçues (prioritaires, avec position)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Main courante : lecture des incidents du staff</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A</b><span>L'organisateur dispose aussi de tous les écrans du staff (scan, pointage, inscription express)</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Après l'événement</h3>
+      <div class="i"><b class="w">S+A</b><span>Bilan automatique : inscrits, présents, absents, taux, catégories et marques, départements, nouveaux abonnés, note moyenne</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Rattrapage du pointage jusqu'à J+2 ; contestations de malus à trancher</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Message de remerciement (modèle) avec lien vers l'avis</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S+A</b><span>Avis reçus + droit de réponse public</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Export des participants (tracé, motif), conservation au-delà de J+7</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">S</b><span>Édition suivante : dupliquer + inviter directement les véhicules retenus</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

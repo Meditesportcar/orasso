@@ -1,0 +1,30 @@
+<!-- @dsCard group="Actions" height=260 subtitle="Principal (néon), secondaire, sur plaque, sur affiche, alerte, fermer — toujours avec icône" -->
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,100,600;0,125,900;1,125,900&family=Archivo+Narrow:wght@700&display=swap">
+<style>
+body{margin:0;padding:20px;background:var(--ground);font-family:var(--font-sans);display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+.btn{font-family:var(--font-display);font-stretch:125%;font-weight:900;font-size:15px;letter-spacing:.02em;text-transform:uppercase;border:0;border-radius:var(--radius-md);padding:0 20px;height:48px;cursor:pointer;font-style:normal;display:inline-flex;align-items:center;gap:10px}
+.btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.primary{background:var(--accent);color:var(--accent-ink);box-shadow:var(--neon-accent)}
+.secondary{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}
+.ghost{background:transparent;color:var(--ink-muted);border:1.5px solid var(--line)}
+.onposter{background:var(--night);color:var(--accent);box-shadow:var(--shadow-card)}
+.alert{background:var(--win);color:var(--win-ink);box-shadow:var(--neon-win);height:56px;padding:0 28px}
+.onplate{background:var(--plate,#2b2e36);color:var(--plate-ink,#f3ebdd);border:1.5px solid rgba(243,235,221,.5)}
+.onplate.dashed{border-style:dashed}
+.onplate.wait{border-color:#7fa6ff;color:#7fa6ff}
+.x{width:34px;height:34px;padding:0;border-radius:11px;border:1.5px solid var(--line);background:transparent;color:var(--ink);display:inline-flex;align-items:center;justify-content:center}
+.x svg{width:16px;height:16px;stroke-width:2.2}
+.poster{background:var(--poster);padding:12px;border-radius:var(--radius-lg);box-shadow:var(--shadow-poster)}
+</style></head>
+<body>
+<button class="btn primary"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v6h-6v-3"/></svg>Mode jour J<svg viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+<button class="btn secondary"><svg viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M12 20s-7-4.5-7-10a4 4 0 017-2.5A4 4 0 0119 10c0 5.5-7 10-7 10z"/></svg>Suivre</button>
+<button class="btn ghost"><svg viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M6 6l12 12M18 6L6 18"/></svg>Me désister</button>
+<div class="poster"><button class="btn onposter"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v6h-6v-3"/></svg>Ouvrir mon QR</button></div>
+<button class="btn onplate dashed"><svg viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M6 6l12 12M18 6L6 18"/></svg>Refuser</button>
+<button class="btn onplate wait"><svg viewBox="0 0 24 24" style="width:18px;height:18px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Attente</button>
+<button class="x" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+<button class="btn alert"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>Alerte</button>
+</body></html>

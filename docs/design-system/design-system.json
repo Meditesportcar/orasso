@@ -1,0 +1,71 @@
+{
+  "v": 3,
+  "assetGroups": {
+    "Logo": {
+      "files": {
+        "orasso-chargement-fond-sombre.svg": {
+          "blob": "45e1d29da1b95e9363522f7dea97b1c1",
+          "name": "orasso-chargement-fond-sombre.svg",
+          "size": 9544,
+          "type": "image/svg+xml"
+        },
+        "orasso-logo-principal-fond-clair-800px.png": {
+          "blob": "5be4530b6d370fa56c94491333db4106",
+          "name": "orasso-logo-principal-fond-clair-800px.png",
+          "size": 29871,
+          "type": "image/png"
+        },
+        "orasso-logo-principal-fond-sombre.svg": {
+          "blob": "de40d233ceaddc6f8fac28bd3a00cbf2",
+          "name": "orasso-logo-principal-fond-sombre.svg",
+          "size": 18759,
+          "type": "image/svg+xml"
+        },
+        "orasso-monogramme-fond-sombre.svg": {
+          "blob": "4ff0dfd3df56ec29b34e2fb4516b8569",
+          "name": "orasso-monogramme-fond-sombre.svg",
+          "size": 9189,
+          "type": "image/svg+xml"
+        },
+        "orasso-monogramme-fond-clair.svg": {
+          "blob": "a3abfff2f3fd512d9e4a1bde78122d50",
+          "name": "orasso-monogramme-fond-clair.svg",
+          "size": 9189,
+          "type": "image/svg+xml"
+        }
+      },
+      "name": "Logo",
+      "order": [
+        "orasso-logo-principal-fond-sombre.svg",
+        "orasso-logo-principal-fond-clair-800px.png",
+        "orasso-monogramme-fond-sombre.svg",
+        "orasso-monogramme-fond-clair.svg",
+        "orasso-chargement-fond-sombre.svg"
+      ],
+      "tile": "l"
+    }
+  },
+  "blobs": {},
+  "createdOnFiles": {
+    "at": "2026-10-15T08:40:00Z",
+    "v": 1
+  },
+  "docs": {
+    "readme": "project/README.md",
+    "sections": []
+  },
+  "groups": [
+    "Logo"
+  ],
+  "lastChange": {
+    "at": "2026-10-15T12:35:00Z",
+    "by": "Damien Caron",
+    "via": "Claude",
+    "note": "Version 1 gelée le 15/10/2026 : référence du code. Tout changement ultérieur est daté et justifié dans le livre de marque."
+  },
+  "layout": "files",
+  "libraries": [],
+  "namespace": "Orasso",
+  "sections": {},
+  "title": "Orasso — Système de design"
+}

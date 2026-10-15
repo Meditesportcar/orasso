@@ -1,0 +1,23 @@
+<!-- @dsCard group="Données" height=130 subtitle="Les compteurs de tri et de page événement" -->
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@800&family=Archivo+Narrow:wght@700&display=swap">
+<style>
+body{margin:0;padding:20px;background:var(--ground);font-family:var(--font-sans)}
+.row{display:flex;background:var(--plate,var(--surface));color:var(--plate-ink,var(--ink));border:1px solid var(--plate-edge,transparent);border-radius:var(--radius-md);box-shadow:var(--shadow-card);overflow:hidden;max-width:420px}
+.c{flex:1;text-align:center;padding:10px 4px;border-left:1px solid var(--plate-line,var(--line))}
+.c:first-child{border-left:0}
+.c b{display:block;font-weight:800;font-size:26px;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--plate-ink,var(--ink))}
+.c span{display:block;margin-top:4px;font-family:var(--font-narrow);font-weight:700;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--plate-muted,var(--ink-muted))}
+.c.live{background:var(--accent);color:var(--accent-ink)}
+.c.live b,.c.live span{color:var(--accent-ink)}
+</style></head>
+<body>
+<div class="row">
+  <div class="c"><b>34</b><span>restantes</span></div>
+  <div class="c"><b>116</b><span>retenus</span></div>
+  <div class="c live"><b>27</b><span>à trier</span></div>
+  <div class="c"><b>12</b><span>attente</span></div>
+  <div class="c"><b>9</b><span>refusés</span></div>
+</div>
+</body></html>

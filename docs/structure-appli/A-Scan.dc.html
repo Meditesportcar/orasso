@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Retour de scan</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,100,600;0,100,800;0,125,900;1,125,900&family=Archivo+Narrow:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif}
+.ph{--surface:#2b2e36;--raised:#363941;--line:#565b66;--ink:#f3ebdd;--muted:#afa89c;--poster:#f3ebdd;--pink:#131417;--pmuted:#6b6660;--night:#131417;--accent:#e9b824;--aink:#131417;--win:#c8322b;--waitlist:#7fa6ff;--shc:0 8px 24px rgba(0,0,0,.4);--shp:0 18px 40px rgba(0,0,0,.5);--neon:inset 0 0 0 1px rgba(255,220,120,.6),0 0 26px rgba(233,184,36,.55),0 6px 14px rgba(0,0,0,.35);--neons:0 0 10px rgba(233,184,36,.4);--neonw:0 0 16px rgba(200,50,43,.6);--neonscan:inset 0 0 0 1px rgba(255,220,120,.6),0 0 34px rgba(233,184,36,.65),0 6px 14px rgba(0,0,0,.35);
+ --park:cubic-bezier(.12,.75,.25,1);--out:cubic-bezier(.2,.8,.2,1);--inout:cubic-bezier(.4,0,.2,1);
+ width:390px;height:844px;color:var(--ink);display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;border-radius:30px;position:relative;background:radial-gradient(ellipse 70% 50% at 95% -10%,rgba(233,184,36,.85),rgba(233,184,36,.30) 40%,transparent 68%),radial-gradient(ellipse 60% 42% at -12% 108%,rgba(255,246,225,.42),rgba(255,246,225,.10) 45%,transparent 65%),linear-gradient(170deg,transparent 0 36%,rgba(255,246,225,.14) 36% 56%,transparent 56%),repeating-linear-gradient(170deg,transparent 0 104px,rgba(243,235,221,.18) 104px 112px),radial-gradient(ellipse 100% 72% at 50% 32%,#262932 0,#15171b 60%,#07080a 100%)}
+.ph>*{position:relative}
+.grain{position:absolute!important;inset:0;pointer-events:none;opacity:.28;mix-blend-mode:overlay;border-radius:30px}
+.hd{font-stretch:125%;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:-.01em}
+.up{font-stretch:125%;font-weight:900;text-transform:uppercase;letter-spacing:.02em}
+.nar{font-family:"Archivo Narrow",sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.lbl{font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.t{font-size:13px;color:var(--muted);line-height:1.4}
+.top{position:relative;isolation:isolate;height:64px;display:flex;align-items:center;gap:10px;padding:12px 18px 0;flex:none;background:linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%);border-bottom:1px solid rgba(233,184,36,.45);box-shadow:0 6px 18px rgba(0,0,0,.45);box-sizing:border-box}
+.mono{width:30px;height:30px;border-radius:50%;flex:none;margin-left:-1.5px}
+.ttl{font-stretch:125%;font-weight:900;font-size:16px;letter-spacing:.02em;text-transform:uppercase;flex:1}
+.ic{width:34px;height:34px;border:1.5px solid var(--line);border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;color:var(--ink)}
+.tabs{position:relative;isolation:isolate;overflow:hidden;height:80px;display:flex;flex:none;background:linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%);border-top:2px solid var(--accent);border-radius:0 0 30px 30px;box-shadow:0 -8px 24px rgba(0,0,0,.5)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-stretch:125%;font-weight:900;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.tab svg{width:22px;height:22px}.tab.on{color:var(--ink)}
+.tab.c{background:var(--accent);color:var(--aink);margin:-16px 6px 12px;border-radius:18px;transform:skewX(-6deg);box-shadow:var(--neon)}.tab.c span{display:block;transform:skewX(6deg)}
+.card{background:var(--surface);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shc);position:relative}
+.credit{position:absolute;right:12px;bottom:8px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:9px;letter-spacing:.14em;color:rgba(233,184,36,.7);pointer-events:none}.credit.lt{color:#8a6200}
+.btn{background:var(--accent);color:var(--aink);font-stretch:125%;font-weight:900;font-size:15px;letter-spacing:.02em;text-transform:uppercase;text-align:center;padding:14px;border-radius:12px;box-shadow:var(--neon);display:flex;align-items:center;justify-content:center;gap:10px;position:relative}
+.chip{display:inline-block;border:1.5px solid var(--line);border-radius:999px;padding:3px 9px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.badge{display:inline-block;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:5px 11px;border-radius:999px;transform:skewX(-8deg);border:1.5px solid transparent}.badge span{display:inline-block;transform:skewX(8deg)}
+.ann{position:absolute;left:12px;right:12px;bottom:14px;background:rgba(19,20,23,.78);border:1px solid rgba(233,184,36,.35);border-radius:10px;padding:8px 10px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#e9b824;line-height:1.5;z-index:5}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.001s!important;animation-iteration-count:1!important}}
+
+.cam{position:relative;flex:1;overflow:hidden;margin:8px 12px 0;border-radius:18px;background:radial-gradient(ellipse at 50% 40%,#2c2f36 0,#1a1c21 60%,#121316 100%);box-shadow:var(--shc)}
+.corner{position:absolute;width:40px;height:40px;border:4px solid var(--ink);border-radius:6px;animation:breathe 2s var(--inout) infinite}
+@keyframes breathe{0%,100%{opacity:.75}50%{opacity:1}}
+.line{position:absolute;left:44px;right:44px;height:2px;background:linear-gradient(90deg,transparent,rgba(233,184,36,.9),transparent);animation:line 1.4s linear infinite;top:60px}
+@keyframes line{0%{transform:translateY(0)}100%{transform:translateY(300px)}}
+.flash{position:absolute;inset:0;background:#f3ebdd;opacity:0;animation:flash 13.5s infinite;pointer-events:none}
+@keyframes flash{0%,14.07%{opacity:0}14.81%{opacity:.5}16.67%,43.70%{opacity:0}44.44%{opacity:.5}46.30%,73.33%{opacity:0}74.07%{opacity:.5}75.93%,100%{opacity:0}}
+.res{position:absolute;left:10px;right:10px;bottom:10px;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;transform:translateY(130%);animation-duration:13.5s;animation-iteration-count:infinite;animation-fill-mode:both}
+.ico{width:56px;height:56px;border:3px solid currentColor;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none;font-weight:900;font-size:26px}
+.ok{background:var(--accent);color:var(--aink);animation-name:ok}
+@keyframes ok{0%,14.81%{transform:translateY(130%);box-shadow:none}16.44%{transform:translateY(-6px);box-shadow:var(--neonscan);animation-timing-function:var(--inout)}17.04%{transform:translateY(0);box-shadow:inset 0 0 0 1px rgba(255,220,120,.6),0 0 60px rgba(233,184,36,.95),0 6px 14px rgba(0,0,0,.35)}20.37%{box-shadow:var(--neonscan)}24.44%{transform:translateY(0);box-shadow:var(--neonscan);opacity:1}26.67%,40.00%{transform:translateY(0);box-shadow:var(--shc);opacity:.88}41.48%,100%{transform:translateY(130%);opacity:1;box-shadow:none}}
+.dup{background:var(--poster);color:var(--pink);animation-name:dup}
+@keyframes dup{0%,44.44%{transform:translateY(130%)}46.07%{transform:translateY(-6px);animation-timing-function:var(--inout)}46.67%{transform:translateY(0);box-shadow:var(--shp)}54.07%{opacity:1}56.30%,69.63%{transform:translateY(0);opacity:.88;box-shadow:var(--shc)}71.11%,100%{transform:translateY(130%);opacity:1}}
+.no{background:var(--win);color:#f3ebdd;animation-name:no}
+@keyframes no{0%,74.07%{transform:translateY(130%)}75.70%{transform:translateY(-6px);box-shadow:var(--neonw)}76.30%{transform:translateY(0) translateX(0);box-shadow:0 0 40px rgba(200,50,43,.9)}76.89%{transform:translateX(-7px)}77.48%{transform:translateX(7px)}78.07%{transform:translateX(-5px)}78.67%{transform:translateX(0);box-shadow:var(--neonw)}83.70%{opacity:1}85.93%,97.78%{transform:translateY(0);opacity:.88;box-shadow:var(--shc)}99.26%,100%{transform:translateY(130%);opacity:1}}
+.snd{position:absolute;right:14px;top:14px;display:flex;align-items:center;gap:6px;font-family:'Archivo Narrow',sans-serif;font-weight:700;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);opacity:0;animation:snd 13.5s infinite}
+@keyframes snd{0%,14.44%{opacity:0}15.19%,19.26%{opacity:1}21.48%,44.07%{opacity:0}44.81%,46.67%{opacity:1}47.41%{opacity:0}48.15%,50.37%{opacity:1}51.85%,73.70%{opacity:0}74.44%,80.74%{opacity:1}82.96%,100%{opacity:0}}
+.cnt{font-family:'Archivo Narrow',sans-serif;font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;border:1.5px solid var(--accent);color:var(--accent);padding:4px 8px;border-radius:8px;transform:skewX(-8deg);position:relative;overflow:hidden;animation:cflash 13.5s infinite}
+.cnt i{display:block;transform:skewX(8deg);font-style:normal}
+@keyframes cflash{0%,17.04%{background:transparent;color:var(--accent)}17.41%,18.15%{background:var(--accent);color:var(--aink)}19.26%,100%{background:transparent;color:var(--accent)}}
+.nn{position:relative;display:inline-block;width:1.5em;text-align:right;vertical-align:top}.n62,.n63{position:absolute;left:0;right:0;top:0}
+.n62{animation:n62 13.5s infinite}.n63{animation:n63 13.5s infinite}
+@keyframes n62{0%,17.04%{opacity:1;transform:translateY(0)}17.93%,100%{opacity:0;transform:translateY(-10px)}}
+@keyframes n63{0%,17.04%{opacity:0;transform:translateY(10px)}17.93%,100%{opacity:1;transform:translateY(0)}}
+.big{flex:1;border:1.5px solid var(--ink);border-radius:14px;padding:14px 6px;text-align:center;font-stretch:125%;font-weight:900;font-size:13px;text-transform:uppercase;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:72px;box-sizing:border-box;background:var(--surface);box-shadow:var(--shc)}
+.big small{font-family:'Archivo Narrow',sans-serif;font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:none}
+</style>
+</helmet>
+<div class="ph"><svg class="grain" aria-hidden="true" width="390" height="844"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0"/></filter><rect width="390" height="844" filter="url(#g)"/></svg>
+<div class="top"><svg aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.6;mix-blend-mode:screen"><filter id="brs"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .95 0 0 0 0 .92 0 0 0 0 .85 0 0 0 .5 0"/></filter><rect width="100%" height="100%" filter="url(#brs)"/></svg><img class="mono" src="/_blob/f901260f4e1ef37e7dbcb769e0140f66" alt="Orasso"><span style="flex:1;min-width:0"><span class="up" style="font-size:12px;display:block">Scan accueil · Canet</span><span class="lbl" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Liste à jour 17:02 · hors ligne OK</span></span><span class="cnt"><i><span class="nn"><span class="n62">62</span><span class="n63">63</span>&nbsp;</span> / 116</i></span><span class="ic"><svg class="" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>
+<div class="cam">
+  <div class="corner" style="top:56px;left:36px;border-right:0;border-bottom:0;border-radius:6px 0 0 0"></div><div class="corner" style="top:56px;right:36px;border-left:0;border-bottom:0;border-radius:0 6px 0 0"></div><div class="corner" style="bottom:120px;left:36px;border-right:0;border-top:0;border-radius:0 0 0 6px"></div><div class="corner" style="bottom:120px;right:36px;border-left:0;border-top:0;border-radius:0 0 6px 0"></div>
+  <div class="line"></div>
+  <div class="lbl" style="position:absolute;left:0;right:0;top:44%;text-align:center">Caméra ouverte · vise le QR à travers le pare-brise</div>
+  <div class="snd"><svg class="" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 010 6"/></svg>bip</div>
+  <div class="flash"></div>
+  <div class="res ok"><div class="ico"><svg class="" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></div><div style="flex:1;min-width:0"><div class="nar" style="font-size:10px;opacity:.7">OK · à l'instant</div><div class="up" style="font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Nissan 200SX · Damien_66</div></div><div style="text-align:right;flex:none"><div class="nar" style="font-size:9px;opacity:.7">Zone</div><div class="nar" style="font-size:30px;line-height:1">JDM</div></div><div class="credit lt">ORASSO</div></div>
+  <div class="res dup"><div class="ico">2</div><div style="flex:1;min-width:0"><div class="nar" style="font-size:10px;opacity:.7">Déjà entré · 19:12</div><div class="up" style="font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Toyota Supra · Kenji_66</div></div><div style="text-align:right;flex:none"><div class="nar" style="font-size:9px;opacity:.7">Zone</div><div class="nar" style="font-size:30px;line-height:1">JDM</div></div><div class="credit lt">ORASSO</div></div>
+  <div class="res no"><div class="ico"><svg class="" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></div><div style="flex:1;min-width:0"><div class="nar" style="font-size:10px;opacity:.8">Refusé</div><div class="up" style="font-size:16px">QR d'un autre événement</div></div><div class="credit">ORASSO</div></div>
+</div>
+<div style="display:flex;gap:8px;padding:12px 12px 0;flex:none"><div class="big"><svg class="" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M6 12h3M11 12h7"/></svg>Plaque<small>ou pseudo</small></div><div class="big"><svg class="" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Express<small>sans compte</small></div><div class="big" style="border-style:dashed"><svg class="" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4l10 8-10 8z"/><path d="M19 4v16"/></svg>Sans scan<small>pointer après</small></div></div>
+<div class="ann" style="position:relative;left:auto;right:auto;bottom:auto;margin:10px 12px 20px">Détection : flash 120 ms + bip · Résultat se gare du bas (220 ms), néon 120 ms puis retombe · tenu 1 s, puis « dernier scan » atténué · Refus : secoué 3 fois, son grave · la caméra ne s'arrête jamais</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

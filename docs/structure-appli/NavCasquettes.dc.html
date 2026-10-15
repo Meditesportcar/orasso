@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Appli — casquettes et modes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#17191C}
+a{color:#17191C}a:hover{color:#5E636B}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.tab{background:#17191C;color:#F7F6F2;padding:12px 14px;font-size:16px;font-weight:800}
+.tab small{display:block;font-size:11px;font-weight:500;color:#CFCBC2;margin-top:3px}
+.sec{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5E636B;margin-top:6px}
+.b{background:#FFFFFF;border:1.5px solid #17191C;padding:8px 10px;font-size:13px;line-height:1.35}
+.b b{display:block;font-size:13px}
+.b span{color:#5E636B;font-size:12px}
+.bar{display:flex;gap:4px}
+.bar div{flex:1;background:#17191C;color:#F7F6F2;font-size:11px;font-weight:700;text-align:center;padding:8px 4px}
+.q{background:#FFE9A8;border:1.5px solid #5A3E00;padding:8px 10px;font-size:12px;line-height:1.4;color:#5A3E00}
+.q b{display:block}
+.step{background:#FFFFFF;border:1.5px solid #17191C;padding:8px 10px;font-size:12px;line-height:1.35;flex:1}
+.step b{display:block;font-size:13px}
+.arrow{align-self:center;font-size:18px;font-weight:800;color:#5E636B}
+</style>
+</helmet>
+<div style="width: 1240px; min-height: 1240px; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 20px; background: #F7F6F2">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #17191C">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5E636B">Appli mobile · casquettes et modes</div>
+    <h1 style="margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -.01em">Changer de casquette change la barre d'onglets. Un mode la fait disparaître.</h1>
+    <p style="margin: 0; font-size: 14px; color: #5E636B; max-width: 1100px">Depuis l'avatar : une feuille « Mes casquettes » liste mon compte passionné, mes structures, ma fiche pro, mon profil prestataire. Chaque casquette a sa propre barre, réduite à ce qui sert en déplacement. L'avatar prend la couleur ou le logo de la casquette active pour qu'on sache toujours où l'on est.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+
+    <div class="col">
+      <div class="tab">Casquette organisateur<small>une barre par structure</small></div>
+      <div class="bar"><div>Direct</div><div>Événements</div><div>Tri</div><div>Boîte</div><div>Staff</div></div>
+      <div class="b"><b>Direct</b><span>Tableau de bord de l'événement du jour : arrivés / attendus par catégorie, prestataires, staff présent, alertes, main courante. Hors événement : compteurs du prochain.</span></div>
+      <div class="b"><b>Événements</b><span>Liste par statut ; page événement côté organisateur : compteurs, statut Maintenu / Incertain / Annulé, consignes, annonces, inviter. Création et modification : renvoi vers le site.</span></div>
+      <div class="b"><b>Tri</b><span>File de tri par glissement, compteurs, motifs de refus, liste d'attente, onglet prestataires</span></div>
+      <div class="b"><b>Boîte</b><span>Messages groupés par segment, modèles, discussions de staff, messages des participants, demandes de staff</span></div>
+      <div class="b"><b>Staff</b><span>Présences « je suis là », relances, rôles de l'événement, bouton « passer en mode staff » pour scanner moi-même</span></div>
+      <div class="b" style="background: #17191C; color: #F7F6F2"><b>Tranché le 15/10</b><span style="color: #CFCBC2">Les écrans du staff sont derrière « Staff > passer en mode staff », pas en onglet.</span></div>
+    </div>
+
+    <div class="col">
+      <div class="tab">Casquette pro<small>après le 21/06/2027, fiche de base sinon</small></div>
+      <div class="bar"><div>Scanner</div><div>Fiche</div><div>Publier</div><div>Stats</div></div>
+      <div class="b"><b>Scanner</b><span>Onglet par défaut à l'ouverture de la casquette : lecteur de QR de compte, résultat pseudo + grade + remise, rien d'autre. Plein écran, continu.</span></div>
+      <div class="b"><b>Fiche</b><span>Aperçu et modification : logo, activités, zone, horaires, photos, contact, remises par grade, partenaires</span></div>
+      <div class="b"><b>Publier</b><span>Offres et actualités vers mes abonnés, compteur mensuel restant</span></div>
+      <div class="b"><b>Stats</b><span>Vues, appels, itinéraires, abonnés, remises utilisées</span></div>
+      <div class="b"><b>Abonnement</b><span>Aucun bouton de paiement dans l'appli : état de l'abonnement et renvoi vers le site</span></div>
+      <div class="sec">Casquette prestataire</div>
+      <div class="bar"><div>Candidatures</div><div>Profil</div><div>Boîte</div></div>
+      <div class="b"><b>Candidatures</b><span>Événements ouverts aux prestataires de mon type, mes candidatures par statut, mon QR de stand le jour J</span></div>
+      <div class="b"><b>Profil</b><span>Type, photos, contact ; photographe : Instagram, portfolio, accréditation</span></div>
+    </div>
+
+    <div class="col">
+      <div class="tab" style="background: #FFC629; color: #17191C">Mode staff<small style="color: #5A3E00">plein écran, lié à un événement, hors ligne</small></div>
+      <div class="b"><b>Écran d'entrée du mode</b><span>Nom de l'événement, état de la synchro (liste à jour / à synchroniser), mon rôle, « je suis là ». Quatre grandes tuiles selon mes rôles.</span></div>
+      <div class="b"><b>Scan</b><span>Caméra ouverte en continu, résultat plein écran coloré et sonore (OK + zone / déjà entré / refusé), retour auto à la caméra en 1 s. Bouton « plaque ou pseudo » et « express » toujours visibles en bas.</span></div>
+      <div class="b"><b>Liste</b><span>Participants validés, pointage manuel, recherche, pointage rapide par plaque après coup, coordonnées pour le super staff</span></div>
+      <div class="b"><b>Placement</b><span>Zones, attendus / arrivés par zone, qui va où</span></div>
+      <div class="b"><b>Boutique</b><span>Billets du public : scan + compteur d'entrées visiteurs (activable par événement)</span></div>
+      <div class="b"><b>Toujours accessible en bas</b><span>Alerte (grand bouton rouge, position), main courante (nouvel incident), discussion du staff</span></div>
+      <div class="b"><b>Quitter le mode</b><span>Bouton discret en haut ; le mode se referme seul à J+1. Les scans en attente partent au retour du réseau.</span></div>
+      <div class="b" style="background: #17191C; color: #F7F6F2"><b>Tranché le 15/10</b><span style="color: #CFCBC2">Le mode staff reste quittable d'un geste, pas de verrouillage kiosque.</span></div>
+    </div>
+
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <div class="sec">Comment on change de casquette</div>
+    <div style="display: flex; gap: 10px; align-items: stretch">
+      <div class="step"><b>Avatar</b>En haut à gauche de tous les onglets. Pastille si une autre casquette a quelque chose à traiter (candidatures à trier, staff à confirmer…).</div>
+      <div class="arrow">→</div>
+      <div class="step"><b>Feuille « Mes casquettes »</b>Passionné (toujours en premier), puis mes structures avec leur logo, ma fiche pro, mon profil prestataire. En bas : créer une structure, une fiche pro, un profil prestataire.</div>
+      <div class="arrow">→</div>
+      <div class="step"><b>Barre d'onglets remplacée</b>L'appli se relance sur l'onglet par défaut de la casquette (Direct, Scanner, Candidatures). L'avatar porte le logo de la structure. Un appui long sur l'avatar revient au passionné.</div>
+      <div class="arrow">→</div>
+      <div class="step"><b>Modes</b>Jour J participant et Staff ne sont pas des casquettes : ils s'ouvrent depuis Accès (ou depuis Staff pour un organisateur) et rendent la barre à la fermeture.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1240,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

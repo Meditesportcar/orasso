@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Règles de mouvement</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100,400;0,100,600;0,100,800;0,125,900;1,125,900&family=Archivo+Narrow:wght@500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif}
+.ph{--surface:#2b2e36;--raised:#363941;--line:#565b66;--ink:#f3ebdd;--muted:#afa89c;--poster:#f3ebdd;--pink:#131417;--pmuted:#6b6660;--night:#131417;--accent:#e9b824;--aink:#131417;--win:#c8322b;--waitlist:#7fa6ff;--shc:0 8px 24px rgba(0,0,0,.4);--shp:0 18px 40px rgba(0,0,0,.5);--neon:inset 0 0 0 1px rgba(255,220,120,.6),0 0 26px rgba(233,184,36,.55),0 6px 14px rgba(0,0,0,.35);--neons:0 0 10px rgba(233,184,36,.4);--neonw:0 0 16px rgba(200,50,43,.6);--neonscan:inset 0 0 0 1px rgba(255,220,120,.6),0 0 34px rgba(233,184,36,.65),0 6px 14px rgba(0,0,0,.35);
+ --park:cubic-bezier(.12,.75,.25,1);--out:cubic-bezier(.2,.8,.2,1);--inout:cubic-bezier(.4,0,.2,1);
+ width:390px;height:844px;color:var(--ink);display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;border-radius:30px;position:relative;background:radial-gradient(ellipse 70% 50% at 95% -10%,rgba(233,184,36,.85),rgba(233,184,36,.30) 40%,transparent 68%),radial-gradient(ellipse 60% 42% at -12% 108%,rgba(255,246,225,.42),rgba(255,246,225,.10) 45%,transparent 65%),linear-gradient(170deg,transparent 0 36%,rgba(255,246,225,.14) 36% 56%,transparent 56%),repeating-linear-gradient(170deg,transparent 0 104px,rgba(243,235,221,.18) 104px 112px),radial-gradient(ellipse 100% 72% at 50% 32%,#262932 0,#15171b 60%,#07080a 100%)}
+.ph>*{position:relative}
+.grain{position:absolute!important;inset:0;pointer-events:none;opacity:.28;mix-blend-mode:overlay;border-radius:30px}
+.hd{font-stretch:125%;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:-.01em}
+.up{font-stretch:125%;font-weight:900;text-transform:uppercase;letter-spacing:.02em}
+.nar{font-family:"Archivo Narrow",sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.lbl{font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.t{font-size:13px;color:var(--muted);line-height:1.4}
+.top{position:relative;isolation:isolate;height:64px;display:flex;align-items:center;gap:10px;padding:12px 18px 0;flex:none;background:linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%);border-bottom:1px solid rgba(233,184,36,.45);box-shadow:0 6px 18px rgba(0,0,0,.45);box-sizing:border-box}
+.mono{width:28px;height:28px;border-radius:50%;flex:none}
+.ttl{font-stretch:125%;font-weight:900;font-size:16px;letter-spacing:.02em;text-transform:uppercase;flex:1}
+.ic{width:34px;height:34px;border:1.5px solid var(--line);border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;color:var(--ink)}
+.tabs{position:relative;isolation:isolate;overflow:hidden;height:80px;display:flex;flex:none;background:linear-gradient(180deg,#131418 0%,#08090b 55%,#030304 100%);border-top:2px solid var(--accent);border-radius:0 0 30px 30px;box-shadow:0 -8px 24px rgba(0,0,0,.5)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-stretch:125%;font-weight:900;font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.tab svg{width:22px;height:22px}.tab.on{color:var(--ink)}
+.tab.c{background:var(--accent);color:var(--aink);margin:-16px 6px 12px;border-radius:18px;transform:skewX(-6deg);box-shadow:var(--neon)}.tab.c span{display:block;transform:skewX(6deg)}
+.card{background:var(--surface);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shc);position:relative}
+.credit{position:absolute;right:12px;bottom:8px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:9px;letter-spacing:.14em;color:rgba(233,184,36,.7);pointer-events:none}.credit.lt{color:#8a6200}
+.btn{background:var(--accent);color:var(--aink);font-stretch:125%;font-weight:900;font-size:15px;letter-spacing:.02em;text-transform:uppercase;text-align:center;padding:14px;border-radius:12px;box-shadow:var(--neon);display:flex;align-items:center;justify-content:center;gap:10px;position:relative}
+.chip{display:inline-block;border:1.5px solid var(--line);border-radius:999px;padding:3px 9px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.badge{display:inline-block;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:5px 11px;border-radius:999px;transform:skewX(-8deg);border:1.5px solid transparent}.badge span{display:inline-block;transform:skewX(8deg)}
+.ann{position:absolute;left:12px;right:12px;bottom:14px;background:rgba(19,20,23,.78);border:1px solid rgba(233,184,36,.35);border-radius:10px;padding:8px 10px;font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#e9b824;line-height:1.5;z-index:5}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.001s!important;animation-iteration-count:1!important}}
+
+.ph{width:560px;padding:28px 28px 24px;gap:14px}
+h1{margin:0;font-size:30px;line-height:30px}
+.rule{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border-radius:14px;padding:12px 14px;box-shadow:var(--shc)}
+.rule b{display:block;font-stretch:125%;font-weight:900;font-size:12px;letter-spacing:.02em;text-transform:uppercase;margin-bottom:3px}
+.rule p{margin:0;font-size:12.5px;line-height:1.4;color:var(--muted)}
+.n{flex:none;width:30px;height:30px;border-radius:9px;background:var(--accent);color:var(--aink);font-weight:900;font-size:14px;display:flex;align-items:center;justify-content:center;transform:skewX(-8deg)}.n span{display:block;transform:skewX(8deg)}
+.tbl{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
+.tk{background:var(--surface);border-radius:10px;padding:8px 10px;box-shadow:var(--shc)}
+.tk b{display:block;font-weight:800;font-size:18px;letter-spacing:-.02em}.tk span{font-family:"Archivo Narrow",sans-serif;font-weight:700;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.curve{display:flex;gap:10px;align-items:center;background:var(--surface);border-radius:14px;padding:10px 14px;box-shadow:var(--shc)}
+.dot{width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:var(--neons);animation:park 2.4s infinite}
+@keyframes park{0%{transform:translateX(0)}10%{transform:translateX(0);animation-timing-function:cubic-bezier(.12,.75,.25,1)}55%{transform:translateX(226px);animation-timing-function:cubic-bezier(.4,0,.2,1)}65%,80%{transform:translateX(220px)}100%{transform:translateX(0)}}
+.lane{flex:1;height:22px;border-radius:6px;background:repeating-linear-gradient(90deg,transparent 0 14px,rgba(243,235,221,.18) 14px 16px);position:relative;display:flex;align-items:center;padding:0 4px}
+.slot{position:absolute;right:2px;top:2px;bottom:2px;width:26px;border:1.5px dashed rgba(233,184,36,.7);border-radius:5px}
+</style>
+</helmet>
+<div class="ph"><svg class="grain" aria-hidden="true" width="390" height="844"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0"/></filter><rect width="390" height="844" filter="url(#g)"/></svg>
+<div class="lbl">Étape 7 · le mouvement d'Orasso</div>
+<h1 class="hd">Tout se gare.</h1>
+<p class="t" style="margin:0">Un seul geste pour toute l'interface, celui du logo : la voiture arrive vite, dépasse de 6 px, puis se range. Chaque élément qui apparaît fait pareil. Le reste ne bouge pas.</p>
+<div class="curve"><div class="lane"><div class="slot"></div><div class="dot"></div></div><div style="width:120px"><b style="display:block;font-size:11px" class="up">park</b><span class="t" style="font-size:11px">cubic-bezier(.12,.75,.25,1) · dépassement 6 px</span></div></div>
+<div class="tbl"><div class="tk"><b>120</b><span>fast · appui, flash, focus</span></div><div class="tk"><b>220</b><span>base · feuille, onglet, badge</span></div><div class="tk"><b>420</b><span>poster · coupe à 10°, grade</span></div><div class="tk"><b>1000</b><span>scan · résultat affiché</span></div></div>
+<div class="rule"><div class="n"><span>1</span></div><div><b>Ce qui arrive se gare</b><p>Toute apparition suit la courbe <i>park</i> : feuilles, badges, bandeaux, résultats de scan, lignes de liste (en cascade, 40 ms d'écart). Ce qui part s'efface simplement (opacité, 120 ms).</p></div></div>
+<div class="rule"><div class="n"><span>2</span></div><div><b>Le fond respire, le contenu non</b><p>Le halo bat en 6 s, le faisceau balaie en 14 s, les phares passent toutes les 9 s. Le grain, le marquage, les cartes et les textes ne bougent jamais. Rien ne tourne en boucle dans une carte.</p></div></div>
+<div class="rule"><div class="n"><span>3</span></div><div><b>Un seul néon pulse à la fois</b><p>Le néon ne « clignote » que pour un événement : résultat de scan, place retenue, nouveau grade. 120 ms de montée, retour en 420 ms. Jamais en continu sur un bouton.</p></div></div>
+<div class="rule"><div class="n"><span>4</span></div><div><b>L'affiche se dévoile par la coupe</b><p>Ce qui est « affiche » (carte poster, nouveau grade, mode jour J) apparaît par un balayage en clip-path à 10°, l'angle du logo, en 420 ms. C'est la seule transition « spectaculaire ».</p></div></div>
+<div class="rule"><div class="n"><span>5</span></div><div><b>Le terrain ne joue pas</b><p>Mode staff et jour J : pas de respiration du fond, pas de cascade. Seuls restent le retour de scan (1 s), le flash de compteur (120 ms) et le secouement d'un refus. Le son double chaque couleur.</p></div></div>
+<div class="rule"><div class="n"><span>6</span></div><div><b>Réduction des animations respectée</b><p>Avec <i>prefers-reduced-motion</i>, tout devient un fondu de 120 ms ; le logo d'ouverture s'affiche garé ; les résultats de scan gardent couleur, forme et son.</p></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":560,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Inventaire — Passionné</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#17191C}
+a{color:#17191C}a:hover{color:#5E636B}
+.g{display:flex;flex-direction:column;gap:6px;break-inside:avoid}
+.g h3{margin:0 0 4px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5E636B}
+.i{display:flex;align-items:flex-start;gap:8px;font-size:14px;line-height:1.35;padding:5px 0;border-bottom:1px solid #E6E3DC}
+.i span{flex:1}
+.t{flex:none;font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:3px;margin-top:2px;min-width:52px;text-align:center}
+.v{background:#17191C;color:#FFFFFF}
+.p{background:#FFE9A8;color:#5A3E00}
+.n{background:#D9E7FF;color:#14387A}
+.w{flex:none;font-size:10px;font-weight:600;color:#5E636B;margin-top:3px;min-width:34px}
+</style>
+</helmet>
+<div style="width: 960px; min-height: 1560px; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 22px; background: #F7F6F2">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #17191C">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5E636B">Casquette A</div>
+    <h1 style="margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -.01em">Passionné</h1>
+    <p style="margin: 0; font-size: 14px; color: #5E636B">Compte personnel unique. Appli (iPhone, Android) + site. C'est la casquette par défaut de tout le monde. Colonne de gauche : où ça vit (A = appli, S = site, A+S = les deux).</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 32px">
+
+    <div class="g">
+      <h3>Premier contact</h3>
+      <div class="i"><b class="w">A</b><span>Premier lancement en 3 écrans (promesse, ce que tu peux faire, créer un compte)</span><b class="t v" style="position: relative">VALIDÉ<svg width="16" height="2" viewBox="0 0 16 2" preserveAspectRatio="none" style="position: absolute; left: 23px; top: 6px; width: 16px; height: 2px; overflow: visible; fill: none; stroke: #8a8378; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><path d="M0 0 C5.5 0 10.7 -0.2 16 1" vector-effect="non-scaling-stroke"></path></svg></b></div>
+      <div class="i"><b class="w">A+S</b><span>Créer un compte : e-mail + mot de passe, Google, Apple</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Création via lien d'invitation d'un organisateur (suivi automatique)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Connexion, mot de passe oublié, nouvel appareil (alerte e-mail)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Secteur (départements, plusieurs), centres d'intérêt, rayon</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A</b><span>Demande d'autorisation des notifications juste après la première candidature</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Accueil</h3>
+      <div class="i"><b class="w">A</b><span>Tableau de bord personnalisable (widgets) + agenda, pas de fil infini</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A</b><span>Widgets : météo du prochain événement, statuts en attente, suggestions autour de moi (curseur de rayon), garage favori, station lavage / carburant</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A</b><span>Incitations contextuelles (crée ton crew, ajoute un véhicule…)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A</b><span>Bloc « Prochain accès » en tête quand un événement approche (bascule vers le mode jour J)</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Découvrir</h3>
+      <div class="i"><b class="w">A+S</b><span>Événements : par affinités (catégories), organisateurs suivis, distance</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Carte des événements et des pros (MapLibre)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Page événement : affiche, date, adresse, organisateur vérifié, programme, catégories recherchées, places restantes, prestataires présents, amis qui y vont, météo, statut (Maintenu / Incertain / Annulé), fil d'actualité, avis</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Page publique d'une structure + bouton Suivre</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Pros : découverte sur le même principe, fiche pro, publications, « garage favori »</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Recherche de personnes : par pseudo ; par véhicule (marque, modèle, génération) ; filtres combinables (département, centres d'intérêt, véhicule, grade)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Sur une fiche véhicule : « autres propriétaires près de chez moi »</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Crews trouvables par nom et département, demande pour rejoindre</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Participer</h3>
+      <div class="i"><b class="w">A+S</b><span>Candidater avec un ou plusieurs véhicules (ceux qui collent aux critères), règlement, 2 cases (suivre / newsletter)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Inscrire son crew (qui vient, avec quoi) ; chaque membre confirme</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Réserver une place public : billet gratuit, payant (Orasso ou lien externe)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Candidater comme prestataire (food truck, photographe…)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Accepter une invitation nominative d'un organisateur</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Mes accès</h3>
+      <div class="i"><b class="w">A+S</b><span>Liste de mes candidatures et billets, par statut : en attente, retenue, liste d'attente, refusée (avec motif)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A</b><span>Place libérée à accepter (24 h, puis 2-3 h la veille et le jour même)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Se désister (sans malus jusqu'au verrouillage) ; se retirer seul d'un crew</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A</b><span>Mode jour J : QR d'inscription en grand (hors ligne), compte à rebours, itinéraire, consignes, zone attribuée, météo</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Après : « pointage en attente », points attribués à J+2, contester un malus</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Laisser un avis (1-3 étoiles + commentaire, 1 semaine, si scanné)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Carnet de route : historique de mes participations (sans tampons)</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Garage</h3>
+      <div class="i"><b class="w">A+S</b><span>Mes véhicules : actifs, puis vendus / souvenir / accidentés (archivés)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Une page par véhicule : 1 à 8 photos, marque / modèle / génération, motorisation, couleur, année, puissance, poids, catégories, préparation, description, certification</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Ajouter / modifier : listes fermées + « Autre », conseil plaque sur la photo, plaque privée</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Transfert de plaque (confirmation de l'ancien propriétaire)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Demander la certification (dès le seuil de points / grade)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A</b><span>Fiche véhicule à partager sur Instagram (story 9:16, post 1:1)</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Social</h3>
+      <div class="i"><b class="w">A+S</b><span>Amis : demandes, liste ; QR ami (le scanner envoie une demande d'ami) ; demandes de contact rangées à part</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Messagerie : conversations, confirmation de lecture, organisateurs toujours joignables</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Crews : créer (logo, nom, description, département), demandes, invitations, discussion de groupe avec images</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Fil d'actualité : acceptations, nouveaux événements, invitations reçues</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Centre de notifications (par type, coupables une à une, silence la nuit)</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Signaler (partout, motif + capture), bloquer</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+    <div class="g">
+      <h3>Moi</h3>
+      <div class="i"><b class="w">A+S</b><span>Profil : pseudo, photo, grade, points, véhicules, carnet, crews. Compte public (par défaut) ou privé : en privé, les autres ne voient que pseudo, photo, grade, marque et modèle des véhicules ; les amis voient tout ; l'organisateur voit toujours tout de ses inscrits et abonnés</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A</b><span>QR de compte dynamique (hors ligne) : pseudo, grade, remise</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Points et grades de saison (Rodage → Légende), avantages, remises chez les pros</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Paramètres : notifications, compte public / privé, sécurité (2FA, appareils), supprimer le compte</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Changer de casquette : mes structures (organisateur), ma fiche pro, mes rôles staff</span><b class="t v">VALIDÉ</b></div>
+      <div class="i"><b class="w">A+S</b><span>Devenir staff d'une structure (demande ou invitation) ; créer une structure ; créer une fiche pro</span><b class="t v">VALIDÉ</b></div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

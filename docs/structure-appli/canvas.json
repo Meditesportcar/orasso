@@ -1,0 +1,626 @@
+{
+  "v": 3,
+  "attachments": {},
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-15T06:40:00Z"
+  },
+  "title": "Orasso — Structure de l'appli",
+  "launch": {
+    "view": "canvas",
+    "page": "etape7"
+  },
+  "pages": [
+    {
+      "id": "etape1",
+      "name": "1 · Inventaire"
+    },
+    {
+      "id": "etape2",
+      "name": "2 · Navigation"
+    },
+    {
+      "id": "etape3",
+      "name": "3 · Maquettes grises"
+    },
+    {
+      "id": "etape4",
+      "name": "4 · Direction artistique"
+    },
+    {
+      "id": "etape6",
+      "name": "6 · Écrans finaux"
+    },
+    {
+      "id": "etape7",
+      "name": "7 · Animations"
+    }
+  ],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 960,
+      "h": 1560,
+      "title": "Passionné",
+      "page": "etape1"
+    },
+    "Organisateur.dc.html": {
+      "x": 1040,
+      "y": 0,
+      "w": 960,
+      "h": 1560,
+      "title": "Organisateur (structure)",
+      "page": "etape1"
+    },
+    "Staff.dc.html": {
+      "x": 2080,
+      "y": 0,
+      "w": 640,
+      "h": 1560,
+      "title": "Staff jour J",
+      "page": "etape1"
+    },
+    "Pro.dc.html": {
+      "x": 0,
+      "y": 1680,
+      "w": 640,
+      "h": 1000,
+      "title": "Professionnel",
+      "page": "etape1"
+    },
+    "Administration.dc.html": {
+      "x": 720,
+      "y": 1680,
+      "w": 640,
+      "h": 1000,
+      "title": "Administration Orasso",
+      "page": "etape1"
+    },
+    "Visiteur.dc.html": {
+      "x": 1440,
+      "y": 1680,
+      "w": 640,
+      "h": 1000,
+      "title": "Visiteur du site",
+      "page": "etape1"
+    },
+    "Socle.dc.html": {
+      "x": 2160,
+      "y": 1680,
+      "w": 560,
+      "h": 1000,
+      "title": "Socle commun & questions",
+      "page": "etape1"
+    },
+    "NavAppli.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1400,
+      "h": 1240,
+      "title": "Appli — squelette passionné",
+      "page": "etape2"
+    },
+    "NavCasquettes.dc.html": {
+      "x": 1480,
+      "y": 0,
+      "w": 1240,
+      "h": 1240,
+      "title": "Appli — casquettes et modes",
+      "page": "etape2"
+    },
+    "NavSite.dc.html": {
+      "x": 0,
+      "y": 1360,
+      "w": 1400,
+      "h": 1100,
+      "title": "Site — plan",
+      "page": "etape2"
+    },
+    "Parcours.dc.html": {
+      "x": 1480,
+      "y": 1360,
+      "w": 1240,
+      "h": 1100,
+      "title": "Parcours clés",
+      "page": "etape2"
+    },
+    "G-Accueil.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Accueil",
+      "page": "etape3"
+    },
+    "G-Evenement.dc.html": {
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Page événement",
+      "page": "etape3"
+    },
+    "G-Candidature.dc.html": {
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Candidature",
+      "page": "etape3"
+    },
+    "G-JourJ.dc.html": {
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Mode jour J",
+      "page": "etape3"
+    },
+    "G-Tri.dc.html": {
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Tri (téléphone)",
+      "page": "etape3"
+    },
+    "G-Scan.dc.html": {
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Scan du staff",
+      "page": "etape3"
+    },
+    "G-Garage.dc.html": {
+      "x": 2820,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Garage",
+      "page": "etape3"
+    },
+    "G-Pro.dc.html": {
+      "x": 3290,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Fiche pro",
+      "page": "etape3"
+    },
+    "G-SiteEvenement.dc.html": {
+      "x": -10,
+      "y": 934,
+      "w": 1280,
+      "h": 1180,
+      "title": "Site — page événement publique",
+      "page": "etape3",
+      "expand": "fill"
+    },
+    "G-TriWeb.dc.html": {
+      "x": 1360,
+      "y": 1000,
+      "w": 1280,
+      "h": 820,
+      "title": "Site — tri au clavier",
+      "page": "etape3",
+      "expand": "fill"
+    },
+    "DA1-Atelier.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 900,
+      "h": 940,
+      "title": "Piste A — Carnet d'atelier",
+      "page": "etape4"
+    },
+    "DA2-Nuit.dc.html": {
+      "x": 980,
+      "y": 0,
+      "w": 900,
+      "h": 940,
+      "title": "Piste B — Nuit de parking",
+      "page": "etape4"
+    },
+    "DA3-Signaletique.dc.html": {
+      "x": 1960,
+      "y": 0,
+      "w": 900,
+      "h": 940,
+      "title": "Piste C — Signalétique",
+      "page": "etape4"
+    },
+    "DA4-Affiche.dc.html": {
+      "x": 0,
+      "y": 1060,
+      "w": 900,
+      "h": 940,
+      "title": "Piste D — Affiche",
+      "page": "etape4"
+    },
+    "DA5-Chrono.dc.html": {
+      "x": 980,
+      "y": 1060,
+      "w": 900,
+      "h": 940,
+      "title": "Piste E — Tour de chronométrage",
+      "page": "etape4"
+    },
+    "DA-Comparatif.dc.html": {
+      "x": 1960,
+      "y": 1060,
+      "w": 900,
+      "h": 940,
+      "title": "Comparatif et recommandation",
+      "page": "etape4"
+    },
+    "DA6-AfficheNuit.dc.html": {
+      "x": 2940,
+      "y": 0,
+      "w": 900,
+      "h": 940,
+      "title": "Croisement D × B — Affiche de nuit",
+      "page": "etape4"
+    },
+    "DA7-Fonds.dc.html": {
+      "x": 2940,
+      "y": 1060,
+      "w": 1760,
+      "h": 1040,
+      "title": "Affiche de nuit — quatre fonds",
+      "page": "etape4"
+    },
+    "F-Accueil.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Accueil · Béton",
+      "page": "etape6"
+    },
+    "F-Evenement.dc.html": {
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Page événement · Béton",
+      "page": "etape6"
+    },
+    "F-Candidature.dc.html": {
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Candidature · Béton",
+      "page": "etape6"
+    },
+    "F-JourJ.dc.html": {
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Mode jour J · Béton",
+      "page": "etape6"
+    },
+    "F-Tri.dc.html": {
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Tri · Béton",
+      "page": "etape6"
+    },
+    "F-Scan.dc.html": {
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Scan du staff · Béton",
+      "page": "etape6"
+    },
+    "F-Garage.dc.html": {
+      "x": 2820,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Garage · Béton",
+      "page": "etape6"
+    },
+    "F-Pro.dc.html": {
+      "x": 3290,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Fiche pro · Béton",
+      "page": "etape6"
+    },
+    "S-Accueil.dc.html": {
+      "x": 0,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "Accueil · Sable",
+      "page": "etape6"
+    },
+    "S-Scan.dc.html": {
+      "x": 470,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "Scan du staff · Sable (plein soleil)",
+      "page": "etape6"
+    },
+    "S-Tri.dc.html": {
+      "x": 940,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "Tri · Sable",
+      "page": "etape6"
+    },
+    "S-Garage.dc.html": {
+      "x": 1410,
+      "y": 1000,
+      "w": 390,
+      "h": 844,
+      "title": "Garage · Sable",
+      "page": "etape6"
+    },
+    "W-Evenement.dc.html": {
+      "x": 1880,
+      "y": 1000,
+      "w": 1280,
+      "h": 1180,
+      "title": "Site — page événement · Béton",
+      "page": "etape6",
+      "expand": "fill"
+    },
+    "W-Tri.dc.html": {
+      "x": 0,
+      "y": 2300,
+      "w": 1280,
+      "h": 820,
+      "title": "Site — tri au clavier · Sable",
+      "page": "etape6",
+      "expand": "fill"
+    },
+    "A-Regles.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 560,
+      "h": 844,
+      "title": "Les règles du mouvement",
+      "page": "etape7"
+    },
+    "A-Ouverture.dc.html": {
+      "x": 640,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Écran d'ouverture",
+      "page": "etape7"
+    },
+    "A-Fonds.dc.html": {
+      "x": 1110,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Fond vivant qui respire",
+      "page": "etape7"
+    },
+    "A-Scan.dc.html": {
+      "x": 1580,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Retour de scan (OK, déjà entré, refusé)",
+      "page": "etape7"
+    },
+    "A-Candidature.dc.html": {
+      "x": 2050,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Candidature envoyée, place retenue",
+      "page": "etape7"
+    },
+    "A-Grade.dc.html": {
+      "x": 2520,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Passage de grade",
+      "page": "etape7"
+    },
+    "A-Chargement.dc.html": {
+      "x": 2990,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Chargements et hors ligne",
+      "page": "etape7"
+    },
+    "A-Micro.dc.html": {
+      "x": 640,
+      "y": 960,
+      "w": 1180,
+      "h": 820,
+      "title": "Douze micro-interactions",
+      "page": "etape7"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Organisateur.dc.html",
+    "Staff.dc.html",
+    "Pro.dc.html",
+    "Administration.dc.html",
+    "Visiteur.dc.html",
+    "Socle.dc.html",
+    "NavAppli.dc.html",
+    "NavCasquettes.dc.html",
+    "NavSite.dc.html",
+    "Parcours.dc.html",
+    "G-Accueil.dc.html",
+    "G-Evenement.dc.html",
+    "G-Candidature.dc.html",
+    "G-JourJ.dc.html",
+    "G-Tri.dc.html",
+    "G-Scan.dc.html",
+    "G-Garage.dc.html",
+    "G-Pro.dc.html",
+    "G-SiteEvenement.dc.html",
+    "G-TriWeb.dc.html",
+    "DA1-Atelier.dc.html",
+    "DA2-Nuit.dc.html",
+    "DA3-Signaletique.dc.html",
+    "DA4-Affiche.dc.html",
+    "DA5-Chrono.dc.html",
+    "DA-Comparatif.dc.html",
+    "DA6-AfficheNuit.dc.html",
+    "DA7-Fonds.dc.html",
+    "F-Accueil.dc.html",
+    "F-Evenement.dc.html",
+    "F-Candidature.dc.html",
+    "F-JourJ.dc.html",
+    "F-Tri.dc.html",
+    "F-Scan.dc.html",
+    "F-Garage.dc.html",
+    "F-Pro.dc.html",
+    "S-Accueil.dc.html",
+    "S-Scan.dc.html",
+    "S-Tri.dc.html",
+    "S-Garage.dc.html",
+    "W-Evenement.dc.html",
+    "W-Tri.dc.html",
+    "A-Regles.dc.html",
+    "A-Ouverture.dc.html",
+    "A-Fonds.dc.html",
+    "A-Scan.dc.html",
+    "A-Candidature.dc.html",
+    "A-Grade.dc.html",
+    "A-Chargement.dc.html",
+    "A-Micro.dc.html"
+  ],
+  "notes": {
+    "t1": {
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "text": "Étape 1 — Inventaire des écrans et fonctions, par casquette",
+      "kind": "title1",
+      "maxW": 2720,
+      "page": "etape1"
+    },
+    "legende": {
+      "x": 0,
+      "y": -200,
+      "w": 1100,
+      "maxH": 120,
+      "text": "Légende : VALIDÉ = tiré du document des décisions · PISTE = en discussion ou idée notée, rien d'acté · PROPOSITION = ajout de Claude à challenger. Commente directement sur les éléments à retirer, déplacer ou ajouter.",
+      "fill": "gray",
+      "page": "etape1"
+    },
+    "t2": {
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "text": "Étape 2 — Plan de navigation : appli, casquettes, site, parcours",
+      "kind": "title1",
+      "maxW": 2720,
+      "page": "etape2"
+    },
+    "legende2": {
+      "x": 0,
+      "y": -200,
+      "w": 1100,
+      "maxH": 120,
+      "text": "Tout ce qui est sur cette page est une PROPOSITION de Claude, construite sur les décisions de l'étape 1. Rien n'est validé tant que tu ne l'as pas dit. Les cases jaunes signalent un choix structurant à trancher.",
+      "fill": "orange",
+      "page": "etape2"
+    },
+    "t3": {
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "text": "Étape 3 — Maquettes en gris : l'ergonomie, pas le style",
+      "kind": "title1",
+      "maxW": 3680,
+      "page": "etape3"
+    },
+    "legende3": {
+      "x": 0,
+      "y": -200,
+      "w": 1100,
+      "maxH": 120,
+      "text": "Gris volontaire : aucune couleur, aucune typo de marque, aucune photo. On juge seulement ce qu'il y a sur l'écran, dans quel ordre, et si ça se manipule d'une main. Les blocs hachurés sont des photos. Commente directement sur les écrans.",
+      "fill": "gray",
+      "page": "etape3"
+    },
+    "t4": {
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "text": "Étape 4 — Cinq directions artistiques, le même écran d'accueil",
+      "kind": "title1",
+      "maxW": 3840,
+      "page": "etape4"
+    },
+    "legende4": {
+      "x": 0,
+      "y": -200,
+      "w": 1100,
+      "maxH": 120,
+      "text": "Exploration : tes « oui » sont des pistes, pas des décisions. Chaque planche montre le même accueil, une palette, deux typos, trois règles et le risque de la piste. Le logo reste tel quel ; ses couleurs se réaccordent à la piste retenue. Dis-moi ce qui te parle, ce qui te rebute, et on peut croiser deux pistes.",
+      "fill": "orange",
+      "page": "etape4"
+    },
+    "t6": {
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "text": "Étape 6 — Écrans finaux, d'après le système de design",
+      "kind": "title1",
+      "maxW": 3680,
+      "page": "etape6"
+    },
+    "legende6": {
+      "x": 0,
+      "y": -200,
+      "w": 1100,
+      "maxH": 120,
+      "text": "Rangée 1 : Béton mouillé (défaut), tous les écrans. Rangée 2 : Sable (plein soleil) sur les écrans qui le demandent, puis le site. Fonds vivants (halo, reflet, marquage, grain) sur l'accueil, le jour J, les scans et le site ; à généraliser une fois validés. Les photos sont des aplats en attendant les vraies.",
+      "fill": "gray",
+      "page": "etape6"
+    },
+    "t7": {
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "text": "Étape 7 — Animations et micro-interactions : tout se gare",
+      "kind": "title1",
+      "maxW": 3380,
+      "page": "etape7"
+    },
+    "legende7": {
+      "x": 0,
+      "y": -200,
+      "w": 1100,
+      "maxH": 120,
+      "text": "Proposition : un seul geste pour toute l'interface, celui du logo (arriver vite, dépasser de 6 px, se ranger). Les planches bouclent toutes seules ; la bande moutarde en bas de chaque écran donne les durées. Le logo d'ouverture et l'indicateur de chargement sont ceux du kit, intégrés tels quels. Dis-moi ce qui est trop, pas assez, ou à côté.",
+      "fill": "orange",
+      "page": "etape7"
+    },
+    "n7a": {
+      "x": 1880,
+      "y": 960,
+      "w": 560,
+      "maxH": 300,
+      "text": "Tranché le 15/10 (Damien) : 1) le fond ne respire pas en mode staff ni en mode jour J, le terrain ne joue pas ✓ · 2) trois sons de scan distincts : bip (OK), double bip (déjà entré), grave (refusé) ✓ · 3) « retenu » arrive aussi en feuille du haut dans l'appli, pas seulement en notification système ✓ · 4) le passage de grade se joue dans la carte, pas en plein écran ✓",
+      "fill": "gray",
+      "page": "etape7"
+    }
+  },
+  "designSystems": []
+}

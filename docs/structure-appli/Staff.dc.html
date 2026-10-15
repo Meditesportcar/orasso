@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Inventaire — Staff jour J</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#17191C}
+a{color:#17191C}a:hover{color:#5E636B}
+.g{display:flex;flex-direction:column;gap:6px}
+.g h3{margin:0 0 4px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5E636B}
+.i{display:flex;align-items:flex-start;gap:8px;font-size:14px;line-height:1.35;padding:5px 0;border-bottom:1px solid #E6E3DC}
+.i span{flex:1}
+.t{flex:none;font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:3px;margin-top:2px;min-width:52px;text-align:center}
+.v{background:#17191C;color:#FFFFFF}
+.p{background:#FFE9A8;color:#5A3E00}
+.n{background:#D9E7FF;color:#14387A}
+.r{flex:none;font-size:10px;font-weight:600;color:#5E636B;margin-top:3px;min-width:60px}
+</style>
+</helmet>
+<div style="width: 640px; min-height: 1560px; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 22px; background: #F7F6F2">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #17191C">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5E636B">Casquette C</div>
+    <h1 style="margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -.01em">Staff jour J</h1>
+    <p style="margin: 0; font-size: 14px; color: #5E636B">Appli uniquement, une main, plein soleil, parking. Pas une casquette permanente : un mode que l'appli ouvre pour l'événement où je suis staff. Colonne de gauche : rôle concerné.</p>
+  </div>
+
+  <div class="g">
+    <h3>Avant l'événement</h3>
+    <div class="i"><b class="r">tous</b><span>Mes événements où je suis staff ; « je suis là / pas là » ; relances tant que je n'ai pas répondu</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">tous</b><span>Discussion permanente de la structure et discussion de l'événement</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">filtration</b><span>Donner un avis sur les candidatures avant l'événement ; décider si l'organisateur me l'a permis</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">tous</b><span>Synchroniser la liste des accès au verrouillage (2 h avant), cache hors ligne, rappel de synchronisation</span><b class="t v">VALIDÉ</b></div>
+  </div>
+
+  <div class="g">
+    <h3>Entrée</h3>
+    <div class="i"><b class="r">scan accueil</b><span>Scan en continu sans toucher l'écran, plusieurs staffs en parallèle, QR lisible à travers le pare-brise, signature vérifiée hors ligne</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">scan accueil</b><span>Résultat du scan : OK + zone attribuée / déjà entré / refusé, visible et audible à 3 mètres</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">scan accueil</b><span>Si le QR ne passe pas : recherche par plaque ou pseudo</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">scan accueil</b><span>Inscription express : e-mail → lien → formulaire de 2 minutes, véhicule accepté direct</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">scan accueil</b><span>Lecture de plaque par caméra (à tester)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">scan accueil</b><span>Un bouton « ils sont entrés sans scan » : pointage rapide par plaque après coup, pour les 150 véhicules en 30 min</span><b class="t v">VALIDÉ</b></div>
+  </div>
+
+  <div class="g">
+    <h3>Sur le terrain</h3>
+    <div class="i"><b class="r">placement</b><span>Qui va où : zones, véhicules attendus par zone, véhicule arrivé</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">tous</b><span>Pointage manuel : cocher les présents dans la liste, pendant ou après</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">tous</b><span>Participants validés (tous rôles) ; coordonnées pour le super staff seulement</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">contrôle</b><span>Vérifier un véhicule / un participant sur place (scan ou recherche)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">boutique</b><span>Rôle boutique : développé dès la V1, activable ou non par événement (décision du 15/10). Contenu proposé : contrôle des billets du public (scan + compteur d'entrées visiteurs), distinct de l'entrée des véhicules</span><b class="t n">PROPOSITION</b></div>
+    <div class="i"><b class="r">tous</b><span>Main courante : nouvel incident (heure, lieu, description, photo)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">tous</b><span>Bouton alerte : prioritaire, avec ma position, vers tout le staff présent et l'organisateur</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="r">tous</b><span>Discussion du staff de l'événement</span><b class="t v">VALIDÉ</b></div>
+  </div>
+
+  <div class="g">
+    <h3>Contraintes d'écran à respecter</h3>
+    <div class="i"><span>Une main : commandes dans le tiers bas, cibles énormes</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Plein soleil : contraste maximal, pas de gris subtil, pas de nuances de couleur comme seul signal</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Sans réseau : tout ce qui est listé ici fonctionne en cache, l'envoi se fait au retour du réseau</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Vitesse : zéro écran intermédiaire entre deux scans ; un véhicule = une seconde</span><b class="t v">VALIDÉ</b></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":640,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

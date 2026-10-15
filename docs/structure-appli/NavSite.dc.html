@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Site — plan</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#17191C}
+a{color:#17191C}a:hover{color:#5E636B}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.tab{background:#17191C;color:#F7F6F2;padding:12px 14px;font-size:16px;font-weight:800}
+.tab small{display:block;font-size:11px;font-weight:500;color:#CFCBC2;margin-top:3px}
+.sec{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5E636B;margin-top:6px}
+.b{background:#FFFFFF;border:1.5px solid #17191C;padding:8px 10px;font-size:13px;line-height:1.35}
+.b b{display:block;font-size:13px}
+.b span{color:#5E636B;font-size:12px}
+.b code{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#5E636B}
+.q{background:#FFE9A8;border:1.5px solid #5A3E00;padding:8px 10px;font-size:12px;line-height:1.4;color:#5A3E00}
+.q b{display:block}
+</style>
+</helmet>
+<div style="width: 1400px; min-height: 1100px; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 20px; background: #F7F6F2">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #17191C">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5E636B">Site web · orasso.fr</div>
+    <h1 style="margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -.01em">Un site public qui référence, un espace connecté qui reflète l'appli, trois espaces de gestion</h1>
+    <p style="margin: 0; font-size: 14px; color: #5E636B; max-width: 1100px">Le site permet tout. Côté passionné, il reprend les cinq sections de l'appli dans une navigation latérale, pour qu'on ne réapprenne rien. Les espaces organisateur, pro et admin sont des outils de gestion : barre latérale, tableaux, clavier. Tout est aussi utilisable sur téléphone.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+
+    <div class="col">
+      <div class="tab">Public<small>sans connexion, référencé</small></div>
+      <div class="b"><b>Accueil</b><code>/</code><span>La promesse, les prochains événements près de chez toi, trois entrées : passionné, organisateur, pro. Téléchargement de l'appli.</span></div>
+      <div class="b"><b>Événements</b><code>/evenements</code><span>Liste et carte, filtres département, format, catégorie, date</span></div>
+      <div class="b"><b>Page événement</b><code>/e/nom-de-l-evenement</code><span>La page partagée : affiche, date, adresse, organisateur vérifié, programme, places, prestataires, statut, avis. Boutons Candidater, Réserver, Suivre → compte. Aperçu de lien propre.</span></div>
+      <div class="b"><b>Page structure</b><code>/o/nom-de-la-structure</code><span>Logo, description, événements à venir et passés, note, partenaires, Suivre, lien d'invitation</span></div>
+      <div class="b"><b>Annuaire des pros</b><code>/pros</code> · <code>/p/nom-du-pro</code><span>Fiche de base pour tous, fiche complète pour les abonnés</span></div>
+      <div class="b"><b>Organisateurs</b><code>/organisateurs</code><span>L'outil, la vérification, gratuit, « publier mon événement »</span></div>
+      <div class="b"><b>Pros</b><code>/professionnels</code><span>Visibilité, remises par grade, abonnement, offre membre fondateur</span></div>
+      <div class="b"><b>Inscription express</b><code>/express/jeton</code><span>Le formulaire de 2 minutes reçu par e-mail sur place</span></div>
+      <div class="b"><b>Compte</b><code>/connexion</code> · <code>/inscription</code> · <code>/invitation/jeton</code><span>Connexion, création, mot de passe oublié, lien d'invitation</span></div>
+      <div class="b"><b>Pied de page</b><span>CGU, confidentialité, mentions légales, contact, badge « Propulsé par Orasso »</span></div>
+    </div>
+
+    <div class="col">
+      <div class="tab">Mon compte<small>connecté, même structure que l'appli</small></div>
+      <div class="b"><b>Accueil</b><code>/app</code><span>Même tableau de bord que l'appli</span></div>
+      <div class="b"><b>Explorer</b><code>/app/explorer</code><span>Événements, pros, personnes et crews</span></div>
+      <div class="b"><b>Accès</b><code>/app/acces</code><span>Candidatures, billets, événements staff, carnet de route. Le QR d'inscription s'affiche aussi ici, pour qui n'a pas l'appli.</span></div>
+      <div class="b"><b>Garage</b><code>/app/garage</code><span>Mon profil (en-tête, QR de compte), véhicules, page véhicule, ajout (plus lent que l'appli, mais complet)</span></div>
+      <div class="b"><b>Boîte</b><code>/app/boite</code><span>Messages, demandes, journal</span></div>
+      <div class="b"><b>Moi</b><code>/app/moi</code><span>Profil, points et grade, paramètres, casquettes</span></div>
+      <div class="b" style="background: #17191C; color: #F7F6F2"><b>Tranché le 15/10</b><span style="color: #CFCBC2">Le scan existe dans l'appli seulement. Le site garde la lecture de liste et le pointage manuel.</span></div>
+    </div>
+
+    <div class="col">
+      <div class="tab">Espace organisateur<small>une structure à la fois, barre latérale</small></div>
+      <div class="b"><b>Tableau de bord</b><code>/orga/structure</code><span>Prochain événement, candidatures à trier, staff à confirmer, badge et échéance de vérification</span></div>
+      <div class="b"><b>Événements</b><span>Liste par statut ; créer (formulaire par étapes : format, véhicules, places, prestataires, public, admission, critères, avant-première, règlement, infos, zones, billetterie) ; dupliquer ; récurrence ; statut</span></div>
+      <div class="b"><b>Candidatures</b><span>File de tri au clavier (grandes photos, 3 touches), vue liste avec filtres et sélection multiple, liste d'attente, onglet prestataires, crews</span></div>
+      <div class="b"><b>Communication</b><span>Consignes, annonces, messages groupés par segment, modèles, fil public de l'événement</span></div>
+      <div class="b"><b>Staff</b><span>Membres et rôles, invitations, présences par événement, discussions</span></div>
+      <div class="b"><b>Jour J et après</b><span>Direct, main courante, pointage rattrapage, bilan, avis et droit de réponse, contestations, remerciement, export, édition suivante</span></div>
+      <div class="b"><b>Structure</b><span>Fiche publique, vérification et badge, abonnés, partenaires pros, bannis, notes internes, Stripe (propriétaire), suppression</span></div>
+    </div>
+
+    <div class="col">
+      <div class="tab">Espace pro et administration<small>barre latérale</small></div>
+      <div class="sec">Espace pro</div>
+      <div class="b"><b>Fiche, publications, statistiques</b><code>/pro/nom</code><span>Mêmes blocs que l'appli, formulaires complets</span></div>
+      <div class="b"><b>Abonnement</b><span>Le seul endroit où l'on paie : offre, membre fondateur, factures</span></div>
+      <div class="b"><b>Stands</b><span>Candidater à un événement, suivre ses candidatures</span></div>
+      <div class="sec">Administration Orasso</div>
+      <div class="b"><b>Files</b><code>/admin</code><span>Une page d'accueil avec toutes les files et leurs compteurs : structures à vérifier, pros, signalements, certifications, transferts de plaque, « Autre »</span></div>
+      <div class="b"><b>Registres</b><span>Utilisateurs, structures, pros (mode assistance), base véhicules, journal</span></div>
+      <div class="b"><b>Réglages</b><span>Interrupteurs, modèles, newsletter, listes (prestataires, formats, départements), points et grades</span></div>
+      <div class="b"><b>Modérateur</b><span>Voit uniquement la file des signalements et peut suspendre</span></div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

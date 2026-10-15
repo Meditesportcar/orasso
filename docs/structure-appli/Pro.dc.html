@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Inventaire — Professionnel</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;color:#17191C}
+a{color:#17191C}a:hover{color:#5E636B}
+.g{display:flex;flex-direction:column;gap:6px}
+.g h3{margin:0 0 4px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5E636B}
+.i{display:flex;align-items:flex-start;gap:8px;font-size:14px;line-height:1.35;padding:5px 0;border-bottom:1px solid #E6E3DC}
+.i span{flex:1}
+.t{flex:none;font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:3px;margin-top:2px;min-width:52px;text-align:center}
+.v{background:#17191C;color:#FFFFFF}
+.p{background:#FFE9A8;color:#5A3E00}
+.n{background:#D9E7FF;color:#14387A}
+.w{flex:none;font-size:10px;font-weight:600;color:#5E636B;margin-top:3px;min-width:34px}
+</style>
+</helmet>
+<div style="width: 640px; min-height: 1000px; box-sizing: border-box; padding: 36px 40px; display: flex; flex-direction: column; gap: 22px; background: #F7F6F2">
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 3px solid #17191C">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #5E636B">Casquette D</div>
+    <h1 style="margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -.01em">Professionnel</h1>
+    <p style="margin: 0; font-size: 14px; color: #5E636B">Structure de type entreprise avec une fiche pro (une structure peut être organisatrice et pro). Client payant à partir du 21 juin 2027. Abonnement vendu sur le site uniquement.</p>
+  </div>
+
+  <div class="g">
+    <h3>Ma fiche</h3>
+    <div class="i"><b class="w">S</b><span>Créer la fiche : SIRET contrôlé automatiquement, badge « pro vérifié »</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">S+A</b><span>Fiche : logo, activités (liste), adresse ou zone d'intervention, horaires, photos de réalisations, contact, réseaux, remises par grade, organisateurs partenaires</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">S+A</b><span>Aperçu de ma fiche telle que la voient les passionnés (base vs complète)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">S</b><span>Abonnement : fiche complète, mise en avant, remises par grade, publications, statistiques, « garage favori »</span><b class="t v">VALIDÉ</b></div>
+  </div>
+
+  <div class="g">
+    <h3>Au quotidien</h3>
+    <div class="i"><b class="w">A</b><span>Lecteur de QR : pseudo, grade, remise à appliquer. Rien d'autre.</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">S+A</b><span>Publications : offres et actualités vers mes abonnés, limite mensuelle</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">S+A</b><span>Statistiques : vues de la fiche, clics appeler / itinéraire, abonnés, remises utilisées</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">S+A</b><span>Candidater pour un stand sur un événement (comme un prestataire)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">S</b><span>Emplacements sponsorisés (ciblés par département et centres d'intérêt)</span><b class="t v">VALIDÉ</b></div>
+  </div>
+
+  <div class="g">
+    <h3>Ce que le pro n'a pas</h3>
+    <div class="i"><span>Aucun accès aux comptes utilisateurs ; pas d'avis sur les pros ; pas de bouton de paiement dans l'appli</span><b class="t v">VALIDÉ</b></div>
+  </div>
+
+  <div class="g">
+    <h3>Prestataires gratuits (food truck, barbier, tatoueur, photographe, animation)</h3>
+    <div class="i"><b class="w">S+A</b><span>Profil prestataire léger : type, photos, contact ; photographe : Instagram, portfolio, accréditation « média officiel »</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><b class="w">S+A</b><span>Candidater aux événements, suivre ses candidatures (mêmes statuts que les véhicules)</span><b class="t v">VALIDÉ</b></div>
+    <div class="i"><span>Décidé : le prestataire est une casquette séparée (pas un « véhicule » du garage)</span><b class="t v">VALIDÉ</b></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":640,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

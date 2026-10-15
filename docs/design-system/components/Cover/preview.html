@@ -1,0 +1,37 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@1,125,900&family=Archivo+Narrow:wght@700&display=swap">
+<style>
+html,body{margin:0;height:288px;overflow:hidden}
+body{width:960px;position:relative;background:var(--ground)}
+svg{position:absolute;left:0;top:0;display:block}
+.poster{fill:var(--poster)}.accent{fill:var(--accent)}.win{fill:var(--win)}.night{fill:var(--night)}.surface{fill:var(--surface-raised)}.ground{fill:var(--ground)}
+.cut{rx:var(--radius-lg)}
+h1{position:absolute;left:48px;bottom:58px;margin:0;font-family:var(--font-display);font-stretch:125%;font-style:italic;font-weight:900;font-size:96px;line-height:.9;letter-spacing:-.01em;text-transform:uppercase;color:var(--ink);max-width:440px}
+p{position:absolute;left:52px;bottom:30px;margin:0;font-family:var(--font-narrow);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-muted);max-width:440px}
+</style></head>
+<body>
+<!--
+blocks: poster slab 240×288 (space-12×5 wide) at x 480 · accent 168×144 (radius-lg) · win 72×72 (radius-lg) · night 240×96 band · surface-raised 120×48 relief
+arrangement: one tall crème slab (the affiche on the wall) with the moutarde and rouge posed on it like stickers, the night band bleeding off the right edge
+pattern: poster type → stripes cut at 10° (the --cut angle of the logo animation), four bands of ground across the slab — "loud, bold, poster type → stripes at a spacing pitch"
+scales: pitch space-6 (24), gap space-2 (8), radius-lg 18, stripe angle --cut 10°
+-->
+<svg width="960" height="288" viewBox="0 0 960 288" role="img" aria-label="Orasso : crème, moutarde, rouge et nuit, coupés à dix degrés">
+  <rect class="poster" x="480" y="0" width="240" height="288"/>
+  <g class="ground">
+    <polygon points="480,200 720,158 720,166 480,208"/>
+    <polygon points="480,232 720,190 720,198 480,240"/>
+    <polygon points="480,264 720,222 720,230 480,272"/>
+    <polygon points="480,296 720,254 720,262 480,304"/>
+  </g>
+  <rect class="night" x="720" y="0" width="240" height="96"/>
+  <rect class="accent cut" x="744" y="120" width="168" height="144"/>
+  <rect class="win cut" x="640" y="24" width="72" height="72"/>
+  <rect class="surface cut" x="744" y="24" width="120" height="48"/>
+  <rect class="night cut" x="800" y="192" width="160" height="96"/>
+</svg>
+<h1>Orasso</h1>
+<p>Affiche de nuit · tout le monde à sa place</p>
+</body></html>
