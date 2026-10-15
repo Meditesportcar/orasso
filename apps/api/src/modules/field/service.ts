@@ -7,7 +7,7 @@ import type { z } from "zod";
 import { db } from "../../db/client";
 import { incidents, profiles, staffAlerts, structureMembers } from "../../db/schema";
 import { now } from "../../lib/deps";
-import { notFound } from "../../lib/errors";
+import { conflict, notFound } from "../../lib/errors";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
@@ -22,6 +22,12 @@ async function fieldEvent(v: Viewer, eventId: string) {
   return event;
 }
 
+/** Rejeu d'un `clientId` : seulement le sien, sur le même événement (sinon 409, sans rien révéler). */
+function mineOrConflict<T extends { eventId: string }>(row: T, eventId: string, ownerId: string | null, v: Viewer): T {
+  if (row.eventId !== eventId || ownerId !== v.user.id) throw conflict("conflict", "Identifiant client déjà utilisé");
+  return row;
+}
+
 const pseudoOf = async (userId: string | null) =>
   userId ? ((await db.query.profiles.findFirst({ where: eq(profiles.userId, userId) }))?.pseudo ?? null) : null;
 
@@ -34,7 +40,7 @@ export const fieldService = {
     const event = await fieldEvent(v, eventId);
     if (input.clientId) {
       const known = await db.query.staffAlerts.findFirst({ where: eq(staffAlerts.clientId, input.clientId) });
-      if (known) return known;
+      if (known) return mineOrConflict(known, eventId, known.userId, v);
     }
     const pseudo = await pseudoOf(v.user.id);
     return withTx(async (tx, after) => {
@@ -53,7 +59,7 @@ export const fieldService = {
       if (!row) {
         const known = await tx.query.staffAlerts.findFirst({ where: eq(staffAlerts.clientId, input.clientId ?? "") });
         if (!known) throw new Error("Alerte non enregistrée");
-        return known;
+        return mineOrConflict(known, eventId, known.userId, v);
       }
       const present = (await staffService.members(event, tx)).filter((m) => m.presence === "present");
       const organizers = await tx
@@ -138,7 +144,8 @@ export const fieldService = {
     const incident =
       row ?? (await db.query.incidents.findFirst({ where: eq(incidents.clientId, input.clientId ?? "") }));
     if (!incident) throw new Error("Incident non enregistré");
-    if (row) realtime.publish(`event:${eventId}:live`, "incident", { id: row.id, occurredAt: row.occurredAt });
+    if (!row) return mineOrConflict(incident, eventId, incident.reporterUserId, v);
+    realtime.publish(`event:${eventId}:live`, "incident", { id: row.id, occurredAt: row.occurredAt });
     return incident;
   },
 

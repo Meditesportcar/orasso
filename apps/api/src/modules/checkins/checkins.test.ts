@@ -450,6 +450,27 @@ describe("synchronisation du staff", () => {
   });
 });
 
+describe("terrain : alertes et main courante", () => {
+  it("alerte et incident idempotents par clientId, seulement pour leur auteur", async () => {
+    await staffService.setPresence(theoV, eventId, true);
+    const clientId = randomUUID();
+    const alert = await call(julie, "POST", `/events/${eventId}/alerts`, { clientId, message: "Besoin d'aide" });
+    expect(alert.status).toBe(201);
+    const again = await call(julie, "POST", `/events/${eventId}/alerts`, { clientId, message: "Besoin d'aide" });
+    expect(again.json.id).toBe(alert.json.id);
+    expect((await call(theo, "POST", `/events/${eventId}/alerts`, { clientId })).status).toBe(409);
+    const notified = await db.query.notifications.findMany({ where: eq(notifications.type, "staff_alert") });
+    expect(notified.map((n) => n.userId).sort()).toEqual([orga.id, theo.id].sort());
+
+    const incident = { clientId: randomUUID(), occurredAt: clock.now.toISOString(), description: "Rayure au parking" };
+    const i1 = await call(theo, "POST", `/events/${eventId}/incidents`, incident);
+    expect(i1.status).toBe(201);
+    expect((await call(theo, "POST", `/events/${eventId}/incidents`, incident)).json.id).toBe(i1.json.id);
+    expect((await call(julie, "POST", `/events/${eventId}/incidents`, incident)).status).toBe(409);
+    expect((await call(orga, "GET", `/events/${eventId}/incidents`)).json).toHaveLength(1);
+  });
+});
+
 describe("inscription express", () => {
   it("lien par e-mail, compte + véhicule + QR + entrée express, session ouverte", async () => {
     const ref = await db.query.vehicleModels.findFirst();
