@@ -120,3 +120,23 @@ bash deploy/deploy.sh rollback   # version précédente
 
 Seul ce qui est commité part. Migrations appliquées au démarrage de l'API ; seed de démonstration lancé à chaque déploiement si `db:seed` existe. Le VPS est partagé avec d'autres sites en production : lire `deploy/README.md` avant d'y toucher (nginx, secrets, sauvegarde, restauration). Identifiants du site : `C:\Users\DELL\.claude\relais\orasso\secrets-dev.txt`.
 
+
+
+## Builds de l'appli (EAS, lot 11)
+
+Configuration dans `apps/mobile/eas.json` (profils `development`, `preview` = APK Android vers https://dev.orasso.fr, `preview-simulator` = iOS simulateur). Aucune variable n'est secrète : l'adresse de l'API et la clé publique des QR (`kid 1`) sont dans le profil. **État : projet EAS pas encore créé** (voir « Première fois » ; le connecteur Expo ne sait ni créer un projet ni le relier à GitHub).
+
+**Première fois (une fois, par Damien, depuis un terminal à la racine du dépôt) :**
+1. `cd apps/mobile`, puis `npx eas-cli@latest login` (compte Expo de Damien) et `npx eas-cli@latest init` : crée le projet `orasso` et écrit `extra.eas.projectId` et `owner` dans `app.json` (à commiter, ce ne sont pas des secrets).
+2. Sur expo.dev, projet > GitHub : installer l'application GitHub d'Expo, relier `Meditesportcar/orasso`, base directory `apps/mobile`.
+3. Pas de compte Apple ni Google : aucun identifiant à fournir (l'APK est signé par une clé que EAS génère ; répondre « oui » à la création du keystore Android au premier build en ligne de commande, ou laisser le connecteur le faire).
+
+**Refaire un build :**
+- Android : `cd apps/mobile && npx eas-cli build -p android --profile preview` (ou, via Claude, le connecteur Expo : `build_run`, plateforme ANDROID, profil `preview`, `baseDirectory` `apps/mobile`, branche à construire).
+- iOS simulateur (Mac seulement pour l'installer) : `npx eas-cli build -p ios --profile preview-simulator`.
+- Le build part de ce qui est poussé sur GitHub (connecteur) ou du dossier local (ligne de commande). Offre gratuite : quota mensuel limité, ne pas relancer en boucle ; lire les journaux (`build_logs`) avant de recommencer.
+- Changer l'API visée ou la clé épinglée (rotation) : modifier `env` dans `eas.json`, puis nouveau build.
+
+**Installer l'APK sur un Android :** ouvrir le lien de téléchargement du build (page du build sur expo.dev, ou QR de cette page) depuis le téléphone, télécharger `.apk`, autoriser « installer des applications inconnues » pour le navigateur quand Android le demande, installer, ouvrir Orasso. Le site est derrière une authentification basique mais `/api/` ne l'est pas : l'appli n'a rien à saisir de plus.
+
+**Plus tard, iOS sur appareil / boutiques :** il faudra un compte Apple Developer (99 USD par an) pour signer, un profil `production` ou `preview` iOS sans `simulator`, l'enregistrement de l'iPhone (`eas device:create`) pour une distribution interne, et un compte Google Play pour publier sur Android (format AAB, profil `production`). Rien de cela n'est fait ici.
