@@ -1,4 +1,4 @@
-import { AppBar, Button, CheckboxField, Chip, ChipRow, VehicleThumb } from "@orasso/design-system/web";
+﻿import { AppBar, Button, CheckboxField, VehicleThumb } from "@orasso/design-system/web";
 import {
   type ApplicationCreate,
   type EventPublic,
@@ -179,12 +179,9 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
                   );
                 })}
               </div>
-              <ChipRow>
-                <Chip>
-                  {selected.length} véhicule{selected.length > 1 ? "s" : ""} · plaque visible par l'organisateur
-                  seulement
-                </Chip>
-              </ChipRow>
+              <p className="o-t-caption s-muted">
+                {selected.length} véhicule{selected.length > 1 ? "s" : ""} · plaque visible par l'organisateur seulement
+              </p>
               <Button variant="secondary" icon="add" href={`/app/garage/nouveau?retour=${encodeURIComponent(here)}`}>
                 Ajouter un autre véhicule
               </Button>

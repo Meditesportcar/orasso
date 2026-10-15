@@ -1,4 +1,4 @@
-# Avancement
+﻿# Avancement
 
 À lire au début de chaque session, à mettre à jour à la fin.
 
@@ -37,13 +37,21 @@
   - Recette : route cachée `/_ds` de l'appli (chaque composant en Béton et Sable ; `?only=<composant>&theme=<beton|sable>`), à voir avec `pnpm --filter @orasso/mobile exec expo start --web` (puis http://localhost:8081/_ds, ou le port choisi). Les choix et écarts sont dans `docs/JOURNAL-DES-CHOIX.md`.
   - Vérifié : `pnpm typecheck`, `pnpm test` (32 tests du design system dont aucune valeur de couleur ou de durée en dur dans les composants natifs), `pnpm lint`, `expo export --platform android` et `--platform ios`, rendu de `/_ds` dans le navigateur. **Pas encore sur simulateur ni appareil.**
 
+- **Site : parcours n° 1 (lot 07, 15/10/2026)** — `apps/web`. Choix : `docs/JOURNAL-DES-CHOIX.md` (lot 07).
+  - Public : `/e/:slug` (affiche, carte MapLibre + OSM, organisateur vérifié, places, Maintenu / Incertain / Annulé, Candidater, Suivre, partager, aperçu de lien Open Graph), `/connexion`, `/inscription` (disponibilité du pseudo, retour exactement là où on était), `/connexion/verification` (2FA), pages légales provisoires, pied « Propulsé par Orasso ».
+  - Candidature en 3 écrans (`/e/:slug/candidater`), ajout de véhicule avec photo au moment de candidater (`/app/garage/nouveau?retour=`).
+  - Connecté `/app` : Accès (statuts, QR d'inscription, offre de place avec compte à rebours en direct, désistement, carnet de route : points, pointage en attente, contestation du malus ; avis désactivé, voir lot 12), Garage, Sécurité (activer la 2FA).
+  - Espace organisateur `/orga/:structure` (Sable imposé, barre latérale) : événements, tri au clavier (V / A / R / Z / Espace, motifs), vue liste (filtres, sélection multiple, décisions en masse), liste d'attente (ordre modifiable), compteurs en temps réel ; jour J : liste, pointage manuel, pointage rapide par plaque, direct. Le staff y accède au jour J seulement.
+  - API : `GET /api/pseudo-available`, catégories du référentiel publiques, script `events:simulate-settle` (J+2 simulé, développement).
+  - Vérifié : `pnpm test` (shared 66, design-system 32, api 102), `typecheck`, `lint`, build du site ; tests de bout en bout Playwright (`pnpm --filter @orasso/web test:e2e`, 5 tests : parcours passionné → QR → pointage → points, tri, liste d'attente et offre, malus et contestation, captures). Captures Béton / Sable / 390 px : voir le journal du relais.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
 
-- Écrans du site avec les composants web (lot 07) et écrans de l'appli avec les composants natifs (lots 09 et 10), en parallèle, sur l'API complète du parcours n° 1 : types et schémas dans `packages/shared/src/schemas/` (`access.ts` pour le jour J et les points), libellés dans `labels.fr.ts`. Le QR se dessine avec `qrcode` en correction M (version 6 attendue). Le thème choisi par l'utilisateur doit être mémorisé par l'appli (`onPreferenceChange`) ; `AppBar`/`TabBar` reçoivent `useSafeAreaInsets()`.
+- Site du parcours n° 1 fait (lot 07) ; reste les écrans de l'appli avec les composants natifs (lots 09 et 10), en parallèle, sur l'API complète du parcours n° 1 : types et schémas dans `packages/shared/src/schemas/` (`access.ts` pour le jour J et les points), libellés dans `labels.fr.ts`. Le QR se dessine avec `qrcode` en correction M (version 6 attendue). Le thème choisi par l'utilisateur doit être mémorisé par l'appli (`onPreferenceChange`) ; `AppBar`/`TabBar` reçoivent `useSafeAreaInsets()`.
 - Déploiement de l'API B sur dev.orasso.fr : ajouter `QR_SIGNING_KEYS` et `QR_SIGNING_ACTIVE_KID` à `/etc/orasso/dev.env` **avant** (l'API refuse de démarrer sans elles en production ; voir `deploy/dev.env.example`).
 - Sauvegardes d'Orasso hors du VPS : validées par Damien et appliquées le 15/10 (deux lignes dans `/etc/vps-backup/files.list`, voir `deploy/README.md`).
 
@@ -94,3 +102,4 @@ bash deploy/deploy.sh rollback   # version précédente
 ```
 
 Seul ce qui est commité part. Migrations appliquées au démarrage de l'API ; seed de démonstration lancé à chaque déploiement si `db:seed` existe. Le VPS est partagé avec d'autres sites en production : lire `deploy/README.md` avant d'y toucher (nginx, secrets, sauvegarde, restauration). Identifiants du site : `C:\Users\DELL\.claude\relais\orasso\secrets-dev.txt`.
+

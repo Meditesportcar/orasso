@@ -1,4 +1,4 @@
-/* Mise en page du site : espacements, grilles et surfaces, toutes les valeurs de style viennent des jetons du
+﻿/* Mise en page du site : espacements, grilles et surfaces, toutes les valeurs de style viennent des jetons du
    système de design (aucune couleur, police ni durée écrite ici). */
 
 /* ---------- Structure générale ---------- */
@@ -109,9 +109,6 @@
   margin: 0;
   color: var(--ink-muted);
 }
-.s-muted {
-  color: var(--ink-muted);
-}
 .s-label {
   color: var(--ink-muted);
 }
@@ -171,8 +168,7 @@
   color: var(--plate-ink);
   border: 1px solid var(--plate-edge);
 }
-.s-card--plate .s-label,
-.s-card--plate .s-muted {
+.s-card--plate .s-label {
   color: var(--plate-muted);
 }
 .s-section {
@@ -736,4 +732,45 @@
 .s-h2 a,
 .ev__hero-text a {
   color: inherit;
+}
+
+/* Lisibilité du texte secondaire sur le fond Sable (le halo clair y est moins contrasté). */
+.s-muted,
+.s-lead {
+  color: var(--ink);
+  opacity: 0.78;
+}
+.s-card--plate .s-muted,
+.orga__head .s-muted {
+  color: inherit;
+}
+.s-title a,
+.s-h2 a {
+  text-decoration: none;
+}
+
+.orga__panel {
+  min-width: 0;
+}
+@media (max-width: 860px) {
+  .orga__content {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+}
+
+.s-narrow {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.orga__panel.s-stack {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: var(--space-4);
+}
+.orga__panel > * {
+  min-width: 0;
 }
