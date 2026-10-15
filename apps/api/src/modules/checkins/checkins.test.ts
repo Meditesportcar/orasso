@@ -327,6 +327,25 @@ describe("synchronisation du staff", () => {
     expect((await call(people[0]!.u, "GET", `/events/${eventId}/staff/sync`)).status).toBe(403);
   });
 
+  it("pass révoqué : ni véhicule, ni plaque, ni coordonnées dans la liste", async () => {
+    await applicationsService.withdraw(people[2]!.v, people[2]!.applicationId);
+    const body = (await call(julie, "GET", `/events/${eventId}/staff/sync`)).json;
+    const nina = body.entries.find((e: { passId: string }) => e.passId === people[2]!.passId);
+    expect(nina).toMatchObject({
+      status: "revoked",
+      revokedReason: "withdrawn",
+      pseudo: "Nina_34",
+      vehicleLabel: null,
+      plateHint: null,
+      plateHash: null,
+      zoneCode: null,
+      categories: [],
+    });
+    expect(nina.contact).toBeUndefined();
+    const kenji = body.entries.find((e: { passId: string }) => e.passId === people[0]!.passId);
+    expect(kenji.contact).toBeDefined();
+  });
+
   it("le staff ne lit la liste que de la veille au règlement ; l'organisation toujours", async () => {
     const paths = [`/events/${eventId}/staff/sync`, `/events/${eventId}/checkins`, `/events/${eventId}/search?q=Ke`];
     clock.set(paris(10, 15, 23, 59));

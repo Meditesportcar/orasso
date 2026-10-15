@@ -389,11 +389,31 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
     const plate = v?.plateNormalized && !v.unregistered ? v.plateNormalized : null;
     const valid = !pass.revokedAt;
     const updatedAt = Math.max(pass.updatedAt.getTime(), app.updatedAt.getTime(), checkin?.updatedAt.getTime() ?? 0);
+    if (!valid) {
+      // Pass révoqué : juste de quoi refuser le QR au scan (« Désisté », « Non admis »…), rien de plus en cache.
+      return {
+        passId: pass.id,
+        applicationId: app.id,
+        status: "revoked",
+        revokedReason: (pass.revokedReason as PassRevokedReason | null) ?? null,
+        pseudo: profile.pseudo,
+        vehicleLabel: null,
+        vehicleType: null,
+        categories: [],
+        plateHint: null,
+        plateHash: null,
+        zoneCode: null,
+        zoneName: null,
+        checkedInAt: null,
+        checkinMethod: null,
+        updatedAt: new Date(updatedAt).toISOString(),
+      } satisfies AccessListEntry;
+    }
     const entry: AccessListEntry = {
       passId: pass.id,
       applicationId: app.id,
-      status: valid ? "valid" : "revoked",
-      revokedReason: (pass.revokedReason as PassRevokedReason | null) ?? null,
+      status: "valid",
+      revokedReason: null,
       pseudo: profile.pseudo,
       vehicleLabel: v ? vehicleLabel(v) : null,
       vehicleType: v?.vehicleType ?? null,
@@ -402,9 +422,8 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
       plateHash: plate ? plateHash(event.plateSalt, plate) : null,
       zoneCode: zone?.code ?? null,
       zoneName: zone?.name ?? null,
-      // Un pass remplacé n'a plus d'entrée : seule l'entrée du pass valide porte le pointage.
-      checkedInAt: valid && checkin ? checkin.checkedInAt.toISOString() : null,
-      checkinMethod: valid && checkin ? (checkin.method as CheckinMethod) : null,
+      checkedInAt: checkin ? checkin.checkedInAt.toISOString() : null,
+      checkinMethod: checkin ? (checkin.method as CheckinMethod) : null,
       updatedAt: new Date(updatedAt).toISOString(),
     };
     if (organizer) entry.plate = v?.plate ?? null;
