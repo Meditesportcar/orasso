@@ -1,0 +1,129 @@
+/* Field : champs de formulaire. Voir docs/design-system/components/Field. */
+
+.o-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink);
+}
+.o-field__label {
+  color: var(--ink-muted);
+}
+.o-field__control {
+  position: relative;
+  display: flex;
+}
+.o-field__input {
+  width: 100%;
+  height: var(--touch);
+  padding: 0 14px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-field);
+  color: var(--ink);
+  outline: 0;
+  transition:
+    border-color var(--timing-fast) var(--ease-inout),
+    box-shadow var(--timing-fast) var(--ease-inout);
+}
+.o-field__input.is-tall {
+  height: 56px;
+}
+.o-field__input.has-toggle {
+  padding-right: 48px;
+}
+.o-field__input::placeholder {
+  color: var(--ink-faint);
+}
+/* Focus : contour moutarde et halo doux (fast). */
+.o-field__input:focus {
+  border-color: var(--accent-text);
+  box-shadow: var(--neon-accent-soft);
+}
+.o-field__select {
+  appearance: none;
+  padding-right: 40px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) 50%,
+    calc(100% - 14px) 50%;
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-repeat: no-repeat;
+}
+.o-field__reveal {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch);
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.o-field__help {
+  color: var(--ink-muted);
+}
+/* Erreur : contour rouge, message sous le champ (jamais une icône seule). */
+.o-field.has-error .o-field__input {
+  border-color: var(--win-text);
+}
+.o-field__error {
+  color: var(--win-text);
+}
+
+/* Case à cocher : 24 px, cochée en moutarde. */
+.o-check {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.o-check__input {
+  position: absolute;
+  opacity: 0;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  cursor: pointer;
+}
+.o-check__box {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: transparent;
+  transition:
+    background-color var(--timing-fast) var(--ease-inout),
+    border-color var(--timing-fast) var(--ease-inout);
+}
+.o-check__input:checked + .o-check__box {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.o-check__input:focus-visible + .o-check__box {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+.o-check__input:disabled + .o-check__box,
+.o-check__input:disabled ~ .o-check__label {
+  opacity: 0.4;
+}
+.o-check__label {
+  min-width: 0;
+}

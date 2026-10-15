@@ -1,0 +1,75 @@
+/* Brand : trois ancres (en-tête, signature, site). Voir docs/design-system/components/Brand. */
+
+/* Une image par version ; en mode « auto », le thème choisit laquelle s'affiche. */
+.o-brand-img--auto.o-brand-img--light {
+  display: none;
+}
+[data-theme="sable"] .o-brand-img--auto.o-brand-img--light {
+  display: inline-block;
+}
+[data-theme="sable"] .o-brand-img--auto.o-brand-img--dark {
+  display: none;
+}
+
+.o-logo {
+  display: block;
+  height: auto;
+  max-width: none;
+}
+/* Le O du monogramme a la taille du O du logotype ; son bord gauche est calé sur celui du logotype. */
+.o-monogram {
+  display: block;
+  flex: none;
+  margin-left: -1.5px;
+  border-radius: 50%;
+}
+.o-loader {
+  display: inline-block;
+  flex: none;
+}
+
+.o-credit {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  pointer-events: none;
+}
+.o-credit--dark-surface {
+  color: var(--brand-credit);
+}
+.o-credit--light-surface {
+  color: var(--brand-credit-light);
+}
+
+/* Pastilles flottantes d'un écran à photo : 40 px, voile de la nuit, flou léger. */
+.o-floating {
+  position: absolute;
+  top: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  color: var(--night-ink);
+  background: color-mix(in srgb, var(--night) 55%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+.o-floating--mark {
+  left: 12px;
+  cursor: default;
+}
+.o-floating--close {
+  right: 12px;
+}
+.o-floating .o-monogram {
+  margin-left: 0;
+}
+
+.o-powered {
+  color: var(--bar-ink);
+}

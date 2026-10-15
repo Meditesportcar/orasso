@@ -1,0 +1,89 @@
+/* TabBar : cinq onglets sur métal brossé. Voir docs/design-system/components/TabBar. */
+
+.o-tabbar {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  height: var(--bar-tabs);
+  background: var(--bar-gradient);
+  border-top: 2px solid var(--bar-edge);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  box-shadow: var(--shadow-bar-bottom);
+  text-shadow: var(--emboss-bar);
+}
+/* Le brossage est clippé dans son propre cadre : l'onglet du milieu, lui, déborde de 16 px vers le haut. */
+.o-tabbar__metal {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.o-tabbar__tab {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--bar-muted);
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--timing-fast) var(--ease-inout);
+}
+.o-tabbar__tab.is-active {
+  color: var(--bar-ink);
+}
+.o-tabbar__icon {
+  position: relative;
+  display: inline-flex;
+}
+/* Pastille de notification : 8 px moutarde sur l'icône de la Boîte. */
+.o-tabbar__dot {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--neon-accent-soft);
+}
+
+/* L'onglet du milieu : pastille inclinée à --skew-tab, débordant de 16 px vers le haut, en néon. */
+.o-tabbar__tab.is-center {
+  margin: -16px 6px 12px;
+  border-radius: 18px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--neon-accent);
+  text-shadow: none;
+  transform: skewX(var(--skew-tab));
+}
+[data-theme="sable"] .o-tabbar__tab.is-center {
+  background: var(--night);
+  color: var(--accent);
+}
+.o-tabbar__center-label {
+  display: block;
+  transform: skewX(calc(var(--skew-tab) * -1));
+}
+.o-tabbar__tab.is-center > svg {
+  transform: skewX(calc(var(--skew-tab) * -1));
+}
+
+/* Changement d'onglet : le nouvel onglet se gare (base). */
+.o-tabbar[data-moved] .o-tabbar__tab.is-active:not(.is-center) .o-tabbar__icon {
+  animation: o-park var(--timing-base) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .o-tabbar[data-moved] .o-tabbar__tab.is-active:not(.is-center) .o-tabbar__icon {
+    animation: o-fade var(--timing-fast) linear both;
+  }
+}
