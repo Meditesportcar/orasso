@@ -4,16 +4,19 @@
 #   deploy/deploy.sh rollback   revient à la version précédente
 #   deploy/deploy.sh status     version en ligne et état des conteneurs
 #   deploy/deploy.sh logs [api|web|db]
-# Variables : ORASSO_VPS (défaut claude@51.210.242.118), ORASSO_URL (défaut https://dev.orasso.fr).
+# Variables : ORASSO_VPS (défaut claude@51.210.242.118), ORASSO_URL (défaut https://dev.orasso.fr),
+#   ORASSO_ALLOW_BRANCH=1 pour envoyer un commit absent d'origin/main (voir deploy/README.md : migrations).
 set -euo pipefail
 
 VPS=${ORASSO_VPS:-claude@51.210.242.118}
 URL=${ORASSO_URL:-https://dev.orasso.fr}
 cd "$(git rev-parse --show-toplevel)"
 
-remote() { # remote <arguments de remote-deploy.sh…>
-  scp -q deploy/remote-deploy.sh "$VPS:/tmp/orasso-remote-deploy.sh"
-  ssh "$VPS" "sudo bash /tmp/orasso-remote-deploy.sh $*" </dev/null
+remote() { # remote <arguments de remote-deploy.sh…> : script envoyé sous un nom unique, supprimé après usage
+  local script
+  script="/tmp/orasso-remote-deploy.$(date +%s).$$.sh"
+  scp -q deploy/remote-deploy.sh "$VPS:$script"
+  ssh "$VPS" "sudo bash $script $*; status=\$?; rm -f $script; exit \$status" </dev/null
 }
 
 check() { # /api/health doit répondre « ok » à travers nginx et le certificat
@@ -32,6 +35,13 @@ check() { # /api/health doit répondre « ok » à travers nginx et le certifica
 case "${1:-deploy}" in
   deploy)
     tag=$(git rev-parse --short=12 HEAD)
+    # Les migrations Drizzle s'appliquent dans l'ordre : envoyer une branche non fusionnée puis main
+    # peut faire sauter une migration sans erreur. Par défaut, seulement des commits déjà dans origin/main.
+    git fetch -q origin main
+    if ! git merge-base --is-ancestor HEAD origin/main && [ "${ORASSO_ALLOW_BRANCH:-0}" != 1 ]; then
+      echo "[orasso] ERREUR : $tag n'est pas dans origin/main (ORASSO_ALLOW_BRANCH=1 pour forcer, voir deploy/README.md)" >&2
+      exit 1
+    fi
     if [ -n "$(git status --porcelain)" ]; then
       echo "[orasso] attention : modifications non commitées ignorées, seul $tag est envoyé"
     fi

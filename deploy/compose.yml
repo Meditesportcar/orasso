@@ -5,11 +5,19 @@
 
 name: orasso
 
+# Journaux des conteneurs avec rotation (le disque est partagé avec les sites en production).
+x-logging: &logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+
 services:
   orasso-db:
     image: postgres:17
     container_name: orasso-db
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: orasso
       POSTGRES_DB: orasso
@@ -30,6 +38,7 @@ services:
     image: orasso-api:${ORASSO_TAG:?ORASSO_TAG manquant}
     container_name: orasso-api
     restart: unless-stopped
+    logging: *logging
     init: true
     env_file: /etc/orasso/dev.env
     environment:
@@ -57,6 +66,7 @@ services:
     image: orasso-web:${ORASSO_TAG:?ORASSO_TAG manquant}
     container_name: orasso-web
     restart: unless-stopped
+    logging: *logging
     init: true
     environment:
       NODE_ENV: production

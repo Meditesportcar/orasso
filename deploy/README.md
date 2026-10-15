@@ -29,13 +29,13 @@ bash deploy/deploy.sh rollback   # revient à la version précédente (relancer 
 bash deploy/check-sites.sh       # codes HTTP des autres sites du VPS
 ```
 
-Seul ce qui est **commité** part (`git archive HEAD`). Le déploiement :
+Seul ce qui est **commité** part (`git archive HEAD`), et par défaut seulement un commit **déjà dans `origin/main`** : les migrations Drizzle s'appliquent par ordre de date, donc déployer une branche non fusionnée (migration récente) puis `main` (migration plus ancienne) ferait sauter cette dernière sans erreur. Pour essayer une branche quand même : `ORASSO_ALLOW_BRANCH=1 bash deploy/deploy.sh`, en sachant qu'il faudra peut-être repartir d'une sauvegarde. Un seul déploiement à la fois (verrou sur le VPS). Le déploiement :
 1. envoie l'archive et `remote-deploy.sh` sur le VPS ;
-2. crée `/etc/orasso/dev.env` s'il n'existe pas (secrets générés sur le serveur) ;
+2. crée `/etc/orasso/dev.env` s'il n'existe pas (secrets générés sur le serveur), et signale les variables de `deploy/dev.env.example` qui y manquent (noms seulement) ;
 3. construit `orasso-api:<commit>` et `orasso-web:<commit>` sur le VPS (pas de Docker sur le PC) ;
 4. `docker compose up -d --wait` : la base, puis l'API (migrations, puis serveur), puis le site, chacun contrôlé ;
-5. si un conteneur ne devient pas sain, **revient tout seul à la version précédente** et échoue ;
-6. si `SEED_DEMO=1` et que `apps/api/package.json` a un script `db:seed`, lance le seed (idempotent) ;
+5. si un conteneur ne devient pas sain, **revient tout seul à la version précédente** et échoue (sans version précédente, il arrête l'API et le site) ;
+6. si `SEED_DEMO=1` et que `apps/api/package.json` a un script `db:seed`, lance le seed (idempotent) ; un seed en échec est signalé sans annuler la version ;
 7. contrôle `https://dev.orasso.fr/api/health` depuis le PC.
 
 Retour arrière et migrations : `rollback` remet les images précédentes mais ne défait pas une migration déjà appliquée. Tant que les migrations ne font qu'ajouter, l'ancienne version fonctionne ; sinon, restaurer la sauvegarde (plus bas).
@@ -43,6 +43,9 @@ Retour arrière et migrations : `rollback` remet les images précédentes mais n
 ## Règles pour le code (lots suivants)
 
 - Tout ce que l'API ou son seed importe à l'exécution doit être dans `dependencies` (l'image de l'API n'a pas les `devDependencies` ; `tsx` y est ajouté à la version du lockfile).
+- Le script `db:seed` de `apps/api` est lancé par `npm run` dans l'image (pas de pnpm) : il appelle `tsx` directement (ex. `tsx src/scripts/seed.ts`) et doit être idempotent.
+- Taille des envois (nginx) : 16 Mo par requête sur l'API, 128 Mo sur `POST /api/me/vehicles/:id/photos` seulement. Une autre route d'envoi lourd = une `location` de plus dans `nginx/dev.orasso.fr.conf`. Débit : 30 requêtes/s par adresse IP (pointe 60), au-delà 429.
+- L'API reçoit l'adresse du client dans `X-Forwarded-For` (une seule adresse, posée par nginx) et `X-Real-IP`. Le mot de passe du site (`Authorization: Basic`) ne lui est pas transmis ; un jeton `Bearer` l'est.
 - Nouvelle variable d'environnement : l'ajouter à `deploy/dev.env.example`, puis sur le VPS dans `/etc/orasso/dev.env` (`sudo nano`), puis redéployer. Un secret se génère sur le serveur (`openssl rand -hex 32`) et ne s'affiche pas.
 - Le site joint l'API pendant le rendu serveur par `API_INTERNAL_URL` (`http://orasso-api:3000`), sans repasser par nginx.
 - Photos : écrire dans `UPLOADS_DIR` (`/data/uploads`), seul dossier inscriptible de l'API.
@@ -66,7 +69,7 @@ ssh claude@51.210.242.118 "sudo bash /tmp/setup-nginx.sh /tmp/dev.orasso.fr.conf
 bash deploy/check-sites.sh
 ```
 
-Changer le mot de passe du site : générer un hachage `openssl passwd -apr1` et le mettre dans `/etc/nginx/orasso-dev.htpasswd` (`orasso:<hachage>`, root:www-data 640), puis `sudo nginx -t && sudo systemctl reload nginx`.
+Changer le mot de passe du site : générer un hachage `openssl passwd -apr1` (bcrypt serait mieux, mais `htpasswd` n'est pas installé sur le VPS) et le mettre dans `/etc/nginx/orasso-dev.htpasswd` (`orasso:<hachage>`, root:www-data 640), puis `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## Sauvegarde et restauration
 
@@ -74,15 +77,19 @@ Installation (déjà faite) : `backup-db.sh` → `/usr/local/sbin/orasso-backup-
 
 Sauvegarde à la main : `ssh claude@51.210.242.118 "sudo systemctl start orasso-backup"`.
 
-Restaurer un dump dans la base (écrase les données) :
+Restaurer un dump dans la base (écrase les données). La base est recréée vide d'abord : un simple `pg_restore --clean` laisserait les tables créées après le dump, et l'API ne redémarrerait plus (migration rejouée sur une table existante).
 
 ```bash
 ssh claude@51.210.242.118
 sudo ls -1t /var/backups/orasso/
 sudo docker stop orasso-web orasso-api
-sudo cat /var/backups/orasso/<fichier>.dump | sudo docker exec -i orasso-db pg_restore -U orasso -d orasso --clean --if-exists --no-owner
+sudo docker exec orasso-db dropdb -U orasso --force orasso
+sudo docker exec orasso-db createdb -U orasso orasso
+sudo cat /var/backups/orasso/<fichier>.dump | sudo docker exec -i orasso-db pg_restore -U orasso -d orasso --no-owner --exit-on-error
 sudo docker start orasso-api orasso-web
 ```
+
+Après une restauration, revenir aussi à la version du code de la date du dump si des migrations ont été ajoutées depuis (`bash deploy/deploy.sh rollback`).
 
 Tester un dump sans toucher à la base : le restaurer dans un conteneur jetable `postgres:17 --network none` (testé le 15/10/2026 : mêmes tables, migrations comprises).
 

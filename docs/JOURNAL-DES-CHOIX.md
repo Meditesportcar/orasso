@@ -42,6 +42,12 @@ Ce que les documents de conception ne tranchent pas et que Claude Code a choisi 
 - **Photos** : volume `orasso_uploads` monté sur `/data/uploads` (`UPLOADS_DIR`), seul dossier inscriptible de l'API.
 - **Taille d'envoi** : 80 Mo par requête sur `/api/` (8 photos par véhicule).
 - **Sauvegarde** : `pg_dump` au format personnalisé chaque nuit à 01:15 UTC (hors 02:30–04:00), 7 jours dans `/var/backups/orasso`, timer systemd `orasso-backup`. Envoi hors VPS préparé, non appliqué (voir « À revoir »).
+- **Corrections après relecture (lot 08)**, qui remplacent les entrées ci-dessus sur ces points :
+  - **Taille d'envoi** : 16 Mo par requête sur l'API, 128 Mo sur la seule route des photos de véhicule (`POST /api/me/vehicles/:id/photos`, 8 photos de 15 Mo au plus), au lieu de 80 Mo partout ; limite de 30 requêtes/s par adresse IP sur l'API (sans mot de passe nginx, elle était exposée au remplissage du disque commun).
+  - **Adresse du client** : nginx transmet `X-Forwarded-For` = adresse réelle seule (et non la chaîne reçue), sinon un client contournerait la limite de tentatives de connexion de Better Auth. Le mot de passe du site (`Authorization: Basic`) n'est pas transmis à l'API.
+  - **Déploiement depuis `main` seulement** par défaut (`ORASSO_ALLOW_BRANCH=1` pour forcer) : les migrations Drizzle s'appliquent par date, une branche non fusionnée déployée avant `main` ferait sauter une migration sans erreur. Verrou contre deux déploiements simultanés, variables manquantes de `dev.env` signalées, seed en échec non bloquant, rotation des journaux des conteneurs (10 Mo × 3).
+  - **Restauration** : base recréée vide avant `pg_restore` (procédure dans `deploy/README.md`).
+  - **Reste ouvert** : `tsx` installé par `npm install -g` à la version du lockfile (ses propres dépendances ne sont pas figées) ; le plus propre serait de passer `tsx` dans les `dependencies` de `@orasso/api` — à faire par le lot 05 qui modifie ce fichier.
 
 ## À revoir avec Damien
 

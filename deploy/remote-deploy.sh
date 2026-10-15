@@ -55,7 +55,16 @@ seed() {
   grep -q '^SEED_DEMO=1' "$ENV_FILE" || return 0
   grep -q '"db:seed"' "$ROOT/releases/$tag/apps/api/package.json" || { log "pas de commande db:seed : seed ignoré"; return 0; }
   log "seed de démonstration"
-  docker exec orasso-api npm run db:seed
+  # Un seed en échec ne remet pas en cause la version, déjà en ligne : on le signale et on continue.
+  docker exec orasso-api npm run db:seed || log "ATTENTION : le seed a échoué (version $tag en ligne quand même)"
+}
+
+# Signale les variables de deploy/dev.env.example absentes de dev.env (noms seulement, jamais les valeurs).
+check_env() {
+  local example=$ROOT/releases/$1/deploy/dev.env.example missing
+  [ -f "$example" ] || return 0
+  missing=$(comm -23 <(grep -oE '^[A-Z_][A-Z0-9_]*=' "$example" | sort -u) <(grep -oE '^[A-Z_][A-Z0-9_]*=' "$ENV_FILE" | sort -u) | tr -d '=' | tr '\n' ' ')
+  [ -z "$missing" ] || log "ATTENTION : variables absentes de $ENV_FILE : $missing(voir deploy/README.md)"
 }
 
 cleanup() { # garde les $KEEP dernières versions + courante et précédente
@@ -97,6 +106,7 @@ deploy() {
       { tail -n 40 "$STATE/build.log"; die "construction de l'image $app impossible"; }
   done
 
+  check_env "$tag"
   prev=$(current)
   log "démarrage de $tag${prev:+ (précédente : $prev)}"
   if ! start "$tag"; then
@@ -104,6 +114,9 @@ deploy() {
     if [ -n "$prev" ] && [ "$prev" != "$tag" ] && [ -d "$ROOT/releases/$prev" ]; then
       log "échec : retour à $prev"
       start "$prev" || die "le retour à $prev a aussi échoué"
+    else
+      # Rien vers quoi revenir : arrêter plutôt que laisser l'API redémarrer en boucle.
+      compose "$tag" stop orasso-web orasso-api || true
     fi
     die "la version $tag ne démarre pas"
   fi
@@ -132,6 +145,16 @@ status() {
   echo "version courante : $(current)   précédente : $(previous)"
   docker ps -a --filter name=orasso- --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
 }
+
+# Un seul déploiement ou retour arrière à la fois (plusieurs sessions peuvent lancer deploy.sh).
+lock() {
+  exec 9>/run/orasso-deploy.lock
+  flock -n 9 || die "un déploiement Orasso est déjà en cours"
+}
+
+case "${1:-}" in
+  deploy | rollback) lock ;;
+esac
 
 case "${1:-}" in
   deploy) deploy "${2:?version}" "${3:?archive}" ;;
