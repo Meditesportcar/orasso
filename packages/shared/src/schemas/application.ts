@@ -96,6 +96,14 @@ export type MyApplication = {
   refusalNote: string | null;
   zone: { code: string; name: string } | null;
   createdAt: string;
+  /** « Sur place » : entrée enregistrée (scan, pointage, express). */
+  checkedInAt: string | null;
+  /** « Pointage en attente » : événement terminé, points pas encore attribués (J+2). */
+  pointsPending: boolean;
+  /** Points de cette candidature une fois réglée (participation, malus, annulation du malus). */
+  points: number | null;
+  /** Malus contestable (carnet de route) : échéance, possible ou non, état de la contestation. */
+  malus: { deadline: string; canContest: boolean; contestStatus: string | null } | null;
 };
 
 export type ApplicationAlert = "duplicatePlate" | "banned" | "unregistered";

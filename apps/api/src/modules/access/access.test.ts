@@ -22,8 +22,10 @@ import type { Viewer } from "../../lib/session";
 import { ed25519Verify, signing } from "../../lib/signing";
 import { applicationsService } from "../applications/service";
 import { eventsService } from "../events/service";
+import { notificationsService } from "../notifications/service";
 
 afterAll(async () => {
+  await notificationsService.flush();
   await pool.end();
 });
 
