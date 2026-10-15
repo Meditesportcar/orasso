@@ -199,6 +199,34 @@ async function offerNext(tx: Tx, event: EventRow, after: After): Promise<Applica
   return offered;
 }
 
+/**
+ * Admission « sans sélection » (docs/01 : « tout le monde est accepté ») : retenue d'office s'il reste une place,
+ * sinon liste d'attente (servie automatiquement quand une place se libère).
+ */
+async function admitOpen(tx: Tx, event: EventRow, app: ApplicationRow): Promise<ApplicationRow> {
+  const t = now();
+  let row: ApplicationRow;
+  const c = await eventsRepo.statusCounts(event.id, tx);
+  if (event.capacity === null || c.accepted + c.offered < event.capacity) {
+    row = await transition(tx, app, "accepted", SYSTEM, { decidedAt: t }, "admission.open");
+  } else {
+    const [agg] = await tx
+      .select({ rank: max(applications.waitlistRank) })
+      .from(applications)
+      .where(and(eq(applications.eventId, event.id), eq(applications.status, "waitlisted")));
+    row = await transition(
+      tx,
+      app,
+      "waitlisted",
+      SYSTEM,
+      { decidedAt: t, waitlistRank: (agg?.rank ?? 0) + 1, waitlistedAt: t },
+      "admission.open",
+    );
+  }
+  await notifyDecision(tx, event, row);
+  return row;
+}
+
 async function lockApplication(tx: Tx, id: string): Promise<ApplicationRow> {
   const [row] = await tx.select().from(applications).where(eq(applications.id, id)).for("update");
   if (!row) throw notFound("Candidature introuvable");
@@ -358,7 +386,7 @@ export const applicationsService = {
             actorUserId: v.user.id,
             at: t,
           });
-          created.push(row);
+          created.push(event.admission === "open" ? await admitOpen(tx, event, row) : row);
         }
         // « Suivre l'organisateur » (cochée d'office) et « Newsletter Orasso » (libre).
         if (input.followStructure) {

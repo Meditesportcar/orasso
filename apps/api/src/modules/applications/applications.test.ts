@@ -111,6 +111,20 @@ describe("candidater", () => {
     expect(me.json.profile.newsletterOptIn).toBe(true);
   });
 
+  it("admission sans sélection : retenue d'office, puis liste d'attente quand c'est complet", async () => {
+    const e = await event({ admission: "open", capacity: 1 });
+    const [a, b] = [await participant("Libre_A"), await participant("Libre_B")];
+    expect((await applyAs(a, e.id)).status).toBe("accepted");
+    expect((await applyAs(b, e.id)).status).toBe("waitlisted");
+    const journal = await db.select().from(applicationEvents).where(eq(applicationEvents.toStatus, "accepted"));
+    expect(journal[0]).toMatchObject({ fromStatus: "pending", actor: "system", reason: "admission.open" });
+    await applicationsService.withdraw(
+      a.v,
+      (await db.query.applications.findFirst({ where: eq(applications.userId, a.u.id) }))!.id,
+    );
+    expect((await db.query.applications.findFirst({ where: eq(applications.userId, b.u.id) }))?.status).toBe("offered");
+  });
+
   it("« Suivre l'organisateur » décochée : pas de suivi", async () => {
     const e = await event();
     const p = await participant("Lea_11");

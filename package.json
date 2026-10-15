@@ -15,6 +15,7 @@
     "db:status": "node scripts/db.mjs status",
     "db:generate": "pnpm --filter @orasso/api db:generate",
     "db:migrate": "pnpm --filter @orasso/api db:migrate",
+    "db:seed": "pnpm --filter @orasso/api db:seed",
     "db:studio": "pnpm --filter @orasso/api db:studio",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "biome check .",

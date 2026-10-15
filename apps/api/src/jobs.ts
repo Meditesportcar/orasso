@@ -2,6 +2,7 @@ import { PgBoss } from "pg-boss";
 
 import { env } from "./env";
 import { deps, type JobName } from "./lib/deps";
+import { AppError } from "./lib/errors";
 import { applicationsService } from "./modules/applications/service";
 import { eventJobs } from "./modules/events/jobs";
 import { notificationsService } from "./modules/notifications/service";
@@ -19,18 +20,33 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "notifications.deliver": () => notificationsService.deliverDue(),
 };
 
-export async function startJobs(): Promise<PgBoss> {
+/**
+ * Démarre pg-boss, crée les files et branche `deps.jobs` dessus. `work: false` (seed, scripts) : on planifie
+ * sans traiter ; c'est l'API qui exécute.
+ */
+export async function startJobs({ work = true } = {}): Promise<PgBoss> {
   const boss = new PgBoss({ connectionString: env.DATABASE_URL, schema: "pgboss" });
   boss.on("error", (error) => console.error("pg-boss :", error));
   await boss.start();
   for (const [name, handler] of Object.entries(handlers)) {
     await boss.createQueue(name);
+    if (!work) continue;
     await boss.work<Payload>(name, async (jobs) => {
-      for (const job of jobs) await handler(job.data ?? {});
+      for (const job of jobs) {
+        try {
+          await handler(job.data ?? {});
+        } catch (error) {
+          // Objet supprimé entre-temps (événement effacé par un seed --reset…) : rien à faire.
+          if (error instanceof AppError && error.code === "not_found") continue;
+          throw error;
+        }
+      }
     });
   }
-  // Notifications différées (heures calmes) : livrées chaque minute.
-  await boss.schedule("notifications.deliver", "* * * * *", null, { tz: "Europe/Paris" });
+  if (work) {
+    // Notifications différées (heures calmes) : livrées chaque minute.
+    await boss.schedule("notifications.deliver", "* * * * *", null, { tz: "Europe/Paris" });
+  }
   deps.jobs = {
     async send(name, data, startAfter) {
       await boss.send(name, data, startAfter ? { startAfter } : {});

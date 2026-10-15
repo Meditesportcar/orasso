@@ -25,8 +25,9 @@ const SYSTEM: readonly TransitionActor[] = ["system"];
 const TRANSITIONS: ReadonlyArray<readonly [ApplicationStatus | null, ApplicationStatus, readonly TransitionActor[]]> = [
   [null, "pending", USER],
   [null, "accepted", ["staff", "organizer"]],
-  ["pending", "accepted", DECIDERS],
-  ["pending", "waitlisted", DECIDERS],
+  // Admission « sans sélection » : retenue d'office par le système (liste d'attente si complet).
+  ["pending", "accepted", [...DECIDERS, "system"]],
+  ["pending", "waitlisted", [...DECIDERS, "system"]],
   ["pending", "refused", DECIDERS],
   ["waitlisted", "accepted", DECIDERS],
   ["waitlisted", "refused", DECIDERS],
