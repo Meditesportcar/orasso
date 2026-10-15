@@ -25,11 +25,8 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "event.settle": (d) => pointsService.settleEvent(d.eventId ?? ""),
   "contest.escalate": (d) => pointsService.escalateContest(d.contestId ?? ""),
   "season.rollover": () => pointsService.rolloverSeason(),
-  // Secours : règlements de J+2 et escalades dont la tâche n'est pas passée (base restaurée, envoi en échec).
-  "points.sweep": async () => {
-    await pointsService.settleDue();
-    await pointsService.escalateDue();
-  },
+  // Secours (chaque heure) : règlements de J+2, escalades et report de saison dont la tâche n'est pas passée.
+  "points.sweep": () => pointsService.sweep(),
 };
 
 /**

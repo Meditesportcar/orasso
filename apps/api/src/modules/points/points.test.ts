@@ -334,6 +334,17 @@ describe("contestation d'un malus", () => {
   });
 });
 
+describe("fin de saison manquée", () => {
+  it("le balayage horaire rattrape le report d'un 1er janvier manqué, une seule fois", async () => {
+    const admin = await viewerOf(await signUp("Equipe", { twoFactor: true, role: "super_admin" }));
+    await pointsService.adjust(admin, p.present.u.id, 340, "Saison 2026");
+    clock.set(paris(1, 3, 10, 0, 2027));
+    expect((await pointsService.sweep()).rolledOver).toBe(true);
+    expect(await points(p.present.u.id)).toMatchObject({ pointsSeason: 100, grade: "route" });
+    expect((await pointsService.sweep()).rolledOver).toBe(false);
+  });
+});
+
 describe("fin de saison", () => {
   it("on descend d'un grade et on continue", async () => {
     const admin = await viewerOf(await signUp("Equipe", { twoFactor: true, role: "super_admin" }));

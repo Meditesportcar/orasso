@@ -401,6 +401,18 @@ export const pointsService = {
     });
   },
 
+  /**
+   * Tâche `points.sweep` (chaque heure) : règlements de J+2 et escalades manqués, et report de fin de saison si la
+   * tâche du 1er janvier n'est pas passée (API arrêtée à minuit…) ; le report est idempotent (`opened_at`).
+   */
+  async sweep() {
+    return {
+      settled: await this.settleDue(),
+      escalated: await this.escalateDue(),
+      rolledOver: await this.rolloverSeason(),
+    };
+  },
+
   /** Balayage de secours (avec la tâche quotidienne) : contestations échues non transmises. */
   async escalateDue(): Promise<number> {
     const due = await db
