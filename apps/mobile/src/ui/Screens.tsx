@@ -1,12 +1,13 @@
 // Gabarits d'écran : le fond vivant, l'en-tête (AppBar) et la zone qui défile. Les zones de sécurité (encoche, barre de
 // gestes) sont passées à l'en-tête et à la barre d'onglets, comme le demande le README du système de design.
-import { AppBar, Ground, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { AppBar, Ground, tokens, useTheme } from "@orasso/design-system/native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useSession } from "@/lib/session";
+import { Muted } from "@/ui/Muted";
 import { Avatar } from "./Avatar";
 import { JournalSheet } from "./JournalSheet";
 
@@ -123,11 +124,10 @@ function Body({ children, onRefresh }: { children: ReactNode; onRefresh?: () => 
 
 /** Intitulé de section (« À venir », « Passés · carnet de route ») : étiquette étroite en capitales. */
 export function SectionTitle({ children }: { children: ReactNode }) {
-  const { t } = useTheme();
   return (
-    <Text variant="label" color={t.color.inkMuted} style={styles.section} accessibilityRole="header">
+    <Muted variant="label" style={styles.section} accessibilityRole="header">
       {children}
-    </Text>
+    </Muted>
   );
 }
 

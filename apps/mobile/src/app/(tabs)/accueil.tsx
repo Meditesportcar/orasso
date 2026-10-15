@@ -1,8 +1,9 @@
 // Accueil : un tableau de bord, jamais un fil. « Prochain accès » en tête (bouton vers le mode jour J), puis les
 // compteurs, l'agenda de mes dates et une seule incitation à la fois. Les widgets avancés (autour de moi, météo,
 // lavage et carburant) sont hors du lot 09.
-import { applicationStatusLabels, gradeLabels, type MyApplication } from "@orasso/shared";
+
 import { Button, Counters, Plate, PosterCard, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { applicationStatusLabels, gradeLabels, type MyApplication } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
@@ -10,6 +11,7 @@ import { useApplications } from "@/lib/applications";
 import { breakTitle, formatDay, formatHour, formatShortDate, relativeDay } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { useNow } from "@/lib/useNow";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { SectionTitle, TabScreen } from "@/ui/Screens";
 
@@ -84,7 +86,11 @@ export default function Accueil() {
         <Plate style={styles.agenda}>
           {upcoming.slice(0, 6).map((a) => (
             <View key={a.id} style={styles.agendaLine}>
-              <Text variant="meta" color={a.status === "accepted" ? t.color.accent : t.color.plateMuted} style={styles.agendaDate}>
+              <Text
+                variant="meta"
+                color={a.status === "accepted" ? t.color.accent : t.color.plateMuted}
+                style={styles.agendaDate}
+              >
                 {formatShortDate(a.event.startsAt)}
               </Text>
               <Text variant="body" color={t.color.plateInk} style={styles.agendaTitle}>
@@ -94,9 +100,7 @@ export default function Accueil() {
           ))}
         </Plate>
       ) : (
-        <Text variant="body" color={t.color.inkMuted}>
-          Tes dates apparaîtront ici dès que tu auras candidaté.
-        </Text>
+        <Muted variant="body">Tes dates apparaîtront ici dès que tu auras candidaté.</Muted>
       )}
 
       {next ? (

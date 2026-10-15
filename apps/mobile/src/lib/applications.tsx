@@ -29,6 +29,8 @@ const UPCOMING_KEY = "applications.upcoming";
 const PAST_KEY = "applications.past";
 const ANNOUNCED_KEY = "announced";
 
+const persistAnnounced = (ids: Set<string> | null) => kvSetJson(ANNOUNCED_KEY, [...(ids ?? [])]);
+
 export function ApplicationsProvider({ children }: { children: ReactNode }) {
   const { status, me } = useSession();
   const [upcoming, setUpcoming] = useState<MyApplication[] | null>(null);
@@ -39,15 +41,13 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
   const announced = useRef<Set<string> | null>(null);
   const pseudo = me?.profile.pseudo ?? "";
 
-  const persistAnnounced = () => kvSetJson(ANNOUNCED_KEY, [...(announced.current ?? [])]);
-
   const detectAnnouncement = useCallback(async (apps: MyApplication[]) => {
     const stored = await kvGetJson<string[]>(ANNOUNCED_KEY);
     const accepted = apps.filter((a) => a.status === "accepted");
     if (!stored) {
       // Premier chargement sur cet appareil : les places déjà retenues ne sont pas des nouveautés.
       announced.current = new Set(accepted.map((a) => a.id));
-      await persistAnnounced();
+      await persistAnnounced(announced.current);
       return;
     }
     announced.current ??= new Set(stored);
@@ -116,14 +116,14 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
         if (announcement) {
           announced.current ??= new Set();
           announced.current.add(announcement.id);
-          void persistAnnounced();
+          void persistAnnounced(announced.current);
         }
         setAnnouncement(null);
       },
       markAnnounced: (ids) => {
         announced.current ??= new Set();
         for (const id of ids) announced.current.add(id);
-        void persistAnnounced();
+        void persistAnnounced(announced.current);
       },
     }),
     [upcoming, past, loading, offline, reload, announcement],

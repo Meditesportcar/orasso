@@ -1,6 +1,6 @@
 // Ajouter un véhicule : type, marque / modèle / génération du référentiel (avec « Autre »), plaque, catégories et
 // photos. La plaque n'est jamais visible des autres : seuls l'organisateur d'un événement où tu candidates la voit.
-import { OTHER_LABEL, vehicleTypeLabels, vehicleTypes, type VehicleType } from "@orasso/shared";
+
 import {
   Button,
   CheckboxField,
@@ -15,14 +15,16 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
+import { OTHER_LABEL, type VehicleType, vehicleTypeLabels, vehicleTypes } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/endpoints";
 import { errorMessage } from "@/lib/http";
 import { MAX_PHOTOS, type PickedPhoto, photoForm, pickPhotos } from "@/lib/photos";
 import { useApi } from "@/lib/useApi";
+import { Muted } from "@/ui/Muted";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
@@ -63,12 +65,21 @@ export default function NouveauVehicule() {
     [models.data, type],
   );
 
-  // Changer de marque (ou de type) invalide le modèle et la génération choisis.
-  useEffect(() => {
+  // Changer de type ou de marque invalide le modèle et la génération choisis ; changer de modèle, la génération.
+  const pickType = (next: VehicleType) => {
+    setType(next);
     setModelId(undefined);
     setGenerationId(undefined);
-  }, [makeId, type]);
-  useEffect(() => setGenerationId(undefined), [modelId]);
+  };
+  const pickMake = (next: string) => {
+    setMakeId(next);
+    setModelId(undefined);
+    setGenerationId(undefined);
+  };
+  const pickModel = (next: string) => {
+    setModelId(next);
+    setGenerationId(undefined);
+  };
 
   const plateMissing = !unregistered && plate.trim().length === 0;
   const ready = Boolean(makeId && modelId) && !plateMissing;
@@ -132,7 +143,14 @@ export default function NouveauVehicule() {
               {error}
             </Text>
           ) : null}
-          <Button variant="primary" icon="check" loading={busy} disabled={!ready} onPress={() => void submit()} fullWidth>
+          <Button
+            variant="primary"
+            icon="check"
+            loading={busy}
+            disabled={!ready}
+            onPress={() => void submit()}
+            fullWidth
+          >
             {created ? "Terminer l'envoi des photos" : "Ajouter à mon garage"}
           </Button>
         </>
@@ -143,7 +161,7 @@ export default function NouveauVehicule() {
       </Text>
       <ChipRow>
         {vehicleTypes.map((v) => (
-          <Chip key={v} selected={type === v} onPress={() => setType(v)}>
+          <Chip key={v} selected={type === v} onPress={() => pickType(v)}>
             {vehicleTypeLabels[v]}
           </Chip>
         ))}
@@ -154,14 +172,14 @@ export default function NouveauVehicule() {
           label="Marque"
           options={options(makes.data)}
           value={makeId}
-          onValueChange={setMakeId}
+          onValueChange={pickMake}
           placeholder="Choisir la marque"
         />
         <SelectField
           label="Modèle"
           options={options(modelRows)}
           value={modelId}
-          onValueChange={setModelId}
+          onValueChange={pickModel}
           placeholder={makeId ? "Choisir le modèle" : "Choisis d'abord la marque"}
         />
         <SelectField
@@ -207,16 +225,16 @@ export default function NouveauVehicule() {
 
       {categories.data && categories.data.length > 0 ? (
         <>
-          <Text variant="label" color={t.color.inkMuted}>
-            Catégories
-          </Text>
+          <Muted variant="label">Catégories</Muted>
           <ChipRow>
             {categories.data.map((c) => (
               <Chip
                 key={c.id}
                 selected={categoryIds.includes(c.id)}
                 onPress={() =>
-                  setCategoryIds((ids) => (ids.includes(c.id) ? ids.filter((x) => x !== c.id) : [...ids, c.id].slice(0, 10)))
+                  setCategoryIds((ids) =>
+                    ids.includes(c.id) ? ids.filter((x) => x !== c.id) : [...ids, c.id].slice(0, 10),
+                  )
                 }
               >
                 {c.label}
@@ -226,13 +244,13 @@ export default function NouveauVehicule() {
         </>
       ) : null}
 
-      <Text variant="label" color={t.color.inkMuted}>
+      <Muted variant="label">
         Photos · {photos.length} / {MAX_PHOTOS}
-      </Text>
-      <Text variant="body" color={t.color.inkMuted}>
+      </Muted>
+      <Muted variant="body">
         Évite de montrer la plaque : tes photos sont visibles de tous les inscrits. La première est la photo de ta
         carte. Il en faut au moins une pour candidater.
-      </Text>
+      </Muted>
       {photos.length > 0 ? (
         <View style={styles.photos}>
           {photos.map((p, i) => (
@@ -258,11 +276,7 @@ export default function NouveauVehicule() {
           Ajouter des photos
         </Button>
       ) : null}
-      {progress ? (
-        <Text variant="meta" color={t.color.inkMuted}>
-          {progress}
-        </Text>
-      ) : null}
+      {progress ? <Muted variant="meta">{progress}</Muted> : null}
     </FlowScreen>
   );
 }

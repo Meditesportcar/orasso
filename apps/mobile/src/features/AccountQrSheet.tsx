@@ -1,8 +1,9 @@
 // QR de compte en grand (docs/02) : dynamique, il se redessine toutes les 60 s et fonctionne hors ligne, avec le secret
 // reçu à la connexion (gardé dans le trousseau sécurisé). Un pro le scanne pour une remise ; une capture prêtée expire
 // en une à deux minutes.
-import { ACCOUNT_QR_STEP_SECONDS, type AccountQrSecret, gradeLabels } from "@orasso/shared";
+
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { ACCOUNT_QR_STEP_SECONDS, type AccountQrSecret, gradeLabels } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 
@@ -29,7 +30,13 @@ export function AccountQrSheet({ visible, onClose }: { visible: boolean; onClose
     let cancelled = false;
     (async () => {
       const stored = await loadAccountQrSecret();
-      if (stored) return !cancelled && (setSecret(stored), setMissing(false));
+      if (stored) {
+        if (!cancelled) {
+          setSecret(stored);
+          setMissing(false);
+        }
+        return;
+      }
       try {
         const fresh = await api.accountQrSecret();
         await saveAccountQrSecret(fresh);

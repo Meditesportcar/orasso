@@ -1,7 +1,7 @@
 // Candidater, en trois écrans : 1 le ou les véhicules, 2 le règlement (et, si besoin, accompagnants et un mot),
 // 3 le récapitulatif avec « Suivre l'organisateur » et la newsletter. À l'envoi, la demande d'autorisation des
 // notifications est proposée (docs/01 : « juste après une candidature »).
-import { type MyApplication, type VehicleFull } from "@orasso/shared";
+
 import {
   Button,
   CheckboxField,
@@ -14,11 +14,10 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
+import type { MyApplication, VehicleFull } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-
-import { NotificationAsk } from "@/ui/NotificationAsk";
 import { useApplications } from "@/lib/applications";
 import { api } from "@/lib/endpoints";
 import { formatDayHour } from "@/lib/format";
@@ -26,7 +25,9 @@ import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { NotificationAsk } from "@/ui/NotificationAsk";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -38,7 +39,6 @@ export default function Candidater() {
   const { reload, markAnnounced } = useApplications();
   const event = useApi(() => api.eventBySlug(slug), [slug]);
   const vehicles = useApi(() => api.vehicles(), []);
-  const categories = useApi(() => api.categories(), [], { cacheKey: "ref.categories" });
   const [step, setStep] = useState(1);
   const [picked, setPicked] = useState<string[]>([]);
   const [rulesAccepted, setRulesAccepted] = useState(false);
@@ -66,13 +66,7 @@ export default function Candidater() {
   if (!e) {
     return (
       <FlowScreen title="Candidater" onClose={close}>
-        {event.error ? (
-          <Notice tone="error">{event.error.message}</Notice>
-        ) : (
-          <Text variant="body" color={t.color.inkMuted}>
-            Chargement…
-          </Text>
-        )}
+        {event.error ? <Notice tone="error">{event.error.message}</Notice> : <Muted variant="body">Chargement…</Muted>}
       </FlowScreen>
     );
   }
@@ -151,15 +145,11 @@ export default function Candidater() {
           <Text variant="posterL" color={t.color.ink}>
             {"Avec quel\nvéhicule ?"}
           </Text>
-          <Text variant="body" color={t.color.inkMuted}>
+          <Muted variant="body">
             Ceux qui collent aux catégories recherchées sont en premier. Limite : {limit} par personne pour cet
             événement.
-          </Text>
-          {vehicles.loading ? (
-            <Text variant="body" color={t.color.inkMuted}>
-              Chargement de ton garage…
-            </Text>
-          ) : null}
+          </Muted>
+          {vehicles.loading ? <Muted variant="body">Chargement de ton garage…</Muted> : null}
           {eligible.map((v) => {
             const on = picked.includes(v.id);
             const match = v.categories.some((c) => wanted.has(c.id));
@@ -204,12 +194,15 @@ export default function Candidater() {
                     </ChipRow>
                   </View>
                   {noPhoto ? null : (
-                  <View
-                    style={[
-                      styles.check,
-                      { borderColor: on ? t.color.accent : t.color.plateLine, backgroundColor: on ? t.color.accent : "transparent" },
-                    ]}
-                  />
+                    <View
+                      style={[
+                        styles.check,
+                        {
+                          borderColor: on ? t.color.accent : t.color.plateLine,
+                          backgroundColor: on ? t.color.accent : "transparent",
+                        },
+                      ]}
+                    />
                   )}
                 </Plate>
               </Pressable>
@@ -231,7 +224,8 @@ export default function Candidater() {
           </Text>
           <Plate style={styles.rules}>
             <Text variant="body" color={t.color.plateInk}>
-              {e.rulesText ?? "L'organisateur n'a pas ajouté de règlement particulier : respecte le voisinage, roule au pas, aucun burn."}
+              {e.rulesText ??
+                "L'organisateur n'a pas ajouté de règlement particulier : respecte le voisinage, roule au pas, aucun burn."}
             </Text>
           </Plate>
           <CheckboxField
@@ -245,13 +239,23 @@ export default function Candidater() {
                 Avec toi (accompagnants)
               </Text>
               <View style={styles.stepper}>
-                <Button variant="plate" icon="close" disabled={companions === 0} onPress={() => setCompanions((n) => Math.max(0, n - 1))}>
+                <Button
+                  variant="plate"
+                  icon="close"
+                  disabled={companions === 0}
+                  onPress={() => setCompanions((n) => Math.max(0, n - 1))}
+                >
                   Moins
                 </Button>
                 <Text variant="number" color={t.color.plateInk}>
                   {companions}
                 </Text>
-                <Button variant="plate" icon="add" disabled={companions >= 9} onPress={() => setCompanions((n) => Math.min(9, n + 1))}>
+                <Button
+                  variant="plate"
+                  icon="add"
+                  disabled={companions >= 9}
+                  onPress={() => setCompanions((n) => Math.min(9, n + 1))}
+                >
                   Plus
                 </Button>
               </View>
@@ -276,8 +280,15 @@ export default function Candidater() {
             <Line k="Événement" v={e.title} />
             <Line k="Quand" v={formatDayHour(e.startsAt)} />
             <Line k={chosen.length > 1 ? "Véhicules" : "Véhicule"} v={chosen.map((v) => v.label).join("\n")} />
-            <Line k="Plaque" v={chosen.map((v) => v.plate ?? "non immatriculé").join("\n")} hint="visible par l'organisateur seulement" />
-            <Line k="Avec toi" v={companions === 0 ? "personne" : `${companions} accompagnant${companions > 1 ? "s" : ""}`} />
+            <Line
+              k="Plaque"
+              v={chosen.map((v) => v.plate ?? "non immatriculé").join("\n")}
+              hint="visible par l'organisateur seulement"
+            />
+            <Line
+              k="Avec toi"
+              v={companions === 0 ? "personne" : `${companions} accompagnant${companions > 1 ? "s" : ""}`}
+            />
             <Line
               k="Réponse"
               v={e.admission === "open" ? "Retenue d'office" : "Par l'organisateur · tu seras notifié"}
@@ -290,9 +301,9 @@ export default function Candidater() {
             onChange={setFollow}
           />
           <CheckboxField label="Recevoir la newsletter d'Orasso." checked={newsletter} onChange={setNewsletter} />
-          <Text variant="caption" color={t.color.inkMuted}>
+          <Muted variant="caption">
             Ta candidature n'est visible que de l'organisateur. Tu peux te désister depuis l'onglet Accès.
-          </Text>
+          </Muted>
         </>
       ) : null}
     </FlowScreen>
@@ -316,11 +327,11 @@ function ResultSheet({
       <Text variant="title" color={t.color.ink}>
         {retained ? "Tu es retenu" : "Candidature envoyée"}
       </Text>
-      <Text variant="body" color={t.color.inkMuted}>
+      <Muted variant="body">
         {retained
           ? "L'événement est sans sélection : ta place est réservée. Ta carte d'accès t'attend dans l'onglet Accès."
           : "L'organisateur te répond au fil des candidatures. Tu seras notifié dès qu'il aura décidé."}
-      </Text>
+      </Muted>
       <NotificationAsk reason="Active les notifications pour recevoir la réponse tout de suite, même appli fermée." />
       <Button variant="primary" icon="qr" next onPress={onAccess} fullWidth>
         Voir mes accès

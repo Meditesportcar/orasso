@@ -2,8 +2,9 @@
 // statut de l'événement, l'itinéraire, les consignes, la zone, la météo. Tout vient du kit enregistré sur le
 // téléphone dès la retenue : l'écran s'affiche et le QR se dessine sans aucun réseau. S'ouvre à partir de la veille,
 // se ferme après le scan ou à J+1.
-import { gradeLabels } from "@orasso/shared";
+
 import { Button, Chip, Plate, StatusBadge, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { gradeLabels } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -17,6 +18,7 @@ import { jourJOpensAt, jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, refreshKit } from "@/lib/kits";
 import { useSession } from "@/lib/session";
 import { useNow } from "@/lib/useNow";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { QrCode } from "@/ui/QrCode";
 import { FlowScreen } from "@/ui/Screens";
@@ -59,6 +61,7 @@ export default function JourJ() {
   }, [id]);
 
   // 2. S'il y a du réseau (et à chaque retour du réseau), on rafraîchit : consignes, zone, météo, entrée enregistrée.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `app` change d'identité à chaque rechargement des candidatures ; seuls son identifiant et son statut relancent le rafraîchissement
   useEffect(() => {
     if (!app || !online) return;
     let cancelled = false;
@@ -80,9 +83,7 @@ export default function JourJ() {
   if (kit === undefined) {
     return (
       <FlowScreen title="Jour J · hors ligne OK" onClose={close} still>
-        <Text variant="body" color={c.inkMuted}>
-          Chargement…
-        </Text>
+        <Muted variant="body">Chargement…</Muted>
       </FlowScreen>
     );
   }
@@ -140,11 +141,12 @@ export default function JourJ() {
         ) : undefined
       }
     >
-      <View style={styles.head}>
-        <Text variant="posterXl" color={c.ink}>
+      {/* En plein soleil comme de nuit : le titre et le compte à rebours sont sur une plaque, pas sur le fond (en Sable, le coin haut-droit du fond descend au graphite). */}
+      <Plate style={styles.head}>
+        <Text variant="posterXl" color={c.plateInk}>
           {kit.event.title}
         </Text>
-        <Text variant="body" color={c.inkMuted}>
+        <Text variant="body" color={c.plateMuted}>
           {untilStart > 0
             ? `${formatDay(kit.event.startsAt, tz)} · ouverture des portes dans ${formatDuration(untilStart)}`
             : "L'événement a commencé."}
@@ -155,15 +157,15 @@ export default function JourJ() {
           ) : kit.event.outlook === "uncertain" ? (
             <StatusBadge status="uncertain" />
           ) : (
-            <Chip>Maintenu</Chip>
+            <Chip surface="plate">Maintenu</Chip>
           )}
           {kit.weather ? (
-            <Chip>
+            <Chip surface="plate">
               {kit.weather.temperature} °C · {kit.weather.label}
             </Chip>
           ) : null}
         </View>
-      </View>
+      </Plate>
 
       {state === "early" ? (
         <Plate kind="note" style={styles.block}>
@@ -218,17 +220,18 @@ export default function JourJ() {
         </View>
       )}
 
-      {state === "open" ? (
-        <Text variant="label" color={c.inkMuted} style={styles.center}>
-          Luminosité au maximum · présente le code à travers le pare-brise
+      <Plate kind="note" style={styles.block}>
+        {state === "open" ? (
+          <Text variant="label" color={c.plateInk} style={styles.center}>
+            Luminosité au maximum · présente le code à travers le pare-brise
+          </Text>
+        ) : null}
+        <Text variant="meta" color={offline ? c.accent : c.plateMuted} style={styles.center}>
+          {offline
+            ? `Hors ligne · QR et infos enregistrés le ${formatStamp(kit.savedAt, tz)}`
+            : `À jour · enregistré sur ce téléphone le ${formatStamp(kit.savedAt, tz)}`}
         </Text>
-      ) : null}
-
-      <Text variant="meta" color={offline ? c.accentText : c.inkMuted} style={styles.center}>
-        {offline
-          ? `Hors ligne · QR et infos enregistrés le ${formatStamp(kit.savedAt, tz)}`
-          : `À jour · enregistré sur ce téléphone le ${formatStamp(kit.savedAt, tz)}`}
-      </Text>
+      </Plate>
 
       <Plate style={styles.block}>
         <Text variant="label" color={c.plateMuted}>
@@ -238,7 +241,8 @@ export default function JourJ() {
           {place || kit.event.title}
         </Text>
         <Text variant="meta" color={c.plateMuted}>
-          {formatDay(kit.event.startsAt, tz)} · {formatHour(kit.event.startsAt, tz)} – {formatHour(kit.event.endsAt, tz)}
+          {formatDay(kit.event.startsAt, tz)} · {formatHour(kit.event.startsAt, tz)} –{" "}
+          {formatHour(kit.event.endsAt, tz)}
         </Text>
         <Button variant="plate" icon="place" onPress={() => void Linking.openURL(mapsUrl(kit))} fullWidth>
           Ouvrir dans Plans
@@ -260,7 +264,7 @@ export default function JourJ() {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: space2 },
+  head: { gap: space2, padding: space3 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space2, alignItems: "center" },
   poster: { borderRadius: tokens.radius.radiusLg, padding: space4, gap: space3 },
   badge: { alignSelf: "flex-end" },

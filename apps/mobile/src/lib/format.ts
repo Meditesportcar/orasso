@@ -8,7 +8,8 @@ const MONTHS = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Jour de la semaine (0 = dimanche) d'une date du calendrier. */
-const weekdayOf = (w: { year: number; month: number; day: number }) => new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay();
+const weekdayOf = (w: { year: number; month: number; day: number }) =>
+  new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay();
 
 /** « Sam 17 oct » */
 export function formatDay(iso: string | Date, timeZone = BUSINESS_TIMEZONE): string {

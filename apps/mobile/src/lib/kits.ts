@@ -71,7 +71,9 @@ async function fetchWeather(lat: number, lng: number, startsAt: string, timezone
     const timer = setTimeout(() => controller.abort(), 6_000);
     const res = await fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
     if (!res.ok) return null;
-    const json = (await res.json()) as { hourly?: { time: string[]; temperature_2m: number[]; weather_code: number[] } };
+    const json = (await res.json()) as {
+      hourly?: { time: string[]; temperature_2m: number[]; weather_code: number[] };
+    };
     const hourly = json.hourly;
     if (!hourly) return null;
     const hour = new Date(startsAt)
@@ -89,7 +91,11 @@ async function fetchWeather(lat: number, lng: number, startsAt: string, timezone
 
 /** Récupère le QR et les infos de l'événement ; garde l'ancienne météo si la nouvelle n'est pas disponible. */
 export async function refreshKit(app: MyApplication, pseudo: string): Promise<AccessKit | null> {
-  const [pass, event, previous] = await Promise.all([api.pass(app.id), api.eventBySlug(app.event.slug), loadKit(app.id)]);
+  const [pass, event, previous] = await Promise.all([
+    api.pass(app.id),
+    api.eventBySlug(app.event.slug),
+    loadKit(app.id),
+  ]);
   if (!pass.payload) {
     await dropKit(app.id);
     return null;

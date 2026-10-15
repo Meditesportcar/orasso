@@ -5,9 +5,9 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { kvSet } from "@/lib/kv";
 import { AuthForm } from "@/features/AuthForm";
+import { kvSet } from "@/lib/kv";
+import { Muted } from "@/ui/Muted";
 
 const { space2, space3, space4 } = tokens.spacing;
 
@@ -47,7 +47,10 @@ export default function Welcome() {
     <Ground animated style={styles.fill}>
       <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView
-          contentContainerStyle={[styles.content, { paddingTop: insets.top + space4, paddingBottom: insets.bottom + space4 }]}
+          contentContainerStyle={[
+            styles.content,
+            { paddingTop: insets.top + space4, paddingBottom: insets.bottom + space4 },
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           <Logo width={160} />
@@ -89,9 +92,9 @@ export default function Welcome() {
               Continuer
             </Button>
           ) : (
-            <Text variant="caption" color={t.color.inkMuted} style={styles.center}>
+            <Muted variant="caption" style={styles.center}>
               Pas de demande de notifications ici : on te la fera quand tu seras retenu.
-            </Text>
+            </Muted>
           )}
         </ScrollView>
       </KeyboardAvoidingView>

@@ -43,7 +43,10 @@ const qs = (params: Record<string, string | number | undefined | null>) => {
 export const authApi = {
   /** Connexion e-mail + mot de passe : le jeton de session revient dans l'en-tête `set-auth-token`. */
   async signIn(email: string, password: string): Promise<string> {
-    const { headers } = await requestWithHeaders("/api/auth/sign-in/email", { method: "POST", body: { email, password } });
+    const { headers } = await requestWithHeaders("/api/auth/sign-in/email", {
+      method: "POST",
+      body: { email, password },
+    });
     const token = headers.get("set-auth-token");
     if (!token) throw new Error("Jeton de session absent de la réponse");
     return token;
@@ -73,7 +76,8 @@ export const api = {
     name?: string | null;
     appVersion?: string | null;
   }) => request<unknown>("/api/me/devices", { method: "POST", body }),
-  notifications: (cursor?: string) => request<Page<NotificationItem>>(`/api/me/notifications${qs({ limit: 30, cursor })}`),
+  notifications: (cursor?: string) =>
+    request<Page<NotificationItem>>(`/api/me/notifications${qs({ limit: 30, cursor })}`),
   markNotificationsRead: () => request<unknown>("/api/me/notifications/read", { method: "POST", body: { all: true } }),
 
   // Garage.
@@ -86,7 +90,8 @@ export const api = {
     request<VehiclePhoto>(`/api/me/vehicles/${vehicleId}/photos`, { method: "POST", form, timeout: 60_000 }),
   makes: () => request<VehicleMake[]>("/api/vehicle-reference/makes"),
   models: (makeId: string) => request<VehicleModel[]>(`/api/vehicle-reference/makes/${makeId}/models`),
-  generations: (modelId: string) => request<VehicleGeneration[]>(`/api/vehicle-reference/models/${modelId}/generations`),
+  generations: (modelId: string) =>
+    request<VehicleGeneration[]>(`/api/vehicle-reference/models/${modelId}/generations`),
   categories: () => request<Category[]>("/api/vehicle-reference/categories"),
 
   // Événements.
@@ -99,7 +104,8 @@ export const api = {
     request<MyApplication[]>(`/api/events/${eventId}/applications`, { method: "POST", body }),
   applications: (scope: "upcoming" | "past") => request<MyApplication[]>(`/api/me/applications${qs({ scope })}`),
   withdraw: (id: string) => request<MyApplication>(`/api/applications/${id}/withdraw`, { method: "POST", body: {} }),
-  acceptOffer: (id: string) => request<MyApplication>(`/api/applications/${id}/offer/accept`, { method: "POST", body: {} }),
+  acceptOffer: (id: string) =>
+    request<MyApplication>(`/api/applications/${id}/offer/accept`, { method: "POST", body: {} }),
   declineOffer: (id: string) =>
     request<MyApplication>(`/api/applications/${id}/offer/decline`, { method: "POST", body: {} }),
   pass: (applicationId: string) => request<AccessPass>(`/api/applications/${applicationId}/pass`),

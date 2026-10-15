@@ -1,7 +1,17 @@
 // Moi, derrière l'avatar : profil minimal, points et grade de la saison, thème de l'appli, déconnexion. Les casquettes
 // (structures, pro, prestataire) et les réglages complets viennent plus tard.
-import { gradeLabels, pointKindLabels, type PointKind } from "@orasso/shared";
-import { Button, Chip, ChipRow, Plate, Text, type ThemePreference, tokens, useTheme } from "@orasso/design-system/native";
+
+import {
+  Button,
+  Chip,
+  ChipRow,
+  Plate,
+  Text,
+  type ThemePreference,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
+import { gradeLabels, type PointKind, pointKindLabels } from "@orasso/shared";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
@@ -11,6 +21,7 @@ import { formatShortDate } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
+import { Muted } from "@/ui/Muted";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -52,7 +63,7 @@ export default function Moi() {
           {p?.next
             ? `Encore ${Math.max(0, p.next.threshold - p.pointsSeason)} points pour passer ${gradeLabels[p.next.grade]}. `
             : "Grade maximal de la saison. "}
-          {p ? `Saison ${p.season.name}.` : ""}
+          {p ? `${p.season.name}.` : ""}
         </Text>
         {p?.entries.slice(0, 6).map((entry) => (
           <View key={entry.id} style={styles.entry}>
@@ -83,9 +94,9 @@ export default function Moi() {
           </Chip>
         ))}
       </ChipRow>
-      <Text variant="caption" color={t.color.inkMuted}>
+      <Muted variant="caption">
         Sable est fait pour le plein soleil. « Selon l'appareil » suit le mode clair ou sombre du téléphone.
-      </Text>
+      </Muted>
 
       <SectionTitle>Compte</SectionTitle>
       <Button

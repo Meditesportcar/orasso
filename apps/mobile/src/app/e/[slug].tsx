@@ -1,14 +1,15 @@
 // Page d'un événement (lien partagé ou depuis Explorer) : la carte affiche, les compteurs, l'admission, le public, le
 // règlement. Ouverte sans compte ; « Candidater » demande de se connecter puis revient exactement ici.
+
+import { Chip, ChipRow, Counters, Plate, PosterCard, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   applicationStatusLabels,
+  type EventPublic,
   eventAdmissionLabels,
   eventFormatLabels,
   eventOutlookLabels,
   eventPublicAccessLabels,
-  type EventPublic,
 } from "@orasso/shared";
-import { Chip, ChipRow, Counters, Plate, PosterCard, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { StyleSheet } from "react-native";
@@ -18,6 +19,7 @@ import { breakTitle, formatDay, formatDayHour, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
@@ -39,11 +41,11 @@ export default function EventPage() {
     return (
       <FlowScreen title="Événement" onClose={close}>
         {event.error ? (
-          <Notice tone="error">{event.error.status === 404 ? "Cet événement n'existe pas ou plus." : event.error.message}</Notice>
+          <Notice tone="error">
+            {event.error.status === 404 ? "Cet événement n'existe pas ou plus." : event.error.message}
+          </Notice>
         ) : (
-          <Text variant="body" color={t.color.inkMuted}>
-            Chargement…
-          </Text>
+          <Muted variant="body">Chargement…</Muted>
         )}
       </FlowScreen>
     );
@@ -53,7 +55,8 @@ export default function EventPage() {
   const opensAt = new Date(e.registrationOpensAtForMe ?? e.registrationsOpenAt);
   const notYetOpen = Date.now() < opensAt.getTime();
   const cancelled = e.status === "cancelled";
-  const canApply = !cancelled && !e.isLocked && !notYetOpen && (e.remaining === null || e.remaining > 0 || e.admission !== "open");
+  const canApply =
+    !cancelled && !e.isLocked && !notYetOpen && (e.remaining === null || e.remaining > 0 || e.admission !== "open");
   const wanted = (e.criteria?.categoryIds ?? [])
     .map((id) => categories.data?.find((c) => c.id === id)?.label)
     .filter((l): l is string => Boolean(l));
@@ -73,7 +76,10 @@ export default function EventPage() {
           source: mediaSource(e.posterUrl),
           placeholder: `linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`,
         }}
-        status={posterStatus(e, mine.some((a) => a.status === "accepted"))}
+        status={posterStatus(
+          e,
+          mine.some((a) => a.status === "accepted"),
+        )}
         action={
           mine.length > 0
             ? { label: "Voir mes accès", icon: "qr", next: true, onPress: () => router.navigate("/acces") }
@@ -105,23 +111,25 @@ export default function EventPage() {
       />
 
       {wanted.length > 0 ? (
-        <>
-          <Text variant="label" color={t.color.inkMuted}>
+        <Plate style={styles.info}>
+          <Text variant="label" color={t.color.plateMuted}>
             Recherché
           </Text>
           <ChipRow>
             {wanted.map((label) => (
-              <Chip key={label} variant="accent">
+              <Chip key={label} variant="accent" surface="plate">
                 {label}
               </Chip>
             ))}
           </ChipRow>
-        </>
+        </Plate>
       ) : null}
 
       <Info label="Quand et où">
         {formatDayHour(e.startsAt)} → {formatDayHour(e.endsAt)}
-        {e.addressLine || e.city ? `\n${[e.addressLine, [e.postalCode, e.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")}` : ""}
+        {e.addressLine || e.city
+          ? `\n${[e.addressLine, [e.postalCode, e.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")}`
+          : ""}
       </Info>
       <Info label="Admission">
         {eventAdmissionLabels[e.admission]}

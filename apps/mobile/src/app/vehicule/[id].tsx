@@ -10,6 +10,7 @@ import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { MAX_PHOTOS, photoForm, pickPhotos } from "@/lib/photos";
 import { useApi } from "@/lib/useApi";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
@@ -60,17 +61,15 @@ export default function VehiculeFiche() {
   return (
     <FlowScreen title="Mon véhicule" onClose={close} onRefresh={vehicle.reload}>
       {!v ? (
-        <Text variant="body" color={t.color.inkMuted}>
-          {vehicle.error ? vehicle.error.message : "Chargement…"}
-        </Text>
+        <Muted variant="body">{vehicle.error ? vehicle.error.message : "Chargement…"}</Muted>
       ) : (
         <>
           <Text variant="posterL" color={t.color.ink}>
             {v.label}
           </Text>
-          <Text variant="meta" color={t.color.inkMuted}>
+          <Muted variant="meta">
             {[v.year, v.powerHp ? `${v.powerHp} ch` : null, v.color].filter(Boolean).join(" · ")}
-          </Text>
+          </Muted>
           {v.categories.length > 0 ? (
             <ChipRow>
               {v.categories.map((c) => (
@@ -79,9 +78,9 @@ export default function VehiculeFiche() {
             </ChipRow>
           ) : null}
 
-          <Text variant="label" color={t.color.inkMuted}>
+          <Muted variant="label">
             Photos · {v.photos.length} / {MAX_PHOTOS}
-          </Text>
+          </Muted>
           {v.photos.length === 0 ? (
             <Notice>Ajoute au moins une photo : il en faut une pour candidater à un événement.</Notice>
           ) : (
@@ -102,25 +101,13 @@ export default function VehiculeFiche() {
               ))}
             </View>
           )}
-          <Text variant="body" color={t.color.inkMuted}>
-            Évite de montrer la plaque : tes photos sont visibles de tous les inscrits.
-          </Text>
+          <Muted variant="body">Évite de montrer la plaque : tes photos sont visibles de tous les inscrits.</Muted>
           {v.photos.length < MAX_PHOTOS ? (
-            <Button
-              variant="primary"
-              icon="add"
-              loading={busy !== null}
-              onPress={() => void add()}
-              fullWidth
-            >
+            <Button variant="primary" icon="add" loading={busy !== null} onPress={() => void add()} fullWidth>
               Ajouter des photos
             </Button>
           ) : null}
-          {busy ? (
-            <Text variant="meta" color={t.color.inkMuted}>
-              {busy}
-            </Text>
-          ) : null}
+          {busy ? <Muted variant="meta">{busy}</Muted> : null}
           {error ? <Notice tone="error">{error}</Notice> : null}
 
           <Plate style={styles.plate}>

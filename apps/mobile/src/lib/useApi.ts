@@ -53,7 +53,6 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
     };
   }, [cacheKey]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `deps` est la liste voulue par l'appelant
   const reload = useCallback(async (): Promise<T | null> => {
     if (!enabled) return null;
     try {

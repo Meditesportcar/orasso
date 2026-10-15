@@ -1,13 +1,11 @@
 // Une carte de l'onglet Accès : une candidature avec son statut, ce qu'on peut en faire (mode jour J, se désister,
 // accepter une place libérée) et, pour un refus, le motif envoyé par l'organisateur.
-import {
-  type MyApplication,
-  refusalReasonLabels,
-} from "@orasso/shared";
+
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { type MyApplication, refusalReasonLabels } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
-import { formatDayHour, formatDuration, formatShortDate } from "@/lib/format";
+import { formatDayHour, formatDuration, formatHour, formatShortDate } from "@/lib/format";
 import { ApplicationStatusBadge } from "./StatusOf";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -43,6 +41,7 @@ export function AccessCard({
   if (app.status === "accepted" && !app.checkedInAt) {
     details.push(`désistement sans pénalité jusqu'au ${formatShortDate(app.withdrawDeadline)}`);
   }
+  if (app.checkedInAt) details.push(`entrée enregistrée à ${formatHour(app.checkedInAt)}`);
   if (app.status === "pending") details.push("réponse de l'organisateur à venir");
   if (app.status === "waitlisted") details.push("tu seras prévenu si une place se libère");
   if (app.status === "refused") {
@@ -92,7 +91,7 @@ export function AccessCard({
             </Button>
           </>
         ) : null}
-        {app.status === "accepted" ? (
+        {app.status === "accepted" && !app.checkedInAt ? (
           <Button variant={primary ? "primary" : "plate"} icon="qr" next onPress={onJourJ} fullWidth>
             Mode jour J
           </Button>

@@ -1,8 +1,8 @@
 import {
   OpeningScreen,
   parseThemePreference,
-  ThemeProvider,
   type ThemePreference,
+  ThemeProvider,
   useOrassoFonts,
   useTheme,
 } from "@orasso/design-system/native";

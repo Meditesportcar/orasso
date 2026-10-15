@@ -1,7 +1,8 @@
 // Explorer : le segment Événements en liste simple (recherche et format). La carte, les Pros et les Personnes et
 // crews arrivent avec le lot 13.
-import { type EventCard, type EventFormat, eventFormatLabels, eventFormats } from "@orasso/shared";
+
 import { Button, Chip, ChipRow, Photo, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { type EventCard, type EventFormat, eventFormatLabels, eventFormats } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -10,6 +11,7 @@ import { api } from "@/lib/endpoints";
 import { formatDay, formatHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 
@@ -81,15 +83,9 @@ export default function Explorer() {
       </ChipRow>
 
       {error ? <Notice tone="error">{error}</Notice> : null}
-      {items === null && !error ? (
-        <Text variant="body" color={t.color.inkMuted}>
-          Chargement…
-        </Text>
-      ) : null}
+      {items === null && !error ? <Muted variant="body">Chargement…</Muted> : null}
       {items?.length === 0 ? (
-        <Text variant="body" color={t.color.inkMuted}>
-          Aucun événement ne correspond. Essaie un autre format ou une autre recherche.
-        </Text>
+        <Muted variant="body">Aucun événement ne correspond. Essaie un autre format ou une autre recherche.</Muted>
       ) : null}
 
       {items?.map((event) => (
@@ -120,7 +116,11 @@ export default function Explorer() {
                 {event.city ? ` · ${event.city}` : ""}
               </Text>
               <Text variant="meta" color={t.color.plateMuted}>
-                {event.remaining === null ? "Places libres" : event.remaining > 0 ? `${event.remaining} places` : "Complet"}
+                {event.remaining === null
+                  ? "Places libres"
+                  : event.remaining > 0
+                    ? `${event.remaining} places`
+                    : "Complet"}
               </Text>
             </View>
           </Plate>

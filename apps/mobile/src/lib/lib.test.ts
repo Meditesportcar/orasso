@@ -6,8 +6,8 @@ import {
   type AccountQrSecret,
   accountQrPayload,
   decodeAccountQrPayload,
-  encodePassPayload,
   encodePassMessage,
+  encodePassPayload,
   type HmacSha1,
   matchAccountQrCounter,
   PASS_PAYLOAD_LENGTH,
@@ -46,8 +46,12 @@ describe("QR de compte hors ligne", () => {
   });
 
   it("se redessine toutes les 60 s", () => {
-    expect(accountQrAt(secret, new Date("2026-10-17T15:00:01Z"))).toBe(accountQrAt(secret, new Date("2026-10-17T15:00:59Z")));
-    expect(accountQrAt(secret, new Date("2026-10-17T15:00:59Z"))).not.toBe(accountQrAt(secret, new Date("2026-10-17T15:01:00Z")));
+    expect(accountQrAt(secret, new Date("2026-10-17T15:00:01Z"))).toBe(
+      accountQrAt(secret, new Date("2026-10-17T15:00:59Z")),
+    );
+    expect(accountQrAt(secret, new Date("2026-10-17T15:00:59Z"))).not.toBe(
+      accountQrAt(secret, new Date("2026-10-17T15:01:00Z")),
+    );
     expect(secondsLeft(new Date("2026-10-17T15:00:20Z"))).toBe(40);
     expect(hmacSha1(secretBytes, shortId)).toEqual(nodeHmac(secretBytes, shortId));
   });

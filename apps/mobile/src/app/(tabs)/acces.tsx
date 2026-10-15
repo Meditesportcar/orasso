@@ -1,14 +1,15 @@
 // Accès : ta place aux événements. À venir (une carte par candidature avec son statut, place libérée à accepter,
 // désistement), Où je suis staff, Passés (carnet de route : pointage en attente, points, contestation d'un malus).
+
+import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
-  contestStatusLabels,
   type ContestStatus,
+  contestStatusLabels,
   type MyApplication,
   type MyStaffEvent,
   POINTS_PENDING_LABEL,
   staffPresenceLabels,
 } from "@orasso/shared";
-import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -22,10 +23,11 @@ import { errorMessage } from "@/lib/http";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { AccessCard } from "@/ui/AccessCard";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { SectionTitle, TabScreen } from "@/ui/Screens";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space2, space3 } = tokens.spacing;
 
 export default function Acces() {
   const { t } = useTheme();
@@ -83,7 +85,9 @@ export default function Acces() {
         </>
       }
     >
-      {offline ? <Notice>Hors ligne : voici ce que ton téléphone a gardé. Tes QR du jour J restent disponibles.</Notice> : null}
+      {offline ? (
+        <Notice>Hors ligne : voici ce que ton téléphone a gardé. Tes QR du jour J restent disponibles.</Notice>
+      ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <SectionTitle>À venir</SectionTitle>
@@ -103,9 +107,7 @@ export default function Acces() {
           />
         ))
       ) : loading ? (
-        <Text variant="body" color={t.color.inkMuted}>
-          Chargement…
-        </Text>
+        <Muted variant="body">Chargement…</Muted>
       ) : (
         <Plate kind="note" style={styles.empty}>
           <Text variant="body" color={t.color.plateInk}>
@@ -140,9 +142,9 @@ export default function Acces() {
           ))}
         </Plate>
       ) : (
-        <Text variant="body" color={t.color.inkMuted}>
+        <Muted variant="body">
           Ton carnet de route se remplira après ton premier événement : présence, points, avis.
-        </Text>
+        </Muted>
       )}
     </TabScreen>
   );
@@ -176,14 +178,16 @@ function LogLine({ app, last, onContest }: { app: MyApplication; last: boolean; 
         <Text variant="body" color={resultColor}>
           {result}
         </Text>
+        {contest?.contestStatus ? (
+          <View style={styles.contestChip}>
+            <Chip surface="plate">{contestStatusLabels[contest.contestStatus as ContestStatus] ?? "Contesté"}</Chip>
+          </View>
+        ) : contest?.canContest ? (
+          <Button variant="plate" icon="chat" onPress={onContest} fullWidth>
+            Contester le malus
+          </Button>
+        ) : null}
       </View>
-      {contest?.contestStatus ? (
-        <Chip surface="plate">{contestStatusLabels[contest.contestStatus as ContestStatus] ?? "Contesté"}</Chip>
-      ) : contest?.canContest ? (
-        <Button variant="plate" icon="chat" onPress={onContest}>
-          Contester
-        </Button>
-      ) : null}
     </View>
   );
 }
@@ -230,8 +234,9 @@ function StaffCard({ item, onChanged }: { item: MyStaffEvent; onChanged: () => v
 const styles = StyleSheet.create({
   empty: { gap: space3 },
   log: { paddingVertical: 4 },
-  line: { flexDirection: "row", alignItems: "center", gap: space2, paddingVertical: space3 },
+  line: { flexDirection: "row", alignItems: "flex-start", gap: space2, paddingVertical: space3 },
   lineDate: { width: 52 },
-  lineBody: { flex: 1, gap: space1 },
+  lineBody: { flex: 1, gap: space2 },
+  contestChip: { alignItems: "flex-start" },
   staff: { gap: space2, padding: space3 },
 });

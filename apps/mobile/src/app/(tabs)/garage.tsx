@@ -1,7 +1,8 @@
 // Garage : « mon garage, c'est moi ». En-tête (photo, pseudo, grade et points, pastille QR de compte), puis mes
 // véhicules actifs en grandes cartes, l'ajout d'un véhicule et les archivés repliés en bas.
-import { gradeLabels, vehicleStatusLabels, type VehicleFull } from "@orasso/shared";
+
 import { Button, Chip, Plate, Text, tokens, useTheme, VehicleCard } from "@orasso/design-system/native";
+import { gradeLabels, type VehicleFull, vehicleStatusLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -101,7 +102,6 @@ export default function Garage() {
             : null}
         </>
       ) : null}
-
     </TabScreen>
   );
 }
@@ -110,20 +110,24 @@ function GarageCard({ vehicle, first }: { vehicle: VehicleFull; first: boolean }
   const { t } = useTheme();
   const router = useRouter();
   return (
-    <Pressable accessibilityRole="link" accessibilityLabel={vehicle.label} onPress={() => router.push(`/vehicule/${vehicle.id}`)}>
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={vehicle.label}
+      onPress={() => router.push(`/vehicule/${vehicle.id}`)}
+    >
       <VehicleCard
-      first={first}
-      name={vehicle.label}
-      year={vehicle.year ?? undefined}
-      power={vehicle.powerHp ? `${vehicle.powerHp} ch` : undefined}
-      certified={vehicle.certified}
-      photoCount={vehicle.photos.length > 1 ? vehicle.photos.length : undefined}
-      photo={{
-        source: mediaSource(vehicle.photos[0]?.url),
-        placeholder: `linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`,
-      }}
-      categories={vehicle.categories.map((c) => ({ label: c.label }))}
-      facts={vehicle.photos.length === 0 ? "Ajoute une photo pour pouvoir candidater" : undefined}
+        first={first}
+        name={vehicle.label}
+        year={vehicle.year ?? undefined}
+        power={vehicle.powerHp ? `${vehicle.powerHp} ch` : undefined}
+        certified={vehicle.certified}
+        photoCount={vehicle.photos.length > 1 ? vehicle.photos.length : undefined}
+        photo={{
+          source: mediaSource(vehicle.photos[0]?.url),
+          placeholder: `linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`,
+        }}
+        categories={vehicle.categories.map((c) => ({ label: c.label }))}
+        facts={vehicle.photos.length === 0 ? "Ajoute une photo pour pouvoir candidater" : undefined}
       />
     </Pressable>
   );

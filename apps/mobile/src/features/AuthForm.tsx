@@ -1,7 +1,8 @@
 // Création de compte et connexion par e-mail + mot de passe. Google et Apple sont prévus par l'API mais restent
 // masqués ici tant que leurs identifiants n'existent pas (PLAN, H6) : aucun bouton qui ne marcherait pas.
-import { pseudoSchema } from "@orasso/shared";
+
 import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { pseudoSchema } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";

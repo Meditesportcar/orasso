@@ -1,11 +1,11 @@
 // Confirmation d'un désistement. Avant le verrouillage : sans pénalité. Après : la place est perdue et un malus sera
 // appliqué au règlement des points (J+2), sauf contestation (règles de l'API ; l'appli ne fait que l'annoncer).
-import { type MyApplication, POINTS } from "@orasso/shared";
-import { Button, Text, useTheme } from "@orasso/design-system/native";
-import { useState } from "react";
 
-import { errorMessage } from "@/lib/http";
+import { Button, Text, useTheme } from "@orasso/design-system/native";
+import { type MyApplication, POINTS } from "@orasso/shared";
+import { useState } from "react";
 import { formatDayHour } from "@/lib/format";
+import { errorMessage } from "@/lib/http";
 import { AppSheet } from "@/ui/AppSheet";
 
 export function WithdrawSheet({
