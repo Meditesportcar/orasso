@@ -13,6 +13,8 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  // MapLibre charge son worker par URL relative : il ne doit pas être pré-empaqueté par Vite en développement.
+  optimizeDeps: { exclude: ["maplibre-gl"] },
   server: {
     port: Number(process.env.WEB_PORT ?? 5173),
     proxy: {

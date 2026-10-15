@@ -53,3 +53,5 @@ Thumbs.db
 
 # Aperçus d origine préparés pour la comparaison visuelle du design system
 apps/web/public/_ds-previews/
+apps/web/test-results/
+apps/web/playwright-report/
