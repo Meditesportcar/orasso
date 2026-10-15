@@ -194,6 +194,8 @@ export type ScanBatchResult = {
   /** Lecture qui a fait entrer le véhicule (pour un doublon). */
   duplicateOf: string | null;
   zone: { code: string; name: string } | null;
+  /** `settled` : points de l'événement déjà réglés, l'élément est refusé (l'appli le retire de sa file). */
+  reason?: "settled";
 };
 
 export const checkinCreateSchema = z.object({

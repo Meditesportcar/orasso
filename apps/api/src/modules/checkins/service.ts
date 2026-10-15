@@ -4,15 +4,16 @@ import {
   type CheckinListItem,
   type CheckinMethod,
   type CheckinResult,
-  checkinWritesOpen,
-  DAY,
   type LiveCounters,
+  MINUTE,
   normalizePlate,
   type ScanBatch,
   type ScanBatchItem,
   type ScanBatchResult,
   type ScanReport,
   type ScanServerResult,
+  settleAt,
+  staffModeOpensAt,
   verifyPassPayload,
 } from "@orasso/shared";
 import { and, asc, eq, ilike, inArray, isNull, like, or, type SQL, sql } from "drizzle-orm";
@@ -24,6 +25,7 @@ import {
   categories,
   checkins,
   devices,
+  events,
   eventZones,
   profiles,
   scanEvents,
@@ -36,6 +38,7 @@ import {
 import { requireOrganizer } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, notFound, validation } from "../../lib/errors";
+import { lockEventCheckins } from "../../lib/locks";
 import { escapeLike } from "../../lib/pagination";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
@@ -49,26 +52,44 @@ import { vehicleLabel } from "../vehicles/serializers";
 export type CheckinRow = typeof checkins.$inferSelect;
 type ScanRow = typeof scanEvents.$inferSelect;
 
-/** Écart d'horloge toléré entre l'appareil et le serveur (choix C22). */
-const MAX_CLOCK_SKEW_MS = DAY;
+/** Avance tolérée de l'horloge d'un appareil sur celle du serveur. */
+const MAX_FUTURE_SKEW_MS = 5 * MINUTE;
 
 const lockedError = (message: string) => new AppError(423, "locked", message);
 
-/** Horloge de l'appareil, ramenée à la réception si elle s'en écarte de plus de 24 h. */
-export function clampScannedAt(scannedAt: Date, receivedAt: Date): Date {
-  return Math.abs(scannedAt.getTime() - receivedAt.getTime()) > MAX_CLOCK_SKEW_MS ? receivedAt : scannedAt;
+/**
+ * Horloge de l'appareil (choix C22), gardée seulement si elle tombe dans la fenêtre de l'événement (de la veille
+ * 00:00 au règlement de J+2) et pas après la réception (5 min de tolérance) ; sinon, l'heure de réception.
+ */
+export function clampScannedAt(
+  scannedAt: Date,
+  receivedAt: Date,
+  event: Parameters<typeof settleAt>[0] & {
+    startsAt: Date;
+    timezone?: string;
+  },
+): Date {
+  const t = scannedAt.getTime();
+  const ok =
+    t >= staffModeOpensAt(event).getTime() &&
+    t < settleAt(event).getTime() &&
+    t <= receivedAt.getTime() + MAX_FUTURE_SKEW_MS;
+  return ok ? scannedAt : receivedAt;
 }
 
-/** Sérialise les écritures de pointage d'un même événement (plusieurs appareils en parallèle). */
-async function lockCheckins(tx: Tx, eventId: string) {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`checkins:${eventId}`}, 0))`);
-}
-
+/** Événement publié et fenêtre ouverte (sinon 423, avant tout traitement). */
 function assertWritable(event: EventRow) {
   if (event.status !== "published") throw lockedError("Événement non publié ou annulé");
-  if (!checkinWritesOpen(event, now())) {
-    throw lockedError("Pointage fermé : ouvert de la veille jusqu'au règlement des points (J+2)");
-  }
+  if (now() < staffModeOpensAt(event)) throw lockedError("Pointage ouvert à partir de la veille de l'événement");
+}
+
+/** Points déjà réglés (ou échéance passée) : plus aucune entrée possible. Relu après le verrou. */
+async function isSettled(tx: Tx, eventId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ endsAt: events.endsAt, settledAt: events.settledAt })
+    .from(events)
+    .where(eq(events.id, eventId));
+  return !row || Boolean(row.settledAt) || now() >= settleAt(row);
 }
 
 /** Candidature retenue de l'événement avec un pass valide (sinon pas d'entrée possible). */
@@ -201,7 +222,7 @@ async function applyScan(
   item: Extract<ScanBatchItem, { kind: "scan" }>,
   receivedAt: Date,
 ): Promise<ScanBatchResult> {
-  const scannedAt = clampScannedAt(item.scannedAt, receivedAt);
+  const scannedAt = clampScannedAt(item.scannedAt, receivedAt, event);
   const pass = await resolvePass(tx, item);
   const ofEvent = pass?.eventId === event.id ? pass : null;
   const app = ofEvent
@@ -298,7 +319,7 @@ async function applyCheckinItem(
     eventId: event.id,
     applicationId: admitted.app.id,
     zoneId: admitted.app.zoneId,
-    at: clampScannedAt(item.scannedAt, receivedAt),
+    at: clampScannedAt(item.scannedAt, receivedAt, event),
     method: item.kind,
     deviceId,
     staffUserId: v.user.id,
@@ -389,8 +410,23 @@ export const checkinsService = {
     const computed = new Map<string, ScanBatchResult>();
     if (fresh.length) {
       await withTx(async (tx, after) => {
-        await lockCheckins(tx, eventId);
+        await lockEventCheckins(tx, eventId);
         const receivedAt = now();
+        if (await isSettled(tx, eventId)) {
+          // Points réglés : chaque élément est refusé (la file hors ligne de l'appli se vide au lieu de bloquer).
+          for (const item of fresh) {
+            computed.set(item.id, {
+              id: item.id,
+              result: "rejected",
+              reason: "settled",
+              applicationId: null,
+              checkedInAt: null,
+              duplicateOf: null,
+              zone: null,
+            });
+          }
+          return;
+        }
         for (const item of fresh) {
           const r =
             item.kind === "scan"
@@ -437,7 +473,8 @@ export const checkinsService = {
     const { event } = await staffEvent(v, eventId);
     assertWritable(event);
     const created = await withTx(async (tx, after) => {
-      await lockCheckins(tx, eventId);
+      await lockEventCheckins(tx, eventId);
+      if (await isSettled(tx, eventId)) throw lockedError("Points déjà réglés : pointage fermé");
       const admitted = await admittedApplication(tx, eventId, input.applicationId);
       if (!admitted) throw notFound("Participant introuvable ou non retenu");
       const r = await recordEntry(tx, {
@@ -486,7 +523,8 @@ export const checkinsService = {
       : [];
     const createdIds = new Set<string>();
     await withTx(async (tx, after) => {
-      await lockCheckins(tx, eventId);
+      await lockEventCheckins(tx, eventId);
+      if (await isSettled(tx, eventId)) throw lockedError("Points déjà réglés : pointage fermé");
       for (const r of rows) {
         const e = await recordEntry(tx, {
           eventId,

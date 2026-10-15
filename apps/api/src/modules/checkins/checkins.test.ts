@@ -220,6 +220,22 @@ describe("réception des scans", () => {
     expect(r.results[0]?.checkedInAt).toBe(clock.now.toISOString());
   });
 
+  it("horloge hors de la fenêtre de l'événement (dans le futur, ou avant la veille) : heure de réception", async () => {
+    const r = await checkinsService.receiveBatch(julieV, eventId, {
+      deviceId: julieDevice,
+      items: [
+        scan(people[0]!.passId, new Date(clock.now.getTime() + 10 * HOUR)),
+        scan(people[1]!.passId, paris(10, 15, 22)),
+        scan(people[2]!.passId, new Date(clock.now.getTime() + 2 * MINUTE)),
+      ],
+    });
+    expect(r.results.map((x) => x.checkedInAt)).toEqual([
+      clock.now.toISOString(),
+      clock.now.toISOString(),
+      new Date(clock.now.getTime() + 2 * MINUTE).toISOString(),
+    ]);
+  });
+
   it("fenêtre : refusé avant la veille ; appareil d'un autre compte refusé", async () => {
     clock.set(paris(10, 15, 23));
     await expect(

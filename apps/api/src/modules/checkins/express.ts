@@ -27,6 +27,7 @@ import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { AppError, conflict, notFound } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
+import { lockEventCheckins } from "../../lib/locks";
 import { mail, renderMail } from "../../lib/mail";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
@@ -139,6 +140,7 @@ export const expressService = {
     const { user: created } = (await signUp.json()) as { user: { id: string } };
 
     const result = await withTx(async (tx, after) => {
+      await lockEventCheckins(tx, event.id);
       const [locked] = await tx.select().from(expressInvites).where(eq(expressInvites.id, invite.id)).for("update");
       if (!locked || locked.usedAt) throw conflict("conflict", "Lien déjà utilisé");
       const t = now();

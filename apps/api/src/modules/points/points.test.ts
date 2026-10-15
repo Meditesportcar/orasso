@@ -1,4 +1,5 @@
 // Points et malus à J+2, contestation, grades et saisons (ARCHITECTURE.md § 2.6), horloge simulée.
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { type Decide, fromWallTime, HOUR } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
@@ -18,7 +19,8 @@ import {
   viewerOf,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { events, malusContests, notifications, pointEntries, profiles } from "../../db/schema";
+import { checkins, devices, events, malusContests, notifications, pointEntries, profiles } from "../../db/schema";
+import { lockEventCheckins } from "../../lib/locks";
 import type { Viewer } from "../../lib/session";
 import { applicationsService } from "../applications/service";
 import { checkinsService } from "../checkins/service";
@@ -139,6 +141,60 @@ describe("règlement de J+2", () => {
     // Fiche de tri d'un prochain événement : une absence.
     const triage = (await call(orga, "GET", `/events/${eventId}/applications?status=accepted`)).json.items;
     expect(triage.find((x: { id: string }) => x.id === p.absent.applicationId).applicant.absencesCount).toBe(1);
+  });
+
+  it("le règlement attend un lot de pointage en cours (même verrou) et compte l'entrée qu'il écrit", async () => {
+    clock.set(SETTLE);
+    let release!: () => void;
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    let locked!: () => void;
+    const isLocked = new Promise<void>((r) => {
+      locked = r;
+    });
+    // Un lot de pointage tardif, en cours d'écriture : il tient le verrou et pointe Léa.
+    const batch = db.transaction(async (tx) => {
+      await lockEventCheckins(tx, eventId);
+      locked();
+      await held;
+      await tx.insert(checkins).values({
+        applicationId: p.absent.applicationId,
+        eventId,
+        method: "manual",
+        checkedInAt: paris(10, 17, 11),
+      });
+    });
+    await isLocked;
+    const settle = pointsService.settleEvent(eventId);
+    await new Promise((r) => setTimeout(r, 300));
+    release();
+    await batch;
+    expect(await settle).toBe(true);
+    expect((await points(p.absent.u.id)).pointsSeason).toBe(20);
+  });
+
+  it("après le règlement, les pointages en retard sont refusés un par un (pas d'erreur globale)", async () => {
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    const [device] = await db.insert(devices).values({ userId: julie.id, platform: "android" }).returning();
+    const r = await checkinsService.receiveBatch(julieV, eventId, {
+      deviceId: device!.id,
+      items: [
+        {
+          kind: "manual",
+          id: randomUUID(),
+          applicationId: p.absent.applicationId,
+          note: null,
+          scannedAt: paris(10, 17, 11),
+        },
+      ],
+    });
+    expect(r.results[0]).toMatchObject({ result: "rejected", reason: "settled" });
+    await expect(
+      checkinsService.create(julieV, eventId, { applicationId: p.absent.applicationId, method: "manual", note: null }),
+    ).rejects.toMatchObject({ status: 423 });
+    expect((await points(p.absent.u.id)).pointsSeason).toBe(-10);
   });
 
   it("balayage de secours : rattrape un règlement manqué récent, jamais un vieil événement", async () => {

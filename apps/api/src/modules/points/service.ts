@@ -38,6 +38,7 @@ import { requireOrganizer, requirePlatformRole } from "../../lib/access";
 import { deps, now } from "../../lib/deps";
 import { AppError, conflict, notFound } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
+import { lockEventCheckins } from "../../lib/locks";
 import type { Viewer } from "../../lib/session";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { eventsRepo } from "../events/repo";
@@ -223,6 +224,9 @@ export const pointsService = {
   async settleEvent(eventId: string): Promise<boolean> {
     return withTx(async (tx, after) => {
       const t = now();
+      // Même verrou que les pointages, pris AVANT la ligne de l'événement : un lot de pointage qui tient ce verrou
+      // insère des entrées dont la clé étrangère verrouille l'événement en partage ; l'ordre inverse s'interbloque.
+      await lockEventCheckins(tx, eventId);
       const event = await eventsRepo.lockForUpdate(tx, eventId);
       if (event.status !== "published" || event.settledAt) return false;
       const at = settleAt(event);
