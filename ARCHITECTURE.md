@@ -194,7 +194,7 @@ Barème provisoire (shared `POINTS`, **à revoir avec Damien** ; repris des chif
 
 ### 1.8 Notifications et journal (docs/01 « Notifications », docs/02 « Journal »)
 
-**`notifications`** : `id`, `user_id` FK, `type text` (enum shared : `application_accepted`, `application_waitlisted`, `application_refused`, `offer_received`, `offer_expired`, `event_updated`, `event_cancelled`, `event_outlook_changed`, `event_instructions`, `event_reminder_eve`, `event_reminder_week` (e-mail seulement), `preview_open`, `new_event_followed`, `event_nearby_interest`, `staff_presence_reminder`, `staff_sync_reminder`, `staff_alert`, `points_awarded`, `malus_applied`, `contest_decided`, `grade_changed`, `season_ended`), `family enum application|event|social|grade|staff`, `title`, `body`, `data jsonb` (lien profond : `{eventId, applicationId, screen}`), `event_id null`, `deliver_after timestamptz` (heures calmes), `push_sent_at null`, `email_sent_at null`, `read_at null`. Index `(user_id, created_at desc)`. Le Journal de l'appli lit cette table (le fil d'actualité social s'y ajoutera **[plus tard]** par de nouveaux `type`).
+**`notifications`** : `id`, `user_id` FK, `type text` (enum shared : `application_accepted`, `application_waitlisted`, `application_refused`, `offer_received`, `offer_expired`, `event_updated`, `event_cancelled`, `event_outlook_changed`, `event_instructions`, `event_reminder_eve`, `event_reminder_week` (e-mail seulement), `preview_open`, `new_event_followed`, `event_nearby_interest`, `staff_presence_reminder`, `staff_sync_reminder`, `staff_alert`, `points_awarded`, `malus_applied`, `contest_decided`, `grade_changed`, `season_ended`), `family enum application|event|social|grade|staff`, `title`, `body`, `data jsonb` (lien profond : `{eventId, applicationId, screen}`), `event_id null`, `deliver_after timestamptz` (heures calmes), `delivered_at null` (livraison réservée une seule fois : ajout du lot 05), `push_sent_at null`, `email_sent_at null`, `read_at null`. Index `(user_id, created_at desc)`. Le Journal de l'appli lit cette table (le fil d'actualité social s'y ajoutera **[plus tard]** par de nouveaux `type`).
 **`email_outbox`** : `id`, `to`, `subject`, `template`, `payload jsonb`, `status enum queued|sent|failed`, `transport enum journal|brevo`, `sent_at`, `error`. Toute sortie e-mail passe par là (rejouable, lisible en dev).
 
 ### 1.9 Journal d'administration (docs/01 « Administration et rôles »)
@@ -226,7 +226,8 @@ Transitions autorisées (toute autre → erreur `409 invalid_transition`) :
 |---|---|---|---|
 | — | `pending` | user | événement `published`, inscriptions ouvertes pour cet utilisateur (§ 2.6), non verrouillé, véhicule `active` du candidat, type admis, ≥ 1 photo, pas de candidature active pour ce véhicule, `max_vehicles_per_user` respecté, non banni de la structure, `admission ≠ invite_only` ou invitation acceptée |
 | — | `accepted` | staff (express) | inscription express : création directe, pass émis |
-| `pending` | `accepted` | organizer | si `capacity` défini : `accepted_count < capacity`, sinon `409 event_full` (l'organisateur passe par la liste d'attente) |
+| `pending` | `accepted` | organizer | si `capacity` défini : `accepted_count + offered_count < capacity` (une offre en cours réserve sa place), sinon `409 event_full` (l'organisateur passe par la liste d'attente) |
+| `pending` | `accepted` / `waitlisted` | system | admission `open` (« sans sélection », docs/01) : retenue d'office s'il reste une place, sinon liste d'attente (lot 05) |
 | `pending` | `waitlisted` | organizer | `waitlist_rank = max + 1`, `waitlisted_at = now` |
 | `pending` | `refused` | organizer | motifs (≥ 1) ; `other` exige une note |
 | `waitlisted` | `accepted` | organizer | même règle de capacité ; `waitlist_rank = null` |
@@ -266,7 +267,7 @@ Tâche `waitlist.offer-expire` : si `status = offered` et `offered_at` égal à 
 
 Réordonnancement par l'organisateur : `PUT /events/:id/waitlist/order` avec la liste complète des ids `waitlisted` → réécriture des `waitlist_rank` 1..n en transaction. Les `offered` ne sont pas réordonnables.
 
-Tests (`waitlist.test.ts`, horloge simulée) : ordre d'arrivée respecté ; réordonnancement ; désistement J−5 → offre 24 h ; désistement la veille 10:00 → échéance 13:00 ; jour J 09:00 pour un début 18:00 (lock 16:00) → 11:00 ; offre à 23:00 J−3 → début 08:00, échéance J−2 08:00 ; plafonnement par `lockAt` ; `null` si < 30 min ; expiration → suivant ; acceptation à temps ; acceptation après l'échéance refusée ; deux places libérées → deux offres ; sans `capacity` → aucune offre ; pas d'offre après verrouillage ; tâche d'expiration rejouée sans effet.
+Tests (`waitlist.test.ts`, horloge simulée) : ordre d'arrivée respecté ; réordonnancement ; désistement J−5 → offre 24 h ; désistement la veille 10:00 → échéance 13:00 ; jour J 09:00 pour un début 18:00 (lock 16:00) → 11:00 ; offre à 23:00 J−3 → début 08:00 (J−2), échéance J−1 08:00 (la règle ci-dessus ; l'exemple d'origine disait « J−2 08:00 », corrigé au lot 05) ; plafonnement par `lockAt` ; `null` si < 30 min ; expiration → suivant ; acceptation à temps ; acceptation après l'échéance refusée ; deux places libérées → deux offres ; sans `capacity` → aucune offre ; pas d'offre après verrouillage ; tâche d'expiration rejouée sans effet.
 
 ### 2.3 Désistement et verrouillage (`ApplicationService.withdraw`, `rules/lock.ts`)
 
@@ -451,17 +452,19 @@ Légende rôle : `pub` public · `auth` connecté · `own` propriétaire de la r
 | GET | `/vehicles/:id` | auth | fiche d'un autre selon visibilité |
 
 **Structures** (lot 05 : minimum pour le seed et l'organisateur ; création complète lot 13)
-| GET | `/structures/:slug` | pub | fiche publique (+ `isFollowing` si connecté) |
+| GET | `/structures/by-slug/:slug` | pub | fiche publique (+ `isFollowing` si connecté) |
 | POST/DELETE | `/structures/:id/follow` | auth | |
 | POST | `/structures` | auth | `StructureCreate` → devient owner ; `verification = unverified` |
 | GET/PATCH | `/structures/:id` | org | |
-| GET/POST/PATCH/DELETE | `/structures/:id/members`, `/members/:userId` | org | rôles, `staffRoles`, `canDecide` ; invitation par pseudo ou e-mail |
-| POST/DELETE | `/structures/:id/bans` | org | |
+| GET/POST/PATCH/DELETE | `/structures/:id/members`, `/members/:userId` | org | rôles, `staffRoles`, `canDecide` ; invitation par pseudo ou e-mail d'un compte existant (statut `invited`) |
+| POST | `/me/memberships/:structureId/accept` · `/decline` | auth | réponse à une invitation (lot 05) |
+| GET | `/structures/:id/followers` | org | abonnés (coordonnées comprises) |
+| GET/POST/DELETE | `/structures/:id/bans`, `/bans/:userId` | org | `{pseudo, reason}` |
 | POST | `/admin/structures/:id/verify` | adm | `{verified: bool, note}` → audit |
 
 **Événements** (lot 05 : lecture publique + création minimale ; assistant complet lot 13)
 | GET | `/events` | pub | filtres `format, categoryId, department, from, to, lat, lng, radiusKm, structureId, q` ; `invite_only` exclus sauf invité |
-| GET | `/events/:slug` | pub | `EventPublic` (compteurs : places restantes si `capacity`, retenus ; `myApplications` si connecté ; `registrationOpensAtForMe`) |
+| GET | `/events/by-slug/:slug` | pub | `EventPublic` (compteurs : places restantes si `capacity`, retenus ; `myApplications` si connecté ; `registrationOpensAtForMe`) |
 | POST | `/structures/:id/events` | org | `EventCreate` (tous les champs § 1.4) → `draft` ; structure `verified` requise pour publier |
 | GET/PATCH | `/events/:id` | org | `EventUpdate` → replanification des tâches ; notifications si date/adresse changent après publication |
 | POST | `/events/:id/publish` · `/cancel` · PATCH `/events/:id/outlook` | org | § 2.8 |
@@ -561,12 +564,14 @@ Sentry : SDK Node pointé sur GlitchTip (DSN optionnel), `tracesSampleRate 0.1`,
 ### Lot 05 — API A (dans cet ordre, chaque étape testée avant la suivante)
 1. Copier ce fichier à la racine du dépôt (`ARCHITECTURE.md`) ; recopier § 8 dans `docs/JOURNAL-DES-CHOIX.md`.
 2. `packages/shared` : `enums.ts`, `labels.fr.ts`, `rules/` (transitions, deadline, lock, registrationWindow, grades), schémas zod des domaines du lot.
-3. Migrations : `0002_profiles` (profiles, profile_interests, categories, devices) · `0003_structures` (structures, structure_members, structure_follows, structure_bans) · `0004_vehicles` (référentiel, vehicles, vehicle_photos, vehicle_categories, plate_transfer_requests) · `0005_events` (events, event_days, event_zones, event_invitations) · `0006_applications` (applications, application_events) · `0007_notifications` (notifications, email_outbox) · `0008_admin` (admin_audit_log). Un fichier Drizzle par étape, noms de contraintes explicites.
+3. Migrations (faites : numérotées `0001` à `0007`, le socle n'ayant que `0000_auth`) : `0001_profiles` (profiles, profile_interests, categories, devices) · `0002_structures` (structures, structure_members, structure_follows, structure_bans) · `0003_vehicles` (référentiel, vehicles, vehicle_photos, vehicle_categories, plate_transfer_requests) · `0004_events` (events, event_days, event_zones, event_invitations) · `0005_applications` (applications, application_events) · `0006_notifications` (notifications, email_outbox) · `0007_admin` (admin_audit_log). Le lot 06 commence donc à `0008_access`. Un fichier Drizzle par étape, noms de contraintes explicites.
 4. `lib/` : errors, pagination, clock, mail (journal), storage (disk), push (squelette), jobs (registre), realtime, auth middlewares, 2FA (plugin Better Auth `twoFactor`, obligatoire dès qu'un utilisateur est `owner`/`co_organizer`/`moderator`/`super_admin` : routes `org`/`adm` renvoient `403 two_factor_required` tant qu'il n'est pas activé ; `DEV_SKIP_2FA`).
 5. Modules : profiles → vehicles (référentiel seedé) → structures → events → applications (création, tri, liste d'attente, désistement, verrouillage, avant-première) → notifications (journal + e-mail) → admin (vérification, audit).
 6. Tâches pg-boss : `waitlist.offer-expire`, `event.lock`, `event.preview-open`, `event.reminder-week`, `event.reminder-eve`, `notifications.deliver`.
 7. Seed `pnpm db:seed` (idempotent, `--reset`), repris des données du prototype validé : catégories ; référentiel véhicules (≈ 40 marques, 200 modèles, générations principales, « Autre » partout) ; super admin `damien@orasso.local` (pseudo `Damien_66`, 66, Sport 340 pts) ; structure **MéditeSportCar** (association, Canet-en-Roussillon, département 66, `verified`, owner Damien, un co-organisateur, staffs `Julie_66` (scan + super_staff), `Marc_66` (control), `Nina_34` (placement), `Theo_66` (scan)) ; événement **« Nocturne de Canet »** (`night`, slug `nocturne-de-canet-2026`, dans 2 jours 19:00–23:00, « Parking du port, Canet-en-Roussillon », `capacity 150`, `admission filtered`, `max_vehicles_per_user 2` (le prototype dit « Limite : 2 par personne »), `preview_hours 24`, `lock_offset 120`, consignes « Musique coupée à 22 h, respectez le voisinage. / Départs au pas, aucun burn, exclusion immédiate. / Travaux sur la D81 : prévoyez 10 min de plus. », zones `JDM` (30), `YNG` « Youngtimer » (22), `SPT` « Sportive » (15), `LIB` « Libre » (40)) ; passionnés `Kenji_66` (Toyota Supra MK4 1997, 330 ch, AB-123-CD), `Lea_11` (Mazda RX-7 FD 1994), `Nina_34` (Honda S2000 AP1 2001), `Marc_66` (Peugeot 205 GTI 1.9 1990), `Julie_66` (BMW E30), `Theo_66` (Golf GTI mk2), Damien (Nissan 200SX S14 1996 250 ch + BMW Série 3 E36 1995 193 ch + Peugeot 106 Rallye `sold`), plus 12 comptes générés (départements 66/11/34/31, dont un véhicule « Autre », une moto, un `unregistered`), 1–3 photos factices chacun ; candidatures : 27 `pending`, 116 `accepted` (zones réparties) — ou proportionnellement réduit (`--small` : 5/20/6/3) —, 12 `waitlisted` ordonnées, 1 `offered` (échéance dans 20 h), 9 `refused` (motifs), 1 `withdrawn`. Autres événements : **« Expo Rivesaltes »** (`exhibition`, dans 10 jours, 40 places), **« C&C Perpignan »** (`cars_and_coffee`, dans 17 jours, sans limite, `admission open`), **« Hivernale 2027 »** `draft`.
-8. Scénario `scenario-parcours1-a.ts` (critère de fin du lot).
+8. Scénario `scenario-parcours1-a.ts` (critère de fin du lot) : fait sous forme de test d'intégration, `apps/api/test/scenario-parcours1-a.test.ts`.
+
+**État après le lot 05 (écarts au plan, détail dans `docs/JOURNAL-DES-CHOIX.md`)** : code dans `apps/api/src/` — `env.ts`, `auth.ts`, `app.ts`, `jobs.ts`, `ws.ts` à la racine de `src/` (pas de `config/`) ; `lib/` = `access.ts` (droits, 2FA), `session.ts`, `deps.ts` (horloge et file de tâches remplaçables), `tx.ts` (`withTx` + effets après validation), `errors.ts`, `validate.ts`, `pagination.ts`, `mail.ts`, `storage.ts`, `push.ts`, `realtime.ts`, `format.ts`, `slug.ts` ; `modules/<domaine>/` = `routes.ts`, `service.ts`, `repo.ts` quand des requêtes sont réutilisées, `queries.ts` (lecture des candidatures), `jobs.ts` (événements). Tests de l'API sur une base dédiée `<base>_test` créée et migrée par `apps/api/test/global-setup.ts`, outils dans `apps/api/test/helpers.ts`. Le seed planifie les tâches pg-boss comme une vraie publication (`startJobs({ work: false })`). Lot 06 : brancher l'émission et la révocation des pass dans `applications/service.ts` (`transition` vers/depuis `accepted`), le rappel `staff_sync_reminder` dans `lockEvent`, et les absences du tri (`absencesCount`) sur les pointages.
 
 ### Lot 06 — API B
 1. `shared/qr` (+ tests), `rules/points`.
