@@ -13,6 +13,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
+import { StaffBackground } from "@/features/staff/StaffBackground";
 import { ApplicationsProvider } from "@/lib/applications";
 import { kvGet, kvSet } from "@/lib/kv";
 import { registerThisDevice } from "@/lib/push";
@@ -64,6 +65,7 @@ function Shell() {
       {/* Les écrans attendent la lecture de la session : sans jeton, leurs premières requêtes partiraient anonymes. */}
       {status === "loading" ? null : <Stack screenOptions={{ headerShown: false, animation: "none" }} />}
       <AnnouncementSheet />
+      {status === "in" ? <StaffBackground /> : null}
       {opening ? (
         <View style={StyleSheet.absoluteFill}>
           <OpeningScreen onDone={() => setOpening(false)} />

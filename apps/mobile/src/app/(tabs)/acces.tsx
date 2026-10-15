@@ -20,6 +20,8 @@ import { useApplications } from "@/lib/applications";
 import { api } from "@/lib/endpoints";
 import { formatDayHour, formatShortDate } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
+import { useSession } from "@/lib/session";
+import { useStaffActions } from "@/lib/staff/useStaff";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { AccessCard } from "@/ui/AccessCard";
@@ -34,7 +36,17 @@ export default function Acces() {
   const router = useRouter();
   const now = useNow();
   const { upcoming, past, loading, offline, reload } = useApplications();
-  const staff = useApi(() => api.staffEvents(), []);
+  const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
+  const { me } = useSession();
+  const staffActions = useStaffActions(me?.user.id ?? null);
+  const unsentBy = new Map<string, { title: string; count: number }>();
+  for (const a of staffActions) {
+    if (a.sentAt) continue;
+    const u = unsentBy.get(a.eventId) ?? { title: a.eventTitle, count: 0 };
+    u.count++;
+    unsentBy.set(a.eventId, u);
+  }
+  const orphans = [...unsentBy.entries()].filter(([eventId]) => !staff.data?.some((s) => s.event.id === eventId));
   const [withdrawing, setWithdrawing] = useState<MyApplication | null>(null);
   const [contesting, setContesting] = useState<{ applicationId: string; title: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -124,10 +136,22 @@ export default function Acces() {
         <>
           <SectionTitle>Où je suis staff</SectionTitle>
           {staff.data.map((s) => (
-            <StaffCard key={s.event.id} item={s} onChanged={() => void staff.reload()} />
+            <StaffCard
+              key={s.event.id}
+              item={s}
+              unsent={unsentBy.get(s.event.id)?.count ?? 0}
+              onOpen={() => router.push(`/staff/${s.event.id}`)}
+              onChanged={() => void staff.reload()}
+            />
           ))}
         </>
       ) : null}
+      {orphans.map(([eventId, u]) => (
+        <Notice key={eventId}>
+          {u.count} envoi{u.count > 1 ? "s" : ""} du staff à faire · {u.title || "événement terminé"} : ils partiront au
+          retour du réseau.
+        </Notice>
+      ))}
 
       <SectionTitle>Passés · carnet de route</SectionTitle>
       {history.length > 0 ? (
@@ -194,8 +218,18 @@ function LogLine({ app, last, onContest }: { app: MyApplication; last: boolean; 
 
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`.replace("-", "−"));
 
-/** « Où je suis staff » : l'événement, mon rôle et « je suis là / pas là ». Le mode staff arrive avec le lot 10. */
-function StaffCard({ item, onChanged }: { item: MyStaffEvent; onChanged: () => void }) {
+/** « Où je suis staff » : l'événement, mon rôle, « je suis là / pas là » et l'entrée du mode staff (veille → J+1). */
+function StaffCard({
+  item,
+  unsent,
+  onOpen,
+  onChanged,
+}: {
+  item: MyStaffEvent;
+  unsent: number;
+  onOpen: () => void;
+  onChanged: () => void;
+}) {
   const { t } = useTheme();
   const [busy, setBusy] = useState(false);
   const present = item.presence === "present";
@@ -227,6 +261,20 @@ function StaffCard({ item, onChanged }: { item: MyStaffEvent; onChanged: () => v
       >
         {present ? "Pas là" : "Je suis là"}
       </Button>
+      {item.staffModeOpen ? (
+        <Button variant="plate" icon="qr" onPress={onOpen} next fullWidth>
+          Mode staff
+        </Button>
+      ) : (
+        <Text variant="meta" color={t.color.plateMuted}>
+          Mode staff à partir du {formatDayHour(item.staffModeOpensAt)} : synchronise la liste ce jour-là.
+        </Text>
+      )}
+      {unsent > 0 ? (
+        <Text variant="meta" color={t.color.plateInk}>
+          {unsent} envoi{unsent > 1 ? "s" : ""} en attente : ils partiront au retour du réseau.
+        </Text>
+      ) : null}
     </Plate>
   );
 }

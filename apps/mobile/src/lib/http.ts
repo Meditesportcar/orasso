@@ -31,6 +31,8 @@ type Options = {
   form?: FormData;
   /** Délai avant d'abandonner (ms). */
   timeout?: number;
+  /** En-têtes en plus (`x-device-id` des lots de scans). */
+  headers?: Record<string, string>;
 };
 
 export const NETWORK_MESSAGE = "Pas de connexion : réessaie quand le réseau revient.";
@@ -48,11 +50,11 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
 
 export async function requestWithHeaders<T>(
   path: string,
-  { method = "GET", body, form, timeout = 15_000 }: Options = {},
+  { method = "GET", body, form, timeout = 15_000, headers: extra }: Options = {},
 ): Promise<{ data: T; headers: Headers }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...extra };
   if (sessionToken) headers.authorization = `Bearer ${sessionToken}`;
   if (body !== undefined) headers["content-type"] = "application/json";
   let response: Response;

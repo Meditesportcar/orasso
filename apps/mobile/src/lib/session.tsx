@@ -8,6 +8,7 @@ import { api, authApi } from "./endpoints";
 import { ApiRequestError, setSessionToken } from "./http";
 import { clearKits } from "./kits";
 import { kvDel, kvGet, kvGetJson, kvSet, kvSetJson } from "./kv";
+import { purgeAllStaff } from "./staff/runtime";
 
 type Status = "loading" | "out" | "in";
 
@@ -115,10 +116,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
-/** Efface tout ce qui appartient au compte sur cet appareil (jeton, profil, QR de compte, kits jour J). */
+/**
+ * Efface tout ce qui appartient au compte sur cet appareil (jeton, profil, QR de compte, kits jour J, listes du mode
+ * staff avec les coordonnées du super staff). Seules les lectures du staff pas encore envoyées restent, pour ce compte.
+ */
 async function clearSession() {
   setSessionToken(null);
-  await Promise.all([kvDel(TOKEN_KEY), kvDel(ME_KEY), clearAccountQrSecret(), clearKits(), kvDel("announced")]);
+  await Promise.all([
+    kvDel(TOKEN_KEY),
+    kvDel(ME_KEY),
+    clearAccountQrSecret(),
+    clearKits(),
+    kvDel("announced"),
+    kvDel("staff-events"),
+    purgeAllStaff(),
+  ]);
 }
 
 export function useSession(): SessionValue {
