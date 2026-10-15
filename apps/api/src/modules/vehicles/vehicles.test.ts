@@ -45,6 +45,15 @@ describe("inscription et profil", () => {
     expect(res.status).toBe(409);
   });
 
+  it("disponibilité du pseudo (public, casse ignorée, format vérifié)", async () => {
+    await signUp("Kenji_66");
+    const get = (pseudo: string) => app.request(`/api/pseudo-available?pseudo=${encodeURIComponent(pseudo)}`);
+    expect(await (await get("kenji_66")).json()).toEqual({ valid: true, available: false });
+    expect(await (await get("Libre_77")).json()).toEqual({ valid: true, available: true });
+    expect(await (await get("a b")).json()).toEqual({ valid: false, available: false });
+    expect(await (await get("")).json()).toEqual({ valid: false, available: false });
+  });
+
   it("profil privé : pseudo, grade, marque et modèle seulement", async () => {
     const a = await signUp("Prive_01");
     const b = await signUp("Curieux_02");
