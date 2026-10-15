@@ -85,9 +85,14 @@ deploy() {
   tar -xzf "$archive" -C "$dir"
   rm -f "$archive"
 
-  log "construction des images $tag (journal : $STATE/build.log)"
   local app
   for app in api web; do
+    # Même commit = même contenu : ne pas reconstruire (une reconstruction déplacerait l'étiquette sans rien changer).
+    if docker image inspect "orasso-$app:$tag" >/dev/null 2>&1; then
+      log "image orasso-$app:$tag déjà construite"
+      continue
+    fi
+    log "construction de orasso-$app:$tag (journal : $STATE/build.log)"
     docker build --progress=plain -f "$dir/apps/$app/Dockerfile" -t "orasso-$app:$tag" "$dir" >"$STATE/build.log" 2>&1 ||
       { tail -n 40 "$STATE/build.log"; die "construction de l'image $app impossible"; }
   done
