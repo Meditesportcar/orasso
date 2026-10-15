@@ -7,25 +7,48 @@
     ".": "./src/index.ts",
     "./web": "./src/web/index.ts",
     "./web/styles.css": "./src/web/styles.css",
-    "./web/tokens.css": "./src/web/tokens.css"
+    "./web/tokens.css": "./src/web/tokens.css",
+    "./native": "./src/native/index.ts"
   },
   "sideEffects": [
     "*.css"
   ],
   "scripts": {
-    "generate": "node scripts/generate-tokens.mjs",
-    "build": "node scripts/generate-tokens.mjs && tsc --noEmit",
+    "generate": "node scripts/generate-tokens.mjs && node scripts/generate-native-brand.mjs",
+    "build": "node scripts/generate-tokens.mjs && node scripts/generate-native-brand.mjs && tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "pretest": "node scripts/generate-tokens.mjs",
+    "pretest": "node scripts/generate-tokens.mjs && node scripts/generate-native-brand.mjs",
     "test": "vitest run"
   },
   "peerDependencies": {
-    "react": "19.2.3"
+    "react": "19.2.3",
+    "react-native": "*",
+    "react-native-svg": "*",
+    "react-native-reanimated": "*",
+    "expo-font": "*",
+    "expo-audio": "*"
   },
   "devDependencies": {
     "@types/react": "~19.2.18",
     "@types/react-dom": "~19.2.7",
     "react": "19.2.3",
     "react-dom": "19.2.3"
+  },
+  "peerDependenciesMeta": {
+    "react-native": {
+      "optional": true
+    },
+    "react-native-svg": {
+      "optional": true
+    },
+    "react-native-reanimated": {
+      "optional": true
+    },
+    "expo-font": {
+      "optional": true
+    },
+    "expo-audio": {
+      "optional": true
+    }
   }
 }

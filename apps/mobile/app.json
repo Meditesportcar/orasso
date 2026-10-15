@@ -30,7 +30,9 @@
           "imageWidth": 160,
           "backgroundColor": "#17191C"
         }
-      ]
+      ],
+      "expo-font",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true
