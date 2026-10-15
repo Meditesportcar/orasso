@@ -1,0 +1,30 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "image": "latest", "buildType": "apk" },
+      "ios": { "image": "latest", "simulator": true }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "image": "latest", "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://dev.orasso.fr",
+        "EXPO_PUBLIC_QR_TRUSTED_KEYS": "[{\"kid\":1,\"publicKey\":\"m2FceWYTZw1CBjcfytn1FPL49U6RqVzBVkyfgC9jqjA\"}]"
+      }
+    },
+    "preview-simulator": {
+      "distribution": "internal",
+      "ios": { "image": "latest", "simulator": true },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://dev.orasso.fr",
+        "EXPO_PUBLIC_QR_TRUSTED_KEYS": "[{\"kid\":1,\"publicKey\":\"m2FceWYTZw1CBjcfytn1FPL49U6RqVzBVkyfgC9jqjA\"}]"
+      }
+    }
+  }
+}

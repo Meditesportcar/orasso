@@ -318,3 +318,9 @@ Code : `apps/web/app/` (routes, `layouts/`, `components/`, `lib/`, `styles/site.
 - **Pass révoqué pendant une coupure.** Sans réseau, un désistement fait après la dernière synchro n'est pas connu du téléphone : le véhicule est accepté, puis le serveur refuse la lecture (« Refusé par le serveur » au rapport). Inhérent au hors ligne ; la synchro différentielle toutes les minutes réduit la fenêtre dès qu'il y a du réseau.
 - **Rapport complet de l'organisateur.** L'écran d'entrée ne montre que les réponses aux envois de ce téléphone ; le rapport de tous les appareils (`GET /events/:id/scan-report`) reste sur le site organisateur.
 - **Alerte sans position, incident sans photo, pas de discussion du staff** (voir les choix du lot 10).
+
+### Builds EAS (lot 11)
+- **Profils.** `development` (client de développement, APK Android et simulateur iOS), `preview` (APK, distribution interne, API https://dev.orasso.fr), `preview-simulator` (iOS simulateur). `image: latest` partout (exigé pour construire depuis GitHub). `appVersionSource: remote` : EAS tient le numéro de build.
+- **`eas.json` dans `apps/mobile`.** Règle EAS pour les monorepos : le dossier de l'appli porte sa configuration ; base directory `apps/mobile` côté EAS ; pnpm est détecté par `packageManager` et le fichier de verrouillage à la racine.
+- **Variables dans le profil, pas de secret.** `EXPO_PUBLIC_API_URL` et `EXPO_PUBLIC_QR_TRUSTED_KEYS` (clé publique `kid 1`) sont publiques par nature (elles finissent dans l'appli) ; le dépôt reste sans secret.
+- **Blocage constaté.** Le connecteur Expo sait lancer et suivre des builds (`build_run`, `build_info`, `build_logs`) mais pas créer un projet EAS ni installer l'application GitHub d'Expo ; la ligne de commande exige une connexion interactive au compte de Damien. Le projet doit donc être créé par Damien (voir `AVANCEMENT.md`), après quoi les builds se lancent par le connecteur.
