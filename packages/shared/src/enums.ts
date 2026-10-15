@@ -1,0 +1,132 @@
+import { z } from "zod";
+
+/**
+ * Énumérations métier (valeurs anglaises, identiques aux enums PostgreSQL). Libellés : `labels.fr.ts`.
+ * Les statuts de candidature, grades et rôles vivent dans `application.ts`, `grades.ts`, `roles.ts`.
+ * Référence : ARCHITECTURE.md § 1.
+ */
+
+export const profileVisibilities = ["public", "private"] as const;
+export type ProfileVisibility = (typeof profileVisibilities)[number];
+
+export const devicePlatforms = ["ios", "android", "web"] as const;
+export type DevicePlatform = (typeof devicePlatforms)[number];
+
+export const structureKinds = ["association", "club", "circuit", "company", "collectivity"] as const;
+export type StructureKind = (typeof structureKinds)[number];
+
+export const structureVerifications = ["unverified", "pending", "verified", "suspended"] as const;
+export type StructureVerification = (typeof structureVerifications)[number];
+
+export const memberStatuses = ["invited", "requested", "active", "removed"] as const;
+export type MemberStatus = (typeof memberStatuses)[number];
+
+export const followSources = ["application", "invite_link", "manual"] as const;
+export type FollowSource = (typeof followSources)[number];
+
+export const vehicleTypes = ["car", "moto", "truck"] as const;
+export const vehicleTypeSchema = z.enum(vehicleTypes);
+export type VehicleType = (typeof vehicleTypes)[number];
+
+export const vehicleStatuses = ["active", "sold", "keepsake", "wrecked"] as const;
+export type VehicleStatus = (typeof vehicleStatuses)[number];
+
+export const plateTransferStatuses = ["pending", "accepted", "refused", "arbitrated"] as const;
+
+export const eventFormats = ["gathering", "exhibition", "cars_and_coffee", "show", "open_house", "night"] as const;
+export type EventFormat = (typeof eventFormats)[number];
+
+export const eventAdmissions = ["open", "filtered", "invite_only"] as const;
+export type EventAdmission = (typeof eventAdmissions)[number];
+
+export const eventPublicAccesses = ["free", "free_reservation", "paid_orasso", "paid_external", "closed"] as const;
+export type EventPublicAccess = (typeof eventPublicAccesses)[number];
+
+export const eventStatuses = ["draft", "published", "cancelled"] as const;
+export type EventStatus = (typeof eventStatuses)[number];
+
+export const eventOutlooks = ["maintained", "uncertain"] as const;
+export type EventOutlook = (typeof eventOutlooks)[number];
+
+export const invitationStatuses = ["pending", "accepted", "declined", "expired"] as const;
+
+export const applicationKinds = ["vehicle", "provider"] as const;
+export type ApplicationKind = (typeof applicationKinds)[number];
+
+export const applicationSources = ["self", "express", "invitation", "crew"] as const;
+export type ApplicationSource = (typeof applicationSources)[number];
+
+/** Qui fait passer une candidature d'un statut à l'autre (journal `application_events`). */
+export const transitionActors = ["user", "organizer", "staff", "system", "admin"] as const;
+export type TransitionActor = (typeof transitionActors)[number];
+
+export const filteringOpinions = ["keep", "doubt", "refuse"] as const;
+export type FilteringOpinion = (typeof filteringOpinions)[number];
+
+/** Motifs de refus (ARCHITECTURE.md § 1.5) ; `other` exige une note. */
+export const refusalReasons = [
+  "off_theme",
+  "insufficient_photos",
+  "full",
+  "vehicle_already_retained",
+  "unregistered_vehicle",
+  "criteria_not_met",
+  "other",
+] as const;
+export const refusalReasonSchema = z.enum(refusalReasons);
+export type RefusalReason = (typeof refusalReasons)[number];
+
+export const triageDecisions = ["accept", "waitlist", "refuse"] as const;
+export type TriageDecision = (typeof triageDecisions)[number];
+
+export const notificationFamilies = ["application", "event", "social", "grade", "staff"] as const;
+export type NotificationFamily = (typeof notificationFamilies)[number];
+
+/** Types de notification et leur famille (une préférence par famille ; `staff` ne se coupe pas). */
+export const notificationTypes = {
+  application_accepted: "application",
+  application_waitlisted: "application",
+  application_refused: "application",
+  offer_received: "application",
+  offer_expired: "application",
+  event_updated: "event",
+  event_cancelled: "event",
+  event_outlook_changed: "event",
+  event_instructions: "event",
+  event_reminder_eve: "event",
+  event_reminder_week: "event",
+  preview_open: "event",
+  new_event_followed: "event",
+  event_nearby_interest: "event",
+  staff_presence_reminder: "staff",
+  staff_sync_reminder: "staff",
+  staff_alert: "staff",
+  points_awarded: "grade",
+  malus_applied: "grade",
+  contest_decided: "grade",
+  grade_changed: "grade",
+  season_ended: "grade",
+} as const satisfies Record<string, NotificationFamily>;
+export type NotificationType = keyof typeof notificationTypes;
+
+/** Préférences de notification : un interrupteur par famille (docs/01 « Notifications »). */
+export const defaultNotificationPrefs = { application: true, event: true, social: true, grade: true };
+export type NotificationPrefs = typeof defaultNotificationPrefs;
+
+/** Départements français (métropole, Corse, outre-mer) : codes acceptés pour le secteur d'un profil ou d'une structure. */
+export const departments = [
+  ...Array.from({ length: 95 }, (_, i) => String(i + 1).padStart(2, "0")).filter((d) => d !== "20"),
+  "2A",
+  "2B",
+  "971",
+  "972",
+  "973",
+  "974",
+  "976",
+] as const;
+export const departmentSchema = z.string().refine((d) => (departments as readonly string[]).includes(d), {
+  message: "Département inconnu",
+});
+
+/** Fuseau métier unique en V1. */
+export const BUSINESS_TIMEZONE = "Europe/Paris";
