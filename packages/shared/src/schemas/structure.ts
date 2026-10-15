@@ -13,7 +13,7 @@ const socialsSchema = z
   })
   .partial();
 
-export const structureCreateSchema = z.object({
+const structureFields = z.object({
   kind: z.enum(structureKinds),
   name: z.string().trim().min(2).max(80),
   description: optionalText(2000),
@@ -23,9 +23,9 @@ export const structureCreateSchema = z.object({
   department: departmentSchema.nullish(),
   lat: z.number().min(-90).max(90).nullish(),
   lng: z.number().min(-180).max(180).nullish(),
-  departments: z.array(departmentSchema).max(20).default([]),
+  departments: z.array(departmentSchema).max(20),
   website: z.url().max(200).nullish(),
-  socials: socialsSchema.default({}),
+  socials: socialsSchema,
   siret: z
     .string()
     .regex(/^\d{14}$/)
@@ -35,9 +35,14 @@ export const structureCreateSchema = z.object({
     .regex(/^W\d{9}$/)
     .nullish(),
 });
+/** Défauts à la création seulement (voir eventCreateSchema). */
+export const structureCreateSchema = structureFields.extend({
+  departments: structureFields.shape.departments.default([]),
+  socials: structureFields.shape.socials.default({}),
+});
 export type StructureCreate = z.infer<typeof structureCreateSchema>;
 
-export const structureUpdateSchema = structureCreateSchema.partial();
+export const structureUpdateSchema = structureFields.partial();
 export type StructureUpdate = z.infer<typeof structureUpdateSchema>;
 
 /** Invitation d'un membre par pseudo ou e-mail (le membre accepte ensuite). */

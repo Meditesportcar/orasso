@@ -21,3 +21,8 @@ export function toPage<T extends { createdAt: Date; id: string }, U>(rows: T[], 
     nextCursor: rows.length > limit && last ? encodeCursor(last.createdAt, last.id) : null,
   };
 }
+
+/** Échappe `%`, `_` et `\` d'une recherche saisie avant un `ilike`. */
+export function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, (c) => `\\${c}`);
+}

@@ -261,9 +261,9 @@ Algorithme :
 - `lockAt = starts_at − lock_offset_minutes`.
 - `start = now` sauf si `now` est dans les heures calmes (22:00–08:00) et que `now` n'est pas le jour J : alors `start = 08:00` suivant (la notification part à `start`).
 - `delay` : 24 h si `start` est avant 00:00 de la veille (J−2 ou plus tôt) ; 3 h si `start` est la veille (J−1) ; 2 h si `start` est le jour J.
-- `deadline = min(start + delay, lockAt)`. Si `deadline − now < 30 min` → `null` (plus personne ne peut répondre et venir).
+- `deadline = min(start + delay, lockAt)`. Si `deadline − start < 30 min` → `null` (plus personne ne peut répondre et venir). *(Lot 05, après relecture : comparé à `start` et non à `now`, sinon une offre faite la veille au soir d'un événement matinal expirerait avant que sa notification parte à 08:00.)*
 
-Tâche `waitlist.offer-expire` : si `status = offered` et `offered_at` égal à la charge utile → `expired`, notification `offer_expired`, puis `offerNext`. Sinon ne rien faire (offre déjà acceptée ou reprise : idempotent).
+Tâche `waitlist.offer-expire` : si `status = offered` et `offered_at` égal à la charge utile → `expired`, notification `offer_expired`, puis `offerNext`. Sinon ne rien faire (offre déjà acceptée ou reprise : idempotent). Partie en avance : replanifiée à l'échéance. Balayage de secours `waitlist.sweep` chaque minute pour les offres échues (lot 05). Verrous toujours dans l'ordre événement puis candidature.
 
 Réordonnancement par l'organisateur : `PUT /events/:id/waitlist/order` avec la liste complète des ids `waitlisted` → réécriture des `waitlist_rank` 1..n en transaction. Les `offered` ne sont pas réordonnables.
 

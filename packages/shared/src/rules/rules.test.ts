@@ -45,6 +45,11 @@ describe("computeOfferDeadline (liste d'attente, § 2.2)", () => {
   it("la nuit du jour J, pas de décalage à 08:00", () => {
     expect(computeOfferDeadline(event, paris(6, 20, 1))).toEqual(paris(6, 20, 3));
   });
+  it("la veille au soir d'un événement matinal : pas d'offre qui expirerait avant d'être notifiée", () => {
+    // Début le jour J à 08:00, verrouillage 06:00 ; désistement la veille à 22:30 → notification à 08:00 seulement.
+    const morning = { startsAt: paris(6, 20, 8), lockOffsetMinutes: 120 };
+    expect(computeOfferDeadline(morning, paris(6, 19, 22, 30))).toBeNull();
+  });
   it("tient compte du passage à l'heure d'hiver", () => {
     const autumn = { startsAt: paris(10, 30, 19), lockOffsetMinutes: 120 };
     // Offre le samedi 24 octobre 12:00 (été) → 24 h plus tard, 25 octobre 11:00 (hiver).

@@ -15,7 +15,7 @@ import {
   registrationOpensAt,
   type TransitionActor,
 } from "@orasso/shared";
-import { and, asc, count, eq, inArray, max, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, lte, max, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -149,7 +149,7 @@ function broadcast(after: After, event: EventRow, changed: ApplicationRow[]) {
       realtime.publish(`event:${event.id}:triage`, "application.changed", payload);
       realtime.publish(`user:${app.userId}`, "application.changed", payload);
     }
-    await notificationsService.deliverDue();
+    notificationsService.kick();
   });
 }
 
@@ -231,6 +231,22 @@ async function lockApplication(tx: Tx, id: string): Promise<ApplicationRow> {
   const [row] = await tx.select().from(applications).where(eq(applications.id, id)).for("update");
   if (!row) throw notFound("Candidature introuvable");
   return row;
+}
+
+/**
+ * Verrous toujours dans le même ordre (événement, puis candidature) pour éviter les interblocages entre une action
+ * du candidat, une décision de l'organisateur et les tâches (expiration, verrouillage).
+ */
+async function lockEventThenApplication(tx: Tx, applicationId: string) {
+  const found = await tx.query.applications.findFirst({
+    where: eq(applications.id, applicationId),
+    columns: { eventId: true },
+  });
+  if (!found) throw notFound("Candidature introuvable");
+  const event = await eventsRepo.lockForUpdate(tx, found.eventId);
+  const app = await lockApplication(tx, applicationId);
+  if (app.eventId !== event.id) throw notFound("Candidature introuvable");
+  return { event, app };
 }
 
 /** Droit de trancher : organisateur, super admin, ou staff de filtration autorisé à décider. */
@@ -432,12 +448,13 @@ export const applicationsService = {
    * Désistement (§ 2.3) : toujours possible jusqu'à la fin de l'événement. Une retenue désistée avant le
    * verrouillage libère sa place (offerte au suivant) ; après, elle est marquée pour le malus de J+2.
    */
-  async withdraw(v: Viewer, applicationId: string): Promise<ApplicationRow> {
+  async withdraw(v: Viewer, applicationId: string, onlyIfOffered = false): Promise<ApplicationRow> {
     return withTx(async (tx, after) => {
       const t = now();
-      const app = await lockApplication(tx, applicationId);
+      const { event, app } = await lockEventThenApplication(tx, applicationId);
       if (app.userId !== v.user.id) throw notFound("Candidature introuvable");
-      const event = await eventsRepo.lockForUpdate(tx, app.eventId);
+      // « Refuser la place » : vérifié sous verrou (un double clic ne désiste pas une place déjà acceptée).
+      if (onlyIfOffered && app.status !== "offered") throw invalidTransition(app.status, "withdrawn");
       if (t >= event.endsAt) throw lockedError("L'événement est terminé");
       const locked = isLocked(event, t);
       const row = await transition(
@@ -462,9 +479,8 @@ export const applicationsService = {
   async acceptOffer(v: Viewer, applicationId: string): Promise<ApplicationRow> {
     return withTx(async (tx, after) => {
       const t = now();
-      const app = await lockApplication(tx, applicationId);
+      const { event, app } = await lockEventThenApplication(tx, applicationId);
       if (app.userId !== v.user.id) throw notFound("Candidature introuvable");
-      const event = await eventsRepo.lockForUpdate(tx, app.eventId);
       if (app.status !== "offered") throw invalidTransition(app.status, "accepted");
       if (!app.offerExpiresAt || t >= app.offerExpiresAt) throw conflict("offer_expired", "L'offre a expiré");
       if (event.capacity !== null) {
@@ -479,10 +495,7 @@ export const applicationsService = {
 
   /** Refuser la place libérée : elle passe au suivant. */
   async declineOffer(v: Viewer, applicationId: string): Promise<ApplicationRow> {
-    const app = await db.query.applications.findFirst({ where: eq(applications.id, applicationId) });
-    if (!app || app.userId !== v.user.id) throw notFound("Candidature introuvable");
-    if (app.status !== "offered") throw invalidTransition(app.status, "withdrawn");
-    return this.withdraw(v, applicationId);
+    return this.withdraw(v, applicationId, true);
   },
 
   /**
@@ -494,10 +507,14 @@ export const applicationsService = {
       const t = now();
       const found = await tx.query.applications.findFirst({ where: eq(applications.id, applicationId) });
       if (found?.status !== "offered") return false;
-      const event = await eventsRepo.lockForUpdate(tx, found.eventId);
-      const app = await lockApplication(tx, applicationId);
-      if (app.status !== "offered" || app.offeredAt?.toISOString() !== offeredAt) return false;
-      if (!app.offerExpiresAt || t < app.offerExpiresAt) return false;
+      const { event, app } = await lockEventThenApplication(tx, applicationId);
+      if (app.status !== "offered" || app.offeredAt?.toISOString() !== offeredAt || !app.offerExpiresAt) return false;
+      if (t < app.offerExpiresAt) {
+        // Tâche partie en avance (horloges) : on la replanifie à l'échéance plutôt que de laisser l'offre bloquée.
+        const at = app.offerExpiresAt;
+        after(() => deps.jobs.send("waitlist.offer-expire", { applicationId, offeredAt }, at));
+        return false;
+      }
       const row = await transition(tx, app, "expired", SYSTEM);
       await notificationsService.notify(tx, row.userId, "offer_expired", {
         title: "Offre expirée",
@@ -511,6 +528,21 @@ export const applicationsService = {
       broadcast(after, event, [row, ...offered]);
       return true;
     });
+  },
+
+  /**
+   * Balayage de secours (chaque minute) : fait expirer les offres échues dont la tâche n'est pas passée
+   * (envoi à pg-boss en échec, base restaurée…). Sans lui, une place pourrait rester réservée jusqu'au verrouillage.
+   */
+  async expireDueOffers(): Promise<number> {
+    const due = await db
+      .select({ id: applications.id, offeredAt: applications.offeredAt })
+      .from(applications)
+      .where(and(eq(applications.status, "offered"), lte(applications.offerExpiresAt, now())))
+      .limit(100);
+    let n = 0;
+    for (const d of due) if (d.offeredAt && (await this.expireOffer(d.id, d.offeredAt.toISOString()))) n++;
+    return n;
   },
 
   /**

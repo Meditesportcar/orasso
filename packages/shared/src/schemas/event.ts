@@ -37,15 +37,15 @@ const eventFields = z.object({
   lng: z.number().min(-180).max(180).nullish(),
   admittedVehicleTypes: z.array(z.enum(vehicleTypes)).min(1),
   /** `null` = sans limite. */
-  capacity: z.number().int().positive().max(100_000).nullable().default(null),
-  maxVehiclesPerUser: z.number().int().min(1).max(10).default(1),
+  capacity: z.number().int().positive().max(100_000).nullable(),
+  maxVehiclesPerUser: z.number().int().min(1).max(10),
   admission: z.enum(eventAdmissions),
   criteria: criteriaSchema.nullish(),
-  publicAccess: z.enum(eventPublicAccesses).default("free"),
+  publicAccess: z.enum(eventPublicAccesses),
   externalTicketUrl: z.url().max(300).nullish(),
   registrationsOpenAt: isoDate,
-  previewHours: z.number().int().min(0).max(168).default(24),
-  lockOffsetMinutes: z.number().int().min(0).max(1440).default(120),
+  previewHours: z.number().int().min(0).max(168),
+  lockOffsetMinutes: z.number().int().min(0).max(1440),
   rulesText: optionalText(10000),
   instructions: optionalText(2000),
 });
@@ -56,7 +56,17 @@ const datesRule = (v: { startsAt?: Date; endsAt?: Date }, ctx: z.RefinementCtx) 
   }
 };
 
-export const eventCreateSchema = eventFields.superRefine(datesRule);
+/** Création : valeurs par défaut des docs. (Les défauts ne vont jamais dans les schémas de mise à jour : avec zod 4,
+ * `.partial()` les garde, et un PATCH partiel remettrait la capacité ou le verrouillage à leur valeur par défaut.) */
+export const eventCreateSchema = eventFields
+  .extend({
+    capacity: eventFields.shape.capacity.default(null),
+    maxVehiclesPerUser: eventFields.shape.maxVehiclesPerUser.default(1),
+    publicAccess: eventFields.shape.publicAccess.default("free"),
+    previewHours: eventFields.shape.previewHours.default(24),
+    lockOffsetMinutes: eventFields.shape.lockOffsetMinutes.default(120),
+  })
+  .superRefine(datesRule);
 export type EventCreate = z.infer<typeof eventCreateSchema>;
 
 export const eventUpdateSchema = eventFields.partial().superRefine(datesRule);
@@ -64,16 +74,17 @@ export type EventUpdate = z.infer<typeof eventUpdateSchema>;
 
 export const outlookUpdateSchema = z.object({ outlook: z.enum(eventOutlooks) });
 
-export const zoneCreateSchema = z.object({
+const zoneFields = z.object({
   code: z
     .string()
     .trim()
     .regex(/^[A-Z0-9]{1,4}$/, "1 à 4 lettres ou chiffres en majuscules"),
   name: z.string().trim().min(1).max(60),
   capacity: z.number().int().positive().nullish(),
-  position: z.number().int().min(0).max(100).default(0),
+  position: z.number().int().min(0).max(100),
 });
-export const zoneUpdateSchema = zoneCreateSchema.partial();
+export const zoneCreateSchema = zoneFields.extend({ position: zoneFields.shape.position.default(0) });
+export const zoneUpdateSchema = zoneFields.partial();
 
 export const eventListQuerySchema = pageQuery.extend({
   format: z.enum(eventFormats).optional(),

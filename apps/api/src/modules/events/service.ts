@@ -27,6 +27,7 @@ import { requireOrganizer, staffAccess } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
+import { escapeLike } from "../../lib/pagination";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
@@ -125,7 +126,10 @@ export const eventsService = {
     if (q.department) filters.push(eq(events.department, q.department));
     if (q.structureId) filters.push(eq(events.structureId, q.structureId));
     if (q.categoryId) filters.push(sql`${events.criteria} -> 'categoryIds' ? ${q.categoryId}`);
-    if (q.q) filters.push(or(ilike(events.title, `%${q.q}%`), ilike(events.city, `%${q.q}%`)));
+    if (q.q) {
+      const like = `%${escapeLike(q.q)}%`;
+      filters.push(or(ilike(events.title, like), ilike(events.city, like)));
+    }
     if (q.lat !== undefined && q.lng !== undefined) {
       // Distance à vol d'oiseau (pas de PostGIS en V1, choix C24).
       const radius = q.radiusKm ?? 50;
@@ -265,7 +269,7 @@ export const eventsService = {
         row.registrationsOpenAt.getTime() !== current.registrationsOpenAt.getTime();
       if (rescheduled) after(() => scheduleEventJobs(row));
       await applicationsService.offerNext(tx, row, after);
-      after(() => notificationsService.deliverDue());
+      after(() => notificationsService.kick());
       return row;
     });
     return this.getForOrganizer(v, updated.id);
@@ -300,7 +304,7 @@ export const eventsService = {
         }
       }
       after(() => scheduleEventJobs(row));
-      after(() => notificationsService.deliverDue());
+      after(() => notificationsService.kick());
     });
     return this.getForOrganizer(v, id);
   },
@@ -329,7 +333,7 @@ export const eventsService = {
         });
       }
       after(() => realtime.publish(`event:${id}:access`, "event.cancelled", { eventId: id }));
-      after(() => notificationsService.deliverDue());
+      after(() => notificationsService.kick());
     });
     return this.getForOrganizer(v, id);
   },
@@ -355,7 +359,7 @@ export const eventsService = {
             link: { label: "Voir l'événement", path: `/e/${e.slug}` },
           });
         }
-        after(() => notificationsService.deliverDue());
+        after(() => notificationsService.kick());
       });
     }
     return this.getForOrganizer(v, id);

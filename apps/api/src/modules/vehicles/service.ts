@@ -93,7 +93,7 @@ async function checkPlate(ex: Executor, ownerId: string, plateNormalized: string
       ),
     });
     if (!existing) {
-      await db.insert(plateTransferRequests).values({ plateNormalized, fromVehicleId: holder.id, toUserId: ownerId });
+      await ex.insert(plateTransferRequests).values({ plateNormalized, fromVehicleId: holder.id, toUserId: ownerId });
     }
   }
   throw conflict("plate_taken", "Cette plaque est déjà enregistrée sur un véhicule actif", {
@@ -290,6 +290,8 @@ export const vehiclesService = {
     await storage.put(key, output.data);
     try {
       await withTx(async (tx) => {
+        // Deux envois simultanés : la ligne du véhicule sérialise le calcul de la position.
+        await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id)).for("update");
         const [agg] = await tx
           .select({ n: count(), maxPos: max(vehiclePhotos.position) })
           .from(vehiclePhotos)

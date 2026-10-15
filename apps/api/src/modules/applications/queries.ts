@@ -27,6 +27,7 @@ import {
 import { requireOrganizer, staffAccess } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { forbidden, notFound } from "../../lib/errors";
+import { escapeLike } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { vehiclesRepo } from "../vehicles/repo";
@@ -288,7 +289,7 @@ export const applicationsQueries = {
       );
     }
     if (q.q) {
-      const like = `%${q.q}%`;
+      const like = `%${escapeLike(q.q)}%`;
       filters.push(or(ilike(profiles.pseudo, like), ilike(vehicleMakes.name, like), ilike(vehicleModels.name, like)));
     }
     const order = {

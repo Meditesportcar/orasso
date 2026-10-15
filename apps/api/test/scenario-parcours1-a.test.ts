@@ -11,6 +11,7 @@ import { app } from "../src/app";
 import { db, pool } from "../src/db/client";
 import { emailOutbox } from "../src/db/schema";
 import { applicationsService } from "../src/modules/applications/service";
+import { notificationsService } from "../src/modules/notifications/service";
 import { call, resetDb, seedReference, signUp, type TestUser, useClock } from "./helpers";
 
 const paris = (month: number, day: number, hour: number, minute = 0) =>
@@ -153,6 +154,7 @@ describe("parcours n° 1, première moitié", () => {
     expect(withdrawn.json).toMatchObject({ status: "withdrawn", withdrawnAfterLock: false });
     const ninaCard = (await call(nina.u, "GET", "/me/applications")).json[0];
     expect(ninaCard).toMatchObject({ status: "offered", offerExpiresAt: paris(6, 16, 10).toISOString() });
+    await notificationsService.flush();
     const ninaJournal = (await call(nina.u, "GET", "/me/notifications")).json.items.map(
       (n: { type: string }) => n.type,
     );
@@ -187,6 +189,7 @@ describe("parcours n° 1, première moitié", () => {
     });
 
     // Chaque décision a été annoncée au candidat (sans appareil : par e-mail, transport « journal »).
+    await notificationsService.flush();
     const mails = await db.select({ to: emailOutbox.to, subject: emailOutbox.subject }).from(emailOutbox);
     expect(mails.map((m) => m.subject).sort()).toEqual(
       [

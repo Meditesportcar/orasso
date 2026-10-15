@@ -409,6 +409,13 @@ async function apply(
 
 // --- Programme ----------------------------------------------------------------------------------------------------
 async function main() {
+  if (RESET && process.env.NODE_ENV === "production" && !args.has("--force-production")) {
+    console.error(
+      "--reset efface tous les comptes : refusé en production (ajouter --force-production si c'est voulu).",
+    );
+    process.exitCode = 1;
+    return;
+  }
   if (RESET) await reset();
   else if (await db.query.structures.findFirst({ where: eq(t.structures.slug, "meditesportcar") })) {
     console.log("Seed déjà présent : rien à faire (pnpm db:seed --reset pour recommencer).");

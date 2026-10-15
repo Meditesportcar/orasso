@@ -29,10 +29,12 @@ export type NotifyInput = {
 /** Types envoyés par e-mail même quand un appareil reçoit le push (docs/01 « Rappel par e-mail… toujours »). */
 const EMAIL_ALWAYS: NotificationType[] = ["event_reminder_week", "staff_presence_reminder"];
 
+let inflight: Promise<void> = Promise.resolve();
+
 export const notificationsService = {
   /**
    * Enregistre une notification (dans la transaction de l'appelant). La livraison se fait après validation :
-   * appeler `deliverDue()` (fait par `withTx(..., after)` côté services, et chaque minute par la tâche).
+   * `kick()` (sans attendre, dans `after` côté services) et la tâche de chaque minute appellent `deliverDue()`.
    */
   async notify(ex: Executor, userId: string, type: NotificationType, input: NotifyInput): Promise<NotificationRow> {
     const at = now();
@@ -68,12 +70,37 @@ export const notificationsService = {
             .from(notifications)
             .where(and(isNull(notifications.deliveredAt), lte(notifications.deliverAfter, at)))
             .orderBy(notifications.deliverAfter)
-            .limit(limit),
+            .limit(limit)
+            // Deux livraisons simultanées (tâche + requête) ne réservent jamais la même ligne.
+            .for("update", { skipLocked: true }),
         ),
       )
       .returning();
-    for (const n of due) await deliverOne(n);
+    for (const n of due) {
+      try {
+        await deliverOne(n);
+      } catch (error) {
+        // Réessayée à la prochaine minute.
+        console.error("Livraison de notification :", error);
+        await db.update(notifications).set({ deliveredAt: null }).where(eq(notifications.id, n.id));
+      }
+    }
     return due.length;
+  },
+
+  /** Lance une livraison sans la faire attendre à la requête (les envois s'enchaînent, jamais en parallèle). */
+  kick(): void {
+    inflight = inflight
+      .then(() => this.deliverDue())
+      .then(
+        () => undefined,
+        (error) => console.error("Livraison de notifications :", error),
+      );
+  },
+
+  /** Attend la fin des livraisons lancées par `kick()` (tests, scripts). */
+  flush(): Promise<void> {
+    return inflight;
   },
 
   async list(userId: string, limit: number, cursor?: string) {

@@ -18,6 +18,7 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "event.reminder-week": (d) => eventJobs.reminderWeek({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "event.reminder-eve": (d) => eventJobs.reminderEve({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "notifications.deliver": () => notificationsService.deliverDue(),
+  "waitlist.sweep": () => applicationsService.expireDueOffers(),
 };
 
 /**
@@ -46,6 +47,8 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
   if (work) {
     // Notifications différées (heures calmes) : livrées chaque minute.
     await boss.schedule("notifications.deliver", "* * * * *", null, { tz: "Europe/Paris" });
+    // Offres échues dont la tâche d'expiration n'est pas passée : balayage de secours.
+    await boss.schedule("waitlist.sweep", "* * * * *", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {
     async send(name, data, startAfter) {

@@ -59,6 +59,7 @@ export const eventJobs = {
   async previewOpen(data: { eventId: string; at: string }) {
     const e = await eventsRepo.byId(data.eventId).catch(() => null);
     if (e?.status !== "published" || !sameInstant(registrationOpensAt(e, true), data.at)) return false;
+    if (e.admission === "invite_only") return false;
     const followers = await db
       .select({ userId: structureFollows.userId })
       .from(structureFollows)
@@ -73,7 +74,7 @@ export const eventJobs = {
           link: { label: "Candidater", path: `/e/${e.slug}` },
         });
       }
-      after(() => notificationsService.deliverDue());
+      after(() => notificationsService.kick());
     });
     return true;
   },
@@ -119,6 +120,6 @@ async function notifyAccepted(
         link: { label: "Ouvrir mes accès", path: "/app/acces" },
       });
     }
-    after(() => notificationsService.deliverDue());
+    after(() => notificationsService.kick());
   });
 }

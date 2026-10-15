@@ -12,7 +12,8 @@ export type JobName =
   | "event.preview-open"
   | "event.reminder-week"
   | "event.reminder-eve"
-  | "notifications.deliver";
+  | "notifications.deliver"
+  | "waitlist.sweep";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

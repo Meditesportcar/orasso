@@ -20,6 +20,7 @@ import {
 } from "../src/db/schema";
 import { deps, MemoryJobQueue } from "../src/lib/deps";
 import type { Viewer } from "../src/lib/session";
+import { notificationsService } from "../src/modules/notifications/service";
 import { profilesRepo } from "../src/modules/profiles/repo";
 
 const TABLES = [
@@ -34,6 +35,8 @@ const TABLES = [
 ];
 
 export async function resetDb() {
+  // Livraisons de notifications encore en cours (lancées sans attente par les services).
+  await notificationsService.flush();
   await db.execute(sql.raw(`truncate ${TABLES.map((t) => `"${t}"`).join(", ")} cascade`));
 }
 

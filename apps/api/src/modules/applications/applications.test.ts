@@ -217,6 +217,7 @@ describe("tri", () => {
     const refusal = notes.find((n) => n.type === "application_refused");
     expect(refusal?.body).toContain("Hors thème, Complet");
     // Sans appareil enregistré, la notification part par e-mail (transport « journal »).
+    await notificationsService.flush();
     const mails = await db.select().from(emailOutbox);
     expect(mails).toHaveLength(3);
     expect(mails.every((m) => m.status === "sent")).toBe(true);
@@ -333,6 +334,7 @@ describe("liste d'attente automatique", () => {
       where: and(eq(notifications.userId, ps[2]!.u.id), eq(notifications.type, "offer_received")),
     });
     expect(n?.body).toContain("À accepter avant");
+    await notificationsService.flush();
     expect((await call(ps[2]!.u, "GET", "/me/applications")).json[0].offerExpiresAt).toBe(
       paris(6, 16, 12).toISOString(),
     );
@@ -385,6 +387,52 @@ describe("liste d'attente automatique", () => {
       false,
     );
     expect(await statusOf(apps[2]!.id)).toBe("accepted");
+  });
+
+  it("tâche d'expiration en avance : replanifiée à l'échéance ; balayage de secours", async () => {
+    const { ps, apps } = await full();
+    clock.set(paris(6, 15, 12));
+    await applicationsService.withdraw(ps[0]!.v, apps[0]!.id);
+    const job = clock.jobs.jobs[0]!;
+    clock.jobs.jobs.length = 0;
+    clock.set(paris(6, 16, 11, 59));
+    expect(await applicationsService.expireOffer(String(job.data.applicationId), String(job.data.offeredAt))).toBe(
+      false,
+    );
+    expect(clock.jobs.jobs).toMatchObject([{ name: "waitlist.offer-expire", startAfter: paris(6, 16, 12) }]);
+    // La tâche n'est jamais passée : le balayage de chaque minute fait expirer l'offre et sert le suivant.
+    clock.set(paris(6, 16, 12, 1));
+    expect(await applicationsService.expireDueOffers()).toBe(1);
+    expect(await statusOf(apps[2]!.id)).toBe("expired");
+    expect(await statusOf(apps[3]!.id)).toBe("offered");
+  });
+
+  it("« refuser la place » après l'avoir acceptée (double clic) : refusé, la retenue reste", async () => {
+    const { ps, apps } = await full();
+    clock.set(paris(6, 15, 12));
+    await applicationsService.withdraw(ps[0]!.v, apps[0]!.id);
+    await applicationsService.acceptOffer(ps[2]!.v, apps[2]!.id);
+    await expect(applicationsService.declineOffer(ps[2]!.v, apps[2]!.id)).rejects.toMatchObject({
+      code: "invalid_transition",
+    });
+    expect(await statusOf(apps[2]!.id)).toBe("accepted");
+  });
+
+  it("modifier seulement le titre ne touche ni la capacité ni la limite par personne", async () => {
+    const { e } = await full();
+    await eventsService.update(orgaV, e.id, { title: "Nocturne renommée" });
+    const res = await call(orga, "PATCH", `/events/${e.id}`, { title: "Nocturne de Canet" });
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ capacity: 2, maxVehiclesPerUser: 1, previewHours: 24 });
+    const row = await db.query.events.findFirst({ where: eq(events.id, e.id) });
+    expect(row).toMatchObject({ capacity: 2, lockOffsetMinutes: 120 });
+    await call(orga, "PATCH", `/events/${e.id}`, { maxVehiclesPerUser: 2, lockOffsetMinutes: 60 });
+    await call(orga, "PATCH", `/events/${e.id}`, { title: "Encore" });
+    expect(await db.query.events.findFirst({ where: eq(events.id, e.id) })).toMatchObject({
+      maxVehiclesPerUser: 2,
+      lockOffsetMinutes: 60,
+      capacity: 2,
+    });
   });
 
   it("refuser la place → offerte au suivant", async () => {
@@ -529,6 +577,7 @@ describe("heures calmes", () => {
     const app = await applyAs(p, e.id);
     clock.set(paris(6, 12, 23));
     await decide(e.id, app.id, "accept");
+    await notificationsService.flush();
     const n = await db.query.notifications.findFirst({ where: eq(notifications.userId, p.u.id) });
     expect(n?.deliverAfter).toEqual(paris(6, 13, 8));
     expect(n?.deliveredAt).toBeNull();
