@@ -1,4 +1,4 @@
-﻿# Avancement
+# Avancement
 
 À lire au début de chaque session, à mettre à jour à la fin.
 
@@ -53,13 +53,21 @@
   - API (petits ajouts) : jeton de session en `Authorization: Bearer` (plugin `bearer` de Better Auth), `CORS_ORIGINS` pour la recette dans un navigateur.
   - Vérifié : `pnpm test` (dont 12 tests de l'appli : QR de compte identique à celui de l'API, tracé du QR, fenêtre du jour J, formats), `typecheck`, `lint`, `expo export` Android et iOS ; parcours complet dans le navigateur (`expo start --web --port 8091`, API locale avec `CORS_ORIGINS=http://localhost:8091`), QR affiché API arrêtée. **Pas encore sur simulateur ni appareil** (le connecteur Expo demande un projet EAS : lot 11).
 
+- **Appli : mode staff hors ligne (lot 10, 15–16/10/2026)** — `apps/mobile`. Choix : `docs/JOURNAL-DES-CHOIX.md` (lot 10) ; état technique : `ARCHITECTURE.md` § 7 « État après le lot 10 ».
+  - Accès > Où je suis staff : présence, « Mode staff » de la veille 00 h à J+1 (sinon la date d'ouverture), envois en attente. Le mode staff est en Sable quel que soit le thème choisi.
+  - Écran d'entrée : poste, compteurs arrivés / attendus / à envoyer, « je suis là », synchro (heure de la liste, « Synchroniser la liste », « Envoyer maintenant »), tuiles selon les rôles (scan, liste, placement, main courante), rapport des doublons et refus renvoyés par le serveur, alerte.
+  - Synchro : `GET /api/keys` (clés de confiance de l'appareil) puis la liste signée, vérifiée (Ed25519 du SHA-256 du JSON canonique) avant d'écraser la liste locale ; complète ou différentielle (écrasée par `passId`), refus d'une liste plus ancienne ; différentielle automatique toutes les minutes en ligne. Base SQLite `orasso-staff.db` (événements, liste, clés, file, pointages locaux).
+  - Scan : caméra continue (`expo-camera`, écran tenu allumé), décision en mémoire avec `decideScan` du paquet partagé (signature, événement, liste, révocation, déjà entré), anti-rebond 3 s, `ScanResult` plein écran 1 s + son + vibration, retour seul à la caméra ; QR signé absent de la liste → « Accepter quand même » ou « Refuser ». Boutons en bas : plaque ou pseudo (recherche hors ligne : plaque entière hachée, 3 premiers caractères, pseudo), express (lien envoyé, rendu en QR ; mis en file sans réseau), sans scan, liste, incident, alerte.
+  - Liste (filtres Tous / Arrivés / Attendus / Sans scan, Pointer, pointage rapide par plaque, coordonnées du super staff), placement (arrivés / attendus et places restantes par zone).
+  - File : chaque lecture, pointage, présence, express, incident et alerte est écrit dans SQLite puis envoyé (lots de 200, appareil enregistré, idempotent) à l'ouverture, au retour du réseau et toutes les 30 s ; essais de 5 s à 5 min, jamais perdu ; après le règlement, éléments refusés un par un (`settled`) et retirés. Purge à J+1 et à la déconnexion (liste, coordonnées, clés), sauf les actions non envoyées.
+  - Vérifié : 27 tests du mode staff (clés de confiance, vérification de la liste, décisions OK / déjà entré / refusé / falsifié / autre événement / clé inconnue / absent, anti-rebond, fusion, recherche, file hors ligne puis réponse avec doublons, `settled`, purge, stockage SQLite via `node:sqlite`), `pnpm test`, `typecheck`, `lint`, `expo export` Android et iOS ; démonstration dans le navigateur (API arrêtée = hors ligne) avec captures. **Pas encore sur téléphone** (caméra, son, vibration, SQLite natif : APK du lot 11).
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
 
-- Site (lot 07) et appli du passionné (lot 09) faits ; reste le mode staff de l'appli (lot 10), sur l'API complète du parcours n° 1 : types et schémas dans `packages/shared/src/schemas/` (`access.ts` pour le jour J et les points), libellés dans `labels.fr.ts`. Le QR se dessine avec `qrcode` en correction M (version 6 attendue). Le thème choisi par l'utilisateur doit être mémorisé par l'appli (`onPreferenceChange`) ; `AppBar`/`TabBar` reçoivent `useSafeAreaInsets()`.
+- Lot 11 : APK Android et build simulateur iOS (EAS). Pour un build qui parle à https://dev.orasso.fr, épingler la clé publique des QR : `EXPO_PUBLIC_QR_TRUSTED_KEYS=[{"kid":1,"publicKey":"<clé de /api/keys>"}]` (voir `apps/mobile/.env.example`) ; la clé de démonstration `kid 0` y est de toute façon refusée. Puis essai du mode staff sur téléphone (caméra à travers un pare-brise, son, vibration, mode avion réel, temps de scan).
 - Déploiement de l'API B sur dev.orasso.fr : ajouter `QR_SIGNING_KEYS` et `QR_SIGNING_ACTIVE_KID` à `/etc/orasso/dev.env` **avant** (l'API refuse de démarrer sans elles en production ; voir `deploy/dev.env.example`).
 - Sauvegardes d'Orasso hors du VPS : validées par Damien et appliquées le 15/10 (deux lignes dans `/etc/vps-backup/files.list`, voir `deploy/README.md`).
 
@@ -87,6 +95,7 @@ Prérequis : Node 24 (déjà installé), Git.
    - `pnpm dev:api` → http://localhost:3001/api/health
    - `pnpm dev:web` → http://localhost:5173 (l'API est aussi joignable sur http://localhost:5173/api) ; la page de recette du système de design est sur `/_ds`
    - `pnpm dev:mobile` → Metro (Expo) ; scanner le QR code avec Expo Go, ou `a` pour un émulateur Android. Dans un navigateur : `npx expo start --web` depuis `apps/mobile` (mettre l'origine de Metro dans `CORS_ORIGINS` du `.env` de l'API, ex. `http://localhost:8081`, et l'API dans `EXPO_PUBLIC_API_URL`).
+   - Mode staff dans un navigateur (expo-sqlite en WebAssembly exige une page isolée) : `expo start --web --port 8102` puis `node apps/mobile/scripts/web-isolated.mjs 8101 8102`, ouvrir http://localhost:8101 (et `CORS_ORIGINS=http://localhost:8101`). Sans caméra, la recette injecte une lecture : champ « Recette · charge utile » de l'écran de scan ou `__orassoScan("OR1…")` dans la console (développement seulement).
 6. **Vérifier** : `pnpm test` (la base doit tourner ; les tests de l'API créent et migrent eux-mêmes une base séparée `orasso_test`, la base de dev et son seed ne sont pas touchés), `pnpm typecheck`, `pnpm lint` (`pnpm format` corrige la mise en forme). Compilation de l'appli sans téléphone : `pnpm --filter @orasso/mobile export:android`.
 7. **Clés des QR** : sans `QR_SIGNING_KEYS` dans le `.env`, l'API de développement signe avec une clé de démonstration publique (`kid 0`). Pour une vraie clé : `pnpm --filter @orasso/api keys:generate` et coller les deux lignes dans le `.env`. Vérifier un QR hors de l'API, avec les seules clés publiques : `pnpm --filter @orasso/api pass:verify --keys http://localhost:3001/api/keys [--event-no N] <OR1…>`. Clé compromise : `pnpm --filter @orasso/api keys:revoke <kid>` (procédure : `deploy/README.md`).
 8. **E-mails en développement** : transport « journal », chaque e-mail est écrit dans `.data/mail/` (un fichier HTML) et résumé dans la console de l'API. Photos envoyées : `.data/storage/`, servies par `/api/files/…`.
