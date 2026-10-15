@@ -10,12 +10,11 @@ import { profilesRepo } from "./repo";
 import { profilesService } from "./service";
 
 export const profilesRoutes = new Hono<AppEnv>()
-  // Public : vérifie un pseudo avant l'inscription. `valid` : format correct ; `available` : libre.
+  // Public (formulaire d'inscription du site) : le pseudo est-il valide et libre ? Rien d'autre n'est révélé.
   .get("/pseudo-available", async (c) => {
-    c.header("cache-control", "no-store");
-    const parsed = pseudoSchema.safeParse(c.req.query("pseudo") ?? "");
-    if (!parsed.success) return c.json({ valid: false, available: false });
-    return c.json({ valid: true, available: !(await profilesRepo.pseudoTaken(parsed.data)) });
+    const pseudo = pseudoSchema.safeParse(c.req.query("pseudo") ?? "");
+    if (!pseudo.success) return c.json({ valid: false, available: false });
+    return c.json({ valid: true, available: !(await profilesRepo.pseudoTaken(pseudo.data)) });
   })
   .get("/me", async (c) => c.json(await profilesService.me(await requireUser(c))))
   .patch("/me/profile", async (c) => {
