@@ -1,7 +1,8 @@
-// Tables de Better Auth (comptes, sessions, identifiants, vérifications).
-// Noms au pluriel et colonnes en snake_case : convention de toute la base Orasso.
-// À modifier seulement avec la configuration de Better Auth (src/auth.ts), puis `pnpm db:generate`.
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+// Tables de Better Auth (comptes, sessions, identifiants, vérifications, double authentification).
+// Noms au singulier imposés par Better Auth (cf. ARCHITECTURE.md § 1.1) ; colonnes en snake_case comme toute la base.
+// On n'y ajoute rien de métier (tout va dans `profiles`). À modifier seulement avec la configuration de
+// Better Auth (src/auth.ts), puis `pnpm db:generate`.
+import { boolean, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -11,38 +12,39 @@ const timestamps = {
     .$onUpdate(() => new Date()),
 };
 
-export const users = pgTable("users", {
+export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  twoFactorEnabled: boolean("two_factor_enabled").default(false),
   ...timestamps,
 });
 
-export const sessions = pgTable(
-  "sessions",
+export const session = pgTable(
+  "session",
   {
     id: text("id").primaryKey(),
     userId: text("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+      .references(() => user.id, { onDelete: "cascade" }),
     token: text("token").notNull().unique(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
     ...timestamps,
   },
-  (t) => [index("sessions_user_id_idx").on(t.userId)],
+  (t) => [index("session_user_id_idx").on(t.userId)],
 );
 
-export const accounts = pgTable(
-  "accounts",
+export const account = pgTable(
+  "account",
   {
     id: text("id").primaryKey(),
     userId: text("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+      .references(() => user.id, { onDelete: "cascade" }),
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
     accessToken: text("access_token"),
@@ -54,11 +56,11 @@ export const accounts = pgTable(
     password: text("password"),
     ...timestamps,
   },
-  (t) => [index("accounts_user_id_idx").on(t.userId)],
+  (t) => [index("account_user_id_idx").on(t.userId)],
 );
 
-export const verifications = pgTable(
-  "verifications",
+export const verification = pgTable(
+  "verification",
   {
     id: text("id").primaryKey(),
     identifier: text("identifier").notNull(),
@@ -66,5 +68,22 @@ export const verifications = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     ...timestamps,
   },
-  (t) => [index("verifications_identifier_idx").on(t.identifier)],
+  (t) => [index("verification_identifier_idx").on(t.identifier)],
+);
+
+/** Double authentification (plugin `twoFactor`) : obligatoire pour organisateurs et administration (docs/01). */
+export const twoFactor = pgTable(
+  "two_factor",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    verified: boolean("verified").default(true),
+    failedVerificationCount: integer("failed_verification_count").default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  },
+  (t) => [index("two_factor_user_id_idx").on(t.userId), index("two_factor_secret_idx").on(t.secret)],
 );

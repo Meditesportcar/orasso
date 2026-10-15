@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { twoFactor } from "better-auth/plugins/two-factor";
 
 import { db } from "./db/client";
 import * as schema from "./db/schema";
@@ -20,9 +21,11 @@ export const auth = betterAuth({
   baseURL: env.PUBLIC_URL,
   basePath: "/api/auth",
   secret: env.BETTER_AUTH_SECRET,
-  database: drizzleAdapter(db, { provider: "pg", schema, usePlural: true }),
+  database: drizzleAdapter(db, { provider: "pg", schema }),
   emailAndPassword: { enabled: true },
   socialProviders,
+  // L'obligation (organisateurs, administration) est appliquée par l'API métier (lot 05).
+  plugins: [twoFactor()],
   trustedOrigins: [env.PUBLIC_URL],
   telemetry: { enabled: false },
 });
