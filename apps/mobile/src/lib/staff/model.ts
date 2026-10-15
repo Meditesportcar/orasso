@@ -5,8 +5,8 @@ import {
   type AccessListEntry,
   decideScan,
   type Ed25519Verify,
+  type LocalScanDecision,
   normalizePlate,
-  type ScanBatchItem,
   type ScanBatchResult,
   type ScanDecision,
   type StaffRole,
@@ -50,6 +50,26 @@ export type LocalCheckin = {
   method: LocalCheckinMethod;
   actionId: string;
 };
+
+/** Élément d'un lot `POST /events/:id/scans` tel qu'il part (dates en texte ISO, `scanBatchSchema` en entrée). */
+export type ScanItemWire = {
+  kind: "scan";
+  id: string;
+  passId: string | null;
+  rawPayload: string | null;
+  decision: LocalScanDecision;
+  reason: string | null;
+  zoneCode: string | null;
+  scannedAt: string;
+};
+export type CheckinItemWire = {
+  kind: "manual" | "plate";
+  id: string;
+  applicationId: string;
+  note: string | null;
+  scannedAt: string;
+};
+export type BatchItemWire = ScanItemWire | CheckinItemWire;
 
 /** Ce qui part au serveur : lectures et pointages (`POST /events/:id/scans`) et le reste du terrain. */
 export type ActionKind = "scan" | "manual" | "plate" | "presence" | "express" | "incident" | "alert";
@@ -198,12 +218,12 @@ export function scanAction(
   id: string,
   now: Date,
   entry?: AccessListEntry,
-): { item: Extract<ScanBatchItem, { kind: "scan" }>; checkin: LocalCheckin | null } {
+): { item: ScanItemWire; checkin: LocalCheckin | null } {
   const passId = decision.passId;
   const reason = decision.decision === "refused" ? decision.reason : null;
   const zoneCode = entry?.zoneCode ?? null;
-  const item = {
-    kind: "scan" as const,
+  const item: ScanItemWire = {
+    kind: "scan",
     id,
     passId,
     // Le QR brut ne part que s'il est d'Orasso et que l'appareil n'a pas su le lire : le serveur le vérifie lui-même.
@@ -235,7 +255,7 @@ export function checkinAction(
   id: string,
   now: Date,
   note?: string,
-): { item: Extract<ScanBatchItem, { kind: "manual" | "plate" }>; checkin: LocalCheckin } {
+): { item: CheckinItemWire; checkin: LocalCheckin } {
   return {
     item: { kind, id, applicationId: entry.applicationId, note: note?.trim() || null, scannedAt: now.toISOString() },
     checkin: {
@@ -431,7 +451,7 @@ export function applyResults(
       missing.push(action.id);
       continue;
     }
-    const item = action.payload as ScanBatchItem;
+    const item = action.payload as BatchItemWire;
     const passId = item.kind === "scan" ? (item.passId ?? null) : (passOf(item.applicationId) ?? null);
     let checkin: ResultEffect["checkin"] = null;
     if (passId) {

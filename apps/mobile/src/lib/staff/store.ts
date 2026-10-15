@@ -327,12 +327,12 @@ export class StaffStore {
 
   /** Retour du réseau, « Envoyer maintenant » : les actions en attente repartent sans attendre leur délai. */
   retryNow(userId: string, now: Date): Promise<void> {
-    return this.serial(() =>
-      this.db.runAsync("update pending_actions set next_attempt_at = ? where user_id = ? and sent_at is null", [
+    return this.serial(async () => {
+      await this.db.runAsync("update pending_actions set next_attempt_at = ? where user_id = ? and sent_at is null", [
         now.toISOString(),
         userId,
-      ]),
-    );
+      ]);
+    });
   }
 
   // --- Purge ---

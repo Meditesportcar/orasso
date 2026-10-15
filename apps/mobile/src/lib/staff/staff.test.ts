@@ -489,7 +489,7 @@ describe("file hors ligne puis synchro (SQLite)", () => {
       const d = decideLocal(s, p, keys, ed25519Verify);
       const id = uuid(700 + i);
       const at = new Date(t0.getTime() + i * 1000);
-      const { item, checkin } = scanAction(d, p, id, at, d.decision === "ok" ? d.entry : undefined);
+      const { item, checkin } = scanAction(d, p, id, at, d.passId ? s.entries.get(d.passId) : undefined);
       await store.addAction(action(id, item, at.toISOString()), checkin);
       if (checkin) s.local.set(checkin.passId, checkin);
     }
