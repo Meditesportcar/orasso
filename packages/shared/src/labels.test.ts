@@ -15,7 +15,7 @@ describe("libellés partagés", () => {
   it("chaque statut de candidature a son libellé des docs", () => {
     expect(Object.keys(applicationStatusLabels)).toEqual([...applicationStatuses]);
     expect(applicationStatusLabels.accepted).toBe("Retenue");
-    expect(applicationStatusLabels.waitlist).toBe("Liste d'attente");
+    expect(applicationStatusLabels.waitlisted).toBe("Liste d'attente");
   });
 
   it("refuse un statut inconnu", () => {

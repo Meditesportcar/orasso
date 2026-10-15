@@ -26,7 +26,7 @@ export const structureRoleLabels: Record<StructureRole, string> = {
 };
 
 /** Rôles du staff, fixés par la structure et ajustables par événement. */
-export const staffRoles = ["scan", "shop", "placement", "control", "filtration", "super_staff"] as const;
+export const staffRoles = ["scan", "shop", "placement", "control", "filtering", "super_staff"] as const;
 export const staffRoleSchema = z.enum(staffRoles);
 export type StaffRole = z.infer<typeof staffRoleSchema>;
 
@@ -35,6 +35,6 @@ export const staffRoleLabels: Record<StaffRole, string> = {
   shop: "Boutique",
   placement: "Placement",
   control: "Contrôle",
-  filtration: "Filtration",
+  filtering: "Filtration",
   super_staff: "Super staff",
 };
