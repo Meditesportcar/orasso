@@ -46,6 +46,14 @@
         {
           "color": "#E9B824"
         }
+      ],
+      "expo-sqlite",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Orasso utilise l’appareil photo pour lire les QR d’accès à l’entrée des événements.",
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "experiments": {
