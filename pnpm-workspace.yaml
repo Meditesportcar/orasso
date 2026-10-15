@@ -1,0 +1,32 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Paquets autorisés à lancer un script d'installation (esbuild, binaires PostgreSQL locaux).
+allowBuilds:
+  '@embedded-postgres/windows-x64': true
+  esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@better-auth/core@1.7.9'
+  - '@better-auth/drizzle-adapter@1.7.9'
+  - '@better-auth/kysely-adapter@1.7.9'
+  - '@better-auth/memory-adapter@1.7.9'
+  - '@better-auth/mongo-adapter@1.7.9'
+  - '@better-auth/prisma-adapter@1.7.9'
+  - '@better-auth/telemetry@1.7.9'
+  - '@expo/cli@57.0.30'
+  - '@expo/metro-runtime@57.0.17'
+  - '@expo/prebuild-config@57.0.19'
+  - '@expo/ui@57.0.24'
+  - better-auth@1.7.9
+  - expo-asset@57.0.20
+  - expo-constants@57.0.22
+  - expo-linking@57.0.13
+  - expo-modules-autolinking@57.0.16
+  - expo-modules-core@57.0.23
+  - expo-router@57.0.27
+  - expo@57.0.29
+
+# Expo/Metro supporte mal les liens symboliques de pnpm : node_modules à plat.
+nodeLinker: hoisted

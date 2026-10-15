@@ -1,0 +1,32 @@
+{
+  "name": "orasso",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @orasso/api dev",
+    "dev:web": "pnpm --filter @orasso/web dev",
+    "dev:mobile": "pnpm --filter @orasso/mobile dev",
+    "db:start": "node scripts/db.mjs start",
+    "db:stop": "node scripts/db.mjs stop",
+    "db:status": "node scripts/db.mjs status",
+    "db:generate": "pnpm --filter @orasso/api db:generate",
+    "db:migrate": "pnpm --filter @orasso/api db:migrate",
+    "db:studio": "pnpm --filter @orasso/api db:studio",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "pnpm -r --if-present test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "^24.19.2",
+    "embedded-postgres": "17.10.0-beta.17",
+    "pg": "^8.23.1",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.4"
+  }
+}
