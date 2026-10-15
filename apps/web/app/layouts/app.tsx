@@ -1,0 +1,58 @@
+import { Ground, TabBar, type TabItem, tabSets } from "@orasso/design-system/web";
+import { Form, Outlet, useLocation } from "react-router";
+
+import { SiteHeader, ThemeSwitch } from "../components/SiteChrome";
+import { requireMe } from "../lib/api.server";
+import type { Route } from "./+types/app";
+
+// Espace connecté : mêmes sections que l'appli (Accueil, Explorer, Accès, Garage, Boîte).
+export async function loader({ request }: Route.LoaderArgs) {
+  const me = await requireMe(request);
+  return {
+    pseudo: me.profile.pseudo,
+    orga: me.memberships.find((m) => m.status === "active")?.structureSlug ?? null,
+    unread: me.counts.unreadNotifications,
+  };
+}
+
+const HREFS: Record<string, string> = {
+  home: "/app",
+  explore: "/app/explorer",
+  access: "/app/acces",
+  garage: "/app/garage",
+  inbox: "/app/boite",
+};
+
+function activeTab(pathname: string): string {
+  const hit = Object.entries(HREFS).find(([id, href]) => id !== "home" && pathname.startsWith(href));
+  return hit ? hit[0] : "home";
+}
+
+export default function AppLayout({ loaderData }: Route.ComponentProps) {
+  const { pathname } = useLocation();
+  const tabs: TabItem[] = tabSets.fan.map((tab) => ({ ...tab, href: HREFS[tab.id] }));
+  return (
+    <Ground variant="site" animated fixed>
+      <div className="app">
+        <SiteHeader>
+          {loaderData.orga && <a href={`/orga/${loaderData.orga}`}>Organisateur</a>}
+          <span>{loaderData.pseudo}</span>
+          <Form method="post" action="/deconnexion">
+            <button type="submit" className="s-linkbutton o-t-button">
+              Déconnexion
+            </button>
+          </Form>
+        </SiteHeader>
+        <div className="app__body">
+          <Outlet />
+          <div className="app__theme">
+            <ThemeSwitch />
+          </div>
+        </div>
+        <div className="app__tabs">
+          <TabBar tabs={tabs} active={activeTab(pathname)} aria-label="Mon compte" />
+        </div>
+      </div>
+    </Ground>
+  );
+}
