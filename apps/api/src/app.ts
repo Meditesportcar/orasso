@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 
 import { auth } from "./auth";
 import { db } from "./db/client";
@@ -30,6 +31,19 @@ import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { ws } from "./ws";
 
 export const app = new Hono<AppEnv>().basePath("/api");
+
+// En-têtes de sécurité (recette du lot 12) : nosniff, pas d'encadrement, pas de référent. HSTS est posé par nginx ;
+// pas de Cross-Origin-Resource-Policy, pour que les photos restent lisibles par l'appli en recette web (autre origine).
+app.use(
+  "*",
+  secureHeaders({
+    xFrameOptions: "DENY",
+    strictTransportSecurity: false,
+    crossOriginResourcePolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
 
 // CORS : seulement pour les origines listées dans CORS_ORIGINS (recette de l'appli dans un navigateur).
 const corsOrigins =
