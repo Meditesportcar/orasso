@@ -17,7 +17,7 @@ import {
 import { localScanDecisionLabels } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -29,7 +29,7 @@ import { clock, pointedResult, resultOf, resultProps, type ShownResult, vibrate 
 import { SearchSheet } from "@/features/staff/SearchSheet";
 import { ed25519Verify } from "@/lib/staff/crypto";
 import { counters, decideLocal, ScanGate } from "@/lib/staff/model";
-import { newId, record, trustedKeysNow } from "@/lib/staff/runtime";
+import { clearWriteError, getWriteError, newId, record, trustedKeysNow } from "@/lib/staff/runtime";
 import { useStaffEvent } from "@/lib/staff/useStaff";
 
 const { space2, space3 } = tokens.spacing;
@@ -56,7 +56,22 @@ export default function Scan() {
   const unknownRef = useRef<{ passId: string; payload: string } | null>(null);
   const [sheet, setSheet] = useState<"search" | "express" | "incident" | "alert" | null>(null);
   const [lastMs, setLastMs] = useState<number | null>(null);
+  // Caméra seulement quand l'écran est au premier plan (pas sous la liste empilée par-dessus).
+  const focused = useIsFocused();
   useKeepAwake();
+  const latest = useRef({ state, userId });
+  latest.current = { state, userId };
+
+  // Quitter l'écran sans répondre au panneau « absent de la liste » : la lecture compte comme refusée.
+  useEffect(
+    () => () => {
+      const pending = unknownRef.current;
+      const { state: s, userId: u } = latest.current;
+      if (pending && s && u) recordScan(s, u, { decision: "unknown_pass", passId: pending.passId }, pending.payload);
+      unknownRef.current = null;
+    },
+    [],
+  );
 
   const show = useCallback((shown: ShownResult) => {
     setResult(shown);
@@ -138,6 +153,7 @@ export default function Scan() {
   const count = state ? counters(state) : null;
   const close = () => (router.canGoBack() ? router.back() : router.replace(`/staff/${id}`));
   const cameraOk = permission?.granted && Platform.OS !== "web";
+  const writeError = getWriteError();
 
   return (
     <Ground animated={false} style={styles.fill}>
@@ -152,13 +168,24 @@ export default function Scan() {
       />
 
       <View style={[styles.camera, { backgroundColor: c.night, borderRadius: tokens.radius.radiusLg }]}>
-        {cameraOk ? (
+        {cameraOk && focused ? (
           <CameraView
             style={StyleSheet.absoluteFill}
             facing="back"
             barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-            onBarcodeScanned={({ data }) => handle(data)}
+            // Une feuille ouverte (plaque, express, incident, alerte) : la caméra ne lit plus derrière elle.
+            onBarcodeScanned={sheet ? undefined : ({ data }) => handle(data)}
           />
+        ) : null}
+        {writeError ? (
+          <Plate style={styles.unknown}>
+            <Text variant="bodyStrong" color={c.plateInk}>
+              {writeError}
+            </Text>
+            <Button variant="plate" icon="check" onPress={clearWriteError}>
+              Compris
+            </Button>
+          </Plate>
         ) : null}
         <View pointerEvents="none" style={styles.aim}>
           <Text variant="label" color={c.nightInk} style={styles.center}>

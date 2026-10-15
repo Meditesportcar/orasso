@@ -1,6 +1,6 @@
 // Inscription express (docs/02, parcours 3) : le staff saisit l'e-mail de la personne sans compte, l'API lui envoie
 // le lien du formulaire de 2 minutes. Le lien est aussi rendu ici en QR, à scanner avec son téléphone si l'e-mail
-// tarde. Sans réseau : la demande est mise en file et part au retour du réseau.
+// tarde. Sans réponse en 4,5 s (réseau absent ou saturé) : la demande est mise en file et part au retour du réseau.
 import { Button, Text, TextField, useTheme } from "@orasso/design-system/native";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -66,7 +66,7 @@ export function ExpressSheet({
           <Text variant="body" color={t.color.ink}>
             {sent.url
               ? `Lien envoyé à ${sent.email}. Il crée son compte et son véhicule en 2 minutes, puis présente son QR. Il peut aussi scanner ce code :`
-              : `Pas de réseau : la demande pour ${sent.email} partira dès que le réseau revient.`}
+              : `Pas de réponse du réseau : la demande pour ${sent.email} est gardée et partira dès qu'il revient.`}
           </Text>
           {sent.url ? (
             <View style={styles.qr}>

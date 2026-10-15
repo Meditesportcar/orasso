@@ -138,7 +138,8 @@ export default function StaffList() {
                       .filter(Boolean)
                       .join(" · ")}
                   </Text>
-                  {item.contact ? (
+                  {/* Coordonnées : rôle super staff courant seulement (une ancienne liste pourrait encore en avoir). */}
+                  {item.contact && superStaff ? (
                     <Text variant="meta" color={c.plateMuted}>
                       {[
                         [item.contact.firstName, item.contact.lastName].filter(Boolean).join(" "),
