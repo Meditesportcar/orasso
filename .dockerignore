@@ -1,0 +1,17 @@
+# Contexte de construction des images (racine du dépôt) : seulement ce dont l'API et le site ont besoin.
+.git
+**/node_modules
+**/.env
+**/.env.*
+.data
+**/build
+**/dist
+**/.react-router
+**/*.tsbuildinfo
+**/*.log
+docs
+identite
+*.md
+# L'appli mobile n'est pas construite ici, mais son package.json reste : le lockfile en a besoin.
+apps/mobile/*
+!apps/mobile/package.json

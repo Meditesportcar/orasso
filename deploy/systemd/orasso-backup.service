@@ -1,0 +1,10 @@
+[Unit]
+Description=Orasso : sauvegarde de la base (pg_dump du conteneur orasso-db)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/orasso-backup-db.sh
+Nice=10
+IOSchedulingClass=idle

@@ -1,0 +1,88 @@
+# Orasso — version de test (dev.orasso.fr) sur le VPS commun.
+# Lancé par remote-deploy.sh :
+#   ORASSO_TAG=<version> docker compose -f deploy/compose.yml --env-file /etc/orasso/dev.env up -d --wait
+# Conteneurs, réseau et volumes propres à Orasso ; ports liés à 127.0.0.1 seulement (nginx devant).
+
+name: orasso
+
+services:
+  orasso-db:
+    image: postgres:17
+    container_name: orasso-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orasso
+      POSTGRES_DB: orasso
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans /etc/orasso/dev.env}
+      # Même locale qu'en local (docs/JOURNAL-DES-CHOIX.md, socle).
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8
+    volumes:
+      - orasso_pgdata:/var/lib/postgresql/data
+    networks: [orasso]
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orasso -d orasso"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  orasso-api:
+    image: orasso-api:${ORASSO_TAG:?ORASSO_TAG manquant}
+    container_name: orasso-api
+    restart: unless-stopped
+    init: true
+    env_file: /etc/orasso/dev.env
+    environment:
+      NODE_ENV: production
+      API_PORT: "3000"
+      DATABASE_URL: postgres://orasso:${POSTGRES_PASSWORD}@orasso-db:5432/orasso
+      UPLOADS_DIR: /data/uploads
+    volumes:
+      - orasso_uploads:/data/uploads
+    depends_on:
+      orasso-db:
+        condition: service_healthy
+    networks: [orasso]
+    ports:
+      - "127.0.0.1:3211:3000"
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  orasso-web:
+    image: orasso-web:${ORASSO_TAG:?ORASSO_TAG manquant}
+    container_name: orasso-web
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # Pour les appels de l'API faits pendant le rendu serveur (sans repasser par nginx).
+      API_INTERNAL_URL: http://orasso-api:3000
+    depends_on:
+      orasso-api:
+        condition: service_healthy
+    networks: [orasso]
+    ports:
+      - "127.0.0.1:3210:3000"
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+networks:
+  orasso:
+    name: orasso
+
+volumes:
+  orasso_pgdata:
+    name: orasso_pgdata
+  orasso_uploads:
+    name: orasso_uploads
