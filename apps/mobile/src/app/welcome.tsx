@@ -64,7 +64,7 @@ export default function Welcome() {
                   {page.text}
                 </Text>
               }
-              reveal={step === 0}
+              reveal={false}
             />
             {last ? <AuthForm mode="signup" onSwitchMode={() => router.replace("/auth")} /> : null}
           </View>

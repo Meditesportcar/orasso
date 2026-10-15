@@ -144,7 +144,7 @@ export function AuthForm({
         >
           {signup ? "Créer mon compte" : "Me connecter"}
         </Button>
-        <Button variant="secondary" icon="profile" onPress={onSwitchMode} fullWidth>
+        <Button variant="plate" icon="profile" onPress={onSwitchMode} fullWidth>
           {signup ? "J'ai déjà un compte" : "Créer un compte"}
         </Button>
       </View>
