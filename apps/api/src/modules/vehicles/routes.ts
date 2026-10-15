@@ -64,6 +64,6 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   })
   // Fiche d'un autre utilisateur (connecté) : jamais de plaque.
   .get("/vehicles/:id", async (c) => {
-    await requireUser(c);
-    return c.json(await vehiclesService.getOther(uuidParam(c, "id")));
+    const v = await requireUser(c);
+    return c.json(await vehiclesService.getOther(v, uuidParam(c, "id")));
   });

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import {
   categoryAllowedForYear,
   normalizePlate,
+  type VehicleBrief,
   type VehicleCreate,
   type VehicleFull,
   type VehiclePublic,
@@ -16,6 +17,7 @@ import {
   applications,
   categories,
   plateTransferRequests,
+  profiles,
   vehicleCategories,
   vehicleGenerations,
   vehicleModels,
@@ -249,9 +251,21 @@ export const vehiclesService = {
     for (const p of photos) await storage.remove(p.storageKey);
   },
 
-  async getOther(id: string): Promise<VehiclePublic> {
+  /** Fiche vue par un autre utilisateur connecté : complète si le compte est public, marque et modèle s'il est privé. */
+  async getOther(v: Viewer, id: string): Promise<VehiclePublic | VehicleBrief> {
     const row = await vehiclesRepo.findFullById(id);
     if (!row) throw notFound("Véhicule introuvable");
+    const owner = await db.query.profiles.findFirst({ where: eq(profiles.userId, row.ownerId) });
+    if (owner?.visibility === "private" && row.ownerId !== v.user.id) {
+      return {
+        id: row.id,
+        label: `${row.make.name} ${row.model.name}`,
+        makeName: row.make.name,
+        modelName: row.model.name,
+        vehicleType: row.vehicleType,
+        photoUrl: null,
+      };
+    }
     return vehiclePublic(row);
   },
 

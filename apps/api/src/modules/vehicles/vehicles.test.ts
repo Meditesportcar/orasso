@@ -120,6 +120,17 @@ describe("garage", () => {
     expect(seen.text.toUpperCase()).not.toContain("AB-123-CD");
   });
 
+  it("compte privé : la fiche d'un véhicule ne montre que marque et modèle", async () => {
+    const a = await signUp("Garage_07");
+    const b = await signUp("Garage_08");
+    const v = await call(a, "POST", "/me/vehicles", { ...car(), color: "Rouge" });
+    await call(a, "PATCH", "/me/profile", { visibility: "private" });
+    const seen = await call(b, "GET", `/vehicles/${v.json.id}`);
+    expect(seen.json).toMatchObject({ label: "BMW Série 3", photoUrl: null });
+    expect(seen.json.color).toBeUndefined();
+    expect((await call(a, "GET", `/vehicles/${v.json.id}`)).json.color).toBe("Rouge");
+  });
+
   it("photos : recompressées en WebP, 8 au plus, réordonnées et supprimées", async () => {
     const u = await signUp("Photo_01");
     const v = await call(u, "POST", "/me/vehicles", car());
