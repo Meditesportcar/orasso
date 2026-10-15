@@ -6,9 +6,10 @@ import { encodePassMessage, encodePassPayload, type PassRevokedReason } from "@o
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { accessPasses, applications, events } from "../../db/schema";
+import { accessPasses, applications, events, signingKeys } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
+import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { signing } from "../../lib/signing";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
@@ -49,6 +50,38 @@ export const accessService = {
     const pass = row ?? (await validPass(tx, app.id));
     if (!pass) throw new Error("Pass non enregistré");
     return pass;
+  },
+
+  /**
+   * Clé compromise (`pnpm --filter @orasso/api keys:revoke <kid>`) : la clé sort de `/keys`, de la synchro et de la
+   * vérification serveur ; chaque pass valide signé avec elle est remplacé (`replaced`) par un pass signé avec la
+   * clé active (le titulaire voit son nouveau QR ; le staff le reçoit à la synchro suivante). Refusé pour la clé active.
+   */
+  async revokeSigningKey(kid: number): Promise<{ reissued: number }> {
+    if (kid === signing.activeKid) throw new Error(`La clé ${kid} est active : changer QR_SIGNING_ACTIVE_KID d'abord`);
+    await signing.ensureSynced();
+    return withTx(async (tx, after) => {
+      const [key] = await tx.update(signingKeys).set({ revokedAt: now() }).where(eq(signingKeys.kid, kid)).returning();
+      if (!key) throw notFound(`Clé ${kid} inconnue`);
+      const exposed = await tx.query.accessPasses.findMany({
+        where: and(eq(accessPasses.kid, kid), isNull(accessPasses.revokedAt)),
+      });
+      for (const pass of exposed) {
+        await tx
+          .update(accessPasses)
+          .set({ revokedAt: now(), revokedReason: "replaced" })
+          .where(and(eq(accessPasses.id, pass.id), isNull(accessPasses.revokedAt)));
+        await this.issue(tx, { id: pass.applicationId, eventId: pass.eventId, userId: pass.userId });
+      }
+      const eventIds = [...new Set(exposed.map((p) => p.eventId))];
+      after(() => {
+        for (const eventId of eventIds) {
+          const applicationIds = exposed.filter((p) => p.eventId === eventId).map((p) => p.applicationId);
+          realtime.publish(`event:${eventId}:access`, "access.changed", { applicationIds });
+        }
+      });
+      return { reissued: exposed.length };
+    });
   },
 
   /** Révoque le pass valide d'une candidature (désistement, refus, annulation). */

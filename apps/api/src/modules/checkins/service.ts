@@ -39,7 +39,7 @@ import { AppError, notFound, validation } from "../../lib/errors";
 import { escapeLike } from "../../lib/pagination";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
-import { ed25519Verify } from "../../lib/signing";
+import { ed25519Verify, signing } from "../../lib/signing";
 import { type Tx, withTx } from "../../lib/tx";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { assertStaffWindow, staffService } from "../staff/service";
@@ -184,7 +184,7 @@ async function storedResult(scan: ScanRow): Promise<ScanBatchResult> {
 async function resolvePass(tx: Tx, item: Extract<ScanBatchItem, { kind: "scan" }>) {
   let passId = item.passId ?? null;
   if (!passId && item.rawPayload) {
-    const keys = new Map((await tx.query.signingKeys.findMany()).map((k) => [k.kid, new Uint8Array(k.publicKey)]));
+    const keys = await signing.trustedKeys(tx);
     const check = verifyPassPayload(item.rawPayload, keys, ed25519Verify);
     if (check.ok) passId = check.pass.passId;
   }

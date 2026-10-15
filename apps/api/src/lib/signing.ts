@@ -3,11 +3,12 @@
 // `signing_keys` (ajoutées, jamais retirées) pour l'appli du staff et pour vérifier les anciens pass après rotation.
 import { createHash, createPrivateKey, createPublicKey, type KeyObject, sign, verify } from "node:crypto";
 import type { Ed25519Verify } from "@orasso/shared";
-import { asc, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { signingKeys } from "../db/schema";
 import { env } from "../env";
+import type { Executor } from "./tx";
 
 /** En-tête DER PKCS#8 d'une clé privée Ed25519 dont la graine (32 octets) suit. */
 const PKCS8_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
@@ -29,7 +30,8 @@ export function keyFromSeed(kid: number, seed: Buffer): SigningKey {
  */
 const DEV_KEY_SEED = createHash("sha256").update("orasso-dev-qr-key-not-secret").digest();
 
-export function parseKeys(json: string | undefined, activeKid: string | undefined) {
+export function parseKeys(json: string | undefined, activeKid: string | undefined, production = false) {
+  if (!json && production) throw new Error("QR_SIGNING_KEYS obligatoire en production");
   if (!json) return { keys: [keyFromSeed(0, DEV_KEY_SEED)], activeKid: 0, demo: true };
   let list: unknown;
   try {
@@ -45,12 +47,18 @@ export function parseKeys(json: string | undefined, activeKid: string | undefine
     return keyFromSeed(k.kid, Buffer.from(k.privateKey, "base64"));
   });
   if (new Set(keys.map((k) => k.kid)).size !== keys.length) throw new Error("QR_SIGNING_KEYS : kid en double");
+  // Défense en profondeur : la clé de démonstration (publique) et son kid 0 sont interdits en production.
+  const demoPublic = keyFromSeed(0, DEV_KEY_SEED).publicKey;
+  if (production && keys.some((k) => k.kid === 0 || k.publicKey.equals(demoPublic))) {
+    throw new Error("QR_SIGNING_KEYS : le kid 0 et la clé de démonstration sont interdits en production");
+  }
   const active = Number(activeKid ?? keys[0]?.kid);
   if (!keys.some((k) => k.kid === active)) throw new Error(`QR_SIGNING_ACTIVE_KID : ${activeKid} absent des clés`);
   return { keys, activeKid: active, demo: false };
 }
 
-let config = parseKeys(env.QR_SIGNING_KEYS, env.QR_SIGNING_ACTIVE_KID);
+let production = env.NODE_ENV === "production";
+let config = parseKeys(env.QR_SIGNING_KEYS, env.QR_SIGNING_ACTIVE_KID, production);
 if (config.demo && env.NODE_ENV === "development") {
   console.warn("QR_SIGNING_KEYS absent : clé de démonstration (kid 0). `pnpm --filter @orasso/api keys:generate`.");
 }
@@ -90,6 +98,15 @@ export const signing = {
         if (!row?.publicKey.equals(k.publicKey)) {
           throw new Error(`signing_keys : la clé ${k.kid} en base ne correspond pas à QR_SIGNING_KEYS`);
         }
+        if (k.kid === config.activeKid && row.revokedAt) {
+          throw new Error(`QR_SIGNING_ACTIVE_KID : la clé ${k.kid} est révoquée, en choisir une autre`);
+        }
+      }
+      if (production) {
+        const demo = await db.query.signingKeys.findFirst({
+          where: and(eq(signingKeys.kid, 0), isNull(signingKeys.revokedAt)),
+        });
+        if (demo) throw new Error("signing_keys : clé de démonstration (kid 0) non révoquée en production");
       }
     })().catch((error) => {
       synced = null;
@@ -98,10 +115,13 @@ export const signing = {
     return synced;
   },
 
-  /** Clés publiques connues (actives et retirées), pour l'appli et les vérifications. */
+  /** Clés publiques de confiance (actives et retirées, jamais révoquées), pour l'appli et les vérifications. */
   async publicKeys() {
     await this.ensureSynced();
-    const rows = await db.query.signingKeys.findMany({ orderBy: [asc(signingKeys.kid)] });
+    const rows = await db.query.signingKeys.findMany({
+      where: isNull(signingKeys.revokedAt),
+      orderBy: [asc(signingKeys.kid)],
+    });
     return rows.map((r) => ({
       kid: r.kid,
       algorithm: r.algorithm,
@@ -111,9 +131,16 @@ export const signing = {
     }));
   },
 
-  /** Remplace le trousseau (tests de rotation). */
-  configureForTests(json: string, activeKid: string) {
-    config = parseKeys(json, activeKid);
+  /** Clés de vérification côté serveur (kid → clé publique), hors clés révoquées. */
+  async trustedKeys(ex: Executor = db): Promise<Map<number, Uint8Array>> {
+    const rows = await ex.query.signingKeys.findMany({ where: isNull(signingKeys.revokedAt) });
+    return new Map(rows.map((k) => [k.kid, new Uint8Array(k.publicKey)]));
+  },
+
+  /** Remplace le trousseau (tests de rotation et de la garde de production). */
+  configureForTests(json: string, activeKid: string, asProduction = false) {
+    config = parseKeys(json, activeKid, asProduction);
+    production = asProduction;
     synced = null;
   },
 };

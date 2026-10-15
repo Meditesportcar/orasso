@@ -113,6 +113,13 @@
       "when": 1792093472629,
       "tag": "0015_account_qr_short_id_default",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792093857168,
+      "tag": "0016_signing_key_revocation",
+      "breakpoints": true
     }
   ]
 }

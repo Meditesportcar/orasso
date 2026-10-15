@@ -58,6 +58,25 @@ ssh claude@51.210.242.118 "sudo tail -n 50 /opt/orasso/state/build.log"
 ssh claude@51.210.242.118 "sudo journalctl -u orasso-backup -n 20"
 ```
 
+## Clés de signature des QR (lot 06)
+
+`QR_SIGNING_KEYS` (JSON `[{"kid":1,"privateKey":"<graine 32 octets base64>"}]`) et `QR_SIGNING_ACTIVE_KID` dans
+`/etc/orasso/dev.env` (voir `dev.env.example`). En production, l'API refuse de démarrer sans elles, avec le `kid 0`
+(réservé à la clé de démonstration du développement), ou si un `kid` déjà connu a changé de clé.
+
+**Rotation simple** (clé non compromise) : ajouter une clé à la liste (`kid` suivant), la rendre active, redéployer ;
+garder l'ancienne dans la liste tant que des QR signés avec elle servent encore.
+
+**Clé compromise** :
+1. Générer une nouvelle graine (`openssl rand -base64 32`), l'ajouter à `QR_SIGNING_KEYS` sous un nouveau `kid`, mettre
+   `QR_SIGNING_ACTIVE_KID` sur ce `kid` (ne pas afficher le fichier), redémarrer l'API (redéploiement ou
+   `docker compose … up -d`).
+2. Révoquer l'ancienne : `ssh claude@51.210.242.118 "sudo docker exec orasso-api npm run keys:revoke -- <kid>"`. La clé
+   sort de `/api/keys`, de la synchro du staff et de la vérification serveur ; chaque QR valide qu'elle avait signé est
+   remplacé par un QR signé avec la clé active (motif `replaced`), visible aussitôt par son titulaire et par le staff à
+   la synchro suivante.
+3. Retirer ensuite l'ancienne clé de `QR_SIGNING_KEYS` et redémarrer.
+
 ## nginx et certificat
 
 `setup-nginx.sh` installe `nginx/dev.orasso.fr.conf`, obtient le certificat la première fois (vhost HTTP provisoire pour le défi ACME), et ne recharge nginx qu'après `nginx -t` (sinon il remet l'état d'avant). À relancer après une modification du vhost, en contrôlant les autres sites avant et après :

@@ -18,6 +18,8 @@ export const signingKeys = pgTable("signing_keys", {
   publicKey: bytea("public_key").notNull(),
   activeFrom: tstz("active_from").notNull().defaultNow(),
   retiredAt: tstz("retired_at"),
+  /** Clé compromise : exclue de `/keys`, de la synchro et de toute vérification (`pnpm keys:revoke <kid>`). */
+  revokedAt: tstz("revoked_at"),
   ...timestamps,
 });
 

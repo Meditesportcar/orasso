@@ -17,12 +17,13 @@ import {
   viewerOf,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { accessPasses } from "../../db/schema";
+import { accessPasses, signingKeys } from "../../db/schema";
 import type { Viewer } from "../../lib/session";
-import { ed25519Verify, signing } from "../../lib/signing";
+import { ed25519Verify, parseKeys, signing } from "../../lib/signing";
 import { applicationsService } from "../applications/service";
 import { eventsService } from "../events/service";
 import { notificationsService } from "../notifications/service";
+import { accessService } from "./service";
 
 afterAll(async () => {
   await notificationsService.flush();
@@ -147,6 +148,53 @@ describe("QR d'inscription", () => {
         JSON.stringify([{ kid: 0, privateKey: Buffer.from(await demoSeed()).toString("base64") }]),
         "0",
       );
+    }
+  });
+});
+
+describe("clé compromise et garde de production", () => {
+  const demo = async () => JSON.stringify([{ kid: 0, privateKey: Buffer.from(await demoSeed()).toString("base64") }]);
+
+  it("révocation : la clé sort de /keys et de la vérification serveur, les QR valides sont réémis", async () => {
+    await applicationsService.decide(orgaV, eventId, applicationId, ACCEPT);
+    const old = (await call(kenji, "GET", `/applications/${applicationId}/pass`)).json;
+    signing.configureForTests(
+      JSON.stringify([
+        { kid: 7, privateKey: Buffer.alloc(32, 7).toString("base64") },
+        { kid: 0, privateKey: Buffer.from(await demoSeed()).toString("base64") },
+      ]),
+      "7",
+    );
+    try {
+      await expect(accessService.revokeSigningKey(7)).rejects.toThrow(/active/);
+      expect(await accessService.revokeSigningKey(0)).toEqual({ reissued: 1 });
+      const keys = await publishedKeys();
+      expect([...keys.keys()]).not.toContain(0);
+      expect([...(await signing.trustedKeys()).keys()]).not.toContain(0);
+      expect(verifyPassPayload(old.payload, keys, ed25519Verify)).toMatchObject({ ok: false, reason: "unknown_key" });
+      const fresh = (await call(kenji, "GET", `/applications/${applicationId}/pass`)).json;
+      expect(fresh.passId).not.toBe(old.passId);
+      expect(verifyPassPayload(fresh.payload, keys, ed25519Verify)).toMatchObject({ ok: true, pass: { kid: 7 } });
+      const oldRow = await db.query.accessPasses.findFirst({ where: eq(accessPasses.id, old.passId) });
+      expect(oldRow?.revokedReason).toBe("replaced");
+    } finally {
+      await db.update(signingKeys).set({ revokedAt: null }).where(eq(signingKeys.kid, 0));
+      signing.configureForTests(await demo(), "0");
+    }
+  });
+
+  it("production : clé de démonstration ou kid 0 refusés", async () => {
+    const demoJson = await demo();
+    expect(() => parseKeys(demoJson, "0", true)).toThrow(/interdits en production/);
+    expect(() => parseKeys(undefined, undefined, true)).toThrow(/obligatoire/);
+    const real = JSON.stringify([{ kid: 9, privateKey: Buffer.alloc(32, 9).toString("base64") }]);
+    expect(parseKeys(real, "9", true).activeKid).toBe(9);
+    // La base de test connaît la clé de démonstration (kid 0) non révoquée : démarrage refusé.
+    signing.configureForTests(real, "9", true);
+    try {
+      await expect(signing.ensureSynced()).rejects.toThrow(/démonstration/);
+    } finally {
+      signing.configureForTests(await demo(), "0");
     }
   });
 });
