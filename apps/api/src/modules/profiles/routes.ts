@@ -1,4 +1,4 @@
-import { deviceRegisterSchema, profileUpdateSchema } from "@orasso/shared";
+import { deviceRegisterSchema, profileUpdateSchema, pseudoSchema } from "@orasso/shared";
 import { Hono } from "hono";
 import sharp from "sharp";
 
@@ -6,9 +6,17 @@ import { AppError, validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, uuidParam } from "../../lib/validate";
 import { MAX_PHOTO_BYTES } from "../vehicles/service";
+import { profilesRepo } from "./repo";
 import { profilesService } from "./service";
 
 export const profilesRoutes = new Hono<AppEnv>()
+  // Public : vérifie un pseudo avant l'inscription. `valid` : format correct ; `available` : libre.
+  .get("/pseudo-available", async (c) => {
+    c.header("cache-control", "no-store");
+    const parsed = pseudoSchema.safeParse(c.req.query("pseudo") ?? "");
+    if (!parsed.success) return c.json({ valid: false, available: false });
+    return c.json({ valid: true, available: !(await profilesRepo.pseudoTaken(parsed.data)) });
+  })
   .get("/me", async (c) => c.json(await profilesService.me(await requireUser(c))))
   .patch("/me/profile", async (c) => {
     const v = await requireUser(c);

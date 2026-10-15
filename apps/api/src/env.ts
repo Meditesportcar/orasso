@@ -38,6 +38,11 @@ const schema = z.object({
   UPLOADS_DIR: optional,
   EXPO_ACCESS_TOKEN: optional,
   /**
+   * Origines web autorisées à appeler l'API depuis un autre hôte (CORS) : liste séparée par des virgules. Vide en
+   * production (site et API sur le même hôte). Sert à la recette de l'appli dans un navigateur (`expo start --web`).
+   */
+  CORS_ORIGINS: optional,
+  /**
    * Clés privées Ed25519 des QR d'inscription : JSON `[{"kid":1,"privateKey":"<graine de 32 octets en base64>"}]`
    * (`pnpm --filter @orasso/api keys:generate`). Obligatoire en production ; en développement, une clé de
    * démonstration publique (kid 0) est utilisée à défaut.

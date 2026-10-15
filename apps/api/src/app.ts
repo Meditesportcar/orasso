@@ -1,10 +1,12 @@
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
 
 import { auth } from "./auth";
 import { db } from "./db/client";
 import { user } from "./db/schema";
+import { env } from "./env";
 import { AppError, errorResponse, notFound } from "./lib/errors";
 import { realtime } from "./lib/realtime";
 import { type AppEnv, type AuthUser, loadSession } from "./lib/session";
@@ -27,6 +29,23 @@ import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { ws } from "./ws";
 
 export const app = new Hono<AppEnv>().basePath("/api");
+
+// CORS : seulement pour les origines listées dans CORS_ORIGINS (recette de l'appli dans un navigateur).
+const corsOrigins =
+  env.CORS_ORIGINS?.split(",")
+    .map((o) => o.trim())
+    .filter(Boolean) ?? [];
+if (corsOrigins.length) {
+  app.use(
+    "*",
+    cors({
+      origin: corsOrigins,
+      allowHeaders: ["authorization", "content-type", "x-device-id"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      exposeHeaders: ["set-auth-token"],
+    }),
+  );
+}
 
 app.onError(errorResponse);
 app.notFound((c) => errorResponse(notFound("Route inconnue"), c));

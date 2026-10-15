@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { bearer } from "better-auth/plugins/bearer";
 import { twoFactor } from "better-auth/plugins/two-factor";
 
 import { db } from "./db/client";
@@ -17,6 +18,11 @@ const socialProviders = {
     : {}),
 };
 
+const corsOrigins =
+  env.CORS_ORIGINS?.split(",")
+    .map((o) => o.trim())
+    .filter(Boolean) ?? [];
+
 export const auth = betterAuth({
   appName: "Orasso",
   baseURL: env.PUBLIC_URL,
@@ -26,7 +32,9 @@ export const auth = betterAuth({
   emailAndPassword: { enabled: true },
   socialProviders,
   // L'obligation (organisateurs, administration) est appliquée par l'API métier : `lib/access.ts`.
-  plugins: [twoFactor()],
+  // `bearer` : l'appli mobile garde le jeton de session dans le trousseau sécurisé et l'envoie en `Authorization`
+  // (en-tête `set-auth-token` à la connexion), sans cookie.
+  plugins: [twoFactor(), bearer()],
   // Chaque compte a son profil métier dès l'inscription ; le pseudo vient du champ `name` de l'inscription.
   databaseHooks: {
     user: {
@@ -37,7 +45,7 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins: [env.PUBLIC_URL],
+  trustedOrigins: [env.PUBLIC_URL, ...corsOrigins],
   telemetry: { enabled: false },
 });
 
