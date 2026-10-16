@@ -12,6 +12,7 @@ import {
 } from "../enums";
 import { type Grade, gradeSchema } from "../grades";
 import { optionalText, pageQuery } from "./common";
+import type { ApplicationCrewForTriage, ApplicationCrewInfo } from "./crews";
 import type { ProviderForTriage } from "./provider";
 import type { MyReview } from "./review";
 import type { VehicleFull, VehiclePublic } from "./vehicle";
@@ -71,6 +72,8 @@ export const triageQuerySchema = pageQuery.extend({
   yearFrom: z.coerce.number().int().optional(),
   yearTo: z.coerce.number().int().optional(),
   grade: gradeSchema.optional(),
+  /** Candidatures d'un crew (lot 19). */
+  crewId: z.uuid().optional(),
   q: z.string().trim().max(80).optional(),
   sort: z.enum(["created_at", "waitlist_rank", "year", "pseudo"]).default("created_at"),
 });
@@ -115,6 +118,8 @@ export type MyApplication = {
   malus: { deadline: string; canContest: boolean; contestStatus: string | null } | null;
   /** Avis après l'événement (participant pointé seulement, lot 12). */
   review: MyReview | null;
+  /** Inscription en crew (lot 19) : le crew, et la venue à confirmer. */
+  crew: ApplicationCrewInfo | null;
 };
 
 export type ApplicationAlert = "duplicatePlate" | "banned" | "unregistered";
@@ -156,6 +161,8 @@ export type ApplicationForTriage = {
   };
   filteringOpinions: { userId: string; pseudo: string; opinion: FilteringOpinion; note: string | null; at: string }[];
   alerts: ApplicationAlert[];
+  /** Crew et autres candidatures du crew (docs/01 « Informations affichées pendant le tri », lot 19). */
+  crew: ApplicationCrewForTriage | null;
 };
 
 /** Liste des participants vue par un autre utilisateur : jamais de plaque. */

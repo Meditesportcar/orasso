@@ -2,6 +2,7 @@ export * from "./access";
 export * from "./account";
 export * from "./application";
 export * from "./common";
+export * from "./crews";
 export * from "./event";
 export * from "./garage";
 export * from "./messaging";

@@ -34,4 +34,4 @@ export const privateUploadPurposes: readonly UploadPurpose[] = ["message", "inci
  * sinon la route servirait d'hébergement public d'images). Les lots 19, 20 et suivants ajoutent le leur ici, avec le code
  * qui rattache le fichier.
  */
-export const acceptedUploadPurposes = ["message"] as const satisfies readonly UploadPurpose[];
+export const acceptedUploadPurposes = ["message", "crew_logo"] as const satisfies readonly UploadPurpose[];

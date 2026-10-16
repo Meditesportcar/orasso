@@ -4,6 +4,7 @@ import { departmentSchema } from "../enums";
 import { gradeSchema } from "../grades";
 import { FRIEND_MESSAGE_MAX, type FriendshipState, type ProfileAudience } from "../rules/visibility";
 import { optionalText, pageQuery } from "./common";
+import type { CrewCard } from "./crews";
 import type { PublicProfile } from "./profile";
 import { pseudoSchema } from "./profile";
 import type { VehicleBrief, VehiclePublic } from "./vehicle";
@@ -87,8 +88,8 @@ export type UserProfileView = Omit<PublicProfile, "vehicles"> & {
   upcomingEvents: ProfileEvent[] | null;
   /** Événements passés des 12 derniers mois : le nombre et les titres. */
   pastEvents: { count: number; titles: string[] } | null;
-  /** Vide jusqu'au lot 19. */
-  crews: { id: string; name: string }[] | null;
+  /** Crews actifs de la personne (lot 19), pour les audiences qui voient tout le profil. */
+  crews: CrewCard[] | null;
   /** Organisateur seulement : coordonnées déjà accessibles dans son tri. */
   contact: { firstName: string | null; lastName: string | null; phone: string | null; email: string | null } | null;
   friendship: { state: FriendshipState; id: string | null };

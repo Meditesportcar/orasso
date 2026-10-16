@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { accountEmailAlwaysTypes, accountNotificationTypes } from "./notifications/account";
 import { applicationNotificationTypes } from "./notifications/application";
+import { crewNotificationTypes } from "./notifications/crews";
 import { eventEmailAlwaysTypes, eventNotificationTypes } from "./notifications/events";
 import { garageNotificationTypes } from "./notifications/garage";
 import { messagingNotificationTypes } from "./notifications/messaging";
@@ -115,6 +116,7 @@ export const notificationTypes = {
   ...socialNotificationTypes,
   ...garageNotificationTypes,
   ...messagingNotificationTypes,
+  ...crewNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 
