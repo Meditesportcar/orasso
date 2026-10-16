@@ -44,9 +44,15 @@ export const pointEntries = pgTable(
     applicationId: uuid("application_id").references(() => applications.id, { onDelete: "set null" }),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     note: text("note"),
+    /** Parrainage (lot 15) : le filleul dont la vérification d'e-mail a rapporté les points. */
+    subjectUserId: text("subject_user_id").references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (t) => [
+    // Un filleul ne rapporte qu'une fois (lot 15).
+    uniqueIndex("point_entries_referral_subject_key")
+      .on(t.kind, t.subjectUserId)
+      .where(sql`${t.kind} = 'referral'`),
     index("point_entries_user_season_idx").on(t.userId, t.seasonId),
     // Jamais deux fois les points d'une même candidature (participation, malus, annulation du malus).
     uniqueIndex("point_entries_application_kind_key")

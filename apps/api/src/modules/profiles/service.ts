@@ -130,7 +130,7 @@ export const profilesService = {
         interests: await profilesRepo.interests(v.user.id),
         platformRole: p.platformRole,
         newsletterOptIn: p.newsletterOptIn,
-        notificationPrefs: { ...defaultNotificationPrefs, ...p.notificationPrefs, staff: true },
+        notificationPrefs: { ...defaultNotificationPrefs, ...p.notificationPrefs, staff: true, account: true },
         pointsSeason: p.pointsSeason,
         grade: p.grade,
         inviteToken: p.inviteToken,

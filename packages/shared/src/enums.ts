@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { accountEmailAlwaysTypes, accountNotificationTypes } from "./notifications/account";
 import { applicationNotificationTypes } from "./notifications/application";
 import { eventEmailAlwaysTypes, eventNotificationTypes } from "./notifications/events";
 import { pointsNotificationTypes } from "./notifications/points";
@@ -88,7 +89,8 @@ export type RefusalReason = (typeof refusalReasons)[number];
 export const triageDecisions = ["accept", "waitlist", "refuse"] as const;
 export type TriageDecision = (typeof triageDecisions)[number];
 
-export const notificationFamilies = ["application", "event", "social", "grade", "staff"] as const;
+/** `account` (lot 15) : sécurité du compte, jamais coupée, e-mail toujours. */
+export const notificationFamilies = ["application", "event", "social", "grade", "staff", "account"] as const;
 export type NotificationFamily = (typeof notificationFamilies)[number];
 
 /**
@@ -100,11 +102,16 @@ export const notificationTypes = {
   ...eventNotificationTypes,
   ...staffNotificationTypes,
   ...pointsNotificationTypes,
+  ...accountNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 
 /** Types envoyés par e-mail même quand un appareil reçoit le push (un tableau par domaine). */
-export const emailAlwaysTypes: readonly NotificationType[] = [...eventEmailAlwaysTypes, ...staffEmailAlwaysTypes];
+export const emailAlwaysTypes: readonly NotificationType[] = [
+  ...eventEmailAlwaysTypes,
+  ...staffEmailAlwaysTypes,
+  ...accountEmailAlwaysTypes,
+];
 
 /** Préférences de notification : un interrupteur par famille (docs/01 « Notifications »). */
 export const defaultNotificationPrefs = { application: true, event: true, social: true, grade: true };
