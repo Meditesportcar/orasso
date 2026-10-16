@@ -7,6 +7,8 @@ import { pointsNotificationTypes } from "./notifications/points";
 import { socialNotificationTypes } from "./notifications/social";
 import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
 
+export { journalOnlyNotificationTypes } from "./notifications/social";
+
 /**
  * Énumérations métier (valeurs anglaises, identiques aux enums PostgreSQL). Libellés : `labels.fr.ts`.
  * Les statuts de candidature, grades et rôles vivent dans `application.ts`, `grades.ts`, `roles.ts`.

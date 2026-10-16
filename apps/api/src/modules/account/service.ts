@@ -58,6 +58,8 @@ import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
+import { socialProfile } from "../social/profile";
+import { socialRepo } from "../social/repo";
 import { accountQrShortId, profilesService } from "../profiles/service";
 import { securityMails } from "../security/mails";
 
@@ -233,7 +235,7 @@ export const accountService = {
 
   /** Ce que voit un autre utilisateur connecté (règles public / privé de docs/01, sans l'exception « c'est moi »). */
   publicPreview(v: Viewer): Promise<PublicPreview> {
-    return profilesService.publicProfile(v, v.profile.pseudo, { asOther: true });
+    return socialProfile.view(v, v.profile.pseudo, { asStranger: true });
   },
 
   /**
@@ -382,7 +384,9 @@ export const accountService = {
           })
           .where(inArray(vehicles.id, ids));
       }
-      // Liens sociaux et d'organisation (amis, crews, messagerie : lots 17 à 19, à compléter par leurs tables).
+      // Liens sociaux et d'organisation (amis : lot 17 ; crews, messagerie : lots 18 et 19, à compléter par leurs tables).
+      await socialRepo.removeAllFor(userId, tx);
+      await tx.update(profiles).set({ friendsCount: 0 }).where(eq(profiles.userId, userId));
       await tx.delete(structureFollows).where(eq(structureFollows.userId, userId));
       await tx.delete(proFollows).where(eq(proFollows.userId, userId));
       await tx

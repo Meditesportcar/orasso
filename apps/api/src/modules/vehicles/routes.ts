@@ -60,9 +60,5 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   .delete("/me/vehicles/:id/photos/:photoId", async (c) => {
     const v = await requireUser(c);
     return c.json(await vehiclesService.removePhoto(v, uuidParam(c, "id"), uuidParam(c, "photoId")));
-  })
-  // Fiche d'un autre utilisateur (connecté) : jamais de plaque.
-  .get("/vehicles/:id", async (c) => {
-    const v = await requireUser(c);
-    return c.json(await vehiclesService.getOther(v, uuidParam(c, "id")));
   });
+// La fiche d'un véhicule d'un autre utilisateur (`GET /vehicles/:id`) est servie par le module social (lot 17).

@@ -66,6 +66,8 @@ export const profiles = pgTable(
     mutedTypes: text("muted_types").array().notNull().default(sql`'{}'::text[]`),
     /** Widgets de l'accueil réglés par l'utilisateur (posée au lot 15, utilisée au lot 30) ; null = par défaut. */
     homeWidgets: jsonb("home_widgets").$type<unknown>(),
+    /** Lot 17 : nombre d'amis acceptés (cache, tenu par le service social). */
+    friendsCount: integer("friends_count").notNull().default(0),
     ...timestamps,
   },
   (t) => [
@@ -73,6 +75,8 @@ export const profiles = pgTable(
     uniqueIndex("profiles_invite_token_key").on(t.inviteToken),
     uniqueIndex("profiles_account_qr_short_id_key").on(t.accountQrShortId),
     index("profiles_departments_idx").using("gin", t.departments),
+    // Lot 17 : recherche de personnes par début de pseudo.
+    index("profiles_pseudo_prefix_idx").on(sql`lower(${t.pseudo}) text_pattern_ops`),
   ],
 );
 

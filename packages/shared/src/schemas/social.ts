@@ -12,6 +12,8 @@ import { pseudoSchema } from "./profile";
 export const friendRequestCreateSchema = z.object({
   pseudo: pseudoSchema,
   message: optionalText(FRIEND_MESSAGE_MAX),
+  /** Où la demande a été faite (le QR et le lien d'ami ont leurs propres routes). */
+  source: z.enum(["search", "profile", "event"]).optional(),
 });
 export type FriendRequestCreate = z.infer<typeof friendRequestCreateSchema>;
 

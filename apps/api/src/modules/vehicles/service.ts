@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import {
   categoryAllowedForYear,
   normalizePlate,
-  type VehicleBrief,
   type VehicleCreate,
   type VehicleFull,
   type VehiclePublic,
@@ -17,7 +16,6 @@ import {
   applications,
   categories,
   plateTransferRequests,
-  profiles,
   vehicleCategories,
   vehicleGenerations,
   vehicleModels,
@@ -29,6 +27,7 @@ import { AppError, conflict, notFound, validation } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
+import { socialJournal } from "../social/journal";
 import { type VehicleRow, vehiclesRepo } from "./repo";
 import { vehicleFull, vehiclePublic } from "./serializers";
 
@@ -172,6 +171,10 @@ export const vehiclesService = {
         await setCategories(tx, row.id, input.categoryIds);
         return row.id;
       });
+      // Journal des amis (lot 17) : « <pseudo> a ajouté un véhicule » ; ne bloque jamais l'ajout.
+      if (input.status === "active") {
+        await socialJournal.friendNewVehicle(v.user.id, id).catch((error) => console.error("Journal des amis :", error));
+      }
       return full(id);
     } catch (error) {
       if (isUniqueViolation(error, "vehicles_active_plate_key")) {
@@ -249,24 +252,6 @@ export const vehiclesService = {
     const photos = await vehiclesRepo.photos(id);
     await db.delete(vehicles).where(eq(vehicles.id, id));
     for (const p of photos) await storage.remove(p.storageKey);
-  },
-
-  /** Fiche vue par un autre utilisateur connecté : complète si le compte est public, marque et modèle s'il est privé. */
-  async getOther(v: Viewer, id: string): Promise<VehiclePublic | VehicleBrief> {
-    const row = await vehiclesRepo.findFullById(id);
-    if (!row) throw notFound("Véhicule introuvable");
-    const owner = await db.query.profiles.findFirst({ where: eq(profiles.userId, row.ownerId) });
-    if (owner?.visibility === "private" && row.ownerId !== v.user.id) {
-      return {
-        id: row.id,
-        label: `${row.make.name} ${row.model.name}`,
-        makeName: row.make.name,
-        modelName: row.model.name,
-        vehicleType: row.vehicleType,
-        photoUrl: null,
-      };
-    }
-    return vehiclePublic(row);
   },
 
   /** Photo recompressée à l'arrivée : 2048 px au plus, WebP, orientation EXIF appliquée, métadonnées retirées. */
