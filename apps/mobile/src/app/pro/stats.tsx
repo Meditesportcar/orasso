@@ -30,7 +30,9 @@ export default function ProStats() {
       }}
     >
       {!myPro.data ? (
-        myPro.loading ? null : <Notice>Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso.</Notice>
+        myPro.loading ? null : (
+          <Notice>Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso.</Notice>
+        )
       ) : !s ? null : (
         <>
           <Counters

@@ -129,7 +129,8 @@ export default function ProScanner() {
             </View>
           ) : (
             <Muted variant="caption">
-              Le client ouvre son QR de compte (onglet Garage). Il change toutes les minutes : une capture prêtée expire.
+              Le client ouvre son QR de compte (onglet Garage). Il change toutes les minutes : une capture prêtée
+              expire.
             </Muted>
           )}
 

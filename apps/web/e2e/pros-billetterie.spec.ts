@@ -1,10 +1,10 @@
-import { createHmac } from "node:crypto";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import {
+  accountQr,
   apiCall,
-  createEvent,
   type Cookie,
+  createEvent,
   login,
   loginInBrowser,
   SEED_PASSWORD,
@@ -17,23 +17,6 @@ import {
 // statistiques. Billets gratuits : réservation → QR → contrôle. Billetterie payante en mode présentation : « bientôt »
 // tant que les clés Stripe de test ne sont pas renseignées (la voie complète est testée dans l'API avec Stripe simulé).
 // Le scan du pro dans l'appli elle-même est dans `appli-pro.spec.ts` (APP_URL).
-
-/** Ce que l'appli du passionné affiche à l'instant `at`, calculé hors ligne avec le secret reçu au login (RFC 4226). */
-function accountQrPayload(secret: string, shortId: string, at = new Date()): string {
-  const counter = Math.floor(at.getTime() / 1000 / 60);
-  const msg = Buffer.alloc(8);
-  msg.writeUInt32BE(Math.floor(counter / 2 ** 32), 0);
-  msg.writeUInt32BE(counter >>> 0, 4);
-  const h = createHmac("sha1", Buffer.from(secret, "base64url")).update(msg).digest();
-  const offset = (h[h.length - 1] ?? 0) & 0x0f;
-  const bin = h.readUInt32BE(offset) & 0x7fffffff;
-  return `OA1${shortId}.${String(bin % 10 ** 8).padStart(8, "0")}`;
-}
-
-async function accountQr(cookie: Cookie): Promise<string> {
-  const res = await apiCall<{ secret: string; shortId: string }>(cookie, "GET", "/me/account-qr-secret");
-  return accountQrPayload(res.data.secret, res.data.shortId);
-}
 
 /** Les liens « appeler » et « itinéraire » ouvrent une application tierce : on neutralise la navigation, pas le compteur. */
 async function disableExternalNavigation(page: Page) {
@@ -109,10 +92,7 @@ test("parcours 6 : fiche pro vérifiée et publiée, annuaire, remises, QR de co
   await photos.getByRole("button", { name: "Ajouter", exact: true }).click();
   await expect(photos.getByRole("status")).toHaveText("Photo ajoutée.");
 
-  await pro
-    .getByTestId("pro-publish")
-    .getByRole("button", { name: "Publier ma fiche" })
-    .click();
+  await pro.getByTestId("pro-publish").getByRole("button", { name: "Publier ma fiche" }).click();
   await expect(pro.getByTestId("pro-publish").getByRole("status")).toContainText("publiée");
   await expect(pro.getByTestId("pro-state")).toHaveText("Publiée");
 
@@ -192,11 +172,13 @@ test("parcours 6 : fiche pro vérifiée et publiée, annuaire, remises, QR de co
   expect(stats.status).toBe(200);
   await expect(pro.getByTestId("pro-stats-discounts")).toContainText("Rodage");
   await expect(pro.getByTestId("pro-stats-discounts")).toContainText("1");
-  const apiStats = await apiCall<{ views: number; calls: number; routes: number; followers: number; discounts: number }>(
-    proCookie,
-    "GET",
-    `/pros/${(stats.data as unknown as { id: string }).id}/stats?days=7`,
-  );
+  const apiStats = await apiCall<{
+    views: number;
+    calls: number;
+    routes: number;
+    followers: number;
+    discounts: number;
+  }>(proCookie, "GET", `/pros/${(stats.data as unknown as { id: string }).id}/stats?days=7`);
   expect(apiStats.data).toMatchObject({ calls: 1, routes: 1, followers: 1, discounts: 1 });
   expect(apiStats.data.views).toBeGreaterThanOrEqual(1);
 
@@ -298,7 +280,11 @@ test("billets gratuits : interrupteur de l'événement, réservation, QR, contr�
   // Rendre un billet libère la place (une seule place restante sur 3 puis deux).
   await fan.goto("/app/billets");
   fan.once("dialog", (d) => d.accept());
-  await fan.getByTestId("ticket").filter({ hasText: "Valable" }).getByRole("button", { name: "Rendre ce billet" }).click();
+  await fan
+    .getByTestId("ticket")
+    .filter({ hasText: "Valable" })
+    .getByRole("button", { name: "Rendre ce billet" })
+    .click();
   await expect(fan.getByTestId("ticket")).toHaveCount(1);
 
   await Promise.all([orgaCtx.close(), fanCtx.close()]);
@@ -341,4 +327,36 @@ test("billets payants : « bientôt » sans clés Stripe, aucun paiement possibl
   await expect(orga.getByRole("button", { name: "Connecter mon compte Stripe" })).toHaveCount(0);
   await visitor.close();
   await ctx.close();
+});
+
+test("système de design : annuaire, fiche pro, événements à billets, dans les deux thèmes (bureau et 390 px)", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const pages = ["/pros", "/p/garage-du-port", "/professionnels", "/e/cars-and-coffee-plage", "/e/nuit-des-moteurs"];
+  for (const theme of ["beton", "sable"]) {
+    for (const view of [
+      { width: 1280, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      const ctx = await browser.newContext({ viewport: view });
+      await ctx.addCookies([
+        { name: "orasso-theme", value: theme, url: `http://localhost:${process.env.WEB_PORT ?? 5173}` },
+      ]);
+      const page = await ctx.newPage();
+      for (const path of pages) {
+        await page.goto(path);
+        await page.waitForLoadState("networkidle");
+        const a = await auditPage(page);
+        const where = `${path} ${theme} ${view.width}px`;
+        expect(a.primaryButtons, `${where} : un seul bouton principal`).toBeLessThanOrEqual(1);
+        expect(a.neonAccent, `${where} : un seul néon moutarde`).toBeLessThanOrEqual(1);
+        expect(a.buttonsWithoutIcon, `${where} : tout bouton porte une icône`).toEqual([]);
+        expect(a.greens, `${where} : pas de vert`).toEqual([]);
+        expect(a.truncated, `${where} : aucun texte tronqué`).toEqual([]);
+        expect(a.horizontalScroll, `${where} : pas de défilement horizontal`).toBe(false);
+      }
+      await ctx.close();
+    }
+  }
 });

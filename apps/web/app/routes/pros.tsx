@@ -68,10 +68,6 @@ export default function Pros({ loaderData }: Route.ComponentProps) {
       <div className="s-head">
         <div className="o-t-label s-label">Découvrir</div>
         <h1 className="s-title">Professionnels</h1>
-        <p className="s-lead">
-          Garages, préparateurs, detailing, covering, pièces : les pros qui connaissent les passionnés. Certains offrent
-          une remise selon ton grade Orasso.
-        </p>
       </div>
 
       <Plate as="section" aria-label="Filtres">
@@ -127,7 +123,8 @@ export default function Pros({ loaderData }: Route.ComponentProps) {
         </p>
       )}
       <p className="s-center o-t-caption s-muted">
-        Tu es professionnel ? <a href="/professionnels">Découvre l'offre et crée ta fiche</a>.
+        Garages, préparateurs, detailing, covering, pièces : certains pros offrent une remise selon ton grade Orasso. Tu
+        es professionnel ? <a href="/professionnels">Découvre l'offre et crée ta fiche</a>.
       </p>
     </div>
   );

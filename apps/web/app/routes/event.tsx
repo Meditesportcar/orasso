@@ -173,7 +173,7 @@ function VisitorTickets({
           </p>
         </>
       ) : !connected ? (
-        <Button variant="primary" icon="calendar" href={`/connexion?retour=${retour}`} fullWidth>
+        <Button variant="secondary" icon="calendar" href={`/connexion?retour=${retour}`} fullWidth>
           {paid ? "Acheter un billet" : "Réserver"}
         </Button>
       ) : (
@@ -189,7 +189,7 @@ function VisitorTickets({
             type="submit"
             name="intent"
             value={paid ? "checkout" : "reserve"}
-            variant="primary"
+            variant="secondary"
             icon="calendar"
             loading={busy}
             fullWidth

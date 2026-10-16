@@ -47,7 +47,9 @@ export default function ProPublier() {
       onClose={() => router.replace("/accueil")}
     >
       {!pro ? (
-        myPro.loading ? null : <Notice>Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso.</Notice>
+        myPro.loading ? null : (
+          <Notice>Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso.</Notice>
+        )
       ) : !pro.published ? (
         <Notice>Publie ta fiche sur le site pour pouvoir écrire à tes abonnés.</Notice>
       ) : (

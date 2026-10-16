@@ -19,7 +19,9 @@ export default function ProFiche() {
   const router = useRouter();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
-  const where = pro ? [pro.addressLine, [pro.postalCode, pro.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") : "";
+  const where = pro
+    ? [pro.addressLine, [pro.postalCode, pro.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")
+    : "";
   return (
     <FlowScreen
       title="Fiche"
@@ -47,7 +49,10 @@ export default function ProFiche() {
               {pro.activities.map((a) => proActivityLabels[a]).join(" · ")}
             </Text>
             <Text variant="body" color={t.color.plateInk}>
-              {where || (pro.interventionDepartments.length ? `Intervient : ${pro.interventionDepartments.join(", ")}` : "Adresse à compléter")}
+              {where ||
+                (pro.interventionDepartments.length
+                  ? `Intervient : ${pro.interventionDepartments.join(", ")}`
+                  : "Adresse à compléter")}
             </Text>
             <Text variant="caption" color={t.color.plateMuted}>
               {pro.followersCount} abonné{pro.followersCount > 1 ? "s" : ""}
