@@ -1,6 +1,6 @@
 // Lot 28 : prévisions factices pour la démonstration (aucun appel réseau) : « Nocturne de Canet » aura une mauvaise
 // météo (la suggestion « passer en Incertain » apparaît au prochain passage de la tâche si l'événement est maintenu),
-// « Expo Rivesaltes » une bonne. Insérées en jsonb ; une vraie prévision (tâche `weather.refresh`) les remplace.
+// « Expo Rivesaltes » et « Salon Argelès » (aujourd'hui) une bonne. Insérées en jsonb ; une vraie prévision (tâche `weather.refresh`) les remplace.
 // Idempotent : une ligne déjà présente n'est pas touchée.
 import {
   type DailyForecast,
@@ -54,6 +54,8 @@ function forecastFor(e: typeof t.events.$inferSelect, p: Profile): StoredForecas
 const demo: Record<string, Profile> = {
   "nocturne-de-canet-2026": { code: "rain", tempMin: 14, tempMax: 18, probability: 75, mm: 6.5, wind: 38 },
   "expo-rivesaltes-2026": { code: "partly_cloudy", tempMin: 13, tempMax: 22, probability: 10, mm: 0, wind: 18 },
+  // Jour J : le Salon Argelès a lieu aujourd'hui (affichage sur la carte d'accès et dans le mode jour J).
+  "salon-argeles": { code: "partly_cloudy", tempMin: 16, tempMax: 24, probability: 5, mm: 0, wind: 14 },
 };
 
 export async function seedWeather() {
@@ -79,6 +81,6 @@ export async function seedWeather() {
     added += inserted.length;
   }
   console.log(
-    `Météo : prévisions factices ${added ? "ajoutées" : "déjà présentes"} (Nocturne de Canet mauvaise, Expo Rivesaltes bonne).`,
+    `Météo : prévisions factices ${added ? "ajoutées" : "déjà présentes"} (Nocturne de Canet mauvaise, Expo Rivesaltes et Salon Argelès bonnes).`,
   );
 }
