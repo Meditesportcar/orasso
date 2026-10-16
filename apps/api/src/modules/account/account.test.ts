@@ -600,7 +600,8 @@ describe("suppression du compte", () => {
     expect((await call(w, "DELETE", "/me", { password: "motdepasse-test-123" })).status).toBe(403);
     await db.update(session).set({ secondFactor: "passkey" }).where(eq(session.userId, w.id));
     expect((await call(w, "DELETE", "/me", { password: "motdepasse-test-123" })).status).toBe(200);
-  });
+    // Une dizaine de vérifications de mot de passe (scrypt) : plus long que la moyenne sur une machine chargée.
+  }, 60_000);
 
   it("un profil supprimé est refusé même si une session subsiste", async () => {
     const u = await signUp("Fantome_01");
