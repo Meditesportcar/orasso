@@ -54,7 +54,10 @@ test("messagerie : amis en direct, lu par, image privée, demande de contact, or
   const b = `Basile_${s}`;
   const c = `Cyril_${s}`;
   const u = `Ugo_${s}`;
-  const [aCookie, bCookie, cCookie, uCookie] = await Promise.all([a, b, c, u].map((p) => signUpApi(p)));
+  const aCookie = await signUpApi(a);
+  const bCookie = await signUpApi(b);
+  const cCookie = await signUpApi(c);
+  const uCookie = await signUpApi(u);
   await befriend(a, aCookie, b, bCookie);
 
   // A écrit à son ami B depuis son profil.

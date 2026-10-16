@@ -60,7 +60,9 @@ test("appli : conversation en direct avec le site, lu par, Boîte, demandes, dem
     const a = `AppA_${theme}_${s}`;
     const b = `SiteB_${theme}_${s}`;
     const c = `AppC_${theme}_${s}`;
-    const [aCookie, bCookie, cCookie] = await Promise.all([a, b, c].map((p) => signUpApi(p)));
+    const aCookie = await signUpApi(a);
+    const bCookie = await signUpApi(b);
+    const cCookie = await signUpApi(c);
     const r = await apiCall<{ id: string }>(aCookie, "POST", "/friends/requests", { pseudo: b });
     await apiCall(bCookie, "POST", `/friends/requests/${r.data.id}/accept`);
 
