@@ -55,6 +55,42 @@ export const securityMails = {
     );
   },
 
+  /** Clé d'accès ajoutée ou supprimée, double authentification activée ou désactivée. */
+  factorChanged(
+    type:
+      | "security_passkey_added"
+      | "security_passkey_removed"
+      | "security_two_factor_enabled"
+      | "security_two_factor_disabled",
+    pseudo: string,
+    at: Date,
+  ): MailContent {
+    const what = {
+      security_passkey_added: [
+        "Clé d'accès ajoutée",
+        "Une clé d'accès (Face ID, empreinte, clé de sécurité) a été ajoutée à ton compte",
+      ],
+      security_passkey_removed: ["Clé d'accès supprimée", "Une clé d'accès a été supprimée de ton compte"],
+      security_two_factor_enabled: [
+        "Double authentification activée",
+        "La double authentification par code a été activée sur ton compte",
+      ],
+      security_two_factor_disabled: [
+        "Double authentification désactivée",
+        "La double authentification par code a été désactivée sur ton compte",
+      ],
+    }[type];
+    return renderMail(
+      what[0] ?? "",
+      [
+        `Bonjour ${pseudo},`,
+        `${what[1]} le ${formatDateTime(at)}. Tes autres appareils ont été déconnectés.`,
+        "Si ce n'est pas toi, réinitialise ton mot de passe tout de suite et vérifie la sécurité de ton compte.",
+      ],
+      securityLink(),
+    );
+  },
+
   accountDeleted(pseudo: string): MailContent {
     return renderMail("Ton compte Orasso est supprimé", [
       `Bonjour ${pseudo},`,

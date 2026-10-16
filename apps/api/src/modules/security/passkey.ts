@@ -1,14 +1,46 @@
-// Clé d'accès comme second facteur (lot 15, corrections après relecture) : la double authentification obligatoire est
-// prouvée par la **session**, pas par l'état du compte. Une session ouverte par `/passkey/verify-authentication`, avec
-// vérification de l'utilisateur (Face ID, empreinte, code de l'appareil), porte `second_factor = 'passkey'`.
+// Second facteur prouvé par la **session** (lot 15, corrections après relecture) : une session ouverte par une clé
+// d'accès vérifiée porte `second_factor = 'passkey'`, une session ouverte (ou confirmée) par le code de l'application
+// d'authentification ou un code de secours porte `'totp'`. L'état du compte (clé enregistrée, TOTP activé) ne suffit
+// jamais : il dit seulement quel facteur on peut demander.
+
+export const SECOND_FACTORS = ["passkey", "totp"] as const;
+export type SecondFactor = (typeof SECOND_FACTORS)[number];
 
 export const PASSKEY_SIGN_IN_PATH = "/passkey/verify-authentication";
-/** Suppression ou ajout d'une clé : session ouverte depuis moins de ce délai. */
-export const PASSKEY_FRESH_SESSION_MS = 24 * 3_600_000;
+/** Chemins de Better Auth qui vérifient le code TOTP (ou un code de secours). */
+export const TOTP_VERIFY_PATHS = [
+  "/two-factor/verify-totp",
+  "/two-factor/verify-backup-code",
+  "/two-factor/verify-otp",
+];
+/** Chemins qui recréent la session courante : la preuve de l'ancienne session est reportée sur la nouvelle. */
+export const CARRY_FACTOR_PATHS = ["/change-password", "/two-factor/disable", "/two-factor/enable"];
+/**
+ * Ajouter, supprimer ou changer un facteur. Si le compte en a déjà un, la session doit le prouver ; sinon (premier
+ * facteur), une session récente suffit (amorçage).
+ */
+export const FACTOR_ENROLLMENT_PATHS = [
+  "/passkey/generate-register-options",
+  "/passkey/verify-registration",
+  "/passkey/delete-passkey",
+  "/two-factor/enable",
+  "/two-factor/disable",
+];
+/** Amorçage (aucun facteur encore) : session ouverte depuis moins de ce délai. */
+export const FRESH_SESSION_MS = 24 * 3_600_000;
 
-/** Second facteur porté par une session créée sur ce chemin de Better Auth (`null` : aucun). */
-export function secondFactorForPath(path: string | null | undefined): "passkey" | null {
-  return path === PASSKEY_SIGN_IN_PATH ? "passkey" : null;
+export const isSecondFactor = (value: unknown): value is SecondFactor =>
+  typeof value === "string" && (SECOND_FACTORS as readonly string[]).includes(value);
+
+/**
+ * Second facteur d'une session créée sur ce chemin. `carried` : preuve de la session courante, reportée sur les
+ * chemins qui la recréent (changement de mot de passe, activation ou désactivation du TOTP).
+ */
+export function secondFactorForPath(path: string | null | undefined, carried?: unknown): SecondFactor | null {
+  if (path === PASSKEY_SIGN_IN_PATH) return "passkey";
+  if (path && TOTP_VERIFY_PATHS.includes(path)) return "totp";
+  if (path && CARRY_FACTOR_PATHS.includes(path) && isSecondFactor(carried)) return carried;
+  return null;
 }
 
 /**
@@ -25,3 +57,6 @@ export function userVerified(response: unknown): boolean {
     return false;
   }
 }
+
+/** Message de refus de la connexion par une clé qui n'a pas vérifié l'utilisateur (repris par le site). */
+export const USER_VERIFICATION_REQUIRED_MESSAGE = "USER_VERIFICATION_REQUIRED";

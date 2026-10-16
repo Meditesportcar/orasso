@@ -39,7 +39,7 @@ export function AddPasskey({ busy }: { busy: boolean }) {
         done: false,
         error:
           options.status === 403 || options.status === 401
-            ? "Reconnecte-toi d'abord (connexion récente exigée), puis recommence."
+            ? "Reconnecte-toi avec ta clé d'accès ou ton code (ou, pour une première clé, reconnecte-toi simplement), puis recommence."
             : "Impossible de préparer la clé. Réessaie.",
       });
     }
@@ -118,10 +118,21 @@ export function PasskeySignIn({ retour }: { retour: string }) {
     }
     try {
       const response = await startAuthentication({ optionsJSON: options.data });
-      const verified = await apiFetch("/auth/passkey/verify-authentication", { method: "POST", json: { response } });
+      // Erreurs de Better Auth au format `{code, message}` (pas l'enveloppe `{error}` de l'API métier) : lues ici.
+      const verified = await fetch("/api/auth/passkey/verify-authentication", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ response }),
+        credentials: "same-origin",
+      });
       if (!verified.ok) {
+        const payload = (await verified.json().catch(() => null)) as { code?: string } | null;
         setPending(false);
-        return setError("Clé non reconnue.");
+        return setError(
+          payload?.code === "USER_VERIFICATION_REQUIRED"
+            ? "Ta clé doit demander ton code ou ton empreinte : utilise une clé qui le fait, ou connecte-toi par mot de passe puis code."
+            : "Clé non reconnue.",
+        );
       }
       window.location.assign(retour);
     } catch (e) {

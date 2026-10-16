@@ -10,6 +10,23 @@ import { notFound } from "../../lib/errors";
 import { withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
 import { securityMails } from "./mails";
+import type { SecondFactor } from "./passkey";
+
+export type FactorChangeType =
+  | "security_passkey_added"
+  | "security_passkey_removed"
+  | "security_two_factor_enabled"
+  | "security_two_factor_disabled";
+
+const FACTOR_CHANGE_BODY: Record<FactorChangeType, string> = {
+  security_passkey_added:
+    "Une clé d'accès a été ajoutée à ton compte. Si ce n'est pas toi, supprime-la et change ton mot de passe.",
+  security_passkey_removed:
+    "Une clé d'accès a été supprimée de ton compte. Si ce n'est pas toi, change ton mot de passe.",
+  security_two_factor_enabled: "La double authentification par code est activée sur ton compte.",
+  security_two_factor_disabled:
+    "La double authentification par code est désactivée. Si ce n'est pas toi, change ton mot de passe.",
+};
 
 /** Un compte créé il y a moins de 10 minutes ne reçoit pas d'alerte (c'est sa première connexion). */
 export const NEW_ACCOUNT_GRACE_MS = 10 * 60_000;
@@ -129,6 +146,42 @@ export const securityService = {
     await db
       .delete(session)
       .where(and(eq(session.userId, userId), keepToken ? ne(session.token, keepToken) : undefined));
+  },
+
+  /** Le compte a-t-il déjà un second facteur (TOTP activé ou au moins une clé d'accès) ? */
+  async accountHasFactor(userId: string): Promise<boolean> {
+    return (await this.totpEnabled(userId)) || (await this.passkeyCount(userId)) > 0;
+  },
+
+  async totpEnabled(userId: string): Promise<boolean> {
+    const row = await db.query.user.findFirst({ where: eq(user.id, userId), columns: { twoFactorEnabled: true } });
+    return Boolean(row?.twoFactorEnabled);
+  },
+
+  /** La session `token` prouve désormais ce second facteur (code vérifié, appareil de confiance). */
+  async markSessionFactor(token: string, factor: SecondFactor) {
+    await db.update(session).set({ secondFactor: factor }).where(eq(session.token, token));
+  },
+
+  /**
+   * Un facteur a été ajouté, retiré, activé ou désactivé : alerte (e-mail toujours, tout de suite) et déconnexion des
+   * autres appareils ; la session courante (`keepToken`) garde sa preuve.
+   */
+  async onFactorChanged(userId: string, type: FactorChangeType, keepToken: string | null) {
+    const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, userId) });
+    if (profile?.deletedAt) return;
+    const at = now();
+    const mail = securityMails.factorChanged(type, profile?.pseudo ?? "", at);
+    await withTx(async (tx, after) => {
+      await notificationsService.notify(tx, userId, type, {
+        title: mail.subject,
+        body: FACTOR_CHANGE_BODY[type],
+        link: { label: "Ouvrir la sécurité de mon compte", path: "/app/securite" },
+        email: mail,
+      });
+      after(() => notificationsService.kick());
+    });
+    await this.revokeOtherSessions(userId, keepToken);
   },
 
   async passkeyCount(userId: string): Promise<number> {

@@ -151,7 +151,13 @@ export const profilesService = {
         staffRoles: m.staffRoles as Me["memberships"][number]["staffRoles"],
       })),
       twoFactorRequired: required,
-      twoFactorHint: required ? ((await hasPasskey(v.user.id)) ? "passkey_sign_in" : "setup") : null,
+      twoFactorHint: required
+        ? (await hasPasskey(v.user.id))
+          ? "passkey_sign_in"
+          : v.user.twoFactorEnabled
+            ? "totp_sign_in"
+            : "setup"
+        : null,
       counts: {
         vehicles: vehicleCount?.n ?? 0,
         upcomingApplications: upcoming?.n ?? 0,

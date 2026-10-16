@@ -1,7 +1,7 @@
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
+import { createAuthMiddleware } from "better-auth/api";
 import { bearer } from "better-auth/plugins/bearer";
 import { twoFactor } from "better-auth/plugins/two-factor";
 
@@ -10,12 +10,8 @@ import * as schema from "./db/schema";
 import { env } from "./env";
 import { accountService } from "./modules/account/service";
 import { ensureProfile } from "./modules/profiles/service";
-import {
-  PASSKEY_FRESH_SESSION_MS,
-  PASSKEY_SIGN_IN_PATH,
-  secondFactorForPath,
-  userVerified,
-} from "./modules/security/passkey";
+import { securityAfter, securityBefore, trustedDeviceFactor } from "./modules/security/auth-hooks";
+import { secondFactorForPath } from "./modules/security/passkey";
 import { securityService } from "./modules/security/service";
 
 // Google et Apple sont prévus (docs/01) mais restent désactivés tant que leurs identifiants n'existent pas.
@@ -90,41 +86,17 @@ export const auth = betterAuth({
       // Une clé sans vérification de l'utilisateur (code, Face ID, empreinte) ne vaut pas double authentification.
       authenticatorSelection: { userVerification: "required" },
     }),
+    // Après `twoFactor()` : marque `totp` la session gardée grâce au cookie « appareil de confiance ».
+    trustedDeviceFactor,
   ],
   // Second facteur prouvé par la session (lot 15, corrections) : colonne `session.second_factor`.
   session: {
     additionalFields: { secondFactor: { type: "string", required: false, input: false } },
   },
+  // Second facteur des sessions, ajout et retrait des facteurs, alertes : `modules/security/auth-hooks.ts`.
   hooks: {
-    // Changement de mot de passe : toujours déconnecter les autres appareils (§ 1.1).
-    before: createAuthMiddleware(async (ctx) => {
-      // Connexion par clé : la vérification de l'utilisateur est exigée (le plugin ne la contrôle pas).
-      if (
-        ctx.path === PASSKEY_SIGN_IN_PATH &&
-        !userVerified((ctx.body as { response?: unknown } | undefined)?.response)
-      ) {
-        throw new APIError("UNAUTHORIZED", { message: "Vérification de l'utilisateur exigée" });
-      }
-      // Supprimer une clé : session récente seulement.
-      if (ctx.path === "/passkey/delete-passkey") {
-        const current = await getSessionFromCtx(ctx);
-        const created = current?.session.createdAt ? new Date(current.session.createdAt).getTime() : 0;
-        if (Date.now() - created > PASSKEY_FRESH_SESSION_MS) {
-          throw new APIError("FORBIDDEN", { message: "Reconnecte-toi pour supprimer une clé" });
-        }
-      }
-      if (ctx.path === "/change-password" && ctx.body && typeof ctx.body === "object") {
-        return { context: { body: { ...ctx.body, revokeOtherSessions: true } } };
-      }
-    }),
-    // Alerte « mot de passe changé » (la réinitialisation passe par `onPasswordReset`).
-    after: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== "/change-password") return;
-      const returned = ctx.context.returned;
-      if (!returned || isAPIError(returned) || returned instanceof Response) return;
-      const userId = (returned as { user?: { id?: string } }).user?.id;
-      if (userId) await securityService.onPasswordChanged(userId);
-    }),
+    before: createAuthMiddleware(securityBefore),
+    after: createAuthMiddleware(securityAfter),
   },
   // Chaque compte a son profil métier dès l'inscription ; le pseudo vient du champ `name` de l'inscription.
   databaseHooks: {
@@ -137,8 +109,12 @@ export const auth = betterAuth({
     },
     session: {
       create: {
+        // Preuve du second facteur posée par le chemin qui crée la session (clé, code TOTP), ou reportée de la session
+        // courante quand Better Auth la recrée (changement de mot de passe, activation ou désactivation du TOTP).
         before: async (session, ctx) => {
-          const secondFactor = secondFactorForPath(ctx?.path);
+          const current = (ctx?.context as { session?: { session?: { secondFactor?: unknown } } | null } | undefined)
+            ?.session?.session?.secondFactor;
+          const secondFactor = secondFactorForPath(ctx?.path, current);
           return { data: { ...session, secondFactor } };
         },
         // Alerte « nouvelle connexion » (empreinte d'appareil inconnue), jamais bloquante.

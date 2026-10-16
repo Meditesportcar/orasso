@@ -41,6 +41,15 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "enable") {
     const password = String(form.get("password") ?? "");
     const res = await api<Enabled>(request, "/auth/two-factor/enable", { method: "POST", json: { password } });
+    if (!res.ok && res.status === 403)
+      return result(
+        {
+          error:
+            "Cette session ne prouve pas ta double authentification : reconnecte-toi avec ta clé d'accès ou ton code, puis recommence.",
+          scope: "totp",
+        },
+        403,
+      );
     if (!res.ok) return result({ error: "Mot de passe incorrect.", scope: "totp" }, 400);
     return result({ enable: res.data }, { headers: withCookies(res.headers) });
   }
@@ -65,6 +74,15 @@ export async function action({ request }: Route.ActionArgs) {
       method: "POST",
       json: { id: String(form.get("id") ?? "") },
     });
+    if (!res.ok && res.status === 403)
+      return result(
+        {
+          error:
+            "Cette session ne prouve pas ta double authentification : reconnecte-toi avec ta clé d'accès ou ton code, puis recommence.",
+          scope: "passkey",
+        },
+        403,
+      );
     if (!res.ok) return result({ error: "Clé introuvable.", scope: "passkey" }, 400);
     return result({});
   }
@@ -90,10 +108,10 @@ export default function Securite({ loaderData, actionData }: Route.ComponentProp
       <p className="s-muted">
         <a href="/app/moi">← Mon compte</a>
       </p>
-      {loaderData.hint === "passkey_sign_in" && (
+      {(loaderData.hint === "passkey_sign_in" || loaderData.hint === "totp_sign_in") && (
         <p className="s-notice s-notice--alert" data-testid="passkey-sign-in-needed">
-          Tu as une clé d'accès mais tu t'es connecté par mot de passe : pour l'espace organisateur, reconnecte-toi avec
-          ta clé (ou active l'application d'authentification).
+          Cette session ne prouve pas ta double authentification : pour l'espace organisateur et pour changer tes clés
+          ou ton code, reconnecte-toi avec ta clé d'accès ou ton code.
         </p>
       )}
 

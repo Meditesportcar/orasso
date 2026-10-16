@@ -5,18 +5,20 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { adminAuditLog, eventStaff, passkey, structureMembers } from "../db/schema";
 import { env } from "../env";
+import { isSecondFactor } from "../modules/security/passkey";
 import { AppError, forbidden } from "./errors";
 import type { Viewer } from "./session";
 
 export const isSuperAdmin = (v: Viewer) => v.profile.platformRole === "super_admin";
 
 /**
- * Double authentification prouvée par la session (lot 15, corrections après relecture) : TOTP activé (Better Auth exige
- * alors le code à chaque connexion par mot de passe) **ou** session ouverte par une clé d'accès vérifiée. Une clé
- * enregistrée sur le compte ne suffit pas : une connexion par mot de passe seul ne la prouve pas.
+ * Double authentification prouvée par la **session** (lot 15, corrections des relectures) : session ouverte par une clé
+ * d'accès vérifiée (`passkey`) ou par le code de l'application d'authentification / un code de secours / un appareil
+ * de confiance (`totp`). L'état du compte (TOTP activé, clé enregistrée) ne suffit jamais : une session ouverte par
+ * mot de passe avant l'activation, ou une future connexion Google / Apple, ne prouvent rien.
  */
 export function hasSecondFactor(v: Viewer): boolean {
-  return Boolean(v.user.twoFactorEnabled) || v.session?.secondFactor === "passkey";
+  return isSecondFactor(v.session?.secondFactor);
 }
 
 /** Le compte a-t-il au moins une clé d'accès (pour dire « reconnecte-toi avec ta clé ») ? */
