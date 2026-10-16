@@ -439,7 +439,7 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
           <div className="orga__wx">
             <Weather weather={weather} title="Météo annoncée" compact />
             {event.outlook === "maintained" && isBadWeather(weather.summary) && (
-              <div className="s-stack s-stack--tight s-grow" data-testid="weather-suggestion">
+              <div className="s-stack s-stack--tight orga__wx-suggest" data-testid="weather-suggestion">
                 <p className="s-notice s-notice--alert" role="status">
                   <strong>{weatherTexts.suggestionTitle}</strong>
                   <br />

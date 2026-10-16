@@ -1305,6 +1305,8 @@
   align-items: center;
   gap: var(--space-3);
 }
-.orga__wx > .wx {
+.orga__wx > .wx,
+.orga__wx-suggest {
   flex: 1 1 260px;
+  min-width: 0;
 }
