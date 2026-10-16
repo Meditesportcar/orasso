@@ -9,6 +9,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   call,
   createEvent,
+  createPro,
   createStructure,
   createVehicle,
   resetDb,
@@ -21,26 +22,38 @@ import {
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import {
+  accessPasses,
   account,
   adminAuditLog,
+  applications,
   emailOutbox,
+  eventInvitations,
+  expressInvites,
   knownLogins,
   notifications,
   passkey,
+  plateTransferRequests,
   pointEntries,
   profileInterests,
   profiles,
+  proProfiles,
   session,
+  structureBans,
   structureFollows,
+  structures,
   user,
   vehiclePhotos,
   vehicles,
+  verification,
 } from "../../db/schema";
 import { requireOrganizer, twoFactorRequired } from "../../lib/access";
+import { resetRateLimits } from "../../lib/rateLimit";
 import { dataDir } from "../../lib/storage";
+import { accessService } from "../access/service";
 import { nearbyService } from "../events/nearby";
 import { notificationsService } from "../notifications/service";
 import { pointsService } from "../points/service";
+import { secondFactorForPath, userVerified } from "../security/passkey";
 import { securityService } from "../security/service";
 import { accountService } from "./service";
 
@@ -131,6 +144,10 @@ describe("réinitialisation du mot de passe et vérification de l'e-mail", () =>
     expect(res.status).toBeLessThan(400);
     const row = await db.query.user.findFirst({ where: eq(user.id, u.id) });
     expect(row?.emailVerified).toBe(true);
+    // Le lien n'ouvre pas de session (elle contournerait la double authentification).
+    expect(res.headers.getSetCookie().some((c) => c.includes("session_token=") && !c.includes("Max-Age=0"))).toBe(
+      false,
+    );
   });
 
   it("changement de mot de passe : autres sessions révoquées, alerte par e-mail", async () => {
@@ -172,10 +189,11 @@ describe("alerte « nouvelle connexion »", () => {
   });
 });
 
-describe("clés d'accès comme double authentification", () => {
-  it("une passkey satisfait la règle et ouvre l'espace organisateur sans TOTP", async () => {
+describe("clés d'accès comme double authentification (prouvée par la session)", () => {
+  it("passkey sur le compte + connexion par mot de passe → 403 ; session ouverte par la clé → acceptée", async () => {
     const orga = await signUp("Cle_01");
     const s = await createStructure(orga.id);
+    const e = await createEvent(s.id);
     const v = await viewerOf(orga);
     expect(await twoFactorRequired(v)).toBe(true);
     await expect(requireOrganizer(v, s.id)).rejects.toMatchObject({ code: "two_factor_required" });
@@ -190,9 +208,45 @@ describe("clés d'accès comme double authentification", () => {
       backedUp: false,
       createdAt: new Date(),
     });
-    expect(await twoFactorRequired(v)).toBe(false);
-    await expect(requireOrganizer(v, s.id)).resolves.toEqual({ role: "owner" });
-    expect((await call(orga, "GET", "/me")).json.twoFactorRequired).toBe(false);
+    // Clé enregistrée, mais session ouverte par mot de passe : la double authentification n'est pas prouvée.
+    expect(await twoFactorRequired(v)).toBe(true);
+    const denied = await call(orga, "GET", `/events/${e.id}`);
+    expect(denied.status).toBe(403);
+    expect(denied.json.error.code).toBe("two_factor_required");
+    const me = (await call(orga, "GET", "/me")).json;
+    expect(me).toMatchObject({ twoFactorRequired: true, twoFactorHint: "passkey_sign_in" });
+    // Session ouverte par la clé (`second_factor = 'passkey'`, posé par le crochet de création de session).
+    await db.update(session).set({ secondFactor: "passkey" }).where(eq(session.userId, orga.id));
+    expect((await call(orga, "GET", `/events/${e.id}`)).status).toBe(200);
+    expect((await call(orga, "GET", "/me")).json).toMatchObject({ twoFactorRequired: false, twoFactorHint: null });
+    await expect(requireOrganizer({ ...v, session: { secondFactor: "passkey" } }, s.id)).resolves.toEqual({
+      role: "owner",
+    });
+  });
+
+  it("seule la connexion par clé (avec vérification de l'utilisateur) porte le second facteur", () => {
+    expect(secondFactorForPath("/passkey/verify-authentication")).toBe("passkey");
+    expect(secondFactorForPath("/sign-in/email")).toBeNull();
+    expect(secondFactorForPath("/verify-email")).toBeNull();
+    const authData = (flags: number) => Buffer.concat([Buffer.alloc(32), Buffer.from([flags]), Buffer.alloc(4)]);
+    expect(userVerified({ response: { authenticatorData: authData(0x05).toString("base64url") } })).toBe(true);
+    expect(userVerified({ response: { authenticatorData: authData(0x01).toString("base64url") } })).toBe(false);
+    expect(userVerified(null)).toBe(false);
+  });
+});
+
+describe("notifications de sécurité", () => {
+  it("livrées tout de suite, même pendant les heures calmes", async () => {
+    const u = await signUp("Nuit_01");
+    clock.set(new Date("2026-11-03T22:30:00Z")); // 23:30 à Paris
+    const row = await db.transaction((tx) =>
+      notificationsService.notify(tx, u.id, "security_new_login", { title: "Nouvelle connexion", body: "x" }),
+    );
+    expect(row.deliverAfter.getTime()).toBe(clock.now.getTime());
+    const other = await db.transaction((tx) =>
+      notificationsService.notify(tx, u.id, "points_awarded", { title: "Points", body: "x" }),
+    );
+    expect(other.deliverAfter.getTime()).toBeGreaterThan(clock.now.getTime());
   });
 });
 
@@ -315,8 +369,84 @@ describe("événement près de chez toi", () => {
   });
 });
 
+describe("« près de chez toi » : exclusions", () => {
+  it("bannis, structure suspendue ou supprimée, événement passé : personne", async () => {
+    const ref = await seedReference();
+    const orga = await signUp("Orga_Excl");
+    const s = await createStructure(orga.id);
+    const fan = await signUp("Fan_66");
+    const banni = await signUp("Banni_66");
+    for (const u of [fan, banni]) {
+      await db.update(profiles).set({ departments: ["66"], radiusKm: 100 }).where(eq(profiles.userId, u.id));
+      await db.insert(profileInterests).values({ userId: u.id, categoryId: ref.jdm.id });
+    }
+    await db.insert(structureBans).values({ structureId: s.id, userId: banni.id, createdBy: orga.id });
+    const criteria = { categoryIds: [ref.jdm.id], makeIds: [], countries: [], text: null };
+    const e = await createEvent(s.id, { lat: 42.69, lng: 2.9, criteria });
+    expect(await nearbyService.notifyNearby(e.id)).toBe(1);
+    const sent = await db.query.notifications.findMany({ where: eq(notifications.type, "event_nearby_interest") });
+    expect(sent.map((n) => n.userId)).toEqual([fan.id]);
+
+    const passe = await createEvent(s.id, {
+      lat: 42.69,
+      lng: 2.9,
+      criteria,
+      startsAt: new Date(clock.now.getTime() - 86_400_000),
+    });
+    expect(await nearbyService.notifyNearby(passe.id)).toBe(0);
+    const e2 = await createEvent(s.id, { lat: 42.69, lng: 2.9, criteria });
+    await db.update(structures).set({ verification: "suspended" }).where(eq(structures.id, s.id));
+    expect(await nearbyService.notifyNearby(e2.id)).toBe(0);
+  });
+});
+
+describe("parrainage et inscription express", () => {
+  it("un compte créé par l'inscription express ne compte pas ; l'e-mail de vérification part quand même", async () => {
+    const parrain = await signUp("Parrain_Ex");
+    const pp = await db.query.profiles.findFirst({ where: eq(profiles.userId, parrain.id) });
+    const orga = await signUp("Orga_Ex");
+    const s = await createStructure(orga.id);
+    const e = await createEvent(s.id);
+    const email = `express-${randomBytes(3).toString("hex")}@orasso.test`;
+    // Invitation express en cours pour l'adresse : la vérification n'est plus retenue (effet de bord corrigé).
+    await db.insert(expressInvites).values({
+      eventId: e.id,
+      email,
+      token: randomBytes(16).toString("base64url"),
+      createdBy: orga.id,
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    const res = await app.request("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: ORIGIN },
+      body: JSON.stringify({ email, password: "motdepasse-test-123", name: "Express_01" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await lastMail(email, "email_verification")).toBeTruthy();
+    await db.update(expressInvites).set({ usedAt: new Date() }).where(eq(expressInvites.email, email));
+    const cookie = res.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    const u = { id: "", pseudo: "Express_01", email, cookie };
+    expect((await call(u, "POST", "/me/referral", { token: pp!.inviteToken })).status).toBe(409);
+  });
+});
+
+describe("réglages", () => {
+  it("widgets de l'accueil bornés", async () => {
+    const u = await signUp("Widgets_01");
+    expect((await call(u, "PATCH", "/me/settings", { homeWidgets: [{ id: "meteo", visible: true }] })).status).toBe(
+      200,
+    );
+    const tooMany = Array.from({ length: 31 }, (_, i) => ({ id: `w${i}` }));
+    expect((await call(u, "PATCH", "/me/settings", { homeWidgets: tooMany })).status).toBe(400);
+    expect((await call(u, "PATCH", "/me/settings", { homeWidgets: [{ id: "x".repeat(200) }] })).status).toBe(400);
+  });
+});
+
 describe("suppression du compte", () => {
-  it("anonymisation complète, 401 ensuite, e-mail de confirmation, idempotente", async () => {
+  it("anonymisation complète, 401 ensuite, e-mail de confirmation exact, idempotente", async () => {
     const ref = await seedReference();
     const u = await signUp("Partant_01");
     const email = u.email;
@@ -328,8 +458,63 @@ describe("suppression du compte", () => {
     const orga = await signUp("Orga_Supp");
     const s = await createStructure(orga.id);
     await db.insert(structureFollows).values({ structureId: s.id, userId: u.id, source: "manual" });
+    // Traces ailleurs : candidature à venir retenue (avec QR), candidature passée, invitation, express, transfert,
+    // fiche pro, jeton de réinitialisation.
+    const futur = await createEvent(s.id, { startsAt: new Date(Date.now() + 10 * 86_400_000) });
+    const passe = await createEvent(s.id, {
+      startsAt: new Date(Date.now() - 10 * 86_400_000),
+      endsAt: new Date(Date.now() - 9 * 86_400_000),
+    });
+    const [aFutur] = await db
+      .insert(applications)
+      .values({
+        eventId: futur.id,
+        userId: u.id,
+        vehicleId: vehicle.id,
+        status: "accepted",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+        message: "Je viens avec mon frère",
+      })
+      .returning();
+    await db.transaction((tx) => accessService.issue(tx, aFutur!));
+    const [aPasse] = await db
+      .insert(applications)
+      .values({
+        eventId: passe.id,
+        userId: u.id,
+        vehicleId: vehicle.id,
+        status: "accepted",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+        message: "Merci",
+      })
+      .returning();
+    await db.insert(eventInvitations).values({ eventId: futur.id, email, token: randomBytes(8).toString("hex") });
+    await db.insert(expressInvites).values({
+      eventId: futur.id,
+      email,
+      token: randomBytes(16).toString("base64url"),
+      createdBy: orga.id,
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    await db.insert(plateTransferRequests).values({
+      plateNormalized: "AB123CD",
+      fromVehicleId: vehicle.id,
+      toUserId: u.id,
+    });
+    await createPro(u.id, { phone: "0611111111", email: "pro@exemple.fr" });
+    await app.request("/api/auth/request-password-reset", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: ORIGIN },
+      body: JSON.stringify({ email, redirectTo: "/reinitialisation" }),
+    });
+    expect(await db.query.verification.findMany({ where: eq(verification.value, u.id) })).not.toHaveLength(0);
 
-    expect((await call(u, "DELETE", "/me", { password: "mauvais" })).status).toBe(403);
+    // Mauvaise confirmation : un seul message.
+    const wrong = await call(u, "DELETE", "/me", { password: "mauvais" });
+    expect(wrong.status).toBe(403);
+    expect(wrong.json.error.message).toBe("Confirmation incorrecte");
     // Propriétaire d'une structure : refus.
     expect((await call(orga, "DELETE", "/me", { password: "motdepasse-test-123" })).json.error.code).toBe(
       "structure_owner",
@@ -339,10 +524,16 @@ describe("suppression du compte", () => {
     expect(res.status).toBe(200);
     expect((await call(u, "GET", "/me")).status).toBe(401);
     expect((await signIn(email, "motdepasse-test-123")).status).toBe(401);
-    expect(await lastMail(email, "account_deleted")).toBeTruthy();
+
+    // E-mail de confirmation, envoyé avant l'anonymisation ; l'adresse ne reste pas dans la file des e-mails.
+    const sent = await db.query.emailOutbox.findFirst({ where: eq(emailOutbox.template, "account_deleted") });
+    expect(sent?.subject).toBe("Ton compte Orasso est supprimé");
+    expect(sent?.payload).toEqual({ userId: u.id });
+    expect(sent?.to).toMatch(/^supprime\+[0-9a-f]{8}@orasso\.invalid$/);
+    expect(await db.query.emailOutbox.findMany({ where: eq(emailOutbox.to, email) })).toHaveLength(0);
 
     const row = await db.query.user.findFirst({ where: eq(user.id, u.id) });
-    expect(row?.email).toMatch(/^supprime\+[0-9a-f]{8}@orasso\.invalid$/);
+    expect(row?.email).toBe(sent?.to);
     expect(row?.name).toBe("Compte supprimé");
     const p = await db.query.profiles.findFirst({ where: eq(profiles.userId, u.id) });
     expect(p?.pseudo).toMatch(/^supprime_[0-9a-f]{8}$/);
@@ -353,7 +544,23 @@ describe("suppression du compte", () => {
     expect(await db.query.vehiclePhotos.findMany({ where: eq(vehiclePhotos.vehicleId, vehicle.id) })).toHaveLength(0);
     expect(await db.query.session.findMany({ where: eq(session.userId, u.id) })).toHaveLength(0);
     expect(await db.query.account.findMany({ where: eq(account.userId, u.id) })).toHaveLength(0);
+    expect(await db.query.verification.findMany({ where: eq(verification.value, u.id) })).toHaveLength(0);
     expect(await db.query.structureFollows.findMany({ where: eq(structureFollows.userId, u.id) })).toHaveLength(0);
+    // Candidature à venir : désistée sans malus, QR révoqué ; candidature passée conservée, sans message.
+    const af = await db.query.applications.findFirst({ where: eq(applications.id, aFutur!.id) });
+    expect(af).toMatchObject({ status: "withdrawn", withdrawnAfterLock: false, message: null });
+    const pass = await db.query.accessPasses.findFirst({ where: eq(accessPasses.applicationId, aFutur!.id) });
+    expect(pass?.revokedAt).toBeTruthy();
+    const ap = await db.query.applications.findFirst({ where: eq(applications.id, aPasse!.id) });
+    expect(ap).toMatchObject({ status: "accepted", message: null });
+    expect(await db.query.eventInvitations.findMany({ where: eq(eventInvitations.email, email) })).toHaveLength(0);
+    expect(await db.query.expressInvites.findMany({ where: eq(expressInvites.email, email) })).toHaveLength(0);
+    expect(
+      await db.query.plateTransferRequests.findMany({ where: eq(plateTransferRequests.toUserId, u.id) }),
+    ).toHaveLength(0);
+    const pro = await db.query.proProfiles.findFirst({ where: eq(proProfiles.ownerUserId, u.id) });
+    expect(pro).toMatchObject({ phone: null, email: null });
+    expect(pro?.deletedAt).toBeTruthy();
     const audit = await db.query.adminAuditLog.findFirst({ where: eq(adminAuditLog.targetId, u.id) });
     expect(audit).toMatchObject({ action: "user.self_delete", actorUserId: u.id });
     // Profil introuvable pour les autres.
@@ -365,5 +572,36 @@ describe("suppression du compte", () => {
     expect(again?.pseudo).toBe(p?.pseudo);
     const audits = await db.query.adminAuditLog.findMany({ where: eq(adminAuditLog.targetId, u.id) });
     expect(audits).toHaveLength(1);
+  });
+
+  it("5 essais par quart d'heure ; code de secours accepté ; session par clé vaut second facteur", async () => {
+    const u = await signUp("Partant_02");
+    const enabled = await call(u, "POST", "/auth/two-factor/enable", { password: "motdepasse-test-123" });
+    expect(enabled.status).toBe(200);
+    const backup: string = enabled.json.backupCodes[0];
+    await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, u.id));
+    // Sans code : refus (même message) ; le compteur avance.
+    for (let i = 0; i < 4; i++) {
+      const r = await call(u, "DELETE", "/me", { password: "motdepasse-test-123" });
+      expect(r.status).toBe(403);
+      expect(r.json.error.message).toBe("Confirmation incorrecte");
+    }
+    expect((await call(u, "DELETE", "/me", { password: "motdepasse-test-123", totpCode: "000000" })).status).toBe(403);
+    expect((await call(u, "DELETE", "/me", { password: "motdepasse-test-123", totpCode: backup })).status).toBe(429);
+    resetRateLimits();
+    expect((await call(u, "DELETE", "/me", { password: "motdepasse-test-123", totpCode: backup })).status).toBe(200);
+
+    // Compte avec 2FA, session ouverte par clé : pas de code demandé.
+    const w = await signUp("Partant_03");
+    await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, w.id));
+    expect((await call(w, "DELETE", "/me", { password: "motdepasse-test-123" })).status).toBe(403);
+    await db.update(session).set({ secondFactor: "passkey" }).where(eq(session.userId, w.id));
+    expect((await call(w, "DELETE", "/me", { password: "motdepasse-test-123" })).status).toBe(200);
+  });
+
+  it("un profil supprimé est refusé même si une session subsiste", async () => {
+    const u = await signUp("Fantome_01");
+    await db.update(profiles).set({ deletedAt: new Date() }).where(eq(profiles.userId, u.id));
+    expect((await call(u, "GET", "/me")).status).toBe(401);
   });
 });

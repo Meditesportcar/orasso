@@ -3,6 +3,19 @@ import { z } from "zod";
 import { departmentSchema, type NotificationFamily, notificationTypes, profileVisibilities } from "../enums";
 import type { PublicProfile } from "./profile";
 
+/**
+ * Widgets de l'accueil (lot 30) : liste bornée d'objets courts (identifiant, visibilité, position, réglages simples).
+ * Le lot 30 précisera la forme ; ici on borne seulement la taille.
+ */
+export const homeWidgetsSchema = z
+  .array(
+    z
+      .record(z.string().max(40), z.union([z.string().max(120), z.number(), z.boolean(), z.null()]))
+      .refine((o) => Object.keys(o).length <= 12, "12 réglages au plus"),
+  )
+  .max(30);
+export type HomeWidgets = z.infer<typeof homeWidgetsSchema>;
+
 const notificationTypeNames = Object.keys(notificationTypes) as [string, ...string[]];
 
 /** `PATCH /me/settings` : tout est facultatif, seuls les champs présents changent. */
@@ -19,7 +32,7 @@ export const accountSettingsSchema = z
     departments: z.array(departmentSchema).max(20),
     radiusKm: z.number().int().min(10).max(300),
     interests: z.array(z.uuid()).max(30),
-    homeWidgets: z.unknown().nullable(),
+    homeWidgets: homeWidgetsSchema.nullable(),
   })
   .partial();
 export type AccountSettingsUpdate = z.infer<typeof accountSettingsSchema>;
@@ -31,18 +44,20 @@ export type AccountSettings = {
   departments: string[];
   radiusKm: number;
   interests: string[];
-  homeWidgets: unknown;
+  homeWidgets: HomeWidgets | null;
 };
 
 export const referralSchema = z.object({ token: z.string().trim().min(8).max(64) });
 
 /** `DELETE /me` : mot de passe, et code de l'application d'authentification si la 2FA est active. */
 export const accountDeleteSchema = z.object({
-  password: z.string().min(1).max(128),
+  /** Vide pour un compte sans mot de passe : la session ouverte par une clé d'accès confirme alors. */
+  password: z.string().max(128).default(""),
+  /** Code à 6 chiffres de l'application d'authentification, ou code de secours (« abcde-12345 »). */
   totpCode: z
     .string()
     .trim()
-    .regex(/^\d{6}$/, "Code à 6 chiffres")
+    .regex(/^[A-Za-z0-9-]{6,20}$/, "Code à 6 chiffres ou code de secours")
     .nullish(),
 });
 export type AccountDelete = z.infer<typeof accountDeleteSchema>;

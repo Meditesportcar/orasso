@@ -16,7 +16,7 @@ import {
   registrationOpensAt,
   type TransitionActor,
 } from "@orasso/shared";
-import { and, asc, count, eq, inArray, lte, max, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, lte, max, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -492,6 +492,39 @@ export const applicationsService = {
       broadcast(after, event, [row, ...offered]);
       return row;
     });
+  },
+
+  /**
+   * Suppression du compte (lot 15) : candidatures des événements à venir désistées **sans malus**, QR révoqués, place
+   * proposée au suivant de la liste d'attente. Les candidatures passées restent (historique des organisateurs).
+   */
+  async withdrawAllForDeletedAccount(userId: string): Promise<number> {
+    const t = now();
+    const upcoming = await db
+      .select({ id: applications.id })
+      .from(applications)
+      .innerJoin(events, eq(events.id, applications.eventId))
+      .where(and(eq(applications.userId, userId), inArray(applications.status, [...ACTIVE]), gt(events.endsAt, t)));
+    let count = 0;
+    for (const { id } of upcoming) {
+      await withTx(async (tx, after) => {
+        const { event, app } = await lockEventThenApplication(tx, id);
+        if (!ACTIVE.includes(app.status)) return;
+        const row = await transition(
+          tx,
+          app,
+          "withdrawn",
+          { kind: "user", userId },
+          { withdrawnAt: t, withdrawnAfterLock: false, waitlistRank: null },
+          "account.deleted",
+        );
+        const freed = app.status === "accepted" || app.status === "offered";
+        const offered = freed ? await offerNext(tx, event, after) : [];
+        broadcast(after, event, [row, ...offered]);
+        count++;
+      });
+    }
+    return count;
   },
 
   /** Accepter la place libérée, avant l'échéance et si elle est toujours libre. */

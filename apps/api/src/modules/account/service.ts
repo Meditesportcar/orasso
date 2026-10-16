@@ -1,6 +1,8 @@
 // Compte (lot 15, ARCHITECTURE-SUITE § 1.2 à § 1.5) : e-mails de réinitialisation et de vérification, parrainage,
 // réglages regroupés, aperçu public, suppression du compte par anonymisation (S5).
 import { randomBytes } from "node:crypto";
+import { readdir, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { createOTP } from "@better-auth/utils/otp";
 import {
   type AccountDelete,
@@ -11,17 +13,21 @@ import {
   REFERRAL_WINDOW_MS,
 } from "@orasso/shared";
 import { symmetricDecrypt } from "better-auth/crypto";
-import { and, eq, gt, inArray, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
   account,
   adminAuditLog,
+  applications,
   categories,
   devices,
+  emailOutbox,
+  eventInvitations,
   expressInvites,
   knownLogins,
   passkey,
+  plateTransferRequests,
   proFollows,
   profileInterests,
   profiles,
@@ -34,14 +40,16 @@ import {
   user,
   vehiclePhotos,
   vehicles,
+  verification,
 } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, conflict, notFound, validation } from "../../lib/errors";
 import { mail } from "../../lib/mail";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
-import { storage } from "../../lib/storage";
+import { dataDir, storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
+import { applicationsService } from "../applications/service";
 import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
 import { accountQrShortId, profilesService } from "../profiles/service";
@@ -64,18 +72,53 @@ async function checkPassword(userId: string, password: string): Promise<boolean>
   const cred = await db.query.account.findFirst({
     where: and(eq(account.userId, userId), eq(account.providerId, "credential")),
   });
-  if (!cred?.password) return false;
+  if (!cred?.password || !password) return false;
   const ctx = await authContext();
   return ctx.password.verify({ hash: cred.password, password });
 }
 
-/** Code TOTP de l'application d'authentification (secret chiffré par Better Auth, fenêtre de ±1 période). */
-async function checkTotp(userId: string, code: string): Promise<boolean> {
+/**
+ * Second facteur de l'application d'authentification : code TOTP (secret chiffré par Better Auth, fenêtre ±1 période)
+ * ou code de secours (JSON du plugin, chiffré si l'option est posée). Les essais sont comptés par la limite
+ * `accountDelete` de la route.
+ */
+async function checkTotpOrBackupCode(userId: string, code: string): Promise<boolean> {
   const row = await db.query.twoFactor.findFirst({ where: eq(twoFactor.userId, userId) });
   if (!row) return false;
   const ctx = await authContext();
-  const secret = await symmetricDecrypt({ key: ctx.secretConfig, data: row.secret });
-  return createOTP(secret, { digits: 6, period: 30 }).verify(code, { window: 1 });
+  const clean = code.replace(/\s+/g, "");
+  if (/^\d{6}$/.test(clean)) {
+    const secret = await symmetricDecrypt({ key: ctx.secretConfig, data: row.secret });
+    return createOTP(secret, { digits: 6, period: 30 }).verify(clean, { window: 1 });
+  }
+  let codes: unknown;
+  try {
+    codes = JSON.parse(row.backupCodes);
+  } catch {
+    codes = JSON.parse(await symmetricDecrypt({ key: ctx.secretConfig, data: row.backupCodes }));
+  }
+  return Array.isArray(codes) && codes.includes(clean);
+}
+
+/** Compte créé par l'inscription express (lien remis par le staff) : ne compte jamais pour le parrainage. */
+async function isExpressAccount(email: string): Promise<boolean> {
+  const row = await db.query.expressInvites.findFirst({
+    where: and(eq(expressInvites.email, email), isNotNull(expressInvites.usedAt)),
+    columns: { id: true },
+  });
+  return Boolean(row);
+}
+
+/** Copies HTML du transport « journal » adressées à ce destinataire (développement ; facultatives en ligne). */
+async function removeJournalMails(email: string) {
+  const dir = join(dataDir, "mail");
+  const names = await readdir(dir).catch(() => [] as string[]);
+  const head = `<!-- À : ${email} -->`;
+  for (const name of names) {
+    const file = join(dir, name);
+    const content = await readFile(file, "utf8").catch(() => "");
+    if (content.startsWith(head)) await rm(file, { force: true });
+  }
 }
 
 export const accountService = {
@@ -87,31 +130,26 @@ export const accountService = {
     });
   },
 
-  /**
-   * E-mail de vérification (inscription, relance). Pas d'envoi pour une inscription express en cours : l'adresse est
-   * celle qui a reçu le lien express, marquée vérifiée par `expressService`.
-   */
+  /** E-mail de vérification (inscription, inscription express comprise, relance). */
   async sendEmailVerification(u: MailUser, url: string) {
-    const express = await db.query.expressInvites.findFirst({
-      where: and(eq(expressInvites.email, u.email), isNull(expressInvites.usedAt), gt(expressInvites.expiresAt, now())),
-      columns: { id: true },
-    });
-    if (express) return;
     await mail.send("email_verification", u.email, securityMails.emailVerification(await pseudoOf(u.id, u.name), url), {
       userId: u.id,
     });
   },
 
-  /** Crochet après vérification de l'e-mail : parrainage confirmé (§ 1.3). */
+  /** Crochet après vérification de l'e-mail : parrainage confirmé (§ 1.3), jamais pour un compte express. */
   async onEmailVerified(userId: string) {
     const profile = await profilesRepo.byUserId(userId);
     if (!profile?.invitedByUserId || profile.deletedAt) return null;
+    const u = await db.query.user.findFirst({ where: eq(user.id, userId), columns: { email: true } });
+    if (!u || (await isExpressAccount(u.email))) return null;
     return pointsService.awardReferral(profile.invitedByUserId, userId);
   },
 
   /**
    * `POST /me/referral {token}` : rattache le parrain (lien d'ami `/ami/:jeton`) à un compte créé il y a moins de 24 h,
-   * sans parrain, avec le jeton d'un autre. Si l'e-mail est déjà vérifié, les points partent aussitôt.
+   * sans parrain, avec le jeton d'un autre, hors inscription express. Si l'e-mail est déjà vérifié, les points partent
+   * aussitôt.
    */
   async applyReferral(v: Viewer, token: string) {
     const created = v.user.createdAt instanceof Date ? v.user.createdAt : new Date(v.user.createdAt);
@@ -121,7 +159,8 @@ export const accountService = {
       !sponsor.deletedAt &&
       sponsor.userId !== v.user.id &&
       !v.profile.invitedByUserId &&
-      now().getTime() - created.getTime() < REFERRAL_WINDOW_MS;
+      now().getTime() - created.getTime() < REFERRAL_WINDOW_MS &&
+      !(await isExpressAccount(v.user.email));
     if (!applicable)
       throw conflict("referral_not_applicable", "Ce lien d'ami ne peut plus être utilisé pour ce compte");
     const [row] = await db
@@ -158,7 +197,7 @@ export const accountService = {
       departments: p.departments,
       radiusKm: p.radiusKm,
       interests: await profilesRepo.interests(v.user.id),
-      homeWidgets: p.homeWidgets ?? null,
+      homeWidgets: (p.homeWidgets as AccountSettings["homeWidgets"]) ?? null,
     };
   },
 
@@ -192,20 +231,25 @@ export const accountService = {
   },
 
   /**
-   * `DELETE /me` (§ 1.5, S5) : mot de passe (et code TOTP si la 2FA est active) ; refus si propriétaire actif d'une
-   * structure. E-mail de confirmation envoyé avant, puis anonymisation en une transaction. Idempotent : un compte déjà
-   * supprimé n'a plus de session (401).
+   * `DELETE /me` (§ 1.5, S5) : mot de passe (ou, pour un compte sans mot de passe, session ouverte par clé d'accès) et,
+   * si la 2FA est active, code TOTP, code de secours ou session ouverte par clé ; 5 essais par quart d'heure, un seul
+   * message d'erreur. Refus si propriétaire actif d'une structure. E-mail de confirmation envoyé avant, puis
+   * anonymisation. Un compte déjà supprimé n'a plus de session (401).
    */
   async deleteAccount(v: Viewer, input: AccountDelete, ip?: string | null) {
     if (v.profile.deletedAt) throw new AppError(401, "unauthenticated", "Compte supprimé");
-    if (!(await checkPassword(v.user.id, input.password))) {
-      throw new AppError(403, "invalid_credentials", "Mot de passe incorrect");
-    }
-    if (v.user.twoFactorEnabled) {
-      if (!input.totpCode || !(await checkTotp(v.user.id, input.totpCode))) {
-        throw new AppError(403, "invalid_credentials", "Code de double authentification incorrect");
-      }
-    }
+    rateLimit("accountDelete", v.user.id);
+    const passkeySession = v.session?.secondFactor === "passkey";
+    const cred = await db.query.account.findFirst({
+      where: and(eq(account.userId, v.user.id), eq(account.providerId, "credential")),
+      columns: { password: true },
+    });
+    const passwordOk = cred?.password ? await checkPassword(v.user.id, input.password) : passkeySession;
+    const secondOk =
+      !v.user.twoFactorEnabled ||
+      passkeySession ||
+      (Boolean(input.totpCode) && (await checkTotpOrBackupCode(v.user.id, input.totpCode ?? "")));
+    if (!passwordOk || !secondOk) throw new AppError(403, "invalid_credentials", "Confirmation incorrecte");
     const owned = await db
       .select({ name: structures.name })
       .from(structureMembers)
@@ -231,30 +275,41 @@ export const accountService = {
     return this.anonymize(v.user.id, ip ?? null);
   },
 
-  /** Anonymisation complète des données identifiantes ; historique (candidatures, entrées, points, avis) conservé. */
+  /**
+   * Anonymisation complète des données identifiantes ; historique (candidatures passées, entrées, points, avis)
+   * conservé. Candidatures à venir désistées sans malus. Rejouée, elle ne fait rien.
+   */
   async anonymize(userId: string, ip: string | null) {
     const tag = randomBytes(4).toString("hex");
+    const anonEmail = `supprime+${tag}@orasso.invalid`;
     const at = now();
     const photoKeys: string[] = [];
+    let oldEmail = null as string | null;
+    const before = await db.query.profiles.findFirst({
+      where: eq(profiles.userId, userId),
+      columns: { deletedAt: true },
+    });
+    if (!before || before.deletedAt) return { deleted: true };
+    // Candidatures à venir : désistées sans malus, QR révoqués, place proposée au suivant de la liste d'attente.
+    await applicationsService.withdrawAllForDeletedAccount(userId);
     await withTx(async (tx) => {
-      const profile = await tx.query.profiles.findFirst({ where: eq(profiles.userId, userId) });
+      // Verrou : deux suppressions simultanées n'anonymisent qu'une fois.
+      const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).for("update");
       if (!profile || profile.deletedAt) return;
-      // Plus aucune connexion possible : sessions, identifiants (mot de passe, Google, Apple), clés, 2FA, appareils.
+      const [current] = await tx.select({ email: user.email }).from(user).where(eq(user.id, userId));
+      oldEmail = current?.email ?? null;
+      // Plus aucune connexion possible : sessions, identifiants (mot de passe, Google, Apple), clés, 2FA, appareils,
+      // jetons de réinitialisation encore valables (valeur = identifiant du compte).
       await tx.delete(session).where(eq(session.userId, userId));
       await tx.delete(account).where(eq(account.userId, userId));
       await tx.delete(passkey).where(eq(passkey.userId, userId));
       await tx.delete(twoFactor).where(eq(twoFactor.userId, userId));
       await tx.delete(devices).where(eq(devices.userId, userId));
       await tx.delete(knownLogins).where(eq(knownLogins.userId, userId));
+      await tx.delete(verification).where(eq(verification.value, userId));
       await tx
         .update(user)
-        .set({
-          email: `supprime+${tag}@orasso.invalid`,
-          name: "Compte supprimé",
-          emailVerified: false,
-          image: null,
-          twoFactorEnabled: false,
-        })
+        .set({ email: anonEmail, name: "Compte supprimé", emailVerified: false, image: null, twoFactorEnabled: false })
         .where(eq(user.id, userId));
       if (profile.avatarKey) photoKeys.push(profile.avatarKey);
       await tx
@@ -277,6 +332,15 @@ export const accountService = {
         })
         .where(eq(profiles.userId, userId));
       await tx.delete(profileInterests).where(eq(profileInterests.userId, userId));
+      // Traces de l'adresse et de la plaque ailleurs : file des e-mails, inscriptions express, invitations, transferts.
+      if (oldEmail) {
+        await tx.update(emailOutbox).set({ to: anonEmail }).where(eq(emailOutbox.to, oldEmail));
+        await tx.update(expressInvites).set({ email: anonEmail }).where(eq(expressInvites.email, oldEmail));
+        await tx.update(eventInvitations).set({ email: null }).where(eq(eventInvitations.email, oldEmail));
+      }
+      await tx.update(eventInvitations).set({ email: null }).where(eq(eventInvitations.userId, userId));
+      await tx.delete(plateTransferRequests).where(eq(plateTransferRequests.toUserId, userId));
+      await tx.update(applications).set({ message: null }).where(eq(applications.userId, userId));
       // Véhicules : vendus, plaque effacée, photos supprimées (fichiers effacés après la validation).
       const owned = await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.ownerId, userId));
       if (owned.length) {
@@ -307,7 +371,7 @@ export const accountService = {
         .where(and(eq(structureMembers.userId, userId), ne(structureMembers.status, "removed")));
       await tx
         .update(proProfiles)
-        .set({ deletedAt: at, publishedAt: null })
+        .set({ deletedAt: at, publishedAt: null, phone: null, email: null })
         .where(and(eq(proProfiles.ownerUserId, userId), isNull(proProfiles.deletedAt)));
       await tx.insert(adminAuditLog).values({
         actorUserId: userId,
@@ -321,6 +385,7 @@ export const accountService = {
     for (const key of photoKeys) {
       await storage.remove(key).catch(() => undefined);
     }
+    if (oldEmail) await removeJournalMails(oldEmail);
     return { deleted: true };
   },
 };

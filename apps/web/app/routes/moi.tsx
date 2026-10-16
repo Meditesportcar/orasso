@@ -94,7 +94,20 @@ export async function action({ request }: Route.ActionArgs) {
       json: { password: String(form.get("password") ?? ""), totpCode: totp || null },
     });
     if (!res.ok) return data({ scope: "delete", error: res.error.message }, { status: res.status });
-    return redirect("/?compte=supprime", { headers: withCookies(res.headers) });
+    // Le compte n'a plus de session : on efface aussi les cookies de session du navigateur.
+    const headers = withCookies(res.headers);
+    for (const name of [
+      "better-auth.session_token",
+      "better-auth.session_data",
+      "__Secure-better-auth.session_token",
+      "__Secure-better-auth.session_data",
+    ]) {
+      headers.append(
+        "set-cookie",
+        `${name}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${name.startsWith("__Secure") ? "; Secure" : ""}`,
+      );
+    }
+    return redirect("/?compte=supprime", { headers });
   }
   return data({ scope: "", error: "Action inconnue." }, { status: 400 });
 }
@@ -320,11 +333,10 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           />
           {me.user.twoFactorEnabled && (
             <TextField
-              label="Code de ton application d'authentification"
+              label="Code de ton application d'authentification (ou code de secours)"
               name="totpCode"
-              inputMode="numeric"
               autoComplete="one-time-code"
-              required
+              help="Inutile si tu t'es connecté avec une clé d'accès."
             />
           )}
           <CheckboxField name="confirm" label="Je comprends que la suppression est définitive." />
