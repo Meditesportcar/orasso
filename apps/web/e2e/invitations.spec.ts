@@ -112,7 +112,7 @@ test("événement privé : invitations par pseudo et par e-mail, acceptation ave
   await expect(pageE.getByTestId("invitation-link")).toContainText(event.title);
   await pageE.getByLabel("Pseudo").fill(`Invite_${s}`.slice(0, 24));
   await pageE.getByLabel("E-mail").fill(email);
-  await pageE.getByLabel("Mot de passe").fill(SEED_PASSWORD);
+  await pageE.getByRole("textbox", { name: "Mot de passe" }).fill(SEED_PASSWORD);
   await pageE.getByRole("button", { name: "Créer un compte" }).click();
   await expect(pageE.getByTestId("received-invitation")).toBeVisible();
   const eCookie = (await ctxE.cookies()).map((c) => `${c.name}=${c.value}`).join("; ");
