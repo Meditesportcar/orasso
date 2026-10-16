@@ -2,7 +2,13 @@
 // l'état de la synchro, mon rôle, « je suis là », les tuiles selon mes rôles, la file d'envoi et les doublons
 // rapportés par le serveur. Tout s'affiche sans réseau depuis la liste du téléphone.
 import { Button, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type MyStaffEvent, type StaffRole, staffPresenceLabels, staffRoleLabels } from "@orasso/shared";
+import {
+  communicationLabels,
+  type MyStaffEvent,
+  type StaffRole,
+  staffPresenceLabels,
+  staffRoleLabels,
+} from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -114,9 +120,21 @@ export default function StaffHome() {
         </>
       }
       footer={
-        <Button variant="alert" icon="alert" onPress={() => setSheet("alert")} fullWidth>
-          Alerte
-        </Button>
+        // Toujours accessibles en bas (docs/02) : l'alerte et, à côté, la discussion du staff (lot 20, en ligne).
+        <View style={styles.row}>
+          <Button variant="alert" icon="alert" onPress={() => setSheet("alert")} style={styles.tile}>
+            Alerte
+          </Button>
+          <Button
+            variant="rescue"
+            icon="chat"
+            onPress={() => router.push(`/staff/${id}/discussion`)}
+            style={styles.tile}
+            testID="staff-discussion"
+          >
+            {communicationLabels.staffDiscussion}
+          </Button>
+        </View>
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
