@@ -6,7 +6,10 @@ export default [
   layout("layouts/app.tsx", [
     route("app", "routes/app-home.tsx"),
     route("app/explorer", "routes/app-explorer.tsx"),
-    route("app/boite", "routes/app-bientot.tsx", { id: "app-boite" }),
+    // Boîte (lot 18) : conversations, demandes, conversation en temps réel.
+    route("app/boite", "routes/boite.tsx"),
+    route("app/boite/demandes", "routes/boite-demandes.tsx"),
+    route("app/boite/:id", "routes/boite-conversation.tsx"),
     route("app/acces", "routes/acces.tsx"),
     route("app/garage", "routes/garage.tsx"),
     route("app/garage/nouveau", "routes/garage-nouveau.tsx"),

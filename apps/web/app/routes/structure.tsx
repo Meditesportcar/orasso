@@ -10,10 +10,12 @@ import {
 import { Form, redirect } from "react-router";
 
 import { EventTile } from "../components/EventTile";
+import { ContactOrganizer } from "../components/Messaging";
 import { ProTile } from "../components/ProTile";
 import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
+import { messageAction } from "../lib/messaging.server";
 import type { Route } from "./+types/structure";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -72,6 +74,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (structureId && (intent === "follow" || intent === "unfollow")) {
     await api(request, `/structures/${structureId}/follow`, { method: intent === "follow" ? "POST" : "DELETE" });
   }
+  // Contacter l'organisateur (lot 18) : toujours possible, conversation avec la structure.
+  if (intent === "contact_organizer") return messageAction(request, form);
   return redirect(`/o/${params.slug}`);
 }
 
@@ -146,6 +150,9 @@ export default function StructurePage({ loaderData }: Route.ComponentProps) {
             >
               Suivre
             </Button>
+          )}
+          {structure.verified && !isOrganizer && (
+            <ContactOrganizer structureId={structure.id} connected={connected} retour={`/o/${structure.slug}`} />
           )}
           {isOrganizer && (
             <Button variant="secondary" icon="calendar" href={`/orga/${structure.slug}`} fullWidth>

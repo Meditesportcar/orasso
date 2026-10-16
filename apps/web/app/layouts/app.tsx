@@ -1,15 +1,19 @@
 import { AppBarAction, Ground, TabBar, type TabItem, tabSets } from "@orasso/design-system/web";
-import { Form, Outlet, useLocation } from "react-router";
+import { Form, Outlet, useLocation, useRevalidator } from "react-router";
 
 import { SiteHeader, ThemeSwitch } from "../components/SiteChrome";
 import { requireMe } from "../lib/api.server";
+import { useChannel } from "../lib/useChannel";
 import type { Route } from "./+types/app";
 
 // Espace connecté : mêmes sections que l'appli (Accueil, Explorer, Accès, Garage, Boîte).
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   return {
+    userId: me.user.id,
     pseudo: me.profile.pseudo,
+    // Pastille de la Boîte (lot 18) : conversations avec du non lu + demandes en attente.
+    unreadInbox: me.unreadInbox,
     orga: me.memberships.find((m) => m.status === "active")?.structureSlug ?? null,
     pro: me.pro?.slug ?? null,
     unread: me.counts.unreadNotifications,
@@ -32,7 +36,18 @@ function activeTab(pathname: string): string {
 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
-  const tabs: TabItem[] = tabSets.fan.map((tab) => ({ ...tab, href: HREFS[tab.id] }));
+  const revalidator = useRevalidator();
+  // Boîte et Journal en direct (lot 18) : un message, une demande ou une notification recharge les compteurs.
+  useChannel(`user:${loaderData.userId}`, (m) => {
+    if (m.type === "inbox.changed" || m.type === "conversation.updated" || m.type === "notification") {
+      revalidator.revalidate();
+    }
+  });
+  const tabs: TabItem[] = tabSets.fan.map((tab) => ({
+    ...tab,
+    href: HREFS[tab.id],
+    dot: tab.id === "inbox" && loaderData.unreadInbox > 0,
+  }));
   return (
     <Ground variant="site" animated fixed>
       <div className="app">

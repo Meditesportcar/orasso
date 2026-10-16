@@ -1,11 +1,12 @@
 import { Button, Chip, Plate, VehicleCard } from "@orasso/design-system/web";
-import { gradeLabels, socialLabels, type UserProfileView } from "@orasso/shared";
-import { useNavigation } from "react-router";
+import { CONTACT_MESSAGE_MAX, gradeLabels, messagingLabels, socialLabels, type UserProfileView } from "@orasso/shared";
+import { Form, useNavigation } from "react-router";
 
 import { FriendAction, PersonAvatar } from "../components/People";
 import { apiOrThrow } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
 import { friendAction } from "../lib/friends.server";
+import { isMessageIntent, type MessageActionData, messageAction } from "../lib/messaging.server";
 import type { Route } from "./+types/profil";
 
 // Profil d'un autre (lot 17, ARCHITECTURE-SUITE § 2.2 et 2.5) : complet pour un compte public ou un ami, réduit
@@ -19,11 +20,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  return friendAction(request, await request.formData());
+  const form = await request.formData();
+  // Message (lot 18) : conversation entre amis, sinon demande de contact.
+  if (isMessageIntent(String(form.get("intent") ?? ""))) return messageAction(request, form);
+  return friendAction(request, form);
 }
 
-export default function Profil({ loaderData, actionData }: Route.ComponentProps) {
+export default function Profil({ loaderData, actionData: rawAction }: Route.ComponentProps) {
   const p = loaderData.profile;
+  const actionData = rawAction as ({ friendError?: string | null } & Partial<MessageActionData>) | undefined;
   const busy = useNavigation().state !== "idle";
   const isSelf = p.audience === "self";
   const limited = p.audience === "public_limited";
@@ -63,14 +68,52 @@ export default function Profil({ loaderData, actionData }: Route.ComponentProps)
             primary
             busy={busy}
           />
-          {/* Messagerie (lot 18) et signalement (lot 32) : visibles, désactivés. */}
-          <Button variant="secondary" icon="chat" disabled>
-            {socialLabels.messageSoon}
-          </Button>
+          {/* Messagerie (lot 18) : ami → conversation ; sinon demande de contact. Signalement : lot 32. */}
+          <Form method="post">
+            <input type="hidden" name="intent" value="message_open" />
+            <input type="hidden" name="userId" value={p.userId} />
+            <Button type="submit" variant="secondary" icon="chat" loading={busy} data-testid="message-open">
+              {messagingLabels.message}
+            </Button>
+          </Form>
           <Button variant="secondary" icon="alert" disabled>
             {socialLabels.reportSoon}
           </Button>
         </div>
+      )}
+
+      {actionData?.messageError && (
+        <p className="s-error" role="alert">
+          {actionData.messageError}
+        </p>
+      )}
+      {actionData?.contactSent && (
+        <p className="s-notice s-notice--ok" data-testid="contact-sent">
+          {messagingLabels.contactRequestSent(actionData.contactSent)}
+        </p>
+      )}
+      {actionData?.contact && (
+        <Form method="post" className="s-form s-card" data-testid="contact-form">
+          <h2 className="s-h2">{messagingLabels.contactRequest}</h2>
+          <p className="o-t-caption s-muted">{messagingLabels.contactRequestHint}</p>
+          <input type="hidden" name="intent" value="contact_request" />
+          <input type="hidden" name="pseudo" value={p.pseudo} />
+          <label className="s-label o-t-label" htmlFor="contact-message">
+            Message
+          </label>
+          <textarea
+            id="contact-message"
+            name="message"
+            className="s-textarea"
+            rows={4}
+            maxLength={CONTACT_MESSAGE_MAX}
+            placeholder={messagingLabels.contactRequestPlaceholder}
+            required
+          />
+          <Button type="submit" variant="secondary" icon="chat" loading={busy}>
+            {messagingLabels.contactRequestSend}
+          </Button>
+        </Form>
       )}
 
       {p.contact && (
