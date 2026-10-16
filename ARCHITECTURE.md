@@ -647,6 +647,14 @@ Lots 07, 09, 10 consomment `packages/shared/api` (chemins, schémas, types) ; au
 - Sentry / GlitchTip : `SENTRY_DSN` (API), `VITE_SENTRY_DSN` (site), `EXPO_PUBLIC_SENTRY_DSN` (appli) ; rien sans DSN.
 - Appli : dépendances natives de la suite posées (`@sentry/react-native`, `expo-location` au premier plan, `@maplibre/maplibre-react-native`, `expo-sharing`, `expo-file-system`) ; un nouvel APK est nécessaire. Les écrans Moi de l'appli viennent au lot 16.
 
+**État après le lot 28 (météo ; détail dans `docs/JOURNAL-DES-CHOIX.md`, section lot 28, et `ARCHITECTURE-SUITE.md` du relais § 12)** :
+- Données : migration `0024_weather` — `event_weather` (`event_id` PK, `provider`, `lat`/`lng` de la prévision, `fetched_at`, `forecast` jsonb = `{ days, hours }` de l'événement, `bad_weather`, `suggested_uncertain_at`) et `weather_departments` (cache du centre d'un département, 3 h). Une prévision n'est valable que si `lat`/`lng` sont ceux de l'événement : une adresse modifiée l'invalide sans autre code, le passage suivant la remplace.
+- API : `lib/weather.ts` (interface `WeatherProvider.forecast(lat, lng) → { daily, hourly }`, fournisseurs `open-meteo` et `met-norway`, `setWeatherFetch` pour les tests, `fetchForecast` renvoie `null` sans jamais lever ; MET Norway : en-têtes `User-Agent` et `If-Modified-Since`, cache mémoire selon `Expires`) ; `modules/weather/` (`service.ts` : `refresh`, `suggestUncertain`, `forEvent`, `reminderLine`, `mine`, `departmentWeather` ; `routes.ts`). Tâche `weather.refresh` (cron `15 */3 * * *`, `eventId` facultatif). Variables `WEATHER_PROVIDER` (`open-meteo` | `met-norway` | `off`) et `WEATHER_USER_AGENT`. Notification `event_weather_suggest_uncertain` (famille `staff`) avec `data.action = set_outlook_uncertain`. `events/jobs.ts` : le rappel de la veille ajoute la ligne météo (prévision de moins de 12 h).
+- Partagé : `weather.ts` (types, attributions, `SET_OUTLOOK_UNCERTAIN_ACTION`), `rules/weather.ts` (`isBadWeather`, `forecastForEvent`, `describeWeather`, `shouldSuggestUncertain`, `weatherVisible`, seuils S33), `labels/weather.fr.ts` (`weatherCodeLabels`, `weatherTexts`), `notifications/weather.ts`.
+- Design system : 10 icônes `weather*` dans `iconShapes` et `weatherIcons` (condition → icône), voir « Ce qui a changé depuis le gel ».
+- Site : `components/Weather.tsx` (page événement, carte d'accès, espace organisateur). Appli : `features/WeatherWidget.tsx` (exporté pour le lot 30), `lib/api/weather.ts`, `lib/weather.ts` ; le kit du jour J porte `EventWeather` (anciens kits : météo ignorée).
+- Seed : `scripts/seed/weather.ts`.
+
 ---
 
 ## 8. Points non tranchés par les docs — choix retenus

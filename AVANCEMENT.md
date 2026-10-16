@@ -89,11 +89,20 @@
   - API : migration `0022_security`, modules `security` et `account`, tâches `event.notify-nearby` et `security.purge-known-logins`. Seed : `noe@orasso.local` (adresse à confirmer), parrainage Kenji → Léa.
   - Vérifié : voir l'entrée du lot 15 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-15-captures\`.
 
+- **Météo (lot 28, 16/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 28) ; état technique : `ARCHITECTURE.md` § 7 « État après le lot 28 ».
+  - Fournisseur derrière une interface (`apps/api/src/lib/weather.ts`) : `open-meteo` (défaut, sans clé) et `met-norway` (User-Agent identifiant, `Expires` et `If-Modified-Since` respectés), choisis par `WEATHER_PROVIDER` (`off` désactive). Liste courte partagée de 10 conditions (`clear`… `wind`) et 10 icônes dans le style du kit. Cache en base (`event_weather`, `weather_departments`) : l'API ne contacte jamais un fournisseur pour répondre à un utilisateur ; tâche `weather.refresh` toutes les 3 h (événements publiés localisés commençant dans 7 jours au plus). Fournisseur absent ou en panne : aucune météo, rien d'autre ne change.
+  - Suggestion « Météo annoncée mauvaise : passer en Incertain » aux organisateurs (pluie ≥ 60 % ou ≥ 5 mm, vent ≥ 60 km/h ; événement maintenu, à 72 h du début au plus, une fois par 24 h) avec bouton direct : bandeau sur `/orga/:s/e/:id` et dans le Journal de l'appli (`data.action = set_outlook_uncertain`). Rappel de la veille : ligne « Météo : 14–21 °C, averses probables (70 %) (Open-Meteo) » quand la météo est connue.
+  - Affichage avec attribution : `/e/:slug` et page événement de l'appli (≤ 7 jours avant), carte d'accès `/app/acces` à J−1, mode jour J de l'appli (le kit garde la dernière météo hors ligne, l'appli n'appelle plus Open-Meteo elle-même). `features/WeatherWidget.tsx` et `GET /me/weather` sont prêts pour le widget de l'Accueil (lot 30).
+  - API : migration `0024_weather`, routes `GET /events/by-slug/:slug/weather` (public, cache 1 h) et `GET /me/weather`. Seed : prévisions factices (Nocturne de Canet mauvaise, Expo Rivesaltes et Salon Argelès bonnes).
+  - Vérifié : voir l'entrée du lot 28 dans le journal du relais.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
+
+- Lot 28 : déployer (migration `0024_weather` appliquée au démarrage ; variables facultatives `WEATHER_PROVIDER` et `WEATHER_USER_AGENT` dans `deploy/dev.env.example`, valeurs par défaut valables ; le VPS doit sortir en HTTPS vers `api.open-meteo.com`). **Avant le 21/06/2027** : passer `WEATHER_PROVIDER=met-norway` (usage commercial permis) ou souscrire l'offre payante Open-Meteo (AS1).
 
 - Lot 15 : déployer (migration `0022` au démarrage ; variables facultatives `SENTRY_DSN`, `VITE_SENTRY_DSN` dans `deploy/dev.env.example`, `SENTRY_RELEASE` posé par `compose.yml`) ; construire l'APK de référence (nouvelles dépendances natives). Les e-mails partent par le transport « journal » tant que Brevo n'est pas branché : en ligne, les liens de réinitialisation et de vérification ne sont lisibles que dans `email_outbox`.
 
