@@ -8,6 +8,7 @@ import {
   canTransition,
   computeOfferDeadline,
   type Decide,
+  invitationLabels,
   isLocked,
   lockAt,
   type PassRevokedReason,
@@ -17,6 +18,7 @@ import {
   refusalReasonLabels,
   registrationOpensAt,
   type TransitionActor,
+  waitlistInsertRank,
 } from "@orasso/shared";
 import { and, asc, count, eq, gt, inArray, isNull, lte, max, sql } from "drizzle-orm";
 
@@ -41,6 +43,7 @@ import type { Viewer } from "../../lib/session";
 import { type Tx, withTx } from "../../lib/tx";
 import { accessService } from "../access/service";
 import { type EventRow, eventsRepo } from "../events/repo";
+import { expirePendingInvitations } from "../invitations/expire";
 import { notificationsService } from "../notifications/service";
 import { socialJournal } from "../social/journal";
 import { staffService } from "../staff/service";
@@ -245,6 +248,57 @@ async function offerNext(tx: Tx, event: EventRow, after: After): Promise<Applica
 }
 
 /**
+ * Rang d'entrée en liste d'attente (§ 2.2), sous le verrou de l'événement. Par défaut `max + 1`. Lot 25 (§ 9.2) : si
+ * l'organisateur a activé la priorité des hauts grades, un véhicule de haut grade se place juste après la dernière
+ * candidature de haut grade (`waitlistInsertRank`) ; `head` (invitation acceptée sur un événement complet, S25) : en
+ * tête. Les véhicules de rang supérieur ou égal reculent d'une place ; l'organisateur peut toujours réordonner.
+ */
+async function waitlistEntryRank(
+  tx: Tx,
+  event: EventRow,
+  app: Pick<ApplicationRow, "userId" | "kind">,
+  head = false,
+): Promise<number> {
+  const prioritized = app.kind === "vehicle" && (head || event.highGradePriority);
+  if (prioritized) {
+    const entries = await tx
+      .select({ rank: applications.waitlistRank, grade: profiles.grade })
+      .from(applications)
+      .innerJoin(profiles, eq(profiles.userId, applications.userId))
+      .where(
+        and(
+          eq(applications.eventId, event.id),
+          eq(applications.status, "waitlisted"),
+          eq(applications.kind, "vehicle"),
+        ),
+      );
+    const ranked = entries.flatMap((e) => (e.rank === null ? [] : [{ rank: e.rank, grade: e.grade }]));
+    const me = await tx.query.profiles.findFirst({ where: eq(profiles.userId, app.userId), columns: { grade: true } });
+    const rank = head ? 1 : waitlistInsertRank(ranked, me?.grade ?? "rodage", event);
+    const last = ranked.reduce((m, e) => Math.max(m, e.rank), 0);
+    if (rank <= last) {
+      await tx
+        .update(applications)
+        .set({ waitlistRank: sql`${applications.waitlistRank} + 1` })
+        .where(
+          and(
+            eq(applications.eventId, event.id),
+            eq(applications.status, "waitlisted"),
+            eq(applications.kind, "vehicle"),
+            sql`${applications.waitlistRank} >= ${rank}`,
+          ),
+        );
+      return rank;
+    }
+  }
+  const [agg] = await tx
+    .select({ rank: max(applications.waitlistRank) })
+    .from(applications)
+    .where(and(eq(applications.eventId, event.id), eq(applications.status, "waitlisted")));
+  return (agg?.rank ?? 0) + 1;
+}
+
+/**
  * Admission « sans sélection » (docs/01 : « tout le monde est accepté ») : retenue d'office s'il reste une place,
  * sinon liste d'attente (servie automatiquement quand une place se libère).
  */
@@ -255,16 +309,12 @@ async function admitOpen(tx: Tx, event: EventRow, app: ApplicationRow): Promise<
   if (event.capacity === null || c.accepted + c.offered < event.capacity) {
     row = await transition(tx, app, "accepted", SYSTEM, { decidedAt: t }, "admission.open");
   } else {
-    const [agg] = await tx
-      .select({ rank: max(applications.waitlistRank) })
-      .from(applications)
-      .where(and(eq(applications.eventId, event.id), eq(applications.status, "waitlisted")));
     row = await transition(
       tx,
       app,
       "waitlisted",
       SYSTEM,
-      { decidedAt: t, waitlistRank: (agg?.rank ?? 0) + 1, waitlistedAt: t },
+      { decidedAt: t, waitlistRank: await waitlistEntryRank(tx, event, app), waitlistedAt: t },
       "admission.open",
     );
   }
@@ -339,11 +389,8 @@ async function decideInTx(
     }
     patch = { ...patch, waitlistRank: null, refusalReasons: [], refusalNote: null, zoneId: input.zoneId ?? app.zoneId };
   } else if (to === "waitlisted") {
-    const [agg] = await tx
-      .select({ rank: max(applications.waitlistRank) })
-      .from(applications)
-      .where(and(eq(applications.eventId, eventId), eq(applications.status, "waitlisted")));
-    patch = { ...patch, waitlistRank: (agg?.rank ?? 0) + 1, waitlistedAt: t, refusalReasons: [], refusalNote: null };
+    const waitlistRank = await waitlistEntryRank(tx, event, app);
+    patch = { ...patch, waitlistRank, waitlistedAt: t, refusalReasons: [], refusalNote: null };
   } else {
     patch = {
       ...patch,
@@ -379,19 +426,22 @@ export const applicationsService = {
       return await withTx(async (tx, after) => {
         const event = await eventsRepo.lockForUpdate(tx, eventId);
         if (event.status === "draft") throw notFound("Événement introuvable");
+        // Événement privé (lot 25, § 9.1) : la candidature libre est refusée, seule l'acceptation d'une invitation
+        // inscrit (`POST /event-invitations/:id/accept`).
         if (event.admission === "invite_only") {
-          // Invitations nominatives : lot 13 (table `event_invitations` prête).
-          throw forbidden("Événement sur invitation");
+          throw new AppError(403, "invitation_required", invitationLabels.invitationRequired);
         }
         const follow = await tx.query.structureFollows.findFirst({
           where: and(eq(structureFollows.structureId, event.structureId), eq(structureFollows.userId, v.user.id)),
         });
-        const check = canApply(event, Boolean(follow), t);
+        // Avant-première des abonnés et des hauts grades (S26 : la plus longue l'emporte).
+        const applicant = { follower: Boolean(follow), grade: v.profile.grade };
+        const check = canApply(event, applicant, t);
         if (!check.ok) {
           if (check.reason === "locked") throw lockedError("Inscriptions verrouillées");
           if (check.reason === "not_open") {
             throw conflict("conflict", "Inscriptions pas encore ouvertes", {
-              opensAt: registrationOpensAt(event, Boolean(follow)).toISOString(),
+              opensAt: registrationOpensAt(event, applicant).toISOString(),
             });
           }
           throw conflict("conflict", "Événement annulé");
@@ -650,6 +700,8 @@ export const applicationsService = {
       const event = await eventsRepo.lockForUpdate(tx, eventId);
       if (event.status !== "published" || !isLocked(event, t)) return false;
       if (!event.lockedAt) await tx.update(events).set({ lockedAt: t }).where(eq(events.id, eventId));
+      // Invitations nominatives en attente : valables jusqu'au verrouillage (S24), elles expirent ici (lot 25).
+      await expirePendingInvitations(tx, eventId);
       const offers = await tx.query.applications.findMany({
         where: and(eq(applications.eventId, eventId), eq(applications.status, "offered")),
       });
@@ -768,6 +820,81 @@ export const applicationsService = {
         .where(eq(applications.id, applicationId));
       return entry;
     });
+  },
+
+  /**
+   * Invitation nominative acceptée (lot 25, § 9.1, S25), sous le verrou de l'événement : candidature créée par l'invité
+   * (`source = invitation`), **retenue** directement s'il reste une place (pass émis), sinon **en tête de la liste
+   * d'attente**. Les vérifications du véhicule et de l'invitation sont faites par l'appelant (`invitationsService`).
+   */
+  async createFromInvitation(
+    tx: Tx,
+    after: After,
+    event: EventRow,
+    input: { userId: string; vehicleId: string },
+  ): Promise<ApplicationRow> {
+    const t = now();
+    const [mine] = await tx
+      .select({ n: count() })
+      .from(applications)
+      .where(
+        and(
+          eq(applications.eventId, event.id),
+          eq(applications.userId, input.userId),
+          eq(applications.kind, "vehicle"),
+          inArray(applications.status, [...ACTIVE]),
+        ),
+      );
+    if ((mine?.n ?? 0) + 1 > event.maxVehiclesPerUser) {
+      throw conflict("conflict", `Limite : ${event.maxVehiclesPerUser} véhicule(s) par personne`, {
+        max: event.maxVehiclesPerUser,
+      });
+    }
+    const c = await eventsRepo.statusCounts(event.id, tx);
+    const full = event.capacity !== null && c.accepted + c.offered >= event.capacity;
+    const to: ApplicationStatus = full ? "waitlisted" : "accepted";
+    if (!canTransition(null, to, "user")) throw invalidTransition(null, to);
+    const waitlistRank = full
+      ? await waitlistEntryRank(tx, event, { userId: input.userId, kind: "vehicle" }, true)
+      : null;
+    let row: ApplicationRow | undefined;
+    try {
+      [row] = await tx
+        .insert(applications)
+        .values({
+          eventId: event.id,
+          userId: input.userId,
+          vehicleId: input.vehicleId,
+          status: to,
+          source: "invitation",
+          rulesAcceptedAt: t,
+          followStructure: false,
+          decidedAt: t,
+          waitlistRank,
+          waitlistedAt: full ? t : null,
+        })
+        .returning();
+    } catch (error) {
+      if (isUniqueViolation(error)) throw conflict("conflict", "Ce véhicule a déjà une candidature pour cet événement");
+      throw error;
+    }
+    if (!row) throw new Error("Candidature non enregistrée");
+    await tx.insert(applicationEvents).values({
+      applicationId: row.id,
+      fromStatus: null,
+      toStatus: to,
+      actor: "user",
+      actorUserId: input.userId,
+      reason: "invitation",
+      at: t,
+    });
+    if (to === "accepted") {
+      await accessService.issue(tx, row);
+      await socialJournal.friendGoingEvent(tx, row);
+    }
+    await notifyDecision(tx, event, row);
+    broadcast(after, event, [row]);
+    return row;
   },
 
   withdrawDeadline(event: EventRow): Date {

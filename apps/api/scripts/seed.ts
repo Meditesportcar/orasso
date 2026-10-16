@@ -20,6 +20,7 @@ import { seedCrews } from "./seed/crews";
 import { seedDayJ } from "./seed/day-j";
 import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
+import { seedInvitations } from "./seed/invitations";
 import { seedMessaging } from "./seed/messaging";
 import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
@@ -99,6 +100,8 @@ async function main() {
   await seedExplorer(hash);
   // Lot 20 : modèles Orasso, annonce et message groupé sur la Nocturne, discussions du staff.
   await seedCommunication();
+  // Lot 25 : événement privé « Soirée partenaires » et ses invitations ; hauts grades sur l'Expo Rivesaltes.
+  await seedInvitations();
 }
 
 try {

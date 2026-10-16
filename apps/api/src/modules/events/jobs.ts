@@ -1,16 +1,17 @@
 // Tâches liées à un événement (ARCHITECTURE.md § 2.9). Chaque tâche porte l'instant prévu (`at`) : si l'événement
 // a changé entre-temps, l'instant recalculé diffère et la tâche ne fait rien (une nouvelle a été planifiée).
 import { addDays, fromWallTime, lockAt, registrationOpensAt, settleAt, wallTime } from "@orasso/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { applications, structureFollows } from "../../db/schema";
+import { applications, notifications, structureFollows } from "../../db/schema";
 import { deps, now } from "../../lib/deps";
 import { formatDateTime } from "../../lib/format";
 import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
 import { weatherService } from "../weather/service";
+import { highGradePreviewAt } from "./high-grade";
 import { type EventRow, eventsRepo } from "./repo";
 
 const DAY = 86_400_000;
@@ -36,6 +37,9 @@ export async function scheduleEventJobs(e: EventRow) {
     ["event.settle", settleAt(e)],
   ];
   if (e.previewHours > 0) plan.push(["event.preview-open", registrationOpensAt(e, true)]);
+  // Avant-première des hauts grades (lot 25, § 9.2).
+  const highGrade = highGradePreviewAt(e);
+  if (highGrade) plan.push(["event.high-grade-preview", highGrade]);
   for (const [name, at] of plan) {
     // Verrouillage et règlement toujours planifiés (même passés : la tâche agit aussitôt, une seule fois).
     const always = name === "event.lock" || name === "event.settle";
@@ -64,10 +68,16 @@ export const eventJobs = {
     const e = await eventsRepo.byId(data.eventId).catch(() => null);
     if (e?.status !== "published" || !sameInstant(registrationOpensAt(e, true), data.at)) return false;
     if (e.admission === "invite_only") return false;
+    // Abonnés déjà prévenus par l'avant-première des hauts grades (lot 25) : pas deux fois.
     const followers = await db
       .select({ userId: structureFollows.userId })
       .from(structureFollows)
-      .where(eq(structureFollows.structureId, e.structureId));
+      .where(
+        and(
+          eq(structureFollows.structureId, e.structureId),
+          sql`not exists (select 1 from ${notifications} n where n.user_id = ${structureFollows.userId} and n.type = 'preview_open' and n.event_id = ${e.id})`,
+        ),
+      );
     await withTx(async (tx, after) => {
       for (const f of followers) {
         await notificationsService.notify(tx, f.userId, "preview_open", {
