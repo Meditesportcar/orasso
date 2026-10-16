@@ -58,8 +58,8 @@ describe("inscription et profil", () => {
     const res = await app.request("/api/vehicle-reference/categories");
     expect(res.status).toBe(200);
     expect(Array.isArray(await res.json())).toBe(true);
-    // Les marques et modèles restent réservés aux comptes connectés.
-    expect((await app.request("/api/vehicle-reference/makes")).status).toBe(401);
+    // Marques et modèles aussi (lot 13) : le formulaire d'inscription express les lit avant la création du compte.
+    expect((await app.request("/api/vehicle-reference/makes")).status).toBe(200);
   });
 
   it("profil privé : pseudo, grade, marque et modèle seulement", async () => {

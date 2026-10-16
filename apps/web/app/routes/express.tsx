@@ -241,8 +241,8 @@ export default function Express({ loaderData, actionData }: Route.ComponentProps
             required
           />
         </div>
-        <Plate as="fieldset" className="s-fieldset s-stack">
-          <legend className="o-t-label">Ton véhicule</legend>
+        <Plate as="section" className="s-stack" aria-label="Ton véhicule">
+          <h2 className="o-t-label">Ton véhicule</h2>
           <SelectField
             label="Marque"
             name="makeId"

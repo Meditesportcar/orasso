@@ -1,6 +1,6 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { EventCard } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const FRANCE: [number, number] = [2.35, 46.6];
 
@@ -11,8 +11,7 @@ const FRANCE: [number, number] = [2.35, 46.6];
 export function EventsMap({ events }: { events: EventCard[] }) {
   const container = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
-  const located = events.filter((e) => e.lat != null && e.lng != null);
-  const key = located.map((e) => e.id).join(",");
+  const located = useMemo(() => events.filter((e) => e.lat != null && e.lng != null), [events]);
 
   useEffect(() => {
     let map: import("maplibre-gl").Map | undefined;
@@ -67,15 +66,13 @@ export function EventsMap({ events }: { events: EventCard[] }) {
       cancelled = true;
       map?.remove();
     };
-    // biome-ignore lint/correctness/useExhaustiveDependencies: la carte se refait quand la liste des événements change
-  }, [key]);
+  }, [located]);
 
   if (failed) return <p className="s-muted">La carte n'a pas pu se charger.</p>;
   return (
-    <div
+    <section
       ref={container}
       className="ev__map evs__map"
-      role="region"
       aria-label={`Carte des événements (${located.length})`}
       data-testid="events-map"
       data-count={located.length}

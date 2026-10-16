@@ -1095,6 +1095,15 @@
   [data-theme="sable"] .s-plated .s-label {
     color: var(--plate-muted);
   }
+  [data-theme="sable"] .ev__aside .o-button--secondary,
+  [data-theme="sable"] .ev__aside .o-button--secondary .o-button__label {
+    color: var(--plate-ink);
+    border-color: var(--plate-chip);
+  }
+  [data-theme="sable"] .ev__aside .ev__counts,
+  [data-theme="sable"] .ev__aside .ev__counts * {
+    color: var(--plate-ink);
+  }
   [data-theme="sable"] .s-head {
     display: inline-block;
     align-self: flex-start;
@@ -1106,5 +1115,22 @@
   }
   [data-theme="sable"] .s-head .s-label {
     color: var(--plate-muted);
+  }
+}
+
+/* Texte long (adresse e-mail, nom) : jamais de défilement horizontal. */
+.s-narrow,
+.s-main {
+  overflow-wrap: anywhere;
+}
+/* En-tête étroit : le menu du site tient sur une ligne, sous le logo. */
+@media (max-width: 640px) {
+  .s-nav--main {
+    order: 3;
+    flex: 1 1 100%;
+    gap: var(--space-3);
+  }
+  .s-nav--main a {
+    font-size: var(--type-meta-size);
   }
 }
