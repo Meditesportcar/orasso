@@ -94,6 +94,8 @@ export const events = pgTable(
     publishedAt: tstz("published_at"),
     cancelledAt: tstz("cancelled_at"),
     settledAt: tstz("settled_at"),
+    /** Remerciement envoyé aux présents (posé au lot 20, utilisé au lot 27). */
+    thanksSentAt: tstz("thanks_sent_at"),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
   },
@@ -102,6 +104,9 @@ export const events = pgTable(
     index("events_status_starts_idx").on(t.status, t.startsAt),
     index("events_department_idx").on(t.department),
     index("events_lat_lng_idx").on(t.lat, t.lng),
+    // Lot 29 : recherche par morceau de titre ou de ville, voir `0029_search_extension`.
+    index("events_title_trgm_idx").using("gin", t.title.op("gin_trgm_ops")),
+    index("events_city_trgm_idx").using("gin", t.city.op("gin_trgm_ops")),
     check("events_dates_check", sql`${t.endsAt} > ${t.startsAt}`),
     check("events_capacity_check", sql`${t.capacity} is null or ${t.capacity} > 0`),
     check("events_lock_offset_check", sql`${t.lockOffsetMinutes} between 0 and 1440`),

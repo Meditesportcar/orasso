@@ -29,6 +29,8 @@ export const errorCodes = [
   "contact_request_exists",
   "use_direct",
   "conversation_closed",
+  // Lot 20 : communication de l'organisateur.
+  "follower_quota_exceeded",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

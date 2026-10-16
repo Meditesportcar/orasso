@@ -4,6 +4,8 @@ import { env } from "./env";
 import { deps, type JobName } from "./lib/deps";
 import { AppError } from "./lib/errors";
 import { applicationsService } from "./modules/applications/service";
+import { groupMessagesService } from "./modules/communication/group-messages";
+import { staffChatsService } from "./modules/communication/staff-chats";
 import { crewRegistrationService } from "./modules/crews/registration";
 import { eventJobs } from "./modules/events/jobs";
 import { nearbyService } from "./modules/events/nearby";
@@ -48,6 +50,11 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   // Lot 19 : venue en crew non confirmée à l'échéance → retirée, chef prévenu ; secours toutes les 5 minutes.
   "crew.confirm-expire": (d) => crewRegistrationService.expire(d.applicationId ?? ""),
   "crew.confirm-sweep": () => crewRegistrationService.sweep(),
+  // Lot 20 : un lot (500) d'un message groupé, la tâche se replanifie tant qu'il reste des destinataires ; balayage de
+  // secours des envois arrêtés ; fermeture à J+1 et purge à un an des discussions du staff des événements.
+  "messaging.group-send": (d) => groupMessagesService.sendBatch(d.groupMessageId ?? ""),
+  "messaging.group-sweep": () => groupMessagesService.sweep(),
+  "messaging.staff-chats-sweep": () => staffChatsService.sweep(),
 };
 
 /**
@@ -89,6 +96,9 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("certification.sweep", "30 5 * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("uploads.purge", "40 4 * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("crew.confirm-sweep", "*/5 * * * *", null, { tz: "Europe/Paris" });
+    // Lot 20 : messages groupés arrêtés (chaque minute), discussions du staff à fermer ou purger (chaque heure).
+    await boss.schedule("messaging.group-sweep", "* * * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("messaging.staff-chats-sweep", "25 * * * *", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {
     async send(name, data, startAfter) {

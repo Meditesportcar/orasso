@@ -76,10 +76,15 @@ const whenOf = (iso: string) => {
 };
 
 /** Une conversation de la liste : avatar, titre, heure, aperçu, pastille de non lu (moutarde à plat, sans néon). */
-export function ConversationRow({ c }: { c: ConversationSummary }) {
+export function ConversationRow({ c, href }: { c: ConversationSummary; href?: string }) {
   return (
     <li>
-      <a href={`/app/boite/${c.id}`} className="s-convo" data-testid="conversation-row" data-unread={c.unreadCount}>
+      <a
+        href={href ?? `/app/boite/${c.id}`}
+        className="s-convo"
+        data-testid="conversation-row"
+        data-unread={c.unreadCount}
+      >
         <PersonAvatar url={c.avatarUrl} pseudo={c.title} size={44} />
         <span className="s-convo__main">
           <span className="s-row s-row--between">

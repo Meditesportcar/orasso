@@ -28,8 +28,11 @@ import { AnnouncementSheet } from "@/ui/AnnouncementSheet";
 initSentry();
 void SplashScreen.preventAutoHideAsync();
 
-/** Écrans ouverts sans compte : premier lancement, connexion, page d'un événement (lien partagé), recette du design. */
-const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "ami", "_ds"]);
+/**
+ * Écrans ouverts sans compte : premier lancement, connexion, page d'un événement (lien partagé), d'une structure ou d'un
+ * pro (pages publiques du site, lot 29), recette du design.
+ */
+const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "o", "p", "ami", "_ds"]);
 
 // Le thème (Béton par défaut, Sable, auto) et les polices Archivo sont posés une fois, à la racine.
 function Shell() {

@@ -13,8 +13,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { validation } from "../../lib/errors";
+import { limitSearch } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
+import { exploreProsList } from "./explore";
 import { prosService } from "./service";
 
 const statsQuery = z.object({ days: z.coerce.number().int().min(7).max(90).default(30) });
@@ -24,9 +26,13 @@ const visitorOf = (c: { req: { header(name: string): string | undefined } }) =>
   c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "direct";
 
 export const prosRoutes = new Hono<AppEnv>()
-  .get("/pros", async (c) =>
-    c.json(await prosService.list(query(c, proListQuery)), 200, { "cache-control": "no-cache" }),
-  )
+  // Annuaire (lot 29 : rayon et tri par distance depuis la position envoyée ou le secteur du profil, donc privé).
+  .get("/pros", async (c) => {
+    const viewer = await optionalUser(c);
+    const q = query(c, proListQuery);
+    if (q.q) limitSearch(c, viewer);
+    return c.json(await exploreProsList(q, viewer), 200, { "cache-control": "private, no-cache" });
+  })
   .get("/pros/by-slug/:slug", async (c) =>
     c.json(await prosService.getPublic(c.req.param("slug"), await optionalUser(c))),
   )

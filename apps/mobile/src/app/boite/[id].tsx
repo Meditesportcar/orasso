@@ -11,7 +11,7 @@ import {
   systemMessageText,
 } from "@orasso/shared";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   AppState,
   FlatList,
@@ -51,12 +51,28 @@ function newClientId(): string {
   });
 }
 
-export default function ConversationScreen() {
+export default function ConversationRoute() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  return <ConversationScreen conversationId={id} />;
+}
+
+/**
+ * L'écran d'une conversation, réutilisé par la discussion du staff du mode staff (lot 20) : `onClose` remplace le
+ * retour à la Boîte, `header` ajoute un encart sous la barre (ex. « en ligne seulement »).
+ */
+export function ConversationScreen({
+  conversationId: id,
+  onClose,
+  header,
+}: {
+  conversationId: string;
+  onClose?: () => void;
+  header?: ReactNode;
+}) {
   const { t } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const { id } = useLocalSearchParams<{ id: string }>();
   const { me } = useSession();
   const myId = me?.user.id ?? "";
   const [conversation, setConversation] = useState<ConversationView | null>(null);
@@ -71,7 +87,7 @@ export default function ConversationScreen() {
   const [menu, setMenu] = useState<MessageView | null>(null);
   const lastRead = useRef<string | null>(null);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/boite"));
+  const close = onClose ?? (() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/boite")));
   const mySide = useCallback(
     (m: MessageView) => (conversation?.side === "structure" ? m.asStructure : m.sender?.userId === myId),
     [conversation?.side, myId],
@@ -333,6 +349,7 @@ export default function ConversationScreen() {
         safeTop={insets.top}
       />
       <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        {header ? <View style={styles.pad}>{header}</View> : null}
         {loadError ? (
           <View style={styles.pad}>
             <Notice tone="error">{loadError}</Notice>

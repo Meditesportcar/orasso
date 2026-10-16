@@ -4,7 +4,7 @@
 // identifiant. Partagé par l'API, le site et l'appli (`beforeSend`, `beforeSendTransaction`, `beforeBreadcrumb`).
 
 const SENSITIVE_KEYS =
-  /^(plate|plate_?normalized|phone|e-?mail|email|password|token|totp_?code|body|cookie|set-cookie|authorization|sec-websocket-protocol|x-forwarded-for|x-real-ip|ip_address)$/i;
+  /^(plate|plate_?normalized|phone|e-?mail|email|password|token|totp_?code|body|cookie|set-cookie|authorization|sec-websocket-protocol|x-forwarded-for|x-real-ip|ip_address|lat|lng)$/i;
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
@@ -13,7 +13,7 @@ export function scrubText(text: string): string {
   return (
     text
       // Paramètres porteurs de secrets.
-      .replace(/([?&#](?:token|code|email|plate|password|callbackURL)=)[^&#\s"']*/gi, "$1[retiré]")
+      .replace(/([?&#](?:token|code|email|plate|password|callbackURL|lat|lng)=)[^&#\s"']*/gi, "$1[retiré]")
       // Chemins qui contiennent un jeton : inscription express, lien d'ami, invitation, réinitialisation (Better Auth).
       .replace(
         /(\/(?:express|ami|invitation|reset-password|reinitialisation|verification-email)\/)[^/?#\s"']+/gi,

@@ -1,8 +1,10 @@
 import { Button, Chip, Plate, StatusBadge } from "@orasso/design-system/web";
 import {
   type AccessPass,
+  type AnnouncementView,
   applicationStatusLabels,
   type ContestStatus,
+  communicationLabels,
   contestStatusLabels,
   crewLabels,
   type EventPublic,
@@ -81,6 +83,24 @@ export async function loader({ request }: Route.LoaderArgs) {
         rules[a.id] = res.ok ? res.data.rulesText : null;
       }),
   );
+  // Consignes et dernière annonce de l'organisateur sur la carte d'un retenu (lot 20) : jamais bloquant.
+  const notes: Record<string, { instructions: AnnouncementView | null; announcement: AnnouncementView | null }> = {};
+  await Promise.all(
+    applications
+      .filter((a) => !past && a.status === "accepted")
+      .map(async (a) => {
+        const res = await api<{ items: AnnouncementView[] }>(
+          request,
+          `/events/by-slug/${encodeURIComponent(a.event.slug)}/announcements`,
+        );
+        if (!res.ok) return;
+        const byDate = [...res.data.items].sort((x, y) => y.publishedAt.localeCompare(x.publishedAt));
+        notes[a.id] = {
+          instructions: byDate.find((i) => i.kind === "instructions") ?? null,
+          announcement: byDate.find((i) => i.kind === "announcement") ?? null,
+        };
+      }),
+  );
   const points = past ? await apiOrThrow<MyPoints>(request, "/me/points") : null;
   const me = await requireMe(request);
   const tickets = await api<MyTicket[]>(request, "/me/tickets");
@@ -90,6 +110,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     passes,
     weather,
     rules,
+    notes,
     points,
     userId: me.user.id,
     ticketCount: tickets.ok ? tickets.data.filter((t) => t.status === "valid").length : 0,
@@ -137,12 +158,14 @@ function ApplicationCard({
   pass,
   weather,
   rulesText,
+  notes,
   past,
 }: {
   app: MyApplication;
   pass?: AccessPass;
   weather?: EventWeather;
   rulesText?: string | null;
+  notes?: { instructions: AnnouncementView | null; announcement: AnnouncementView | null };
   past: boolean;
 }) {
   const busy = useNavigation().state !== "idle";
@@ -184,6 +207,24 @@ function ApplicationCard({
       {weather && (
         <div className="acc__wx" data-testid="application-weather">
           <Weather weather={weather} compact />
+        </div>
+      )}
+
+      {notes?.instructions && (
+        <div className="s-stack s-stack--tight" data-testid="application-instructions">
+          <div className="s-label o-t-label">{communicationLabels.instructions}</div>
+          <p className="s-prewrap">{notes.instructions.body}</p>
+        </div>
+      )}
+      {notes?.announcement && (
+        <div className="s-stack s-stack--tight" data-testid="application-announcement">
+          <div className="s-label o-t-label">
+            {communicationLabels.lastAnnouncement} · {formatDateTime(notes.announcement.publishedAt)}
+          </div>
+          <p className="s-prewrap">{notes.announcement.body}</p>
+          <a className="o-t-caption" href={`/e/${app.event.slug}#fil`}>
+            {communicationLabels.feed}
+          </a>
         </div>
       )}
 
@@ -387,7 +428,7 @@ function ReviewBlock({ app, review, busy }: { app: MyApplication; review: MyRevi
 }
 
 export default function Acces({ loaderData, actionData }: Route.ComponentProps) {
-  const { past, applications, passes, weather, rules, points, sent, userId, ticketCount } = loaderData;
+  const { past, applications, passes, weather, rules, notes, points, sent, userId, ticketCount } = loaderData;
   const okMessage = actionData && "ok" in actionData ? actionData.ok : null;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -452,6 +493,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
             pass={passes[app.id]}
             weather={weather[app.id]}
             rulesText={rules[app.id]}
+            notes={notes[app.id]}
             past={past}
           />
         ))

@@ -29,7 +29,7 @@ import {
   structures,
   user,
 } from "../../db/schema";
-import { type OrganizerAccess, requireOrganizer, requirePlatformRole } from "../../lib/access";
+import { activeMembership, type OrganizerAccess, requireOrganizer, requirePlatformRole } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { addressQuery, geocode } from "../../lib/geocode";
@@ -38,6 +38,7 @@ import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
+import { staffChatsService } from "../communication/staff-chats";
 import { profilesRepo } from "../profiles/repo";
 
 export type StructureRow = typeof structures.$inferSelect;
@@ -223,6 +224,11 @@ export const structuresService = {
       where: and(eq(structures.slug, slug), isNull(structures.deletedAt)),
     });
     if (!s || s.verification === "suspended") throw notFound("Structure introuvable");
+    // Structure pas (encore) vérifiée (en attente, refusée) : visible de ses membres seulement, comme ses événements, qui
+    // ne sont jamais listés.
+    if (s.verification !== "verified" && !(viewer && (await activeMembership(viewer.user.id, s.id)))) {
+      throw notFound("Structure introuvable");
+    }
     return toPublic(s, viewer);
   },
 
@@ -385,6 +391,8 @@ export const structuresService = {
       .update(structureMembers)
       .set(accept ? { status: "active", joinedAt: now() } : { status: "removed" })
       .where(eq(structureMembers.id, m.id));
+    // Discussions du staff (lot 20) : participants à jour.
+    if (accept) await staffChatsService.syncStructure(structureId);
   },
 
   async updateMember(v: Viewer, id: string, userId: string, input: MemberUpdate) {
@@ -398,6 +406,7 @@ export const structuresService = {
       throw forbidden("Seul le propriétaire gère les co-organisateurs");
     }
     await db.update(structureMembers).set(input).where(eq(structureMembers.id, m.id));
+    await staffChatsService.syncStructure(id);
   },
 
   async removeMember(v: Viewer, id: string, userId: string) {
@@ -411,6 +420,7 @@ export const structuresService = {
       throw forbidden("Seul le propriétaire gère les co-organisateurs");
     }
     await db.update(structureMembers).set({ status: "removed" }).where(eq(structureMembers.id, m.id));
+    await staffChatsService.syncStructure(id);
   },
 
   async bans(v: Viewer, id: string) {

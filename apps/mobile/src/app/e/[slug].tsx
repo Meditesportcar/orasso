@@ -27,9 +27,10 @@ import {
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { ContactOrganizerButton } from "@/features/boite/MessageButton";
+import { EventFeed } from "@/features/communication/EventFeed";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
@@ -55,6 +56,8 @@ export default function EventPage() {
   const reviews = useApi(() => api.eventReviews(slug), [slug, status], { enabled: status !== "loading" });
   // Météo à l'approche (lot 28) : seulement dans les 7 jours avant l'événement ; jamais bloquante.
   const weather = useApi(() => api.eventWeather(slug), [slug], { enabled: status !== "loading" });
+  // Fil de l'événement (lot 20) : public, enrichi pour les retenus (consignes, annonces réservées).
+  const feed = useApi(() => api.eventAnnouncements(slug), [slug, status], { enabled: status !== "loading" });
   const e = event.data;
   const providers = useApi(() => api.eventProviders(slug), [slug, status], { enabled: status !== "loading" });
   const hasPro = me?.personas?.some((p) => p.kind === "pro") ?? false;
@@ -195,6 +198,22 @@ export default function EventPage() {
         </Plate>
       ) : null}
 
+      {/* Page de l'organisateur (lot 29) : fiche, événements, suivre, devenir staff. */}
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={`Organisateur : ${e.structure.name}`}
+        onPress={() => router.push(`/o/${e.structure.slug}`)}
+        testID="event-organizer"
+      >
+        <Plate style={styles.info}>
+          <Text variant="label" color={t.color.plateMuted}>
+            Organisateur
+          </Text>
+          <Text variant="bodyStrong" color={t.color.plateInk}>
+            {e.structure.name}
+          </Text>
+        </Plate>
+      </Pressable>
       <Info label="Quand et où">
         {formatDayHour(e.startsAt)} → {formatDayHour(e.endsAt)}
         {e.addressLine || e.city
@@ -256,6 +275,7 @@ export default function EventPage() {
         </>
       ) : null}
       {e.description ? <Info label="À propos">{e.description}</Info> : null}
+      {feed.data ? <EventFeed items={feed.data.items} /> : null}
       {e.instructions ? <Info label="Consignes de l'organisateur">{e.instructions}</Info> : null}
       {/* Contacter l'organisateur (lot 18) : toujours possible pour une personne connectée. */}
       {status === "in" ? <ContactOrganizerButton structureId={e.structure.id} /> : null}

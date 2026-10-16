@@ -4,7 +4,9 @@ import type { ConversationKind } from "@orasso/shared";
 
 import { crewRules } from "./crew";
 import { directRules } from "./direct";
+import { eventStaffRules } from "./event_staff";
 import { organizerRules } from "./organizer";
+import { structureStaffRules } from "./structure_staff";
 import type { KindRules } from "./types";
 
 const registry = new Map<ConversationKind, KindRules>();
@@ -16,6 +18,8 @@ export function registerConversationKind(rules: KindRules) {
 registerConversationKind(directRules);
 registerConversationKind(organizerRules);
 registerConversationKind(crewRules);
+registerConversationKind(structureStaffRules);
+registerConversationKind(eventStaffRules);
 
 /** Règles d'une sorte ; une sorte sans règles (pas encore livrée) n'ouvre aucun accès. */
 export function rulesOf(kind: ConversationKind): KindRules | null {

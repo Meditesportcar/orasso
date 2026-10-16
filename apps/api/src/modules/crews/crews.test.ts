@@ -869,6 +869,28 @@ describe("inscription en crew", () => {
     }
   });
 
+  it("annonce de l'organisateur (lot 20) : jamais aux membres qui n'ont pas confirmé ; modification : oui", async () => {
+    const s = await setup();
+    await req(
+      s.kenji,
+      "POST",
+      `/events/${s.event.id}/crew-applications`,
+      body(s.crew.id, [
+        { userId: s.kenji.id, vehicleId: s.vk.id },
+        { userId: s.lea.id, vehicleId: s.vl.id },
+      ]),
+    );
+    const posted = await req(s.orga, "POST", `/events/${s.event.id}/announcements`, {
+      body: "Rendez-vous à l'entrée nord.",
+      notify: true,
+      audience: "public",
+    });
+    expect(posted.status).toBe(201);
+    const announced = await db.select().from(notifications).where(eq(notifications.type, "event_announcement"));
+    expect(announced.map((n) => n.userId)).toContain(s.kenji.id);
+    expect(announced.map((n) => n.userId)).not.toContain(s.lea.id);
+  });
+
   it("dissolution par suppression du compte du chef : venues à confirmer retirées sans malus", async () => {
     const s = await setup();
     const reg = await req(

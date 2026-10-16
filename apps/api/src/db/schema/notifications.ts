@@ -8,7 +8,8 @@ import { timestamps, tstz } from "./common";
 import { events } from "./events";
 
 export const notificationFamilyEnum = pgEnum("notification_family", notificationFamilies);
-export const emailStatusEnum = pgEnum("email_status", ["queued", "sent", "failed"]);
+/** `skipped_quota` (relecture du lot 20) : non envoyé, budget d'e-mails du jour atteint (`MAIL_DAILY_BUDGET`). */
+export const emailStatusEnum = pgEnum("email_status", ["queued", "sent", "failed", "skipped_quota"]);
 export const mailTransportEnum = pgEnum("mail_transport", ["journal", "brevo"]);
 
 export type NotificationData = { eventId?: string; applicationId?: string; screen?: string; [k: string]: unknown };

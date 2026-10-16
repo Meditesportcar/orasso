@@ -80,6 +80,40 @@ export const notificationsService = {
     return row;
   },
 
+  /**
+   * La même notification pour plusieurs personnes, en une requête par tranche de 1 000 (lot 20 : annonces et consignes
+   * à des centaines d'inscrits sans boucle de requêtes dans la transaction de l'appelant).
+   */
+  async notifyMany(
+    ex: Executor,
+    userIds: readonly string[],
+    type: NotificationType,
+    input: NotifyInput,
+  ): Promise<void> {
+    if (!userIds.length) return;
+    const at = now();
+    const immediate =
+      type === "staff_alert" || notificationTypes[type] === "account" || journalOnlyNotificationTypes.includes(type);
+    const base = {
+      type,
+      family: notificationTypes[type],
+      title: input.title,
+      body: input.body,
+      data: {
+        ...input.data,
+        ...(input.link ? { link: input.link.path, linkLabel: input.link.label } : {}),
+        ...(input.email ? { _email: input.email } : {}),
+      },
+      inJournal: input.inJournal ?? true,
+      eventId: input.eventId ?? null,
+      deliverAfter: immediate ? at : deliverAfter(at, input.eventStartsAt ?? null),
+    };
+    const unique = [...new Set(userIds)];
+    for (let i = 0; i < unique.length; i += 1000) {
+      await ex.insert(notifications).values(unique.slice(i, i + 1000).map((userId) => ({ ...base, userId })));
+    }
+  },
+
   /** Livre les notifications arrivées à échéance (idempotent : chaque ligne est réservée avant l'envoi). */
   async deliverDue(limit = 200): Promise<number> {
     const at = now();

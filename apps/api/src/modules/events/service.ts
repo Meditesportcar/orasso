@@ -22,27 +22,17 @@ import {
   type zoneCreateSchema,
   type zoneUpdateSchema,
 } from "@orasso/shared";
-import { and, asc, desc, eq, gte, ilike, lt, ne, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import sharp from "sharp";
 import type { z } from "zod";
 
 import { db } from "../../db/client";
-import {
-  applications,
-  events,
-  eventZones,
-  orders,
-  structureFollows,
-  structureMembers,
-  structures,
-  tickets,
-} from "../../db/schema";
+import { applications, events, eventZones, orders, structureFollows, structureMembers, tickets } from "../../db/schema";
 import { requireOrganizer, staffAccess } from "../../lib/access";
 import { deps, now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
 import { addressQuery, geocode } from "../../lib/geocode";
-import { escapeLike } from "../../lib/pagination";
 import { rateLimit } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
@@ -50,38 +40,15 @@ import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
+import { announcementsService } from "../communication/announcements";
+import { staffChatsService } from "../communication/staff-chats";
 import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
+import { card, type StructureRow } from "./card";
+import { exploreEvents } from "./explore";
 import { scheduleEventJobs } from "./jobs";
 import { type EventRow, eventsRepo } from "./repo";
-
-type StructureRow = typeof structures.$inferSelect;
-
-function card(
-  e: EventRow,
-  s: Pick<StructureRow, "id" | "slug" | "name" | "logoKey">,
-  remaining: number | null,
-): EventCard {
-  return {
-    id: e.id,
-    slug: e.slug,
-    title: e.title,
-    format: e.format,
-    startsAt: e.startsAt.toISOString(),
-    endsAt: e.endsAt.toISOString(),
-    city: e.city,
-    department: e.department,
-    lat: e.lat,
-    lng: e.lng,
-    posterUrl: storage.url(e.posterKey),
-    status: e.status,
-    outlook: e.outlook,
-    structure: { id: s.id, slug: s.slug, name: s.name, logoUrl: storage.url(s.logoKey) },
-    capacity: e.capacity,
-    remaining,
-  };
-}
 
 async function publicView(e: EventRow, s: StructureRow, showInstructions: boolean): Promise<EventPublic> {
   const counters = await eventsRepo.counters(e);
@@ -185,48 +152,9 @@ function copyValues(e: EventRow) {
 }
 
 export const eventsService = {
-  async list(q: EventListQuery): Promise<Page<EventCard>> {
-    const t = now();
-    const filters: (SQL | undefined)[] = [
-      eq(events.status, "published"),
-      ne(events.admission, "invite_only"),
-      eq(structures.verification, "verified"),
-      q.scope === "past" ? lt(events.endsAt, t) : gte(events.endsAt, q.from ?? t),
-    ];
-    if (q.to) filters.push(sql`${events.startsAt} <= ${q.to.toISOString()}::timestamptz`);
-    if (q.format) filters.push(eq(events.format, q.format));
-    if (q.department) filters.push(eq(events.department, q.department));
-    if (q.structureId) filters.push(eq(events.structureId, q.structureId));
-    if (q.categoryId) filters.push(sql`${events.criteria} -> 'categoryIds' ? ${q.categoryId}`);
-    if (q.q) {
-      const like = `%${escapeLike(q.q)}%`;
-      filters.push(or(ilike(events.title, like), ilike(events.city, like)));
-    }
-    if (q.lat !== undefined && q.lng !== undefined) {
-      // Distance à vol d'oiseau (pas de PostGIS en V1, choix C24).
-      const radius = q.radiusKm ?? 50;
-      filters.push(sql`${events.lat} is not null and 6371 * acos(least(1, cos(radians(${q.lat})) * cos(radians(${events.lat}))
-        * cos(radians(${events.lng}) - radians(${q.lng})) + sin(radians(${q.lat})) * sin(radians(${events.lat}))))
-        <= ${radius}`);
-    }
-    const offset = q.cursor ? Number(Buffer.from(q.cursor, "base64url").toString()) || 0 : 0;
-    const rows = await db
-      .select({ e: events, s: structures })
-      .from(events)
-      .innerJoin(structures, eq(structures.id, events.structureId))
-      .where(and(...filters))
-      .orderBy(
-        ...(q.scope === "past" ? [desc(events.startsAt), asc(events.id)] : [asc(events.startsAt), asc(events.id)]),
-      )
-      .limit(q.limit + 1)
-      .offset(offset);
-    const items = await Promise.all(
-      rows.slice(0, q.limit).map(async ({ e, s }) => card(e, s, (await eventsRepo.counters(e)).remaining)),
-    );
-    return {
-      items,
-      nextCursor: rows.length > q.limit ? Buffer.from(String(offset + q.limit)).toString("base64url") : null,
-    };
+  /** `GET /events` : liste publique ; connecté, elle sait trier par affinités et par distance (lot 29, `explore.ts`). */
+  list(q: EventListQuery, viewer: Viewer | null = null): Promise<Page<EventCard>> {
+    return exploreEvents(q, viewer);
   },
 
   /** Page publique d'un événement (`/e/<slug>`). Brouillon : 404 ; sur invitation : membres et candidats seulement. */
@@ -343,7 +271,7 @@ export const eventsService = {
       const addressChanged = ADDRESS_FIELDS.some((f) => row[f] !== current[f]);
       if (datesChanged || addressChanged) {
         const what = datesChanged ? `nouvelle date : ${formatDateTime(row.startsAt)}` : "nouvelle adresse";
-        for (const userId of await eventsRepo.activeApplicantIds(id, tx)) {
+        for (const userId of await eventsRepo.activeApplicantIds(id, tx, { awaitingMembers: true })) {
           await notificationsService.notify(tx, userId, "event_updated", {
             title: "Événement modifié",
             body: `« ${row.title} » a changé (${what}).`,
@@ -397,6 +325,8 @@ export const eventsService = {
       }
       // Staff de l'événement (relances « je suis là », mode staff) : une ligne par membre staff actif.
       await staffService.ensureRows(row, tx);
+      // Discussion du staff de l'événement (lot 20) : créée à la publication.
+      await staffChatsService.ensureEventChat(tx, row);
       after(() => scheduleEventJobs(row));
       // « Près de chez toi » (lot 15) : après les abonnés, centres d'intérêt et rayon.
       if (row.admission !== "invite_only") after(() => deps.jobs.send("event.notify-nearby", { eventId: id }));
@@ -418,6 +348,8 @@ export const eventsService = {
         .returning();
       if (!row) throw notFound("Événement introuvable");
       const cancelled = await applicationsService.cancelAll(tx, row, after);
+      // Fil de l'événement (lot 20) : une entrée « Annulé », une seule fois (verrou + statut contrôlé ci-dessus).
+      await announcementsService.recordStatusChange(tx, id, "cancelled", v.user.id);
       // Billets de visiteurs (lot 14) : les billets valables sont annulés, les paiements en cours abandonnés.
       const cancelledTickets = await tx
         .update(tickets)
@@ -572,12 +504,17 @@ export const eventsService = {
     if (e.status !== "published") throw conflict("conflict", "Événement non publié ou annulé");
     if (e.outlook !== outlook) {
       await withTx(async (tx, after) => {
+        // Verrou et nouveau contrôle (lot 20) : deux changements simultanés n'envoient le statut qu'une fois.
+        const current = await eventsRepo.lockForUpdate(tx, id);
+        if (current.outlook === outlook || current.status !== "published") return;
         await tx.update(events).set({ outlook }).where(eq(events.id, id));
+        // Fil de l'événement : entrée « Maintenu » / « Incertain » (une par changement).
+        await announcementsService.recordStatusChange(tx, id, outlook, v.user.id);
         const body =
           outlook === "uncertain"
             ? `« ${e.title} » passe en « ${eventOutlookLabels.uncertain} » : l'organisateur confirmera.`
             : `« ${e.title} » est « ${eventOutlookLabels.maintained} ».`;
-        for (const userId of await eventsRepo.activeApplicantIds(id, tx)) {
+        for (const userId of await eventsRepo.activeApplicantIds(id, tx, { awaitingMembers: true })) {
           await notificationsService.notify(tx, userId, "event_outlook_changed", {
             title: eventOutlookLabels[outlook],
             body,

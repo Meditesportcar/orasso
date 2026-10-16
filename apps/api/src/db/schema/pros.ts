@@ -66,6 +66,10 @@ export const proProfiles = pgTable(
     // Un établissement (SIRET) = une fiche non supprimée.
     uniqueIndex("pro_profiles_siret_key").on(t.siret).where(sql`${t.deletedAt} is null and ${t.siret} is not null`),
     index("pro_profiles_published_idx").on(t.publishedAt),
+    // Lot 29 : rayon (rectangle englobant) et recherche par morceau de nom ou de ville.
+    index("pro_profiles_lat_lng_idx").on(t.lat, t.lng),
+    index("pro_profiles_name_trgm_idx").using("gin", t.name.op("gin_trgm_ops")),
+    index("pro_profiles_city_trgm_idx").using("gin", t.city.op("gin_trgm_ops")),
   ],
 );
 

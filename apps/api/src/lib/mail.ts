@@ -2,7 +2,8 @@
 // « journal » (par défaut, H5) : fichier HTML dans DATA_DIR/mail + ligne en console. « brevo » : API Brevo.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { eq } from "drizzle-orm";
+import { BUSINESS_TIMEZONE, fromWallTime, wallTime } from "@orasso/shared";
+import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { db } from "../db/client";
 import { emailOutbox } from "../db/schema";
@@ -104,6 +105,29 @@ export function transportFor(to: string, configured: "journal" | "brevo"): "jour
   return configured === "brevo" && isReservedAddress(to) ? "journal" : configured;
 }
 
+/** E-mails réservés à la fin du budget du jour : compte et sécurité (jamais bloqués par une annonce de masse). */
+export const MAIL_PROTECTED_RESERVE = 50;
+const PROTECTED_TEMPLATES = new Set(["password_reset", "email_verification", "account_deleted"]);
+
+export function isProtectedTemplate(template: string): boolean {
+  return PROTECTED_TEMPLATES.has(template) || template.startsWith("security_");
+}
+
+/**
+ * Un e-mail de plus peut-il partir aujourd'hui ? `sentToday` : envois Brevo déjà faits depuis minuit (Paris). Les
+ * gabarits de compte et de sécurité vont jusqu'au budget ; les autres s'arrêtent `MAIL_PROTECTED_RESERVE` avant.
+ */
+export function withinMailBudget(template: string, sentToday: number, budget = env.MAIL_DAILY_BUDGET): boolean {
+  const limit = isProtectedTemplate(template) ? budget : Math.max(0, budget - MAIL_PROTECTED_RESERVE);
+  return sentToday < limit;
+}
+
+/** Minuit du jour, heure de Paris. */
+export function startOfBusinessDay(at: Date): Date {
+  const w = wallTime(at, BUSINESS_TIMEZONE);
+  return fromWallTime({ year: w.year, month: w.month, day: w.day, hour: 0, minute: 0 }, BUSINESS_TIMEZONE);
+}
+
 export const mail = {
   /** `configured` : transport de la configuration ; paramètre pour les tests seulement. */
   async send(
@@ -114,19 +138,45 @@ export const mail = {
     configured: "journal" | "brevo" = env.MAIL_TRANSPORT,
   ) {
     const transport = transportFor(to, configured);
-    const [row] = await db
-      .insert(emailOutbox)
-      .values({
-        to,
-        subject: content.subject,
-        template,
-        payload,
-        transport,
-        // Trace lisible de la déviation : adresse réservée, écrite dans le journal au lieu de Brevo.
-        error: transport !== configured ? "Adresse non routable (domaine réservé) : journal au lieu de Brevo" : null,
-      })
-      .returning({ id: emailOutbox.id });
-    if (!row) return;
+    // Budget du jour (Brevo seulement) : compté et réservé sous un verrou, pour que deux envois simultanés ne le
+    // dépassent pas. Au-delà, l'e-mail n'est pas envoyé (`skipped_quota`) : la notification reste au Journal.
+    const row = await db.transaction(async (tx) => {
+      let skipped = false;
+      if (transport === "brevo") {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext('mail-daily-budget'))`);
+        const [sent] = await tx
+          .select({ n: count() })
+          .from(emailOutbox)
+          .where(
+            and(
+              eq(emailOutbox.transport, "brevo"),
+              inArray(emailOutbox.status, ["queued", "sent"]),
+              gte(emailOutbox.createdAt, startOfBusinessDay(now())),
+            ),
+          );
+        skipped = !withinMailBudget(template, sent?.n ?? 0);
+      }
+      const [inserted] = await tx
+        .insert(emailOutbox)
+        .values({
+          to,
+          subject: content.subject,
+          template,
+          payload,
+          transport,
+          status: skipped ? "skipped_quota" : "queued",
+          createdAt: now(),
+          // Trace lisible de la déviation : adresse réservée, écrite dans le journal au lieu de Brevo.
+          error: skipped
+            ? `Budget d'e-mails du jour atteint (${env.MAIL_DAILY_BUDGET}) : non envoyé`
+            : transport !== configured
+              ? "Adresse non routable (domaine réservé) : journal au lieu de Brevo"
+              : null,
+        })
+        .returning({ id: emailOutbox.id, status: emailOutbox.status });
+      return inserted;
+    });
+    if (!row || row.status === "skipped_quota") return;
     try {
       if (transport === "brevo") await deliverBrevo(to, content);
       else await deliverJournal(row.id, to, content);

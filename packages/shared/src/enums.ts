@@ -2,17 +2,24 @@ import { z } from "zod";
 
 import { accountEmailAlwaysTypes, accountNotificationTypes } from "./notifications/account";
 import { applicationNotificationTypes } from "./notifications/application";
+import {
+  communicationJournalOnlyTypes,
+  communicationNoEmailTypes,
+  communicationNotificationTypes,
+} from "./notifications/communication";
 import { crewNotificationTypes } from "./notifications/crews";
 import { eventEmailAlwaysTypes, eventNotificationTypes } from "./notifications/events";
 import { garageNotificationTypes } from "./notifications/garage";
-import { messagingNotificationTypes } from "./notifications/messaging";
+import { messagingNotificationTypes, pushOnlyNotificationTypes as messagingPushOnly } from "./notifications/messaging";
 import { pointsNotificationTypes } from "./notifications/points";
-import { socialNotificationTypes } from "./notifications/social";
+import { journalOnlyNotificationTypes as socialJournalOnly, socialNotificationTypes } from "./notifications/social";
 import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
 import { weatherNotificationTypes } from "./notifications/weather";
 
-export { pushOnlyNotificationTypes } from "./notifications/messaging";
-export { journalOnlyNotificationTypes } from "./notifications/social";
+/** Types sans e-mail de repli (push et Journal seulement), un tableau par domaine. */
+export const pushOnlyNotificationTypes: readonly string[] = [...messagingPushOnly, ...communicationNoEmailTypes];
+/** Actualités du Journal : ni push ni e-mail, livrées tout de suite (un tableau par domaine). */
+export const journalOnlyNotificationTypes: readonly string[] = [...socialJournalOnly, ...communicationJournalOnlyTypes];
 
 /**
  * Énumérations métier (valeurs anglaises, identiques aux enums PostgreSQL). Libellés : `labels.fr.ts`.
@@ -117,6 +124,7 @@ export const notificationTypes = {
   ...garageNotificationTypes,
   ...messagingNotificationTypes,
   ...crewNotificationTypes,
+  ...communicationNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 
