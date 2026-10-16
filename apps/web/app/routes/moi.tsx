@@ -253,6 +253,7 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             <span className="o-field__label o-t-label">Rayon des notifications</span>
             <input
               type="range"
+              className="s-range"
               name="radiusKm"
               min={10}
               max={300}

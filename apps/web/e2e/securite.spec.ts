@@ -20,7 +20,7 @@ async function linkFromMail(to: string, path: string, since: number): Promise<st
       const html = readFileSync(resolve(MAIL_DIR, f.name), "utf8");
       if (!html.startsWith(`<!-- À : ${to} -->`)) continue;
       const m = new RegExp(`href="(https?://[^"]*${path}\\?token=[^"]+)"`).exec(html);
-      if (m) return m[1]!.replaceAll("&amp;", "&");
+      if (m?.[1]) return m[1].replaceAll("&amp;", "&");
     }
     await new Promise((r) => setTimeout(r, 500));
   }
@@ -50,8 +50,12 @@ async function signUpInBrowser(page: Page, pseudo: string, email: string, passwo
   await page.waitForURL((u) => u.pathname === "/app");
 }
 
-async function newPage(browser: Browser, userAgent?: string) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, userAgent });
+async function newPage(browser: Browser, userAgent?: string, ip?: string) {
+  const ctx = await browser.newContext({
+    viewport: { width: 1280, height: 900 },
+    userAgent,
+    extraHTTPHeaders: ip ? { "x-forwarded-for": ip } : undefined,
+  });
   return { ctx, page: await ctx.newPage() };
 }
 
@@ -125,7 +129,9 @@ test("connexion depuis un autre navigateur → e-mail « nouvelle connexion »",
   const a = await newPage(browser);
   await loginInBrowser(a.page, email, SEED_PASSWORD, "/app");
   const since = Date.now();
-  const b = await newPage(browser, `${OTHER_UA} ${unique()}`);
+  // Adresse au hasard (relayée par le site comme le fait nginx) : appareil jamais vu, même si le test est rejoué.
+  const ip = `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.7`;
+  const b = await newPage(browser, OTHER_UA, ip);
   await loginInBrowser(b.page, email, SEED_PASSWORD, "/app/securite");
   expect(await mailSent(email, "Nouvelle connexion à ton compte", since)).toBe(true);
   await expect(b.page.getByTestId("session-row").first()).toBeVisible();
