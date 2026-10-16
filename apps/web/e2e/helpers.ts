@@ -121,7 +121,7 @@ export async function createEvent(
   opts: {
     title?: string;
     capacity?: number | null;
-    admission?: "open" | "filtered";
+    admission?: "open" | "filtered" | "invite_only";
     rulesText?: string;
     publicAccess?: "free" | "free_reservation" | "paid_orasso" | "closed";
   } = {},
