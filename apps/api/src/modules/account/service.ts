@@ -1,7 +1,7 @@
 // Compte (lot 15, ARCHITECTURE-SUITE § 1.2 à § 1.5) : e-mails de réinitialisation et de vérification, parrainage,
 // réglages regroupés, aperçu public, suppression du compte par anonymisation (S5).
 import { randomBytes } from "node:crypto";
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createOTP } from "@better-auth/utils/otp";
 import {
@@ -117,15 +117,18 @@ async function isExpressAccount(email: string): Promise<boolean> {
   return Boolean(row);
 }
 
-/** Copies HTML du transport « journal » adressées à ce destinataire (développement ; facultatives en ligne). */
-async function removeJournalMails(email: string) {
+/**
+ * Copies HTML du transport « journal » des e-mails donnés (fichiers `<date>-<id>.html`) : développement ; facultatives
+ * en ligne. Les identifiants viennent de la file des e-mails, sans relire chaque fichier.
+ */
+async function removeJournalMails(ids: string[]) {
+  if (!ids.length) return;
   const dir = join(dataDir, "mail");
   const names = await readdir(dir).catch(() => [] as string[]);
-  const head = `<!-- À : ${email} -->`;
+  const wanted = new Set(ids);
   for (const name of names) {
-    const file = join(dir, name);
-    const content = await readFile(file, "utf8").catch(() => "");
-    if (content.startsWith(head)) await rm(file, { force: true });
+    const id = /-([0-9a-f-]{36})\.html$/.exec(name)?.[1];
+    if (id && wanted.has(id)) await rm(join(dir, name), { force: true });
   }
 }
 
@@ -294,6 +297,7 @@ export const accountService = {
     const photoKeys: string[] = [];
     let oldEmail = null as string | null;
     let oldPseudo = null as string | null;
+    const mailIds: string[] = [];
     const before = await db.query.profiles.findFirst({
       where: eq(profiles.userId, userId),
       columns: { deletedAt: true },
@@ -355,7 +359,12 @@ export const accountService = {
       await tx.delete(profileInterests).where(eq(profileInterests.userId, userId));
       // Traces de l'adresse et de la plaque ailleurs : file des e-mails, inscriptions express, invitations, transferts.
       if (oldEmail) {
-        await tx.update(emailOutbox).set({ to: anonEmail }).where(eq(emailOutbox.to, oldEmail));
+        const sent = await tx
+          .update(emailOutbox)
+          .set({ to: anonEmail })
+          .where(eq(emailOutbox.to, oldEmail))
+          .returning({ id: emailOutbox.id });
+        mailIds.push(...sent.map((m) => m.id));
         await tx.update(expressInvites).set({ email: anonEmail }).where(eq(expressInvites.email, oldEmail));
         await tx.update(eventInvitations).set({ email: null }).where(eq(eventInvitations.email, oldEmail));
       }
@@ -443,9 +452,14 @@ export const accountService = {
       // Confirmation à l'ancienne adresse, après la validation ; la trace dans la file des e-mails est aussitôt
       // anonymisée et la copie du transport journal supprimée.
       await mail.send("account_deleted", oldEmail, securityMails.accountDeleted(oldPseudo ?? ""), { userId });
-      await db.update(emailOutbox).set({ to: anonEmail }).where(eq(emailOutbox.to, oldEmail));
+      const sent = await db
+        .update(emailOutbox)
+        .set({ to: anonEmail })
+        .where(eq(emailOutbox.to, oldEmail))
+        .returning({ id: emailOutbox.id });
+      mailIds.push(...sent.map((m) => m.id));
     }
-    if (oldEmail) await removeJournalMails(oldEmail);
+    await removeJournalMails(mailIds);
     return { deleted: true };
   },
 };
