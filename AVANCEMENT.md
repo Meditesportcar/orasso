@@ -89,12 +89,19 @@
   - API : migration `0022_security`, modules `security` et `account`, tâches `event.notify-nearby` et `security.purge-known-logins`. Seed : `noe@orasso.local` (adresse à confirmer), parrainage Kenji → Léa.
   - Vérifié : voir l'entrée du lot 15 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-15-captures\`.
 
+- **Appli : casquettes, Moi complet, sécurité, suppression du compte (lot 16, 16/10/2026)** — `apps/mobile`. Choix : `docs/JOURNAL-DES-CHOIX.md` (lot 16) ; état technique : `ARCHITECTURE.md` « État après le lot 16 ».
+  - Casquettes : `GET /me` renvoie `personas` (passionné, structures dont on est propriétaire ou co-organisateur, fiche pro) et `unreadInbox` ; `PersonaProvider` (casquette mémorisée, repli sur le passionné), feuille « Mes casquettes » et barre du haut communes (avatar de la casquette active, point moutarde si une autre a quelque chose à traiter, appui long = passionné), groupes de routes `(tabs)`, `(orga)`, `(pro)` (casquette Pro du lot 14, URL `/scanner`…), `(provider)` ; Organisateur et Prestataire sont des squelettes « Bientôt » (lots 21 et 22).
+  - Moi : profil (photo, pseudo disponible, description, aperçu « ce que voient les autres »), points et grade, mes casquettes, devenir staff, notifications par famille et par type, compte public / privé, secteur, rayon, centres d'intérêt, mot de passe, double authentification (QR, codes de secours, désactivation), appareils, secret du QR de compte, clés d'accès (renvoi au site), thème, déconnexion, suppression du compte ; bandeau « Vérifie ton e-mail » ; « Mot de passe oublié » sur l'écran de connexion.
+  - Le jeton de session est remplacé après un changement de mot de passe ou de double authentification (`adoptToken`) : sans cela l'appli était déconnectée.
+  - Vérifié : voir l'entrée du lot 16 dans le journal du relais. Recette dans le navigateur : `apps/web/e2e/appli-moi.spec.ts` (`APP_URL=http://localhost:<relais>`). Captures : `C:\Users\DELL\.claude\relais\orasso\lot-16-captures\`. **Pas encore sur téléphone** (photo, application d'authentification : APK de la vague).
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
 
+- Lot 16 : aucune migration ni variable obligatoire (`EXPO_PUBLIC_SITE_URL` facultative dans `apps/mobile/.env.example`, utile seulement en local). Les écrans Organisateur et Prestataire (`app/(orga)/`, `app/(provider)/`) sont des squelettes : lots 22 et 21. Essayer sur téléphone (APK de la vague) : photo de profil, application d'authentification, appui long sur l'avatar.
 - Lot 15 : déployer (migration `0022` au démarrage ; variables facultatives `SENTRY_DSN`, `VITE_SENTRY_DSN` dans `deploy/dev.env.example`, `SENTRY_RELEASE` posé par `compose.yml`) ; construire l'APK de référence (nouvelles dépendances natives). Les e-mails partent par le transport « journal » tant que Brevo n'est pas branché : en ligne, les liens de réinitialisation et de vérification ne sont lisibles que dans `email_outbox`.
 
 - Lot 14 : déployer (migrations `0019` et `0020` au démarrage ; variables facultatives `STRIPE_*` vides = billetterie payante « bientôt »). Pour activer Stripe en test : clés de test du compte Orasso (`sk_test_…`), application Connect (`ca_…`, URI de redirection `<PUBLIC_URL>/api/stripe/connect/callback`) et point de terminaison webhook `<PUBLIC_URL>/api/stripe/webhook` (événements Connect : `checkout.session.completed`, `checkout.session.expired`, `account.application.deauthorized`) → `whsec_…`.
