@@ -1,22 +1,24 @@
 import { randomBytes } from "node:crypto";
 import {
-  categoryAllowedForYear,
   normalizePlate,
+  type ShareFormat,
   type VehicleBrief,
   type VehicleCreate,
+  type VehicleDetail,
   type VehicleFull,
+  type VehicleHistoryItem,
   type VehiclePublic,
   type VehicleUpdate,
   vehiclePlateIssue,
 } from "@orasso/shared";
-import { and, count, eq, inArray, max, ne } from "drizzle-orm";
+import { and, count, desc, eq, max, ne } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
 import {
   applications,
-  categories,
-  plateTransferRequests,
+  checkins,
+  events,
   profiles,
   vehicleCategories,
   vehicleGenerations,
@@ -29,8 +31,13 @@ import { AppError, conflict, notFound, validation } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
+import { notificationsService } from "../notifications/service";
+import { checkCategories } from "./categories";
+import { certificationService } from "./certification";
+import { plateTransferService } from "./plate-transfer";
 import { type VehicleRow, vehiclesRepo } from "./repo";
 import { vehicleFull, vehiclePublic } from "./serializers";
+import { cachedShareImage } from "./share-image";
 
 export const MAX_PHOTOS = 8;
 export const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
@@ -42,6 +49,10 @@ const isUniqueViolation = (error: unknown, constraint: string) => {
   const pg = e.cause ?? e;
   return pg.code === "23505" && pg.constraint === constraint;
 };
+
+/** Plaque déjà active, ou deuxième demande de transfert simultanée pour la même plaque (index uniques). */
+const isPlateConflict = (error: unknown) =>
+  isUniqueViolation(error, "vehicles_active_plate_key") || isUniqueViolation(error, "plate_transfer_requests_open_key");
 
 /** Cohérence marque → modèle → génération, et type du véhicule (sauf modèle « Autre »). */
 export async function checkReference(
@@ -57,25 +68,9 @@ export async function checkReference(
   }
 }
 
-/** Catégories actives et cohérentes avec l'âge du véhicule (pas de « youngtimer » sur une voiture de 2015). */
-async function checkCategories(ex: Executor, ids: string[], year: number | null) {
-  if (!ids.length) return;
-  const rows = await ex.query.categories.findMany({ where: inArray(categories.id, ids) });
-  if (rows.length !== new Set(ids).size || rows.some((c) => !c.active)) throw validation("Catégorie inconnue");
-  const refused = rows.filter((c) => !categoryAllowedForYear(c.minVehicleAge, year, now()));
-  if (refused.length) {
-    throw validation(`Catégorie incompatible avec l'année : ${refused.map((c) => c.label).join(", ")}`, {
-      categoryIds: refused.map((c) => c.id),
-    });
-  }
-}
-
-/**
- * Plaque déjà active ailleurs → `409 plate_taken`. Si elle appartient à un autre compte, une demande de transfert
- * est créée (confirmée par l'ancien propriétaire ou arbitrée par l'équipe Orasso, lot 13).
- */
-async function checkPlate(ex: Executor, ownerId: string, plateNormalized: string | null, exceptVehicleId?: string) {
-  if (!plateNormalized) return;
+/** Véhicule actif qui porte déjà cette plaque (hors le véhicule en cours de modification). */
+async function plateHolder(ex: Executor, plateNormalized: string | null, exceptVehicleId?: string) {
+  if (!plateNormalized) return null;
   const holder = await ex.query.vehicles.findFirst({
     where: and(
       eq(vehicles.plateNormalized, plateNormalized),
@@ -83,22 +78,19 @@ async function checkPlate(ex: Executor, ownerId: string, plateNormalized: string
       exceptVehicleId ? ne(vehicles.id, exceptVehicleId) : undefined,
     ),
   });
-  if (!holder) return;
-  if (holder.ownerId !== ownerId) {
-    const existing = await ex.query.plateTransferRequests.findFirst({
-      where: and(
-        eq(plateTransferRequests.plateNormalized, plateNormalized),
-        eq(plateTransferRequests.toUserId, ownerId),
-        eq(plateTransferRequests.status, "pending"),
-      ),
+  return holder ?? null;
+}
+
+/**
+ * Plaque déjà active sur un autre véhicule du même compte : refus (`409 plate_taken`). Sur le véhicule d'un autre compte :
+ * pas de refus, une demande de transfert est ouverte à la création du véhicule (lot 31, S36).
+ */
+function assertNotOwnPlate(holder: { ownerId: string } | null, ownerId: string) {
+  if (holder && holder.ownerId === ownerId) {
+    throw conflict("plate_taken", "Cette plaque est déjà enregistrée sur un de tes véhicules actifs", {
+      transferRequested: false,
     });
-    if (!existing) {
-      await ex.insert(plateTransferRequests).values({ plateNormalized, fromVehicleId: holder.id, toUserId: ownerId });
-    }
   }
-  throw conflict("plate_taken", "Cette plaque est déjà enregistrée sur un véhicule actif", {
-    transferRequested: holder.ownerId !== ownerId,
-  });
 }
 
 async function setCategories(tx: Tx, vehicleId: string, ids: string[]) {
@@ -128,9 +120,12 @@ export const vehiclesService = {
     return (await vehiclesRepo.findFull(eq(vehicles.ownerId, v.user.id))).map(vehicleFull);
   },
 
-  getMine: async (v: Viewer, id: string) => {
+  /** Page du véhicule : fiche complète et état de la certification. */
+  getMine: async (v: Viewer, id: string): Promise<VehicleDetail> => {
     await ownVehicle(v, id);
-    return full(id);
+    const row = await vehiclesRepo.findFullById(id);
+    if (!row) throw notFound("Véhicule introuvable");
+    return { ...vehicleFull(row), certification: await certificationService.stateOf(v, row) };
   },
 
   /** Garage visible des autres (sans plaque). */
@@ -138,14 +133,66 @@ export const vehiclesService = {
     return (await vehiclesRepo.findFull(eq(vehicles.ownerId, userId))).map(vehiclePublic);
   },
 
+  /** Historique : les candidatures du véhicule, avec « présent » quand l'entrée a été enregistrée sur place. */
+  async history(v: Viewer, id: string): Promise<VehicleHistoryItem[]> {
+    await ownVehicle(v, id);
+    const rows = await db
+      .select({
+        applicationId: applications.id,
+        eventId: events.id,
+        eventTitle: events.title,
+        eventSlug: events.slug,
+        startsAt: events.startsAt,
+        status: applications.status,
+        checkinId: checkins.id,
+      })
+      .from(applications)
+      .innerJoin(events, eq(events.id, applications.eventId))
+      .leftJoin(checkins, eq(checkins.applicationId, applications.id))
+      .where(eq(applications.vehicleId, id))
+      .orderBy(desc(events.startsAt));
+    return rows.map((r) => ({
+      applicationId: r.applicationId,
+      eventId: r.eventId,
+      eventTitle: r.eventTitle,
+      eventSlug: r.eventSlug,
+      startsAt: r.startsAt.toISOString(),
+      status: r.status,
+      attended: r.checkinId !== null,
+    }));
+  },
+
+  /** PNG de la fiche à partager (story ou publication), sans plaque ; mis en cache une heure. */
+  async shareImage(v: Viewer, id: string, format: ShareFormat): Promise<Buffer> {
+    await ownVehicle(v, id);
+    const row = await vehiclesRepo.findFullById(id);
+    if (!row) throw notFound("Véhicule introuvable");
+    return cachedShareImage(row, v.profile.pseudo, format);
+  },
+
   async create(v: Viewer, input: VehicleCreate): Promise<VehicleFull> {
     const plateNormalized = input.plate && !input.unregistered ? normalizePlate(input.plate) : null;
     if (input.plate && !plateNormalized) throw validation("Plaque invalide", { field: "plate" });
     await checkReference(db, input);
-    await checkCategories(db, input.categoryIds, input.year ?? null);
-    if (input.status === "active") await checkPlate(db, v.user.id, plateNormalized);
+    await checkCategories(db, input.categoryIds, {
+      vehicleType: input.vehicleType,
+      makeId: input.makeId,
+      year: input.year ?? null,
+    });
+    const holder = input.status === "active" ? await plateHolder(db, plateNormalized) : null;
+    assertNotOwnPlate(holder, v.user.id);
     try {
-      const id = await withTx(async (tx) => {
+      const id = await withTx(async (tx, after) => {
+        // Plaque d'un autre compte : le véhicule est créé quand même, sans plaque normalisée, en attente (S36).
+        const pendingTransferId =
+          holder && plateNormalized
+            ? await plateTransferService.open(tx, after, {
+                plateNormalized,
+                holder,
+                requester: v,
+                plateText: input.plate ?? null,
+              })
+            : null;
         const [row] = await tx
           .insert(vehicles)
           .values({
@@ -160,9 +207,11 @@ export const vehiclesService = {
             powerHp: input.powerHp ?? null,
             weightKg: input.weightKg ?? null,
             plate: input.unregistered ? null : input.plate,
-            plateNormalized,
+            plateNormalized: pendingTransferId ? null : plateNormalized,
+            pendingTransferId,
             unregistered: input.unregistered,
             status: input.status,
+            statusNote: input.status === "active" ? null : input.statusNote,
             description: input.description,
             preparation: input.preparation,
             archivedAt: input.status === "active" ? null : now(),
@@ -174,7 +223,7 @@ export const vehiclesService = {
       });
       return full(id);
     } catch (error) {
-      if (isUniqueViolation(error, "vehicles_active_plate_key")) {
+      if (isPlateConflict(error)) {
         throw conflict("plate_taken", "Cette plaque est déjà enregistrée sur un véhicule actif");
       }
       throw error;
@@ -193,26 +242,73 @@ export const vehiclesService = {
       unregistered: input.unregistered ?? current.unregistered,
       status: input.status ?? current.status,
     };
+    const pending = Boolean(current.pendingTransferId);
+    // Tant que la plaque est en attente de transfert, on ne la change pas : on supprime le véhicule ou on l'archive.
+    if (pending) {
+      const plateChanged = input.plate !== undefined && input.plate !== current.plate;
+      const unregisteredChanged = input.unregistered !== undefined && input.unregistered !== current.unregistered;
+      if (plateChanged || unregisteredChanged) {
+        throw validation("Plaque en attente de transfert : elle ne peut pas être modifiée pour le moment", {
+          field: "plate",
+        });
+      }
+    }
     if (merged.unregistered) merged.plate = null;
     const plateIssue = vehiclePlateIssue(merged);
     if (plateIssue) throw validation(plateIssue, { field: "plate" });
-    const plateNormalized = merged.plate ? normalizePlate(merged.plate) : null;
-    if (input.makeId || input.modelId || input.generationId !== undefined || input.vehicleType) {
-      await checkReference(db, merged);
+    const plateNormalized = pending ? null : merged.plate ? normalizePlate(merged.plate) : null;
+    const referenceChanged = Boolean(
+      input.makeId || input.modelId || input.generationId !== undefined || input.vehicleType,
+    );
+    if (referenceChanged) await checkReference(db, merged);
+    // Catégories revérifiées quand elles changent, ou quand ce qui les conditionne change (marque, type, année) :
+    // une fiche ancienne reste modifiable même si les règles ont été durcies depuis.
+    if (input.categoryIds || referenceChanged || input.year !== undefined) {
+      const categoryIds =
+        input.categoryIds ??
+        (
+          await db
+            .select({ id: vehicleCategories.categoryId })
+            .from(vehicleCategories)
+            .where(eq(vehicleCategories.vehicleId, id))
+        ).map((r) => r.id);
+      await checkCategories(db, categoryIds, {
+        vehicleType: merged.vehicleType,
+        makeId: merged.makeId,
+        year: merged.year ?? null,
+      });
     }
-    const categoryIds =
-      input.categoryIds ??
-      (
-        await db
-          .select({ id: vehicleCategories.categoryId })
-          .from(vehicleCategories)
-          .where(eq(vehicleCategories.vehicleId, id))
-      ).map((r) => r.id);
-    await checkCategories(db, categoryIds, merged.year ?? null);
-    if (merged.status === "active") await checkPlate(db, v.user.id, plateNormalized, id);
+    // Plaque : changée ou véhicule réactivé → doublon chez soi refusé, chez un autre compte = demande de transfert.
+    const wantsPlate = merged.status === "active" && Boolean(plateNormalized);
+    const plateIsNew = plateNormalized !== current.plateNormalized || current.status !== "active";
+    const holder = wantsPlate && plateIsNew ? await plateHolder(db, plateNormalized, id) : null;
+    assertNotOwnPlate(holder, v.user.id);
     const { categoryIds: _ignored, ...fields } = input;
     try {
-      await withTx(async (tx) => {
+      await withTx(async (tx, after) => {
+        // Véhicule verrouillé et relu : une acceptation de transfert concurrente ne doit jamais être écrasée (I1).
+        const [locked] = await tx.select().from(vehicles).where(eq(vehicles.id, id)).for("update");
+        if (
+          !locked ||
+          locked.pendingTransferId !== current.pendingTransferId ||
+          locked.plateNormalized !== current.plateNormalized ||
+          locked.status !== current.status
+        ) {
+          throw conflict("conflict", "La fiche vient de changer : recharge-la et recommence.");
+        }
+        const certifiedBefore = await certificationService.fieldsBeforeChange(tx, id);
+        const openedTransferId =
+          holder && plateNormalized
+            ? await plateTransferService.open(tx, after, {
+                plateNormalized,
+                holder,
+                requester: v,
+                plateText: merged.plate,
+              })
+            : null;
+        const pendingTransferId = openedTransferId ?? current.pendingTransferId;
+        const nextPending = merged.status === "active" ? pendingTransferId : null;
+        const nextPlateNormalized = pendingTransferId ? null : plateNormalized;
         await tx
           .update(vehicles)
           .set({
@@ -220,18 +316,30 @@ export const vehiclesService = {
             generationId: merged.generationId ?? null,
             year: merged.year ?? null,
             plate: merged.plate,
-            plateNormalized,
+            // Jamais réécrits s'ils ne changent pas.
+            ...(nextPlateNormalized !== current.plateNormalized ? { plateNormalized: nextPlateNormalized } : {}),
+            ...(nextPending !== current.pendingTransferId ? { pendingTransferId: nextPending } : {}),
             unregistered: merged.unregistered,
             status: merged.status,
+            statusNote: merged.status === "active" ? null : (input.statusNote ?? current.statusNote),
             archivedAt: merged.status === "active" ? null : (current.archivedAt ?? now()),
-            // La certification se perd à toute modification de la fiche (docs/01).
-            certifiedAt: null,
           })
           .where(eq(vehicles.id, id));
         if (input.categoryIds) await setCategories(tx, id, input.categoryIds);
+        // La demande de transfert du véhicule archivé est annulée ; si ce véhicule quitte sa plaque, les demandes des
+        // autres comptes sur cette plaque sont acceptées d'office.
+        if (merged.status !== "active") await plateTransferService.cancelFor(tx, id, current.pendingTransferId);
+        const leftPlate =
+          current.status === "active" &&
+          current.plateNormalized &&
+          (merged.status !== "active" || plateNormalized !== current.plateNormalized);
+        if (leftPlate) await plateTransferService.plateReleased(tx, id);
+        // La certification se perd quand un champ technique, une catégorie ou une photo change (S38), pas pour la
+        // description, la préparation, la couleur ou le statut.
+        await certificationService.afterChange(tx, after, id, certifiedBefore);
       });
     } catch (error) {
-      if (isUniqueViolation(error, "vehicles_active_plate_key")) {
+      if (isPlateConflict(error)) {
         throw conflict("plate_taken", "Cette plaque est déjà enregistrée sur un véhicule actif");
       }
       throw error;
@@ -241,13 +349,22 @@ export const vehiclesService = {
 
   /** Suppression réelle si le véhicule n'a jamais candidaté ; sinon il faut l'archiver (choix C26). */
   async remove(v: Viewer, id: string) {
-    await ownVehicle(v, id);
+    const current = await ownVehicle(v, id);
     const [used] = await db.select({ n: count() }).from(applications).where(eq(applications.vehicleId, id));
     if ((used?.n ?? 0) > 0) {
-      throw conflict("conflict", "Ce véhicule a déjà participé : archive-le (vendu, gardé, accidenté)");
+      throw conflict("conflict", "Ce véhicule a déjà participé : archive-le (vendu, souvenir, accidenté)");
     }
     const photos = await vehiclesRepo.photos(id);
-    await db.delete(vehicles).where(eq(vehicles.id, id));
+    await withTx(async (tx, after) => {
+      // Plusieurs demandes ouvertes sur cette plaque : la suppression les emporterait (clé étrangère en cascade).
+      if ((await plateTransferService.openCount(tx, id)) > 1) {
+        throw conflict("conflict", "Plusieurs demandes de transfert portent sur cette plaque : archive-le (Vendu).");
+      }
+      await plateTransferService.cancelFor(tx, id, current.pendingTransferId);
+      await plateTransferService.plateReleased(tx, id);
+      await tx.delete(vehicles).where(eq(vehicles.id, id));
+      after(() => notificationsService.kick());
+    });
     for (const p of photos) await storage.remove(p.storageKey);
   },
 
@@ -289,9 +406,10 @@ export const vehiclesService = {
     const key = `vehicles/${id}/${randomBytes(8).toString("hex")}.webp`;
     await storage.put(key, output.data);
     try {
-      await withTx(async (tx) => {
+      await withTx(async (tx, after) => {
         // Deux envois simultanés : la ligne du véhicule sérialise le calcul de la position.
         await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id)).for("update");
+        const certifiedBefore = await certificationService.fieldsBeforeChange(tx, id);
         const [agg] = await tx
           .select({ n: count(), maxPos: max(vehiclePhotos.position) })
           .from(vehiclePhotos)
@@ -305,7 +423,8 @@ export const vehiclesService = {
           height: output.info.height,
           bytes: output.info.size,
         });
-        await tx.update(vehicles).set({ certifiedAt: null }).where(eq(vehicles.id, id));
+        // Une photo ajoutée ou retirée fait perdre la certification (S38).
+        await certificationService.afterChange(tx, after, id, certifiedBefore);
       });
     } catch (error) {
       await storage.remove(key);
@@ -319,7 +438,9 @@ export const vehiclesService = {
     const photos = await vehiclesRepo.photos(id);
     const target = photos.find((p) => p.id === photoId);
     if (!target) throw notFound("Photo introuvable");
-    await withTx(async (tx) => {
+    await withTx(async (tx, after) => {
+      await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id)).for("update");
+      const certifiedBefore = await certificationService.fieldsBeforeChange(tx, id);
       await tx.delete(vehiclePhotos).where(eq(vehiclePhotos.id, photoId));
       // Positions renumérotées 1..n (contrainte d'unicité différée à la validation).
       let position = 1;
@@ -328,6 +449,7 @@ export const vehiclesService = {
         if (p.position !== position) await tx.update(vehiclePhotos).set({ position }).where(eq(vehiclePhotos.id, p.id));
         position++;
       }
+      await certificationService.afterChange(tx, after, id, certifiedBefore);
     });
     await storage.remove(target.storageKey);
     return full(id);

@@ -51,5 +51,14 @@ export function vehicleFull(v: VehicleWithAll): VehicleFull {
     plate: v.plate,
     unregistered: v.unregistered,
     archivedAt: v.archivedAt?.toISOString() ?? null,
+    statusNote: v.statusNote,
+    shareVersion: `${v.updatedAt.getTime()}-${v.photos.length}-${v.photos[0]?.id.slice(0, 8) ?? "0"}`,
+    plateTransfer: v.pendingTransfer
+      ? {
+          id: v.pendingTransfer.id,
+          status: v.pendingTransfer.status,
+          createdAt: v.pendingTransfer.createdAt.toISOString(),
+        }
+      : null,
   };
 }

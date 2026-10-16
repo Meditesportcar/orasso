@@ -31,6 +31,7 @@ import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { staffRoutes } from "./modules/staff/routes";
 import { structuresRoutes } from "./modules/structures/routes";
 import { ticketsRoutes } from "./modules/tickets/routes";
+import { garageRoutes } from "./modules/vehicles/garage-routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { ws } from "./ws";
 
@@ -127,6 +128,7 @@ app.use("*", loadSession);
 app.route("/", accessRoutes);
 app.route("/", profilesRoutes);
 app.route("/", vehiclesRoutes);
+app.route("/", garageRoutes);
 app.route("/", structuresRoutes);
 app.route("/", eventsRoutes);
 app.route("/", applicationsRoutes);

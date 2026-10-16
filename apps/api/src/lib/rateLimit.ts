@@ -13,6 +13,8 @@ export const rateRules = {
     windowMs: 3_600_000,
     message: "Trop de véhicules ajoutés ou modifiés : réessaie plus tard.",
   },
+  /** Fiche Instagram d'un véhicule (rendu d'image, mis en cache une heure par véhicule). */
+  shareImage: { max: 40, windowMs: 3_600_000, message: "Trop de fiches générées : réessaie plus tard." },
   /** Vérification d'un QR de compte : code de 8 chiffres deviné par essais successifs. */
   accountQrVerify: { max: 30, windowMs: 60_000, message: "Trop de vérifications : réessaie dans une minute." },
   /** Recherche du staff par début de plaque ou pseudo. */

@@ -376,6 +376,12 @@ export const applicationsService = {
         for (const x of vehicles) {
           const label = vehicleLabel(x);
           if (x.status !== "active") throw validation(`${label} n'est plus dans ton garage actif`);
+          // Plaque déjà portée par un autre compte, transfert en cours (lot 31, S36) : pas de candidature d'ici là.
+          if (x.pendingTransferId) {
+            throw validation(`${label} : plaque en attente de transfert, tu ne peux pas candidater pour le moment`, {
+              plateTransfer: true,
+            });
+          }
           if (!event.admittedVehicleTypes.includes(x.vehicleType)) {
             throw validation(`${label} : ce type de véhicule n'est pas admis`);
           }

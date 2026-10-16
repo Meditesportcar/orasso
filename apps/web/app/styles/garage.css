@@ -1,0 +1,201 @@
+/* Garage et certification (lot 31) : page véhicule, archivés, demandes de transfert. Jetons seulement. */
+.g-card-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.g-card-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-md);
+}
+.g-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.g-archived {
+  border-top: 1.5px solid var(--line);
+  padding-top: var(--space-4);
+}
+.g-archived > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.g-archived__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.g-archived__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: inherit;
+  text-decoration: none;
+}
+.g-archived__name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.g-hero {
+  display: grid;
+  gap: var(--space-4);
+}
+.g-name {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+.g-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.g-photos li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.g-photos a {
+  display: block;
+}
+.g-photos img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+.g-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+.g-facts dt {
+  color: var(--ink-muted);
+}
+.g-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.g-conditions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.g-conditions li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.g-conditions .is-missing {
+  color: var(--ink-muted);
+}
+.g-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.g-history li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.g-sheet {
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+.g-sheet > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.g-sheet[open] > summary {
+  margin-bottom: var(--space-3);
+}
+.g-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.g-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.g-choice input {
+  accent-color: var(--accent);
+  margin-top: 3px;
+}
+.g-cats {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.g-cat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.g-cat label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.g-cat input {
+  accent-color: var(--accent);
+}
+.g-cat.is-off {
+  opacity: 0.6;
+  border-style: dashed;
+}
+.g-transfer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.g-queue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.g-queue__photos {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.g-queue__photos img {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
