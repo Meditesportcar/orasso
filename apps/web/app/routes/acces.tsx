@@ -39,7 +39,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const passes: Record<string, AccessPass> = {};
   await Promise.all(
     applications
-      .filter((a) => a.status === "accepted")
+      .filter((a) => !past && a.status === "accepted")
       .map(async (a) => {
         const res = await api<AccessPass>(request, `/applications/${a.id}/pass`);
         if (res.ok && res.data.payload) passes[a.id] = res.data;
@@ -119,7 +119,12 @@ function ApplicationCard({ app, pass, past }: { app: MyApplication; pass?: Acces
         )}
       </div>
 
-      {app.status === "accepted" && pass?.payload && (
+      {past && app.checkedInAt && (
+        <p className="o-t-caption s-muted">Entrée enregistrée le {formatDateTime(app.checkedInAt)}.</p>
+      )}
+
+      {/* Le QR ne sert qu'avant et pendant l'événement : pas dans le carnet de route (lot 12). */}
+      {!past && app.status === "accepted" && pass?.payload && (
         <>
           <div className="acc__qr" data-testid="pass-qr">
             <Qr payload={pass.payload} label={`QR d'inscription : ${app.event.title}`} />
@@ -332,7 +337,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
 
       {past && points && (
         <Plate as="section" className="s-stack s-stack--tight" aria-label="Mes points">
-          <div className="s-label o-t-label">Saison {points.season.name}</div>
+          <div className="s-label o-t-label">{points.season.name}</div>
           <div className="o-t-number" data-testid="season-points">
             {points.pointsSeason} pts
           </div>

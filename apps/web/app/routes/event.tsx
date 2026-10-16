@@ -133,13 +133,15 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
     .filter(Boolean)
     .join(", ");
   const bandText =
-    state.kind === "open"
-      ? "Inscriptions ouvertes"
-      : state.kind === "not_open"
-        ? `Ouverture le ${formatDateTime(state.opensAt)}`
-        : state.kind === "locked"
-          ? "Inscriptions closes"
-          : "Annulé";
+    ended && state.kind !== "cancelled"
+      ? "Événement terminé"
+      : state.kind === "open"
+        ? "Inscriptions ouvertes"
+        : state.kind === "not_open"
+          ? `Ouverture le ${formatDateTime(state.opensAt)}`
+          : state.kind === "locked"
+            ? "Inscriptions closes"
+            : "Annulé";
 
   return (
     <div className="ev">
@@ -270,6 +272,10 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
                 <p className="o-t-caption s-muted s-center">Crée ton compte ou connecte-toi, tu reviendras ici.</p>
               )}
             </>
+          ) : ended ? (
+            <p className="o-t-caption s-muted">
+              Événement terminé. Les participants pointés à l'entrée peuvent laisser leur avis pendant une semaine.
+            </p>
           ) : (
             <Button variant="primary" icon="vehicle" disabled fullWidth>
               Candidater avec un véhicule
@@ -278,7 +284,7 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
           {state.kind === "not_open" && (
             <p className="o-t-caption s-muted">Les inscriptions ouvrent le {formatDateTime(state.opensAt)}.</p>
           )}
-          {state.kind === "locked" && (
+          {state.kind === "locked" && !ended && (
             <p className="o-t-caption s-muted">Les inscriptions sont closes (verrouillage).</p>
           )}
 

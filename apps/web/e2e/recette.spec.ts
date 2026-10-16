@@ -158,6 +158,7 @@ test("recette du parcours n° 1 : cinq passionnés, deux staffs, avis", async ({
     const card = page.getByTestId("application").first();
     const form = card.getByTestId("review-form");
     await expect(form).toBeVisible();
+    await expect(card.getByTestId("pass-qr")).toHaveCount(0); // plus de QR dans le carnet de route
     await expect(form.getByRole("button", { name: "Envoyer mon avis" })).toBeDisabled();
     await form.getByRole("button", { name: `${stars} étoile${stars > 1 ? "s" : ""} sur 3` }).click();
     await form.getByLabel("Ton commentaire").fill(comment);
@@ -192,6 +193,8 @@ test("recette du parcours n° 1 : cinq passionnés, deux staffs, avis", async ({
   const visitor = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const pub = await visitor.newPage();
   await pub.goto(`/e/${event.slug}`);
+  await expect(pub.getByText("Événement terminé").first()).toBeVisible();
+  await expect(pub.getByRole("button", { name: "Candidater avec un véhicule" })).toHaveCount(0);
   const section = pub.getByTestId("reviews");
   await expect(section.getByTestId("review")).toHaveCount(2);
   await expect(section).toContainText(alpha.pseudo);
