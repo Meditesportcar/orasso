@@ -10,6 +10,7 @@ import { notificationsService } from "./modules/notifications/service";
 import { pointsService } from "./modules/points/service";
 import { securityService } from "./modules/security/service";
 import { staffService } from "./modules/staff/service";
+import { uploadsService } from "./modules/uploads/service";
 import { certificationService } from "./modules/vehicles/certification";
 import { plateTransferService } from "./modules/vehicles/plate-transfer";
 
@@ -38,6 +39,8 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   // et certifications perdues après six mois sans événement.
   "plate-transfer.escalate": (d) => plateTransferService.escalate(d.transferId),
   "certification.sweep": () => certificationService.sweep(),
+  // Lot 18 : fichiers de `POST /me/uploads` jamais rattachés depuis plus de 24 h (enregistrement et fichier).
+  "uploads.purge": () => uploadsService.purgeExpired(),
 };
 
 /**
@@ -76,6 +79,7 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("security.purge-known-logins", "20 4 * * 1", null, { tz: "Europe/Paris" });
     await boss.schedule("plate-transfer.escalate", "15 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("certification.sweep", "30 5 * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("uploads.purge", "40 4 * * *", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {
     async send(name, data, startAfter) {

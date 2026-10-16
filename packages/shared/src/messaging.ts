@@ -28,3 +28,10 @@ export const uploadPurposes = ["message", "crew_logo", "incident", "report", "pr
 export type UploadPurpose = (typeof uploadPurposes)[number];
 
 export const privateUploadPurposes: readonly UploadPurpose[] = ["message", "incident", "report"];
+
+/**
+ * Usages acceptés par `POST /me/uploads` **aujourd'hui** : seulement ceux qui ont un consommateur (relecture du lot 18 :
+ * sinon la route servirait d'hébergement public d'images). Les lots 19, 20 et suivants ajoutent le leur ici, avec le code
+ * qui rattache le fichier.
+ */
+export const acceptedUploadPurposes = ["message"] as const satisfies readonly UploadPurpose[];

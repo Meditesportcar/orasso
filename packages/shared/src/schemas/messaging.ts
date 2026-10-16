@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { Grade } from "../grades";
-import { type ConversationKind, type MessageKind, uploadPurposes } from "../messaging";
+import { acceptedUploadPurposes, type ConversationKind, type MessageKind } from "../messaging";
 import { CONTACT_MESSAGE_MAX, MESSAGE_BODY_MAX, MESSAGES_PAGE_SIZE } from "../rules/messaging";
 import { pageQuery } from "./common";
 import { pseudoSchema } from "./profile";
@@ -40,7 +40,7 @@ export type ContactRequestCreate = z.infer<typeof contactRequestCreateSchema>;
 
 export const contactRequestsQuery = z.object({ direction: z.enum(["in", "out"]).optional() });
 
-export const uploadPurposeSchema = z.enum(uploadPurposes);
+export const uploadPurposeSchema = z.enum(acceptedUploadPurposes);
 
 /** Une personne dans la messagerie : pseudo et photo, jamais rien d'autre. */
 export type MessagePerson = { userId: string; pseudo: string; avatarUrl: string | null };
@@ -67,7 +67,13 @@ export type MessageView = {
 };
 
 /** Pourquoi on ne peut plus écrire dans une conversation (lecture toujours possible). */
-export type ConversationWriteBlock = "not_friends" | "closed" | "suspended" | "account_deleted" | "two_factor";
+export type ConversationWriteBlock =
+  | "not_friends"
+  | "closed"
+  | "suspended"
+  | "account_deleted"
+  | "two_factor"
+  | "structure_suspended";
 
 export type ConversationSummary = {
   id: string;

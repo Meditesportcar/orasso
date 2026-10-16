@@ -119,6 +119,23 @@ export const uploadsService = {
   },
 
   /**
+   * Tâche quotidienne `uploads.purge` : tout fichier jamais rattaché depuis plus de 24 h disparaît (enregistrement puis
+   * fichier), quel que soit son auteur. Rend le nombre de fichiers effacés.
+   */
+  async purgeExpired(): Promise<number> {
+    const rows = await withTx((tx) =>
+      tx
+        .delete(uploads)
+        .where(
+          and(isNull(uploads.consumedAt), lt(uploads.createdAt, new Date(now().getTime() - PENDING_UPLOAD_TTL_MS))),
+        )
+        .returning({ key: uploads.key }),
+    );
+    for (const r of rows) await storage.remove(r.key).catch(() => undefined);
+    return rows.length;
+  },
+
+  /**
    * Rattache un fichier à son usage, dans la transaction de l'appelant : seulement par son auteur, pour l'usage prévu,
    * une seule fois. `null` si la clé ne convient pas.
    */

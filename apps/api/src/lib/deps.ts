@@ -24,7 +24,9 @@ export type JobName =
   | "security.purge-known-logins"
   // Lot 31 : garage et certification.
   | "plate-transfer.escalate"
-  | "certification.sweep";
+  | "certification.sweep"
+  // Lot 18 : fichiers envoyés jamais rattachés.
+  | "uploads.purge";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */
