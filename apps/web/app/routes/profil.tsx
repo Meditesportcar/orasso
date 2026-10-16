@@ -1,4 +1,4 @@
-import { Button, Chip, VehicleCard } from "@orasso/design-system/web";
+import { Button, Chip, Plate, VehicleCard } from "@orasso/design-system/web";
 import { gradeLabels, socialLabels, type UserProfileView } from "@orasso/shared";
 import { useNavigation } from "react-router";
 
@@ -100,11 +100,13 @@ export default function Profil({ loaderData, actionData }: Route.ComponentProps)
           <div className="s-grid">
             {p.vehicles.map((v) => (
               <a key={v.id} className="s-cardlink" href={`/v/${v.id}`} data-testid="profil-vehicle">
-                <VehicleCard
-                  first
-                  name={v.label}
-                  photo={v.photoUrl ? <img src={v.photoUrl} alt="" loading="lazy" /> : undefined}
-                />
+                {v.photoUrl ? (
+                  <VehicleCard first name={v.label} photo={<img src={v.photoUrl} alt="" loading="lazy" />} />
+                ) : (
+                  <Plate as="article" className="s-vrow">
+                    <span className="o-t-poster-m o-never-truncate">{v.label}</span>
+                  </Plate>
+                )}
               </a>
             ))}
           </div>

@@ -1383,3 +1383,36 @@
   background: var(--surface-sunken);
   border: 1.5px solid var(--line);
 }
+
+/* Cloche du Journal (en-tête du site) : pastille moutarde à plat, sans néon (le néon est celui du bouton principal ou de
+   l'onglet allumé : un seul par écran). */
+.s-bell {
+  position: relative;
+  display: inline-flex;
+}
+.s-bell__count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  padding: 2px 4px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Liens de liste : la couleur du lien du site ne s'applique pas aux cartes, aux personnes ni au Journal. */
+.s-main .s-journal__link,
+.s-main .s-person__name,
+.s-main .s-cardlink {
+  color: inherit;
+}
+.s-vrow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  color: var(--plate-ink);
+}

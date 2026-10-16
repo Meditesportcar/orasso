@@ -167,6 +167,9 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
               Suite
             </Button>
           )}
+          <Button variant="secondary" icon="crew" href="/app/amis">
+            {socialLabels.myFriends}
+          </Button>
           <p className="o-t-caption s-muted">{socialLabels.crewsSoon}</p>
         </div>
       )}

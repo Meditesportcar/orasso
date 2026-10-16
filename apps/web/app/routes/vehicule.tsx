@@ -1,4 +1,4 @@
-import { Button, Chip, VehicleCard } from "@orasso/design-system/web";
+import { Button, Chip, Plate, VehicleCard } from "@orasso/design-system/web";
 import { gradeLabels, type OtherVehicle, type PeopleSearchPage, socialLabels } from "@orasso/shared";
 import { useNavigation } from "react-router";
 
@@ -29,16 +29,27 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
   const full = "photos" in v ? v : null;
   return (
     <div className="s-narrow s-stack" data-testid="vehicule" data-detailed={v.detailed}>
-      <VehicleCard
-        first
-        name={v.label}
-        certified={full?.certified}
-        photo={full?.photos[0] ? <img src={full.photos[0].url} alt="" /> : undefined}
-        photoCount={full?.photos.length || undefined}
-        year={full?.year ?? undefined}
-        power={full?.powerHp ? `${full.powerHp} ch` : undefined}
-        categories={full?.categories.map((c) => ({ label: c.label }))}
-      />
+      {full?.photos[0] ? (
+        <VehicleCard
+          first
+          name={v.label}
+          certified={full.certified}
+          photo={<img src={full.photos[0].url} alt="" />}
+          photoCount={full.photos.length || undefined}
+          year={full.year ?? undefined}
+          power={full.powerHp ? `${full.powerHp} ch` : undefined}
+          categories={full.categories.map((c) => ({ label: c.label }))}
+        />
+      ) : (
+        <Plate as="article" className="s-vrow">
+          <h1 className="o-t-poster-m o-never-truncate">{v.label}</h1>
+          {full && (
+            <span className="o-t-meta">
+              {[full.year, full.powerHp ? `${full.powerHp} ch` : null].filter(Boolean).join(" · ")}
+            </span>
+          )}
+        </Plate>
+      )}
       <a className="s-row" href={`/u/${encodeURIComponent(v.owner.pseudo)}`} data-testid="vehicule-owner">
         <PersonAvatar url={v.owner.avatarUrl} pseudo={v.owner.pseudo} />
         <span className="o-t-title">{v.owner.pseudo}</span>

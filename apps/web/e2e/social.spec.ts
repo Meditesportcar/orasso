@@ -47,7 +47,11 @@ test("social : profils selon l'audience, recherche, demande d'ami, acceptation, 
   await addVehicleApi(alphaCookie, randomPlate());
   await addVehicleApi(bravoCookie, randomPlate());
   await apiCall(alphaCookie, "PATCH", "/me/profile", { bio: "Passionné d'anciennes", departments: ["66"] });
-  await apiCall(bravoCookie, "PATCH", "/me/profile", { visibility: "private", bio: "secret-de-bravo", departments: ["66"] });
+  await apiCall(bravoCookie, "PATCH", "/me/profile", {
+    visibility: "private",
+    bio: "secret-de-bravo",
+    departments: ["66"],
+  });
 
   const page = await browser.newPage();
   await loginInBrowser(page, `${charlie.toLowerCase()}@e2e.orasso.test`, undefined, "/app");

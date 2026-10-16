@@ -40,14 +40,15 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           {loaderData.orga && <a href={`/orga/${loaderData.orga}`}>Organisateur</a>}
           {loaderData.pro && <a href={`/pro/${loaderData.pro}`}>Pro</a>}
           {/* Journal (lot 17) : la cloche et sa pastille d'éléments non lus. */}
-          <AppBarAction
-            icon="bell"
-            label="Journal"
-            href="/app/journal"
-            count={loaderData.unread}
-            on={pathname === "/app/journal"}
-          />
-          <a href="/app/amis">Amis</a>
+          <span className="s-bell">
+            <AppBarAction icon="bell" label="Journal" href="/app/journal" on={pathname === "/app/journal"} />
+            {loaderData.unread > 0 && (
+              <span className="s-bell__count o-t-credit" data-testid="bell-count">
+                {loaderData.unread}
+                <span className="o-visually-hidden"> non lus</span>
+              </span>
+            )}
+          </span>
           <a href="/app/moi">{loaderData.pseudo}</a>
           <Form method="post" action="/deconnexion">
             <button type="submit" className="s-linkbutton o-t-button">

@@ -34,7 +34,8 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
   await apiCall(charlieCookie, "PATCH", "/me/profile", { departments: ["66"] });
   const errors: string[] = [];
 
-  const bravoQr = (await apiCall<{ secret: string; shortId: string }>(bravoCookie, "GET", "/me/account-qr-secret")).data;
+  const bravoQr = (await apiCall<{ secret: string; shortId: string }>(bravoCookie, "GET", "/me/account-qr-secret"))
+    .data;
   let pass = 0;
   for (const theme of ["sable", "beton"] as const) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: APP });
@@ -102,7 +103,13 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     await page.waitForTimeout(600);
 
     // Alpha accepte via l'API : Journal et Mes amis côté Charlie.
-    const pending = (await apiCall<{ items: { id: string; person: { pseudo: string } }[] }>(alphaCookie, "GET", "/me/friends/requests?direction=in")).data;
+    const pending = (
+      await apiCall<{ items: { id: string; person: { pseudo: string } }[] }>(
+        alphaCookie,
+        "GET",
+        "/me/friends/requests?direction=in",
+      )
+    ).data;
     const fromCharlie = pending.items.find((r) => r.person.pseudo === charlie);
     if (fromCharlie) await apiCall(alphaCookie, "POST", `/friends/requests/${fromCharlie.id}/accept`);
     await page.goto("/amis");
@@ -119,8 +126,18 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     await ctx.close();
 
     // Un second passage (autre thème) repart de zéro : on retire l'amitié pour retrouver l'état initial.
-    await apiCall(alphaCookie, "DELETE", `/friends/${(await apiCall<{ user: { id: string } }>(charlieCookie, "GET", "/me")).data.user.id}`);
-    const outgoing = (await apiCall<{ items: { person: { userId: string } }[] }>(charlieCookie, "GET", "/me/friends/requests?direction=out")).data;
+    await apiCall(
+      alphaCookie,
+      "DELETE",
+      `/friends/${(await apiCall<{ user: { id: string } }>(charlieCookie, "GET", "/me")).data.user.id}`,
+    );
+    const outgoing = (
+      await apiCall<{ items: { person: { userId: string } }[] }>(
+        charlieCookie,
+        "GET",
+        "/me/friends/requests?direction=out",
+      )
+    ).data;
     for (const r of outgoing.items) await apiCall(charlieCookie, "DELETE", `/friends/${r.person.userId}`);
   }
   console.log(`Erreurs console : ${errors.length} ${errors.slice(0, 5).join(" | ")}`);
