@@ -14,6 +14,7 @@ import {
   eventFormats,
   eventPublicAccessLabels,
   ON_SITE_PAYMENT_LABEL,
+  shopLabels,
   type VehicleMake,
   type VehicleType,
   vehicleTypeLabels,
@@ -84,6 +85,8 @@ type Draft = {
   unlimited: boolean;
   capacity: string;
   vendorTypes: string[];
+  /** Rôle boutique du staff activé pour cet événement (lot 24). */
+  shopEnabled: boolean;
   publicAccess: EventPublicAccess;
   externalTicketUrl: string;
   /** Entrée payante hors Orasso : lien de billetterie ou paiement sur place (lot 21). */
@@ -119,6 +122,7 @@ function initial(event?: EventOrganizer): Draft {
       unlimited: true,
       capacity: "",
       vendorTypes: [],
+      shopEnabled: false,
       publicAccess: "free",
       externalTicketUrl: "",
       paymentMode: "link",
@@ -151,6 +155,7 @@ function initial(event?: EventOrganizer): Draft {
     unlimited: event.capacity === null,
     capacity: event.capacity === null ? "" : String(event.capacity),
     vendorTypes: event.vendorTypes,
+    shopEnabled: event.shopEnabled,
     publicAccess: event.publicAccess,
     externalTicketUrl: event.externalTicketUrl ?? "",
     paymentMode: event.publicAccess === "paid_external" && !event.externalTicketUrl ? "on_site" : "link",
@@ -242,6 +247,7 @@ function payloadOf(d: Draft) {
     rulesText: d.rulesText.trim() || null,
     instructions: d.instructions.trim() || null,
     vendorTypes: d.vendorTypes,
+    shopEnabled: d.shopEnabled,
   };
 }
 
@@ -823,6 +829,15 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
                 ? "Une fois le brouillon enregistré, ouvre la billetterie des visiteurs (places, prix, interrupteur) depuis la page de l'événement."
                 : "La billetterie Orasso (billets gratuits sur réservation, billets payants en mode présentation) se choisit à l'étape « Public »."}
             </p>
+            <fieldset className="s-fieldset s-stack s-stack--tight" data-testid="shop-setting">
+              <legend className="o-t-label s-label">Staff de l'événement</legend>
+              <CheckboxField
+                label={shopLabels.wizardCheckbox}
+                checked={d.shopEnabled}
+                onChange={() => set("shopEnabled", !d.shopEnabled)}
+              />
+              <p className="s-muted">{shopLabels.wizardHint}</p>
+            </fieldset>
             <Recap d={d} />
             {!verified && (
               <p className="s-notice" data-testid="not-verified-note">

@@ -2,7 +2,7 @@
 // du public hors ligne, compteur d'entrées visiteurs, photo de la main courante, position de l'alerte.
 import { z } from "zod";
 import type { TicketRefusal } from "../qr/ticket";
-import { staffRoleSchema } from "../roles";
+import { type StaffRole, staffRoleSchema } from "../roles";
 import { isoDate, optionalText } from "./common";
 
 // --- Devenir staff ---------------------------------------------------------------------------------------------
@@ -17,6 +17,22 @@ export const staffRequestAcceptSchema = z.object({
   canDecide: z.boolean().default(false),
 });
 export type StaffRequestAccept = z.infer<typeof staffRequestAcceptSchema>;
+
+/** `POST /api/events/:id/staff/remind` : « Relancer » tout ceux qui n'ont pas répondu, ou une seule personne. */
+export const staffRemindSchema = z.object({ userId: z.string().min(1).max(64).optional() });
+
+/** `GET /api/me/staff-invitations` : invitations à rejoindre une structure, à accepter ou refuser (Boîte > Demandes). */
+export type StaffInvitationView = {
+  structureId: string;
+  structureSlug: string;
+  structureName: string;
+  logoUrl: string | null;
+  /** `staff` ou `co_organizer`. */
+  role: "staff" | "co_organizer";
+  staffRoles: StaffRole[];
+  invitedBy: string | null;
+  invitedAt: string;
+};
 
 /** Limites de la gestion du staff (gardes contre la répétition et l'abus). */
 export const STAFF_PENDING_MAX = 50;

@@ -3,7 +3,7 @@
 import { createPublicKey, generateKeyPairSync, sign, verify } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { encodePassMessage, encodePassPayload, type Ed25519Verify } from "./pass";
+import { type Ed25519Verify, encodePassMessage, encodePassPayload } from "./pass";
 import { decideTicketScan, encodeTicketMessage, encodeTicketPayload, type LocalTicket } from "./ticket";
 
 const SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -31,7 +31,13 @@ function ticketQr(fields = { kid: 1, eventNo: EVENT_NO, passId: TICKET_ID }, key
   return encodeTicketPayload(message, new Uint8Array(sign(null, message, key)));
 }
 
-const listed: LocalTicket = { ticketId: TICKET_ID, status: "valid", holderLabel: "Kenji", typeLabel: "Entrée", usedAt: null };
+const listed: LocalTicket = {
+  ticketId: TICKET_ID,
+  status: "valid",
+  holderLabel: "Kenji",
+  typeLabel: "Entrée",
+  usedAt: null,
+};
 const ctx = (tickets: LocalTicket[] = [listed], usedLocally?: Map<string, string>) => ({
   eventNo: EVENT_NO,
   keys,
@@ -81,7 +87,10 @@ describe("décision de scan d'un billet (decideTicketScan)", () => {
       reason: "unknown_key",
     });
     expect(decideTicketScan("OB1NIMPORTEQUOI", ctx())).toMatchObject({ decision: "refused", reason: "malformed" });
-    expect(decideTicketScan("https://exemple.fr/qr", ctx())).toMatchObject({ decision: "refused", reason: "malformed" });
+    expect(decideTicketScan("https://exemple.fr/qr", ctx())).toMatchObject({
+      decision: "refused",
+      reason: "malformed",
+    });
   });
 
   it("billet d'un autre événement : refusé other_event", () => {

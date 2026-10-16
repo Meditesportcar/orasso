@@ -31,10 +31,6 @@ export const fieldRoutes = new Hono<AppEnv>()
     return c.json(await fieldService.setIncidentPhoto(v, uuidParam(c, "id"), uuidParam(c, "incidentId"), photoKey));
   })
   .get("/events/:id/incidents/:incidentId/photo", async (c) => {
-    const data = await fieldService.incidentPhoto(
-      await requireUser(c),
-      uuidParam(c, "id"),
-      uuidParam(c, "incidentId"),
-    );
+    const data = await fieldService.incidentPhoto(await requireUser(c), uuidParam(c, "id"), uuidParam(c, "incidentId"));
     return c.body(new Uint8Array(data), 200, { "content-type": "image/webp", "cache-control": "private, no-store" });
   });

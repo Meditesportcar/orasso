@@ -1,0 +1,86 @@
+/* Staff côté site (lot 24) : membres, demandes, présences par événement, direct du jour J. Jetons seulement. */
+.staffp__roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.staffp__roles legend {
+  padding: 0;
+}
+.staffp__member {
+  gap: var(--space-3);
+}
+.staffp__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+.staffp__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.staffp__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.staffp__event {
+  gap: var(--space-3);
+}
+.staffp__never {
+  color: var(--ink-muted);
+}
+
+/* Direct du jour J : alertes avec position, main courante avec photo. */
+.livep__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.livep__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.livep__photo {
+  display: block;
+  max-width: min(100%, 360px);
+  height: auto;
+  border-radius: var(--radius-md);
+}
+.livep__bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.livep__bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.livep__track {
+  grid-column: 1 / -1;
+  height: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  border: 1.5px solid var(--line);
+  overflow: hidden;
+}
+.livep__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}

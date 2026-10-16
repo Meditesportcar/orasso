@@ -5,18 +5,21 @@
 import {
   STAFF_PENDING_MAX,
   STAFF_REQUEST_COOLDOWN_MS,
+  type StaffInvitationView,
   type StaffRequestAccept,
+  type StaffRole,
   staffRequestLabels,
 } from "@orasso/shared";
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { structureBans, structureMembers } from "../../db/schema";
+import { profiles, structureBans, structureMembers, structures } from "../../db/schema";
 import { requireOrganizer } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
+import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { staffChatsService } from "../communication/staff-chats";
 import { inboxService, registerInboxCounter } from "../messaging/inbox";
@@ -84,6 +87,33 @@ export const staffRequestsService = {
       .from(structureMembers)
       .where(and(eq(structureMembers.userId, userId), eq(structureMembers.status, "invited")));
     return row?.n ?? 0;
+  },
+
+  /** `GET /me/staff-invitations` : mes invitations en attente (structure, rôle proposé, qui m'invite). */
+  async myInvitations(v: Viewer): Promise<StaffInvitationView[]> {
+    const rows = await db
+      .select({ m: structureMembers, s: structures, inviter: profiles.pseudo })
+      .from(structureMembers)
+      .innerJoin(structures, eq(structures.id, structureMembers.structureId))
+      .leftJoin(profiles, eq(profiles.userId, structureMembers.invitedBy))
+      .where(
+        and(
+          eq(structureMembers.userId, v.user.id),
+          eq(structureMembers.status, "invited"),
+          isNull(structures.deletedAt),
+        ),
+      )
+      .orderBy(desc(structureMembers.updatedAt));
+    return rows.map(({ m, s, inviter }) => ({
+      structureId: s.id,
+      structureSlug: s.slug,
+      structureName: s.name,
+      logoUrl: storage.url(s.logoKey),
+      role: m.role === "co_organizer" ? "co_organizer" : "staff",
+      staffRoles: m.staffRoles as StaffRole[],
+      invitedBy: inviter,
+      invitedAt: m.updatedAt.toISOString(),
+    }));
   },
 
   /**

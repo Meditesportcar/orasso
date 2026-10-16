@@ -9,6 +9,9 @@ import {
   gradeLabels,
   type InboxSummary,
   messagingLabels,
+  type StaffInvitationView,
+  staffRequestLabels,
+  staffRoleLabels,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
@@ -29,13 +32,15 @@ export function meta() {
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireMe(request);
-  const [friends, contacts, summary, crews, confirmations] = await Promise.all([
+  const [friends, contacts, summary, crews, confirmations, staffInvitations] = await Promise.all([
     apiOrThrow<{ items: FriendRequestView[] }>(request, "/me/friends/requests?direction=in"),
     apiOrThrow<{ items: ContactRequestView[] }>(request, "/me/contact-requests"),
     apiOrThrow<InboxSummary>(request, "/me/inbox/summary"),
     // Crews (lot 19) : demandes reçues par un chef, invitations reçues, venues en crew à confirmer.
     apiOrThrow<CrewInboxRequest[]>(request, "/me/crew-requests"),
     apiOrThrow<CrewConfirmationRequest[]>(request, "/me/crew-confirmations"),
+    // Invitations à rejoindre une structure (lot 24).
+    apiOrThrow<StaffInvitationView[]>(request, "/me/staff-invitations"),
   ]);
   return {
     friends: friends.items,
@@ -44,6 +49,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     summary,
     crews,
     confirmations,
+    staffInvitations,
   };
 }
 
@@ -54,6 +60,14 @@ export async function action({ request }: Route.ActionArgs) {
   if (isCrewIntent(intent)) {
     const res = await crewAction(request, form);
     return data({ friendError: res.data.crewError }, { status: res.init?.status ?? 200 });
+  }
+  // Invitation à rejoindre une structure (lot 24) : accepter ou refuser, seul le destinataire le peut.
+  if (intent === "staff_accept" || intent === "staff_decline") {
+    const structureId = encodeURIComponent(String(form.get("structureId") ?? ""));
+    const answer = intent === "staff_accept" ? "accept" : "decline";
+    const res = await api(request, `/me/memberships/${structureId}/${answer}`, { method: "POST" });
+    if (!res.ok) return data({ friendError: res.error.message }, { status: res.status });
+    return data({ friendError: null as string | null });
   }
   const id = encodeURIComponent(String(form.get("id") ?? ""));
   if (intent === "contact_accept") {
@@ -105,10 +119,15 @@ function Decide({ intentPrefix, id, busy }: { intentPrefix: "friend" | "contact"
 }
 
 export default function Demandes({ loaderData, actionData }: Route.ComponentProps) {
-  const { friends, contactsIn, contactsOut, summary, crews, confirmations } = loaderData;
+  const { friends, contactsIn, contactsOut, summary, crews, confirmations, staffInvitations } = loaderData;
   const busy = useNavigation().state !== "idle";
   const requests = Object.values(summary.requests).reduce((a, b) => a + b, 0);
-  const empty = friends.length === 0 && contactsIn.length === 0 && crews.length === 0 && confirmations.length === 0;
+  const empty =
+    friends.length === 0 &&
+    contactsIn.length === 0 &&
+    crews.length === 0 &&
+    confirmations.length === 0 &&
+    staffInvitations.length === 0;
   return (
     <div className="s-narrow s-stack" data-testid="demandes">
       <h1 className="s-title">{messagingLabels.inbox}</h1>
@@ -165,6 +184,50 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
                 <Button variant="secondary" icon="qr" href="/app/acces">
                   {crewLabels.confirmVenue}
                 </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {staffInvitations.length > 0 && (
+        <section className="s-section" aria-labelledby="staff-titre">
+          <h2 id="staff-titre" className="s-h2">
+            {staffRequestLabels.invited}
+          </h2>
+          <ul className="s-people">
+            {staffInvitations.map((i) => (
+              <li key={i.structureId} className="s-person" data-testid="request-staff-invitation">
+                <CrewLogo url={i.logoUrl} name={i.structureName} size={44} />
+                <div className="s-person__main">
+                  <span className="s-label o-t-label">
+                    {i.role === "co_organizer" ? "Invitation comme co-organisateur" : "Invitation dans le staff"}
+                  </span>
+                  <a className="o-t-title o-never-truncate" href={`/o/${i.structureSlug}`}>
+                    {i.structureName}
+                  </a>
+                  {i.staffRoles.length > 0 && (
+                    <span className="o-t-caption s-muted">
+                      {i.staffRoles.map((r) => staffRoleLabels[r]).join(" · ")}
+                    </span>
+                  )}
+                  {i.invitedBy && <span className="o-t-caption s-muted">Proposé par {i.invitedBy}</span>}
+                </div>
+                <div className="s-row">
+                  {(["staff_accept", "staff_decline"] as const).map((intent) => (
+                    <Form method="post" key={intent}>
+                      <input type="hidden" name="intent" value={intent} />
+                      <input type="hidden" name="structureId" value={i.structureId} />
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        icon={intent === "staff_accept" ? "check" : "close"}
+                        loading={busy}
+                      >
+                        {intent === "staff_accept" ? messagingLabels.accept : messagingLabels.decline}
+                      </Button>
+                    </Form>
+                  ))}
+                </div>
               </li>
             ))}
           </ul>

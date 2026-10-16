@@ -158,6 +158,44 @@ export function assertStaffWindow(event: EventRow, access: StaffAccess) {
   }
 }
 
+/**
+ * Relance ceux qui n'ont pas répondu et pas été relancés aujourd'hui (heure de Paris) : notification et e-mail,
+ * compteur de relances. `only` : une seule personne.
+ */
+async function remindPending(
+  event: EventRow,
+  today: { year: number; month: number; day: number },
+  only?: string,
+): Promise<number> {
+  const t = now();
+  const pending = (await members(event)).filter((m) => {
+    if (only && m.userId !== only) return false;
+    if (m.presence !== "unknown") return false;
+    if (!m.lastRemindedAt) return true;
+    const last = wallTime(m.lastRemindedAt);
+    return last.year !== today.year || last.month !== today.month || last.day !== today.day;
+  });
+  if (!pending.length) return 0;
+  await withTx(async (tx, after) => {
+    for (const m of pending) {
+      await notificationsService.notify(tx, m.userId, "staff_presence_reminder", {
+        title: "Seras-tu là ?",
+        body: `« ${event.title} », ${formatDateTime(event.startsAt)} : dis à l'équipe si tu seras là.`,
+        eventId: event.id,
+        eventStartsAt: event.startsAt,
+        data: { eventId: event.id, screen: "staff" },
+        link: { label: "Répondre", path: "/app/acces" },
+      });
+      await tx
+        .update(eventStaff)
+        .set({ reminderCount: sql`${eventStaff.reminderCount} + 1`, lastRemindedAt: t })
+        .where(eq(eventStaff.id, m.id));
+    }
+    after(() => notificationsService.kick());
+  });
+  return pending.length;
+}
+
 export const staffService = {
   ensureRows,
   members,
@@ -327,33 +365,26 @@ export const staffService = {
     let sent = 0;
     for (const event of upcoming) {
       if (isEventDay(event.startsAt, t)) continue;
-      const pending = (await members(event)).filter((m) => {
-        if (m.presence !== "unknown") return false;
-        if (!m.lastRemindedAt) return true;
-        const last = wallTime(m.lastRemindedAt);
-        return last.year !== today.year || last.month !== today.month || last.day !== today.day;
-      });
-      if (!pending.length) continue;
-      await withTx(async (tx, after) => {
-        for (const m of pending) {
-          await notificationsService.notify(tx, m.userId, "staff_presence_reminder", {
-            title: "Seras-tu là ?",
-            body: `« ${event.title} », ${formatDateTime(event.startsAt)} : dis à l'équipe si tu seras là.`,
-            eventId: event.id,
-            eventStartsAt: event.startsAt,
-            data: { eventId: event.id, screen: "staff" },
-            link: { label: "Répondre", path: "/app/acces" },
-          });
-          await tx
-            .update(eventStaff)
-            .set({ reminderCount: sql`${eventStaff.reminderCount} + 1`, lastRemindedAt: t })
-            .where(eq(eventStaff.id, m.id));
-          sent++;
-        }
-        after(() => notificationsService.kick());
-      });
+      sent += await remindPending(event, today);
     }
     return sent;
+  },
+
+  /**
+   * « Relancer » depuis le site (lot 24) : l'organisation relance tout de suite ceux qui n'ont pas dit s'ils seraient
+   * là (ou une seule personne). Même règle que la relance du matin : une par jour et par personne, arrêt au début de
+   * l'événement. Rend le nombre de personnes relancées.
+   */
+  async remind(v: Viewer, eventId: string, userId?: string): Promise<{ reminded: number }> {
+    const event = await eventsRepo.byId(eventId);
+    await requireOrganizer(v, event.structureId);
+    if (event.status !== "published") throw notFound("Événement introuvable");
+    const t = now();
+    if (t >= event.startsAt) throw lockedError("Les relances s'arrêtent au début de l'événement");
+    if (userId && !(await members(event)).some((m) => m.userId === userId)) {
+      throw notFound("Ce membre n'est pas dans le staff de l'événement");
+    }
+    return { reminded: await remindPending(event, wallTime(t), userId) };
   },
 
   /** Rappel de synchronisation au verrouillage, au staff présent ou qui n'a pas répondu (§ 2.3). */

@@ -1,13 +1,14 @@
-import { Button, Icon, Plate } from "@orasso/design-system/web";
+import { Button, Chip, Icon, Plate } from "@orasso/design-system/web";
 import {
   type EventCard,
   type Page,
   type ProCard,
   type StructureOrganizer,
   type StructurePublic,
+  staffRequestLabels,
   structureKindLabels,
 } from "@orasso/shared";
-import { Form, redirect } from "react-router";
+import { data, Form, redirect } from "react-router";
 
 import { EventTile } from "../components/EventTile";
 import { ContactOrganizer } from "../components/Messaging";
@@ -32,7 +33,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   );
   // Lien d'invitation : visible des organisateurs de la structure seulement (c'est leur lien à partager).
   const full = organizer ? await api<StructureOrganizer>(request, `/structures/${structure.id}`) : null;
+  // Devenir staff (lot 24) : où en est ma demande ou mon appartenance à cette structure.
+  const mine = me?.memberships.find((m) => m.structureId === structure.id);
   return {
+    staffState: (mine && mine.role === "staff" ? mine.status : null) as "active" | "invited" | "requested" | null,
     structure,
     upcoming: upcoming.ok ? upcoming.data.items : [],
     past: past.ok ? past.data.items : [],
@@ -76,11 +80,21 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
   // Contacter l'organisateur (lot 18) : toujours possible, conversation avec la structure.
   if (intent === "contact_organizer") return messageAction(request, form);
+  // Demande pour devenir staff (lot 24) : l'organisateur est prévenu et répond depuis son espace.
+  if (intent === "become_staff" && structureId) {
+    const res = await api(request, `/structures/${structureId}/staff-requests`, {
+      method: "POST",
+      json: { message: String(form.get("message") ?? "").trim() || null },
+    });
+    if (!res.ok) return data({ staffError: res.error.message }, { status: res.status });
+    return redirect(`/o/${params.slug}?staff=demande`);
+  }
   return redirect(`/o/${params.slug}`);
 }
 
-export default function StructurePage({ loaderData }: Route.ComponentProps) {
-  const { structure, upcoming, past, partners, connected, inviteToken, isOrganizer, origin } = loaderData;
+export default function StructurePage({ loaderData, actionData }: Route.ComponentProps) {
+  const { structure, upcoming, past, partners, connected, inviteToken, isOrganizer, origin, staffState } = loaderData;
+  const staffError = (actionData as { staffError?: string } | undefined)?.staffError;
   const where = [structure.postalCode, structure.city].filter(Boolean).join(" ");
   const socials = Object.entries(structure.socials).filter(([, url]) => Boolean(url)) as [string, string][];
   const average = structure.rating.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
@@ -153,6 +167,40 @@ export default function StructurePage({ loaderData }: Route.ComponentProps) {
           )}
           {structure.verified && !isOrganizer && (
             <ContactOrganizer structureId={structure.id} connected={connected} retour={`/o/${structure.slug}`} />
+          )}
+          {structure.verified && !isOrganizer && (
+            <div className="s-stack s-stack--tight" data-testid="become-staff">
+              {staffState === "active" ? (
+                <Chip variant="accent">Tu fais partie du staff</Chip>
+              ) : staffState === "requested" ? (
+                <Chip>{staffRequestLabels.sent}</Chip>
+              ) : staffState === "invited" ? (
+                <Button variant="secondary" icon="staff" href="/app/boite/demandes" fullWidth>
+                  {staffRequestLabels.invited}
+                </Button>
+              ) : connected ? (
+                <Form method="post">
+                  <input type="hidden" name="structureId" value={structure.id} />
+                  <Button type="submit" name="intent" value="become_staff" variant="secondary" icon="staff" fullWidth>
+                    {staffRequestLabels.becomeStaff}
+                  </Button>
+                </Form>
+              ) : (
+                <Button
+                  variant="secondary"
+                  icon="staff"
+                  href={`/connexion?retour=${encodeURIComponent(`/o/${structure.slug}`)}`}
+                  fullWidth
+                >
+                  {staffRequestLabels.becomeStaff}
+                </Button>
+              )}
+              {staffError && (
+                <p className="s-error" role="alert">
+                  {staffError}
+                </p>
+              )}
+            </div>
           )}
           {isOrganizer && (
             <Button variant="secondary" icon="calendar" href={`/orga/${structure.slug}`} fullWidth>

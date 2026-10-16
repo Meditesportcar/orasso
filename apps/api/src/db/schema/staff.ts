@@ -63,10 +63,7 @@ export const ticketScans = pgTable(
     serverResult: ticketScanResultEnum("server_result").notNull(),
     ...timestamps,
   },
-  (t) => [
-    index("ticket_scans_event_idx").on(t.eventId, t.receivedAt),
-    index("ticket_scans_ticket_idx").on(t.ticketId),
-  ],
+  (t) => [index("ticket_scans_event_idx").on(t.eventId, t.receivedAt), index("ticket_scans_ticket_idx").on(t.ticketId)],
 );
 
 /**

@@ -162,7 +162,9 @@ export const structuresService = {
         and(
           isNull(structures.deletedAt),
           eq(structures.verification, "verified"),
-          search ? or(ilike(structures.name, `%${escapeLike(search)}%`), ilike(structures.city, `%${escapeLike(search)}%`)) : undefined,
+          search
+            ? or(ilike(structures.name, `%${escapeLike(search)}%`), ilike(structures.city, `%${escapeLike(search)}%`))
+            : undefined,
         ),
       )
       .orderBy(asc(structures.name), asc(structures.id))

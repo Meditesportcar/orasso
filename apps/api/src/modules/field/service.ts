@@ -224,10 +224,7 @@ export const fieldService = {
       .select()
       .from(incidents)
       .where(
-        and(
-          eq(incidents.eventId, eventId),
-          or(eq(incidents.id, incidentRef), eq(incidents.clientId, incidentRef)),
-        ),
+        and(eq(incidents.eventId, eventId), or(eq(incidents.id, incidentRef), eq(incidents.clientId, incidentRef))),
       );
     if (!row) throw notFound("Incident introuvable");
     if (access.actor === "staff" && row.reporterUserId !== v.user.id) {

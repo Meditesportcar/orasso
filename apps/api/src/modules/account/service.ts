@@ -67,8 +67,8 @@ import { securityMails } from "../security/mails";
 import { isSecondFactor } from "../security/passkey";
 import { securityService } from "../security/service";
 import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
-import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { socialProfile } from "../social/profile";
+import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
 
 type MailUser = { id: string; email: string; name: string };

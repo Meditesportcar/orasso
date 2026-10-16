@@ -9,6 +9,7 @@ import {
   type MyStaffEvent,
   POINTS_PENDING_LABEL,
   staffPresenceLabels,
+  staffRequestLabels,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -169,6 +170,13 @@ export default function Acces() {
           ))}
         </>
       ) : null}
+      {(me?.memberships ?? [])
+        .filter((m) => m.role === "staff" && m.status === "requested")
+        .map((m) => (
+          <Notice key={m.structureId}>
+            {staffRequestLabels.sent} · {m.structureName} : tu seras prévenu quand l'organisateur aura répondu.
+          </Notice>
+        ))}
       {orphans.map(([eventId, u]) => (
         <Notice key={eventId}>
           {u.count} envoi{u.count > 1 ? "s" : ""} du staff à faire · {u.title || "événement terminé"} : ils partiront au

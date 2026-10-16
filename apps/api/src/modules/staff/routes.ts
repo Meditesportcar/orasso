@@ -1,6 +1,7 @@
 import {
   eventStaffUpdateSchema,
   presenceSchema,
+  staffRemindSchema,
   staffRequestAcceptSchema,
   staffRequestSchema,
   staffSyncQuerySchema,
@@ -30,6 +31,12 @@ export const staffRoutes = new Hono<AppEnv>()
     const input = await body(c, eventStaffUpdateSchema);
     return c.json(await staffService.update(v, uuidParam(c, "id"), userIdParam(c.req.param("userId")), input));
   })
+  // « Relancer » ceux qui n'ont pas répondu (tous, ou un seul : `userId`).
+  .post("/events/:id/staff/remind", async (c) => {
+    const v = await requireUser(c);
+    const input = parse(staffRemindSchema, await c.req.json().catch(() => ({})));
+    return c.json(await staffService.remind(v, uuidParam(c, "id"), input.userId));
+  })
   .put("/events/:id/staff/me/presence", async (c) => {
     const v = await requireUser(c);
     const { present } = await body(c, presenceSchema);
@@ -41,6 +48,10 @@ export const staffRoutes = new Hono<AppEnv>()
     return c.json(await staffService.sync(v, uuidParam(c, "id"), since));
   })
   // Devenir staff d'une structure (lot 24) : demande du public, réponse de l'organisation.
+  .get("/me/staff-invitations", async (c) => {
+    c.header("cache-control", "private, no-store");
+    return c.json(await staffRequestsService.myInvitations(await requireUser(c)));
+  })
   .post("/structures/:id/staff-requests", async (c) => {
     const v = await requireUser(c);
     const { message } = await body(c, staffRequestSchema);

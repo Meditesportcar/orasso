@@ -57,7 +57,8 @@ function assertShopOpen(event: EventRow) {
   if (!event.shopEnabled) throw new AppError(409, "conflict", "La boutique n'est pas activée pour cet événement.");
   const t = now();
   if (t < staffModeOpensAt(event)) throw new AppError(423, "locked", "Boutique ouverte à partir de la veille");
-  if (t >= settleAt(event) || event.settledAt) throw new AppError(423, "locked", "Points déjà réglés : boutique fermée");
+  if (t >= settleAt(event) || event.settledAt)
+    throw new AppError(423, "locked", "Points déjà réglés : boutique fermée");
 }
 
 async function ownedDevice(v: Viewer, deviceId: string | null | undefined): Promise<string | null> {

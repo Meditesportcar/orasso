@@ -29,14 +29,14 @@ import {
   notifications,
   staffAlerts,
   structureMembers,
-  tickets,
   ticketScans,
+  tickets,
   vehicleCategories,
   visitorEntries,
 } from "../../db/schema";
 import { applicationsService } from "../applications/service";
-import { notificationsService } from "../notifications/service";
 import { fieldService } from "../field/service";
+import { notificationsService } from "../notifications/service";
 
 afterAll(async () => {
   await notificationsService.flush();
@@ -155,7 +155,13 @@ describe("devenir staff : demande, réponse, délais", () => {
     const nina = await signUp("Nina_Candidate");
     for (const mode of MODES) {
       const user = mode === "cookie" ? nina : await signUp("Nina_Bearer");
-      const asked = await req(user, "POST", `/structures/${w.s.id}/staff-requests`, { message: "Dispo le week-end" }, mode);
+      const asked = await req(
+        user,
+        "POST",
+        `/structures/${w.s.id}/staff-requests`,
+        { message: "Dispo le week-end" },
+        mode,
+      );
       expect(asked.status).toBe(201);
       expect(asked.json).toEqual({ status: "requested" });
       // Répéter la demande en cours est sans effet (une seule notification à l'organisateur).
@@ -178,9 +184,9 @@ describe("devenir staff : demande, réponse, délais", () => {
     const otherStructure = await createStructure(otherOwner.id);
     expect((await req(otherOwner, "POST", `/structures/${w.s.id}/members/${nina.id}/accept`, {})).status).toBe(403);
     // Une demande qui n'existe pas dans CETTE structure : introuvable.
-    expect((await req(otherOwner, "POST", `/structures/${otherStructure.id}/members/${nina.id}/accept`, {})).status).toBe(
-      404,
-    );
+    expect(
+      (await req(otherOwner, "POST", `/structures/${otherStructure.id}/members/${nina.id}/accept`, {})).status,
+    ).toBe(404);
 
     const accept = await req(w.damien, "POST", `/structures/${w.s.id}/members/${nina.id}/accept`, {
       staffRoles: ["scan", "placement"],
@@ -257,9 +263,9 @@ describe("invitations de staff", () => {
       else expect(invite.status).toBe(409);
     }
     await notificationsService.flush();
-    expect((await db.select().from(notifications).where(eq(notifications.userId, nina.id))).map((n) => n.type)).toContain(
-      "staff_invitation",
-    );
+    expect(
+      (await db.select().from(notifications).where(eq(notifications.userId, nina.id))).map((n) => n.type),
+    ).toContain("staff_invitation");
     const summary = await req(nina, "GET", "/me/inbox/summary");
     expect(summary.json.requests.staffInvitation).toBe(1);
     // Un autre compte ne peut pas accepter à sa place (il n'a pas d'invitation).
@@ -278,7 +284,12 @@ describe("invitations de staff", () => {
     const w = await setup();
     const nina = await signUp("Nina_Refuse");
     const invite = () =>
-      req(w.damien, "POST", `/structures/${w.s.id}/members`, { pseudo: nina.pseudo, role: "staff", staffRoles: [], canDecide: false });
+      req(w.damien, "POST", `/structures/${w.s.id}/members`, {
+        pseudo: nina.pseudo,
+        role: "staff",
+        staffRoles: [],
+        canDecide: false,
+      });
     expect((await invite()).status).toBe(201);
     expect((await req(nina, "POST", `/me/memberships/${w.s.id}/decline`)).status).toBe(204);
     expect((await invite()).status).toBe(409);
@@ -356,8 +367,15 @@ describe("rôle boutique : synchro et contrôle des billets", () => {
     const first = await req(w.lea, "GET", `/events/${w.e.id}/staff/sync`);
     const d = await device(w.lea.id);
     clock.advance(60_000);
-    await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, { deviceId: d, items: [scanItem(w.payloads[0] as string)] });
-    const delta = await req(w.lea, "GET", `/events/${w.e.id}/staff/sync?since=${encodeURIComponent(first.json.cursor)}`);
+    await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, {
+      deviceId: d,
+      items: [scanItem(w.payloads[0] as string)],
+    });
+    const delta = await req(
+      w.lea,
+      "GET",
+      `/events/${w.e.id}/staff/sync?since=${encodeURIComponent(first.json.cursor)}`,
+    );
     expect(delta.json.full).toBe(false);
     expect(delta.json.tickets.map((t: { ticketId: string }) => t.ticketId)).toContain(w.ids[0]);
     expect(delta.json.tickets.find((t: { ticketId: string }) => t.ticketId === w.ids[0]).status).toBe("used");
@@ -399,7 +417,11 @@ describe("rôle boutique : synchro et contrôle des billets", () => {
     const w = await setup();
     clock.set(new Date(w.e.startsAt.getTime() - HOUR));
     const d = await device(w.lea.id);
-    const items = [scanItem(w.payloads[0] as string), scanItem(w.payloads[0] as string), scanItem(w.payloads[1] as string)];
+    const items = [
+      scanItem(w.payloads[0] as string),
+      scanItem(w.payloads[0] as string),
+      scanItem(w.payloads[1] as string),
+    ];
     const res = await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, { deviceId: d, items });
     expect(res.json.results.map((r: { result: string }) => r.result)).toEqual(["accepted", "already", "accepted"]);
     const live = await req(w.damien, "GET", `/events/${w.e.id}/live`);
@@ -428,7 +450,10 @@ describe("rôle boutique : synchro et contrôle des billets", () => {
       ["https://exemple.fr/promo", "malformed"],
     ];
     for (const [payload, reason] of cases) {
-      const res = await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, { deviceId: d, items: [scanItem(payload)] });
+      const res = await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, {
+        deviceId: d,
+        items: [scanItem(payload)],
+      });
       expect(res.json.results[0]).toMatchObject({ result: "refused", reason });
     }
     // Annulé par son titulaire avant la lecture.
@@ -452,8 +477,11 @@ describe("rôle boutique : synchro et contrôle des billets", () => {
     // Théo n'a que le scan : ni billets, ni compteur.
     expect((await req(w.theo, "POST", `/events/${w.e.id}/ticket-scans`, body(dTheo))).status).toBe(403);
     expect(
-      (await req(w.theo, "POST", `/events/${w.e.id}/visitor-entries`, { items: [{ id: randomUUID(), delta: 1, at: clock.now }] }))
-        .status,
+      (
+        await req(w.theo, "POST", `/events/${w.e.id}/visitor-entries`, {
+          items: [{ id: randomUUID(), delta: 1, at: clock.now }],
+        })
+      ).status,
     ).toBe(403);
     // Visiteur ordinaire, anonyme.
     expect((await req(w.kenji, "POST", `/events/${w.e.id}/ticket-scans`, body(dLea))).status).toBe(403);
@@ -487,13 +515,21 @@ describe("rôle boutique : synchro et contrôle des billets", () => {
     const d = await device(w.lea.id);
     clock.set(new Date(w.e.startsAt.getTime() - 3 * DAY));
     expect(
-      (await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, { deviceId: d, items: [scanItem(w.payloads[0] as string)] }))
-        .status,
+      (
+        await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, {
+          deviceId: d,
+          items: [scanItem(w.payloads[0] as string)],
+        })
+      ).status,
     ).toBe(423);
     clock.set(new Date(w.e.endsAt.getTime() + 4 * DAY));
     expect(
-      (await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, { deviceId: d, items: [scanItem(w.payloads[0] as string)] }))
-        .status,
+      (
+        await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, {
+          deviceId: d,
+          items: [scanItem(w.payloads[0] as string)],
+        })
+      ).status,
     ).toBe(423);
   });
 });
@@ -536,7 +572,10 @@ describe("rôle boutique : compteur d'entrées des visiteurs", () => {
 describe("direct par catégorie, prestataires, main courante avec photo, alerte avec position", () => {
   it("live.byCategory : attendus / arrivés par catégorie principale", async () => {
     const w = await setup();
-    const [muscle] = await db.insert(categories).values({ slug: "muscle", label: "Muscle car", position: 5 }).returning();
+    const [muscle] = await db
+      .insert(categories)
+      .values({ slug: "muscle", label: "Muscle car", position: 5 })
+      .returning();
     const people = [await signUp("Kenji_Fan"), await signUp("Nina_Fan")];
     const cars = [];
     for (const u of people) {
@@ -560,9 +599,9 @@ describe("direct par catégorie, prestataires, main courante avec photo, alerte 
     }
     clock.set(new Date(w.e.startsAt.getTime() + HOUR));
     const first = created[0]!;
-    expect((await req(w.damien, "POST", `/events/${w.e.id}/checkins`, { applicationId: first.id, method: "manual" })).status).toBe(
-      201,
-    );
+    expect(
+      (await req(w.damien, "POST", `/events/${w.e.id}/checkins`, { applicationId: first.id, method: "manual" })).status,
+    ).toBe(201);
     const live = await req(w.damien, "GET", `/events/${w.e.id}/live`);
     const row = live.json.byCategory.find((c: { slug: string }) => c.slug === "muscle");
     expect(row).toMatchObject({ expected: 2, arrived: 1, label: "Muscle car" });
@@ -578,7 +617,12 @@ describe("direct par catégorie, prestataires, main courante avec photo, alerte 
         w.lea,
         "POST",
         `/events/${w.e.id}/incidents`,
-        { clientId: mode === "cookie" ? clientId : randomUUID(), occurredAt: clock.now.toISOString(), location: "Entrée A", description: "Rétroviseur arraché" },
+        {
+          clientId: mode === "cookie" ? clientId : randomUUID(),
+          occurredAt: clock.now.toISOString(),
+          location: "Entrée A",
+          description: "Rétroviseur arraché",
+        },
         mode,
       );
       expect(made.status).toBe(201);
@@ -592,25 +636,33 @@ describe("direct par catégorie, prestataires, main courante avec photo, alerte 
     const photo = await upload(w.lea, "incident");
     expect(photo.status).toBe(201);
     // Un autre staff ne peut pas y joindre sa photo ; ni utiliser la photo d'un autre.
-    expect((await req(julie, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: julPhoto.json.key })).status).toBe(
-      403,
-    );
-    expect((await req(w.lea, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: julPhoto.json.key })).status).toBe(
-      404,
-    );
+    expect(
+      (await req(julie, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: julPhoto.json.key })).status,
+    ).toBe(403);
+    expect(
+      (await req(w.lea, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: julPhoto.json.key })).status,
+    ).toBe(404);
     // Pas le bon usage : un fichier « message » n'est pas une photo de main courante.
-    expect((await req(w.lea, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: wrong.json.key })).status).toBe(
-      404,
+    expect(
+      (await req(w.lea, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: wrong.json.key })).status,
+    ).toBe(404);
+    const ok = await req(
+      w.lea,
+      "PATCH",
+      `/events/${w.e.id}/incidents/${clientId}`,
+      { photoKey: photo.json.key },
+      "bearer",
     );
-    const ok = await req(w.lea, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: photo.json.key }, "bearer");
     expect(ok.json).toMatchObject({ hasPhoto: true, location: "Entrée A" });
     expect(ok.status).toBe(200);
     // Rejouer la même photo : sans effet. Une autre : refusée (pièce d'assurance).
-    expect((await req(w.lea, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: photo.json.key })).status).toBe(200);
+    expect(
+      (await req(w.lea, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: photo.json.key })).status,
+    ).toBe(200);
     const second = await upload(w.lea, "incident");
-    expect((await req(w.lea, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: second.json.key })).status).toBe(
-      409,
-    );
+    expect(
+      (await req(w.lea, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: second.json.key })).status,
+    ).toBe(409);
     // Lecture : staff de l'événement et organisation ; jamais le public, ni une autre structure.
     const list = await req(w.damien, "GET", `/events/${w.e.id}/incidents`);
     const incident = list.json.find((i: { hasPhoto: boolean }) => i.hasPhoto);
@@ -644,10 +696,20 @@ describe("direct par catégorie, prestataires, main courante avec photo, alerte 
     });
     expect(sent.status).toBe(201);
     // Rejeu : même alerte.
-    const replay = await req(w.lea, "POST", `/events/${w.e.id}/alerts`, { clientId: first, message: "x", lat: 1, lng: 1 }, "bearer");
+    const replay = await req(
+      w.lea,
+      "POST",
+      `/events/${w.e.id}/alerts`,
+      { clientId: first, message: "x", lat: 1, lng: 1 },
+      "bearer",
+    );
     expect(replay.json.id).toBe(sent.json.id);
     // Une moitié de position n'est pas enregistrée.
-    const half = await req(w.lea, "POST", `/events/${w.e.id}/alerts`, { clientId: randomUUID(), message: "Sans GPS", lat: 42.5 });
+    const half = await req(w.lea, "POST", `/events/${w.e.id}/alerts`, {
+      clientId: randomUUID(),
+      message: "Sans GPS",
+      lat: 42.5,
+    });
     expect(half.json).toMatchObject({ lat: null, lng: null });
     for (const mode of MODES) {
       const list = await req(w.damien, "GET", `/events/${w.e.id}/alerts`, undefined, mode);
@@ -668,11 +730,18 @@ describe("direct par catégorie, prestataires, main courante avec photo, alerte 
     expect((await req(w.kenji, "GET", `/events/${w.e.id}/alerts`)).status).toBe(403);
     // Clôture : la position disparaît avec l'alerte.
     expect((await req(w.damien, "POST", `/events/${w.e.id}/alerts/${sent.json.id}/resolve`)).status).toBe(200);
-    const closed = (await req(w.damien, "GET", `/events/${w.e.id}/alerts`)).json.find((x: { id: string }) => x.id === sent.json.id);
+    const closed = (await req(w.damien, "GET", `/events/${w.e.id}/alerts`)).json.find(
+      (x: { id: string }) => x.id === sent.json.id,
+    );
     expect(closed).toMatchObject({ lat: null, lng: null, distanceM: null });
     expect(closed.resolvedAt).not.toBeNull();
     // Alerte laissée ouverte : la tâche efface la position après 24 h.
-    const stale = await req(w.lea, "POST", `/events/${w.e.id}/alerts`, { clientId: randomUUID(), message: "Oubliée", lat: 42.54, lng: 3.02 });
+    const stale = await req(w.lea, "POST", `/events/${w.e.id}/alerts`, {
+      clientId: randomUUID(),
+      message: "Oubliée",
+      lat: 42.54,
+      lng: 3.02,
+    });
     clock.advance(25 * HOUR);
     expect(await fieldService.sweep()).toMatchObject({ positions: 1 });
     const left = await db.query.staffAlerts.findFirst({ where: eq(staffAlerts.id, stale.json.id) });
@@ -683,7 +752,11 @@ describe("direct par catégorie, prestataires, main courante avec photo, alerte 
     const w = await setup();
     clock.set(new Date(w.e.startsAt.getTime() + HOUR));
     const clientId = randomUUID();
-    await req(w.lea, "POST", `/events/${w.e.id}/incidents`, { clientId, occurredAt: clock.now.toISOString(), description: "Verre brisé" });
+    await req(w.lea, "POST", `/events/${w.e.id}/incidents`, {
+      clientId,
+      occurredAt: clock.now.toISOString(),
+      description: "Verre brisé",
+    });
     const photo = await upload(w.lea, "incident");
     await req(w.lea, "PATCH", `/events/${w.e.id}/incidents/${clientId}`, { photoKey: photo.json.key });
     clock.advance(200 * DAY);

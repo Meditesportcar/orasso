@@ -4,14 +4,20 @@
 import {
   type AccessListEntry,
   decideScan,
+  decideTicketScan,
   type Ed25519Verify,
   type LocalScanDecision,
+  type LocalTicket,
   normalizePlate,
   type ScanBatchResult,
   type ScanDecision,
   type StaffRole,
   type StaffSync,
   staffModeClosesAt,
+  type TicketListEntry,
+  type TicketScanDecision,
+  type TicketScanResultView,
+  type VisitorDelta,
 } from "@orasso/shared";
 
 import { plateHashOf } from "./crypto";
@@ -32,6 +38,8 @@ export type StaffEventMeta = {
   plateSalt: string;
   zones: StaffSync["event"]["zones"];
   myRoles: StaffRole[];
+  /** Lot 24 : la boutique est activée pour cet événement (tuile « Boutique », billets dans la synchro). */
+  shopEnabled?: boolean;
   /** À renvoyer en `since` (synchro différentielle). */
   cursor: string | null;
   /** Heure du serveur de la dernière liste acceptée : une liste plus ancienne est refusée (rejeu). */
@@ -76,9 +84,25 @@ export type CheckinItemWire = {
 };
 export type BatchItemWire = ScanItemWire | CheckinItemWire;
 
-/** Ce qui part au serveur : lectures et pointages (`POST /events/:id/scans`) et le reste du terrain. */
-export type ActionKind = "scan" | "manual" | "plate" | "presence" | "express" | "incident" | "alert";
+/**
+ * Ce qui part au serveur : lectures et pointages (`POST /events/:id/scans`) et le reste du terrain. Lot 24 :
+ * `ticket_scan` (billets du public, `POST /events/:id/ticket-scans`), `visitor` (compteur d'entrées,
+ * `POST /events/:id/visitor-entries`), `incident_photo` (photo envoyée après l'incident, à son tour).
+ */
+export type ActionKind =
+  | "scan"
+  | "manual"
+  | "plate"
+  | "presence"
+  | "express"
+  | "incident"
+  | "alert"
+  | "ticket_scan"
+  | "visitor"
+  | "incident_photo";
 export const BATCH_KINDS: readonly ActionKind[] = ["scan", "manual", "plate"];
+/** Les actions dont l'identifiant (clé d'idempotence côté serveur) voyage aussi dans le corps. */
+export const ID_IN_PAYLOAD: readonly ActionKind[] = [...BATCH_KINDS, "ticket_scan", "visitor"];
 
 export type PendingAction = {
   id: string;
@@ -104,12 +128,20 @@ export type StaffState = {
   entries: Map<string, AccessListEntry>;
   byApplication: Map<string, string>;
   local: Map<string, LocalCheckin>;
+  /** Lot 24 : billets du public (rôle boutique seulement) et ceux que cet appareil a déjà acceptés. */
+  tickets: Map<string, TicketListEntry>;
+  ticketUses: Map<string, LocalTicketUse>;
 };
+
+/** Billet accepté sur cet appareil avant (ou en attendant) la confirmation du serveur (table `local_ticket_uses`). */
+export type LocalTicketUse = { ticketId: string; usedAt: string; actionId: string };
 
 export function buildState(
   meta: StaffEventMeta,
   entries: Iterable<AccessListEntry>,
   local: Iterable<LocalCheckin>,
+  tickets: Iterable<TicketListEntry> = [],
+  ticketUses: Iterable<LocalTicketUse> = [],
 ): StaffState {
   const map = new Map<string, AccessListEntry>();
   const byApplication = new Map<string, string>();
@@ -118,13 +150,20 @@ export function buildState(
     // Un pass valide l'emporte sur l'ancien pass révoqué (`replaced`) de la même candidature.
     if (e.status === "valid" || !byApplication.has(e.applicationId)) byApplication.set(e.applicationId, e.passId);
   }
-  return { meta, entries: map, byApplication, local: new Map([...local].map((l) => [l.passId, l])) };
+  return {
+    meta,
+    entries: map,
+    byApplication,
+    local: new Map([...local].map((l) => [l.passId, l])),
+    tickets: new Map([...tickets].map((t) => [t.ticketId, t])),
+    ticketUses: new Map([...ticketUses].map((u) => [u.ticketId, u])),
+  };
 }
 
 // --- Synchro ---------------------------------------------------------------------------------------------------
 
 export type SyncMerge =
-  | { ok: true; meta: StaffEventMeta; entries: AccessListEntry[]; full: boolean }
+  | { ok: true; meta: StaffEventMeta; entries: AccessListEntry[]; tickets: TicketListEntry[]; full: boolean }
   | { ok: false; reason: "stale" | "needs_full" };
 
 /**
@@ -133,7 +172,7 @@ export type SyncMerge =
  * n'est jamais supprimé, il revient `revoked`). Une liste générée avant celle qu'on a déjà est refusée.
  */
 export function mergeSync(
-  previous: { meta: StaffEventMeta; entries: Iterable<AccessListEntry> } | null,
+  previous: { meta: StaffEventMeta; entries: Iterable<AccessListEntry>; tickets?: Iterable<TicketListEntry> } | null,
   sync: StaffSync,
   userId: string,
   now: Date,
@@ -148,12 +187,18 @@ export function mergeSync(
   // Rôles changés (super staff retiré : coordonnées à effacer) : une différentielle ne suffit pas, il faut tout remplacer.
   const sameRoles =
     previous !== null && [...previous.meta.myRoles].sort().join(",") === [...sync.myRoles].sort().join(",");
-  if (previous && previous.meta.userId === userId && !sync.full && !sameRoles)
+  // Boutique activée ou coupée depuis la dernière liste : les billets ne se complètent pas par différence.
+  const sameShop = previous !== null && Boolean(previous.meta.shopEnabled) === Boolean(sync.shopEnabled);
+  if (previous && previous.meta.userId === userId && !sync.full && (!sameRoles || !sameShop))
     return { ok: false, reason: "needs_full" };
   const keepPrevious = previous && previous.meta.userId === userId && !sync.full;
   const map = new Map<string, AccessListEntry>();
   if (keepPrevious) for (const e of previous.entries) map.set(e.passId, e);
   for (const e of sync.entries) map.set(e.passId, e);
+  // Billets du public (rôle boutique) : sans `tickets` dans la synchro, le téléphone n'en garde aucun.
+  const ticketMap = new Map<string, TicketListEntry>();
+  if (keepPrevious && sync.tickets) for (const t of previous.tickets ?? []) ticketMap.set(t.ticketId, t);
+  for (const t of sync.tickets ?? []) ticketMap.set(t.ticketId, t);
   const meta: StaffEventMeta = {
     eventId: sync.event.id,
     userId,
@@ -166,13 +211,20 @@ export function mergeSync(
     plateSalt: sync.event.plateSalt,
     zones: sync.event.zones,
     myRoles: sync.myRoles,
+    shopEnabled: sync.shopEnabled === true,
     // Une synchro différentielle sans base locale ne peut pas servir de point de départ : on repartira de zéro.
     cursor: keepPrevious || sync.full ? sync.cursor : null,
     generatedAt: sync.generatedAt,
     syncedAt: now.toISOString(),
     serverOffsetMs: Date.parse(sync.generatedAt) - now.getTime(),
   };
-  return { ok: true, meta, entries: [...map.values()], full: sync.full || !keepPrevious };
+  return {
+    ok: true,
+    meta,
+    entries: [...map.values()],
+    tickets: [...ticketMap.values()],
+    full: sync.full || !keepPrevious,
+  };
 }
 
 /**
@@ -302,6 +354,184 @@ export class ScanGate {
     }
     return last === undefined || nowMs - last >= this.windowMs;
   }
+}
+
+// --- Rôle boutique : billets du public et compteur de visiteurs (lot 24) -----------------------------------------
+
+/** Élément d'un lot `POST /events/:id/ticket-scans` tel qu'il part. */
+export type TicketScanWire = {
+  id: string;
+  rawPayload: string;
+  decision: "ok" | "already" | "refused";
+  reason: string | null;
+  scannedAt: string;
+};
+
+/** Billet de la liste locale tel que `decideTicketScan` le lit (sans la date de modification). */
+const asLocalTicket = (t: TicketListEntry | undefined): LocalTicket | undefined =>
+  t && {
+    ticketId: t.ticketId,
+    status: t.status,
+    holderLabel: t.holderLabel,
+    typeLabel: t.typeLabel,
+    usedAt: t.usedAt,
+  };
+
+/** Décision locale d'un QR de billet (liste du téléphone + billets déjà acceptés ici, sans réseau). */
+export function decideTicketLocal(
+  state: StaffState,
+  payload: string,
+  keys: ReadonlyMap<number, Uint8Array>,
+  verify: Ed25519Verify,
+): TicketScanDecision {
+  return decideTicketScan(payload, {
+    eventNo: state.meta.eventNo,
+    keys,
+    verify,
+    findTicket: (id) => asLocalTicket(state.tickets.get(id)),
+    usedLocally: (id) => state.ticketUses.get(id)?.usedAt,
+  });
+}
+
+/**
+ * Ce que la lecture d'un billet devient dans la file (`kind: ticket_scan`) et, si le billet passe, l'usage local qui
+ * le rend « déjà utilisé » pour la lecture suivante. Un QR qui n'est pas d'Orasso (préfixe `OB1`) reste sur le
+ * téléphone : rien à envoyer.
+ */
+export function ticketScanAction(
+  decision: TicketScanDecision,
+  payload: string,
+  id: string,
+  now: Date,
+): { item: TicketScanWire | null; use: LocalTicketUse | null } {
+  const text = payload.trim();
+  const item: TicketScanWire | null = text.startsWith("OB1")
+    ? {
+        id,
+        rawPayload: text.slice(0, 512),
+        decision: decision.decision,
+        reason: decision.decision === "refused" ? decision.reason : null,
+        scannedAt: now.toISOString(),
+      }
+    : null;
+  const use: LocalTicketUse | null =
+    decision.decision === "ok" ? { ticketId: decision.ticketId, usedAt: now.toISOString(), actionId: id } : null;
+  return { item, use };
+}
+
+export type TicketResultEffect = {
+  id: string;
+  result: TicketScanResultView;
+  /** Usage local à aligner sur le serveur (heure retenue), ou à retirer (`usedAt: null`) si le serveur a refusé. */
+  use: { ticketId: string; usedAt: string | null; actionId: string } | null;
+};
+
+/**
+ * Réponse du serveur à un lot de billets : `accepted` aligne l'heure d'usage sur celle du serveur ; `already` (un
+ * autre téléphone a passé le billet avant) garde le billet « utilisé » avec l'heure du serveur ; `refused` et `rejected`
+ * retirent l'usage local que cette lecture avait créé.
+ */
+export function applyTicketResults(
+  sent: readonly PendingAction[],
+  results: readonly TicketScanResultView[],
+): { effects: TicketResultEffect[]; missing: string[] } {
+  const byId = new Map(results.map((r) => [r.id, r]));
+  const effects: TicketResultEffect[] = [];
+  const missing: string[] = [];
+  for (const action of sent) {
+    const r = byId.get(action.id);
+    if (!r) {
+      missing.push(action.id);
+      continue;
+    }
+    const ticketId = typeof action.payload.ticketId === "string" ? action.payload.ticketId : null;
+    let use: TicketResultEffect["use"] = null;
+    if (ticketId) {
+      if ((r.result === "accepted" || r.result === "already") && r.usedAt) {
+        use = { ticketId, usedAt: r.usedAt, actionId: action.id };
+      } else if (r.result === "refused" || r.result === "rejected") {
+        use = { ticketId, usedAt: null, actionId: action.id };
+      }
+    }
+    effects.push({ id: action.id, result: r, use });
+  }
+  return { effects, missing };
+}
+
+/** Billets lus ici qu'un autre téléphone avait déjà passés (rapport du serveur) : une ligne par billet. */
+export function ticketDuplicates(
+  actions: readonly PendingAction[],
+): { ticketId: string; usedAt: string | null; count: number }[] {
+  const lines = new Map<string, { ticketId: string; usedAt: string | null; count: number }>();
+  for (const a of actions) {
+    if (a.kind !== "ticket_scan" || !a.sentAt || a.result?.result !== "already") continue;
+    if (a.payload.decision !== "ok") continue;
+    const ticketId = typeof a.payload.ticketId === "string" ? a.payload.ticketId : a.id;
+    const line = lines.get(ticketId);
+    if (line) line.count++;
+    else
+      lines.set(ticketId, {
+        ticketId,
+        usedAt: typeof a.result?.usedAt === "string" ? a.result.usedAt : null,
+        count: 1,
+      });
+  }
+  return [...lines.values()];
+}
+
+/** Élément d'un lot `POST /events/:id/visitor-entries`. */
+export type VisitorItemWire = { id: string; delta: VisitorDelta; at: string };
+
+/** Compteur d'entrées : ce que cet appareil a compté, ce qui reste à envoyer, et le dernier total connu du serveur. */
+export function visitorTotals(actions: readonly PendingAction[]): {
+  local: number;
+  pending: number;
+  server: number | null;
+} {
+  let local = 0;
+  let pending = 0;
+  let server: number | null = null;
+  let serverAt = "";
+  for (const a of actions) {
+    if (a.kind !== "visitor") continue;
+    // Refusé pour de bon par le serveur (boutique fermée, plus de rôle) : le toucher ne compte pas.
+    if (typeof a.result?.error === "string") continue;
+    const delta = typeof a.payload.delta === "number" ? a.payload.delta : 0;
+    local += delta;
+    if (!a.sentAt) pending += delta;
+    else if (typeof a.result?.total === "number" && a.sentAt >= serverAt) {
+      server = a.result.total;
+      serverAt = a.sentAt;
+    }
+  }
+  return { local: Math.max(0, local), pending, server };
+}
+
+/** Les actions d'un genre à envoyer maintenant, par événement, en lots de 200 au plus, les plus anciennes d'abord. */
+export function dueOfKind(
+  actions: readonly PendingAction[],
+  kind: ActionKind,
+  now: Date,
+  max = 200,
+): Map<string, PendingAction[]> {
+  const due = actions
+    .filter((a) => !a.sentAt && a.kind === kind && Date.parse(a.nextAttemptAt) <= now.getTime())
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const byEvent = new Map<string, PendingAction[]>();
+  for (const a of due) {
+    const list = byEvent.get(a.eventId) ?? [];
+    if (list.length < max) list.push(a);
+    byEvent.set(a.eventId, list);
+  }
+  return byEvent;
+}
+
+/** Rôle boutique de cet appareil sur cet événement : rôle donné, boutique activée, liste de billets reçue. */
+export function shopAccess(
+  meta: Pick<StaffEventMeta, "myRoles" | "shopEnabled"> | null | undefined,
+): "ok" | "no_role" | "disabled" {
+  if (!meta?.myRoles.includes("shop")) return "no_role";
+  return meta.shopEnabled ? "ok" : "disabled";
 }
 
 // --- Recherche et pointage rapide ------------------------------------------------------------------------------

@@ -25,6 +25,7 @@ import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
 import { seedSocial } from "./seed/social";
+import { seedStaff } from "./seed/staff";
 import { seedWeather } from "./seed/weather";
 
 const args = new Set(process.argv.slice(2));
@@ -99,6 +100,8 @@ async function main() {
   await seedExplorer(hash);
   // Lot 20 : modèles Orasso, annonce et message groupé sur la Nocturne, discussions du staff.
   await seedCommunication();
+  // Lot 24 : rôle boutique du Salon Argelès (billets gratuits, staff boutique) et une demande de staff en attente.
+  await seedStaff(hash);
 }
 
 try {
