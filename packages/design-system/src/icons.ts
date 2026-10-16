@@ -64,6 +64,8 @@ export const iconShapes = {
   live: [p("M3 12h4l3-7 4 14 3-7h4")], // Direct (prototype)
   eye: [p("M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"), c(12, 12, 3)], // afficher le mot de passe
   eyeOff: [p("M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"), c(12, 12, 3), p("M4 4l16 16")],
+  // Signaler (lot 32, ajout daté dans docs/design-system/README.md) : drapeau, même grille, même trait.
+  flag: [p("M5 21V4"), p("M5 4h11l-2 4 2 4H5")],
   // Météo (lot 28, ajout daté dans docs/design-system/README.md) : même grille, même trait, aucune couleur propre.
   weatherClear: [
     c(12, 12, 4),
