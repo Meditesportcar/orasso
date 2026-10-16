@@ -1,6 +1,6 @@
 // Entrée du navigateur : celle de React Router par défaut, plus GlitchTip / Sentry si `VITE_SENTRY_DSN` est renseigné
 // à la construction (lot 15). Sans DSN, rien n'est chargé ni envoyé.
-import { scrubErrorEvent } from "@orasso/shared";
+import { scrubBreadcrumb, scrubErrorEvent } from "@orasso/shared";
 import { StrictMode, startTransition } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { HydratedRouter } from "react-router/dom";
@@ -12,8 +12,11 @@ if (dsn) {
     Sentry.init({
       dsn,
       environment: (import.meta.env.VITE_SENTRY_ENVIRONMENT as string | undefined) ?? import.meta.env.MODE,
-      tracesSampleRate: 0.1,
+      // Pas de traces de performance (elles portent des URL et des requêtes) : erreurs seulement.
+      tracesSampleRate: 0,
       beforeSend: (event) => scrubErrorEvent(event),
+      beforeSendTransaction: (event) => scrubErrorEvent(event),
+      beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
     }),
   );
 }

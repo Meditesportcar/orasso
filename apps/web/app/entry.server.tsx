@@ -1,7 +1,7 @@
 // Entrée du serveur : celle de React Router par défaut (Node, flux), plus GlitchTip / Sentry si `VITE_SENTRY_DSN` (ou
 // `SENTRY_DSN`) est renseigné (lot 15). Sans DSN, rien n'est initialisé et `handleError` journalise seulement.
 import { PassThrough } from "node:stream";
-import { scrubErrorEvent } from "@orasso/shared";
+import { scrubBreadcrumb, scrubErrorEvent } from "@orasso/shared";
 import { createReadableStreamFromReadable } from "@react-router/node";
 import * as Sentry from "@sentry/react-router";
 import { isbot } from "isbot";
@@ -16,8 +16,11 @@ if (dsn) {
     dsn,
     environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
     release: process.env.SENTRY_RELEASE,
-    tracesSampleRate: 0.1,
+    // Pas de traces de performance (elles portent des URL et des requêtes) : erreurs seulement.
+    tracesSampleRate: 0,
     beforeSend: (event) => scrubErrorEvent(event),
+    beforeSendTransaction: (event) => scrubErrorEvent(event),
+    beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
   });
 }
 

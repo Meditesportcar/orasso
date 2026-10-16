@@ -105,7 +105,11 @@ deploy() {
       continue
     fi
     log "construction de orasso-$app:$tag (journal : $STATE/build.log)"
-    docker build --progress=plain -f "$dir/apps/$app/Dockerfile" -t "orasso-$app:$tag" "$dir" >"$STATE/build.log" 2>&1 ||
+    # DSN GlitchTip du site, lu par le navigateur : inscrit à la construction (lot 15) ; vide si absent de dev.env.
+    local sentry_dsn
+    sentry_dsn=$(sed -n 's/^VITE_SENTRY_DSN=//p' "$ENV_FILE" 2>/dev/null | tail -n 1)
+    docker build --progress=plain --build-arg "VITE_SENTRY_DSN=$sentry_dsn" \
+      -f "$dir/apps/$app/Dockerfile" -t "orasso-$app:$tag" "$dir" >"$STATE/build.log" 2>&1 ||
       { tail -n 40 "$STATE/build.log"; die "construction de l'image $app impossible"; }
   done
 

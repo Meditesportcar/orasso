@@ -1,6 +1,6 @@
 // Erreurs de l'appli vers GlitchTip (compatible Sentry) — lot 15, ARCHITECTURE-SUITE § 1.7. Sans
 // `EXPO_PUBLIC_SENTRY_DSN`, rien n'est initialisé. Pas de source maps envoyées (pas de jeton : SENTRY_DISABLE_AUTO_UPLOAD).
-import { scrubErrorEvent } from "@orasso/shared";
+import { scrubBreadcrumb, scrubErrorEvent } from "@orasso/shared";
 import * as Sentry from "@sentry/react-native";
 import { Platform } from "react-native";
 
@@ -11,8 +11,11 @@ export function initSentry(): boolean {
   Sentry.init({
     dsn,
     environment: process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT ?? (__DEV__ ? "development" : "preview"),
-    tracesSampleRate: 0.1,
+    // Pas de traces de performance (elles portent des URL et des requêtes) : erreurs seulement.
+    tracesSampleRate: 0,
     beforeSend: (event) => scrubErrorEvent(event),
+    beforeSendTransaction: (event) => scrubErrorEvent(event),
+    beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
   });
   return true;
 }

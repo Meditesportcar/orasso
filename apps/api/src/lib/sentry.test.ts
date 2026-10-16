@@ -28,4 +28,34 @@ describe("Sentry / GlitchTip (lot 15)", () => {
     expect(event.user).toEqual({ id: "u1" });
     expect(event.extra).toEqual({ body: "[retiré]", eventId: "e1" });
   });
+
+  it("retire aussi les jetons et adresses des valeurs : URL, fil d'Ariane, messages, adresses IP", () => {
+    const event = scrubErrorEvent({
+      request: {
+        url: "https://dev.orasso.fr/reinitialisation?token=SECRET123&x=1",
+        headers: { "x-forwarded-for": "82.1.2.3", "x-real-ip": "82.1.2.3" },
+      },
+      breadcrumbs: [
+        { data: { url: "/express/AbCdEf123", from: "/ami/XyZ987", to: "/verification-email?token=T0K" } },
+        { message: "GET /api/auth/reset-password/abcdef?callbackURL=/x" },
+      ],
+      exception: {
+        values: [
+          { value: 'duplicate key value violates unique constraint : Key (email)=(jean@exemple.fr) already exists.' },
+          { value: "Envoi impossible à marie@exemple.fr" },
+        ],
+      },
+    });
+    expect(event.request.url).toBe("https://dev.orasso.fr/reinitialisation?token=[retiré]&x=1");
+    expect(event.request.headers).toEqual({ "x-forwarded-for": "[retiré]", "x-real-ip": "[retiré]" });
+    expect(event.breadcrumbs[0]?.data).toEqual({
+      url: "/express/[retiré]",
+      from: "/ami/[retiré]",
+      to: "/verification-email?token=[retiré]",
+    });
+    expect(event.breadcrumbs[1]?.message).not.toContain("abcdef");
+    const messages = event.exception.values.map((v) => v.value).join(" ");
+    expect(messages).not.toContain("jean@exemple.fr");
+    expect(messages).not.toContain("marie@exemple.fr");
+  });
 });
