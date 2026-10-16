@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { REFERRAL_SEASON_CAP } from "@orasso/shared";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -36,6 +36,7 @@ import {
   pointEntries,
   profileInterests,
   profiles,
+  proPhotos,
   proProfiles,
   session,
   structureBans,
@@ -607,5 +608,70 @@ describe("suppression du compte", () => {
     const u = await signUp("Fantome_01");
     await db.update(profiles).set({ deletedAt: new Date() }).where(eq(profiles.userId, u.id));
     expect((await call(u, "GET", "/me")).status).toBe(401);
+  });
+});
+
+describe("suppression du compte : atomicité et données restantes", () => {
+  it("échec de la transaction → aucun e-mail, aucun désistement, rien d'anonymisé", async () => {
+    const ref = await seedReference();
+    const u = await signUp("Atomique_01");
+    const vehicle = await createVehicle(u.id, ref);
+    const orga = await signUp("Orga_Atom");
+    const s = await createStructure(orga.id);
+    const futur = await createEvent(s.id, { startsAt: new Date(Date.now() + 10 * 86_400_000) });
+    const [app0] = await db
+      .insert(applications)
+      .values({
+        eventId: futur.id,
+        userId: u.id,
+        vehicleId: vehicle.id,
+        status: "accepted",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+      })
+      .returning();
+    // Échec simulé à la fin de la transaction (écriture du journal d'administration).
+    await db.execute(sql`
+      create or replace function orasso_test_fail() returns trigger language plpgsql as $$
+      begin raise exception 'échec simulé'; end $$`);
+    await db.execute(sql`
+      create trigger orasso_test_fail before insert on admin_audit_log
+      for each row when (new.action = 'user.self_delete') execute function orasso_test_fail()`);
+    try {
+      const res = await call(u, "DELETE", "/me", { password: "motdepasse-test-123" });
+      expect(res.status).toBe(500);
+    } finally {
+      await db.execute(sql`drop trigger if exists orasso_test_fail on admin_audit_log`);
+      await db.execute(sql`drop function if exists orasso_test_fail()`);
+    }
+    await notificationsService.flush();
+    expect(await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "account_deleted") })).toHaveLength(0);
+    expect((await db.query.applications.findFirst({ where: eq(applications.id, app0!.id) }))?.status).toBe("accepted");
+    const p = await db.query.profiles.findFirst({ where: eq(profiles.userId, u.id) });
+    expect(p?.deletedAt).toBeNull();
+    expect((await call(u, "GET", "/me")).status).toBe(200);
+  });
+
+  it("fiche pro vidée (nom, coordonnées, photos), Journal effacé", async () => {
+    const u = await signUp("ProPartant_01");
+    const pro = await createPro(u.id, { phone: "0611111111", email: "pro@exemple.fr", website: "https://exemple.fr" });
+    await db.insert(proPhotos).values({ proId: pro.id, storageKey: `test/pro-${pro.id}.webp` });
+    await db.transaction((tx) =>
+      notificationsService.notify(tx, u.id, "points_awarded", { title: "Points", body: "x" }),
+    );
+    expect((await call(u, "DELETE", "/me", { password: "motdepasse-test-123" })).status).toBe(200);
+    const after = await db.query.proProfiles.findFirst({ where: eq(proProfiles.id, pro.id) });
+    expect(after).toMatchObject({
+      name: "Fiche supprimée",
+      phone: null,
+      email: null,
+      website: null,
+      addressLine: null,
+      siret: null,
+      publishedAt: null,
+    });
+    expect(after?.deletedAt).toBeTruthy();
+    expect(await db.query.proPhotos.findMany({ where: eq(proPhotos.proId, pro.id) })).toHaveLength(0);
+    expect(await db.query.notifications.findMany({ where: eq(notifications.userId, u.id) })).toHaveLength(0);
   });
 });

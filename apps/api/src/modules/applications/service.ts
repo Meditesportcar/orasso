@@ -495,34 +495,33 @@ export const applicationsService = {
   },
 
   /**
-   * Suppression du compte (lot 15) : candidatures des événements à venir désistées **sans malus**, QR révoqués, place
+   * Suppression du compte (lot 15) : dans la transaction de l'anonymisation (après le verrou du profil), candidatures
+   * des événements à venir désistées **sans malus** — offres de place en cours comprises —, QR révoqués, place
    * proposée au suivant de la liste d'attente. Les candidatures passées restent (historique des organisateurs).
    */
-  async withdrawAllForDeletedAccount(userId: string): Promise<number> {
+  async withdrawAllForDeletedAccount(tx: Tx, userId: string, after: After): Promise<number> {
     const t = now();
-    const upcoming = await db
+    const upcoming = await tx
       .select({ id: applications.id })
       .from(applications)
       .innerJoin(events, eq(events.id, applications.eventId))
       .where(and(eq(applications.userId, userId), inArray(applications.status, [...ACTIVE]), gt(events.endsAt, t)));
     let count = 0;
     for (const { id } of upcoming) {
-      await withTx(async (tx, after) => {
-        const { event, app } = await lockEventThenApplication(tx, id);
-        if (!ACTIVE.includes(app.status)) return;
-        const row = await transition(
-          tx,
-          app,
-          "withdrawn",
-          { kind: "user", userId },
-          { withdrawnAt: t, withdrawnAfterLock: false, waitlistRank: null },
-          "account.deleted",
-        );
-        const freed = app.status === "accepted" || app.status === "offered";
-        const offered = freed ? await offerNext(tx, event, after) : [];
-        broadcast(after, event, [row, ...offered]);
-        count++;
-      });
+      const { event, app } = await lockEventThenApplication(tx, id);
+      if (!ACTIVE.includes(app.status)) continue;
+      const row = await transition(
+        tx,
+        app,
+        "withdrawn",
+        { kind: "user", userId },
+        { withdrawnAt: t, withdrawnAfterLock: false, waitlistRank: null },
+        "account.deleted",
+      );
+      const freed = app.status === "accepted" || app.status === "offered";
+      const offered = freed ? await offerNext(tx, event, after) : [];
+      broadcast(after, event, [row, ...offered]);
+      count++;
     }
     return count;
   },

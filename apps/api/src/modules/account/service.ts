@@ -13,7 +13,7 @@ import {
   REFERRAL_WINDOW_MS,
 } from "@orasso/shared";
 import { symmetricDecrypt } from "better-auth/crypto";
-import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -24,18 +24,24 @@ import {
   devices,
   emailOutbox,
   eventInvitations,
+  events,
   expressInvites,
   knownLogins,
+  malusContests,
+  notifications,
+  orders,
   passkey,
   plateTransferRequests,
   proFollows,
   profileInterests,
   profiles,
+  proPhotos,
   proProfiles,
   session,
   structureFollows,
   structureMembers,
   structures,
+  tickets,
   twoFactor,
   user,
   vehiclePhotos,
@@ -269,35 +275,46 @@ export const accountService = {
         { structures: owned.map((s) => s.name) },
       );
     }
-    await mail.send("account_deleted", v.user.email, securityMails.accountDeleted(v.profile.pseudo), {
-      userId: v.user.id,
-    });
-    return this.anonymize(v.user.id, ip ?? null);
+    // L'e-mail de confirmation part après la validation de l'anonymisation (adresse gardée en mémoire).
+    return this.anonymize(v.user.id, ip ?? null, { confirm: true });
   },
 
   /**
    * Anonymisation complète des données identifiantes ; historique (candidatures passées, entrées, points, avis)
    * conservé. Candidatures à venir désistées sans malus. Rejouée, elle ne fait rien.
    */
-  async anonymize(userId: string, ip: string | null) {
+  async anonymize(userId: string, ip: string | null, opts: { confirm?: boolean } = {}) {
     const tag = randomBytes(4).toString("hex");
     const anonEmail = `supprime+${tag}@orasso.invalid`;
     const at = now();
     const photoKeys: string[] = [];
     let oldEmail = null as string | null;
+    let oldPseudo = null as string | null;
     const before = await db.query.profiles.findFirst({
       where: eq(profiles.userId, userId),
       columns: { deletedAt: true },
     });
     if (!before || before.deletedAt) return { deleted: true };
-    // Candidatures à venir : désistées sans malus, QR révoqués, place proposée au suivant de la liste d'attente.
-    await applicationsService.withdrawAllForDeletedAccount(userId);
-    await withTx(async (tx) => {
+    await withTx(async (tx, after) => {
       // Verrou : deux suppressions simultanées n'anonymisent qu'une fois.
       const [profile] = await tx.select().from(profiles).where(eq(profiles.userId, userId)).for("update");
       if (!profile || profile.deletedAt) return;
       const [current] = await tx.select({ email: user.email }).from(user).where(eq(user.id, userId));
       oldEmail = current?.email ?? null;
+      oldPseudo = profile.pseudo;
+      // Candidatures à venir (offres de place en cours comprises) : désistées sans malus, QR révoqués, place
+      // proposée au suivant — dans la même transaction, après le verrou.
+      await applicationsService.withdrawAllForDeletedAccount(tx, userId, after);
+      // Billets d'événements à venir : annulés (le contrôle à l'entrée les refuse), commandes en attente annulées.
+      const upcomingEvents = tx.select({ id: events.id }).from(events).where(gt(events.endsAt, at));
+      await tx
+        .update(tickets)
+        .set({ status: "cancelled", cancelledAt: at })
+        .where(and(eq(tickets.userId, userId), eq(tickets.status, "valid"), inArray(tickets.eventId, upcomingEvents)));
+      await tx
+        .update(orders)
+        .set({ status: "cancelled" })
+        .where(and(eq(orders.userId, userId), eq(orders.status, "pending"), inArray(orders.eventId, upcomingEvents)));
       // Plus aucune connexion possible : sessions, identifiants (mot de passe, Google, Apple), clés, 2FA, appareils,
       // jetons de réinitialisation encore valables (valeur = identifiant du compte).
       await tx.delete(session).where(eq(session.userId, userId));
@@ -341,6 +358,9 @@ export const accountService = {
       await tx.update(eventInvitations).set({ email: null }).where(eq(eventInvitations.userId, userId));
       await tx.delete(plateTransferRequests).where(eq(plateTransferRequests.toUserId, userId));
       await tx.update(applications).set({ message: null }).where(eq(applications.userId, userId));
+      await tx.update(malusContests).set({ message: "[message supprimé]" }).where(eq(malusContests.userId, userId));
+      // Journal de l'utilisateur (notifications) : personnel, rien à garder.
+      await tx.delete(notifications).where(eq(notifications.userId, userId));
       // Véhicules : vendus, plaque effacée, photos supprimées (fichiers effacés après la validation).
       const owned = await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.ownerId, userId));
       if (owned.length) {
@@ -369,10 +389,40 @@ export const accountService = {
         .update(structureMembers)
         .set({ status: "removed" })
         .where(and(eq(structureMembers.userId, userId), ne(structureMembers.status, "removed")));
-      await tx
-        .update(proProfiles)
-        .set({ deletedAt: at, publishedAt: null, phone: null, email: null })
-        .where(and(eq(proProfiles.ownerUserId, userId), isNull(proProfiles.deletedAt)));
+      // Fiche pro : rattachée à la personne seule (pas de lien de structure dans le schéma) → retirée et vidée de
+      // tout ce qui l'identifie (nom, adresse, coordonnées, site, réseaux, SIRET, logo et photos).
+      const pros = await tx.select().from(proProfiles).where(eq(proProfiles.ownerUserId, userId));
+      for (const pro of pros) {
+        if (pro.logoKey) photoKeys.push(pro.logoKey);
+        const photos = await tx
+          .delete(proPhotos)
+          .where(eq(proPhotos.proId, pro.id))
+          .returning({ key: proPhotos.storageKey });
+        photoKeys.push(...photos.map((p) => p.key));
+        await tx
+          .update(proProfiles)
+          .set({
+            deletedAt: pro.deletedAt ?? at,
+            publishedAt: null,
+            name: "Fiche supprimée",
+            description: null,
+            logoKey: null,
+            addressLine: null,
+            postalCode: null,
+            city: null,
+            lat: null,
+            lng: null,
+            phone: null,
+            email: null,
+            website: null,
+            socials: {},
+            hours: {},
+            siret: null,
+            registryCheck: null,
+            verifiedAt: null,
+          })
+          .where(eq(proProfiles.id, pro.id));
+      }
       await tx.insert(adminAuditLog).values({
         actorUserId: userId,
         action: "user.self_delete",
@@ -384,6 +434,12 @@ export const accountService = {
     });
     for (const key of photoKeys) {
       await storage.remove(key).catch(() => undefined);
+    }
+    if (oldEmail && opts.confirm) {
+      // Confirmation à l'ancienne adresse, après la validation ; la trace dans la file des e-mails est aussitôt
+      // anonymisée et la copie du transport journal supprimée.
+      await mail.send("account_deleted", oldEmail, securityMails.accountDeleted(oldPseudo ?? ""), { userId });
+      await db.update(emailOutbox).set({ to: anonEmail }).where(eq(emailOutbox.to, oldEmail));
     }
     if (oldEmail) await removeJournalMails(oldEmail);
     return { deleted: true };
