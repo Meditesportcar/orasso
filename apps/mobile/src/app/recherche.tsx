@@ -13,6 +13,7 @@ import {
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { CrewRowNative } from "@/features/crews/CrewSearch";
 import { EventRow, ProRow, VehicleHitRow } from "@/features/explorer/rows";
 import { PersonRow } from "@/features/social/PersonRow";
 import { api } from "@/lib/api";
@@ -66,7 +67,12 @@ export default function Recherche() {
   );
   const empty =
     results !== null &&
-    results.events.length + results.pros.length + results.people.length + results.vehicles.length === 0;
+    results.events.length +
+      results.pros.length +
+      results.people.length +
+      results.vehicles.length +
+      results.crews.length ===
+      0;
 
   return (
     <FlowScreen title={explorerLabels.searchTitle} onClose={close}>
@@ -113,6 +119,15 @@ export default function Recherche() {
             <PersonRow key={p.userId} person={p} onChanged={() => void load()} />
           ))}
           {results.more.people ? seeAll("personnes") : null}
+        </>
+      ) : null}
+      {results && results.crews.length > 0 ? (
+        <>
+          <SectionTitle>{searchGroupLabels.crews}</SectionTitle>
+          {results.crews.map((c) => (
+            <CrewRowNative key={c.id} crew={c} onPress={() => router.push(`/crew/${c.slug}`)} />
+          ))}
+          {results.more.crews ? seeAll("personnes") : null}
         </>
       ) : null}
       {results && results.vehicles.length > 0 ? (

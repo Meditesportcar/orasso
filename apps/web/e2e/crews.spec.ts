@@ -63,7 +63,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   // Léa trouve la fiche (sans la liste des membres) et demande à rejoindre.
   const ctxL = await context(browser, lCookie);
   const pageL = await ctxL.newPage();
-  await pageL.goto(`/app/explorer?segment=personnes&crew=${encodeURIComponent(crewName)}`);
+  await pageL.goto(`/app/explorer?segment=personnes&q=${encodeURIComponent(crewName)}`);
   await pageL.getByTestId("crew-results").getByRole("link", { name: crewName }).click();
   await pageL.waitForURL(crewPath);
   await expect(pageL.getByTestId("crew-members")).toHaveCount(0);
@@ -136,7 +136,7 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
     { name: "03-mes-crews", cookie: kCookie, path: "/app/crews" },
     { name: "04-inscription-crew", cookie: kCookie, path: `/e/${event.slug}/crew` },
     { name: "05-acces-confirmer", cookie: nCookie, path: "/app/acces" },
-    { name: "06-explorer-crews", cookie: outsider, path: `/app/explorer?segment=personnes&crewdep=66` },
+    { name: "06-explorer-crews", cookie: outsider, path: `/app/explorer?segment=personnes&departement=66` },
     { name: "07-tri-liste-crew", cookie: organizer, path: `/orga/meditesportcar/e/${event.id}/candidatures?vue=liste` },
     { name: "08-garage", cookie: kCookie, path: "/app/garage" },
   ];

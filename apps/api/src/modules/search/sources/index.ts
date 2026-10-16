@@ -1,12 +1,11 @@
 // Sources de la recherche de premier niveau (lot 29, ARCHITECTURE-SUITE § 13.1). Une source = un groupe de résultats,
 // dans son propre fichier ; ce registre est le seul endroit à compléter.
 //
-// Point d'extension pour les crews (lot 19) : créer `modules/crews/search-source.ts` qui exporte une `SearchSource`
-// de groupe `crews` (`needsAccount: true`, voir `people.ts` pour le modèle), puis ajouter UNE ligne au tableau
-// `searchSources` ci-dessous. Le type `SearchCrewHit` est dans `@orasso/shared` (schemas/search.ts).
+// Les crews (lot 19) ont leur source dans `modules/crews/search-source.ts`, qui réutilise `crewsService.search`.
 import type { SearchGroup, SearchResults } from "@orasso/shared";
 
 import type { Viewer } from "../../../lib/session";
+import { crewsSource } from "../../crews/search-source";
 import { eventsSource } from "./events";
 import { peopleSource } from "./people";
 import { prosSource } from "./pros";
@@ -28,10 +27,4 @@ export type SearchSource<G extends SearchGroup = SearchGroup> = {
   run(ctx: SearchContext): Promise<SearchResults[G]>;
 };
 
-export const searchSources: SearchSource[] = [
-  eventsSource,
-  prosSource,
-  peopleSource,
-  vehiclesSource,
-  // crewsSource (lot 19) : une ligne ici.
-];
+export const searchSources: SearchSource[] = [eventsSource, prosSource, peopleSource, vehiclesSource, crewsSource];

@@ -78,7 +78,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     await shot(k.page, `01-crew-chef-${theme}`);
     await k.page.goto("/explorer");
     await k.page.getByText("Personnes et crews").click();
-    await k.page.getByLabel("Rechercher un crew").fill(`Roussillon ${s}`);
+    await k.page.getByTestId("people-q").fill(`Roussillon ${s}`);
     await expect(k.page.getByTestId("crew-row").first()).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `02-explorer-crews-${theme}`);
     await k.page.goto("/garage");
