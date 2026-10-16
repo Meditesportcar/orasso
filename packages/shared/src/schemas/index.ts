@@ -3,6 +3,8 @@ export * from "./application";
 export * from "./common";
 export * from "./event";
 export * from "./profile";
+export * from "./pro";
 export * from "./review";
 export * from "./structure";
+export * from "./ticketing";
 export * from "./vehicle";
