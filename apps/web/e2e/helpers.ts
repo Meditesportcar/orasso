@@ -104,7 +104,13 @@ export const randomPlate = () => {
 /** Un événement publié par MéditeSportCar, demain (la fenêtre du staff s'ouvre la veille à 00:00). */
 export async function createEvent(
   organizer: Cookie,
-  opts: { title?: string; capacity?: number | null; admission?: "open" | "filtered"; rulesText?: string } = {},
+  opts: {
+    title?: string;
+    capacity?: number | null;
+    admission?: "open" | "filtered";
+    rulesText?: string;
+    publicAccess?: "free" | "free_reservation" | "paid_orasso" | "closed";
+  } = {},
 ): Promise<CreatedEvent> {
   const me = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(organizer, "GET", "/me");
   const structureId = me.data.memberships.find((m) => m.structureSlug === "meditesportcar")?.structureId;
@@ -129,7 +135,7 @@ export async function createEvent(
     capacity: opts.capacity === undefined ? 40 : opts.capacity,
     maxVehiclesPerUser: 2,
     admission: opts.admission ?? "filtered",
-    publicAccess: "free",
+    publicAccess: opts.publicAccess ?? "free",
     registrationsOpenAt: new Date(Date.now() - 3600_000).toISOString(),
     previewHours: 0,
     rulesText: opts.rulesText ?? "Pas de burn, pas de bruit inutile, on respecte les riverains.",
