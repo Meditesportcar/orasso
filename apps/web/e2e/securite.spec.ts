@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD, unique } from "./helpers";
 
 // Lot 15 : compte et sécurité de bout en bout, avec le transport d'e-mails « journal » (fichiers `.data/mail`).
@@ -139,26 +139,11 @@ test("connexion depuis un autre navigateur → e-mail « nouvelle connexion »",
   await b.ctx.close();
 });
 
-test("clé d'accès : mot de passe seul insuffisant, connexion par la clé → double authentification prouvée", async ({
-  browser,
-}) => {
-  const s = unique();
-  const email = `cle-${s}@orasso.test`;
-  const { ctx, page } = await newPage(browser);
-  await signUpInBrowser(page, `Cle_${s}`.slice(0, 24), email, "motdepasse-e2e-123");
-  const cookie = await login(email, "motdepasse-e2e-123");
-  const created = await apiCall<{ slug: string }>(cookie, "POST", "/structures", {
-    kind: "club",
-    name: `Club clé ${s}`,
-    departments: ["66"],
-  });
-  expect(created.status, JSON.stringify(created.data)).toBeLessThan(300);
-  expect((await apiCall<{ twoFactorRequired: boolean }>(cookie, "GET", "/me")).data.twoFactorRequired).toBe(true);
-
-  // Authentificateur virtuel de Chrome (Face ID / empreinte simulés).
+/** Authentificateur virtuel de Chrome (Face ID / empreinte simulés) ; renvoie son identifiant. */
+async function virtualAuthenticator(ctx: BrowserContext, page: Page) {
   const cdp = await ctx.newCDPSession(page);
   await cdp.send("WebAuthn.enable");
-  await cdp.send("WebAuthn.addVirtualAuthenticator", {
+  const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
     options: {
       protocol: "ctap2",
       transport: "internal",
@@ -168,34 +153,109 @@ test("clé d'accès : mot de passe seul insuffisant, connexion par la clé → d
       automaticPresenceSimulation: true,
     },
   });
-  await page.goto("/app/securite");
-  await page.getByLabel("Nom de la clé").fill("Téléphone de test");
-  await page.getByRole("button", { name: "Ajouter une clé d'accès" }).click();
-  await expect(page.getByTestId("passkey-row")).toHaveCount(1);
-  await expect(page.getByTestId("passkey-row")).toContainText("Téléphone de test");
-  // Clé enregistrée, mais session ouverte par mot de passe : la double authentification n'est pas prouvée.
-  type MeHint = { twoFactorRequired: boolean; twoFactorHint: string | null };
-  expect((await apiCall<MeHint>(cookie, "GET", "/me")).data).toMatchObject({
-    twoFactorRequired: true,
-    twoFactorHint: "passkey_sign_in",
-  });
-  await page.goto("/app/securite");
-  await expect(page.getByTestId("passkey-sign-in-needed")).toBeVisible();
+  return { cdp, authenticatorId };
+}
 
-  // Connexion par la clé, sans mot de passe : la session prouve le second facteur.
+async function addKey(page: Page, name: string) {
+  await page.goto("/app/securite");
+  await page.getByLabel("Nom de la clé").fill(name);
+  await page.getByRole("button", { name: "Ajouter une clé d'accès" }).click();
+}
+
+async function signInWithKey(page: Page, retour: string) {
   await page.getByRole("button", { name: "Déconnexion" }).first().click();
-  await page.goto("/connexion?retour=/app/moi");
+  await page.goto(`/connexion?retour=${retour}`);
   await page.getByRole("button", { name: "Se connecter avec une clé d'accès" }).click();
-  // Le chemin exact (et non « /app/moi » contenu dans ?retour= de la page de connexion).
-  await page.waitForURL((u) => u.pathname === "/app/moi");
-  const sessionCookie = (await ctx.cookies())
+}
+
+const sessionCookieOf = async (ctx: BrowserContext) =>
+  (await ctx.cookies())
     .filter((c) => c.name === "better-auth.session_token")
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
-  const me = (await apiCall<MeHint>(sessionCookie, "GET", "/me")).data;
-  expect(me).toMatchObject({ twoFactorRequired: false, twoFactorHint: null });
+
+type MeHint = { twoFactorRequired: boolean; twoFactorHint: string | null };
+
+test("clé d'accès : le mot de passe seul ne prouve rien et n'ajoute aucun facteur ; le titulaire, connecté par sa clé, en ajoute une autre", async ({
+  browser,
+}) => {
+  const s = unique();
+  const email = `cle-${s}@orasso.test`;
+  const { ctx, page } = await newPage(browser);
+  await signUpInBrowser(page, `Cle_${s}`.slice(0, 24), email, "motdepasse-e2e-123");
+  const cookie = await login(email, "motdepasse-e2e-123");
+  const created = await apiCall(cookie, "POST", "/structures", {
+    kind: "club",
+    name: `Club clé ${s}`,
+    departments: ["66"],
+  });
+  expect(created.status, JSON.stringify(created.data)).toBeLessThan(300);
+  const first = await virtualAuthenticator(ctx, page);
+
+  // Premier facteur du compte (aucun encore) : autorisé depuis la session récente (amorçage).
+  await addKey(page, "Téléphone");
+  await expect(page.getByTestId("passkey-row")).toHaveCount(1);
+  // Ajouter un facteur déconnecte les autres appareils : nouvelle session par mot de passe seul.
+  expect((await apiCall(cookie, "GET", "/me")).status).toBe(401);
+  const password = await login(email, "motdepasse-e2e-123");
+  const keyId = (await apiCall<{ id: string }[]>(password, "GET", "/auth/passkey/list-user-passkeys")).data[0]?.id;
+
+  // Mot de passe seul + clé existante : double authentification non prouvée, et aucun facteur ne peut changer.
+  expect((await apiCall<MeHint>(password, "GET", "/me")).data).toMatchObject({
+    twoFactorRequired: true,
+    twoFactorHint: "passkey_sign_in",
+  });
+  expect((await apiCall(password, "GET", "/auth/passkey/generate-register-options")).status).toBe(403);
+  expect((await apiCall(password, "POST", "/auth/passkey/verify-registration", { response: {} })).status).toBe(403);
+  expect((await apiCall(password, "POST", "/auth/passkey/delete-passkey", { id: keyId })).status).toBe(403);
+  expect((await apiCall(password, "POST", "/auth/two-factor/enable", { password: "motdepasse-e2e-123" })).status).toBe(
+    403,
+  );
   await page.goto("/app/securite");
+  await expect(page.getByTestId("passkey-sign-in-needed")).toBeVisible();
+
+  // Connexion par la clé : la session prouve le second facteur ; le titulaire ajoute une deuxième clé.
+  await signInWithKey(page, "/app/securite");
+  // Le chemin exact (et non « /app/securite » contenu dans ?retour= de la page de connexion).
+  await page.waitForURL((u) => u.pathname === "/app/securite");
+  expect((await apiCall<MeHint>(await sessionCookieOf(ctx), "GET", "/me")).data).toMatchObject({
+    twoFactorRequired: false,
+    twoFactorHint: null,
+  });
   await expect(page.getByTestId("passkey-sign-in-needed")).toHaveCount(0);
+  // Deuxième appareil (l'authentificateur qui porte déjà la première clé la refuserait en double).
+  await first.cdp.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId: first.authenticatorId });
+  await virtualAuthenticator(ctx, page);
+  await addKey(page, "Ordinateur");
+  await expect(page.getByTestId("passkey-row")).toHaveCount(2);
+  await ctx.close();
+});
+
+test("clé sans vérification de l'utilisateur : connexion refusée avec un message clair", async ({ browser }) => {
+  const s = unique();
+  const email = `cle-uv-${s}@orasso.test`;
+  const { ctx, page } = await newPage(browser);
+  await signUpInBrowser(page, `CleUv_${s}`.slice(0, 24), email, "motdepasse-e2e-123");
+  await virtualAuthenticator(ctx, page);
+  await addKey(page, "Clé de sécurité");
+  await expect(page.getByTestId("passkey-row")).toHaveCount(1);
+  // Réponse d'une clé qui n'a pas vérifié l'utilisateur (simple présence, comme une clé de sécurité sans code) : le
+  // bit UV des données d'authentificateur est mis à 0 en route vers l'API, qui doit refuser.
+  await page.route("**/api/auth/passkey/verify-authentication", async (route) => {
+    const body = JSON.parse(route.request().postData() ?? "{}") as {
+      response?: { response?: { authenticatorData?: string } };
+    };
+    const data = body.response?.response?.authenticatorData;
+    if (data && body.response?.response) {
+      const bytes = Buffer.from(data, "base64url");
+      bytes[32] = (bytes[32] ?? 0) & ~0x04;
+      body.response.response.authenticatorData = bytes.toString("base64url");
+    }
+    await route.continue({ postData: JSON.stringify(body) });
+  });
+  await signInWithKey(page, "/app");
+  await expect(page.getByRole("alert")).toContainText("Ta clé doit demander ton code ou ton empreinte");
+  await expect(page).toHaveURL(/\/connexion/);
   await ctx.close();
 });
 

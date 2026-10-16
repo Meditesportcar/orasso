@@ -39,8 +39,10 @@ export function TwoFactorStep({
 
   return (
     <Plate style={styles.plate} testID="two-factor-step">
-      <Text variant="title">Double authentification</Text>
-      <Text variant="body" color={t.color.inkMuted}>
+      <Text variant="title" color={t.color.plateInk}>
+        Double authentification
+      </Text>
+      <Text variant="body" color={t.color.plateInk}>
         {backup
           ? "Saisis l'un des codes de secours reçus à l'activation (chacun ne sert qu'une fois)."
           : "Saisis le code à 6 chiffres affiché par ton application d'authentification."}
