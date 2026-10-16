@@ -390,5 +390,6 @@ export const accountQrVerifySchema = z.object({ payload: z.string().trim().min(1
 export type AccountQrSecret = { secret: string; shortId: string; stepSeconds: number; digits: number };
 
 export type AccountQrVerify =
-  | { valid: true; pseudo: string; grade: Grade; discount: null }
+  // Résultat d'un scan par un pro (lot 14) : pseudo, grade et remise du pro pour ce grade, rien d'autre.
+  | { valid: true; pseudo: string; grade: Grade; discount: { percent: number } | null }
   | { valid: false; reason: "malformed" | "unknown" | "expired" | "replayed" };

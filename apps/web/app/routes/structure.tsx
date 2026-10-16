@@ -2,6 +2,7 @@ import { Button, Icon, Plate } from "@orasso/design-system/web";
 import {
   type EventCard,
   type Page,
+  type ProCard,
   type StructureOrganizer,
   type StructurePublic,
   structureKindLabels,
@@ -9,6 +10,7 @@ import {
 import { Form, redirect } from "react-router";
 
 import { EventTile } from "../components/EventTile";
+import { ProTile } from "../components/ProTile";
 import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
@@ -17,10 +19,11 @@ import type { Route } from "./+types/structure";
 export async function loader({ request, params }: Route.LoaderArgs) {
   const slug = params.slug;
   const structure = await apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(slug)}`);
-  const [upcoming, past, me] = await Promise.all([
+  const [upcoming, past, me, partners] = await Promise.all([
     api<Page<EventCard>>(request, `/events?structureId=${structure.id}&limit=50`),
     api<Page<EventCard>>(request, `/events?structureId=${structure.id}&scope=past&limit=12`),
     getMe(request),
+    api<ProCard[]>(request, `/structures/by-slug/${encodeURIComponent(slug)}/pros`),
   ]);
   const organizer = me?.memberships.find(
     (m) => m.structureId === structure.id && m.status === "active" && m.role !== "staff",
@@ -31,6 +34,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     structure,
     upcoming: upcoming.ok ? upcoming.data.items : [],
     past: past.ok ? past.data.items : [],
+    partners: partners.ok ? partners.data : [],
     connected: Boolean(me),
     inviteToken: full?.ok ? full.data.inviteToken : null,
     isOrganizer: Boolean(organizer),
@@ -72,7 +76,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function StructurePage({ loaderData }: Route.ComponentProps) {
-  const { structure, upcoming, past, connected, inviteToken, isOrganizer, origin } = loaderData;
+  const { structure, upcoming, past, partners, connected, inviteToken, isOrganizer, origin } = loaderData;
   const where = [structure.postalCode, structure.city].filter(Boolean).join(" ");
   const socials = Object.entries(structure.socials).filter(([, url]) => Boolean(url)) as [string, string][];
   const average = structure.rating.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
@@ -197,6 +201,19 @@ export default function StructurePage({ loaderData }: Route.ComponentProps) {
           <div className="s-grid" data-testid="structure-past">
             {past.map((event) => (
               <EventTile key={event.id} event={event} showStructure={false} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {partners.length > 0 && (
+        <section className="s-stack" aria-labelledby="so-partners" data-testid="structure-partners">
+          <h2 id="so-partners" className="s-h2 s-head">
+            Pros partenaires
+          </h2>
+          <div className="s-grid">
+            {partners.map((pro) => (
+              <ProTile key={pro.slug} pro={pro} />
             ))}
           </div>
         </section>

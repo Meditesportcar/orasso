@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { resolve } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import type { Page } from "@playwright/test";
@@ -104,7 +105,13 @@ export const randomPlate = () => {
 /** Un événement publié par MéditeSportCar, demain (la fenêtre du staff s'ouvre la veille à 00:00). */
 export async function createEvent(
   organizer: Cookie,
-  opts: { title?: string; capacity?: number | null; admission?: "open" | "filtered"; rulesText?: string } = {},
+  opts: {
+    title?: string;
+    capacity?: number | null;
+    admission?: "open" | "filtered";
+    rulesText?: string;
+    publicAccess?: "free" | "free_reservation" | "paid_orasso" | "closed";
+  } = {},
 ): Promise<CreatedEvent> {
   const me = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(organizer, "GET", "/me");
   const structureId = me.data.memberships.find((m) => m.structureSlug === "meditesportcar")?.structureId;
@@ -129,7 +136,7 @@ export async function createEvent(
     capacity: opts.capacity === undefined ? 40 : opts.capacity,
     maxVehiclesPerUser: 2,
     admission: opts.admission ?? "filtered",
-    publicAccess: "free",
+    publicAccess: opts.publicAccess ?? "free",
     registrationsOpenAt: new Date(Date.now() - 3600_000).toISOString(),
     previewHours: 0,
     rulesText: opts.rulesText ?? "Pas de burn, pas de bruit inutile, on respecte les riverains.",
@@ -201,4 +208,45 @@ export async function decideApi(
     ...(decision === "refuse" ? { reasons: ["full"], sendReasons: true } : {}),
   });
   if (res.status !== 200) throw new Error(`Décision : ${res.status} ${JSON.stringify(res.data)}`);
+}
+
+// ---------- Pros (lot 14) ----------
+
+/** Ce que l'appli du passionné affiche à l'instant `at`, calculé hors ligne avec le secret reçu au login (RFC 4226, 8 chiffres, pas de 60 s). */
+export function accountQrPayload(secret: string, shortId: string, at = new Date()): string {
+  const counter = Math.floor(at.getTime() / 1000 / 60);
+  const msg = Buffer.alloc(8);
+  msg.writeUInt32BE(Math.floor(counter / 2 ** 32), 0);
+  msg.writeUInt32BE(counter >>> 0, 4);
+  const h = createHmac("sha1", Buffer.from(secret, "base64url")).update(msg).digest();
+  const offset = (h[h.length - 1] ?? 0) & 0x0f;
+  const bin = h.readUInt32BE(offset) & 0x7fffffff;
+  return `OA1${shortId}.${String(bin % 10 ** 8).padStart(8, "0")}`;
+}
+
+/** Le QR de compte courant d'un passionné (secret lu auprès de l'API avec sa session). */
+export async function accountQr(cookie: Cookie): Promise<string> {
+  const res = await apiCall<{ secret: string; shortId: string }>(cookie, "GET", "/me/account-qr-secret");
+  return accountQrPayload(res.data.secret, res.data.shortId);
+}
+
+/** Fiche pro publiée avec ses remises par grade (créée par l'API, comme le ferait l'espace pro). */
+export async function createPublishedPro(
+  cookie: Cookie,
+  name: string,
+  discounts: Record<string, number | null> = { rodage: 5, route: 8, sport: 10, circuit: 12, legende: 20 },
+): Promise<{ id: string; slug: string }> {
+  const created = await apiCall<{ id: string; slug: string }>(cookie, "POST", "/pros", {
+    name,
+    activities: ["garage"],
+    city: "Canet-en-Roussillon",
+    postalCode: "66140",
+    phone: "04 68 00 12 34",
+  });
+  if (created.status !== 201) throw new Error(`Fiche pro : ${created.status} ${JSON.stringify(created.data)}`);
+  const d = await apiCall(cookie, "PUT", `/pros/${created.data.id}/discounts`, { discounts });
+  if (d.status !== 200) throw new Error(`Remises : ${d.status}`);
+  const p = await apiCall(cookie, "PUT", `/pros/${created.data.id}/published`, { published: true });
+  if (p.status !== 200) throw new Error(`Publication : ${p.status}`);
+  return created.data;
 }

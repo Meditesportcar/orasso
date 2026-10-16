@@ -1,10 +1,16 @@
 import { Button, Icon, Plate, Reveal } from "@orasso/design-system/web";
 
-import { originOf } from "../lib/api.server";
+import { getMe, originOf } from "../lib/api.server";
 import type { Route } from "./+types/professionnels";
 
-export function loader({ request }: Route.LoaderArgs) {
-  return { origin: originOf(request) };
+export async function loader({ request }: Route.LoaderArgs) {
+  const me = await getMe(request);
+  const proHref = me?.pro
+    ? `/pro/${me.pro.slug}`
+    : me
+      ? "/app/pro/nouvelle"
+      : `/inscription?retour=${encodeURIComponent("/app/pro/nouvelle")}`;
+  return { origin: originOf(request), proHref, hasPro: Boolean(me?.pro) };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -46,7 +52,7 @@ const POINTS = [
   },
 ] as const;
 
-export default function Professionnels() {
+export default function Professionnels({ loaderData }: Route.ComponentProps) {
   return (
     <div className="s-stack">
       <Reveal>
@@ -61,8 +67,11 @@ export default function Professionnels() {
             gratuits.
           </p>
           <div className="s-row">
-            <Button variant="primary" icon="phone" disabled>
-              Les fiches pro ouvrent bientôt
+            <Button variant="primary" icon="vehicle" href={loaderData.proHref} data-testid="pro-cta">
+              {loaderData.hasPro ? "Mon espace pro" : "Créer ma fiche pro"}
+            </Button>
+            <Button variant="secondary" icon="search" href="/pros">
+              Voir l'annuaire
             </Button>
           </div>
         </Plate>
@@ -80,11 +89,11 @@ export default function Professionnels() {
 
       <Plate as="section" kind="note" aria-labelledby="pro-soon">
         <h2 id="pro-soon" className="s-h2">
-          En préparation
+          Gratuit jusqu'au 21 juin 2027
         </h2>
         <p className="s-entry__text">
-          Cette page est une présentation. L'inscription des professionnels, l'annuaire et l'abonnement arrivent dans
-          une prochaine version ; les tarifs ne sont pas encore fixés.
+          Les fiches pro et l'annuaire sont ouverts. L'abonnement est présenté mais ne se paie pas encore : toutes les
+          fonctions sont gratuites jusqu'au 21 juin 2027 et les tarifs ne sont pas encore fixés.
         </p>
       </Plate>
     </div>

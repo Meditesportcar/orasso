@@ -45,3 +45,7 @@ export function formatRemaining(untilIso: string, nowMs: number): string {
   if (h > 0) return `${h} h ${String(m).padStart(2, "0")} min`;
   return `${m} min ${String(s).padStart(2, "0")} s`;
 }
+
+/** « 12,00 € » : prix d'un billet (centimes). */
+export const formatPrice = (cents: number) =>
+  new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(cents / 100);

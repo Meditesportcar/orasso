@@ -1,11 +1,23 @@
 // Page d'un événement côté organisateur : statut (brouillon, publié, annulé), Maintenu / Incertain, publication,
 // duplication en un clic, récurrence créée une seule fois (docs/01 « Organisateurs : créer un événement »).
-import { Button, Chip, ChipRow, Counters, Plate, SelectField, StatusBadge } from "@orasso/design-system/web";
+import {
+  Button,
+  CheckboxField,
+  Chip,
+  ChipRow,
+  Counters,
+  Plate,
+  SelectField,
+  StatusBadge,
+  TextField,
+} from "@orasso/design-system/web";
 import {
   describeRecurrence,
   type EventOrganizer,
+  type EventTicketing,
   eventFormatLabels,
   eventOutlookLabels,
+  eventPublicAccessLabels,
   eventStatusLabels,
   RECURRENCE_MAX_COUNT,
   type RecurrenceRule,
@@ -17,7 +29,7 @@ import { useState } from "react";
 import { data, Form, redirect, useNavigation, useSearchParams } from "react-router";
 
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
-import { formatDay, formatWhen } from "../lib/format";
+import { formatDay, formatPrice, formatWhen } from "../lib/format";
 import type { Route } from "./+types/orga-evenement";
 
 export function meta() {
@@ -39,7 +51,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (event.structure.id !== membership.structureId) throw new Response("Événement introuvable.", { status: 404 });
   const structure = await apiOrThrow<{ verified: boolean }>(request, `/structures/by-slug/${params.structure}`);
   const url = new URL(request.url);
-  return { event, verified: structure.verified, created: url.searchParams.get("creee") === "1" };
+  const ticketing = await api<EventTicketing>(request, `/events/${params.eventId}/ticketing`);
+  return {
+    event,
+    ticketing: ticketing.ok ? ticketing.data : null,
+    verified: structure.verified,
+    created: url.searchParams.get("creee") === "1",
+  };
 }
 
 type Result = { error?: string; ok?: string; series?: { title: string; startsAt: string }[] };
@@ -69,6 +87,24 @@ export async function action({ request, params }: Route.ActionArgs) {
     case "duplicate": {
       const res = await api<EventOrganizer>(request, `/events/${id}/duplicate`, { method: "POST" });
       return res.ok ? redirect(`/orga/${params.structure}/e/${res.data.id}/modifier`) : fail(res);
+    }
+    case "ticketing": {
+      const capacity = text("capacity").trim();
+      const price = text("price").trim().replace(",", ".");
+      const priceCents = price ? Math.round(Number(price) * 100) : null;
+      if (priceCents !== null && !Number.isFinite(priceCents)) {
+        return data({ error: "Prix du billet : un montant en euros (ex. 12,50)." } satisfies Result, { status: 400 });
+      }
+      const res = await api(request, `/events/${id}/ticketing`, {
+        method: "PUT",
+        json: {
+          enabled: form.get("enabled") === "on",
+          capacity: capacity ? Number(capacity) : null,
+          priceCents,
+          name: text("name").trim() || "Entrée",
+        },
+      });
+      return res.ok ? redirect(`${back}?billets=1`) : fail(res);
     }
     case "recurrence": {
       const rule: RecurrenceRule =
@@ -175,8 +211,105 @@ function Recurrence({ event }: { event: EventOrganizer }) {
   );
 }
 
+/** Billetterie des visiteurs : deuxième interrupteur (après le réglage général), places, prix, compte Stripe. */
+function Ticketing({ event, ticketing, base }: { event: EventOrganizer; ticketing: EventTicketing; base: string }) {
+  const busy = useNavigation().state !== "idle";
+  const paid = event.publicAccess === "paid_orasso";
+  const ticketed = paid || event.publicAccess === "free_reservation";
+  if (!ticketed) {
+    return (
+      <Plate as="section" className="s-stack s-stack--tight" data-testid="ticketing">
+        <h2 className="s-h2">Billetterie des visiteurs</h2>
+        <p className="s-muted">
+          L'accès du public est « {eventPublicAccessLabels[event.publicAccess]} ». Pour ouvrir la billetterie Orasso,
+          choisis « Gratuite sur réservation » ou « Payante · billetterie Orasso » dans <em>Modifier</em>, rubrique
+          Public.
+        </p>
+      </Plate>
+    );
+  }
+  return (
+    <section className="orga__panel s-stack" aria-labelledby="billets-title" data-testid="ticketing">
+      <div className="s-row s-row--between">
+        <h2 id="billets-title" className="s-h2">
+          Billetterie des visiteurs
+        </h2>
+        <Chip variant={ticketing.block === null ? "accent" : undefined} data-testid="ticketing-state">
+          {ticketing.block === null ? "Ouverte" : (ticketing.blockLabel ?? "Fermée")}
+        </Chip>
+      </div>
+      <p className="s-muted">
+        {paid
+          ? "Billets payants en mode présentation : le paiement se fait avec Stripe en mode test, aucun encaissement réel avant le 21 juin 2027."
+          : "Billets gratuits sur réservation : chaque visiteur reçoit un billet avec son QR, contrôlé à l'entrée par le staff d'accueil."}
+      </p>
+      {!paid && !ticketing.generalSwitch && (
+        <p className="s-notice s-notice--alert" data-testid="general-off">
+          La réservation de billets gratuits est momentanément suspendue par l'administration d'Orasso.
+        </p>
+      )}
+      {paid && !ticketing.stripe.configured && (
+        <p className="s-notice" data-testid="stripe-soon">
+          La billetterie payante est « bientôt disponible » : les clés Stripe de la plateforme ne sont pas encore
+          renseignées.
+        </p>
+      )}
+      {paid && ticketing.stripe.configured && !ticketing.stripe.connected && (
+        <p className="s-notice" data-testid="stripe-not-connected">
+          Connecte ton compte Stripe pour recevoir les paiements : <a href={`${base}/structure#stripe`}>Structure</a>.
+        </p>
+      )}
+      <Counters
+        variant="surface"
+        size="site"
+        items={[
+          { value: ticketing.sold, label: "billets" },
+          { value: ticketing.used, label: "entrés" },
+        ]}
+      />
+      <Form method="post" className="s-form" data-testid="ticketing-form">
+        <input type="hidden" name="intent" value="ticketing" />
+        <CheckboxField
+          name="enabled"
+          label="Ouvrir la billetterie pour cet événement"
+          defaultChecked={ticketing.enabled}
+        />
+        <div className="s-two">
+          <TextField label="Nom du billet" name="name" defaultValue={ticketing.name} />
+          <TextField
+            label="Places pour les visiteurs"
+            name="capacity"
+            type="number"
+            min={1}
+            inputMode="numeric"
+            defaultValue={ticketing.capacity ?? ""}
+            help="Vide = sans limite."
+          />
+        </div>
+        {paid && (
+          <TextField
+            label="Prix du billet (€)"
+            name="price"
+            inputMode="decimal"
+            defaultValue={ticketing.priceCents ? (ticketing.priceCents / 100).toString().replace(".", ",") : ""}
+            help={`De 1 à 500 €. Commission de la plateforme prélevée sur chaque billet payé.${ticketing.priceCents ? ` Actuellement ${formatPrice(ticketing.priceCents)}.` : ""}`}
+          />
+        )}
+        <div className="s-row">
+          <Button type="submit" variant="secondary" icon="check" loading={busy}>
+            Enregistrer la billetterie
+          </Button>
+          <Button variant="secondary" icon="qr" href={`${base}/e/${event.id}/billets`}>
+            Contrôle des billets
+          </Button>
+        </div>
+      </Form>
+    </section>
+  );
+}
+
 export default function OrgaEvenement({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, verified, created } = loaderData;
+  const { event, ticketing, verified, created } = loaderData;
   const base = `/orga/${event.structure.slug}`;
   const busy = useNavigation().state !== "idle";
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -288,6 +421,8 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
           </Form>
         )}
       </section>
+
+      {ticketing && event.status !== "cancelled" && <Ticketing event={event} ticketing={ticketing} base={base} />}
 
       {published && (
         <section className="orga__panel s-stack" aria-labelledby="statut-title">

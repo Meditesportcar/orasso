@@ -17,6 +17,8 @@ export default [
     route("o/:slug", "routes/structure.tsx"),
     route("organisateurs", "routes/organisateurs.tsx"),
     route("professionnels", "routes/professionnels.tsx"),
+    route("pros", "routes/pros.tsx"),
+    route("p/:slug", "routes/pro.tsx"),
     route("invitation/:jeton", "routes/invitation.tsx"),
     route("express/:jeton", "routes/express.tsx"),
     route("connexion", "routes/connexion.tsx"),
@@ -38,6 +40,8 @@ export default [
     route("app/garage/nouveau", "routes/garage-nouveau.tsx"),
     route("app/securite", "routes/securite.tsx"),
     route("app/structure/nouvelle", "routes/structure-nouvelle.tsx"),
+    route("app/pro/nouvelle", "routes/pro-nouvelle.tsx"),
+    route("app/billets", "routes/billets.tsx"),
   ]),
 
   // Espace organisateur (Sable imposé), barre latérale.
@@ -49,6 +53,15 @@ export default [
     route("e/:eventId/modifier", "routes/orga-evenement-modifier.tsx"),
     route("e/:eventId/candidatures", "routes/orga-candidatures.tsx"),
     route("e/:eventId/jour-j", "routes/orga-jour-j.tsx"),
+    route("e/:eventId/billets", "routes/orga-billets.tsx"),
+  ]),
+
+  // Espace pro (Sable imposé), barre latérale : fiche, publications, statistiques, abonnement en présentation.
+  route("pro/:pro", "layouts/pro.tsx", [
+    index("routes/pro-fiche.tsx"),
+    route("publications", "routes/pro-publications.tsx"),
+    route("statistiques", "routes/pro-statistiques.tsx"),
+    route("abonnement", "routes/pro-abonnement.tsx"),
   ]),
 
   // Administration (super admin seulement).

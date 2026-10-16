@@ -1,7 +1,7 @@
 // Recette de sécurité (lot 12) : limites de débit des routes sensibles et en-têtes HTTP de l'API.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { call, resetDb, signUp } from "../../test/helpers";
+import { call, createPro, resetDb, signUp } from "../../test/helpers";
 import { pool } from "../db/client";
 import { notificationsService } from "../modules/notifications/service";
 import { rateLimit, rateRules } from "./rateLimit";
@@ -24,9 +24,10 @@ describe("limites de débit", () => {
     expect(() => rateLimit("accountQrVerify", "u1", t + rateRules.accountQrVerify.windowMs)).not.toThrow();
   });
 
-  it("vérification du QR de compte : 30 par minute puis 429", async () => {
+  it("vérification du QR de compte (pros) : 10 codes refusés en 10 minutes puis 429", async () => {
     const u = await signUp("Verif_66");
-    for (let i = 0; i < 30; i++) {
+    await createPro(u.id);
+    for (let i = 0; i < 10; i++) {
       expect((await call(u, "POST", "/account-qr/verify", { payload: "ORC1-XXXX" })).status).toBe(200);
     }
     const blocked = await call(u, "POST", "/account-qr/verify", { payload: "ORC1-XXXX" });

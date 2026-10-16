@@ -38,6 +38,7 @@ export default function Moi() {
   const router = useRouter();
   const { me, signOut } = useSession();
   const points = useApi(() => api.points(), [], { cacheKey: "points" });
+  const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const profile = me?.profile;
   const p = points.data;
 
@@ -86,6 +87,18 @@ export default function Moi() {
           </Text>
         ) : null}
       </Plate>
+
+      <SectionTitle>Mes casquettes</SectionTitle>
+      {myPro.data ? (
+        <Button variant="plate" icon="vehicle" onPress={() => router.push("/pro/scanner")} fullWidth>
+          {`Pro · ${myPro.data.name}`}
+        </Button>
+      ) : (
+        <Muted variant="caption">
+          Tu es professionnel de l'automobile ? Crée ta fiche pro sur le site Orasso : le lecteur de QR de compte et tes
+          statistiques arrivent ici.
+        </Muted>
+      )}
 
       <SectionTitle>Thème</SectionTitle>
       <ChipRow>

@@ -3,7 +3,9 @@
 import { Button, Chip, Plate, SelectField, TextField } from "@orasso/design-system/web";
 import {
   departmentSchema,
+  type StripeAccountState,
   type StructureOrganizer,
+  type StructurePartnerRow,
   type StructureUpdate,
   type StructureVerificationView,
   structureKindLabels,
@@ -12,7 +14,7 @@ import {
   verificationDocumentKindLabels,
   verificationDocumentKinds,
 } from "@orasso/shared";
-import { data, Form, useNavigation } from "react-router";
+import { data, Form, redirect, useNavigation } from "react-router";
 
 import { FileField, TextAreaField } from "../components/Fields";
 import { ShareButtons } from "../components/ShareButtons";
@@ -30,14 +32,17 @@ async function organizerStructure(request: Request, slug: string) {
   if (!membership || membership.role === "staff") {
     throw new Response("Réservé aux organisateurs de la structure.", { status: 403 });
   }
-  return membership.structureId;
+  return membership;
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const id = await organizerStructure(request, params.structure);
-  const [structure, verification] = await Promise.all([
+  const membership = await organizerStructure(request, params.structure);
+  const id = membership.structureId;
+  const [structure, verification, stripe, partners] = await Promise.all([
     apiOrThrow<StructureOrganizer>(request, `/structures/${id}`),
     apiOrThrow<StructureVerificationView>(request, `/structures/${id}/verification`),
+    api<StripeAccountState>(request, `/structures/${id}/stripe`),
+    api<StructurePartnerRow[]>(request, `/structures/${id}/partners`),
   ]);
   const url = new URL(request.url);
   return {
@@ -46,16 +51,51 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     origin: originOf(request),
     created: url.searchParams.get("creee") === "1",
     logoRefused: url.searchParams.get("logo") === "refuse",
+    stripe: stripe.ok ? stripe.data : null,
+    stripeResult: url.searchParams.get("stripe"),
+    isOwner: membership.role === "owner",
+    partners: partners.ok ? partners.data : [],
   };
 }
 
-type Result = { section: "fiche" | "check" | "documents" | "submit"; error?: string; ok?: string };
+type Result = {
+  section: "fiche" | "check" | "documents" | "submit" | "stripe" | "partners";
+  error?: string;
+  ok?: string;
+};
 
 export async function action({ request, params }: Route.ActionArgs) {
-  const id = await organizerStructure(request, params.structure);
+  const membership = await organizerStructure(request, params.structure);
+  const id = membership.structureId;
   const form = await request.formData();
   const text = (name: string) => String(form.get(name) ?? "").trim();
   const intent = text("intent");
+
+  // Billetterie payante : connexion du compte Stripe de l'organisateur (le propriétaire seulement). Stripe renvoie
+  // ensuite ici ; Orasso ne reçoit jamais les clés ni les coordonnées bancaires.
+  if (intent === "stripe-connect") {
+    const res = await api<{ url: string }>(request, `/structures/${id}/stripe/connect`, { method: "POST" });
+    if (!res.ok) return data({ section: "stripe", error: res.error.message } satisfies Result, { status: res.status });
+    return redirect(res.data.url);
+  }
+
+  if (intent === "stripe-disconnect") {
+    const res = await api(request, `/structures/${id}/stripe`, { method: "DELETE" });
+    if (!res.ok) return data({ section: "stripe", error: res.error.message } satisfies Result, { status: res.status });
+    return data({ section: "stripe", ok: "Compte Stripe déconnecté." } satisfies Result);
+  }
+
+  if (intent === "partner-accept" || intent === "partner-drop") {
+    const res = await api(request, `/structures/${id}/partners/${encodeURIComponent(text("proSlug"))}`, {
+      method: intent === "partner-accept" ? "PUT" : "DELETE",
+    });
+    if (!res.ok)
+      return data({ section: "partners", error: res.error.message } satisfies Result, { status: res.status });
+    return data({
+      section: "partners",
+      ok: intent === "partner-accept" ? "Partenaire accepté." : "Partenaire retiré.",
+    } satisfies Result);
+  }
 
   if (intent === "check") {
     const res = await api<StructureVerificationView>(request, `/structures/${id}/verification/check`, {
@@ -145,7 +185,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function OrgaStructure({ loaderData, actionData }: Route.ComponentProps) {
-  const { structure, verification, origin, created, logoRefused } = loaderData;
+  const { structure, verification, origin, created, logoRefused, stripe, stripeResult, isOwner, partners } = loaderData;
   const busy = useNavigation().state !== "idle";
   const result = actionData as Result | undefined;
   const check = verification.registryCheck;
@@ -373,6 +413,97 @@ export default function OrgaStructure({ loaderData, actionData }: Route.Componen
           </div>
         </Form>
       </section>
+
+      <section className="orga__panel s-stack" aria-labelledby="partners-title" data-testid="partners">
+        <h2 id="partners-title" className="s-h2">
+          Pros partenaires
+        </h2>
+        <p className="s-muted">
+          Les pros qui te proposent un partenariat apparaissent ici. Une fois acceptés, ils sont affichés sur la page de
+          {` ${structure.name}`}.
+        </p>
+        {partners.length === 0 ? (
+          <p className="s-muted">Aucune demande de pro pour l'instant.</p>
+        ) : (
+          <ul className="s-docs">
+            {partners.map((p) => (
+              <li key={p.proSlug} className="s-row s-row--between">
+                <span>
+                  <a href={`/p/${p.proSlug}`}>
+                    <strong>{p.proName}</strong>
+                  </a>{" "}
+                  · {p.status === "accepted" ? "Partenaire" : "Demande en attente"}
+                </span>
+                <Form method="post" className="s-row">
+                  {p.status === "pending" && (
+                    <Button type="submit" name="intent" value="partner-accept" variant="secondary" icon="check">
+                      Accepter
+                    </Button>
+                  )}
+                  <input type="hidden" name="proSlug" value={p.proSlug} />
+                  <Button type="submit" name="intent" value="partner-drop" variant="secondary" icon="close">
+                    {p.status === "accepted" ? "Retirer" : "Refuser"}
+                  </Button>
+                </Form>
+              </li>
+            ))}
+          </ul>
+        )}
+        {message("partners")}
+      </section>
+
+      {stripe && (
+        <section className="orga__panel s-stack" id="stripe" aria-labelledby="stripe-title" data-testid="stripe">
+          <h2 id="stripe-title" className="s-h2">
+            Billetterie payante · compte Stripe
+          </h2>
+          <p className="s-muted">
+            Les billets payants sont encaissés en <strong>mode présentation</strong> : Stripe en mode test, aucun
+            encaissement réel avant le 21 juin 2027. Tu connectes ton compte par le parcours de Stripe : Orasso ne
+            reçoit jamais tes clés ni tes coordonnées bancaires, et chaque paiement est reversé directement sur ton
+            compte.
+          </p>
+          {stripeResult === "connecte" && (
+            <p className="s-notice s-notice--ok" role="status">
+              Compte Stripe connecté.
+            </p>
+          )}
+          {stripeResult === "erreur" && (
+            <p className="s-error" role="alert">
+              La connexion avec Stripe n'a pas abouti. Réessaie, ou contacte l'équipe Orasso.
+            </p>
+          )}
+          {!stripe.configured ? (
+            <p className="s-notice" data-testid="stripe-soon">
+              La billetterie payante est « bientôt disponible » : la plateforme n'a pas encore ses clés Stripe de test.
+            </p>
+          ) : stripe.connected ? (
+            <>
+              <p data-testid="stripe-connected">
+                <Chip variant="accent">Compte connecté</Chip> {stripe.accountHint}
+              </p>
+              {isOwner && (
+                <Form method="post">
+                  <input type="hidden" name="intent" value="stripe-disconnect" />
+                  <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                    Déconnecter le compte
+                  </Button>
+                </Form>
+              )}
+            </>
+          ) : isOwner ? (
+            <Form method="post">
+              <input type="hidden" name="intent" value="stripe-connect" />
+              <Button type="submit" icon="next" loading={busy}>
+                Connecter mon compte Stripe
+              </Button>
+            </Form>
+          ) : (
+            <p className="s-muted">Seul le propriétaire de la structure peut connecter le compte Stripe.</p>
+          )}
+          {message("stripe")}
+        </section>
+      )}
 
       <section className="orga__panel s-stack" aria-labelledby="invite-title">
         <h2 id="invite-title" className="s-h2">

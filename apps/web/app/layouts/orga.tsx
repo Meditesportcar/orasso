@@ -19,6 +19,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     role: membership.role,
     canDecide: membership.role !== "staff" || membership.canDecide,
     isOrganizer: membership.role !== "staff",
+    canCheckTickets:
+      membership.role !== "staff" || membership.staffRoles.some((r) => r === "scan" || r === "super_staff"),
     twoFactorRequired: me.twoFactorRequired,
     pseudo: me.profile.pseudo,
   };
@@ -37,7 +39,7 @@ function SideLink({ href, children, on }: { href: string; children: string; on: 
 }
 
 export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
-  const { structure, isOrganizer, twoFactorRequired, pseudo } = loaderData;
+  const { structure, isOrganizer, canCheckTickets, twoFactorRequired, pseudo } = loaderData;
   const { pathname } = useLocation();
   const { eventId } = useParams();
   const base = `/orga/${structure.slug}`;
@@ -69,6 +71,11 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
             {eventBase && (
               <SideLink href={`${eventBase}/jour-j`} on={pathname.startsWith(`${eventBase}/jour-j`)}>
                 Jour J et après
+              </SideLink>
+            )}
+            {eventBase && canCheckTickets && (
+              <SideLink href={`${eventBase}/billets`} on={pathname.startsWith(`${eventBase}/billets`)}>
+                Billets
               </SideLink>
             )}
             {isOrganizer && (

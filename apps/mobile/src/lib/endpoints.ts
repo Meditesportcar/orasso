@@ -3,6 +3,7 @@
 import type {
   AccessPass,
   AccountQrSecret,
+  AccountQrVerify,
   ApplicationCreate,
   Category,
   EventCard,
@@ -15,6 +16,10 @@ import type {
   MyPoints,
   MyStaffEvent,
   Page,
+  ProOwner,
+  ProPostCreate,
+  ProPostView,
+  ProStats,
   PublicSigningKey,
   ReviewCreate,
   ScanBatchResult,
@@ -78,6 +83,14 @@ export const api = {
   me: () => request<Me>("/api/me"),
   points: () => request<MyPoints>("/api/me/points"),
   accountQrSecret: () => request<AccountQrSecret>("/api/me/account-qr-secret"),
+
+  // Casquette Pro (lot 14) : fiche, lecteur de QR de compte, publications, statistiques. Aucun paiement dans l'appli.
+  myPro: () => request<ProOwner | null>("/api/me/pro"),
+  verifyAccountQr: (payload: string) =>
+    request<AccountQrVerify>("/api/account-qr/verify", { method: "POST", body: { payload } }),
+  createProPost: (proId: string, body: ProPostCreate) =>
+    request<ProPostView>(`/api/pros/${proId}/posts`, { method: "POST", body }),
+  proStats: (proId: string, days = 30) => request<ProStats>(`/api/pros/${proId}/stats?days=${days}`),
   registerDevice: (body: {
     platform: "ios" | "android" | "web";
     expoPushToken?: string | null;

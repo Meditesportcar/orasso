@@ -1,4 +1,4 @@
-import { Button, Chip, ChipRow, Counters, Icon, Reveal, StatusBadge } from "@orasso/design-system/web";
+import { Button, Chip, ChipRow, Counters, Icon, Reveal, SelectField, StatusBadge } from "@orasso/design-system/web";
 import {
   type Category,
   type EventPublic,
@@ -7,32 +7,41 @@ import {
   eventFormatLabels,
   eventOutlookLabels,
   eventPublicAccessLabels,
+  type MyTicket,
   type StructurePublic,
+  type TicketOffer,
   vehicleTypeLabels,
 } from "@orasso/shared";
-import { Form, redirect } from "react-router";
+import { data, Form, redirect, useNavigation } from "react-router";
 
 import { EventMap } from "../components/EventMap";
 import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
-import { formatDateTime, formatWhen } from "../lib/format";
+import { formatDateTime, formatPrice, formatWhen } from "../lib/format";
 import { badgeFor, registrationState } from "../lib/status";
 import type { Route } from "./+types/event";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const slug = params.slug;
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
-  const [structure, categories, me, reviews] = await Promise.all([
+  const [structure, categories, me, reviews, tickets] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     api<Category[]>(request, "/vehicle-reference/categories"),
     getMe(request),
     api<EventReviews>(request, `/events/by-slug/${encodeURIComponent(slug)}/reviews`),
+    api<{ offer: TicketOffer | null; mine: MyTicket[] }>(
+      request,
+      `/events/by-slug/${encodeURIComponent(slug)}/tickets`,
+    ),
   ]);
   return {
     event,
     structure,
     reviews: reviews.ok ? reviews.data : null,
+    offer: tickets.ok ? tickets.data.offer : null,
+    myTickets: tickets.ok ? tickets.data.mine : [],
+    paymentCancelled: new URL(request.url).searchParams.get("paiement") === "annule",
     ended: new Date(event.endsAt).getTime() <= Date.now(),
     categories: categories.ok ? categories.data : [],
     connected: Boolean(me),
@@ -93,7 +102,114 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (structureId && (intent === "follow" || intent === "unfollow")) {
     await api(request, `/structures/${structureId}/follow`, { method: intent === "follow" ? "POST" : "DELETE" });
   }
+  // Billets : réservation gratuite (billet et QR tout de suite) ou paiement de démonstration (Stripe en mode test).
+  if (intent === "reserve" || intent === "checkout") {
+    const eventId = String(form.get("eventId") ?? "");
+    const quantity = Number(form.get("quantity") ?? 1);
+    const res = await api<{ url?: string }>(request, `/events/${encodeURIComponent(eventId)}/tickets/${intent}`, {
+      method: "POST",
+      json: { quantity },
+    });
+    if (!res.ok) return data({ error: res.error.message }, { status: res.status });
+    if (intent === "checkout" && res.data.url) return redirect(res.data.url);
+    return redirect("/app/billets?reserve=ok");
+  }
   return redirect(`/e/${params.slug}`);
+}
+
+/** Billets des visiteurs : réservation gratuite ou paiement de démonstration, interrupteurs et places restantes. */
+function VisitorTickets({
+  event,
+  offer,
+  tickets,
+  connected,
+  cancelled,
+  error,
+}: {
+  event: EventPublic;
+  offer: TicketOffer;
+  tickets: MyTicket[];
+  connected: boolean;
+  cancelled: boolean;
+  error?: string;
+}) {
+  const busy = useNavigation().state !== "idle";
+  const paid = offer.kind === "paid";
+  const max = Math.max(1, Math.min(offer.maxPerOrder, offer.remaining ?? offer.maxPerOrder));
+  const retour = encodeURIComponent(`/e/${event.slug}`);
+  return (
+    <div className="s-card s-stack s-stack--tight" data-testid="tickets-card">
+      <div className="s-label o-t-label">Visiteurs · billets</div>
+      <p className="s-row s-row--between">
+        <strong>{offer.name}</strong>
+        <span className="o-t-number" data-testid="ticket-price">
+          {paid && offer.priceCents != null ? formatPrice(offer.priceCents) : "Gratuit"}
+        </span>
+      </p>
+      {offer.remaining !== null && (
+        <p className="o-t-caption s-muted">
+          {offer.remaining} place{offer.remaining > 1 ? "s" : ""} restante{offer.remaining > 1 ? "s" : ""}
+        </p>
+      )}
+      {tickets.length > 0 && (
+        <p className="o-t-caption" data-testid="my-tickets-note">
+          Tu as {tickets.length} billet{tickets.length > 1 ? "s" : ""} pour cet événement.
+        </p>
+      )}
+      {cancelled && <p className="s-notice">Paiement annulé : aucun billet n'a été émis.</p>}
+      {error && (
+        <p className="s-error" role="alert">
+          {error}
+        </p>
+      )}
+      {offer.block ? (
+        <>
+          <Button variant="secondary" icon="calendar" disabled fullWidth data-testid="ticket-blocked">
+            {paid ? "Acheter un billet" : "Réserver"}
+          </Button>
+          <p className="o-t-caption s-muted" data-testid="ticket-block">
+            {offer.blockLabel}
+            {offer.block === "payments_soon" ? " : les paiements ne sont pas encore ouverts." : "."}
+          </p>
+        </>
+      ) : !connected ? (
+        <Button variant="secondary" icon="calendar" href={`/connexion?retour=${retour}`} fullWidth>
+          {paid ? "Acheter un billet" : "Réserver"}
+        </Button>
+      ) : (
+        <Form method="post" className="s-stack s-stack--tight" data-testid="ticket-form">
+          <input type="hidden" name="eventId" value={event.id} />
+          <SelectField
+            label="Nombre de billets"
+            name="quantity"
+            defaultValue="1"
+            options={Array.from({ length: max }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
+          />
+          <Button
+            type="submit"
+            name="intent"
+            value={paid ? "checkout" : "reserve"}
+            variant="secondary"
+            icon="calendar"
+            loading={busy}
+            fullWidth
+          >
+            {paid ? "Payer avec une carte de test" : "Réserver gratuitement"}
+          </Button>
+        </Form>
+      )}
+      {paid && !offer.block && (
+        <p className="o-t-caption s-muted">
+          Paiement de démonstration (mode test Stripe) : aucun vrai débit. Carte de test 4242 4242 4242 4242.
+        </p>
+      )}
+      {tickets.length > 0 && (
+        <Button variant="secondary" icon="qr" href="/app/billets" fullWidth>
+          Voir mes billets
+        </Button>
+      )}
+    </div>
+  );
 }
 
 /** Avis des participants pointés : moyenne à partir du minimum d'avis, réponse publique de l'organisateur. */
@@ -140,15 +256,15 @@ function ReviewsSection({ reviews }: { reviews: EventReviews }) {
   );
 }
 
-export default function EventPage({ loaderData }: Route.ComponentProps) {
-  const { event, structure, categories, connected, origin, state, reviews, ended } = loaderData;
+export default function EventPage({ loaderData, actionData }: Route.ComponentProps) {
+  const { event, structure, categories, connected, origin, state, reviews, ended, offer, myTickets, paymentCancelled } =
+    loaderData;
   const mine = event.myApplications ?? [];
   const wanted = (event.criteria?.categoryIds ?? [])
     .map((id) => categories.find((c) => c.id === id)?.label)
     .filter((label): label is string => Boolean(label));
   const wantedTypes = event.admittedVehicleTypes.map((t) => vehicleTypeLabels[t]);
   const publicAccess = eventPublicAccessLabels[event.publicAccess];
-  const reservable = event.publicAccess === "free_reservation" || event.publicAccess === "paid_orasso";
   const retour = encodeURIComponent(`/e/${event.slug}`);
   const candidateHref = connected
     ? `/e/${event.slug}/candidater`
@@ -344,16 +460,33 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
               Suivre {structure.name}
             </Button>
           )}
-          {reservable && (
-            <Button variant="secondary" icon="calendar" disabled fullWidth>
-              Réserver
-            </Button>
-          )}
-          <p className="o-t-caption s-muted">
-            Visiteurs : {publicAccess.toLowerCase()}
-            {reservable ? " (réservation bientôt disponible)" : ""}.
-          </p>
+          <p className="o-t-caption s-muted">Visiteurs : {publicAccess.toLowerCase()}.</p>
         </div>
+
+        {offer && (
+          <VisitorTickets
+            event={event}
+            offer={offer}
+            tickets={myTickets}
+            connected={connected}
+            cancelled={paymentCancelled}
+            error={(actionData as { error?: string } | undefined)?.error}
+          />
+        )}
+        {!offer && event.publicAccess === "paid_external" && event.externalTicketUrl && (
+          <div className="s-card">
+            <Button
+              variant="secondary"
+              icon="calendar"
+              href={event.externalTicketUrl}
+              target="_blank"
+              rel="noopener"
+              fullWidth
+            >
+              Billetterie en ligne
+            </Button>
+          </div>
+        )}
 
         <div className="s-card">
           <div className="s-label o-t-label">Partager</div>

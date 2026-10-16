@@ -27,6 +27,22 @@ export const rateRules = {
   structureCreate: { max: 5, windowMs: 86_400_000, message: "Trop de structures créées aujourd'hui." },
   /** Pointage rapide par plaques (jusqu'à 300 plaques par envoi). */
   plateCheckins: { max: 30, windowMs: 60_000, message: "Trop d'envois de plaques : réessaie dans une minute." },
+  /** Codes de QR de compte refusés (expirés, inconnus, rejoués) par un même pro : chaque échec est un essai de devinette. */
+  accountQrFailure: {
+    max: 10,
+    windowMs: 600_000,
+    message: "Trop de codes refusés : réessaie dans quelques minutes.",
+  },
+  /** Vérifications de QR de compte par un pro dans la journée (un garage ne scanne pas mille clients par jour). */
+  accountQrDaily: { max: 500, windowMs: 86_400_000, message: "Limite quotidienne de vérifications atteinte." },
+  /** Compteurs de la fiche pro (vues, appels, itinéraires) : par visiteur et par fiche. */
+  proTrack: { max: 30, windowMs: 3_600_000, message: "Trop d'actions sur cette fiche." },
+  /** Création et modification de fiche pro, photos, publications. */
+  proWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  /** Réservation de billets gratuits ou ouverture d'un paiement. */
+  ticketOrder: { max: 20, windowMs: 3_600_000, message: "Trop de commandes de billets : réessaie plus tard." },
+  /** Contrôle des billets à l'entrée (un lecteur enchaîne les lectures). */
+  ticketCheck: { max: 120, windowMs: 60_000, message: "Trop de lectures : réessaie dans une minute." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;
@@ -49,6 +65,24 @@ export function rateLimit(name: RateRuleName, subject: string, nowMs = Date.now(
   }
   bucket.count++;
   if (bucket.count > rule.max) {
+    throw new AppError(429, "rate_limited", rule.message, { retryAfter: Math.ceil((bucket.resetAt - nowMs) / 1000) });
+  }
+}
+
+/** Compte un événement (un échec, par exemple) sans jamais lever : la limite se vérifie avant avec `rateAssertBelow`. */
+export function rateRecord(name: RateRuleName, subject: string, nowMs = Date.now()): void {
+  const rule = rateRules[name];
+  const key = `${name}|${subject}`;
+  const bucket = buckets.get(key);
+  if (!bucket || bucket.resetAt <= nowMs) buckets.set(key, { count: 1, resetAt: nowMs + rule.windowMs });
+  else bucket.count++;
+}
+
+/** `429 rate_limited` si le maximum de la règle est déjà atteint, sans rien compter. */
+export function rateAssertBelow(name: RateRuleName, subject: string, nowMs = Date.now()): void {
+  const rule = rateRules[name];
+  const bucket = buckets.get(`${name}|${subject}`);
+  if (bucket && bucket.resetAt > nowMs && bucket.count >= rule.max) {
     throw new AppError(429, "rate_limited", rule.message, { retryAfter: Math.ceil((bucket.resetAt - nowMs) / 1000) });
   }
 }

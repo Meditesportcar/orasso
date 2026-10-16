@@ -74,6 +74,8 @@ export type Me = {
     inviteToken: string;
   };
   memberships: Membership[];
+  /** Fiche pro du compte (casquette Pro de l'appli, espace `/pro/<slug>` du site), `null` sans fiche. */
+  pro: { id: string; slug: string; name: string; logoUrl: string | null; published: boolean; verified: boolean } | null;
   /** La double authentification est exigée (organisateur ou administration) mais pas encore activée. */
   twoFactorRequired: boolean;
   counts: { vehicles: number; upcomingApplications: number; unreadNotifications: number };

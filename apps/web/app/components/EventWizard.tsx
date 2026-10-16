@@ -544,7 +544,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
             <fieldset className="s-fieldset s-stack s-stack--tight">
               <legend className="o-t-label s-label">Entrée du public</legend>
               <ChipRow className="s-chips-wrap">
-                {(["free", "paid_external", "closed"] as const).map((p) => (
+                {(["free", "free_reservation", "paid_orasso", "paid_external", "closed"] as const).map((p) => (
                   <Chip key={p} selected={d.publicAccess === p} onClick={() => set("publicAccess", p)}>
                     {eventPublicAccessLabels[p]}
                   </Chip>
@@ -561,10 +561,15 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
                 placeholder="https://"
               />
             )}
-            <p className="s-muted">
-              « Gratuite sur réservation » et « Payante · billetterie Orasso » arrivent avec la billetterie : elles
-              restent indisponibles pour l'instant.
-            </p>
+            {(d.publicAccess === "free_reservation" || d.publicAccess === "paid_orasso") && (
+              <p className="s-muted" data-testid="ticketing-hint">
+                {d.publicAccess === "free_reservation"
+                  ? "Chaque visiteur réserve un billet gratuit avec son QR, contrôlé à l'entrée. "
+                  : "Billetterie payante en mode présentation : le paiement se fait avec Stripe en mode test, aucun encaissement réel avant le 21 juin 2027. "}
+                Tu règles les places{d.publicAccess === "paid_orasso" ? ", le prix" : ""} et l'ouverture de la
+                billetterie sur la page de l'événement, une fois le brouillon enregistré.
+              </p>
+            )}
           </>
         )}
 
@@ -786,9 +791,9 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
         {step.id === "billetterie" && (
           <>
             <p className="s-notice">
-              La billetterie Orasso (réservation gratuite, vente en ligne) est en préparation : elle arrive dans une
-              prochaine version. Pour l'instant, indique à l'étape « Public » si l'entrée est libre, payante via ta
-              propre billetterie, ou fermée au public.
+              {d.publicAccess === "free_reservation" || d.publicAccess === "paid_orasso"
+                ? "Une fois le brouillon enregistré, ouvre la billetterie des visiteurs (places, prix, interrupteur) depuis la page de l'événement."
+                : "La billetterie Orasso (billets gratuits sur réservation, billets payants en mode présentation) se choisit à l'étape « Public »."}
             </p>
             <Recap d={d} />
             {!verified && (

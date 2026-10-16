@@ -15,6 +15,7 @@ import {
   devices,
   events,
   notifications,
+  proProfiles,
   structureMembers,
   structures,
   vehicles,
@@ -87,6 +88,9 @@ export const profilesService = {
       .from(structureMembers)
       .innerJoin(structures, eq(structures.id, structureMembers.structureId))
       .where(and(eq(structureMembers.userId, v.user.id), inArray(structureMembers.status, ["active", "invited"])));
+    const pro = await db.query.proProfiles.findFirst({
+      where: and(eq(proProfiles.ownerUserId, v.user.id), isNull(proProfiles.deletedAt)),
+    });
     const [vehicleCount] = await db
       .select({ n: count() })
       .from(vehicles)
@@ -131,6 +135,16 @@ export const profilesService = {
         grade: p.grade,
         inviteToken: p.inviteToken,
       },
+      pro: pro
+        ? {
+            id: pro.id,
+            slug: pro.slug,
+            name: pro.name,
+            logoUrl: storage.url(pro.logoKey),
+            published: pro.publishedAt !== null,
+            verified: pro.verifiedAt !== null,
+          }
+        : null,
       memberships: memberships.map((m) => ({
         ...m,
         staffRoles: m.staffRoles as Me["memberships"][number]["staffRoles"],

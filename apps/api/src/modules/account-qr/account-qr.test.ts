@@ -4,7 +4,7 @@ import { accountQrPayload, fromWallTime } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { call, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
+import { call, createPro, resetDb, signUp, type TestUser, useClock } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import { profiles } from "../../db/schema";
 import { hmacSha1 } from "./service";
@@ -28,6 +28,7 @@ beforeEach(async () => {
   clock = useClock(fromWallTime({ year: 2026, month: 10, day: 17, hour: 15, minute: 0 }));
   kenji = await signUp("Kenji_66");
   pro = await signUp("Garage_Pro");
+  await createPro(pro.id);
   const res = await call(kenji, "GET", "/me/account-qr-secret");
   expect(res.status).toBe(200);
   expect(res.json).toMatchObject({ stepSeconds: 60, digits: 8 });
@@ -36,7 +37,7 @@ beforeEach(async () => {
 });
 
 describe("QR de compte", () => {
-  it("code de la fenêtre courante : pseudo et grade, sans remise (lot 14) ; rejeu refusé", async () => {
+  it("code de la fenêtre courante : pseudo et grade, sans remise si le pro n'en accorde pas ; rejeu refusé", async () => {
     const payload = payloadAt(clock.now);
     expect(await verify(payload)).toEqual({ valid: true, pseudo: "Kenji_66", grade: "rodage", discount: null });
     expect(await verify(payload)).toEqual({ valid: false, reason: "replayed" });
@@ -76,5 +77,39 @@ describe("QR de compte", () => {
     expect(await verify("OA1AAAAAAAAAAA.12345678")).toEqual({ valid: false, reason: "unknown" });
     expect(await verify("bonjour")).toEqual({ valid: false, reason: "malformed" });
     expect((await call(null, "POST", "/account-qr/verify", { payload: payloadAt(clock.now) })).status).toBe(401);
+  });
+
+  it("réservé aux pros : un passionné simple ou un pro non publié reçoit 403", async () => {
+    const other = await signUp("Autre_66");
+    const res = await call(other, "POST", "/account-qr/verify", { payload: payloadAt(clock.now) });
+    expect(res.status).toBe(403);
+    expect(res.json.error.code).toBe("forbidden");
+    const draft = await signUp("Brouillon_Pro");
+    await createPro(draft.id, { publishedAt: null });
+    expect((await call(draft, "POST", "/account-qr/verify", { payload: payloadAt(clock.now) })).status).toBe(403);
+  });
+
+  it("remise selon le grade du porteur, renvoyée et comptée dans les statistiques du pro", async () => {
+    const proRow = await db.query.proProfiles.findFirst();
+    await call(pro, "PUT", `/pros/${proRow?.id}/discounts`, { discounts: { rodage: 5, sport: 15 } });
+    const first = await verify(payloadAt(clock.now));
+    expect(first).toEqual({ valid: true, pseudo: "Kenji_66", grade: "rodage", discount: { percent: 5 } });
+    await db.update(profiles).set({ grade: "sport" }).where(eq(profiles.userId, kenji.id));
+    clock.advance(60_000);
+    expect((await verify(payloadAt(clock.now))).discount).toEqual({ percent: 15 });
+    // Grade sans remise : valide, aucune remise, rien de compté.
+    await db.update(profiles).set({ grade: "legende" }).where(eq(profiles.userId, kenji.id));
+    clock.advance(60_000);
+    expect(await verify(payloadAt(clock.now))).toMatchObject({ valid: true, discount: null });
+    const stats = await call(pro, "GET", `/pros/${proRow?.id}/stats?days=7`);
+    expect(stats.json.discounts).toBe(2);
+    expect(stats.json.discountsByGrade).toEqual({ rodage: 1, sport: 1 });
+  });
+
+  it("échecs comptés par vérificateur : au-delà de 10 en 10 minutes, même un code juste est refusé", async () => {
+    for (let i = 0; i < 10; i++) expect((await verify("OA1AAAAAAAAAAA.12345678")).valid).toBe(false);
+    const blocked = await call(pro, "POST", "/account-qr/verify", { payload: payloadAt(clock.now) });
+    expect(blocked.status).toBe(429);
+    expect(blocked.json.error.code).toBe("rate_limited");
   });
 });

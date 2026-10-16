@@ -11,6 +11,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     pseudo: me.profile.pseudo,
     orga: me.memberships.find((m) => m.status === "active")?.structureSlug ?? null,
+    pro: me.pro?.slug ?? null,
     unread: me.counts.unreadNotifications,
   };
 }
@@ -36,6 +37,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       <div className="app">
         <SiteHeader>
           {loaderData.orga && <a href={`/orga/${loaderData.orga}`}>Organisateur</a>}
+          {loaderData.pro && <a href={`/pro/${loaderData.pro}`}>Pro</a>}
           <span>{loaderData.pseudo}</span>
           <Form method="post" action="/deconnexion">
             <button type="submit" className="s-linkbutton o-t-button">

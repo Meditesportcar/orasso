@@ -9,6 +9,7 @@ import {
   events,
   eventZones,
   profiles,
+  proProfiles,
   structureMembers,
   structures,
   user,
@@ -228,6 +229,24 @@ export async function createEvent(structureId: string, overrides: Partial<typeof
     })
     .returning();
   return e!;
+}
+
+/** Fiche pro publiée (insérée directement). */
+export async function createPro(ownerId: string, overrides: Partial<typeof proProfiles.$inferInsert> = {}) {
+  const [p] = await db
+    .insert(proProfiles)
+    .values({
+      slug: `pro-${randomBytes(3).toString("hex")}`,
+      ownerUserId: ownerId,
+      name: "Garage de test",
+      activities: ["garage"],
+      city: "Perpignan",
+      department: "66",
+      publishedAt: new Date(0),
+      ...overrides,
+    })
+    .returning();
+  return p!;
 }
 
 export async function createZone(eventId: string, code: string) {

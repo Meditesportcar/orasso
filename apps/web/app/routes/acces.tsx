@@ -9,6 +9,7 @@ import {
   type MyApplication,
   type MyPoints,
   type MyReview,
+  type MyTicket,
   POINTS_PENDING_LABEL,
   REVIEW_MAX_RATING,
   refusalReasonLabels,
@@ -47,12 +48,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   );
   const points = past ? await apiOrThrow<MyPoints>(request, "/me/points") : null;
   const me = await requireMe(request);
+  const tickets = await api<MyTicket[]>(request, "/me/tickets");
   return {
     past,
     applications,
     passes,
     points,
     userId: me.user.id,
+    ticketCount: tickets.ok ? tickets.data.filter((t) => t.status === "valid").length : 0,
     sent: url.searchParams.get("candidature") === "envoyee",
   };
 }
@@ -309,7 +312,7 @@ function ReviewBlock({ app, review, busy }: { app: MyApplication; review: MyRevi
 }
 
 export default function Acces({ loaderData, actionData }: Route.ComponentProps) {
-  const { past, applications, passes, points, sent, userId } = loaderData;
+  const { past, applications, passes, points, sent, userId, ticketCount } = loaderData;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   // Une décision de l'organisateur, une offre ou un pass émis : la page se met à jour sans rechargement.
@@ -329,6 +332,12 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
       </div>
 
       {sent && <p className="s-notice s-notice--ok">Candidature envoyée. L'organisateur te répond ici.</p>}
+      {!past && ticketCount > 0 && (
+        <p className="s-notice" data-testid="tickets-link">
+          Tu as {ticketCount} billet{ticketCount > 1 ? "s" : ""} de visiteur.{" "}
+          <a href="/app/billets">Voir mes billets</a>
+        </p>
+      )}
       {actionData?.error && (
         <p className="s-error" role="alert">
           {actionData.error}

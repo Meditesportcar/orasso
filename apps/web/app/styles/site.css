@@ -1134,3 +1134,116 @@
     font-size: var(--type-meta-size);
   }
 }
+
+/* ---------- Pros et billetterie (lot 14) ---------- */
+.s-tile__photo--logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-muted);
+}
+.s-tile__photo--logo img {
+  object-fit: contain;
+  padding: var(--space-3);
+}
+.s-chip-link {
+  text-decoration: none;
+}
+.s-discounts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.s-discounts li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.s-discounts__on {
+  border-color: var(--accent);
+}
+.s-discounts__off {
+  opacity: 0.55;
+}
+.s-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.s-photos img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+.s-photos--edit li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.s-hours {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+.s-hours > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.s-hours dd {
+  margin: 0;
+  text-align: right;
+}
+.s-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 140px;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.s-bars__col {
+  flex: 1 1 0;
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  min-width: 2px;
+}
+.s-bars__bar {
+  width: 100%;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--accent);
+}
+.s-ticks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.s-ticks li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.s-camera {
+  width: 100%;
+  max-width: 420px;
+  border-radius: var(--radius-md);
+  background: var(--night);
+}
