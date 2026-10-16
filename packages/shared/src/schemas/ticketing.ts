@@ -111,6 +111,13 @@ export type TicketHolderRow = {
   orderPaid: boolean;
 };
 
+export type TicketHolders = {
+  event: { title: string; slug: string };
+  sold: number;
+  used: number;
+  items: TicketHolderRow[];
+};
+
 export type TicketCheckResult =
   | { result: "ok"; pseudo: string; ticketName: string; usedAt: string }
   | { result: "already"; pseudo: string; ticketName: string; usedAt: string }

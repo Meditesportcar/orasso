@@ -16,7 +16,7 @@ import {
   type StripeAccountState,
   TICKET_MAX_PER_ORDER,
   type TicketCheckResult,
-  type TicketHolderRow,
+  type TicketHolders,
   type TicketingUpdate,
   type TicketOffer,
   ticketingBlock,
@@ -582,7 +582,7 @@ export const ticketsService = {
   },
 
   /** `GET /events/:id/tickets` : liste des billets et compteur d'entrées visiteurs. */
-  async holders(v: Viewer, eventId: string): Promise<{ sold: number; used: number; items: TicketHolderRow[] }> {
+  async holders(v: Viewer, eventId: string): Promise<TicketHolders> {
     const e = await eventsRepo.byId(eventId);
     const access = await staffAccess(v, e.structureId, ["scan", "super_staff"], e.id);
     if (!access) throw forbidden("Réservé à l'organisation et au staff d'accueil");
@@ -598,6 +598,7 @@ export const ticketsService = {
       .orderBy(desc(tickets.usedAt), asc(tickets.issuedAt))
       .limit(500);
     return {
+      event: { title: e.title, slug: e.slug },
       sold: rows.length,
       used: rows.filter((r) => r.t.status === "used").length,
       items: rows.map(({ t, o, pseudo }) => ({

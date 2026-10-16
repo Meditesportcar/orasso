@@ -3,6 +3,10 @@
 import { Button, Chip, Ground, Monogram, Plate, ThemeScope } from "@orasso/design-system/web";
 import {
   type AdminStructureRow,
+  type PlatformSettingKey,
+  type PlatformSettings,
+  platformSettingKeys,
+  platformSettingLabels,
   structureKindLabels,
   structureVerificationLabels,
   verificationDocumentKindLabels,
@@ -30,12 +34,23 @@ export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireSuperAdmin(request);
   const all = new URL(request.url).searchParams.get("tout") === "1";
   const rows = await apiOrThrow<AdminStructureRow[]>(request, `/admin/structures?status=${all ? "all" : "pending"}`);
-  return { rows, all, pseudo: me.profile.pseudo, twoFactorRequired: me.twoFactorRequired };
+  const settings = await apiOrThrow<PlatformSettings>(request, "/admin/settings");
+  return { rows, settings, all, pseudo: me.profile.pseudo, twoFactorRequired: me.twoFactorRequired };
 }
 
 export async function action({ request }: Route.ActionArgs) {
   await requireSuperAdmin(request);
   const form = await request.formData();
+  // Interrupteurs de la billetterie (réglages de la plateforme).
+  if (String(form.get("intent")) === "setting") {
+    const key = String(form.get("key") ?? "");
+    const res = await api(request, `/admin/settings/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      json: { value: String(form.get("value")) === "true" },
+    });
+    if (!res.ok) return data({ error: res.error.message, id: key }, { status: res.status });
+    return redirect("/admin?fait=reglage");
+  }
   const id = String(form.get("structureId") ?? "");
   const verified = String(form.get("intent")) === "verify";
   const note = String(form.get("note") ?? "").trim();
@@ -51,7 +66,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Admin({ loaderData, actionData }: Route.ComponentProps) {
-  const { rows, all, pseudo, twoFactorRequired } = loaderData;
+  const { rows, settings, all, pseudo, twoFactorRequired } = loaderData;
   const busy = useNavigation().state !== "idle";
   return (
     <ThemeScope theme="sable">
@@ -79,6 +94,54 @@ export default function Admin({ loaderData, actionData }: Route.ComponentProps) 
                 <a href="/app/securite">Active-la maintenant</a>.
               </p>
             )}
+            <section className="orga__panel s-stack" aria-labelledby="settings-title" data-testid="admin-settings">
+              <h2 id="settings-title" className="s-h2">
+                Réglages · billetterie
+              </h2>
+              <p className="s-muted">
+                Les billets gratuits sont réels ; les billets payants restent en mode présentation (Stripe en mode test,
+                aucun encaissement réel). Chaque organisateur ouvre ensuite la billetterie événement par événement.
+                Stripe :{" "}
+                {settings.stripe.configured
+                  ? "clés de test renseignées"
+                  : "clés non renseignées (billetterie payante « bientôt »)"}
+                .
+              </p>
+              {platformSettingKeys.map((key: PlatformSettingKey) => {
+                const on = settings[key];
+                const locked = key === "ticketing.presentation_mode" && settings.presentationForced;
+                return (
+                  <Form key={key} method="post" className="s-row s-row--between" data-testid={`setting-${key}`}>
+                    <input type="hidden" name="intent" value="setting" />
+                    <input type="hidden" name="key" value={key} />
+                    <span>
+                      {platformSettingLabels[key]} · <strong>{on ? "activé" : "désactivé"}</strong>
+                      {locked ? " (imposé jusqu'au 21 juin 2027)" : ""}
+                    </span>
+                    <Button
+                      type="submit"
+                      name="value"
+                      value={on ? "false" : "true"}
+                      variant="secondary"
+                      icon={on ? "close" : "check"}
+                      disabled={locked && on}
+                      loading={busy}
+                    >
+                      {on ? "Désactiver" : "Activer"}
+                    </Button>
+                  </Form>
+                );
+              })}
+              {actionData &&
+                "error" in actionData &&
+                typeof actionData.id === "string" &&
+                actionData.id.startsWith("ticketing.") && (
+                  <p className="s-error" role="alert">
+                    {actionData.error}
+                  </p>
+                )}
+            </section>
+
             <div className="orga__head">
               <div>
                 <div className="s-label o-t-label">Administration</div>

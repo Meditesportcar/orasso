@@ -197,6 +197,7 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
   return {
     ...toCard(p, followers.get(p.id) ?? 0),
     id: p.id,
+    published: p.publishedAt !== null,
     description: p.description,
     addressLine: p.addressLine,
     postalCode: p.postalCode,

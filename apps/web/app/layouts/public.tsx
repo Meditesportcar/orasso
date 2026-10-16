@@ -11,6 +11,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     pseudo: me?.profile.pseudo ?? null,
     orga: (me?.memberships ?? []).find((m) => m.status === "active")?.structureSlug ?? null,
+    pro: me?.pro?.slug ?? null,
   };
 }
 
@@ -24,6 +25,7 @@ export default function PublicLayout({ loaderData }: Route.ComponentProps) {
           {loaderData.pseudo ? (
             <>
               {loaderData.orga && <a href={`/orga/${loaderData.orga}`}>Organisateur</a>}
+              {loaderData.pro && <a href={`/pro/${loaderData.pro}`}>Pro</a>}
               <a href="/app/acces">{loaderData.pseudo}</a>
             </>
           ) : (

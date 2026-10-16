@@ -122,6 +122,8 @@ export type ProPhotoView = { id: string; url: string };
 
 export type ProPublic = ProCard & {
   id: string;
+  /** Visible dans l'annuaire (faux : brouillon, vu par son propriétaire seulement). */
+  published: boolean;
   description: string | null;
   addressLine: string | null;
   postalCode: string | null;
@@ -165,7 +167,6 @@ export type ProPartnerLink = {
 
 /** Fiche pro vue par son propriétaire : tout ce qu'il peut modifier, l'état de l'abonnement et le compteur du mois. */
 export type ProOwner = ProPublic & {
-  published: boolean;
   siret: string | null;
   registryCheck: RegistryCheck | null;
   verifiedAt: string | null;
