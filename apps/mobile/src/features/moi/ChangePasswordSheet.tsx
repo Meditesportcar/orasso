@@ -6,10 +6,12 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { passwordFormError } from "@/lib/passwordForm";
 import { securityErrorMessage } from "@/lib/securityMessages";
+import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
 
 export function ChangePasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTheme();
+  const { adoptToken } = useSession();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -35,7 +37,8 @@ export function ChangePasswordSheet({ visible, onClose }: { visible: boolean; on
     setBusy(true);
     setError(null);
     try {
-      await api.changePassword(current, next);
+      const token = await api.changePassword(current, next);
+      if (token) await adoptToken(token);
       setDone(true);
     } catch (e) {
       setError(securityErrorMessage(e));

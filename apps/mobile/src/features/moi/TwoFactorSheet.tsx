@@ -23,7 +23,7 @@ type Step =
 
 export function TwoFactorSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTheme();
-  const { me, refreshMe } = useSession();
+  const { me, refreshMe, adoptToken } = useSession();
   const enabled = Boolean(me?.user.twoFactorEnabled);
   const [step, setStep] = useState<Step>({ name: "menu" });
   const [password, setPassword] = useState("");
@@ -60,7 +60,8 @@ export function TwoFactorSheet({ visible, onClose }: { visible: boolean; onClose
         const result = await api.regenerateBackupCodes(password);
         setStep({ name: "codes", codes: result.backupCodes, title: "Nouveaux codes de secours" });
       } else {
-        await api.disableTwoFactor(password);
+        const token = await api.disableTwoFactor(password);
+        if (token) await adoptToken(token);
         await refreshMe();
         setStep({ name: "done", text: "Double authentification désactivée. Un e-mail te le confirme." });
       }
@@ -69,7 +70,8 @@ export function TwoFactorSheet({ visible, onClose }: { visible: boolean; onClose
 
   const confirmCode = () =>
     run(async () => {
-      await api.verifyTotp(code);
+      const token = await api.verifyTotp(code);
+      if (token) await adoptToken(token);
       await refreshMe();
       setCode("");
       setStep({ name: "done", text: "Double authentification activée. Elle te sera demandée à chaque connexion." });
