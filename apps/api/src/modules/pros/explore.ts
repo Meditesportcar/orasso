@@ -25,8 +25,9 @@ import type { Viewer } from "../../lib/session";
 import { containsPattern, fold, searchTokens } from "../../lib/text-search";
 import { followersCounts, toCard } from "./card";
 
+const safeOffset = (n: number): number => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
 const decodeOffset = (cursor: string | undefined): number =>
-  cursor ? Math.max(0, Number(Buffer.from(cursor, "base64url").toString()) || 0) : 0;
+  cursor ? safeOffset(Number(Buffer.from(cursor, "base64url").toString())) : 0;
 const encodeOffset = (offset: number): string => Buffer.from(String(offset)).toString("base64url");
 
 /** Activités dont le libellé contient ce mot (« detail » → detailing), sans tenir compte des accents ni de la casse. */
@@ -44,7 +45,8 @@ export async function exploreProsList(q: ProListQuery, viewer: Viewer | null): P
   const explicit = q.lat !== undefined && q.lng !== undefined;
   const located = resolvePosition({ lat: q.lat, lng: q.lng }, viewer?.profile.departments ?? null);
   const sort = q.sort === "distance" && located ? "distance" : "name";
-  const wantsRadius = located !== null && (q.radiusKm !== undefined || (explicit && q.sort === "name"));
+  // Rayon : seulement s'il est demandé (pas de rayon implicite : les pros sans adresse ou éloignés restent listés).
+  const wantsRadius = located !== null && q.radiusKm !== undefined;
   const needsDistance = located !== null && (sort === "distance" || wantsRadius || explicit);
   const dist = needsDistance && located ? distanceKmSql(proProfiles.lat, proProfiles.lng, located.position) : null;
 
@@ -64,6 +66,7 @@ export async function exploreProsList(q: ProListQuery, viewer: Viewer | null): P
       or(
         sql`${proProfiles.name} ilike ${like}`,
         sql`${proProfiles.city} ilike ${like}`,
+        sql`${proProfiles.description} ilike ${like}`,
         activities.length
           ? sql`${proProfiles.activities} && ARRAY[${sql.join(
               activities.map((a) => sql`${a}`),
@@ -74,7 +77,7 @@ export async function exploreProsList(q: ProListQuery, viewer: Viewer | null): P
     );
   }
   if (wantsRadius && located) {
-    filters.push(withinRadiusSql(proProfiles.lat, proProfiles.lng, located.position, q.radiusKm ?? 50));
+    filters.push(withinRadiusSql(proProfiles.lat, proProfiles.lng, located.position, q.radiusKm as number));
   }
 
   const promoted = !proVisibility(null, null, t).hidden.promotion;

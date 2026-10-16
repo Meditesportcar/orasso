@@ -52,6 +52,7 @@ import { lookupRegistry } from "../../lib/registry";
 import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
+import { profilesRepo } from "../profiles/repo";
 import { locate } from "../structures/service";
 import { followersCounts, toCard } from "./card";
 
@@ -420,6 +421,13 @@ export const prosService = {
       where: and(eq(proProfiles.slug, slug), isNull(proProfiles.deletedAt)),
     });
     if (!p || (!p.publishedAt && viewer?.user.id !== p.ownerUserId)) throw notFound("Fiche pro introuvable");
+    // Titulaire supprimé ou suspendu : la fiche disparaît pour tous sauf lui (comme dans les listes, `proOwnerActive`).
+    if (viewer?.user.id !== p.ownerUserId) {
+      const owner = await profilesRepo.byUserId(p.ownerUserId);
+      if (!owner || owner.deletedAt || (owner.suspendedUntil && owner.suspendedUntil > now())) {
+        throw notFound("Fiche pro introuvable");
+      }
+    }
     return toPublic(p, viewer);
   },
 

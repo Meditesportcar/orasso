@@ -278,7 +278,7 @@ describe("distance : GET /events?sort=distance", () => {
     const rivesaltes = await createEvent(s.id, { title: "Rivesaltes", ...RIVESALTES });
     const res = await get(viewer, `/events?sort=distance&lat=${PARIS.lat}&lng=${PARIS.lng}`);
     expect(ids(res.json.items)).toEqual([paris.slug, rivesaltes.slug]);
-    expect(res.json.items[0].distanceKm).toBeLessThan(5);
+    expect(res.json.items[0].distanceKm).toBeLessThan(10);
     // Le profil n'a pas bougé : toujours le département 66, aucune colonne de position.
     const row = await db.query.profiles.findFirst({ where: eq(profiles.userId, viewer.id) });
     expect(row?.departments).toEqual(["66"]);

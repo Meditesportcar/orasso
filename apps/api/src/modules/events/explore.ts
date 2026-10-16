@@ -23,8 +23,9 @@ import { containsPattern, searchTokens } from "../../lib/text-search";
 import { card } from "./card";
 import type { EventRow } from "./repo";
 
+const safeOffset = (n: number): number => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
 const decodeOffset = (cursor: string | undefined): number =>
-  cursor ? Math.max(0, Number(Buffer.from(cursor, "base64url").toString()) || 0) : 0;
+  cursor ? safeOffset(Number(Buffer.from(cursor, "base64url").toString())) : 0;
 const encodeOffset = (offset: number): string => Buffer.from(String(offset)).toString("base64url");
 
 /** Places restantes de plusieurs événements en une requête (capacité moins retenus et offres en cours). */

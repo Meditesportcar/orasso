@@ -29,7 +29,7 @@ import {
   structures,
   user,
 } from "../../db/schema";
-import { type OrganizerAccess, requireOrganizer, requirePlatformRole } from "../../lib/access";
+import { activeMembership, type OrganizerAccess, requireOrganizer, requirePlatformRole } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { addressQuery, geocode } from "../../lib/geocode";
@@ -223,6 +223,11 @@ export const structuresService = {
       where: and(eq(structures.slug, slug), isNull(structures.deletedAt)),
     });
     if (!s || s.verification === "suspended") throw notFound("Structure introuvable");
+    // Structure pas (encore) vérifiée (en attente, refusée) : visible de ses membres seulement, comme ses événements, qui
+    // ne sont jamais listés.
+    if (s.verification !== "verified" && !(viewer && (await activeMembership(viewer.user.id, s.id)))) {
+      throw notFound("Structure introuvable");
+    }
     return toPublic(s, viewer);
   },
 

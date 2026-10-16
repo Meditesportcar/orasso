@@ -144,15 +144,16 @@ export type PositionSource = "device" | "sector";
 
 /**
  * Position utilisée pour la distance (docs/01, HS5) : celle que l'appareil envoie pour cette requête seulement
- * (« Utiliser ma position », jamais stockée), sinon le centre du premier département de secteur du profil. Côté
- * serveur, jamais plus précise qu'un département.
+ * (« Utiliser ma position », jamais stockée) **ramenée au dixième de degré (environ 11 km) par le serveur lui-même**,
+ * quel que soit le client : une position précise envoyée à la main ne sert pas telle quelle au calcul. Sinon, le centre
+ * du premier département de secteur du profil.
  */
 export function resolvePosition(
   explicit: { lat?: number | undefined; lng?: number | undefined },
   sector: readonly string[] | null,
 ): { position: LatLng; source: PositionSource } | null {
   if (explicit.lat !== undefined && explicit.lng !== undefined) {
-    return { position: { lat: explicit.lat, lng: explicit.lng }, source: "device" };
+    return { position: coarsePosition({ lat: explicit.lat, lng: explicit.lng }), source: "device" };
   }
   const fromSector = sector ? profilePosition(sector) : null;
   return fromSector ? { position: fromSector, source: "sector" } : null;
