@@ -19,6 +19,8 @@ export const explorerLabels = {
   segmentPeople: "Personnes et crews",
   segmentAll: "Résultats",
   searchTitle: "Recherche",
+  searchPeopleCrews: "Rechercher une personne ou un crew",
+  searchPeopleCrewsPlaceholder: "Pseudo, véhicule ou nom de crew",
   searchPlaceholder: "Événement, ville, pro, pseudo, véhicule…",
   searchIdle: "Cherche un événement, une ville, un pro, une personne ou un véhicule (Supra, Rivesaltes, drift…).",
   searchTooShort: "Saisis au moins deux caractères.",

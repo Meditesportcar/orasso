@@ -70,6 +70,12 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
     .click();
   await expect(page).toHaveURL(/\/e\/expo-rivesaltes/);
 
+  // « drift » → crew (lot 19), avec sa carte réduite ; le segment Personnes et crews le montre aussi.
+  await page.goto("/app/explorer?q=drift");
+  await expect(page.getByTestId("group-crews")).toContainText("Roussillon Drift");
+  await page.goto("/app/explorer?segment=personnes&q=drift");
+  await expect(page.getByTestId("crew-results")).toContainText("Roussillon Drift");
+
   // Texte trop court : rien n'est cherché.
   await page.goto("/app/explorer?q=a");
   await expect(page.getByText("Saisis au moins deux caractères.")).toBeVisible();

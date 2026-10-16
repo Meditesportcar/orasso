@@ -4,6 +4,7 @@
 import { Button, SelectField, TextField, tokens } from "@orasso/design-system/native";
 import {
   departments,
+  explorerLabels,
   gradeLabels,
   grades,
   hasPeopleSearchCriteria,
@@ -11,6 +12,7 @@ import {
   socialLabels,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -23,7 +25,14 @@ import { PersonRow } from "./PersonRow";
 
 const { space3 } = tokens.spacing;
 
-export function PeopleSearch({ initialQ = "" }: { initialQ?: string }) {
+export function PeopleSearch({
+  initialQ = "",
+  renderCrews,
+}: {
+  initialQ?: string;
+  /** Crews (lots 19 et 29) : cherchés avec le même texte et le même département. */
+  renderCrews?: (criteria: { q: string; department: string }) => ReactNode;
+}) {
   const router = useRouter();
   const categories = useApi(() => api.categories(), [], { cacheKey: "ref.categories" });
   const [q, setQ] = useState(initialQ);
@@ -88,8 +97,8 @@ export function PeopleSearch({ initialQ = "" }: { initialQ?: string }) {
   return (
     <View style={styles.col} testID="people-search">
       <TextField
-        label={socialLabels.searchPeople}
-        placeholder={socialLabels.searchPeoplePlaceholder}
+        label={explorerLabels.searchPeopleCrews}
+        placeholder={explorerLabels.searchPeopleCrewsPlaceholder}
         value={q}
         onChangeText={setQ}
         autoCapitalize="none"
@@ -135,6 +144,8 @@ export function PeopleSearch({ initialQ = "" }: { initialQ?: string }) {
           Voir plus
         </Button>
       ) : null}
+
+      {renderCrews?.({ q: q.trim(), department })}
 
       <Button variant="plate" icon="profile" onPress={() => router.push("/amis")} fullWidth>
         {socialLabels.myFriends}

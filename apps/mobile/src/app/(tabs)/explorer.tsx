@@ -43,10 +43,11 @@ export default function Explorer() {
       {segment === "evenements" ? <EventsSegment key={`e|${q}`} initialQ={q} /> : null}
       {segment === "pros" ? <ProsSegment key={`p|${q}`} initialQ={q} /> : null}
       {segment === "personnes" ? (
-        <>
-          <PeopleSearch key={`s|${q}`} initialQ={q} />
-          <CrewSearch />
-        </>
+        <PeopleSearch
+          key={`s|${q}`}
+          initialQ={q}
+          renderCrews={(criteria) => <CrewSearch q={criteria.q} department={criteria.department} />}
+        />
       ) : null}
     </TabScreen>
   );
