@@ -4,6 +4,7 @@
 import { accountApi } from "./account";
 import { applicationsApi } from "./applications";
 import { eventsApi } from "./events";
+import { explorerApi } from "./explorer";
 import { garageApi } from "./garage";
 import { prosApi } from "./pros";
 import { providersApi } from "./providers";
@@ -22,6 +23,7 @@ export const api = {
   ...providersApi,
   ...garageApi,
   ...eventsApi,
+  ...explorerApi,
   ...applicationsApi,
   ...staffApi,
   ...weatherApi,

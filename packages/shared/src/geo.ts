@@ -157,3 +157,11 @@ export function resolvePosition(
   const fromSector = sector ? profilePosition(sector) : null;
   return fromSector ? { position: fromSector, source: "sector" } : null;
 }
+
+/**
+ * Position de l'appareil ramenée au dixième de degré (environ 11 km) avant d'être envoyée à l'API : « près de chez moi »
+ * n'a pas besoin de plus, et une adresse web ou un journal d'accès ne gardent pas l'endroit exact où se trouve la personne.
+ */
+export function coarsePosition(p: LatLng): LatLng {
+  return { lat: Math.round(p.lat * 10) / 10, lng: Math.round(p.lng * 10) / 10 };
+}

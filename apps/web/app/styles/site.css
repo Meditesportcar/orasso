@@ -1473,3 +1473,41 @@
   flex: 1 1 260px;
   min-width: 0;
 }
+
+/* Recherche de premier niveau (lot 29) : champ dans l'en-tête du compte, renvoie vers l'Explorer. Jetons seulement. */
+.s-search,
+.s-search__form {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.s-search__input {
+  inline-size: 11rem;
+  min-block-size: var(--touch);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font-family: inherit;
+}
+.s-search__input::placeholder {
+  color: var(--ink-muted);
+}
+.s-search__input:focus-visible,
+.s-search__submit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.s-search__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--touch);
+  block-size: var(--touch);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bar-ink);
+  cursor: pointer;
+}

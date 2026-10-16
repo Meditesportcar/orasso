@@ -16,6 +16,7 @@ import { notificationsService } from "../src/modules/notifications/service";
 import { seedBase } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedDayJ } from "./seed/day-j";
+import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
 import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
@@ -87,6 +88,8 @@ async function main() {
   await seedProviders(hash);
   // Lot 31 : règles de cohérence des catégories, véhicule certifié de démonstration.
   await seedGarage();
+  // Lot 29 : structures, événements et pros localisés en 11, 34 et 31 (Explorer : liste, carte, affinités, distance).
+  await seedExplorer(hash);
 }
 
 try {

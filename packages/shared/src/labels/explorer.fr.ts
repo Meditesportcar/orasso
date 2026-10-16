@@ -1,3 +1,5 @@
+import type { EventCard } from "../schemas/event";
+import type { ProCard } from "../schemas/pro";
 import type { SearchGroup } from "../schemas/search";
 
 // Recherche de premier niveau et Explorer (lot 29) : libellés d'interface.
@@ -73,3 +75,19 @@ export const explorerLabels = {
   // Fiche d'un pro dans l'appli.
   proMissing: "Cette fiche pro n'existe pas ou plus.",
 } as const;
+
+/** Pastilles d'un événement de l'Explorer : pourquoi il est là (affinités) et à quelle distance. */
+export function eventHints(event: Pick<EventCard, "affinity" | "distanceKm">): string[] {
+  const hints: string[] = [];
+  const a = event.affinity;
+  if (a?.followed) hints.push(explorerLabels.reasonFollowed);
+  if (a && a.commonCategories > 0) hints.push(explorerLabels.reasonInterest(a.commonCategories));
+  if (a?.near) hints.push(explorerLabels.reasonNear);
+  if (event.distanceKm !== undefined && event.distanceKm !== null) hints.push(explorerLabels.awayKm(event.distanceKm));
+  return hints;
+}
+
+/** Pastille d'un pro de l'Explorer : la distance, quand elle est connue. */
+export function proHints(pro: Pick<ProCard, "distanceKm">): string[] {
+  return pro.distanceKm !== undefined && pro.distanceKm !== null ? [explorerLabels.awayKm(pro.distanceKm)] : [];
+}
