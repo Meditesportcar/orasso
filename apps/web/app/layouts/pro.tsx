@@ -1,4 +1,5 @@
 import { Ground, Monogram, ThemeScope } from "@orasso/design-system/web";
+import { proVisibility } from "@orasso/shared";
 import { Form, Outlet, redirect, useLocation } from "react-router";
 
 import { requireMe } from "../lib/api.server";
@@ -10,7 +11,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const me = await requireMe(request);
   if (!me.pro) throw redirect("/app/pro/nouvelle");
   if (me.pro.slug !== params.pro) throw redirect(`/pro/${me.pro.slug}`);
-  return { pro: me.pro, pseudo: me.profile.pseudo };
+  // « Fiche de base » après le 21/06/2027 sans abonnement actif : bandeau d'explication (lot 21).
+  return { pro: me.pro, pseudo: me.profile.pseudo, banner: proVisibility(me.pro, null, new Date()).banner };
 }
 
 export function meta() {
@@ -26,7 +28,7 @@ function SideLink({ href, children, on }: { href: string; children: string; on: 
 }
 
 export default function ProLayout({ loaderData }: Route.ComponentProps) {
-  const { pro, pseudo } = loaderData;
+  const { pro, pseudo, banner } = loaderData;
   const { pathname } = useLocation();
   const base = `/pro/${pro.slug}`;
   return (
@@ -66,6 +68,11 @@ export default function ProLayout({ loaderData }: Route.ComponentProps) {
             </Form>
           </nav>
           <main className="orga__content">
+            {banner && (
+              <p className="s-notice" role="status" data-testid="basic-sheet-banner">
+                {banner}
+              </p>
+            )}
             <Outlet />
           </main>
         </div>

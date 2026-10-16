@@ -13,6 +13,7 @@ import {
   eventFormatLabels,
   eventFormats,
   eventPublicAccessLabels,
+  ON_SITE_PAYMENT_LABEL,
   type VehicleMake,
   type VehicleType,
   vehicleTypeLabels,
@@ -85,6 +86,8 @@ type Draft = {
   vendorTypes: string[];
   publicAccess: EventPublicAccess;
   externalTicketUrl: string;
+  /** Entrée payante hors Orasso : lien de billetterie ou paiement sur place (lot 21). */
+  paymentMode: "link" | "on_site";
   admission: EventAdmission;
   categoryIds: string[];
   makeIds: string[];
@@ -118,6 +121,7 @@ function initial(event?: EventOrganizer): Draft {
       vendorTypes: [],
       publicAccess: "free",
       externalTicketUrl: "",
+      paymentMode: "link",
       admission: "filtered",
       categoryIds: [],
       makeIds: [],
@@ -149,6 +153,7 @@ function initial(event?: EventOrganizer): Draft {
     vendorTypes: event.vendorTypes,
     publicAccess: event.publicAccess,
     externalTicketUrl: event.externalTicketUrl ?? "",
+    paymentMode: event.publicAccess === "paid_external" && !event.externalTicketUrl ? "on_site" : "link",
     admission: event.admission,
     categoryIds: event.criteria?.categoryIds ?? [],
     makeIds: event.criteria?.makeIds ?? [],
@@ -185,7 +190,9 @@ function validate(step: StepId, d: Draft): string | null {
     case "places":
       return !d.unlimited && !(Number(d.capacity) > 0) ? "Indique un nombre de places supérieur à zéro." : null;
     case "public":
-      return d.publicAccess === "paid_external" && !/^https?:\/\//i.test(d.externalTicketUrl)
+      return d.publicAccess === "paid_external" &&
+        d.paymentMode === "link" &&
+        !/^https?:\/\//i.test(d.externalTicketUrl)
         ? "Indique l'adresse de ta billetterie (https://…)."
         : null;
     case "avant-premiere":
@@ -227,7 +234,8 @@ function payloadOf(d: Draft) {
           }
         : null,
     publicAccess: d.publicAccess,
-    externalTicketUrl: d.publicAccess === "paid_external" ? d.externalTicketUrl.trim() : null,
+    externalTicketUrl:
+      d.publicAccess === "paid_external" && d.paymentMode === "link" ? d.externalTicketUrl.trim() : null,
     registrationsOpenAt: fromInput(d.registrationsOpenAt),
     previewHours: Number(d.previewHours),
     lockOffsetMinutes: Number(d.lockOffsetMinutes),
@@ -499,8 +507,9 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
         {step.id === "prestataires" && (
           <>
             <p className="s-muted">
-              Coche les types de prestataires que tu accueilles. La candidature des prestataires n'est pas encore
-              ouverte : cette liste est affichée sur la page de l'événement.
+              Coche les types de prestataires que tu accueilles : seuls ceux-là peuvent candidater, et tu les tries dans
+              l'onglet « Prestataires » des candidatures, hors places. « Autres » accepte aussi les types que tu ajoutes
+              avec « Un autre type ».
             </p>
             <fieldset className="s-fieldset s-stack s-stack--tight">
               <legend className="o-t-label s-label">Prestataires attendus</legend>
@@ -552,14 +561,33 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
               </ChipRow>
             </fieldset>
             {d.publicAccess === "paid_external" && (
-              <TextField
-                label="Adresse de ta billetterie"
-                name="externalTicketUrl"
-                inputMode="url"
-                value={d.externalTicketUrl}
-                onChange={(e) => set("externalTicketUrl", e.currentTarget.value)}
-                placeholder="https://"
-              />
+              <>
+                <fieldset className="s-fieldset s-stack s-stack--tight">
+                  <legend className="o-t-label s-label">Paiement de l'entrée</legend>
+                  <ChipRow className="s-chips-wrap">
+                    <Chip selected={d.paymentMode === "link"} onClick={() => set("paymentMode", "link")}>
+                      Lien de billetterie
+                    </Chip>
+                    <Chip selected={d.paymentMode === "on_site"} onClick={() => set("paymentMode", "on_site")}>
+                      Paiement sur place
+                    </Chip>
+                  </ChipRow>
+                </fieldset>
+                {d.paymentMode === "link" ? (
+                  <TextField
+                    label="Adresse de ta billetterie"
+                    name="externalTicketUrl"
+                    inputMode="url"
+                    value={d.externalTicketUrl}
+                    onChange={(e) => set("externalTicketUrl", e.currentTarget.value)}
+                    placeholder="https://"
+                  />
+                ) : (
+                  <p className="s-muted" data-testid="on-site-hint">
+                    Pas de billetterie en ligne : la page affichera « {ON_SITE_PAYMENT_LABEL} ».
+                  </p>
+                )}
+              </>
             )}
             {(d.publicAccess === "free_reservation" || d.publicAccess === "paid_orasso") && (
               <p className="s-muted" data-testid="ticketing-hint">

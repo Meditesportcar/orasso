@@ -92,14 +92,13 @@ describe("profil prestataire", () => {
     expect(instagramHandle("@lea.photo")).toBe("@lea.photo");
   });
 
-  it("le schéma exige nom et type, précise le type libre et refuse « stand »", () => {
+  it("le schéma exige nom et type et précise le type libre", () => {
     const ok = providerProfileSchema.safeParse({ type: "food_truck", name: "La Caravane" });
     expect(ok.success).toBe(true);
     expect(providerProfileSchema.safeParse({ type: "other", name: "Glaces" }).success).toBe(false);
     expect(providerProfileSchema.safeParse({ type: "other", customType: "Glacier", name: "Glaces" }).success).toBe(
       true,
     );
-    expect(providerProfileSchema.safeParse({ type: "stand", name: "Garage" }).success).toBe(false);
     expect(providerProfileSchema.safeParse({ type: "barber", name: "B", website: "javascript:alert(1)" }).success).toBe(
       false,
     );

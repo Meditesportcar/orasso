@@ -478,6 +478,11 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
         <Plate as="section" className="s-stack s-stack--tight">
           <h2 className="s-h2">Prestataires attendus</h2>
           <p>{event.vendorTypes.join(" · ")}</p>
+          <p>
+            <Button variant="secondary" icon="check" href={`${base}/e/${event.id}/candidatures?onglet=prestataires`}>
+              Trier les prestataires
+            </Button>
+          </p>
         </Plate>
       )}
 

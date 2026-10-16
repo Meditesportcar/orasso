@@ -124,6 +124,9 @@ export const providersService = {
   async upsert(v: Viewer, input: ProviderProfileInput): Promise<ProviderProfileView> {
     rateLimit("proWrite", v.user.id);
     const existing = await providerOfUser(v.user.id);
+    if (input.type === "stand" && existing?.type !== "stand") {
+      throw validation("Le stand vient de ta fiche pro : utilise « Créer le stand de ma fiche pro »");
+    }
     if (existing) {
       const type = existing.type === "stand" ? "stand" : input.type;
       await db

@@ -13,8 +13,11 @@ const httpUrl = z.url().refine((u) => /^https?:\/\//i.test(u), "Adresse en http 
 const emptyToNull = <T extends z.ZodType>(schema: T) =>
   z.union([schema, z.literal("").transform(() => null)]).nullish();
 
-/** Types qu'un prestataire peut choisir (le type « stand » vient de la fiche pro). */
-const selectableType = z.enum(vendorTypeCodes).refine((t) => t !== "stand", "Type inconnu");
+/**
+ * Types du profil. « stand » vient de la fiche pro : le service le refuse pour un nouveau profil et le garde pour un
+ * profil déjà lié (le formulaire d'un stand n'a pas de choix de type).
+ */
+const selectableType = z.enum(vendorTypeCodes);
 
 /**
  * Profil prestataire (`PUT /me/provider-profile`). Seuls le nom et le type sont obligatoires pour l'enregistrer ;

@@ -14,6 +14,7 @@ export default [
     route("app/securite", "routes/securite.tsx"),
     route("app/structure/nouvelle", "routes/structure-nouvelle.tsx"),
     route("app/pro/nouvelle", "routes/pro-nouvelle.tsx"),
+    route("app/prestataire", "routes/prestataire.tsx"),
     route("app/billets", "routes/billets.tsx"),
   ]),
 ] satisfies RouteConfig;
