@@ -1,0 +1,44 @@
+// Recherche de premier niveau et Explorer (lot 29) : `GET /search`, événements triés par affinités ou distance, pros,
+// fiche d'un pro, suivre une structure. Aucune règle métier ici : tri, filtres et confidentialité sont dans l'API.
+import type { EventCard, EventSort, Page, ProCard, ProPublic, SearchResults } from "@orasso/shared";
+
+import { request } from "../http";
+import { qs } from "./qs";
+
+/** Réglages communs de position : celle de l'appareil pour cette requête seulement, jamais enregistrée par l'API. */
+type Position = { lat?: number; lng?: number; radiusKm?: number };
+
+export type ExploreEventsQuery = Position & {
+  q?: string;
+  format?: string;
+  categoryId?: string;
+  department?: string;
+  /** Instants ISO. */
+  from?: string;
+  to?: string;
+  sort?: EventSort;
+  structureId?: string;
+  scope?: "upcoming" | "past";
+  limit?: number;
+  cursor?: string;
+};
+
+export type ExploreProsQuery = Position & {
+  q?: string;
+  activity?: string;
+  department?: string;
+  sort?: "name" | "distance";
+  limit?: number;
+  cursor?: string;
+};
+
+export const explorerApi = {
+  search: (q: string, limit = 5) => request<SearchResults>(`/api/search${qs({ q, limit })}`),
+  exploreEvents: (query: ExploreEventsQuery) => request<Page<EventCard>>(`/api/events${qs({ limit: 20, ...query })}`),
+  explorePros: (query: ExploreProsQuery) => request<Page<ProCard>>(`/api/pros${qs({ limit: 20, ...query })}`),
+  proBySlug: (slug: string) => request<ProPublic>(`/api/pros/by-slug/${encodeURIComponent(slug)}`),
+  followStructure: (id: string) => request<unknown>(`/api/structures/${id}/follow`, { method: "POST" }),
+  followPro: (id: string) => request<unknown>(`/api/pros/${id}/follow`, { method: "POST" }),
+  unfollowPro: (id: string) => request<unknown>(`/api/pros/${id}/follow`, { method: "DELETE" }),
+  unfollowStructure: (id: string) => request<unknown>(`/api/structures/${id}/follow`, { method: "DELETE" }),
+};

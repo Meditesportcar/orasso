@@ -1,3 +1,4 @@
+export * from "./affinity";
 export * from "./applicationTransitions";
 export * from "./garage";
 export * from "./lock";

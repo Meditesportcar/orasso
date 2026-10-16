@@ -122,3 +122,47 @@ export function profilePosition(departments: readonly string[]): LatLng | null {
   const first = departments[0];
   return first ? (departmentCentroids[first] ?? null) : null;
 }
+
+/** Rectangle qui contient le cercle de rayon `radiusKm` autour de `center` (préfiltre qui sert les index de position). */
+export function boundingBox(
+  center: LatLng,
+  radiusKm: number,
+): { minLat: number; maxLat: number; minLng: number; maxLng: number } {
+  const dLat = radiusKm / 111.2;
+  const cosLat = Math.max(0.01, Math.cos((center.lat * Math.PI) / 180));
+  const dLng = radiusKm / (111.2 * cosLat);
+  return {
+    minLat: center.lat - dLat,
+    maxLat: center.lat + dLat,
+    minLng: center.lng - dLng,
+    maxLng: center.lng + dLng,
+  };
+}
+
+/** D'où vient la position qui sert au tri par distance et au rayon. */
+export type PositionSource = "device" | "sector";
+
+/**
+ * Position utilisée pour la distance (docs/01, HS5) : celle que l'appareil envoie pour cette requête seulement
+ * (« Utiliser ma position », jamais stockée) **ramenée au dixième de degré (environ 11 km) par le serveur lui-même**,
+ * quel que soit le client : une position précise envoyée à la main ne sert pas telle quelle au calcul. Sinon, le centre
+ * du premier département de secteur du profil.
+ */
+export function resolvePosition(
+  explicit: { lat?: number | undefined; lng?: number | undefined },
+  sector: readonly string[] | null,
+): { position: LatLng; source: PositionSource } | null {
+  if (explicit.lat !== undefined && explicit.lng !== undefined) {
+    return { position: coarsePosition({ lat: explicit.lat, lng: explicit.lng }), source: "device" };
+  }
+  const fromSector = sector ? profilePosition(sector) : null;
+  return fromSector ? { position: fromSector, source: "sector" } : null;
+}
+
+/**
+ * Position de l'appareil ramenée au dixième de degré (environ 11 km) avant d'être envoyée à l'API : « près de chez moi »
+ * n'a pas besoin de plus, et une adresse web ou un journal d'accès ne gardent pas l'endroit exact où se trouve la personne.
+ */
+export function coarsePosition(p: LatLng): LatLng {
+  return { lat: Math.round(p.lat * 10) / 10, lng: Math.round(p.lng * 10) / 10 };
+}

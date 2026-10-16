@@ -23,10 +23,10 @@ import { PersonRow } from "./PersonRow";
 
 const { space3 } = tokens.spacing;
 
-export function PeopleSearch() {
+export function PeopleSearch({ initialQ = "" }: { initialQ?: string }) {
   const router = useRouter();
   const categories = useApi(() => api.categories(), [], { cacheKey: "ref.categories" });
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQ);
   const [department, setDepartment] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [grade, setGrade] = useState("");

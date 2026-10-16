@@ -12,13 +12,20 @@ import { Hono } from "hono";
 import { validation } from "../../lib/errors";
 import { geocode } from "../../lib/geocode";
 import { rateLimit } from "../../lib/rateLimit";
+import { limitSearch } from "../../lib/search-limit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { eventsService } from "./service";
 
 export const eventsRoutes = new Hono<AppEnv>()
   // Public.
-  .get("/events", async (c) => c.json(await eventsService.list(query(c, eventListQuerySchema))))
+  // Liste de l'Explorer : connecté, elle sait trier par affinités et par distance (lot 29) ; la réponse dépend alors de la personne.
+  .get("/events", async (c) => {
+    const viewer = await optionalUser(c);
+    const q = query(c, eventListQuerySchema);
+    if (q.q) limitSearch(c, viewer);
+    return c.json(await eventsService.list(q, viewer), 200, { "cache-control": "private, no-cache" });
+  })
   .get("/events/by-slug/:slug", async (c) =>
     c.json(await eventsService.getPublic(c.req.param("slug"), await optionalUser(c))),
   )

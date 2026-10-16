@@ -26,7 +26,7 @@ import {
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { ContactOrganizerButton } from "@/features/boite/MessageButton";
 import { EventFeed } from "@/features/communication/EventFeed";
@@ -183,6 +183,22 @@ export default function EventPage() {
         </Plate>
       ) : null}
 
+      {/* Page de l'organisateur (lot 29) : fiche, événements, suivre, devenir staff. */}
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel={`Organisateur : ${e.structure.name}`}
+        onPress={() => router.push(`/o/${e.structure.slug}`)}
+        testID="event-organizer"
+      >
+        <Plate style={styles.info}>
+          <Text variant="label" color={t.color.plateMuted}>
+            Organisateur
+          </Text>
+          <Text variant="bodyStrong" color={t.color.plateInk}>
+            {e.structure.name}
+          </Text>
+        </Plate>
+      </Pressable>
       <Info label="Quand et où">
         {formatDayHour(e.startsAt)} → {formatDayHour(e.endsAt)}
         {e.addressLine || e.city

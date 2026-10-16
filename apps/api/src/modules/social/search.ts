@@ -26,6 +26,15 @@ import { vehicleBriefLabel, vehicleLabel } from "../vehicles/serializers";
 import { socialProfile } from "./profile";
 import { socialRepo } from "./repo";
 
+/**
+ * Condition SQL (alias `p` = profiles) : la fiche complète de la personne est visible de `viewerId` (compte public, ou ami).
+ * Un compte privé non ami ne montre que pseudo, photo, grade, marque et modèle : tout filtre ou tri qui lirait autre chose
+ * (génération, département, centres d'intérêt) doit passer par cette condition.
+ */
+export function detailVisibleSql(viewerId: string): SQL {
+  return sql`(p.visibility = 'public' or exists (select 1 from friendships f where f.status = 'accepted' and ((f.requester_id = ${viewerId} and f.addressee_id = p.user_id) or (f.requester_id = p.user_id and f.addressee_id = ${viewerId}))))`;
+}
+
 type Row = {
   user_id: string;
   pseudo: string;
@@ -36,6 +45,8 @@ type Row = {
 };
 
 type Options = {
+  /** Recherche de premier niveau (lot 29) : le texte ne cherche que dans les pseudos (les véhicules ont leur groupe). */
+  pseudoOnly?: boolean;
   /** Départements dont l'un au moins doit être celui de la personne (propriétaires près de chez moi). */
   departmentsAny?: string[];
   exclude?: string[];
@@ -61,7 +72,7 @@ async function run(
   const q = query.q?.trim();
 
   // `d.detail` : la fiche complète de la personne est visible de moi (compte public ou ami).
-  const detail = sql`(p.visibility = 'public' or exists (select 1 from friendships f where f.status = 'accepted' and ((f.requester_id = ${viewerId} and f.addressee_id = p.user_id) or (f.requester_id = p.user_id and f.addressee_id = ${viewerId}))))`;
+  const detail = detailVisibleSql(viewerId);
 
   const where: SQL[] = [
     sql`p.deleted_at is null`,
@@ -81,7 +92,9 @@ async function run(
       where v.owner_id = p.user_id and v.status = 'active' and ${cond})`;
   // Texte libre : le pseudo (début) OU un véhicule (marque, modèle, « marque modèle » ; la génération seulement si la
   // fiche complète est visible). Il se combine avec les filtres de véhicule ci-dessous.
-  if (q) {
+  if (q && options.pseudoOnly) {
+    where.push(sql`${pseudoMatch}`);
+  } else if (q) {
     const pattern = `%${escapeLike(q)}%`;
     const text = vehicleExists(sql`(
       mk.name ilike ${pattern} escape '\\'
@@ -152,6 +165,15 @@ function page(rows: Row[], limit: number, items: PersonCard[]): PeopleSearchPage
 }
 
 export const peopleSearch = {
+  /**
+   * Recherche de premier niveau (`GET /search`) : pseudos qui commencent par le texte, sans filtre ni curseur. Renvoie
+   * jusqu'à `limit + 1` personnes : le dernier dit seulement qu'il y en a davantage.
+   */
+  async byPseudo(viewer: Viewer, q: string, limit: number): Promise<PersonCard[]> {
+    const { rows } = await run(viewer, { q, limit } as PeopleSearchQuery, { pseudoOnly: true });
+    return cards(viewer, rows);
+  },
+
   /** `GET /users/search`. */
   async search(viewer: Viewer, query: PeopleSearchQuery): Promise<PeopleSearchPage> {
     if (!hasPeopleSearchCriteria(query)) {

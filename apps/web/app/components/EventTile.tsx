@@ -4,7 +4,16 @@ import { type EventCard, eventFormatLabels } from "@orasso/shared";
 import { formatDay, formatTime } from "../lib/format";
 
 /** Une carte d'événement dans les listes publiques (accueil, `/evenements`, page d'une structure). Tout est un lien. */
-export function EventTile({ event, showStructure = true }: { event: EventCard; showStructure?: boolean }) {
+export function EventTile({
+  event,
+  showStructure = true,
+  hints = [],
+}: {
+  event: EventCard;
+  showStructure?: boolean;
+  /** Pastilles de l'Explorer (lot 29) : pourquoi l'événement est là, à quelle distance. */
+  hints?: string[];
+}) {
   const where = [event.city, event.department].filter(Boolean).join(" · ");
   return (
     <Plate as="article" className="s-tile" data-testid="event-tile">
@@ -29,6 +38,9 @@ export function EventTile({ event, showStructure = true }: { event: EventCard; s
           <StatusBadge status="uncertain" />
         ) : null}
         <Chip>{event.remaining === null ? "Sans limite" : `${event.remaining} places`}</Chip>
+        {hints.map((hint) => (
+          <Chip key={hint}>{hint}</Chip>
+        ))}
       </div>
     </Plate>
   );

@@ -2,7 +2,7 @@ import { Chip, Icon, Plate } from "@orasso/design-system/web";
 import { type ProCard, proActivityLabels } from "@orasso/shared";
 
 /** Une carte de pro dans l'annuaire et les pages de structure. Tout est un lien vers `/p/<slug>`. */
-export function ProTile({ pro }: { pro: ProCard }) {
+export function ProTile({ pro, hints = [] }: { pro: ProCard; hints?: string[] }) {
   const where = pro.city
     ? [pro.city, pro.department].filter(Boolean).join(" · ")
     : pro.interventionDepartments.length > 0
@@ -29,6 +29,9 @@ export function ProTile({ pro }: { pro: ProCard }) {
           </span>
         )}
         <Chip>{pro.followersCount} abonnés</Chip>
+        {hints.map((hint) => (
+          <Chip key={hint}>{hint}</Chip>
+        ))}
       </div>
     </Plate>
   );
