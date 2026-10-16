@@ -301,6 +301,8 @@ describe("parrainage", () => {
 
 describe("préférences par type", () => {
   it("un type coupé n'est ni poussé ni envoyé ; la sécurité passe toujours", async () => {
+    // En journée : hors heures calmes, sinon les notifications non urgentes attendent 08:00 (test rouge le soir).
+    useClock(new Date("2026-10-17T13:00:00Z"));
     const u = await signUp("Prefs_01");
     const res = await call(u, "PATCH", "/me/settings", {
       mutedTypes: ["new_event_followed"],
@@ -321,7 +323,9 @@ describe("préférences par type", () => {
     expect(templates).not.toContain("new_event_followed");
     expect(templates).not.toContain("points_awarded");
     // Elles restent dans le Journal.
-    expect((await call(u, "GET", "/me/notifications")).json.items).toHaveLength(3);
+    const types = ["new_event_followed", "points_awarded", "security_password_changed"];
+    const journal = (await call(u, "GET", "/me/notifications")).json.items as { type: string }[];
+    expect(journal.filter((n) => types.includes(n.type))).toHaveLength(3);
   });
 });
 
