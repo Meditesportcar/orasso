@@ -2,12 +2,21 @@
 // Tâche `event.notify-nearby`, planifiée à la publication : profils dont un centre d'intérêt est une catégorie de
 // l'événement et dont le centre du premier département est à moins de `radius_km`, hors abonnés de la structure (déjà
 // prévenus par `new_event_followed`), une seule fois par événement (index unique partiel sur `notifications`).
-// S4 : un événement sans catégorie ne notifie personne. Les événements sur invitation sont exclus.
+// S4 : un événement sans catégorie ne notifie personne. Exclus : événements sur invitation ou déjà commencés,
+// structures suspendues ou supprimées, personnes bannies par la structure.
 import { distanceKm, profilePosition } from "@orasso/shared";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { notifications, profileInterests, profiles, structureFollows } from "../../db/schema";
+import {
+  notifications,
+  profileInterests,
+  profiles,
+  structureBans,
+  structureFollows,
+  structures,
+} from "../../db/schema";
+import { now } from "../../lib/deps";
 import { formatDateTime } from "../../lib/format";
 import { withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
@@ -17,7 +26,9 @@ export const nearbyService = {
   /** Renvoie le nombre de personnes notifiées. */
   async notifyNearby(eventId: string): Promise<number> {
     const e = await eventsRepo.byId(eventId).catch(() => null);
-    if (e?.status !== "published" || e.admission === "invite_only") return 0;
+    if (e?.status !== "published" || e.admission === "invite_only" || e.startsAt <= now()) return 0;
+    const structure = await db.query.structures.findFirst({ where: eq(structures.id, e.structureId) });
+    if (!structure || structure.deletedAt || structure.verification === "suspended") return 0;
     const categoryIds = e.criteria?.categoryIds ?? [];
     if (!categoryIds.length || e.lat === null || e.lng === null) return 0;
     const position = { lat: e.lat, lng: e.lng };
@@ -30,6 +41,7 @@ export const nearbyService = {
         and(
           inArray(profileInterests.categoryId, categoryIds),
           isNull(profiles.deletedAt),
+          sql`not exists (select 1 from ${structureBans} b where b.user_id = ${profiles.userId} and b.structure_id = ${e.structureId})`,
           sql`not exists (select 1 from ${structureFollows} f where f.user_id = ${profiles.userId} and f.structure_id = ${e.structureId})`,
           sql`not exists (select 1 from ${notifications} n where n.user_id = ${profiles.userId} and n.type = 'event_nearby_interest' and n.event_id = ${e.id})`,
         ),
