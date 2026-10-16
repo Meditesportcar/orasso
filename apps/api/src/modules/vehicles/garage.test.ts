@@ -589,16 +589,40 @@ describe("certification", () => {
     expect(removed.json.certified).toBe(false);
     expect((await db.query.vehicles.findFirst({ where: eq(vehicles.id, v.id) }))?.certifiedLostReason).toBe("modified");
 
-    await db
-      .insert(vehiclePhotos)
-      .values({ vehicleId: v.id, position: 3, storageKey: "t/3b.webp", width: 1, height: 1, bytes: 1 });
+    expect(admin.id).toBeTruthy();
+  });
+
+  it("B1 : fiche modifiée pendant l'examen (photos retirées, puissance changée) → la validation est refusée (409), le refus reste possible", async () => {
+    const admin = await signUp("Admin_01", { twoFactor: true, role: "super_admin" });
+    const { u, v } = await sportVehicle("Kenji_66");
     const requested = await call(u, "POST", `/me/vehicles/${v.id}/certification-request`, {});
     expect(requested.status).toBe(201);
-    // Modification pendant l'examen : la demande reste, avec la fiche à jour.
-    await db.update(vehicles).set({ certifiedAt: new Date() }).where(eq(vehicles.id, v.id));
-    await call(u, "PATCH", `/me/vehicles/${v.id}`, { weightKg: 1450 });
-    const queue = await call(admin, "GET", "/admin/certification-requests?status=pending");
-    expect(queue.json[0].snapshot.weightKg).toBe(1450);
+    const id = requested.json.request.id;
+    // Sans rien changer à la base de la certification : on modifie seulement la fiche, comme le ferait le membre.
+    const photos = await vehiclesRepo.photos(v.id);
+    for (const p of photos.slice(1)) await call(u, "DELETE", `/me/vehicles/${v.id}/photos/${p.id}`);
+    await call(u, "PATCH", `/me/vehicles/${v.id}`, { powerHp: 500 });
+    const stale = await call(admin, "POST", `/admin/certification-requests/${id}/decide`, { decision: "accept" });
+    expect(stale.status).toBe(409);
+    expect(stale.json.error.message).toContain("Fiche modifiée depuis la demande");
+    expect((await db.query.vehicles.findFirst({ where: eq(vehicles.id, v.id) }))?.certifiedAt).toBeNull();
+    const refused = await call(admin, "POST", `/admin/certification-requests/${id}/decide`, {
+      decision: "refuse",
+      note: "Fiche modifiée",
+    });
+    expect(refused.status).toBe(200);
+  });
+
+  it("B1 : seule la description change pendant l'examen → la validation passe", async () => {
+    const admin = await signUp("Admin_01", { twoFactor: true, role: "super_admin" });
+    const { u, v } = await sportVehicle("Kenji_66");
+    const requested = await call(u, "POST", `/me/vehicles/${v.id}/certification-request`, {});
+    await call(u, "PATCH", `/me/vehicles/${v.id}`, { description: "Description retouchée" });
+    const ok = await call(admin, "POST", `/admin/certification-requests/${requested.json.request.id}/decide`, {
+      decision: "accept",
+    });
+    expect(ok.status).toBe(200);
+    expect((await call(u, "GET", `/me/vehicles/${v.id}`)).json.certified).toBe(true);
   });
 
   it("six mois sans événement : perdue (tâche quotidienne) ; une entrée récente la garde", async () => {

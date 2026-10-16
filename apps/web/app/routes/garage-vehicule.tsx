@@ -8,6 +8,7 @@ import {
   certificationMissingLabels,
   certificationStatusLabels,
   countryLabel,
+  type OutgoingPlateTransferView,
   type PlateTransferView,
   plateTransferLabels,
   SHARE_SIZES,
@@ -40,7 +41,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     apiOrThrow<VehicleHistoryItem[]>(request, `/me/vehicles/${encodeURIComponent(id)}/history`),
     apiOrThrow<CategoryOption[]>(request, `/vehicle-reference/categories?${query}`),
     vehicle.plateTransfer
-      ? api<{ incoming: PlateTransferView[]; outgoing: PlateTransferView[] }>(request, "/me/plate-transfers")
+      ? api<{ incoming: PlateTransferView[]; outgoing: OutgoingPlateTransferView[] }>(request, "/me/plate-transfers")
       : Promise.resolve(null),
   ]);
   const outgoing = transfers?.ok ? transfers.data.outgoing.find((t) => t.id === vehicle.plateTransfer?.id) : undefined;
@@ -114,8 +115,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   return data({ error: "Action inconnue.", done: null }, { status: 400 });
 }
 
-const shareHref = (id: string, format: ShareFormat) =>
-  `/api/me/vehicles/${encodeURIComponent(id)}/share-image?format=${format}&download=1`;
+const shareHref = (id: string, format: ShareFormat, version: string) =>
+  `/api/me/vehicles/${encodeURIComponent(id)}/share-image?format=${format}&download=1&v=${encodeURIComponent(version)}`;
 
 export default function VehiclePage({ loaderData, actionData }: Route.ComponentProps) {
   const { vehicle: v, history, categories, answerBy } = loaderData;
@@ -333,7 +334,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
         </p>
         <div className="s-row" data-testid="share-links">
           {shareFormats.map((f) => (
-            <Button key={f} variant="secondary" icon="share" href={shareHref(v.id, f)}>
+            <Button key={f} variant="secondary" icon="share" href={shareHref(v.id, f, v.shareVersion)}>
               {shareFormatLabels[f]} · {SHARE_SIZES[f].width}×{SHARE_SIZES[f].height}
             </Button>
           ))}

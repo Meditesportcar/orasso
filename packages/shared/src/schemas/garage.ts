@@ -3,7 +3,7 @@ import { z } from "zod";
 import { type PlateTransferStatus, vehicleTypes } from "../enums";
 import { type CategoryMakeMode, type CertificationLostReason, type CertificationStatus, shareFormats } from "../garage";
 import type { Grade } from "../grades";
-import type { CategoryRefusal, CertificationMissing } from "../rules/garage";
+import type { CategoryRefusal, CertificationFields, CertificationMissing } from "../rules/garage";
 import { optionalText } from "./common";
 
 /** `GET /vehicle-reference/categories?makeId&vehicleType&year` : chaque catégorie avec son éligibilité. */
@@ -96,6 +96,16 @@ export type PlateTransferView = {
   note: string | null;
 };
 
+/** Demande vue par le demandeur : rien de l'ancien propriétaire (ni véhicule, ni plaque), seulement son propre véhicule. */
+export type OutgoingPlateTransferView = {
+  id: string;
+  status: PlateTransferStatus;
+  createdAt: string;
+  answerBy: string;
+  note: string | null;
+  requesterVehicleLabel: string | null;
+};
+
 export type AdminPlateTransfer = PlateTransferView & {
   requesterId: string;
   holderPseudo: string;
@@ -128,4 +138,6 @@ export type CertificationSnapshot = {
   preparation: string | null;
   categories: string[];
   photoUrls: string[];
+  /** Champs surveillés au moment de la demande : comparés à la fiche actuelle avant toute validation. */
+  fields?: CertificationFields;
 };

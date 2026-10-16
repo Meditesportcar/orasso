@@ -180,5 +180,9 @@ export const plateTransferRequests = pgTable(
   (t) => [
     index("plate_transfer_requests_plate_idx").on(t.plateNormalized),
     index("plate_transfer_requests_status_idx").on(t.status, t.createdAt),
+    // Une seule demande ouverte par plaque et par demandeur, même si deux envois partent en même temps.
+    uniqueIndex("plate_transfer_requests_open_key")
+      .on(t.plateNormalized, t.toUserId)
+      .where(sql`${t.status} in ('pending', 'arbitrated')`),
   ],
 );

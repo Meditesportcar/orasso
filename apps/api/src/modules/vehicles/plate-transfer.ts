@@ -5,16 +5,17 @@
 import {
   type AdminDecision,
   type AdminPlateTransfer,
+  type OutgoingPlateTransferView,
   PLATE_TRANSFER_DELAY_DAYS,
   type PlateTransferView,
 } from "@orasso/shared";
-import { and, asc, desc, eq, inArray, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lte, ne, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { adminAuditLog, plateTransferRequests, profiles, vehicles } from "../../db/schema";
 import { requirePlatformRole } from "../../lib/access";
 import { deps, now } from "../../lib/deps";
-import { conflict, notFound } from "../../lib/errors";
+import { AppError, conflict, notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { type Tx, withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
@@ -69,6 +70,21 @@ async function open(
       transferRequested: true,
     });
   }
+  // Contre le harcèlement par notifications (supprimer / recréer un véhicule avec la plaque d'autrui) : deux demandes
+  // par plaque et par demandeur en 24 h.
+  const [recent] = await tx
+    .select({ n: count() })
+    .from(plateTransferRequests)
+    .where(
+      and(
+        eq(plateTransferRequests.plateNormalized, plateNormalized),
+        eq(plateTransferRequests.toUserId, requester.user.id),
+        gte(plateTransferRequests.createdAt, new Date(now().getTime() - DAY)),
+      ),
+    );
+  if ((recent?.n ?? 0) >= 2) {
+    throw new AppError(429, "rate_limited", "Trop de demandes pour cette plaque : réessaie demain.");
+  }
   const [row] = await tx
     .insert(plateTransferRequests)
     .values({ plateNormalized, fromVehicleId: holder.id, toUserId: requester.user.id, createdAt: now() })
@@ -92,8 +108,16 @@ async function open(
  * l'ancien véhicule passe « Vendu » s'il porte encore la plaque, le véhicule du demandeur la reçoit.
  */
 async function applyAccepted(tx: Tx, transfer: TransferRow, decidedBy: string | null, note: string | null) {
-  const target = await requesterVehicle(tx, transfer.id);
   const at = now();
+  // Le véhicule du demandeur d'abord : s'il n'existe plus, on clôt la demande sans toucher à l'ancien véhicule.
+  const target = await requesterVehicle(tx, transfer.id);
+  if (!target) {
+    await tx
+      .update(plateTransferRequests)
+      .set({ status: "refused", decidedBy, decidedAt: at, note: note ?? "Véhicule du demandeur supprimé" })
+      .where(eq(plateTransferRequests.id, transfer.id));
+    return;
+  }
   const [holder] = await tx.select().from(vehicles).where(eq(vehicles.id, transfer.fromVehicleId)).for("update");
   if (holder && holder.status === "active" && holder.plateNormalized === transfer.plateNormalized) {
     await tx
@@ -106,13 +130,6 @@ async function applyAccepted(tx: Tx, transfer: TransferRow, decidedBy: string | 
         certifiedAt: null,
       })
       .where(eq(vehicles.id, holder.id));
-  }
-  if (!target) {
-    await tx
-      .update(plateTransferRequests)
-      .set({ status: "refused", decidedBy, decidedAt: at, note: note ?? "Véhicule du demandeur supprimé" })
-      .where(eq(plateTransferRequests.id, transfer.id));
-    return;
   }
   try {
     await tx
@@ -133,6 +150,18 @@ async function applyAccepted(tx: Tx, transfer: TransferRow, decidedBy: string | 
     data: { transferId: transfer.id, vehicleId: target.id },
     link: garageLink(target.id),
   });
+  // Les autres demandes ouvertes sur la même plaque passent à l'arbitrage de l'équipe (jamais refusées d'office).
+  const others = await tx
+    .select()
+    .from(plateTransferRequests)
+    .where(
+      and(
+        eq(plateTransferRequests.plateNormalized, transfer.plateNormalized),
+        ne(plateTransferRequests.id, transfer.id),
+        eq(plateTransferRequests.status, "pending"),
+      ),
+    );
+  for (const other of others) await toArbitration(tx, other, "other");
 }
 
 /** Refus définitif (équipe Orasso) : le véhicule du demandeur devient non immatriculé, plaque effacée. */
@@ -156,10 +185,11 @@ async function applyRefused(tx: Tx, transfer: TransferRow, decidedBy: string | n
 }
 
 /** Demande passée à l'arbitrage de l'équipe (refus de l'ancien propriétaire, ou sept jours sans réponse). */
-async function toArbitration(tx: Tx, transfer: TransferRow, reason: "declined" | "timeout") {
+async function toArbitration(tx: Tx, transfer: TransferRow, reason: "declined" | "timeout" | "other") {
+  const notes = { timeout: "Sans réponse de l'ancien propriétaire", other: "Plusieurs demandes pour cette plaque" };
   await tx
     .update(plateTransferRequests)
-    .set({ status: "arbitrated", ...(reason === "timeout" ? { note: "Sans réponse de l'ancien propriétaire" } : {}) })
+    .set({ status: "arbitrated", ...(reason === "declined" ? {} : { note: notes[reason] }) })
     .where(eq(plateTransferRequests.id, transfer.id));
   const target = await requesterVehicle(tx, transfer.id);
   await notificationsService.notify(tx, transfer.toUserId, "plate_transfer_arbitrated", {
@@ -167,7 +197,9 @@ async function toArbitration(tx: Tx, transfer: TransferRow, reason: "declined" |
     body:
       reason === "declined"
         ? "L'ancien propriétaire n'a pas confirmé le transfert : l'équipe Orasso va trancher."
-        : "L'ancien propriétaire n'a pas répondu en 7 jours : l'équipe Orasso va trancher.",
+        : reason === "timeout"
+          ? "L'ancien propriétaire n'a pas répondu en 7 jours : l'équipe Orasso va trancher."
+          : "Plusieurs membres demandent cette plaque : l'équipe Orasso va trancher.",
     data: { transferId: transfer.id, ...(target ? { vehicleId: target.id } : {}) },
     link: target ? garageLink(target.id) : undefined,
   });
@@ -199,11 +231,24 @@ async function viewOf(t: TransferRow, holderVehicleId: string): Promise<PlateTra
   };
 }
 
+/** Vue du demandeur : ni véhicule ni plaque de l'ancien propriétaire (une plaque relevée ne doit pas mener à une fiche). */
+async function outgoingViewOf(t: TransferRow): Promise<OutgoingPlateTransferView> {
+  const target = await requesterVehicle(db, t.id);
+  return {
+    id: t.id,
+    status: t.status,
+    createdAt: t.createdAt.toISOString(),
+    answerBy: answerBy(t).toISOString(),
+    note: t.note,
+    requesterVehicleLabel: await labelOf(target?.id),
+  };
+}
+
 export const plateTransferService = {
   open,
 
   /** Demandes reçues (je suis l'ancien propriétaire) et envoyées (j'ai saisi la plaque d'un autre). */
-  async listMine(v: Viewer): Promise<{ incoming: PlateTransferView[]; outgoing: PlateTransferView[] }> {
+  async listMine(v: Viewer): Promise<{ incoming: PlateTransferView[]; outgoing: OutgoingPlateTransferView[] }> {
     const mine = await db
       .select({ transfer: plateTransferRequests })
       .from(plateTransferRequests)
@@ -222,7 +267,7 @@ export const plateTransferService = {
       .orderBy(asc(plateTransferRequests.createdAt));
     return {
       incoming: await Promise.all(mine.map((m) => viewOf(m.transfer, m.transfer.fromVehicleId))),
-      outgoing: await Promise.all(sent.map((t) => viewOf(t, t.fromVehicleId))),
+      outgoing: await Promise.all(sent.map((t) => outgoingViewOf(t))),
     };
   },
 
@@ -327,8 +372,8 @@ export const plateTransferService = {
   },
 
   /**
-   * L'ancien véhicule quitte la plaque (vendu, archivé, plaque changée, supprimé) pendant qu'une demande est ouverte :
-   * la plaque est libre, la demande est acceptée d'office.
+   * L'ancien véhicule quitte la plaque (vendu, archivé, plaque changée, supprimé, compte supprimé) pendant que des
+   * demandes sont ouvertes : la plaque est libre.
    */
   async plateReleased(tx: Tx, holderVehicleId: string): Promise<void> {
     const open = await tx
@@ -341,15 +386,30 @@ export const plateTransferService = {
         ),
       )
       .orderBy(asc(plateTransferRequests.createdAt));
-    // Une seule demande peut recevoir la plaque (index unique des plaques actives) : la plus ancienne ; les autres
-    // sont refusées.
-    let first = true;
-    for (const t of open) {
-      const locked = await lockedTransfer(tx, t.id);
-      if (first) await applyAccepted(tx, locked, null, "Plaque libérée par l'ancien propriétaire");
-      else await applyRefused(tx, locked, null, "Plaque attribuée à une demande plus ancienne");
-      first = false;
+    // Une seule demande, jamais refusée par l'ancien propriétaire (`pending`) : acceptée d'office. Sinon tout passe à
+    // l'arbitrage de l'équipe ; jamais de refus automatique.
+    const [only] = open;
+    if (open.length === 1 && only && only.status === "pending") {
+      await applyAccepted(tx, await lockedTransfer(tx, only.id), null, "Plaque libérée par l'ancien propriétaire");
+      return;
     }
+    for (const t of open) {
+      if (t.status === "pending") await toArbitration(tx, await lockedTransfer(tx, t.id), "other");
+    }
+  },
+
+  /** Nombre de demandes ouvertes sur la plaque d'un véhicule (suppression refusée s'il y en a plusieurs). */
+  async openCount(tx: Tx, holderVehicleId: string): Promise<number> {
+    const [row] = await tx
+      .select({ n: count() })
+      .from(plateTransferRequests)
+      .where(
+        and(
+          eq(plateTransferRequests.fromVehicleId, holderVehicleId),
+          inArray(plateTransferRequests.status, ["pending", "arbitrated"]),
+        ),
+      );
+    return row?.n ?? 0;
   },
 
   /** Le demandeur supprime son véhicule en attente : la demande est annulée. */

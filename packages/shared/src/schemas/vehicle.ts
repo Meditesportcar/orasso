@@ -95,6 +95,8 @@ export type VehicleFull = VehiclePublic & {
   unregistered: boolean;
   archivedAt: string | null;
   statusNote: string | null;
+  /** Change quand la fiche ou ses photos changent : à ajouter (`?v=`) à l'adresse de la fiche Instagram (cache du navigateur). */
+  shareVersion: string;
   /** Plaque déjà prise : demande de transfert en cours (le véhicule ne peut pas candidater). */
   plateTransfer: PlateTransferInfo | null;
 };

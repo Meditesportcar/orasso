@@ -11,10 +11,13 @@ import { AppSheet } from "@/ui/AppSheet";
 
 export function ShareSheet({
   vehicleId,
+  version,
   visible,
   onClose,
 }: {
   vehicleId: string;
+  /** `VehicleFull.shareVersion`. */
+  version: string;
   visible: boolean;
   onClose: () => void;
 }) {
@@ -28,7 +31,7 @@ export function ShareSheet({
     setError(null);
     setOutcome(null);
     try {
-      setOutcome(await shareVehicleImage(vehicleId, format));
+      setOutcome(await shareVehicleImage(vehicleId, format, version));
     } catch (e) {
       setError(errorMessage(e));
     } finally {

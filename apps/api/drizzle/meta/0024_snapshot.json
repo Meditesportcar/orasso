@@ -1,5 +1,5 @@
 {
-  "id": "09fd1623-7324-4a9d-8f1f-1812366cbb90",
+  "id": "bbf7fd4d-b50e-424a-bf45-ef5d759e367e",
   "prevId": "967e9fa0-30b5-4e88-bc2e-11dbdf849d99",
   "version": "7",
   "dialect": "postgresql",
@@ -7638,6 +7638,28 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plate_transfer_requests_open_key": {
+          "name": "plate_transfer_requests_open_key",
+          "columns": [
+            {
+              "expression": "plate_normalized",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "to_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"plate_transfer_requests\".\"status\" in ('pending', 'arbitrated')",
           "concurrently": false,
           "method": "btree",
           "with": {}

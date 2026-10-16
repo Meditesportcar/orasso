@@ -33,7 +33,7 @@ import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
 import { checkCategories } from "./categories";
-import { certificationFieldsOf, certificationService } from "./certification";
+import { certificationService } from "./certification";
 import { plateTransferService } from "./plate-transfer";
 import { type VehicleRow, vehiclesRepo } from "./repo";
 import { vehicleFull, vehiclePublic } from "./serializers";
@@ -49,6 +49,10 @@ const isUniqueViolation = (error: unknown, constraint: string) => {
   const pg = e.cause ?? e;
   return pg.code === "23505" && pg.constraint === constraint;
 };
+
+/** Plaque déjà active, ou deuxième demande de transfert simultanée pour la même plaque (index uniques). */
+const isPlateConflict = (error: unknown) =>
+  isUniqueViolation(error, "vehicles_active_plate_key") || isUniqueViolation(error, "plate_transfer_requests_open_key");
 
 /** Cohérence marque → modèle → génération, et type du véhicule (sauf modèle « Autre »). */
 export async function checkReference(
@@ -219,7 +223,7 @@ export const vehiclesService = {
       });
       return full(id);
     } catch (error) {
-      if (isUniqueViolation(error, "vehicles_active_plate_key")) {
+      if (isPlateConflict(error)) {
         throw conflict("plate_taken", "Cette plaque est déjà enregistrée sur un véhicule actif");
       }
       throw error;
@@ -279,11 +283,21 @@ export const vehiclesService = {
     const plateIsNew = plateNormalized !== current.plateNormalized || current.status !== "active";
     const holder = wantsPlate && plateIsNew ? await plateHolder(db, plateNormalized, id) : null;
     assertNotOwnPlate(holder, v.user.id);
-    const certifiedBefore = current.certifiedAt ? await certificationFieldsOf(db, id) : null;
     const { categoryIds: _ignored, ...fields } = input;
     try {
       await withTx(async (tx, after) => {
-        const pendingTransferId =
+        // Véhicule verrouillé et relu : une acceptation de transfert concurrente ne doit jamais être écrasée (I1).
+        const [locked] = await tx.select().from(vehicles).where(eq(vehicles.id, id)).for("update");
+        if (
+          !locked ||
+          locked.pendingTransferId !== current.pendingTransferId ||
+          locked.plateNormalized !== current.plateNormalized ||
+          locked.status !== current.status
+        ) {
+          throw conflict("conflict", "La fiche vient de changer : recharge-la et recommence.");
+        }
+        const certifiedBefore = await certificationService.fieldsBeforeChange(tx, id);
+        const openedTransferId =
           holder && plateNormalized
             ? await plateTransferService.open(tx, after, {
                 plateNormalized,
@@ -291,7 +305,10 @@ export const vehiclesService = {
                 requester: v,
                 plateText: merged.plate,
               })
-            : current.pendingTransferId;
+            : null;
+        const pendingTransferId = openedTransferId ?? current.pendingTransferId;
+        const nextPending = merged.status === "active" ? pendingTransferId : null;
+        const nextPlateNormalized = pendingTransferId ? null : plateNormalized;
         await tx
           .update(vehicles)
           .set({
@@ -299,8 +316,9 @@ export const vehiclesService = {
             generationId: merged.generationId ?? null,
             year: merged.year ?? null,
             plate: merged.plate,
-            plateNormalized: pendingTransferId ? null : plateNormalized,
-            pendingTransferId: merged.status === "active" ? pendingTransferId : null,
+            // Jamais réécrits s'ils ne changent pas.
+            ...(nextPlateNormalized !== current.plateNormalized ? { plateNormalized: nextPlateNormalized } : {}),
+            ...(nextPending !== current.pendingTransferId ? { pendingTransferId: nextPending } : {}),
             unregistered: merged.unregistered,
             status: merged.status,
             statusNote: merged.status === "active" ? null : (input.statusNote ?? current.statusNote),
@@ -321,7 +339,7 @@ export const vehiclesService = {
         await certificationService.afterChange(tx, after, id, certifiedBefore);
       });
     } catch (error) {
-      if (isUniqueViolation(error, "vehicles_active_plate_key")) {
+      if (isPlateConflict(error)) {
         throw conflict("plate_taken", "Cette plaque est déjà enregistrée sur un véhicule actif");
       }
       throw error;
@@ -338,6 +356,10 @@ export const vehiclesService = {
     }
     const photos = await vehiclesRepo.photos(id);
     await withTx(async (tx, after) => {
+      // Plusieurs demandes ouvertes sur cette plaque : la suppression les emporterait (clé étrangère en cascade).
+      if ((await plateTransferService.openCount(tx, id)) > 1) {
+        throw conflict("conflict", "Plusieurs demandes de transfert portent sur cette plaque : archive-le (Vendu).");
+      }
       await plateTransferService.cancelFor(tx, id, current.pendingTransferId);
       await plateTransferService.plateReleased(tx, id);
       await tx.delete(vehicles).where(eq(vehicles.id, id));
@@ -366,7 +388,7 @@ export const vehiclesService = {
 
   /** Photo recompressée à l'arrivée : 2048 px au plus, WebP, orientation EXIF appliquée, métadonnées retirées. */
   async addPhoto(v: Viewer, id: string, file: File): Promise<VehicleFull> {
-    const current = await ownVehicle(v, id);
+    await ownVehicle(v, id);
     if (file.size > MAX_PHOTO_BYTES) throw new AppError(413, "payload_too_large", "Photo trop lourde (15 Mo au plus)");
     if (!ACCEPTED_TYPES.includes(file.type)) {
       throw new AppError(415, "unsupported_media_type", "Formats acceptés : JPEG, PNG, WebP, HEIC");
@@ -383,11 +405,11 @@ export const vehiclesService = {
     }
     const key = `vehicles/${id}/${randomBytes(8).toString("hex")}.webp`;
     await storage.put(key, output.data);
-    const certifiedBefore = current.certifiedAt ? await certificationFieldsOf(db, id) : null;
     try {
       await withTx(async (tx, after) => {
         // Deux envois simultanés : la ligne du véhicule sérialise le calcul de la position.
         await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id)).for("update");
+        const certifiedBefore = await certificationService.fieldsBeforeChange(tx, id);
         const [agg] = await tx
           .select({ n: count(), maxPos: max(vehiclePhotos.position) })
           .from(vehiclePhotos)
@@ -412,12 +434,13 @@ export const vehiclesService = {
   },
 
   async removePhoto(v: Viewer, id: string, photoId: string): Promise<VehicleFull> {
-    const current = await ownVehicle(v, id);
-    const certifiedBefore = current.certifiedAt ? await certificationFieldsOf(db, id) : null;
+    await ownVehicle(v, id);
     const photos = await vehiclesRepo.photos(id);
     const target = photos.find((p) => p.id === photoId);
     if (!target) throw notFound("Photo introuvable");
     await withTx(async (tx, after) => {
+      await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, id)).for("update");
+      const certifiedBefore = await certificationService.fieldsBeforeChange(tx, id);
       await tx.delete(vehiclePhotos).where(eq(vehiclePhotos.id, photoId));
       // Positions renumérotées 1..n (contrainte d'unicité différée à la validation).
       let position = 1;

@@ -12,16 +12,22 @@ import { ApiRequestError, getSessionToken, NETWORK_MESSAGE } from "./http";
 
 export type ShareOutcome = "shared" | "saved" | "unavailable";
 
-const path = (vehicleId: string, format: ShareFormat) => `/api/me/vehicles/${vehicleId}/share-image?format=${format}`;
+/** `version` (`VehicleFull.shareVersion`) évite de resservir une fiche périmée après une modification. */
+const path = (vehicleId: string, format: ShareFormat, version: string) =>
+  `/api/me/vehicles/${vehicleId}/share-image?format=${format}&v=${encodeURIComponent(version)}`;
 
-export async function shareVehicleImage(vehicleId: string, format: ShareFormat): Promise<ShareOutcome> {
+export async function shareVehicleImage(
+  vehicleId: string,
+  format: ShareFormat,
+  version: string,
+): Promise<ShareOutcome> {
   const token = getSessionToken();
   const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
   if (Platform.OS === "web") {
     // Navigateur : téléchargement du fichier.
     let res: Response;
     try {
-      res = await fetch(apiUrl(path(vehicleId, format)), { headers });
+      res = await fetch(apiUrl(path(vehicleId, format, version)), { headers });
     } catch {
       throw new ApiRequestError(0, "network", NETWORK_MESSAGE);
     }
@@ -37,7 +43,7 @@ export async function shareVehicleImage(vehicleId: string, format: ShareFormat):
   let file: File;
   try {
     file = await File.downloadFileAsync(
-      apiUrl(path(vehicleId, format)),
+      apiUrl(path(vehicleId, format, version)),
       new File(Paths.cache, `orasso-${vehicleId}-${format}.png`),
       { headers, idempotent: true },
     );

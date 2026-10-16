@@ -132,7 +132,8 @@ export const certificationService = {
         vehicleId,
         userId: v.user.id,
         message,
-        snapshot: snapshotOf(row),
+        // La fiche affichée et les champs surveillés : la validation compare ceux-ci à la fiche du moment (B1).
+        snapshot: { ...snapshotOf(row), fields: (await certificationFieldsOf(db, vehicleId)) ?? undefined },
       });
     } catch (error) {
       if (isUniqueViolation(error)) throw conflict("conflict", "Une demande est déjà en cours pour ce véhicule");
@@ -179,10 +180,20 @@ export const certificationService = {
       const [req] = await tx.select().from(certificationRequests).where(eq(certificationRequests.id, id)).for("update");
       if (!req) throw notFound("Demande introuvable");
       if (req.status !== "pending") throw conflict("conflict", "Cette demande est déjà traitée");
+      // Véhicule verrouillé : plus de modification de la fiche entre la comparaison et la validation.
+      await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, req.vehicleId)).for("update");
       const vehicle = await vehiclesRepo.findFullById(req.vehicleId, tx);
       if (!vehicle) throw notFound("Véhicule introuvable");
       const accept = input.decision === "accept";
       if (accept && vehicle.status !== "active") throw conflict("conflict", "Le véhicule n'est plus actif");
+      if (accept) {
+        const examined = (req.snapshot as CertificationSnapshot).fields;
+        const current = await certificationFieldsOf(tx, vehicle.id);
+        // Demande sans champs enregistrés (ancienne) : on ne peut pas comparer, on refuse de valider à l'aveugle.
+        if (!examined || !current || certificationLostByChange(examined, current)) {
+          throw conflict("conflict", "Fiche modifiée depuis la demande : refuse la demande, le membre en refera une.");
+        }
+      }
       const at = now();
       await tx
         .update(certificationRequests)
@@ -235,7 +246,7 @@ export const certificationService = {
 
   /**
    * À appeler après toute modification de la fiche d'un véhicule certifié : perte si un champ surveillé a changé
-   * (S38) ; sinon rien. Une demande en cours voit sa fiche examinée remise à jour.
+   * (S38) ; sinon rien.
    */
   async afterChange(
     tx: Tx,
@@ -247,18 +258,16 @@ export const certificationService = {
     const current = await certificationFieldsOf(tx, vehicleId);
     if (!current || !certificationLostByChange(before, current)) return;
     if (await certificationService.lose(tx, vehicleId, "modified")) after(() => notificationsService.kick());
-    const pending = await tx.query.certificationRequests.findFirst({
-      where: and(eq(certificationRequests.vehicleId, vehicleId), eq(certificationRequests.status, "pending")),
-    });
-    if (pending) {
-      const fresh = await vehiclesRepo.findFullById(vehicleId, tx);
-      if (fresh) {
-        await tx
-          .update(certificationRequests)
-          .set({ snapshot: snapshotOf(fresh) })
-          .where(eq(certificationRequests.id, pending.id));
-      }
-    }
+  },
+
+  /**
+   * Champs surveillés avant une modification, lus **dans la transaction** (véhicule verrouillé par l'appelant) :
+   * null si le véhicule n'est pas certifié. Une demande en cours n'en a pas besoin : sa validation compare la fiche à
+   * celle de la demande.
+   */
+  async fieldsBeforeChange(tx: Tx, vehicleId: string): Promise<CertificationFields | null> {
+    const [v] = await tx.select({ at: vehicles.certifiedAt }).from(vehicles).where(eq(vehicles.id, vehicleId));
+    return v?.at ? certificationFieldsOf(tx, vehicleId) : null;
   },
 
   /**

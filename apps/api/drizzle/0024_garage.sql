@@ -38,4 +38,7 @@ CREATE INDEX "certification_requests_vehicle_idx" ON "certification_requests" US
 CREATE INDEX "certification_requests_status_idx" ON "certification_requests" USING btree ("status","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "certification_requests_pending_key" ON "certification_requests" USING btree ("vehicle_id") WHERE "certification_requests"."status" = 'pending';--> statement-breakpoint
 ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_pending_transfer_id_plate_transfer_requests_id_fk" FOREIGN KEY ("pending_transfer_id") REFERENCES "public"."plate_transfer_requests"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "plate_transfer_requests_status_idx" ON "plate_transfer_requests" USING btree ("status","created_at");
+CREATE INDEX "plate_transfer_requests_status_idx" ON "plate_transfer_requests" USING btree ("status","created_at");--> statement-breakpoint
+-- Demandes `pending` héritées de l'ancien comportement (409 plate_taken sans véhicule créé) : aucune n'a de véhicule en attente, on les clôt.
+UPDATE "plate_transfer_requests" SET "status" = 'refused', "decided_at" = now(), "note" = 'Clôturée à la mise à jour du garage (lot 31)' WHERE "status" = 'pending';--> statement-breakpoint
+CREATE UNIQUE INDEX "plate_transfer_requests_open_key" ON "plate_transfer_requests" USING btree ("plate_normalized","to_user_id") WHERE "plate_transfer_requests"."status" in ('pending', 'arbitrated');

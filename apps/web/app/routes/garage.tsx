@@ -22,7 +22,7 @@ const ARCHIVED: Exclude<VehicleStatus, "active">[] = ["sold", "keepsake", "wreck
 export async function loader({ request }: Route.LoaderArgs) {
   const [vehicles, transfers] = await Promise.all([
     apiOrThrow<VehicleFull[]>(request, "/me/vehicles"),
-    api<{ incoming: PlateTransferView[]; outgoing: PlateTransferView[] }>(request, "/me/plate-transfers"),
+    api<{ incoming: PlateTransferView[]; outgoing: unknown[] }>(request, "/me/plate-transfers"),
   ]);
   const photoRefused = new URL(request.url).searchParams.get("photo") === "refusee";
   return {

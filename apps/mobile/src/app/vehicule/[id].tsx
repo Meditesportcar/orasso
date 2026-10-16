@@ -109,7 +109,12 @@ export default function VehiculeFiche() {
                 await vehicle.reload();
               }}
             />
-            <ShareSheet vehicleId={v.id} visible={shareOpen} onClose={() => setShareOpen(false)} />
+            <ShareSheet
+              vehicleId={v.id}
+              version={v.shareVersion}
+              visible={shareOpen}
+              onClose={() => setShareOpen(false)}
+            />
           </>
         ) : null
       }

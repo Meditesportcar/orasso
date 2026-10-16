@@ -1,6 +1,7 @@
 // Garage et référentiel des véhicules (lot 31 : page véhicule complète, certification, transfert de plaque).
 import type {
   CategoryOption,
+  OutgoingPlateTransferView,
   PlateTransferView,
   VehicleCertification,
   VehicleCreate,
@@ -47,7 +48,7 @@ export const garageApi = {
     }),
   /** Demandes de transfert de plaque reçues (je suis l'ancien propriétaire) et envoyées. */
   plateTransfers: () =>
-    request<{ incoming: PlateTransferView[]; outgoing: PlateTransferView[] }>("/api/me/plate-transfers"),
+    request<{ incoming: PlateTransferView[]; outgoing: OutgoingPlateTransferView[] }>("/api/me/plate-transfers"),
   acceptPlateTransfer: (id: string) => request<{ ok: true }>(`/api/plate-transfers/${id}/accept`, { method: "POST" }),
   declinePlateTransfer: (id: string) => request<{ ok: true }>(`/api/plate-transfers/${id}/decline`, { method: "POST" }),
 };

@@ -60,6 +60,7 @@ import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
 import { accountQrShortId, profilesService } from "../profiles/service";
 import { securityMails } from "../security/mails";
+import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
 
 type MailUser = { id: string; email: string; name: string };
 
@@ -382,6 +383,8 @@ export const accountService = {
           })
           .where(inArray(vehicles.id, ids));
       }
+      // Garage : demandes de certification, certification, demandes de transfert de plaque (lot 31).
+      await anonymizeGarageForDeletedAccount(tx, userId);
       // Liens sociaux et d'organisation (amis, crews, messagerie : lots 17 à 19, à compléter par leurs tables).
       await tx.delete(structureFollows).where(eq(structureFollows.userId, userId));
       await tx.delete(proFollows).where(eq(proFollows.userId, userId));
