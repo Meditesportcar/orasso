@@ -9,6 +9,7 @@ import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
 import { garageApi } from "./garage";
 import { messagingApi } from "./messaging";
+import { orgaApi } from "./orga";
 import { prosApi } from "./pros";
 import { providersApi } from "./providers";
 import { securityApi } from "./security";
@@ -19,6 +20,7 @@ import { weatherApi } from "./weather";
 
 export type { NotificationItem } from "./account";
 export { authApi } from "./auth";
+export type { FieldAlert, FieldIncident } from "./orga";
 
 export const api = {
   ...accountApi,
@@ -36,4 +38,5 @@ export const api = {
   ...messagingApi,
   ...crewsApi,
   ...communicationApi,
+  ...orgaApi,
 };
