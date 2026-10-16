@@ -13,6 +13,7 @@ export * from "./labels/events.fr";
 export * from "./labels/explorer.fr";
 export * from "./labels/garage.fr";
 export * from "./labels/messaging.fr";
+export * from "./labels/moderation.fr";
 export * from "./labels/notifications.fr";
 export * from "./labels/points.fr";
 export * from "./labels/social.fr";

@@ -47,6 +47,8 @@ export const authErrorLabels: Record<string, string> = {
   USER_VERIFICATION_REQUIRED: "Ta clé doit demander ton code ou ton empreinte.",
   ROUTE_NOT_AVAILABLE: "Action indisponible.",
   SESSION_EXPIRED: "Ta session a expiré : reconnecte-toi.",
+  // Lot 32 : compte banni (connexion refusée).
+  BANNED: "Ce compte a été banni d'Orasso. Pour contester, réponds à l'e-mail qui t'a été envoyé.",
 };
 export const authErrorFallback = "La connexion n'a pas abouti. Réessaie.";
 

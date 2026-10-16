@@ -62,6 +62,8 @@ export type MessageView = {
   clientId: string | null;
   createdAt: string;
   deleted: boolean;
+  /** Lot 32 : retiré par la modération (« Message retiré par la modération ») ; `deleted` est vrai aussi. */
+  moderated?: boolean;
   /** « Lu par » : sur les messages de mon côté de la première page seulement. */
   readBy: { userId: string; pseudo: string }[] | null;
 };

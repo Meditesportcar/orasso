@@ -31,6 +31,11 @@ export const errorCodes = [
   "conversation_closed",
   // Lot 20 : communication de l'organisateur.
   "follower_quota_exceeded",
+  // Lot 32 : modération.
+  "suspended",
+  "banned",
+  "already_reported",
+  "already_handled",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

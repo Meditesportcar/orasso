@@ -6,6 +6,7 @@ export * from "./geo";
 export * from "./grades";
 export * from "./labels.fr";
 export * from "./messaging";
+export * from "./moderation";
 export * from "./privacy";
 export * from "./provider";
 export * from "./qr";

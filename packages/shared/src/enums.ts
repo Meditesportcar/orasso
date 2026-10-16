@@ -11,6 +11,7 @@ import { crewNotificationTypes } from "./notifications/crews";
 import { eventEmailAlwaysTypes, eventNotificationTypes } from "./notifications/events";
 import { garageNotificationTypes } from "./notifications/garage";
 import { messagingNotificationTypes, pushOnlyNotificationTypes as messagingPushOnly } from "./notifications/messaging";
+import { moderationEmailAlwaysTypes, moderationNotificationTypes } from "./notifications/moderation";
 import { pointsNotificationTypes } from "./notifications/points";
 import { journalOnlyNotificationTypes as socialJournalOnly, socialNotificationTypes } from "./notifications/social";
 import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
@@ -125,6 +126,7 @@ export const notificationTypes = {
   ...messagingNotificationTypes,
   ...crewNotificationTypes,
   ...communicationNotificationTypes,
+  ...moderationNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 
@@ -133,6 +135,7 @@ export const emailAlwaysTypes: readonly NotificationType[] = [
   ...eventEmailAlwaysTypes,
   ...staffEmailAlwaysTypes,
   ...accountEmailAlwaysTypes,
+  ...moderationEmailAlwaysTypes,
 ];
 
 /** Préférences de notification : un interrupteur par famille (docs/01 « Notifications »). */

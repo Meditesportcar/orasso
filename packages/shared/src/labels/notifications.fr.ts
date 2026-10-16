@@ -6,6 +6,7 @@ import { crewNotificationLabels } from "../notifications/crews";
 import { eventNotificationLabels } from "../notifications/events";
 import { garageNotificationLabels } from "../notifications/garage";
 import { messagingNotificationLabels } from "../notifications/messaging";
+import { moderationNotificationLabels } from "../notifications/moderation";
 import { pointsNotificationLabels } from "../notifications/points";
 import { socialNotificationLabels } from "../notifications/social";
 import { staffNotificationLabels } from "../notifications/staff";
@@ -35,4 +36,5 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   ...messagingNotificationLabels,
   ...crewNotificationLabels,
   ...communicationNotificationLabels,
+  ...moderationNotificationLabels,
 };
