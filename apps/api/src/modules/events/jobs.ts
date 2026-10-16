@@ -9,7 +9,6 @@ import { deps, now } from "../../lib/deps";
 import { formatDateTime } from "../../lib/format";
 import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
-import { staffChatsService } from "../communication/staff-chats";
 import { notificationsService } from "../notifications/service";
 import { weatherService } from "../weather/service";
 import { type EventRow, eventsRepo } from "./repo";
@@ -42,8 +41,6 @@ export async function scheduleEventJobs(e: EventRow) {
     const always = name === "event.lock" || name === "event.settle";
     if (always || at > t) await deps.jobs.send(name, { eventId: e.id, at: at.toISOString() }, at);
   }
-  // Lot 20 : fermeture (J+1) et purge (1 an) de la discussion du staff.
-  await staffChatsService.schedule(e);
 }
 
 const sameInstant = (a: Date, iso: unknown) =>

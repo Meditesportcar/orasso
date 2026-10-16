@@ -31,6 +31,16 @@ export function segmentNeedsEvent(segment: MessageSegment): boolean {
   return !segmentsWithoutEvent.includes(segment);
 }
 
+/**
+ * Les inscrits d'un événement restent joignables par un message groupé jusqu'à 7 jours après sa fin (S10, relecture
+ * du lot 20) : au-delà, la limite d'envoi aux abonnés se contournerait par les inscrits des événements passés.
+ */
+export const SEGMENT_REACH_AFTER_END_MS = 7 * 86_400_000;
+
+export function segmentReachable(event: { endsAt: Date }, now: Date): boolean {
+  return event.endsAt.getTime() + SEGMENT_REACH_AFTER_END_MS >= now.getTime();
+}
+
 /** Ce qui reste du quota d'envoi aux abonnés : `quota` moins les envois des 30 derniers jours (jamais négatif). */
 export function followerQuotaRemaining(sentAt: readonly Date[], now: Date, quota = FOLLOWER_QUOTA_DEFAULT): number {
   const since = now.getTime() - FOLLOWER_QUOTA_WINDOW_MS;

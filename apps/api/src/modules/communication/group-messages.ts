@@ -10,6 +10,7 @@ import {
   type FollowerQuota,
   followerQuotaRemaining,
   followerQuotaResetsAt,
+  GROUP_MESSAGE_BODY_MAX,
   GROUP_MESSAGE_MAX_RECIPIENTS,
   GROUP_MESSAGES_PER_DAY,
   GROUP_SEND_BATCH,
@@ -24,6 +25,8 @@ import {
   organizerKey,
   PUSH_PREVIEW_MAX,
   renderTemplate,
+  segmentNeedsEvent,
+  segmentReachable,
   shorten,
 } from "@orasso/shared";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
@@ -38,11 +41,12 @@ import {
   messages,
   messageTemplates,
   profiles,
+  structureBans,
   structures,
 } from "../../db/schema";
 import { env } from "../../env";
 import { deps, now } from "../../lib/deps";
-import { AppError, notFound, validation } from "../../lib/errors";
+import { AppError, conflict, notFound, validation } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
@@ -61,13 +65,28 @@ const isUniqueViolation = (error: unknown) => {
   return (e.cause ?? e).code === "23505";
 };
 
+/** Pseudo le plus long accepté (schéma du profil) : pire cas du remplacement de `{{pseudo}}`. */
+const PSEUDO_MAX = 24;
+
 const quotaOf = (s: Pick<StructureRow, "followerMessageQuota">) => s.followerMessageQuota ?? FOLLOWER_QUOTA_DEFAULT;
 
 /** Événement de la structure (404 pour celui d'une autre structure : aucune fuite). */
-async function eventOfStructure(structureId: string, eventId: string | null | undefined): Promise<EventRow | null> {
+async function eventOfStructure(
+  structureId: string,
+  eventId: string | null | undefined,
+  segment: MessageSegment,
+): Promise<EventRow | null> {
   if (!eventId) return null;
   const e = await eventsRepo.byId(eventId).catch(() => null);
   if (!e || e.structureId !== structureId || e.status === "draft") throw notFound("Événement introuvable");
+  // S10 (relecture du lot 20) : les inscrits d'un événement fini depuis plus de 7 jours ne sont plus joignables en
+  // groupe — sinon la limite d'envoi aux abonnés se contournerait par les inscrits des événements passés.
+  if (segmentNeedsEvent(segment) && !segmentReachable(e, now())) {
+    throw conflict(
+      "conflict",
+      "Cet événement est fini depuis plus de 7 jours : ses inscrits ne sont plus joignables par un message groupé.",
+    );
+  }
   return e;
 }
 
@@ -163,7 +182,7 @@ export const groupMessagesService = {
     q: { segment: MessageSegment; eventId?: string },
   ): Promise<GroupMessagePreview> {
     const s = await requireStructureSpeaker(v, structureId);
-    const event = await eventOfStructure(s.id, q.eventId);
+    const event = await eventOfStructure(s.id, q.eventId, q.segment);
     const ids = await segmentRecipients(db, {
       segment: q.segment,
       structureId: s.id,
@@ -191,7 +210,18 @@ export const groupMessagesService = {
     };
     const seen = await replay();
     if (seen) return seen;
-    const event = await eventOfStructure(s.id, input.eventId);
+    const event = await eventOfStructure(s.id, input.eventId, input.segment);
+    // Le texte d'un destinataire (variables remplacées, `{{pseudo}}` au plus long) doit tenir dans un message.
+    const longest = composeBody({ subject: input.subject, body: input.body } as typeof groupMessages.$inferSelect, {
+      event,
+      structureName: s.name,
+      pseudo: "x".repeat(PSEUDO_MAX),
+    });
+    if (longest.length > GROUP_MESSAGE_BODY_MAX) {
+      throw validation(
+        `Message trop long une fois les variables remplacées (${longest.length} caractères pour ${GROUP_MESSAGE_BODY_MAX} au plus) : raccourcis-le.`,
+      );
+    }
     if (input.templateId) {
       const [t] = await db
         .select({ id: messageTemplates.id })
@@ -319,6 +349,15 @@ export const groupMessagesService = {
         .for("update", { skipLocked: true });
       // Structure supprimée ou suspendue entre-temps : plus rien ne part, l'envoi est clos.
       const stop = !s || s.deletedAt || s.verification === "suspended";
+      if (!batch.length && !stop) {
+        // Lot vide : peut-être que des lignes sont réservées par un autre passage (SKIP LOCKED) ; on ne clôt que s'il
+        // ne reste vraiment rien à envoyer (relecture du lot 20).
+        const [left] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(groupMessageRecipients)
+          .where(and(eq(groupMessageRecipients.groupMessageId, gm.id), isNull(groupMessageRecipients.sentAt)));
+        if ((left?.n ?? 0) > 0) return left?.n ?? 0;
+      }
       if (!batch.length || stop) {
         await tx.update(groupMessages).set({ status: "sent", sentAt: now() }).where(eq(groupMessages.id, gm.id));
         return 0;
@@ -353,13 +392,35 @@ export const groupMessagesService = {
           ),
         );
       const byId = new Map(recipients.map((r) => [r.userId, r]));
+      // Bannis de la structure depuis la création de l'envoi (reprise tardive) : sautés.
+      const banned = new Set(
+        (
+          await tx
+            .select({ userId: structureBans.userId })
+            .from(structureBans)
+            .where(
+              and(
+                eq(structureBans.structureId, gm.structureId),
+                inArray(
+                  structureBans.userId,
+                  batch.map((b) => b.userId),
+                ),
+              ),
+            )
+        ).map((b) => b.userId),
+      );
       const at = now();
       let sent = 0;
       const published: { conversationId: string; userId: string; row: typeof messages.$inferSelect }[] = [];
       for (const r of batch) {
         const person = byId.get(r.userId);
         // Compte supprimé ou suspendu depuis l'envoi : sauté (ligne close, aucun message).
-        if (!person || person.deletedAt || (person.suspendedUntil && person.suspendedUntil > at)) {
+        if (
+          !person ||
+          person.deletedAt ||
+          (person.suspendedUntil && person.suspendedUntil > at) ||
+          banned.has(r.userId)
+        ) {
           await markDone(tx, gm.id, r.userId, null, null);
           continue;
         }
@@ -368,7 +429,11 @@ export const groupMessagesService = {
           await markDone(tx, gm.id, r.userId, conversation.id, null);
           continue;
         }
-        const body = composeBody(gm, { event, structureName: s.name, pseudo: person.pseudo });
+        // Longueur contrôlée à la création (pire cas du pseudo) : la coupe n'est qu'une garde.
+        const body = composeBody(gm, { event, structureName: s.name, pseudo: person.pseudo }).slice(
+          0,
+          GROUP_MESSAGE_BODY_MAX,
+        );
         const { row, created } = await insertGroupMessage(tx, conversation.id, gm, body);
         await markDone(tx, gm.id, r.userId, conversation.id, row.id);
         if (created) {
@@ -404,6 +469,27 @@ export const groupMessagesService = {
     });
   },
 
+  /**
+   * Tâche de secours `messaging.group-sweep` (chaque minute, relecture du lot 20) : un envoi resté `queued` ou
+   * `sending` sans mouvement depuis 2 minutes (lot suivant jamais planifié : pg-boss coupé, redémarrage, reprises
+   * épuisées) repart d'un lot ; le lot se replanifie ensuite lui-même. Sans doublon (voir `sendBatch`).
+   */
+  async sweep(): Promise<number> {
+    const stale = await db
+      .select({ id: groupMessages.id })
+      .from(groupMessages)
+      .where(
+        and(
+          inArray(groupMessages.status, ["queued", "sending"]),
+          // Horloge de la base : `updated_at` est posé par l'écriture elle-même.
+          sql`${groupMessages.updatedAt} < now() - interval '2 minutes'`,
+        ),
+      )
+      .limit(20);
+    for (const { id } of stale) await this.sendBatch(id);
+    return stale.length;
+  },
+
   /** Envoie tout, lot après lot (scripts, seed, tests). */
   async drain(groupMessageId: string): Promise<void> {
     for (let i = 0; i < 100; i += 1) if ((await this.sendBatch(groupMessageId)) === 0) return;
@@ -423,8 +509,7 @@ function composeBody(
     "event.city": ctx.event?.city ?? null,
     review_link: ctx.event ? `${env.PUBLIC_URL}/e/${ctx.event.slug}#avis` : null,
   });
-  const full = gm.subject ? `${gm.subject}\n\n${text}` : text;
-  return full.slice(0, 2000);
+  return gm.subject ? `${gm.subject}\n\n${text}` : text;
 }
 
 /** Conversation `organizer` de la personne avec la structure (créée au besoin, une seule ligne en cas de course). */

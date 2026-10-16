@@ -6,6 +6,7 @@ import {
   followerQuotaResetsAt,
   renderTemplate,
   segmentNeedsEvent,
+  segmentReachable,
   staffChatClosesAt,
   staffChatReadableUntil,
   unknownTemplateVariables,
@@ -67,6 +68,12 @@ describe("segments et discussion du staff", () => {
     expect(segmentNeedsEvent("staff")).toBe(false);
     expect(segmentNeedsEvent("accepted")).toBe(true);
     expect(segmentNeedsEvent("checked_in")).toBe(true);
+  });
+
+  it("inscrits joignables jusqu'à 7 jours après la fin", () => {
+    const endsAt = new Date("2026-10-17T23:00:00Z");
+    expect(segmentReachable({ endsAt }, new Date("2026-10-24T22:00:00Z"))).toBe(true);
+    expect(segmentReachable({ endsAt }, new Date("2026-10-25T00:00:00Z"))).toBe(false);
   });
 
   it("fermée à J+1, lisible jusqu'à J+7", () => {

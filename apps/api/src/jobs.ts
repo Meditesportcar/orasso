@@ -46,11 +46,11 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "certification.sweep": () => certificationService.sweep(),
   // Lot 18 : fichiers de `POST /me/uploads` jamais rattachés depuis plus de 24 h (enregistrement et fichier).
   "uploads.purge": () => uploadsService.purgeExpired(),
-  // Lot 20 : un lot (500) d'un message groupé, la tâche se replanifie tant qu'il reste des destinataires ; fermeture à
-  // J+1 et purge à un an de la discussion du staff d'un événement.
+  // Lot 20 : un lot (500) d'un message groupé, la tâche se replanifie tant qu'il reste des destinataires ; balayage de
+  // secours des envois arrêtés ; fermeture à J+1 et purge à un an des discussions du staff des événements.
   "messaging.group-send": (d) => groupMessagesService.sendBatch(d.groupMessageId ?? ""),
-  "event.close-staff-chat": (d) => staffChatsService.closeEventChat(d.eventId ?? "", d.at),
-  "messaging.purge-event-staff": (d) => staffChatsService.purgeEventChat(d.eventId ?? "", d.at),
+  "messaging.group-sweep": () => groupMessagesService.sweep(),
+  "messaging.staff-chats-sweep": () => staffChatsService.sweep(),
 };
 
 /**
@@ -91,6 +91,9 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("plate-transfer.escalate", "15 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("certification.sweep", "30 5 * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("uploads.purge", "40 4 * * *", null, { tz: "Europe/Paris" });
+    // Lot 20 : messages groupés arrêtés (chaque minute), discussions du staff à fermer ou purger (chaque heure).
+    await boss.schedule("messaging.group-sweep", "* * * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("messaging.staff-chats-sweep", "25 * * * *", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {
     async send(name, data, startAfter) {

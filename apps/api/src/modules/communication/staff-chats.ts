@@ -13,7 +13,7 @@ import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-
 
 import { db } from "../../db/client";
 import { conversationParticipants, conversations, events, messages } from "../../db/schema";
-import { deps, now } from "../../lib/deps";
+import { now } from "../../lib/deps";
 import { AppError, forbidden } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
@@ -228,15 +228,12 @@ export const staffChatsService = {
   },
 
   /**
-   * Tâche `event.close-staff-chat` (J+1) : fermeture posée (même si aucun accès ne l'a recalculée), le staff quitte la
-   * conversation (plus de non-lus ni de liste) ; les organisateurs restent jusqu'à J+7.
+   * Fermeture (J+1) : fermeture posée (même si aucun accès ne l'a recalculée), le staff quitte la conversation (plus de
+   * non-lus ni de liste) ; les organisateurs restent jusqu'à J+7.
    */
-  async closeEventChat(eventId: string, at?: string): Promise<boolean> {
+  async closeEventChat(eventId: string): Promise<boolean> {
     const e = await eventsRepo.byId(eventId).catch(() => null);
-    if (!e) return false;
-    const closesAt = staffChatClosesAt(e);
-    if (at && Math.abs(closesAt.getTime() - Date.parse(at)) >= 60_000) return false;
-    if (now() < closesAt) return false;
+    if (!e || now() < staffChatClosesAt(e)) return false;
     const [c] = await db
       .select()
       .from(conversations)
@@ -246,19 +243,15 @@ export const staffChatsService = {
     return true;
   },
 
-  /** Tâche `messaging.purge-event-staff` (fin + 1 an) : la discussion et ses images disparaissent. */
-  async purgeEventChat(eventId: string, at?: string): Promise<boolean> {
+  /** Purge (fin + 1 an) : la discussion et ses images disparaissent. */
+  async purgeEventChat(eventId: string): Promise<boolean> {
     const e = await eventsRepo.byId(eventId).catch(() => null);
     const [c] = await db
       .select()
       .from(conversations)
       .where(eq(conversations.directKey, eventStaffKey(eventId)));
     if (!c) return false;
-    if (e) {
-      const purgeAt = staffChatPurgeAt(e);
-      if (at && Math.abs(purgeAt.getTime() - Date.parse(at)) >= 60_000) return false;
-      if (now() < purgeAt) return false;
-    }
+    if (e && now() < staffChatPurgeAt(e)) return false;
     const keys = await withTx(async (tx: Tx) => {
       const images = await tx
         .select({ key: messages.imageKey })
@@ -271,16 +264,27 @@ export const staffChatsService = {
     return true;
   },
 
-  /** Tâches de la discussion d'un événement publié (planifiées avec les autres tâches de l'événement). */
-  async schedule(e: EventRow) {
-    const t = now();
-    const plan: [Parameters<typeof deps.jobs.send>[0], Date][] = [
-      ["event.close-staff-chat", staffChatClosesAt(e)],
-      ["messaging.purge-event-staff", staffChatPurgeAt(e)],
-    ];
-    for (const [name, at] of plan) {
-      if (at > t) await deps.jobs.send(name, { eventId: e.id, at: at.toISOString() }, at);
-    }
+  /**
+   * Tâche `messaging.staff-chats-sweep` (chaque heure, relecture du lot 20 : un balayage plutôt qu'une tâche par
+   * événement, qui couvre aussi les événements publiés avant le déploiement) : discussions d'événement fermées dont
+   * le staff est encore participant → fermeture posée ; discussions d'événements finis depuis plus d'un an → purge.
+   */
+  async sweep(): Promise<{ closed: number; purged: number }> {
+    const at = now();
+    const toClose = await db.execute(sql`
+      select distinct c.event_id from conversations c
+      join conversation_participants p on p.conversation_id = c.id and p.left_at is null and p.role = 'member'
+      where c.kind = 'event_staff' and c.event_id is not null and c.closed_at is not null and c.closed_at <= ${at}
+      limit 200`);
+    let closed = 0;
+    for (const row of toClose.rows as { event_id: string }[]) if (await this.closeEventChat(row.event_id)) closed += 1;
+    const toPurge = await db.execute(sql`
+      select c.event_id from conversations c join events e on e.id = c.event_id
+      where c.kind = 'event_staff' and e.ends_at <= ${new Date(at.getTime() - 365 * 86_400_000)}
+      limit 200`);
+    let purged = 0;
+    for (const row of toPurge.rows as { event_id: string }[]) if (await this.purgeEventChat(row.event_id)) purged += 1;
+    return { closed, purged };
   },
 
   /** Discussions du staff où la personne a du non lu (Boîte de la casquette Organisateur). */
