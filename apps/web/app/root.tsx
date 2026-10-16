@@ -20,6 +20,15 @@ export const links: Route.LinksFunction = () => [
   { rel: "manifest", href: "/site.webmanifest" },
 ];
 
+// En-têtes de sécurité des pages (recette du lot 12) : pas d'encadrement par un autre site (espace organisateur,
+// candidature), référent réduit à l'origine, nosniff. HSTS est posé par nginx.
+export const headers: Route.HeadersFunction = () => ({
+  "X-Frame-Options": "DENY",
+  "Content-Security-Policy": "frame-ancestors 'none'",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Content-Type-Options": "nosniff",
+});
+
 // La préférence de thème est un cookie : le serveur écrit le bon `data-theme` dans le HTML, sans flash.
 export function loader({ request }: Route.LoaderArgs) {
   return { themePreference: readThemeCookie(request.headers.get("cookie")) };

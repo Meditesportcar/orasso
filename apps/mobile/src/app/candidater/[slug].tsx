@@ -28,6 +28,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { NotificationAsk } from "@/ui/NotificationAsk";
+import { plateText } from "@/ui/plateText";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -181,7 +182,7 @@ export default function Candidater() {
                       {wanted.size > 0 && !match ? " · hors des catégories, possible quand même" : ""}
                     </Text>
                     {noPhoto ? (
-                      <Text variant="meta" color={t.color.accentText}>
+                      <Text variant="meta" color={plateText.accent}>
                         Ajoute au moins une photo pour candidater →
                       </Text>
                     ) : null}

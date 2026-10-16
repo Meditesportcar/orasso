@@ -2,6 +2,7 @@ import { photoOrderSchema, vehicleCreateSchema, vehicleUpdateSchema } from "@ora
 import { Hono } from "hono";
 
 import { validation } from "../../lib/errors";
+import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, uuidParam } from "../../lib/validate";
 import { vehiclesRepo } from "./repo";
@@ -36,11 +37,13 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   .get("/me/vehicles", async (c) => c.json(await vehiclesService.listMine(await requireUser(c))))
   .post("/me/vehicles", async (c) => {
     const v = await requireUser(c);
+    rateLimit("vehicleWrite", v.user.id);
     return c.json(await vehiclesService.create(v, await body(c, vehicleCreateSchema)), 201);
   })
   .get("/me/vehicles/:id", async (c) => c.json(await vehiclesService.getMine(await requireUser(c), uuidParam(c, "id"))))
   .patch("/me/vehicles/:id", async (c) => {
     const v = await requireUser(c);
+    rateLimit("vehicleWrite", v.user.id);
     return c.json(await vehiclesService.update(v, uuidParam(c, "id"), await body(c, vehicleUpdateSchema)));
   })
   .delete("/me/vehicles/:id", async (c) => {

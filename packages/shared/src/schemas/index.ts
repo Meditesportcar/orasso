@@ -3,5 +3,6 @@ export * from "./application";
 export * from "./common";
 export * from "./event";
 export * from "./profile";
+export * from "./review";
 export * from "./structure";
 export * from "./vehicle";

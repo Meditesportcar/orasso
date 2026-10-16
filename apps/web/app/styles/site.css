@@ -129,9 +129,22 @@
 .s-row--between {
   justify-content: space-between;
 }
+/* Retour + bouton principal : sur un téléphone étroit, le principal passe au-dessus, en pleine largeur (lot 12 :
+   « Envoyer ma candidature » débordait de son bouton et de l'écran à 390 px). */
+.s-actions {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  gap: var(--space-3);
+}
+.s-actions > * {
+  flex: 1 1 auto;
+}
 .s-grow {
   flex: 1 1 0;
   min-width: 0;
+}
+.s-actions > .s-grow {
+  flex: 1 1 220px;
 }
 .s-error {
   margin: 0;
@@ -617,6 +630,9 @@
   vertical-align: middle;
 }
 .s-table-wrap {
+  /* `relative` : le libellé masqué (absolu) de la colonne « Action » restait hors du défilement du tableau et donnait
+     un défilement horizontal à toute la page sur téléphone (lot 12). */
+  position: relative;
   overflow-x: auto;
 }
 .s-filters {
@@ -677,7 +693,8 @@
   height: 18px;
   border-radius: var(--radius-pill);
   background: var(--accent);
-  box-shadow: var(--neon-accent);
+  /* Halo atténué : le néon moutarde de la page est celui du bouton « Candidater » (un seul par écran, lot 12). */
+  box-shadow: var(--neon-accent-soft);
 }
 .s-vehicles {
   display: grid;
@@ -705,6 +722,37 @@
   color: var(--ink);
   font-family: inherit;
   resize: vertical;
+}
+/* ---------- Avis après l'événement (lot 12) ---------- */
+.s-stars {
+  font-size: 1.05em;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.s-stars__on {
+  color: var(--accent-text);
+}
+.s-stars__off {
+  color: var(--ink-muted);
+}
+.s-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.s-reply {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--line);
+}
+.s-reviews {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 .s-cb {
   width: 22px;

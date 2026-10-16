@@ -1,7 +1,16 @@
 import { Button, Chip, Counters, StatusBadge, TextField } from "@orasso/design-system/web";
-import type { CheckinListItem, CheckinResult, EventOrganizer, LiveCounters, MyStaffEvent } from "@orasso/shared";
+import type {
+  CheckinListItem,
+  CheckinResult,
+  EventOrganizer,
+  EventReviews,
+  LiveCounters,
+  MalusContestView,
+  MyStaffEvent,
+} from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AfterEvent } from "../components/AfterEvent";
 import { apiFetch } from "../lib/api.client";
 import { api } from "../lib/api.server";
 import { formatDateTime, formatWhen } from "../lib/format";
@@ -37,12 +46,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!event) throw new Response("Événement introuvable", { status: 404 });
   const list = await api<CheckinListItem[]>(request, `/events/${eventId}/checkins`);
   const live = organizer ? await api<LiveCounters>(request, `/events/${eventId}/live`) : null;
+  // Après l'événement (organisateur) : avis et droit de réponse, contestations de malus.
+  const reviews = organizer ? await api<EventReviews>(request, `/events/${eventId}/reviews`) : null;
+  const contests = organizer ? await api<MalusContestView[]>(request, `/events/${eventId}/malus-contests`) : null;
   return {
     event,
     organizer,
     items: list.ok ? list.data : [],
     listError: list.ok ? null : list.error.message,
     live: live?.ok ? live.data : null,
+    reviews: reviews?.ok ? reviews.data : null,
+    contests: contests?.ok ? contests.data : [],
   };
 }
 
@@ -296,6 +310,8 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
           </table>
         </div>
       </section>
+
+      {organizer && <AfterEvent reviews={loaderData.reviews} contests={loaderData.contests} />}
     </>
   );
 }

@@ -2,6 +2,7 @@ import { Button, Chip, ChipRow, Counters, Icon, Reveal, StatusBadge } from "@ora
 import {
   type Category,
   type EventPublic,
+  type EventReviews,
   eventAdmissionLabels,
   eventFormatLabels,
   eventOutlookLabels,
@@ -13,6 +14,7 @@ import { Form, redirect } from "react-router";
 
 import { EventMap } from "../components/EventMap";
 import { ShareButtons } from "../components/ShareButtons";
+import { Stars } from "../components/Stars";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
 import { formatDateTime, formatWhen } from "../lib/format";
 import { badgeFor, registrationState } from "../lib/status";
@@ -21,14 +23,17 @@ import type { Route } from "./+types/event";
 export async function loader({ request, params }: Route.LoaderArgs) {
   const slug = params.slug;
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
-  const [structure, categories, me] = await Promise.all([
+  const [structure, categories, me, reviews] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     api<Category[]>(request, "/vehicle-reference/categories"),
     getMe(request),
+    api<EventReviews>(request, `/events/by-slug/${encodeURIComponent(slug)}/reviews`),
   ]);
   return {
     event,
     structure,
+    reviews: reviews.ok ? reviews.data : null,
+    ended: new Date(event.endsAt).getTime() <= Date.now(),
     categories: categories.ok ? categories.data : [],
     connected: Boolean(me),
     origin: originOf(request),
@@ -67,8 +72,52 @@ export async function action({ request, params }: Route.ActionArgs) {
   return redirect(`/e/${params.slug}`);
 }
 
+/** Avis des participants pointés : moyenne à partir du minimum d'avis, réponse publique de l'organisateur. */
+function ReviewsSection({ reviews }: { reviews: EventReviews }) {
+  const average = reviews.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+  return (
+    <section className="s-section" id="avis" aria-labelledby="avis-titre" data-testid="reviews">
+      <h2 className="s-h2" id="avis-titre">
+        Avis des participants
+      </h2>
+      {reviews.count === 0 ? (
+        <p className="s-muted">
+          Pas encore d'avis. Seuls les participants pointés à l'entrée peuvent noter, pendant la semaine qui suit.
+        </p>
+      ) : average ? (
+        <p data-testid="reviews-average">
+          <strong className="o-t-number">{average}</strong> / 3 · {reviews.count} avis
+        </p>
+      ) : (
+        <p className="s-muted" data-testid="reviews-average">
+          {reviews.count} avis · la moyenne s'affiche à partir de {reviews.minForAverage} avis.
+        </p>
+      )}
+      {reviews.items.length > 0 && (
+        <ul className="s-reviews">
+          {reviews.items.map((r) => (
+            <li key={r.id} className="s-card" data-testid="review">
+              <div className="s-row s-row--between">
+                <strong>{r.pseudo}</strong>
+                <Stars rating={r.rating} />
+              </div>
+              <p className="s-prewrap">{r.comment}</p>
+              {r.reply && (
+                <p className="s-reply s-prewrap">
+                  <span className="s-label o-t-label">Réponse de l'organisateur</span> {r.reply.text}
+                </p>
+              )}
+              <span className="o-t-caption s-muted">{formatDateTime(r.createdAt)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default function EventPage({ loaderData }: Route.ComponentProps) {
-  const { event, structure, categories, connected, origin, state } = loaderData;
+  const { event, structure, categories, connected, origin, state, reviews, ended } = loaderData;
   const mine = event.myApplications ?? [];
   const wanted = (event.criteria?.categoryIds ?? [])
     .map((id) => categories.find((c) => c.id === id)?.label)
@@ -84,13 +133,15 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
     .filter(Boolean)
     .join(", ");
   const bandText =
-    state.kind === "open"
-      ? "Inscriptions ouvertes"
-      : state.kind === "not_open"
-        ? `Ouverture le ${formatDateTime(state.opensAt)}`
-        : state.kind === "locked"
-          ? "Inscriptions closes"
-          : "Annulé";
+    ended && state.kind !== "cancelled"
+      ? "Événement terminé"
+      : state.kind === "open"
+        ? "Inscriptions ouvertes"
+        : state.kind === "not_open"
+          ? `Ouverture le ${formatDateTime(state.opensAt)}`
+          : state.kind === "locked"
+            ? "Inscriptions closes"
+            : "Annulé";
 
   return (
     <div className="ev">
@@ -170,6 +221,8 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
           <p className="s-muted">{place || "Adresse communiquée par l'organisateur."}</p>
         </section>
 
+        {reviews && (ended || reviews.count > 0) && <ReviewsSection reviews={reviews} />}
+
         <section className="s-section" id="organisateur">
           <h2 className="s-h2">Organisateur</h2>
           <p>
@@ -219,6 +272,10 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
                 <p className="o-t-caption s-muted s-center">Crée ton compte ou connecte-toi, tu reviendras ici.</p>
               )}
             </>
+          ) : ended ? (
+            <p className="o-t-caption s-muted">
+              Événement terminé. Les participants pointés à l'entrée peuvent laisser leur avis pendant une semaine.
+            </p>
           ) : (
             <Button variant="primary" icon="vehicle" disabled fullWidth>
               Candidater avec un véhicule
@@ -227,7 +284,7 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
           {state.kind === "not_open" && (
             <p className="o-t-caption s-muted">Les inscriptions ouvrent le {formatDateTime(state.opensAt)}.</p>
           )}
-          {state.kind === "locked" && (
+          {state.kind === "locked" && !ended && (
             <p className="o-t-caption s-muted">Les inscriptions sont closes (verrouillage).</p>
           )}
 

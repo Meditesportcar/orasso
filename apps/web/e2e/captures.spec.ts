@@ -1,5 +1,6 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type Audit, auditPage } from "./audit";
 import {
   addVehicleApi,
   apiCall,
@@ -27,10 +28,14 @@ const VIEWS = [
 ] as const;
 const THEMES = ["beton", "sable"] as const;
 
+// Contrôle du système de design écran par écran (lot 12) : écrit dans audit.json à la fin.
+const audits: Record<string, Audit> = {};
+
 async function shot(page: Page, theme: string, view: string, name: string) {
   await page.waitForLoadState("networkidle");
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${DIR}/${name}-${theme}-${view}.png`, fullPage: true });
+  audits[`${name}-${theme}-${view}`] = await auditPage(page);
 }
 
 async function themed(context: BrowserContext, theme: string, baseURL: string) {
@@ -91,6 +96,38 @@ test("captures du parcours", async ({ browser, baseURL }) => {
   await apiCall(julie, "POST", `/events/${e5.id}/checkins`, { applicationId: crowd[0]?.id, method: "manual" });
   const hold = await make(`Cap_${suffix}`);
   await applyApi(hold.cookie, e1.id, hold.vehicleId);
+
+  // Avis (lot 12) : un événement passé avec trois avis (moyenne affichée) et une réponse de l'organisateur.
+  const e6 = await createEvent(organizer, { title: `Nocturne avis ${suffix}`, capacity: 6 });
+  const reviewers = [main, await make(`Avis1_${suffix}`), await make(`Avis2_${suffix}`)];
+  const reviewApps: string[] = [];
+  for (const r of reviewers) {
+    const id = await applyApi(r.cookie, e6.id, r.vehicleId);
+    await decideApi(organizer, e6.id, id, "accept");
+    await apiCall(julie, "POST", `/events/${e6.id}/checkins`, { applicationId: id, method: "manual" });
+    reviewApps.push(id);
+  }
+  simulateSettle(e6.slug);
+  const comments = [
+    "Accueil au top, parking bien rangé, ambiance détendue.",
+    "Belle soirée, un peu d'attente à l'entrée.",
+    "Super lieu, on revient l'an prochain.",
+  ];
+  for (const [i, r] of reviewers.entries()) {
+    await apiCall(r.cookie, "POST", `/applications/${reviewApps[i]}/review`, {
+      rating: [3, 2, 3][i],
+      comment: comments[i],
+    });
+  }
+  const orgaReviews = await apiCall<{ items: { id: string; pseudo: string }[] }>(
+    organizer,
+    "GET",
+    `/events/${e6.id}/reviews`,
+  );
+  const toReply = orgaReviews.data.items.find((r) => r.pseudo === reviewers[1]?.pseudo);
+  await apiCall(organizer, "PUT", `/reviews/${toReply?.id}/reply`, {
+    reply: "Merci ! Deux files à l'entrée la prochaine fois.",
+  });
 
   for (const theme of THEMES) {
     for (const view of VIEWS) {
@@ -153,7 +190,20 @@ test("captures du parcours", async ({ browser, baseURL }) => {
       await shot(o, theme, view.id, "17-orga-liste-attente");
       await o.goto(`/orga/meditesportcar/e/${e5.id}/jour-j`);
       await shot(o, theme, view.id, "18-orga-jour-j");
+      await o.goto(`/orga/meditesportcar/e/${e6.id}/jour-j`);
+      await expect(o.getByTestId("orga-reviews")).toBeVisible();
+      await shot(o, theme, view.id, "20-orga-apres-avis");
       await org.close();
+
+      // --- Avis : page publique après l'événement ---
+      const after = await browser.newContext({ viewport: size });
+      await themed(after, theme, url);
+      const a = await after.newPage();
+      await a.goto(`/e/${e6.slug}`);
+      await expect(a.getByTestId("reviews-average")).toBeVisible();
+      await shot(a, theme, view.id, "19-evenement-avis");
+      await after.close();
     }
   }
+  writeFileSync(`${DIR}/audit.json`, JSON.stringify(audits, null, 2));
 });

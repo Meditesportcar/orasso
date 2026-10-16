@@ -15,6 +15,7 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { ContestSheet } from "@/features/ContestSheet";
+import { ReviewSheet, type ReviewTarget } from "@/features/ReviewSheet";
 import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { useApplications } from "@/lib/applications";
 import { api } from "@/lib/endpoints";
@@ -27,6 +28,7 @@ import { useNow } from "@/lib/useNow";
 import { AccessCard } from "@/ui/AccessCard";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { plateText } from "@/ui/plateText";
 import { SectionTitle, TabScreen } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
@@ -49,6 +51,7 @@ export default function Acces() {
   const orphans = [...unsentBy.entries()].filter(([eventId]) => !staff.data?.some((s) => s.event.id === eventId));
   const [withdrawing, setWithdrawing] = useState<MyApplication | null>(null);
   const [contesting, setContesting] = useState<{ applicationId: string; title: string } | null>(null);
+  const [reviewing, setReviewing] = useState<ReviewTarget | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,6 +94,14 @@ export default function Acces() {
             onClose={() => setContesting(null)}
             onDone={() => {
               setContesting(null);
+              void reload();
+            }}
+          />
+          <ReviewSheet
+            target={reviewing}
+            onClose={() => setReviewing(null)}
+            onDone={() => {
+              setReviewing(null);
               void reload();
             }}
           />
@@ -162,6 +173,10 @@ export default function Acces() {
               app={app}
               last={i === history.length - 1}
               onContest={() => setContesting({ applicationId: app.id, title: app.event.title })}
+              onReview={() =>
+                app.review &&
+                setReviewing({ applicationId: app.id, title: app.event.title, deadline: app.review.deadline })
+              }
             />
           ))}
         </Plate>
@@ -175,19 +190,30 @@ export default function Acces() {
 }
 
 /** Une ligne du carnet de route. */
-function LogLine({ app, last, onContest }: { app: MyApplication; last: boolean; onContest: () => void }) {
+function LogLine({
+  app,
+  last,
+  onContest,
+  onReview,
+}: {
+  app: MyApplication;
+  last: boolean;
+  onContest: () => void;
+  onReview: () => void;
+}) {
   const { t } = useTheme();
   const c = t.color;
   let result: string;
   let resultColor = c.plateInk;
+  // Le carnet est une plaque graphite : couleurs de texte faites pour le graphite (`plateText`).
   if (app.event.status === "cancelled") result = "événement annulé";
   else if (app.checkedInAt) result = app.points !== null ? `présent · ${signed(app.points)} pts` : "présent";
   else if (app.pointsPending) {
     result = POINTS_PENDING_LABEL.toLowerCase();
-    resultColor = c.accentText;
+    resultColor = plateText.accent;
   } else if (app.withdrawnAfterLock || app.malus) {
     result = app.points !== null ? `absent · ${signed(app.points)} pts` : "absent";
-    resultColor = c.winText;
+    resultColor = plateText.alert;
   } else result = "terminé";
   const contest = app.malus;
   return (
@@ -211,12 +237,37 @@ function LogLine({ app, last, onContest }: { app: MyApplication; last: boolean; 
             Contester le malus
           </Button>
         ) : null}
+        {app.review?.given ? (
+          <View style={styles.review}>
+            <View style={styles.reviewHead}>
+              <Chip surface="plate">Avis donné</Chip>
+              <Text variant="bodyStrong" color={c.accent} accessibilityLabel={starsLabel(app.review.given.rating)}>
+                {"★".repeat(app.review.given.rating)}
+              </Text>
+            </View>
+            {app.review.given.reply ? (
+              <Text variant="meta" color={c.plateMuted}>
+                Réponse de l'organisateur : {app.review.given.reply}
+              </Text>
+            ) : null}
+          </View>
+        ) : app.review?.canReview ? (
+          <>
+            <Text variant="meta" color={c.plateMuted}>
+              Ton avis · jusqu'au {formatDayHour(app.review.deadline)} · affiché avec ton pseudo
+            </Text>
+            <Button variant="plate" icon="chat" onPress={onReview} fullWidth>
+              Laisser un avis
+            </Button>
+          </>
+        ) : null}
       </View>
     </View>
   );
 }
 
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`.replace("-", "−"));
+const starsLabel = (n: number) => `${n} étoile${n > 1 ? "s" : ""} sur 3`;
 
 /** « Où je suis staff » : l'événement, mon rôle, « je suis là / pas là » et l'entrée du mode staff (veille → J+1). */
 function StaffCard({
@@ -286,5 +337,7 @@ const styles = StyleSheet.create({
   lineDate: { width: 52 },
   lineBody: { flex: 1, gap: space2 },
   contestChip: { alignItems: "flex-start" },
+  review: { gap: space2 },
+  reviewHead: { flexDirection: "row", alignItems: "center", gap: space2 },
   staff: { gap: space2, padding: space3 },
 });

@@ -10,6 +10,7 @@ import {
 } from "../enums";
 import { type Grade, gradeSchema } from "../grades";
 import { optionalText, pageQuery } from "./common";
+import type { MyReview } from "./review";
 import type { VehicleFull, VehiclePublic } from "./vehicle";
 
 /** Formulaire de candidature (prototype écran 2/3) : un ou plusieurs véhicules, règlement, deux cases. */
@@ -104,6 +105,8 @@ export type MyApplication = {
   points: number | null;
   /** Malus contestable (carnet de route) : échéance, possible ou non, état de la contestation. */
   malus: { deadline: string; canContest: boolean; contestStatus: string | null } | null;
+  /** Avis après l'événement (participant pointé seulement, lot 12). */
+  review: MyReview | null;
 };
 
 export type ApplicationAlert = "duplicatePlate" | "banned" | "unregistered";
