@@ -5,7 +5,11 @@
 export type RealtimeSocket = { send(data: string): void; userId?: string; secondFactor?: string | null };
 
 /** Contexte d'un abonnement : la session qui a ouvert la connexion. */
-export type ChannelContext = { secondFactor: string | null };
+export type ChannelContext = {
+  secondFactor: string | null;
+  /** Revérification périodique (30 s) d'un abonnement déjà accordé : rien à tracer de nouveau. */
+  revalidation?: boolean;
+};
 
 /** Droit d'abonnement à un canal (`event:{id}:triage`…), fourni par les modules métier. */
 export type ChannelAuthorizer = (userId: string, channel: string, ctx: ChannelContext) => Promise<boolean>;

@@ -139,8 +139,9 @@ class RealtimeClient {
     };
     socket.onclose = (event) => {
       this.socket = null;
-      // Session refusée : inutile d'insister (le prochain écran rechargera la session).
-      if (event.code === 4401) return;
+      // Session réellement refusée (4401) ou trop de connexions ouvertes (4008) : inutile d'insister ; une base
+      // indisponible (1011) ou une coupure réseau, elles, relancent la reconnexion.
+      if (event.code === 4401 || event.code === 4008) return;
       this.schedule();
     };
   }

@@ -59,18 +59,63 @@ export async function resolveWsSession(credentials: Headers | null): Promise<Res
   };
 }
 
+/** Résultat d'une revérification : garder (avec la preuve de second facteur), fermer (session absente), réessayer. */
+export type SessionCheck = { action: "keep"; secondFactor: string | null } | { action: "close" } | { action: "retry" };
+
+/**
+ * Revérifie la session d'une connexion ouverte. Une erreur passagère (base indisponible) ne ferme rien : seule une
+ * session réellement absente (ou d'une autre personne) ferme la connexion en 4401 (relecture du lot 18).
+ */
+export async function checkWsSession(
+  credentials: Headers | null,
+  userId: string,
+  resolve: (c: Headers | null) => Promise<ResolvedSession | null> = resolveWsSession,
+): Promise<SessionCheck> {
+  let current: ResolvedSession | null;
+  try {
+    current = await resolve(credentials);
+  } catch {
+    return { action: "retry" };
+  }
+  if (!current || current.userId !== userId) return { action: "close" };
+  return { action: "keep", secondFactor: current.secondFactor };
+}
+
+/** Connexions ouvertes au plus par personne : au-delà, la plus ancienne est fermée (4008). */
+export const MAX_WS_PER_USER = 5;
+const openConnections = new Map<string, (() => void)[]>();
+
+/** Enregistre une connexion ; ferme la plus ancienne de la personne au-delà du plafond. Rend la fonction de retrait. */
+export function trackConnection(userId: string, close: () => void): () => void {
+  const list = openConnections.get(userId) ?? [];
+  list.push(close);
+  openConnections.set(userId, list);
+  while (list.length > MAX_WS_PER_USER) list.shift()?.();
+  return () => {
+    const current = openConnections.get(userId);
+    if (!current) return;
+    const i = current.indexOf(close);
+    if (i >= 0) current.splice(i, 1);
+    if (current.length === 0) openConnections.delete(userId);
+  };
+}
+
 /**
  * Temps réel (/api/ws). Le client envoie `{"type":"subscribe","channel":"conversation:<id>"}` ; le droit est vérifié à
  * chaque abonnement, puis toutes les 30 s avec la session elle-même (session supprimée, compte supprimé, droit perdu :
  * connexion fermée ou abonnement retiré). Le canal `user:<id>` est ouvert d'office. Rien d'autre n'est accepté du
- * client (les messages s'envoient par HTTP) : messages de 2 Ko au plus, 60 abonnements par minute.
+ * client (les messages s'envoient par HTTP) : messages de 2 Ko au plus, 60 abonnements par minute, 5 connexions par
+ * personne.
  */
 export const ws = new Hono().get(
   "/",
   upgradeWebSocket(async (c) => {
     const credentials = wsCredentials(c.req.raw.headers);
-    const initial = await resolveWsSession(credentials);
-    const userId = initial?.userId ?? null;
+    // Base indisponible à la poignée de main : fermeture 1011, le client se reconnecte (jamais 4401 à tort).
+    const initial = await resolveWsSession(credentials).catch(() => "error" as const);
+    const unavailable = initial === "error";
+    const userId = initial && initial !== "error" ? initial.userId : null;
+    let untrack: (() => void) | null = null;
     let socket: RealtimeSocket | null = null;
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     let windowStart = Date.now();
@@ -78,17 +123,19 @@ export const ws = new Hono().get(
 
     const revalidate = async (ws: WSContext) => {
       if (!socket || !userId) return;
-      const current = await resolveWsSession(credentials).catch(() => null);
-      if (!current || current.userId !== userId) {
+      const check = await checkWsSession(credentials, userId);
+      if (check.action === "close") {
         ws.close(4401, "unauthenticated");
         return;
       }
-      socket.secondFactor = current.secondFactor;
+      if (check.action === "retry") return;
+      socket.secondFactor = check.secondFactor;
       for (const channel of realtime.channelsOf(socket)) {
         if (channel === `user:${userId}`) continue;
+        // Erreur passagère : l'abonnement est gardé jusqu'à la prochaine revérification.
         const ok = await realtime
-          .canSubscribe(userId, channel, { secondFactor: current.secondFactor })
-          .catch(() => false);
+          .canSubscribe(userId, channel, { secondFactor: check.secondFactor, revalidation: true })
+          .catch(() => true);
         if (!ok) {
           realtime.unsubscribe(channel, socket);
           ws.send(JSON.stringify({ type: "revoked", channel }));
@@ -98,11 +145,16 @@ export const ws = new Hono().get(
 
     return {
       onOpen(_event, ws: WSContext) {
-        if (!userId) {
+        if (unavailable) {
+          ws.close(1011, "unavailable");
+          return;
+        }
+        if (!userId || !initial || unavailable) {
           ws.close(4401, "unauthenticated");
           return;
         }
-        socket = { send: (data) => ws.send(data), userId, secondFactor: initial?.secondFactor ?? null };
+        socket = { send: (data) => ws.send(data), userId, secondFactor: (initial as ResolvedSession).secondFactor };
+        untrack = trackConnection(userId, () => ws.close(4008, "too_many_connections"));
         realtime.subscribe(`user:${userId}`, socket);
         heartbeat = setInterval(() => {
           ws.send(JSON.stringify({ type: "ping" }));
@@ -144,6 +196,7 @@ export const ws = new Hono().get(
       },
       onClose() {
         clearInterval(heartbeat);
+        untrack?.();
         if (socket) realtime.unsubscribeAll(socket);
       },
     };
