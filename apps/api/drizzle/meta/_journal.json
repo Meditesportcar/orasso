@@ -173,8 +173,22 @@
     {
       "idx": 24,
       "version": "7",
-      "when": 1792156095815,
-      "tag": "0024_weather",
+      "when": 1792156224934,
+      "tag": "0024_garage",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792160155263,
+      "tag": "0025_social",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792161878339,
+      "tag": "0026_weather",
       "breakpoints": true
     }
   ]

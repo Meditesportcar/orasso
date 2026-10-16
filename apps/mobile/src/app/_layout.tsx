@@ -16,6 +16,9 @@ import { Platform, StyleSheet, View } from "react-native";
 import { StaffBackground } from "@/features/staff/StaffBackground";
 import { ApplicationsProvider } from "@/lib/applications";
 import { kvGet, kvSet } from "@/lib/kv";
+import { appLinkOf } from "@/lib/links";
+import { PersonaProvider, usePersona } from "@/lib/persona";
+import { homeOf, misplacedGroup } from "@/lib/personaModel";
 import { registerThisDevice } from "@/lib/push";
 import { initSentry } from "@/lib/sentry";
 import { SessionProvider, useSession } from "@/lib/session";
@@ -26,12 +29,13 @@ initSentry();
 void SplashScreen.preventAutoHideAsync();
 
 /** Écrans ouverts sans compte : premier lancement, connexion, page d'un événement (lien partagé), recette du design. */
-const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "_ds"]);
+const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "ami", "_ds"]);
 
 // Le thème (Béton par défaut, Sable, auto) et les polices Archivo sont posés une fois, à la racine.
 function Shell() {
   const { theme } = useTheme();
   const { status } = useSession();
+  const { persona, backToFan } = usePersona();
   const router = useRouter();
   const segments = useSegments();
   const navigation = useRootNavigationState();
@@ -50,17 +54,30 @@ function Shell() {
     router.replace(onboarded ? "/auth" : "/welcome");
   }, [status, onboarded, segments, router, navigation?.key]);
 
+  // Chaque casquette a son groupe de routes : si l'URL est dans celui d'une autre (retour arrière, lien profond),
+  // on revient au premier écran de la casquette active.
+  useEffect(() => {
+    if (status !== "in" || !navigation?.key) return;
+    if (misplacedGroup(persona, segments[0] as string | undefined)) router.replace(homeOf(persona));
+  }, [status, persona, segments, router, navigation?.key]);
+
   // Appareil enregistré auprès de l'API dès que le compte est ouvert (utile aux notifications et au staff).
   useEffect(() => {
     if (status === "in") void registerThisDevice();
   }, [status]);
 
-  // Toucher une notification ouvre l'onglet Accès.
+  // Toucher une notification ouvre l'onglet Accès du passionné (quelle que soit la casquette active) ou l'écran de son lien.
   useEffect(() => {
     if (Platform.OS === "web") return;
-    const sub = Notifications.addNotificationResponseReceivedListener(() => router.navigate("/acces"));
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      backToFan();
+      // Un lien de l'appli (profil d'un ami, événement) ouvre cet écran, sinon l'onglet Accès.
+      const link = appLinkOf(response.notification.request.content.data?.link);
+      if (link) router.navigate(link as never);
+      else router.navigate("/acces");
+    });
     return () => sub.remove();
-  }, [router]);
+  }, [router, backToFan]);
 
   return (
     <View style={styles.fill}>
@@ -101,9 +118,11 @@ export default function RootLayout() {
       reducedMotion={reduce === "1" ? true : undefined}
     >
       <SessionProvider>
-        <ApplicationsProvider>
-          <Shell />
-        </ApplicationsProvider>
+        <PersonaProvider>
+          <ApplicationsProvider>
+            <Shell />
+          </ApplicationsProvider>
+        </PersonaProvider>
       </SessionProvider>
     </ThemeProvider>
   );

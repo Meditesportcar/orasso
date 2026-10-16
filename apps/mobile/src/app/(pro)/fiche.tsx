@@ -3,30 +3,27 @@
 // l'appli : la fiche et l'abonnement se gèrent sur le site Orasso (espace pro).
 import { Chip, ChipRow, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { gradeLabels, grades, proActivityLabels } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { FlowScreen, SectionTitle } from "@/ui/Screens";
+import { SectionTitle, TabScreen } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
 
 export default function ProFiche() {
   const { t } = useTheme();
-  const router = useRouter();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
   const where = pro
     ? [pro.addressLine, [pro.postalCode, pro.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")
     : "";
   return (
-    <FlowScreen
+    <TabScreen
       title="Fiche"
       facts={pro?.name}
-      onClose={() => router.replace("/accueil")}
       onRefresh={async () => {
         await myPro.reload();
       }}
@@ -98,7 +95,7 @@ export default function ProFiche() {
           </Muted>
         </>
       )}
-    </FlowScreen>
+    </TabScreen>
   );
 }
 

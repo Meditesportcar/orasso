@@ -9,3 +9,16 @@ export function pickCookie(setCookie: string | null, name: string): string | nul
   if (!pair || pair.endsWith("=")) return null;
   return pair;
 }
+
+/**
+ * En-tête `Origin` des appels natifs à `/api/auth/*` : origine de l'API (`EXPO_PUBLIC_API_URL`), qui doit figurer dans les
+ * `trustedOrigins` de Better Auth (`PUBLIC_URL` en ligne : même hôte que l'API ; `CORS_ORIGINS` en développement).
+ */
+export function authOriginHeader(path: string, isNative: boolean, apiBase: string): Record<string, string> {
+  if (!isNative || !path.startsWith("/api/auth/")) return {};
+  try {
+    return { origin: new URL(apiBase).origin };
+  } catch {
+    return {};
+  }
+}

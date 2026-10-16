@@ -16,6 +16,8 @@ type ActionProps = {
   /** Nom accessible (« Rechercher », « Journal »). */
   label: string;
   onPress?: () => void;
+  /** Appui long (l'avatar : retour au passionné). */
+  onLongPress?: () => void;
   /** On est sur l'écran que la pastille ouvre : fond bar-ink, icône inversée. */
   on?: boolean;
   /** Pastille de notification : un compteur moutarde. */
@@ -25,7 +27,7 @@ type ActionProps = {
 };
 
 /** Une pastille d'action de l'en-tête : 34 px, `radius-chip`. */
-export function AppBarAction({ icon, label, onPress, on = false, count, children }: ActionProps) {
+export function AppBarAction({ icon, label, onPress, onLongPress, on = false, count, children }: ActionProps) {
   const { t, theme } = useTheme();
   const c = t.color;
   const sable = theme === "sable";
@@ -35,6 +37,7 @@ export function AppBarAction({ icon, label, onPress, on = false, count, children
       accessibilityLabel={label}
       accessibilityState={{ selected: on }}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={[
         styles.action,
         children ? styles.avatar : null,
@@ -79,6 +82,8 @@ export type AppBarProps = {
   /** Avatar à droite : photo du compte, ou logo de la structure active. Il ouvre « Moi ». */
   avatar?: ReactNode;
   onAvatar?: () => void;
+  /** Appui long sur l'avatar : retour au passionné quand une autre casquette est active (lot 16). */
+  onAvatarLongPress?: () => void;
   avatarLabel?: string;
   /** Une autre casquette a quelque chose à traiter : pastille moutarde sur l'avatar. */
   avatarDot?: boolean;
@@ -108,6 +113,7 @@ export function AppBar({
   notificationCount,
   avatar,
   onAvatar,
+  onAvatarLongPress,
   avatarLabel = "Moi et mes casquettes",
   avatarDot,
   onClose,
@@ -180,7 +186,7 @@ export function AppBar({
             count={notificationsOn ? undefined : notificationCount}
           />
           {avatar ? (
-            <AppBarAction icon="profile" label={avatarLabel} onPress={onAvatar}>
+            <AppBarAction icon="profile" label={avatarLabel} onPress={onAvatar} onLongPress={onAvatarLongPress}>
               {avatar}
               {avatarDot ? (
                 <View style={[styles.dot, { backgroundColor: c.accent, boxShadow: t.shadow.neonAccentSoft }]} />

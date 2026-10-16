@@ -4,7 +4,7 @@
 import { Button, Plate, ScanResult, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
-import { useIsFocused, useRouter } from "expo-router";
+import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
@@ -14,7 +14,7 @@ import { type ProScan, proScanOf } from "@/lib/pro";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { FlowScreen } from "@/ui/Screens";
+import { TabScreen } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -23,7 +23,6 @@ const REPEAT_MS = 4_000;
 
 export default function ProScanner() {
   const { t } = useTheme();
-  const router = useRouter();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const [permission, requestPermission] = useCameraPermissions();
   const focused = useIsFocused();
@@ -65,7 +64,7 @@ export default function ProScanner() {
   const cameraOk = permission?.granted && Platform.OS !== "web";
 
   return (
-    <FlowScreen title="Scanner" facts="QR de compte du client" onClose={() => router.replace("/accueil")}>
+    <TabScreen title="Scanner" facts="QR de compte du client">
       {!pro && myPro.loading ? null : !pro ? (
         <Notice>
           Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso (menu Professionnels) : le lecteur s'ouvre dès que
@@ -137,7 +136,7 @@ export default function ProScanner() {
           {__DEV__ ? <DevInject onInject={(p) => void handle(p)} busy={busy} /> : null}
         </>
       )}
-    </FlowScreen>
+    </TabScreen>
   );
 }
 

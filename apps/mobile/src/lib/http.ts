@@ -1,8 +1,11 @@
 // Client HTTP de l'API Orasso : jeton de session en `Authorization: Bearer` (plugin `bearer` de Better Auth),
 // erreurs de l'API (`{"error":{"code","message","details"}}`) et pannes réseau rendues sous une même forme.
-import type { ErrorCode } from "@orasso/shared";
+import { authErrorFallback, authErrorLabels, type ErrorCode } from "@orasso/shared";
+import { Platform } from "react-native";
 
 import { apiUrl } from "@/api";
+
+import { authOriginHeader } from "./api/cookies";
 
 let sessionToken: string | null = null;
 export const setSessionToken = (token: string | null) => {
@@ -63,6 +66,9 @@ export async function requestWithHeaders<T>(
   const timer = setTimeout(() => controller.abort(), timeout);
   const headers: Record<string, string> = { ...extra };
   if (sessionToken) headers.authorization = `Bearer ${sessionToken}`;
+  // Téléphone : Better Auth exige un en-tête Origin quand des cookies accompagnent la requête (étape « code », appareil
+  // de confiance) ; le navigateur le pose lui-même en recette web.
+  Object.assign(headers, authOriginHeader(path, Platform.OS !== "web", apiUrl("/")));
   if (body !== undefined) headers["content-type"] = "application/json";
   let response: Response;
   try {
@@ -103,19 +109,8 @@ export async function requestWithHeaders<T>(
 export function authErrorMessage(error: unknown): string {
   if (!(error instanceof ApiRequestError)) return "Une erreur est survenue. Réessaie.";
   if (error.isNetwork) return error.message;
-  const byCode: Record<string, string> = {
-    INVALID_EMAIL_OR_PASSWORD: "E-mail ou mot de passe incorrect.",
-    USER_ALREADY_EXISTS: "Un compte existe déjà avec cet e-mail.",
-    USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: "Un compte existe déjà avec cet e-mail.",
-    INVALID_EMAIL: "Cette adresse e-mail n'est pas valide.",
-    PASSWORD_TOO_SHORT: "Le mot de passe est trop court (8 caractères au moins).",
-    PASSWORD_TOO_LONG: "Le mot de passe est trop long.",
-    EMAIL_NOT_VERIFIED: "Vérifie ton adresse e-mail avant de te connecter.",
-    INVALID_CODE: "Code incorrect. Réessaie avec le code affiché maintenant.",
-    INVALID_BACKUP_CODE: "Code de secours incorrect.",
-    INVALID_TWO_FACTOR_COOKIE: "L'étape du code a expiré : reconnecte-toi.",
-    TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE: "Trop d'essais : reconnecte-toi.",
-    ACCOUNT_TEMPORARILY_LOCKED: "Trop d'essais : réessaie dans un quart d'heure.",
-  };
-  return byCode[error.code] ?? error.message;
+  return (
+    authErrorLabels[error.code] ??
+    (error.status >= 500 ? "Le service est momentanément indisponible." : authErrorFallback)
+  );
 }

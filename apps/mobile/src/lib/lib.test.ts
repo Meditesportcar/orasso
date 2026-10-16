@@ -14,7 +14,7 @@ import {
 } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 import { accountQrAt, hmacSha1, secondsLeft } from "./accountQr";
-import { pickCookie } from "./api/cookies";
+import { authOriginHeader, pickCookie } from "./api/cookies";
 import { breakTitle, dayCountdown, formatDay, formatDayHour, formatDuration, formatHour } from "./format";
 import { jourJClosesAt, jourJOpensAt, jourJState } from "./jourj";
 import { qrMatrix, qrPath, qrViewBox } from "./qr";
@@ -176,5 +176,18 @@ describe("double authentification dans l'appli (lot 15)", () => {
       "__Secure-better-auth.trust_device=t0k",
     );
     expect(pickCookie(null, "two_factor")).toBeNull();
+  });
+});
+
+describe("appels natifs à Better Auth (lot 15)", () => {
+  it("portent l'en-tête Origin de l'API, pas dans le navigateur ni hors de /api/auth", () => {
+    expect(authOriginHeader("/api/auth/two-factor/verify-totp", true, "https://dev.orasso.fr/")).toEqual({
+      origin: "https://dev.orasso.fr",
+    });
+    expect(authOriginHeader("/api/auth/sign-in/email", true, "http://192.168.1.20:3001/")).toEqual({
+      origin: "http://192.168.1.20:3001",
+    });
+    expect(authOriginHeader("/api/auth/sign-in/email", false, "https://dev.orasso.fr/")).toEqual({});
+    expect(authOriginHeader("/api/me", true, "https://dev.orasso.fr/")).toEqual({});
   });
 });

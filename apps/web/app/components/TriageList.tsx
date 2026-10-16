@@ -220,7 +220,10 @@ export function TriageList({
                     {item.applicant.pseudo}{" "}
                     <span className="s-muted o-t-caption">· {gradeLabels[item.applicant.grade]}</span>
                   </td>
-                  <td className="o-never-truncate">{item.vehicle?.label ?? "—"}</td>
+                  <td className="o-never-truncate">
+                    {item.vehicle?.label ?? "—"}
+                    {item.vehicle?.certified ? " · Certifié" : ""}
+                  </td>
                   <td>{item.vehicle?.year ?? "—"}</td>
                   <td>
                     {badge ? <StatusBadge status={badge.status} rank={badge.rank} /> : <Chip>{item.status}</Chip>}

@@ -3,14 +3,16 @@
 import {
   deliverAfter,
   emailAlwaysTypes,
+  journalOnlyNotificationTypes,
+  journalWindowStart,
   type NotificationType,
   notificationTypes,
   shouldDeliver,
 } from "@orasso/shared";
-import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { devices, notifications, profiles, user } from "../../db/schema";
+import { devices, type NotificationData, notifications, profiles, user } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { type MailContent, mail, renderMail } from "../../lib/mail";
@@ -24,7 +26,7 @@ export type NotificationRow = typeof notifications.$inferSelect;
 export type NotifyInput = {
   title: string;
   body: string;
-  data?: { eventId?: string; applicationId?: string; screen?: string; action?: string };
+  data?: NotificationData;
   eventId?: string | null;
   /** Début de l'événement concerné : le jour J lève les heures calmes. */
   eventStartsAt?: Date | null;
@@ -52,7 +54,9 @@ export const notificationsService = {
   async notify(ex: Executor, userId: string, type: NotificationType, input: NotifyInput): Promise<NotificationRow> {
     const at = now();
     // Alertes du staff et sécurité du compte (nouvelle connexion, mot de passe changé…) : jamais différées la nuit.
-    const immediate = type === "staff_alert" || notificationTypes[type] === "account";
+    // Items d'actualité du Journal (lot 17) : ni push ni heures calmes, visibles tout de suite.
+    const immediate =
+      type === "staff_alert" || notificationTypes[type] === "account" || journalOnlyNotificationTypes.includes(type);
     const [row] = await ex
       .insert(notifications)
       .values({
@@ -133,6 +137,8 @@ export const notificationsService = {
           eq(notifications.inJournal, true),
           // Les notifications différées (heures calmes) n'apparaissent qu'une fois livrées.
           isNotNull(notifications.deliveredAt),
+          // Fenêtre du Journal (lot 17) : 7 jours en arrière, sauf les éléments non lus.
+          or(isNull(notifications.readAt), gte(notifications.createdAt, journalWindowStart(now()))),
           c
             ? or(
                 lt(notifications.createdAt, c.createdAt),
@@ -154,6 +160,22 @@ export const notificationsService = {
       createdAt: n.createdAt.toISOString(),
       readAt: n.readAt?.toISOString() ?? null,
     }));
+  },
+
+  /** Pastille de la cloche : éléments non lus du Journal (livrés, hors push seul). */
+  async unreadCount(userId: string, ex: Executor = db): Promise<number> {
+    const [row] = await ex
+      .select({ n: count() })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.inJournal, true),
+          isNotNull(notifications.deliveredAt),
+          isNull(notifications.readAt),
+        ),
+      );
+    return row?.n ?? 0;
   },
 
   async markRead(userId: string, ids: string[] | "all") {
@@ -180,6 +202,8 @@ async function deliverOne(n: NotificationRow) {
     body: n.body,
     data: stripInternal(n.data),
   });
+  // Actualité du Journal : jamais de push ni d'e-mail (lot 17).
+  if (journalOnlyNotificationTypes.includes(n.type)) return;
   const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, n.userId) });
   // Compte supprimé : plus rien n'est livré.
   if (profile?.deletedAt) return;

@@ -93,13 +93,17 @@ describe("garage", () => {
     expect(res.json.unregistered).toBe(true);
   });
 
-  it("plaque unique parmi les véhicules actifs : 409 et demande de transfert", async () => {
+  it("plaque unique parmi les véhicules actifs : doublon chez soi refusé (409), chez un autre = demande de transfert", async () => {
     const a = await signUp("Proprio_01");
     const b = await signUp("Acheteur_02");
     expect((await call(a, "POST", "/me/vehicles", car())).status).toBe(201);
+    const own = await call(a, "POST", "/me/vehicles", { ...car(), plate: "AB 123 CD" });
+    expect(own.status).toBe(409);
+    expect(own.json.error.code).toBe("plate_taken");
+    // Lot 31 : le véhicule du demandeur est créé en attente de transfert (le détail est dans garage.test.ts).
     const dup = await call(b, "POST", "/me/vehicles", { ...car(), plate: "AB 123 CD" });
-    expect(dup.status).toBe(409);
-    expect(dup.json.error.code).toBe("plate_taken");
+    expect(dup.status).toBe(201);
+    expect(dup.json.plateTransfer.status).toBe("pending");
     const requests = await db.select().from(plateTransferRequests).where(eq(plateTransferRequests.toUserId, b.id));
     expect(requests).toHaveLength(1);
   });

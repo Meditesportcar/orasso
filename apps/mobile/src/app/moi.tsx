@@ -1,31 +1,33 @@
-// Moi, derrière l'avatar : profil minimal, points et grade de la saison, thème de l'appli, déconnexion. Les casquettes
-// (structures, pro, prestataire) et les réglages complets viennent plus tard.
+// Moi, derrière l'avatar (docs/02, ARCHITECTURE-SUITE § 1.6) : profil (photo, pseudo, description, aperçu « ce que voient
+// les autres »), points et grade, mes casquettes et « devenir staff », paramètres (notifications par type, compte
+// public ou privé, secteur, centres d'intérêt, rayon), sécurité (mot de passe, double authentification, appareils, QR de
+// compte, clés d'accès), thème, déconnexion et suppression du compte. Les sections sont dans `features/moi/`.
 
-import {
-  Button,
-  Chip,
-  ChipRow,
-  Plate,
-  Text,
-  type ThemePreference,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
-import { gradeLabels, type PointKind, pointKindLabels } from "@orasso/shared";
+import { Button, Chip, ChipRow, Text, type ThemePreference, useTheme } from "@orasso/design-system/native";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
-import { StyleSheet, View } from "react-native";
+import { useState } from "react";
 
-import { api } from "@/lib/api";
-import { formatShortDate } from "@/lib/format";
+import { CasquettesSection } from "@/features/moi/CasquettesSection";
+import { ChangePasswordSheet } from "@/features/moi/ChangePasswordSheet";
+import { DeleteAccountSheet } from "@/features/moi/DeleteAccountSheet";
+import { EmailBanner } from "@/features/moi/EmailBanner";
+import { NotificationsSection } from "@/features/moi/NotificationsSection";
+import { PointsSection } from "@/features/moi/PointsSection";
+import { ProfileSection } from "@/features/moi/ProfileSection";
+import { QrSecretSheet } from "@/features/moi/QrSecretSheet";
+import { SectorSection } from "@/features/moi/SectorSection";
+import { SecuritySection, type SecuritySheet } from "@/features/moi/SecuritySection";
+import { SessionsSheet } from "@/features/moi/SessionsSheet";
+import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
+import { TwoFactorSheet } from "@/features/moi/TwoFactorSheet";
+import { useSettings } from "@/features/moi/useSettings";
+import { VisibilitySection } from "@/features/moi/VisibilitySection";
+import { FriendsSection } from "@/features/social/FriendsSection";
 import { useSession } from "@/lib/session";
-import { useApi } from "@/lib/useApi";
-import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
-import { plateText } from "@/ui/plateText";
+import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
-
-const { space1, space2, space3 } = tokens.spacing;
 
 const themeChoices: { value: ThemePreference; label: string }[] = [
   { value: "beton", label: "Béton" },
@@ -33,72 +35,44 @@ const themeChoices: { value: ThemePreference; label: string }[] = [
   { value: "auto", label: "Selon l'appareil" },
 ];
 
+type Sheet = SecuritySheet | "staff" | "delete" | null;
+
 export default function Moi() {
   const { t, preference, setPreference } = useTheme();
   const router = useRouter();
-  const { me, signOut } = useSession();
-  const points = useApi(() => api.points(), [], { cacheKey: "points" });
-  const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
-  const profile = me?.profile;
-  const p = points.data;
+  const { signOut, refreshMe } = useSession();
+  const settings = useSettings();
+  const [sheet, setSheet] = useState<Sheet>(null);
+  const close = () => setSheet(null);
 
   return (
-    <FlowScreen title="Moi" onClose={() => (router.canGoBack() ? router.back() : router.replace("/accueil"))}>
-      <Plate style={styles.head}>
-        <Avatar url={profile?.avatarUrl} pseudo={profile?.pseudo} size={56} />
-        <View style={styles.headText}>
-          <Text variant="posterL" color={t.color.plateInk}>
-            {profile?.pseudo}
-          </Text>
-          <Text variant="meta" color={t.color.plateMuted}>
-            {me?.user.email}
-          </Text>
-        </View>
-      </Plate>
-
-      <SectionTitle>Points et grade</SectionTitle>
-      <Plate style={styles.block}>
-        <Text variant="posterM" color={t.color.plateInk}>
-          {profile ? `${gradeLabels[profile.grade]} · ${profile.pointsSeason} pts` : ""}
-        </Text>
-        <Text variant="body" color={t.color.plateMuted}>
-          {p?.next
-            ? `Encore ${Math.max(0, p.next.threshold - p.pointsSeason)} points pour passer ${gradeLabels[p.next.grade]}. `
-            : "Grade maximal de la saison. "}
-          {p ? `${p.season.name}.` : ""}
-        </Text>
-        {p?.entries.slice(0, 6).map((entry) => (
-          <View key={entry.id} style={styles.entry}>
-            <Text variant="meta" color={t.color.plateMuted} style={styles.entryDate}>
-              {formatShortDate(entry.at)}
-            </Text>
-            <Text variant="body" color={t.color.plateInk} style={styles.entryLabel}>
-              {entry.event?.title ?? pointKindLabels[entry.kind as PointKind] ?? entry.kind}
-              {entry.event ? ` · ${pointKindLabels[entry.kind as PointKind] ?? entry.kind}` : ""}
-            </Text>
-            <Text variant="bodyStrong" color={entry.points < 0 ? plateText.alert : t.color.plateInk}>
-              {entry.points > 0 ? `+${entry.points}` : `${entry.points}`.replace("-", "−")}
-            </Text>
-          </View>
-        ))}
-        {p && p.pending.length > 0 ? (
-          <Text variant="body" color={plateText.accent}>
-            Pointage en attente : {p.pending.map((x) => x.title).join(", ")}.
-          </Text>
-        ) : null}
-      </Plate>
-
-      <SectionTitle>Mes casquettes</SectionTitle>
-      {myPro.data ? (
-        <Button variant="plate" icon="vehicle" onPress={() => router.push("/pro/scanner")} fullWidth>
-          {`Pro · ${myPro.data.name}`}
-        </Button>
-      ) : (
-        <Muted variant="caption">
-          Tu es professionnel de l'automobile ? Crée ta fiche pro sur le site Orasso : le lecteur de QR de compte et tes
-          statistiques arrivent ici.
-        </Muted>
-      )}
+    <FlowScreen
+      title="Moi"
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+      onRefresh={async () => {
+        await Promise.all([refreshMe(), settings.reload()]);
+      }}
+      overlays={
+        <>
+          <ChangePasswordSheet visible={sheet === "password"} onClose={close} />
+          <TwoFactorSheet visible={sheet === "two-factor"} onClose={close} />
+          <SessionsSheet visible={sheet === "sessions"} onClose={close} />
+          <QrSecretSheet visible={sheet === "qr-secret"} onClose={close} />
+          <StaffRequestSheet visible={sheet === "staff"} onClose={close} />
+          <DeleteAccountSheet visible={sheet === "delete"} onClose={close} />
+        </>
+      }
+    >
+      <EmailBanner />
+      {settings.error ? <Notice tone="error">{settings.error}</Notice> : null}
+      <ProfileSection />
+      <PointsSection />
+      <FriendsSection />
+      <CasquettesSection onStaff={() => setSheet("staff")} />
+      <NotificationsSection settings={settings.settings} save={settings.save} />
+      <VisibilitySection settings={settings.settings} save={settings.save} />
+      <SectorSection settings={settings.settings} save={settings.save} />
+      <SecuritySection onOpen={setSheet} />
 
       <SectionTitle>Thème</SectionTitle>
       <ChipRow>
@@ -124,18 +98,12 @@ export default function Moi() {
       >
         Me déconnecter
       </Button>
+      <Button variant="plate" icon="close" onPress={() => setSheet("delete")} fullWidth>
+        Supprimer mon compte
+      </Button>
       <Text variant="caption" color={t.color.inkFaint}>
         Orasso {Constants.expoConfig?.version ?? ""}
       </Text>
     </FlowScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  head: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3 },
-  headText: { flex: 1, gap: space1 },
-  block: { gap: space2, padding: space3 },
-  entry: { flexDirection: "row", alignItems: "baseline", gap: space3 },
-  entryDate: { width: 52 },
-  entryLabel: { flex: 1 },
-});

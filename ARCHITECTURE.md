@@ -647,13 +647,67 @@ Lots 07, 09, 10 consomment `packages/shared/api` (chemins, schémas, types) ; au
 - Sentry / GlitchTip : `SENTRY_DSN` (API), `VITE_SENTRY_DSN` (site), `EXPO_PUBLIC_SENTRY_DSN` (appli) ; rien sans DSN.
 - Appli : dépendances natives de la suite posées (`@sentry/react-native`, `expo-location` au premier plan, `@maplibre/maplibre-react-native`, `expo-sharing`, `expo-file-system`) ; un nouvel APK est nécessaire. Les écrans Moi de l'appli viennent au lot 16.
 
+<<<<<<< HEAD
 **État après le lot 28 (météo ; détail dans `docs/JOURNAL-DES-CHOIX.md`, section lot 28, et `ARCHITECTURE-SUITE.md` du relais § 12)** :
-- Données : migration `0024_weather` — `event_weather` (`event_id` PK, `provider`, `lat`/`lng` de la prévision, `fetched_at`, `forecast` jsonb = `{ days, hours }` de l'événement, `bad_weather`, `suggested_uncertain_at`) et `weather_departments` (cache du centre d'un département, 3 h). Une prévision n'est valable que si `lat`/`lng` sont ceux de l'événement : une adresse modifiée l'invalide sans autre code, le passage suivant la remplace.
+- Données : migration `0026_weather` — `event_weather` (`event_id` PK, `provider`, `lat`/`lng` de la prévision, `fetched_at`, `forecast` jsonb = `{ days, hours }` de l'événement, `bad_weather`, `suggested_uncertain_at`) et `weather_departments` (cache du centre d'un département, 3 h). Une prévision n'est valable que si `lat`/`lng` sont ceux de l'événement : une adresse modifiée l'invalide sans autre code, le passage suivant la remplace.
 - API : `lib/weather.ts` (interface `WeatherProvider.forecast(lat, lng) → { daily, hourly }`, fournisseurs `open-meteo` et `met-norway`, `setWeatherFetch` pour les tests, `fetchForecast` renvoie `null` sans jamais lever ; MET Norway : en-têtes `User-Agent` et `If-Modified-Since`, cache mémoire selon `Expires`) ; `modules/weather/` (`service.ts` : `refresh`, `suggestUncertain`, `forEvent`, `reminderLine`, `mine`, `departmentWeather` ; `routes.ts`). Tâche `weather.refresh` (cron `15 */3 * * *`, `eventId` facultatif). Variables `WEATHER_PROVIDER` (`open-meteo` | `met-norway` | `off`) et `WEATHER_USER_AGENT`. Notification `event_weather_suggest_uncertain` (famille `staff`) avec `data.action = set_outlook_uncertain`. `events/jobs.ts` : le rappel de la veille ajoute la ligne météo (prévision de moins de 12 h).
 - Partagé : `weather.ts` (types, attributions, `SET_OUTLOOK_UNCERTAIN_ACTION`), `rules/weather.ts` (`isBadWeather`, `forecastForEvent`, `describeWeather`, `shouldSuggestUncertain`, `weatherVisible`, seuils S33), `labels/weather.fr.ts` (`weatherCodeLabels`, `weatherTexts`), `notifications/weather.ts`.
 - Design system : 10 icônes `weather*` dans `iconShapes` et `weatherIcons` (condition → icône), voir « Ce qui a changé depuis le gel ».
 - Site : `components/Weather.tsx` (page événement, carte d'accès, espace organisateur). Appli : `features/WeatherWidget.tsx` (exporté pour le lot 30), `lib/api/weather.ts`, `lib/weather.ts` ; le kit du jour J porte `EventWeather` (anciens kits : météo ignorée).
 - Seed : `scripts/seed/weather.ts`.
+=======
+**État après le lot 17 (social : amis, profils des autres, recherche de personnes, QR ami, Journal fusionné ; détail dans `docs/JOURNAL-DES-CHOIX.md`, section lot 17, et `ARCHITECTURE-SUITE.md` du relais § 2)** :
+- Données : migration `0024_social` (`friendships` avec index unique d'expression sur la paire `(least, greatest)`, enums `friendship_status` et `friend_source`, `profiles.friends_count`, index `lower(pseudo) text_pattern_ops`). Schéma dans `schema/social.ts` (+ colonne dans `profiles.ts`).
+- Règles pures (`packages/shared/src/rules/visibility.ts`) : `profileAudience` (`self | friend | public_full | public_limited | organizer`), `profileFields` (champs par audience, la plaque n'y est jamais), `friendRequestOutcome` (création, ré-ouverture après 30 jours, inversion pour le destinataire d'un refus), `hasPeopleSearchCriteria`, fenêtre du Journal (7 jours sauf non lues). Types et libellés : `schemas/social.ts`, `labels/social.fr.ts`, `notifications/social.ts` (`friend_request`, `friend_accepted`, `friend_going_event`, `friend_new_vehicle` ; les deux derniers sont `journalOnlyNotificationTypes`).
+- Module `modules/social/` : `profile.ts` (`GET /users/:pseudo`, `GET /vehicles/:id` selon l'audience, `isOrganizerOf`), `search.ts` (`GET /users/search`, `GET /vehicles/:id/owners-nearby` : SQL paramétré, un compte privé n'est filtrable que par ce qu'il montre), `friends.ts` (`POST /friends/requests`, `…/by-qr`, `…/by-invite`, `…/:id/accept`, `…/:id/decline`, `DELETE /friends/:userId`, `GET /me/friends`, `GET /me/friends/requests`, `GET /me/inbox/summary`), `journal.ts` (actualités), `repo.ts`. QR ami : même vérification et même table anti-rejeu que `account-qr`, route distincte (`POST /account-qr/verify` reste réservée aux pros).
+- Journal : `GET /me/notifications` (`in_journal`, livrées, 7 jours sauf non lues), `notificationsService.unreadCount` (cloche), livraison sans push ni e-mail pour les types « actualité ». Crochets : `ApplicationService.transition` → `socialJournal.friendGoingEvent` ; `vehiclesService.create` → `friendNewVehicle` ; anonymisation → `socialRepo.removeAllFor`.
+- Temps réel (`user:{id}`) : `friend.request`, `friend.accepted`, `inbox.changed {requests: {friend}}`. Limites : `friendRequest` (20 / jour), `peopleSearch` (60 / min), `friendQr` (30 / min), `friendQrFailure` (10 / 10 min).
+- Site : `/u/:pseudo`, `/v/:id`, `/app/explorer` (segment Personnes et crews), `/app/amis`, `/app/journal`, cloche avec pastille dans `layouts/app.tsx`, `/ami/:jeton` connecté. Appli : `app/u/[pseudo]`, `app/v/[id]`, `app/amis`, `app/ami/[token]`, `features/social/*`, `features/FriendQrScanner`, Explorer segment Personnes et crews, Journal avec avatars et liens. Seed : `scripts/seed/social.ts`.
+**Sécurité du compte : audit des routes de Better Auth (lot 15, relecture finale).** better-auth 1.7.9 avec `twoFactor`, `bearer`, `passkey` expose 45 routes HTTP sous `/api/auth`. Un seul garde, le middleware Hono `modules/security/auth-guard.ts`, monté devant le handler (`app.ts`) : il résout la session par `auth.api.getSession({ headers })` (cookie **et** jeton porteur), refuse toute route non classée (404) et applique la règle des facteurs. Les crochets de Better Auth (`auth-hooks.ts`) ne gardent rien : ils posent la preuve (`session.second_factor`), envoient les alertes et révoquent. Un test (`factors.test.ts`) échoue si une route exposée n'est pas classée. Règle « facteur » : si le compte a déjà un facteur (TOTP activé ou clé), la session doit en prouver un (`second_factor` ∈ {`passkey`, `totp`}) ; sinon (premier facteur), session de moins de 24 h.
+
+| Route | Session créée ou recréée | `second_factor` posé | Effet sur un facteur ou un secret | Règle du garde |
+|---|---|---|---|---|
+| `POST /sign-up/email` | oui | nul | — | publique |
+| `POST /sign-in/email` | oui (supprimée par le plugin si code requis) | nul ; `totp` si appareil de confiance | — | publique |
+| `POST /sign-in/social`, `GET\|POST /callback/:id` | oui (Google / Apple inactifs) | nul | — | publique |
+| `POST /sign-out` | supprime | — | — | publique |
+| `GET\|POST /get-session` | — | — | lit la session (sans jeton d'autres sessions) | publique |
+| `GET /verify-email` | non (`autoSignInAfterVerification: false`) | — | — | publique |
+| `POST /send-verification-email` | non | — | — | publique |
+| `POST /request-password-reset`, `GET /reset-password/:token` | non | — | jeton par e-mail | publique |
+| `POST /reset-password` | supprime toutes les sessions | — | mot de passe changé, appareils de confiance oubliés | publique (jeton) |
+| `GET /passkey/generate-authenticate-options` | non | — | — | publique |
+| `POST /passkey/verify-authentication` | oui | `passkey` | — | publique ; vérification de l'utilisateur (bit UV) exigée |
+| `GET /error`, `GET /ok`, `GET /delete-user/callback` | non | — | — (suppression Better Auth non activée) | publique |
+| `POST /change-password` | recrée (autres révoquées) | reporté de la session courante | mot de passe, appareils de confiance oubliés | session |
+| `POST /revoke-session`, `/revoke-sessions`, `/revoke-other-sessions` | supprime | — | — | session |
+| `GET /passkey/list-user-passkeys` | non | — | liste ses clés (publiques) | session |
+| `POST /passkey/update-passkey` | non | — | renomme une clé | session |
+| `GET /passkey/generate-register-options` | non | — | prépare l'ajout d'une clé | **facteur** |
+| `POST /passkey/verify-registration` | non (`createSession: true` refusé) | — | **ajoute** une clé | **facteur** |
+| `POST /passkey/delete-passkey` | non | — | **retire** une clé | **facteur** |
+| `POST /two-factor/enable` | non (sauf option désactivée) | — | crée le secret TOTP et les codes de secours (non vérifiés) | **facteur** |
+| `POST /two-factor/get-totp-uri` | non | — | **révèle** le secret TOTP | **facteur** |
+| `POST /two-factor/generate-backup-codes` | non | — | **nouveaux** codes de secours | **facteur** |
+| `POST /two-factor/disable` | recrée | reporté | **retire** le TOTP, appareils de confiance oubliés | **facteur** |
+| `POST /two-factor/verify-totp`, `/verify-backup-code` | oui (étape de connexion, ou activation) | `totp` | **active** le TOTP si la ligne n'est pas vérifiée | sans session : plugin (essais comptés) ; avec session : 5 essais / 15 min, et règle **facteur** si activation |
+| `POST /two-factor/send-otp`, `/verify-otp` | — | — | OTP par e-mail non configuré | **refusée** |
+| `POST /update-session` | — | — | — | **refusée** |
+| `GET /list-sessions` | — | — | renverrait les jetons des sessions | **refusée** (`/api/me/sessions`) |
+| `POST /update-user` | — | — | — | **refusée** (`/api/me/profile`) |
+| `POST /change-email` | — | — | changerait l'identifiant du compte | **refusée** |
+| `POST /delete-user` | — | — | — | **refusée** (`DELETE /api/me`) |
+| `POST /verify-password` | — | — | oracle du mot de passe | **refusée** |
+| `POST /link-social`, `/unlink-account`, `GET /list-accounts`, `GET /account-info`, `POST /get-access-token`, `POST /refresh-token` | — | — | comptes et jetons OAuth (Google / Apple inactifs) | **refusées** |
+
+Sous le middleware avec la règle « facteur » : 7 routes (`generate-register-options`, `verify-registration`, `delete-passkey`, `two-factor/enable`, `get-totp-uri`, `generate-backup-codes`, `two-factor/disable`) + 2 routes de vérification de code en activation ; 14 routes refusées ; 22 publiques (16) ou de session (6) (vérification de l'utilisateur pour la connexion par clé).
+
+**État après le lot 16 (appli : casquettes, Moi complet, sécurité, suppression du compte ; détail dans `docs/JOURNAL-DES-CHOIX.md`, section lot 16, et `ARCHITECTURE-SUITE.md` du relais § 7.1)** :
+- API : aucune migration. `GET /me` renvoie `personas` (le passionné en premier, les structures actives dont on est `owner` ou `co_organizer`, la fiche pro) et `unreadInbox` (0 jusqu'au lot 18). `modules/profiles/personas.ts` : sources de casquettes (`registerPersonaSource` : le lot 21 y ajoute le profil prestataire) et compteurs « à traiter » par structure (`registerOrganizerBadge` : aujourd'hui les candidatures `pending` ; messages et demandes de staff viendront des lots 18 et 24). Type partagé `PersonaEntry` (`schemas/profile.ts`).
+- Appli, casquettes : `lib/personaModel.ts` (pur : `Persona`, repli sur le passionné, groupes de routes, pastille des autres casquettes, redirection) et `lib/persona.tsx` (`PersonaProvider`, `usePersona()`, mémorisation dans le trousseau, effacée à la déconnexion). Groupes de routes : `(tabs)` passionné, `(orga)` et `(provider)` squelettes « Bientôt » (`ui/PersonaTabs.tsx` + `tabSets.organizer` / `tabSets.provider`), `(pro)` (la casquette Pro du lot 14, déplacée de `app/pro/` ; URL `/scanner`, `/fiche`, `/publier`, `/stats`). `app/_layout.tsx` : si l'URL est dans le groupe d'une autre casquette que l'active, retour au premier écran de la casquette active ; `app/index.tsx` ouvre la casquette mémorisée. `ui/TopBar.tsx` (utilisée par `TabScreen`) : avatar de la casquette active, point moutarde si une autre a un `badge > 0`, appui court → `features/casquettes/CasquettesSheet.tsx` (ou Moi directement quand on n'a que le passionné), appui long → passionné (`AppBar` : prop `onAvatarLongPress`). Les lots 21 et 22 remplacent les écrans des groupes sans toucher aux `_layout.tsx`.
+- Appli, Moi : `app/moi.tsx` assemble `features/moi/*` (profil et aperçu public, points, casquettes et « devenir staff », notifications par famille et par type, public / privé, secteur, rayon et centres d'intérêt, sécurité : mot de passe, TOTP, appareils, secret du QR, renvoi vers le site pour les clés d'accès ; suppression du compte). Réglages enregistrés un par un (`useSettings`, `PATCH /me/settings`). Routes de l'API : `lib/api/settings.ts` (`/me/*`) et `lib/api/security.ts` (`/api/auth/*` de Better Auth). Calculs purs et testés : `lib/settingsPatch.ts`, `lib/passwordForm.ts`, `lib/totp.ts`, `lib/slider.ts`, `lib/structureSearch.ts`. Écran d'auth : « Mot de passe oublié » (`features/ForgotPasswordSheet.tsx`).
+- Seed : `scripts/seed/casquettes.ts` (« Roues Libres 66 », seconde structure de Sarah_66).
+>>>>>>> origin/integration
 
 ---
 
@@ -707,3 +761,9 @@ Lots 07, 09, 10 consomment `packages/shared/api` (chemins, schémas, types) ; au
 - **A12 (produit)** — Le prototype promet « Réponse sous 48 h · notification » après l'envoi d'une candidature. Aucune règle des docs ne l'impose : à retirer des écrans, ou à transformer en relance de l'organisateur à 48 h (tâche `triage.remind`, non prévue ici).
 - **A13 (produit)** — « Invitation nominative : ta place est réservée 72 h » (prototype) : délai à confirmer au lot 13 (`event_invitations.expires_at`).
 - **A14 (sécurité, ajout du coordinateur 15/10)** — Le hachage de plaque envoyé au staff (§ 4.1) ne protège pas réellement la plaque : l'espace des plaques est petit et la plaque se retrouve par force brute à partir du hachage, avec le sel présent sur l'appareil. En pratique, tout téléphone du staff synchronisé contient de quoi retrouver les plaques de l'événement jusqu'à la purge de J+1. C'est inévitable si l'on veut la recherche et le pointage par plaque **hors ligne** (docs/01). Parades retenues : sel propre à l'événement, purge à J+1, pas de plaque en clair dans l'interface du staff. À présenter honnêtement à Damien avec A1 (même sujet pour les coordonnées du super staff).
+
+**État après le lot 31 (garage et certification ; choix : `docs/JOURNAL-DES-CHOIX.md`, lot 31 ; conception : `ARCHITECTURE-SUITE.md` du relais § 14)** :
+- Migration `0024_garage`. Schéma `certification.ts` (`category_makes`, `certification_requests`, une seule demande `pending` par véhicule) ; colonnes ajoutées à `categories`, `vehicles`, `plate_transfer_requests`.
+- `modules/vehicles/` : `categories.ts`, `plate-transfer.ts`, `certification.ts`, `share-image.ts`, `garage-routes.ts` ; règles pures dans `packages/shared/src/rules/garage.ts`.
+- Routes : `GET /vehicle-reference/categories?makeId&vehicleType&year`, `GET /me/vehicles/:id/history`, `GET /me/vehicles/:id/share-image?format=story|post[&download=1]`, `POST /me/vehicles/:id/certification-request`, `GET /me/plate-transfers`, `POST /plate-transfers/:id/accept|decline`, `GET /admin/plate-transfers`, `POST /admin/plate-transfers/:id/decide`, `GET /admin/certification-requests`, `POST /admin/certification-requests/:id/decide`. `GET /me/vehicles/:id` renvoie `certification` (état et conditions).
+- Tâches : `plate-transfer.escalate` (par demande à 7 jours, et balayage horaire), `certification.sweep` (quotidienne).

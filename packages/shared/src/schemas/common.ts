@@ -21,6 +21,9 @@ export const errorCodes = [
   "referral_not_applicable",
   "structure_owner",
   "invalid_credentials",
+  // Lot 17 : amis.
+  "friendship_exists",
+  "already_friends",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

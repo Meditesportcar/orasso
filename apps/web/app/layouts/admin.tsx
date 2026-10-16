@@ -10,7 +10,11 @@ import type { Route } from "./+types/admin";
 // (files à traiter) viendra avec les chantiers concernés.
 type AdminSection = { href: string; label: string; count?: number };
 
-const adminSections: AdminSection[] = [{ href: "/admin", label: "Structures à vérifier" }];
+const adminSections: AdminSection[] = [
+  { href: "/admin", label: "Structures à vérifier" },
+  { href: "/admin/certifications", label: "Certifications" },
+  { href: "/admin/transferts", label: "Transferts de plaque" },
+];
 
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireSuperAdmin(request);

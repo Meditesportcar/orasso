@@ -1,5 +1,7 @@
 import { Button, CheckboxField, SelectField, TextField } from "@orasso/design-system/web";
 import {
+  archiveStatusChoices,
+  type CategoryOption,
   type VehicleCreate,
   type VehicleFull,
   type VehicleGeneration,
@@ -14,6 +16,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, safeReturn } from "../lib/api.server";
 import type { Route } from "./+types/garage-nouveau";
+import "../styles/garage.css";
 
 export function meta() {
   return [{ title: "Ajouter un véhicule · Orasso" }, { name: "robots", content: "noindex" }];
@@ -25,22 +28,30 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { makes, retour: retour ? safeReturn(retour, "/app/garage") : null };
 }
 
-type Errors = Partial<Record<"vehicleType" | "makeId" | "modelId" | "year" | "plate" | "photo" | "form", string>>;
+type Errors = Partial<
+  Record<"vehicleType" | "makeId" | "modelId" | "year" | "plate" | "photo" | "powerHp" | "weightKg" | "form", string>
+>;
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const text = (name: string) => String(form.get(name) ?? "").trim();
   const retour = text("retour");
   const unregistered = form.get("unregistered") === "on";
+  const status = (text("status") || "active") as VehicleCreate["status"];
+  const active = status === "active";
   const yearText = text("year");
+  const powerText = text("powerHp");
+  const weightText = text("weightKg");
   const photo = form.get("photo");
   const errors: Errors = {};
   if (!text("makeId")) errors.makeId = "Choisis une marque.";
   if (!text("modelId")) errors.modelId = "Choisis un modèle.";
-  if (!unregistered && !text("plate")) errors.plate = "Plaque obligatoire (ou coche « non immatriculé »).";
+  if (active && !unregistered && !text("plate")) errors.plate = "Plaque obligatoire (ou coche « non immatriculé »).";
   if (yearText && !/^\d{4}$/.test(yearText)) errors.year = "Année sur 4 chiffres.";
-  if (!(photo instanceof File) || photo.size === 0)
-    errors.photo = "Ajoute au moins une photo : elle est exigée pour candidater.";
+  if (powerText && !/^\d{1,4}$/.test(powerText)) errors.powerHp = "Puissance en chevaux, nombre entier.";
+  if (weightText && !/^\d{2,5}$/.test(weightText)) errors.weightKg = "Poids en kilos, nombre entier.";
+  const hasPhoto = photo instanceof File && photo.size > 0;
+  if (active && !hasPhoto) errors.photo = "Ajoute au moins une photo : elle est exigée pour candidater.";
   if (Object.keys(errors).length) return data({ errors }, { status: 400 });
 
   const body: Partial<VehicleCreate> = {
@@ -50,14 +61,20 @@ export async function action({ request }: Route.ActionArgs) {
     generationId: text("generationId") || null,
     year: yearText ? Number(yearText) : null,
     color: text("color") || null,
-    plate: unregistered ? null : text("plate"),
+    powerHp: powerText ? Number(powerText) : null,
+    weightKg: weightText ? Number(weightText) : null,
+    plate: unregistered ? null : text("plate") || null,
     unregistered,
+    status,
+    statusNote: active ? null : text("statusNote") || null,
+    categoryIds: form.getAll("categoryIds").map(String),
   };
   const created = await api<VehicleFull>(request, "/me/vehicles", { method: "POST", json: body });
   if (!created.ok) {
     const field = created.error.code === "plate_taken" ? "plate" : "form";
     return data({ errors: { [field]: created.error.message } satisfies Errors }, { status: created.status });
   }
+  if (!hasPhoto) return redirect(`/app/garage/${created.data.id}`);
   const upload = new FormData();
   upload.set("photo", photo as File);
   const sent = await api(request, `/me/vehicles/${created.data.id}/photos`, { method: "POST", body: upload });
@@ -65,6 +82,8 @@ export async function action({ request }: Route.ActionArgs) {
     // Le véhicule existe : on reste sur la fiche avec le message, la photo se rajoute depuis le garage.
     return redirect(`/app/garage?photo=refusee`);
   }
+  // Plaque d'un autre membre : le véhicule existe, en attente de transfert (S36) ; on ouvre sa page pour l'expliquer.
+  if (created.data.plateTransfer) return redirect(`/app/garage/${created.data.id}`);
   const back = safeReturn(retour, "/app/garage");
   if (retour) return redirect(`${back}${back.includes("?") ? "&" : "?"}vehicule=${created.data.id}`);
   return redirect("/app/garage");
@@ -80,6 +99,10 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const [modelId, setModelId] = useState("");
   const [generations, setGenerations] = useState<VehicleGeneration[]>([]);
   const [unregistered, setUnregistered] = useState(false);
+  const [year, setYear] = useState("");
+  const [status, setStatus] = useState("active");
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const active = status === "active";
 
   useEffect(() => {
     setModelId("");
@@ -97,6 +120,20 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
       if (res.ok) setGenerations(res.data);
     });
   }, [modelId]);
+
+  // Catégories filtrées par marque, type et année : celles qui ne conviennent pas sont grisées avec la raison.
+  useEffect(() => {
+    const query = new URLSearchParams({ vehicleType: type });
+    if (makeId) query.set("makeId", makeId);
+    if (/^\d{4}$/.test(year)) query.set("year", year);
+    let stale = false;
+    apiFetch<CategoryOption[]>(`/vehicle-reference/categories?${query}`).then((res) => {
+      if (!stale && res.ok) setCategories(res.data);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [type, makeId, year]);
 
   const visibleModels = models.filter((m) => m.vehicleType === type || m.isOther);
 
@@ -149,14 +186,54 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
             ]}
           />
         )}
-        <TextField label="Année" name="year" inputMode="numeric" maxLength={4} error={errors.year} />
+        <TextField
+          label="Année"
+          name="year"
+          inputMode="numeric"
+          maxLength={4}
+          value={year}
+          onChange={(e) => setYear(e.currentTarget.value)}
+          error={errors.year}
+        />
+        <div className="s-two">
+          <TextField label="Puissance en ch (facultatif)" name="powerHp" inputMode="numeric" error={errors.powerHp} />
+          <TextField label="Poids en kg (facultatif)" name="weightKg" inputMode="numeric" error={errors.weightKg} />
+        </div>
         <TextField label="Couleur (facultatif)" name="color" />
+        <SelectField
+          label="Statut"
+          name="status"
+          value={status}
+          onChange={(e) => setStatus(e.currentTarget.value)}
+          options={[
+            { value: "active", label: "Dans mon garage (actif)" },
+            ...archiveStatusChoices.map((c) => ({ value: c.status, label: c.label })),
+          ]}
+          help="Un véhicule vendu, en souvenir ou accidenté ne candidate pas ; sa plaque est facultative."
+        />
+        {!active && <TextField label="Motif (facultatif)" name="statusNote" maxLength={300} />}
+        <fieldset className="g-cats" data-testid="categories">
+          <legend className="o-field__label o-t-label">Catégories</legend>
+          {categories.map((c) => (
+            <div key={c.id} className={c.eligible ? "g-cat" : "g-cat is-off"}>
+              <label>
+                <input type="checkbox" name="categoryIds" value={c.id} disabled={!c.eligible} />
+                {c.label}
+              </label>
+              {!c.eligible && <span className="o-t-meta">{c.reason}</span>}
+            </div>
+          ))}
+        </fieldset>
         <TextField
           label="Plaque"
           name="plate"
           autoCapitalize="characters"
           disabled={unregistered}
-          help="Jamais affichée aux autres passionnés."
+          help={
+            active
+              ? "Jamais affichée aux autres passionnés. Déjà prise par un autre membre ? Il sera prévenu et pourra confirmer le transfert."
+              : "Facultative pour un véhicule archivé. Jamais affichée aux autres passionnés."
+          }
           error={errors.plate}
         />
         <CheckboxField
@@ -172,7 +249,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
           accept="image/jpeg,image/png,image/webp"
           help="Une photo de ton véhicule, de face ou de trois quarts."
           error={errors.photo}
-          required
+          required={active}
         />
         {errors.form && (
           <p className="s-error" role="alert">

@@ -49,8 +49,8 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     await page.goto("/moi");
     await expect(page.getByText("Mes casquettes")).toBeVisible({ timeout: 30_000 });
     await shot(page, `01-moi-casquettes-${theme}`);
-    await page.getByRole("button", { name: /Pro · Garage appli/ }).click();
-    await page.waitForURL(/\/pro\/scanner/);
+    await page.getByTestId("casquette-pro").click();
+    await page.waitForURL(/\/scanner/);
     await expect(page.getByText("Scanner").first()).toBeVisible();
     await shot(page, `02-scanner-attente-${theme}`);
 
@@ -79,7 +79,7 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     }
 
     // Fiche, Publier, Stats (onglets de la casquette).
-    await page.goto("/pro/fiche");
+    await page.goto("/fiche");
     await expect(page.getByTestId("pro-subscription")).toHaveText("Gratuit jusqu'au 21 juin 2027");
     await expect(page.getByText("Remises par grade")).toBeVisible();
     const body = (await page.locator("body").textContent()) ?? "";
@@ -87,7 +87,7 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     await expect(page.getByRole("button", { name: /payer|acheter|souscrire|s'abonner/i })).toHaveCount(0);
     await shot(page, `04-fiche-${theme}`);
 
-    await page.goto("/pro/publier");
+    await page.goto("/publier");
     await expect(page.getByTestId("pro-posts-counter")).toBeVisible({ timeout: 30_000 });
     if (first) {
       await page.getByLabel("Titre").fill("Offre appli");
@@ -98,7 +98,7 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     }
     await shot(page, `05-publier-${theme}`);
 
-    await page.goto("/pro/stats");
+    await page.goto("/stats");
     await expect(page.getByText("remises utilisées", { exact: true })).toBeVisible({ timeout: 30_000 });
     await shot(page, `06-stats-${theme}`);
     await ctx.close();
