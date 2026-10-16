@@ -22,6 +22,7 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
+import { plateText } from "@/ui/plateText";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -74,13 +75,13 @@ export default function Moi() {
               {entry.event?.title ?? pointKindLabels[entry.kind as PointKind] ?? entry.kind}
               {entry.event ? ` · ${pointKindLabels[entry.kind as PointKind] ?? entry.kind}` : ""}
             </Text>
-            <Text variant="bodyStrong" color={entry.points < 0 ? t.color.winText : t.color.plateInk}>
+            <Text variant="bodyStrong" color={entry.points < 0 ? plateText.alert : t.color.plateInk}>
               {entry.points > 0 ? `+${entry.points}` : `${entry.points}`.replace("-", "−")}
             </Text>
           </View>
         ))}
         {p && p.pending.length > 0 ? (
-          <Text variant="body" color={t.color.accentText}>
+          <Text variant="body" color={plateText.accent}>
             Pointage en attente : {p.pending.map((x) => x.title).join(", ")}.
           </Text>
         ) : null}

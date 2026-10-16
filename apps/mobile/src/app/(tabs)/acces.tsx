@@ -28,6 +28,7 @@ import { useNow } from "@/lib/useNow";
 import { AccessCard } from "@/ui/AccessCard";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { plateText } from "@/ui/plateText";
 import { SectionTitle, TabScreen } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
@@ -204,14 +205,15 @@ function LogLine({
   const c = t.color;
   let result: string;
   let resultColor = c.plateInk;
+  // Le carnet est une plaque graphite : couleurs de texte faites pour le graphite (`plateText`).
   if (app.event.status === "cancelled") result = "événement annulé";
   else if (app.checkedInAt) result = app.points !== null ? `présent · ${signed(app.points)} pts` : "présent";
   else if (app.pointsPending) {
     result = POINTS_PENDING_LABEL.toLowerCase();
-    resultColor = c.accentText;
+    resultColor = plateText.accent;
   } else if (app.withdrawnAfterLock || app.malus) {
     result = app.points !== null ? `absent · ${signed(app.points)} pts` : "absent";
-    resultColor = c.winText;
+    resultColor = plateText.alert;
   } else result = "terminé";
   const contest = app.malus;
   return (
