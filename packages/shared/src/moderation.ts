@@ -106,7 +106,8 @@ export type AdminReportDetail = AdminReportItem & {
   reporter: { pseudo: string; dismissedAbusive: number; accountAgeDays: number };
   handledByPseudo: string | null;
   handledAt: string | null;
-  sanction: { id: string; kind: SanctionKind; auto: boolean; liftedAt: string | null } | null;
+  /** `liftable` : la personne connectée peut lever cette sanction (modérateur : suspension automatique seulement). */
+  sanction: { id: string; kind: SanctionKind; auto: boolean; liftedAt: string | null; liftable: boolean } | null;
   /** Ce que la personne connectée peut faire (selon son rôle). */
   can: {
     review: boolean;
