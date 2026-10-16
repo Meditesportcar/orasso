@@ -12,3 +12,4 @@ export * from "./reviews";
 export * from "./ticketing";
 export * from "./time";
 export * from "./waitlistDeadline";
+export * from "./weather";

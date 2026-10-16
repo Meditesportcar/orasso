@@ -5,6 +5,7 @@ import { applicationNotificationTypes } from "./notifications/application";
 import { eventEmailAlwaysTypes, eventNotificationTypes } from "./notifications/events";
 import { pointsNotificationTypes } from "./notifications/points";
 import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
+import { weatherNotificationTypes } from "./notifications/weather";
 
 /**
  * Énumérations métier (valeurs anglaises, identiques aux enums PostgreSQL). Libellés : `labels.fr.ts`.
@@ -103,6 +104,7 @@ export const notificationTypes = {
   ...staffNotificationTypes,
   ...pointsNotificationTypes,
   ...accountNotificationTypes,
+  ...weatherNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 
