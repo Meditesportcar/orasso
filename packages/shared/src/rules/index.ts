@@ -10,5 +10,6 @@ export * from "./registrationWindow";
 export * from "./registry";
 export * from "./reviews";
 export * from "./ticketing";
+export * from "./visibility";
 export * from "./time";
 export * from "./waitlistDeadline";

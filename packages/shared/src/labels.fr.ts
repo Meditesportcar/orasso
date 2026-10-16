@@ -10,6 +10,7 @@ export * from "./labels/account.fr";
 export * from "./labels/events.fr";
 export * from "./labels/notifications.fr";
 export * from "./labels/points.fr";
+export * from "./labels/social.fr";
 export * from "./labels/staff.fr";
 export * from "./labels/structures.fr";
 export * from "./labels/vehicles.fr";
