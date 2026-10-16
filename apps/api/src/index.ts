@@ -15,7 +15,11 @@ await signing.ensureSynced();
 const boss = await startJobs();
 
 const server = serve(
-  { fetch: app.fetch, port: env.API_PORT, websocket: { server: new WebSocketServer({ noServer: true }) } },
+  {
+    fetch: app.fetch,
+    port: env.API_PORT,
+    websocket: { server: new WebSocketServer({ noServer: true, maxPayload: 4096 }) },
+  },
   (info) => console.log(`API Orasso sur http://localhost:${info.port}/api`),
 );
 

@@ -25,6 +25,8 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
+import { twoFactorOk } from "../messaging/core";
+import { inboxService } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
 import { type Profile, profilesRepo } from "../profiles/repo";
 import { type Friendship, socialRepo } from "./repo";
@@ -393,8 +395,8 @@ export const friendsService = {
     return { items: out };
   },
 
-  /** `GET /me/inbox/summary` (minimal : le lot 18 le complète des messages et des autres demandes). */
+  /** `GET /me/inbox/summary` : compté par la messagerie (lot 18), qui réunit messages et demandes de toutes sortes. */
   async inboxSummary(viewer: Viewer) {
-    return { requests: { friend: await socialRepo.pendingIncomingCount(viewer.user.id) } };
+    return inboxService.summary(viewer.user.id, { includeStructure: twoFactorOk(viewer.session?.secondFactor) });
   },
 };

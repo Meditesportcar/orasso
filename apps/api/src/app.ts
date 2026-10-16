@@ -21,6 +21,7 @@ import { checkinsRoutes } from "./modules/checkins/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { fieldRoutes } from "./modules/field/routes";
+import { messagingRoutes } from "./modules/messaging/routes";
 import { notificationsRoutes } from "./modules/notifications/routes";
 import { pointsRoutes } from "./modules/points/routes";
 import { profilesRepo } from "./modules/profiles/repo";
@@ -32,6 +33,7 @@ import { socialRoutes } from "./modules/social/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { structuresRoutes } from "./modules/structures/routes";
 import { ticketsRoutes } from "./modules/tickets/routes";
+import { uploadsRoutes } from "./modules/uploads/routes";
 import { garageRoutes } from "./modules/vehicles/garage-routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { ws } from "./ws";
@@ -145,6 +147,8 @@ app.route("/", ticketsRoutes);
 app.route("/", adminRoutes);
 app.route("/", accountRoutes);
 app.route("/", socialRoutes);
+app.route("/", uploadsRoutes);
+app.route("/", messagingRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes.
 realtime.setAuthorizer(async (userId, channel) => {
