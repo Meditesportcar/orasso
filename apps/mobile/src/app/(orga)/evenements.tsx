@@ -1,11 +1,13 @@
-// Casquette Organisateur, Événements : liste par statut et page de gestion de l'événement (lot 22).
-import { Soon } from "@/ui/Soon";
+// Casquette Organisateur, Événements : liste par statut ; la page d'un événement est `evenement/[id]` (lot 22).
+import { orgaLabels } from "@orasso/shared";
+
+import { EventsScreen } from "@/features/orga/Events";
+import { OrgaGate } from "@/features/orga/OrgaGate";
 
 export default function Evenements() {
   return (
-    <Soon title="Événements">
-      Tes événements par statut, avec les compteurs, les annonces et les consignes, arrivent ici. Pour créer ou modifier
-      un événement, passe par le site.
-    </Soon>
+    <OrgaGate title={orgaLabels.eventsTitle}>
+      <EventsScreen />
+    </OrgaGate>
   );
 }

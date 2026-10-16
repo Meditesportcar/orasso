@@ -11,7 +11,7 @@ import { Avatar } from "@/ui/Avatar";
 
 const { space1, space2, space3 } = tokens.spacing;
 
-/** Créer une casquette : pages du site, jusqu'à ce que les lots 21 et 22 apportent les écrans de l'appli. */
+/** Créer une casquette : la structure et le profil prestataire se créent dans l'appli (lots 21 et 22), la fiche pro sur le site. */
 const CREATIONS = [
   { kind: "organizer", label: "Créer une structure", path: "/app/structure/nouvelle" },
   { kind: "pro", label: "Créer une fiche pro", path: "/app/pro/nouvelle" },
@@ -70,7 +70,7 @@ export function PersonaRows({ onPicked }: { onPicked?: () => void }) {
 }
 
 /** Créer une structure / une fiche pro / un profil prestataire (on n'a qu'une fiche pro et qu'un profil prestataire). */
-export function CreateCasquettes() {
+export function CreateCasquettes({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { entries } = usePersona();
   const router = useRouter();
   return (
@@ -81,10 +81,13 @@ export function CreateCasquettes() {
           variant="plate"
           icon="add"
           fullWidth
-          // Le profil prestataire se crée dans l'appli (lot 21) ; structure et fiche pro, sur le site.
-          onPress={() =>
-            c.kind === "provider" ? router.push("/prestataire/nouveau") : void Linking.openURL(siteUrl(c.path))
-          }
+          // Structure (lot 22) et profil prestataire (lot 21) se créent dans l'appli ; la fiche pro, sur le site.
+          onPress={() => {
+            onNavigate?.();
+            if (c.kind === "provider") router.push("/prestataire/nouveau");
+            else if (c.kind === "organizer") router.push("/structure/nouvelle");
+            else void Linking.openURL(siteUrl(c.path));
+          }}
         >
           {c.label}
         </Button>
