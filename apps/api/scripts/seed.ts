@@ -16,6 +16,7 @@ import { notificationsService } from "../src/modules/notifications/service";
 import { seedBase } from "./seed/base";
 import { seedDayJ } from "./seed/day-j";
 import { seedPros } from "./seed/pros";
+import { seedSecurity } from "./seed/security";
 
 const args = new Set(process.argv.slice(2));
 const RESET = args.has("--reset");
@@ -69,6 +70,8 @@ async function main() {
   await seedDayJ(hash);
   // Lot 14 : professionnels (annuaire, remises par grade) et billetterie (billets gratuits, billets payants « bientôt »).
   await seedPros(hash);
+  // Lot 15 : compte à confirmer, parrainage.
+  await seedSecurity(hash);
 }
 
 try {

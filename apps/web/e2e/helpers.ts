@@ -46,7 +46,7 @@ export async function loginInBrowser(page: Page, email: string, password = SEED_
   await page.goto(`/connexion?retour=${encodeURIComponent(retour)}`);
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("button", { name: "Se connecter", exact: true }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/connexion"));
 }
 

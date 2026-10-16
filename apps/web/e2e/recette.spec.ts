@@ -276,7 +276,7 @@ test("double authentification : activation et connexion avec un code TOTP", asyn
   await page.goto("/connexion?retour=/app/acces");
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(SEED_PASSWORD);
-  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByRole("button", { name: "Se connecter", exact: true }).click();
   await page.waitForURL(/\/connexion\/verification/);
   await page.getByLabel("Code").fill("000000");
   await page.getByRole("button", { name: /Vérifier|Valider|Confirmer/ }).click();
