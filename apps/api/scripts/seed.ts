@@ -17,6 +17,7 @@ import { seedBase } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedDayJ } from "./seed/day-j";
 import { seedPros } from "./seed/pros";
+import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
 
 const args = new Set(process.argv.slice(2));
@@ -75,6 +76,8 @@ async function main() {
   await seedSecurity(hash);
   // Lot 16 : seconde structure de Sarah_66 (feuille « Mes casquettes »).
   await seedCasquettes();
+  // Lot 21 : prestataires (food truck de Léa, photographe accrédité, stand d'un pro).
+  await seedProviders(hash);
 }
 
 try {

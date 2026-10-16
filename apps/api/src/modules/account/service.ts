@@ -37,6 +37,8 @@ import {
   profiles,
   proPhotos,
   proProfiles,
+  providerPhotos,
+  providerProfiles,
   session,
   structureFollows,
   structureMembers,
@@ -422,6 +424,31 @@ export const accountService = {
             verifiedAt: null,
           })
           .where(eq(proProfiles.id, pro.id));
+      }
+      // Profil prestataire (lot 21) : retiré et vidé de ce qui l'identifie (les candidatures passées gardent leur lien).
+      const providers = await tx.select().from(providerProfiles).where(eq(providerProfiles.userId, userId));
+      for (const provider of providers) {
+        const photos = await tx
+          .delete(providerPhotos)
+          .where(eq(providerPhotos.providerId, provider.id))
+          .returning({ key: providerPhotos.storageKey });
+        photoKeys.push(...photos.map((p) => p.key));
+        await tx
+          .update(providerProfiles)
+          .set({
+            deletedAt: provider.deletedAt ?? at,
+            name: "Profil supprimé",
+            customType: null,
+            description: null,
+            phone: null,
+            email: null,
+            website: null,
+            instagram: null,
+            portfolioUrl: null,
+            departments: [],
+            proProfileId: null,
+          })
+          .where(eq(providerProfiles.id, provider.id));
       }
       await tx.insert(adminAuditLog).values({
         actorUserId: userId,
