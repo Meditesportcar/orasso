@@ -15,6 +15,8 @@ function clientIp(header: string | undefined): string | null {
 }
 
 export const accountRoutes = new Hono<AppEnv>()
+  // Public (page `/ami/:jeton`) : qui invite ? Pseudo et photo seulement, rien si le lien est inconnu.
+  .get("/referral/:token", async (c) => c.json(await accountService.referrer(c.req.param("token"))))
   .post("/me/referral", async (c) => {
     const v = await requireUser(c);
     const { token } = await body(c, referralSchema);

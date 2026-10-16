@@ -366,6 +366,9 @@ importers:
       '@react-router/serve':
         specifier: ^8.4.0
         version: 8.4.0(react-router@8.4.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(supports-color@8.1.1)(typescript@6.0.3)
+      '@simplewebauthn/browser':
+        specifier: 13.3.0
+        version: 13.3.0
       isbot:
         specifier: ^5.2.2
         version: 5.2.2

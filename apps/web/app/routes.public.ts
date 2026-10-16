@@ -24,6 +24,11 @@ export default [
     route("express/:jeton", "routes/express.tsx"),
     route("connexion", "routes/connexion.tsx"),
     route("connexion/verification", "routes/verification.tsx"),
+    // Compte et sécurité (lot 15).
+    route("mot-de-passe-oublie", "routes/mot-de-passe-oublie.tsx"),
+    route("reinitialisation", "routes/reinitialisation.tsx"),
+    route("verification-email", "routes/verification-email.tsx"),
+    route("ami/:jeton", "routes/ami.tsx"),
     route("inscription", "routes/inscription.tsx"),
     route("conditions", "routes/legal.tsx", { id: "legal-conditions" }),
     route("confidentialite", "routes/legal.tsx", { id: "legal-confidentialite" }),

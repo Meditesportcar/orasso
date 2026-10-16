@@ -134,6 +134,13 @@ export const accountService = {
     return { sponsor: sponsor.pseudo };
   },
 
+  /** `GET /referral/:token` (public) : pseudo et photo du parrain, 404 si le lien est inconnu. */
+  async referrer(token: string) {
+    const p = token.length <= 64 ? await db.query.profiles.findFirst({ where: eq(profiles.inviteToken, token) }) : null;
+    if (!p || p.deletedAt) throw notFound("Lien d'ami inconnu");
+    return { pseudo: p.pseudo, avatarUrl: storage.url(p.avatarKey) };
+  },
+
   /** `POST /me/email/resend-verification` : 3 par heure. */
   async resendVerification(v: Viewer) {
     if (v.user.emailVerified) throw conflict("conflict", "Ton adresse est déjà confirmée");

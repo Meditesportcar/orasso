@@ -1,6 +1,7 @@
 import { Button, TextField } from "@orasso/design-system/web";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { PasskeySignIn } from "../components/Passkeys";
 import { api, getMe, safeReturn, withCookies } from "../lib/api.server";
 import type { Route } from "./+types/connexion";
 
@@ -11,7 +12,7 @@ export function meta() {
 export async function loader({ request }: Route.LoaderArgs) {
   const retour = safeReturn(new URL(request.url).searchParams.get("retour"));
   if (await getMe(request)) throw redirect(retour);
-  return { retour };
+  return { retour, reset: new URL(request.url).searchParams.get("reinitialise") === "1" };
 }
 
 type SignIn = { twoFactorRedirect?: boolean };
@@ -39,10 +40,15 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function Connexion({ loaderData, actionData }: Route.ComponentProps) {
   const busy = useNavigation().state !== "idle";
-  const { retour } = loaderData;
+  const { retour, reset } = loaderData;
   return (
     <div className="s-narrow s-stack">
       <h1 className="s-title">Connexion</h1>
+      {reset && (
+        <p className="s-notice s-notice--ok" role="status">
+          Mot de passe changé : connecte-toi avec le nouveau.
+        </p>
+      )}
       <Form method="post" className="s-form">
         <input type="hidden" name="retour" value={retour} />
         <TextField label="E-mail" name="email" type="email" autoComplete="email" required />
@@ -63,6 +69,10 @@ export default function Connexion({ loaderData, actionData }: Route.ComponentPro
           Se connecter
         </Button>
       </Form>
+      <p className="s-muted">
+        <a href="/mot-de-passe-oublie">Mot de passe oublié ?</a>
+      </p>
+      <PasskeySignIn retour={retour} />
       <p className="s-muted">
         Pas encore de compte ? <a href={`/inscription?retour=${encodeURIComponent(retour)}`}>Créer un compte</a>
       </p>

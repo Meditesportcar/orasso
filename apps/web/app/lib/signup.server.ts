@@ -1,7 +1,8 @@
 // Création de compte par e-mail (Better Auth), commune à `/inscription` et `/invitation/:jeton`.
 import { pseudoSchema } from "@orasso/shared";
 
-import { api, cookieFrom } from "./api.server";
+import { api, cookieFrom, withCookies } from "./api.server";
+import { applyInviteAfterSignup } from "./invite.server";
 
 export type SignupErrors = { pseudo?: string; email?: string; password?: string; form?: string };
 
@@ -36,5 +37,9 @@ export async function signUpFromForm(request: Request, form: FormData): Promise<
       : "Inscription impossible pour le moment.";
     return { ok: false, errors, status: res.status === 422 ? 409 : 400, values };
   }
-  return { ok: true, headers: res.headers, cookie: cookieFrom(res.headers) };
+  // Copie modifiable des en-têtes (cookies de session + effacement du cookie de lien d'ami, lot 15).
+  const headers = withCookies(res.headers);
+  const cookie = cookieFrom(res.headers);
+  await applyInviteAfterSignup(request, cookie, headers);
+  return { ok: true, headers, cookie };
 }

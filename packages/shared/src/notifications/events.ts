@@ -15,3 +15,16 @@ export const eventNotificationTypes = {
 
 /** Envoyés par e-mail même quand un appareil reçoit le push (docs/01 « Rappel par e-mail… toujours »). */
 export const eventEmailAlwaysTypes = ["event_reminder_week"] as const;
+
+/** Libellés des types (réglages des notifications). */
+export const eventNotificationLabels: Record<keyof typeof eventNotificationTypes, string> = {
+  event_updated: "Événement modifié",
+  event_cancelled: "Événement annulé",
+  event_outlook_changed: "Maintenu ou incertain",
+  event_instructions: "Consignes de l'organisateur",
+  event_reminder_eve: "Rappel la veille",
+  event_reminder_week: "Rappel une semaine avant",
+  preview_open: "Avant-première ouverte",
+  new_event_followed: "Nouvel événement d'un organisateur suivi",
+  event_nearby_interest: "Événement près de chez toi",
+};
