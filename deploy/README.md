@@ -141,3 +141,7 @@ Aujourd'hui le code part du PC (`git archive`). Pour que le VPS le récupère lu
    sudo git --git-dir=/opt/orasso/repo.git archive --format=tar.gz -o /tmp/orasso-<commit>.tar.gz <commit>
    ```
 4. Puis `sudo bash remote-deploy.sh deploy <commit> /tmp/orasso-<commit>.tar.gz`, comme aujourd'hui.
+
+## Disque et cache de construction
+
+Les images sont construites sur le VPS (disque commun de 99 Go). Le cache de construction Docker grossissait à chaque déploiement (52 Go le 16/10/2026) : avec l'accord de Damien, il a été purgé (`docker builder prune -f --max-used-space 10GB`, 38,6 Go libérés) et `remote-deploy.sh` le borne désormais à 10 Go à la fin de chaque déploiement réussi. Cette commande ne touche ni les images, ni les conteneurs, ni les volumes (ceux des autres services du VPS non plus). Contrôle : `ssh claude@51.210.242.118 'df -h /; sudo docker system df'`.
