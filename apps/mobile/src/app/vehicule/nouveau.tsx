@@ -20,7 +20,7 @@ import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { MAX_PHOTOS, type PickedPhoto, photoForm, pickPhotos } from "@/lib/photos";
 import { useApi } from "@/lib/useApi";

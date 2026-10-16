@@ -1,6 +1,12 @@
 // Notifications : ligne `notifications` (le Journal de l'appli), puis livraison WebSocket + push + e-mail.
 // Heures calmes 22:00–08:00 hors jour J (choix C15) : la livraison attend 08:00 (tâche `notifications.deliver`).
-import { deliverAfter, type NotificationFamily, type NotificationType, notificationTypes } from "@orasso/shared";
+import {
+  deliverAfter,
+  emailAlwaysTypes,
+  type NotificationFamily,
+  type NotificationType,
+  notificationTypes,
+} from "@orasso/shared";
 import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -25,9 +31,6 @@ export type NotifyInput = {
   /** Lien dans l'e-mail (chemin du site, ex. `/e/nocturne-de-canet-2026`). */
   link?: { label: string; path: string };
 };
-
-/** Types envoyés par e-mail même quand un appareil reçoit le push (docs/01 « Rappel par e-mail… toujours »). */
-const EMAIL_ALWAYS: NotificationType[] = ["event_reminder_week", "staff_presence_reminder"];
 
 let inflight: Promise<void> = Promise.resolve();
 
@@ -180,7 +183,7 @@ async function deliverOne(n: NotificationRow) {
     pushed = await push.send(tokens.map((to) => ({ to, title: n.title, body: n.body, data: n.data })));
     if (pushed) await db.update(notifications).set({ pushSentAt: now() }).where(eq(notifications.id, n.id));
   }
-  if (tokens.length === 0 || EMAIL_ALWAYS.includes(n.type as NotificationType)) {
+  if (tokens.length === 0 || emailAlwaysTypes.includes(n.type as NotificationType)) {
     const account = await db.query.user.findFirst({ where: eq(user.id, n.userId), columns: { email: true } });
     if (!account) return;
     const data = n.data as { link?: string; linkLabel?: string };

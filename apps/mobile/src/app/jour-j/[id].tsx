@@ -11,8 +11,8 @@ import { useEffect, useState } from "react";
 import { Linking, Platform, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { WithdrawSheet } from "@/features/WithdrawSheet";
+import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
-import { api } from "@/lib/endpoints";
 import { formatDay, formatDayHour, formatDuration, formatHour, formatStamp } from "@/lib/format";
 import { jourJOpensAt, jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, refreshKit } from "@/lib/kits";

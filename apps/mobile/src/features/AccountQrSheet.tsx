@@ -9,7 +9,7 @@ import { StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { accountQrAt, secondsLeft } from "@/lib/accountQr";
 import { loadAccountQrSecret, saveAccountQrSecret } from "@/lib/accountQrStore";
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
 import { QrCode } from "@/ui/QrCode";

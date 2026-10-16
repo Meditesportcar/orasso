@@ -5,7 +5,7 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
-import { api } from "./endpoints";
+import { api } from "./api";
 
 export type PermissionState = "granted" | "denied" | "undetermined";
 

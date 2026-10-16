@@ -8,7 +8,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { AccountQrSheet } from "@/features/AccountQrSheet";
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";

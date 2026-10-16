@@ -4,7 +4,7 @@ import type { Me } from "@orasso/shared";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { clearAccountQrSecret, saveAccountQrSecret } from "./accountQrStore";
-import { api, authApi } from "./endpoints";
+import { api, authApi } from "./api";
 import { ApiRequestError, setSessionToken } from "./http";
 import { clearKits } from "./kits";
 import { kvDel, kvGet, kvGetJson, kvSet, kvSetJson } from "./kv";

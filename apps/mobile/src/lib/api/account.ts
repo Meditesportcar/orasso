@@ -1,0 +1,32 @@
+// Compte : profil, points, QR de compte, appareils, Journal.
+import type { AccountQrSecret, Me, MyPoints, Page } from "@orasso/shared";
+
+import { request } from "../http";
+import { qs } from "./qs";
+
+export type NotificationItem = {
+  id: string;
+  type: string;
+  family: string;
+  title: string;
+  body: string | null;
+  data: Record<string, unknown> | null;
+  eventId: string | null;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export const accountApi = {
+  me: () => request<Me>("/api/me"),
+  points: () => request<MyPoints>("/api/me/points"),
+  accountQrSecret: () => request<AccountQrSecret>("/api/me/account-qr-secret"),
+  registerDevice: (body: {
+    platform: "ios" | "android" | "web";
+    expoPushToken?: string | null;
+    name?: string | null;
+    appVersion?: string | null;
+  }) => request<{ id: string }>("/api/me/devices", { method: "POST", body }),
+  notifications: (cursor?: string) =>
+    request<Page<NotificationItem>>(`/api/me/notifications${qs({ limit: 30, cursor })}`),
+  markNotificationsRead: () => request<unknown>("/api/me/notifications/read", { method: "POST", body: { all: true } }),
+};

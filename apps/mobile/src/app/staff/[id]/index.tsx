@@ -11,7 +11,7 @@ import { StyleSheet, View } from "react-native";
 import { AlertSheet } from "@/features/staff/AlertSheet";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock } from "@/features/staff/result";
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { counters, serverReport } from "@/lib/staff/model";
 import { flushNow, record, syncEvent, TRUST_MISSING } from "@/lib/staff/runtime";

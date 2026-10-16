@@ -3,7 +3,7 @@
 // de l'appli avec du réseau (donc la veille aussi), effacé à J+1 ou quand la place n'est plus valide.
 import type { EventOutlook, MyApplication } from "@orasso/shared";
 
-import { api } from "./endpoints";
+import { api } from "./api";
 import { jourJClosesAt, weatherLabel } from "./jourj";
 import { kvDel, kvGetJson, kvSetJson } from "./kv";
 

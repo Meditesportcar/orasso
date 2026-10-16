@@ -7,7 +7,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { authApi } from "@/lib/endpoints";
+import { authApi } from "@/lib/api";
 import { authErrorMessage } from "@/lib/http";
 import { kvSet } from "@/lib/kv";
 import { useSession } from "@/lib/session";

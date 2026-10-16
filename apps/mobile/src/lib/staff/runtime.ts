@@ -7,7 +7,7 @@ import * as Device from "expo-device";
 import { Platform } from "react-native";
 
 import { apiUrl } from "@/api";
-import { api } from "../endpoints";
+import { api } from "../api";
 import { ApiRequestError, getSessionToken } from "../http";
 import { kvDel, kvGet, kvSet } from "../kv";
 import { staffStore } from "./db";

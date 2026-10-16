@@ -8,7 +8,7 @@ import { useIsFocused, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { type ProScan, proScanOf } from "@/lib/pro";
 import { useApi } from "@/lib/useApi";

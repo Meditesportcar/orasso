@@ -2,7 +2,7 @@
 import { Button, Text, TextField, useTheme } from "@orasso/design-system/native";
 import { useState } from "react";
 
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { AppSheet } from "@/ui/AppSheet";
 

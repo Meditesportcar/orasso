@@ -4,7 +4,7 @@ import { Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "./AppSheet";

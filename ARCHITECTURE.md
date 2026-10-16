@@ -555,6 +555,14 @@ packages/shared/src/
 ```
 Règles : aucune requête SQL hors `repo.ts` ; aucune règle métier hors `service.ts` / `shared/rules` ; les routes ne font que valider, appeler, sérialiser. Transactions Drizzle au niveau service. Tests Vitest : règles pures sans base ; services contre la base locale (`embedded-postgres`, schéma migré, transaction annulée par test) ; horloge injectée partout.
 
+**Fichiers partagés découpés par domaine (lot 15, anti-conflits ; détail `docs/JOURNAL-DES-CHOIX.md`).** Un lot ajoute son fichier et une seule ligne dans le fichier qui rassemble :
+- libellés : `packages/shared/src/labels/<domaine>.fr.ts`, ré-exportés par `labels.fr.ts` (`export * from`) ;
+- types de notification : `packages/shared/src/notifications/<domaine>.ts` (`Record<type, famille>`, et `<domaine>EmailAlwaysTypes` si besoin), fusionnés par spread dans `notificationTypes` / `emailAlwaysTypes` (`enums.ts`) ;
+- routes du site : `apps/web/app/routes.<espace>.ts` (`public`, `app`, `orga`, `pro`, `admin`) concaténés par `routes.ts` ; administration = `layouts/admin.tsx` (barre latérale, `adminSections`) + une route enfant par page dans `routes/admin/` ;
+- routes de l'API vues par l'appli : `apps/mobile/src/lib/api/<domaine>.ts`, réunies dans `lib/api/index.ts` (`api`, `authApi`) ;
+- seed : `apps/api/scripts/seed/<domaine>.ts`, appelés depuis `main()` de `scripts/seed.ts` (outils communs : `seed/helpers.ts`) ;
+- schéma : `apps/api/src/db/schema/<domaine>.ts` + une ligne dans `schema/index.ts` (et `relations.ts`) ; migration générée par lot (`db:generate --name <slug>`), SQL fait main dans `apps/api/drizzle/custom/<slug>.sql` (règle de fusion : `PLAN-SUITE.md` du relais, § 2).
+
 Secrets : `.env` local ignoré par Git ; `/etc/orasso/api.env` (root 600) en prod ; `env.ts` échoue au démarrage si une variable obligatoire manque ou si `DEV_SKIP_2FA` est posé en production. Rotation des clés QR § 3.1.
 E-mails : `MailService.send(template, to, payload)` → `email_outbox` → transport `journal` (fichier `.data/mail/<date>-<id>.html` + console) ou `brevo` ; modèles en français dans `modules/notifications/templates/`.
 Stockage : `StorageService.put(key, buffer, contentType)`, `url(key)` ; `disk` écrit dans `.data/storage/` et sert via `/api/files/*` ; `s3` OVH avec URLs publiques en lecture (photos de véhicules et affiches sont publiques par nature ; justificatifs **[plus tard]** en URL signée).
