@@ -249,7 +249,7 @@ export function EventPage({ eventId }: { eventId: string }) {
                   { value: counters.waitlisted, label: orgaLabels.eventWaitlisted },
                   { value: remainingText(counters, orgaLabels.eventUnlimited), label: orgaLabels.eventRemaining },
                 ]}
-                active={1}
+                active={counters.pending > 0 ? 1 : undefined}
               />
             </>
           ) : null}

@@ -287,10 +287,12 @@ test("Casquettes : feuille Mes casquettes, bascule vers (orga) et (pro), appui l
     await expect(page.getByText(/\d+ à traiter/)).toBeVisible();
     await shot(page, `11-mes-casquettes-${theme}`);
 
-    // Bascule vers la casquette Organisateur : écran « Bientôt », barre à cinq onglets, casquette mémorisée.
+    // Bascule vers la casquette Organisateur : le Direct (lot 22), barre à cinq onglets, casquette mémorisée.
     await page.getByTestId("casquette-organizer").first().click();
     await page.waitForURL(/direct/, { timeout: 15_000 });
-    await expect(page.getByText("Bientôt")).toBeVisible();
+    await expect(
+      page.getByTestId("orga-direct-event").or(page.getByText("Aucun événement publié à suivre")),
+    ).toBeVisible({ timeout: 20_000 });
     for (const label of ["Direct", "Événements", "Tri", "Boîte", "Staff"]) {
       await expect(page.getByRole("tab", { name: label })).toBeVisible();
     }

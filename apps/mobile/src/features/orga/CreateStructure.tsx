@@ -94,7 +94,7 @@ export function CreateStructureScreen() {
             {orgaLabels.createDoneBody}
           </Text>
         </Plate>
-        {me?.twoFactorRequired ? <TwoFactorGate /> : null}
+        {me?.twoFactorRequired ? <TwoFactorGate primary={false} /> : null}
         <Button
           variant="primary"
           icon="staff"

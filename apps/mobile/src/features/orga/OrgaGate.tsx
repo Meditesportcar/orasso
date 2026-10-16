@@ -9,10 +9,13 @@ import { useRouter } from "expo-router";
 import { createContext, type ReactNode, useContext } from "react";
 import { StyleSheet } from "react-native";
 
+import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { gateKind, isTwoFactorError } from "@/lib/orga";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
+import { useApi } from "@/lib/useApi";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 
@@ -27,7 +30,7 @@ export function useOrga(): OrgaValue {
 }
 
 /** Que faire quand la double authentification manque : l'activer, ou se reconnecter avec son code. */
-export function TwoFactorGate() {
+export function TwoFactorGate({ primary = true }: { primary?: boolean } = {}) {
   const { t } = useTheme();
   const router = useRouter();
   const { me, signOut } = useSession();
@@ -42,7 +45,7 @@ export function TwoFactorGate() {
       </Text>
       {kind === "setup" ? (
         <>
-          <Button variant="primary" icon="profile" onPress={() => router.push("/moi")} fullWidth>
+          <Button variant={primary ? "primary" : "plate"} icon="profile" onPress={() => router.push("/moi")} fullWidth>
             {orgaLabels.gateOpenSecurity}
           </Button>
           <Button variant="plate" icon="back" onPress={() => void signOut()} fullWidth>
@@ -51,7 +54,7 @@ export function TwoFactorGate() {
         </>
       ) : (
         <>
-          <Button variant="primary" icon="back" onPress={() => void signOut()} fullWidth>
+          <Button variant={primary ? "primary" : "plate"} icon="back" onPress={() => void signOut()} fullWidth>
             {orgaLabels.gateSignInAgain}
           </Button>
           <Button variant="plate" icon="profile" onPress={() => router.push("/moi")} fullWidth>
@@ -70,6 +73,31 @@ export function OrgaFailure({ error }: { error: unknown }) {
   return <Notice tone="error">{errorMessage(error)}</Notice>;
 }
 
+/**
+ * `GET /me` dit « double authentification exigée » même quand l'API est réglée pour la laisser passer (développement,
+ * `DEV_SKIP_2FA`) : on demande donc à l'API elle-même, par un appel léger (le résumé de la Boîte, protégé comme toutes
+ * les routes de l'espace). Refus pour double authentification → l'écran qui explique quoi faire ; sinon l'espace s'ouvre.
+ */
+function TwoFactorProbe({ title, children }: { title: string; children: ReactNode }) {
+  const { structureId, structureName } = useOrga();
+  const probe = useApi(() => api.orgInboxSummary(structureId), [structureId]);
+  if (isTwoFactorError(probe.error)) {
+    return (
+      <TabScreen title={title} facts={structureName}>
+        <TwoFactorGate />
+      </TabScreen>
+    );
+  }
+  if (!probe.data && !probe.error) {
+    return (
+      <TabScreen title={title} facts={structureName}>
+        <Muted variant="body">Chargement…</Muted>
+      </TabScreen>
+    );
+  }
+  return <>{children}</>;
+}
+
 export function OrgaGate({ title, children }: { title: string; children: ReactNode }) {
   const { persona, active } = usePersona();
   const { me } = useSession();
@@ -82,16 +110,9 @@ export function OrgaGate({ title, children }: { title: string; children: ReactNo
       </TabScreen>
     );
   }
-  if (me?.twoFactorRequired) {
-    return (
-      <TabScreen title={title} facts={active.label}>
-        <TwoFactorGate />
-      </TabScreen>
-    );
-  }
   return (
     <OrgaContext.Provider value={{ structureId: persona.structureId, structureName: active.label }}>
-      {children}
+      {me?.twoFactorRequired ? <TwoFactorProbe title={title}>{children}</TwoFactorProbe> : children}
     </OrgaContext.Provider>
   );
 }

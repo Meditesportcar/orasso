@@ -103,7 +103,7 @@ function MemberRow({
           </Button>
         ) : null}
         <Button variant="plate" icon="staff" onPress={onRoles} style={styles.grow}>
-          {orgaLabels.staffRoles}
+          {orgaLabels.staffRolesButton}
         </Button>
       </View>
     </Plate>
@@ -125,7 +125,12 @@ export function StaffScreen() {
   const eventId = picked ?? current?.event.id ?? choices[0]?.id ?? null;
   const event = (events.data ?? []).find((e) => e.id === eventId) ?? null;
 
-  const staff = useApi(() => api.eventStaff(eventId as string), [eventId], { enabled: eventId !== null });
+  // La réponse porte l'événement qu'elle décrit : changer d'événement n'affiche jamais la liste du précédent.
+  const staff = useApi(
+    async () => ({ eventId: eventId as string, members: await api.eventStaff(eventId as string) }),
+    [eventId],
+    { enabled: eventId !== null },
+  );
   const members = useApi(() => api.structureMembers(structureId), [structureId]);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -134,7 +139,7 @@ export function StaffScreen() {
   const [draftRoles, setDraftRoles] = useState<StaffRole[]>([]);
   const slug = structureSlugOf(me?.memberships, structureId);
 
-  const list = eventId ? (staff.data ?? []) : [];
+  const list = eventId && staff.data?.eventId === eventId ? staff.data.members : [];
   const summary = staffSummary(list);
 
   async function remind(m: EventStaffMember) {

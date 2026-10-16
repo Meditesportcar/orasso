@@ -190,7 +190,7 @@ function DirectEvent({
       </Plate>
 
       {l ? (
-        <>
+        <View style={styles.counters} testID="orga-direct-counters">
           <Counters
             items={[
               { value: l.arrived, label: orgaLabels.directArrived },
@@ -207,7 +207,7 @@ function DirectEvent({
                 : []),
             ]}
           />
-        </>
+        </View>
       ) : (
         <Muted variant="body">{live.loading ? "Chargement…" : null}</Muted>
       )}
@@ -362,6 +362,7 @@ const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
   line: { flexDirection: "row", alignItems: "baseline", gap: space2 },
   grow: { flex: 1 },
+  counters: { gap: space2 },
   incident: { gap: space1, paddingTop: space2, marginTop: space1, borderTopWidth: 1 },
   buttons: { gap: space2, marginTop: space2 },
 });

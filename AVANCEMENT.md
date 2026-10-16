@@ -149,11 +149,20 @@
   - API : migrations `0029_search_extension` (SQL personnalisé `CREATE EXTENSION pg_trgm`) et `0030_search` ; `GET /events` et `GET /pros` prennent `sort`, `lat`, `lng`, `radiusKm` et ne sont plus mis en cache (la réponse dépend de la personne). Seed `scripts/seed/explorer.ts` (Aude, Hérault, Haute-Garonne).
   - Vérifié : voir l'entrée du lot 29 (1re partie) dans le journal du relais. **Carte native non essayée sur appareil** (APK du coordinateur).
 
+- **Appli : casquette Organisateur (lot 22, 17/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 22) ; état technique : `ARCHITECTURE.md` « État après le lot 22 ».
+  - Les cinq onglets de la casquette (barre de `tabSets.organizer`, une structure active) : **Direct** (événement en cours, du jour ou prochain : arrivés / attendus par catégorie, staff, prestataires, alertes avec lien de carte et « traitée », main courante, rapport des scans ; compteurs en direct par le canal `event:{id}:live` + rechargement toutes les 60 s), **Événements** (par statut ; page : compteurs en direct, bandeau et bascule Maintenu / Incertain confirmée, annulation à confirmation forte avec motif publié dans le fil, consignes, annonces avec photo et « prévenir », créer / modifier sur le site), **Tri** (écran d'attente, lot 23), **Boîte** (participants, messages groupés avec modèle et aperçu du quota, discussions du staff, demandes de staff en lecture), **Staff** (présences, « Relancer », « jamais répondu », rôles de l'événement, membres, « Passer en mode staff »).
+  - Création d'une structure depuis « Mes casquettes » (type, nom, départements, présentation) puis écran « vérification à faire sur le site ».
+  - Garde commune : sans casquette Organisateur rien ne s'ouvre ; double authentification de la session exigée par l'API (`403 two_factor_required` → écran qui propose de l'activer ou de se reconnecter avec son code) ; aucune donnée d'une autre structure.
+  - API : `POST /events/:id/staff/:userId/remind` (relance à la demande, 1 par heure), demandes de staff comptées dans la Boîte et la pastille de la casquette. Aucune migration.
+  - Vérifié : voir l'entrée du lot 22 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-22-captures\`.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
+
+- Lot 22 : aucune migration ni variable ; à fusionner avec le lot 24 (staff côté site : acceptation des demandes, invitations, rôles de la structure ; **ne pas ré-enregistrer** le compteur « demandes de staff » de la pastille, déjà dans `communication/inbox.ts`) et le lot 23 (le tri par glissement remplace `app/(orga)/tri.tsx`). À essayer sur téléphone (APK de la vague) : photo d'annonce, liens vers le site, canal en direct sur le réseau du terrain.
 
 - Lot 19 : déployer (migration `0032_crews` au démarrage, aucune variable nouvelle ; `pnpm db:seed` ajoute « Roussillon Drift » à une base existante). À essayer sur téléphone (APK de la vague) : logo du crew (sélecteur de photo), discussion du crew, confirmation de venue. Lots suivants : le lot 23 trie aussi les crews par glissement, le lot 29 branche la recherche de crews sur la recherche de premier niveau, le lot 32 ajoute « Signaler » sur un crew.
 

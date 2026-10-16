@@ -139,6 +139,7 @@ export const orgaLabels = {
   staffRemind: "Relancer",
   staffRemindDone: "Relance envoyée.",
   staffRoles: "Rôles pour cet événement",
+  staffRolesButton: "Rôles",
   staffRolesStructure: "Rôles de la structure",
   staffRolesSave: "Enregistrer les rôles",
   staffRolesSaved: "Rôles enregistrés.",
