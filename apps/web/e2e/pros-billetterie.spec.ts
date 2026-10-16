@@ -254,7 +254,7 @@ test("billets gratuits : interrupteur de l'événement, réservation, QR, contr�
   expect(await qr.getAttribute("data-qr-version")).toBe("6");
   const mine = await apiCall<{ id: string; payload: string }[]>(fanCookie, "GET", "/me/tickets");
   expect(mine.data).toHaveLength(2);
-  expect(mine.data[0]?.payload).toMatch(/^OR1[A-Z2-7]+$/);
+  expect(mine.data[0]?.payload).toMatch(/^OB1[A-Z2-7]+$/);
 
   // Contrôle à l'entrée par l'organisation : OK, puis déjà entré.
   await orga.goto(`/orga/meditesportcar/e/${ev.id}/billets`);
