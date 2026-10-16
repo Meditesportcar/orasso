@@ -3,11 +3,15 @@ import {
   eventListQuerySchema,
   eventUpdateSchema,
   outlookUpdateSchema,
+  recurrenceCreateSchema,
   zoneCreateSchema,
   zoneUpdateSchema,
 } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { validation } from "../../lib/errors";
+import { geocode } from "../../lib/geocode";
+import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
 import { eventsService } from "./service";
@@ -32,6 +36,28 @@ export const eventsRoutes = new Hono<AppEnv>()
   .patch("/events/:id", async (c) => {
     const v = await requireUser(c);
     return c.json(await eventsService.update(v, uuidParam(c, "id"), await body(c, eventUpdateSchema)));
+  })
+  .post("/events/:id/duplicate", async (c) =>
+    c.json(await eventsService.duplicate(await requireUser(c), uuidParam(c, "id")), 201),
+  )
+  .post("/events/:id/recurrence", async (c) => {
+    const v = await requireUser(c);
+    const { rule } = await body(c, recurrenceCreateSchema);
+    return c.json(await eventsService.createRecurrence(v, uuidParam(c, "id"), rule), 201);
+  })
+  .post("/events/:id/poster", async (c) => {
+    const v = await requireUser(c);
+    const form = await c.req.parseBody();
+    if (!(form.poster instanceof File)) throw validation("Champ « poster » attendu (fichier)");
+    return c.json(await eventsService.setPoster(v, uuidParam(c, "id"), form.poster));
+  })
+  // Recherche d'adresse de l'assistant (service public de l'IGN) : renvoie la meilleure correspondance, ou null.
+  .get("/geocode", async (c) => {
+    const v = await requireUser(c);
+    rateLimit("geocode", v.user.id);
+    const q = (c.req.query("q") ?? "").trim();
+    if (q.length < 3 || q.length > 200) throw validation("Adresse trop courte");
+    return c.json({ match: await geocode(q) });
   })
   .post("/events/:id/publish", async (c) =>
     c.json(await eventsService.publish(await requireUser(c), uuidParam(c, "id"))),

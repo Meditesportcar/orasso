@@ -13,6 +13,7 @@ import type {
   StructureVerification,
   VehicleStatus,
   VehicleType,
+  VerificationDocumentKind,
 } from "./enums";
 import type { LocalScanDecision, ScanRefusal } from "./qr/pass";
 import type { ContestStatus, PointKind } from "./rules/points";
@@ -84,6 +85,26 @@ export const structureVerificationLabels: Record<StructureVerification, string> 
   verified: "Structure vérifiée",
   suspended: "Suspendue",
 };
+
+export const verificationDocumentKindLabels: Record<VerificationDocumentKind, string> = {
+  statutes: "Statuts",
+  receipt: "Récépissé de déclaration",
+  kbis: "Extrait Kbis",
+  identity: "Pièce d'identité du responsable",
+  other: "Autre justificatif",
+};
+
+/** Types de prestataires proposés à la création d'un événement (cases à cocher ; « + » pour en ajouter un autre). */
+export const vendorTypeSuggestions = [
+  "Food truck",
+  "Barbier",
+  "Tatoueur",
+  "Photographe",
+  "Animation",
+  "Vente de pièces",
+  "Detailing",
+  "Boisson",
+] as const;
 
 export const profileVisibilityLabels: Record<ProfileVisibility, string> = {
   public: "Public",

@@ -14,6 +14,7 @@ import {
   type VehicleType,
   vehicleTypes,
 } from "../enums";
+import { RECURRENCE_MAX_COUNT, type RecurrenceRule } from "../rules/recurrence";
 import { isoDate, optionalText, pageQuery } from "./common";
 
 const criteriaSchema = z.object({
@@ -48,6 +49,8 @@ const eventFields = z.object({
   lockOffsetMinutes: z.number().int().min(0).max(1440),
   rulesText: optionalText(10000),
   instructions: optionalText(2000),
+  /** Types de prestataires attendus (cases à cocher et « + »), sans candidature en V1. */
+  vendorTypes: z.array(z.string().trim().min(1).max(40)).max(16),
 });
 
 const datesRule = (v: { startsAt?: Date; endsAt?: Date }, ctx: z.RefinementCtx) => {
@@ -65,6 +68,7 @@ export const eventCreateSchema = eventFields
     publicAccess: eventFields.shape.publicAccess.default("free"),
     previewHours: eventFields.shape.previewHours.default(24),
     lockOffsetMinutes: eventFields.shape.lockOffsetMinutes.default(120),
+    vendorTypes: eventFields.shape.vendorTypes.default([]),
   })
   .superRefine(datesRule);
 export type EventCreate = z.infer<typeof eventCreateSchema>;
@@ -73,6 +77,25 @@ export const eventUpdateSchema = eventFields.partial().superRefine(datesRule);
 export type EventUpdate = z.infer<typeof eventUpdateSchema>;
 
 export const outlookUpdateSchema = z.object({ outlook: z.enum(eventOutlooks) });
+
+/** Récurrence (« chaque premier dimanche du mois ») : créée une seule fois, les occurrences sont des brouillons. */
+export const recurrenceRuleSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("weekly"),
+    interval: z.number().int().min(1).max(4),
+    count: z.number().int().min(1).max(RECURRENCE_MAX_COUNT),
+  }),
+  z.object({
+    kind: z.literal("monthly_nth_weekday"),
+    nth: z
+      .number()
+      .int()
+      .refine((n) => n === -1 || (n >= 1 && n <= 4), "Rang de 1 à 4, ou -1 pour le dernier"),
+    weekday: z.number().int().min(0).max(6),
+    count: z.number().int().min(1).max(RECURRENCE_MAX_COUNT),
+  }),
+]) satisfies z.ZodType<RecurrenceRule>;
+export const recurrenceCreateSchema = z.object({ rule: recurrenceRuleSchema });
 
 const zoneFields = z.object({
   code: z
@@ -97,6 +120,8 @@ export const eventListQuerySchema = pageQuery.extend({
   radiusKm: z.coerce.number().min(1).max(500).optional(),
   structureId: z.uuid().optional(),
   q: z.string().trim().max(80).optional(),
+  /** `upcoming` (défaut) : pas encore terminés, du plus proche au plus lointain ; `past` : terminés, du plus récent. */
+  scope: z.enum(["upcoming", "past"]).default("upcoming"),
 });
 export type EventListQuery = z.infer<typeof eventListQuerySchema>;
 
@@ -120,6 +145,9 @@ export type EventCard = {
   endsAt: string;
   city: string | null;
   department: string | null;
+  /** Position sur la carte de `/evenements`. */
+  lat: number | null;
+  lng: number | null;
   posterUrl: string | null;
   status: EventStatus;
   outlook: EventOutlook;
@@ -134,9 +162,8 @@ export type EventPublic = EventCard & {
   description: string | null;
   addressLine: string | null;
   postalCode: string | null;
-  lat: number | null;
-  lng: number | null;
   timezone: string;
+  vendorTypes: string[];
   admittedVehicleTypes: VehicleType[];
   maxVehiclesPerUser: number;
   admission: EventAdmission;
@@ -162,4 +189,7 @@ export type EventOrganizer = EventPublic & {
   publishedAt: string | null;
   cancelledAt: string | null;
   lockedAt: string | null;
+  /** Duplication ou occurrence d'une série : l'événement d'origine. */
+  parentEventId: string | null;
+  recurrenceRule: RecurrenceRule | null;
 };

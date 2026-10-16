@@ -1,4 +1,6 @@
 // Événements, jours, zones, invitations (ARCHITECTURE.md § 1.4).
+
+import type { RecurrenceRule } from "@orasso/shared";
 import {
   eventAdmissions,
   eventFormats,
@@ -9,6 +11,7 @@ import {
 } from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   check,
   date,
   doublePrecision,
@@ -79,6 +82,12 @@ export const events = pgTable(
     lockedAt: tstz("locked_at"),
     rulesText: text("rules_text"),
     instructions: text("instructions"),
+    /** Types de prestataires attendus (cases à cocher et « + » de l'assistant, lot 13) ; pas de candidature en V1. */
+    vendorTypes: text("vendor_types").array().notNull().default(sql`'{}'::text[]`),
+    /** Duplication ou récurrence (lot 13) : l'événement dont celui-ci est la copie ou une occurrence. */
+    parentEventId: uuid("parent_event_id").references((): AnyPgColumn => events.id, { onDelete: "set null" }),
+    /** Règle de récurrence, posée sur l'événement d'origine seulement (les occurrences sont créées une fois). */
+    recurrenceRule: jsonb("recurrence_rule").$type<RecurrenceRule>(),
     publishedAt: tstz("published_at"),
     cancelledAt: tstz("cancelled_at"),
     settledAt: tstz("settled_at"),
