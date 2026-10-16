@@ -17,6 +17,7 @@ import { seedBase } from "./seed/base";
 import { seedDayJ } from "./seed/day-j";
 import { seedPros } from "./seed/pros";
 import { seedSecurity } from "./seed/security";
+import { seedWeather } from "./seed/weather";
 
 const args = new Set(process.argv.slice(2));
 const RESET = args.has("--reset");
@@ -72,6 +73,8 @@ async function main() {
   await seedPros(hash);
   // Lot 15 : compte à confirmer, parrainage.
   await seedSecurity(hash);
+  // Lot 28 : prévisions météo factices (Nocturne de Canet mauvaise, Expo Rivesaltes bonne).
+  await seedWeather();
 }
 
 try {

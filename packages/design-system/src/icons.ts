@@ -64,10 +64,57 @@ export const iconShapes = {
   live: [p("M3 12h4l3-7 4 14 3-7h4")], // Direct (prototype)
   eye: [p("M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"), c(12, 12, 3)], // afficher le mot de passe
   eyeOff: [p("M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"), c(12, 12, 3), p("M4 4l16 16")],
+  // Météo (lot 28, ajout daté dans docs/design-system/README.md) : même grille, même trait, aucune couleur propre.
+  weatherClear: [
+    c(12, 12, 4),
+    p("M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"),
+  ],
+  weatherPartlyCloudy: [
+    c(8, 8, 3),
+    p("M8 2v1.5M2 8h1.5M3.8 3.8l1 1M12.2 3.8l-1 1"),
+    p("M9 20h8.5a3.5 3.5 0 00.3-7 5 5 0 00-9.4 1A3 3 0 009 20z"),
+  ],
+  weatherCloudy: [p("M7 19h10.5a4 4 0 00.4-8 6 6 0 00-11.5 1.6A3.2 3.2 0 007 19z")],
+  weatherFog: [p("M7 13h10.5a4 4 0 00.4-8 6 6 0 00-11.5 1.6A3.2 3.2 0 007 13z"), p("M4 17h16M7 21h10")],
+  weatherDrizzle: [
+    p("M7 14h10.5a4 4 0 00.4-8 6 6 0 00-11.5 1.6A3.2 3.2 0 007 14z"),
+    p("M8 18v.01M12 19v.01M16 18v.01"),
+  ],
+  weatherRain: [
+    p("M7 14h10.5a4 4 0 00.4-8 6 6 0 00-11.5 1.6A3.2 3.2 0 007 14z"),
+    p("M8 17l-1 3M12 17l-1 3M16 17l-1 3"),
+  ],
+  weatherHeavyRain: [
+    p("M7 13h10.5a4 4 0 00.4-8 6 6 0 00-11.5 1.6A3.2 3.2 0 007 13z"),
+    p("M7 16l-1.5 4M11 16l-1.5 4M15 16l-1.5 4M19 16l-1.5 4"),
+  ],
+  weatherSnow: [
+    p("M7 14h10.5a4 4 0 00.4-8 6 6 0 00-11.5 1.6A3.2 3.2 0 007 14z"),
+    p("M8 18v.01M12 18v.01M16 18v.01M10 21v.01M14 21v.01"),
+  ],
+  weatherThunderstorm: [
+    p("M7 13h10.5a4 4 0 00.4-8 6 6 0 00-11.5 1.6A3.2 3.2 0 007 13z"),
+    p("M12.5 12l-3 4.5h4l-2.5 4.5"),
+  ],
+  weatherWind: [p("M3 8h10a2.5 2.5 0 10-2.5-2.5M3 12h15a3 3 0 11-3 3M3 16h7a2 2 0 11-2 2")],
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;
 export const iconNames = Object.keys(iconShapes) as IconName[];
+
+/** Icône de chaque condition météo de `@orasso/shared` (`WeatherCode`), lot 28. */
+export const weatherIcons = {
+  clear: "weatherClear",
+  partly_cloudy: "weatherPartlyCloudy",
+  cloudy: "weatherCloudy",
+  fog: "weatherFog",
+  drizzle: "weatherDrizzle",
+  rain: "weatherRain",
+  heavy_rain: "weatherHeavyRain",
+  snow: "weatherSnow",
+  thunderstorm: "weatherThunderstorm",
+  wind: "weatherWind",
+} as const satisfies Record<string, IconName>;
 
 /** Icônes réservées à un usage précis (README Icons) : à ne pas employer ailleurs. */
 export const reservedIcons = {

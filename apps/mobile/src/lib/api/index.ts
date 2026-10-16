@@ -7,6 +7,7 @@ import { eventsApi } from "./events";
 import { garageApi } from "./garage";
 import { prosApi } from "./pros";
 import { staffApi } from "./staff";
+import { weatherApi } from "./weather";
 
 export type { NotificationItem } from "./account";
 export { authApi } from "./auth";
@@ -18,4 +19,5 @@ export const api = {
   ...eventsApi,
   ...applicationsApi,
   ...staffApi,
+  ...weatherApi,
 };
