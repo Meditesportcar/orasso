@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "fr.orasso.app",
+      "googleServicesFile": "./google-services.json",
       "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
