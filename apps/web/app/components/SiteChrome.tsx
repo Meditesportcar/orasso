@@ -28,6 +28,11 @@ export function SiteHeader({ children }: { children?: ReactNode }) {
       <a className="s-header__brand" href="/" aria-label="Orasso, accueil">
         <Logo width={120} />
       </a>
+      <nav className="s-nav s-nav--main o-t-button" aria-label="Site">
+        <a href="/evenements">Événements</a>
+        <a href="/organisateurs">Organisateurs</a>
+        <a href="/professionnels">Professionnels</a>
+      </nav>
       <nav className="s-nav o-t-button" aria-label="Compte">
         {children}
       </nav>

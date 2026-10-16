@@ -19,11 +19,25 @@ export type ApiOk<T> = { ok: true; status: number; data: T; headers: Headers };
 export type ApiFail = { ok: false; status: number; error: ApiError["error"]; headers: Headers };
 export type ApiResult<T> = ApiOk<T> | ApiFail;
 
-type Init = { method?: string; json?: unknown; body?: BodyInit };
+type Init = {
+  method?: string;
+  json?: unknown;
+  body?: BodyInit;
+  /** Cookie à envoyer à la place de celui du visiteur (session qui vient d'être créée par cette même requête). */
+  cookie?: string;
+};
+
+/** En-tête `Cookie` correspondant aux `Set-Cookie` d'une réponse de l'API (nom=valeur seulement). */
+export function cookieFrom(headers: Headers): string {
+  return headers
+    .getSetCookie()
+    .map((c) => c.split(";")[0])
+    .join("; ");
+}
 
 export async function api<T>(request: Request, path: string, init: Init = {}): Promise<ApiResult<T>> {
   const headers = new Headers({ origin: originOf(request), accept: "application/json" });
-  const cookie = request.headers.get("cookie");
+  const cookie = init.cookie ?? request.headers.get("cookie");
   if (cookie) headers.set("cookie", cookie);
   // Adresse du visiteur (posée par nginx, seul accès au site) : sans elle, la limite de débit de Better Auth compte
   // toutes les connexions faites depuis le site dans un seul compteur partagé (3 essais / 10 s pour tout le monde).

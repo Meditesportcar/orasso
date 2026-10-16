@@ -1,0 +1,84 @@
+import "maplibre-gl/dist/maplibre-gl.css";
+import type { EventCard } from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
+
+const FRANCE: [number, number] = [2.35, 46.6];
+
+/**
+ * Carte MapLibre (fond OpenStreetMap) de tous les événements d'une liste qui ont une position : un repère par
+ * événement, un clic ouvre une bulle avec le lien vers la page. Chargée dans le navigateur seulement.
+ */
+export function EventsMap({ events }: { events: EventCard[] }) {
+  const container = useRef<HTMLDivElement>(null);
+  const [failed, setFailed] = useState(false);
+  const located = events.filter((e) => e.lat != null && e.lng != null);
+  const key = located.map((e) => e.id).join(",");
+
+  useEffect(() => {
+    let map: import("maplibre-gl").Map | undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const maplibre = await import("maplibre-gl");
+        if (cancelled || !container.current) return;
+        map = new maplibre.Map({
+          container: container.current,
+          center: FRANCE,
+          zoom: 4.6,
+          attributionControl: { compact: true },
+          style: {
+            version: 8,
+            sources: {
+              osm: {
+                type: "raster",
+                tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+                tileSize: 256,
+                maxzoom: 19,
+                attribution: "© OpenStreetMap",
+              },
+            },
+            layers: [{ id: "osm", type: "raster", source: "osm" }],
+          },
+        });
+        const bounds = new maplibre.LngLatBounds();
+        for (const event of located) {
+          const lngLat: [number, number] = [event.lng as number, event.lat as number];
+          const marker = document.createElement("button");
+          marker.type = "button";
+          marker.className = "s-marker s-marker--button";
+          marker.dataset.testid = "map-marker";
+          marker.setAttribute("aria-label", event.title);
+          const link = document.createElement("a");
+          link.className = "s-popup";
+          link.href = `/e/${encodeURIComponent(event.slug)}`;
+          link.textContent = event.title;
+          const popup = new maplibre.Popup({ offset: 14, closeButton: false }).setDOMContent(link);
+          new maplibre.Marker({ element: marker }).setLngLat(lngLat).setPopup(popup).addTo(map);
+          bounds.extend(lngLat);
+        }
+        if (located.length === 1) map.setCenter([located[0]?.lng as number, located[0]?.lat as number]);
+        if (located.length === 1) map.setZoom(10);
+        else if (located.length > 1) map.fitBounds(bounds, { padding: 48, maxZoom: 11, duration: 0 });
+      } catch {
+        setFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      map?.remove();
+    };
+    // biome-ignore lint/correctness/useExhaustiveDependencies: la carte se refait quand la liste des événements change
+  }, [key]);
+
+  if (failed) return <p className="s-muted">La carte n'a pas pu se charger.</p>;
+  return (
+    <div
+      ref={container}
+      className="ev__map evs__map"
+      role="region"
+      aria-label={`Carte des événements (${located.length})`}
+      data-testid="events-map"
+      data-count={located.length}
+    />
+  );
+}

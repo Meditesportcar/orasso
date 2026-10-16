@@ -3,7 +3,8 @@ import { pseudoSchema } from "@orasso/shared";
 import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { apiFetch } from "../lib/api.client";
-import { api, getMe, safeReturn, withCookies } from "../lib/api.server";
+import { getMe, safeReturn, withCookies } from "../lib/api.server";
+import { type SignupErrors, signUpFromForm } from "../lib/signup.server";
 import type { Route } from "./+types/inscription";
 
 export function meta() {
@@ -16,36 +17,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { retour };
 }
 
-type Errors = { pseudo?: string; email?: string; password?: string; form?: string };
+type Errors = SignupErrors;
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const retour = safeReturn(String(form.get("retour") ?? ""));
-  const pseudo = String(form.get("pseudo") ?? "").trim();
-  const email = String(form.get("email") ?? "").trim();
-  const password = String(form.get("password") ?? "");
-  const errors: Errors = {};
-
-  const parsed = pseudoSchema.safeParse(pseudo);
-  if (!parsed.success) errors.pseudo = parsed.error.issues[0]?.message;
-  else {
-    const free = await api<{ available: boolean }>(request, `/pseudo-available?pseudo=${encodeURIComponent(pseudo)}`);
-    if (free.ok && !free.data.available) errors.pseudo = "Ce pseudo est déjà pris.";
-  }
-  if (!/^\S+@\S+\.\S+$/.test(email)) errors.email = "Cette adresse e-mail n'est pas valide.";
-  if (password.length < 8) errors.password = "8 caractères au moins.";
-  if (Object.keys(errors).length) return data({ errors, values: { pseudo, email } }, { status: 400 });
-
-  const res = await api(request, "/auth/sign-up/email", { method: "POST", json: { email, password, name: pseudo } });
-  if (!res.ok) {
-    const message = String(res.error.message ?? "");
-    const taken = res.status === 422 || /exist|already/i.test(message);
-    errors[taken ? "email" : "form"] = taken
-      ? "Un compte existe déjà avec cette adresse."
-      : "Inscription impossible pour le moment.";
-    return data({ errors, values: { pseudo, email } }, { status: res.status === 422 ? 409 : 400 });
-  }
-  return redirect(retour, { headers: withCookies(res.headers) });
+  const result = await signUpFromForm(request, form);
+  if (!result.ok) return data({ errors: result.errors, values: result.values }, { status: result.status });
+  return redirect(retour, { headers: withCookies(result.headers) });
 }
 
 export default function Inscription({ loaderData, actionData }: Route.ComponentProps) {

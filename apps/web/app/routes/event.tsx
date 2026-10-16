@@ -58,6 +58,30 @@ export function meta({ loaderData }: Route.MetaArgs) {
     { property: "og:url", content: `${origin}/e/${event.slug}` },
     { property: "og:image", content: image },
     { name: "twitter:card", content: "summary_large_image" },
+    {
+      "script:ld+json": {
+        "@context": "https://schema.org",
+        "@type": "Event",
+        name: event.title,
+        description,
+        startDate: event.startsAt,
+        endDate: event.endsAt,
+        eventStatus:
+          event.status === "cancelled"
+            ? "https://schema.org/EventCancelled"
+            : event.outlook === "uncertain"
+              ? "https://schema.org/EventPostponed"
+              : "https://schema.org/EventScheduled",
+        eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+        location: {
+          "@type": "Place",
+          name: event.city ?? undefined,
+          address: [event.addressLine, event.postalCode, event.city].filter(Boolean).join(", ") || undefined,
+        },
+        image: [image],
+        organizer: { "@type": "Organization", name: event.structure.name, url: `${origin}/o/${event.structure.slug}` },
+      },
+    },
   ];
 }
 
@@ -145,7 +169,7 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="ev">
-      <div className="ev__main">
+      <div className="ev__main s-plated">
         <Reveal>
           <section className="ev__hero" aria-labelledby="ev-title">
             {event.posterUrl && <img className="ev__hero-photo" src={event.posterUrl} alt="" />}
@@ -201,6 +225,17 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
           </p>
         </section>
 
+        {event.vendorTypes.length > 0 && (
+          <section className="s-section" data-testid="vendors">
+            <h2 className="s-h2">Prestataires attendus</h2>
+            <ChipRow>
+              {event.vendorTypes.map((label) => (
+                <Chip key={label}>{label}</Chip>
+              ))}
+            </ChipRow>
+          </section>
+        )}
+
         {event.description && (
           <section className="s-section">
             <h2 className="s-h2">Programme et infos</h2>
@@ -226,7 +261,9 @@ export default function EventPage({ loaderData }: Route.ComponentProps) {
         <section className="s-section" id="organisateur">
           <h2 className="s-h2">Organisateur</h2>
           <p>
-            <strong>{structure.name}</strong>{" "}
+            <a href={`/o/${structure.slug}`}>
+              <strong>{structure.name}</strong>
+            </a>{" "}
             {structure.verified && <span className="s-verified o-t-label">Vérifié</span>}
           </p>
           {structure.description && <p className="s-muted">{structure.description}</p>}
