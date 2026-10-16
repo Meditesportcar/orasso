@@ -1,5 +1,6 @@
 import { Button, Chip, ChipRow, Counters, Icon, Reveal, SelectField, StatusBadge } from "@orasso/design-system/web";
 import {
+  type AnnouncementView,
   type Category,
   type EventProviderPublic,
   type EventPublic,
@@ -17,6 +18,7 @@ import {
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { EventFeed } from "../components/EventFeed";
 import { EventMap } from "../components/EventMap";
 import { ContactOrganizer } from "../components/Messaging";
 import { ShareButtons } from "../components/ShareButtons";
@@ -32,7 +34,7 @@ import type { Route } from "./+types/event";
 export async function loader({ request, params }: Route.LoaderArgs) {
   const slug = params.slug;
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
-  const [structure, categories, me, reviews, tickets, providers, weather] = await Promise.all([
+  const [structure, categories, me, reviews, tickets, providers, weather, feed] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     api<Category[]>(request, "/vehicle-reference/categories"),
     getMe(request),
@@ -44,6 +46,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     api<EventProviderPublic[]>(request, `/events/by-slug/${encodeURIComponent(slug)}/providers`),
     // Météo à l'approche (lot 28) : cache de l'API, `null` au-delà de 7 jours ; jamais bloquante.
     api<EventWeather | null>(request, `/events/by-slug/${encodeURIComponent(slug)}/weather`),
+    // Fil de l'événement (lot 20) : public, enrichi pour les retenus et l'organisation.
+    api<{ items: AnnouncementView[] }>(request, `/events/by-slug/${encodeURIComponent(slug)}/announcements`),
   ]);
   return {
     event,
@@ -51,6 +55,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     reviews: reviews.ok ? reviews.data : null,
     providers: providers.ok ? providers.data : [],
     weather: weather.ok ? weather.data : null,
+    feed: feed.ok ? feed.data.items : [],
     offer: tickets.ok ? tickets.data.offer : null,
     myTickets: tickets.ok ? tickets.data.mine : [],
     paymentCancelled: new URL(request.url).searchParams.get("paiement") === "annule",
@@ -280,6 +285,7 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
     state,
     reviews,
     weather,
+    feed,
     ended,
     offer,
     myTickets,
@@ -419,6 +425,8 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
             <p className="s-muted s-prewrap">{event.description}</p>
           </section>
         )}
+
+        <EventFeed items={feed} />
 
         {event.instructions && (
           <section className="s-section">

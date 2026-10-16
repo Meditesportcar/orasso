@@ -79,6 +79,9 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
                 Billets
               </SideLink>
             )}
+            <SideLink href={`${base}/communication`} on={pathname.startsWith(`${base}/communication`)}>
+              Communication
+            </SideLink>
             {isOrganizer && (
               <SideLink href={`${base}/structure`} on={pathname.startsWith(`${base}/structure`)}>
                 Structure

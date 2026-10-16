@@ -28,7 +28,12 @@ export type JobName =
   | "plate-transfer.escalate"
   | "certification.sweep"
   // Lot 18 : fichiers envoyés jamais rattachés.
-  | "uploads.purge";
+  | "uploads.purge"
+  // Lot 20 : messages groupés (lot par lot, et balayage de secours), fermeture (J+1) et purge (1 an) des discussions du
+  // staff des événements.
+  | "messaging.group-send"
+  | "messaging.group-sweep"
+  | "messaging.staff-chats-sweep";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

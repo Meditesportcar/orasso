@@ -94,6 +94,8 @@ export const events = pgTable(
     publishedAt: tstz("published_at"),
     cancelledAt: tstz("cancelled_at"),
     settledAt: tstz("settled_at"),
+    /** Remerciement envoyé aux présents (posé au lot 20, utilisé au lot 27). */
+    thanksSentAt: tstz("thanks_sent_at"),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
   },

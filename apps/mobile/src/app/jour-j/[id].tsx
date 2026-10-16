@@ -4,7 +4,7 @@
 // se ferme après le scan ou à J+1.
 
 import { Button, Chip, Plate, StatusBadge, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { gradeLabels, weatherTexts } from "@orasso/shared";
+import { communicationLabels, gradeLabels, weatherTexts } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -18,6 +18,7 @@ import { formatDay, formatDayHour, formatDuration, formatHour, formatStamp } fro
 import { jourJOpensAt, jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, refreshKit } from "@/lib/kits";
 import { useSession } from "@/lib/session";
+import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -51,6 +52,16 @@ export default function JourJ() {
   const [withdrawing, setWithdrawing] = useState(false);
   const app = [...(upcoming ?? []), ...(past ?? [])].find((a) => a.id === id) ?? null;
   const pseudo = me?.profile.pseudo ?? kit?.pseudo ?? "";
+  // Dernière annonce de l'organisateur (lot 20) : avec du réseau, gardée sur le téléphone pour la suite (hors ligne OK).
+  const slug = app?.event.slug ?? kit?.event.slug ?? "";
+  const feed = useApi(() => api.eventAnnouncements(slug), [slug, online], {
+    enabled: Boolean(slug) && online,
+    cacheKey: slug ? `feed.${slug}` : undefined,
+  });
+  const lastAnnouncement =
+    [...(feed.data?.items ?? [])]
+      .filter((i) => i.kind === "announcement")
+      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))[0] ?? null;
 
   // 1. Le kit enregistré s'affiche tout de suite, sans réseau.
   useEffect(() => {
@@ -258,6 +269,17 @@ export default function JourJ() {
           </Text>
           <Text variant="body" color={c.plateInk}>
             {kit.event.instructions}
+          </Text>
+        </Plate>
+      ) : null}
+
+      {lastAnnouncement ? (
+        <Plate style={styles.block} testID="last-announcement">
+          <Text variant="label" color={c.plateMuted}>
+            {communicationLabels.lastAnnouncement} · {formatDayHour(lastAnnouncement.publishedAt, tz)}
+          </Text>
+          <Text variant="body" color={c.plateInk}>
+            {lastAnnouncement.body}
           </Text>
         </Plate>
       ) : null}

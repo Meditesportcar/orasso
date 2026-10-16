@@ -12,6 +12,7 @@ export * from "./recurrence";
 export * from "./registrationWindow";
 export * from "./registry";
 export * from "./reviews";
+export * from "./templates";
 export * from "./ticketing";
 export * from "./time";
 export * from "./visibility";

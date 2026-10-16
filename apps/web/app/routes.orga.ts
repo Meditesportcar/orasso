@@ -12,5 +12,8 @@ export default [
     route("e/:eventId/candidatures", "routes/orga-candidatures.tsx"),
     route("e/:eventId/jour-j", "routes/orga-jour-j.tsx"),
     route("e/:eventId/billets", "routes/orga-billets.tsx"),
+    // Lot 20 : communication (consignes, annonces, messages groupés, modèles, messages des participants, staff).
+    route("communication", "routes/orga-communication.tsx"),
+    route("communication/conversation/:id", "routes/orga-conversation.tsx"),
   ]),
 ] satisfies RouteConfig;
