@@ -106,9 +106,13 @@ describe("certificationEligibility", () => {
   });
 
   it("demande déjà en cours, déjà certifié, plaque en attente", () => {
-    expect(certificationEligibility({ grade: "sport" }, { ...ok, hasPendingRequest: true }).missing).toEqual(["pending"]);
+    expect(certificationEligibility({ grade: "sport" }, { ...ok, hasPendingRequest: true }).missing).toEqual([
+      "pending",
+    ]);
     expect(certificationEligibility({ grade: "sport" }, { ...ok, certified: true }).missing).toEqual(["certified"]);
-    expect(certificationEligibility({ grade: "sport" }, { ...ok, plateTransferPending: true }).missing).toEqual(["plate"]);
+    expect(certificationEligibility({ grade: "sport" }, { ...ok, plateTransferPending: true }).missing).toEqual([
+      "plate",
+    ]);
   });
 });
 
@@ -127,7 +131,9 @@ describe("certificationLostByChange", () => {
 
   it("aucun changement, ou ordre des catégories et photos : pas de perte", () => {
     expect(certificationLostByChange(base, { ...base })).toBe(false);
-    expect(certificationLostByChange(base, { ...base, categoryIds: ["b", "a"], photoIds: ["p3", "p1", "p2"] })).toBe(false);
+    expect(certificationLostByChange(base, { ...base, categoryIds: ["b", "a"], photoIds: ["p3", "p1", "p2"] })).toBe(
+      false,
+    );
   });
 
   it("champs techniques : perte", () => {

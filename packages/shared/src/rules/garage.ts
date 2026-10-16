@@ -1,9 +1,9 @@
 // Règles pures du garage (lot 31) : catégories cohérentes, éligibilité et perte de la certification, mise en page de
 // la fiche Instagram. Aucune dépendance à la base ni à l'horloge (le « maintenant » est passé par l'appelant).
 import {
+  type CategoryMakeMode,
   CERTIFICATION_INACTIVITY_MONTHS,
   CERTIFICATION_MIN_PHOTOS,
-  type CategoryMakeMode,
   type ShareFormat,
 } from "../garage";
 import { type Grade, grades } from "../grades";

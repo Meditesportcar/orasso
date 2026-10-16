@@ -15,6 +15,7 @@ import { storageDir } from "../src/lib/storage";
 import { notificationsService } from "../src/modules/notifications/service";
 import { seedBase } from "./seed/base";
 import { seedDayJ } from "./seed/day-j";
+import { seedGarage } from "./seed/garage";
 import { seedPros } from "./seed/pros";
 import { seedSecurity } from "./seed/security";
 
@@ -72,6 +73,8 @@ async function main() {
   await seedPros(hash);
   // Lot 15 : compte à confirmer, parrainage.
   await seedSecurity(hash);
+  // Lot 31 : règles de cohérence des catégories, véhicule certifié de démonstration.
+  await seedGarage();
 }
 
 try {

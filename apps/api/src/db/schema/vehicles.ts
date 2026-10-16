@@ -1,7 +1,8 @@
 // Référentiel véhicules, garage, photos, catégories, transferts de plaque (ARCHITECTURE.md § 1.3).
-import { plateTransferStatuses, vehicleStatuses, vehicleTypes } from "@orasso/shared";
+import { certificationLostReasons, plateTransferStatuses, vehicleStatuses, vehicleTypes } from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -23,6 +24,7 @@ import { categories } from "./profiles";
 export const vehicleTypeEnum = pgEnum("vehicle_type", vehicleTypes);
 export const vehicleStatusEnum = pgEnum("vehicle_status", vehicleStatuses);
 export const plateTransferStatusEnum = pgEnum("plate_transfer_status", plateTransferStatuses);
+export const certificationLostReasonEnum = pgEnum("certification_lost_reason", certificationLostReasons);
 
 /** Référentiel enrichi par l'équipe Orasso seulement ; « Autre » à chaque niveau, aucune saisie libre. */
 export const vehicleMakes = pgTable("vehicle_makes", {
@@ -92,10 +94,17 @@ export const vehicles = pgTable(
     plateNormalized: text("plate_normalized"),
     unregistered: boolean("unregistered").notNull().default(false),
     status: vehicleStatusEnum("status").notNull().default("active"),
+    /** Motif du passage en archive (vendu, souvenir, accidenté), facultatif. */
+    statusNote: text("status_note"),
     description: text("description"),
     preparation: text("preparation"),
-    /** [préparé] Certification (lot 13). */
+    /** Certification validée par l'équipe Orasso (lot 31) ; perdue à la modification de la fiche ou par inactivité. */
     certifiedAt: tstz("certified_at"),
+    certifiedLostReason: certificationLostReasonEnum("certified_lost_reason"),
+    /** Plaque saisie mais déjà portée par un autre compte : demande de transfert en cours (lot 31, S36). */
+    pendingTransferId: uuid("pending_transfer_id").references((): AnyPgColumn => plateTransferRequests.id, {
+      onDelete: "set null",
+    }),
     archivedAt: tstz("archived_at"),
     ...timestamps,
   },
@@ -145,7 +154,11 @@ export const vehicleCategories = pgTable(
   (t) => [primaryKey({ name: "vehicle_categories_pkey", columns: [t.vehicleId, t.categoryId] })],
 );
 
-/** [préparé] Créée quand une plaque déjà active est saisie ; file admin au lot 13. */
+/**
+ * Créée quand une plaque déjà active est saisie : le véhicule du demandeur est créé sans plaque normalisée
+ * (`vehicles.pending_transfer_id`) ; l'ancien propriétaire confirme ou refuse, sinon l'équipe Orasso arbitre
+ * après 7 jours (lot 31, S36).
+ */
 export const plateTransferRequests = pgTable(
   "plate_transfer_requests",
   {
@@ -159,7 +172,13 @@ export const plateTransferRequests = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     status: plateTransferStatusEnum("status").notNull().default("pending"),
     decidedBy: text("decided_by").references(() => user.id, { onDelete: "set null" }),
+    decidedAt: tstz("decided_at"),
+    /** Note de l'équipe Orasso à la décision. */
+    note: text("note"),
     ...timestamps,
   },
-  (t) => [index("plate_transfer_requests_plate_idx").on(t.plateNormalized)],
+  (t) => [
+    index("plate_transfer_requests_plate_idx").on(t.plateNormalized),
+    index("plate_transfer_requests_status_idx").on(t.status, t.createdAt),
+  ],
 );

@@ -24,7 +24,15 @@ export type NotificationRow = typeof notifications.$inferSelect;
 export type NotifyInput = {
   title: string;
   body: string;
-  data?: { eventId?: string; applicationId?: string; screen?: string };
+  data?: {
+    eventId?: string;
+    applicationId?: string;
+    screen?: string;
+    /** Garage (lot 31) : véhicule, demande de transfert de plaque, demande de certification. */
+    vehicleId?: string;
+    transferId?: string;
+    requestId?: string;
+  };
   eventId?: string | null;
   /** Début de l'événement concerné : le jour J lève les heures calmes. */
   eventStartsAt?: Date | null;

@@ -21,7 +21,10 @@ export type JobName =
   | "points.sweep"
   // Lot 15 : compte et sécurité.
   | "event.notify-nearby"
-  | "security.purge-known-logins";
+  | "security.purge-known-logins"
+  // Lot 31 : garage et certification.
+  | "plate-transfer.escalate"
+  | "certification.sweep";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

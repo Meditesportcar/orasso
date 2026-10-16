@@ -1,12 +1,7 @@
 // Garage et certification (lot 31) : entrées validées et types de sortie des nouvelles routes.
 import { z } from "zod";
 import { type PlateTransferStatus, vehicleTypes } from "../enums";
-import {
-  type CategoryMakeMode,
-  type CertificationLostReason,
-  type CertificationStatus,
-  shareFormats,
-} from "../garage";
+import { type CategoryMakeMode, type CertificationLostReason, type CertificationStatus, shareFormats } from "../garage";
 import type { Grade } from "../grades";
 import type { CategoryRefusal, CertificationMissing } from "../rules/garage";
 import { optionalText } from "./common";
@@ -19,7 +14,11 @@ export const categoryReferenceQuery = z.object({
 });
 export type CategoryReferenceQuery = z.infer<typeof categoryReferenceQuery>;
 
-export const shareImageQuery = z.object({ format: z.enum(shareFormats).default("story") });
+/** `download=1` : l'image est servie en pièce jointe (téléchargement depuis le site) au lieu de s'afficher. */
+export const shareImageQuery = z.object({
+  format: z.enum(shareFormats).default("story"),
+  download: z.literal("1").optional(),
+});
 
 export const certificationRequestSchema = z.object({ message: optionalText(500) });
 
@@ -56,7 +55,13 @@ export type VehicleCertification = {
   certifiedAt: string | null;
   lostReason: CertificationLostReason | null;
   /** Dernière demande, quelle que soit son issue. */
-  request: { id: string; status: CertificationStatus; createdAt: string; decidedAt: string | null; note: string | null } | null;
+  request: {
+    id: string;
+    status: CertificationStatus;
+    createdAt: string;
+    decidedAt: string | null;
+    note: string | null;
+  } | null;
   grade: Grade;
   eligible: boolean;
   missing: CertificationMissing[];
