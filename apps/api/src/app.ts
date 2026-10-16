@@ -28,6 +28,7 @@ import { profilesRoutes } from "./modules/profiles/routes";
 import { prosRoutes } from "./modules/pros/routes";
 import { providersRoutes } from "./modules/providers/routes";
 import { reviewsRoutes } from "./modules/reviews/routes";
+import { searchRoutes } from "./modules/search/routes";
 import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { socialRoutes } from "./modules/social/routes";
 import { staffRoutes } from "./modules/staff/routes";
@@ -149,6 +150,7 @@ app.route("/", adminRoutes);
 app.route("/", accountRoutes);
 app.route("/", weatherRoutes);
 app.route("/", socialRoutes);
+app.route("/", searchRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes.
 realtime.setAuthorizer(async (userId, channel) => {

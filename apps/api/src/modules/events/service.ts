@@ -22,27 +22,17 @@ import {
   type zoneCreateSchema,
   type zoneUpdateSchema,
 } from "@orasso/shared";
-import { and, asc, desc, eq, gte, ilike, lt, ne, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import sharp from "sharp";
 import type { z } from "zod";
 
 import { db } from "../../db/client";
-import {
-  applications,
-  events,
-  eventZones,
-  orders,
-  structureFollows,
-  structureMembers,
-  structures,
-  tickets,
-} from "../../db/schema";
+import { applications, events, eventZones, orders, structureFollows, structureMembers, tickets } from "../../db/schema";
 import { requireOrganizer, staffAccess } from "../../lib/access";
 import { deps, now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
 import { addressQuery, geocode } from "../../lib/geocode";
-import { escapeLike } from "../../lib/pagination";
 import { rateLimit } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
@@ -53,35 +43,10 @@ import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
+import { card, type StructureRow } from "./card";
+import { exploreEvents } from "./explore";
 import { scheduleEventJobs } from "./jobs";
 import { type EventRow, eventsRepo } from "./repo";
-
-type StructureRow = typeof structures.$inferSelect;
-
-function card(
-  e: EventRow,
-  s: Pick<StructureRow, "id" | "slug" | "name" | "logoKey">,
-  remaining: number | null,
-): EventCard {
-  return {
-    id: e.id,
-    slug: e.slug,
-    title: e.title,
-    format: e.format,
-    startsAt: e.startsAt.toISOString(),
-    endsAt: e.endsAt.toISOString(),
-    city: e.city,
-    department: e.department,
-    lat: e.lat,
-    lng: e.lng,
-    posterUrl: storage.url(e.posterKey),
-    status: e.status,
-    outlook: e.outlook,
-    structure: { id: s.id, slug: s.slug, name: s.name, logoUrl: storage.url(s.logoKey) },
-    capacity: e.capacity,
-    remaining,
-  };
-}
 
 async function publicView(e: EventRow, s: StructureRow, showInstructions: boolean): Promise<EventPublic> {
   const counters = await eventsRepo.counters(e);
@@ -185,48 +150,9 @@ function copyValues(e: EventRow) {
 }
 
 export const eventsService = {
-  async list(q: EventListQuery): Promise<Page<EventCard>> {
-    const t = now();
-    const filters: (SQL | undefined)[] = [
-      eq(events.status, "published"),
-      ne(events.admission, "invite_only"),
-      eq(structures.verification, "verified"),
-      q.scope === "past" ? lt(events.endsAt, t) : gte(events.endsAt, q.from ?? t),
-    ];
-    if (q.to) filters.push(sql`${events.startsAt} <= ${q.to.toISOString()}::timestamptz`);
-    if (q.format) filters.push(eq(events.format, q.format));
-    if (q.department) filters.push(eq(events.department, q.department));
-    if (q.structureId) filters.push(eq(events.structureId, q.structureId));
-    if (q.categoryId) filters.push(sql`${events.criteria} -> 'categoryIds' ? ${q.categoryId}`);
-    if (q.q) {
-      const like = `%${escapeLike(q.q)}%`;
-      filters.push(or(ilike(events.title, like), ilike(events.city, like)));
-    }
-    if (q.lat !== undefined && q.lng !== undefined) {
-      // Distance à vol d'oiseau (pas de PostGIS en V1, choix C24).
-      const radius = q.radiusKm ?? 50;
-      filters.push(sql`${events.lat} is not null and 6371 * acos(least(1, cos(radians(${q.lat})) * cos(radians(${events.lat}))
-        * cos(radians(${events.lng}) - radians(${q.lng})) + sin(radians(${q.lat})) * sin(radians(${events.lat}))))
-        <= ${radius}`);
-    }
-    const offset = q.cursor ? Number(Buffer.from(q.cursor, "base64url").toString()) || 0 : 0;
-    const rows = await db
-      .select({ e: events, s: structures })
-      .from(events)
-      .innerJoin(structures, eq(structures.id, events.structureId))
-      .where(and(...filters))
-      .orderBy(
-        ...(q.scope === "past" ? [desc(events.startsAt), asc(events.id)] : [asc(events.startsAt), asc(events.id)]),
-      )
-      .limit(q.limit + 1)
-      .offset(offset);
-    const items = await Promise.all(
-      rows.slice(0, q.limit).map(async ({ e, s }) => card(e, s, (await eventsRepo.counters(e)).remaining)),
-    );
-    return {
-      items,
-      nextCursor: rows.length > q.limit ? Buffer.from(String(offset + q.limit)).toString("base64url") : null,
-    };
+  /** `GET /events` : liste publique ; connecté, elle sait trier par affinités et par distance (lot 29, `explore.ts`). */
+  list(q: EventListQuery, viewer: Viewer | null = null): Promise<Page<EventCard>> {
+    return exploreEvents(q, viewer);
   },
 
   /** Page publique d'un événement (`/e/<slug>`). Brouillon : 404 ; sur invitation : membres et candidats seulement. */

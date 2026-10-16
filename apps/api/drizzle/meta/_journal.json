@@ -197,6 +197,20 @@
       "when": 1792164005651,
       "tag": "0027_providers",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792170826507,
+      "tag": "0028_search_extension",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792170838792,
+      "tag": "0029_search",
+      "breakpoints": true
     }
   ]
 }

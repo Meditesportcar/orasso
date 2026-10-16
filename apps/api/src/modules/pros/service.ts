@@ -7,10 +7,8 @@ import {
   type Grade,
   grades,
   monthBounds,
-  type Page,
   PRO_MAX_PHOTOS,
   PRO_POSTS_PER_MONTH,
-  type ProActivity,
   type ProCard,
   type ProCreate,
   type ProDiscounts,
@@ -31,7 +29,7 @@ import {
   type StructurePartnerRow,
   wallTime,
 } from "@orasso/shared";
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
@@ -49,13 +47,13 @@ import {
 import { requireOrganizer } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
-import { escapeLike } from "../../lib/pagination";
 import { rateLimit } from "../../lib/rateLimit";
 import { lookupRegistry } from "../../lib/registry";
 import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
 import { locate } from "../structures/service";
+import { followersCounts, toCard } from "./card";
 
 export type ProRow = typeof proProfiles.$inferSelect;
 
@@ -91,33 +89,6 @@ export async function proOfUser(userId: string): Promise<ProRow | null> {
     where: and(eq(proProfiles.ownerUserId, userId), isNull(proProfiles.deletedAt)),
   });
   return p ?? null;
-}
-
-async function followersCounts(ids: string[]): Promise<Map<string, number>> {
-  if (!ids.length) return new Map();
-  const rows = await db
-    .select({ proId: proFollows.proId, n: count() })
-    .from(proFollows)
-    .where(inArray(proFollows.proId, ids))
-    .groupBy(proFollows.proId);
-  return new Map(rows.map((r) => [r.proId, r.n]));
-}
-
-function toCard(p: ProRow, followers: number): ProCard {
-  return {
-    slug: p.slug,
-    name: p.name,
-    logoUrl: storage.url(p.logoKey),
-    activities: p.activities as ProActivity[],
-    city: p.city,
-    department: p.department,
-    lat: p.lat,
-    lng: p.lng,
-    interventionDepartments: p.interventionDepartments,
-    verified: p.verifiedAt !== null,
-    registryName: p.verifiedAt !== null ? (p.registryCheck?.name ?? null) : null,
-    followersCount: followers,
-  };
 }
 
 async function discountsOf(proId: string): Promise<ProDiscounts> {
@@ -442,48 +413,6 @@ export const prosService = {
   },
 
   // --- Annuaire et fiche publique -------------------------------------------------------------------------------
-
-  /** `GET /pros` : fiches publiées, tri alphabétique, filtres activité / département / texte. */
-  async list(q: {
-    limit: number;
-    cursor?: string;
-    q?: string;
-    activity?: ProActivity;
-    department?: string;
-  }): Promise<Page<ProCard>> {
-    const offset = q.cursor ? Math.max(0, Number(Buffer.from(q.cursor, "base64url").toString()) || 0) : 0;
-    const where = and(
-      isNull(proProfiles.deletedAt),
-      isNotNull(proProfiles.publishedAt),
-      q.activity ? sql`${q.activity} = any(${proProfiles.activities})` : undefined,
-      q.department
-        ? or(
-            eq(proProfiles.department, q.department),
-            sql`${q.department} = any(${proProfiles.interventionDepartments})`,
-          )
-        : undefined,
-      q.q
-        ? or(
-            ilike(proProfiles.name, `%${escapeLike(q.q)}%`),
-            ilike(proProfiles.city, `%${escapeLike(q.q)}%`),
-            ilike(proProfiles.description, `%${escapeLike(q.q)}%`),
-          )
-        : undefined,
-    );
-    const rows = await db
-      .select()
-      .from(proProfiles)
-      .where(where)
-      .orderBy(desc(sql`${proProfiles.verifiedAt} is not null`), asc(proProfiles.name), asc(proProfiles.id))
-      .limit(q.limit + 1)
-      .offset(offset);
-    const page = rows.slice(0, q.limit);
-    const followers = await followersCounts(page.map((p) => p.id));
-    return {
-      items: page.map((p) => toCard(p, followers.get(p.id) ?? 0)),
-      nextCursor: rows.length > q.limit ? Buffer.from(String(offset + q.limit)).toString("base64url") : null,
-    };
-  },
 
   /** `GET /pros/by-slug/:slug` : une fiche publiée (ou la fiche du propriétaire, même en brouillon). */
   async getPublic(slug: string, viewer: Viewer | null): Promise<ProPublic> {

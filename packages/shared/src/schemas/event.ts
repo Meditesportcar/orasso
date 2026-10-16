@@ -14,6 +14,7 @@ import {
   type VehicleType,
   vehicleTypes,
 } from "../enums";
+import type { Affinity } from "../rules/affinity";
 import { RECURRENCE_MAX_COUNT, type RecurrenceRule } from "../rules/recurrence";
 import { isoDate, optionalText, pageQuery } from "./common";
 
@@ -109,6 +110,9 @@ const zoneFields = z.object({
 export const zoneCreateSchema = zoneFields.extend({ position: zoneFields.shape.position.default(0) });
 export const zoneUpdateSchema = zoneFields.partial();
 
+export const eventSorts = ["date", "affinity", "distance"] as const;
+export type EventSort = (typeof eventSorts)[number];
+
 export const eventListQuerySchema = pageQuery.extend({
   format: z.enum(eventFormats).optional(),
   categoryId: z.uuid().optional(),
@@ -122,6 +126,11 @@ export const eventListQuerySchema = pageQuery.extend({
   q: z.string().trim().max(80).optional(),
   /** `upcoming` (défaut) : pas encore terminés, du plus proche au plus lointain ; `past` : terminés, du plus récent. */
   scope: z.enum(["upcoming", "past"]).default("upcoming"),
+  /**
+   * Ordre (lot 29, Explorer) : `date` (défaut), `affinity` (organisateurs suivis, centres d'intérêt, proximité : S34,
+   * connecté), `distance` (à la position envoyée ou au secteur du profil). Sans position connue, retombe sur la date.
+   */
+  sort: z.enum(eventSorts).default("date"),
 });
 export type EventListQuery = z.infer<typeof eventListQuerySchema>;
 
@@ -154,6 +163,10 @@ export type EventCard = {
   structure: { id: string; slug: string; name: string; logoUrl: string | null };
   capacity: number | null;
   remaining: number | null;
+  /** Distance à ma position (lot 29) : renseignée seulement quand la requête en a une (envoyée ou secteur du profil). */
+  distanceKm?: number | null;
+  /** Affinités avec moi (lot 29) : renseignées pour le tri `affinity`. */
+  affinity?: Affinity;
 };
 
 export type MyApplicationBrief = { id: string; vehicleId: string | null; status: ApplicationStatus };

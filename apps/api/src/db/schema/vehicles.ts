@@ -27,15 +27,20 @@ export const plateTransferStatusEnum = pgEnum("plate_transfer_status", plateTran
 export const certificationLostReasonEnum = pgEnum("certification_lost_reason", certificationLostReasons);
 
 /** Référentiel enrichi par l'équipe Orasso seulement ; « Autre » à chaque niveau, aucune saisie libre. */
-export const vehicleMakes = pgTable("vehicle_makes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique("vehicle_makes_slug_key"),
-  /** Pays de la marque (ISO 3166-1 alpha-2). */
-  country: text("country"),
-  isOther: boolean("is_other").notNull().default(false),
-  ...timestamps,
-});
+export const vehicleMakes = pgTable(
+  "vehicle_makes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique("vehicle_makes_slug_key"),
+    /** Pays de la marque (ISO 3166-1 alpha-2). */
+    country: text("country"),
+    isOther: boolean("is_other").notNull().default(false),
+    ...timestamps,
+  },
+  // Lot 29 : recherche par morceau de nom, voir la migration 0028_search_extension.
+  (t) => [index("vehicle_makes_name_trgm_idx").using("gin", t.name.op("gin_trgm_ops"))],
+);
 
 export const vehicleModels = pgTable(
   "vehicle_models",
@@ -50,7 +55,10 @@ export const vehicleModels = pgTable(
     isOther: boolean("is_other").notNull().default(false),
     ...timestamps,
   },
-  (t) => [unique("vehicle_models_make_slug_key").on(t.makeId, t.slug)],
+  (t) => [
+    unique("vehicle_models_make_slug_key").on(t.makeId, t.slug),
+    index("vehicle_models_name_trgm_idx").using("gin", t.name.op("gin_trgm_ops")),
+  ],
 );
 
 export const vehicleGenerations = pgTable(
@@ -66,7 +74,10 @@ export const vehicleGenerations = pgTable(
     isOther: boolean("is_other").notNull().default(false),
     ...timestamps,
   },
-  (t) => [unique("vehicle_generations_model_name_key").on(t.modelId, t.name)],
+  (t) => [
+    unique("vehicle_generations_model_name_key").on(t.modelId, t.name),
+    index("vehicle_generations_name_trgm_idx").using("gin", t.name.op("gin_trgm_ops")),
+  ],
 );
 
 export const vehicles = pgTable(

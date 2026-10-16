@@ -98,7 +98,13 @@ export const proListQuery = z.object({
   q: z.string().trim().max(80).optional(),
   activity: z.enum(proActivities).optional(),
   department: departmentSchema.optional(),
+  /** Lot 29 : `name` (défaut, vérifiés d'abord) ou `distance` (position envoyée ou secteur du profil). */
+  sort: z.enum(["name", "distance"]).default("name"),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+  radiusKm: z.coerce.number().min(1).max(500).optional(),
 });
+export type ProListQuery = z.infer<typeof proListQuery>;
 
 // --- Vues ---------------------------------------------------------------------------------------------------
 
@@ -117,6 +123,8 @@ export type ProCard = {
   /** Raison sociale du registre, affichée à côté du badge « Pro vérifié » (`null` sans badge). */
   registryName: string | null;
   followersCount: number;
+  /** Distance à ma position (lot 29), seulement quand la requête en a une et que la fiche a une adresse. */
+  distanceKm?: number | null;
 };
 
 export type ProPartner = { slug: string; name: string; logoUrl: string | null; city: string | null };
