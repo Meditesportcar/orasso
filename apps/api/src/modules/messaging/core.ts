@@ -95,6 +95,8 @@ export function writeBlockError(block: ConversationWriteBlock): AppError {
       return forbidden("Ton compte est suspendu : lecture seule.");
     case "two_factor":
       return new AppError(403, "two_factor_required", "Double authentification obligatoire pour cet espace");
+    case "structure_suspended":
+      return forbidden("Cette structure est suspendue.");
   }
 }
 

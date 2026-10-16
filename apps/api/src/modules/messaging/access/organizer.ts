@@ -40,6 +40,19 @@ export async function isStructureOrganizer(ex: Executor, userId: string, structu
 }
 
 /**
+ * Structure suspendue (relecture du lot 18, même règle que `isOrganizerOf` du lot 17) : plus d'écriture ni d'ouverture
+ * de conversation, de son côté comme vers elle ; l'historique reste lisible par ses membres et ses correspondants.
+ */
+export async function isStructureSuspended(ex: Executor, structureId: string | null): Promise<boolean> {
+  if (!structureId) return false;
+  const [row] = await ex
+    .select({ verification: structures.verification })
+    .from(structures)
+    .where(eq(structures.id, structureId));
+  return row?.verification === "suspended";
+}
+
+/**
  * S10 : une structure peut écrire la première à une personne qui la suit, ou qui a une candidature en cours (en
  * attente, retenue, liste d'attente, offre) à un de ses événements fini depuis moins de 7 jours — la même audience que
  * celle des profils (relecture du lot 17).
@@ -121,7 +134,8 @@ export const organizerRules: KindRules = {
   },
 
   async writeBlock(ex, conversation) {
-    return (await memberOf(ex, conversation.id)) ? null : "account_deleted";
+    if (!(await memberOf(ex, conversation.id))) return "account_deleted";
+    return (await isStructureSuspended(ex, conversation.structureId)) ? "structure_suspended" : null;
   },
 
   async describe(ex, conversation, viewer) {

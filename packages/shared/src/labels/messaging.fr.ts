@@ -30,6 +30,7 @@ export const messagingLabels = {
   closeImage: "Fermer la photo",
   imageTooLarge: "Photo trop lourde (15 Mo au plus).",
   contactOrganizer: "Contacter l'organisateur",
+  structureSuspended: "Cette structure est suspendue.",
   contactRequest: "Demande de contact",
   contactRequestHint:
     "Vous n'êtes pas amis : ton message part en demande de contact, rangée à part. Une seule demande est possible.",
@@ -48,6 +49,7 @@ export const messagingLabels = {
     suspended: "Ton compte est suspendu : lecture seule.",
     account_deleted: "Ce compte a été supprimé : la conversation reste lisible.",
     two_factor: "Double authentification obligatoire pour répondre au nom de la structure.",
+    structure_suspended: "Cette structure est suspendue : la conversation reste lisible.",
   },
 } as const;
 

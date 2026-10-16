@@ -11,6 +11,7 @@ import {
 } from "@orasso/shared";
 import { Hono } from "hono";
 
+import { rateLimit } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, query, uuidParam } from "../../lib/validate";
@@ -30,17 +31,20 @@ export const messagingRoutes = new Hono<AppEnv>()
   })
   .post("/conversations/direct", async (c) => {
     const v = await requireUser(c);
+    rateLimit("conversationOpen", v.user.id);
     const { userId } = await body(c, directConversationSchema);
     const result = await messagingService.openDirect(v, userId);
     return c.json(result, result.created ? 201 : 200);
   })
   .post("/structures/:id/conversation", async (c) => {
     const v = await requireUser(c);
+    rateLimit("conversationOpen", v.user.id);
     const result = await messagingService.openWithStructure(v, uuidParam(c, "id"));
     return c.json(result, result.created ? 201 : 200);
   })
   .post("/structures/:id/conversations/with/:userId", async (c) => {
     const v = await requireUser(c);
+    rateLimit("conversationOpen", v.user.id);
     const result = await messagingService.openFromStructure(v, uuidParam(c, "id"), c.req.param("userId"));
     return c.json(result, result.created ? 201 : 200);
   })

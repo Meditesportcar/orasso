@@ -15,7 +15,8 @@ import type { Tx } from "../../lib/tx";
 import { refreshPreview } from "./core";
 
 /**
- * - ses messages : contenu et image effacés, expéditeur retiré (« Message supprimé », jamais son pseudo) ;
+ * - ses messages : contenu et image effacés, expéditeur retiré (« Message supprimé », jamais son pseudo) ; ceux écrits
+ *   au nom d'une structure gardent leur texte et leur image (historique de la structure), seul l'expéditeur est retiré ;
  * - ses fichiers envoyés et pas encore rattachés ;
  * - ses demandes de contact, envoyées et reçues ;
  * - ses participations : retirées ; ses conversations à deux et avec une structure sont fermées (lisibles par l'autre) ;
@@ -26,10 +27,14 @@ export async function anonymizeMessagingForDeletedAccount(tx: Tx, userId: string
   const at = now();
   const keys: string[] = [];
   const own = await tx
-    .select({ conversationId: messages.conversationId, imageKey: messages.imageKey })
+    .select({ conversationId: messages.conversationId, imageKey: messages.imageKey, asStructure: messages.asStructure })
     .from(messages)
     .where(eq(messages.senderId, userId));
-  for (const m of own) if (m.imageKey) keys.push(m.imageKey);
+  for (const m of own) if (m.imageKey && !m.asStructure) keys.push(m.imageKey);
+  await tx
+    .update(messages)
+    .set({ senderId: null })
+    .where(and(eq(messages.senderId, userId), eq(messages.asStructure, true)));
   await tx
     .update(messages)
     .set({

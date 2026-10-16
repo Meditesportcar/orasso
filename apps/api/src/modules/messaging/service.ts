@@ -12,6 +12,7 @@ import {
   type MessageSend,
   type MessageView,
   messagePreview,
+  messagingLabels,
   type OpenConversationResult,
   organizerKey,
   PUSH_PREVIEW_MAX,
@@ -33,7 +34,7 @@ import { profilesRepo } from "../profiles/repo";
 import { uploadsService } from "../uploads/service";
 import { type ConversationRow, type Reader, registeredKinds } from "./access";
 import { canTalkDirect } from "./access/direct";
-import { isStructureOrganizer, structureCanReach } from "./access/organizer";
+import { isStructureOrganizer, isStructureSuspended, structureCanReach } from "./access/organizer";
 import {
   type Access,
   type Actor,
@@ -152,6 +153,7 @@ export const messagingService = {
       .select()
       .from(structures)
       .where(and(eq(structures.id, structureId), isNull(structures.deletedAt)));
+    if (s?.verification === "suspended") throw forbidden(messagingLabels.structureSuspended);
     if (s?.verification !== "verified") throw notFound("Structure introuvable");
     if (await isStructureOrganizer(db, v.user.id, structureId)) {
       throw conflict("conflict", "Tu es organisateur de cette structure.");
@@ -177,6 +179,7 @@ export const messagingService = {
     if (!(await isStructureOrganizer(db, v.user.id, structureId))) {
       throw forbidden("Réservé aux organisateurs de la structure");
     }
+    if (await isStructureSuspended(db, structureId)) throw forbidden(messagingLabels.structureSuspended);
     if (!twoFactorOk(actor.secondFactor)) {
       throw new AppError(403, "two_factor_required", "Double authentification obligatoire pour cet espace");
     }
@@ -595,9 +598,12 @@ async function pushTo(tx: Tx, access: Access, row: MessageRow, v: Viewer, recipi
         : r.side === "structure" && structureName
           ? `${v.profile.pseudo} · ${structureName}`
           : v.profile.pseudo;
+    // Côté structure : l'organisateur n'a peut-être pas prouvé son second facteur sur l'appareil qui reçoit le push →
+    // aucun contenu (relecture du lot 18), il lit dans sa Boîte après la double authentification.
+    const toStructure = r.side === "structure" && structureName;
     await notificationsService.notify(tx, r.userId, "message_received", {
-      title,
-      body: `${v.profile.pseudo} : ${preview}`,
+      title: toStructure ? structureName : title,
+      body: toStructure ? `Nouveau message pour ${structureName}` : `${v.profile.pseudo} : ${preview}`,
       inJournal: false,
       data: {
         conversationId: row.conversationId,
