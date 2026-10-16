@@ -1,5 +1,7 @@
 import { Button, Chip, Plate, TextField, VehicleCard } from "@orasso/design-system/web";
 import {
+  crewLabels,
+  type MyCrew,
   type PlateTransferView,
   plateTransferLabels,
   type VehicleFull,
@@ -8,6 +10,7 @@ import {
 } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
 
+import { CrewLogo } from "../components/Crews";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime } from "../lib/format";
 import type { Route } from "./+types/garage";
@@ -20,15 +23,18 @@ export function meta() {
 const ARCHIVED: Exclude<VehicleStatus, "active">[] = ["sold", "keepsake", "wrecked"];
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const [vehicles, transfers] = await Promise.all([
+  const [vehicles, transfers, crews] = await Promise.all([
     apiOrThrow<VehicleFull[]>(request, "/me/vehicles"),
     api<{ incoming: PlateTransferView[]; outgoing: unknown[] }>(request, "/me/plate-transfers"),
+    // En-tête : mes crews (lot 19, docs/02 « Garage »).
+    api<MyCrew[]>(request, "/me/crews"),
   ]);
   const photoRefused = new URL(request.url).searchParams.get("photo") === "refusee";
   return {
     vehicles: vehicles.filter((v) => v.status === "active"),
     archived: vehicles.filter((v) => v.status !== "active"),
     incoming: transfers.ok ? transfers.data.incoming : [],
+    crews: crews.ok ? crews.data : [],
     photoRefused,
   };
 }
@@ -57,7 +63,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Garage({ loaderData, actionData }: Route.ComponentProps) {
-  const { vehicles, archived, incoming, photoRefused } = loaderData;
+  const { vehicles, archived, incoming, crews, photoRefused } = loaderData;
   const busy = useNavigation().state !== "idle";
   return (
     <div className="s-stack">
@@ -66,6 +72,17 @@ export default function Garage({ loaderData, actionData }: Route.ComponentProps)
         <Button variant="primary" icon="add" href="/app/garage/nouveau">
           Ajouter un véhicule
         </Button>
+      </div>
+      <div className="s-row s-row--tight" data-testid="garage-crews">
+        <span className="s-label o-t-label">{crewLabels.crews}</span>
+        {crews.map((c) => (
+          <a key={c.id} href={`/c/${c.slug}`} title={c.name} aria-label={c.name}>
+            <CrewLogo url={c.logoUrl} name={c.name} size={36} />
+          </a>
+        ))}
+        <a href="/app/crews" className="o-t-caption">
+          {crews.length ? crewLabels.myCrews : crewLabels.createCrew}
+        </a>
       </div>
       {photoRefused && (
         <p className="s-notice s-notice--alert">

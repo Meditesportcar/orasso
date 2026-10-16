@@ -4,6 +4,8 @@ import {
   applicationStatusLabels,
   type ContestStatus,
   contestStatusLabels,
+  crewLabels,
+  type EventPublic,
   type EventWeather,
   eventFormatLabels,
   gradeLabels,
@@ -19,10 +21,12 @@ import { useState } from "react";
 import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-router";
 
 import { Countdown } from "../components/Countdown";
+import { CrewConfirm } from "../components/Crews";
 import { Qr } from "../components/Qr";
 import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { crewAction, isCrewIntent } from "../lib/crews.server";
 import { formatDateTime, formatWhen } from "../lib/format";
 import { badgeFor } from "../lib/status";
 import { useChannel } from "../lib/useChannel";
@@ -67,6 +71,16 @@ export async function loader({ request }: Route.LoaderArgs) {
         if (res.ok && res.data) weather[a.id] = res.data;
       }),
   );
+  // Venue en crew à confirmer (lot 19) : le règlement de l'événement s'affiche dans la carte.
+  const rules: Record<string, string | null> = {};
+  await Promise.all(
+    applications
+      .filter((a) => !past && a.status === "awaiting_member")
+      .map(async (a) => {
+        const res = await api<EventPublic>(request, `/events/by-slug/${encodeURIComponent(a.event.slug)}`);
+        rules[a.id] = res.ok ? res.data.rulesText : null;
+      }),
+  );
   const points = past ? await apiOrThrow<MyPoints>(request, "/me/points") : null;
   const me = await requireMe(request);
   const tickets = await api<MyTicket[]>(request, "/me/tickets");
@@ -75,6 +89,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     applications,
     passes,
     weather,
+    rules,
     points,
     userId: me.user.id,
     ticketCount: tickets.ok ? tickets.data.filter((t) => t.status === "valid").length : 0,
@@ -85,6 +100,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
+  // Confirmer ma venue en crew / Je ne viens pas (lot 19).
+  if (isCrewIntent(intent)) {
+    const res = await crewAction(request, form);
+    return data({ error: res.data.crewError, ok: res.data.crewOk ?? null }, { status: res.init?.status ?? 200 });
+  }
   const id = String(form.get("applicationId") ?? "");
   if (!id) return data({ error: "Candidature inconnue." }, { status: 400 });
   let res: Awaited<ReturnType<typeof api>>;
@@ -116,11 +136,13 @@ function ApplicationCard({
   app,
   pass,
   weather,
+  rulesText,
   past,
 }: {
   app: MyApplication;
   pass?: AccessPass;
   weather?: EventWeather;
+  rulesText?: string | null;
   past: boolean;
 }) {
   const busy = useNavigation().state !== "idle";
@@ -146,6 +168,11 @@ function ApplicationCard({
             {app.event.city ? ` · ${app.event.city}` : ""}
           </div>
           {app.vehicle && <div className="o-never-truncate">{app.vehicle.label}</div>}
+          {app.crew && (
+            <a href={`/c/${app.crew.slug}`} className="o-t-caption" data-testid="application-crew">
+              {crewLabels.crew} « {app.crew.name} »
+            </a>
+          )}
         </div>
         {badge ? (
           <StatusBadge status={badge.status} rank={badge.rank} />
@@ -175,6 +202,16 @@ function ApplicationCard({
             {app.checkedInAt ? ` Entrée enregistrée à ${formatDateTime(app.checkedInAt)}.` : ""}
           </p>
         </>
+      )}
+
+      {!past && app.status === "awaiting_member" && app.crew && (
+        <CrewConfirm
+          applicationId={app.id}
+          crew={app.crew}
+          vehicleLabel={app.vehicle?.label ?? null}
+          rulesText={rulesText ?? null}
+          busy={busy}
+        />
       )}
 
       {app.status === "offered" && app.offerExpiresAt && (
@@ -350,7 +387,8 @@ function ReviewBlock({ app, review, busy }: { app: MyApplication; review: MyRevi
 }
 
 export default function Acces({ loaderData, actionData }: Route.ComponentProps) {
-  const { past, applications, passes, weather, points, sent, userId, ticketCount } = loaderData;
+  const { past, applications, passes, weather, rules, points, sent, userId, ticketCount } = loaderData;
+  const okMessage = actionData && "ok" in actionData ? actionData.ok : null;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   // Une décision de l'organisateur, une offre ou un pass émis : la page se met à jour sans rechargement.
@@ -381,6 +419,11 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
           {actionData.error}
         </p>
       )}
+      {okMessage && (
+        <p className="s-notice s-notice--ok" role="status" data-testid="acces-ok">
+          {okMessage}
+        </p>
+      )}
 
       {past && points && (
         <Plate as="section" className="s-stack s-stack--tight" aria-label="Mes points">
@@ -403,7 +446,14 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
         </p>
       ) : (
         applications.map((app) => (
-          <ApplicationCard key={app.id} app={app} pass={passes[app.id]} weather={weather[app.id]} past={past} />
+          <ApplicationCard
+            key={app.id}
+            app={app}
+            pass={passes[app.id]}
+            weather={weather[app.id]}
+            rulesText={rules[app.id]}
+            past={past}
+          />
         ))
       )}
     </div>

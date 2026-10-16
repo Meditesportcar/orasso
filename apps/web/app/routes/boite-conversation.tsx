@@ -5,6 +5,7 @@ import {
   type MessagePage,
   type MessageView,
   messagingLabels,
+  systemMessageText,
   type UploadResult,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -230,6 +231,15 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
           const mine = mySide(m);
           const prev = items[i - 1];
           const day = !prev || new Date(prev.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
+          // Message d'information (« Léa a rejoint le crew. », lot 19) : centré, sans bulle ni expéditeur.
+          if (m.kind === "system") {
+            return (
+              <li key={m.id} className="s-chat__item" data-testid="message-system">
+                {day && <div className="s-chat__day o-t-caption s-muted">{formatDay(m.createdAt)}</div>}
+                <p className="o-t-caption s-muted s-center">{systemMessageText(m.body)}</p>
+              </li>
+            );
+          }
           return (
             <li key={m.id} className={`s-chat__item${mine ? " s-chat__item--mine" : ""}`} data-testid="message">
               {day && <div className="s-chat__day o-t-caption s-muted">{formatDay(m.createdAt)}</div>}

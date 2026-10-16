@@ -1,6 +1,8 @@
 import { Button, Chip, ChipRow, Counters, Icon, Reveal, SelectField, StatusBadge } from "@orasso/design-system/web";
 import {
+  applicationStatusLabels,
   type Category,
+  crewLabels,
   type EventProviderPublic,
   type EventPublic,
   type EventReviews,
@@ -9,6 +11,7 @@ import {
   eventFormatLabels,
   eventOutlookLabels,
   instagramHandle,
+  type MyCrew,
   type MyTicket,
   publicAccessText,
   type StructurePublic,
@@ -45,9 +48,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // Météo à l'approche (lot 28) : cache de l'API, `null` au-delà de 7 jours ; jamais bloquante.
     api<EventWeather | null>(request, `/events/by-slug/${encodeURIComponent(slug)}/weather`),
   ]);
+  // Inscription en crew (lot 19) : proposée au chef d'un crew, sauf événement sur invitation seulement.
+  const crews = me && event.admission !== "invite_only" ? await api<MyCrew[]>(request, "/me/crews") : null;
   return {
     event,
     structure,
+    leadsCrew: Boolean(crews?.ok && crews.data.some((c) => c.role === "leader")),
     reviews: reviews.ok ? reviews.data : null,
     providers: providers.ok ? providers.data : [],
     weather: weather.ok ? weather.data : null,
@@ -285,6 +291,7 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
     myTickets,
     paymentCancelled,
     providers,
+    leadsCrew,
   } = loaderData;
   const mine = event.myApplications ?? [];
   const wanted = (event.criteria?.categoryIds ?? [])
@@ -471,23 +478,41 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
                 const badge = badgeFor({ status: a.status });
                 return (
                   <div key={a.id} className="s-row">
-                    {badge ? (
-                      <StatusBadge status={badge.status} />
-                    ) : (
-                      <Chip>{a.status === "withdrawn" ? "Désistée" : "Offre expirée"}</Chip>
-                    )}
+                    {badge ? <StatusBadge status={badge.status} /> : <Chip>{applicationStatusLabels[a.status]}</Chip>}
                   </div>
                 );
               })}
               <Button variant="primary" icon="qr" href="/app/acces" fullWidth>
                 Voir mon accès
               </Button>
+              {leadsCrew && state.kind === "open" && (
+                <Button
+                  variant="secondary"
+                  icon="crew"
+                  href={`/e/${event.slug}/crew`}
+                  fullWidth
+                  data-testid="register-crew"
+                >
+                  {crewLabels.myRegistrations}
+                </Button>
+              )}
             </div>
           ) : state.kind === "open" ? (
             <>
               <Button variant="primary" icon="vehicle" href={candidateHref} fullWidth>
                 Candidater avec un véhicule
               </Button>
+              {leadsCrew && (
+                <Button
+                  variant="secondary"
+                  icon="crew"
+                  href={`/e/${event.slug}/crew`}
+                  fullWidth
+                  data-testid="register-crew"
+                >
+                  {crewLabels.registerCrew}
+                </Button>
+              )}
               {!connected && (
                 <p className="o-t-caption s-muted s-center">Crée ton compte ou connecte-toi, tu reviendras ici.</p>
               )}

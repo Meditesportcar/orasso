@@ -2,6 +2,9 @@ import { Button, Chip } from "@orasso/design-system/web";
 import {
   type ContactAcceptResult,
   type ContactRequestView,
+  type CrewConfirmationRequest,
+  type CrewInboxRequest,
+  crewLabels,
   type FriendRequestView,
   gradeLabels,
   type InboxSummary,
@@ -9,9 +12,12 @@ import {
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { CrewLogo } from "../components/Crews";
 import { InboxSegments } from "../components/Messaging";
 import { PersonAvatar } from "../components/People";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { crewAction, isCrewIntent } from "../lib/crews.server";
+import { formatDateTime } from "../lib/format";
 import { friendAction, isFriendIntent } from "../lib/friends.server";
 import type { Route } from "./+types/boite-demandes";
 
@@ -23,16 +29,21 @@ export function meta() {
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireMe(request);
-  const [friends, contacts, summary] = await Promise.all([
+  const [friends, contacts, summary, crews, confirmations] = await Promise.all([
     apiOrThrow<{ items: FriendRequestView[] }>(request, "/me/friends/requests?direction=in"),
     apiOrThrow<{ items: ContactRequestView[] }>(request, "/me/contact-requests"),
     apiOrThrow<InboxSummary>(request, "/me/inbox/summary"),
+    // Crews (lot 19) : demandes reçues par un chef, invitations reçues, venues en crew à confirmer.
+    apiOrThrow<CrewInboxRequest[]>(request, "/me/crew-requests"),
+    apiOrThrow<CrewConfirmationRequest[]>(request, "/me/crew-confirmations"),
   ]);
   return {
     friends: friends.items,
     contactsIn: contacts.items.filter((c) => c.direction === "in"),
     contactsOut: contacts.items.filter((c) => c.direction === "out"),
     summary,
+    crews,
+    confirmations,
   };
 }
 
@@ -40,6 +51,10 @@ export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   if (isFriendIntent(intent)) return friendAction(request, form);
+  if (isCrewIntent(intent)) {
+    const res = await crewAction(request, form);
+    return data({ friendError: res.data.crewError }, { status: res.init?.status ?? 200 });
+  }
   const id = encodeURIComponent(String(form.get("id") ?? ""));
   if (intent === "contact_accept") {
     const res = await api<ContactAcceptResult>(request, `/contact-requests/${id}/accept`, { method: "POST" });
@@ -90,10 +105,10 @@ function Decide({ intentPrefix, id, busy }: { intentPrefix: "friend" | "contact"
 }
 
 export default function Demandes({ loaderData, actionData }: Route.ComponentProps) {
-  const { friends, contactsIn, contactsOut, summary } = loaderData;
+  const { friends, contactsIn, contactsOut, summary, crews, confirmations } = loaderData;
   const busy = useNavigation().state !== "idle";
   const requests = Object.values(summary.requests).reduce((a, b) => a + b, 0);
-  const empty = friends.length === 0 && contactsIn.length === 0;
+  const empty = friends.length === 0 && contactsIn.length === 0 && crews.length === 0 && confirmations.length === 0;
   return (
     <div className="s-narrow s-stack" data-testid="demandes">
       <h1 className="s-title">{messagingLabels.inbox}</h1>
@@ -127,6 +142,91 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
             </li>
           ))}
         </ul>
+      )}
+      {confirmations.length > 0 && (
+        <section className="s-section" aria-labelledby="venues-titre">
+          <h2 id="venues-titre" className="s-h2">
+            {crewLabels.crewConfirmations}
+          </h2>
+          <ul className="s-people">
+            {confirmations.map((c) => (
+              <li key={c.applicationId} className="s-person" data-testid="request-crew-confirmation">
+                <CrewLogo url={c.crew.logoUrl} name={c.crew.name} size={44} />
+                <div className="s-person__main">
+                  <span className="s-label o-t-label">{crewLabels.confirmTitle(c.crew.name)}</span>
+                  <a href={`/e/${c.event.slug}`} className="o-t-title">
+                    {c.event.title}
+                  </a>
+                  {c.vehicleLabel && <span className="o-never-truncate">{c.vehicleLabel}</span>}
+                  <span className="o-t-caption s-muted">
+                    {crewLabels.confirmBefore(formatDateTime(c.confirmBefore))}
+                  </span>
+                </div>
+                <Button variant="secondary" icon="qr" href="/app/acces">
+                  {crewLabels.confirmVenue}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {crews.length > 0 && (
+        <section className="s-section" aria-labelledby="crews-titre">
+          <h2 id="crews-titre" className="s-h2">
+            {crewLabels.crewRequests}
+          </h2>
+          <ul className="s-people">
+            {crews.map((r) => (
+              <li
+                key={`${r.kind}-${r.crew.id}-${r.person.userId}`}
+                className="s-person"
+                data-testid={`request-crew-${r.kind}`}
+              >
+                <CrewLogo url={r.crew.logoUrl} name={r.crew.name} size={44} />
+                <div className="s-person__main">
+                  <span className="s-label o-t-label">
+                    {r.kind === "request"
+                      ? crewLabels.requestFrom(r.person.pseudo, r.crew.name)
+                      : crewLabels.invitationFrom(r.crew.name)}
+                  </span>
+                  <a className="o-t-title o-never-truncate" href={`/c/${r.crew.slug}`}>
+                    {r.crew.name}
+                  </a>
+                  {r.kind === "invitation" && (
+                    <span className="o-t-caption s-muted">{crewLabels.leaderOf(r.person.pseudo)}</span>
+                  )}
+                  {r.message && <p className="o-t-caption s-muted s-prewrap">{r.message}</p>}
+                </div>
+                <div className="s-row">
+                  <Form method="post">
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value={r.kind === "request" ? "crew_request_accept" : "crew_invitation_accept"}
+                    />
+                    <input type="hidden" name="crewId" value={r.crew.id} />
+                    <input type="hidden" name="userId" value={r.person.userId} />
+                    <Button type="submit" variant="secondary" icon="check" loading={busy}>
+                      {crewLabels.accept}
+                    </Button>
+                  </Form>
+                  <Form method="post">
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value={r.kind === "request" ? "crew_request_decline" : "crew_invitation_decline"}
+                    />
+                    <input type="hidden" name="crewId" value={r.crew.id} />
+                    <input type="hidden" name="userId" value={r.person.userId} />
+                    <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                      {crewLabels.decline}
+                    </Button>
+                  </Form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       {contactsOut.length > 0 && (
         <section className="s-section" aria-labelledby="envoyees-titre">

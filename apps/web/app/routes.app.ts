@@ -25,5 +25,8 @@ export default [
     route("app/journal", "routes/journal.tsx"),
     route("u/:pseudo", "routes/profil.tsx"),
     route("v/:id", "routes/vehicule.tsx"),
+    // Crews (lot 19) : mes crews et création, fiche d'un crew (connectés seulement).
+    route("app/crews", "routes/crews.tsx"),
+    route("c/:slug", "routes/crew.tsx"),
   ]),
 ] satisfies RouteConfig;

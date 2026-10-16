@@ -2,6 +2,8 @@ import { Button, CheckboxField, Chip, SelectField, StatusBadge, TextField } from
 import {
   type ApplicationForTriage,
   type Category,
+  crewLabels,
+  type EventCrewFilter,
   gradeLabels,
   grades,
   type RefusalReason,
@@ -30,7 +32,14 @@ const SORT_OPTIONS = [
   { value: "pseudo", label: "Pseudo" },
 ];
 
-export type ListFilters = { q?: string; status?: string; categoryId?: string; grade?: string; sort?: string };
+export type ListFilters = {
+  q?: string;
+  status?: string;
+  categoryId?: string;
+  grade?: string;
+  sort?: string;
+  crewId?: string;
+};
 
 /** Vue liste : filtres, sélection multiple, décisions en masse (chaque candidature réussit ou échoue seule). */
 export function TriageList({
@@ -39,6 +48,7 @@ export function TriageList({
   nextHref,
   filters,
   categories,
+  crews = [],
   canDecide,
   onChanged,
 }: {
@@ -47,6 +57,8 @@ export function TriageList({
   nextHref: string | null;
   filters: ListFilters;
   categories: Category[];
+  /** Crews inscrits (lot 19) : filtre, puis « tout sélectionner » = décision en masse par crew. */
+  crews?: EventCrewFilter[];
   canDecide: boolean;
   onChanged: () => void;
 }) {
@@ -112,6 +124,17 @@ export function TriageList({
           defaultValue={filters.grade ?? ""}
           options={[{ value: "", label: "Tous" }, ...grades.map((g) => ({ value: g, label: gradeLabels[g] }))]}
         />
+        {crews.length > 0 && (
+          <SelectField
+            label={crewLabels.triageFilterCrew}
+            name="crewId"
+            defaultValue={filters.crewId ?? ""}
+            options={[
+              { value: "", label: crewLabels.triageFilterAnyCrew },
+              ...crews.map((c) => ({ value: c.id, label: `${c.name} (${c.count})` })),
+            ]}
+          />
+        )}
         <SelectField label="Tri" name="sort" defaultValue={filters.sort ?? "created_at"} options={SORT_OPTIONS} />
         <Button type="submit" icon="search" variant="secondary">
           Filtrer
@@ -219,6 +242,13 @@ export function TriageList({
                   <td>
                     {item.applicant.pseudo}{" "}
                     <span className="s-muted o-t-caption">· {gradeLabels[item.applicant.grade]}</span>
+                    {item.crew && (
+                      <span className="s-row s-row--tight" data-testid="triage-row-crew">
+                        <Chip>
+                          {crewLabels.triageCrew} {item.crew.name} · {item.crew.confirmed}/{item.crew.total}
+                        </Chip>
+                      </span>
+                    )}
                   </td>
                   <td className="o-never-truncate">
                     {item.vehicle?.label ?? "—"}

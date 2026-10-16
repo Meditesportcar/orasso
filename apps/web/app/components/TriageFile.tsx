@@ -1,6 +1,8 @@
 import { Button, CheckboxField, Chip, ChipRow } from "@orasso/design-system/web";
 import {
   type ApplicationForTriage,
+  applicationStatusLabels,
+  crewLabels,
   type Page,
   type RefusalReason,
   refusalReasonLabels,
@@ -266,6 +268,27 @@ export function TriageFile({
               : `Retenu ${current.applicant.historyWithStructure.accepted} fois · refusé ${current.applicant.historyWithStructure.refused}`}
           </span>
         </div>
+        {current.crew && (
+          <div className="tri__kv" data-testid="triage-crew">
+            <span>{crewLabels.triageCrew}</span>
+            <span>
+              <a href={`/c/${current.crew.slug}`} className="o-never-truncate">
+                {current.crew.name}
+              </a>{" "}
+              · {crewLabels.confirmedCount(current.crew.confirmed, current.crew.total)}
+              {current.crew.members.filter((m) => m.applicationId !== current.id).length > 0 && (
+                <>
+                  {" "}
+                  · {crewLabels.triageCrewOthers.toLowerCase()} :{" "}
+                  {current.crew.members
+                    .filter((m) => m.applicationId !== current.id)
+                    .map((m) => `${m.pseudo} (${applicationStatusLabels[m.status].toLowerCase()})`)
+                    .join(", ")}
+                </>
+              )}
+            </span>
+          </div>
+        )}
         {opinions.length > 0 && (
           <div className="tri__kv">
             <span>Filtration</span>

@@ -1,15 +1,19 @@
 import { Button, Chip, Plate, SelectField, TextField } from "@orasso/design-system/web";
 import {
   type Category,
+  type CrewCard,
+  crewLabels,
   departments,
   gradeLabels,
   grades,
   hasPeopleSearchCriteria,
+  type Page,
   type PeopleSearchPage,
   socialLabels,
 } from "@orasso/shared";
 import { Form, useNavigation } from "react-router";
 
+import { CrewRow } from "../components/Crews";
 import { FriendAction, PersonRow } from "../components/People";
 import { api, apiOrThrow } from "../lib/api.server";
 import { friendAction } from "../lib/friends.server";
@@ -30,7 +34,22 @@ export async function loader({ request }: Route.LoaderArgs) {
     categoryId: url.searchParams.get("interet") ?? "",
     grade: url.searchParams.get("grade") ?? "",
   };
-  if (segment !== "personnes") return { segment, filters, people: null, categories: [] as Category[], failed: null };
+  // Crews (lot 19) : trouvables par leur nom et leur département.
+  const crewFilters = {
+    q: url.searchParams.get("crew")?.trim() ?? "",
+    department: url.searchParams.get("crewdep") ?? "",
+  };
+  if (segment !== "personnes") {
+    return { segment, filters, crewFilters, crews: null, people: null, categories: [] as Category[], failed: null };
+  }
+  let crews: CrewCard[] | null = null;
+  if (crewFilters.q || crewFilters.department) {
+    const qs = new URLSearchParams();
+    if (crewFilters.q) qs.set("q", crewFilters.q);
+    if (crewFilters.department) qs.set("department", crewFilters.department);
+    const res = await api<Page<CrewCard>>(request, `/crews/search?${qs}`);
+    crews = res.ok ? res.data.items : [];
+  }
   const categories = await apiOrThrow<Category[]>(request, "/vehicle-reference/categories");
   const criteria = {
     q: filters.q,
@@ -38,13 +57,23 @@ export async function loader({ request }: Route.LoaderArgs) {
     categoryId: filters.categoryId,
     grade: filters.grade,
   };
-  if (!hasPeopleSearchCriteria(criteria)) return { segment, filters, people: null, categories, failed: null };
+  if (!hasPeopleSearchCriteria(criteria)) {
+    return { segment, filters, crewFilters, crews, people: null, categories, failed: null };
+  }
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(criteria)) if (value) params.set(key, value);
   const cursor = url.searchParams.get("suite");
   if (cursor) params.set("cursor", cursor);
   const res = await api<PeopleSearchPage>(request, `/users/search?${params}`);
-  return { segment, filters, people: res.ok ? res.data : null, categories, failed: res.ok ? null : res.error.message };
+  return {
+    segment,
+    filters,
+    crewFilters,
+    crews,
+    people: res.ok ? res.data : null,
+    categories,
+    failed: res.ok ? null : res.error.message,
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -52,7 +81,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Explorer({ loaderData, actionData }: Route.ComponentProps) {
-  const { segment, filters, people, categories, failed } = loaderData;
+  const { segment, filters, crewFilters, crews, people, categories, failed } = loaderData;
   const busy = useNavigation().state !== "idle";
   const segments = [
     { id: "evenements", label: socialLabels.segmentEvents, href: "/app/explorer" },
@@ -167,10 +196,42 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
               Suite
             </Button>
           )}
-          <Button variant="secondary" icon="crew" href="/app/amis">
+          <Button variant="secondary" icon="profile" href="/app/amis">
             {socialLabels.myFriends}
           </Button>
-          <p className="o-t-caption s-muted">{socialLabels.crewsSoon}</p>
+
+          <Plate as="section" aria-label={crewLabels.search} data-testid="crew-search">
+            <Form method="get" className="s-filters">
+              <input type="hidden" name="segment" value="personnes" />
+              <TextField
+                label={crewLabels.search}
+                name="crew"
+                defaultValue={crewFilters.q}
+                placeholder={crewLabels.searchPlaceholder}
+              />
+              <SelectField
+                label={crewLabels.department}
+                name="crewdep"
+                defaultValue={crewFilters.department}
+                options={[{ value: "", label: "Tous" }, ...departments.map((d) => ({ value: d, label: d }))]}
+              />
+              <Button type="submit" variant="secondary" icon="search">
+                {crewLabels.search}
+              </Button>
+            </Form>
+          </Plate>
+          {!crews && <p className="o-t-caption s-muted">{crewLabels.searchIdle}</p>}
+          {crews && crews.length === 0 && <p className="s-notice">{crewLabels.searchEmpty}</p>}
+          {crews && crews.length > 0 && (
+            <ul className="s-people" data-testid="crew-results">
+              {crews.map((c) => (
+                <CrewRow key={c.id} crew={c} />
+              ))}
+            </ul>
+          )}
+          <Button variant="secondary" icon="crew" href="/app/crews">
+            {crewLabels.myCrews}
+          </Button>
         </div>
       )}
     </div>
