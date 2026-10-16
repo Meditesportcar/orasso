@@ -5,7 +5,11 @@ import { app } from "./app";
 import { pool } from "./db/client";
 import { env } from "./env";
 import { startJobs } from "./jobs";
+import { initSentry } from "./lib/sentry";
 import { signing } from "./lib/signing";
+
+// GlitchTip / Sentry (lot 15) : seulement si SENTRY_DSN est renseigné.
+initSentry();
 
 // Clés publiques des QR recopiées dans `signing_keys` (refus de démarrer si une clé diffère de celle en base).
 await signing.ensureSynced();

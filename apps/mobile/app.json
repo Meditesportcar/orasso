@@ -63,6 +63,22 @@
           "cameraPermission": "Orasso utilise l’appareil photo pour photographier ton véhicule et, si tu fais partie du staff, lire les QR d’accès à l’entrée des événements.",
           "recordAudioAndroid": false
         }
+      ],
+      "@sentry/react-native/expo",
+      "@maplibre/maplibre-react-native",
+      "expo-sharing",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Orasso utilise ta position seulement quand tu le demandes (« Utiliser ma position ») pour montrer les événements et les pros autour de toi et, si tu fais partie du staff, situer une alerte ou un incident. Elle n’est jamais enregistrée.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "motionUsagePermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false,
+          "isAndroidMotionActivityEnabled": false
+        }
       ]
     ],
     "experiments": {

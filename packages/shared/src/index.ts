@@ -3,6 +3,7 @@ export * from "./enums";
 export * from "./geo";
 export * from "./grades";
 export * from "./labels.fr";
+export * from "./privacy";
 export * from "./qr";
 export * from "./roles";
 export * from "./rules";

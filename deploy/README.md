@@ -49,6 +49,8 @@ Retour arrière et migrations : `rollback` remet les images précédentes mais n
 - Nouvelle variable d'environnement : l'ajouter à `deploy/dev.env.example`, puis sur le VPS dans `/etc/orasso/dev.env` (`sudo nano`), puis redéployer. Un secret se génère sur le serveur (`openssl rand -hex 32`) et ne s'affiche pas.
 - Le site joint l'API pendant le rendu serveur par `API_INTERNAL_URL` (`http://orasso-api:3000`), sans repasser par nginx.
 - Photos : écrire dans `UPLOADS_DIR` (`/data/uploads`), seul dossier inscriptible de l'API.
+- GlitchTip / Sentry (lot 15) : `SENTRY_DSN` (API) et `VITE_SENTRY_DSN` (rendu serveur du site) se lisent au démarrage depuis `/etc/orasso/dev.env` ; `SENTRY_RELEASE` reçoit l'étiquette de l'image (`compose.yml`). Côté navigateur, `VITE_SENTRY_DSN` est lu **à la construction** de l'image du site : tant que `deploy.sh` ne le passe pas en `--build-arg` (non fait), seules les erreurs du rendu serveur partent. Vides = rien n'est envoyé.
+- Clés d'accès (passkeys, lot 15) : identifiant de domaine = hôte de `PUBLIC_URL` (`dev.orasso.fr`) ; une clé créée sur dev.orasso.fr ne vaut pas pour orasso.fr.
 
 ## Voir les journaux sur le VPS
 

@@ -64,6 +64,11 @@ const schema = z.object({
   STRIPE_WEBHOOK_SECRET: optional,
   /** Identifiant d'application Connect (`ca_…`) : parcours de connexion du compte de l'organisateur. */
   STRIPE_CONNECT_CLIENT_ID: optional,
+  /** Erreurs vers GlitchTip / Sentry (lot 15) : vide = rien n'est envoyé. */
+  SENTRY_DSN: optional,
+  SENTRY_ENVIRONMENT: optional,
+  /** Version déployée (étiquette de l'image, posée par compose.yml). */
+  SENTRY_RELEASE: optional,
 });
 
 /**
