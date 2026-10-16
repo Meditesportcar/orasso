@@ -37,6 +37,7 @@ import {
   ScanGate,
   type StaffState,
   scanAction,
+  scanLines,
   searchLocal,
   serverReport,
 } from "./model";
@@ -96,6 +97,9 @@ function entry(n: number, over: Partial<AccessListEntry> = {}): AccessListEntry 
     pseudo: `Pilote_${String(n).padStart(3, "0")}`,
     vehicleLabel: n === 1 ? "Toyota Supra MK4" : "Mazda RX-7",
     vehicleType: "car",
+    kind: "vehicle",
+    providerType: null,
+    providerName: null,
     categories: [],
     plateHint: plate ? plate.slice(0, 3) : null,
     plateHash: plate ? apiPlateHash(SALT, plate) : null,
@@ -717,5 +721,21 @@ describe("corrections après relecture", () => {
     if (!merged.ok) throw new Error("fusion");
     await store.saveSync(merged.meta, merged.entries, true);
     expect(await store.entries(EVENT_ID)).toHaveLength(250);
+  });
+});
+
+describe("résultat d'un scan de prestataire (lot 21)", () => {
+  it("« Prestataire · Food truck » à la place du véhicule, le nom de l'activité à la place du pseudo", () => {
+    const truck = entry(7, {
+      kind: "provider",
+      vehicleLabel: "Food truck · La Caravane",
+      providerType: "Food truck",
+      providerName: "La Caravane",
+      zoneCode: null,
+    });
+    expect(scanLines(truck)).toEqual({ vehicle: "Prestataire · Food truck", pseudo: "La Caravane", zone: undefined });
+    // Un véhicule garde son affichage.
+    expect(scanLines(entry(1))).toEqual({ vehicle: "Toyota Supra MK4", pseudo: "Pilote_001", zone: "JDM" });
+    expect(scanLines(null)).toEqual({ vehicle: undefined, pseudo: undefined, zone: undefined });
   });
 });

@@ -95,12 +95,20 @@
   - Le jeton de session est remplacé après un changement de mot de passe ou de double authentification (`adoptToken`) : sans cela l'appli était déconnectée.
   - Vérifié : voir l'entrée du lot 16 dans le journal du relais. Recette dans le navigateur : `apps/web/e2e/appli-moi.spec.ts` (`APP_URL=http://localhost:<relais>`). Captures : `C:\Users\DELL\.claude\relais\orasso\lot-16-captures\`. **Pas encore sur téléphone** (photo, application d'authentification : APK de la vague).
 
+- **Prestataires, photographes, stands des pros, compléments pros (lot 21, 16/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 21) ; état technique : `ARCHITECTURE.md` « État après le lot 21 ».
+  - Un prestataire (food truck, barbier, tatoueur, photographe, animation, vente de pièces, autres ; amateur sans structure ni SIRET) crée un profil (nom, présentation, photos, contacts, Instagram, portfolio, départements) et candidate aux événements dont les prestataires attendus incluent son type. La candidature reste en attente (jamais admise d'office), **hors des places**, et l'organisateur la trie dans l'onglet « Prestataires » (mêmes décisions, liste d'attente manuelle, motifs). Retenu : pass émis (« QR de stand »), « Prestataires présents » sur la page de l'événement, scan « Prestataire · Food truck » au jour J, prestataires arrivés dans le direct.
+  - Photographes : « Média officiel » (accréditation par événement, à la main de l'organisateur) ; stand d'un pro : « Candidater pour un stand » depuis la casquette Pro (profil lié à la fiche pro, nom et photos copiés).
+  - Pros : fiche de base après le 21/06/2027 sans abonnement actif (remises, publications, statistiques masquées ; bandeau dans l'espace pro). Événements : « paiement sur place » dans l'assistant et sur la page (site et appli).
+  - API : migration `0024_providers`, module `providers`, `proVisibility`. Site : `/app/prestataire`, onglet de tri, fiche de l'événement. Appli : casquette Prestataire (Candidatures, Profil, QR de stand, création depuis « Mes casquettes »). Seed : Léa (food truck), Paul_Photo (accrédité), stand du Garage du Port.
+  - Vérifié : voir l'entrée du lot 21 dans le journal du relais. **Pas encore sur téléphone** (sélecteur de photos, QR de stand).
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
 
+- Lot 21 : migration `0024_providers` au démarrage (renumérotée à la fusion si d'autres lots en ont généré), aucune variable nouvelle ; le seed ajoute Léa, Paul_Photo et le stand du Garage du Port (`pnpm db:seed` complète une base existante). À essayer sur téléphone (APK de la vague) : choix de photos du profil, QR de stand. La Boîte du prestataire attend le lot 18.
 - Lot 16 : aucune migration ni variable obligatoire (`EXPO_PUBLIC_SITE_URL` facultative dans `apps/mobile/.env.example`, utile seulement en local). Les écrans Organisateur et Prestataire (`app/(orga)/`, `app/(provider)/`) sont des squelettes : lots 22 et 21. Essayer sur téléphone (APK de la vague) : photo de profil, application d'authentification, appui long sur l'avatar.
 - Lot 15 : déployer (migration `0022` au démarrage ; variables facultatives `SENTRY_DSN`, `VITE_SENTRY_DSN` dans `deploy/dev.env.example`, `SENTRY_RELEASE` posé par `compose.yml`) ; construire l'APK de référence (nouvelles dépendances natives). Les e-mails partent par le transport « journal » tant que Brevo n'est pas branché : en ligne, les liens de réinitialisation et de vérification ne sont lisibles que dans `email_outbox`.
 

@@ -486,6 +486,25 @@ export function applyResults(
 export const isDuplicate = (r: { result?: unknown } | null | undefined) =>
   r?.result === "duplicate_same_device" || r?.result === "duplicate_other_device";
 
+/**
+ * Lignes de l'écran de résultat d'un scan (ScanResult) : véhicule, pseudo, zone. Un prestataire (lot 21) s'affiche
+ * « Prestataire · Food truck » à la place du véhicule, avec le nom de son activité à la place du pseudo.
+ */
+export function scanLines(
+  entry:
+    | (Pick<AccessListEntry, "vehicleLabel" | "pseudo" | "zoneCode"> &
+        Partial<Pick<AccessListEntry, "kind" | "providerType" | "providerName">>)
+    | null
+    | undefined,
+): { vehicle: string | undefined; pseudo: string | undefined; zone: string | undefined } {
+  const provider = entry?.kind === "provider";
+  return {
+    vehicle: provider ? `Prestataire · ${entry?.providerType ?? "Stand"}` : (entry?.vehicleLabel ?? undefined),
+    pseudo: (provider ? entry?.providerName : null) || entry?.pseudo || undefined,
+    zone: entry?.zoneCode ?? undefined,
+  };
+}
+
 export type ReportLine = {
   key: string;
   passId: string | null;

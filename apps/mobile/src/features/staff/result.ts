@@ -5,6 +5,8 @@ import { type AccessListEntry, type ScanDecision, scanRefusalLabels, wallTime } 
 import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
 
+import { scanLines } from "@/lib/staff/model";
+
 /** « 09:48 » (heure de Paris), comme les écrans du staff du prototype. */
 export function clock(iso: string | Date): string {
   const w = wallTime(new Date(iso));
@@ -20,11 +22,7 @@ export type ShownResult = ResultProps & {
   detectedAt?: number;
 };
 
-const entryView = (entry: Pick<AccessListEntry, "vehicleLabel" | "pseudo" | "zoneCode"> | null | undefined) => ({
-  vehicle: entry?.vehicleLabel ?? undefined,
-  pseudo: entry?.pseudo || undefined,
-  zone: entry?.zoneCode ?? undefined,
-});
+const entryView = scanLines;
 
 /** L'affichage d'une décision locale (`unknown_pass` a son propre panneau : il attend un geste du staff). */
 export function resultOf(
