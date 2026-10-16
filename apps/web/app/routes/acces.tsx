@@ -1,8 +1,10 @@
 import { Button, Chip, Plate, StatusBadge } from "@orasso/design-system/web";
 import {
   type AccessPass,
+  type AnnouncementView,
   applicationStatusLabels,
   type ContestStatus,
+  communicationLabels,
   contestStatusLabels,
   type EventWeather,
   eventFormatLabels,
@@ -67,6 +69,24 @@ export async function loader({ request }: Route.LoaderArgs) {
         if (res.ok && res.data) weather[a.id] = res.data;
       }),
   );
+  // Consignes et dernière annonce de l'organisateur sur la carte d'un retenu (lot 20) : jamais bloquant.
+  const notes: Record<string, { instructions: AnnouncementView | null; announcement: AnnouncementView | null }> = {};
+  await Promise.all(
+    applications
+      .filter((a) => !past && a.status === "accepted")
+      .map(async (a) => {
+        const res = await api<{ items: AnnouncementView[] }>(
+          request,
+          `/events/by-slug/${encodeURIComponent(a.event.slug)}/announcements`,
+        );
+        if (!res.ok) return;
+        const byDate = [...res.data.items].sort((x, y) => y.publishedAt.localeCompare(x.publishedAt));
+        notes[a.id] = {
+          instructions: byDate.find((i) => i.kind === "instructions") ?? null,
+          announcement: byDate.find((i) => i.kind === "announcement") ?? null,
+        };
+      }),
+  );
   const points = past ? await apiOrThrow<MyPoints>(request, "/me/points") : null;
   const me = await requireMe(request);
   const tickets = await api<MyTicket[]>(request, "/me/tickets");
@@ -75,6 +95,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     applications,
     passes,
     weather,
+    notes,
     points,
     userId: me.user.id,
     ticketCount: tickets.ok ? tickets.data.filter((t) => t.status === "valid").length : 0,
@@ -116,11 +137,13 @@ function ApplicationCard({
   app,
   pass,
   weather,
+  notes,
   past,
 }: {
   app: MyApplication;
   pass?: AccessPass;
   weather?: EventWeather;
+  notes?: { instructions: AnnouncementView | null; announcement: AnnouncementView | null };
   past: boolean;
 }) {
   const busy = useNavigation().state !== "idle";
@@ -157,6 +180,24 @@ function ApplicationCard({
       {weather && (
         <div className="acc__wx" data-testid="application-weather">
           <Weather weather={weather} compact />
+        </div>
+      )}
+
+      {notes?.instructions && (
+        <div className="s-stack s-stack--tight" data-testid="application-instructions">
+          <div className="s-label o-t-label">{communicationLabels.instructions}</div>
+          <p className="s-prewrap">{notes.instructions.body}</p>
+        </div>
+      )}
+      {notes?.announcement && (
+        <div className="s-stack s-stack--tight" data-testid="application-announcement">
+          <div className="s-label o-t-label">
+            {communicationLabels.lastAnnouncement} · {formatDateTime(notes.announcement.publishedAt)}
+          </div>
+          <p className="s-prewrap">{notes.announcement.body}</p>
+          <a className="o-t-caption" href={`/e/${app.event.slug}#fil`}>
+            {communicationLabels.feed}
+          </a>
         </div>
       )}
 
@@ -350,7 +391,7 @@ function ReviewBlock({ app, review, busy }: { app: MyApplication; review: MyRevi
 }
 
 export default function Acces({ loaderData, actionData }: Route.ComponentProps) {
-  const { past, applications, passes, weather, points, sent, userId, ticketCount } = loaderData;
+  const { past, applications, passes, weather, notes, points, sent, userId, ticketCount } = loaderData;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   // Une décision de l'organisateur, une offre ou un pass émis : la page se met à jour sans rechargement.
@@ -403,7 +444,14 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
         </p>
       ) : (
         applications.map((app) => (
-          <ApplicationCard key={app.id} app={app} pass={passes[app.id]} weather={weather[app.id]} past={past} />
+          <ApplicationCard
+            key={app.id}
+            app={app}
+            pass={passes[app.id]}
+            weather={weather[app.id]}
+            notes={notes[app.id]}
+            past={past}
+          />
         ))
       )}
     </div>
