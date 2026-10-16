@@ -56,6 +56,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function OrgaIndex({ loaderData }: Route.ComponentProps) {
   const { organizer, rows } = loaderData;
   const base = `/orga/${useParams().structure}`;
+  // Un seul bouton principal par écran : le tri du premier événement qui a des candidatures à trier.
+  const primaryId = rows.find((r) => r.status === "published" && (r.counters?.pending ?? 0) > 0)?.id;
   return (
     <>
       <div className="orga__head">
@@ -88,7 +90,11 @@ export default function OrgaIndex({ loaderData }: Route.ComponentProps) {
           )}
           <div className="s-row">
             {organizer && (
-              <Button variant="primary" icon="check" href={`${base}/e/${event.id}/candidatures`}>
+              <Button
+                variant={event.id === primaryId ? "primary" : "secondary"}
+                icon="check"
+                href={`${base}/e/${event.id}/candidatures`}
+              >
                 Candidatures
               </Button>
             )}
