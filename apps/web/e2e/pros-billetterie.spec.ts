@@ -264,9 +264,11 @@ test("billets gratuits : interrupteur de l'événement, réservation, QR, contr�
   await form.getByRole("button", { name: "Valider" }).click();
   await expect(orga.getByTestId("ticket-result")).toHaveAttribute("data-result", "ok");
   await expect(orga.getByTestId("ticket-result")).toContainText(fanPseudo);
+  await expect(form.getByLabel("QR du billet")).toHaveValue("");
   await form.getByLabel("QR du billet").fill(mine.data[0]?.payload ?? "");
   await form.getByRole("button", { name: "Valider" }).click();
   await expect(orga.getByTestId("ticket-result")).toHaveAttribute("data-result", "already");
+  await expect(form.getByLabel("QR du billet")).toHaveValue("");
   await form.getByLabel("QR du billet").fill("OR1FAUX");
   await form.getByRole("button", { name: "Valider" }).click();
   await expect(orga.getByTestId("ticket-result")).toHaveAttribute("data-result", "refused");
