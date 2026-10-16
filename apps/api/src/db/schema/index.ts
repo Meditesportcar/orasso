@@ -9,6 +9,7 @@ export * from "./crews";
 export * from "./events";
 export * from "./field";
 export * from "./messaging";
+export * from "./moderation";
 export * from "./notifications";
 export * from "./points";
 export * from "./profiles";

@@ -61,7 +61,10 @@ export const profiles = pgTable(
     accountQrShortId: bytea("account_qr_short_id").notNull(),
     inviteToken: text("invite_token").notNull(),
     invitedByUserId: text("invited_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    /** Fin de la sanction active la plus longue (lot 32 : `BAN_UNTIL` pour un bannissement), tenue par la modération. */
     suspendedUntil: tstz("suspended_until"),
+    /** Lot 32 : banni de la plateforme (connexion refusée, sessions révoquées). */
+    bannedAt: tstz("banned_at"),
     /** Lot 15 : compte supprimé par son titulaire (anonymisé, plus de session). */
     deletedAt: tstz("deleted_at"),
     /** Lot 15 : types de notification coupés un par un (en plus des familles), voir `shouldDeliver`. */
