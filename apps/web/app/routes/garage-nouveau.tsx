@@ -125,7 +125,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   useEffect(() => {
     const query = new URLSearchParams({ vehicleType: type });
     if (makeId) query.set("makeId", makeId);
-    if (/^d{4}$/.test(year)) query.set("year", year);
+    if (/^\d{4}$/.test(year)) query.set("year", year);
     let stale = false;
     apiFetch<CategoryOption[]>(`/vehicle-reference/categories?${query}`).then((res) => {
       if (!stale && res.ok) setCategories(res.data);

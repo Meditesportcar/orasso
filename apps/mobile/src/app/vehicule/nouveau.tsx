@@ -69,7 +69,7 @@ export default function NouveauVehicule() {
   const models = useApi(() => api.models(makeId ?? ""), [makeId], { enabled: Boolean(makeId) });
   const generations = useApi(() => api.generations(modelId ?? ""), [modelId], { enabled: Boolean(modelId) });
   // Catégories filtrées par marque, type et année (lot 31) : celles qui ne conviennent pas sont grisées avec la raison.
-  const yearValue = /^d{4}$/.test(year) ? Number.parseInt(year, 10) : undefined;
+  const yearValue = /^\d{4}$/.test(year) ? Number.parseInt(year, 10) : undefined;
   const categories = useApi(
     () => api.categories({ makeId, vehicleType: type, year: yearValue }),
     [makeId, type, yearValue],
