@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { systemMessageText } from "../labels/messaging.fr";
 import { activeApplicationStatuses, canTransition, capacityStatuses } from "./applicationTransitions";
-import { crewConfirmDeadline, crewJoinOutcome, crewViewerState } from "./crews";
+import { type CrewMemberStatus, crewConfirmDeadline, crewJoinOutcome, crewViewerState } from "./crews";
 
 const at = new Date("2026-10-16T10:00:00Z");
 const daysAgo = (n: number) => new Date(at.getTime() - n * 86_400_000);
@@ -48,11 +48,7 @@ describe("échéance de confirmation (S17)", () => {
 });
 
 describe("demandes et invitations", () => {
-  const row = (
-    status: Parameters<typeof crewJoinOutcome>[0] extends infer R ? NonNullable<R>["status"] : never,
-    respondedAt: Date | null,
-    wasInvitation = false,
-  ) => ({
+  const row = (status: CrewMemberStatus, respondedAt: Date | null, wasInvitation = false) => ({
     status,
     respondedAt,
     wasInvitation,

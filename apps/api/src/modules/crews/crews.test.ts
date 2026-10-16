@@ -261,7 +261,12 @@ describe("crews : demandes, invitations, départs", () => {
 
   it("invitation : acceptée, refusée (silencieux), annulée ; invitation croisée avec une demande = acceptation", async () => {
     const kenji = await signUp("Kenji");
-    const [theo, julie, marc, sarah] = await Promise.all(["Theo", "Julie", "Marc", "Sarah"].map((p) => signUp(p)));
+    const [theo, julie, marc, sarah] = await Promise.all([
+      signUp("Theo"),
+      signUp("Julie"),
+      signUp("Marc"),
+      signUp("Sarah"),
+    ]);
     const crew = await newCrew(kenji);
     expect((await req(kenji, "POST", `/crews/${crew.id}/invitations`, { pseudo: theo.pseudo })).json.status).toBe(
       "invited",
