@@ -51,7 +51,8 @@ export const notificationsService = {
    */
   async notify(ex: Executor, userId: string, type: NotificationType, input: NotifyInput): Promise<NotificationRow> {
     const at = now();
-    const immediate = type === "staff_alert";
+    // Alertes du staff et sécurité du compte (nouvelle connexion, mot de passe changé…) : jamais différées la nuit.
+    const immediate = type === "staff_alert" || notificationTypes[type] === "account";
     const [row] = await ex
       .insert(notifications)
       .values({
