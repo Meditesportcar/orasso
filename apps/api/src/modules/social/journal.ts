@@ -5,6 +5,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { events, notifications } from "../../db/schema";
+import { now } from "../../lib/deps";
 import { formatDateTime } from "../../lib/format";
 import { storage } from "../../lib/storage";
 import type { Tx } from "../../lib/tx";
@@ -16,7 +17,7 @@ import { socialRepo } from "./repo";
 
 async function actorOf(userId: string, tx: Tx | typeof db) {
   const p = await profilesRepo.byUserId(userId, tx);
-  if (!p || p.deletedAt) return null;
+  if (!p || p.deletedAt || (p.suspendedUntil && p.suspendedUntil > now())) return null;
   return { userId: p.userId, pseudo: p.pseudo, avatarUrl: storage.url(p.avatarKey), visibility: p.visibility };
 }
 

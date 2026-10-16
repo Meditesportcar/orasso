@@ -60,8 +60,8 @@ import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
 import { accountQrShortId } from "../profiles/service";
 import { securityMails } from "../security/mails";
+import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
 import { socialProfile } from "../social/profile";
-import { socialRepo } from "../social/repo";
 
 type MailUser = { id: string; email: string; name: string };
 
@@ -385,8 +385,7 @@ export const accountService = {
           .where(inArray(vehicles.id, ids));
       }
       // Liens sociaux et d'organisation (amis : lot 17 ; crews, messagerie : lots 18 et 19, à compléter par leurs tables).
-      await socialRepo.removeAllFor(userId, tx);
-      await tx.update(profiles).set({ friendsCount: 0 }).where(eq(profiles.userId, userId));
+      await anonymizeSocialForDeletedAccount(tx, userId);
       await tx.delete(structureFollows).where(eq(structureFollows.userId, userId));
       await tx.delete(proFollows).where(eq(proFollows.userId, userId));
       await tx

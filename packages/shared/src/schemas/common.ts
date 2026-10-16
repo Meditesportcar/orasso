@@ -23,7 +23,6 @@ export const errorCodes = [
   "invalid_credentials",
   // Lot 17 : amis.
   "friendship_exists",
-  "recently_declined",
   "already_friends",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];

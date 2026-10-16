@@ -24,28 +24,33 @@ import { socialRepo } from "./repo";
 
 const DAY = 86_400_000;
 
-/** Organisateur (propriétaire ou co-organisateur actif) d'une structure où la personne a candidaté ou qu'elle suit. */
-export async function isOrganizerOf(viewerId: string, targetId: string): Promise<boolean> {
+/**
+ * Organisateur (propriétaire ou co-organisateur actif) d'une structure en règle (ni supprimée ni suspendue) dont la
+ * personne est abonnée, ou à un événement de laquelle elle a une candidature en cours (en attente, retenue, liste
+ * d'attente, offre) dont l'événement n'est pas fini depuis plus de 7 jours (docs/01 : « pendant l'événement et
+ * jusqu'à J+7 »). Une candidature refusée, retirée ou expirée n'ouvre rien.
+ */
+export async function isOrganizerOf(viewerId: string, targetId: string, at: Date = now()): Promise<boolean> {
   const result = await db.execute(sql`
     select 1
     from structure_members m
+    join structures s on s.id = m.structure_id
     where m.user_id = ${viewerId}
+      and s.deleted_at is null
+      and s.verification <> 'suspended'
       and m.status = 'active'
       and m.role in ('owner', 'co_organizer')
       and (
         exists (
           select 1 from applications a join events e on e.id = a.event_id
           where a.user_id = ${targetId} and e.structure_id = m.structure_id
+            and a.status in ('pending', 'accepted', 'waitlisted', 'offered')
+            and e.ends_at >= ${new Date(at.getTime() - 7 * DAY)}
         )
         or exists (select 1 from structure_follows sf where sf.structure_id = m.structure_id and sf.user_id = ${targetId})
       )
     limit 1`);
   return result.rows.length > 0;
-}
-
-/** Un compte supprimé n'existe plus, un compte suspendu n'apparaît plus dans les listes. */
-export function isHidden(p: Pick<Profile, "deletedAt" | "suspendedUntil">, at = now()): boolean {
-  return Boolean(p.deletedAt) || Boolean(p.suspendedUntil && p.suspendedUntil > at);
 }
 
 export async function audienceFor(
@@ -62,7 +67,7 @@ export async function audienceFor(
   }
   const isSelf = target.userId === viewer.user.id;
   const row = isSelf ? null : await socialRepo.pair(viewer.user.id, target.userId);
-  const state = friendshipState(row, viewer.user.id);
+  const state = friendshipState(row, viewer.user.id, now());
   const isOrganizer = isSelf ? false : await isOrganizerOf(viewer.user.id, target.userId);
   return {
     audience: profileAudience({ isSelf, isFriend: state === "friends", isOrganizer, visibility: target.visibility }),

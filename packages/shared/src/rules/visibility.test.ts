@@ -59,6 +59,13 @@ describe("demande d'ami", () => {
     expect(friendshipState(row({}), "b")).toBe("pending_in");
     expect(friendshipState(row({ status: "accepted" }), "b")).toBe("friends");
     expect(friendshipState(row({ status: "declined" }), "a")).toBe("none");
+    // Refus récent : silencieux, la demande reste « envoyée » pour le demandeur seulement.
+    const recent = row({ status: "declined", respondedAt: new Date(NOW.getTime() - 3 * DAY) });
+    expect(friendshipState(recent, "a", NOW)).toBe("pending_out");
+    expect(friendshipState(recent, "b", NOW)).toBe("none");
+    expect(
+      friendshipState(row({ status: "declined", respondedAt: new Date(NOW.getTime() - 31 * DAY) }), "a", NOW),
+    ).toBe("none");
   });
 
   it("aucune relation : créer ; en attente (dans un sens ou l'autre) ou amis : refusé", () => {
@@ -74,7 +81,7 @@ describe("demande d'ami", () => {
   it("refus : le demandeur attend 30 jours, puis la ligne repasse en attente ; le destinataire peut demander tout de suite", () => {
     const declinedAt = new Date(NOW.getTime() - 3 * DAY);
     const declined = row({ status: "declined", respondedAt: declinedAt });
-    expect(friendRequestOutcome(declined, "a", NOW)).toEqual({ kind: "error", code: "recently_declined" });
+    expect(friendRequestOutcome(declined, "a", NOW)).toEqual({ kind: "error", code: "friendship_exists" });
     expect(friendRequestOutcome(declined, "b", NOW)).toEqual({ kind: "reopen", flip: true });
     const old = row({ status: "declined", respondedAt: new Date(NOW.getTime() - FRIEND_DECLINE_COOLDOWN_DAYS * DAY) });
     expect(friendRequestOutcome(old, "a", NOW)).toEqual({ kind: "reopen", flip: false });
@@ -82,7 +89,7 @@ describe("demande d'ami", () => {
       status: "declined",
       respondedAt: new Date(NOW.getTime() - FRIEND_DECLINE_COOLDOWN_DAYS * DAY + 1000),
     });
-    expect(friendRequestOutcome(almost, "a", NOW)).toEqual({ kind: "error", code: "recently_declined" });
+    expect(friendRequestOutcome(almost, "a", NOW)).toEqual({ kind: "error", code: "friendship_exists" });
   });
 
   it("schémas : pseudo valide, message borné à 200 caractères, charge utile du QR", () => {

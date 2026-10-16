@@ -1,6 +1,6 @@
 // Social (lot 17) : audiences des profils, amis, QR ami, recherche de personnes, Journal des amis.
 import { accountQrPayload, fromWallTime } from "@orasso/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -24,12 +24,14 @@ import {
   notifications,
   profileInterests,
   profiles,
+  structures,
   vehicleGenerations,
   vehicleMakes,
   vehicleModels,
 } from "../../db/schema";
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
+import { anonymizeSocialForDeletedAccount } from "./anonymize";
 import { socialRepo } from "./repo";
 
 afterAll(async () => {
@@ -76,6 +78,9 @@ async function person(
 }
 
 const flush = () => notificationsService.flush();
+/** Vieillit les notifications de demande d'ami (le garde-fou de 24 h lit l'horloge de la base). */
+const ageRequests = () =>
+  db.execute(sql`update notifications set created_at = created_at - interval '2 days' where type = 'friend_request'`);
 const journal = async (u: TestUser) =>
   (await call(u, "GET", "/me/notifications")).json.items as {
     type: string;
@@ -267,10 +272,13 @@ describe("demandes d'ami", () => {
     const row = await db.query.profiles.findFirst({ where: eq(profiles.userId, c.id) });
     expect(row?.friendsCount).toBe(1);
 
-    // Retrait : la ligne disparaît, plus d'accès complet, aucun délai pour redemander.
+    // Retrait : la ligne disparaît, plus d'accès complet ; pas de nouvelle demande avant 24 h (une seule notification
+    // de demande par paire et par 24 h).
     expect((await call(c, "DELETE", `/friends/${b.id}`)).status).toBe(204);
     expect((await call(c, "GET", "/users/Bravo_Priv")).json.audience).toBe("public_limited");
     expect((await call(c, "DELETE", `/friends/${b.id}`)).status).toBe(404);
+    expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_Priv" })).status).toBe(429);
+    await ageRequests();
     expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_Priv" })).status).toBe(201);
     expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, b.id) }))?.friendsCount).toBe(0);
   });
@@ -308,12 +316,22 @@ describe("demandes d'ami", () => {
     expect((await call(b, "POST", `/friends/requests/${req.json.id}/decline`)).status).toBe(409);
     await flush();
     expect((await journal(c)).some((n) => n.type === "friend_accepted")).toBe(false);
-    expect((await call(c, "GET", "/users/Bravo_B")).json.friendship.state).toBe("none");
+    // Refus silencieux : pour C la demande reste « envoyée » (profil, liste des envoyées), rien ne dit qu'elle a été refusée.
+    expect((await call(c, "GET", "/users/Bravo_B")).json.friendship.state).toBe("pending_out");
+    const sent = (await call(c, "GET", "/me/friends/requests?direction=out")).json.items;
+    expect(sent.map((r: { person: { pseudo: string } }) => r.person.pseudo)).toEqual(["Bravo_B"]);
+    // B, lui, n'a plus de demande reçue.
+    expect((await call(b, "GET", "/me/friends/requests?direction=in")).json.items).toEqual([]);
+    expect((await call(b, "GET", "/users/Charlie_C")).json.friendship.state).toBe("none");
+    // « Annuler » ne change rien pendant le délai.
+    expect((await call(c, "DELETE", `/friends/${b.id}`)).status).toBe(204);
+    expect(await db.select().from(friendships)).toHaveLength(1);
 
     clock.advance(29 * DAY);
     const early = await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
     expect(early.status).toBe(409);
-    expect(early.json.error.code).toBe("recently_declined");
+    expect(early.json.error.code).toBe("friendship_exists");
+    expect(early.json.error.message).toBe("Une demande est déjà en cours");
     // B peut demander à C : la ligne s'inverse.
     const reverse = await call(b, "POST", "/friends/requests", { pseudo: "Charlie_C" });
     expect(reverse.status).toBe(201);
@@ -330,6 +348,9 @@ describe("demandes d'ami", () => {
     const req = await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
     await call(b, "POST", `/friends/requests/${req.json.id}/decline`);
     clock.advance(30 * DAY);
+    await ageRequests();
+    // Passé le délai, la demande « envoyée » n'apparaît plus et on peut redemander.
+    expect((await call(c, "GET", "/users/Bravo_B")).json.friendship.state).toBe("none");
     const again = await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B", message: "On réessaie" });
     expect(again.status).toBe(201);
     expect(again.json.id).toBe(req.json.id);
@@ -352,6 +373,9 @@ describe("demandes d'ami", () => {
     expect((await call(b, "DELETE", `/friends/${c.id}`)).status).toBe(404);
     expect((await call(c, "DELETE", `/friends/${b.id}`)).status).toBe(204);
     expect(await db.select().from(friendships)).toHaveLength(0);
+    // Retirer puis redemander tout de suite : 24 h d'attente (en base), puis c'est possible.
+    expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" })).status).toBe(429);
+    await ageRequests();
     // Limite : chaque tentative compte, même refusée (409 sur une demande déjà en cours).
     await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
     let last = 0;
@@ -744,5 +768,121 @@ describe("compte supprimé", () => {
     expect(await db.select().from(friendships)).toHaveLength(1);
     expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, b.id) }))?.friendsCount).toBe(0);
     expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, c.id) }))?.friendsCount).toBe(0);
+  });
+});
+
+describe("relecture de confidentialité (lot 17)", () => {
+  const apply = async (userId: string, eventId: string, status: "pending" | "accepted" | "refused" | "withdrawn") => {
+    const v = await createVehicle(userId, ref);
+    await db
+      .insert(applications)
+      .values({ eventId, userId, vehicleId: v.id, status, rulesAcceptedAt: new Date(), followStructure: false });
+  };
+  const setup = async () => {
+    const orga = await signUp("Orga_66", { twoFactor: true });
+    const s = await createStructure(orga.id);
+    const k = await person("Kenji_66", { visibility: "private" });
+    await db.update(profiles).set({ firstName: "Kenji", phone: "0600000000" }).where(eq(profiles.userId, k.id));
+    return { orga, s, k };
+  };
+  const audience = async (orga: TestUser) => (await call(orga, "GET", "/users/Kenji_66")).json.audience;
+
+  it("organisateur : candidature en cours seulement, événement non fini depuis plus de 7 jours, structure en règle", async () => {
+    const { orga, s, k } = await setup();
+    const future = await createEvent(s.id, { admission: "open" });
+    // Candidature refusée, retirée : rien.
+    await apply(k.id, future.id, "refused");
+    expect(await audience(orga)).toBe("public_limited");
+    await db.delete(applications);
+    await apply(k.id, future.id, "withdrawn");
+    expect(await audience(orga)).toBe("public_limited");
+    // Candidature en cours : coordonnées visibles.
+    await db.delete(applications);
+    await apply(k.id, future.id, "pending");
+    expect(await audience(orga)).toBe("organizer");
+    // Structure suspendue ou supprimée : rien.
+    await db.update(structures).set({ verification: "suspended" }).where(eq(structures.id, s.id));
+    expect(await audience(orga)).toBe("public_limited");
+    await db.update(structures).set({ verification: "verified", deletedAt: new Date() }).where(eq(structures.id, s.id));
+    expect(await audience(orga)).toBe("public_limited");
+    await db.update(structures).set({ deletedAt: null }).where(eq(structures.id, s.id));
+    expect(await audience(orga)).toBe("organizer");
+  });
+
+  it("organisateur : un événement fini depuis plus de 7 jours n'ouvre plus rien, un événement fini il y a 3 jours oui ; l'abonné reste visible", async () => {
+    const { orga, s, k } = await setup();
+    const day = 86_400_000;
+    const old = await createEvent(s.id, {
+      admission: "open",
+      startsAt: new Date(clock.now.getTime() - 9 * day),
+      endsAt: new Date(clock.now.getTime() - 8 * day),
+    });
+    await apply(k.id, old.id, "accepted");
+    expect(await audience(orga)).toBe("public_limited");
+    const recent = await createEvent(s.id, {
+      admission: "open",
+      startsAt: new Date(clock.now.getTime() - 4 * day),
+      endsAt: new Date(clock.now.getTime() - 3 * day),
+    });
+    await apply(k.id, recent.id, "accepted");
+    expect(await audience(orga)).toBe("organizer");
+    await db.delete(applications);
+    expect(await audience(orga)).toBe("public_limited");
+    // Abonné de la structure : visible, sans limite de temps.
+    await db.execute(
+      sql`insert into structure_follows (structure_id, user_id, source) values (${s.id}, ${k.id}, 'manual')`,
+    );
+    expect(await audience(orga)).toBe("organizer");
+  });
+
+  it("suspendus : pas de demande vers eux, absents des demandes reçues, aucune actualité émise", async () => {
+    const b = await person("Bravo_B");
+    const c = await person("Charlie_C");
+    const d = await person("Delta_D");
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(Date.now() + 400 * DAY) })
+      .where(eq(profiles.userId, b.id));
+    expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" })).status).toBe(404);
+    // Demande reçue d'un compte devenu suspendu : n'apparaît plus.
+    await call(d, "POST", "/friends/requests", { pseudo: "Charlie_C" });
+    expect((await call(c, "GET", "/me/friends/requests?direction=in")).json.items).toHaveLength(1);
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(Date.now() + 400 * DAY) })
+      .where(eq(profiles.userId, d.id));
+    expect((await call(c, "GET", "/me/friends/requests?direction=in")).json.items).toEqual([]);
+    // Un suspendu qui a un ami ne produit aucune actualité.
+    const { socialJournal } = await import("./journal");
+    await db.update(friendships).set({ status: "accepted" });
+    await createVehicle(d.id, ref);
+    const v = (await db.query.vehicles.findFirst({ where: (t, { eq: e }) => e(t.ownerId, d.id) }))!;
+    expect(await socialJournal.friendNewVehicle(d.id, v.id)).toBe(0);
+  });
+
+  it("anonymisation : les notifications des autres qui citent le compte supprimé disparaissent avec les amitiés", async () => {
+    const b = await person("Bravo_B");
+    const c = await person("Charlie_C");
+    const e = await person("Echo_E");
+    await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
+    await befriend(c, e);
+    await flush();
+    expect((await journal(b)).some((n) => n.type === "friend_request" && n.data.actor?.pseudo === "Charlie_C")).toBe(
+      true,
+    );
+    await db.transaction((tx) => anonymizeSocialForDeletedAccount(tx, c.id));
+    expect((await journal(b)).some((n) => n.data.actor?.userId === c.id)).toBe(false);
+    expect(await db.select().from(friendships)).toHaveLength(0);
+    expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, e.id) }))?.friendsCount).toBe(0);
+  });
+
+  it("recherche : le texte cherche aussi dans le pseudo quand un filtre de marque est posé", async () => {
+    const me = await person("Moi_Meme");
+    const a = await person("Supra_Fan");
+    const o = await person("Supra_Autre");
+    await createVehicle(a.id, supra);
+    await createVehicle(o.id, ref);
+    const res = await call(me, "GET", `/users/search?q=supra&makeId=${supra.makeId}`);
+    expect(res.json.items.map((i: { pseudo: string }) => i.pseudo)).toEqual(["Supra_Fan"]);
   });
 });

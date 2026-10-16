@@ -48,26 +48,6 @@ function decodeCursor(cursor: string | undefined): { pseudo: string; id: string 
   return pseudo && id ? { pseudo, id } : null;
 }
 
-/** Rattache la fiche des critères de véhicule à une seule « exists » : une même voiture doit les satisfaire tous. */
-function vehicleCondition(query: PeopleSearchQuery): SQL | null {
-  const parts: SQL[] = [];
-  const q = query.q?.trim();
-  const pattern = q ? `%${escapeLike(q)}%` : null;
-  if (pattern) {
-    parts.push(sql`(
-      mk.name ilike ${pattern} escape '\\'
-      or md.name ilike ${pattern} escape '\\'
-      or (mk.name || ' ' || md.name) ilike ${pattern} escape '\\'
-      or (d.detail and (g.name ilike ${pattern} escape '\\' or (mk.name || ' ' || md.name || ' ' || g.name) ilike ${pattern} escape '\\'))
-    )`);
-  }
-  if (query.makeId) parts.push(sql`v.make_id = ${query.makeId}`);
-  if (query.modelId) parts.push(sql`v.model_id = ${query.modelId}`);
-  if (query.generationId) parts.push(sql`(d.detail and v.generation_id = ${query.generationId})`);
-  if (!parts.length) return null;
-  return sql.join(parts, sql` and `);
-}
-
 async function run(
   viewer: Viewer,
   query: PeopleSearchQuery,
@@ -91,27 +71,31 @@ async function run(
       sql`, `,
     )})`,
   ];
-  const vehicleExists = vehicleCondition(query);
   const pseudoMatch = q ? sql`lower(p.pseudo) like ${`${escapeLike(q.toLowerCase())}%`} escape '\\'` : null;
-  if (pseudoMatch || vehicleExists) {
-    const byVehicle = vehicleExists
-      ? sql`exists (select 1 from vehicles v
-          join vehicle_makes mk on mk.id = v.make_id
-          join vehicle_models md on md.id = v.model_id
-          left join vehicle_generations g on g.id = v.generation_id
-          cross join lateral (select ${detail} as detail) d
-          where v.owner_id = p.user_id and v.status = 'active' and ${vehicleExists})`
-      : null;
-    if (pseudoMatch && byVehicle && !query.makeId && !query.modelId && !query.generationId) {
-      // Texte seul : le pseudo OU un véhicule.
-      where.push(sql`(${pseudoMatch} or ${byVehicle})`);
-    } else if (byVehicle) {
-      // Filtres de véhicule : le véhicule doit les satisfaire (et le texte, déjà dans la même condition).
-      where.push(byVehicle);
-    } else if (pseudoMatch) {
-      where.push(pseudoMatch);
-    }
+  const vehicleExists = (cond: SQL) =>
+    sql`exists (select 1 from vehicles v
+      join vehicle_makes mk on mk.id = v.make_id
+      join vehicle_models md on md.id = v.model_id
+      left join vehicle_generations g on g.id = v.generation_id
+      cross join lateral (select ${detail} as detail) d
+      where v.owner_id = p.user_id and v.status = 'active' and ${cond})`;
+  // Texte libre : le pseudo (début) OU un véhicule (marque, modèle, « marque modèle » ; la génération seulement si la
+  // fiche complète est visible). Il se combine avec les filtres de véhicule ci-dessous.
+  if (q) {
+    const pattern = `%${escapeLike(q)}%`;
+    const text = vehicleExists(sql`(
+      mk.name ilike ${pattern} escape '\\'
+      or md.name ilike ${pattern} escape '\\'
+      or (mk.name || ' ' || md.name) ilike ${pattern} escape '\\'
+      or (d.detail and (g.name ilike ${pattern} escape '\\' or (mk.name || ' ' || md.name || ' ' || g.name) ilike ${pattern} escape '\\'))
+    )`);
+    where.push(sql`(${pseudoMatch} or ${text})`);
   }
+  const filters: SQL[] = [];
+  if (query.makeId) filters.push(sql`v.make_id = ${query.makeId}`);
+  if (query.modelId) filters.push(sql`v.model_id = ${query.modelId}`);
+  if (query.generationId) filters.push(sql`(d.detail and v.generation_id = ${query.generationId})`);
+  if (filters.length) where.push(vehicleExists(sql.join(filters, sql` and `)));
   if (query.department) where.push(sql`(p.departments @> ARRAY[${query.department}]::text[] and ${detail})`);
   if (options.departmentsAny?.length) {
     where.push(
@@ -154,7 +138,7 @@ async function cards(viewer: Viewer, rows: Row[]): Promise<PersonCard[]> {
       .filter((g) => g.ownerId === r.user_id)
       .slice(0, 3)
       .map((g) => ({ id: g.id, label: r.detail ? vehicleLabel(g) : vehicleBriefLabel(g) })),
-    friendship: friendshipState(relations.get(r.user_id), viewer.user.id),
+    friendship: friendshipState(relations.get(r.user_id), viewer.user.id, now()),
     friendshipId: relations.get(r.user_id)?.status === "pending" ? (relations.get(r.user_id)?.id ?? null) : null,
   }));
 }

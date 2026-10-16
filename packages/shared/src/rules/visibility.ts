@@ -74,25 +74,36 @@ export type FriendshipRowLike = {
 /** État de la relation vu par `me` : sert aux boutons Ami / Demande envoyée / Accepter. */
 export type FriendshipState = "none" | "friends" | "pending_out" | "pending_in";
 
-export function friendshipState(row: FriendshipRowLike | null | undefined, me: string): FriendshipState {
+export function friendshipState(
+  row: FriendshipRowLike | null | undefined,
+  me: string,
+  at: Date = new Date(),
+): FriendshipState {
   if (!row) return "none";
   if (row.status === "accepted") return "friends";
   if (row.status === "pending") return row.requesterId === me ? "pending_out" : "pending_in";
-  // Refusée : pour le demandeur comme pour le destinataire, aucune demande n'est en cours.
-  return "none";
+  // Refusée : le refus est silencieux, pour le demandeur la demande reste « envoyée » pendant les 30 jours (puis il peut
+  // redemander). Pour le destinataire du refus, aucune demande n'est en cours.
+  return row.requesterId === me && declineCooldownActive(row, at) ? "pending_out" : "none";
+}
+
+/** Le refus date de moins de 30 jours (S7). */
+export function declineCooldownActive(row: Pick<FriendshipRowLike, "respondedAt">, at: Date): boolean {
+  const since = row.respondedAt ? at.getTime() - row.respondedAt.getTime() : Number.POSITIVE_INFINITY;
+  return since < FRIEND_DECLINE_COOLDOWN_DAYS * 86_400_000;
 }
 
 export type FriendRequestOutcome =
   | { kind: "create" }
   /** La ligne existe (refusée) : elle repasse en attente, `flip` si le demandeur et le destinataire s'inversent. */
   | { kind: "reopen"; flip: boolean }
-  | { kind: "error"; code: "friendship_exists" | "recently_declined" | "already_friends" };
+  | { kind: "error"; code: "friendship_exists" | "already_friends" };
 
 /**
  * Que faire d'une demande d'ami de `me` vers l'autre personne, d'après la relation existante (une seule ligne par paire) :
  * - aucune ligne → créer ;
  * - déjà amis → `already_friends` ; demande en attente (dans un sens ou l'autre) → `friendship_exists` ;
- * - refusée : le même demandeur attend 30 jours (`recently_declined`) puis la ligne repasse en attente ; le destinataire
+ * - refusée : le même demandeur attend 30 jours (réponse `friendship_exists` : le refus reste silencieux) puis la ligne repasse en attente ; le destinataire
  *   du refus peut demander à tout moment (la ligne s'inverse).
  */
 export function friendRequestOutcome(
@@ -104,8 +115,7 @@ export function friendRequestOutcome(
   if (row.status === "accepted") return { kind: "error", code: "already_friends" };
   if (row.status === "pending") return { kind: "error", code: "friendship_exists" };
   if (row.requesterId !== me) return { kind: "reopen", flip: true };
-  const since = row.respondedAt ? now.getTime() - row.respondedAt.getTime() : Number.POSITIVE_INFINITY;
-  if (since < FRIEND_DECLINE_COOLDOWN_DAYS * 86_400_000) return { kind: "error", code: "recently_declined" };
+  if (declineCooldownActive(row, now)) return { kind: "error", code: "friendship_exists" };
   return { kind: "reopen", flip: false };
 }
 

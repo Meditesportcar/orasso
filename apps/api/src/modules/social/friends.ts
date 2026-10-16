@@ -2,6 +2,7 @@
 // Une seule ligne `friendships` par paire (index unique d'expression) ; un refus garde la ligne 30 jours (S7).
 import { createHmac } from "node:crypto";
 import {
+  declineCooldownActive,
   decodeAccountQrPayload,
   type FriendItem,
   type FriendRequestResult,
@@ -34,7 +35,6 @@ const QR_USE_RETENTION_MS = 3 * 60_000;
 
 const errorMessages = {
   friendship_exists: socialLabels.alreadyRequested,
-  recently_declined: socialLabels.recentlyDeclined,
   already_friends: socialLabels.alreadyFriends,
 } as const;
 
@@ -106,7 +106,9 @@ export const friendsService = {
     opts: { message?: string | null; source: FriendSource },
   ): Promise<FriendRequestResult> {
     if (target.userId === viewer.user.id) throw validation(socialLabels.selfRequest);
-    if (target.deletedAt) throw notFound("Profil introuvable");
+    // Un compte supprimé n'existe plus ; un compte suspendu ne reçoit pas de demande.
+    if (target.deletedAt || (target.suspendedUntil && target.suspendedUntil > now()))
+      throw notFound("Profil introuvable");
     rateLimit("friendRequest", viewer.user.id);
     const me = viewer.user.id;
 
@@ -127,6 +129,30 @@ export const friendsService = {
           friendshipId: row?.id ?? null,
           state: friendshipState(row, me),
         });
+      }
+      // Anti-harcèlement (en base, pas en mémoire) : au plus une notification de demande par paire et par 24 h. Cela
+      // vaut aussi après le retrait d'une demande ou d'un ami : pas de nouvelle demande avant 24 h.
+      const [recent] = await tx
+        .select({ id: notifications.id })
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, target.userId),
+            eq(notifications.type, "friend_request"),
+            sql`${notifications.data} -> 'actor' ->> 'userId' = ${me}`,
+            sql`${notifications.createdAt} > now() - interval '24 hours'`,
+          ),
+        )
+        .limit(1);
+      if (recent) {
+        throw new AppError(
+          429,
+          "rate_limited",
+          "Tu as déjà envoyé une demande à cette personne aujourd'hui : réessaie demain.",
+          {
+            retryAfter: 86_400,
+          },
+        );
       }
       const values = {
         requesterId: me,
@@ -203,7 +229,8 @@ export const friendsService = {
     const target = await db.query.profiles.findFirst({
       where: eq(profiles.accountQrShortId, Buffer.from(decoded.shortId)),
     });
-    if (!target || target.deletedAt) return refuse("unknown");
+    if (!target || target.deletedAt || (target.suspendedUntil && target.suspendedUntil > now()))
+      return refuse("unknown");
     const t = now();
     const counter = matchAccountQrCounter(target.accountQrSecret, decoded.code, t, hmacSha1);
     if (counter === null) return refuse("expired");
@@ -263,6 +290,8 @@ export const friendsService = {
     await withTx(async (tx, after) => {
       await lockPair(tx, viewer.user.id, otherId);
       const row = await socialRepo.pair(viewer.user.id, otherId, tx);
+      // Un refus qui dure encore s'affiche « envoyée » chez le demandeur : « annuler » ne change rien (le délai reste).
+      if (row?.status === "declined" && row.requesterId === viewer.user.id && declineCooldownActive(row, now())) return;
       const removable =
         row && (row.status === "accepted" || (row.status === "pending" && row.requesterId === viewer.user.id));
       if (!row || !removable) throw notFound("Cette personne n'est pas dans tes amis");
@@ -330,9 +359,19 @@ export const friendsService = {
         .innerJoin(profiles, eq(profiles.userId, dir === "in" ? friendships.requesterId : friendships.addresseeId))
         .where(
           and(
-            eq(friendships.status, "pending"),
+            dir === "in"
+              ? eq(friendships.status, "pending")
+              : // Envoyées : en attente, ou refusées depuis moins de 30 jours (le refus est silencieux).
+                or(
+                  eq(friendships.status, "pending"),
+                  and(
+                    eq(friendships.status, "declined"),
+                    sql`${friendships.respondedAt} > ${new Date(now().getTime() - 30 * 86_400_000)}`,
+                  ),
+                ),
             eq(dir === "in" ? friendships.addresseeId : friendships.requesterId, me),
             sql`${profiles.deletedAt} is null`,
+            sql`(${profiles.suspendedUntil} is null or ${profiles.suspendedUntil} <= ${now()})`,
           ),
         )
         .orderBy(sql`${friendships.createdAt} desc`);

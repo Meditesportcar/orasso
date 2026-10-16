@@ -35,7 +35,6 @@ export const socialLabels = {
   requestSentTo: (pseudo: string) => `Demande envoyée à ${pseudo}`,
   alreadyFriends: "Vous êtes déjà amis",
   alreadyRequested: "Une demande est déjà en cours",
-  recentlyDeclined: "Cette personne a refusé ta demande récemment. Tu pourras réessayer dans quelques semaines.",
   selfRequest: "C'est ton propre compte.",
   scanFriend: "Scanner le QR d'un ami",
   scanFriendHint: "Cadre le QR de compte de la personne : une demande d'ami lui est envoyée.",

@@ -6,11 +6,6 @@ import type { Executor, Tx } from "../../lib/tx";
 
 export type Friendship = typeof friendships.$inferSelect;
 
-/** Condition SQL « ces deux personnes sont amies » (ami accepté de `viewerId` pour la ligne de profil `userIdSql`). */
-export function areFriendsSql(viewerId: string, userIdSql: ReturnType<typeof sql>) {
-  return sql`exists (select 1 from friendships f where f.status = 'accepted' and ((f.requester_id = ${viewerId} and f.addressee_id = ${userIdSql}) or (f.requester_id = ${userIdSql} and f.addressee_id = ${viewerId})))`;
-}
-
 export const socialRepo = {
   /** La ligne unique de la paire, quel que soit le sens de la demande. */
   pair(a: string, b: string, ex: Executor = db) {
@@ -43,6 +38,8 @@ export const socialRepo = {
   /** Recalcule le cache `profiles.friends_count` (amis acceptés) de ces personnes. */
   async recountFriends(userIds: string[], tx: Executor = db) {
     for (const id of new Set(userIds)) {
+      // Verrou de la ligne du profil : deux changements simultanés ne s'écrasent pas (le compte est lu après le verrou).
+      await tx.select({ id: profiles.userId }).from(profiles).where(eq(profiles.userId, id)).for("update");
       await tx
         .update(profiles)
         .set({
