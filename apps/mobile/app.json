@@ -33,13 +33,21 @@
         }
       ],
       "expo-font",
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
       "expo-secure-store",
       [
         "expo-image-picker",
         {
           "photosPermission": "Orasso accède à tes photos pour illustrer ton véhicule.",
-          "cameraPermission": "Orasso utilise l’appareil photo pour photographier ton véhicule."
+          "cameraPermission": "Orasso utilise l’appareil photo pour photographier ton véhicule et, si tu fais partie du staff, lire les QR d’accès à l’entrée des événements.",
+          "microphonePermission": false
         }
       ],
       [
@@ -52,13 +60,20 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Orasso utilise l’appareil photo pour lire les QR d’accès à l’entrée des événements.",
+          "cameraPermission": "Orasso utilise l’appareil photo pour photographier ton véhicule et, si tu fais partie du staff, lire les QR d’accès à l’entrée des événements.",
           "recordAudioAndroid": false
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ae53f346-f41a-4871-a14c-35d330589656"
+      }
+    },
+    "owner": "dams4889494"
   }
 }
