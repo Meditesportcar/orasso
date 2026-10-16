@@ -17,7 +17,9 @@ type SessionValue = {
   me: Me | null;
   /** Les données viennent du cache : l'API n'a pas répondu. */
   offline: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  /** `"two_factor"` : le compte a la double authentification, il faut le code (`verifyTwoFactor`). */
+  signIn: (email: string, password: string) => Promise<"in" | "two_factor">;
+  verifyTwoFactor: (code: string, opts: { backup: boolean; trustDevice: boolean }) => Promise<void>;
   signUp: (email: string, password: string, pseudo: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Recharge `/api/me` (compteurs, grade, points). */
@@ -34,6 +36,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [offline, setOffline] = useState(false);
   const started = useRef(false);
+  /** Cookie de l'étape « code » de Better Auth, entre la connexion et la saisie du code. */
+  const pendingTwoFactor = useRef<string | null>(null);
 
   const loadMe = useCallback(async (): Promise<Me | null> => {
     try {
@@ -96,7 +100,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       status,
       me,
       offline,
-      signIn: async (email, password) => open(await authApi.signIn(email, password)),
+      signIn: async (email, password) => {
+        const result = await authApi.signIn(email, password);
+        if ("twoFactor" in result) {
+          pendingTwoFactor.current = result.twoFactor.cookie;
+          return "two_factor";
+        }
+        await open(result.token);
+        return "in";
+      },
+      verifyTwoFactor: async (code, { backup, trustDevice }) => {
+        const token = await authApi.verifyTwoFactor({ code, backup, trustDevice, cookie: pendingTwoFactor.current });
+        pendingTwoFactor.current = null;
+        await open(token);
+      },
       signUp: async (email, password, pseudo) => open(await authApi.signUp(email, password, pseudo)),
       signOut: async () => {
         try {

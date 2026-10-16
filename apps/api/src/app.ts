@@ -61,6 +61,8 @@ if (corsOrigins.length) {
       allowHeaders: ["authorization", "content-type", "x-device-id"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       exposeHeaders: ["set-auth-token"],
+      // Recette web de l'appli : cookies de l'étape « code » de la double authentification (lot 15).
+      credentials: true,
     }),
   );
 }

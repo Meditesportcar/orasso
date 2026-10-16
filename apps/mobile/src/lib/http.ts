@@ -33,12 +33,19 @@ type Options = {
   timeout?: number;
   /** En-têtes en plus (`x-device-id` des lots de scans). */
   headers?: Record<string, string>;
+  /** Cookies de Better Auth (étape « code » de la double authentification) : gardés par le navigateur en recette web. */
+  cookies?: boolean;
 };
 
 export const NETWORK_MESSAGE = "Pas de connexion : réessaie quand le réseau revient.";
 
+/** Double authentification exigée (espace organisateur, mode staff organisateur) : que faire, dans l'appli. */
+export const TWO_FACTOR_REQUIRED_MESSAGE =
+  "Double authentification obligatoire : déconnecte-toi puis reconnecte-toi avec ton code. Pas encore de code ? Active-la sur le site, rubrique Sécurité.";
+
 /** Message lisible d'une erreur d'API ou d'une erreur inattendue. */
 export function errorMessage(error: unknown): string {
+  if (error instanceof ApiRequestError && error.code === "two_factor_required") return TWO_FACTOR_REQUIRED_MESSAGE;
   if (error instanceof ApiRequestError) return error.message;
   return "Une erreur est survenue. Réessaie.";
 }
@@ -50,7 +57,7 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
 
 export async function requestWithHeaders<T>(
   path: string,
-  { method = "GET", body, form, timeout = 15_000, headers: extra }: Options = {},
+  { method = "GET", body, form, timeout = 15_000, headers: extra, cookies = false }: Options = {},
 ): Promise<{ data: T; headers: Headers }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -64,6 +71,7 @@ export async function requestWithHeaders<T>(
       headers,
       body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
       signal: controller.signal,
+      ...(cookies ? { credentials: "include" as const } : {}),
     });
   } catch {
     throw new ApiRequestError(0, "network", NETWORK_MESSAGE);
@@ -103,6 +111,11 @@ export function authErrorMessage(error: unknown): string {
     PASSWORD_TOO_SHORT: "Le mot de passe est trop court (8 caractères au moins).",
     PASSWORD_TOO_LONG: "Le mot de passe est trop long.",
     EMAIL_NOT_VERIFIED: "Vérifie ton adresse e-mail avant de te connecter.",
+    INVALID_CODE: "Code incorrect. Réessaie avec le code affiché maintenant.",
+    INVALID_BACKUP_CODE: "Code de secours incorrect.",
+    INVALID_TWO_FACTOR_COOKIE: "L'étape du code a expiré : reconnecte-toi.",
+    TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE: "Trop d'essais : reconnecte-toi.",
+    ACCOUNT_TEMPORARILY_LOCKED: "Trop d'essais : réessaie dans un quart d'heure.",
   };
   return byCode[error.code] ?? error.message;
 }
