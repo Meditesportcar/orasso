@@ -108,12 +108,21 @@
   - Journal fusionné : actualités des amis (« X va à… », « X a ajouté… ») et notifications dans un fil de 7 jours (plus les non lues), cloche avec pastille sur le site, avatars et liens dans l'appli.
   - API : migration `0024_social`, module `social`, `GET /me/inbox/summary` minimal (lot 18). Seed : Kenji ↔ Léa amis, demande de Nina à Damien en attente, Marc en compte privé (ami de Julie).
   - Vérifié : voir l'entrée du lot 17 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-17-captures\`.
+- **Messagerie et Boîte (lot 18, 16/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 18) ; état technique : `ARCHITECTURE.md` « État après le lot 18 » et § 5.4.
+  - Messages entre amis en temps réel (site et appli), « Lu par … » toujours actif, images privées (servies aux seuls participants), suppression de ses messages (« Message supprimé »), envoi qui réessaie tant que l'écran est ouvert sans jamais publier deux fois.
+  - Demande de contact pour écrire à quelqu'un qui n'est pas son ami : une seule possible, rangée dans Boîte > Demandes, refus silencieux, acceptation = conversation avec le message en premier (sans amitié). Amitié retirée : la conversation reste lisible, plus d'écriture.
+  - Organisateurs toujours joignables : « Contacter l'organisateur » (page structure et page événement du site, page événement de l'appli) ; les propriétaires et co-organisateurs répondent au nom de la structure depuis leur Boîte (« MéditeSportCar · par Damien_66 ») ; une structure écrit la première seulement à ses abonnés et inscrits.
+  - Boîte : site `/app/boite`, `/app/boite/demandes`, `/app/boite/:id` ; appli onglet Boîte (Messages / Demandes avec compteurs) et conversation ; pastille de l'onglet (`GET /me` → `unreadInbox`) ; premier client WebSocket de l'appli. Push « message reçu » au plus un par conversation et par 5 minutes.
+  - API : migration `0026_messaging`, modules `messaging` et `uploads` (`POST /me/uploads`). Seed : conversation Kenji ↔ Léa, demande de contact de Nina à Kenji, Julie ↔ MéditeSportCar (Damien répond).
+  - Vérifié : voir l'entrée du lot 18 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-18-captures\`.
 
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
+
+- Lot 18 : déployer (migration `0026_messaging` au démarrage, aucune variable nouvelle ; nginx doit relayer le sous-protocole WebSocket tel quel, ce qu'il fait par défaut). Essayer sur téléphone (APK de la vague) : connexion WebSocket par en-tête, pause en arrière-plan, envoi d'une photo, image privée, push « message reçu ». Lots 19 et 20 : ajouter leurs sortes de conversation dans `modules/messaging/access/<kind>.ts` (une ligne dans `access/index.ts`) et leurs demandes dans `features/boite/requests/` et `registerInboxCounter`.
 
 - Lot 17 : déployer (migration `0024_social` au démarrage, aucune variable nouvelle) ; la messagerie (bouton « Message » du profil) vient au lot 18, le signalement au lot 32, les crews du profil au lot 19. Nouvel APK utile seulement pour le scanner de QR ami (`expo-camera` déjà dans l'APK de référence).
 
