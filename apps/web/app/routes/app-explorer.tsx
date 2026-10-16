@@ -95,9 +95,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     people: null as PeopleSearchPage | null,
     categories: [] as Category[],
     failed: null as string | null,
-    // Crews (lot 19) : trouvables par leur nom et leur département (segment « Personnes et crews »).
+    // Crews (lots 19 et 29) : même texte et même département que les personnes (segment « Personnes et crews »).
     crews: null as CrewCard[] | null,
-    crewFilters: { q: get("crew").trim(), department: get("crewdep") },
   };
 
   if (segment === "resultats") {
@@ -190,10 +189,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
   const categories = await apiOrThrow<Category[]>(request, "/vehicle-reference/categories");
   let crews: CrewCard[] | null = null;
-  if (empty.crewFilters.q || empty.crewFilters.department) {
+  if (q || filters.department) {
     const qs = new URLSearchParams();
-    if (empty.crewFilters.q) qs.set("q", empty.crewFilters.q);
-    if (empty.crewFilters.department) qs.set("department", empty.crewFilters.department);
+    if (q) qs.set("q", q);
+    if (filters.department) qs.set("department", filters.department);
     const found = await api<Page<CrewCard>>(request, `/crews/search?${qs}`);
     crews = found.ok ? found.data.items : [];
   }
@@ -228,22 +227,8 @@ function href(params: Record<string, string | number | null | undefined>): strin
 }
 
 export default function Explorer({ loaderData, actionData }: Route.ComponentProps) {
-  const {
-    segment,
-    q,
-    vue,
-    position,
-    radius,
-    filters,
-    results,
-    events,
-    pros,
-    people,
-    categories,
-    failed,
-    crews,
-    crewFilters,
-  } = loaderData;
+  const { segment, q, vue, position, radius, filters, results, events, pros, people, categories, failed, crews } =
+    loaderData;
   const busy = useNavigation().state !== "idle";
   const f = filters as Record<string, string>;
   const segments: { id: Segment; label: string }[] = [
@@ -511,14 +496,14 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
 
       {segment === "personnes" && (
         <div className="s-stack" data-testid="people-search">
-          <Plate as="section" aria-label={socialLabels.searchPeople}>
+          <Plate as="section" aria-label={explorerLabels.searchPeopleCrews}>
             <Form method="get" className="s-filters">
               <input type="hidden" name="segment" value="personnes" />
               <TextField
-                label={socialLabels.searchPeople}
+                label={explorerLabels.searchPeopleCrews}
                 name="q"
                 defaultValue={q}
-                placeholder={socialLabels.searchPeoplePlaceholder}
+                placeholder={explorerLabels.searchPeopleCrewsPlaceholder}
                 maxLength={SEARCH_MAX_LENGTH}
               />
               <SelectField
@@ -587,30 +572,10 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
           <Button variant="secondary" icon="crew" href="/app/amis">
             {socialLabels.myFriends}
           </Button>
-          <Plate as="section" aria-label={crewLabels.search} data-testid="crew-search">
-            <Form method="get" className="s-filters">
-              <input type="hidden" name="segment" value="personnes" />
-              <TextField
-                label={crewLabels.search}
-                name="crew"
-                defaultValue={crewFilters.q}
-                placeholder={crewLabels.searchPlaceholder}
-              />
-              <SelectField
-                label={crewLabels.department}
-                name="crewdep"
-                defaultValue={crewFilters.department}
-                options={[{ value: "", label: "Tous" }, ...departments.map((d) => ({ value: d, label: d }))]}
-              />
-              <Button type="submit" variant="secondary" icon="search">
-                {crewLabels.search}
-              </Button>
-            </Form>
-          </Plate>
           {!crews && <p className="o-t-caption s-muted">{crewLabels.searchIdle}</p>}
           {crews && crews.length === 0 && <p className="s-notice">{crewLabels.searchEmpty}</p>}
           {crews && crews.length > 0 && (
-            <ul className="s-people" data-testid="crew-results">
+            <ul className="s-people" aria-label={crewLabels.crews} data-testid="crew-results">
               {crews.map((c) => (
                 <CrewRow key={c.id} crew={c} />
               ))}
@@ -627,7 +592,13 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
 
 /** Résultats de la recherche de premier niveau : un bloc par groupe, cinq lignes, puis « Voir tout ». */
 function ResultGroups({ results, busy, q }: { results: SearchResults; busy: boolean; q: string }) {
-  const nothing = results.events.length + results.pros.length + results.people.length + results.vehicles.length === 0;
+  const nothing =
+    results.events.length +
+      results.pros.length +
+      results.people.length +
+      results.vehicles.length +
+      results.crews.length ===
+    0;
   if (nothing) {
     return (
       <p className="s-notice" data-testid="search-empty">
@@ -689,6 +660,17 @@ function ResultGroups({ results, busy, q }: { results: SearchResults; busy: bool
             ))}
           </ul>
           {seeAll("personnes", results.more.people)}
+        </section>
+      )}
+      {results.crews.length > 0 && (
+        <section className="s-stack s-stack--tight" aria-label={searchGroupLabels.crews} data-testid="group-crews">
+          <h2 className="s-h2">{searchGroupLabels.crews}</h2>
+          <ul className="s-people">
+            {results.crews.map((c) => (
+              <CrewRow key={c.id} crew={c} />
+            ))}
+          </ul>
+          {seeAll("personnes", results.more.crews)}
         </section>
       )}
       {results.vehicles.length > 0 && (

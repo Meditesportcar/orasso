@@ -1,10 +1,13 @@
-// Casquette Organisateur, Staff : présences, relances, rôles, membres de la structure (lots 22 et 24).
-import { Soon } from "@/ui/Soon";
+// Casquette Organisateur, Staff : présences, relances, rôles, membres de la structure (lot 22 ; la gestion fine : lot 24).
+import { orgaLabels } from "@orasso/shared";
+
+import { OrgaGate } from "@/features/orga/OrgaGate";
+import { StaffScreen } from "@/features/orga/Staff";
 
 export default function Staff() {
   return (
-    <Soon title="Staff">
-      La gestion de ton staff (présences, relances, rôles de chaque événement, membres) arrive ici.
-    </Soon>
+    <OrgaGate title={orgaLabels.staffTitle}>
+      <StaffScreen />
+    </OrgaGate>
   );
 }

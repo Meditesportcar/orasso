@@ -616,7 +616,8 @@ export const crewsService = {
   /** `GET /crews/search?q=&department=` : par nom et département, crews non dissous. */
   async search(v: Viewer, q: CrewSearchQuery): Promise<Page<CrewCard>> {
     rateLimit("crewSearch", v.user.id);
-    const offset = q.cursor ? Number(Buffer.from(q.cursor, "base64url").toString()) || 0 : 0;
+    const decoded = q.cursor ? Number(Buffer.from(q.cursor, "base64url").toString()) : 0;
+    const offset = Number.isSafeInteger(decoded) && decoded >= 0 ? decoded : 0;
     const rows = await db
       .select()
       .from(crews)
