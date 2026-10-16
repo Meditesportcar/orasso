@@ -4,6 +4,7 @@
 // compte, clés d'accès), thème, déconnexion et suppression du compte. Les sections sont dans `features/moi/`.
 
 import { Button, Chip, ChipRow, Text, type ThemePreference, useTheme } from "@orasso/design-system/native";
+import { moderationLabels } from "@orasso/shared";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -40,7 +41,7 @@ type Sheet = SecuritySheet | "staff" | "delete" | null;
 export default function Moi() {
   const { t, preference, setPreference } = useTheme();
   const router = useRouter();
-  const { signOut, refreshMe } = useSession();
+  const { signOut, refreshMe, me } = useSession();
   const settings = useSettings();
   const [sheet, setSheet] = useState<Sheet>(null);
   const close = () => setSheet(null);
@@ -73,6 +74,13 @@ export default function Moi() {
       <VisibilitySection settings={settings.settings} save={settings.save} />
       <SectorSection settings={settings.settings} save={settings.save} />
       <SecuritySection onOpen={setSheet} />
+
+      {/* Lot 32 : sanctions de la modération et contestation. */}
+      <SectionTitle>{moderationLabels.mySanctions}</SectionTitle>
+      {me?.suspension ? <Notice>{moderationLabels.suspendedTitle}</Notice> : null}
+      <Button variant="secondary" icon="list" fullWidth onPress={() => router.push("/suspendu")} testID="my-sanctions">
+        {me?.suspension?.canContest ? moderationLabels.contest : moderationLabels.mySanctions}
+      </Button>
 
       <SectionTitle>Thème</SectionTitle>
       <ChipRow>

@@ -9,6 +9,7 @@ import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
 import { garageApi } from "./garage";
 import { messagingApi } from "./messaging";
+import { moderationApi } from "./moderation";
 import { prosApi } from "./pros";
 import { providersApi } from "./providers";
 import { securityApi } from "./security";
@@ -36,4 +37,5 @@ export const api = {
   ...messagingApi,
   ...crewsApi,
   ...communicationApi,
+  ...moderationApi,
 };

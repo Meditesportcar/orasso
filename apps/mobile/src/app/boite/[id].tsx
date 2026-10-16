@@ -1,6 +1,6 @@
 // Conversation (lot 18, ARCHITECTURE-SUITE § 3.5) : liste inversée, bulles, image avec visionneuse, « Lu par … » (S9),
 // envoi avec un `clientId` et nouvel essai tant que l'écran est ouvert (S13, pas de file persistante), message
-// supprimé, appui long (Supprimer pour ses messages ; Signaler, lot 32, visible et désactivé).
+// supprimé, appui long (Supprimer pour ses messages ; Signaler ceux des autres, lot 32).
 import { AppBar, Button, Ground, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type ConversationView,
@@ -8,6 +8,7 @@ import {
   type MessagePage,
   type MessageView,
   messagingLabels,
+  moderationLabels,
   systemMessageText,
 } from "@orasso/shared";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -26,6 +27,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PrivateImage } from "@/features/boite/PrivateImage";
+import { openReport } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
 import { formatDay, formatHour } from "@/lib/format";
 import { ApiRequestError, errorMessage } from "@/lib/http";
@@ -315,7 +317,7 @@ export function ConversationScreen({
         >
           {m.deleted ? (
             <Text variant="body" color={mine ? t.color.plateMuted : t.color.inkMuted}>
-              {messagingLabels.deleted}
+              {m.moderated ? moderationLabels.messageRemoved : messagingLabels.deleted}
             </Text>
           ) : m.image ? (
             <PrivateImage
@@ -415,10 +417,20 @@ export function ConversationScreen({
             {messagingLabels.deleteMessage}
           </Button>
         ) : null}
-        {menu && menu.sender?.userId !== myId ? (
-          // Signalement d'un message : lot 32 (visible, désactivé).
-          <Button variant="secondary" icon="alert" fullWidth disabled>
-            {messagingLabels.reportSoon}
+        {menu?.sender && menu.sender.userId !== myId && !menu.deleted ? (
+          // Signaler (lot 32) : la copie des 5 messages avant et après est faite par l'API.
+          <Button
+            variant="secondary"
+            icon="flag"
+            fullWidth
+            testID="message-report"
+            onPress={() => {
+              const id = menu.id;
+              setMenu(null);
+              openReport({ type: "message", id });
+            }}
+          >
+            {messagingLabels.report}
           </Button>
         ) : null}
       </AppSheet>

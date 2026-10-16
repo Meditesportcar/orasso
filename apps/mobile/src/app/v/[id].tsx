@@ -3,9 +3,12 @@
 import { Button, Chip, Photo, Plate, Text, tokens, useTheme, VehicleCard } from "@orasso/design-system/native";
 import { gradeLabels, socialLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { ReportButton } from "@/features/ReportSheet";
 import { PersonRow } from "@/features/social/PersonRow";
+import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
@@ -23,6 +26,7 @@ export default function OtherVehiclePage() {
   const vehicle = useApi(() => api.otherVehicle(id), [id]);
   const nearby = useApi(() => api.ownersNearby(id), [id], { enabled: Boolean(vehicle.data) });
   const v = vehicle.data;
+  const [viewer, setViewer] = useState<number | null>(null);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/explorer"));
 
@@ -47,19 +51,27 @@ export default function OtherVehiclePage() {
   return (
     <FlowScreen title="Véhicule" onClose={close} onRefresh={reload}>
       <View testID="vehicule" accessibilityLabel={v.label} style={styles.col}>
-        <VehicleCard
-          first
-          name={v.label}
-          certified={full?.certified}
-          year={full?.year ?? undefined}
-          power={full?.powerHp ? `${full.powerHp} ch` : undefined}
-          photoCount={full && full.photos.length > 1 ? full.photos.length : undefined}
-          categories={full?.categories.map((c) => ({ label: c.label }))}
-          photo={{
-            source: mediaSource(full?.photos[0]?.url),
-            placeholder: `linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`,
-          }}
-        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Photos de ${v.label} en plein écran`}
+          disabled={!full || full.photos.length === 0}
+          onPress={() => setViewer(0)}
+          testID="photos-open"
+        >
+          <VehicleCard
+            first
+            name={v.label}
+            certified={full?.certified}
+            year={full?.year ?? undefined}
+            power={full?.powerHp ? `${full.powerHp} ch` : undefined}
+            photoCount={full && full.photos.length > 1 ? full.photos.length : undefined}
+            categories={full?.categories.map((c) => ({ label: c.label }))}
+            photo={{
+              source: mediaSource(full?.photos[0]?.url),
+              placeholder: `linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`,
+            }}
+          />
+        </Pressable>
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={`Profil de ${v.owner.pseudo}`}
@@ -73,6 +85,7 @@ export default function OtherVehiclePage() {
             <Chip surface="plate">{gradeLabels[v.owner.grade]}</Chip>
           </Plate>
         </Pressable>
+        <ReportButton type="vehicle" id={v.id} />
         {!v.detailed ? <Notice>{socialLabels.privateNotice}</Notice> : null}
         {full ? (
           <Plate style={styles.facts}>
@@ -92,18 +105,24 @@ export default function OtherVehiclePage() {
             ) : null}
           </Plate>
         ) : null}
+        {/* Photos (lot 32) : toucher ouvre la visionneuse plein écran, d'où l'on peut signaler la photo. */}
         {full && full.photos.length > 1
-          ? full.photos
-              .slice(1)
-              .map((p) => (
+          ? full.photos.slice(1).map((p, i) => (
+              <Pressable
+                key={p.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Photo ${i + 2} en plein écran`}
+                onPress={() => setViewer(i + 1)}
+              >
                 <Photo
-                  key={p.id}
                   source={mediaSource(p.url)}
                   placeholder={`linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`}
                   style={styles.photo}
                 />
-              ))
+              </Pressable>
+            ))
           : null}
+        {full ? <PhotoViewer photos={full.photos} start={viewer} onClose={() => setViewer(null)} reportable /> : null}
       </View>
 
       <SectionTitle>{socialLabels.ownersNearby}</SectionTitle>
