@@ -11,6 +11,8 @@ import {
   isLocked,
   lockAt,
   type PassRevokedReason,
+  providerApplicationsLink,
+  providerWaitlistNote,
   type RefusalReason,
   refusalReasonLabels,
   registrationOpensAt,
@@ -108,7 +110,8 @@ async function labelOf(app: ApplicationRow, tx: Tx): Promise<string> {
 }
 
 const eventLink = (e: EventRow) => ({ label: "Voir l'événement", path: `/e/${e.slug}` });
-const accessLink = { label: "Ouvrir mes accès", path: "/app/acces" };
+const accessLinkDefault = { label: "Ouvrir mes accès", path: "/app/acces" };
+const accessLink = accessLinkDefault;
 
 /** Rang affiché dans la liste d'attente (1 = prochain servi). */
 async function waitlistPosition(tx: Tx | typeof db, app: ApplicationRow): Promise<number> {
@@ -129,7 +132,13 @@ async function waitlistPosition(tx: Tx | typeof db, app: ApplicationRow): Promis
 /** Notifie le candidat d'une décision (« au fil des décisions », docs/01). */
 async function notifyDecision(tx: Tx, event: EventRow, app: ApplicationRow) {
   const label = await labelOf(app, tx);
-  const base = { eventId: event.id, eventStartsAt: event.startsAt, data: { eventId: event.id, applicationId: app.id } };
+  const provider = app.kind === "provider";
+  const base = {
+    eventId: event.id,
+    eventStartsAt: event.startsAt,
+    data: { eventId: event.id, applicationId: app.id, ...(provider ? { screen: "provider_applications" } : {}) },
+  };
+  const accessLink = provider ? providerApplicationsLink : accessLinkDefault;
   if (app.status === "accepted") {
     await notificationsService.notify(tx, app.userId, "application_accepted", {
       ...base,
@@ -142,7 +151,7 @@ async function notifyDecision(tx: Tx, event: EventRow, app: ApplicationRow) {
     await notificationsService.notify(tx, app.userId, "application_waitlisted", {
       ...base,
       title: "Liste d'attente",
-      body: `${label} est en liste d'attente pour « ${event.title} » (rang ${rank}). Si une place se libère, elle te sera proposée automatiquement.`,
+      body: `${label} est en liste d'attente pour « ${event.title} » (rang ${rank}). ${provider ? providerWaitlistNote : "Si une place se libère, elle te sera proposée automatiquement."}`,
       link: accessLink,
     });
   } else if (app.status === "refused") {
@@ -400,6 +409,8 @@ export const applicationsService = {
             and(
               eq(applications.eventId, eventId),
               eq(applications.userId, v.user.id),
+              // Les candidatures de prestataire ne comptent pas dans la limite de véhicules.
+              eq(applications.kind, "vehicle"),
               inArray(applications.status, [...ACTIVE]),
             ),
           );

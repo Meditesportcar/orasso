@@ -76,7 +76,15 @@ export const openToProvidersQuerySchema = z.object({
 export function instagramUrl(value: string | null | undefined): string | null {
   const v = value?.trim();
   if (!v) return null;
-  if (/^https?:\/\//i.test(v)) return v;
+  if (/^https?:\/\//i.test(v)) {
+    // Seule une adresse de compte Instagram est gardée (jamais un lien vers un autre site déguisé en Instagram).
+    try {
+      const host = new URL(v).hostname.toLowerCase();
+      return host === "instagram.com" || host === "www.instagram.com" ? v : null;
+    } catch {
+      return null;
+    }
+  }
   const handle = v.replace(/^@/, "").replace(/[^A-Za-z0-9_.]/g, "");
   return handle ? `https://www.instagram.com/${handle}` : null;
 }

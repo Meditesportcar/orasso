@@ -19,6 +19,7 @@ import {
   type ProviderProfileView,
   type ProviderPublic,
   providerProfileIssue,
+  providerTypeChangeBlocked,
   type VendorTypeCode,
 } from "@orasso/shared";
 import { and, asc, count, desc, eq, gt, inArray, isNull, lte, max, sql } from "drizzle-orm";
@@ -129,14 +130,36 @@ export const providersService = {
     }
     if (existing) {
       const type = existing.type === "stand" ? "stand" : input.type;
-      await db
-        .update(providerProfiles)
-        .set({
-          ...fieldsOf({ ...input, type: input.type }),
-          type,
-          customType: type === "other" ? input.customType : null,
-        })
-        .where(eq(providerProfiles.id, existing.id));
+      const customType = type === "other" ? input.customType : null;
+      const typeChanged = type !== existing.type || customType !== existing.customType;
+      await db.transaction(async (tx) => {
+        // Verrou du profil : une candidature ne peut pas être déposée entre le contrôle et le changement.
+        await tx.select().from(providerProfiles).where(eq(providerProfiles.id, existing.id)).for("update");
+        const active = await tx
+          .select({ id: applications.id })
+          .from(applications)
+          .innerJoin(events, eq(events.id, applications.eventId))
+          .where(
+            and(
+              eq(applications.providerProfileId, existing.id),
+              inArray(applications.status, [...ACTIVE]),
+              gt(events.endsAt, now()),
+            ),
+          );
+        // Le type (et donc l'accréditation, les types acceptés par l'événement) ne change pas sous une candidature.
+        if (typeChanged && active.length > 0) throw conflict("conflict", providerTypeChangeBlocked);
+        await tx
+          .update(providerProfiles)
+          .set({ ...fieldsOf({ ...input, type: input.type }), type, customType })
+          .where(eq(providerProfiles.id, existing.id));
+        // Synchro différentielle du staff : le nom et le type viennent du profil, pas de la candidature.
+        if (typeChanged || input.name !== existing.name) {
+          await tx
+            .update(applications)
+            .set({ updatedAt: new Date() })
+            .where(and(eq(applications.providerProfileId, existing.id), inArray(applications.status, [...ACTIVE])));
+        }
+      });
       return ownerView((await loadProvider(existing.id)) as ProviderWith);
     }
     try {
@@ -156,19 +179,33 @@ export const providersService = {
   async addPhoto(v: Viewer, file: File): Promise<ProviderProfileView> {
     rateLimit("fileUpload", v.user.id);
     const p = await requireProfile(v);
-    if (p.photos.length >= PROVIDER_MAX_PHOTOS) throw conflict("conflict", `${PROVIDER_MAX_PHOTOS} photos au maximum`);
     const data = await toWebp(file);
     const key = `providers/${p.id}/photo-${randomBytes(6).toString("hex")}.webp`;
     await storage.put(key, data);
-    const [agg] = await db
-      .select({ maxPos: max(providerPhotos.position) })
-      .from(providerPhotos)
-      .where(eq(providerPhotos.providerId, p.id));
-    await db.insert(providerPhotos).values({ providerId: p.id, storageKey: key, position: (agg?.maxPos ?? -1) + 1 });
+    try {
+      await db.transaction(async (tx) => {
+        // Le compte des photos se fait sous le verrou du profil : deux envois simultanés ne dépassent pas la limite.
+        await tx.select().from(providerProfiles).where(eq(providerProfiles.id, p.id)).for("update");
+        const [agg] = await tx
+          .select({ n: count(), maxPos: max(providerPhotos.position) })
+          .from(providerPhotos)
+          .where(eq(providerPhotos.providerId, p.id));
+        if ((agg?.n ?? 0) >= PROVIDER_MAX_PHOTOS) {
+          throw conflict("conflict", `${PROVIDER_MAX_PHOTOS} photos au maximum`);
+        }
+        await tx
+          .insert(providerPhotos)
+          .values({ providerId: p.id, storageKey: key, position: (agg?.maxPos ?? -1) + 1 });
+      });
+    } catch (error) {
+      await storage.remove(key).catch(() => undefined);
+      throw error;
+    }
     return ownerView((await loadProvider(p.id)) as ProviderWith);
   },
 
   async removePhoto(v: Viewer, photoId: string): Promise<ProviderProfileView> {
+    rateLimit("proWrite", v.user.id);
     const p = await requireProfile(v);
     const photo = p.photos.find((x) => x.id === photoId);
     if (!photo) throw notFound("Photo introuvable");
@@ -178,6 +215,7 @@ export const providersService = {
   },
 
   async reorderPhotos(v: Viewer, photoIds: string[]): Promise<ProviderProfileView> {
+    rateLimit("proWrite", v.user.id);
     const p = await requireProfile(v);
     const set = new Set(p.photos.map((x) => x.id));
     if (photoIds.length !== set.size || !photoIds.every((id) => set.has(id)) || new Set(photoIds).size !== set.size) {
@@ -215,37 +253,46 @@ export const providersService = {
     });
     const logo = pro.logoKey ? [{ storageKey: pro.logoKey }] : [];
     const sources = [...proPhotoRows, ...logo].slice(0, PROVIDER_MAX_PHOTOS);
-    const created = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(providerProfiles)
-        .values({
-          userId: v.user.id,
-          type: "stand",
-          name: pro.name.slice(0, 60),
-          description: pro.description ? pro.description.slice(0, 800) : null,
-          phone: pro.phone,
-          email: pro.email,
-          website: pro.website,
-          instagram: pro.socials.instagram ?? null,
-          departments: pro.interventionDepartments.length
-            ? pro.interventionDepartments
-            : pro.department
-              ? [pro.department]
-              : [],
-          proProfileId: pro.id,
-        })
-        .returning();
-      if (!row) throw new Error("Stand non enregistré");
-      let position = 0;
-      for (const s of sources) {
-        const data = await storage.get(s.storageKey);
-        if (!data) continue;
-        const key = `providers/${row.id}/photo-${randomBytes(6).toString("hex")}.webp`;
-        await storage.put(key, data);
-        await tx.insert(providerPhotos).values({ providerId: row.id, storageKey: key, position: position++ });
-      }
-      return row;
-    });
+    // Fichiers recopiés pendant la transaction : nettoyés si elle échoue (aucun fichier orphelin).
+    const copied: string[] = [];
+    const created = await db
+      .transaction(async (tx) => {
+        const [row] = await tx
+          .insert(providerProfiles)
+          .values({
+            userId: v.user.id,
+            type: "stand",
+            name: pro.name.slice(0, 60),
+            description: pro.description ? pro.description.slice(0, 800) : null,
+            phone: pro.phone,
+            email: pro.email,
+            website: pro.website,
+            instagram: pro.socials.instagram ?? null,
+            departments: pro.interventionDepartments.length
+              ? pro.interventionDepartments
+              : pro.department
+                ? [pro.department]
+                : [],
+            proProfileId: pro.id,
+          })
+          .returning();
+        if (!row) throw new Error("Stand non enregistré");
+        let position = 0;
+        for (const s of sources) {
+          const data = await storage.get(s.storageKey);
+          if (!data) continue;
+          const key = `providers/${row.id}/photo-${randomBytes(6).toString("hex")}.webp`;
+          await storage.put(key, data);
+          copied.push(key);
+          await tx.insert(providerPhotos).values({ providerId: row.id, storageKey: key, position: position++ });
+        }
+        return row;
+      })
+      .catch(async (error) => {
+        await Promise.all(copied.map((k) => storage.remove(k).catch(() => undefined)));
+        if (isUniqueViolation(error)) throw conflict("conflict", "Tu as déjà un profil de prestataire");
+        throw error;
+      });
     return ownerView((await loadProvider(created.id)) as ProviderWith);
   },
 
@@ -497,7 +544,8 @@ export const providersService = {
     const providers = await loadProviders(rows.flatMap((r) => (r.providerProfileId ? [r.providerProfileId] : [])));
     return rows.flatMap((r) => {
       const p = r.providerProfileId ? providers.get(r.providerProfileId) : undefined;
-      return p ? [presentView(p, r.accreditedMedia)] : [];
+      // Profil supprimé (compte anonymisé) : jamais affiché.
+      return p && !p.deletedAt ? [presentView(p, r.accreditedMedia)] : [];
     });
   },
 

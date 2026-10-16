@@ -2,7 +2,7 @@
 // officiel », « Prestataires présents », scan « Prestataire · <type> », `live.providers`, stand d'un pro.
 import { randomUUID } from "node:crypto";
 import { fromWallTime, PRO_PAID_FROM } from "@orasso/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -533,5 +533,112 @@ describe("mes candidatures", () => {
     const mine = await call(lea, "GET", "/me/provider-applications");
     expect(mine.json[0]).toMatchObject({ status: "withdrawn", canWithdraw: false });
     expect((await applyTo(lea, nocturneId)).status).toBe(201);
+  });
+});
+
+describe("corrections de la relecture", () => {
+  const vehicleApply = async (u: TestUser, eventId: string) => {
+    const car = await createVehicle(u.id, ref);
+    return applicationsService.apply(await viewerOf(u), eventId, {
+      vehicleIds: [car.id],
+      rulesAccepted: true,
+      followStructure: true,
+      newsletterOptIn: false,
+      companions: 0,
+      message: null,
+    });
+  };
+
+  it("un prestataire retenu peut aussi venir avec sa voiture (la limite de véhicules ne compte que les véhicules)", async () => {
+    const paul = await signUp("Paul_Photo");
+    await readyProvider(paul, { type: "photographer", name: "Paul Photo", instagram: "@paul.photo" });
+    const app = (await applyTo(paul, nocturneId)).json;
+    await call(orga, "POST", `/events/${nocturneId}/applications/${app.id}/decide`, ACCEPT);
+    await db.update(events).set({ maxVehiclesPerUser: 1, capacity: 10 }).where(eq(events.id, nocturneId));
+    const created = await vehicleApply(paul, nocturneId);
+    expect(created).toHaveLength(1);
+    expect(created[0]?.kind).toBe("vehicle");
+    // Le compte, lui, reste à une voiture.
+    await expect(vehicleApply(paul, nocturneId)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("liste d'attente d'un prestataire : pas de promesse de proposition automatique, lien vers son espace", async () => {
+    await readyProvider(lea);
+    const app = (await applyTo(lea, nocturneId)).json;
+    await call(orga, "POST", `/events/${nocturneId}/applications/${app.id}/decide`, {
+      decision: "waitlist",
+      sendReasons: true,
+    });
+    await notificationsService.flush();
+    const mine = await call(lea, "GET", "/me/notifications");
+    const note = (
+      mine.json.items as { type: string; body: string; link?: { path: string } | null; data: Record<string, unknown> }[]
+    ).find((n) => n.type === "application_waitlisted");
+    expect(note?.body).toContain("recontactera");
+    expect(note?.body).not.toContain("proposée automatiquement");
+    expect(note?.data).toMatchObject({ screen: "provider_applications" });
+    expect(JSON.stringify(note)).toContain("/app/prestataire");
+  });
+
+  it("le type d'activité ne change pas sous une candidature active (photographe accrédité → food truck refusé)", async () => {
+    const paul = await signUp("Paul_Photo");
+    await readyProvider(paul, { type: "photographer", name: "Paul Photo", instagram: "@paul.photo" });
+    const app = (await applyTo(paul, nocturneId)).json;
+    await call(orga, "POST", `/events/${nocturneId}/applications/${app.id}/decide`, ACCEPT);
+    await call(orga, "PATCH", `/events/${nocturneId}/applications/${app.id}/accreditation`, { accredited: true });
+    const change = await putProfile(paul, { type: "food_truck", name: "Paul Photo" });
+    expect(change.status).toBe(409);
+    expect(change.json.error.message).toMatch(/candidature en cours/);
+    // Le nom, lui, peut changer ; il touche la candidature pour la synchro différentielle du staff.
+    const before = (await db.query.applications.findFirst({ where: eq(applications.id, app.id) }))?.updatedAt;
+    clock.advance(1000);
+    await new Promise((r) => setTimeout(r, 20));
+    const renamed = await putProfile(paul, { type: "photographer", name: "Paul Roca", instagram: "@paul.photo" });
+    expect(renamed.status).toBe(200);
+    const after = (await db.query.applications.findFirst({ where: eq(applications.id, app.id) }))?.updatedAt;
+    expect(after && before && after.getTime() > before.getTime()).toBe(true);
+    // Désistement : le changement devient possible.
+    await call(paul, "POST", `/applications/${app.id}/withdraw`);
+    expect((await putProfile(paul, { type: "food_truck", name: "Paul Roca" })).status).toBe(200);
+  });
+
+  it("un profil supprimé n'apparaît plus dans « Prestataires présents »", async () => {
+    const view = await readyProvider(lea);
+    const app = (await applyTo(lea, nocturneId)).json;
+    await call(orga, "POST", `/events/${nocturneId}/applications/${app.id}/decide`, ACCEPT);
+    expect(await providersService.presentAtEventId(nocturneId)).toHaveLength(1);
+    await db.execute(sql`update provider_profiles set deleted_at = now() where id = ${view.id}`);
+    expect(await providersService.presentAtEventId(nocturneId)).toHaveLength(0);
+  });
+
+  it("8 photos au plus, même quand le compte est déjà plein ; le fichier envoyé est retiré", async () => {
+    const view = await readyProvider(lea);
+    for (let i = 1; i < 8; i++) {
+      await db
+        .insert(providerPhotos)
+        .values({ providerId: view.id, storageKey: `providers/${view.id}/p${i}.webp`, position: i });
+    }
+    const png = await sharp({ create: { width: 16, height: 16, channels: 3, background: "#123456" } })
+      .png()
+      .toBuffer();
+    const file = new File([new Uint8Array(png)], "x.png", { type: "image/png" });
+    await expect(providersService.addPhoto(leaV, file)).rejects.toMatchObject({ status: 409 });
+    const { readdir } = await import("node:fs/promises");
+    const { storageDir } = await import("../../lib/storage");
+    const dir = `${storageDir}/providers/${view.id}`;
+    const files = await readdir(dir).catch(() => [] as string[]);
+    expect(files.filter((f) => f.startsWith("photo-"))).toHaveLength(0);
+  });
+
+  it("stand d'un pro : un profil déjà pris par un autre compte lié est refusé en 409 (pas 500)", async () => {
+    const pro = await signUp("Pro_Garage");
+    await createPro(pro.id, { name: "Garage du Port" });
+    const [a, b] = await Promise.all([
+      call(pro, "POST", "/me/provider-profile/from-pro"),
+      call(pro, "POST", "/me/provider-profile/from-pro"),
+    ]);
+    // Deux créations simultanées : jamais d'erreur 500, au plus un profil.
+    expect([a.status, b.status].every((s) => s === 201 || s === 409 || s === 200)).toBe(true);
+    expect((await call(pro, "GET", "/me/provider-profile")).json.profile).not.toBeNull();
   });
 });

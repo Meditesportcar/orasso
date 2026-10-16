@@ -90,6 +90,11 @@ describe("profil prestataire", () => {
     expect(instagramUrl("https://instagram.com/lea")).toBe("https://instagram.com/lea");
     expect(instagramUrl("  ")).toBeNull();
     expect(instagramHandle("@lea.photo")).toBe("@lea.photo");
+    // Une adresse d'un autre site n'est jamais présentée comme un compte Instagram.
+    expect(instagramUrl("https://evil.example/instagram.com/lea")).toBeNull();
+    expect(instagramUrl("https://instagram.com.evil.example/lea")).toBeNull();
+    expect(instagramUrl("https://www.instagram.com/lea")).toBe("https://www.instagram.com/lea");
+    expect(instagramHandle("https://evil.example/lea")).toBeNull();
   });
 
   it("le schéma exige nom et type et précise le type libre", () => {

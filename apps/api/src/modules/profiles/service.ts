@@ -103,6 +103,7 @@ export const profilesService = {
       .where(
         and(
           eq(applications.userId, v.user.id),
+          eq(applications.kind, "vehicle"),
           inArray(applications.status, ["pending", "accepted", "waitlisted", "offered"]),
           gt(events.endsAt, now()),
         ),

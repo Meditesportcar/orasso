@@ -107,6 +107,12 @@ export function customVendorTypes(vendorTypes: readonly string[]): string[] {
 /** Photos du profil prestataire (comme `vehicle_photos`). */
 export const PROVIDER_MAX_PHOTOS = 8;
 
+/** Notifications de décision d'un prestataire : sa liste d'attente est manuelle, son écran n'est pas « Accès ». */
+export const providerWaitlistNote = "L'organisateur te recontactera s'il y a de la place pour toi.";
+export const providerApplicationsLink = { label: "Voir mes candidatures", path: "/app/prestataire" } as const;
+export const providerTypeChangeBlocked =
+  "Tu as une candidature en cours : retire-la ou attends la fin de l'événement pour changer d'activité.";
+
 export type ProviderProfileDraft = {
   name: string;
   type: VendorTypeCode | null;

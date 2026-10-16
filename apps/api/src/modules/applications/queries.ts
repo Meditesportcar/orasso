@@ -166,7 +166,14 @@ async function toTriage(
     .select({ userId: applications.userId, n: count() })
     .from(applications)
     .innerJoin(events, eq(events.id, applications.eventId))
-    .where(and(inArray(applications.userId, userIds), eq(applications.status, "accepted"), lte(events.endsAt, t)))
+    .where(
+      and(
+        inArray(applications.userId, userIds),
+        eq(applications.kind, "vehicle"),
+        eq(applications.status, "accepted"),
+        lte(events.endsAt, t),
+      ),
+    )
     .groupBy(applications.userId);
   const pastById = new Map(past.map((x) => [x.userId, x.n]));
 
@@ -178,6 +185,7 @@ async function toTriage(
     .where(
       and(
         inArray(applications.userId, userIds),
+        eq(applications.kind, "vehicle"),
         eq(events.structureId, event.structureId),
         ne(applications.eventId, event.id),
       ),
