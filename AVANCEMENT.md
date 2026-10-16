@@ -81,11 +81,21 @@
   - Billets payants : Stripe Connect en mode test écrit de bout en bout (connexion du compte, paiement avec commission 5 %, webhooks signés) derrière `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_CLIENT_ID` ; vides = « bientôt » ; clé `sk_live_` refusée au démarrage. Testé avec Stripe simulé seulement (aucune clé fournie).
   - Vérifié : `pnpm test` (shared 91, design-system 32, mobile 43, api 182), `typecheck`, `lint`, build du site, `expo export` Android ; Playwright : `pros-billetterie` (parcours 6, billets gratuits, billets payants « bientôt », audit du système de design), `appli-pro` (appli dans le navigateur) ; captures dans `C:\Users\DELL\.claude\relais\orasso\lot-14-captures\`.
 
+- **Socle de la suite : découpages, compte et sécurité, Sentry, dépendances natives (lot 15, 16/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 15) ; état technique : `ARCHITECTURE.md` § 6 et § 7 « État après le lot 15 ».
+  - Fichiers partagés découpés par domaine pour les lots parallèles : libellés (`labels/`), types de notification (`notifications/`), routes du site (`routes.<espace>.ts`, administration en layout), routes de l'appli (`lib/api/`), seed (`scripts/seed/`). Règle : un lot ajoute son fichier et une ligne.
+  - Compte et sécurité : réinitialisation du mot de passe par e-mail (sessions révoquées, alerte), vérification de l'e-mail à l'inscription (non bloquante, bandeau « Vérifie ton e-mail »), alertes « nouvelle connexion » (une par appareil) et « mot de passe changé », clés d'accès (Face ID, empreinte) sur `/app/securite` qui valent double authentification et permettent de se connecter sans mot de passe, appareils connectés et déconnexion à distance, suppression du compte par anonymisation (mot de passe + code 2FA, e-mail de confirmation), `/app/moi` (profil, aperçu public, notifications par type, public / privé, secteur, centres d'intérêt, rayon).
+  - Parrainage : lien d'ami `/ami/:jeton`, +10 points au parrain quand le filleul confirme son adresse (une fois, 20 par saison). Notification « événement près de chez toi » (centres d'intérêt et rayon autour du département).
+  - Sentry / GlitchTip sur l'API, le site et l'appli (rien sans DSN, données personnelles retirées). Appli : `@sentry/react-native`, `expo-location`, MapLibre, `expo-sharing`, `expo-file-system` installés → **nouvel APK nécessaire**.
+  - API : migration `0022_security`, modules `security` et `account`, tâches `event.notify-nearby` et `security.purge-known-logins`. Seed : `noe@orasso.local` (adresse à confirmer), parrainage Kenji → Léa.
+  - Vérifié : voir l'entrée du lot 15 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-15-captures\`.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
+
+- Lot 15 : déployer (migration `0022` au démarrage ; variables facultatives `SENTRY_DSN`, `VITE_SENTRY_DSN` dans `deploy/dev.env.example`, `SENTRY_RELEASE` posé par `compose.yml`) ; construire l'APK de référence (nouvelles dépendances natives). Les e-mails partent par le transport « journal » tant que Brevo n'est pas branché : en ligne, les liens de réinitialisation et de vérification ne sont lisibles que dans `email_outbox`.
 
 - Lot 14 : déployer (migrations `0019` et `0020` au démarrage ; variables facultatives `STRIPE_*` vides = billetterie payante « bientôt »). Pour activer Stripe en test : clés de test du compte Orasso (`sk_test_…`), application Connect (`ca_…`, URI de redirection `<PUBLIC_URL>/api/stripe/connect/callback`) et point de terminaison webhook `<PUBLIC_URL>/api/stripe/webhook` (événements Connect : `checkout.session.completed`, `checkout.session.expired`, `account.application.deauthorized`) → `whsec_…`.
 

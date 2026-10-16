@@ -1,4 +1,4 @@
-import { Button, CheckboxField, Chip, TextField } from "@orasso/design-system/web";
+import { Button, CheckboxField, Chip, Icon, TextField } from "@orasso/design-system/web";
 import {
   type AccountSettings,
   departments as allDepartments,
@@ -228,6 +228,9 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
                 className="o-check__input"
                 defaultChecked={settings.visibility === v}
               />
+              <span className="o-check__box" aria-hidden="true">
+                <Icon name="check" size={16} strokeWidth={3} />
+              </span>
               <span className="o-check__label o-t-body">
                 <strong>{profileVisibilityLabels[v]}</strong> · {profileVisibilityRules[v]}
               </span>
