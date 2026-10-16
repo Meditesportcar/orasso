@@ -24,7 +24,6 @@ import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { staffChatsService } from "../communication/staff-chats";
 import { inboxService, registerInboxCounter } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
-import { registerOrganizerBadge } from "../profiles/personas";
 import { structureById } from "../structures/service";
 
 type MemberRow = typeof structureMembers.$inferSelect;
@@ -175,6 +174,8 @@ export const staffRequestsService = {
   async accept(v: Viewer, structureId: string, userId: string, input: StaffRequestAccept): Promise<void> {
     await requireOrganizer(v, structureId);
     const structure = await structureById(structureId);
+    // Structure suspendue : plus de recrutement (ses événements publiés continuent avec le staff déjà en place).
+    if (structure.verification === "suspended") throw forbidden("Cette structure est suspendue.");
     await withTx(async (tx, after) => {
       await lockStructureStaff(tx, structureId);
       const [row] = await tx
@@ -248,6 +249,7 @@ export const staffRequestsService = {
   },
 };
 
-// Pastille de la Boîte de l'utilisateur : invitations à rejoindre une structure ; casquette d'une structure : demandes.
+// Pastille de la Boîte de l'utilisateur : invitations à rejoindre une structure. (La pastille de la casquette d'une
+// structure compte déjà les demandes de staff : `registerOrganizerBadge` de `communication/inbox.ts`, lot 22 ; ne pas
+// la déclarer une seconde fois ici, les demandes seraient comptées deux fois.)
 registerInboxCounter("staffInvitation", (userId, ex) => staffRequestsService.pendingInvitations(userId, ex));
-registerOrganizerBadge((structureId) => staffRequestsService.pendingRequests(structureId));

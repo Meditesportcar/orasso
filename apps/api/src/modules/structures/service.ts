@@ -375,6 +375,8 @@ export const structuresService = {
     if (!target) throw notFound("Aucun compte Orasso à ce nom");
     if (target.userId === v.user.id) throw conflict("conflict", "Tu fais déjà partie de cette structure");
     const s = await structureById(id);
+    // Structure suspendue : plus de recrutement (ses événements publiés continuent avec le staff déjà en place).
+    if (s.verification === "suspended") throw forbidden("Cette structure est suspendue.");
     // Lot 24 : unicité (une ligne par personne), file bornée, délai après un refus, invitation notifiée à son seul
     // destinataire. Une demande de staff en attente de cette personne est acceptée d'emblée (même geste).
     const promoted = await withTx(async (tx, after) => {

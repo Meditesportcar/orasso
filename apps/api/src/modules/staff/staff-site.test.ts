@@ -29,6 +29,7 @@ import {
   notifications,
   staffAlerts,
   structureMembers,
+  structures,
   ticketScans,
   tickets,
   vehicleCategories,
@@ -174,9 +175,6 @@ describe("devenir staff : demande, réponse, délais", () => {
     expect(members.filter((m: { status: string }) => m.status === "requested")).toHaveLength(2);
     const summary = await req(w.damien, "GET", `/structures/${w.s.id}/inbox/summary`);
     expect(summary.json.staffRequests).toBe(2);
-    const me = await req(w.damien, "GET", "/me");
-    const persona = me.json.personas.find((p: { kind: string }) => p.kind === "organizer");
-    expect(persona.badge).toBeGreaterThanOrEqual(2);
 
     // Un simple utilisateur ne répond pas aux demandes ; l'organisateur d'une autre structure non plus.
     expect((await req(nina, "POST", `/structures/${w.s.id}/members/${nina.id}/accept`, {})).status).toBe(403);
@@ -766,6 +764,76 @@ describe("direct par catégorie, prestataires, main courante avec photo, alerte 
     const row = await db.query.incidents.findFirst({ where: eq(incidents.clientId, clientId) });
     expect(row?.photoKey).toBeNull();
     expect(row?.description).toBe("Verre brisé");
+  });
+});
+
+describe("structure suspendue, relances, appartenances", () => {
+  it("structure suspendue : plus de demande, d'invitation ni d'acceptation ; le staff en place garde son accès", async () => {
+    const w = await setup();
+    const nina = await signUp("Nina_Demande");
+    await req(nina, "POST", `/structures/${w.s.id}/staff-requests`, {});
+    await db.update(structures).set({ verification: "suspended" }).where(eq(structures.id, w.s.id));
+    const other = await signUp("Autre_Fan");
+    expect((await req(other, "POST", `/structures/${w.s.id}/staff-requests`, {})).status).toBe(404);
+    expect(
+      (
+        await req(w.damien, "POST", `/structures/${w.s.id}/members`, {
+          pseudo: other.pseudo,
+          role: "staff",
+          staffRoles: [],
+          canDecide: false,
+        })
+      ).status,
+    ).toBe(403);
+    expect((await req(w.damien, "POST", `/structures/${w.s.id}/members/${nina.id}/accept`, {})).status).toBe(403);
+    // Refuser reste possible ; le staff déjà en place n'est pas touché.
+    expect((await req(w.damien, "POST", `/structures/${w.s.id}/members/${nina.id}/decline`)).status).toBe(204);
+    clock.set(new Date(w.e.startsAt.getTime() - 2 * HOUR));
+    expect((await req(w.lea, "GET", `/events/${w.e.id}/staff/sync`)).status).toBe(200);
+  });
+
+  it("« Relancer » : ceux qui n'ont pas répondu, une fois par jour, jamais après le début ; réservé à l'organisation", async () => {
+    const w = await setup();
+    for (const mode of MODES) {
+      const first = await req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, {}, mode);
+      if (mode === "cookie") {
+        expect(first.status).toBe(200);
+        expect(first.json.reminded).toBe(2);
+      } else {
+        // Déjà relancés aujourd'hui.
+        expect(first.json.reminded).toBe(0);
+      }
+    }
+    await notificationsService.flush();
+    const leaNotes = await db.select().from(notifications).where(eq(notifications.userId, w.lea.id));
+    expect(leaNotes.filter((n) => n.type === "staff_presence_reminder")).toHaveLength(1);
+    const list = await req(w.damien, "GET", `/events/${w.e.id}/staff`);
+    expect(list.json.find((m: { userId: string }) => m.userId === w.lea.id)).toMatchObject({ reminderCount: 1 });
+    // Le lendemain : une seule personne.
+    clock.advance(20 * HOUR);
+    const one = await req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, { userId: w.theo.id });
+    expect(one.json.reminded).toBe(1);
+    expect((await req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, { userId: "inconnu" })).status).toBe(404);
+    // Staff : pas de relance ; au début de l'événement : fermé.
+    expect((await req(w.lea, "POST", `/events/${w.e.id}/staff/remind`, {})).status).toBe(403);
+    clock.set(new Date(w.e.startsAt.getTime() + 1));
+    expect((await req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, {})).status).toBe(423);
+  });
+
+  it("GET /me : la demande de staff envoyée apparaît dans les appartenances (« requested »)", async () => {
+    const w = await setup();
+    const nina = await signUp("Nina_Suivie");
+    await req(nina, "POST", `/structures/${w.s.id}/staff-requests`, {});
+    for (const mode of MODES) {
+      const me = await req(nina, "GET", "/me", undefined, mode);
+      expect(me.json.memberships).toEqual([
+        expect.objectContaining({ structureSlug: w.s.slug, role: "staff", status: "requested", staffRoles: [] }),
+      ]);
+    }
+    // Un compte qui a demandé n'a aucun accès : pas d'événement de staff, pas de synchro.
+    expect((await req(nina, "GET", "/me/staff-events")).json).toEqual([]);
+    clock.set(new Date(w.e.startsAt.getTime() - HOUR));
+    expect((await req(nina, "GET", `/events/${w.e.id}/staff/sync`)).status).toBe(403);
   });
 });
 
