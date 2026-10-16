@@ -71,6 +71,14 @@ const schema = z.object({
   SENTRY_ENVIRONMENT: optional,
   /** Version déployée (étiquette de l'image, posée par compose.yml). */
   SENTRY_RELEASE: optional,
+  /**
+   * Météo (lot 28) : fournisseur des prévisions. `open-meteo` (défaut, gratuit pour l'usage NON commercial seulement,
+   * à quitter avant le 21/06/2027), `met-norway` (usage commercial permis), `off` (désactivée). Changer la valeur et
+   * redémarrer l'API suffit : aucun changement de code ni de l'appli.
+   */
+  WEATHER_PROVIDER: z.enum(["open-meteo", "met-norway", "off"]).default("open-meteo"),
+  /** `User-Agent` envoyé aux fournisseurs : obligatoire et identifiant pour MET Norway (nom de l'appli + contact). */
+  WEATHER_USER_AGENT: z.string().default("Orasso/0.1 contact@orasso.fr"),
 });
 
 /**

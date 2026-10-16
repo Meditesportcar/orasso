@@ -17,12 +17,29 @@ export async function loader({ request }: Route.LoaderArgs) {
   const pro = await apiOrThrow<ProOwner>(request, "/me/pro");
   const asked = Number(new URL(request.url).searchParams.get("jours"));
   const days = (RANGES as readonly number[]).includes(asked) ? asked : 30;
+  // Fiche de base (après le 21/06/2027, sans abonnement actif) : statistiques réservées aux pros abonnés (lot 21).
+  if (pro.visibility.hidden.stats) return { pro, stats: null };
   const stats = await apiOrThrow<ProStats>(request, `/pros/${pro.id}/stats?days=${days}`);
   return { pro, stats };
 }
 
 export default function ProStatistiques({ loaderData }: Route.ComponentProps) {
   const { stats } = loaderData;
+  if (!stats) {
+    return (
+      <>
+        <div className="orga__head">
+          <div>
+            <div className="s-label o-t-label">Espace pro</div>
+            <h1 className="s-title">Statistiques</h1>
+          </div>
+        </div>
+        <p className="s-notice" data-testid="stats-locked">
+          Les statistiques sont réservées aux pros abonnés.
+        </p>
+      </>
+    );
+  }
   const peak = Math.max(1, ...stats.series.map((d) => d.views));
   const used = grades.filter((g) => stats.discountsByGrade[g]);
   return (

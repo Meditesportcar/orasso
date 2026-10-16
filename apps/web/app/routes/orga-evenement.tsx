@@ -15,19 +15,23 @@ import {
   describeRecurrence,
   type EventOrganizer,
   type EventTicketing,
+  type EventWeather,
   eventFormatLabels,
   eventOutlookLabels,
   eventPublicAccessLabels,
   eventStatusLabels,
+  isBadWeather,
   RECURRENCE_MAX_COUNT,
   type RecurrenceRule,
   recurrenceOccurrences,
   wallTime,
+  weatherTexts,
   weekdayNames,
 } from "@orasso/shared";
 import { useState } from "react";
 import { data, Form, redirect, useNavigation, useSearchParams } from "react-router";
 
+import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { formatDay, formatPrice, formatWhen } from "../lib/format";
 import type { Route } from "./+types/orga-evenement";
@@ -52,8 +56,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const structure = await apiOrThrow<{ verified: boolean }>(request, `/structures/by-slug/${params.structure}`);
   const url = new URL(request.url);
   const ticketing = await api<EventTicketing>(request, `/events/${params.eventId}/ticketing`);
+  // Météo annoncée (lot 28) : cache de l'API, `null` au-delà de 7 jours ; jamais bloquante.
+  const weather =
+    event.status === "published"
+      ? await api<EventWeather | null>(request, `/events/by-slug/${encodeURIComponent(event.slug)}/weather`)
+      : null;
   return {
     event,
+    weather: weather?.ok ? weather.data : null,
     ticketing: ticketing.ok ? ticketing.data : null,
     verified: structure.verified,
     created: url.searchParams.get("creee") === "1",
@@ -309,7 +319,7 @@ function Ticketing({ event, ticketing, base }: { event: EventOrganizer; ticketin
 }
 
 export default function OrgaEvenement({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, ticketing, verified, created } = loaderData;
+  const { event, weather, ticketing, verified, created } = loaderData;
   const base = `/orga/${event.structure.slug}`;
   const busy = useNavigation().state !== "idle";
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -424,6 +434,29 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
 
       {ticketing && event.status !== "cancelled" && <Ticketing event={event} ticketing={ticketing} base={base} />}
 
+      {published && weather && (
+        <section className="orga__panel s-stack" aria-label="Météo annoncée" data-testid="orga-weather">
+          <div className="orga__wx">
+            <Weather weather={weather} title="Météo annoncée" compact />
+            {event.outlook === "maintained" && isBadWeather(weather.summary) && (
+              <div className="s-stack s-stack--tight orga__wx-suggest" data-testid="weather-suggestion">
+                <p className="s-notice s-notice--alert" role="status">
+                  <strong>{weatherTexts.suggestionTitle}</strong>
+                  <br />
+                  {weatherTexts.suggestionBody}
+                </p>
+                <Form method="post">
+                  <input type="hidden" name="intent" value="outlook" />
+                  <Button type="submit" name="outlook" value="uncertain" variant="secondary" icon="wait" loading={busy}>
+                    {weatherTexts.suggestionAction}
+                  </Button>
+                </Form>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {published && (
         <section className="orga__panel s-stack" aria-labelledby="statut-title">
           <h2 id="statut-title" className="s-h2">
@@ -478,6 +511,11 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
         <Plate as="section" className="s-stack s-stack--tight">
           <h2 className="s-h2">Prestataires attendus</h2>
           <p>{event.vendorTypes.join(" · ")}</p>
+          <p>
+            <Button variant="secondary" icon="check" href={`${base}/e/${event.id}/candidatures?onglet=prestataires`}>
+              Trier les prestataires
+            </Button>
+          </p>
         </Plate>
       )}
 

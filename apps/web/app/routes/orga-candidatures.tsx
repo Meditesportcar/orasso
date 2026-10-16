@@ -3,6 +3,7 @@ import type { ApplicationForTriage, Category, EventCounters, EventOrganizer, Pag
 import { useEffect, useState } from "react";
 import { useRevalidator } from "react-router";
 
+import { ProviderTriage } from "../components/ProviderTriage";
 import { TriageFile } from "../components/TriageFile";
 import { TriageList } from "../components/TriageList";
 import { Waitlist } from "../components/Waitlist";
@@ -17,6 +18,7 @@ export function meta() {
 
 const VIEWS = ["file", "liste", "attente"] as const;
 type View = (typeof VIEWS)[number];
+type Tab = "vehicules" | "prestataires";
 
 async function allPages(request: Request, path: string): Promise<ApplicationForTriage[]> {
   const items: ApplicationForTriage[] = [];
@@ -42,6 +44,38 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const eventId = params.eventId;
   const event = await apiOrThrow<EventOrganizer>(request, `/events/${eventId}`);
   const canDecide = Boolean(membership && (membership.role !== "staff" || membership.canDecide));
+  const isOrganizer = Boolean(membership && membership.role !== "staff");
+
+  // Prestataires (lot 21) : une file à part, hors capacité (`?onglet=prestataires`).
+  const tab: Tab = url.searchParams.get("onglet") === "prestataires" ? "prestataires" : "vehicules";
+  const providers = await allPages(request, `/events/${eventId}/applications?kind=provider&sort=created_at`);
+  const providersPending = providers.filter((p) => p.status === "pending").length;
+  const eventHead = {
+    id: event.id,
+    title: event.title,
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
+    counters: event.counters,
+    zones: event.zones,
+  };
+  if (tab === "prestataires") {
+    return {
+      tab,
+      view,
+      event: eventHead,
+      canDecide,
+      isOrganizer,
+      providers,
+      providersPending,
+      file: [] as ApplicationForTriage[],
+      list: [] as ApplicationForTriage[],
+      nextHref: null as string | null,
+      filters: {} as Record<string, string | undefined>,
+      categories: [] as Category[],
+      waitlisted: [] as ApplicationForTriage[],
+      offered: [] as ApplicationForTriage[],
+    };
+  }
 
   let file: ApplicationForTriage[] = [];
   let list: Page<ApplicationForTriage> = { items: [], nextCursor: null };
@@ -77,16 +111,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   for (const [k, v] of Object.entries(filters)) if (v) nextParams.set(k, v);
   if (list.nextCursor) nextParams.set("cursor", list.nextCursor);
   return {
+    tab,
     view,
-    event: {
-      id: event.id,
-      title: event.title,
-      startsAt: event.startsAt,
-      endsAt: event.endsAt,
-      counters: event.counters,
-      zones: event.zones,
-    },
+    event: eventHead,
     canDecide,
+    isOrganizer,
+    providers: [] as ApplicationForTriage[],
+    providersPending,
     file,
     list: list.items,
     nextHref: list.nextCursor ? `?${nextParams}` : null,
@@ -98,7 +129,22 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export default function OrgaCandidatures({ loaderData }: Route.ComponentProps) {
-  const { view, event, canDecide, file, list, nextHref, filters, categories, waitlisted, offered } = loaderData;
+  const {
+    tab,
+    view,
+    event,
+    canDecide,
+    isOrganizer,
+    providers,
+    providersPending,
+    file,
+    list,
+    nextHref,
+    filters,
+    categories,
+    waitlisted,
+    offered,
+  } = loaderData;
   const revalidator = useRevalidator();
   const [counters, setCounters] = useState<EventCounters>(event.counters);
   useEffect(() => setCounters(event.counters), [event.counters]);
@@ -106,11 +152,48 @@ export default function OrgaCandidatures({ loaderData }: Route.ComponentProps) {
   // Compteurs en temps réel (canal de tri) ; hors file, les autres changements rechargent la page.
   const { connected } = useChannel(`event:${event.id}:triage`, (message) => {
     if (message.type === "counters") setCounters(message.payload as EventCounters);
-    else if (view !== "file" && message.type !== "counters") revalidator.revalidate();
+    else if ((view !== "file" || tab === "prestataires") && message.type !== "counters") revalidator.revalidate();
   });
 
+  const mainTabs = (
+    <nav className="s-row" aria-label="Candidatures">
+      <a href="?" aria-current={tab === "vehicules" ? "page" : undefined}>
+        <Chip surface="plate" selected={tab === "vehicules"} variant={tab === "vehicules" ? "accent" : "default"}>
+          Véhicules
+        </Chip>
+      </a>
+      <a href="?onglet=prestataires" aria-current={tab === "prestataires" ? "page" : undefined}>
+        <Chip surface="plate" selected={tab === "prestataires"} variant={tab === "prestataires" ? "accent" : "default"}>
+          Prestataires · {providersPending}
+        </Chip>
+      </a>
+    </nav>
+  );
+
+  if (tab === "prestataires") {
+    return (
+      <>
+        <div className="orga__head">
+          <div>
+            <div className="s-label o-t-label">Candidatures · {event.title}</div>
+            <h1 className="s-title">Prestataires</h1>
+            <div className="o-t-meta s-label">{formatWhen(event.startsAt, event.endsAt)}</div>
+          </div>
+          {mainTabs}
+        </div>
+        <ProviderTriage
+          eventId={event.id}
+          items={providers}
+          canDecide={canDecide}
+          canAccreditMedia={isOrganizer}
+          onChanged={() => revalidator.revalidate()}
+        />
+      </>
+    );
+  }
+
   const tabs: { id: View; label: string; count?: number }[] = [
-    { id: "file", label: "Véhicules", count: counters.pending },
+    { id: "file", label: "File de tri", count: counters.pending },
     { id: "liste", label: "Vue liste et filtres" },
     { id: "attente", label: "Liste d'attente", count: counters.waitlisted },
   ];
@@ -125,20 +208,23 @@ export default function OrgaCandidatures({ loaderData }: Route.ComponentProps) {
           </h1>
           <div className="o-t-meta s-label">{formatWhen(event.startsAt, event.endsAt)}</div>
         </div>
-        <nav className="s-row" aria-label="Vues">
-          {tabs.map((tab) => (
-            <a
-              key={tab.id}
-              href={tab.id === "file" ? "?" : `?vue=${tab.id}`}
-              aria-current={view === tab.id ? "page" : undefined}
-            >
-              <Chip surface="plate" selected={view === tab.id} variant={view === tab.id ? "accent" : "default"}>
-                {tab.label}
-                {tab.count !== undefined ? ` · ${tab.count}` : ""}
-              </Chip>
-            </a>
-          ))}
-        </nav>
+        <div className="s-stack s-stack--tight">
+          {mainTabs}
+          <nav className="s-row" aria-label="Vues">
+            {tabs.map((t) => (
+              <a
+                key={t.id}
+                href={t.id === "file" ? "?" : `?vue=${t.id}`}
+                aria-current={view === t.id ? "page" : undefined}
+              >
+                <Chip surface="plate" selected={view === t.id} variant={view === t.id ? "accent" : "default"}>
+                  {t.label}
+                  {t.count !== undefined ? ` · ${t.count}` : ""}
+                </Chip>
+              </a>
+            ))}
+          </nav>
+        </div>
       </div>
 
       <Counters

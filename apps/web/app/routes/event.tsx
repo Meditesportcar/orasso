@@ -1,13 +1,16 @@
 import { Button, Chip, ChipRow, Counters, Icon, Reveal, SelectField, StatusBadge } from "@orasso/design-system/web";
 import {
   type Category,
+  type EventProviderPublic,
   type EventPublic,
   type EventReviews,
+  type EventWeather,
   eventAdmissionLabels,
   eventFormatLabels,
   eventOutlookLabels,
-  eventPublicAccessLabels,
+  instagramHandle,
   type MyTicket,
+  publicAccessText,
   type StructurePublic,
   type TicketOffer,
   vehicleTypeLabels,
@@ -18,16 +21,18 @@ import { EventMap } from "../components/EventMap";
 import { ContactOrganizer } from "../components/Messaging";
 import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
+import { Weather } from "../components/Weather";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
 import { formatDateTime, formatPrice, formatWhen } from "../lib/format";
 import { messageAction } from "../lib/messaging.server";
 import { badgeFor, registrationState } from "../lib/status";
+import "../styles/providers.css";
 import type { Route } from "./+types/event";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const slug = params.slug;
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
-  const [structure, categories, me, reviews, tickets] = await Promise.all([
+  const [structure, categories, me, reviews, tickets, providers, weather] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     api<Category[]>(request, "/vehicle-reference/categories"),
     getMe(request),
@@ -36,11 +41,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       request,
       `/events/by-slug/${encodeURIComponent(slug)}/tickets`,
     ),
+    api<EventProviderPublic[]>(request, `/events/by-slug/${encodeURIComponent(slug)}/providers`),
+    // Météo à l'approche (lot 28) : cache de l'API, `null` au-delà de 7 jours ; jamais bloquante.
+    api<EventWeather | null>(request, `/events/by-slug/${encodeURIComponent(slug)}/weather`),
   ]);
   return {
     event,
     structure,
     reviews: reviews.ok ? reviews.data : null,
+    providers: providers.ok ? providers.data : [],
+    weather: weather.ok ? weather.data : null,
     offer: tickets.ok ? tickets.data.offer : null,
     myTickets: tickets.ok ? tickets.data.mine : [],
     paymentCancelled: new URL(request.url).searchParams.get("paiement") === "annule",
@@ -261,15 +271,30 @@ function ReviewsSection({ reviews }: { reviews: EventReviews }) {
 }
 
 export default function EventPage({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, structure, categories, connected, origin, state, reviews, ended, offer, myTickets, paymentCancelled } =
-    loaderData;
+  const {
+    event,
+    structure,
+    categories,
+    connected,
+    origin,
+    state,
+    reviews,
+    weather,
+    ended,
+    offer,
+    myTickets,
+    paymentCancelled,
+    providers,
+  } = loaderData;
   const mine = event.myApplications ?? [];
   const wanted = (event.criteria?.categoryIds ?? [])
     .map((id) => categories.find((c) => c.id === id)?.label)
     .filter((label): label is string => Boolean(label));
   const wantedTypes = event.admittedVehicleTypes.map((t) => vehicleTypeLabels[t]);
-  const publicAccess = eventPublicAccessLabels[event.publicAccess];
+  const publicAccess = publicAccessText(event.publicAccess, event.externalTicketUrl);
   const retour = encodeURIComponent(`/e/${event.slug}`);
+  const providerPath = `/app/prestataire?evenement=${event.slug}`;
+  const providerHref = connected ? providerPath : `/connexion?retour=${encodeURIComponent(providerPath)}`;
   const candidateHref = connected
     ? `/e/${event.slug}/candidater`
     : `/connexion?retour=${encodeURIComponent(`/e/${event.slug}/candidater`)}`;
@@ -353,6 +378,38 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
                 <Chip key={label}>{label}</Chip>
               ))}
             </ChipRow>
+            {!ended && event.status === "published" && !event.isLocked && (
+              <p>
+                <Button variant="secondary" icon="profile" href={providerHref}>
+                  Candidater comme prestataire
+                </Button>
+              </p>
+            )}
+          </section>
+        )}
+
+        {providers.length > 0 && (
+          <section className="s-section" data-testid="providers-present">
+            <h2 className="s-h2">Prestataires présents</h2>
+            <ul className="prov__present">
+              {providers.map((p) => (
+                <li key={p.id} className="prov__present-item" data-testid="provider-present">
+                  <span className="prov__present-thumb">
+                    {p.photoUrl ? <img src={p.photoUrl} alt="" /> : <Icon name="profile" size={20} />}
+                  </span>
+                  <span className="prov__present-text">
+                    <strong className="o-never-truncate">{p.name}</strong>
+                    <span className="o-t-caption s-muted">{p.typeLabel}</span>
+                    {p.instagram && (
+                      <a className="o-t-caption" href={p.instagram} target="_blank" rel="noopener noreferrer">
+                        {instagramHandle(p.instagram) ?? "Instagram"}
+                      </a>
+                    )}
+                  </span>
+                  {p.accreditedMedia && <Chip variant="accent">Média officiel</Chip>}
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 
@@ -367,6 +424,12 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
           <section className="s-section">
             <h2 className="s-h2">Consignes</h2>
             <p className="s-muted s-prewrap">{event.instructions}</p>
+          </section>
+        )}
+
+        {weather && !ended && (
+          <section className="s-section" id="meteo" aria-label="Météo à l'approche" data-testid="event-weather">
+            <Weather weather={weather} />
           </section>
         )}
 
@@ -479,6 +542,15 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
             cancelled={paymentCancelled}
             error={(actionData as { error?: string } | undefined)?.error}
           />
+        )}
+        {!offer && event.publicAccess === "paid_external" && !event.externalTicketUrl && (
+          <div className="s-card" data-testid="on-site-payment">
+            <p className="s-row">
+              <Icon name="entry" size={20} />
+              <strong>{publicAccess}</strong>
+            </p>
+            <p className="o-t-caption s-muted">Pas de billetterie en ligne : l'entrée se règle à l'arrivée.</p>
+          </div>
         )}
         {!offer && event.publicAccess === "paid_external" && event.externalTicketUrl && (
           <div className="s-card">

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "679129167328",
+    "project_id": "orasso-35bd2",
+    "storage_bucket": "orasso-35bd2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:679129167328:android:a0c5cbedd39e84839ba785",
+        "android_client_info": {
+          "package_name": "fr.orasso.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4cuTD3tqjAMW8pK8WGzULLQKXOcJZlyU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

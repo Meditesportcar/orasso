@@ -23,17 +23,3 @@ export function jourJState(event: Span, now: Date, checkedIn: boolean, timeZone 
   if (checkedIn || now >= jourJClosesAt(event, timeZone)) return "closed";
   return "open";
 }
-
-/** Libellé de la météo (codes WMO d'Open-Meteo). */
-export function weatherLabel(code: number): string {
-  if (code === 0) return "dégagé";
-  if (code <= 2) return "peu nuageux";
-  if (code === 3) return "couvert";
-  if (code === 45 || code === 48) return "brouillard";
-  if (code >= 51 && code <= 57) return "bruine";
-  if (code >= 61 && code <= 67) return "pluie";
-  if (code >= 71 && code <= 77) return "neige";
-  if (code >= 80 && code <= 82) return "averses";
-  if (code >= 95) return "orage";
-  return "variable";
-}

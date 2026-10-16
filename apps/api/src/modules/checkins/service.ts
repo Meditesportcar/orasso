@@ -7,6 +7,7 @@ import {
   type LiveCounters,
   MINUTE,
   normalizePlate,
+  providerTypeLabel,
   type ScanBatch,
   type ScanBatchItem,
   type ScanBatchResult,
@@ -14,6 +15,7 @@ import {
   type ScanServerResult,
   settleAt,
   staffModeOpensAt,
+  type VendorTypeCode,
   verifyPassPayload,
 } from "@orasso/shared";
 import { and, asc, eq, ilike, inArray, isNull, like, or, type SQL, sql } from "drizzle-orm";
@@ -45,6 +47,7 @@ import type { Viewer } from "../../lib/session";
 import { ed25519Verify, signing } from "../../lib/signing";
 import { type Tx, withTx } from "../../lib/tx";
 import { type EventRow, eventsRepo } from "../events/repo";
+import { loadProviders } from "../providers/serializers";
 import { assertStaffWindow, staffService } from "../staff/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
@@ -365,13 +368,21 @@ async function listItems(eventId: string, where: SQL | undefined, limit = 1000):
   const zones = new Map(
     (await db.query.eventZones.findMany({ where: eq(eventZones.eventId, eventId) })).map((z) => [z.id, z]),
   );
+  const providers = await loadProviders(
+    rows.flatMap((r) => (r.app.providerProfileId ? [r.app.providerProfileId] : [])),
+  );
   return rows.map(({ app, checkin, pseudo }) => {
     const v = app.vehicleId ? vs.get(app.vehicleId) : undefined;
     const z = app.zoneId ? zones.get(app.zoneId) : undefined;
+    const prov = app.providerProfileId ? providers.get(app.providerProfileId) : undefined;
     return {
       applicationId: app.id,
       pseudo,
-      vehicleLabel: v ? vehicleLabel(v) : null,
+      vehicleLabel: prov
+        ? `${providerTypeLabel(prov.type as VendorTypeCode, prov.customType)} · ${prov.name}`
+        : v
+          ? vehicleLabel(v)
+          : null,
       zone: z ? { code: z.code, name: z.name } : null,
       status: app.status,
       checkedInAt: checkin?.checkedInAt.toISOString() ?? null,
@@ -593,7 +604,18 @@ export const checkinsService = {
       .leftJoin(profiles, eq(profiles.userId, scanEvents.staffUserId))
       .where(eq(scanEvents.eventId, eventId))
       .orderBy(asc(scanEvents.scannedAt));
-    const entries = await db.query.checkins.findMany({ where: eq(checkins.eventId, eventId) });
+    // Entrées des véhicules seulement : `expected` ne compte pas les prestataires (lot 21, compteur à part dans le direct).
+    const providerApps = new Set(
+      (
+        await db
+          .select({ id: applications.id })
+          .from(applications)
+          .where(and(eq(applications.eventId, eventId), eq(applications.kind, "provider")))
+      ).map((r) => r.id),
+    );
+    const entries = (await db.query.checkins.findMany({ where: eq(checkins.eventId, eventId) })).filter(
+      (c) => !providerApps.has(c.applicationId),
+    );
     const expected = (await eventsRepo.statusCounts(eventId)).accepted;
     const items = await listItems(eventId, undefined);
     const people = new Map(items.map((i) => [i.applicationId, i]));
@@ -693,16 +715,20 @@ export const checkinsService = {
   /** Direct de l'organisateur : arrivés / attendus par catégorie et par zone, staff présent, alertes ouvertes. */
   async liveCounters(eventId: string): Promise<LiveCounters> {
     const event = await eventsRepo.byId(eventId);
-    const rows = await db
+    let rows = await db
       .select({
         appId: applications.id,
         zoneId: applications.zoneId,
         vehicleId: applications.vehicleId,
+        kind: applications.kind,
         at: checkins.checkedInAt,
       })
       .from(applications)
       .leftJoin(checkins, eq(checkins.applicationId, applications.id))
       .where(and(eq(applications.eventId, eventId), eq(applications.status, "accepted")));
+    // Les prestataires ont leur propre compteur : jamais dans les véhicules, les catégories ni les zones (lot 21).
+    const providerRows = rows.filter((r) => r.kind === "provider");
+    rows = rows.filter((r) => r.kind === "vehicle");
     const vehicleIds = rows.flatMap((r) => (r.vehicleId ? [r.vehicleId] : []));
     const cats = vehicleIds.length
       ? await db
@@ -755,6 +781,7 @@ export const checkinsService = {
       staffPresent: staff.filter((m) => m.presence === "present").length,
       staffExpected: staff.length,
       alertsOpen: alerts?.n ?? 0,
+      providers: { expected: providerRows.length, arrived: providerRows.filter((r) => r.at).length },
     };
   },
 

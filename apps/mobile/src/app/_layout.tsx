@@ -35,7 +35,7 @@ const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "ami", "_ds"]);
 function Shell() {
   const { theme } = useTheme();
   const { status } = useSession();
-  const { persona, backToFan } = usePersona();
+  const { persona, backToFan, choose } = usePersona();
   const router = useRouter();
   const segments = useSegments();
   const navigation = useRootNavigationState();
@@ -70,6 +70,11 @@ function Shell() {
   useEffect(() => {
     if (Platform.OS === "web") return;
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      // Décision sur une candidature de prestataire (lot 21) : l'écran Candidatures de la casquette Prestataire.
+      if (response.notification.request.content.data?.screen === "provider_applications") {
+        choose({ kind: "provider" });
+        return;
+      }
       backToFan();
       // Un lien de l'appli (profil d'un ami, événement) ouvre cet écran, sinon l'onglet Accès.
       const link = appLinkOf(response.notification.request.content.data?.link);
@@ -77,7 +82,7 @@ function Shell() {
       else router.navigate("/acces");
     });
     return () => sub.remove();
-  }, [router, backToFan]);
+  }, [router, backToFan, choose]);
 
   return (
     <View style={styles.fill}>

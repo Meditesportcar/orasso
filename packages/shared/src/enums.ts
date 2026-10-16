@@ -8,6 +8,7 @@ import { messagingNotificationTypes } from "./notifications/messaging";
 import { pointsNotificationTypes } from "./notifications/points";
 import { socialNotificationTypes } from "./notifications/social";
 import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
+import { weatherNotificationTypes } from "./notifications/weather";
 
 export { pushOnlyNotificationTypes } from "./notifications/messaging";
 export { journalOnlyNotificationTypes } from "./notifications/social";
@@ -110,6 +111,7 @@ export const notificationTypes = {
   ...staffNotificationTypes,
   ...pointsNotificationTypes,
   ...accountNotificationTypes,
+  ...weatherNotificationTypes,
   ...socialNotificationTypes,
   ...garageNotificationTypes,
   ...messagingNotificationTypes,

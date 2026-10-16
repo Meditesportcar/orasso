@@ -10,6 +10,7 @@ import { formatDateTime } from "../../lib/format";
 import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
+import { weatherService } from "../weather/service";
 import { type EventRow, eventsRepo } from "./repo";
 
 const DAY = 86_400_000;
@@ -95,11 +96,14 @@ export const eventJobs = {
     return true;
   },
 
-  /** Rappel la veille à 18:00 (météo : plus tard). */
+  /** Rappel la veille à 18:00, avec la météo annoncée quand on la connaît (lot 28). */
   async reminderEve(data: { eventId: string; at: string }) {
     const e = await eventsRepo.byId(data.eventId).catch(() => null);
     if (e?.status !== "published" || !sameInstant(reminderEveAt(e), data.at)) return false;
-    const body = [`« ${e.title} », ${formatDateTime(e.startsAt)}.`, e.instructions ?? ""].filter(Boolean).join("\n");
+    const weather = await weatherService.reminderLine(e);
+    const body = [`« ${e.title} », ${formatDateTime(e.startsAt)}.`, weather ?? "", e.instructions ?? ""]
+      .filter(Boolean)
+      .join("\n");
     await notifyAccepted(e, "event_reminder_eve", "C'est demain", body);
     return true;
   },

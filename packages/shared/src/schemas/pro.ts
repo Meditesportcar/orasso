@@ -8,6 +8,7 @@ import {
   type ProActivity,
   type ProDiscounts,
   type ProSubscriptionState,
+  type ProVisibility,
   proActivities,
   type Weekday,
   weekdays,
@@ -178,6 +179,8 @@ export type ProOwner = ProPublic & {
   canPublish: boolean;
   publishBlockedReason: string | null;
   subscription: ProSubscriptionState;
+  /** Fiche complète ou « fiche de base » après le 21/06/2027 sans abonnement actif (lot 21). */
+  visibility: ProVisibility;
   postsUsed: number;
   postsLimit: number;
   postsRemaining: number;

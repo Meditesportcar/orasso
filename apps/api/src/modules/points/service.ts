@@ -516,6 +516,7 @@ export const pointsService = {
       .where(
         and(
           eq(applications.userId, v.user.id),
+          eq(applications.kind, "vehicle"),
           eq(applications.status, "accepted"),
           eq(events.status, "published"),
           isNull(events.settledAt),

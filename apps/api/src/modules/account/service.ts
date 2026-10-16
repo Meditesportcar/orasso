@@ -60,6 +60,7 @@ import { anonymizeMessagingForDeletedAccount } from "../messaging/anonymize";
 import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
 import { accountQrShortId } from "../profiles/service";
+import { anonymizeProviderForDeletedAccount } from "../providers/anonymize";
 import { securityMails } from "../security/mails";
 import { isSecondFactor } from "../security/passkey";
 import { securityService } from "../security/service";
@@ -444,6 +445,8 @@ export const accountService = {
           })
           .where(eq(proProfiles.id, pro.id));
       }
+      // Profil prestataire (lot 21) : retiré et vidé de ce qui l'identifie (les candidatures passées gardent leur lien).
+      photoKeys.push(...(await anonymizeProviderForDeletedAccount(tx, userId, at)));
       await tx.insert(adminAuditLog).values({
         actorUserId: userId,
         action: "user.self_delete",

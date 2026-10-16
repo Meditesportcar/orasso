@@ -1,5 +1,6 @@
 // Morceaux communs à la feuille « Mes casquettes » (barre du haut) et à la section « Mes casquettes » de Moi.
 import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { useRouter } from "expo-router";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { siteUrl } from "@/api";
@@ -71,10 +72,20 @@ export function PersonaRows({ onPicked }: { onPicked?: () => void }) {
 /** Créer une structure / une fiche pro / un profil prestataire (on n'a qu'une fiche pro et qu'un profil prestataire). */
 export function CreateCasquettes() {
   const { entries } = usePersona();
+  const router = useRouter();
   return (
     <>
       {CREATIONS.filter((c) => c.kind === "organizer" || !entries.some((e) => e.kind === c.kind)).map((c) => (
-        <Button key={c.kind} variant="plate" icon="add" fullWidth onPress={() => void Linking.openURL(siteUrl(c.path))}>
+        <Button
+          key={c.kind}
+          variant="plate"
+          icon="add"
+          fullWidth
+          // Le profil prestataire se crée dans l'appli (lot 21) ; structure et fiche pro, sur le site.
+          onPress={() =>
+            c.kind === "provider" ? router.push("/prestataire/nouveau") : void Linking.openURL(siteUrl(c.path))
+          }
+        >
           {c.label}
         </Button>
       ))}

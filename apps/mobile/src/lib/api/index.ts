@@ -7,10 +7,12 @@ import { eventsApi } from "./events";
 import { garageApi } from "./garage";
 import { messagingApi } from "./messaging";
 import { prosApi } from "./pros";
+import { providersApi } from "./providers";
 import { securityApi } from "./security";
 import { settingsApi } from "./settings";
 import { socialApi } from "./social";
 import { staffApi } from "./staff";
+import { weatherApi } from "./weather";
 
 export type { NotificationItem } from "./account";
 export { authApi } from "./auth";
@@ -18,10 +20,12 @@ export { authApi } from "./auth";
 export const api = {
   ...accountApi,
   ...prosApi,
+  ...providersApi,
   ...garageApi,
   ...eventsApi,
   ...applicationsApi,
   ...staffApi,
+  ...weatherApi,
   ...socialApi,
   ...settingsApi,
   ...securityApi,

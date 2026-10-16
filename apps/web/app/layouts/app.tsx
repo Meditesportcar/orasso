@@ -16,6 +16,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     unreadInbox: me.unreadInbox,
     orga: me.memberships.find((m) => m.status === "active")?.structureSlug ?? null,
     pro: me.pro?.slug ?? null,
+    provider: me.personas.some((p) => p.kind === "provider"),
     unread: me.counts.unreadNotifications,
     emailVerified: me.user.emailVerified,
   };
@@ -54,6 +55,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         <SiteHeader>
           {loaderData.orga && <a href={`/orga/${loaderData.orga}`}>Organisateur</a>}
           {loaderData.pro && <a href={`/pro/${loaderData.pro}`}>Pro</a>}
+          {loaderData.provider && <a href="/app/prestataire">Prestataire</a>}
           {/* Journal (lot 17) : la cloche et sa pastille d'éléments non lus. */}
           <span className="s-bell">
             <AppBarAction icon="bell" label="Journal" href="/app/journal" on={pathname === "/app/journal"} />

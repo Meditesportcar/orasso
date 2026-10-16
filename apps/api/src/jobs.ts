@@ -13,6 +13,7 @@ import { staffService } from "./modules/staff/service";
 import { uploadsService } from "./modules/uploads/service";
 import { certificationService } from "./modules/vehicles/certification";
 import { plateTransferService } from "./modules/vehicles/plate-transfer";
+import { weatherService } from "./modules/weather/service";
 
 // Tâches planifiées dans PostgreSQL (schéma « pgboss », créé et mis à jour par pg-boss lui-même).
 // Les gestionnaires n'ont pas de logique : ils appellent un service, qui revérifie l'état en base.
@@ -35,6 +36,8 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   // Lot 15 : « événement près de chez toi » (à la publication) et oubli des connexions connues de plus d'un an.
   "event.notify-nearby": (d) => nearbyService.notifyNearby(d.eventId ?? ""),
   "security.purge-known-logins": () => securityService.purgeKnownLogins(),
+  // Lot 28 : prévisions des événements des 7 prochains jours (cron toutes les 3 h), suggestion « Incertain ».
+  "weather.refresh": (d) => weatherService.refresh(d.eventId),
   // Lot 31 : transferts de plaque sans réponse depuis 7 jours (une demande, ou toutes si la tâche est celle du secours)
   // et certifications perdues après six mois sans événement.
   "plate-transfer.escalate": (d) => plateTransferService.escalate(d.transferId),
@@ -77,6 +80,7 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("season.rollover", "10 0 1 1 *", null, { tz: "Europe/Paris" });
     await boss.schedule("points.sweep", "5 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("security.purge-known-logins", "20 4 * * 1", null, { tz: "Europe/Paris" });
+    await boss.schedule("weather.refresh", "15 */3 * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("plate-transfer.escalate", "15 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("certification.sweep", "30 5 * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("uploads.purge", "40 4 * * *", null, { tz: "Europe/Paris" });

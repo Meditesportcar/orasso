@@ -27,6 +27,7 @@ import {
   parseRegistryNumber,
   postsRemaining,
   proSubscription,
+  proVisibility,
   type StructurePartnerRow,
   wallTime,
 } from "@orasso/shared";
@@ -131,6 +132,8 @@ async function discountsOf(proId: string): Promise<ProDiscounts> {
 
 /** Remise de ce pro pour un grade (0 = aucune) : utilisée par la vérification du QR de compte. */
 export async function discountPercent(proId: string, grade: Grade): Promise<number> {
+  // Fiche de base : les remises sont masquées, donc non accordées (lot 21).
+  if (proVisibility(null, null, now()).hidden.discounts) return 0;
   const r = await db.query.proDiscounts.findFirst({
     where: and(eq(proDiscounts.proId, proId), eq(proDiscounts.grade, grade)),
   });
@@ -185,7 +188,10 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
     logoUrl: storage.url(s.logoKey),
     city: s.city,
   }));
-  const canSeePosts = isOwner || Boolean(following);
+  // Fiche de base (lot 21) : remises et publications masquées au public ; le propriétaire garde la main sur les siennes.
+  const vis = proVisibility(p, null, now());
+  const shownDiscounts = vis.hidden.discounts && !isOwner ? {} : discounts;
+  const canSeePosts = isOwner || (Boolean(following) && !vis.hidden.posts);
   const posts = canSeePosts
     ? (
         await db.query.proPosts.findMany({
@@ -208,9 +214,9 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
     socials: p.socials,
     hours: p.hours,
     photos: photos.map((x) => ({ id: x.id, url: storage.url(x.storageKey) ?? "" })),
-    discounts,
+    discounts: shownDiscounts,
     partners,
-    postsCount: postCount[0]?.n ?? 0,
+    postsCount: vis.hidden.posts && !isOwner ? 0 : (postCount[0]?.n ?? 0),
     posts,
     isFollowing: viewer ? Boolean(following) : null,
     isOwner,
@@ -254,6 +260,7 @@ async function toOwner(p: ProRow, v: Viewer): Promise<ProOwner> {
     canPublish: block === null,
     publishBlockedReason: block,
     subscription: proSubscription(now()),
+    visibility: proVisibility(p, null, now()),
     postsUsed: used,
     postsLimit: PRO_POSTS_PER_MONTH,
     postsRemaining: postsRemaining(used),
@@ -531,6 +538,7 @@ export const prosService = {
     rateLimit("proWrite", v.user.id);
     const p = await ownedPro(v, id);
     if (!p.publishedAt) throw validation("Publie ta fiche avant de publier une offre ou une actualité.");
+    if (proVisibility(p, null, now()).hidden.posts) throw forbidden("Publications réservées aux pros abonnés");
     // Verrou par fiche : deux publications simultanées ne dépassent pas la limite du mois.
     const row = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`pro-posts:${id}`}, 0))`);
@@ -561,6 +569,8 @@ export const prosService = {
   async stats(v: Viewer, id: string, days: number): Promise<ProStats> {
     await ownedPro(v, id);
     const t = now();
+    // Fiche de base (après le 21/06/2027, sans abonnement actif) : statistiques réservées aux pros abonnés (lot 21).
+    if (proVisibility(null, null, t).hidden.stats) throw forbidden("Statistiques réservées aux pros abonnés");
     const since = new Date(t.getTime() - (days - 1) * 86_400_000);
     const sinceDay = parisDay(since);
     const rows = await db.query.proDailyStats.findMany({

@@ -1,13 +1,14 @@
 // Le Journal, derrière la cloche : le fil d'actualité des amis et les notifications de l'utilisateur dans un seul fil
 // chronologique (lot 17, ARCHITECTURE-SUITE § 2.4). Sept jours en arrière, sauf ce qui n'a pas été lu.
-import { Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { socialLabels } from "@orasso/shared";
+import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { SET_OUTLOOK_UNCERTAIN_ACTION, socialLabels, weatherTexts } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { api, type NotificationItem } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
+import { ApiRequestError } from "@/lib/http";
 import { appLinkOf } from "@/lib/links";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "./AppSheet";
@@ -20,6 +21,56 @@ const actorOf = (n: NotificationItem): Actor | null => {
   const actor = n.data?.actor;
   return actor && typeof actor === "object" ? (actor as Actor) : null;
 };
+
+/** Suggestion météo (lot 28) : le bouton passe l'événement en Incertain sans quitter le Journal. */
+function UncertainAction({ eventId }: { eventId: string }) {
+  const { t } = useTheme();
+  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const [error, setError] = useState<string | null>(null);
+  if (state === "done") {
+    return (
+      <Text variant="meta" color={t.color.plateMuted}>
+        Passé en Incertain : les inscrits sont prévenus.
+      </Text>
+    );
+  }
+  return (
+    <>
+      <Button
+        variant="plate"
+        icon="wait"
+        loading={state === "busy"}
+        onPress={async () => {
+          setState("busy");
+          setError(null);
+          try {
+            await api.setOutlook(eventId, "uncertain");
+            setState("done");
+          } catch (e) {
+            setState("idle");
+            setError(
+              e instanceof ApiRequestError && e.status === 403
+                ? "Active la double authentification (Moi, Sécurité) pour modifier l'événement depuis l'appli."
+                : e instanceof Error
+                  ? e.message
+                  : "Échec, réessaie.",
+            );
+          }
+        }}
+      >
+        {weatherTexts.suggestionAction}
+      </Button>
+      {error ? (
+        <Text variant="meta" color={t.color.plateMuted} accessibilityRole="alert">
+          {error}
+        </Text>
+      ) : null}
+    </>
+  );
+}
+
+const asksUncertain = (n: NotificationItem) =>
+  n.data?.action === SET_OUTLOOK_UNCERTAIN_ACTION && typeof n.data.eventId === "string";
 
 export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTheme();
@@ -70,6 +121,7 @@ export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: 
                     {n.body}
                   </Text>
                 ) : null}
+                {asksUncertain(n) ? <UncertainAction eventId={String(n.data?.eventId)} /> : null}
                 <Text variant="meta" color={t.color.plateMuted}>
                   {formatDayHour(n.createdAt)}
                 </Text>

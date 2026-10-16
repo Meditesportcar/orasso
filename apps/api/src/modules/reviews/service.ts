@@ -65,6 +65,8 @@ export const reviewsService = {
   async create(v: Viewer, applicationId: string, input: ReviewCreate): Promise<EventReview> {
     const app = await db.query.applications.findFirst({ where: eq(applications.id, applicationId) });
     if (!app || app.userId !== v.user.id) throw notFound("Candidature introuvable");
+    // Les avis sont ceux des participants avec un véhicule (les prestataires n'en laissent pas, lot 21).
+    if (app.kind !== "vehicle") throw forbidden("Les avis sont réservés aux participants");
     const event = await eventsRepo.byId(app.eventId);
     const entry = await db.query.checkins.findFirst({ where: eq(checkins.applicationId, app.id) });
     if (!entry) throw forbidden("Seuls les participants pointés à l'entrée peuvent laisser un avis");

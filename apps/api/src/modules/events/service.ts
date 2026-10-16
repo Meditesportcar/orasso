@@ -248,7 +248,10 @@ export const eventsService = {
     const follower = await isFollowing(e.structureId, viewer.user.id);
     return {
       ...view,
-      myApplications: mine.map((a) => ({ id: a.id, vehicleId: a.vehicleId, status: a.status })),
+      // Les candidatures de prestataire ont leur propre liste (`GET /me/provider-applications`, lot 21).
+      myApplications: mine
+        .filter((a) => a.kind === "vehicle")
+        .map((a) => ({ id: a.id, vehicleId: a.vehicleId, status: a.status })),
       registrationOpensAtForMe: registrationOpensAt(e, follower).toISOString(),
     };
   },
