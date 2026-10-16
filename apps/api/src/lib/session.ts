@@ -4,7 +4,8 @@ import { createMiddleware } from "hono/factory";
 import { auth } from "../auth";
 import { type Profile, profilesRepo } from "../modules/profiles/repo";
 import { ensureProfile } from "../modules/profiles/service";
-import { unauthenticated } from "./errors";
+import { now } from "./deps";
+import { AppError, unauthenticated } from "./errors";
 
 export type AuthUser = typeof auth.$Infer.Session.user;
 
@@ -38,7 +39,31 @@ export const loadSession = createMiddleware<AppEnv>(async (c, next) => {
 /** `session` : second facteur prouvé par la session de la requête (absent hors requête HTTP : tâches, scripts). */
 export type Viewer = { user: AuthUser; profile: Profile; session?: { secondFactor: string | null } };
 
-/** Utilisateur connecté (401 sinon). Le profil est créé s'il manque (compte antérieur au lot 05). */
+/**
+ * Écritures permises à un compte suspendu (ARCHITECTURE-SUITE § 0.4, lot 32) : contester, supprimer son compte, et ce
+ * qui accompagne la lecture ou la sécurité du compte (marquer lu le Journal ou une conversation, appareils pour recevoir
+ * les notifications, fermer une session). Les routes `/auth/*` ne passent pas par ici.
+ */
+const WRITES_WHILE_SUSPENDED: [method: string, path: RegExp][] = [
+  ["POST", /^\/api\/sanctions\/[^/]+\/contest$/],
+  ["DELETE", /^\/api\/me$/],
+  ["POST", /^\/api\/me\/notifications\/read$/],
+  ["POST", /^\/api\/conversations\/[^/]+\/read$/],
+  ["POST", /^\/api\/me\/devices$/],
+  ["DELETE", /^\/api\/me\/devices\/[^/]+$/],
+  ["DELETE", /^\/api\/me\/sessions\/[^/]+$/],
+];
+
+function writeAllowedWhileSuspended(c: Context<AppEnv>): boolean {
+  const method = c.req.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return true;
+  return WRITES_WHILE_SUSPENDED.some(([m, re]) => m === method && re.test(c.req.path));
+}
+
+/**
+ * Utilisateur connecté (401 sinon). Le profil est créé s'il manque (compte antérieur au lot 05). Compte suspendu
+ * (`suspended_until` dans le futur, lot 32) : lecture seule, toute autre écriture répond `403 suspended`.
+ */
 export async function requireUser(c: Context<AppEnv>): Promise<Viewer> {
   const user = c.get("user");
   if (!user) throw unauthenticated();
@@ -49,6 +74,9 @@ export async function requireUser(c: Context<AppEnv>): Promise<Viewer> {
   }
   // Compte supprimé (anonymisé) : plus aucun accès, même si une session avait survécu.
   if (profile.deletedAt) throw unauthenticated();
+  if (profile.suspendedUntil && profile.suspendedUntil > now() && !writeAllowedWhileSuspended(c)) {
+    throw new AppError(403, "suspended", "Ton compte est suspendu : lecture seule.");
+  }
   return { user, profile, session: { secondFactor: c.get("sessionSecondFactor") ?? null } };
 }
 

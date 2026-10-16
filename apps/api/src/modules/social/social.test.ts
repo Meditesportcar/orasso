@@ -12,6 +12,7 @@ import {
   resetDb,
   seedReference,
   signUp,
+  suspendByModeration,
   type TestUser,
   useClock,
   viewerOf,
@@ -839,18 +840,13 @@ describe("relecture de confidentialité (lot 17)", () => {
     const b = await person("Bravo_B");
     const c = await person("Charlie_C");
     const d = await person("Delta_D");
-    await db
-      .update(profiles)
-      .set({ suspendedUntil: new Date(Date.now() + 400 * DAY) })
-      .where(eq(profiles.userId, b.id));
+    // Lot 32 : suspension par la vraie route de la modération.
+    await suspendByModeration(b);
     expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" })).status).toBe(404);
     // Demande reçue d'un compte devenu suspendu : n'apparaît plus.
     await call(d, "POST", "/friends/requests", { pseudo: "Charlie_C" });
     expect((await call(c, "GET", "/me/friends/requests?direction=in")).json.items).toHaveLength(1);
-    await db
-      .update(profiles)
-      .set({ suspendedUntil: new Date(Date.now() + 400 * DAY) })
-      .where(eq(profiles.userId, d.id));
+    await suspendByModeration(d);
     expect((await call(c, "GET", "/me/friends/requests?direction=in")).json.items).toEqual([]);
     // Un suspendu qui a un ami ne produit aucune actualité.
     const { socialJournal } = await import("./journal");

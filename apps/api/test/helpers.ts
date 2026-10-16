@@ -259,3 +259,24 @@ export async function createZone(eventId: string, code: string) {
   const [z] = await db.insert(eventZones).values({ eventId, code, name: code }).returning();
   return z!;
 }
+
+/**
+ * Suspension par le vrai chemin de la modération (lot 32) : un signalement du profil, puis la sanction prononcée par un
+ * super administrateur (double authentification de session) sur `POST /admin/reports/:id/sanction`.
+ */
+export async function suspendByModeration(
+  target: TestUser,
+  kind: "suspension_7d" | "suspension_30d" | "ban" = "suspension_30d",
+) {
+  const tag = randomBytes(3).toString("hex");
+  const reporter = await signUp(`Signaleur_${tag}`);
+  const admin = await signUp(`Admin_${tag}`, { twoFactor: true, role: "super_admin" });
+  const report = await call(reporter, "POST", "/reports", {
+    targetType: "profile",
+    targetId: target.id,
+    reason: "insult",
+  });
+  if (report.status !== 201) throw new Error(`Signalement ${report.status} : ${report.text}`);
+  const sanction = await call(admin, "POST", `/admin/reports/${report.json.id}/sanction`, { kind });
+  if (sanction.status !== 200) throw new Error(`Sanction ${sanction.status} : ${sanction.text}`);
+}

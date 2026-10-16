@@ -6,10 +6,18 @@ import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { createStructure, resetDb, signUp, type TestUser, useClock, viewerOf } from "../../../test/helpers";
+import {
+  createStructure,
+  resetDb,
+  signUp,
+  suspendByModeration,
+  type TestUser,
+  useClock,
+  viewerOf,
+} from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { contactRequests, conversations, messages, notifications, profiles, structureMembers } from "../../db/schema";
+import { contactRequests, conversations, messages, notifications, structureMembers } from "../../db/schema";
 import { type RealtimeSocket, realtime } from "../../lib/realtime";
 import { storage } from "../../lib/storage";
 import { resolveWsSession, wsCredentials } from "../../ws";
@@ -509,10 +517,8 @@ describe("compte suspendu et compte supprimé", () => {
     const [a, b] = [await signUp("Alice"), await signUp("Bob")];
     const id = await directBetween(a, b);
     await send(b, id, "Avant");
-    await db
-      .update(profiles)
-      .set({ suspendedUntil: new Date(clock.now.getTime() + 86_400_000) })
-      .where(eq(profiles.userId, a.id));
+    // Lot 32 : suspension par la vraie route de la modération (signalement puis sanction du super administrateur).
+    await suspendByModeration(a, "suspension_7d");
     expect((await send(a, id, "Pendant")).status).toBe(403);
     expect((await req(a, "GET", `/conversations/${id}/messages`)).status).toBe(200);
     expect((await req(a, "GET", `/conversations/${id}`)).json.writeBlocked).toBe("suspended");

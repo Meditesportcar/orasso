@@ -149,6 +149,7 @@ export function serializeMessage(
     clientId: viewerId === null || mine ? m.clientId : null,
     createdAt: m.createdAt.toISOString(),
     deleted,
+    moderated: Boolean(m.moderatedAt),
     readBy,
   };
 }
