@@ -15,7 +15,18 @@ await signing.ensureSynced();
 const boss = await startJobs();
 
 const server = serve(
-  { fetch: app.fetch, port: env.API_PORT, websocket: { server: new WebSocketServer({ noServer: true }) } },
+  {
+    fetch: app.fetch,
+    port: env.API_PORT,
+    websocket: {
+      server: new WebSocketServer({
+        noServer: true,
+        maxPayload: 4096,
+        // Jamais le sous-protocole qui porte le jeton (« orasso.bearer.… ») dans la réponse : seulement « orasso.v1 ».
+        handleProtocols: (protocols) => (protocols.has("orasso.v1") ? "orasso.v1" : false),
+      }),
+    },
+  },
   (info) => console.log(`API Orasso sur http://localhost:${info.port}/api`),
 );
 

@@ -28,6 +28,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 
+import { ContactOrganizerButton } from "@/features/boite/MessageButton";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
@@ -241,6 +242,8 @@ export default function EventPage() {
       ) : null}
       {e.description ? <Info label="À propos">{e.description}</Info> : null}
       {e.instructions ? <Info label="Consignes de l'organisateur">{e.instructions}</Info> : null}
+      {/* Contacter l'organisateur (lot 18) : toujours possible pour une personne connectée. */}
+      {status === "in" ? <ContactOrganizerButton structureId={e.structure.id} /> : null}
       {reviews.data && (reviews.data.count > 0 || new Date(e.endsAt).getTime() <= Date.now()) ? (
         <Reviews data={reviews.data} />
       ) : null}

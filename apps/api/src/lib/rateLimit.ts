@@ -58,6 +58,8 @@ export const rateRules = {
   /** QR ami : lectures par minute, et codes refusés (le code à 8 chiffres ne se devine pas par essais). */
   friendQr: { max: 30, windowMs: 60_000, message: "Trop de lectures : réessaie dans une minute." },
   friendQrFailure: { max: 10, windowMs: 600_000, message: "Trop de codes refusés : réessaie dans quelques minutes." },
+  /** Ouverture d'une conversation (lot 18) : avec un ami, avec une structure. */
+  conversationOpen: { max: 60, windowMs: 3_600_000, message: "Trop de conversations ouvertes : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

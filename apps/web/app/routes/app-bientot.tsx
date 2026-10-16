@@ -5,7 +5,7 @@ export function meta() {
   return [{ title: "Bientôt · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
-const TITLES: Record<string, string> = { "/app/explorer": "Explorer", "/app/boite": "Boîte" };
+const TITLES: Record<string, string> = { "/app/explorer": "Explorer" };
 
 // Sections de l'appli qui ne font pas partie du parcours n° 1 sur le site : page d'attente.
 export default function Bientot() {

@@ -38,9 +38,10 @@ export function useChannel(
           handler.current({ channel, type: message.type, payload: message.payload });
         }
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setConnected(false);
-        if (closed) return;
+        // Session absente (4401) ou trop d'onglets ouverts (4008) : pas de nouvel essai en boucle.
+        if (closed || event.code === 4401 || event.code === 4008) return;
         attempt += 1;
         timer = setTimeout(open, Math.min(30_000, 1000 * 2 ** attempt));
       };

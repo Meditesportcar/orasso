@@ -106,8 +106,5 @@ export type FriendItem = Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "g
 
 export type FriendRequestResult = { id: string; status: "pending" | "accepted"; pseudo: string };
 
-/** Compteurs de la pastille de Boîte ; chaque lot ajoute sa clé (lot 17 : `requests.friend`). */
-export type InboxSummary = { requests: { friend: number } };
-
 /** Actualité du Journal : personne concernée (avatar affiché devant l'item). */
 export type JournalActor = { userId: string; pseudo: string; avatarUrl: string | null };

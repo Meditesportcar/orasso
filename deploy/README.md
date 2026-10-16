@@ -44,7 +44,7 @@ Retour arrière et migrations : `rollback` remet les images précédentes mais n
 
 - Tout ce que l'API ou son seed importe à l'exécution doit être dans `dependencies` (l'image de l'API n'a pas les `devDependencies` ; `tsx` y est ajouté à la version du lockfile).
 - Le script `db:seed` de `apps/api` est lancé par `npm run` dans l'image (pas de pnpm) : il appelle `tsx` directement (ex. `tsx src/scripts/seed.ts`) et doit être idempotent.
-- Taille des envois (nginx) : 16 Mo par requête sur l'API, 128 Mo sur `POST /api/me/vehicles/:id/photos` seulement. Une autre route d'envoi lourd = une `location` de plus dans `nginx/dev.orasso.fr.conf`. Débit : 30 requêtes/s par adresse IP (pointe 60), au-delà 429.
+- Taille des envois (nginx) : 16 Mo par requête sur l'API, 128 Mo sur `POST /api/me/vehicles/:id/photos` seulement. Une autre route d'envoi lourd = une `location` de plus dans `nginx/dev.orasso.fr.conf`. Débit : 30 requêtes/s par adresse IP (pointe 60), au-delà 429. WebSocket (`/api/ws`, lot 18) : 20 connexions simultanées par adresse IP au plus (`limit_conn_zone orasso_dev_ws`, 429 au-delà), et l'API en garde 5 par compte (la plus ancienne fermée).
 - L'API reçoit l'adresse du client dans `X-Forwarded-For` (une seule adresse, posée par nginx) et `X-Real-IP`. Le mot de passe du site (`Authorization: Basic`) ne lui est pas transmis ; un jeton `Bearer` l'est.
 - Nouvelle variable d'environnement : l'ajouter à `deploy/dev.env.example`, puis sur le VPS dans `/etc/orasso/dev.env` (`sudo nano`), puis redéployer. Un secret se génère sur le serveur (`openssl rand -hex 32`) et ne s'affiche pas.
 - Le site joint l'API pendant le rendu serveur par `API_INTERNAL_URL` (`http://orasso-api:3000`), sans repasser par nginx.

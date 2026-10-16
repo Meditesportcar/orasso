@@ -8,6 +8,7 @@ import { api, authApi } from "./api";
 import { ApiRequestError, setSessionToken } from "./http";
 import { clearKits } from "./kits";
 import { kvDel, kvGet, kvGetJson, kvSet, kvSetJson } from "./kv";
+import { realtime } from "./realtime";
 import { purgeAllStaff } from "./staff/runtime";
 
 type Status = "loading" | "out" | "in";
@@ -145,6 +146,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
  */
 async function clearSession() {
   setSessionToken(null);
+  realtime.stop();
   await Promise.all([
     kvDel(TOKEN_KEY),
     kvDel(ME_KEY),

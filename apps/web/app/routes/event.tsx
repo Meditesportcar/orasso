@@ -18,11 +18,13 @@ import {
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { EventMap } from "../components/EventMap";
+import { ContactOrganizer } from "../components/Messaging";
 import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
 import { formatDateTime, formatPrice, formatWhen } from "../lib/format";
+import { messageAction } from "../lib/messaging.server";
 import { badgeFor, registrationState } from "../lib/status";
 import "../styles/providers.css";
 import type { Route } from "./+types/event";
@@ -112,6 +114,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (structureId && (intent === "follow" || intent === "unfollow")) {
     await api(request, `/structures/${structureId}/follow`, { method: intent === "follow" ? "POST" : "DELETE" });
   }
+  // Contacter l'organisateur (lot 18).
+  if (intent === "contact_organizer") return messageAction(request, form);
   // Billets : réservation gratuite (billet et QR tout de suite) ou paiement de démonstration (Stripe en mode test).
   if (intent === "reserve" || intent === "checkout") {
     const eventId = String(form.get("eventId") ?? "");
@@ -522,6 +526,9 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
             <Button variant="secondary" icon="heart" href={`/connexion?retour=${retour}`} fullWidth>
               Suivre {structure.name}
             </Button>
+          )}
+          {structure.verified && (
+            <ContactOrganizer structureId={structure.id} connected={connected} retour={`/e/${event.slug}`} />
           )}
           <p className="o-t-caption s-muted">Visiteurs : {publicAccess.toLowerCase()}.</p>
         </div>

@@ -245,7 +245,7 @@ describe("demandes d'ami", () => {
     expect((await call(c, "GET", "/users/Bravo_Priv")).json.friendship.state).toBe("pending_out");
     const asB = await call(b, "GET", "/users/Charlie_C");
     expect(asB.json.friendship.state).toBe("pending_in");
-    expect((await call(b, "GET", "/me/inbox/summary")).json).toEqual({ requests: { friend: 1 } });
+    expect((await call(b, "GET", "/me/inbox/summary")).json).toMatchObject({ requests: { friend: 1 } });
     const incoming = (await call(b, "GET", "/me/friends/requests?direction=in")).json.items;
     expect(incoming).toHaveLength(1);
     expect(incoming[0]).toMatchObject({ direction: "in", message: "Salut !", person: { pseudo: "Charlie_C" } });
@@ -264,7 +264,7 @@ describe("demandes d'ami", () => {
     const seen = await call(c, "GET", "/users/Bravo_Priv");
     expect(seen.json).toMatchObject({ audience: "friend", bio: "secret", departments: ["66"], friendsCount: 1 });
     expect(seen.json.vehicles[0].detailed).toBe(true);
-    expect((await call(b, "GET", "/me/inbox/summary")).json).toEqual({ requests: { friend: 0 } });
+    expect((await call(b, "GET", "/me/inbox/summary")).json).toMatchObject({ requests: { friend: 0 } });
     expect((await journal(c)).some((n) => n.type === "friend_accepted")).toBe(true);
     expect((await journal(b)).find((n) => n.type === "friend_request")?.readAt).not.toBeNull();
     const friendsOfC = (await call(c, "GET", "/me/friends")).json.items;

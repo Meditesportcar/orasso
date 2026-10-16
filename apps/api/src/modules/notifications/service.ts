@@ -7,6 +7,7 @@ import {
   journalWindowStart,
   type NotificationType,
   notificationTypes,
+  pushOnlyNotificationTypes,
   shouldDeliver,
 } from "@orasso/shared";
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
@@ -224,6 +225,8 @@ async function deliverOne(n: NotificationRow) {
     pushed = await push.send(tokens.map((to) => ({ to, title: n.title, body: n.body, data })));
     if (pushed) await db.update(notifications).set({ pushSentAt: now() }).where(eq(notifications.id, n.id));
   }
+  // Push seulement (message reçu, lot 18) : pas d'e-mail de repli sans appareil.
+  if (pushOnlyNotificationTypes.includes(n.type)) return;
   if (tokens.length === 0 || emailAlwaysTypes.includes(n.type as NotificationType)) {
     const account = await db.query.user.findFirst({ where: eq(user.id, n.userId), columns: { email: true } });
     if (!account) return;
