@@ -4,6 +4,7 @@ import { Form, useNavigation } from "react-router";
 
 import { CrewRow } from "../components/Crews";
 import { FriendAction, PersonAvatar } from "../components/People";
+import { ReportDialog } from "../components/ReportDialog";
 import { apiOrThrow } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
 import { friendAction } from "../lib/friends.server";
@@ -69,7 +70,7 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
             primary
             busy={busy}
           />
-          {/* Messagerie (lot 18) : ami → conversation ; sinon demande de contact. Signalement : lot 32. */}
+          {/* Messagerie (lot 18) : ami → conversation ; sinon demande de contact. Signaler : lot 32. */}
           <Form method="post">
             <input type="hidden" name="intent" value="message_open" />
             <input type="hidden" name="userId" value={p.userId} />
@@ -77,9 +78,7 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
               {messagingLabels.message}
             </Button>
           </Form>
-          <Button variant="secondary" icon="alert" disabled>
-            {socialLabels.reportSoon}
-          </Button>
+          <ReportDialog targetType="profile" targetId={p.userId} />
         </div>
       )}
 

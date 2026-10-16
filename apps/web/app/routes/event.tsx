@@ -24,6 +24,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { EventFeed } from "../components/EventFeed";
 import { EventMap } from "../components/EventMap";
 import { ContactOrganizer } from "../components/Messaging";
+import { ReportDialog } from "../components/ReportDialog";
 import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
@@ -238,7 +239,7 @@ function VisitorTickets({
 }
 
 /** Avis des participants pointés : moyenne à partir du minimum d'avis, réponse publique de l'organisateur. */
-function ReviewsSection({ reviews }: { reviews: EventReviews }) {
+function ReviewsSection({ reviews, connected }: { reviews: EventReviews; connected: boolean }) {
   const average = reviews.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
   return (
     <section className="s-section" id="avis" aria-labelledby="avis-titre" data-testid="reviews">
@@ -273,6 +274,7 @@ function ReviewsSection({ reviews }: { reviews: EventReviews }) {
                 </p>
               )}
               <span className="o-t-caption s-muted">{formatDateTime(r.createdAt)}</span>
+              {connected && <ReportDialog look="link" targetType="review" targetId={r.id} />}
             </li>
           ))}
         </ul>
@@ -420,6 +422,7 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
                     )}
                   </span>
                   {p.accreditedMedia && <Chip variant="accent">Média officiel</Chip>}
+                  {connected && <ReportDialog look="link" targetType="provider" targetId={p.id} />}
                 </li>
               ))}
             </ul>
@@ -433,7 +436,7 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
           </section>
         )}
 
-        <EventFeed items={feed} />
+        <EventFeed items={feed} connected={connected} />
 
         {event.instructions && (
           <section className="s-section">
@@ -454,7 +457,7 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
           <p className="s-muted">{place || "Adresse communiquée par l'organisateur."}</p>
         </section>
 
-        {reviews && (ended || reviews.count > 0) && <ReviewsSection reviews={reviews} />}
+        {reviews && (ended || reviews.count > 0) && <ReviewsSection reviews={reviews} connected={connected} />}
 
         <section className="s-section" id="organisateur">
           <h2 className="s-h2">Organisateur</h2>
@@ -603,6 +606,7 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
         <div className="s-card">
           <div className="s-label o-t-label">Partager</div>
           <ShareButtons url={`${origin}/e/${event.slug}`} title={event.title} />
+          {connected && <ReportDialog look="link" targetType="event" targetId={event.id} />}
         </div>
 
         {mine.length > 0 && (

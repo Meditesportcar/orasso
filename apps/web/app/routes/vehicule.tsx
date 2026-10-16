@@ -3,6 +3,7 @@ import { gradeLabels, type OtherVehicle, type PeopleSearchPage, socialLabels } f
 import { useNavigation } from "react-router";
 
 import { FriendAction, PersonAvatar, PersonRow } from "../components/People";
+import { ReportDialog } from "../components/ReportDialog";
 import { api, apiOrThrow } from "../lib/api.server";
 import { friendAction } from "../lib/friends.server";
 import type { Route } from "./+types/vehicule";
@@ -50,11 +51,16 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
           )}
         </Plate>
       )}
+      {/* Signaler la photo principale (lot 32) ; les autres photos ont leur lien sous la galerie. */}
+      {full?.photos[0] && <ReportDialog look="link" targetType="photo" targetId={full.photos[0].id} />}
       <a className="s-row" href={`/u/${encodeURIComponent(v.owner.pseudo)}`} data-testid="vehicule-owner">
         <PersonAvatar url={v.owner.avatarUrl} pseudo={v.owner.pseudo} />
         <span className="o-t-title">{v.owner.pseudo}</span>
         <Chip>{gradeLabels[v.owner.grade]}</Chip>
       </a>
+      <div className="s-row">
+        <ReportDialog targetType="vehicle" targetId={v.id} />
+      </div>
       {!v.detailed && <p className="s-notice">{socialLabels.privateNotice}</p>}
       {full && (
         <dl className="s-recap">
@@ -94,7 +100,10 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
       {full && full.photos.length > 1 && (
         <div className="s-vehicles">
           {full.photos.slice(1).map((p) => (
-            <img key={p.id} className="s-gallery__img" src={p.url} alt="" loading="lazy" />
+            <figure key={p.id} className="s-stack s-stack--tight">
+              <img className="s-gallery__img" src={p.url} alt="" loading="lazy" />
+              <ReportDialog look="link" targetType="photo" targetId={p.id} />
+            </figure>
           ))}
         </div>
       )}

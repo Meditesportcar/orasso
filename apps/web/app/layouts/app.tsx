@@ -1,10 +1,18 @@
 import { AppBarAction, Ground, Icon, TabBar, type TabItem, tabSets } from "@orasso/design-system/web";
-import { explorerLabels, SEARCH_MAX_LENGTH, SEARCH_MIN_LENGTH } from "@orasso/shared";
+import {
+  explorerLabels,
+  moderationLabels,
+  reportReasonLabels,
+  SEARCH_MAX_LENGTH,
+  SEARCH_MIN_LENGTH,
+} from "@orasso/shared";
 import { Form, Outlet, useLocation, useRevalidator } from "react-router";
 
 import { SiteHeader, ThemeSwitch } from "../components/SiteChrome";
 import { requireMe } from "../lib/api.server";
+import { formatDateTime } from "../lib/format";
 import { useChannel } from "../lib/useChannel";
+import "../styles/moderation.css";
 import type { Route } from "./+types/app";
 
 // Espace connecté : mêmes sections que l'appli (Accueil, Explorer, Accès, Garage, Boîte).
@@ -20,6 +28,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     provider: me.personas.some((p) => p.kind === "provider"),
     unread: me.counts.unreadNotifications,
     emailVerified: me.user.emailVerified,
+    // Lot 32 : compte suspendu (lecture seule) : bandeau avec le motif et « Contester ».
+    suspension: me.suspension,
   };
 }
 
@@ -105,6 +115,17 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
                 Renvoyer
               </button>
             </Form>
+          )}
+          {loaderData.suspension && (
+            <div className="s-notice mod-banner" role="status" data-testid="suspended-banner">
+              <span>
+                <strong>{moderationLabels.suspendedUntil(formatDateTime(loaderData.suspension.until))}</strong> ·{" "}
+                {moderationLabels.suspendedReason(reportReasonLabels[loaderData.suspension.reason])}
+              </span>
+              <a className="o-t-button" href="/app/sanctions" data-testid="suspended-contest">
+                {loaderData.suspension.canContest ? moderationLabels.contest : moderationLabels.mySanctions}
+              </a>
+            </div>
           )}
           <Outlet />
           <div className="app__theme">

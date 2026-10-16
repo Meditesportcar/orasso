@@ -5,6 +5,7 @@ import { gradeLabels, grades, type ProPublic, proActivityLabels, weekdayLabels, 
 import { useEffect } from "react";
 import { Form, redirect } from "react-router";
 
+import { ReportDialog } from "../components/ReportDialog";
 import { ShareButtons } from "../components/ShareButtons";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
@@ -322,6 +323,7 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
           Partager
         </h2>
         <ShareButtons url={`${origin}/p/${pro.slug}`} title={`${pro.name} sur Orasso`} />
+        {connected && !pro.isOwner && <ReportDialog look="link" targetType="pro" targetId={pro.id} />}
       </Plate>
     </div>
   );
