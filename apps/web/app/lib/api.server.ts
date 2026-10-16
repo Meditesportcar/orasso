@@ -25,6 +25,10 @@ export async function api<T>(request: Request, path: string, init: Init = {}): P
   const headers = new Headers({ origin: originOf(request), accept: "application/json" });
   const cookie = request.headers.get("cookie");
   if (cookie) headers.set("cookie", cookie);
+  // Adresse du visiteur (posée par nginx, seul accès au site) : sans elle, la limite de débit de Better Auth compte
+  // toutes les connexions faites depuis le site dans un seul compteur partagé (3 essais / 10 s pour tout le monde).
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) headers.set("x-forwarded-for", forwarded);
   let body = init.body;
   if (init.json !== undefined) {
     headers.set("content-type", "application/json");
