@@ -323,7 +323,8 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
             ref={fileRef}
             type="file"
             accept="image/jpeg,image/png,image/webp,image/heic"
-            className="o-visually-hidden"
+            // Ouvert par le bouton « Photo » (le champ natif de Chrome tronque son libellé).
+            hidden
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void sendImage(file);

@@ -1427,7 +1427,8 @@
   list-style: none;
 }
 .s-convo,
-.s-main .s-convo {
+.s-main .s-convo,
+.app__body .s-convo {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
@@ -1445,7 +1446,9 @@
   gap: 2px;
   min-width: 0;
 }
-.s-convo__title {
+.s-convo__title,
+.s-main .s-convo .s-convo__title {
+  color: var(--plate-ink);
   overflow-wrap: anywhere;
 }
 .s-convo__preview,

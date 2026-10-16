@@ -193,6 +193,7 @@ export const contactsService = {
     const me = v.user.id;
     const [request] = await db.select().from(contactRequests).where(eq(contactRequests.id, id));
     if (!request || request.toUserId !== me) throw notFound("Demande introuvable");
+    if (actorOf(v).suspended) throw forbidden("Ton compte est suspendu : lecture seule.");
     const from = await profilesRepo.byUserId(request.fromUserId);
     if (!from || from.deletedAt) throw notFound("Demande introuvable");
     const { conversationId, first, readers } = await withTx(async (tx, after) => {
