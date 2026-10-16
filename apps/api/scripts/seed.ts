@@ -16,9 +16,12 @@ import { notificationsService } from "../src/modules/notifications/service";
 import { seedBase } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedDayJ } from "./seed/day-j";
+import { seedGarage } from "./seed/garage";
 import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
+import { seedSocial } from "./seed/social";
+import { seedWeather } from "./seed/weather";
 
 const args = new Set(process.argv.slice(2));
 const RESET = args.has("--reset");
@@ -74,10 +77,16 @@ async function main() {
   await seedPros(hash);
   // Lot 15 : compte à confirmer, parrainage.
   await seedSecurity(hash);
+  // Lot 28 : prévisions météo factices (Nocturne de Canet mauvaise, Expo Rivesaltes bonne).
+  await seedWeather();
+  // Lot 17 : amis, demande en attente, profil privé.
+  await seedSocial();
   // Lot 16 : seconde structure de Sarah_66 (feuille « Mes casquettes »).
   await seedCasquettes();
   // Lot 21 : prestataires (food truck de Léa, photographe accrédité, stand d'un pro).
   await seedProviders(hash);
+  // Lot 31 : règles de cohérence des catégories, véhicule certifié de démonstration.
+  await seedGarage();
 }
 
 try {

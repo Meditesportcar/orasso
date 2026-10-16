@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type VehicleStatus, type VehicleType, vehicleStatuses, vehicleTypes } from "../enums";
 import { optionalText } from "./common";
+import type { PlateTransferInfo, VehicleCertification } from "./garage";
 
 const currentYear = new Date().getUTCFullYear();
 
@@ -23,6 +24,8 @@ const vehicleFields = z.object({
   plate: optionalText(20),
   unregistered: z.boolean().default(false),
   status: z.enum(vehicleStatuses).default("active"),
+  /** Motif du passage en archive (vendu, souvenir, accidenté). */
+  statusNote: optionalText(300),
   description: optionalText(2000),
   preparation: optionalText(2000),
   categoryIds: z.array(z.uuid()).max(10).default([]),
@@ -87,7 +90,19 @@ export type VehiclePublic = {
 };
 
 /** Fiche du propriétaire et de l'organisateur : avec la plaque. */
-export type VehicleFull = VehiclePublic & { plate: string | null; unregistered: boolean; archivedAt: string | null };
+export type VehicleFull = VehiclePublic & {
+  plate: string | null;
+  unregistered: boolean;
+  archivedAt: string | null;
+  statusNote: string | null;
+  /** Change quand la fiche ou ses photos changent : à ajouter (`?v=`) à l'adresse de la fiche Instagram (cache du navigateur). */
+  shareVersion: string;
+  /** Plaque déjà prise : demande de transfert en cours (le véhicule ne peut pas candidater). */
+  plateTransfer: PlateTransferInfo | null;
+};
+
+/** Page du véhicule (propriétaire) : fiche, plus l'état de la certification. */
+export type VehicleDetail = VehicleFull & { certification: VehicleCertification };
 
 /** Fiche réduite d'un compte privé : marque et modèle seulement. */
 export type VehicleBrief = Pick<VehiclePublic, "id" | "label" | "makeName" | "modelName" | "vehicleType"> & {

@@ -1,5 +1,6 @@
 export * from "./application";
 export * from "./enums";
+export * from "./garage";
 export * from "./geo";
 export * from "./grades";
 export * from "./labels.fr";
@@ -9,3 +10,4 @@ export * from "./qr";
 export * from "./roles";
 export * from "./rules";
 export * from "./schemas";
+export * from "./weather";

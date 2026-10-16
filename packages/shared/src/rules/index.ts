@@ -1,4 +1,5 @@
 export * from "./applicationTransitions";
+export * from "./garage";
 export * from "./lock";
 export * from "./misc";
 export * from "./notifications";
@@ -11,4 +12,6 @@ export * from "./registry";
 export * from "./reviews";
 export * from "./ticketing";
 export * from "./time";
+export * from "./visibility";
 export * from "./waitlistDeadline";
+export * from "./weather";

@@ -4,6 +4,7 @@ import {
   type EventProviderPublic,
   type EventPublic,
   type EventReviews,
+  type EventWeather,
   eventAdmissionLabels,
   eventFormatLabels,
   eventOutlookLabels,
@@ -19,6 +20,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { EventMap } from "../components/EventMap";
 import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
+import { Weather } from "../components/Weather";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
 import { formatDateTime, formatPrice, formatWhen } from "../lib/format";
 import { badgeFor, registrationState } from "../lib/status";
@@ -28,7 +30,7 @@ import type { Route } from "./+types/event";
 export async function loader({ request, params }: Route.LoaderArgs) {
   const slug = params.slug;
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
-  const [structure, categories, me, reviews, tickets, providers] = await Promise.all([
+  const [structure, categories, me, reviews, tickets, providers, weather] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     api<Category[]>(request, "/vehicle-reference/categories"),
     getMe(request),
@@ -38,12 +40,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       `/events/by-slug/${encodeURIComponent(slug)}/tickets`,
     ),
     api<EventProviderPublic[]>(request, `/events/by-slug/${encodeURIComponent(slug)}/providers`),
+    // Météo à l'approche (lot 28) : cache de l'API, `null` au-delà de 7 jours ; jamais bloquante.
+    api<EventWeather | null>(request, `/events/by-slug/${encodeURIComponent(slug)}/weather`),
   ]);
   return {
     event,
     structure,
     reviews: reviews.ok ? reviews.data : null,
     providers: providers.ok ? providers.data : [],
+    weather: weather.ok ? weather.data : null,
     offer: tickets.ok ? tickets.data.offer : null,
     myTickets: tickets.ok ? tickets.data.mine : [],
     paymentCancelled: new URL(request.url).searchParams.get("paiement") === "annule",
@@ -270,6 +275,7 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
     origin,
     state,
     reviews,
+    weather,
     ended,
     offer,
     myTickets,
@@ -414,6 +420,12 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
           <section className="s-section">
             <h2 className="s-h2">Consignes</h2>
             <p className="s-muted s-prewrap">{event.instructions}</p>
+          </section>
+        )}
+
+        {weather && !ended && (
+          <section className="s-section" id="meteo" aria-label="Météo à l'approche" data-testid="event-weather">
+            <Weather weather={weather} />
           </section>
         )}
 

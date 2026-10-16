@@ -23,6 +23,8 @@ export default defineConfig({
       DATA_DIR: ".data/test",
       DEV_SKIP_2FA: "false",
       MAIL_TRANSPORT: "journal",
+      // Météo (lot 28) : le fournisseur par défaut, quel que soit le .env ; les tests simulent `fetch` (jamais de réseau).
+      WEATHER_PROVIDER: "open-meteo",
     },
   },
 });

@@ -29,6 +29,7 @@ import { type ReactNode, useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 
 import { ApplySheet } from "@/features/provider/ApplySheet";
+import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
 import { breakTitle, formatDay, formatDayHour, formatHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
@@ -50,6 +51,8 @@ export default function EventPage() {
   const event = useApi(() => api.eventBySlug(slug), [slug, status], { enabled: status !== "loading" });
   const categories = useApi(() => api.categories(), [], { cacheKey: "ref.categories", enabled: status === "in" });
   const reviews = useApi(() => api.eventReviews(slug), [slug, status], { enabled: status !== "loading" });
+  // Météo à l'approche (lot 28) : seulement dans les 7 jours avant l'événement ; jamais bloquante.
+  const weather = useApi(() => api.eventWeather(slug), [slug], { enabled: status !== "loading" });
   const e = event.data;
   const providers = useApi(() => api.eventProviders(slug), [slug, status], { enabled: status !== "loading" });
   const hasPro = me?.personas?.some((p) => p.kind === "pro") ?? false;
@@ -158,6 +161,8 @@ export default function EventPage() {
         ]}
         active={0}
       />
+
+      {weather.data ? <WeatherWidget summary={weather.data.summary} attribution={weather.data.attribution} /> : null}
 
       {wanted.length > 0 ? (
         <Plate style={styles.info}>

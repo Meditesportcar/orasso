@@ -1,5 +1,6 @@
 // Profils, centres d'intérêt, catégories, appareils (ARCHITECTURE.md § 1.1).
 import {
+  categoryMakeModes,
   defaultNotificationPrefs,
   devicePlatforms,
   grades,
@@ -29,6 +30,7 @@ export const platformRoleEnum = pgEnum("platform_role", platformRoles);
 export const profileVisibilityEnum = pgEnum("profile_visibility", profileVisibilities);
 export const gradeEnum = pgEnum("grade", grades);
 export const devicePlatformEnum = pgEnum("device_platform", devicePlatforms);
+export const categoryMakeModeEnum = pgEnum("category_make_mode", categoryMakeModes);
 
 /** Tout ce qui est métier sur un compte (1 pour 1 avec `user`, table de Better Auth). */
 export const profiles = pgTable(
@@ -66,6 +68,8 @@ export const profiles = pgTable(
     mutedTypes: text("muted_types").array().notNull().default(sql`'{}'::text[]`),
     /** Widgets de l'accueil réglés par l'utilisateur (posée au lot 15, utilisée au lot 30) ; null = par défaut. */
     homeWidgets: jsonb("home_widgets").$type<unknown>(),
+    /** Lot 17 : nombre d'amis acceptés (cache, tenu par le service social). */
+    friendsCount: integer("friends_count").notNull().default(0),
     ...timestamps,
   },
   (t) => [
@@ -73,6 +77,8 @@ export const profiles = pgTable(
     uniqueIndex("profiles_invite_token_key").on(t.inviteToken),
     uniqueIndex("profiles_account_qr_short_id_key").on(t.accountQrShortId),
     index("profiles_departments_idx").using("gin", t.departments),
+    // Lot 17 : recherche de personnes par début de pseudo.
+    index("profiles_pseudo_prefix_idx").on(sql`lower(${t.pseudo}) text_pattern_ops`),
   ],
 );
 
@@ -83,6 +89,12 @@ export const categories = pgTable("categories", {
   label: text("label").notNull(),
   position: smallint("position").notNull().default(0),
   minVehicleAge: smallint("min_vehicle_age"),
+  /** Types de véhicule admis (`car`, `moto`, `truck`) ; null = tous (lot 31). */
+  allowedVehicleTypes: text("allowed_vehicle_types").array(),
+  /** Pays de marque admis (ISO 3166-1 alpha-2) ; null = tous. */
+  allowedCountries: text("allowed_countries").array(),
+  /** `whitelist` : seules les marques de `category_makes` (ex. supercar). */
+  makeMode: categoryMakeModeEnum("make_mode").notNull().default("any"),
   active: boolean("active").notNull().default(true),
   ...timestamps,
 });

@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { securityErrorMessage } from "@/lib/securityMessages";
 import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
+import { PasskeyOnlyNotice } from "./PasskeyOnlyNotice";
 
 /** Ce que la suppression change, en clair (le même texte que sur le site). */
 export const DELETE_CONSEQUENCES =
@@ -47,6 +48,17 @@ export function DeleteAccountSheet({ visible, onClose }: { visible: boolean; onC
       setError(securityErrorMessage(e));
       setBusy(false);
     }
+  }
+
+  if (me?.twoFactorHint === "passkey_sign_in") {
+    return (
+      <AppSheet visible={visible} onClose={close} accessibilityLabel="Supprimer mon compte">
+        <Text variant="title" color={t.color.ink}>
+          Supprimer mon compte
+        </Text>
+        <PasskeyOnlyNotice onClose={close} />
+      </AppSheet>
+    );
   }
 
   return (

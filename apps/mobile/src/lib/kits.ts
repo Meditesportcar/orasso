@@ -1,11 +1,12 @@
 // Kit « jour J » : tout ce qu'il faut pour entrer sans réseau (QR d'inscription signé, infos de l'événement, zone,
 // consignes, dernière météo connue). Enregistré dès que la candidature est retenue, rafraîchi à chaque ouverture
 // de l'appli avec du réseau (donc la veille aussi), effacé à J+1 ou quand la place n'est plus valide.
-import type { EventOutlook, MyApplication } from "@orasso/shared";
+import type { EventOutlook, EventWeather, MyApplication } from "@orasso/shared";
 
 import { api } from "./api";
-import { jourJClosesAt, weatherLabel } from "./jourj";
+import { jourJClosesAt } from "./jourj";
 import { kvDel, kvGetJson, kvSetJson } from "./kv";
+import { mergeWeather } from "./weather";
 
 export type AccessKit = {
   applicationId: string;
@@ -33,7 +34,8 @@ export type AccessKit = {
     instructions: string | null;
   };
   pass: { passId: string; payload: string; issuedAt: string };
-  weather: { label: string; temperature: number; at: string } | null;
+  /** Dernière météo connue de l'événement (cache de l'API, lot 28) ; `null` si aucune (hors des 7 jours, ou jamais reçue). */
+  weather: EventWeather | null;
 };
 
 const INDEX_KEY = "kits";
@@ -62,30 +64,15 @@ export async function clearKits() {
   await kvDel(INDEX_KEY);
 }
 
-/** Météo à l'heure de début (Open-Meteo, sans clé) ; `null` hors de la fenêtre de prévision ou sans réseau. */
-async function fetchWeather(lat: number, lng: number, startsAt: string, timezone: string) {
+/**
+ * Météo de l'événement, depuis l'API d'Orasso (cache en base, attribution comprise) : l'appli n'appelle jamais un
+ * fournisseur météo elle-même. `undefined` : l'API n'a pas répondu (on garde l'ancienne) ; `null` : pas de météo.
+ */
+async function fetchWeather(slug: string): Promise<EventWeather | null | undefined> {
   try {
-    const day = new Date(startsAt).toLocaleDateString("sv-SE", { timeZone: timezone });
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weather_code&timezone=${encodeURIComponent(timezone)}&start_date=${day}&end_date=${day}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6_000);
-    const res = await fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
-    if (!res.ok) return null;
-    const json = (await res.json()) as {
-      hourly?: { time: string[]; temperature_2m: number[]; weather_code: number[] };
-    };
-    const hourly = json.hourly;
-    if (!hourly) return null;
-    const hour = new Date(startsAt)
-      .toLocaleTimeString("sv-SE", { timeZone: timezone, hour: "2-digit", hourCycle: "h23" })
-      .slice(0, 2);
-    const index = hourly.time.findIndex((t) => t.slice(11, 13) === hour);
-    const temperature = hourly.temperature_2m[index];
-    const code = hourly.weather_code[index];
-    if (index < 0 || temperature === undefined || code === undefined) return null;
-    return { label: weatherLabel(code), temperature: Math.round(temperature), at: new Date().toISOString() };
+    return await api.eventWeather(slug);
   } catch {
-    return null;
+    return undefined;
   }
 }
 
@@ -100,10 +87,7 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
     await dropKit(app.id);
     return null;
   }
-  const weather =
-    event.lat !== null && event.lng !== null
-      ? ((await fetchWeather(event.lat, event.lng, event.startsAt, event.timezone)) ?? previous?.weather ?? null)
-      : null;
+  const weather = mergeWeather(await fetchWeather(event.slug), previous?.weather);
   const kit: AccessKit = {
     applicationId: app.id,
     savedAt: new Date().toISOString(),

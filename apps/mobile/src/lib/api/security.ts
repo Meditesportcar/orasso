@@ -2,15 +2,16 @@
 // Ce sont les routes de Better Auth (`/api/auth/*`), appelées avec le jeton de la session. Les clés d'accès
 // (passkeys) restent sur le site (S2) : pas de module WebAuthn natif en V1.
 import { request, requestWithHeaders } from "../http";
+import { newSessionToken } from "../sessionToken";
 
 /**
  * Better Auth remplace la session quand le mot de passe change, que la double authentification est activée ou
- * désactivée : le nouveau jeton arrive dans l'en-tête `set-auth-token` (ou dans le corps). L'appli doit l'adopter
+ * désactivée : le nouveau jeton arrive dans l'en-tête `set-auth-token` (jamais le corps : son `token` est celui de l'ancienne session). L'appli doit l'adopter
  * (`adoptToken` de la session), sinon elle est déconnectée au prochain appel. `null` : la session n'a pas changé.
  */
 async function sessionToken(path: string, body: unknown): Promise<string | null> {
-  const { data, headers } = await requestWithHeaders<{ token?: string } | null>(path, { method: "POST", body });
-  return headers.get("set-auth-token") ?? data?.token ?? null;
+  const { headers } = await requestWithHeaders<unknown>(path, { method: "POST", body });
+  return newSessionToken(headers);
 }
 
 export type TotpEnrollment = { totpURI: string; backupCodes: string[] };

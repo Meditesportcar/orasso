@@ -7,6 +7,7 @@ import { events, eventZones } from "./events";
 import { categories, profiles } from "./profiles";
 import { structures } from "./structures";
 import {
+  plateTransferRequests,
   vehicleCategories,
   vehicleGenerations,
   vehicleMakes,
@@ -21,6 +22,10 @@ export const vehiclesRelations = relations(vehicles, ({ one, many }) => ({
   generation: one(vehicleGenerations, { fields: [vehicles.generationId], references: [vehicleGenerations.id] }),
   photos: many(vehiclePhotos),
   categories: many(vehicleCategories),
+  pendingTransfer: one(plateTransferRequests, {
+    fields: [vehicles.pendingTransferId],
+    references: [plateTransferRequests.id],
+  }),
 }));
 
 export const vehiclePhotosRelations = relations(vehiclePhotos, ({ one }) => ({

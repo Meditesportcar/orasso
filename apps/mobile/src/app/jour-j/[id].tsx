@@ -4,12 +4,13 @@
 // se ferme après le scan ou à J+1.
 
 import { Button, Chip, Plate, StatusBadge, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { gradeLabels } from "@orasso/shared";
+import { gradeLabels, weatherTexts } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Linking, Platform, StyleSheet, useWindowDimensions, View } from "react-native";
 
+import { WeatherWidget } from "@/features/WeatherWidget";
 import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
@@ -101,6 +102,8 @@ export default function JourJ() {
   }
 
   const tz = kit.event.timezone;
+  // Kits enregistrés avant le lot 28 : ancienne forme de météo, ignorée jusqu'au prochain rafraîchissement.
+  const weather = kit.weather && "summary" in kit.weather ? kit.weather : null;
   const state = jourJState(kit.event, now, Boolean(kit.checkedInAt), tz);
   const untilStart = new Date(kit.event.startsAt).getTime() - now.getTime();
   const qrSize = Math.min(width - 4 * space4, 320);
@@ -159,13 +162,12 @@ export default function JourJ() {
           ) : (
             <Chip surface="plate">Maintenu</Chip>
           )}
-          {kit.weather ? (
-            <Chip surface="plate">
-              {kit.weather.temperature} °C · {kit.weather.label}
-            </Chip>
-          ) : null}
         </View>
       </Plate>
+
+      {weather ? (
+        <WeatherWidget summary={weather.summary} attribution={weather.attribution} title={weatherTexts.todayTitle} />
+      ) : null}
 
       {state === "early" ? (
         <Plate kind="note" style={styles.block}>

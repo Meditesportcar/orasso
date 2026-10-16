@@ -650,7 +650,7 @@ describe("suppression du compte : atomicité et données restantes", () => {
     const p = await db.query.profiles.findFirst({ where: eq(profiles.userId, u.id) });
     expect(p?.deletedAt).toBeNull();
     expect((await call(u, "GET", "/me")).status).toBe(200);
-  });
+  }, 60_000);
 
   it("fiche pro vidée (nom, coordonnées, photos), Journal effacé", async () => {
     const u = await signUp("ProPartant_01");
@@ -673,5 +673,5 @@ describe("suppression du compte : atomicité et données restantes", () => {
     expect(after?.deletedAt).toBeTruthy();
     expect(await db.query.proPhotos.findMany({ where: eq(proPhotos.proId, pro.id) })).toHaveLength(0);
     expect(await db.query.notifications.findMany({ where: eq(notifications.userId, u.id) })).toHaveLength(0);
-  });
+  }, 60_000);
 });

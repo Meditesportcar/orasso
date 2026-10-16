@@ -128,7 +128,13 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins: [env.PUBLIC_URL, ...corsOrigins],
+  // L'appli envoie l'origine de son API (`EXPO_PUBLIC_API_URL`) sur `/api/auth/*` : en ligne, même hôte que
+  // `PUBLIC_URL` ; en développement, l'API locale, plus les adresses ajoutées à `CORS_ORIGINS` (téléphone sur le Wi-Fi).
+  // En production, seule l'adresse publique est de confiance.
+  trustedOrigins: [
+    env.PUBLIC_URL,
+    ...(env.NODE_ENV === "production" ? [] : [...corsOrigins, `http://localhost:${env.API_PORT}`]),
+  ],
   telemetry: { enabled: false },
 });
 

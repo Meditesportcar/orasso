@@ -11,6 +11,7 @@ import { useSession } from "@/lib/session";
 import { totpSecretOf } from "@/lib/totp";
 import { AppSheet } from "@/ui/AppSheet";
 import { QrCode } from "@/ui/QrCode";
+import { PasskeyOnlyNotice } from "./PasskeyOnlyNotice";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -76,6 +77,17 @@ export function TwoFactorSheet({ visible, onClose }: { visible: boolean; onClose
       setCode("");
       setStep({ name: "done", text: "Double authentification activée. Elle te sera demandée à chaque connexion." });
     });
+
+  if (me?.twoFactorHint === "passkey_sign_in") {
+    return (
+      <AppSheet visible={visible} onClose={close} accessibilityLabel="Double authentification">
+        <Text variant="title" color={t.color.ink}>
+          Double authentification
+        </Text>
+        <PasskeyOnlyNotice onClose={close} />
+      </AppSheet>
+    );
+  }
 
   return (
     <AppSheet visible={visible} onClose={close} accessibilityLabel="Double authentification" maxHeight={0.9}>

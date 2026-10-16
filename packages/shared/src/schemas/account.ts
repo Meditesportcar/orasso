@@ -1,7 +1,7 @@
 // Compte et sécurité (lot 15, ARCHITECTURE-SUITE § 1.2).
 import { z } from "zod";
 import { departmentSchema, type NotificationFamily, notificationTypes, profileVisibilities } from "../enums";
-import type { PublicProfile } from "./profile";
+import type { UserProfileView } from "./social";
 
 /**
  * Widgets de l'accueil (lot 30) : liste bornée d'objets courts (identifiant, visibilité, position, réglages simples).
@@ -72,4 +72,4 @@ export type SessionView = {
 };
 
 /** `GET /me/public-preview` : ce que voit un autre utilisateur connecté (sérialiseur public appliqué à soi). */
-export type PublicPreview = PublicProfile;
+export type PublicPreview = UserProfileView;
