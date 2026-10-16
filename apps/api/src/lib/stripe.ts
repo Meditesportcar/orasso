@@ -57,8 +57,9 @@ export function formEncode(data: Record<string, unknown>): string {
   const pairs: string[] = [];
   const add = (key: string, value: unknown) => {
     if (value === undefined || value === null) return;
-    if (Array.isArray(value)) value.forEach((v, i) => add(`${key}[${i}]`, v));
-    else if (typeof value === "object") for (const [k, v] of Object.entries(value)) add(`${key}[${k}]`, v);
+    if (Array.isArray(value)) {
+      for (const [i, v] of value.entries()) add(`${key}[${i}]`, v);
+    } else if (typeof value === "object") for (const [k, v] of Object.entries(value)) add(`${key}[${k}]`, v);
     else pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
   };
   for (const [k, v] of Object.entries(data)) add(k, v);
