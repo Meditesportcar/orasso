@@ -204,6 +204,20 @@
       "when": 1792170167172,
       "tag": "0028_messaging",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792174124368,
+      "tag": "0029_search_extension",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792174132625,
+      "tag": "0030_search",
+      "breakpoints": true
     }
   ]
 }

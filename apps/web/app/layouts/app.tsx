@@ -1,4 +1,5 @@
-import { AppBarAction, Ground, TabBar, type TabItem, tabSets } from "@orasso/design-system/web";
+import { AppBarAction, Ground, Icon, TabBar, type TabItem, tabSets } from "@orasso/design-system/web";
+import { explorerLabels, SEARCH_MAX_LENGTH, SEARCH_MIN_LENGTH } from "@orasso/shared";
 import { Form, Outlet, useLocation, useRevalidator } from "react-router";
 
 import { SiteHeader, ThemeSwitch } from "../components/SiteChrome";
@@ -56,6 +57,28 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           {loaderData.orga && <a href={`/orga/${loaderData.orga}`}>Organisateur</a>}
           {loaderData.pro && <a href={`/pro/${loaderData.pro}`}>Pro</a>}
           {loaderData.provider && <a href="/app/prestataire">Prestataire</a>}
+          {/* Recherche de premier niveau (lot 29) : renvoie vers l'Explorer, résultats groupés. */}
+          <search className="s-search" data-testid="site-search">
+            <form action="/app/explorer" method="get" className="s-search__form">
+              <label className="o-visually-hidden" htmlFor="site-search-input">
+                {explorerLabels.searchTitle}
+              </label>
+              <input
+                id="site-search-input"
+                className="s-search__input o-t-meta"
+                type="search"
+                name="q"
+                placeholder={explorerLabels.searchTitle}
+                minLength={SEARCH_MIN_LENGTH}
+                maxLength={SEARCH_MAX_LENGTH}
+                autoComplete="off"
+                required
+              />
+              <button type="submit" className="s-search__submit" aria-label={explorerLabels.searchTitle}>
+                <Icon name="search" size={18} />
+              </button>
+            </form>
+          </search>
           {/* Journal (lot 17) : la cloche et sa pastille d'éléments non lus. */}
           <span className="s-bell">
             <AppBarAction icon="bell" label="Journal" href="/app/journal" on={pathname === "/app/journal"} />

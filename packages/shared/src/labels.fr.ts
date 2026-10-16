@@ -8,6 +8,7 @@
 
 export * from "./labels/account.fr";
 export * from "./labels/events.fr";
+export * from "./labels/explorer.fr";
 export * from "./labels/garage.fr";
 export * from "./labels/messaging.fr";
 export * from "./labels/notifications.fr";

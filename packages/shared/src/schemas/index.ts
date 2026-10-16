@@ -9,6 +9,7 @@ export * from "./pro";
 export * from "./profile";
 export * from "./provider";
 export * from "./review";
+export * from "./search";
 export * from "./social";
 export * from "./structure";
 export * from "./ticketing";

@@ -16,6 +16,7 @@ import { notificationsService } from "../src/modules/notifications/service";
 import { seedBase } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedDayJ } from "./seed/day-j";
+import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
 import { seedMessaging } from "./seed/messaging";
 import { seedPros } from "./seed/pros";
@@ -90,6 +91,8 @@ async function main() {
   await seedGarage();
   // Lot 18 : conversations, demande de contact, organisateur joignable.
   await seedMessaging();
+  // Lot 29 : structures, événements et pros localisés en 11, 34 et 31 (Explorer : liste, carte, affinités, distance).
+  await seedExplorer(hash);
 }
 
 try {
