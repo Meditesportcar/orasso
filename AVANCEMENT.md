@@ -149,11 +149,21 @@
   - API : migrations `0029_search_extension` (SQL personnalisé `CREATE EXTENSION pg_trgm`) et `0030_search` ; `GET /events` et `GET /pros` prennent `sort`, `lat`, `lng`, `radiusKm` et ne sont plus mis en cache (la réponse dépend de la personne). Seed `scripts/seed/explorer.ts` (Aude, Hérault, Haute-Garonne).
   - Vérifié : voir l'entrée du lot 29 (1re partie) dans le journal du relais. **Carte native non essayée sur appareil** (APK du coordinateur).
 
+- **Invitations nominatives, événement privé, avantages des hauts grades (lot 25, 17/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 25) ; état technique : `ARCHITECTURE.md` « État après le lot 25 ».
+  - L'organisateur (propriétaire ou co-organisateur, double authentification) invite depuis `/orga/:s/e/:id/invitations` : par pseudo, par véhicule (véhicules de ses abonnés et retenus de ses éditions passées), par e-mail (lien `/invitation-evenement/:jeton`), avec un message ; « Inviter les retenus de l'édition … » ; liste des invitations et statuts (En attente, Acceptée, Refusée, Expirée), retrait d'une invitation en attente. Appli : écran `/(orga)/evenement/[id]/inviter` (pseudo, retenus de l'édition précédente, e-mail).
+  - L'invité répond dans Accès > « Invitations reçues » (site et appli ; aussi dans Boîte > Demandes) : accepter avec un véhicule (imposé si l'invitation est pour un véhicule) → retenu directement avec son QR ; si l'événement est complet, en tête de la liste d'attente et l'organisateur est prévenu ; ou refuser. Valable jusqu'au verrouillage, puis expirée.
+  - Événement « Sur invitation » (étape Admission de l'assistant) : absent de partout (liste, carte, recherche, Explorer, plan du site, Journal des amis, compteurs) ; la page répond « Événement privé sur invitation » à qui n'est pas invité ; candidature libre refusée.
+  - Hauts grades (étape Avant-première) : priorité en liste d'attente (un haut grade passe devant les grades inférieurs, derrière les hauts grades arrivés avant) et avant-première supplémentaire (la plus longue des deux l'emporte), à partir du grade choisi ; mention « Avant-première abonnés 24 h · grades Circuit et Légende 48 h » sur la page de l'événement ; notification d'avant-première aux hauts grades de la région.
+  - API : migration `0033_invitations`, module `invitations`, tâche `event.high-grade-preview`. Seed : « Soirée partenaires » (privée, Kenji retenu, Nina en attente, une adresse e-mail) ; hauts grades sur « Expo Rivesaltes ».
+  - Vérifié : voir l'entrée du lot 25 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-25-captures\`.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
+
+- Lot 25 : déployer (migration `0033_invitations` au démarrage, à renuméroter à la fusion si d'autres lots en ont généré, règle B1 ; aucune variable nouvelle ; `pnpm db:seed` ajoute « Soirée partenaires » à une base existante). Lot 22 : brancher le bouton « Inviter » de la page événement de la casquette Organisateur sur `/evenement/<id>/inviter`. Lot 27 : « Inviter les retenus » de l'édition suivante réutilise `POST /events/:id/invitations/from-event`. Essayer sur téléphone : feuille de réponse (choix du véhicule), écran Inviter.
 
 - Lot 19 : déployer (migration `0032_crews` au démarrage, aucune variable nouvelle ; `pnpm db:seed` ajoute « Roussillon Drift » à une base existante). À essayer sur téléphone (APK de la vague) : logo du crew (sélecteur de photo), discussion du crew, confirmation de venue. Lots suivants : le lot 23 trie aussi les crews par glissement, le lot 29 branche la recherche de crews sur la recherche de premier niveau, le lot 32 ajoute « Signaler » sur un crew.
 
