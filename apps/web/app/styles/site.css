@@ -129,6 +129,19 @@
 .s-row--between {
   justify-content: space-between;
 }
+/* Retour + bouton principal : sur un téléphone étroit, le principal passe au-dessus, en pleine largeur (lot 12 :
+   « Envoyer ma candidature » débordait de son bouton et de l'écran à 390 px). */
+.s-actions {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  gap: var(--space-3);
+}
+.s-actions > * {
+  flex: 1 1 auto;
+}
+.s-actions > .s-grow {
+  flex: 1 1 220px;
+}
 .s-grow {
   flex: 1 1 0;
   min-width: 0;
@@ -617,6 +630,9 @@
   vertical-align: middle;
 }
 .s-table-wrap {
+  /* `relative` : le libellé masqué (absolu) de la colonne « Action » restait hors du défilement du tableau et donnait
+     un défilement horizontal à toute la page sur téléphone (lot 12). */
+  position: relative;
   overflow-x: auto;
 }
 .s-filters {

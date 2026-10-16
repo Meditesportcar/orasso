@@ -209,7 +209,7 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
             onChange={(e) => setRules(e.currentTarget.checked)}
             label="J'ai lu le règlement de l'événement et je l'accepte."
           />
-          <div className="s-row">
+          <div className="s-actions">
             <Button variant="secondary" icon="back" onClick={() => setStep(1)}>
               Retour
             </Button>
@@ -241,7 +241,7 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
               {error}
             </p>
           )}
-          <div className="s-row">
+          <div className="s-actions">
             <Button variant="secondary" icon="back" onClick={() => setStep(2)}>
               Retour
             </Button>
