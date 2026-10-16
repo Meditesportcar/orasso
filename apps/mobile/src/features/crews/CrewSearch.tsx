@@ -1,8 +1,8 @@
 // Explorer, segment « Personnes et crews » (lot 19) : les crews, trouvables par leur nom et leur département (docs/01),
-// et l'accès à mes crews. La fiche d'un crew s'ouvre au toucher. Le lot 29 branchera cette recherche sur la recherche
-// de premier niveau.
-import { Button, Chip, Plate, SelectField, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { type CrewCard, crewLabels, departments } from "@orasso/shared";
+// et l'accès à mes crews. La fiche d'un crew s'ouvre au toucher. Lot 29 : pas de champ propre, le crew suit le texte et
+// le département de la recherche de personnes du segment (un seul champ).
+import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { type CrewCard, crewLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -37,11 +37,9 @@ export function CrewRowNative({ crew, onPress }: { crew: CrewCard; onPress: () =
   );
 }
 
-export function CrewSearch() {
+export function CrewSearch({ q, department }: { q: string; department: string }) {
   const router = useRouter();
   const mine = useApi(() => api.myCrews(), []);
-  const [q, setQ] = useState("");
-  const [department, setDepartment] = useState("");
   const [items, setItems] = useState<CrewCard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const request = useRef(0);
@@ -68,19 +66,6 @@ export function CrewSearch() {
   return (
     <View style={styles.col} testID="crew-search">
       <SectionTitle>{crewLabels.crews}</SectionTitle>
-      <TextField
-        label={crewLabels.search}
-        value={q}
-        onChangeText={setQ}
-        placeholder={crewLabels.searchPlaceholder}
-        returnKeyType="search"
-      />
-      <SelectField
-        label={crewLabels.department}
-        value={department}
-        onValueChange={setDepartment}
-        options={[{ value: "", label: "Tous" }, ...departments.map((d) => ({ value: d, label: d }))]}
-      />
       {error ? <Notice tone="error">{error}</Notice> : null}
       {!items ? <Muted variant="body">{crewLabels.searchIdle}</Muted> : null}
       {items && items.length === 0 ? <Muted variant="body">{crewLabels.searchEmpty}</Muted> : null}
