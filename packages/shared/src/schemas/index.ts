@@ -1,4 +1,5 @@
 export * from "./access";
+export * from "./account";
 export * from "./application";
 export * from "./common";
 export * from "./event";

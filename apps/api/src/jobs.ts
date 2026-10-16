@@ -5,8 +5,10 @@ import { deps, type JobName } from "./lib/deps";
 import { AppError } from "./lib/errors";
 import { applicationsService } from "./modules/applications/service";
 import { eventJobs } from "./modules/events/jobs";
+import { nearbyService } from "./modules/events/nearby";
 import { notificationsService } from "./modules/notifications/service";
 import { pointsService } from "./modules/points/service";
+import { securityService } from "./modules/security/service";
 import { staffService } from "./modules/staff/service";
 
 // Tâches planifiées dans PostgreSQL (schéma « pgboss », créé et mis à jour par pg-boss lui-même).
@@ -27,6 +29,9 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "season.rollover": () => pointsService.rolloverSeason(),
   // Secours (chaque heure) : règlements de J+2, escalades et report de saison dont la tâche n'est pas passée.
   "points.sweep": () => pointsService.sweep(),
+  // Lot 15 : « événement près de chez toi » (à la publication) et oubli des connexions connues de plus d'un an.
+  "event.notify-nearby": (d) => nearbyService.notifyNearby(d.eventId ?? ""),
+  "security.purge-known-logins": () => securityService.purgeKnownLogins(),
 };
 
 /**
@@ -62,6 +67,7 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     // Fin de saison : on descend d'un grade et on continue (1er janvier, 00:10).
     await boss.schedule("season.rollover", "10 0 1 1 *", null, { tz: "Europe/Paris" });
     await boss.schedule("points.sweep", "5 * * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("security.purge-known-logins", "20 4 * * 1", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {
     async send(name, data, startAfter) {

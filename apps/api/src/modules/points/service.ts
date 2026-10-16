@@ -15,6 +15,7 @@ import {
   POINTS,
   type PointKind,
   pointKindLabels,
+  REFERRAL_SEASON_CAP,
   SETTLE_DELAY_MS,
   seasonDates,
   seasonYear,
@@ -74,6 +75,7 @@ async function award(
     applicationId?: string | null;
     createdBy?: string | null;
     note?: string | null;
+    subjectUserId?: string | null;
   },
 ): Promise<EntryRow | null> {
   const [row] = await tx
@@ -570,6 +572,49 @@ export const pointsService = {
       const result = await recompute(tx, userId);
       after(() => notificationsService.kick());
       return result;
+    });
+  },
+
+  /**
+   * Parrainage (lot 15, ARCHITECTURE-SUITE § 1.3) : le filleul vient de confirmer son e-mail. +10 au parrain, une seule
+   * fois par filleul (index unique partiel), au plus `REFERRAL_SEASON_CAP` par saison et par parrain (S3 : au-delà,
+   * rien, journalisé). Renvoie l'entrée écrite ou `null`.
+   */
+  async awardReferral(sponsorId: string, refereeId: string): Promise<EntryRow | null> {
+    return withTx(async (tx, after) => {
+      const season = await seasonFor(tx, now());
+      // Verrou consultatif par parrain : deux filleuls confirmés en même temps ne dépassent pas le plafond.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`referral:${sponsorId}`}))`);
+      const [done] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(pointEntries)
+        .where(
+          and(
+            eq(pointEntries.userId, sponsorId),
+            eq(pointEntries.seasonId, season.id),
+            eq(pointEntries.kind, "referral"),
+          ),
+        );
+      if ((done?.n ?? 0) >= REFERRAL_SEASON_CAP) {
+        console.info(`Parrainage au-delà du plafond de la saison (${REFERRAL_SEASON_CAP}) : ${sponsorId}`);
+        return null;
+      }
+      const entry = await award(tx, season, {
+        userId: sponsorId,
+        kind: "referral",
+        points: POINTS.referral,
+        subjectUserId: refereeId,
+      });
+      if (!entry) return null;
+      const referee = await tx.query.profiles.findFirst({ where: eq(profiles.userId, refereeId) });
+      await recompute(tx, sponsorId);
+      await notificationsService.notify(tx, sponsorId, "referral_confirmed", {
+        title: `+${POINTS.referral} points · parrainage`,
+        body: `${referee?.pseudo ?? "Ton ami"} a rejoint Orasso grâce à toi.`,
+        link: pointsLink,
+      });
+      after(() => notificationsService.kick());
+      return entry;
     });
   },
 

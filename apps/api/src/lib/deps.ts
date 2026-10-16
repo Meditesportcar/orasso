@@ -18,7 +18,10 @@ export type JobName =
   | "event.settle"
   | "contest.escalate"
   | "season.rollover"
-  | "points.sweep";
+  | "points.sweep"
+  // Lot 15 : compte et sécurité.
+  | "event.notify-nearby"
+  | "security.purge-known-logins";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

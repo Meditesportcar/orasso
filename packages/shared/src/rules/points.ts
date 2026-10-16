@@ -13,6 +13,11 @@ export const POINTS = {
   malus: -10,
 } as const;
 
+/** Parrainages rémunérés au plus par saison et par parrain (S3, lot 15). */
+export const REFERRAL_SEASON_CAP = 20;
+/** Délai après la création du compte pendant lequel un lien d'ami peut encore être rattaché (§ 1.2). */
+export const REFERRAL_WINDOW_MS = 24 * 3_600_000;
+
 export const pointKinds = [
   "participation",
   "staff",

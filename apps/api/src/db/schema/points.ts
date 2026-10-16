@@ -50,9 +50,7 @@ export const pointEntries = pgTable(
   },
   (t) => [
     // Un filleul ne rapporte qu'une fois (lot 15).
-    uniqueIndex("point_entries_referral_subject_key")
-      .on(t.kind, t.subjectUserId)
-      .where(sql`${t.kind} = 'referral'`),
+    uniqueIndex("point_entries_referral_subject_key").on(t.kind, t.subjectUserId).where(sql`${t.kind} = 'referral'`),
     index("point_entries_user_season_idx").on(t.userId, t.seasonId),
     // Jamais deux fois les points d'une même candidature (participation, malus, annulation du malus).
     uniqueIndex("point_entries_application_kind_key")

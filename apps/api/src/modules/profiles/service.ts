@@ -183,10 +183,11 @@ export const profilesService = {
   },
 
   /** Profil d'un autre utilisateur (connecté seulement) : complet si public, réduit si privé (docs/01). */
-  async publicProfile(v: Viewer, pseudo: string): Promise<PublicProfile> {
+  async publicProfile(v: Viewer, pseudo: string, opts: { asOther?: boolean } = {}): Promise<PublicProfile> {
     const p = await profilesRepo.byPseudo(pseudo);
-    if (!p) throw notFound("Profil introuvable");
-    const full = p.visibility === "public" || p.userId === v.user.id;
+    if (!p || p.deletedAt) throw notFound("Profil introuvable");
+    // `asOther` : aperçu « ce que voient les autres » de son propre profil (lot 15).
+    const full = p.visibility === "public" || (p.userId === v.user.id && !opts.asOther);
     const garage = await vehiclesService.garageOf(p.userId);
     return {
       pseudo: p.pseudo,

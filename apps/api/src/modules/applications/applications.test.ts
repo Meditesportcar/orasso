@@ -1,5 +1,5 @@
 import { fromWallTime, HOUR } from "@orasso/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -218,7 +218,8 @@ describe("tri", () => {
     expect(refusal?.body).toContain("Hors thème, Complet");
     // Sans appareil enregistré, la notification part par e-mail (transport « journal »).
     await notificationsService.flush();
-    const mails = await db.select().from(emailOutbox);
+    // Hors e-mails de vérification envoyés à l'inscription (lot 15).
+    const mails = await db.select().from(emailOutbox).where(ne(emailOutbox.template, "email_verification"));
     expect(mails).toHaveLength(3);
     expect(mails.every((m) => m.status === "sent")).toBe(true);
 

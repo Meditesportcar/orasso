@@ -12,6 +12,8 @@ export type AppEnv = {
   Variables: {
     user: AuthUser | null;
     profile: Profile | null;
+    /** Session Better Auth de la requête (liste des sessions : « cet appareil »). */
+    sessionId: string | null;
     /** En-tête `X-Device-Id` de l'appli (attribution des scans, lot 06). */
     deviceId: string | null;
   };
@@ -21,6 +23,7 @@ export type AppEnv = {
 export const loadSession = createMiddleware<AppEnv>(async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   c.set("user", session?.user ?? null);
+  c.set("sessionId", session?.session.id ?? null);
   c.set("profile", session ? ((await profilesRepo.byUserId(session.user.id)) ?? null) : null);
   c.set("deviceId", c.req.header("x-device-id") ?? null);
   await next();

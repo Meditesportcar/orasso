@@ -18,6 +18,8 @@
     "events:simulate-settle": "tsx scripts/simulate-settle.ts"
   },
   "dependencies": {
+    "@better-auth/passkey": "1.7.9",
+    "@better-auth/utils": "0.5.0",
     "@hono/node-server": "^2.1.5",
     "@orasso/shared": "workspace:*",
     "better-auth": "^1.7.9",

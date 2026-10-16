@@ -13,6 +13,7 @@ import { realtime } from "./lib/realtime";
 import { type AppEnv, type AuthUser, loadSession } from "./lib/session";
 import { storage } from "./lib/storage";
 import { accessRoutes } from "./modules/access/routes";
+import { accountRoutes } from "./modules/account/routes";
 import { accountQrRoutes } from "./modules/account-qr/routes";
 import { adminRoutes } from "./modules/admin/routes";
 import { applicationsRoutes } from "./modules/applications/routes";
@@ -120,6 +121,7 @@ app.route("/", accountQrRoutes);
 app.route("/", prosRoutes);
 app.route("/", ticketsRoutes);
 app.route("/", adminRoutes);
+app.route("/", accountRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes.
 realtime.setAuthorizer(async (userId, channel) => {
