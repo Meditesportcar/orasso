@@ -15,6 +15,7 @@ import { storageDir } from "../src/lib/storage";
 import { notificationsService } from "../src/modules/notifications/service";
 import { seedBase } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
+import { seedCommunication } from "./seed/communication";
 import { seedDayJ } from "./seed/day-j";
 import { seedGarage } from "./seed/garage";
 import { seedMessaging } from "./seed/messaging";
@@ -90,6 +91,8 @@ async function main() {
   await seedGarage();
   // Lot 18 : conversations, demande de contact, organisateur joignable.
   await seedMessaging();
+  // Lot 20 : modèles Orasso, annonce et message groupé sur la Nocturne, discussions du staff.
+  await seedCommunication();
 }
 
 try {

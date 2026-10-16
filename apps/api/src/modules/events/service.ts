@@ -50,6 +50,8 @@ import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
+import { announcementsService } from "../communication/announcements";
+import { staffChatsService } from "../communication/staff-chats";
 import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
@@ -397,6 +399,8 @@ export const eventsService = {
       }
       // Staff de l'événement (relances « je suis là », mode staff) : une ligne par membre staff actif.
       await staffService.ensureRows(row, tx);
+      // Discussion du staff de l'événement (lot 20) : créée à la publication.
+      await staffChatsService.ensureEventChat(tx, row);
       after(() => scheduleEventJobs(row));
       // « Près de chez toi » (lot 15) : après les abonnés, centres d'intérêt et rayon.
       if (row.admission !== "invite_only") after(() => deps.jobs.send("event.notify-nearby", { eventId: id }));
@@ -418,6 +422,8 @@ export const eventsService = {
         .returning();
       if (!row) throw notFound("Événement introuvable");
       const cancelled = await applicationsService.cancelAll(tx, row, after);
+      // Fil de l'événement (lot 20) : une entrée « Annulé », une seule fois (verrou + statut contrôlé ci-dessus).
+      await announcementsService.recordStatusChange(tx, id, "cancelled", v.user.id);
       // Billets de visiteurs (lot 14) : les billets valables sont annulés, les paiements en cours abandonnés.
       const cancelledTickets = await tx
         .update(tickets)
@@ -572,7 +578,12 @@ export const eventsService = {
     if (e.status !== "published") throw conflict("conflict", "Événement non publié ou annulé");
     if (e.outlook !== outlook) {
       await withTx(async (tx, after) => {
+        // Verrou et nouveau contrôle (lot 20) : deux changements simultanés n'envoient le statut qu'une fois.
+        const current = await eventsRepo.lockForUpdate(tx, id);
+        if (current.outlook === outlook || current.status !== "published") return;
         await tx.update(events).set({ outlook }).where(eq(events.id, id));
+        // Fil de l'événement : entrée « Maintenu » / « Incertain » (une par changement).
+        await announcementsService.recordStatusChange(tx, id, outlook, v.user.id);
         const body =
           outlook === "uncertain"
             ? `« ${e.title} » passe en « ${eventOutlookLabels.uncertain} » : l'organisateur confirmera.`

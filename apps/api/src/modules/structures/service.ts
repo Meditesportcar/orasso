@@ -38,6 +38,7 @@ import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
+import { staffChatsService } from "../communication/staff-chats";
 import { profilesRepo } from "../profiles/repo";
 
 export type StructureRow = typeof structures.$inferSelect;
@@ -385,6 +386,8 @@ export const structuresService = {
       .update(structureMembers)
       .set(accept ? { status: "active", joinedAt: now() } : { status: "removed" })
       .where(eq(structureMembers.id, m.id));
+    // Discussions du staff (lot 20) : participants à jour.
+    if (accept) await staffChatsService.syncStructure(structureId);
   },
 
   async updateMember(v: Viewer, id: string, userId: string, input: MemberUpdate) {
@@ -398,6 +401,7 @@ export const structuresService = {
       throw forbidden("Seul le propriétaire gère les co-organisateurs");
     }
     await db.update(structureMembers).set(input).where(eq(structureMembers.id, m.id));
+    await staffChatsService.syncStructure(id);
   },
 
   async removeMember(v: Viewer, id: string, userId: string) {
@@ -411,6 +415,7 @@ export const structuresService = {
       throw forbidden("Seul le propriétaire gère les co-organisateurs");
     }
     await db.update(structureMembers).set({ status: "removed" }).where(eq(structureMembers.id, m.id));
+    await staffChatsService.syncStructure(id);
   },
 
   async bans(v: Viewer, id: string) {

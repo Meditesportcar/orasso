@@ -4,6 +4,8 @@ import { env } from "./env";
 import { deps, type JobName } from "./lib/deps";
 import { AppError } from "./lib/errors";
 import { applicationsService } from "./modules/applications/service";
+import { groupMessagesService } from "./modules/communication/group-messages";
+import { staffChatsService } from "./modules/communication/staff-chats";
 import { eventJobs } from "./modules/events/jobs";
 import { nearbyService } from "./modules/events/nearby";
 import { notificationsService } from "./modules/notifications/service";
@@ -44,6 +46,11 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "certification.sweep": () => certificationService.sweep(),
   // Lot 18 : fichiers de `POST /me/uploads` jamais rattachés depuis plus de 24 h (enregistrement et fichier).
   "uploads.purge": () => uploadsService.purgeExpired(),
+  // Lot 20 : un lot (500) d'un message groupé, la tâche se replanifie tant qu'il reste des destinataires ; fermeture à
+  // J+1 et purge à un an de la discussion du staff d'un événement.
+  "messaging.group-send": (d) => groupMessagesService.sendBatch(d.groupMessageId ?? ""),
+  "event.close-staff-chat": (d) => staffChatsService.closeEventChat(d.eventId ?? "", d.at),
+  "messaging.purge-event-staff": (d) => staffChatsService.purgeEventChat(d.eventId ?? "", d.at),
 };
 
 /**

@@ -14,6 +14,7 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
+import { requireAnnouncementUploader } from "../communication/guards";
 
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 /** Fichiers envoyés mais pas encore rattachés, par personne (bornés sous verrou). */
@@ -81,6 +82,8 @@ export const uploadsService = {
       throw forbidden("Ton compte est suspendu : lecture seule.");
     }
     rateLimit("fileUpload", v.user.id);
+    // Photo d'annonce (lot 20) : seulement un organisateur qui peut publier.
+    if (purpose === "announcement") await requireAnnouncementUploader(v);
     if (file.size === 0) throw validation("Fichier vide");
     if (file.size > MAX_UPLOAD_BYTES) throw new AppError(413, "payload_too_large", "Image de 15 Mo au plus");
     const image = await toWebp(Buffer.from(await file.arrayBuffer()), purpose);
