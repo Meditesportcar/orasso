@@ -25,6 +25,7 @@ import {
   events,
   eventZones,
   profiles,
+  providerProfiles,
   structureBans,
   structureFollows,
 } from "../../db/schema";
@@ -97,6 +98,10 @@ const PASS_REVOCATION: Partial<Record<ApplicationStatus, PassRevokedReason>> = {
 };
 
 async function labelOf(app: ApplicationRow, tx: Tx): Promise<string> {
+  if (app.providerProfileId) {
+    const p = await tx.query.providerProfiles.findFirst({ where: eq(providerProfiles.id, app.providerProfileId) });
+    return p ? `Ton activité « ${p.name} »` : "Ta candidature";
+  }
   if (!app.vehicleId) return "Ta candidature";
   const v = await vehiclesRepo.findFullById(app.vehicleId, tx);
   return v ? vehicleLabel(v) : "Ton véhicule";
@@ -114,6 +119,7 @@ async function waitlistPosition(tx: Tx | typeof db, app: ApplicationRow): Promis
       and(
         eq(applications.eventId, app.eventId),
         eq(applications.status, "waitlisted"),
+        eq(applications.kind, app.kind),
         sql`(${applications.waitlistRank}, ${applications.waitlistedAt}) < (${app.waitlistRank}, ${app.waitlistedAt?.toISOString() ?? null}::timestamptz)`,
       ),
     );
@@ -184,7 +190,12 @@ async function offerNext(tx: Tx, event: EventRow, after: After): Promise<Applica
     const c = await eventsRepo.statusCounts(event.id, tx);
     if (event.capacity - c.accepted - c.offered <= 0) break;
     const next = await tx.query.applications.findFirst({
-      where: and(eq(applications.eventId, event.id), eq(applications.status, "waitlisted")),
+      // Les prestataires ne comptent jamais dans la capacité : leur liste d'attente est manuelle (lot 21).
+      where: and(
+        eq(applications.eventId, event.id),
+        eq(applications.status, "waitlisted"),
+        eq(applications.kind, "vehicle"),
+      ),
       orderBy: [
         sql`${applications.waitlistRank} asc nulls last`,
         asc(applications.waitlistedAt),
@@ -302,7 +313,8 @@ async function decideInTx(
 
   let patch: Partial<typeof applications.$inferInsert> = { decidedAt: t, decidedBy: v.user.id };
   if (to === "accepted") {
-    if (event.capacity !== null) {
+    // Un prestataire est retenu hors capacité (lot 21).
+    if (event.capacity !== null && app.kind === "vehicle") {
       const c = await eventsRepo.statusCounts(eventId, tx);
       // Les offres en cours réservent leur place ; une offre forcée par l'organisateur occupe déjà la sienne.
       const taken = c.accepted + c.offered - (app.status === "offered" ? 1 : 0);
@@ -649,7 +661,13 @@ export const applicationsService = {
       const current = await tx
         .select({ id: applications.id })
         .from(applications)
-        .where(and(eq(applications.eventId, eventId), eq(applications.status, "waitlisted")));
+        .where(
+          and(
+            eq(applications.eventId, eventId),
+            eq(applications.status, "waitlisted"),
+            eq(applications.kind, "vehicle"),
+          ),
+        );
       const set = new Set(current.map((r) => r.id));
       if (ids.length !== set.size || !ids.every((id) => set.has(id)) || new Set(ids).size !== ids.length) {
         throw validation("La liste doit contenir toutes les candidatures en liste d'attente, une fois chacune");

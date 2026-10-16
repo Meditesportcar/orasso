@@ -6,6 +6,7 @@ import type {
   EventStatus,
   RefusalReason,
 } from "../enums";
+import { vendorTypeChoices, vendorTypeLabels } from "../provider";
 
 // Événements : formats, admission, accès du public, statuts, prestataires, règlement, motifs de refus.
 
@@ -43,17 +44,16 @@ export const eventOutlookLabels: Record<EventOutlook, string> = {
   uncertain: "Incertain",
 };
 
+/** « Paiement sur place » (lot 21) : entrée payante sans billetterie en ligne (`paid_external` sans adresse). */
+export const ON_SITE_PAYMENT_LABEL = "Entrée payante · paiement sur place";
+
+/** Entrée du public telle qu'elle s'affiche : le libellé du mode, ou « paiement sur place » sans lien de billetterie. */
+export function publicAccessText(access: EventPublicAccess, externalTicketUrl: string | null | undefined): string {
+  return access === "paid_external" && !externalTicketUrl ? ON_SITE_PAYMENT_LABEL : eventPublicAccessLabels[access];
+}
+
 /** Types de prestataires proposés à la création d'un événement (cases à cocher ; « + » pour en ajouter un autre). */
-export const vendorTypeSuggestions = [
-  "Food truck",
-  "Barbier",
-  "Tatoueur",
-  "Photographe",
-  "Animation",
-  "Vente de pièces",
-  "Detailing",
-  "Boisson",
-] as const;
+export const vendorTypeSuggestions: readonly string[] = vendorTypeChoices.map((c) => vendorTypeLabels[c]);
 
 /**
  * Modèle de règlement proposé par Orasso (docs/01 : « un modèle général proposé par Orasso, et une option de texte

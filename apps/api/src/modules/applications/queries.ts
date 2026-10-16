@@ -2,6 +2,7 @@
 import {
   type ApplicationAlert,
   type ApplicationForTriage,
+  type ApplicationKind,
   canContest,
   contestDeadline,
   type EventCounters,
@@ -23,6 +24,7 @@ import {
   malusContests,
   pointEntries,
   profiles,
+  providerProfiles,
   structureBans,
   user,
   vehicleCategories,
@@ -37,6 +39,7 @@ import { escapeLike } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { pointsService } from "../points/service";
+import { loadProviders, triageView } from "../providers/serializers";
 import { reviewsService } from "../reviews/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleFull, vehicleLabel } from "../vehicles/serializers";
@@ -47,7 +50,7 @@ async function waitlistRanks(eventIds: string[]): Promise<Map<string, number>> {
   const ranks = new Map<string, number>();
   if (!eventIds.length) return ranks;
   const rows = await db
-    .select({ id: applications.id, eventId: applications.eventId })
+    .select({ id: applications.id, eventId: applications.eventId, kind: applications.kind })
     .from(applications)
     .where(and(inArray(applications.eventId, eventIds), eq(applications.status, "waitlisted")))
     .orderBy(
@@ -55,10 +58,12 @@ async function waitlistRanks(eventIds: string[]): Promise<Map<string, number>> {
       asc(applications.waitlistedAt),
       asc(applications.createdAt),
     );
+  // Un rang par file : les prestataires ont leur propre liste d'attente, hors capacité (lot 21).
   const perEvent = new Map<string, number>();
   for (const r of rows) {
-    const n = (perEvent.get(r.eventId) ?? 0) + 1;
-    perEvent.set(r.eventId, n);
+    const key = `${r.eventId}|${r.kind}`;
+    const n = (perEvent.get(key) ?? 0) + 1;
+    perEvent.set(key, n);
     ranks.set(r.id, n);
   }
   return ranks;
@@ -146,6 +151,7 @@ async function toTriage(
   const userIds = [...new Set(rows.map((r) => r.userId))];
   const vehicleRows = await vehiclesRepo.findFullByIds(rows.flatMap((r) => (r.vehicleId ? [r.vehicleId] : [])));
   const vehiclesById = new Map(vehicleRows.map((v) => [v.id, v]));
+  const providersById = await loadProviders(rows.flatMap((r) => (r.providerProfileId ? [r.providerProfileId] : [])));
   const people = await db
     .select({ p: profiles, email: user.email })
     .from(profiles)
@@ -219,8 +225,12 @@ async function toTriage(
     if (banned.has(r.userId)) alerts.push("banned");
     if (v?.unregistered) alerts.push("unregistered");
     const vehicle = v ? vehicleFull(v) : null;
+    const prov = r.providerProfileId ? providersById.get(r.providerProfileId) : undefined;
     return {
       id: r.id,
+      kind: r.kind,
+      provider: prov ? triageView(prov, r.accreditedMedia, withContact) : null,
+      accreditedMedia: r.accreditedMedia,
       status: r.status,
       createdAt: r.createdAt.toISOString(),
       decidedAt: r.decidedAt?.toISOString() ?? null,
@@ -278,7 +288,12 @@ export const applicationsQueries = {
       .from(applications)
       .innerJoin(events, eq(events.id, applications.eventId))
       .where(
-        and(eq(applications.userId, v.user.id), scope === "upcoming" ? gt(events.endsAt, t) : lte(events.endsAt, t)),
+        and(
+          eq(applications.userId, v.user.id),
+          // Les candidatures de prestataire ont leur propre liste (`GET /me/provider-applications`, lot 21).
+          eq(applications.kind, "vehicle"),
+          scope === "upcoming" ? gt(events.endsAt, t) : lte(events.endsAt, t),
+        ),
       )
       .orderBy(scope === "upcoming" ? asc(events.startsAt) : desc(events.startsAt), asc(applications.createdAt));
     return toMine(rows.map((r) => r.a));
@@ -304,7 +319,7 @@ export const applicationsQueries = {
   async triageList(v: Viewer, eventId: string, q: TriageQuery): Promise<Page<ApplicationForTriage>> {
     const event = await eventsRepo.byId(eventId);
     const { withContact } = await triageAccess(v, event);
-    const filters: (SQL | undefined)[] = [eq(applications.eventId, eventId)];
+    const filters: (SQL | undefined)[] = [eq(applications.eventId, eventId), eq(applications.kind, q.kind)];
     if (q.status) filters.push(eq(applications.status, q.status));
     if (q.makeId) filters.push(eq(vehicles.makeId, q.makeId));
     if (q.country) filters.push(eq(vehicleMakes.country, q.country.toUpperCase()));
@@ -324,7 +339,14 @@ export const applicationsQueries = {
     }
     if (q.q) {
       const like = `%${escapeLike(q.q)}%`;
-      filters.push(or(ilike(profiles.pseudo, like), ilike(vehicleMakes.name, like), ilike(vehicleModels.name, like)));
+      filters.push(
+        or(
+          ilike(profiles.pseudo, like),
+          ilike(vehicleMakes.name, like),
+          ilike(vehicleModels.name, like),
+          ilike(providerProfiles.name, like),
+        ),
+      );
     }
     const order = {
       created_at: [asc(applications.createdAt)],
@@ -339,6 +361,7 @@ export const applicationsQueries = {
       .leftJoin(vehicles, eq(vehicles.id, applications.vehicleId))
       .leftJoin(vehicleMakes, eq(vehicleMakes.id, vehicles.makeId))
       .leftJoin(vehicleModels, eq(vehicleModels.id, vehicles.modelId))
+      .leftJoin(providerProfiles, eq(providerProfiles.id, applications.providerProfileId))
       .innerJoin(profiles, eq(profiles.userId, applications.userId))
       .where(and(...filters))
       .orderBy(...order, asc(applications.id))
@@ -353,11 +376,11 @@ export const applicationsQueries = {
   },
 
   /** File une par une : la plus ancienne candidature à trier. */
-  async next(v: Viewer, eventId: string): Promise<ApplicationForTriage | null> {
+  async next(v: Viewer, eventId: string, kind: ApplicationKind = "vehicle"): Promise<ApplicationForTriage | null> {
     const event = await eventsRepo.byId(eventId);
     const { withContact } = await triageAccess(v, event);
     const app = await db.query.applications.findFirst({
-      where: and(eq(applications.eventId, eventId), eq(applications.status, "pending")),
+      where: and(eq(applications.eventId, eventId), eq(applications.status, "pending"), eq(applications.kind, kind)),
       orderBy: [asc(applications.createdAt), asc(applications.id)],
     });
     if (!app) return null;

@@ -4,6 +4,7 @@ export * from "./geo";
 export * from "./grades";
 export * from "./labels.fr";
 export * from "./privacy";
+export * from "./provider";
 export * from "./qr";
 export * from "./roles";
 export * from "./rules";

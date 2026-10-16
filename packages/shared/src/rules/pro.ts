@@ -120,3 +120,38 @@ export function monthBounds(at: Date): { start: Date; end: Date } {
 export function postsRemaining(usedThisMonth: number): number {
   return Math.max(0, PRO_POSTS_PER_MONTH - usedThisMonth);
 }
+
+/**
+ * Date à partir de laquelle une fiche pro sans abonnement actif passe en « fiche de base » (lot 21). Identique à la
+ * fin de la gratuité (`PRO_FREE_UNTIL`) ; l'encaissement des abonnements n'existe pas encore, donc après cette date
+ * tous les pros sont en fiche de base tant que les tarifs ne sont pas décidés (docs/01 « en discussion »).
+ */
+export const PRO_PAID_FROM = PRO_FREE_UNTIL;
+
+/** Abonnement d'un pro : `null` = aucun. (Aucun abonnement payant n'existe en V1 : toujours `null`.) */
+export type ProSubscriptionStatus = { active: boolean } | null;
+
+export type ProVisibility = {
+  /** `true` : fiche complète. */
+  full: boolean;
+  /** Ce qui reste caché au public après la date : remises, publications, statistiques, garage favori, mise en avant. */
+  hidden: { discounts: boolean; posts: boolean; stats: boolean; favoriteGarage: boolean; promotion: boolean };
+  /** Bandeau de la casquette Pro (`null` tant que tout est visible). */
+  banner: string | null;
+};
+
+/**
+ * Visibilité d'une fiche pro (docs/01, lot 21) : avant `PRO_PAID_FROM` tout est visible ; après, sans abonnement actif,
+ * la fiche de base garde nom, activités, ville et badge vérifié, et masque remises, publications, statistiques,
+ * « garage favori » et mise en avant. Le pro lui-même voit le bandeau qui l'explique.
+ */
+export function proVisibility(_pro: unknown, subscription: ProSubscriptionStatus, at: Date): ProVisibility {
+  const full = at < PRO_PAID_FROM || Boolean(subscription?.active);
+  return {
+    full,
+    hidden: { discounts: !full, posts: !full, stats: !full, favoriteGarage: !full, promotion: !full },
+    banner: full
+      ? null
+      : `Fiche de base depuis le ${PRO_FREE_UNTIL_LABEL} : remises, publications, statistiques et mise en avant sont réservées aux pros abonnés.`,
+  };
+}

@@ -5,6 +5,7 @@ export * from "./common";
 export * from "./event";
 export * from "./pro";
 export * from "./profile";
+export * from "./provider";
 export * from "./review";
 export * from "./structure";
 export * from "./ticketing";
