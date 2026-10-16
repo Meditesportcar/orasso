@@ -14,7 +14,7 @@ import {
   type StructureRating,
   type StructureUpdate,
 } from "@orasso/shared";
-import { and, asc, count, eq, gte, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, gte, ilike, isNull, ne, or, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
@@ -33,13 +33,17 @@ import { activeMembership, type OrganizerAccess, requireOrganizer, requirePlatfo
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { addressQuery, geocode } from "../../lib/geocode";
+import { escapeLike } from "../../lib/pagination";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { staffChatsService } from "../communication/staff-chats";
+import { inboxService } from "../messaging/inbox";
+import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
+import { staffRequestsService } from "../staff/requests";
 
 export type StructureRow = typeof structures.$inferSelect;
 
@@ -141,7 +145,7 @@ const slugTaken = async (slug: string) =>
 
 export const structuresService = {
   /** Annuaire public des structures vérifiées (plan du site, page des organisateurs). */
-  async list(limit: number, cursor?: string): Promise<Page<StructureCard>> {
+  async list(limit: number, cursor?: string, search?: string): Promise<Page<StructureCard>> {
     const offset = cursor ? Number(Buffer.from(cursor, "base64url").toString()) || 0 : 0;
     const t = now();
     const upcoming = db
@@ -154,7 +158,13 @@ export const structuresService = {
       .select({ s: structures, n: upcoming.n })
       .from(structures)
       .leftJoin(upcoming, eq(upcoming.structureId, structures.id))
-      .where(and(isNull(structures.deletedAt), eq(structures.verification, "verified")))
+      .where(
+        and(
+          isNull(structures.deletedAt),
+          eq(structures.verification, "verified"),
+          search ? or(ilike(structures.name, `%${escapeLike(search)}%`), ilike(structures.city, `%${escapeLike(search)}%`)) : undefined,
+        ),
+      )
       .orderBy(asc(structures.name), asc(structures.id))
       .limit(limit + 1)
       .offset(offset);
@@ -361,36 +371,82 @@ export const structuresService = {
           .where(sql`lower(${user.email}) = lower(${input.email ?? ""})`)
           .then((r) => r[0]);
     if (!target) throw notFound("Aucun compte Orasso à ce nom");
-    const existing = await db.query.structureMembers.findFirst({
-      where: and(eq(structureMembers.structureId, id), eq(structureMembers.userId, target.userId)),
+    if (target.userId === v.user.id) throw conflict("conflict", "Tu fais déjà partie de cette structure");
+    const s = await structureById(id);
+    // Lot 24 : unicité (une ligne par personne), file bornée, délai après un refus, invitation notifiée à son seul
+    // destinataire. Une demande de staff en attente de cette personne est acceptée d'emblée (même geste).
+    const promoted = await withTx(async (tx, after) => {
+      const existing = await tx.query.structureMembers.findFirst({
+        where: and(eq(structureMembers.structureId, id), eq(structureMembers.userId, target.userId)),
+      });
+      if (existing && existing.status !== "removed" && existing.status !== "requested") {
+        throw conflict("conflict", "Déjà membre ou déjà invité");
+      }
+      if (existing?.status === "requested" && input.role === "staff") {
+        await tx
+          .update(structureMembers)
+          .set({
+            status: "active",
+            staffRoles: input.staffRoles,
+            canDecide: input.canDecide,
+            joinedAt: now(),
+            invitedBy: v.user.id,
+          })
+          .where(eq(structureMembers.id, existing.id));
+        await notificationsService.notify(tx, target.userId, "staff_request_accepted", {
+          title: "Demande de staff acceptée",
+          body: `« ${s.name} » t'a accepté dans son staff. Ton accès et tes rôles sont dans l'onglet Accès.`,
+          data: { structureId: id, screen: "acces" },
+          link: { label: "Ouvrir mon accès", path: "/app/acces" },
+        });
+        after(() => {
+          inboxService.publish(target.userId);
+          notificationsService.kick();
+        });
+        return true;
+      }
+      if (existing?.status !== "requested") await staffRequestsService.beforeInvite(tx, v, id, existing);
+      const values = {
+        role: input.role,
+        staffRoles: input.staffRoles,
+        canDecide: input.canDecide,
+        status: "invited" as const,
+        invitedBy: v.user.id,
+        joinedAt: null,
+      };
+      if (existing) await tx.update(structureMembers).set(values).where(eq(structureMembers.id, existing.id));
+      else await tx.insert(structureMembers).values({ structureId: id, userId: target.userId, ...values });
+      await notificationsService.notify(tx, target.userId, "staff_invitation", {
+        title: `Invitation de « ${s.name} »`,
+        body: `${v.profile.pseudo} t'invite à rejoindre l'équipe de « ${s.name} » (${input.role === "co_organizer" ? "co-organisateur" : "staff"}). Accepte ou refuse depuis ta Boîte.`,
+        data: { structureId: id, screen: "boite" },
+        link: { label: "Voir l'invitation", path: "/app/boite/demandes" },
+      });
+      after(() => {
+        inboxService.publish(target.userId);
+        notificationsService.kick();
+      });
+      return false;
     });
-    if (existing && existing.status !== "removed") throw conflict("conflict", "Déjà membre ou déjà invité");
-    const values = {
-      role: input.role,
-      staffRoles: input.staffRoles,
-      canDecide: input.canDecide,
-      status: "invited" as const,
-      invitedBy: v.user.id,
-      joinedAt: null,
-    };
-    if (existing) await db.update(structureMembers).set(values).where(eq(structureMembers.id, existing.id));
-    else await db.insert(structureMembers).values({ structureId: id, userId: target.userId, ...values });
+    if (promoted) await staffChatsService.syncStructure(id);
     return { userId: target.userId };
   },
 
   async respondToInvitation(v: Viewer, structureId: string, accept: boolean) {
-    const m = await db.query.structureMembers.findFirst({
-      where: and(
-        eq(structureMembers.structureId, structureId),
-        eq(structureMembers.userId, v.user.id),
-        eq(structureMembers.status, "invited"),
-      ),
-    });
-    if (!m) throw notFound("Invitation introuvable");
-    await db
+    // Seul le destinataire répond (la ligne est cherchée par son identifiant de session), une seule fois.
+    const [m] = await db
       .update(structureMembers)
-      .set(accept ? { status: "active", joinedAt: now() } : { status: "removed" })
-      .where(eq(structureMembers.id, m.id));
+      .set(accept ? { status: "active", joinedAt: now() } : { status: "removed", joinedAt: null })
+      .where(
+        and(
+          eq(structureMembers.structureId, structureId),
+          eq(structureMembers.userId, v.user.id),
+          eq(structureMembers.status, "invited"),
+        ),
+      )
+      .returning();
+    if (!m) throw notFound("Invitation introuvable");
+    inboxService.publish(v.user.id);
     // Discussions du staff (lot 20) : participants à jour.
     if (accept) await staffChatsService.syncStructure(structureId);
   },

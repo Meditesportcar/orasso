@@ -50,6 +50,7 @@ import { notificationsService } from "../notifications/service";
 import { loadProviders } from "../providers/serializers";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
+import { shopService } from "./shop";
 
 export type EventStaffRow = typeof eventStaff.$inferSelect;
 
@@ -268,9 +269,15 @@ export const staffService = {
     const t = now();
     assertStaffWindow(event, access);
     const entries = await accessEntries(event, access);
+    // Rôle boutique (lot 24) : billets du public, seulement si la boutique est activée pour cet événement. Un staff
+    // sans ce rôle n'en reçoit jamais (le corps signé ne contient alors ni `tickets` ni `shopEnabled`).
+    const withShop = event.shopEnabled && access.roles.includes("shop");
+    const allTickets = withShop ? await shopService.ticketEntries(event) : [];
     // Delta : `>=` sur le curseur (au milliseconde près) ; une entrée renvoyée deux fois est simplement réécrite.
-    const delta = since ? entries.filter((e) => Date.parse(e.updatedAt) >= since.getTime()) : entries;
-    const cursor = syncCursor(entries);
+    const newer = <T extends { updatedAt: string }>(list: T[]) =>
+      since ? list.filter((e) => Date.parse(e.updatedAt) >= since.getTime()) : list;
+    const delta = newer(entries);
+    const cursor = syncCursor([...entries, ...allTickets]);
     const zones = await db.query.eventZones.findMany({
       where: eq(eventZones.eventId, eventId),
       orderBy: [asc(eventZones.position), asc(eventZones.code)],
@@ -291,6 +298,7 @@ export const staffService = {
       myRoles: access.roles,
       full: !since,
       entries: delta,
+      ...(withShop ? { tickets: newer(allTickets), shopEnabled: true } : {}),
       removedPassIds: [],
       cursor,
       generatedAt: t.toISOString(),

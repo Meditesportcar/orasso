@@ -1,10 +1,20 @@
-import { eventStaffUpdateSchema, presenceSchema, staffSyncQuerySchema } from "@orasso/shared";
+import {
+  eventStaffUpdateSchema,
+  presenceSchema,
+  staffRequestAcceptSchema,
+  staffRequestSchema,
+  staffSyncQuerySchema,
+  ticketScanBatchSchema,
+  visitorEntryBatchSchema,
+} from "@orasso/shared";
 import { Hono } from "hono";
 
 import { validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
-import { body, query, uuidParam } from "../../lib/validate";
+import { body, parse, query, uuidParam } from "../../lib/validate";
+import { staffRequestsService } from "./requests";
 import { staffService } from "./service";
+import { shopService } from "./shop";
 
 const userIdParam = (raw: string | undefined) => {
   const id = raw ?? "";
@@ -29,4 +39,31 @@ export const staffRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     const { since } = query(c, staffSyncQuerySchema);
     return c.json(await staffService.sync(v, uuidParam(c, "id"), since));
+  })
+  // Devenir staff d'une structure (lot 24) : demande du public, réponse de l'organisation.
+  .post("/structures/:id/staff-requests", async (c) => {
+    const v = await requireUser(c);
+    const { message } = await body(c, staffRequestSchema);
+    return c.json(await staffRequestsService.request(v, uuidParam(c, "id"), message), 201);
+  })
+  .post("/structures/:id/members/:userId/accept", async (c) => {
+    const v = await requireUser(c);
+    // Corps facultatif : sans rôles donnés, la personne entre sans rôle et l'organisateur les ajuste ensuite.
+    const input = parse(staffRequestAcceptSchema, await c.req.json().catch(() => ({})));
+    await staffRequestsService.accept(v, uuidParam(c, "id"), userIdParam(c.req.param("userId")), input);
+    return c.body(null, 204);
+  })
+  .post("/structures/:id/members/:userId/decline", async (c) => {
+    const v = await requireUser(c);
+    await staffRequestsService.decline(v, uuidParam(c, "id"), userIdParam(c.req.param("userId")));
+    return c.body(null, 204);
+  })
+  // Rôle boutique (lot 24) : contrôle des billets du public et compteur d'entrées visiteurs.
+  .post("/events/:id/ticket-scans", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await shopService.scanTickets(v, uuidParam(c, "id"), await body(c, ticketScanBatchSchema)));
+  })
+  .post("/events/:id/visitor-entries", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await shopService.addVisitorEntries(v, uuidParam(c, "id"), await body(c, visitorEntryBatchSchema)));
   });

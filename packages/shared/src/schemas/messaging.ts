@@ -122,6 +122,8 @@ export type InboxRequestCounts = {
   /** Lot 19 : demandes reçues par un chef de crew et invitations reçues ; venues en crew à confirmer. */
   crew: number;
   crewConfirmation: number;
+  /** Lot 24 : invitations à rejoindre une structure (staff ou co-organisateur) reçues et pas encore acceptées. */
+  staffInvitation: number;
 };
 
 /** Pastille de la Boîte : conversations qui ont du non lu, et demandes en attente par sorte. */

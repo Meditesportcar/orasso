@@ -69,9 +69,9 @@ const send = (u: TestUser, id: string, body: string) =>
   req(u, "POST", `/conversations/${id}/messages`, { clientId: randomUUID(), body });
 
 describe("envois de fichiers (I1)", () => {
-  it("seulement les usages qui ont un consommateur (message, annonce, logo de crew) ; purge des fichiers jamais rattachés", async () => {
+  it("seulement les usages qui ont un consommateur (message, annonce, logo de crew, photo de main courante) ; purge des fichiers jamais rattachés", async () => {
     const a = await signUp("Alice");
-    for (const purpose of ["provider_photo", "incident", "report"]) {
+    for (const purpose of ["provider_photo", "report"]) {
       expect((await upload(a, purpose)).status).toBe(400);
     }
     const pending = await upload(a, "message");

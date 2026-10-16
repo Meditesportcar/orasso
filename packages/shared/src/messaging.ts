@@ -42,4 +42,6 @@ export const acceptedUploadPurposes = [
   "message",
   "announcement",
   "crew_logo",
+  // Lot 24 : photo de la main courante (consommateur : `fieldService.setIncidentPhoto`).
+  "incident",
 ] as const satisfies readonly UploadPurpose[];

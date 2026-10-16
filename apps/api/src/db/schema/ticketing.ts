@@ -19,6 +19,7 @@ import { signingKeys } from "./access";
 import { user } from "./auth";
 import { bytea, timestamps, tstz } from "./common";
 import { events } from "./events";
+import { devices } from "./profiles";
 import { structures } from "./structures";
 
 export const orderStatuses = ["pending", "paid", "cancelled", "expired", "refunded"] as const;
@@ -119,6 +120,8 @@ export const tickets = pgTable(
     issuedAt: tstz("issued_at").notNull(),
     usedAt: tstz("used_at"),
     usedBy: text("used_by").references(() => user.id, { onDelete: "set null" }),
+    /** Appareil du staff qui a contrôlé le billet (rôle boutique hors ligne, lot 24). */
+    usedByDeviceId: uuid("used_by_device_id").references(() => devices.id, { onDelete: "set null" }),
     cancelledAt: tstz("cancelled_at"),
     ...timestamps,
   },

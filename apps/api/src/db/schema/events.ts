@@ -76,6 +76,8 @@ export const events = pgTable(
     externalTicketUrl: text("external_ticket_url"),
     /** Billetterie Orasso ouverte pour cet événement (deuxième interrupteur, après le réglage général, lot 14). */
     ticketsEnabled: boolean("tickets_enabled").notNull().default(false),
+    /** Rôle « boutique » activé pour cet événement (lot 24) : contrôle des billets du public, compteur d'entrées. */
+    shopEnabled: boolean("shop_enabled").notNull().default(false),
     status: eventStatusEnum("status").notNull().default("draft"),
     outlook: eventOutlookEnum("outlook").notNull().default("maintained"),
     registrationsOpenAt: tstz("registrations_open_at").notNull(),

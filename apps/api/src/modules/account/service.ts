@@ -67,6 +67,7 @@ import { securityMails } from "../security/mails";
 import { isSecondFactor } from "../security/passkey";
 import { securityService } from "../security/service";
 import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
+import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { socialProfile } from "../social/profile";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
 
@@ -409,6 +410,7 @@ export const accountService = {
       photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId)));
       photoKeys.push(...(await anonymizeMessagingForDeletedAccount(tx, userId)));
       await anonymizeCommunicationForDeletedAccount(tx, userId);
+      await anonymizeStaffForDeletedAccount(tx, userId);
       await tx.delete(structureFollows).where(eq(structureFollows.userId, userId));
       await tx.delete(proFollows).where(eq(proFollows.userId, userId));
       await tx

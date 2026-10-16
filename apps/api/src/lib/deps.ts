@@ -36,7 +36,9 @@ export type JobName =
   // staff des événements.
   | "messaging.group-send"
   | "messaging.group-sweep"
-  | "messaging.staff-chats-sweep";
+  | "messaging.staff-chats-sweep"
+  // Lot 24 : positions d'alerte et photos de la main courante à effacer (chaque heure).
+  | "field.sweep";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

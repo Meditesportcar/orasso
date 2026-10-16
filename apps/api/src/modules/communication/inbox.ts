@@ -16,6 +16,7 @@ import { decodeCursor, encodeCursor } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
 import { isMySide, lastMessageOf, resolveAccess, unreadCountOf } from "../messaging/core";
 import { unreadConversationCount } from "../messaging/inbox";
+import { staffRequestsService } from "../staff/requests";
 import { requireStructureReader } from "./guards";
 import { staffChatsService } from "./staff-chats";
 
@@ -26,8 +27,8 @@ export const organizerInboxService = {
     return {
       participantMessages: await unreadConversationCount(v.user.id, { includeStructure: true, structureId }),
       staffDiscussions: await staffChatsService.unreadFor(v, structureId),
-      // Demandes pour devenir staff : lot 24.
-      staffRequests: 0,
+      // Demandes pour devenir staff en attente de réponse (lot 24).
+      staffRequests: await staffRequestsService.pendingRequests(structureId),
     };
   },
 

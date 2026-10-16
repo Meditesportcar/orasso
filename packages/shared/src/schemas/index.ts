@@ -11,6 +11,7 @@ export * from "./pro";
 export * from "./profile";
 export * from "./provider";
 export * from "./review";
+export * from "./shop";
 export * from "./search";
 export * from "./social";
 export * from "./structure";
