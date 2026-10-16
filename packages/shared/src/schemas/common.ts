@@ -24,6 +24,11 @@ export const errorCodes = [
   // Lot 17 : amis.
   "friendship_exists",
   "already_friends",
+  // Lot 18 : messagerie.
+  "not_friends",
+  "contact_request_exists",
+  "use_direct",
+  "conversation_closed",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

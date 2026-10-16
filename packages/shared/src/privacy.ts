@@ -4,7 +4,7 @@
 // identifiant. Partagé par l'API, le site et l'appli (`beforeSend`, `beforeSendTransaction`, `beforeBreadcrumb`).
 
 const SENSITIVE_KEYS =
-  /^(plate|plate_?normalized|phone|e-?mail|email|password|token|totp_?code|body|cookie|set-cookie|authorization|x-forwarded-for|x-real-ip|ip_address)$/i;
+  /^(plate|plate_?normalized|phone|e-?mail|email|password|token|totp_?code|body|cookie|set-cookie|authorization|sec-websocket-protocol|x-forwarded-for|x-real-ip|ip_address)$/i;
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 

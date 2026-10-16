@@ -2,6 +2,7 @@ export * from "./affinity";
 export * from "./applicationTransitions";
 export * from "./garage";
 export * from "./lock";
+export * from "./messaging";
 export * from "./misc";
 export * from "./notifications";
 export * from "./points";

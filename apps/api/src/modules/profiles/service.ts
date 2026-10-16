@@ -19,6 +19,8 @@ import { conflict, notFound, validation } from "../../lib/errors";
 import type { AuthUser, Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
+import { twoFactorOk } from "../messaging/core";
+import { inboxService } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
 import { personasOf } from "./personas";
 import { type Profile, profilesRepo } from "./repo";
@@ -157,8 +159,8 @@ export const profilesService = {
         unreadNotifications: unread,
       },
       personas: await personasOf(v),
-      // La Boîte arrive au lot 18 : aucun message à compter avant.
-      unreadInbox: 0,
+      // Pastille de la Boîte (lot 18) : conversations avec du non lu + demandes en attente.
+      unreadInbox: await inboxService.total(v.user.id, { includeStructure: twoFactorOk(v.session?.secondFactor) }),
     };
   },
 

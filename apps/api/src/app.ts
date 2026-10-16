@@ -8,6 +8,7 @@ import { auth } from "./auth";
 import { db } from "./db/client";
 import { user } from "./db/schema";
 import { env } from "./env";
+import { hasSecondFactor } from "./lib/access";
 import { AppError, errorResponse, notFound } from "./lib/errors";
 import { realtime } from "./lib/realtime";
 import { type AppEnv, type AuthUser, loadSession } from "./lib/session";
@@ -21,6 +22,7 @@ import { checkinsRoutes } from "./modules/checkins/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { fieldRoutes } from "./modules/field/routes";
+import { messagingRoutes } from "./modules/messaging/routes";
 import { notificationsRoutes } from "./modules/notifications/routes";
 import { pointsRoutes } from "./modules/points/routes";
 import { profilesRepo } from "./modules/profiles/repo";
@@ -34,6 +36,7 @@ import { socialRoutes } from "./modules/social/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { structuresRoutes } from "./modules/structures/routes";
 import { ticketsRoutes } from "./modules/tickets/routes";
+import { uploadsRoutes } from "./modules/uploads/routes";
 import { garageRoutes } from "./modules/vehicles/garage-routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { weatherRoutes } from "./modules/weather/routes";
@@ -150,14 +153,23 @@ app.route("/", adminRoutes);
 app.route("/", accountRoutes);
 app.route("/", weatherRoutes);
 app.route("/", socialRoutes);
+app.route("/", uploadsRoutes);
+app.route("/", messagingRoutes);
 app.route("/", searchRoutes);
 
-// Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes.
-realtime.setAuthorizer(async (userId, channel) => {
+// Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes, avec la preuve de second facteur de la
+// session qui a ouvert la connexion (sans elle, les organisateurs perdaient le tri en direct depuis le lot 15).
+realtime.setAuthorizer(async (userId, channel, ctx) => {
   const u = await db.query.user.findFirst({ where: eq(user.id, userId) });
   const profile = await profilesRepo.byUserId(userId);
   if (!u || !profile) return false;
-  return eventsService.canSubscribe({ user: u as AuthUser, profile }, channel);
+  const viewer = { user: u as AuthUser, profile, session: { secondFactor: ctx.secondFactor } };
+  // Revérification (30 s) d'un super admin : ses droits ne dépendent que du second facteur ; on n'écrit pas une ligne
+  // `structure.view_as` du journal d'administration toutes les 30 s (seulement au premier abonnement).
+  if (ctx.revalidation && profile.platformRole === "super_admin") {
+    return /^event:[0-9a-f-]{36}:(triage|live|access)$/.test(channel) && (env.DEV_SKIP_2FA || hasSecondFactor(viewer));
+  }
+  return eventsService.canSubscribe(viewer, channel);
 });
 
 export type App = typeof app;

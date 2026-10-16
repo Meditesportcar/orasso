@@ -5,6 +5,7 @@ import { gradeLabels, socialLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { MessageButton } from "@/features/boite/MessageButton";
 import { FriendButton } from "@/features/social/FriendButton";
 import { api } from "@/lib/api";
 import { formatDay, formatHour } from "@/lib/format";
@@ -86,11 +87,9 @@ export default function UserProfile() {
             primary
             onChanged={() => void profile.reload()}
           />
-          {/* Messagerie (lot 18) et signalement (lot 32) : visibles, désactivés jusque-là. */}
+          {/* Messagerie (lot 18) : ami → conversation, sinon demande de contact. Signalement : lot 32 (désactivé). */}
           <View style={styles.row}>
-            <Button variant="secondary" icon="chat" disabled>
-              {socialLabels.messageSoon}
-            </Button>
+            <MessageButton userId={p.userId} pseudo={p.pseudo} />
             <Button variant="secondary" icon="alert" disabled>
               {socialLabels.reportSoon}
             </Button>

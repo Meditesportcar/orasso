@@ -1,0 +1,57 @@
+// Messagerie et Boîte (lot 18) : libellés d'interface (appli et site).
+
+export const messagingLabels = {
+  inbox: "Boîte",
+  messages: "Messages",
+  requests: "Demandes",
+  noConversations: "Aucune conversation pour l'instant. Écris à un ami depuis son profil, ou contacte un organisateur.",
+  noRequests: "Aucune demande en attente.",
+  message: "Message",
+  send: "Envoyer",
+  photo: "Photo",
+  placeholder: "Écrire un message…",
+  sending: "Envoi…",
+  retry: "Réessayer",
+  notSent: "Non envoyé : nouvel essai dès que le réseau revient.",
+  deleted: "Message supprimé",
+  deleteMessage: "Supprimer le message",
+  deleteConfirm: "Supprimer ce message pour tout le monde ?",
+  report: "Signaler",
+  reportSoon: "Signaler · bientôt",
+  readBy: (pseudos: string[]) => `Lu par ${pseudos.join(", ")}`,
+  read: "Lu",
+  deletedAccount: "Compte supprimé",
+  byPseudo: (structure: string, pseudo: string) => `${structure} · par ${pseudo}`,
+  olderMessages: "Messages plus anciens",
+  today: "Aujourd'hui",
+  closeConversation: "Fermer",
+  viewProfile: "Voir le profil",
+  openImage: "Agrandir la photo",
+  closeImage: "Fermer la photo",
+  imageTooLarge: "Photo trop lourde (15 Mo au plus).",
+  contactOrganizer: "Contacter l'organisateur",
+  structureSuspended: "Cette structure est suspendue.",
+  contactRequest: "Demande de contact",
+  contactRequestHint:
+    "Vous n'êtes pas amis : ton message part en demande de contact, rangée à part. Une seule demande est possible.",
+  contactRequestPlaceholder: "Présente-toi et dis pourquoi tu écris…",
+  contactRequestSend: "Envoyer la demande",
+  contactRequestSent: (pseudo: string) => `Demande de contact envoyée à ${pseudo}`,
+  contactRequestFrom: "Demande de contact",
+  friendRequestFrom: "Demande d'ami",
+  accept: "Accepter",
+  decline: "Refuser",
+  pendingOut: "Demande envoyée",
+  writeBlocked: {
+    not_friends:
+      "Vous n'êtes plus amis : la conversation reste lisible. Pour écrire, envoie une demande d'ami ou de contact.",
+    closed: "Cette conversation est fermée : plus de nouveaux messages.",
+    suspended: "Ton compte est suspendu : lecture seule.",
+    account_deleted: "Ce compte a été supprimé : la conversation reste lisible.",
+    two_factor: "Double authentification obligatoire pour répondre au nom de la structure.",
+    structure_suspended: "Cette structure est suspendue : la conversation reste lisible.",
+  },
+} as const;
+
+/** Libellés des messages `system` (code dans `body`) ; les lots 19 et 20 ajoutent les leurs. */
+export const systemMessageLabels: Record<string, string> = {};

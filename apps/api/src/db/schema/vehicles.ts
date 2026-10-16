@@ -38,7 +38,7 @@ export const vehicleMakes = pgTable(
     isOther: boolean("is_other").notNull().default(false),
     ...timestamps,
   },
-  // Lot 29 : recherche par morceau de nom, voir la migration 0028_search_extension.
+  // Lot 29 : recherche par morceau de nom, voir la migration 0029_search_extension.
   (t) => [index("vehicle_makes_name_trgm_idx").using("gin", t.name.op("gin_trgm_ops"))],
 );
 
