@@ -28,8 +28,8 @@ async function linkFromMail(to: string, path: string, since: number): Promise<st
 }
 
 /** Un e-mail dont le sujet contient `subject` est-il parti vers `to` depuis `since` ? */
-async function mailSent(to: string, subject: string, since: number): Promise<boolean> {
-  for (let i = 0; i < 30; i++) {
+async function mailSent(to: string, subject: string, since: number, tries = 30): Promise<boolean> {
+  for (let i = 0; i < tries; i++) {
     for (const name of readdirSync(MAIL_DIR)) {
       const file = resolve(MAIL_DIR, name);
       if (statSync(file).mtimeMs < since - 1000) continue;
@@ -139,7 +139,9 @@ test("connexion depuis un autre navigateur → e-mail « nouvelle connexion »",
   await b.ctx.close();
 });
 
-test("clé d'accès créée sur /app/securite → la double authentification n'est plus exigée", async ({ browser }) => {
+test("clé d'accès : mot de passe seul insuffisant, connexion par la clé → double authentification prouvée", async ({
+  browser,
+}) => {
   const s = unique();
   const email = `cle-${s}@orasso.test`;
   const { ctx, page } = await newPage(browser);
@@ -171,13 +173,29 @@ test("clé d'accès créée sur /app/securite → la double authentification n'e
   await page.getByRole("button", { name: "Ajouter une clé d'accès" }).click();
   await expect(page.getByTestId("passkey-row")).toHaveCount(1);
   await expect(page.getByTestId("passkey-row")).toContainText("Téléphone de test");
-  expect((await apiCall<{ twoFactorRequired: boolean }>(cookie, "GET", "/me")).data.twoFactorRequired).toBe(false);
+  // Clé enregistrée, mais session ouverte par mot de passe : la double authentification n'est pas prouvée.
+  type MeHint = { twoFactorRequired: boolean; twoFactorHint: string | null };
+  expect((await apiCall<MeHint>(cookie, "GET", "/me")).data).toMatchObject({
+    twoFactorRequired: true,
+    twoFactorHint: "passkey_sign_in",
+  });
+  await page.goto("/app/securite");
+  await expect(page.getByTestId("passkey-sign-in-needed")).toBeVisible();
 
-  // Connexion par la clé, sans mot de passe.
+  // Connexion par la clé, sans mot de passe : la session prouve le second facteur.
   await page.getByRole("button", { name: "Déconnexion" }).first().click();
   await page.goto("/connexion?retour=/app/moi");
   await page.getByRole("button", { name: "Se connecter avec une clé d'accès" }).click();
-  await page.waitForURL(/\/app\/moi/);
+  // Le chemin exact (et non « /app/moi » contenu dans ?retour= de la page de connexion).
+  await page.waitForURL((u) => u.pathname === "/app/moi");
+  const sessionCookie = (await ctx.cookies())
+    .filter((c) => c.name === "better-auth.session_token")
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
+  const me = (await apiCall<MeHint>(sessionCookie, "GET", "/me")).data;
+  expect(me).toMatchObject({ twoFactorRequired: false, twoFactorHint: null });
+  await page.goto("/app/securite");
+  await expect(page.getByTestId("passkey-sign-in-needed")).toHaveCount(0);
   await ctx.close();
 });
 
@@ -196,7 +214,12 @@ test("suppression du compte depuis /app/moi → anonymisé, connexion impossible
   await zone.getByText("Je comprends que la suppression est définitive.").click();
   await zone.getByRole("button", { name: "Supprimer mon compte" }).click();
   await page.waitForURL((u) => u.pathname === "/");
-  expect(await mailSent(email, "Ton compte Orasso est supprimé", since)).toBe(true);
+  // L'e-mail de confirmation est parti avant l'anonymisation (vérifié par les tests de l'API) ; ensuite, plus aucune
+  // copie du transport « journal » ne garde l'adresse supprimée.
+  expect(await mailSent(email, "Ton compte Orasso est supprimé", since, 2)).toBe(false);
+  // Plus de session dans ce navigateur.
+  await page.goto("/app/acces");
+  await expect(page).toHaveURL(/\/connexion/);
   const retry = await apiCall(null, "POST", "/auth/sign-in/email", { email, password: "motdepasse-e2e-123" });
   expect(retry.status).toBe(401);
   await ctx.close();

@@ -377,7 +377,10 @@ describe("« près de chez toi » : exclusions", () => {
     const fan = await signUp("Fan_66");
     const banni = await signUp("Banni_66");
     for (const u of [fan, banni]) {
-      await db.update(profiles).set({ departments: ["66"], radiusKm: 100 }).where(eq(profiles.userId, u.id));
+      await db
+        .update(profiles)
+        .set({ departments: ["66"], radiusKm: 100 })
+        .where(eq(profiles.userId, u.id));
       await db.insert(profileInterests).values({ userId: u.id, categoryId: ref.jdm.id });
     }
     await db.insert(structureBans).values({ structureId: s.id, userId: banni.id, createdBy: orga.id });

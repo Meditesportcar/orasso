@@ -41,7 +41,7 @@ describe("Sentry / GlitchTip (lot 15)", () => {
       ],
       exception: {
         values: [
-          { value: 'duplicate key value violates unique constraint : Key (email)=(jean@exemple.fr) already exists.' },
+          { value: "duplicate key value violates unique constraint : Key (email)=(jean@exemple.fr) already exists." },
           { value: "Envoi impossible à marie@exemple.fr" },
         ],
       },
