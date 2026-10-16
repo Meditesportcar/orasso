@@ -139,12 +139,12 @@
 .s-actions > * {
   flex: 1 1 auto;
 }
-.s-actions > .s-grow {
-  flex: 1 1 220px;
-}
 .s-grow {
   flex: 1 1 0;
   min-width: 0;
+}
+.s-actions > .s-grow {
+  flex: 1 1 220px;
 }
 .s-error {
   margin: 0;
@@ -693,7 +693,8 @@
   height: 18px;
   border-radius: var(--radius-pill);
   background: var(--accent);
-  box-shadow: var(--neon-accent);
+  /* Halo atténué : le néon moutarde de la page est celui du bouton « Candidater » (un seul par écran, lot 12). */
+  box-shadow: var(--neon-accent-soft);
 }
 .s-vehicles {
   display: grid;
