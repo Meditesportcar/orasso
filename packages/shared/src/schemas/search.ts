@@ -2,6 +2,7 @@
 import { z } from "zod";
 
 import type { Grade } from "../grades";
+import type { CrewCard } from "./crews";
 import type { EventCard } from "./event";
 import type { ProCard } from "./pro";
 import type { PersonCard } from "./social";
@@ -29,13 +30,8 @@ export type SearchVehicleHit = {
   owner: { userId: string; pseudo: string; avatarUrl: string | null; grade: Grade };
 };
 
-/** Un crew trouvé (lot 19 : le registre de sources de recherche l'alimente). */
-export type SearchCrewHit = {
-  slug: string;
-  name: string;
-  logoUrl: string | null;
-  membersCount: number;
-};
+/** Un crew trouvé : la carte du lot 19 (nom, logo, département, nombre de membres), jamais la liste des membres. */
+export type SearchCrewHit = CrewCard;
 
 export type SearchResults = {
   q: string;

@@ -157,6 +157,8 @@
   - API : migration `0033_invitations`, module `invitations`, tâche `event.high-grade-preview`. Seed : « Soirée partenaires » (privée, Kenji retenu, Nina en attente, une adresse e-mail) ; hauts grades sur « Expo Rivesaltes ».
   - Vérifié : voir l'entrée du lot 25 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-25-captures\`.
 
+- **Recherche et Explorer, seconde passe : crews (lot 29, 17/10/2026)** : les crews sont dans `GET /search` (source `modules/crews/search-source.ts`, réutilise la recherche du lot 19) et dans l'écran de recherche de l'appli ; le segment « Personnes et crews » (site et appli) n'a plus qu'un champ et un filtre de département pour les deux. Aucune migration.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).

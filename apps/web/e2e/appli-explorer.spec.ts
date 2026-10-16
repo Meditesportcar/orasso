@@ -62,6 +62,8 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
       timeout: 30_000,
     });
     await shot(page, `03-recherche-rivesaltes-${theme}`);
+    await page.getByTestId("search-q").fill("drift");
+    await expect(page.getByTestId("crew-row").filter({ hasText: "Roussillon Drift" })).toBeVisible({ timeout: 30_000 });
     // « Voir tout » : plus de cinq événements pour « de ».
     await page.getByTestId("search-q").fill("de");
     await page.getByTestId("see-all-evenements").click({ timeout: 30_000 });
