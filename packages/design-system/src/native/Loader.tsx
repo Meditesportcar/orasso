@@ -40,7 +40,9 @@ const windowPolygons: Point[][] = brandArt.windowPath
       }),
   );
 
+// Appelée par useAnimatedProps sur le fil graphique : doit être un worklet (sinon plantage natif au démarrage).
 function windowPathAt(dx: number): string {
+  "worklet";
   return windowPolygons
     .map((poly) => `${poly.map(([px, py], i) => `${i === 0 ? "M" : "L"}${px + dx} ${py}`).join(" ")}Z`)
     .join("");
