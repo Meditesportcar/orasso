@@ -647,6 +647,45 @@ Lots 07, 09, 10 consomment `packages/shared/api` (chemins, schémas, types) ; au
 - Sentry / GlitchTip : `SENTRY_DSN` (API), `VITE_SENTRY_DSN` (site), `EXPO_PUBLIC_SENTRY_DSN` (appli) ; rien sans DSN.
 - Appli : dépendances natives de la suite posées (`@sentry/react-native`, `expo-location` au premier plan, `@maplibre/maplibre-react-native`, `expo-sharing`, `expo-file-system`) ; un nouvel APK est nécessaire. Les écrans Moi de l'appli viennent au lot 16.
 
+**Sécurité du compte : audit des routes de Better Auth (lot 15, relecture finale).** better-auth 1.7.9 avec `twoFactor`, `bearer`, `passkey` expose 45 routes HTTP sous `/api/auth`. Un seul garde, le middleware Hono `modules/security/auth-guard.ts`, monté devant le handler (`app.ts`) : il résout la session par `auth.api.getSession({ headers })` (cookie **et** jeton porteur), refuse toute route non classée (404) et applique la règle des facteurs. Les crochets de Better Auth (`auth-hooks.ts`) ne gardent rien : ils posent la preuve (`session.second_factor`), envoient les alertes et révoquent. Un test (`factors.test.ts`) échoue si une route exposée n'est pas classée. Règle « facteur » : si le compte a déjà un facteur (TOTP activé ou clé), la session doit en prouver un (`second_factor` ∈ {`passkey`, `totp`}) ; sinon (premier facteur), session de moins de 24 h.
+
+| Route | Session créée ou recréée | `second_factor` posé | Effet sur un facteur ou un secret | Règle du garde |
+|---|---|---|---|---|
+| `POST /sign-up/email` | oui | nul | — | publique |
+| `POST /sign-in/email` | oui (supprimée par le plugin si code requis) | nul ; `totp` si appareil de confiance | — | publique |
+| `POST /sign-in/social`, `GET\|POST /callback/:id` | oui (Google / Apple inactifs) | nul | — | publique |
+| `POST /sign-out` | supprime | — | — | publique |
+| `GET\|POST /get-session` | — | — | lit la session (sans jeton d'autres sessions) | publique |
+| `GET /verify-email` | non (`autoSignInAfterVerification: false`) | — | — | publique |
+| `POST /send-verification-email` | non | — | — | publique |
+| `POST /request-password-reset`, `GET /reset-password/:token` | non | — | jeton par e-mail | publique |
+| `POST /reset-password` | supprime toutes les sessions | — | mot de passe changé, appareils de confiance oubliés | publique (jeton) |
+| `GET /passkey/generate-authenticate-options` | non | — | — | publique |
+| `POST /passkey/verify-authentication` | oui | `passkey` | — | publique ; vérification de l'utilisateur (bit UV) exigée |
+| `GET /error`, `GET /ok`, `GET /delete-user/callback` | non | — | — (suppression Better Auth non activée) | publique |
+| `POST /change-password` | recrée (autres révoquées) | reporté de la session courante | mot de passe, appareils de confiance oubliés | session |
+| `POST /revoke-session`, `/revoke-sessions`, `/revoke-other-sessions` | supprime | — | — | session |
+| `GET /passkey/list-user-passkeys` | non | — | liste ses clés (publiques) | session |
+| `POST /passkey/update-passkey` | non | — | renomme une clé | session |
+| `GET /passkey/generate-register-options` | non | — | prépare l'ajout d'une clé | **facteur** |
+| `POST /passkey/verify-registration` | non (`createSession: true` refusé) | — | **ajoute** une clé | **facteur** |
+| `POST /passkey/delete-passkey` | non | — | **retire** une clé | **facteur** |
+| `POST /two-factor/enable` | non (sauf option désactivée) | — | crée le secret TOTP et les codes de secours (non vérifiés) | **facteur** |
+| `POST /two-factor/get-totp-uri` | non | — | **révèle** le secret TOTP | **facteur** |
+| `POST /two-factor/generate-backup-codes` | non | — | **nouveaux** codes de secours | **facteur** |
+| `POST /two-factor/disable` | recrée | reporté | **retire** le TOTP, appareils de confiance oubliés | **facteur** |
+| `POST /two-factor/verify-totp`, `/verify-backup-code` | oui (étape de connexion, ou activation) | `totp` | **active** le TOTP si la ligne n'est pas vérifiée | sans session : plugin (essais comptés) ; avec session : 5 essais / 15 min, et règle **facteur** si activation |
+| `POST /two-factor/send-otp`, `/verify-otp` | — | — | OTP par e-mail non configuré | **refusée** |
+| `POST /update-session` | — | — | — | **refusée** |
+| `GET /list-sessions` | — | — | renverrait les jetons des sessions | **refusée** (`/api/me/sessions`) |
+| `POST /update-user` | — | — | — | **refusée** (`/api/me/profile`) |
+| `POST /change-email` | — | — | changerait l'identifiant du compte | **refusée** |
+| `POST /delete-user` | — | — | — | **refusée** (`DELETE /api/me`) |
+| `POST /verify-password` | — | — | oracle du mot de passe | **refusée** |
+| `POST /link-social`, `/unlink-account`, `GET /list-accounts`, `GET /account-info`, `POST /get-access-token`, `POST /refresh-token` | — | — | comptes et jetons OAuth (Google / Apple inactifs) | **refusées** |
+
+Sous le middleware avec la règle « facteur » : 7 routes (`generate-register-options`, `verify-registration`, `delete-passkey`, `two-factor/enable`, `get-totp-uri`, `generate-backup-codes`, `two-factor/disable`) + 2 routes de vérification de code en activation ; 14 routes refusées ; 22 publiques (16) ou de session (6) (vérification de l'utilisateur pour la connexion par clé).
+
 ---
 
 ## 8. Points non tranchés par les docs — choix retenus
