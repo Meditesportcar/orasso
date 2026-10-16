@@ -1,8 +1,10 @@
 // Les cinq onglets du passionné : Accueil · Explorer · Accès (au centre, en couleur) · Garage · Boîte.
-import { TabBar } from "@orasso/design-system/native";
+import { TabBar, tabSets } from "@orasso/design-system/native";
 import { Tabs } from "expo-router";
 import type { ComponentProps } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { useSession } from "@/lib/session";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
@@ -12,10 +14,13 @@ const routeOf = Object.fromEntries(Object.entries(tabIds).map(([route, id]) => [
 
 function AppTabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
+  const { me } = useSession();
   const current = state.routes[state.index]?.name as keyof typeof tabIds | undefined;
+  // Pastille de la Boîte (lot 18) : conversations avec du non lu + demandes en attente (`GET /me` → `unreadInbox`).
+  const tabs = tabSets.fan.map((tab) => (tab.id === "inbox" ? { ...tab, dot: (me?.unreadInbox ?? 0) > 0 } : tab));
   return (
     <TabBar
-      set="fan"
+      tabs={tabs}
       active={current ? tabIds[current] : "home"}
       safeBottom={insets.bottom}
       onSelect={(id) => {
