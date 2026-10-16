@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
 import { breakTitle, formatDay, formatDayHour, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
@@ -35,6 +36,8 @@ export default function EventPage() {
   const event = useApi(() => api.eventBySlug(slug), [slug, status], { enabled: status !== "loading" });
   const categories = useApi(() => api.categories(), [], { cacheKey: "ref.categories", enabled: status === "in" });
   const reviews = useApi(() => api.eventReviews(slug), [slug, status], { enabled: status !== "loading" });
+  // Météo à l'approche (lot 28) : seulement dans les 7 jours avant l'événement ; jamais bloquante.
+  const weather = useApi(() => api.eventWeather(slug), [slug], { enabled: status !== "loading" });
   const e = event.data;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/explorer" : "/auth"));
@@ -111,6 +114,8 @@ export default function EventPage() {
         ]}
         active={0}
       />
+
+      {weather.data ? <WeatherWidget summary={weather.data.summary} attribution={weather.data.attribution} /> : null}
 
       {wanted.length > 0 ? (
         <Plate style={styles.info}>

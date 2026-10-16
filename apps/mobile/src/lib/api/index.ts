@@ -10,6 +10,7 @@ import { securityApi } from "./security";
 import { settingsApi } from "./settings";
 import { socialApi } from "./social";
 import { staffApi } from "./staff";
+import { weatherApi } from "./weather";
 
 export type { NotificationItem } from "./account";
 export { authApi } from "./auth";
@@ -21,6 +22,7 @@ export const api = {
   ...eventsApi,
   ...applicationsApi,
   ...staffApi,
+  ...weatherApi,
   ...socialApi,
   ...settingsApi,
   ...securityApi,

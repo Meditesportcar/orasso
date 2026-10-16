@@ -1416,3 +1416,60 @@
   padding: var(--space-4);
   color: var(--plate-ink);
 }
+
+/* Météo (lot 28) : une icône du kit, les températures, le détail, l'attribution. Aucune couleur propre (pas de vert,
+   pas de néon) : tout vient des jetons. */
+.wx {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.wx__main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.wx__temp {
+  font-size: var(--type-title-size);
+  line-height: 1.1;
+}
+.wx__label {
+  font-weight: 700;
+}
+.wx--compact .wx__temp {
+  font-size: var(--type-body-size);
+}
+.wx__days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wx__days li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 64px;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.acc__wx {
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.orga__wx {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.orga__wx > .wx,
+.orga__wx-suggest {
+  flex: 1 1 260px;
+  min-width: 0;
+}

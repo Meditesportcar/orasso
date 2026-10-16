@@ -22,6 +22,8 @@ export type JobName =
   // Lot 15 : compte et sécurité.
   | "event.notify-nearby"
   | "security.purge-known-logins"
+  // Lot 28 : météo des événements.
+  | "weather.refresh"
   // Lot 31 : garage et certification.
   | "plate-transfer.escalate"
   | "certification.sweep";

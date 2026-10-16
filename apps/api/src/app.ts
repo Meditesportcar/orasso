@@ -34,6 +34,7 @@ import { structuresRoutes } from "./modules/structures/routes";
 import { ticketsRoutes } from "./modules/tickets/routes";
 import { garageRoutes } from "./modules/vehicles/garage-routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
+import { weatherRoutes } from "./modules/weather/routes";
 import { ws } from "./ws";
 
 export const app = new Hono<AppEnv>().basePath("/api");
@@ -144,6 +145,7 @@ app.route("/", prosRoutes);
 app.route("/", ticketsRoutes);
 app.route("/", adminRoutes);
 app.route("/", accountRoutes);
+app.route("/", weatherRoutes);
 app.route("/", socialRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes.

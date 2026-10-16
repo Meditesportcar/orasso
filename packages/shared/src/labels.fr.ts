@@ -15,3 +15,4 @@ export * from "./labels/social.fr";
 export * from "./labels/staff.fr";
 export * from "./labels/structures.fr";
 export * from "./labels/vehicles.fr";
+export * from "./labels/weather.fr";

@@ -9,3 +9,4 @@ export * from "./qr";
 export * from "./roles";
 export * from "./rules";
 export * from "./schemas";
+export * from "./weather";

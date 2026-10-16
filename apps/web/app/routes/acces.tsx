@@ -4,6 +4,7 @@ import {
   applicationStatusLabels,
   type ContestStatus,
   contestStatusLabels,
+  type EventWeather,
   eventFormatLabels,
   gradeLabels,
   type MyApplication,
@@ -20,6 +21,7 @@ import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-ro
 import { Countdown } from "../components/Countdown";
 import { Qr } from "../components/Qr";
 import { Stars } from "../components/Stars";
+import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { formatDateTime, formatWhen } from "../lib/format";
 import { badgeFor } from "../lib/status";
@@ -46,6 +48,25 @@ export async function loader({ request }: Route.LoaderArgs) {
         if (res.ok && res.data.payload) passes[a.id] = res.data;
       }),
   );
+  // Météo sur la carte à J−1 (lot 28) : événements retenus qui commencent dans 48 h au plus (cache de l'API, jamais bloquant).
+  const weather: Record<string, EventWeather> = {};
+  await Promise.all(
+    applications
+      .filter(
+        (a) =>
+          !past &&
+          a.status === "accepted" &&
+          new Date(a.event.startsAt).getTime() - Date.now() <= 48 * 3_600_000 &&
+          new Date(a.event.endsAt).getTime() > Date.now(),
+      )
+      .map(async (a) => {
+        const res = await api<EventWeather | null>(
+          request,
+          `/events/by-slug/${encodeURIComponent(a.event.slug)}/weather`,
+        );
+        if (res.ok && res.data) weather[a.id] = res.data;
+      }),
+  );
   const points = past ? await apiOrThrow<MyPoints>(request, "/me/points") : null;
   const me = await requireMe(request);
   const tickets = await api<MyTicket[]>(request, "/me/tickets");
@@ -53,6 +74,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     past,
     applications,
     passes,
+    weather,
     points,
     userId: me.user.id,
     ticketCount: tickets.ok ? tickets.data.filter((t) => t.status === "valid").length : 0,
@@ -90,7 +112,17 @@ export async function action({ request }: Route.ActionArgs) {
   return data({ error: null });
 }
 
-function ApplicationCard({ app, pass, past }: { app: MyApplication; pass?: AccessPass; past: boolean }) {
+function ApplicationCard({
+  app,
+  pass,
+  weather,
+  past,
+}: {
+  app: MyApplication;
+  pass?: AccessPass;
+  weather?: EventWeather;
+  past: boolean;
+}) {
   const busy = useNavigation().state !== "idle";
   const badge = badgeFor(app);
   const confirmWithdraw = (e: React.FormEvent<HTMLFormElement>) => {
@@ -121,6 +153,12 @@ function ApplicationCard({ app, pass, past }: { app: MyApplication; pass?: Acces
           <Chip>{applicationStatusLabels[app.status]}</Chip>
         )}
       </div>
+
+      {weather && (
+        <div className="acc__wx" data-testid="application-weather">
+          <Weather weather={weather} compact />
+        </div>
+      )}
 
       {past && app.checkedInAt && (
         <p className="o-t-caption s-muted">Entrée enregistrée le {formatDateTime(app.checkedInAt)}.</p>
@@ -312,7 +350,7 @@ function ReviewBlock({ app, review, busy }: { app: MyApplication; review: MyRevi
 }
 
 export default function Acces({ loaderData, actionData }: Route.ComponentProps) {
-  const { past, applications, passes, points, sent, userId, ticketCount } = loaderData;
+  const { past, applications, passes, weather, points, sent, userId, ticketCount } = loaderData;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   // Une décision de l'organisateur, une offre ou un pass émis : la page se met à jour sans rechargement.
@@ -364,7 +402,9 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
             : "Aucune candidature à venir. Trouve un événement et candidate avec un véhicule."}
         </p>
       ) : (
-        applications.map((app) => <ApplicationCard key={app.id} app={app} pass={passes[app.id]} past={past} />)
+        applications.map((app) => (
+          <ApplicationCard key={app.id} app={app} pass={passes[app.id]} weather={weather[app.id]} past={past} />
+        ))
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import { garageNotificationTypes } from "./notifications/garage";
 import { pointsNotificationTypes } from "./notifications/points";
 import { socialNotificationTypes } from "./notifications/social";
 import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
+import { weatherNotificationTypes } from "./notifications/weather";
 
 export { journalOnlyNotificationTypes } from "./notifications/social";
 
@@ -108,6 +109,7 @@ export const notificationTypes = {
   ...staffNotificationTypes,
   ...pointsNotificationTypes,
   ...accountNotificationTypes,
+  ...weatherNotificationTypes,
   ...socialNotificationTypes,
   ...garageNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;

@@ -16,8 +16,9 @@ import { describe, expect, it } from "vitest";
 import { accountQrAt, hmacSha1, secondsLeft } from "./accountQr";
 import { authOriginHeader, pickCookie } from "./api/cookies";
 import { breakTitle, dayCountdown, formatDay, formatDayHour, formatDuration, formatHour } from "./format";
-import { jourJClosesAt, jourJOpensAt, jourJState, weatherLabel } from "./jourj";
+import { jourJClosesAt, jourJOpensAt, jourJState } from "./jourj";
 import { qrMatrix, qrPath, qrViewBox } from "./qr";
+import { mergeWeather, temperatureRange } from "./weather";
 
 const nodeHmac: HmacSha1 = (key, message) => new Uint8Array(createHmac("sha1", key).update(message).digest());
 
@@ -110,12 +111,6 @@ describe("Mode jour J : fenêtre d'ouverture", () => {
     expect(jourJOpensAt(winter).toISOString()).toBe("2026-10-23T22:00:00.000Z");
     expect(jourJClosesAt(winter).toISOString()).toBe("2026-10-25T23:00:00.000Z");
   });
-
-  it("météo en français", () => {
-    expect(weatherLabel(0)).toBe("dégagé");
-    expect(weatherLabel(63)).toBe("pluie");
-    expect(weatherLabel(95)).toBe("orage");
-  });
 });
 
 describe("Formats", () => {
@@ -135,6 +130,39 @@ describe("Formats", () => {
   it("titre d'affiche sur deux lignes", () => {
     expect(breakTitle("Nocturne de Canet")).toBe("Nocturne\nde Canet");
     expect(breakTitle("Salon")).toBe("Salon");
+  });
+});
+
+describe("Météo du kit jour J (lot 28)", () => {
+  const weather = {
+    provider: "open-meteo" as const,
+    attribution: "Météo : Open-Meteo",
+    fetchedAt: "2026-10-16T09:00:00Z",
+    summary: {
+      date: "2026-10-17",
+      tempMin: 14,
+      tempMax: 21,
+      precipitationProbability: 70,
+      precipitationMm: 4,
+      windMaxKmh: 30,
+      code: "rain" as const,
+    },
+    days: [],
+  };
+  it("nouvelle réponse de l'API : remplace l'ancienne, y compris « pas de météo » (null)", () => {
+    expect(mergeWeather(weather, null)).toBe(weather);
+    expect(mergeWeather(null, weather)).toBeNull();
+  });
+  it("API injoignable (undefined) : dernière météo connue gardée", () => {
+    expect(mergeWeather(undefined, weather)).toBe(weather);
+    expect(mergeWeather(undefined, null)).toBeNull();
+  });
+  it("ancienne forme d'avant le lot 28 : ignorée", () => {
+    expect(mergeWeather(undefined, { label: "pluie", temperature: 14, at: "2026-10-16T09:00:00Z" })).toBeNull();
+  });
+  it("températures : « 14–21 °C », « 21 °C » si identiques", () => {
+    expect(temperatureRange(weather.summary)).toBe("14–21 °C");
+    expect(temperatureRange({ tempMin: 20.6, tempMax: 21.2 })).toBe("21 °C");
   });
 });
 

@@ -18,3 +18,4 @@ export * from "./staff";
 export * from "./structures";
 export * from "./ticketing";
 export * from "./vehicles";
+export * from "./weather";

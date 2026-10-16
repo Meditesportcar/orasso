@@ -519,6 +519,24 @@ Code : `apps/web/app/` (routes, `layouts/`, `components/`, `lib/`, `styles/site.
 - **Centres de départements approchés** et distance à vol d'oiseau : suffisants à l'échelle du département ; les montagnes (Pyrénées) rallongent les trajets réels.
 - **Permissions Android héritées** : `SYSTEM_ALERT_WINDOW` et `READ/WRITE_EXTERNAL_STORAGE` (≤ Android 12) viennent des réglages par défaut d'Expo, déjà dans les APK précédents ; à retirer (`android.blockedPermissions`) si les stores les questionnent.
 
+### Météo (lot 28)
+- **AS1, licence** : Open-Meteo reste le fournisseur par défaut mais son offre gratuite est réservée à l'usage non commercial. Le fournisseur se choisit par `WEATHER_PROVIDER` (redémarrage de l'API, aucun changement de code ni de l'appli). À trancher avant le 21/06/2027 : `met-norway` (usage commercial permis, CC BY 4.0, **sans probabilité de pluie** dans le `compact` : seuls la pluie en mm et le vent déclenchent « mauvaise météo ») ou l'offre payante Open-Meteo.
+- **Interface** : `WeatherProvider.forecast(lat, lng)` renvoie en un appel les jours (8, aujourd'hui compris) et les heures ; les deux méthodes `daily`/`hourly` du plan n'ont pas de raison d'être séparées (un seul appel HTTP chez les deux fournisseurs).
+- **Stockage** : `event_weather.forecast` ne garde que les jours couvrant l'événement et les heures comprises entre son début et sa fin. Colonnes `lat`/`lng` en plus du plan : la prévision n'est valable que pour la position utilisée ; une adresse modifiée l'invalide sans toucher au service des événements.
+- **Météo de l'événement** : ses heures de début à fin quand on les a (nocturne 19 h – 23 h = la soirée), sinon les jours qu'il couvre ; la pire condition, le pire vent, la pluie cumulée, la plus forte probabilité.
+- **Vent fort** : les codes WMO n'ont pas de vent ; un ciel dégagé, éclairci ou couvert avec un vent ≥ 60 km/h devient « Vent fort » (code `wind`). MET Norway : vent moyen horaire (pas les rafales), converti en km/h.
+- **Suggestion** : réservée par une mise à jour conditionnelle de `suggested_uncertain_at` avant l'envoi (deux passages simultanés n'envoient qu'une fois) ; jamais une fois l'événement commencé. Destinataires : propriétaire et co-organisateurs actifs de la structure. Livraison aux heures calmes (08:00) comme les autres notifications non urgentes.
+- **Rappel de la veille** : la ligne « Météo : … (Open-Meteo) » porte le nom du fournisseur (attribution CC BY) ; omise si la prévision date de plus de 12 h.
+- **Pas d'appel par requête** : `GET /events/by-slug/:slug/weather` ne lit que `event_weather`. `GET /me/weather` remplit à la demande un cache par département (`weather_departments`, 3 h, requêtes simultanées regroupées) : au plus 101 départements × 8 appels par jour, jamais un appel par utilisateur ; le centre du premier département suffit (HS5).
+- **Appli** : le kit du jour J n'appelle plus Open-Meteo depuis le téléphone (c'était le cas depuis le lot 09) mais `GET /events/by-slug/:slug/weather` ; les kits enregistrés avant le lot 28 perdent leur ancienne mention météo jusqu'au prochain rafraîchissement. Bouton « Passer en Incertain » dans le Journal (la page événement côté casquette Organisateur viendra avec le lot 22).
+- **Icônes** : 10 pictogrammes météo ajoutés au jeu (même grille et même trait, aucune couleur propre), consignés dans « Ce qui a changé depuis le gel » du design system.
+- **Seed** : prévisions factices pour Nocturne de Canet (mauvaise), Expo Rivesaltes et Salon Argelès (bonnes) ; une vraie prévision les remplace au premier passage de la tâche.
+
+#### À revoir avec Damien (lot 28)
+- **Fournisseur au passage en commercial** (AS1, avant juin 2027) : Open-Meteo payant ou MET Norway ; MET Norway ne donne pas la probabilité de pluie.
+- **Une publication récente** n'a pas de météo avant le prochain passage de la tâche (jusqu'à 3 h) ; un rafraîchissement immédiat à la publication ou au changement d'adresse est possible (tâche `weather.refresh` avec `eventId`) mais touche le service des événements : laissé de côté.
+- **Seuils S33** (60 %, 5 mm, 60 km/h) : constantes simples, à ajuster selon le terrain (une nocturne sur le port supporte mal le vent).
+
 ### Social (lot 17)
 - **Compte privé trouvable par son pseudo.** Un compte privé reste trouvable par pseudo et par marque + modèle (docs/01 : « Ton compte reste trouvable ») ; il peut recevoir des demandes d'ami de n'importe qui. Si Damien veut un compte privé introuvable, c'est un réglage de plus à décider.
 - **Les organisateurs voient les coordonnées sur le profil** (nom, téléphone, e-mail) des personnes inscrites ou abonnées, comme dans leur tri : l'accès à un profil étant libre pour eux, il faudra tracer les consultations si l'export des participants doit l'être (AS9).

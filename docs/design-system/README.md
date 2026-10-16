@@ -146,3 +146,4 @@ Le prototype cliquable (étape 8), puis le code : l'appli Expo et le site reprod
 ## Ce qui a changé depuis le gel
 
 - 15/10/2026 : version 1 gelée. Aucun changement.
+- 16/10/2026 (lot 28) : dix pictogrammes météo ajoutés au jeu Icons (`weatherClear`, `weatherPartlyCloudy`, `weatherCloudy`, `weatherFog`, `weatherDrizzle`, `weatherRain`, `weatherHeavyRain`, `weatherSnow`, `weatherThunderstorm`, `weatherWind`) : grille de 24 px, trait de 2 px, bouts arrondis, `currentColor`, aucune couleur propre. Raison : « météo à l'approche », jour J et widget de l'Accueil demandent une icône par condition et le README prévoit que le jeu se complète au développement. Aucune autre règle touchée.
