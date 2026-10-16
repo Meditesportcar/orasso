@@ -2,6 +2,8 @@ import { z } from "zod";
 import { type ApplicationStatus, applicationStatusSchema } from "../application";
 import type { EventFormat } from "../enums";
 import {
+  type ApplicationKind,
+  applicationKinds,
   type FilteringOpinion,
   filteringOpinions,
   type RefusalReason,
@@ -10,6 +12,7 @@ import {
 } from "../enums";
 import { type Grade, gradeSchema } from "../grades";
 import { optionalText, pageQuery } from "./common";
+import type { ProviderForTriage } from "./provider";
 import type { MyReview } from "./review";
 import type { VehicleFull, VehiclePublic } from "./vehicle";
 
@@ -60,6 +63,8 @@ export const filteringOpinionSchema = z.object({ opinion: z.enum(filteringOpinio
 
 export const triageQuerySchema = pageQuery.extend({
   status: applicationStatusSchema.optional(),
+  /** Véhicules (défaut) ou prestataires : deux files séparées. */
+  kind: z.enum(applicationKinds).default("vehicle"),
   categoryId: z.uuid().optional(),
   makeId: z.uuid().optional(),
   country: z.string().length(2).optional(),
@@ -70,6 +75,9 @@ export const triageQuerySchema = pageQuery.extend({
   sort: z.enum(["created_at", "waitlist_rank", "year", "pseudo"]).default("created_at"),
 });
 export type TriageQuery = z.infer<typeof triageQuerySchema>;
+
+/** `GET /events/:id/applications/next` : la file des véhicules (défaut) ou celle des prestataires. */
+export const nextQuerySchema = z.object({ kind: z.enum(applicationKinds).default("vehicle") });
 
 export const myApplicationsQuerySchema = z.object({ scope: z.enum(["upcoming", "past"]).default("upcoming") });
 
@@ -114,7 +122,12 @@ export type ApplicationAlert = "duplicatePlate" | "banned" | "unregistered";
 /** Fiche de tri (organisateur) : véhicule complet avec la plaque, candidat, historique, alertes. */
 export type ApplicationForTriage = {
   id: string;
+  kind: ApplicationKind;
   status: ApplicationStatus;
+  /** Prestataire : sa fiche (le véhicule est alors `null`). */
+  provider: ProviderForTriage | null;
+  /** Accréditation « média officiel » (photographe retenu). */
+  accreditedMedia: boolean;
   createdAt: string;
   decidedAt: string | null;
   companions: number;

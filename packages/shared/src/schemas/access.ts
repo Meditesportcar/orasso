@@ -104,8 +104,14 @@ export type AccessListEntry = {
   status: "valid" | "revoked";
   revokedReason: PassRevokedReason | null;
   pseudo: string;
+  /** Véhicule : « Porsche 911 (997) » ; prestataire : « Food truck · La Caravane ». */
   vehicleLabel: string | null;
   vehicleType: VehicleType | null;
+  /** Lot 21 : `provider` = prestataire (pas de plaque ni de catégorie). */
+  kind: "vehicle" | "provider";
+  /** Prestataire : libellé du type (« Food truck ») et nom de l'activité, pour le résultat de scan. */
+  providerType: string | null;
+  providerName: string | null;
   categories: string[];
   /** 3 premiers caractères de la plaque normalisée (recherche hors ligne) ; `null` sans plaque. */
   plateHint: string | null;
@@ -281,6 +287,8 @@ export type LiveCounters = {
   staffPresent: number;
   staffExpected: number;
   alertsOpen: number;
+  /** Prestataires retenus : attendus / arrivés (jamais comptés dans les véhicules ni dans la capacité). */
+  providers: { expected: number; arrived: number };
 };
 
 export const expressInviteSchema = z.object({ email: z.email().max(200) });

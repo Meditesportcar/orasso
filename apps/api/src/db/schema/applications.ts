@@ -25,6 +25,7 @@ import {
 import { user } from "./auth";
 import { timestamps, tstz } from "./common";
 import { eventDays, events, eventZones } from "./events";
+import { providerProfiles } from "./providers";
 import { vehicles } from "./vehicles";
 
 export const applicationKindEnum = pgEnum("application_kind", applicationKinds);
@@ -46,6 +47,10 @@ export const applications = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     kind: applicationKindEnum("kind").notNull().default("vehicle"),
     vehicleId: uuid("vehicle_id").references(() => vehicles.id, { onDelete: "restrict" }),
+    /** Prestataire (`kind = provider`, lot 21) : son profil ; `vehicle_id` est alors nul. */
+    providerProfileId: uuid("provider_profile_id").references(() => providerProfiles.id, { onDelete: "restrict" }),
+    /** Accréditation « média officiel » donnée par l'organisateur à un photographe retenu (par événement, S23). */
+    accreditedMedia: boolean("accredited_media").notNull().default(false),
     /** [préparé] Multi-jours. */
     eventDayId: uuid("event_day_id").references(() => eventDays.id, { onDelete: "set null" }),
     status: applicationStatusEnum("status").notNull(),
@@ -78,6 +83,11 @@ export const applications = pgTable(
     uniqueIndex("applications_active_vehicle_key")
       .on(t.eventId, t.vehicleId)
       .where(sql`${t.status} in ('pending', 'accepted', 'waitlisted', 'offered')`),
+    // Une candidature active par profil prestataire et par événement.
+    uniqueIndex("applications_active_provider_key")
+      .on(t.eventId, t.providerProfileId)
+      .where(sql`${t.status} in ('pending', 'accepted', 'waitlisted', 'offered')`),
+    check("applications_provider_kind_check", sql`${t.kind} <> 'provider' or ${t.providerProfileId} is not null`),
     check("applications_vehicle_kind_check", sql`${t.kind} <> 'vehicle' or ${t.vehicleId} is not null`),
     check("applications_companions_check", sql`${t.companions} between 0 and 9`),
   ],

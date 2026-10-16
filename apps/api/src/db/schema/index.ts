@@ -10,6 +10,7 @@ export * from "./notifications";
 export * from "./points";
 export * from "./profiles";
 export * from "./pros";
+export * from "./providers";
 export * from "./relations";
 export * from "./reviews";
 export * from "./security";

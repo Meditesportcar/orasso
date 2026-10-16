@@ -13,11 +13,13 @@ import {
   lockAt,
   type MyStaffEvent,
   type PassRevokedReason,
+  providerTypeLabel,
   type StaffRole,
   type StaffSync,
   settleAt,
   staffModeClosesAt,
   staffModeOpensAt,
+  type VendorTypeCode,
   wallTime,
 } from "@orasso/shared";
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
@@ -45,6 +47,7 @@ import { signing } from "../../lib/signing";
 import { type Executor, withTx } from "../../lib/tx";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
+import { loadProviders } from "../providers/serializers";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 
@@ -376,6 +379,9 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
     .orderBy(asc(profiles.pseudo), asc(accessPasses.issuedAt));
   const vehicleIds = [...new Set(rows.flatMap((r) => (r.app.vehicleId ? [r.app.vehicleId] : [])))];
   const vehicles = new Map((await vehiclesRepo.findFullByIds(vehicleIds)).map((x) => [x.id, x]));
+  const providers = await loadProviders(
+    rows.flatMap((r) => (r.app.providerProfileId ? [r.app.providerProfileId] : [])),
+  );
   const zoneIds = [...new Set(rows.flatMap((r) => (r.app.zoneId ? [r.app.zoneId] : [])))];
   const zones = new Map(
     (zoneIds.length ? await db.query.eventZones.findMany({ where: inArray(eventZones.id, zoneIds) }) : []).map((z) => [
@@ -399,6 +405,9 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
         pseudo: profile.pseudo,
         vehicleLabel: null,
         vehicleType: null,
+        kind: app.kind,
+        providerType: null,
+        providerName: null,
         categories: [],
         plateHint: null,
         plateHash: null,
@@ -409,14 +418,20 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
         updatedAt: new Date(updatedAt).toISOString(),
       } satisfies AccessListEntry;
     }
+    const prov = app.providerProfileId ? providers.get(app.providerProfileId) : undefined;
+    const provType = prov ? providerTypeLabel(prov.type as VendorTypeCode, prov.customType) : null;
     const entry: AccessListEntry = {
       passId: pass.id,
       applicationId: app.id,
       status: "valid",
       revokedReason: null,
       pseudo: profile.pseudo,
-      vehicleLabel: v ? vehicleLabel(v) : null,
+      // Prestataire : « Food truck · La Caravane » (§ 6.2) ; l'écran de scan dit « Prestataire · Food truck ».
+      vehicleLabel: prov ? `${provType} · ${prov.name}` : v ? vehicleLabel(v) : null,
       vehicleType: v?.vehicleType ?? null,
+      kind: app.kind,
+      providerType: provType,
+      providerName: prov?.name ?? null,
       categories: v ? v.categories.map((c) => c.category.slug) : [],
       plateHint: plate ? plate.slice(0, 3) : null,
       plateHash: plate ? plateHash(event.plateSalt, plate) : null,

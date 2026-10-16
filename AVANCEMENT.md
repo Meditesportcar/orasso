@@ -101,6 +101,12 @@
   - Le jeton de session est remplacé après un changement de mot de passe ou de double authentification (`adoptToken`) : sans cela l'appli était déconnectée.
   - Vérifié : voir l'entrée du lot 16 dans le journal du relais. Recette dans le navigateur : `apps/web/e2e/appli-moi.spec.ts` (`APP_URL=http://localhost:<relais>`). Captures : `C:\Users\DELL\.claude\relais\orasso\lot-16-captures\`. **Pas encore sur téléphone** (photo, application d'authentification : APK de la vague).
 
+- **Prestataires, photographes, stands des pros, compléments pros (lot 21, 16/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 21) ; état technique : `ARCHITECTURE.md` « État après le lot 21 ».
+  - Un prestataire (food truck, barbier, tatoueur, photographe, animation, vente de pièces, autres ; amateur sans structure ni SIRET) crée un profil (nom, présentation, photos, contacts, Instagram, portfolio, départements) et candidate aux événements dont les prestataires attendus incluent son type. La candidature reste en attente (jamais admise d'office), **hors des places**, et l'organisateur la trie dans l'onglet « Prestataires » (mêmes décisions, liste d'attente manuelle, motifs). Retenu : pass émis (« QR de stand »), « Prestataires présents » sur la page de l'événement, scan « Prestataire · Food truck » au jour J, prestataires arrivés dans le direct.
+  - Photographes : « Média officiel » (accréditation par événement, à la main de l'organisateur) ; stand d'un pro : « Candidater pour un stand » depuis la casquette Pro (profil lié à la fiche pro, nom et photos copiés).
+  - Pros : fiche de base après le 21/06/2027 sans abonnement actif (remises, publications, statistiques masquées ; bandeau dans l'espace pro). Événements : « paiement sur place » dans l'assistant et sur la page (site et appli).
+  - API : migration `0027_providers`, module `providers`, `proVisibility`. Site : `/app/prestataire`, onglet de tri, fiche de l'événement. Appli : casquette Prestataire (Candidatures, Profil, QR de stand, création depuis « Mes casquettes »). Seed : Léa (food truck), Paul_Photo (accrédité), stand du Garage du Port.
+  - Vérifié : voir l'entrée du lot 21 dans le journal du relais. **Pas encore sur téléphone** (sélecteur de photos, QR de stand).
 - **Social : amis, profils des autres, recherche de personnes, QR ami, Journal fusionné (lot 17, 16/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 17) ; état technique : `ARCHITECTURE.md` « État après le lot 17 ».
   - Amis : demande avec acceptation des deux côtés (une relation par paire, refus = 30 jours, demande croisée = acceptation), 20 demandes par jour, retrait, lien d'ami `/ami/:jeton` et `orasso://ami/…`, QR de compte scanné par la caméra de l'appli (même code HOTP de 60 s, rejeu refusé).
   - Profils des autres selon l'audience : public = complet, privé = pseudo, photo, grade, marque et modèle (les amis voient tout), organisateur = tout + coordonnées ; la plaque n'est jamais exposée. Fiche d'un véhicule d'un autre et « Autres propriétaires près de chez moi » (même génération, mes départements).
@@ -122,14 +128,12 @@
 
 ## Prochaine étape
 
-<<<<<<< HEAD
+- Lot 21 : migration `0027_providers` au démarrage (renumérotée à la fusion si d'autres lots en ont généré), aucune variable nouvelle ; le seed ajoute Léa, Paul_Photo et le stand du Garage du Port (`pnpm db:seed` complète une base existante). À essayer sur téléphone (APK de la vague) : choix de photos du profil, QR de stand. La Boîte du prestataire attend le lot 18.
 - Lot 28 : déployer (migration `0026_weather` appliquée au démarrage ; variables facultatives `WEATHER_PROVIDER` et `WEATHER_USER_AGENT` dans `deploy/dev.env.example`, valeurs par défaut valables ; le VPS doit sortir en HTTPS vers `api.open-meteo.com`). **Avant le 21/06/2027** : passer `WEATHER_PROVIDER=met-norway` (usage commercial permis) ou souscrire l'offre payante Open-Meteo (AS1).
 
-=======
 - Lot 17 : déployer (migration `0024_social` au démarrage, aucune variable nouvelle) ; la messagerie (bouton « Message » du profil) vient au lot 18, le signalement au lot 32, les crews du profil au lot 19. Nouvel APK utile seulement pour le scanner de QR ami (`expo-camera` déjà dans l'APK de référence).
 
 - Lot 16 : aucune migration ni variable obligatoire (`EXPO_PUBLIC_SITE_URL` facultative dans `apps/mobile/.env.example`, utile seulement en local). Les écrans Organisateur et Prestataire (`app/(orga)/`, `app/(provider)/`) sont des squelettes : lots 22 et 21. Essayer sur téléphone (APK de la vague) : photo de profil, application d'authentification, appui long sur l'avatar.
->>>>>>> origin/integration
 - Lot 15 : déployer (migration `0022` au démarrage ; variables facultatives `SENTRY_DSN`, `VITE_SENTRY_DSN` dans `deploy/dev.env.example`, `SENTRY_RELEASE` posé par `compose.yml`) ; construire l'APK de référence (nouvelles dépendances natives). Les e-mails partent par le transport « journal » tant que Brevo n'est pas branché : en ligne, les liens de réinitialisation et de vérification ne sont lisibles que dans `email_outbox`.
 
 - Lot 14 : déployer (migrations `0019` et `0020` au démarrage ; variables facultatives `STRIPE_*` vides = billetterie payante « bientôt »). Pour activer Stripe en test : clés de test du compte Orasso (`sk_test_…`), application Connect (`ca_…`, URI de redirection `<PUBLIC_URL>/api/stripe/connect/callback`) et point de terminaison webhook `<PUBLIC_URL>/api/stripe/webhook` (événements Connect : `checkout.session.completed`, `checkout.session.expired`, `account.application.deauthorized`) → `whsec_…`.

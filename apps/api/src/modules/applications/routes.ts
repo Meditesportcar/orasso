@@ -4,6 +4,7 @@ import {
   decideSchema,
   filteringOpinionSchema,
   myApplicationsQuerySchema,
+  nextQuerySchema,
   triageQuerySchema,
   waitlistOrderSchema,
   zoneAssignSchema,
@@ -52,7 +53,9 @@ export const applicationsRoutes = new Hono<AppEnv>()
     return c.json(await applicationsQueries.triageList(v, uuidParam(c, "id"), query(c, triageQuerySchema)));
   })
   .get("/events/:id/applications/next", async (c) =>
-    c.json({ item: await applicationsQueries.next(await requireUser(c), uuidParam(c, "id")) }),
+    c.json({
+      item: await applicationsQueries.next(await requireUser(c), uuidParam(c, "id"), query(c, nextQuerySchema).kind),
+    }),
   )
   .get("/events/:id/counters", async (c) =>
     c.json(await applicationsQueries.counters(await requireUser(c), uuidParam(c, "id"))),

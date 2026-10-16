@@ -18,6 +18,7 @@ import { seedCasquettes } from "./seed/casquettes";
 import { seedDayJ } from "./seed/day-j";
 import { seedGarage } from "./seed/garage";
 import { seedPros } from "./seed/pros";
+import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
 import { seedSocial } from "./seed/social";
 import { seedWeather } from "./seed/weather";
@@ -82,6 +83,8 @@ async function main() {
   await seedSocial();
   // Lot 16 : seconde structure de Sarah_66 (feuille « Mes casquettes »).
   await seedCasquettes();
+  // Lot 21 : prestataires (food truck de Léa, photographe accrédité, stand d'un pro).
+  await seedProviders(hash);
   // Lot 31 : règles de cohérence des catégories, véhicule certifié de démonstration.
   await seedGarage();
 }

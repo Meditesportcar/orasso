@@ -99,6 +99,10 @@ export type LocalAccessEntry = {
   zoneName: string | null;
   pseudo: string;
   vehicleLabel: string | null;
+  /** Prestataire (lot 21) : « Prestataire · Food truck » à l'écran de scan. Absent = véhicule. */
+  kind?: "vehicle" | "provider";
+  providerType?: string | null;
+  providerName?: string | null;
 };
 
 export const localScanDecisions = ["ok", "already", "refused", "override", "unknown_pass"] as const;

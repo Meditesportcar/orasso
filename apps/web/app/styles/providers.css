@@ -1,0 +1,70 @@
+/* Prestataires (lot 21) : tri de l'organisateur, « Prestataires présents », espace prestataire. Jetons seulement. */
+.prov__card {
+  align-items: flex-start;
+}
+.prov__photo {
+  flex: 0 1 220px;
+  min-width: 160px;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--surface-sunken);
+}
+.prov__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.prov__present {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.prov__present-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.prov__present-thumb {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+}
+.prov__present-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.prov__present-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.s-list-plain {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.is-highlight {
+  outline: 2px solid var(--ink);
+}

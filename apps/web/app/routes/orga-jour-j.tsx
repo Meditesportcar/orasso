@@ -162,6 +162,14 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
                 { value: fmtCount(live.arrived), label: "arrivés" },
                 { value: Math.max(live.expected - live.arrived, 0), label: "attendus" },
                 { value: `${fmtCount(live.staffPresent)}/${fmtCount(live.staffExpected)}`, label: "staff" },
+                ...(live.providers.expected > 0
+                  ? [
+                      {
+                        value: `${fmtCount(live.providers.arrived)}/${fmtCount(live.providers.expected)}`,
+                        label: "prestataires arrivés",
+                      },
+                    ]
+                  : []),
                 { value: fmtCount(live.alertsOpen), label: "alertes" },
               ]
             : [
