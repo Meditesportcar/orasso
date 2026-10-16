@@ -4,6 +4,7 @@
 import { accountApi } from "./account";
 import { applicationsApi } from "./applications";
 import { communicationApi } from "./communication";
+import { crewsApi } from "./crews";
 import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
 import { garageApi } from "./garage";
@@ -33,5 +34,6 @@ export const api = {
   ...settingsApi,
   ...securityApi,
   ...messagingApi,
+  ...crewsApi,
   ...communicationApi,
 };

@@ -29,6 +29,9 @@ export type JobName =
   | "certification.sweep"
   // Lot 18 : fichiers envoyés jamais rattachés.
   | "uploads.purge"
+  // Lot 19 : venues en crew à confirmer (72 h, plafonnées au verrouillage), et leur balayage de secours.
+  | "crew.confirm-expire"
+  | "crew.confirm-sweep"
   // Lot 20 : messages groupés (lot par lot, et balayage de secours), fermeture (J+1) et purge (1 an) des discussions du
   // staff des événements.
   | "messaging.group-send"

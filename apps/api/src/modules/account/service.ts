@@ -57,6 +57,7 @@ import { dataDir, storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { anonymizeCommunicationForDeletedAccount } from "../communication/anonymize";
+import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
 import { anonymizeMessagingForDeletedAccount } from "../messaging/anonymize";
 import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
@@ -405,6 +406,7 @@ export const accountService = {
       await anonymizeGarageForDeletedAccount(tx, userId);
       // Liens sociaux et d'organisation (amis : lot 17 ; crews, messagerie : lots 18 et 19, à compléter par leurs tables).
       await anonymizeSocialForDeletedAccount(tx, userId);
+      photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId)));
       photoKeys.push(...(await anonymizeMessagingForDeletedAccount(tx, userId)));
       await anonymizeCommunicationForDeletedAccount(tx, userId);
       await tx.delete(structureFollows).where(eq(structureFollows.userId, userId));

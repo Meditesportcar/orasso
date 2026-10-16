@@ -116,7 +116,13 @@ export type ContactRequestResult = { id: string; pseudo: string };
 export type ContactAcceptResult = { conversationId: string };
 
 /** Compteurs des Demandes de la Boîte ; chaque lot ajoute sa clé (crew, invitation à un événement, staff…). */
-export type InboxRequestCounts = { friend: number; contact: number };
+export type InboxRequestCounts = {
+  friend: number;
+  contact: number;
+  /** Lot 19 : demandes reçues par un chef de crew et invitations reçues ; venues en crew à confirmer. */
+  crew: number;
+  crewConfirmation: number;
+};
 
 /** Pastille de la Boîte : conversations qui ont du non lu, et demandes en attente par sorte. */
 export type InboxSummary = { unreadMessages: number; requests: InboxRequestCounts };

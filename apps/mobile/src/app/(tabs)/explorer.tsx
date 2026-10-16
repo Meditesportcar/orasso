@@ -1,12 +1,12 @@
 // Explorer (docs/02) : trois segments, recherche en tête. Événements (liste ou carte, affinités, date, distance, filtres),
-// Pros (même principe) et Personnes et crews (lot 17 ; les crews arrivent avec le lot 19). La recherche de premier
+// Pros (même principe) et Personnes et crews (lot 17 ; crews : lot 19). La recherche de premier
 // niveau (`app/recherche.tsx`) renvoie ici par « Voir tout » avec le segment et le texte en paramètres.
 
 import { Chip, ChipRow } from "@orasso/design-system/native";
 import { explorerLabels } from "@orasso/shared";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-
+import { CrewSearch } from "@/features/crews/CrewSearch";
 import { EventsSegment } from "@/features/explorer/EventsSegment";
 import { ProsSegment } from "@/features/explorer/ProsSegment";
 import { PeopleSearch } from "@/features/social/PeopleSearch";
@@ -42,7 +42,12 @@ export default function Explorer() {
       </ChipRow>
       {segment === "evenements" ? <EventsSegment key={`e|${q}`} initialQ={q} /> : null}
       {segment === "pros" ? <ProsSegment key={`p|${q}`} initialQ={q} /> : null}
-      {segment === "personnes" ? <PeopleSearch key={`s|${q}`} initialQ={q} /> : null}
+      {segment === "personnes" ? (
+        <>
+          <PeopleSearch key={`s|${q}`} initialQ={q} />
+          <CrewSearch />
+        </>
+      ) : null}
     </TabScreen>
   );
 }

@@ -1,6 +1,15 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { accountQrPayload, addVehicleApi, apiCall, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import {
+  accountQrPayload,
+  addVehicleApi,
+  apiCall,
+  deliverNow,
+  randomPlate,
+  SEED_PASSWORD,
+  signUpApi,
+  unique,
+} from "./helpers";
 
 // Social (lot 17) dans l'appli, version web de recette (`expo start --web` derrière `apps/mobile/scripts/web-isolated.mjs`) :
 // Explorer > Personnes et crews, profil d'un autre, fiche d'un véhicule d'un autre et propriétaires près de chez moi,
@@ -117,6 +126,8 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     await shot(page, `08-mes-amis-${theme}`);
     await page.goto("/moi");
     await expect(page.getByTestId("moi-amis")).toBeVisible({ timeout: 30_000 });
+    // Heures calmes (la nuit) : la notification serait reportée à 08:00 ; livrée tout de suite pour la recette.
+    deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
     await page.goto("/accueil");
     await page.getByLabel("Journal").first().click();
     await expect(page.getByTestId("journal-item").filter({ hasText: "a accepté" }).first()).toBeVisible({

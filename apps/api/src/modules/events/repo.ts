@@ -37,6 +37,7 @@ export const eventsRepo = {
       withdrawn: 0,
       expired: 0,
       cancelled: 0,
+      awaiting_member: 0,
     } satisfies Record<ApplicationStatus, number>;
     for (const r of rows) counts[r.status] = r.n;
     return counts;
@@ -58,15 +59,25 @@ export const eventsRepo = {
     return Boolean(await db.query.events.findFirst({ where: eq(events.slug, slug), columns: { id: true } }));
   },
 
-  /** Utilisateurs ayant une candidature active (pour prévenir de tout changement). */
-  async activeApplicantIds(eventId: string, ex: Executor = db): Promise<string[]> {
+  /**
+   * Utilisateurs ayant une candidature active. `awaitingMembers` : membres de crew pas encore confirmés compris (lot 19)
+   * — pour la modification ou l'annulation de l'événement, jamais pour la communication de l'organisateur (annonces,
+   * consignes, messages groupés) : rien n'arrive de l'organisateur à quelqu'un qui n'a pas accepté de venir.
+   */
+  async activeApplicantIds(
+    eventId: string,
+    ex: Executor = db,
+    opts: { awaitingMembers?: boolean } = {},
+  ): Promise<string[]> {
     const rows = await ex
       .selectDistinct({ userId: applications.userId })
       .from(applications)
       .where(
         and(
           eq(applications.eventId, eventId),
-          sql`${applications.status} in ('pending', 'accepted', 'waitlisted', 'offered')`,
+          opts.awaitingMembers
+            ? sql`${applications.status} in ('pending', 'accepted', 'waitlisted', 'offered', 'awaiting_member')`
+            : sql`${applications.status} in ('pending', 'accepted', 'waitlisted', 'offered')`,
         ),
       );
     return rows.map((r) => r.userId);

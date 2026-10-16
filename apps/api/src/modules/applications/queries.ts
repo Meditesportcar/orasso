@@ -37,6 +37,7 @@ import { now } from "../../lib/deps";
 import { forbidden, notFound } from "../../lib/errors";
 import { escapeLike } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
+import { crewsForApplications, crewsForTriage, eventCrewFilters } from "../crews/application-info";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { pointsService } from "../points/service";
 import { loadProviders, triageView } from "../providers/serializers";
@@ -44,6 +45,9 @@ import { reviewsService } from "../reviews/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleFull, vehicleLabel } from "../vehicles/serializers";
 import type { ApplicationRow } from "./service";
+
+/** Candidature seule, ou venue en crew confirmée par le membre (lot 19) : seules visibles de l'organisation. */
+const confirmedByMember = sql`(${applications.crewApplicationId} is null or ${applications.memberConfirmedAt} is not null)`;
 
 /** Rangs affichés (1 = prochain servi) de toutes les candidatures en liste d'attente d'un événement. */
 async function waitlistRanks(eventIds: string[]): Promise<Map<string, number>> {
@@ -91,6 +95,8 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
   const contests = await db.query.malusContests.findMany({ where: inArray(malusContests.applicationId, appIds) });
   // Avis après l'événement (lot 12) : candidatures pointées seulement.
   const myReviews = await reviewsService.mine(rows[0]?.userId ?? "", rows, eventsById, new Set(enteredAt.keys()));
+  // Inscription en crew (lot 19) : le crew, son chef, l'échéance de confirmation.
+  const crewInfo = await crewsForApplications(rows);
   const t = now();
   return rows.flatMap((r) => {
     const e = eventsById.get(r.eventId);
@@ -136,6 +142,7 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
             }
           : null,
         review: myReviews.get(r.id) ?? null,
+        crew: crewInfo(r, e),
       },
     ];
   });
@@ -188,6 +195,7 @@ async function toTriage(
         eq(applications.kind, "vehicle"),
         eq(events.structureId, event.structureId),
         ne(applications.eventId, event.id),
+        confirmedByMember,
       ),
     )
     .groupBy(applications.userId, applications.status);
@@ -223,6 +231,8 @@ async function toTriage(
     : [];
   const authorPseudo = new Map(authors.map((a) => [a.userId, a.pseudo]));
   const ranks = await waitlistRanks([event.id]);
+  // Crew et autres candidatures confirmées du crew (lot 19).
+  const crewOf = await crewsForTriage(event.id, rows);
 
   return rows.map((r) => {
     const v = r.vehicleId ? vehiclesById.get(r.vehicleId) : undefined;
@@ -271,6 +281,7 @@ async function toTriage(
       },
       filteringOpinions: (r.filteringOpinion ?? []).map((o) => ({ ...o, pseudo: authorPseudo.get(o.userId) ?? "" })),
       alerts,
+      crew: crewOf(r),
     };
   });
 }
@@ -316,6 +327,8 @@ export const applicationsQueries = {
       if (!card) throw notFound("Candidature introuvable");
       return card;
     }
+    // Venue en crew jamais confirmée : rien n'est montré à l'organisation sans l'accord du membre (lot 19).
+    if (app.crewApplicationId && !app.memberConfirmedAt) throw notFound("Candidature introuvable");
     const event = await eventsRepo.byId(app.eventId);
     const access = await staffAccess(v, event.structureId, ["filtering"], event.id).catch(() => null);
     if (!access) throw notFound("Candidature introuvable");
@@ -327,8 +340,15 @@ export const applicationsQueries = {
   async triageList(v: Viewer, eventId: string, q: TriageQuery): Promise<Page<ApplicationForTriage>> {
     const event = await eventsRepo.byId(eventId);
     const { withContact } = await triageAccess(v, event);
-    const filters: (SQL | undefined)[] = [eq(applications.eventId, eventId), eq(applications.kind, q.kind)];
+    const filters: (SQL | undefined)[] = [
+      eq(applications.eventId, eventId),
+      eq(applications.kind, q.kind),
+      // Venues en crew jamais confirmées (à confirmer, refusées, expirées) : hors de la file de tri, seulement comptées
+      // dans le groupe du crew (lot 19) : rien n'est montré à l'organisation sans l'accord du membre.
+      confirmedByMember,
+    ];
     if (q.status) filters.push(eq(applications.status, q.status));
+    if (q.crewId) filters.push(eq(applications.crewId, q.crewId));
     if (q.makeId) filters.push(eq(vehicles.makeId, q.makeId));
     if (q.country) filters.push(eq(vehicleMakes.country, q.country.toUpperCase()));
     if (q.yearFrom) filters.push(sql`${vehicles.year} >= ${q.yearFrom}`);
@@ -394,6 +414,13 @@ export const applicationsQueries = {
     if (!app) return null;
     const [card] = await toTriage(event, [app], withContact);
     return card ?? null;
+  },
+
+  /** Filtre « crew » du tri (lot 19) : les crews inscrits à l'événement. */
+  async crewFilters(v: Viewer, eventId: string) {
+    const event = await eventsRepo.byId(eventId);
+    await triageAccess(v, event);
+    return eventCrewFilters(eventId);
   },
 
   async counters(v: Viewer, eventId: string): Promise<EventCounters> {

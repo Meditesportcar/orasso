@@ -1,0 +1,73 @@
+/* Crews (lot 19) : logo carré, en-tête de la fiche, membres, inscription en crew. Jetons seulement. */
+
+.crw-logo {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  border: 1.5px solid var(--line);
+  font-weight: 700;
+}
+.crw-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.crw-head {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+.crw-confirm {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.crw-members {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.crw-pick {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+.crw-pick:first-child {
+  border-top: 0;
+}
+.crw-pick__vehicles {
+  display: grid;
+  gap: var(--space-2);
+  padding-left: var(--space-6);
+}
+.crw-radio {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 44px;
+}
+.crw-radio input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+}
+
+/* Champ et bouton côte à côte, alignés en bas (inviter, logo). */
+.crw-row-end {
+  align-items: flex-end;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crw-pick,
+  .crw-confirm {
+    transition: opacity 120ms linear;
+  }
+}

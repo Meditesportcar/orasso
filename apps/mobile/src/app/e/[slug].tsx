@@ -14,6 +14,7 @@ import {
 } from "@orasso/design-system/native";
 import {
   applicationStatusLabels,
+  crewLabels,
   type EventPublic,
   type EventReviews,
   eventAcceptsVendorType,
@@ -43,7 +44,7 @@ import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space1, space3 } = tokens.spacing;
-const OPEN_STATUSES = ["pending", "accepted", "waitlisted", "offered"];
+const OPEN_STATUSES = ["pending", "accepted", "waitlisted", "offered", "awaiting_member"];
 
 export default function EventPage() {
   const { t } = useTheme();
@@ -64,6 +65,9 @@ export default function EventPage() {
   const providerProfile = useApi(async () => (await api.providerProfile()).profile, [status, hasPro, hasProvider], {
     enabled: status === "in" && (hasPro || hasProvider),
   });
+  // Inscription en crew (lot 19) : proposée au chef d'un crew.
+  const crews = useApi(() => api.myCrews(), [status], { enabled: status === "in" });
+  const leadsCrew = (crews.data ?? []).some((c) => c.role === "leader");
   const [applying, setApplying] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerSent, setProviderSent] = useState(false);
@@ -155,6 +159,17 @@ export default function EventPage() {
         <Notice>Les inscriptions sont verrouillées.</Notice>
       ) : notYetOpen ? (
         <Notice>Les candidatures ouvrent le {formatDayHour(opensAt)}.</Notice>
+      ) : null}
+      {leadsCrew && !cancelled && !e.isLocked && !notYetOpen && e.admission !== "invite_only" ? (
+        <Button
+          variant="secondary"
+          icon="crew"
+          fullWidth
+          testID="register-crew"
+          onPress={() => router.push({ pathname: "/crew/inscription", params: { event: e.slug } })}
+        >
+          {crewLabels.registerCrew}
+        </Button>
       ) : null}
 
       <Counters

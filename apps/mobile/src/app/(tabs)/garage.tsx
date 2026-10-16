@@ -3,6 +3,7 @@
 
 import { Button, Chip, Plate, Text, tokens, useTheme, VehicleCard } from "@orasso/design-system/native";
 import {
+  crewLabels,
   gradeLabels,
   plateTransferLabels,
   type VehicleFull,
@@ -14,6 +15,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { AccountQrSheet } from "@/features/AccountQrSheet";
+import { CrewLogo } from "@/features/crews/CrewLogo";
 import { FriendQrScanner } from "@/features/FriendQrScanner";
 import { PlateTransferCard } from "@/features/garage/PlateTransferCard";
 import { api } from "@/lib/api";
@@ -35,6 +37,7 @@ export default function Garage() {
   const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles" });
   // Demandes de transfert de plaque reçues (lot 31) : en attendant la Boîte > Demandes (lot 18), elles sont ici.
   const transfers = useApi(() => api.plateTransfers(), []);
+  const crews = useApi(() => api.myCrews(), []);
   const [qr, setQr] = useState(false);
   const [scan, setScan] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -46,7 +49,7 @@ export default function Garage() {
     <TabScreen
       title="Mon garage"
       onRefresh={async () => {
-        await Promise.all([vehicles.reload(), transfers.reload()]);
+        await Promise.all([vehicles.reload(), transfers.reload(), crews.reload()]);
       }}
       overlays={
         <>
@@ -82,6 +85,24 @@ export default function Garage() {
               QR
             </Button>
           </View>
+        </View>
+        {/* Mes crews (lot 19, docs/02 « Garage ») : logos, la fiche au toucher ; créer un crew s'il n'y en a pas. */}
+        <View style={styles.crews} testID="garage-crews">
+          {(crews.data ?? []).map((c) => (
+            <Pressable
+              key={c.id}
+              accessibilityRole="link"
+              accessibilityLabel={c.name}
+              onPress={() => router.push(`/crew/${c.slug}`)}
+            >
+              <CrewLogo url={c.logoUrl} name={c.name} size={36} />
+            </Pressable>
+          ))}
+          {crews.data && crews.data.length === 0 ? (
+            <Chip surface="plate" onPress={() => router.push("/crew/nouveau")}>
+              {crewLabels.createCrew}
+            </Chip>
+          ) : null}
         </View>
       </Plate>
 
@@ -195,6 +216,7 @@ const styles = StyleSheet.create({
   profileHead: { flexDirection: "row", alignItems: "center", gap: space3 },
   profileText: { flex: 1, gap: space1 },
   gradeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
+  crews: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space2 },
   qrButtons: { flexDirection: "row", gap: space2 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
   empty: { gap: space2 },

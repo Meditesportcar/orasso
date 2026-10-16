@@ -15,6 +15,8 @@ export default [
     route("evenements", "routes/evenements.tsx"),
     route("e/:slug", "routes/event.tsx"),
     route("e/:slug/candidater", "routes/candidater.tsx"),
+    // Inscription en crew par le chef (lot 19).
+    route("e/:slug/crew", "routes/crew-inscription.tsx"),
     route("o/:slug", "routes/structure.tsx"),
     route("organisateurs", "routes/organisateurs.tsx"),
     route("professionnels", "routes/professionnels.tsx"),

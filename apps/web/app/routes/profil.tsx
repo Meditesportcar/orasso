@@ -2,6 +2,7 @@ import { Button, Chip, Plate, VehicleCard } from "@orasso/design-system/web";
 import { CONTACT_MESSAGE_MAX, gradeLabels, messagingLabels, socialLabels, type UserProfileView } from "@orasso/shared";
 import { Form, useNavigation } from "react-router";
 
+import { CrewRow } from "../components/Crews";
 import { FriendAction, PersonAvatar } from "../components/People";
 import { apiOrThrow } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
@@ -189,7 +190,15 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
           <h2 id="crews-titre" className="s-h2">
             {socialLabels.crews}
           </h2>
-          <p className="s-muted">{socialLabels.crewsEmpty}</p>
+          {p.crews.length === 0 ? (
+            <p className="s-muted">{socialLabels.crewsEmpty}</p>
+          ) : (
+            <ul className="s-people" data-testid="profil-crews">
+              {p.crews.map((c) => (
+                <CrewRow key={c.id} crew={c} />
+              ))}
+            </ul>
+          )}
         </section>
       )}
     </div>

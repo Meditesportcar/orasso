@@ -5,6 +5,8 @@ import type { InboxRequestCounts } from "@orasso/shared";
 import type { ComponentType } from "react";
 
 import { ContactRequests } from "./contact";
+import { CrewRequests } from "./crew";
+import { CrewConfirmations } from "./crewConfirmation";
 import { FriendRequests } from "./friend";
 import type { RequestSectionProps } from "./types";
 
@@ -13,6 +15,8 @@ export type RequestSection = { kind: keyof InboxRequestCounts; Section: Componen
 export const requestSections: RequestSection[] = [
   { kind: "friend", Section: FriendRequests },
   { kind: "contact", Section: ContactRequests },
+  { kind: "crewConfirmation", Section: CrewConfirmations },
+  { kind: "crew", Section: CrewRequests },
 ];
 
 export type { RequestSectionProps } from "./types";

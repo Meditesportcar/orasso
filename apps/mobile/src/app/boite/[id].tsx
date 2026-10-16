@@ -8,6 +8,7 @@ import {
   type MessagePage,
   type MessageView,
   messagingLabels,
+  systemMessageText,
 } from "@orasso/shared";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
@@ -275,6 +276,19 @@ export function ConversationScreen({
     const next = rows[index + 1];
     const prev = next?.kind === "message" ? next.m : null;
     const newDay = !prev || new Date(prev.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
+    // Message d'information (« Léa a rejoint le crew. », lot 19) : centré, sans bulle ni expéditeur.
+    if (m.kind === "system") {
+      return (
+        <View style={styles.system} testID="message-system">
+          {newDay ? (
+            <Muted variant="caption" style={styles.day}>
+              {formatDay(m.createdAt)}
+            </Muted>
+          ) : null}
+          <Muted variant="caption">{systemMessageText(m.body)}</Muted>
+        </View>
+      );
+    }
     const showName =
       (!mine || (m.asStructure && conversation?.side === "structure")) &&
       (newDay || prev?.sender?.userId !== m.sender?.userId);
@@ -434,6 +448,7 @@ const styles = StyleSheet.create({
   item: { alignItems: "flex-start", gap: space1 },
   itemMine: { alignItems: "flex-end" },
   day: { alignSelf: "center", marginVertical: space2 },
+  system: { alignItems: "center", gap: space1, paddingVertical: space1 },
   bubble: {
     maxWidth: "82%",
     paddingHorizontal: space3,

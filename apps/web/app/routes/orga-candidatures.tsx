@@ -1,5 +1,12 @@
 import { Chip, Counters } from "@orasso/design-system/web";
-import type { ApplicationForTriage, Category, EventCounters, EventOrganizer, Page } from "@orasso/shared";
+import type {
+  ApplicationForTriage,
+  Category,
+  EventCounters,
+  EventCrewFilter,
+  EventOrganizer,
+  Page,
+} from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { useRevalidator } from "react-router";
 
@@ -72,6 +79,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       nextHref: null as string | null,
       filters: {} as Record<string, string | undefined>,
       categories: [] as Category[],
+      crews: [] as EventCrewFilter[],
       waitlisted: [] as ApplicationForTriage[],
       offered: [] as ApplicationForTriage[],
     };
@@ -88,7 +96,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     categoryId: url.searchParams.get("categoryId") ?? undefined,
     grade: url.searchParams.get("grade") ?? undefined,
     sort: url.searchParams.get("sort") ?? undefined,
+    crewId: url.searchParams.get("crewId") ?? undefined,
   };
+  let crews: EventCrewFilter[] = [];
   if (view === "file") {
     const page = await apiOrThrow<Page<ApplicationForTriage>>(
       request,
@@ -103,6 +113,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     list = await apiOrThrow<Page<ApplicationForTriage>>(request, `/events/${eventId}/applications?${qs}`);
     const cats = await api<Category[]>(request, "/vehicle-reference/categories");
     categories = cats.ok ? cats.data : [];
+    // Filtre « crew » (lot 19).
+    const crewRes = await api<EventCrewFilter[]>(request, `/events/${eventId}/applications/crews`);
+    crews = crewRes.ok ? crewRes.data : [];
   } else {
     waitlisted = await allPages(request, `/events/${eventId}/applications?status=waitlisted&sort=waitlist_rank`);
     offered = await allPages(request, `/events/${eventId}/applications?status=offered`);
@@ -123,6 +136,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     nextHref: list.nextCursor ? `?${nextParams}` : null,
     filters,
     categories,
+    crews,
     waitlisted,
     offered,
   };
@@ -142,6 +156,7 @@ export default function OrgaCandidatures({ loaderData }: Route.ComponentProps) {
     nextHref,
     filters,
     categories,
+    crews,
     waitlisted,
     offered,
   } = loaderData;
@@ -250,6 +265,7 @@ export default function OrgaCandidatures({ loaderData }: Route.ComponentProps) {
           nextHref={nextHref}
           filters={filters}
           categories={categories}
+          crews={crews}
           canDecide={canDecide}
           onChanged={() => revalidator.revalidate()}
         />

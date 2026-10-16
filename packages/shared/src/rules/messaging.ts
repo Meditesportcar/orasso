@@ -1,3 +1,4 @@
+import { systemMessageText } from "../labels/messaging.fr";
 import type { MessageKind } from "../messaging";
 
 // Messagerie (lot 18, ARCHITECTURE-SUITE § 3) : règles pures. L'API les applique ; l'appli et le site affichent le
@@ -48,7 +49,7 @@ export function messagePreview(
 ): string {
   if (message.deleted) return "Message supprimé";
   if (message.kind === "image") return PHOTO_PREVIEW;
-  if (message.kind === "system") return "Information";
+  if (message.kind === "system") return shorten(systemMessageText(message.body), max);
   return shorten(message.body ?? "", max);
 }
 

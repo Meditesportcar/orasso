@@ -53,5 +53,27 @@ export const messagingLabels = {
   },
 } as const;
 
-/** Libellés des messages `system` (code dans `body`) ; les lots 19 et 20 ajoutent les leurs. */
-export const systemMessageLabels: Record<string, string> = {};
+/**
+ * Libellés des messages `system` ; les lots 19 et 20 ajoutent les leurs. Le corps d'un message `system` est un JSON
+ * `{"code": "...", "pseudo": "..." | null}` (`pseudo` effacé si le compte est supprimé) ; `{pseudo}` est remplacé.
+ */
+export const systemMessageLabels: Record<string, string> = {
+  // Lot 19 : discussion d'un crew.
+  crew_created: "Crew créé par {pseudo}.",
+  crew_member_joined: "{pseudo} a rejoint le crew.",
+  crew_member_left: "{pseudo} a quitté le crew.",
+  crew_member_removed: "{pseudo} ne fait plus partie du crew.",
+  crew_archived: "Ce crew est dissous : la discussion reste lisible.",
+};
+
+/** Texte d'un message `system` (« Léa a rejoint le crew. »), ou « Information » si le code est inconnu. */
+export function systemMessageText(body: string | null): string {
+  try {
+    const parsed = JSON.parse(body ?? "") as { code?: unknown; pseudo?: unknown };
+    const label = typeof parsed.code === "string" ? systemMessageLabels[parsed.code] : undefined;
+    if (!label) return "Information";
+    return label.replace("{pseudo}", typeof parsed.pseudo === "string" && parsed.pseudo ? parsed.pseudo : "Un membre");
+  } catch {
+    return "Information";
+  }
+}

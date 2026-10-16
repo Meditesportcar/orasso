@@ -18,7 +18,7 @@ import {
   registrationOpensAt,
   type TransitionActor,
 } from "@orasso/shared";
-import { and, asc, count, eq, gt, inArray, lte, max, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lte, max, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -26,6 +26,7 @@ import {
   applications,
   events,
   eventZones,
+  notifications,
   profiles,
   providerProfiles,
   structureBans,
@@ -177,14 +178,16 @@ async function notifyDecision(tx: Tx, event: EventRow, app: ApplicationRow) {
 function broadcast(after: After, event: EventRow, changed: ApplicationRow[]) {
   after(async () => {
     realtime.publish(`event:${event.id}:triage`, "counters", await eventsRepo.counters(event));
+    // Venue en crew jamais confirmée (lot 19) : invisible de l'organisation et du staff, même par son identifiant.
+    const visible = changed.filter((a) => !a.crewApplicationId || a.memberConfirmedAt);
     for (const app of changed) {
       const payload = { applicationId: app.id, eventId: event.id, status: app.status };
-      realtime.publish(`event:${event.id}:triage`, "application.changed", payload);
+      if (visible.includes(app)) realtime.publish(`event:${event.id}:triage`, "application.changed", payload);
       realtime.publish(`user:${app.userId}`, "application.changed", payload);
     }
     // Liste d'accès du staff : l'appli relance une synchro différentielle si elle a du réseau (§ 4.1).
-    if (changed.length) {
-      realtime.publish(`event:${event.id}:access`, "access.changed", { applicationIds: changed.map((a) => a.id) });
+    if (visible.length) {
+      realtime.publish(`event:${event.id}:access`, "access.changed", { applicationIds: visible.map((a) => a.id) });
     }
     notificationsService.kick();
   });
@@ -362,6 +365,12 @@ async function decideInTx(
 export const applicationsService = {
   transition,
   offerNext,
+  // Briques réutilisées par l'inscription en crew (lot 19, `modules/crews/registration.ts`).
+  admitOpen,
+  broadcast,
+  lockEventThenApplication,
+  lockedError,
+  isUniqueViolation,
 
   /** Candidater avec un ou plusieurs véhicules : une candidature `pending` par véhicule (§ 2.1). */
   async apply(v: Viewer, eventId: string, input: ApplicationCreate): Promise<ApplicationRow[]> {
@@ -506,6 +515,9 @@ export const applicationsService = {
       if (app.userId !== v.user.id) throw notFound("Candidature introuvable");
       // « Refuser la place » : vérifié sous verrou (un double clic ne désiste pas une place déjà acceptée).
       if (onlyIfOffered && app.status !== "offered") throw invalidTransition(app.status, "withdrawn");
+      // Venue en crew pas encore confirmée : « Je ne viens pas » (`POST /applications/:id/decline-crew`, lot 19), qui
+      // prévient le chef.
+      if (app.status === "awaiting_member") throw invalidTransition(app.status, "withdrawn");
       if (t >= event.endsAt) throw lockedError("L'événement est terminé");
       const locked = isLocked(event, t);
       const row = await transition(
@@ -668,6 +680,20 @@ export const applicationsService = {
     });
     const rows: ApplicationRow[] = [];
     for (const app of active) rows.push(await transition(tx, app, "cancelled", SYSTEM, {}, "event.cancel"));
+    // Venues en crew qui étaient à confirmer (lot 19) : la notification « venue à confirmer » ne reste pas en attente.
+    const awaiting = active.filter((a) => a.status === "awaiting_member").map((a) => a.id);
+    if (awaiting.length) {
+      await tx
+        .update(notifications)
+        .set({ readAt: now() })
+        .where(
+          and(
+            eq(notifications.type, "crew_registration_to_confirm"),
+            inArray(sql`${notifications.data} ->> 'applicationId'`, awaiting),
+            isNull(notifications.readAt),
+          ),
+        );
+    }
     broadcast(after, event, rows);
     return rows;
   },

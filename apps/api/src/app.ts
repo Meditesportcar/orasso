@@ -20,6 +20,7 @@ import { adminRoutes } from "./modules/admin/routes";
 import { applicationsRoutes } from "./modules/applications/routes";
 import { checkinsRoutes } from "./modules/checkins/routes";
 import { communicationRoutes } from "./modules/communication/routes";
+import { crewsRoutes } from "./modules/crews/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { fieldRoutes } from "./modules/field/routes";
@@ -156,6 +157,7 @@ app.route("/", weatherRoutes);
 app.route("/", socialRoutes);
 app.route("/", uploadsRoutes);
 app.route("/", messagingRoutes);
+app.route("/", crewsRoutes);
 app.route("/", searchRoutes);
 app.route("/", communicationRoutes);
 

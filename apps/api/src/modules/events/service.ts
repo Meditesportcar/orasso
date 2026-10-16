@@ -271,7 +271,7 @@ export const eventsService = {
       const addressChanged = ADDRESS_FIELDS.some((f) => row[f] !== current[f]);
       if (datesChanged || addressChanged) {
         const what = datesChanged ? `nouvelle date : ${formatDateTime(row.startsAt)}` : "nouvelle adresse";
-        for (const userId of await eventsRepo.activeApplicantIds(id, tx)) {
+        for (const userId of await eventsRepo.activeApplicantIds(id, tx, { awaitingMembers: true })) {
           await notificationsService.notify(tx, userId, "event_updated", {
             title: "Événement modifié",
             body: `« ${row.title} » a changé (${what}).`,
@@ -514,7 +514,7 @@ export const eventsService = {
           outlook === "uncertain"
             ? `« ${e.title} » passe en « ${eventOutlookLabels.uncertain} » : l'organisateur confirmera.`
             : `« ${e.title} » est « ${eventOutlookLabels.maintained} ».`;
-        for (const userId of await eventsRepo.activeApplicantIds(id, tx)) {
+        for (const userId of await eventsRepo.activeApplicantIds(id, tx, { awaitingMembers: true })) {
           await notificationsService.notify(tx, userId, "event_outlook_changed", {
             title: eventOutlookLabels[outlook],
             body,

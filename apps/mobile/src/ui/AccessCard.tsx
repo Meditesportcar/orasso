@@ -2,7 +2,7 @@
 // accepter une place libérée) et, pour un refus, le motif envoyé par l'organisateur.
 
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type MyApplication, refusalReasonLabels } from "@orasso/shared";
+import { crewLabels, type MyApplication, refusalReasonLabels } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
 import { formatDayHour, formatDuration, formatHour, formatShortDate } from "@/lib/format";
@@ -20,6 +20,8 @@ export function AccessCard({
   onWithdraw,
   onAccept,
   onDecline,
+  onConfirmCrew,
+  onDeclineCrew,
 }: {
   app: MyApplication;
   now: Date;
@@ -31,6 +33,9 @@ export function AccessCard({
   onWithdraw: () => void;
   onAccept: () => void;
   onDecline: () => void;
+  /** Venue en crew à confirmer (lot 19) : ouvre la feuille de confirmation ; « Je ne viens pas ». */
+  onConfirmCrew?: () => void;
+  onDeclineCrew?: () => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -38,6 +43,11 @@ export function AccessCard({
   const remaining = app.offerExpiresAt ? new Date(app.offerExpiresAt).getTime() - now.getTime() : 0;
   const details: string[] = [];
   if (app.vehicle) details.push(app.vehicle.label);
+  if (app.crew) details.push(`${crewLabels.crew} « ${app.crew.name} »`);
+  const awaiting = app.status === "awaiting_member";
+  if (awaiting && app.crew?.confirmBefore) {
+    details.push(crewLabels.confirmBefore(formatShortDate(app.crew.confirmBefore)).toLowerCase());
+  }
   if (app.status === "accepted" && !app.checkedInAt) {
     details.push(`désistement sans pénalité jusqu'au ${formatShortDate(app.withdrawDeadline)}`);
   }
@@ -80,7 +90,29 @@ export function AccessCard({
           Un retenu s'est désisté. Si tu ne réponds pas à temps, la place passe au suivant.
         </Text>
       ) : null}
+      {awaiting && app.crew ? (
+        <Text variant="body" color={c.plateMuted}>
+          {crewLabels.confirmBody(app.crew.leaderPseudo, null)}
+        </Text>
+      ) : null}
       <View style={styles.buttons}>
+        {awaiting && onConfirmCrew ? (
+          <>
+            <Button
+              variant="plate"
+              icon="check"
+              disabled={busy}
+              onPress={onConfirmCrew}
+              fullWidth
+              testID="crew-confirm-open"
+            >
+              {crewLabels.confirmVenue}
+            </Button>
+            <Button variant="plate" tone="dashed" icon="close" loading={busy} onPress={onDeclineCrew} fullWidth>
+              {crewLabels.notComing}
+            </Button>
+          </>
+        ) : null}
         {offered ? (
           <>
             <Button variant="primary" icon="check" loading={busy} onPress={onAccept} fullWidth>

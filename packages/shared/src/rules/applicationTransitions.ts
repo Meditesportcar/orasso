@@ -1,13 +1,21 @@
 import type { ApplicationStatus } from "../application";
 import type { TransitionActor } from "../enums";
 
-/** Statuts « actifs » : la candidature occupe ou attend une place. */
+/**
+ * Statuts « actifs » : la candidature occupe ou attend une place. `awaiting_member` (inscription en crew, lot 19) en
+ * fait partie : elle bloque le véhicule et compte dans la limite de véhicules par personne, mais n'est ni dans la file
+ * de tri ni dans la capacité (voir `capacityStatuses`).
+ */
 export const activeApplicationStatuses = [
   "pending",
   "accepted",
   "waitlisted",
   "offered",
+  "awaiting_member",
 ] as const satisfies readonly ApplicationStatus[];
+
+/** Statuts qui occupent une place de la capacité : retenue, et offre de place en cours (elle réserve la sienne). */
+export const capacityStatuses = ["accepted", "offered"] as const satisfies readonly ApplicationStatus[];
 
 export function isActiveStatus(status: ApplicationStatus): boolean {
   return (activeApplicationStatuses as readonly ApplicationStatus[]).includes(status);
@@ -45,6 +53,13 @@ const TRANSITIONS: ReadonlyArray<readonly [ApplicationStatus | null, Application
   ["offered", "cancelled", SYSTEM],
   ["refused", "accepted", DECIDERS],
   ["refused", "waitlisted", DECIDERS],
+  // Inscription en crew (lot 19, ARCHITECTURE-SUITE § 4.2) : le chef inscrit un membre (`user` = le chef), le membre
+  // confirme (règlement accepté) ou dit « je ne viens pas » ; le chef peut le retirer ; la tâche d'expiration (72 h,
+  // plafonnée au verrouillage) le retire ; l'annulation de l'événement l'annule.
+  [null, "awaiting_member", USER],
+  ["awaiting_member", "pending", USER],
+  ["awaiting_member", "withdrawn", [...USER, ...SYSTEM]],
+  ["awaiting_member", "cancelled", SYSTEM],
 ];
 
 export function canTransition(from: ApplicationStatus | null, to: ApplicationStatus, actor: TransitionActor): boolean {

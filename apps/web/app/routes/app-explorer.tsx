@@ -1,7 +1,9 @@
 import { Button, Chip, Plate, SelectField, TextField } from "@orasso/design-system/web";
 import {
   type Category,
+  type CrewCard,
   coarsePosition,
+  crewLabels,
   departments,
   type EventCard,
   type EventSort,
@@ -27,6 +29,7 @@ import {
 } from "@orasso/shared";
 import { Form, useNavigation } from "react-router";
 
+import { CrewRow } from "../components/Crews";
 import { EventsMap } from "../components/EventsMap";
 import { EventTile } from "../components/EventTile";
 import { FriendAction, PersonAvatar, PersonRow } from "../components/People";
@@ -92,6 +95,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     people: null as PeopleSearchPage | null,
     categories: [] as Category[],
     failed: null as string | null,
+    // Crews (lot 19) : trouvables par leur nom et leur département (segment « Personnes et crews »).
+    crews: null as CrewCard[] | null,
+    crewFilters: { q: get("crew").trim(), department: get("crewdep") },
   };
 
   if (segment === "resultats") {
@@ -183,8 +189,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     grade: get("grade"),
   };
   const categories = await apiOrThrow<Category[]>(request, "/vehicle-reference/categories");
+  let crews: CrewCard[] | null = null;
+  if (empty.crewFilters.q || empty.crewFilters.department) {
+    const qs = new URLSearchParams();
+    if (empty.crewFilters.q) qs.set("q", empty.crewFilters.q);
+    if (empty.crewFilters.department) qs.set("department", empty.crewFilters.department);
+    const found = await api<Page<CrewCard>>(request, `/crews/search?${qs}`);
+    crews = found.ok ? found.data.items : [];
+  }
   const criteria = { q, ...filters };
-  if (!hasPeopleSearchCriteria(criteria)) return { ...base, ...empty, filters, categories };
+  if (!hasPeopleSearchCriteria(criteria)) return { ...base, ...empty, crews, filters, categories };
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(criteria)) if (value) params.set(key, value);
   if (cursor) params.set("cursor", cursor);
@@ -192,6 +206,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     ...base,
     ...empty,
+    crews,
     filters,
     categories,
     people: res.ok ? res.data : null,
@@ -213,7 +228,22 @@ function href(params: Record<string, string | number | null | undefined>): strin
 }
 
 export default function Explorer({ loaderData, actionData }: Route.ComponentProps) {
-  const { segment, q, vue, position, radius, filters, results, events, pros, people, categories, failed } = loaderData;
+  const {
+    segment,
+    q,
+    vue,
+    position,
+    radius,
+    filters,
+    results,
+    events,
+    pros,
+    people,
+    categories,
+    failed,
+    crews,
+    crewFilters,
+  } = loaderData;
   const busy = useNavigation().state !== "idle";
   const f = filters as Record<string, string>;
   const segments: { id: Segment; label: string }[] = [
@@ -557,7 +587,38 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
           <Button variant="secondary" icon="crew" href="/app/amis">
             {socialLabels.myFriends}
           </Button>
-          <p className="o-t-caption s-muted">{socialLabels.crewsSoon}</p>
+          <Plate as="section" aria-label={crewLabels.search} data-testid="crew-search">
+            <Form method="get" className="s-filters">
+              <input type="hidden" name="segment" value="personnes" />
+              <TextField
+                label={crewLabels.search}
+                name="crew"
+                defaultValue={crewFilters.q}
+                placeholder={crewLabels.searchPlaceholder}
+              />
+              <SelectField
+                label={crewLabels.department}
+                name="crewdep"
+                defaultValue={crewFilters.department}
+                options={[{ value: "", label: "Tous" }, ...departments.map((d) => ({ value: d, label: d }))]}
+              />
+              <Button type="submit" variant="secondary" icon="search">
+                {crewLabels.search}
+              </Button>
+            </Form>
+          </Plate>
+          {!crews && <p className="o-t-caption s-muted">{crewLabels.searchIdle}</p>}
+          {crews && crews.length === 0 && <p className="s-notice">{crewLabels.searchEmpty}</p>}
+          {crews && crews.length > 0 && (
+            <ul className="s-people" data-testid="crew-results">
+              {crews.map((c) => (
+                <CrewRow key={c.id} crew={c} />
+              ))}
+            </ul>
+          )}
+          <Button variant="secondary" icon="crew" href="/app/crews">
+            {crewLabels.myCrews}
+          </Button>
         </div>
       )}
     </div>

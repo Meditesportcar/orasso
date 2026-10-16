@@ -13,6 +13,8 @@ export const applicationStatuses = [
   "withdrawn",
   "expired",
   "cancelled",
+  /** Inscription en crew (lot 19) : le chef a inscrit ce membre, qui doit confirmer sa venue (hors tri, hors capacité). */
+  "awaiting_member",
 ] as const;
 
 export const applicationStatusSchema = z.enum(applicationStatuses);
@@ -28,4 +30,5 @@ export const applicationStatusLabels: Record<ApplicationStatus, string> = {
   withdrawn: "Désistée",
   expired: "Offre expirée",
   cancelled: "Événement annulé",
+  awaiting_member: "À confirmer par le membre",
 };
