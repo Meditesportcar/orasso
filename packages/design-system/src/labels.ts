@@ -37,7 +37,7 @@ export const scanLabels: Record<ScanResultState, string> = {
   refused: "Refusé",
 };
 
-/** Les trois casquettes qui ont une barre d'onglets (TabBar). */
+/** Les quatre casquettes qui ont une barre d'onglets (TabBar). */
 export const tabSets = {
   fan: [
     { id: "home", label: "Accueil", icon: "home" },
@@ -58,6 +58,13 @@ export const tabSets = {
     { id: "publish", label: "Publier", icon: "chat" },
     { id: "scanner", label: "Scanner", icon: "qr", center: true },
     { id: "stats", label: "Stats", icon: "live" },
+    { id: "inbox", label: "Boîte", icon: "inbox" },
+  ],
+  // Casquette Prestataire (lot 16, ARCHITECTURE-SUITE § 7.1) : trois onglets, aucun au centre (pas d'action
+  // principale qui mérite la pastille inclinée).
+  provider: [
+    { id: "applications", label: "Candidatures", icon: "list" },
+    { id: "profile", label: "Profil", icon: "profile" },
     { id: "inbox", label: "Boîte", icon: "inbox" },
   ],
 } as const;
