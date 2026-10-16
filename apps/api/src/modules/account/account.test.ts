@@ -301,6 +301,8 @@ describe("parrainage", () => {
 
 describe("préférences par type", () => {
   it("un type coupé n'est ni poussé ni envoyé ; la sécurité passe toujours", async () => {
+    // En pleine journée (Paris) : hors heures calmes, quelle que soit l'heure à laquelle le test tourne.
+    useClock(new Date("2026-06-10T10:00:00Z"));
     const u = await signUp("Prefs_01");
     const res = await call(u, "PATCH", "/me/settings", {
       mutedTypes: ["new_event_followed"],

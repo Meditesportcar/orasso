@@ -28,6 +28,9 @@ import {
   type events,
   messages,
   notifications,
+  profiles,
+  structureBans,
+  vehicles,
 } from "../../db/schema";
 import { accountService } from "../account/service";
 import { crewRegistrationService } from "./registration";
@@ -749,7 +752,7 @@ describe("inscription en crew", () => {
     const triage = await req(orga, "GET", `/events/${expo.id}/applications?crewId=${crew.id}`);
     expect(triage.json.items).toHaveLength(2);
     const leaCard = triage.json.items.find((i: { id: string }) => i.id === leaApp);
-    expect(leaCard.crew).toMatchObject({ confirmed: 2, total: 3 });
+    expect(leaCard.crew).toMatchObject({ confirmed: 2, total: 2 });
     expect(leaCard.crew.members.map((m: { pseudo: string }) => m.pseudo).sort()).toEqual(
       [kenji.pseudo, lea.pseudo].sort(),
     );
@@ -767,5 +770,139 @@ describe("inscription en crew", () => {
       "withdrawn",
     );
     expect((await req(kenji, "GET", `/applications/${kenjiApp}`)).json.status).toBe("accepted");
+  });
+
+  // ---- Corrections de la relecture du lot 19 ----
+
+  for (const mode of MODES) {
+    it(`pas de réinscription moins de 24 h après « Je ne viens pas » ou un retrait par le chef (${mode})`, async () => {
+      const s = await setup();
+      const base = `/events/${s.event.id}/crew-applications`;
+      const leaOnly = body(s.crew.id, [{ userId: s.lea.id, vehicleId: s.vl.id }]);
+      const ninaOnly = body(s.crew.id, [{ userId: s.nina.id, vehicleId: s.vn.id }]);
+      const first = await req(s.kenji, "POST", base, leaOnly, mode);
+      expect(first.status).toBe(201);
+      await req(s.lea, "POST", `/applications/${first.json.members[0].applicationId}/decline-crew`, undefined, mode);
+      const again = await req(s.kenji, "POST", base, leaOnly, mode);
+      expect(again.status).toBe(429);
+      expect(again.json.error.message).toContain("24 h");
+      const nina = await req(s.kenji, "POST", base, ninaOnly, mode);
+      const ninaApp = nina.json.members.find((m: { pseudo: string }) => m.pseudo === s.nina.pseudo).applicationId;
+      expect((await req(s.kenji, "POST", `/applications/${ninaApp}/crew-remove`, undefined, mode)).status).toBe(204);
+      expect((await req(s.kenji, "POST", base, ninaOnly, mode)).status).toBe(429);
+      const notes = await db
+        .select()
+        .from(notifications)
+        .where(and(eq(notifications.userId, s.nina.id), eq(notifications.type, "crew_registration_to_confirm")));
+      expect(notes).toHaveLength(1);
+      // 24 h plus tard : de nouveau possible.
+      clock.advance(25 * HOUR);
+      expect((await req(s.kenji, "POST", base, leaOnly, mode)).status).toBe(201);
+    });
+  }
+
+  it("le chef n'apprend rien de privé : raisons génériques, véhicules d'un compte privé sans photo ni génération", async () => {
+    const s = await setup();
+    await db.update(profiles).set({ visibility: "private" }).where(eq(profiles.userId, s.nina.id));
+    await db.insert(structureBans).values({ structureId: s.event.structureId, userId: s.lea.id, createdBy: s.orga.id });
+    const options = await req(s.kenji, "GET", `/events/${s.event.id}/crew-applications/options?crewId=${s.crew.id}`);
+    expect(options.status).toBe(200);
+    const byPseudo = (p: string) =>
+      options.json.members.find((m: { person: { pseudo: string } }) => m.person.pseudo === p);
+    expect(byPseudo(s.lea.pseudo).blocked).toBe("Indisponible pour cet événement");
+    const nina = byPseudo(s.nina.pseudo);
+    expect(nina.blocked).toBeNull();
+    expect(nina.vehicles[0].photoUrl).toBeNull();
+    expect(nina.vehicles[0].label).toBe("BMW Série 3");
+    expect(byPseudo(s.kenji.pseudo).vehicles[0].photoUrl).not.toBeNull();
+    expect(byPseudo(s.kenji.pseudo).vehicles[0].label).toBe("BMW Série 3 E36");
+    const refused = await req(
+      s.kenji,
+      "POST",
+      `/events/${s.event.id}/crew-applications`,
+      body(s.crew.id, [{ userId: s.lea.id, vehicleId: s.vl.id }]),
+    );
+    expect(refused.status).toBe(409);
+    expect(refused.json.error.message).toBe(`${s.lea.pseudo} : indisponible pour cet événement`);
+    expect(JSON.stringify(refused.json)).not.toMatch(/structure|banni|suspendu/i);
+  });
+
+  it("départ, retrait et dissolution retirent les venues à confirmer ; crew dissous sans lien au tri", async () => {
+    const s = await setup();
+    const theo = await signUp("Theo");
+    const vt = await createVehicle(theo.id, ref);
+    await addToCrew(s.crew.id, s.kenji, theo);
+    const reg = await req(
+      s.kenji,
+      "POST",
+      `/events/${s.event.id}/crew-applications`,
+      body(s.crew.id, [
+        { userId: s.kenji.id, vehicleId: s.vk.id },
+        { userId: s.lea.id, vehicleId: s.vl.id },
+        { userId: s.nina.id, vehicleId: s.vn.id },
+        { userId: theo.id, vehicleId: vt.id },
+      ]),
+    );
+    const appOf = (p: string) => reg.json.members.find((m: { pseudo: string }) => m.pseudo === p).applicationId;
+    const statusOf = async (id: string) =>
+      (await db.query.applications.findFirst({ where: eq(applications.id, id) }))?.status;
+    // Léa part : sa venue à confirmer est retirée, sa confirmation est refusée.
+    await req(s.lea, "DELETE", `/crews/${s.crew.id}/members/${s.lea.id}`);
+    expect(await statusOf(appOf(s.lea.pseudo))).toBe("withdrawn");
+    expect(
+      (await req(s.lea, "POST", `/applications/${appOf(s.lea.pseudo)}/confirm-crew`, { rulesAccepted: true })).status,
+    ).toBe(409);
+    // Nina retirée par le chef.
+    await req(s.kenji, "DELETE", `/crews/${s.crew.id}/members/${s.nina.id}`);
+    expect(await statusOf(appOf(s.nina.pseudo))).toBe("withdrawn");
+    // Théo confirme, puis le crew est dissous : la venue confirmée reste, le tri ne lie plus vers le crew.
+    await req(theo, "POST", `/applications/${appOf(theo.pseudo)}/confirm-crew`, { rulesAccepted: true });
+    expect((await req(s.kenji, "DELETE", `/crews/${s.crew.id}`)).status).toBe(204);
+    expect(await statusOf(appOf(theo.pseudo))).toBe("pending");
+    const triage = await req(s.orga, "GET", `/events/${s.event.id}/applications?crewId=${s.crew.id}`);
+    expect(triage.json.items[0].crew).toMatchObject({ archived: true, confirmed: 2, total: 2 });
+    for (const n of await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.type, "crew_registration_to_confirm"))) {
+      if (n.userId !== theo.id) expect(n.readAt).not.toBeNull();
+    }
+  });
+
+  it("dissolution par suppression du compte du chef : venues à confirmer retirées sans malus", async () => {
+    const s = await setup();
+    const reg = await req(
+      s.kenji,
+      "POST",
+      `/events/${s.event.id}/crew-applications`,
+      body(s.crew.id, [{ userId: s.lea.id, vehicleId: s.vl.id }]),
+    );
+    const id = reg.json.members[0].applicationId;
+    await accountService.anonymize(s.kenji.id, null);
+    const app = await db.query.applications.findFirst({ where: eq(applications.id, id) });
+    expect(app?.status).toBe("withdrawn");
+    expect(app?.withdrawnAfterLock).toBe(false);
+  });
+
+  it("confirmation refusée si la plaque a été transférée à un autre compte ; annulation : notification fermée", async () => {
+    const s = await setup();
+    const reg = await req(
+      s.kenji,
+      "POST",
+      `/events/${s.event.id}/crew-applications`,
+      body(s.crew.id, [
+        { userId: s.lea.id, vehicleId: s.vl.id },
+        { userId: s.nina.id, vehicleId: s.vn.id },
+      ]),
+    );
+    const leaApp = reg.json.members.find((m: { pseudo: string }) => m.pseudo === s.lea.pseudo).applicationId;
+    await db.update(vehicles).set({ ownerId: s.kenji.id }).where(eq(vehicles.id, s.vl.id));
+    expect((await req(s.lea, "POST", `/applications/${leaApp}/confirm-crew`, { rulesAccepted: true })).status).toBe(
+      409,
+    );
+    expect((await req(s.orga, "POST", `/events/${s.event.id}/cancel`)).status).toBeLessThan(300);
+    const notes = await db.select().from(notifications).where(eq(notifications.type, "crew_registration_to_confirm"));
+    expect(notes.length).toBe(2);
+    expect(notes.every((n) => n.readAt !== null)).toBe(true);
   });
 });

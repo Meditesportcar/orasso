@@ -128,4 +128,11 @@ export const crewErrors = {
   alreadyApplied: (pseudo: string) => `${pseudo} a déjà une candidature pour cet événement`,
   needMember: "Choisis au moins un membre en plus de toi",
   tooManyInvitations: "Trop d'invitations en attente pour ce crew",
+  /** Jamais la raison (bannissement, suspension, candidature existante, transfert de plaque) : information privée. */
+  unavailable: "Indisponible pour cet événement",
+  memberUnavailable: (pseudo: string) => `${pseudo} : indisponible pour cet événement`,
+  someUnavailable: "Un des membres est indisponible pour cet événement",
+  recentlyDeclined: (pseudo: string) =>
+    `${pseudo} ne vient pas ou a été retiré il y a moins de 24 h : réinscription possible plus tard.`,
+  noLongerMember: "Tu ne fais plus partie de ce crew : cette inscription n'est plus valable.",
 } as const;

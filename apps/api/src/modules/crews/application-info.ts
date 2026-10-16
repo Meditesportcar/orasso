@@ -61,6 +61,7 @@ export async function crewsForTriage(eventId: string, rows: AppLike[]) {
         .select({
           id: applications.id,
           crewId: applications.crewId,
+          userId: applications.userId,
           status: applications.status,
           confirmedAt: applications.memberConfirmedAt,
           pseudo: profiles.pseudo,
@@ -74,15 +75,19 @@ export async function crewsForTriage(eventId: string, rows: AppLike[]) {
   return (r: AppLike): ApplicationCrewForTriage | null => {
     const found = r.crewId ? byId.get(r.crewId) : undefined;
     if (!found) return null;
-    const mine = all.filter((a) => a.crewId === found.crew.id);
-    const confirmed = mine.filter((a) => a.confirmedAt !== null);
+    // Une fois par membre, sans les candidatures annulées ou désistées (relecture du lot 19).
+    const live = all.filter((a) => a.crewId === found.crew.id && a.status !== "withdrawn" && a.status !== "cancelled");
+    const members = new Set(live.map((a) => a.userId));
+    const confirmedMembers = new Set(live.filter((a) => a.confirmedAt !== null).map((a) => a.userId));
+    const confirmed = live.filter((a) => a.confirmedAt !== null);
     return {
       id: found.crew.id,
       slug: found.crew.slug,
       name: found.crew.name,
       logoUrl: storage.url(found.crew.logoKey),
-      confirmed: confirmed.length,
-      total: mine.length,
+      archived: Boolean(found.crew.deletedAt),
+      confirmed: confirmedMembers.size,
+      total: members.size,
       members: confirmed.map((a) => ({ applicationId: a.id, pseudo: a.pseudo, status: a.status })),
     };
   };

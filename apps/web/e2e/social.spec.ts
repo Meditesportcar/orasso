@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
-import { addVehicleApi, apiCall, login, loginInBrowser, randomPlate, signUpApi, unique } from "./helpers";
+import { addVehicleApi, apiCall, deliverNow, login, loginInBrowser, randomPlate, signUpApi, unique } from "./helpers";
 
 // Social (lot 17) sur le site : profil d'un autre (public / privé / ami), véhicule d'un autre, recherche de personnes
 // dans Explorer, demande d'ami et acceptation, Journal avec l'actualité des amis, cloche. Avec CAPTURES=1, captures dans
@@ -100,6 +100,8 @@ test("social : profils selon l'audience, recherche, demande d'ami, acceptation, 
   await expect(page.getByTestId("profil")).toHaveAttribute("data-audience", "friend");
   await expect(page.getByText("secret-de-bravo")).toBeVisible();
   await expect(page.getByTestId("friend-remove")).toBeVisible();
+  // Heures calmes (la nuit) : la notification serait reportée à 08:00 ; livrée tout de suite pour la recette.
+  deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
   await page.goto("/app/journal");
   await expect(page.getByTestId("journal-item").filter({ hasText: `${bravo} a accepté` })).toBeVisible();
   await expect(page.getByRole("link", { name: "Journal" })).toBeVisible();

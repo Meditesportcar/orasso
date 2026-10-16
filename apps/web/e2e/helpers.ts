@@ -60,6 +60,19 @@ export function simulateSettle(slug: string): void {
   });
 }
 
+/**
+ * Livre tout de suite les notifications en attente d'un compte (script de l'API, développement seulement) : la nuit, les
+ * heures calmes les reportent à 08:00 et le Journal resterait vide. Rend les recettes indépendantes de l'heure.
+ */
+export function deliverNow(email: string): void {
+  const apiDir = resolve(import.meta.dirname, "../../api");
+  execFileSync(process.execPath, ["--import", "tsx", "scripts/deliver-now.ts", email], {
+    cwd: apiDir,
+    stdio: "pipe",
+    env: { ...process.env },
+  });
+}
+
 /** Photo de test : un PNG uni de 320 × 240 (le serveur le recompresse en WebP), sans dépendance d'image. */
 export function samplePhoto(rgb: [number, number, number] = [138, 74, 42]): Buffer {
   const width = 320;

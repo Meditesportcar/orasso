@@ -16,9 +16,10 @@ import {
   crewLabels,
   isLocked,
   lockAt,
+  profileFields,
   registrationOpensAt,
 } from "@orasso/shared";
-import { and, asc, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -27,15 +28,15 @@ import {
   crewMembers,
   crews,
   events,
-  notifications,
   profiles,
   structureBans,
   structureFollows,
   vehicles,
 } from "../../db/schema";
 import { deps, now } from "../../lib/deps";
-import { conflict, forbidden, invalidTransition, notFound, validation } from "../../lib/errors";
+import { AppError, conflict, forbidden, invalidTransition, notFound, validation } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
+import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
@@ -44,10 +45,11 @@ import { type EventRow, eventsRepo } from "../events/repo";
 import { inboxService } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
+import { audienceFor } from "../social/profile";
 import { type VehicleWithAll, vehiclesRepo } from "../vehicles/repo";
-import { vehicleLabel } from "../vehicles/serializers";
+import { vehicleBriefLabel, vehicleLabel } from "../vehicles/serializers";
+import { closeConfirmNotification, withdrawAwaiting } from "./awaiting";
 
-type After = (cb: () => unknown) => void;
 const ACTIVE = ["pending", "accepted", "waitlisted", "offered", "awaiting_member"] as const;
 const accessLink = { label: "Ouvrir mes accès", path: "/app/acces" };
 
@@ -142,47 +144,9 @@ async function notifyLeader(
   });
 }
 
-/** La notification « venue à confirmer » n'a plus à rester non lue une fois la venue confirmée, refusée ou expirée. */
-async function closeConfirmNotification(tx: Tx, app: ApplicationRow) {
-  await tx
-    .update(notifications)
-    .set({ readAt: now() })
-    .where(
-      and(
-        eq(notifications.userId, app.userId),
-        eq(notifications.type, "crew_registration_to_confirm"),
-        sql`${notifications.data} ->> 'applicationId' = ${app.id}`,
-        isNull(notifications.readAt),
-      ),
-    );
-}
-
 async function lockAwaiting(tx: Tx, applicationId: string) {
   const { event, app } = await applicationsService.lockEventThenApplication(tx, applicationId);
   return { event, app };
-}
-
-/** Passage `awaiting_member → withdrawn` (le membre, le chef ou la tâche d'expiration). */
-async function withdrawAwaiting(
-  tx: Tx,
-  after: After,
-  event: EventRow,
-  app: ApplicationRow,
-  actor: { kind: "user" | "system"; userId: string | null },
-  reason: string,
-) {
-  const row = await applicationsService.transition(
-    tx,
-    app,
-    "withdrawn",
-    actor,
-    { withdrawnAt: now(), withdrawnAfterLock: false, waitlistRank: null },
-    reason,
-  );
-  await closeConfirmNotification(tx, app);
-  applicationsService.broadcast(after, event, [row]);
-  after(() => inboxService.publish(app.userId));
-  return row;
 }
 
 export const crewRegistrationService = {
@@ -211,28 +175,33 @@ export const crewRegistrationService = {
     const counts = await activeCounts(db, eventId, ids);
     const banned = await bannedIds(db, event.structureId, ids);
     const t = now();
+    // Ce que le chef voit des véhicules de chacun : les règles du profil (lot 17). Compte privé et non ami : marque et
+    // modèle, sans photo. Les raisons d'un blocage (bannissement, suspension, candidature existante) ne sont jamais
+    // données : « Indisponible pour cet événement ».
+    const detailed = new Map<string, boolean>();
+    for (const m of members) {
+      const { audience } = await audienceFor(v, m.p);
+      detailed.set(m.p.userId, profileFields(audience).vehicleDetails);
+    }
     return {
       crew: { id: crew.id, name: crew.name },
       members: members.map((m) => {
         const suspended = Boolean(m.p.suspendedUntil && m.p.suspendedUntil > t);
-        const blocked = banned.has(m.p.userId)
-          ? "Ne peut pas candidater aux événements de cette structure"
-          : suspended
-            ? "Compte suspendu"
-            : (counts.get(m.p.userId) ?? 0) >= event.maxVehiclesPerUser
-              ? "A déjà une candidature pour cet événement"
-              : null;
+        const unavailable =
+          banned.has(m.p.userId) || suspended || (counts.get(m.p.userId) ?? 0) >= event.maxVehiclesPerUser;
+        const full = detailed.get(m.p.userId) ?? false;
         return {
           person: { userId: m.p.userId, pseudo: m.p.pseudo, avatarUrl: storage.url(m.p.avatarKey), grade: m.p.grade },
           isLeader: m.role === "leader",
-          blocked,
+          blocked: unavailable ? crewErrors.unavailable : null,
           vehicles: garage
             .filter((x) => x.ownerId === m.p.userId)
             .map((x) => ({
               id: x.id,
-              label: vehicleLabel(x),
-              photoUrl: storage.url(x.photos[0]?.storageKey ?? null),
-              blocked: appliedVehicles.has(x.id) ? "Déjà candidat pour cet événement" : vehicleBlock(x, event),
+              label: full ? vehicleLabel(x) : vehicleBriefLabel(x),
+              photoUrl: full ? storage.url(x.photos[0]?.storageKey ?? null) : null,
+              blocked:
+                appliedVehicles.has(x.id) || x.pendingTransferId ? crewErrors.unavailable : vehicleBlock(x, event),
             })),
         };
       }),
@@ -248,6 +217,7 @@ export const crewRegistrationService = {
     if (v.profile.suspendedUntil && v.profile.suspendedUntil > now()) {
       throw forbidden("Ton compte est suspendu : lecture seule.");
     }
+    rateLimit("crewWrite", v.user.id);
     const t = now();
     const userIds = input.members.map((m) => m.userId);
     if (new Set(userIds).size !== userIds.length) throw validation(crewErrors.duplicateMember);
@@ -287,23 +257,44 @@ export const crewRegistrationService = {
         const vehiclesById = new Map(garage.map((x) => [x.id, x]));
         for (const m of input.members) {
           const member = byUser.get(m.userId);
-          if (
-            member?.status !== "active" ||
-            member.p.deletedAt ||
-            (member.p.suspendedUntil && member.p.suspendedUntil > t)
-          ) {
+          if (member?.status !== "active" || member.p.deletedAt) {
             throw validation(crewErrors.memberNotActive(member?.p.pseudo ?? "Cette personne"));
           }
           const pseudo = member.p.pseudo;
-          if (banned.has(m.userId))
-            throw forbidden(`${pseudo} ne peut pas candidater aux événements de cette structure`);
           const x = vehiclesById.get(m.vehicleId);
           if (x?.ownerId !== m.userId) throw validation(crewErrors.vehicleNotOwned);
+          // Suspension, bannissement par la structure, candidature déjà en cours, transfert de plaque : jamais la raison
+          // (informations privées du membre), le même refus pour tous.
+          if (
+            (member.p.suspendedUntil && member.p.suspendedUntil > t) ||
+            banned.has(m.userId) ||
+            x.pendingTransferId ||
+            (counts.get(m.userId) ?? 0) + 1 > event.maxVehiclesPerUser
+          ) {
+            throw conflict("conflict", crewErrors.memberUnavailable(pseudo), { userId: m.userId });
+          }
           const block = vehicleBlock(x, event);
           if (block) throw validation(`${pseudo}, ${vehicleLabel(x)} : ${block.toLowerCase()}`);
-          if ((counts.get(m.userId) ?? 0) + 1 > event.maxVehiclesPerUser) {
-            throw conflict("conflict", crewErrors.alreadyApplied(pseudo), { userId: m.userId });
-          }
+        }
+        // Anti-harcèlement : pas de nouvelle inscription d'un membre à cet événement moins de 24 h après son « Je ne
+        // viens pas » ou son retrait par le chef (chaque inscription lui envoie une notification et bloque son véhicule).
+        const others = userIds.filter((id) => id !== v.user.id);
+        const recent = await tx
+          .select({ userId: applications.userId })
+          .from(applicationEvents)
+          .innerJoin(applications, eq(applications.id, applicationEvents.applicationId))
+          .where(
+            and(
+              eq(applications.eventId, eventId),
+              inArray(applications.userId, others),
+              inArray(applicationEvents.reason, ["crew.decline", "crew.leader_removed"]),
+              gt(applicationEvents.at, new Date(t.getTime() - 24 * 3_600_000)),
+            ),
+          )
+          .limit(1);
+        if (recent[0]) {
+          const pseudo = byUser.get(recent[0].userId)?.p.pseudo ?? "Ce membre";
+          throw new AppError(429, "rate_limited", crewErrors.recentlyDeclined(pseudo), { retryAfter: 86_400 });
         }
 
         // Plusieurs envois du chef sur un même événement : un seul regroupement par crew.
@@ -384,7 +375,7 @@ export const crewRegistrationService = {
       });
     } catch (error) {
       if (applicationsService.isUniqueViolation(error)) {
-        throw conflict("conflict", "Un de ces véhicules a déjà une candidature pour cet événement");
+        throw conflict("conflict", crewErrors.someUnavailable);
       }
       throw error;
     }
@@ -455,12 +446,24 @@ export const crewRegistrationService = {
       if (t >= crewConfirmDeadline(app.createdAt, lockAt(event))) {
         throw conflict("offer_expired", "Le délai de confirmation est dépassé");
       }
+      // Inscription en crew : seulement tant qu'on est membre d'un crew qui existe encore.
+      if (app.crewId) {
+        const [crew] = await tx.select({ deletedAt: crews.deletedAt }).from(crews).where(eq(crews.id, app.crewId));
+        if (!crew || crew.deletedAt) throw conflict("conflict", crewErrors.archived);
+        const [membership] = await tx
+          .select({ status: crewMembers.status })
+          .from(crewMembers)
+          .where(and(eq(crewMembers.crewId, app.crewId), eq(crewMembers.userId, v.user.id)));
+        if (membership?.status !== "active") throw conflict("conflict", crewErrors.noLongerMember);
+      }
       const [banned] = await tx
         .select({ userId: structureBans.userId })
         .from(structureBans)
         .where(and(eq(structureBans.structureId, event.structureId), eq(structureBans.userId, v.user.id)));
       if (banned) throw forbidden("Tu ne peux pas candidater aux événements de cette structure");
       const vehicle = app.vehicleId ? await vehiclesRepo.findFullById(app.vehicleId, tx) : undefined;
+      // Plaque transférée à un autre compte pendant les 72 h : le véhicule n'est plus le sien.
+      if (vehicle && vehicle.ownerId !== app.userId) throw conflict("conflict", crewErrors.vehicleNotOwned);
       const block = vehicle ? vehicleBlock(vehicle, event) : "Véhicule introuvable";
       if (block) throw validation(`${vehicle ? vehicleLabel(vehicle) : "Véhicule"} : ${block.toLowerCase()}`);
       let row = await applicationsService.transition(
@@ -506,6 +509,7 @@ export const crewRegistrationService = {
 
   /** `POST /applications/:id/crew-remove` (le chef) : retirer un membre qui n'a pas encore confirmé. */
   async removeAwaiting(v: Viewer, applicationId: string): Promise<ApplicationRow> {
+    rateLimit("crewWrite", v.user.id);
     return withTx(async (tx, after) => {
       const { event, app } = await lockAwaiting(tx, applicationId);
       if (!app.crewId) throw notFound("Candidature introuvable");

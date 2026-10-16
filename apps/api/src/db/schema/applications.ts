@@ -87,7 +87,8 @@ export const applications = pgTable(
     index("applications_event_waitlist_idx").on(t.eventId, t.waitlistRank),
     // Une candidature active par véhicule et par événement, `awaiting_member` comprise (lot 19 : une inscription en
     // crew bloque le véhicule). Écrit par les statuts terminés : la migration qui ajoute `awaiting_member` à l'enum ne
-    // peut pas citer la nouvelle valeur dans la même transaction.
+    // peut pas citer la nouvelle valeur dans la même transaction. **Liste noire** : tout futur statut terminal doit être
+    // ajouté ici (sinon il bloquerait le véhicule pour toujours).
     uniqueIndex("applications_active_vehicle_key")
       .on(t.eventId, t.vehicleId)
       .where(sql`${t.status} not in ('refused', 'withdrawn', 'expired', 'cancelled')`),

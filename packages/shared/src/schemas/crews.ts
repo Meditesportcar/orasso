@@ -176,6 +176,9 @@ export type ApplicationCrewForTriage = {
   slug: string;
   name: string;
   logoUrl: string | null;
+  /** Crew dissous : pas de lien vers sa fiche. */
+  archived: boolean;
+  /** Membres (une fois chacun) dont la venue est confirmée / membres inscrits, sans les annulées ni les désistées. */
   confirmed: number;
   total: number;
   /** Candidatures confirmées du même crew sur cet événement (les membres non confirmés ne sont jamais nommés). */

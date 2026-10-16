@@ -272,9 +272,13 @@ export function TriageFile({
           <div className="tri__kv" data-testid="triage-crew">
             <span>{crewLabels.triageCrew}</span>
             <span>
-              <a href={`/c/${current.crew.slug}`} className="o-never-truncate">
-                {current.crew.name}
-              </a>{" "}
+              {current.crew.archived ? (
+                <span className="o-never-truncate">{current.crew.name}</span>
+              ) : (
+                <a href={`/c/${current.crew.slug}`} className="o-never-truncate">
+                  {current.crew.name}
+                </a>
+              )}{" "}
               · {crewLabels.confirmedCount(current.crew.confirmed, current.crew.total)}
               {current.crew.members.filter((m) => m.applicationId !== current.id).length > 0 && (
                 <>

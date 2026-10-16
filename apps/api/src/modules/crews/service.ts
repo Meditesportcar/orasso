@@ -57,6 +57,7 @@ import { nextMessageAt } from "../messaging/service";
 import { notificationsService } from "../notifications/service";
 import { type Profile, profilesRepo } from "../profiles/repo";
 import { uploadsService } from "../uploads/service";
+import { withdrawAwaitingForCrew } from "./awaiting";
 
 export type CrewRow = typeof crews.$inferSelect;
 export type CrewMemberRow = typeof crewMembers.$inferSelect;
@@ -358,6 +359,8 @@ async function depart(
     .set({ status, respondedAt: now() })
     .where(and(eq(crewMembers.crewId, crew.id), eq(crewMembers.userId, person.userId)));
   await recount(tx, crew.id);
+  // Ses venues encore à confirmer avec ce crew ne valent plus (relecture du lot 19).
+  await withdrawAwaitingForCrew(tx, after, crew.id, person.userId);
   const conversationId = await syncConversation(tx, crew);
   await systemMessage(
     tx,
@@ -516,6 +519,8 @@ export const crewsService = {
   async archiveInTx(tx: Tx, after: After, crew: CrewRow, reason: "leader" | "account_deleted"): Promise<string[]> {
     const at = now();
     await tx.update(crews).set({ deletedAt: at, logoKey: null }).where(eq(crews.id, crew.id));
+    // Venues à confirmer avec ce crew : retirées (sans malus) ; les venues déjà confirmées vivent seules.
+    await withdrawAwaitingForCrew(tx, after, crew.id);
     const pending = await tx
       .delete(crewMembers)
       .where(and(eq(crewMembers.crewId, crew.id), inArray(crewMembers.status, ["requested", "invited"])))
