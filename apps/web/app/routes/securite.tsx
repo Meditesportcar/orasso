@@ -23,6 +23,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     enabled: me.user.twoFactorEnabled,
     required: me.twoFactorRequired,
+    hint: me.twoFactorHint,
     passkeys: passkeys.ok ? passkeys.data : [],
     sessions: sessions.ok ? sessions.data : [],
   };
@@ -89,6 +90,12 @@ export default function Securite({ loaderData, actionData }: Route.ComponentProp
       <p className="s-muted">
         <a href="/app/moi">← Mon compte</a>
       </p>
+      {loaderData.hint === "passkey_sign_in" && (
+        <p className="s-notice s-notice--alert" data-testid="passkey-sign-in-needed">
+          Tu as une clé d'accès mais tu t'es connecté par mot de passe : pour l'espace organisateur, reconnecte-toi avec
+          ta clé (ou active l'application d'authentification).
+        </p>
+      )}
 
       <section className="s-section s-section--first" aria-labelledby="totp-titre">
         <h2 id="totp-titre" className="s-h2">
@@ -103,7 +110,7 @@ export default function Securite({ loaderData, actionData }: Route.ComponentProp
           <>
             <p className="s-lead">
               {loaderData.required
-                ? "La double authentification est obligatoire pour les organisateurs : application d'authentification ou clé d'accès."
+                ? "La double authentification est obligatoire pour les organisateurs : application d'authentification, ou connexion avec une clé d'accès."
                 : "Protège ton compte avec un code à usage unique."}
             </p>
             <Form method="post" className="s-form">
@@ -160,8 +167,9 @@ export default function Securite({ loaderData, actionData }: Route.ComponentProp
           Clés d'accès
         </h2>
         <p className="s-muted">
-          Face ID, empreinte ou clé de sécurité : une clé d'accès vaut double authentification et permet de se connecter
-          sans mot de passe sur ce site. Dans l'appli, la double authentification se fait par code.
+          Face ID, empreinte ou code de l'appareil : se connecter sur ce site avec une clé d'accès vaut double
+          authentification pour cette session. Une connexion par mot de passe, elle, demande l'application
+          d'authentification si elle est activée. Dans l'appli, la double authentification se fait par code.
         </p>
         {loaderData.passkeys.length === 0 ? (
           <p className="s-notice">Aucune clé d'accès.</p>

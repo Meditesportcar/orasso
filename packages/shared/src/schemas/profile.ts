@@ -78,6 +78,8 @@ export type Me = {
   pro: { id: string; slug: string; name: string; logoUrl: string | null; published: boolean; verified: boolean } | null;
   /** La double authentification est exigée (organisateur ou administration) mais pas encore activée. */
   twoFactorRequired: boolean;
+  /** Lot 15 : que faire quand la 2FA est exigée — l'activer, ou se reconnecter avec sa clé d'accès (la session doit la prouver). */
+  twoFactorHint: "setup" | "passkey_sign_in" | null;
   counts: { vehicles: number; upcomingApplications: number; unreadNotifications: number };
 };
 

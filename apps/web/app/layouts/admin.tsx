@@ -1,6 +1,7 @@
 import { Ground, Monogram, ThemeScope } from "@orasso/design-system/web";
 import { Outlet, useLocation } from "react-router";
 
+import { TwoFactorNotice } from "../components/TwoFactorNotice";
 import { requireSuperAdmin } from "../lib/admin.server";
 import type { Route } from "./+types/admin";
 
@@ -13,7 +14,7 @@ const adminSections: AdminSection[] = [{ href: "/admin", label: "Structures à v
 
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireSuperAdmin(request);
-  return { pseudo: me.profile.pseudo, twoFactorRequired: me.twoFactorRequired };
+  return { pseudo: me.profile.pseudo, twoFactorHint: me.twoFactorHint };
 }
 
 export function meta() {
@@ -21,7 +22,7 @@ export function meta() {
 }
 
 export default function AdminLayout({ loaderData }: Route.ComponentProps) {
-  const { pseudo, twoFactorRequired } = loaderData;
+  const { pseudo, twoFactorHint } = loaderData;
   const { pathname } = useLocation();
   return (
     <ThemeScope theme="sable">
@@ -55,12 +56,7 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
             </a>
           </nav>
           <main className="orga__content">
-            {twoFactorRequired && (
-              <p className="s-notice s-notice--alert">
-                La double authentification est obligatoire pour l'administration.{" "}
-                <a href="/app/securite">Active-la maintenant</a>.
-              </p>
-            )}
+            <TwoFactorNotice hint={twoFactorHint} space="l'administration" />
             <Outlet />
           </main>
         </div>

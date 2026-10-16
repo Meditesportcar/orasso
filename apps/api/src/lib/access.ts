@@ -10,16 +10,24 @@ import type { Viewer } from "./session";
 
 export const isSuperAdmin = (v: Viewer) => v.profile.platformRole === "super_admin";
 
-/** Double authentification : TOTP activé ou au moins une clé d'accès (lot 15, S2). */
-export async function hasSecondFactor(v: Viewer): Promise<boolean> {
-  if (v.user.twoFactorEnabled) return true;
-  const [row] = await db.select({ id: passkey.id }).from(passkey).where(eq(passkey.userId, v.user.id)).limit(1);
+/**
+ * Double authentification prouvée par la session (lot 15, corrections après relecture) : TOTP activé (Better Auth exige
+ * alors le code à chaque connexion par mot de passe) **ou** session ouverte par une clé d'accès vérifiée. Une clé
+ * enregistrée sur le compte ne suffit pas : une connexion par mot de passe seul ne la prouve pas.
+ */
+export function hasSecondFactor(v: Viewer): boolean {
+  return Boolean(v.user.twoFactorEnabled) || v.session?.secondFactor === "passkey";
+}
+
+/** Le compte a-t-il au moins une clé d'accès (pour dire « reconnecte-toi avec ta clé ») ? */
+export async function hasPasskey(userId: string): Promise<boolean> {
+  const [row] = await db.select({ id: passkey.id }).from(passkey).where(eq(passkey.userId, userId)).limit(1);
   return Boolean(row);
 }
 
 /** 2FA (TOTP ou clé d'accès), ou contournement explicite de développement (`DEV_SKIP_2FA`, refusé en production). */
 async function assertTwoFactor(v: Viewer) {
-  if (env.DEV_SKIP_2FA || (await hasSecondFactor(v))) return;
+  if (env.DEV_SKIP_2FA || hasSecondFactor(v)) return;
   throw new AppError(403, "two_factor_required", "Double authentification obligatoire pour cet espace");
 }
 
@@ -109,7 +117,7 @@ export async function staffAccess(
 
 /** La double authentification est exigée mais pas encore activée (affiché dans `GET /me`). */
 export async function twoFactorRequired(v: Viewer): Promise<boolean> {
-  if (await hasSecondFactor(v)) return false;
+  if (hasSecondFactor(v)) return false;
   if (v.profile.platformRole !== "user") return true;
   const organizer = await db.query.structureMembers.findFirst({
     where: and(

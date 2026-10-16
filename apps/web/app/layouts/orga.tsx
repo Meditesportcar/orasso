@@ -2,6 +2,7 @@ import { Ground, Monogram, ThemeScope } from "@orasso/design-system/web";
 import type { StructurePublic } from "@orasso/shared";
 import { Form, Outlet, useLocation, useParams } from "react-router";
 
+import { TwoFactorNotice } from "../components/TwoFactorNotice";
 import { apiOrThrow, requireMe } from "../lib/api.server";
 import type { Route } from "./+types/orga";
 
@@ -21,7 +22,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     isOrganizer: membership.role !== "staff",
     canCheckTickets:
       membership.role !== "staff" || membership.staffRoles.some((r) => r === "scan" || r === "super_staff"),
-    twoFactorRequired: me.twoFactorRequired,
+    twoFactorHint: me.twoFactorHint,
     pseudo: me.profile.pseudo,
   };
 }
@@ -39,7 +40,7 @@ function SideLink({ href, children, on }: { href: string; children: string; on: 
 }
 
 export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
-  const { structure, isOrganizer, canCheckTickets, twoFactorRequired, pseudo } = loaderData;
+  const { structure, isOrganizer, canCheckTickets, twoFactorHint, pseudo } = loaderData;
   const { pathname } = useLocation();
   const { eventId } = useParams();
   const base = `/orga/${structure.slug}`;
@@ -94,12 +95,7 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
             </Form>
           </nav>
           <main className="orga__content">
-            {twoFactorRequired && (
-              <p className="s-notice s-notice--alert">
-                La double authentification est obligatoire pour l'espace organisateur.{" "}
-                <a href="/app/securite">Active-la maintenant</a> pour décider des candidatures.
-              </p>
-            )}
+            <TwoFactorNotice hint={twoFactorHint} space="l'espace organisateur" />
             <Outlet />
           </main>
         </div>

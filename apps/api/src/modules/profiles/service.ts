@@ -20,7 +20,7 @@ import {
   structures,
   vehicles,
 } from "../../db/schema";
-import { twoFactorRequired } from "../../lib/access";
+import { hasPasskey, twoFactorRequired } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, notFound, validation } from "../../lib/errors";
 import type { AuthUser, Viewer } from "../../lib/session";
@@ -110,6 +110,7 @@ export const profilesService = {
       .select({ n: count() })
       .from(notifications)
       .where(and(eq(notifications.userId, v.user.id), isNull(notifications.readAt)));
+    const required = await twoFactorRequired(v);
     return {
       user: {
         id: v.user.id,
@@ -149,7 +150,8 @@ export const profilesService = {
         ...m,
         staffRoles: m.staffRoles as Me["memberships"][number]["staffRoles"],
       })),
-      twoFactorRequired: await twoFactorRequired(v),
+      twoFactorRequired: required,
+      twoFactorHint: required ? ((await hasPasskey(v.user.id)) ? "passkey_sign_in" : "setup") : null,
       counts: {
         vehicles: vehicleCount?.n ?? 0,
         upcomingApplications: upcoming?.n ?? 0,

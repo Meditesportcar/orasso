@@ -14,6 +14,8 @@ export type AppEnv = {
     profile: Profile | null;
     /** Session Better Auth de la requête (liste des sessions : « cet appareil »). */
     sessionId: string | null;
+    /** Second facteur prouvé par la session (« passkey »), lot 15. */
+    sessionSecondFactor: string | null;
     /** En-tête `X-Device-Id` de l'appli (attribution des scans, lot 06). */
     deviceId: string | null;
   };
@@ -24,12 +26,17 @@ export const loadSession = createMiddleware<AppEnv>(async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   c.set("user", session?.user ?? null);
   c.set("sessionId", session?.session.id ?? null);
+  c.set(
+    "sessionSecondFactor",
+    (session?.session as { secondFactor?: string | null } | undefined)?.secondFactor ?? null,
+  );
   c.set("profile", session ? ((await profilesRepo.byUserId(session.user.id)) ?? null) : null);
   c.set("deviceId", c.req.header("x-device-id") ?? null);
   await next();
 });
 
-export type Viewer = { user: AuthUser; profile: Profile };
+/** `session` : second facteur prouvé par la session de la requête (absent hors requête HTTP : tâches, scripts). */
+export type Viewer = { user: AuthUser; profile: Profile; session?: { secondFactor: string | null } };
 
 /** Utilisateur connecté (401 sinon). Le profil est créé s'il manque (compte antérieur au lot 05). */
 export async function requireUser(c: Context<AppEnv>): Promise<Viewer> {
@@ -40,7 +47,9 @@ export async function requireUser(c: Context<AppEnv>): Promise<Viewer> {
     profile = await ensureProfile(user);
     c.set("profile", profile);
   }
-  return { user, profile };
+  // Compte supprimé (anonymisé) : plus aucun accès, même si une session avait survécu.
+  if (profile.deletedAt) throw unauthenticated();
+  return { user, profile, session: { secondFactor: c.get("sessionSecondFactor") ?? null } };
 }
 
 /** Utilisateur connecté ou rien (routes publiques enrichies quand on est connecté). */

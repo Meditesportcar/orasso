@@ -33,6 +33,8 @@ export const session = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
+    /** Lot 15 : second facteur prouvé par cette session (« passkey » si ouverte par une clé d'accès vérifiée). */
+    secondFactor: text("second_factor"),
     ...timestamps,
   },
   (t) => [index("session_user_id_idx").on(t.userId)],
