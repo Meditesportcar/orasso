@@ -171,7 +171,8 @@ export default function CrewRegistration() {
                 <View style={styles.personRow}>
                   <Avatar url={m.person.avatarUrl} pseudo={m.person.pseudo} size={28} />
                   <Text variant="caption" color={c.plateMuted}>
-                    {m.blocked ?? (usable.length === 0 ? crewLabels.registerCrewNoVehicle : "")}
+                    {m.blocked ??
+                      (usable.length === 0 ? (m.vehicles[0]?.blocked ?? crewLabels.registerCrewNoVehicle) : "")}
                   </Text>
                 </View>
                 {on

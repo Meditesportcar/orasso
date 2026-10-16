@@ -202,7 +202,9 @@ export default function CrewInscription({ loaderData, actionData }: Route.Compon
                   />
                   {m.blocked && <span className="o-t-caption s-muted">{m.blocked}</span>}
                   {!m.blocked && usable.length === 0 && (
-                    <span className="o-t-caption s-muted">{crewLabels.registerCrewNoVehicle}</span>
+                    <span className="o-t-caption s-muted">
+                      {m.vehicles[0]?.blocked ?? crewLabels.registerCrewNoVehicle}
+                    </span>
                   )}
                   {picked[id] && (
                     <div className="crw-pick__vehicles" role="radiogroup" aria-label={`Véhicule de ${m.person.pseudo}`}>
