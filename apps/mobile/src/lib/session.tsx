@@ -24,6 +24,8 @@ type SessionValue = {
   signOut: () => Promise<void>;
   /** Recharge `/api/me` (compteurs, grade, points). */
   refreshMe: () => Promise<Me | null>;
+  /** Better Auth a remplacé la session (mot de passe changé, double authentification activée ou désactivée) : nouveau jeton. */
+  adoptToken: (token: string) => Promise<void>;
 };
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -126,6 +128,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setStatus("out");
       },
       refreshMe: loadMe,
+      adoptToken: async (token) => {
+        setSessionToken(token);
+        await kvSet(TOKEN_KEY, token);
+      },
     }),
     [status, me, offline, open, loadMe],
   );

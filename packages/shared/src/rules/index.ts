@@ -1,4 +1,5 @@
 export * from "./applicationTransitions";
+export * from "./garage";
 export * from "./lock";
 export * from "./misc";
 export * from "./notifications";

@@ -13,6 +13,8 @@ export const rateRules = {
     windowMs: 3_600_000,
     message: "Trop de véhicules ajoutés ou modifiés : réessaie plus tard.",
   },
+  /** Fiche Instagram d'un véhicule (rendu d'image, mis en cache une heure par véhicule). */
+  shareImage: { max: 40, windowMs: 3_600_000, message: "Trop de fiches générées : réessaie plus tard." },
   /** Vérification d'un QR de compte : code de 8 chiffres deviné par essais successifs. */
   accountQrVerify: { max: 30, windowMs: 60_000, message: "Trop de vérifications : réessaie dans une minute." },
   /** Recherche du staff par début de plaque ou pseudo. */
@@ -46,6 +48,8 @@ export const rateRules = {
   /** Relance de l'e-mail de vérification (lot 15). */
   /** Suppression du compte : essais de mot de passe et de code (lot 15). */
   accountDelete: { max: 5, windowMs: 15 * 60_000, message: "Trop d'essais : réessaie dans un quart d'heure." },
+  /** Codes TOTP ou de secours vérifiés depuis une session déjà ouverte (le plugin ne les compte pas, lot 15). */
+  twoFactorVerify: { max: 5, windowMs: 15 * 60_000, message: "Trop d'essais : réessaie dans un quart d'heure." },
   emailVerificationResend: { max: 3, windowMs: 3_600_000, message: "Trop de relances : réessaie dans une heure." },
   /** Demandes d'ami (lot 17) : 20 par personne et par jour. */
   friendRequest: { max: 20, windowMs: 86_400_000, message: "Trop de demandes d'ami aujourd'hui : réessaie demain." },

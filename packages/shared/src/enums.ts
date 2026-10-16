@@ -3,6 +3,7 @@ import { z } from "zod";
 import { accountEmailAlwaysTypes, accountNotificationTypes } from "./notifications/account";
 import { applicationNotificationTypes } from "./notifications/application";
 import { eventEmailAlwaysTypes, eventNotificationTypes } from "./notifications/events";
+import { garageNotificationTypes } from "./notifications/garage";
 import { pointsNotificationTypes } from "./notifications/points";
 import { socialNotificationTypes } from "./notifications/social";
 import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
@@ -45,6 +46,7 @@ export const vehicleStatuses = ["active", "sold", "keepsake", "wrecked"] as cons
 export type VehicleStatus = (typeof vehicleStatuses)[number];
 
 export const plateTransferStatuses = ["pending", "accepted", "refused", "arbitrated"] as const;
+export type PlateTransferStatus = (typeof plateTransferStatuses)[number];
 
 export const eventFormats = ["gathering", "exhibition", "cars_and_coffee", "show", "open_house", "night"] as const;
 export type EventFormat = (typeof eventFormats)[number];
@@ -107,6 +109,7 @@ export const notificationTypes = {
   ...pointsNotificationTypes,
   ...accountNotificationTypes,
   ...socialNotificationTypes,
+  ...garageNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 

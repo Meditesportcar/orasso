@@ -27,10 +27,12 @@ import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
 import { prosRoutes } from "./modules/pros/routes";
 import { reviewsRoutes } from "./modules/reviews/routes";
+import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { socialRoutes } from "./modules/social/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { structuresRoutes } from "./modules/structures/routes";
 import { ticketsRoutes } from "./modules/tickets/routes";
+import { garageRoutes } from "./modules/vehicles/garage-routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { ws } from "./ws";
 
@@ -80,7 +82,23 @@ app.get("/health", async (c) => {
   }
 });
 
-app.on(["GET", "POST"], "/auth/*", (c) => auth.handler(c.req.raw));
+// Corps des requêtes de Better Auth limités à 1 Mo (le garde ci-dessous clone et lit le JSON).
+app.use(
+  "/auth/*",
+  bodyLimit({
+    maxSize: 1024 * 1024,
+    onError: () => {
+      throw new AppError(413, "payload_too_large", "Requête trop lourde");
+    },
+  }),
+);
+// Garde unique des routes de Better Auth (session lue en cookie ou en jeton porteur) : `modules/security/auth-guard.ts`.
+app.on(
+  ["GET", "POST"],
+  "/auth/*",
+  authGuard((headers) => auth.api.getSession({ headers }) as Promise<SessionLike | null>),
+  (c) => auth.handler(c.req.raw),
+);
 
 app.route("/ws", ws);
 
@@ -111,6 +129,7 @@ app.use("*", loadSession);
 app.route("/", accessRoutes);
 app.route("/", profilesRoutes);
 app.route("/", vehiclesRoutes);
+app.route("/", garageRoutes);
 app.route("/", structuresRoutes);
 app.route("/", eventsRoutes);
 app.route("/", applicationsRoutes);

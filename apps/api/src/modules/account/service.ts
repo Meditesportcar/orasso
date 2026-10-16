@@ -1,7 +1,7 @@
 // Compte (lot 15, ARCHITECTURE-SUITE § 1.2 à § 1.5) : e-mails de réinitialisation et de vérification, parrainage,
 // réglages regroupés, aperçu public, suppression du compte par anonymisation (S5).
 import { randomBytes } from "node:crypto";
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createOTP } from "@better-auth/utils/otp";
 import {
@@ -60,8 +60,11 @@ import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
 import { accountQrShortId } from "../profiles/service";
 import { securityMails } from "../security/mails";
+import { isSecondFactor } from "../security/passkey";
+import { securityService } from "../security/service";
 import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
 import { socialProfile } from "../social/profile";
+import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
 
 type MailUser = { id: string; email: string; name: string };
 
@@ -117,15 +120,18 @@ async function isExpressAccount(email: string): Promise<boolean> {
   return Boolean(row);
 }
 
-/** Copies HTML du transport « journal » adressées à ce destinataire (développement ; facultatives en ligne). */
-async function removeJournalMails(email: string) {
+/**
+ * Copies HTML du transport « journal » des e-mails donnés (fichiers `<date>-<id>.html`) : développement ; facultatives
+ * en ligne. Les identifiants viennent de la file des e-mails, sans relire chaque fichier.
+ */
+async function removeJournalMails(ids: string[]) {
+  if (!ids.length) return;
   const dir = join(dataDir, "mail");
   const names = await readdir(dir).catch(() => [] as string[]);
-  const head = `<!-- À : ${email} -->`;
+  const wanted = new Set(ids);
   for (const name of names) {
-    const file = join(dir, name);
-    const content = await readFile(file, "utf8").catch(() => "");
-    if (content.startsWith(head)) await rm(file, { force: true });
+    const id = /-([0-9a-f-]{36})\.html$/.exec(name)?.[1];
+    if (id && wanted.has(id)) await rm(join(dir, name), { force: true });
   }
 }
 
@@ -247,15 +253,17 @@ export const accountService = {
   async deleteAccount(v: Viewer, input: AccountDelete, ip?: string | null) {
     if (v.profile.deletedAt) throw new AppError(401, "unauthenticated", "Compte supprimé");
     rateLimit("accountDelete", v.user.id);
-    const passkeySession = v.session?.secondFactor === "passkey";
+    // Session qui prouve un second facteur (clé d'accès vérifiée, ou code TOTP / de secours / appareil de confiance).
+    const provenSession = isSecondFactor(v.session?.secondFactor);
     const cred = await db.query.account.findFirst({
       where: and(eq(account.userId, v.user.id), eq(account.providerId, "credential")),
       columns: { password: true },
     });
-    const passwordOk = cred?.password ? await checkPassword(v.user.id, input.password) : passkeySession;
+    const passwordOk = cred?.password ? await checkPassword(v.user.id, input.password) : provenSession;
+    // Compte protégé par un facteur (TOTP ou clé d'accès) : session qui le prouve, ou code valide.
     const secondOk =
-      !v.user.twoFactorEnabled ||
-      passkeySession ||
+      !(await securityService.accountHasFactor(v.user.id)) ||
+      provenSession ||
       (Boolean(input.totpCode) && (await checkTotpOrBackupCode(v.user.id, input.totpCode ?? "")));
     if (!passwordOk || !secondOk) throw new AppError(403, "invalid_credentials", "Confirmation incorrecte");
     const owned = await db
@@ -292,6 +300,7 @@ export const accountService = {
     const photoKeys: string[] = [];
     let oldEmail = null as string | null;
     let oldPseudo = null as string | null;
+    const mailIds: string[] = [];
     const before = await db.query.profiles.findFirst({
       where: eq(profiles.userId, userId),
       columns: { deletedAt: true },
@@ -353,7 +362,12 @@ export const accountService = {
       await tx.delete(profileInterests).where(eq(profileInterests.userId, userId));
       // Traces de l'adresse et de la plaque ailleurs : file des e-mails, inscriptions express, invitations, transferts.
       if (oldEmail) {
-        await tx.update(emailOutbox).set({ to: anonEmail }).where(eq(emailOutbox.to, oldEmail));
+        const sent = await tx
+          .update(emailOutbox)
+          .set({ to: anonEmail })
+          .where(eq(emailOutbox.to, oldEmail))
+          .returning({ id: emailOutbox.id });
+        mailIds.push(...sent.map((m) => m.id));
         await tx.update(expressInvites).set({ email: anonEmail }).where(eq(expressInvites.email, oldEmail));
         await tx.update(eventInvitations).set({ email: null }).where(eq(eventInvitations.email, oldEmail));
       }
@@ -384,6 +398,8 @@ export const accountService = {
           })
           .where(inArray(vehicles.id, ids));
       }
+      // Garage : demandes de certification, certification, demandes de transfert de plaque (lot 31).
+      await anonymizeGarageForDeletedAccount(tx, userId);
       // Liens sociaux et d'organisation (amis : lot 17 ; crews, messagerie : lots 18 et 19, à compléter par leurs tables).
       await anonymizeSocialForDeletedAccount(tx, userId);
       await tx.delete(structureFollows).where(eq(structureFollows.userId, userId));
@@ -442,9 +458,14 @@ export const accountService = {
       // Confirmation à l'ancienne adresse, après la validation ; la trace dans la file des e-mails est aussitôt
       // anonymisée et la copie du transport journal supprimée.
       await mail.send("account_deleted", oldEmail, securityMails.accountDeleted(oldPseudo ?? ""), { userId });
-      await db.update(emailOutbox).set({ to: anonEmail }).where(eq(emailOutbox.to, oldEmail));
+      const sent = await db
+        .update(emailOutbox)
+        .set({ to: anonEmail })
+        .where(eq(emailOutbox.to, oldEmail))
+        .returning({ id: emailOutbox.id });
+      mailIds.push(...sent.map((m) => m.id));
     }
-    if (oldEmail) await removeJournalMails(oldEmail);
+    await removeJournalMails(mailIds);
     return { deleted: true };
   },
 };

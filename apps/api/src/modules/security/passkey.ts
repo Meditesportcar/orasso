@@ -15,17 +15,6 @@ export const TOTP_VERIFY_PATHS = [
 ];
 /** Chemins qui recréent la session courante : la preuve de l'ancienne session est reportée sur la nouvelle. */
 export const CARRY_FACTOR_PATHS = ["/change-password", "/two-factor/disable", "/two-factor/enable"];
-/**
- * Ajouter, supprimer ou changer un facteur. Si le compte en a déjà un, la session doit le prouver ; sinon (premier
- * facteur), une session récente suffit (amorçage).
- */
-export const FACTOR_ENROLLMENT_PATHS = [
-  "/passkey/generate-register-options",
-  "/passkey/verify-registration",
-  "/passkey/delete-passkey",
-  "/two-factor/enable",
-  "/two-factor/disable",
-];
 /** Amorçage (aucun facteur encore) : session ouverte depuis moins de ce délai. */
 export const FRESH_SESSION_MS = 24 * 3_600_000;
 

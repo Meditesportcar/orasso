@@ -11,7 +11,7 @@ export const vehicleTypeLabels: Record<VehicleType, string> = {
 export const vehicleStatusLabels: Record<VehicleStatus, string> = {
   active: "Actif",
   sold: "Vendu",
-  keepsake: "Gardé par passion",
+  keepsake: "Souvenir",
   wrecked: "Accidenté",
 };
 

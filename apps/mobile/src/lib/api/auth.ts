@@ -28,6 +28,9 @@ export const authApi = {
       "/api/auth/sign-in/email",
       { method: "POST", body: { email, password }, headers: trust ? { cookie: trust } : undefined, cookies: true },
     );
+    // Appareil de confiance : le plugin remplace le cookie à chaque usage ; on garde le nouveau.
+    const renewed = pickCookie(headers.get("set-cookie"), "trust_device");
+    if (renewed) await kvSet(TRUST_KEY, renewed);
     if (data?.twoFactorRedirect) {
       return { twoFactor: { cookie: pickCookie(headers.get("set-cookie"), "two_factor") } };
     }

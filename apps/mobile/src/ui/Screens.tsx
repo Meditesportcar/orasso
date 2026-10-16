@@ -1,15 +1,15 @@
 // Gabarits d'écran : le fond vivant, l'en-tête (AppBar) et la zone qui défile. Les zones de sécurité (encoche, barre de
 // gestes) sont passées à l'en-tête et à la barre d'onglets, comme le demande le README du système de design.
 import { AppBar, Ground, tokens, useTheme } from "@orasso/design-system/native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { type ReactNode, useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
-import { Avatar } from "./Avatar";
 import { JournalSheet } from "./JournalSheet";
+import { TopBar } from "./TopBar";
 
 const { space2, space3, space4, space6 } = tokens.spacing;
 
@@ -25,19 +25,18 @@ type Common = {
   overlays?: ReactNode;
 };
 
-/** Écran d'un onglet : AppBar « page » (ou le logotype sur l'Accueil) avec Recherche, Cloche et Avatar. */
+/** Écran d'un onglet : barre du haut commune (TopBar) avec Recherche, Cloche et Avatar de la casquette active. */
 export function TabScreen({
   title,
+  facts,
   home = false,
   children,
   onRefresh,
   footer,
   still,
   overlays,
-}: Common & { title?: string; home?: boolean }) {
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const { me, refreshMe } = useSession();
+}: Common & { title?: string; facts?: string; home?: boolean }) {
+  const { refreshMe } = useSession();
   const [journal, setJournal] = useState(false);
   // Compteurs de la cloche et du garage à jour à chaque retour sur un onglet.
   useFocusEffect(
@@ -45,22 +44,15 @@ export function TabScreen({
       void refreshMe();
     }, [refreshMe]),
   );
-  const bar = (
-    <AppBar
-      kind={home ? "home" : "page"}
-      title={title}
-      safeTop={insets.top}
-      notificationCount={me?.counts.unreadNotifications}
-      onSearch={() => router.navigate("/explorer")}
-      onNotifications={() => setJournal(true)}
-      notificationsOn={journal}
-      onAvatar={() => router.push("/moi")}
-      avatar={<Avatar url={me?.profile.avatarUrl} pseudo={me?.profile.pseudo} />}
-    />
-  );
   return (
     <Ground animated={!still} style={styles.fill}>
-      {bar}
+      <TopBar
+        title={title}
+        facts={facts}
+        home={home}
+        onNotifications={() => setJournal(true)}
+        notificationsOn={journal}
+      />
       <Body onRefresh={onRefresh}>{children}</Body>
       {footer ? <View style={styles.footer}>{footer}</View> : null}
       {overlays}

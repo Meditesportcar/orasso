@@ -17,6 +17,7 @@ export const vehiclesRepo = {
         generation: true,
         photos: { orderBy: [asc(vehiclePhotos.position)] },
         categories: { with: { category: true } },
+        pendingTransfer: true,
       },
       orderBy: [asc(vehicles.createdAt)],
     });

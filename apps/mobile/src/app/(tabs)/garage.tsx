@@ -2,13 +2,20 @@
 // véhicules actifs en grandes cartes, l'ajout d'un véhicule et les archivés repliés en bas.
 
 import { Button, Chip, Plate, Text, tokens, useTheme, VehicleCard } from "@orasso/design-system/native";
-import { gradeLabels, type VehicleFull, vehicleStatusLabels } from "@orasso/shared";
+import {
+  gradeLabels,
+  plateTransferLabels,
+  type VehicleFull,
+  type VehicleStatus,
+  vehicleStatusLabels,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { AccountQrSheet } from "@/features/AccountQrSheet";
 import { FriendQrScanner } from "@/features/FriendQrScanner";
+import { PlateTransferCard } from "@/features/garage/PlateTransferCard";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";
@@ -19,11 +26,15 @@ import { SectionTitle, TabScreen } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
 
+const ARCHIVED: Exclude<VehicleStatus, "active">[] = ["sold", "keepsake", "wrecked"];
+
 export default function Garage() {
   const { t } = useTheme();
   const router = useRouter();
   const { me } = useSession();
   const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles" });
+  // Demandes de transfert de plaque reçues (lot 31) : en attendant la Boîte > Demandes (lot 18), elles sont ici.
+  const transfers = useApi(() => api.plateTransfers(), []);
   const [qr, setQr] = useState(false);
   const [scan, setScan] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -34,7 +45,9 @@ export default function Garage() {
   return (
     <TabScreen
       title="Mon garage"
-      onRefresh={vehicles.reload}
+      onRefresh={async () => {
+        await Promise.all([vehicles.reload(), transfers.reload()]);
+      }}
       overlays={
         <>
           <AccountQrSheet visible={qr} onClose={() => setQr(false)} />
@@ -72,6 +85,16 @@ export default function Garage() {
         </View>
       </Plate>
 
+      {(transfers.data?.incoming ?? []).map((tr) => (
+        <PlateTransferCard
+          key={tr.id}
+          transfer={tr}
+          onDone={async () => {
+            await Promise.all([vehicles.reload(), transfers.reload()]);
+          }}
+        />
+      ))}
+
       <View style={styles.sectionHead}>
         <SectionTitle>Véhicules actifs · {active.length}</SectionTitle>
         <Button variant="secondary" icon="add" onPress={() => router.push("/vehicule/nouveau")}>
@@ -101,16 +124,32 @@ export default function Garage() {
             {`Archivés · ${archived.length}`}
           </Button>
           {showArchived
-            ? archived.map((v) => (
-                <Plate key={v.id} style={styles.archived}>
-                  <Text variant="bodyStrong" color={t.color.plateInk}>
-                    {v.label}
-                  </Text>
-                  <Text variant="meta" color={t.color.plateMuted}>
-                    {vehicleStatusLabels[v.status]}
-                  </Text>
-                </Plate>
-              ))
+            ? ARCHIVED.map((status) => {
+                const rows = archived.filter((v) => v.status === status);
+                if (!rows.length) return null;
+                return (
+                  <View key={status} style={styles.group}>
+                    <Chip>{vehicleStatusLabels[status]}</Chip>
+                    {rows.map((v) => (
+                      <Pressable
+                        key={v.id}
+                        accessibilityRole="link"
+                        accessibilityLabel={v.label}
+                        onPress={() => router.push(`/vehicule/${v.id}`)}
+                      >
+                        <Plate style={styles.archived}>
+                          <Text variant="bodyStrong" color={t.color.plateInk}>
+                            {v.label}
+                          </Text>
+                          <Text variant="meta" color={t.color.plateMuted}>
+                            {[v.year, v.statusNote].filter(Boolean).join(" · ")}
+                          </Text>
+                        </Plate>
+                      </Pressable>
+                    ))}
+                  </View>
+                );
+              })
             : null}
         </>
       ) : null}
@@ -139,7 +178,13 @@ function GarageCard({ vehicle, first }: { vehicle: VehicleFull; first: boolean }
           placeholder: `linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`,
         }}
         categories={vehicle.categories.map((c) => ({ label: c.label }))}
-        facts={vehicle.photos.length === 0 ? "Ajoute une photo pour pouvoir candidater" : undefined}
+        facts={
+          vehicle.plateTransfer
+            ? plateTransferLabels.pending
+            : vehicle.photos.length === 0
+              ? "Ajoute une photo pour pouvoir candidater"
+              : undefined
+        }
       />
     </Pressable>
   );
@@ -154,4 +199,5 @@ const styles = StyleSheet.create({
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
   empty: { gap: space2 },
   archived: { gap: space1, padding: space3 },
+  group: { gap: space2 },
 });

@@ -20,6 +20,7 @@ import type { AuthUser, Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
+import { personasOf } from "./personas";
 import { type Profile, profilesRepo } from "./repo";
 
 /** Pseudo proposé à partir du nom saisi à l'inscription ; complété de chiffres s'il est pris ou trop court. */
@@ -154,6 +155,9 @@ export const profilesService = {
         upcomingApplications: upcoming?.n ?? 0,
         unreadNotifications: unread,
       },
+      personas: await personasOf(v),
+      // La Boîte arrive au lot 18 : aucun message à compter avant.
+      unreadInbox: 0,
     };
   },
 

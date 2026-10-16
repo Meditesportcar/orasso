@@ -10,6 +10,7 @@ export default [
     route("app/acces", "routes/acces.tsx"),
     route("app/garage", "routes/garage.tsx"),
     route("app/garage/nouveau", "routes/garage-nouveau.tsx"),
+    route("app/garage/:id", "routes/garage-vehicule.tsx"),
     route("app/moi", "routes/moi.tsx"),
     route("app/securite", "routes/securite.tsx"),
     route("app/structure/nouvelle", "routes/structure-nouvelle.tsx"),

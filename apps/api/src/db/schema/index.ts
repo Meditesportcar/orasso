@@ -2,6 +2,7 @@ export * from "./access";
 export * from "./admin";
 export * from "./applications";
 export * from "./auth";
+export * from "./certification";
 export * from "./checkins";
 export * from "./events";
 export * from "./field";

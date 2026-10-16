@@ -1,10 +1,19 @@
-import { photoOrderSchema, vehicleCreateSchema, vehicleUpdateSchema } from "@orasso/shared";
+import {
+  categoryReferenceQuery,
+  certificationRequestSchema,
+  photoOrderSchema,
+  shareImageQuery,
+  vehicleCreateSchema,
+  vehicleUpdateSchema,
+} from "@orasso/shared";
 import { Hono } from "hono";
 
 import { validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
-import { body, uuidParam } from "../../lib/validate";
+import { body, query, uuidParam } from "../../lib/validate";
+import { categoryOptions } from "./categories";
+import { certificationService } from "./certification";
 import { vehiclesRepo } from "./repo";
 import { vehiclesService } from "./service";
 
@@ -21,14 +30,11 @@ export const vehiclesRoutes = new Hono<AppEnv>()
     c.json(await vehiclesRepo.generations(uuidParam(c, "id")), 200, CACHE_1H),
   )
   // Public : la page d'un événement affiche les catégories recherchées aux visiteurs sans compte.
-  .get("/vehicle-reference/categories", async (c) => {
-    const rows = await vehiclesRepo.categories();
-    return c.json(
-      rows.map((r) => ({ id: r.id, slug: r.slug, label: r.label, minVehicleAge: r.minVehicleAge })),
-      200,
-      CACHE_1H,
-    );
-  })
+  // Filtré par marque, type et année quand ils sont donnés (formulaire du véhicule) : chaque catégorie dit si elle est
+  // éligible et pourquoi sinon (lot 31).
+  .get("/vehicle-reference/categories", async (c) =>
+    c.json(await categoryOptions(query(c, categoryReferenceQuery)), 200, CACHE_1H),
+  )
   // Garage.
   .get("/me/vehicles", async (c) => c.json(await vehiclesService.listMine(await requireUser(c))))
   .post("/me/vehicles", async (c) => {
@@ -60,5 +66,26 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   .delete("/me/vehicles/:id/photos/:photoId", async (c) => {
     const v = await requireUser(c);
     return c.json(await vehiclesService.removePhoto(v, uuidParam(c, "id"), uuidParam(c, "photoId")));
+  })
+  // Historique des événements, fiche Instagram, certification (lot 31).
+  .get("/me/vehicles/:id/history", async (c) =>
+    c.json(await vehiclesService.history(await requireUser(c), uuidParam(c, "id"))),
+  )
+  .get("/me/vehicles/:id/share-image", async (c) => {
+    const v = await requireUser(c);
+    rateLimit("shareImage", v.user.id);
+    const { format, download } = query(c, shareImageQuery);
+    const png = await vehiclesService.shareImage(v, uuidParam(c, "id"), format);
+    return c.body(new Uint8Array(png), 200, {
+      "content-type": "image/png",
+      "cache-control": CACHE_1H["cache-control"],
+      "content-disposition": `${download ? "attachment" : "inline"}; filename="orasso-${format}.png"`,
+    });
+  })
+  .post("/me/vehicles/:id/certification-request", async (c) => {
+    const v = await requireUser(c);
+    rateLimit("vehicleWrite", v.user.id);
+    const { message } = await body(c, certificationRequestSchema);
+    return c.json(await certificationService.request(v, uuidParam(c, "id"), message), 201);
   });
 // La fiche d'un véhicule d'un autre utilisateur (`GET /vehicles/:id`) est servie par le module social (lot 17).
