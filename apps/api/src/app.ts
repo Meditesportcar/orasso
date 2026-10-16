@@ -28,6 +28,7 @@ import { prosRoutes } from "./modules/pros/routes";
 import { reviewsRoutes } from "./modules/reviews/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { structuresRoutes } from "./modules/structures/routes";
+import { ticketsRoutes } from "./modules/tickets/routes";
 import { vehiclesRoutes } from "./modules/vehicles/routes";
 import { ws } from "./ws";
 
@@ -117,6 +118,7 @@ app.route("/", pointsRoutes);
 app.route("/", reviewsRoutes);
 app.route("/", accountQrRoutes);
 app.route("/", prosRoutes);
+app.route("/", ticketsRoutes);
 app.route("/", adminRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes.

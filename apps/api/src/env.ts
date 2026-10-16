@@ -54,7 +54,32 @@ const schema = z.object({
   REGISTRY_API_URL: z.url().default("https://recherche-entreprises.api.gouv.fr"),
   /** Géocodage des adresses (Géoplateforme de l'IGN, sans clé). `off` le désactive (les tests le désactivent). */
   GEOCODER_URL: z.string().default("https://data.geopf.fr/geocodage"),
+  /**
+   * Billetterie payante en mode présentation (Stripe Connect, compte Orasso en **mode test** uniquement). Les trois
+   * variables vides = billetterie payante affichée « bientôt », sans erreur. Une clé `sk_live_` est refusée : l'API
+   * ne démarre pas (aucun encaissement réel avant le 21 juin 2027, et pas dans cette version).
+   */
+  STRIPE_SECRET_KEY: optional,
+  /** Secret de signature des webhooks (`whsec_…`). */
+  STRIPE_WEBHOOK_SECRET: optional,
+  /** Identifiant d'application Connect (`ca_…`) : parcours de connexion du compte de l'organisateur. */
+  STRIPE_CONNECT_CLIENT_ID: optional,
 });
+
+/**
+ * Garde Stripe : seules les clés de **test** sont acceptées. Une clé live (`sk_live_`, `rk_live_`) empêche le démarrage,
+ * en production comme ailleurs (aucun encaissement réel dans cette version).
+ */
+export function stripeKeyError(key: string | undefined): string | null {
+  if (!key) return null;
+  if (/^(sk|rk)_live_/.test(key)) {
+    return "STRIPE_SECRET_KEY est une clé de production (sk_live_) : refusée. Orasso n'encaisse rien en réel ; utiliser la clé de test (sk_test_…).";
+  }
+  if (!/^(sk|rk)_test_[A-Za-z0-9]+$/.test(key)) {
+    return "STRIPE_SECRET_KEY doit être une clé de test Stripe (sk_test_…).";
+  }
+  return null;
+}
 
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
@@ -68,6 +93,11 @@ if (parsed.data.NODE_ENV === "production" && parsed.data.DEV_SKIP_2FA) {
 }
 if (parsed.data.NODE_ENV === "production" && (!parsed.data.QR_SIGNING_KEYS || !parsed.data.QR_SIGNING_ACTIVE_KID)) {
   console.error("Configuration invalide : QR_SIGNING_KEYS et QR_SIGNING_ACTIVE_KID sont obligatoires en production.");
+  process.exit(1);
+}
+const stripeKeyProblem = stripeKeyError(parsed.data.STRIPE_SECRET_KEY);
+if (stripeKeyProblem) {
+  console.error(`Configuration invalide : ${stripeKeyProblem}`);
   process.exit(1);
 }
 if (parsed.data.MAIL_TRANSPORT === "brevo" && !parsed.data.BREVO_API_KEY) {

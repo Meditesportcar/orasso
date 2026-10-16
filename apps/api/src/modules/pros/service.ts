@@ -576,7 +576,7 @@ export const prosService = {
     const s = await db.query.structures.findFirst({
       where: and(eq(structures.slug, structureSlug), isNull(structures.deletedAt)),
     });
-    if (!s || s.verification !== "verified") throw notFound("Organisateur introuvable");
+    if (s?.verification !== "verified") throw notFound("Organisateur introuvable");
     await db.insert(proPartnerLinks).values({ proId: id, structureId: s.id }).onConflictDoNothing();
     return toOwner(p, v);
   },
