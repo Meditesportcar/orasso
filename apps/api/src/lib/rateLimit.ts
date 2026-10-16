@@ -60,6 +60,10 @@ export const rateRules = {
   friendQrFailure: { max: 10, windowMs: 600_000, message: "Trop de codes refusés : réessaie dans quelques minutes." },
   /** Ouverture d'une conversation (lot 18) : avec un ami, avec une structure. */
   conversationOpen: { max: 60, windowMs: 3_600_000, message: "Trop de conversations ouvertes : réessaie plus tard." },
+  /** Crews (lot 19) : recherche, invitations envoyées par un chef, modifications et inscriptions à un événement. */
+  crewSearch: { max: 60, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
+  crewInvite: { max: 50, windowMs: 86_400_000, message: "Trop d'invitations aujourd'hui : réessaie demain." },
+  crewWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

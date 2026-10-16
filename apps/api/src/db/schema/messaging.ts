@@ -19,6 +19,7 @@ import {
 
 import { user } from "./auth";
 import { timestamps, tstz } from "./common";
+import { crews } from "./crews";
 import { events } from "./events";
 import { structures } from "./structures";
 
@@ -40,8 +41,8 @@ export const conversations = pgTable(
     directKey: text("direct_key").unique("conversations_direct_key_key"),
     structureId: uuid("structure_id").references(() => structures.id, { onDelete: "cascade" }),
     eventId: uuid("event_id").references(() => events.id, { onDelete: "cascade" }),
-    /** Clé étrangère posée au lot 19 (table `crews`). */
-    crewId: uuid("crew_id"),
+    /** Discussion d'un crew (lot 19) : une seule par crew (`direct_key = crew:<id>`). */
+    crewId: uuid("crew_id").references(() => crews.id, { onDelete: "cascade" }),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     /** Plus d'écriture après cette date. */
     closedAt: tstz("closed_at"),

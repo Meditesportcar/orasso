@@ -37,6 +37,7 @@ export const eventsRepo = {
       withdrawn: 0,
       expired: 0,
       cancelled: 0,
+      awaiting_member: 0,
     } satisfies Record<ApplicationStatus, number>;
     for (const r of rows) counts[r.status] = r.n;
     return counts;
@@ -66,7 +67,8 @@ export const eventsRepo = {
       .where(
         and(
           eq(applications.eventId, eventId),
-          sql`${applications.status} in ('pending', 'accepted', 'waitlisted', 'offered')`,
+          // Membres de crew pas encore confirmés compris (lot 19) : ils doivent savoir que l'événement a changé.
+          sql`${applications.status} in ('pending', 'accepted', 'waitlisted', 'offered', 'awaiting_member')`,
         ),
       );
     return rows.map((r) => r.userId);

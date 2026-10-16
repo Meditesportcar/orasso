@@ -2,6 +2,7 @@
 // (`structure_staff`, `event_staff`) ajoutent leur fichier `access/<kind>.ts` et **une ligne** ci-dessous.
 import type { ConversationKind } from "@orasso/shared";
 
+import { crewRules } from "./crew";
 import { directRules } from "./direct";
 import { organizerRules } from "./organizer";
 import type { KindRules } from "./types";
@@ -14,6 +15,7 @@ export function registerConversationKind(rules: KindRules) {
 
 registerConversationKind(directRules);
 registerConversationKind(organizerRules);
+registerConversationKind(crewRules);
 
 /** Règles d'une sorte ; une sorte sans règles (pas encore livrée) n'ouvre aucun accès. */
 export function rulesOf(kind: ConversationKind): KindRules | null {

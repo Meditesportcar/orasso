@@ -57,6 +57,9 @@ export const applicationsRoutes = new Hono<AppEnv>()
       item: await applicationsQueries.next(await requireUser(c), uuidParam(c, "id"), query(c, nextQuerySchema).kind),
     }),
   )
+  .get("/events/:id/applications/crews", async (c) =>
+    c.json(await applicationsQueries.crewFilters(await requireUser(c), uuidParam(c, "id"))),
+  )
   .get("/events/:id/counters", async (c) =>
     c.json(await applicationsQueries.counters(await requireUser(c), uuidParam(c, "id"))),
   )

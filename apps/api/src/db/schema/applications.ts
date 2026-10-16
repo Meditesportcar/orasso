@@ -24,6 +24,7 @@ import {
 
 import { user } from "./auth";
 import { timestamps, tstz } from "./common";
+import { crews } from "./crews";
 import { eventDays, events, eventZones } from "./events";
 import { providerProfiles } from "./providers";
 import { vehicles } from "./vehicles";
@@ -54,7 +55,8 @@ export const applications = pgTable(
     /** [préparé] Multi-jours. */
     eventDayId: uuid("event_day_id").references(() => eventDays.id, { onDelete: "set null" }),
     status: applicationStatusEnum("status").notNull(),
-    rulesAcceptedAt: tstz("rules_accepted_at").notNull(),
+    /** Règlement accepté. Nul seulement pour un membre inscrit par son chef qui n'a pas (encore) confirmé (lot 19). */
+    rulesAcceptedAt: tstz("rules_accepted_at"),
     companions: smallint("companions").notNull().default(0),
     message: text("message"),
     followStructure: boolean("follow_structure").notNull(),
@@ -73,16 +75,25 @@ export const applications = pgTable(
     zoneId: uuid("zone_id").references(() => eventZones.id, { onDelete: "set null" }),
     source: applicationSourceEnum("source").notNull().default("self"),
     filteringOpinion: jsonb("filtering_opinion").$type<FilteringOpinionEntry[]>(),
+    /** Inscription en crew (lot 19) : le crew, l'inscription qui regroupe ses membres, la confirmation du membre. */
+    crewId: uuid("crew_id").references(() => crews.id, { onDelete: "set null" }),
+    crewApplicationId: uuid("crew_application_id"),
+    memberConfirmedAt: tstz("member_confirmed_at"),
     ...timestamps,
   },
   (t) => [
     index("applications_event_status_idx").on(t.eventId, t.status),
     index("applications_user_status_idx").on(t.userId, t.status),
     index("applications_event_waitlist_idx").on(t.eventId, t.waitlistRank),
-    // Une candidature active par véhicule et par événement.
+    // Une candidature active par véhicule et par événement, `awaiting_member` comprise (lot 19 : une inscription en
+    // crew bloque le véhicule). Écrit par les statuts terminés : la migration qui ajoute `awaiting_member` à l'enum ne
+    // peut pas citer la nouvelle valeur dans la même transaction.
     uniqueIndex("applications_active_vehicle_key")
       .on(t.eventId, t.vehicleId)
-      .where(sql`${t.status} in ('pending', 'accepted', 'waitlisted', 'offered')`),
+      .where(sql`${t.status} not in ('refused', 'withdrawn', 'expired', 'cancelled')`),
+    index("applications_crew_idx").on(t.crewId, t.eventId).where(sql`${t.crewId} is not null`),
+    // Règlement accepté, sauf pour un membre de crew qui n'a pas confirmé (`awaiting_member`, puis désisté ou annulé).
+    check("applications_rules_check", sql`${t.rulesAcceptedAt} is not null or ${t.crewApplicationId} is not null`),
     // Une candidature active par profil prestataire et par événement.
     uniqueIndex("applications_active_provider_key")
       .on(t.eventId, t.providerProfileId)

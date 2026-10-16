@@ -17,6 +17,7 @@ import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
+import { crewsService } from "../crews/service";
 import { type Profile, profilesRepo } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleBrief, vehicleLabel, vehiclePublic } from "../vehicles/serializers";
@@ -183,8 +184,8 @@ export const socialProfile = {
       vehicles: profileVehicles,
       upcomingEvents: fields.upcomingEvents && ev ? ev.upcoming : null,
       pastEvents: fields.pastEvents && ev ? ev.past : null,
-      // Les crews arrivent au lot 19 : la liste reste vide (et visible seulement pour les audiences complètes).
-      crews: fields.crews ? [] : null,
+      // Crews actifs (lot 19), pour les audiences qui voient tout le profil (docs/01 : public = profil complet).
+      crews: fields.crews ? await crewsService.ofUser(target.userId) : null,
       contact,
       friendship: { state, id: friendshipId },
     };

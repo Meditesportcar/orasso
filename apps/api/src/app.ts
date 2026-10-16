@@ -19,6 +19,7 @@ import { accountQrRoutes } from "./modules/account-qr/routes";
 import { adminRoutes } from "./modules/admin/routes";
 import { applicationsRoutes } from "./modules/applications/routes";
 import { checkinsRoutes } from "./modules/checkins/routes";
+import { crewsRoutes } from "./modules/crews/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { fieldRoutes } from "./modules/field/routes";
@@ -154,6 +155,7 @@ app.route("/", weatherRoutes);
 app.route("/", socialRoutes);
 app.route("/", uploadsRoutes);
 app.route("/", messagingRoutes);
+app.route("/", crewsRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes, avec la preuve de second facteur de la
 // session qui a ouvert la connexion (sans elle, les organisateurs perdaient le tri en direct depuis le lot 15).

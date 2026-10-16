@@ -362,6 +362,12 @@ async function decideInTx(
 export const applicationsService = {
   transition,
   offerNext,
+  // Briques réutilisées par l'inscription en crew (lot 19, `modules/crews/registration.ts`).
+  admitOpen,
+  broadcast,
+  lockEventThenApplication,
+  lockedError,
+  isUniqueViolation,
 
   /** Candidater avec un ou plusieurs véhicules : une candidature `pending` par véhicule (§ 2.1). */
   async apply(v: Viewer, eventId: string, input: ApplicationCreate): Promise<ApplicationRow[]> {
@@ -506,6 +512,9 @@ export const applicationsService = {
       if (app.userId !== v.user.id) throw notFound("Candidature introuvable");
       // « Refuser la place » : vérifié sous verrou (un double clic ne désiste pas une place déjà acceptée).
       if (onlyIfOffered && app.status !== "offered") throw invalidTransition(app.status, "withdrawn");
+      // Venue en crew pas encore confirmée : « Je ne viens pas » (`POST /applications/:id/decline-crew`, lot 19), qui
+      // prévient le chef.
+      if (app.status === "awaiting_member") throw invalidTransition(app.status, "withdrawn");
       if (t >= event.endsAt) throw lockedError("L'événement est terminé");
       const locked = isLocked(event, t);
       const row = await transition(

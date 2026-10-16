@@ -28,7 +28,10 @@ export type JobName =
   | "plate-transfer.escalate"
   | "certification.sweep"
   // Lot 18 : fichiers envoyés jamais rattachés.
-  | "uploads.purge";
+  | "uploads.purge"
+  // Lot 19 : venues en crew à confirmer (72 h, plafonnées au verrouillage), et leur balayage de secours.
+  | "crew.confirm-expire"
+  | "crew.confirm-sweep";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */
