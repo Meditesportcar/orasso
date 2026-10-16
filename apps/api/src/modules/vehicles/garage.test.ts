@@ -447,9 +447,7 @@ describe("fiche Instagram", () => {
       plate: "SECRET-777",
     });
     const row = (await vehiclesRepo.findFullById(v.id))!;
-    expect(`${row.make.name} ${row.model.name} ${row.generation?.name}`).toBe(
-      "Mercedes-Benz SLK 230 Kompressor R170",
-    );
+    expect(`${row.make.name} ${row.model.name} ${row.generation?.name}`).toBe("Mercedes-Benz SLK 230 Kompressor R170");
     const guarded = new Proxy(row, {
       get(target, prop, receiver) {
         if (prop === "plate" || prop === "plateNormalized") throw new Error(`plaque lue : ${String(prop)}`);

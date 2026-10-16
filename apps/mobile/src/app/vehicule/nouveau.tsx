@@ -15,9 +15,16 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import { OTHER_LABEL, type VehicleType, vehicleTypeLabels, vehicleTypes } from "@orasso/shared";
+import {
+  archiveStatusChoices,
+  OTHER_LABEL,
+  type VehicleStatus,
+  type VehicleType,
+  vehicleTypeLabels,
+  vehicleTypes,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -45,6 +52,9 @@ export default function NouveauVehicule() {
   const [generationId, setGenerationId] = useState<string | undefined>();
   const [year, setYear] = useState("");
   const [power, setPower] = useState("");
+  const [weight, setWeight] = useState("");
+  const [status, setStatus] = useState<VehicleStatus>("active");
+  const [statusNote, setStatusNote] = useState("");
   const [plate, setPlate] = useState("");
   const [unregistered, setUnregistered] = useState(false);
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
@@ -53,12 +63,27 @@ export default function NouveauVehicule() {
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Si l'envoi des photos échoue après la création, on reprend sans recréer le véhicule.
-  const [created, setCreated] = useState<{ id: string; uploaded: number } | null>(null);
+  const [created, setCreated] = useState<{ id: string; uploaded: number; pending: boolean } | null>(null);
 
   const makes = useApi(() => api.makes(), [], { cacheKey: "ref.makes" });
   const models = useApi(() => api.models(makeId ?? ""), [makeId], { enabled: Boolean(makeId) });
   const generations = useApi(() => api.generations(modelId ?? ""), [modelId], { enabled: Boolean(modelId) });
-  const categories = useApi(() => api.categories(), [], { cacheKey: "ref.categories" });
+  // Catégories filtrées par marque, type et année (lot 31) : celles qui ne conviennent pas sont grisées avec la raison.
+  const yearValue = /^d{4}$/.test(year) ? Number.parseInt(year, 10) : undefined;
+  const categories = useApi(
+    () => api.categories({ makeId, vehicleType: type, year: yearValue }),
+    [makeId, type, yearValue],
+  );
+  const active = status === "active";
+  // Une catégorie choisie qui ne convient plus (marque, type ou année changés) est décochée.
+  useEffect(() => {
+    const rows = categories.data;
+    if (!rows) return;
+    setCategoryIds((ids) => {
+      const kept = ids.filter((id) => rows.find((c) => c.id === id)?.eligible);
+      return kept.length === ids.length ? ids : kept;
+    });
+  }, [categories.data]);
 
   const modelRows = useMemo(
     () => (models.data ?? []).filter((m) => m.isOther || m.vehicleType === type),
@@ -81,7 +106,7 @@ export default function NouveauVehicule() {
     setGenerationId(undefined);
   };
 
-  const plateMissing = !unregistered && plate.trim().length === 0;
+  const plateMissing = active && !unregistered && plate.trim().length === 0;
   const ready = Boolean(makeId && modelId) && !plateMissing;
 
   async function addPhotos() {
@@ -101,6 +126,7 @@ export default function NouveauVehicule() {
       if (!target) {
         const yearNumber = Number.parseInt(year, 10);
         const powerNumber = Number.parseInt(power, 10);
+        const weightNumber = Number.parseInt(weight, 10);
         const vehicle = await api.createVehicle({
           vehicleType: type,
           makeId: makeId as string,
@@ -108,12 +134,14 @@ export default function NouveauVehicule() {
           generationId: generationId ?? null,
           year: Number.isFinite(yearNumber) ? yearNumber : null,
           powerHp: Number.isFinite(powerNumber) ? powerNumber : null,
-          plate: unregistered ? null : plate.trim(),
+          weightKg: Number.isFinite(weightNumber) ? weightNumber : null,
+          plate: unregistered || !plate.trim() ? null : plate.trim(),
           unregistered,
-          status: "active",
+          status,
+          statusNote: active ? null : statusNote.trim() || null,
           categoryIds,
         } as Parameters<typeof api.createVehicle>[0]);
-        target = { id: vehicle.id, uploaded: 0 };
+        target = { id: vehicle.id, uploaded: 0, pending: Boolean(vehicle.plateTransfer) };
         setCreated(target);
       }
       for (let i = target.uploaded; i < photos.length; i++) {
@@ -122,7 +150,9 @@ export default function NouveauVehicule() {
         target = { ...target, uploaded: i + 1 };
         setCreated(target);
       }
-      if (router.canGoBack()) router.back();
+      // Plaque d'un autre membre : le véhicule existe en attente de transfert ; sa page l'explique.
+      if (target.pending) router.replace(`/vehicule/${target.id}`);
+      else if (router.canGoBack()) router.back();
       else router.replace("/garage");
     } catch (e) {
       setError(errorMessage(e));
@@ -207,7 +237,29 @@ export default function NouveauVehicule() {
             style={styles.half}
           />
         </View>
+        <TextField
+          label="Poids en kg (facultatif)"
+          value={weight}
+          onChangeText={setWeight}
+          keyboardType="number-pad"
+          maxLength={5}
+        />
       </Plate>
+
+      <Muted variant="label">Statut</Muted>
+      <ChipRow>
+        <Chip selected={active} onPress={() => setStatus("active")}>
+          Dans mon garage
+        </Chip>
+        {archiveStatusChoices.map((c) => (
+          <Chip key={c.status} selected={status === c.status} onPress={() => setStatus(c.status)}>
+            {c.label}
+          </Chip>
+        ))}
+      </ChipRow>
+      {active ? null : (
+        <TextField label="Motif (facultatif)" value={statusNote} onChangeText={setStatusNote} maxLength={300} />
+      )}
 
       <Plate style={styles.plate}>
         <TextField
@@ -218,7 +270,11 @@ export default function NouveauVehicule() {
           autoCorrect={false}
           editable={!unregistered}
           placeholder="AB-123-CD"
-          help="Visible par l'organisateur seulement, jamais par les autres inscrits."
+          help={
+            active
+              ? "Visible par l'organisateur seulement, jamais par les autres inscrits. Déjà prise par un autre membre ? Il sera prévenu et pourra confirmer le transfert."
+              : "Facultative pour un véhicule archivé. Jamais visible des autres inscrits."
+          }
         />
         <CheckboxField label="Véhicule non immatriculé" checked={unregistered} onChange={setUnregistered} />
       </Plate>
@@ -226,21 +282,24 @@ export default function NouveauVehicule() {
       {categories.data && categories.data.length > 0 ? (
         <>
           <Muted variant="label">Catégories</Muted>
-          <ChipRow>
-            {categories.data.map((c) => (
+          {categories.data.map((c) => (
+            <View key={c.id} style={[styles.category, !c.eligible && styles.categoryOff]}>
               <Chip
-                key={c.id}
                 selected={categoryIds.includes(c.id)}
-                onPress={() =>
-                  setCategoryIds((ids) =>
-                    ids.includes(c.id) ? ids.filter((x) => x !== c.id) : [...ids, c.id].slice(0, 10),
-                  )
+                onPress={
+                  c.eligible
+                    ? () =>
+                        setCategoryIds((ids) =>
+                          ids.includes(c.id) ? ids.filter((x) => x !== c.id) : [...ids, c.id].slice(0, 10),
+                        )
+                    : undefined
                 }
               >
                 {c.label}
               </Chip>
-            ))}
-          </ChipRow>
+              {c.reason ? <Muted variant="caption">{c.reason}</Muted> : null}
+            </View>
+          ))}
         </>
       ) : null}
 
@@ -287,4 +346,6 @@ const styles = StyleSheet.create({
   half: { flex: 1 },
   photos: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   photo: { width: 92, height: 70, borderRadius: 8 },
+  category: { flexDirection: "row", alignItems: "center", gap: space2, flexWrap: "wrap" },
+  categoryOff: { opacity: 0.55 },
 });
