@@ -206,6 +206,36 @@ test("recette du parcours n° 1 : cinq passionnés, deux staffs, avis", async ({
   await fanCtx.close();
 });
 
+// Mouvement réduit (CLAUDE.md : « reduced motion = fondu 120 ms partout ») : aucune animation autre qu'un fondu de
+// 120 ms au plus sur les pages du parcours, dans les deux thèmes.
+test("mouvement réduit : seulement des fondus de 120 ms", async ({ browser }) => {
+  const organizer = await login("damien@orasso.local");
+  const event = await createEvent(organizer);
+  for (const theme of ["beton", "sable"]) {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+    await ctx.addCookies([{ name: "orasso-theme", value: theme, url: test.info().project.use.baseURL ?? "" }]);
+    const page = await ctx.newPage();
+    for (const path of [`/e/${event.slug}`, "/connexion"]) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      const offenders = await page.evaluate(() =>
+        [...document.querySelectorAll("*")].flatMap((el) => {
+          const s = getComputedStyle(el);
+          const names = s.animationName.split(",").map((n) => n.trim());
+          const durations = s.animationDuration
+            .split(",")
+            .map((d) => Number.parseFloat(d) * (d.endsWith("ms") ? 0.001 : 1));
+          return names.some((n, i) => n !== "none" && (n !== "o-fade" || (durations[i] ?? 0) > 0.121))
+            ? [`${el.tagName}.${String(el.className).slice(0, 50)} ${s.animationName} ${s.animationDuration}`]
+            : [];
+        }),
+      );
+      expect(offenders, `${theme} ${path}`).toEqual([]);
+    }
+    await ctx.close();
+  }
+});
+
 /** Code TOTP (RFC 6238 : HMAC-SHA1, 30 s, 6 chiffres) d'un secret base32, comme une appli d'authentification. */
 function totp(secret: string, at = Date.now()): string {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
