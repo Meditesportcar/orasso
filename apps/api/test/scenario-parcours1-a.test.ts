@@ -4,7 +4,7 @@
 // un désistement tardif n'est plus « sans malus ». L'horloge est simulée ; la tâche d'expiration est exécutée
 // comme pg-boss le ferait.
 import { fromWallTime } from "@orasso/shared";
-import { ne } from "drizzle-orm";
+import { notInArray } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -194,7 +194,7 @@ describe("parcours n° 1, première moitié", () => {
     const mails = await db
       .select({ to: emailOutbox.to, subject: emailOutbox.subject })
       .from(emailOutbox)
-      .where(ne(emailOutbox.template, "structure_verification"));
+      .where(notInArray(emailOutbox.template, ["structure_verification", "email_verification"]));
     expect(mails.map((m) => m.subject).sort()).toEqual(
       [
         "Candidature refusée",

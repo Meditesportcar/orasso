@@ -38,7 +38,7 @@ import {
   tickets,
 } from "../../db/schema";
 import { requireOrganizer, staffAccess } from "../../lib/access";
-import { now } from "../../lib/deps";
+import { deps, now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
 import { addressQuery, geocode } from "../../lib/geocode";
@@ -395,6 +395,8 @@ export const eventsService = {
       // Staff de l'événement (relances « je suis là », mode staff) : une ligne par membre staff actif.
       await staffService.ensureRows(row, tx);
       after(() => scheduleEventJobs(row));
+      // « Près de chez toi » (lot 15) : après les abonnés, centres d'intérêt et rayon.
+      if (row.admission !== "invite_only") after(() => deps.jobs.send("event.notify-nearby", { eventId: id }));
       after(() => notificationsService.kick());
     });
     return this.getForOrganizer(v, id);

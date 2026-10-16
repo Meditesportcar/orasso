@@ -17,9 +17,12 @@ import { StaffBackground } from "@/features/staff/StaffBackground";
 import { ApplicationsProvider } from "@/lib/applications";
 import { kvGet, kvSet } from "@/lib/kv";
 import { registerThisDevice } from "@/lib/push";
+import { initSentry } from "@/lib/sentry";
 import { SessionProvider, useSession } from "@/lib/session";
 import { AnnouncementSheet } from "@/ui/AnnouncementSheet";
 
+// GlitchTip / Sentry (lot 15) : seulement si EXPO_PUBLIC_SENTRY_DSN est renseigné au build.
+initSentry();
 void SplashScreen.preventAutoHideAsync();
 
 /** Écrans ouverts sans compte : premier lancement, connexion, page d'un événement (lien partagé), recette du design. */

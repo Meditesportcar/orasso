@@ -13,6 +13,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     orga: me.memberships.find((m) => m.status === "active")?.structureSlug ?? null,
     pro: me.pro?.slug ?? null,
     unread: me.counts.unreadNotifications,
+    emailVerified: me.user.emailVerified,
   };
 }
 
@@ -38,7 +39,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         <SiteHeader>
           {loaderData.orga && <a href={`/orga/${loaderData.orga}`}>Organisateur</a>}
           {loaderData.pro && <a href={`/pro/${loaderData.pro}`}>Pro</a>}
-          <span>{loaderData.pseudo}</span>
+          <a href="/app/moi">{loaderData.pseudo}</a>
           <Form method="post" action="/deconnexion">
             <button type="submit" className="s-linkbutton o-t-button">
               Déconnexion
@@ -46,6 +47,15 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           </Form>
         </SiteHeader>
         <div className="app__body">
+          {!loaderData.emailVerified && (
+            <Form method="post" action="/app/moi" className="s-notice s-row s-row--between" data-testid="verify-banner">
+              <span>Vérifie ton e-mail : un lien de confirmation t'a été envoyé à l'inscription.</span>
+              <input type="hidden" name="intent" value="resend" />
+              <button type="submit" className="s-linkbutton o-t-button">
+                Renvoyer
+              </button>
+            </Form>
+          )}
           <Outlet />
           <div className="app__theme">
             <ThemeSwitch />

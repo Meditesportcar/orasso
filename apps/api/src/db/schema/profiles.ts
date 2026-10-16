@@ -60,6 +60,12 @@ export const profiles = pgTable(
     inviteToken: text("invite_token").notNull(),
     invitedByUserId: text("invited_by_user_id").references(() => user.id, { onDelete: "set null" }),
     suspendedUntil: tstz("suspended_until"),
+    /** Lot 15 : compte supprimé par son titulaire (anonymisé, plus de session). */
+    deletedAt: tstz("deleted_at"),
+    /** Lot 15 : types de notification coupés un par un (en plus des familles), voir `shouldDeliver`. */
+    mutedTypes: text("muted_types").array().notNull().default(sql`'{}'::text[]`),
+    /** Widgets de l'accueil réglés par l'utilisateur (posée au lot 15, utilisée au lot 30) ; null = par défaut. */
+    homeWidgets: jsonb("home_widgets").$type<unknown>(),
     ...timestamps,
   },
   (t) => [

@@ -13,8 +13,8 @@ import {
   PASS_PAYLOAD_LENGTH,
 } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
-
 import { accountQrAt, hmacSha1, secondsLeft } from "./accountQr";
+import { authOriginHeader, pickCookie } from "./api/cookies";
 import { breakTitle, dayCountdown, formatDay, formatDayHour, formatDuration, formatHour } from "./format";
 import { jourJClosesAt, jourJOpensAt, jourJState, weatherLabel } from "./jourj";
 import { qrMatrix, qrPath, qrViewBox } from "./qr";
@@ -135,5 +135,31 @@ describe("Formats", () => {
   it("titre d'affiche sur deux lignes", () => {
     expect(breakTitle("Nocturne de Canet")).toBe("Nocturne\nde Canet");
     expect(breakTitle("Salon")).toBe("Salon");
+  });
+});
+
+describe("double authentification dans l'appli (lot 15)", () => {
+  it("reprend les cookies de Better Auth des en-têtes set-cookie", () => {
+    const header =
+      "better-auth.session_token=; Max-Age=0; Path=/, better-auth.two_factor=abc.sig%3D; Max-Age=600; Path=/; HttpOnly";
+    expect(pickCookie(header, "two_factor")).toBe("better-auth.two_factor=abc.sig%3D");
+    expect(pickCookie(header, "session_token")).toBeNull();
+    expect(pickCookie("__Secure-better-auth.trust_device=t0k; Path=/", "trust_device")).toBe(
+      "__Secure-better-auth.trust_device=t0k",
+    );
+    expect(pickCookie(null, "two_factor")).toBeNull();
+  });
+});
+
+describe("appels natifs à Better Auth (lot 15)", () => {
+  it("portent l'en-tête Origin de l'API, pas dans le navigateur ni hors de /api/auth", () => {
+    expect(authOriginHeader("/api/auth/two-factor/verify-totp", true, "https://dev.orasso.fr/")).toEqual({
+      origin: "https://dev.orasso.fr",
+    });
+    expect(authOriginHeader("/api/auth/sign-in/email", true, "http://192.168.1.20:3001/")).toEqual({
+      origin: "http://192.168.1.20:3001",
+    });
+    expect(authOriginHeader("/api/auth/sign-in/email", false, "https://dev.orasso.fr/")).toEqual({});
+    expect(authOriginHeader("/api/me", true, "https://dev.orasso.fr/")).toEqual({});
   });
 });

@@ -6,7 +6,7 @@ import { gradeLabels, grades, proActivityLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";

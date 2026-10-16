@@ -15,7 +15,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { breakTitle, formatDay, formatDayHour, formatHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";

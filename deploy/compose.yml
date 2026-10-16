@@ -46,6 +46,8 @@ services:
       API_PORT: "3000"
       DATABASE_URL: postgres://orasso:${POSTGRES_PASSWORD}@orasso-db:5432/orasso
       UPLOADS_DIR: /data/uploads
+      # Version déployée dans les rapports d'erreur GlitchTip (lot 15).
+      SENTRY_RELEASE: ${ORASSO_TAG}
     volumes:
       - orasso_uploads:/data/uploads
     depends_on:
@@ -73,6 +75,10 @@ services:
       PORT: "3000"
       # Pour les appels de l'API faits pendant le rendu serveur (sans repasser par nginx).
       API_INTERNAL_URL: http://orasso-api:3000
+      # Erreurs du rendu serveur vers GlitchTip (lot 15) : vide = désactivé.
+      VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-dev}
+      SENTRY_RELEASE: ${ORASSO_TAG}
     depends_on:
       orasso-api:
         condition: service_healthy

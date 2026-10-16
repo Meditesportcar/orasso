@@ -43,32 +43,92 @@ async function deliverJournal(id: string, to: string, content: MailContent) {
   }
 }
 
-async function deliverBrevo(to: string, content: MailContent) {
-  const match = /^(.*)<(.+)>$/.exec(env.MAIL_FROM);
-  const sender = match ? { name: match[1]?.trim(), email: match[2] } : { email: env.MAIL_FROM };
-  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+/** « Nom <adresse> » ou « adresse » → `{ name?, email }` (format attendu par Brevo). */
+export function parseMailbox(value: string): { name?: string; email: string } {
+  const match = /^(.*)<(.+)>$/.exec(value.trim());
+  if (!match) return { email: value.trim() };
+  // Les guillemets d'un nom (« "Orasso" <adresse> ») ne font pas partie du nom.
+  const name = match[1]
+    ?.trim()
+    .replace(/^"(.*)"$/, "$1")
+    .trim();
+  return name ? { name, email: (match[2] ?? "").trim() } : { email: (match[2] ?? "").trim() };
+}
+
+/** Corps de la requête envoyée à l'API Brevo (expéditeur du sous-domaine dédié, réponses vers `MAIL_REPLY_TO`). */
+export function brevoPayload(
+  to: string,
+  content: MailContent,
+  config = { from: env.MAIL_FROM, replyTo: env.MAIL_REPLY_TO },
+) {
+  return {
+    sender: parseMailbox(config.from),
+    to: [{ email: to }],
+    ...(config.replyTo ? { replyTo: parseMailbox(config.replyTo) } : {}),
+    subject: content.subject,
+    htmlContent: content.html,
+    textContent: content.text,
+  };
+}
+
+let brevoFetch: typeof fetch = (...args) => fetch(...args);
+/** Tests : remplace l'appel réseau à Brevo. */
+export function setBrevoFetch(f: typeof fetch) {
+  brevoFetch = f;
+}
+
+export async function deliverBrevo(to: string, content: MailContent) {
+  const res = await brevoFetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: { "api-key": env.BREVO_API_KEY ?? "", "content-type": "application/json" },
-    body: JSON.stringify({
-      sender,
-      to: [{ email: to }],
-      subject: content.subject,
-      htmlContent: content.html,
-      textContent: content.text,
-    }),
+    body: JSON.stringify(brevoPayload(to, content)),
+    // Brevo injoignable : l'envoi échoue au bout de 10 s (e-mail marqué « failed » dans la file), sans bloquer l'API.
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`Brevo ${res.status} : ${await res.text()}`);
 }
 
+/**
+ * Adresse qui ne peut pas recevoir d'e-mail (comptes de démonstration du seed, tests) : domaines réservés des
+ * RFC 2606 / 6761 (`.local`, `.localhost`, `.test`, `.example`, `.invalid`, `example.com|net|org`). En transport
+ * `brevo`, elle n'est jamais envoyée (rebond dur = réputation du compte abîmée) : elle passe par le journal.
+ */
+export function isReservedAddress(address: string): boolean {
+  const domain = address.trim().toLowerCase().split("@").pop() ?? "";
+  if (/(^|\.)(local|localhost|test|example|invalid)$/.test(domain)) return true;
+  return /(^|\.)example\.(com|net|org)$/.test(domain);
+}
+
+/** Transport réellement utilisé pour une adresse. */
+export function transportFor(to: string, configured: "journal" | "brevo"): "journal" | "brevo" {
+  return configured === "brevo" && isReservedAddress(to) ? "journal" : configured;
+}
+
 export const mail = {
-  async send(template: string, to: string, content: MailContent, payload: Record<string, unknown> = {}) {
+  /** `configured` : transport de la configuration ; paramètre pour les tests seulement. */
+  async send(
+    template: string,
+    to: string,
+    content: MailContent,
+    payload: Record<string, unknown> = {},
+    configured: "journal" | "brevo" = env.MAIL_TRANSPORT,
+  ) {
+    const transport = transportFor(to, configured);
     const [row] = await db
       .insert(emailOutbox)
-      .values({ to, subject: content.subject, template, payload, transport: env.MAIL_TRANSPORT })
+      .values({
+        to,
+        subject: content.subject,
+        template,
+        payload,
+        transport,
+        // Trace lisible de la déviation : adresse réservée, écrite dans le journal au lieu de Brevo.
+        error: transport !== configured ? "Adresse non routable (domaine réservé) : journal au lieu de Brevo" : null,
+      })
       .returning({ id: emailOutbox.id });
     if (!row) return;
     try {
-      if (env.MAIL_TRANSPORT === "brevo") await deliverBrevo(to, content);
+      if (transport === "brevo") await deliverBrevo(to, content);
       else await deliverJournal(row.id, to, content);
       await db.update(emailOutbox).set({ status: "sent", sentAt: now() }).where(eq(emailOutbox.id, row.id));
     } catch (error) {

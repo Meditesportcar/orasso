@@ -3,16 +3,33 @@ import { staffRoles as ALL_STAFF_ROLES, type StaffRole, type StructureRole } fro
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../db/client";
-import { adminAuditLog, eventStaff, structureMembers } from "../db/schema";
+import { adminAuditLog, eventStaff, passkey, structureMembers } from "../db/schema";
 import { env } from "../env";
+import { isSecondFactor } from "../modules/security/passkey";
 import { AppError, forbidden } from "./errors";
 import type { Viewer } from "./session";
 
 export const isSuperAdmin = (v: Viewer) => v.profile.platformRole === "super_admin";
 
-/** 2FA activée, ou contournement explicite de développement (`DEV_SKIP_2FA`, refusé en production). */
-function assertTwoFactor(v: Viewer) {
-  if (env.DEV_SKIP_2FA || v.user.twoFactorEnabled) return;
+/**
+ * Double authentification prouvée par la **session** (lot 15, corrections des relectures) : session ouverte par une clé
+ * d'accès vérifiée (`passkey`) ou par le code de l'application d'authentification / un code de secours / un appareil
+ * de confiance (`totp`). L'état du compte (TOTP activé, clé enregistrée) ne suffit jamais : une session ouverte par
+ * mot de passe avant l'activation, ou une future connexion Google / Apple, ne prouvent rien.
+ */
+export function hasSecondFactor(v: Viewer): boolean {
+  return isSecondFactor(v.session?.secondFactor);
+}
+
+/** Le compte a-t-il au moins une clé d'accès (pour dire « reconnecte-toi avec ta clé ») ? */
+export async function hasPasskey(userId: string): Promise<boolean> {
+  const [row] = await db.select({ id: passkey.id }).from(passkey).where(eq(passkey.userId, userId)).limit(1);
+  return Boolean(row);
+}
+
+/** 2FA (TOTP ou clé d'accès), ou contournement explicite de développement (`DEV_SKIP_2FA`, refusé en production). */
+async function assertTwoFactor(v: Viewer) {
+  if (env.DEV_SKIP_2FA || hasSecondFactor(v)) return;
   throw new AppError(403, "two_factor_required", "Double authentification obligatoire pour cet espace");
 }
 
@@ -39,11 +56,11 @@ export const organizerActor = (a: OrganizerAccess): "admin" | "organizer" =>
 export async function requireOrganizer(v: Viewer, structureId: string, ip?: string | null): Promise<OrganizerAccess> {
   const member = await activeMembership(v.user.id, structureId);
   if (member && (member.role === "owner" || member.role === "co_organizer")) {
-    assertTwoFactor(v);
+    await assertTwoFactor(v);
     return { role: member.role };
   }
   if (isSuperAdmin(v)) {
-    assertTwoFactor(v);
+    await assertTwoFactor(v);
     await db.insert(adminAuditLog).values({
       actorUserId: v.user.id,
       action: "structure.view_as",
@@ -60,7 +77,7 @@ export async function requireOrganizer(v: Viewer, structureId: string, ip?: stri
 export async function requirePlatformRole(v: Viewer, role: "moderator" | "super_admin") {
   const ok = role === "moderator" ? v.profile.platformRole !== "user" : v.profile.platformRole === "super_admin";
   if (!ok) throw forbidden("Réservé à l'administration");
-  assertTwoFactor(v);
+  await assertTwoFactor(v);
 }
 
 export type StaffAccess = { actor: "organizer" | "admin" | "staff"; canDecide: boolean; roles: StaffRole[] };
@@ -77,7 +94,7 @@ export async function staffAccess(
 ): Promise<StaffAccess | null> {
   const member = await activeMembership(v.user.id, structureId);
   if (member && (member.role === "owner" || member.role === "co_organizer")) {
-    assertTwoFactor(v);
+    await assertTwoFactor(v);
     return { actor: "organizer", canDecide: true, roles: [...ALL_STAFF_ROLES] };
   }
   if (member?.role === "staff") {
@@ -102,7 +119,7 @@ export async function staffAccess(
 
 /** La double authentification est exigée mais pas encore activée (affiché dans `GET /me`). */
 export async function twoFactorRequired(v: Viewer): Promise<boolean> {
-  if (v.user.twoFactorEnabled) return false;
+  if (hasSecondFactor(v)) return false;
   if (v.profile.platformRole !== "user") return true;
   const organizer = await db.query.structureMembers.findFirst({
     where: and(

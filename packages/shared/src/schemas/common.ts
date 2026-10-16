@@ -17,6 +17,10 @@ export const errorCodes = [
   "unsupported_media_type",
   "rate_limited",
   "internal",
+  // Lot 15 : compte et sécurité.
+  "referral_not_applicable",
+  "structure_owner",
+  "invalid_credentials",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

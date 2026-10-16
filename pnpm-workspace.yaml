@@ -12,6 +12,9 @@ allowBuilds:
   '@embedded-postgres/darwin-arm64': false
   '@embedded-postgres/darwin-x64': false
   esbuild: true
+  # Binaire d'envoi des source maps de Sentry (lot 15) : pas téléchargé, l'envoi est désactivé tant qu'il n'y a pas de
+  # jeton (SENTRY_DISABLE_AUTO_UPLOAD dans eas.json).
+  '@sentry/cli': false
 
 minimumReleaseAgeExclude:
   - '@better-auth/core@1.7.9'

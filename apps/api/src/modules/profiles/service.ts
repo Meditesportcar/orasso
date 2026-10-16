@@ -20,7 +20,7 @@ import {
   structures,
   vehicles,
 } from "../../db/schema";
-import { twoFactorRequired } from "../../lib/access";
+import { hasPasskey, twoFactorRequired } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, notFound, validation } from "../../lib/errors";
 import type { AuthUser, Viewer } from "../../lib/session";
@@ -110,6 +110,7 @@ export const profilesService = {
       .select({ n: count() })
       .from(notifications)
       .where(and(eq(notifications.userId, v.user.id), isNull(notifications.readAt)));
+    const required = await twoFactorRequired(v);
     return {
       user: {
         id: v.user.id,
@@ -130,7 +131,7 @@ export const profilesService = {
         interests: await profilesRepo.interests(v.user.id),
         platformRole: p.platformRole,
         newsletterOptIn: p.newsletterOptIn,
-        notificationPrefs: { ...defaultNotificationPrefs, ...p.notificationPrefs, staff: true },
+        notificationPrefs: { ...defaultNotificationPrefs, ...p.notificationPrefs, staff: true, account: true },
         pointsSeason: p.pointsSeason,
         grade: p.grade,
         inviteToken: p.inviteToken,
@@ -149,7 +150,14 @@ export const profilesService = {
         ...m,
         staffRoles: m.staffRoles as Me["memberships"][number]["staffRoles"],
       })),
-      twoFactorRequired: await twoFactorRequired(v),
+      twoFactorRequired: required,
+      twoFactorHint: required
+        ? (await hasPasskey(v.user.id))
+          ? "passkey_sign_in"
+          : v.user.twoFactorEnabled
+            ? "totp_sign_in"
+            : "setup"
+        : null,
       counts: {
         vehicles: vehicleCount?.n ?? 0,
         upcomingApplications: upcoming?.n ?? 0,
@@ -183,10 +191,11 @@ export const profilesService = {
   },
 
   /** Profil d'un autre utilisateur (connecté seulement) : complet si public, réduit si privé (docs/01). */
-  async publicProfile(v: Viewer, pseudo: string): Promise<PublicProfile> {
+  async publicProfile(v: Viewer, pseudo: string, opts: { asOther?: boolean } = {}): Promise<PublicProfile> {
     const p = await profilesRepo.byPseudo(pseudo);
-    if (!p) throw notFound("Profil introuvable");
-    const full = p.visibility === "public" || p.userId === v.user.id;
+    if (!p || p.deletedAt) throw notFound("Profil introuvable");
+    // `asOther` : aperçu « ce que voient les autres » de son propre profil (lot 15).
+    const full = p.visibility === "public" || (p.userId === v.user.id && !opts.asOther);
     const garage = await vehiclesService.garageOf(p.userId);
     return {
       pseudo: p.pseudo,

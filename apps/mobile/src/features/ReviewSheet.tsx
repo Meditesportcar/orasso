@@ -4,7 +4,7 @@ import { Button, Chip, ChipRow, Text, TextField, useTheme } from "@orasso/design
 import { REVIEW_MAX_RATING } from "@orasso/shared";
 import { useState } from "react";
 
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { AppSheet } from "@/ui/AppSheet";

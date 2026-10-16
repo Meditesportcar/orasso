@@ -1247,3 +1247,9 @@
   border-radius: var(--radius-md);
   background: var(--night);
 }
+
+/* Curseur (rayon des notifications, lot 15) : couleur du système de design, pas celle du navigateur. */
+.s-range {
+  width: 100%;
+  accent-color: var(--accent);
+}

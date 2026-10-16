@@ -13,6 +13,7 @@ import { realtime } from "./lib/realtime";
 import { type AppEnv, type AuthUser, loadSession } from "./lib/session";
 import { storage } from "./lib/storage";
 import { accessRoutes } from "./modules/access/routes";
+import { accountRoutes } from "./modules/account/routes";
 import { accountQrRoutes } from "./modules/account-qr/routes";
 import { adminRoutes } from "./modules/admin/routes";
 import { applicationsRoutes } from "./modules/applications/routes";
@@ -26,6 +27,7 @@ import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
 import { prosRoutes } from "./modules/pros/routes";
 import { reviewsRoutes } from "./modules/reviews/routes";
+import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { staffRoutes } from "./modules/staff/routes";
 import { structuresRoutes } from "./modules/structures/routes";
 import { ticketsRoutes } from "./modules/tickets/routes";
@@ -60,6 +62,8 @@ if (corsOrigins.length) {
       allowHeaders: ["authorization", "content-type", "x-device-id"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       exposeHeaders: ["set-auth-token"],
+      // Recette web de l'appli : cookies de l'étape « code » de la double authentification (lot 15).
+      credentials: true,
     }),
   );
 }
@@ -76,7 +80,23 @@ app.get("/health", async (c) => {
   }
 });
 
-app.on(["GET", "POST"], "/auth/*", (c) => auth.handler(c.req.raw));
+// Corps des requêtes de Better Auth limités à 1 Mo (le garde ci-dessous clone et lit le JSON).
+app.use(
+  "/auth/*",
+  bodyLimit({
+    maxSize: 1024 * 1024,
+    onError: () => {
+      throw new AppError(413, "payload_too_large", "Requête trop lourde");
+    },
+  }),
+);
+// Garde unique des routes de Better Auth (session lue en cookie ou en jeton porteur) : `modules/security/auth-guard.ts`.
+app.on(
+  ["GET", "POST"],
+  "/auth/*",
+  authGuard((headers) => auth.api.getSession({ headers }) as Promise<SessionLike | null>),
+  (c) => auth.handler(c.req.raw),
+);
 
 app.route("/ws", ws);
 
@@ -120,6 +140,7 @@ app.route("/", accountQrRoutes);
 app.route("/", prosRoutes);
 app.route("/", ticketsRoutes);
 app.route("/", adminRoutes);
+app.route("/", accountRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes.
 realtime.setAuthorizer(async (userId, channel) => {

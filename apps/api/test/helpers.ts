@@ -10,6 +10,7 @@ import {
   eventZones,
   profiles,
   proProfiles,
+  session,
   structureMembers,
   structures,
   user,
@@ -82,7 +83,11 @@ export async function signUp(pseudo: string, opts: { twoFactor?: boolean; role?:
     .map((c) => c.split(";")[0])
     .join("; ");
   const { user: u } = (await res.json()) as { user: { id: string } };
-  if (opts.twoFactor) await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, u.id));
+  // TOTP activé et session qui l'a prouvé (comme après la saisie du code ; lot 15 : la preuve est portée par la session).
+  if (opts.twoFactor) {
+    await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, u.id));
+    await db.update(session).set({ secondFactor: "totp" }).where(eq(session.userId, u.id));
+  }
   if (opts.role) await db.update(profiles).set({ platformRole: opts.role }).where(eq(profiles.userId, u.id));
   const p = await profilesRepo.byUserId(u.id);
   return { id: u.id, pseudo: p?.pseudo ?? pseudo, email, cookie } satisfies TestUser;
@@ -93,7 +98,8 @@ export async function viewerOf(u: TestUser): Promise<Viewer> {
   const row = await db.query.user.findFirst({ where: eq(user.id, u.id) });
   const profile = await profilesRepo.byUserId(u.id);
   if (!row || !profile) throw new Error("Utilisateur de test introuvable");
-  return { user: row as Viewer["user"], profile };
+  // Hors requête HTTP : un compte TOTP est supposé connecté avec son code (session « totp »).
+  return { user: row as Viewer["user"], profile, session: { secondFactor: row.twoFactorEnabled ? "totp" : null } };
 }
 
 /** Requête HTTP authentifiée sur l'application Hono (sans serveur). */

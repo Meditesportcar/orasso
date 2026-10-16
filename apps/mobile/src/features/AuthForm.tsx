@@ -7,10 +7,12 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { authApi } from "@/lib/endpoints";
+import { authApi } from "@/lib/api";
 import { authErrorMessage } from "@/lib/http";
 import { kvSet } from "@/lib/kv";
 import { useSession } from "@/lib/session";
+
+import { TwoFactorStep } from "./TwoFactorStep";
 
 const { space3 } = tokens.spacing;
 
@@ -27,7 +29,7 @@ export function AuthForm({
   next?: string;
 }) {
   const { t } = useTheme();
-  const { signIn, signUp } = useSession();
+  const { signIn, signUp, verifyTwoFactor } = useSession();
   const router = useRouter();
   const [pseudo, setPseudo] = useState("");
   const [email, setEmail] = useState("");
@@ -35,6 +37,8 @@ export function AuthForm({
   const [pseudoState, setPseudoState] = useState<PseudoState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Le compte a la double authentification : étape du code. */
+  const [needsCode, setNeedsCode] = useState(false);
   const signup = mode === "signup";
 
   // Le pseudo est vérifié pendant la saisie (format, puis disponibilité auprès de l'API).
@@ -77,19 +81,38 @@ export function AuthForm({
   const ready =
     email.includes("@") && password.length >= 8 && (!signup || pseudoState === "free" || pseudoState === "idle");
 
+  async function done() {
+    await kvSet("onboarded", "1");
+    router.replace((next ?? "/accueil") as "/accueil");
+  }
+
   async function submit() {
     setError(null);
     setBusy(true);
     try {
       if (signup) await signUp(email.trim(), password, pseudo);
-      else await signIn(email.trim(), password);
-      await kvSet("onboarded", "1");
-      router.replace((next ?? "/accueil") as "/accueil");
+      else if ((await signIn(email.trim(), password)) === "two_factor") {
+        setNeedsCode(true);
+        return;
+      }
+      await done();
     } catch (e) {
       setError(authErrorMessage(e));
     } finally {
       setBusy(false);
     }
+  }
+
+  if (needsCode) {
+    return (
+      <TwoFactorStep
+        onVerify={async (code, opts) => {
+          await verifyTwoFactor(code, opts);
+          await done();
+        }}
+        onCancel={() => setNeedsCode(false)}
+      />
+    );
   }
 
   return (

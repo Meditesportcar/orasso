@@ -1,13 +1,19 @@
 // Notifications : ligne `notifications` (le Journal de l'appli), puis livraison WebSocket + push + e-mail.
 // Heures calmes 22:00–08:00 hors jour J (choix C15) : la livraison attend 08:00 (tâche `notifications.deliver`).
-import { deliverAfter, type NotificationFamily, type NotificationType, notificationTypes } from "@orasso/shared";
+import {
+  deliverAfter,
+  emailAlwaysTypes,
+  type NotificationType,
+  notificationTypes,
+  shouldDeliver,
+} from "@orasso/shared";
 import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { devices, notifications, profiles, user } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
-import { mail, renderMail } from "../../lib/mail";
+import { type MailContent, mail, renderMail } from "../../lib/mail";
 import { decodeCursor, toPage } from "../../lib/pagination";
 import { push } from "../../lib/push";
 import { realtime } from "../../lib/realtime";
@@ -24,10 +30,17 @@ export type NotifyInput = {
   eventStartsAt?: Date | null;
   /** Lien dans l'e-mail (chemin du site, ex. `/e/nocturne-de-canet-2026`). */
   link?: { label: string; path: string };
+  /** E-mail rédigé par l'appelant (sécurité du compte) à la place du gabarit titre + texte. */
+  email?: MailContent;
+  /** Faux : push seulement, absent du Journal (ex. message reçu, lot 18). */
+  inJournal?: boolean;
 };
 
-/** Types envoyés par e-mail même quand un appareil reçoit le push (docs/01 « Rappel par e-mail… toujours »). */
-const EMAIL_ALWAYS: NotificationType[] = ["event_reminder_week", "staff_presence_reminder"];
+/** Champs internes de `data` jamais renvoyés aux clients. */
+const stripInternal = (data: Record<string, unknown>) => {
+  const { _email, ...rest } = data;
+  return rest;
+};
 
 let inflight: Promise<void> = Promise.resolve();
 
@@ -38,7 +51,8 @@ export const notificationsService = {
    */
   async notify(ex: Executor, userId: string, type: NotificationType, input: NotifyInput): Promise<NotificationRow> {
     const at = now();
-    const immediate = type === "staff_alert";
+    // Alertes du staff et sécurité du compte (nouvelle connexion, mot de passe changé…) : jamais différées la nuit.
+    const immediate = type === "staff_alert" || notificationTypes[type] === "account";
     const [row] = await ex
       .insert(notifications)
       .values({
@@ -47,7 +61,12 @@ export const notificationsService = {
         family: notificationTypes[type],
         title: input.title,
         body: input.body,
-        data: { ...input.data, ...(input.link ? { link: input.link.path, linkLabel: input.link.label } : {}) },
+        data: {
+          ...input.data,
+          ...(input.link ? { link: input.link.path, linkLabel: input.link.label } : {}),
+          ...(input.email ? { _email: input.email } : {}),
+        },
+        inJournal: input.inJournal ?? true,
         eventId: input.eventId ?? null,
         deliverAfter: immediate ? at : deliverAfter(at, input.eventStartsAt ?? null),
       })
@@ -111,6 +130,7 @@ export const notificationsService = {
       .where(
         and(
           eq(notifications.userId, userId),
+          eq(notifications.inJournal, true),
           // Les notifications différées (heures calmes) n'apparaissent qu'une fois livrées.
           isNotNull(notifications.deliveredAt),
           c
@@ -129,7 +149,7 @@ export const notificationsService = {
       family: n.family,
       title: n.title,
       body: n.body,
-      data: n.data,
+      data: stripInternal(n.data),
       eventId: n.eventId,
       createdAt: n.createdAt.toISOString(),
       readAt: n.readAt?.toISOString() ?? null,
@@ -158,14 +178,13 @@ async function deliverOne(n: NotificationRow) {
     type: n.type,
     title: n.title,
     body: n.body,
-    data: n.data,
+    data: stripInternal(n.data),
   });
   const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, n.userId) });
-  const family = n.family as NotificationFamily;
-  // Chaque famille peut être coupée, sauf les relances du staff ; la notification reste dans le Journal.
-  const allowed =
-    family === "staff" || (profile?.notificationPrefs as Record<string, boolean> | undefined)?.[family] !== false;
-  if (!allowed) return;
+  // Compte supprimé : plus rien n'est livré.
+  if (profile?.deletedAt) return;
+  // Chaque famille et chaque type peuvent être coupés, sauf `staff` et `account` ; la notification reste au Journal.
+  if (!shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type)) return;
 
   const tokens = (
     await db
@@ -177,18 +196,21 @@ async function deliverOne(n: NotificationRow) {
     .filter((t): t is string => Boolean(t));
   let pushed = 0;
   if (tokens.length) {
-    pushed = await push.send(tokens.map((to) => ({ to, title: n.title, body: n.body, data: n.data })));
+    const data = stripInternal(n.data);
+    pushed = await push.send(tokens.map((to) => ({ to, title: n.title, body: n.body, data })));
     if (pushed) await db.update(notifications).set({ pushSentAt: now() }).where(eq(notifications.id, n.id));
   }
-  if (tokens.length === 0 || EMAIL_ALWAYS.includes(n.type as NotificationType)) {
+  if (tokens.length === 0 || emailAlwaysTypes.includes(n.type as NotificationType)) {
     const account = await db.query.user.findFirst({ where: eq(user.id, n.userId), columns: { email: true } });
     if (!account) return;
-    const data = n.data as { link?: string; linkLabel?: string };
-    const content = renderMail(
-      n.title,
-      n.body.split("\n"),
-      data.link ? { label: data.linkLabel ?? "Voir sur Orasso", url: `${env.PUBLIC_URL}${data.link}` } : undefined,
-    );
+    const data = n.data as { link?: string; linkLabel?: string; _email?: MailContent };
+    const content =
+      data._email ??
+      renderMail(
+        n.title,
+        n.body.split("\n"),
+        data.link ? { label: data.linkLabel ?? "Voir sur Orasso", url: `${env.PUBLIC_URL}${data.link}` } : undefined,
+      );
     await mail.send(n.type, account.email, content, { notificationId: n.id });
     await db.update(notifications).set({ emailSentAt: now() }).where(eq(notifications.id, n.id));
   }

@@ -7,8 +7,8 @@ import * as Device from "expo-device";
 import { Platform } from "react-native";
 
 import { apiUrl } from "@/api";
-import { api } from "../endpoints";
-import { ApiRequestError, getSessionToken } from "../http";
+import { api } from "../api";
+import { ApiRequestError, errorMessage, getSessionToken } from "../http";
 import { kvDel, kvGet, kvSet } from "../kv";
 import { staffStore } from "./db";
 import {
@@ -208,7 +208,7 @@ async function doSync(eventId: string, userId: string, full: boolean): Promise<S
     if (error instanceof ApiRequestError) {
       return error.isNetwork
         ? { ok: false, offline: true, message: "Pas de réseau : la liste du téléphone reste valable." }
-        : { ok: false, message: error.message };
+        : { ok: false, message: errorMessage(error) };
     }
     return { ok: false, message: "Synchro impossible. Réessaie." };
   }

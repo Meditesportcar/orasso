@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { MAX_PHOTOS, photoForm, pickPhotos } from "@/lib/photos";

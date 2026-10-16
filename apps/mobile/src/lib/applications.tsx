@@ -5,7 +5,7 @@ import type { MyApplication } from "@orasso/shared";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
-import { api } from "./endpoints";
+import { api } from "./api";
 import { syncKits } from "./kits";
 import { kvGetJson, kvSetJson } from "./kv";
 import { useSession } from "./session";

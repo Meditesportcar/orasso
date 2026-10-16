@@ -5,7 +5,7 @@ import { Button, Text, TextField, useTheme } from "@orasso/design-system/native"
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
 import { record } from "@/lib/staff/runtime";
 import { AppSheet } from "@/ui/AppSheet";

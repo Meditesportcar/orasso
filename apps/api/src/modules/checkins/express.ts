@@ -160,6 +160,7 @@ export const expressService = {
       if (!locked || locked.usedAt) throw conflict("conflict", "Lien déjà utilisé");
       const t = now();
       // L'adresse n'est pas marquée vérifiée : le lien a pu être montré par le staff au lieu d'être reçu par e-mail.
+      // L'e-mail de vérification part à l'inscription (lot 15) ; un compte express ne compte jamais pour le parrainage.
       await tx
         .update(profiles)
         .set({ firstName: input.firstName, lastName: input.lastName })

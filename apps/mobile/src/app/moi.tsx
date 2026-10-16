@@ -16,7 +16,7 @@ import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
-import { api } from "@/lib/endpoints";
+import { api } from "@/lib/api";
 import { formatShortDate } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";

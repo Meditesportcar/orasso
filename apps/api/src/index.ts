@@ -1,3 +1,6 @@
+// GlitchTip / Sentry d'abord (lot 15).
+import "./instrument";
+
 import { serve } from "@hono/node-server";
 import { WebSocketServer } from "ws";
 

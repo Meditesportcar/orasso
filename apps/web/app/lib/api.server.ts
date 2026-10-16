@@ -43,6 +43,9 @@ export async function api<T>(request: Request, path: string, init: Init = {}): P
   // toutes les connexions faites depuis le site dans un seul compteur partagé (3 essais / 10 s pour tout le monde).
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) headers.set("x-forwarded-for", forwarded);
+  // Appareil du visiteur : alerte « nouvelle connexion » et liste des appareils connectés (lot 15).
+  const userAgent = request.headers.get("user-agent");
+  if (userAgent) headers.set("user-agent", userAgent);
   let body = init.body;
   if (init.json !== undefined) {
     headers.set("content-type", "application/json");

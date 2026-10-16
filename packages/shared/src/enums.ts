@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import { accountEmailAlwaysTypes, accountNotificationTypes } from "./notifications/account";
+import { applicationNotificationTypes } from "./notifications/application";
+import { eventEmailAlwaysTypes, eventNotificationTypes } from "./notifications/events";
+import { pointsNotificationTypes } from "./notifications/points";
+import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
+
 /**
  * Énumérations métier (valeurs anglaises, identiques aux enums PostgreSQL). Libellés : `labels.fr.ts`.
  * Les statuts de candidature, grades et rôles vivent dans `application.ts`, `grades.ts`, `roles.ts`.
@@ -83,36 +89,29 @@ export type RefusalReason = (typeof refusalReasons)[number];
 export const triageDecisions = ["accept", "waitlist", "refuse"] as const;
 export type TriageDecision = (typeof triageDecisions)[number];
 
-export const notificationFamilies = ["application", "event", "social", "grade", "staff"] as const;
+/** `account` (lot 15) : sécurité du compte, jamais coupée, e-mail toujours. */
+export const notificationFamilies = ["application", "event", "social", "grade", "staff", "account"] as const;
 export type NotificationFamily = (typeof notificationFamilies)[number];
 
-/** Types de notification et leur famille (une préférence par famille ; `staff` ne se coupe pas). */
+/**
+ * Types de notification et leur famille, déclarés par domaine dans `notifications/<domaine>.ts` (lot 15, anti-conflits) :
+ * un lot ajoute son fichier et un spread ci-dessous. Une préférence par famille ; `staff` ne se coupe pas.
+ */
 export const notificationTypes = {
-  application_accepted: "application",
-  application_waitlisted: "application",
-  application_refused: "application",
-  offer_received: "application",
-  offer_expired: "application",
-  event_updated: "event",
-  event_cancelled: "event",
-  event_outlook_changed: "event",
-  event_instructions: "event",
-  event_reminder_eve: "event",
-  event_reminder_week: "event",
-  preview_open: "event",
-  new_event_followed: "event",
-  event_nearby_interest: "event",
-  staff_presence_reminder: "staff",
-  staff_sync_reminder: "staff",
-  staff_alert: "staff",
-  points_awarded: "grade",
-  malus_applied: "grade",
-  contest_decided: "grade",
-  grade_changed: "grade",
-  stripe_account_changed: "staff",
-  season_ended: "grade",
+  ...applicationNotificationTypes,
+  ...eventNotificationTypes,
+  ...staffNotificationTypes,
+  ...pointsNotificationTypes,
+  ...accountNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
+
+/** Types envoyés par e-mail même quand un appareil reçoit le push (un tableau par domaine). */
+export const emailAlwaysTypes: readonly NotificationType[] = [
+  ...eventEmailAlwaysTypes,
+  ...staffEmailAlwaysTypes,
+  ...accountEmailAlwaysTypes,
+];
 
 /** Préférences de notification : un interrupteur par famille (docs/01 « Notifications »). */
 export const defaultNotificationPrefs = { application: true, event: true, social: true, grade: true };

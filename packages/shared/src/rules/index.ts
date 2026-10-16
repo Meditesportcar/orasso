@@ -1,6 +1,7 @@
 export * from "./applicationTransitions";
 export * from "./lock";
 export * from "./misc";
+export * from "./notifications";
 export * from "./points";
 export * from "./pro";
 export * from "./quietHours";

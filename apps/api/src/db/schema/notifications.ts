@@ -1,7 +1,7 @@
 // Notifications (Journal de l'appli) et file des e-mails (ARCHITECTURE.md § 1.8).
 import { notificationFamilies } from "@orasso/shared";
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgEnum, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, jsonb, pgEnum, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 import { timestamps, tstz } from "./common";
@@ -33,9 +33,15 @@ export const notifications = pgTable(
     pushSentAt: tstz("push_sent_at"),
     emailSentAt: tstz("email_sent_at"),
     readAt: tstz("read_at"),
+    /** Lot 15 : faux pour un push qui n'encombre pas le Journal (ex. message reçu). */
+    inJournal: boolean("in_journal").notNull().default(true),
     ...timestamps,
   },
   (t) => [
+    // Types « une fois par événement » (lot 15) : jamais deux fois la même notification pour un événement.
+    uniqueIndex("notifications_once_per_event_key")
+      .on(t.userId, t.type, t.eventId)
+      .where(sql`${t.type} in ('event_nearby_interest')`),
     index("notifications_user_created_idx").on(t.userId, t.createdAt.desc()),
     index("notifications_undelivered_idx").on(t.deliverAfter).where(sql`${t.deliveredAt} is null`),
   ],

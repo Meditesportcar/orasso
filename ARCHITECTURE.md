@@ -555,6 +555,14 @@ packages/shared/src/
 ```
 Règles : aucune requête SQL hors `repo.ts` ; aucune règle métier hors `service.ts` / `shared/rules` ; les routes ne font que valider, appeler, sérialiser. Transactions Drizzle au niveau service. Tests Vitest : règles pures sans base ; services contre la base locale (`embedded-postgres`, schéma migré, transaction annulée par test) ; horloge injectée partout.
 
+**Fichiers partagés découpés par domaine (lot 15, anti-conflits ; détail `docs/JOURNAL-DES-CHOIX.md`).** Un lot ajoute son fichier et une seule ligne dans le fichier qui rassemble :
+- libellés : `packages/shared/src/labels/<domaine>.fr.ts`, ré-exportés par `labels.fr.ts` (`export * from`) ;
+- types de notification : `packages/shared/src/notifications/<domaine>.ts` (`Record<type, famille>`, et `<domaine>EmailAlwaysTypes` si besoin), fusionnés par spread dans `notificationTypes` / `emailAlwaysTypes` (`enums.ts`) ;
+- routes du site : `apps/web/app/routes.<espace>.ts` (`public`, `app`, `orga`, `pro`, `admin`) concaténés par `routes.ts` ; administration = `layouts/admin.tsx` (barre latérale, `adminSections`) + une route enfant par page dans `routes/admin/` ;
+- routes de l'API vues par l'appli : `apps/mobile/src/lib/api/<domaine>.ts`, réunies dans `lib/api/index.ts` (`api`, `authApi`) ;
+- seed : `apps/api/scripts/seed/<domaine>.ts`, appelés depuis `main()` de `scripts/seed.ts` (outils communs : `seed/helpers.ts`) ;
+- schéma : `apps/api/src/db/schema/<domaine>.ts` + une ligne dans `schema/index.ts` (et `relations.ts`) ; migration générée par lot (`db:generate --name <slug>`), SQL fait main dans `apps/api/drizzle/custom/<slug>.sql` (règle de fusion : `PLAN-SUITE.md` du relais, § 2).
+
 Secrets : `.env` local ignoré par Git ; `/etc/orasso/api.env` (root 600) en prod ; `env.ts` échoue au démarrage si une variable obligatoire manque ou si `DEV_SKIP_2FA` est posé en production. Rotation des clés QR § 3.1.
 E-mails : `MailService.send(template, to, payload)` → `email_outbox` → transport `journal` (fichier `.data/mail/<date>-<id>.html` + console) ou `brevo` ; modèles en français dans `modules/notifications/templates/`.
 Stockage : `StorageService.put(key, buffer, contentType)`, `url(key)` ; `disk` écrit dans `.data/storage/` et sert via `/api/files/*` ; `s3` OVH avec URLs publiques en lecture (photos de véhicules et affiches sont publiques par nature ; justificatifs **[plus tard]** en URL signée).
@@ -628,6 +636,55 @@ Lots 07, 09, 10 consomment `packages/shared/api` (chemins, schémas, types) ; au
 - API billetterie (`modules/tickets`, `lib/stripe.ts`) : `GET /events/by-slug/:slug/tickets` (offre + mes billets), `POST /events/:id/tickets/reserve` (gratuit, verrou consultatif par événement), `…/checkout` (Stripe Checkout sur le compte connecté, commission en `application_fee_amount`), `GET/PUT /events/:id/ticketing`, contrôle `POST …/tickets/check` (signature Ed25519 comme un pass, passage atomique à « utilisé »), `/structures/:id/stripe` (+ `/connect`, retour OAuth `GET /stripe/connect/callback`), `POST /stripe/webhook`, `GET/PUT /admin/settings`. Stripe en REST direct, tests par `setStripeFetch` / `setStripeConfig` ; `env.ts` refuse toute clé `sk_live_`.
 - Site : `/pros`, `/p/:slug`, `/app/pro/nouvelle`, `/pro/:slug` (fiche, publications, statistiques, abonnement), `/app/billets`, `/orga/:s/e/:id/billets`, panneaux « Billetterie » (page de l'événement), « Stripe » et « Pros partenaires » (page de la structure), réglages dans `/admin`. Appli : casquette Pro `src/app/pro/` (Scanner, Fiche, Publier, Stats) depuis Moi.
 - Brancher plus tard : encaissement réel (clés live, remboursements, litiges), billets dans la liste d'accès hors ligne du staff, rôle « boutique », réservation de billets dans l'appli, emplacements sponsorisés.
+
+**État après le lot 15 (socle de la suite : découpages, compte et sécurité, Sentry, dépendances natives ; détail dans `docs/JOURNAL-DES-CHOIX.md`, section lot 15, et `ARCHITECTURE-SUITE.md` du relais § 1)** :
+- Organisation : fichiers partagés découpés par domaine (§ 6 « Fichiers partagés découpés par domaine ») — libellés, types de notification, routes du site, administration en layout, routes de l'appli, seed.
+- Données : migration `0022_security` (`known_logins`, `passkey`, famille `account`, `profiles.deleted_at` / `muted_types` / `home_widgets`, `point_entries.subject_user_id`, `notifications.in_journal`, index uniques partiels du parrainage et des notifications « une fois par événement »). Schéma dans `schema/security.ts` (+ colonnes dans `profiles.ts`, `points.ts`, `notifications.ts`).
+- Better Auth (`auth.ts`) : réinitialisation par e-mail (sessions révoquées), vérification de l'e-mail à l'inscription (non bloquante, sans connexion automatique), plugin `passkey` (`rpID` = hôte de `PUBLIC_URL`), crochets : session créée → `securityService.onLogin` ; changement de mot de passe → autres sessions révoquées + alerte ; vérification → parrainage. `hasSecondFactor` (`lib/access.ts`) : **session** qui prouve un second facteur (`session.second_factor` = `passkey` pour une clé vérifiée, `totp` pour un code, un code de secours ou un appareil de confiance ; migration `0023`), jamais l'état du compte ; ajout et retrait des facteurs réservés à une session qui en prouve un (`modules/security/auth-hooks.ts`) ; vérification de l'e-mail sans session ouverte ; inscription express non vérifiée et hors parrainage.
+- Modules : `security` (empreintes d'appareil, alertes, sessions, purge), `account` (e-mails, parrainage, réglages, aperçu public, suppression par anonymisation), `events/nearby.ts` (tâche `event.notify-nearby`). Routes : `POST /me/referral`, `GET /referral/:token`, `POST /me/email/resend-verification`, `GET/PATCH /me/settings`, `GET /me/sessions`, `DELETE /me/sessions/:id`, `GET /me/public-preview`, `DELETE /me`. Tâches : `event.notify-nearby`, `security.purge-known-logins`. `PointsService.awardReferral`. Notifications : `shouldDeliver` (familles + types coupés), `data._email` (e-mail rédigé, jamais renvoyé), `in_journal`.
+- Partagé : `geo.ts` (centres des départements, distance), `privacy.ts` (`scrubErrorEvent`), `rules/notifications.ts`, `schemas/account.ts`, `labels/notifications.fr.ts`, `notifications/account.ts`.
+- Site : `/mot-de-passe-oublie`, `/reinitialisation`, `/verification-email`, `/ami/:jeton` (cookie `orasso-invite`), `/app/moi`, `/app/securite` (TOTP, clés d'accès WebAuthn, appareils), connexion par clé d'accès, bandeau « Vérifie ton e-mail ». Le site transmet le User-Agent du visiteur à l'API. `entry.client.tsx` / `entry.server.tsx` pour Sentry.
+- Sentry / GlitchTip : `SENTRY_DSN` (API), `VITE_SENTRY_DSN` (site), `EXPO_PUBLIC_SENTRY_DSN` (appli) ; rien sans DSN.
+- Appli : dépendances natives de la suite posées (`@sentry/react-native`, `expo-location` au premier plan, `@maplibre/maplibre-react-native`, `expo-sharing`, `expo-file-system`) ; un nouvel APK est nécessaire. Les écrans Moi de l'appli viennent au lot 16.
+
+**Sécurité du compte : audit des routes de Better Auth (lot 15, relecture finale).** better-auth 1.7.9 avec `twoFactor`, `bearer`, `passkey` expose 45 routes HTTP sous `/api/auth`. Un seul garde, le middleware Hono `modules/security/auth-guard.ts`, monté devant le handler (`app.ts`) : il résout la session par `auth.api.getSession({ headers })` (cookie **et** jeton porteur), refuse toute route non classée (404) et applique la règle des facteurs. Les crochets de Better Auth (`auth-hooks.ts`) ne gardent rien : ils posent la preuve (`session.second_factor`), envoient les alertes et révoquent. Un test (`factors.test.ts`) échoue si une route exposée n'est pas classée. Règle « facteur » : si le compte a déjà un facteur (TOTP activé ou clé), la session doit en prouver un (`second_factor` ∈ {`passkey`, `totp`}) ; sinon (premier facteur), session de moins de 24 h.
+
+| Route | Session créée ou recréée | `second_factor` posé | Effet sur un facteur ou un secret | Règle du garde |
+|---|---|---|---|---|
+| `POST /sign-up/email` | oui | nul | — | publique |
+| `POST /sign-in/email` | oui (supprimée par le plugin si code requis) | nul ; `totp` si appareil de confiance | — | publique |
+| `POST /sign-in/social`, `GET\|POST /callback/:id` | oui (Google / Apple inactifs) | nul | — | publique |
+| `POST /sign-out` | supprime | — | — | publique |
+| `GET\|POST /get-session` | — | — | lit la session (sans jeton d'autres sessions) | publique |
+| `GET /verify-email` | non (`autoSignInAfterVerification: false`) | — | — | publique |
+| `POST /send-verification-email` | non | — | — | publique |
+| `POST /request-password-reset`, `GET /reset-password/:token` | non | — | jeton par e-mail | publique |
+| `POST /reset-password` | supprime toutes les sessions | — | mot de passe changé, appareils de confiance oubliés | publique (jeton) |
+| `GET /passkey/generate-authenticate-options` | non | — | — | publique |
+| `POST /passkey/verify-authentication` | oui | `passkey` | — | publique ; vérification de l'utilisateur (bit UV) exigée |
+| `GET /error`, `GET /ok`, `GET /delete-user/callback` | non | — | — (suppression Better Auth non activée) | publique |
+| `POST /change-password` | recrée (autres révoquées) | reporté de la session courante | mot de passe, appareils de confiance oubliés | session |
+| `POST /revoke-session`, `/revoke-sessions`, `/revoke-other-sessions` | supprime | — | — | session |
+| `GET /passkey/list-user-passkeys` | non | — | liste ses clés (publiques) | session |
+| `POST /passkey/update-passkey` | non | — | renomme une clé | session |
+| `GET /passkey/generate-register-options` | non | — | prépare l'ajout d'une clé | **facteur** |
+| `POST /passkey/verify-registration` | non (`createSession: true` refusé) | — | **ajoute** une clé | **facteur** |
+| `POST /passkey/delete-passkey` | non | — | **retire** une clé | **facteur** |
+| `POST /two-factor/enable` | non (sauf option désactivée) | — | crée le secret TOTP et les codes de secours (non vérifiés) | **facteur** |
+| `POST /two-factor/get-totp-uri` | non | — | **révèle** le secret TOTP | **facteur** |
+| `POST /two-factor/generate-backup-codes` | non | — | **nouveaux** codes de secours | **facteur** |
+| `POST /two-factor/disable` | recrée | reporté | **retire** le TOTP, appareils de confiance oubliés | **facteur** |
+| `POST /two-factor/verify-totp`, `/verify-backup-code` | oui (étape de connexion, ou activation) | `totp` | **active** le TOTP si la ligne n'est pas vérifiée | sans session : plugin (essais comptés) ; avec session : 5 essais / 15 min, et règle **facteur** si activation |
+| `POST /two-factor/send-otp`, `/verify-otp` | — | — | OTP par e-mail non configuré | **refusée** |
+| `POST /update-session` | — | — | — | **refusée** |
+| `GET /list-sessions` | — | — | renverrait les jetons des sessions | **refusée** (`/api/me/sessions`) |
+| `POST /update-user` | — | — | — | **refusée** (`/api/me/profile`) |
+| `POST /change-email` | — | — | changerait l'identifiant du compte | **refusée** |
+| `POST /delete-user` | — | — | — | **refusée** (`DELETE /api/me`) |
+| `POST /verify-password` | — | — | oracle du mot de passe | **refusée** |
+| `POST /link-social`, `/unlink-account`, `GET /list-accounts`, `GET /account-info`, `POST /get-access-token`, `POST /refresh-token` | — | — | comptes et jetons OAuth (Google / Apple inactifs) | **refusées** |
+
+Sous le middleware avec la règle « facteur » : 7 routes (`generate-register-options`, `verify-registration`, `delete-passkey`, `two-factor/enable`, `get-totp-uri`, `generate-backup-codes`, `two-factor/disable`) + 2 routes de vérification de code en activation ; 14 routes refusées ; 22 publiques (16) ou de session (6) (vérification de l'utilisateur pour la connexion par clé).
 
 ---
 

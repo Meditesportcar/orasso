@@ -11,6 +11,7 @@ export * from "./profiles";
 export * from "./pros";
 export * from "./relations";
 export * from "./reviews";
+export * from "./security";
 export * from "./staff";
 export * from "./structures";
 export * from "./ticketing";

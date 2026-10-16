@@ -1,6 +1,7 @@
 import type { ErrorCode } from "@orasso/shared";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { captureError } from "./sentry";
 
 /** Erreur métier : convertie en `{"error":{"code","message","details"}}` (ARCHITECTURE.md § 5.1). */
 export class AppError extends Error {
@@ -29,5 +30,6 @@ export function errorResponse(err: Error, c: Context) {
     return c.json({ error: { code: err.code, message: err.message, details: err.details } }, err.status);
   }
   console.error(err);
+  captureError(err, (c.get("user") as { id?: string } | null | undefined)?.id ?? null);
   return c.json({ error: { code: "internal", message: "Erreur interne" } }, 500);
 }
