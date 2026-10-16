@@ -12,6 +12,7 @@ import {
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  boolean,
   check,
   date,
   doublePrecision,
@@ -73,6 +74,8 @@ export const events = pgTable(
     criteria: jsonb("criteria").$type<EventCriteria>(),
     publicAccess: eventPublicAccessEnum("public_access").notNull().default("free"),
     externalTicketUrl: text("external_ticket_url"),
+    /** Billetterie Orasso ouverte pour cet événement (deuxième interrupteur, après le réglage général, lot 14). */
+    ticketsEnabled: boolean("tickets_enabled").notNull().default(false),
     status: eventStatusEnum("status").notNull().default("draft"),
     outlook: eventOutlookEnum("outlook").notNull().default("maintained"),
     registrationsOpenAt: tstz("registrations_open_at").notNull(),

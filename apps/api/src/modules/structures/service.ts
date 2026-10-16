@@ -113,7 +113,7 @@ async function toOrganizer(s: StructureRow, access: OrganizerAccess): Promise<St
 }
 
 /** Position et département d'une adresse (meilleur effort : jamais bloquant). */
-async function locate(a: {
+export async function locate(a: {
   addressLine?: string | null;
   postalCode?: string | null;
   city?: string | null;

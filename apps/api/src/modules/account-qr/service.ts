@@ -1,5 +1,5 @@
 // QR de compte dynamique (ARCHITECTURE.md § 3.3, choix C21) : secret par compte transmis à l'appli au login,
-// code HOTP de 60 s calculé hors ligne, vérifié ici par le pro (remise au lot 14).
+// code HOTP de 60 s calculé hors ligne, vérifié ici par un pro, avec sa remise par grade (lot 14).
 import { createHmac, randomBytes } from "node:crypto";
 import {
   ACCOUNT_QR_DIGITS,
@@ -13,9 +13,12 @@ import {
 import { eq, lt } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { accountQrUses, profiles } from "../../db/schema";
+import { accountQrUses, proDiscountUses, profiles } from "../../db/schema";
 import { now } from "../../lib/deps";
+import { forbidden } from "../../lib/errors";
+import { rateAssertBelow, rateLimit, rateRecord } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
+import { discountPercent, proOfUser } from "../pros/service";
 
 /** Anti-rejeu : un code présenté une fois est refusé ensuite ; les traces sont purgées après 3 minutes. */
 const USE_RETENTION_MS = 3 * 60_000;
@@ -49,10 +52,22 @@ export const accountQrService = {
   },
 
   /**
-   * `POST /account-qr/verify` : pseudo et grade du porteur si le code est valide (fenêtres c−1, c, c+1) et jamais
-   * présenté ; la remise du pro arrive au lot 14.
+   * `POST /account-qr/verify` : réservé aux comptes pro (fiche publiée). Pseudo, grade et remise du pro pour ce grade
+   * si le code est valide (fenêtres c−1, c, c+1) et jamais présenté. Garde-fous (M5, lot 14) : limite par minute
+   * (route), limite quotidienne, et les échecs (code inconnu, expiré, rejoué) sont comptés par vérificateur — au-delà
+   * de 10 en 10 minutes, le vérificateur est bloqué même pour un code juste.
    */
-  async verify(_v: Viewer, payload: string): Promise<AccountQrVerify> {
+  async verify(v: Viewer, payload: string): Promise<AccountQrVerify> {
+    const pro = await proOfUser(v.user.id);
+    if (!pro?.publishedAt) throw forbidden("Le lecteur de QR de compte est réservé aux professionnels (fiche publiée)");
+    rateAssertBelow("accountQrFailure", v.user.id);
+    rateLimit("accountQrDaily", v.user.id);
+    const result = await this.check(payload, v.user.id, pro.id);
+    if (!result.valid) rateRecord("accountQrFailure", v.user.id);
+    return result;
+  },
+
+  async check(payload: string, verifierId: string, proId: string): Promise<AccountQrVerify> {
     const decoded = decodeAccountQrPayload(payload);
     if (!decoded) return { valid: false, reason: "malformed" };
     const profile = await db.query.profiles.findFirst({
@@ -69,6 +84,16 @@ export const accountQrService = {
       .onConflictDoNothing()
       .returning();
     if (!use) return { valid: false, reason: "replayed" };
-    return { valid: true, pseudo: profile.pseudo, grade: profile.grade, discount: null };
+    // Remise du pro pour ce grade, comptée dans ses statistiques (jamais pour un scan de son propre compte).
+    const percent = await discountPercent(proId, profile.grade);
+    if (percent > 0 && profile.userId !== verifierId) {
+      await db.insert(proDiscountUses).values({ proId, grade: profile.grade, percent, usedAt: t });
+    }
+    return {
+      valid: true,
+      pseudo: profile.pseudo,
+      grade: profile.grade,
+      discount: percent > 0 ? { percent } : null,
+    };
   },
 };

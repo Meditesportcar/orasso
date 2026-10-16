@@ -46,8 +46,16 @@ const proFields = z.object({
     .regex(/^[+\d][\d\s.()-]{5,20}$/, "Numéro de téléphone invalide")
     .nullish()
     .or(z.literal("").transform(() => null)),
-  email: z.email().max(120).nullish().or(z.literal("").transform(() => null)),
-  website: z.url().max(200).nullish().or(z.literal("").transform(() => null)),
+  email: z
+    .email()
+    .max(120)
+    .nullish()
+    .or(z.literal("").transform(() => null)),
+  website: z
+    .url()
+    .max(200)
+    .nullish()
+    .or(z.literal("").transform(() => null)),
   socials: socialsSchema,
   hours: proHoursSchema,
 });
