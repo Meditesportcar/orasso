@@ -38,6 +38,7 @@ import { type Tx, withTx } from "../../lib/tx";
 import { accessService } from "../access/service";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
+import { socialJournal } from "../social/journal";
 import { staffService } from "../staff/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
@@ -83,6 +84,8 @@ async function transition(
   });
   // QR d'inscription (lot 06) : émis à la retenue, révoqué quand la candidature n'est plus retenue.
   if (to === "accepted" && app.status !== "accepted") await accessService.issue(tx, row);
+  // Journal des amis (lot 17) : « <pseudo> va à <événement> ».
+  if (to === "accepted" && app.status !== "accepted") await socialJournal.friendGoingEvent(tx, row);
   if (app.status === "accepted" && to !== "accepted") {
     await accessService.revoke(tx, row.id, PASS_REVOCATION[to] ?? "cancelled");
   }

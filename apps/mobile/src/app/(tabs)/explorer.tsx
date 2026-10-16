@@ -1,12 +1,13 @@
-// Explorer : le segment Événements en liste simple (recherche et format). La carte, les Pros et les Personnes et
-// crews arrivent avec le lot 13.
+// Explorer : le segment Événements en liste simple (recherche et format) et le segment « Personnes et crews » (lot 17 :
+// recherche de personnes ; les crews arrivent au lot 19). La carte et les Pros viennent plus tard.
 
 import { Button, Chip, ChipRow, Photo, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { type EventCard, type EventFormat, eventFormatLabels, eventFormats } from "@orasso/shared";
+import { type EventCard, type EventFormat, eventFormatLabels, eventFormats, socialLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { PeopleSearch } from "@/features/social/PeopleSearch";
 import { api } from "@/lib/api";
 import { formatDay, formatHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
@@ -20,6 +21,7 @@ const { space1, space3 } = tokens.spacing;
 export default function Explorer() {
   const { t } = useTheme();
   const router = useRouter();
+  const [segment, setSegment] = useState<"evenements" | "personnes">("evenements");
   const [q, setQ] = useState("");
   const [format, setFormat] = useState<EventFormat | null>(null);
   const [items, setItems] = useState<EventCard[] | null>(null);
@@ -61,8 +63,29 @@ export default function Explorer() {
     }
   }
 
+  const segments = (
+    <ChipRow>
+      <Chip selected={segment === "evenements"} onPress={() => setSegment("evenements")}>
+        {socialLabels.segmentEvents}
+      </Chip>
+      <Chip selected={segment === "personnes"} onPress={() => setSegment("personnes")}>
+        {socialLabels.segmentPeople}
+      </Chip>
+    </ChipRow>
+  );
+
+  if (segment === "personnes") {
+    return (
+      <TabScreen title="Explorer">
+        {segments}
+        <PeopleSearch />
+      </TabScreen>
+    );
+  }
+
   return (
     <TabScreen title="Explorer" onRefresh={load}>
+      {segments}
       <TextField
         label="Recherche"
         placeholder="Nom d'événement, ville…"

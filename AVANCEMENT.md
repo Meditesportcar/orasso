@@ -101,11 +101,21 @@
   - Le jeton de session est remplacé après un changement de mot de passe ou de double authentification (`adoptToken`) : sans cela l'appli était déconnectée.
   - Vérifié : voir l'entrée du lot 16 dans le journal du relais. Recette dans le navigateur : `apps/web/e2e/appli-moi.spec.ts` (`APP_URL=http://localhost:<relais>`). Captures : `C:\Users\DELL\.claude\relais\orasso\lot-16-captures\`. **Pas encore sur téléphone** (photo, application d'authentification : APK de la vague).
 
+- **Social : amis, profils des autres, recherche de personnes, QR ami, Journal fusionné (lot 17, 16/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 17) ; état technique : `ARCHITECTURE.md` « État après le lot 17 ».
+  - Amis : demande avec acceptation des deux côtés (une relation par paire, refus = 30 jours, demande croisée = acceptation), 20 demandes par jour, retrait, lien d'ami `/ami/:jeton` et `orasso://ami/…`, QR de compte scanné par la caméra de l'appli (même code HOTP de 60 s, rejeu refusé).
+  - Profils des autres selon l'audience : public = complet, privé = pseudo, photo, grade, marque et modèle (les amis voient tout), organisateur = tout + coordonnées ; la plaque n'est jamais exposée. Fiche d'un véhicule d'un autre et « Autres propriétaires près de chez moi » (même génération, mes départements).
+  - Recherche de personnes (pseudo, véhicule, département, centre d'intérêt, grade) dans Explorer, segment « Personnes et crews » (crews au lot 19) ; comptes supprimés et suspendus jamais listés.
+  - Journal fusionné : actualités des amis (« X va à… », « X a ajouté… ») et notifications dans un fil de 7 jours (plus les non lues), cloche avec pastille sur le site, avatars et liens dans l'appli.
+  - API : migration `0024_social`, module `social`, `GET /me/inbox/summary` minimal (lot 18). Seed : Kenji ↔ Léa amis, demande de Nina à Damien en attente, Marc en compte privé (ami de Julie).
+  - Vérifié : voir l'entrée du lot 17 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-17-captures\`.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
+
+- Lot 17 : déployer (migration `0024_social` au démarrage, aucune variable nouvelle) ; la messagerie (bouton « Message » du profil) vient au lot 18, le signalement au lot 32, les crews du profil au lot 19. Nouvel APK utile seulement pour le scanner de QR ami (`expo-camera` déjà dans l'APK de référence).
 
 - Lot 16 : aucune migration ni variable obligatoire (`EXPO_PUBLIC_SITE_URL` facultative dans `apps/mobile/.env.example`, utile seulement en local). Les écrans Organisateur et Prestataire (`app/(orga)/`, `app/(provider)/`) sont des squelettes : lots 22 et 21. Essayer sur téléphone (APK de la vague) : photo de profil, application d'authentification, appui long sur l'avatar.
 - Lot 15 : déployer (migration `0022` au démarrage ; variables facultatives `SENTRY_DSN`, `VITE_SENTRY_DSN` dans `deploy/dev.env.example`, `SENTRY_RELEASE` posé par `compose.yml`) ; construire l'APK de référence (nouvelles dépendances natives). Les e-mails partent par le transport « journal » tant que Brevo n'est pas branché : en ligne, les liens de réinitialisation et de vérification ne sont lisibles que dans `email_outbox`.

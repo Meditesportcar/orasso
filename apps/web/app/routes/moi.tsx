@@ -153,6 +153,9 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             Enregistrer le profil
           </Button>
         </Form>
+        <Button variant="secondary" icon="crew" href="/app/amis">
+          Mes amis
+        </Button>
         <div className="s-card s-stack s-stack--tight" data-testid="public-preview">
           <div className="s-label o-t-label">Ce que voient les autres</div>
           <strong>

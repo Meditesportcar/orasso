@@ -23,6 +23,7 @@ import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
 import { TwoFactorSheet } from "@/features/moi/TwoFactorSheet";
 import { useSettings } from "@/features/moi/useSettings";
 import { VisibilitySection } from "@/features/moi/VisibilitySection";
+import { FriendsSection } from "@/features/social/FriendsSection";
 import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -66,6 +67,7 @@ export default function Moi() {
       {settings.error ? <Notice tone="error">{settings.error}</Notice> : null}
       <ProfileSection />
       <PointsSection />
+      <FriendsSection />
       <CasquettesSection onStaff={() => setSheet("staff")} />
       <NotificationsSection settings={settings.settings} save={settings.save} />
       <VisibilitySection settings={settings.settings} save={settings.save} />

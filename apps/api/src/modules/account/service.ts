@@ -58,10 +58,12 @@ import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
-import { accountQrShortId, profilesService } from "../profiles/service";
+import { accountQrShortId } from "../profiles/service";
 import { securityMails } from "../security/mails";
 import { isSecondFactor } from "../security/passkey";
 import { securityService } from "../security/service";
+import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
+import { socialProfile } from "../social/profile";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
 
 type MailUser = { id: string; email: string; name: string };
@@ -239,7 +241,7 @@ export const accountService = {
 
   /** Ce que voit un autre utilisateur connecté (règles public / privé de docs/01, sans l'exception « c'est moi »). */
   publicPreview(v: Viewer): Promise<PublicPreview> {
-    return profilesService.publicProfile(v, v.profile.pseudo, { asOther: true });
+    return socialProfile.view(v, v.profile.pseudo, { asStranger: true });
   },
 
   /**
@@ -398,7 +400,8 @@ export const accountService = {
       }
       // Garage : demandes de certification, certification, demandes de transfert de plaque (lot 31).
       await anonymizeGarageForDeletedAccount(tx, userId);
-      // Liens sociaux et d'organisation (amis, crews, messagerie : lots 17 à 19, à compléter par leurs tables).
+      // Liens sociaux et d'organisation (amis : lot 17 ; crews, messagerie : lots 18 et 19, à compléter par leurs tables).
+      await anonymizeSocialForDeletedAccount(tx, userId);
       await tx.delete(structureFollows).where(eq(structureFollows.userId, userId));
       await tx.delete(proFollows).where(eq(proFollows.userId, userId));
       await tx

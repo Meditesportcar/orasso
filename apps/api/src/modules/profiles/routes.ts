@@ -48,8 +48,4 @@ export const profilesRoutes = new Hono<AppEnv>()
   .delete("/me/devices/:id", async (c) => {
     await profilesService.revokeDevice(await requireUser(c), uuidParam(c, "id"));
     return c.body(null, 204);
-  })
-  .get("/users/:pseudo", async (c) => {
-    const v = await requireUser(c);
-    return c.json(await profilesService.publicProfile(v, c.req.param("pseudo")));
   });

@@ -19,6 +19,7 @@ import { seedDayJ } from "./seed/day-j";
 import { seedGarage } from "./seed/garage";
 import { seedPros } from "./seed/pros";
 import { seedSecurity } from "./seed/security";
+import { seedSocial } from "./seed/social";
 
 const args = new Set(process.argv.slice(2));
 const RESET = args.has("--reset");
@@ -74,6 +75,8 @@ async function main() {
   await seedPros(hash);
   // Lot 15 : compte à confirmer, parrainage.
   await seedSecurity(hash);
+  // Lot 17 : amis, demande en attente, profil privé.
+  await seedSocial();
   // Lot 16 : seconde structure de Sarah_66 (feuille « Mes casquettes »).
   await seedCasquettes();
   // Lot 31 : règles de cohérence des catégories, véhicule certifié de démonstration.

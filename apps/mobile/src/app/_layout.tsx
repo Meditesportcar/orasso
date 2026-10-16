@@ -16,6 +16,7 @@ import { Platform, StyleSheet, View } from "react-native";
 import { StaffBackground } from "@/features/staff/StaffBackground";
 import { ApplicationsProvider } from "@/lib/applications";
 import { kvGet, kvSet } from "@/lib/kv";
+import { appLinkOf } from "@/lib/links";
 import { PersonaProvider, usePersona } from "@/lib/persona";
 import { homeOf, misplacedGroup } from "@/lib/personaModel";
 import { registerThisDevice } from "@/lib/push";
@@ -28,7 +29,7 @@ initSentry();
 void SplashScreen.preventAutoHideAsync();
 
 /** Écrans ouverts sans compte : premier lancement, connexion, page d'un événement (lien partagé), recette du design. */
-const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "_ds"]);
+const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "ami", "_ds"]);
 
 // Le thème (Béton par défaut, Sable, auto) et les polices Archivo sont posés une fois, à la racine.
 function Shell() {
@@ -65,12 +66,15 @@ function Shell() {
     if (status === "in") void registerThisDevice();
   }, [status]);
 
-  // Toucher une notification ouvre l'onglet Accès (celui du passionné, quelle que soit la casquette active).
+  // Toucher une notification ouvre l'onglet Accès du passionné (quelle que soit la casquette active) ou l'écran de son lien.
   useEffect(() => {
     if (Platform.OS === "web") return;
-    const sub = Notifications.addNotificationResponseReceivedListener(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       backToFan();
-      router.navigate("/acces");
+      // Un lien de l'appli (profil d'un ami, événement) ouvre cet écran, sinon l'onglet Accès.
+      const link = appLinkOf(response.notification.request.content.data?.link);
+      if (link) router.navigate(link as never);
+      else router.navigate("/acces");
     });
     return () => sub.remove();
   }, [router, backToFan]);

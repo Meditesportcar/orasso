@@ -4,6 +4,7 @@ import { applicationNotificationLabels } from "../notifications/application";
 import { eventNotificationLabels } from "../notifications/events";
 import { garageNotificationLabels } from "../notifications/garage";
 import { pointsNotificationLabels } from "../notifications/points";
+import { socialNotificationLabels } from "../notifications/social";
 import { staffNotificationLabels } from "../notifications/staff";
 
 // Notifications (lot 15) : familles et types, pour les réglages du compte. Les libellés des types sont déclarés à
@@ -24,5 +25,6 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   ...staffNotificationLabels,
   ...pointsNotificationLabels,
   ...accountNotificationLabels,
+  ...socialNotificationLabels,
   ...garageNotificationLabels,
 };

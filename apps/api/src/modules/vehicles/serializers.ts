@@ -1,5 +1,5 @@
 // Sérialiseurs par audience (ARCHITECTURE.md § 5.2) : la plaque ne sort que pour le propriétaire et l'organisateur.
-import type { VehicleFull, VehiclePublic } from "@orasso/shared";
+import type { VehicleBrief, VehicleFull, VehiclePublic } from "@orasso/shared";
 
 import { storage } from "../../lib/storage";
 import type { VehicleWithAll } from "./repo";
@@ -60,5 +60,22 @@ export function vehicleFull(v: VehicleWithAll): VehicleFull {
           createdAt: v.pendingTransfer.createdAt.toISOString(),
         }
       : null,
+  };
+}
+
+/** Marque + modèle (fiche réduite d'un compte privé, lot 17) : « BMW Série 3 », jamais la génération ni l'année. */
+export function vehicleBriefLabel(v: Pick<VehicleWithAll, "make" | "model">): string {
+  const label = [v.make.isOther ? null : v.make.name, v.model.isOther ? null : v.model.name].filter(Boolean).join(" ");
+  return label || "Autre véhicule";
+}
+
+export function vehicleBrief(v: VehicleWithAll): VehicleBrief {
+  return {
+    id: v.id,
+    label: vehicleBriefLabel(v),
+    makeName: v.make.name,
+    modelName: v.model.name,
+    vehicleType: v.vehicleType,
+    photoUrl: null,
   };
 }

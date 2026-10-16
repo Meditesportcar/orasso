@@ -176,6 +176,13 @@
       "when": 1792156224934,
       "tag": "0024_garage",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792160155263,
+      "tag": "0025_social",
+      "breakpoints": true
     }
   ]
 }

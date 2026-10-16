@@ -1,11 +1,5 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
-import {
-  type DeviceRegister,
-  defaultNotificationPrefs,
-  type Me,
-  type ProfileUpdate,
-  type PublicProfile,
-} from "@orasso/shared";
+import { type DeviceRegister, defaultNotificationPrefs, type Me, type ProfileUpdate } from "@orasso/shared";
 import { and, count, eq, gt, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -14,7 +8,6 @@ import {
   categories,
   devices,
   events,
-  notifications,
   proProfiles,
   structureMembers,
   structures,
@@ -26,7 +19,7 @@ import { conflict, notFound, validation } from "../../lib/errors";
 import type { AuthUser, Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
-import { vehiclesService } from "../vehicles/service";
+import { notificationsService } from "../notifications/service";
 import { personasOf } from "./personas";
 import { type Profile, profilesRepo } from "./repo";
 
@@ -107,10 +100,8 @@ export const profilesService = {
           gt(events.endsAt, now()),
         ),
       );
-    const [unread] = await db
-      .select({ n: count() })
-      .from(notifications)
-      .where(and(eq(notifications.userId, v.user.id), isNull(notifications.readAt)));
+    // Pastille de la cloche (lot 17) : éléments du Journal non lus, un push seul (message reçu) n'en fait pas partie.
+    const unread = await notificationsService.unreadCount(v.user.id);
     const required = await twoFactorRequired(v);
     return {
       user: {
@@ -162,7 +153,7 @@ export const profilesService = {
       counts: {
         vehicles: vehicleCount?.n ?? 0,
         upcomingApplications: upcoming?.n ?? 0,
-        unreadNotifications: unread?.n ?? 0,
+        unreadNotifications: unread,
       },
       personas: await personasOf(v),
       // La Boîte arrive au lot 18 : aucun message à compter avant.
@@ -192,30 +183,6 @@ export const profilesService = {
       if (!updated) throw notFound();
       return updated;
     });
-  },
-
-  /** Profil d'un autre utilisateur (connecté seulement) : complet si public, réduit si privé (docs/01). */
-  async publicProfile(v: Viewer, pseudo: string, opts: { asOther?: boolean } = {}): Promise<PublicProfile> {
-    const p = await profilesRepo.byPseudo(pseudo);
-    if (!p || p.deletedAt) throw notFound("Profil introuvable");
-    // `asOther` : aperçu « ce que voient les autres » de son propre profil (lot 15).
-    const full = p.visibility === "public" || (p.userId === v.user.id && !opts.asOther);
-    const garage = await vehiclesService.garageOf(p.userId);
-    return {
-      pseudo: p.pseudo,
-      avatarUrl: storage.url(p.avatarKey),
-      grade: p.grade,
-      visibility: p.visibility,
-      bio: full ? p.bio : null,
-      departments: full ? p.departments : null,
-      vehicles: garage.map((g) => ({
-        id: g.id,
-        label: full ? g.label : `${g.makeName} ${g.modelName}`,
-        makeName: g.makeName,
-        modelName: g.modelName,
-        photoUrl: full ? (g.photos[0]?.url ?? null) : null,
-      })),
-    };
   },
 
   async setAvatar(v: Viewer, image: Buffer): Promise<string> {

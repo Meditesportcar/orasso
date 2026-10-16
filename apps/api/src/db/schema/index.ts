@@ -13,6 +13,7 @@ export * from "./pros";
 export * from "./relations";
 export * from "./reviews";
 export * from "./security";
+export * from "./social";
 export * from "./staff";
 export * from "./structures";
 export * from "./ticketing";

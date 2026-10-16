@@ -7,6 +7,7 @@ export * from "./garage";
 export * from "./pro";
 export * from "./profile";
 export * from "./review";
+export * from "./social";
 export * from "./structure";
 export * from "./ticketing";
 export * from "./vehicle";

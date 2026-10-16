@@ -87,9 +87,5 @@ export const vehiclesRoutes = new Hono<AppEnv>()
     rateLimit("vehicleWrite", v.user.id);
     const { message } = await body(c, certificationRequestSchema);
     return c.json(await certificationService.request(v, uuidParam(c, "id"), message), 201);
-  })
-  // Fiche d'un autre utilisateur (connecté) : jamais de plaque.
-  .get("/vehicles/:id", async (c) => {
-    const v = await requireUser(c);
-    return c.json(await vehiclesService.getOther(v, uuidParam(c, "id")));
   });
+// La fiche d'un véhicule d'un autre utilisateur (`GET /vehicles/:id`) est servie par le module social (lot 17).
