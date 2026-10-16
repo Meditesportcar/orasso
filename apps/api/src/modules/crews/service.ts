@@ -68,6 +68,7 @@ const isUniqueViolation = (error: unknown) => {
 };
 
 const crewKey = (crewId: string) => `crew:${crewId}`;
+const RESERVED_SLUGS = new Set(["nouveau", "inscription", "search", "by-slug"]);
 const crewPath = (crew: Pick<CrewRow, "slug">) => `/c/${crew.slug}`;
 
 export function crewCard(crew: CrewRow): CrewCard {
@@ -403,8 +404,12 @@ export const crewsService = {
   async create(v: Viewer, input: CrewCreate): Promise<CrewView> {
     assertWritable(v);
     rateLimit("crewWrite", v.user.id);
-    const slug = await uniqueSlug(input.name, async (s) =>
-      Boolean(await db.query.crews.findFirst({ where: eq(crews.slug, s), columns: { id: true } })),
+    // Adresses réservées par les écrans de l'appli (`/crew/nouveau`, `/crew/inscription`).
+    const slug = await uniqueSlug(
+      input.name,
+      async (s) =>
+        RESERVED_SLUGS.has(s) ||
+        Boolean(await db.query.crews.findFirst({ where: eq(crews.slug, s), columns: { id: true } })),
     );
     const id = await withTx(async (tx, after) => {
       await lockPerson(tx, v.user.id);

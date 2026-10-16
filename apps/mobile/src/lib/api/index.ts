@@ -3,6 +3,7 @@
 // toutes dans l'API (CLAUDE.md).
 import { accountApi } from "./account";
 import { applicationsApi } from "./applications";
+import { crewsApi } from "./crews";
 import { eventsApi } from "./events";
 import { garageApi } from "./garage";
 import { messagingApi } from "./messaging";
@@ -30,4 +31,5 @@ export const api = {
   ...settingsApi,
   ...securityApi,
   ...messagingApi,
+  ...crewsApi,
 };

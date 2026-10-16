@@ -1,5 +1,5 @@
 // Explorer : le segment Événements en liste simple (recherche et format) et le segment « Personnes et crews » (lot 17 :
-// recherche de personnes ; les crews arrivent au lot 19). La carte et les Pros viennent plus tard.
+// recherche de personnes ; lot 19 : crews). La carte et les Pros viennent plus tard.
 
 import { Button, Chip, ChipRow, Photo, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventCard, type EventFormat, eventFormatLabels, eventFormats, socialLabels } from "@orasso/shared";
@@ -7,6 +7,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { CrewSearch } from "@/features/crews/CrewSearch";
 import { PeopleSearch } from "@/features/social/PeopleSearch";
 import { api } from "@/lib/api";
 import { formatDay, formatHour } from "@/lib/format";
@@ -79,6 +80,7 @@ export default function Explorer() {
       <TabScreen title="Explorer">
         {segments}
         <PeopleSearch />
+        <CrewSearch />
       </TabScreen>
     );
   }

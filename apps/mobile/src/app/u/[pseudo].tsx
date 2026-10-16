@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { MessageButton } from "@/features/boite/MessageButton";
+import { CrewRowNative } from "@/features/crews/CrewSearch";
 import { FriendButton } from "@/features/social/FriendButton";
 import { api } from "@/lib/api";
 import { formatDay, formatHour } from "@/lib/format";
@@ -165,7 +166,10 @@ export default function UserProfile() {
       {p.crews ? (
         <>
           <SectionTitle>{socialLabels.crews}</SectionTitle>
-          <Muted variant="body">{socialLabels.crewsEmpty}</Muted>
+          {p.crews.length === 0 ? <Muted variant="body">{socialLabels.crewsEmpty}</Muted> : null}
+          {p.crews.map((c) => (
+            <CrewRowNative key={c.id} crew={c} onPress={() => router.push(`/crew/${c.slug}`)} />
+          ))}
         </>
       ) : null}
     </FlowScreen>

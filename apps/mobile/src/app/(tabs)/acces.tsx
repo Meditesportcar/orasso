@@ -15,6 +15,7 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { ContestSheet } from "@/features/ContestSheet";
+import { CrewConfirmSheet } from "@/features/CrewConfirmSheet";
 import { ReviewSheet, type ReviewTarget } from "@/features/ReviewSheet";
 import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { api } from "@/lib/api";
@@ -52,6 +53,7 @@ export default function Acces() {
   const [withdrawing, setWithdrawing] = useState<MyApplication | null>(null);
   const [contesting, setContesting] = useState<{ applicationId: string; title: string } | null>(null);
   const [reviewing, setReviewing] = useState<ReviewTarget | null>(null);
+  const [confirmingCrew, setConfirmingCrew] = useState<MyApplication | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +99,14 @@ export default function Acces() {
               void reload();
             }}
           />
+          <CrewConfirmSheet
+            app={confirmingCrew}
+            onClose={() => setConfirmingCrew(null)}
+            onDone={() => {
+              setConfirmingCrew(null);
+              void reload();
+            }}
+          />
           <ReviewSheet
             target={reviewing}
             onClose={() => setReviewing(null)}
@@ -127,6 +137,8 @@ export default function Acces() {
             onWithdraw={() => setWithdrawing(app)}
             onAccept={() => void run(app, () => api.acceptOffer(app.id))}
             onDecline={() => void run(app, () => api.declineOffer(app.id))}
+            onConfirmCrew={() => setConfirmingCrew(app)}
+            onDeclineCrew={() => void run(app, () => api.declineCrewVenue(app.id))}
           />
         ))
       ) : loading ? (

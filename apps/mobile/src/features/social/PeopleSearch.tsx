@@ -1,5 +1,5 @@
 // Explorer, segment « Personnes et crews » (lot 17) : recherche par pseudo ou véhicule, filtres département, centre
-// d'intérêt et grade. Les crews arrivent au lot 19 : l'emplacement est réservé. Comptes supprimés et suspendus : jamais
+// d'intérêt et grade. Les crews sont juste en dessous (lot 19). Comptes supprimés et suspendus : jamais
 // dans les résultats ; un compte privé n'est trouvable que par ce qu'il montre à tous.
 import { Button, SelectField, TextField, tokens } from "@orasso/design-system/native";
 import {
@@ -136,10 +136,9 @@ export function PeopleSearch() {
         </Button>
       ) : null}
 
-      <Button variant="plate" icon="crew" onPress={() => router.push("/amis")} fullWidth>
+      <Button variant="plate" icon="profile" onPress={() => router.push("/amis")} fullWidth>
         {socialLabels.myFriends}
       </Button>
-      <Muted variant="caption">{socialLabels.crewsSoon}</Muted>
     </View>
   );
 }
