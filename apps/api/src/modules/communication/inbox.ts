@@ -8,7 +8,7 @@ import {
   messagePreview,
   type OrganizerInboxSummary,
 } from "@orasso/shared";
-import { and, desc, eq, isNotNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { conversations } from "../../db/schema";
@@ -47,6 +47,10 @@ export const organizerInboxService = {
           eq(conversations.kind, "organizer"),
           eq(conversations.structureId, structureId),
           isNotNull(conversations.lastMessageAt),
+          // Seulement les conversations où la personne a écrit (relecture du lot 20) : un message groupé sans réponse
+          // ne remplit pas « Messages des participants ».
+          sql`exists (select 1 from messages m where m.conversation_id = ${conversations.id}
+            and m.as_structure = false and m.kind <> 'system')`,
           c
             ? or(
                 lt(conversations.lastMessageAt, c.createdAt),

@@ -23,6 +23,7 @@ import {
   structureBans,
   structureFollows,
   structures,
+  uploads,
 } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, conflict, notFound, validation } from "../../lib/errors";
@@ -76,9 +77,23 @@ async function audienceOf(v: Viewer | null, e: EventRow): Promise<"team" | "part
   return accepted ? "participant" : "public";
 }
 
-/** Copie la photo envoyée (clé privée en attente) vers une clé publique ; rend la clé publique. */
-async function publishImage(tx: Tx, v: Viewer, eventId: string, imageKey: string) {
-  const upload = await uploadsService.consume(tx, v.user.id, imageKey, "announcement");
+/**
+ * Copie la photo envoyée (clé privée en attente) vers une clé publique, **hors transaction** (relecture du lot 20 :
+ * aucune écriture de fichier sous le verrou de l'événement) ; le rattachement (une seule fois, par son auteur) se fait
+ * ensuite dans la transaction. Rend `null` si la clé ne convient pas.
+ */
+async function copyImage(v: Viewer, eventId: string, imageKey: string) {
+  const [upload] = await db
+    .select()
+    .from(uploads)
+    .where(
+      and(
+        eq(uploads.key, imageKey),
+        eq(uploads.userId, v.user.id),
+        eq(uploads.purpose, "announcement"),
+        isNull(uploads.consumedAt),
+      ),
+    );
   if (!upload) throw validation("Photo inconnue ou déjà utilisée");
   const data = await storage.get(upload.key);
   if (!data) throw validation("Photo introuvable : renvoie-la");
@@ -154,10 +169,10 @@ export const announcementsService = {
   async create(v: Viewer, eventId: string, input: AnnouncementCreate): Promise<AnnouncementView> {
     const { e, s } = await requireEventSpeaker(v, eventId);
     if (e.status === "draft") throw conflict("conflict", "Publie l'événement avant d'y écrire une annonce.");
-    let publicKey: string | null = null;
-    let privateKey: string | null = null;
+    const image = input.imageKey ? await copyImage(v, e.id, input.imageKey) : null;
+    const preview = shorten(input.body, 160);
     try {
-      const row = await withTx(async (tx, after) => {
+      const { row, notified } = await withTx(async (tx, after) => {
         await eventsRepo.lockForUpdate(tx, e.id);
         const [today] = await tx
           .select({ n: count() })
@@ -172,12 +187,8 @@ export const announcementsService = {
         if ((today?.n ?? 0) >= ANNOUNCEMENTS_PER_DAY) {
           throw new AppError(429, "rate_limited", "Trop d'annonces aujourd'hui pour cet événement.");
         }
-        let image: { key: string; width: number; height: number } | null = null;
-        if (input.imageKey) {
-          const published = await publishImage(tx, v, e.id, input.imageKey);
-          publicKey = published.key;
-          privateKey = published.privateKey;
-          image = published;
+        if (image && !(await uploadsService.consume(tx, v.user.id, image.privateKey, "announcement"))) {
+          throw validation("Photo inconnue ou déjà utilisée");
         }
         const [inserted] = await tx
           .insert(eventAnnouncements)
@@ -196,27 +207,31 @@ export const announcementsService = {
           })
           .returning();
         if (!inserted) throw new Error("Annonce non enregistrée");
-        const preview = shorten(input.body, 160);
-        const notified = new Set<string>();
+        const notified: string[] = [];
         if (input.notify) {
           const users =
             input.audience === "participants"
               ? await acceptedUserIds(tx, e.id)
               : await eventsRepo.activeApplicantIds(e.id, tx);
-          for (const userId of users) {
-            notified.add(userId);
-            await notificationsService.notify(tx, userId, "event_announcement", {
-              title: `${s.name} · ${e.title}`,
-              body: preview,
-              eventId: e.id,
-              eventStartsAt: e.startsAt,
-              data: { eventId: e.id, announcementId: inserted.id },
-              link: { label: "Voir l'annonce", path: `/e/${e.slug}#fil` },
-            });
-          }
+          notified.push(...users);
+          // Une seule requête pour tous les inscrits (relecture du lot 20 : pas de boucle sous le verrou).
+          await notificationsService.notifyMany(tx, users, "event_announcement", {
+            title: `${s.name} · ${e.title}`,
+            body: preview,
+            eventId: e.id,
+            eventStartsAt: e.startsAt,
+            data: { eventId: e.id, announcementId: inserted.id },
+            link: { label: "Voir l'annonce", path: `/e/${e.slug}#fil` },
+          });
         }
-        if (input.audience === "public" && e.admission !== "invite_only") {
-          // Abonnés (hors bannis, hors déjà prévenus) : une actualité au Journal, sans push.
+        after(() => notificationsService.kick());
+        return { row: inserted, notified };
+      });
+      if (image) await storage.remove(image.privateKey).catch(() => undefined);
+      // Abonnés (hors bannis, hors déjà prévenus) : une actualité au Journal, sans push, après la validation (hors du
+      // verrou de l'événement). Un échec ici ne retire pas l'annonce.
+      if (input.audience === "public" && e.admission !== "invite_only") {
+        await withTx(async (tx, after) => {
           const followers = await tx
             .select({ userId: structureFollows.userId })
             .from(structureFollows)
@@ -224,27 +239,28 @@ export const announcementsService = {
               and(
                 eq(structureFollows.structureId, s.id),
                 sql`not exists (select 1 from ${structureBans} b where b.structure_id = ${s.id} and b.user_id = ${structureFollows.userId})`,
-                notified.size ? notInArray(structureFollows.userId, [...notified]) : undefined,
+                notified.length ? notInArray(structureFollows.userId, notified) : undefined,
               ),
             );
-          for (const f of followers) {
-            await notificationsService.notify(tx, f.userId, "structure_announcement", {
+          await notificationsService.notifyMany(
+            tx,
+            followers.map((f) => f.userId),
+            "structure_announcement",
+            {
               title: `${s.name} · ${e.title}`,
               body: preview,
               eventId: e.id,
-              data: { eventId: e.id, announcementId: inserted.id },
+              data: { eventId: e.id, announcementId: row.id },
               link: { label: "Voir l'annonce", path: `/e/${e.slug}#fil` },
-            });
-          }
-        }
-        after(() => notificationsService.kick());
-        return inserted;
-      });
-      if (privateKey) await storage.remove(privateKey).catch(() => undefined);
+            },
+          );
+          after(() => notificationsService.kick());
+        }).catch((error) => console.error("Annonce : actualité des abonnés", error));
+      }
       return serialize(row, s.name, v.profile.pseudo);
     } catch (error) {
       // Rien d'enregistré : la copie publique de la photo ne doit pas rester.
-      if (publicKey) await storage.remove(publicKey).catch(() => undefined);
+      if (image) await storage.remove(image.key).catch(() => undefined);
       throw error;
     }
   },
@@ -330,16 +346,14 @@ export const announcementsService = {
         })
         .returning();
       const users = await acceptedUserIds(tx, e.id);
-      for (const userId of users) {
-        await notificationsService.notify(tx, userId, "event_instructions", {
-          title: `Consignes · ${e.title}`,
-          body: shorten(text, 200),
-          eventId: e.id,
-          eventStartsAt: e.startsAt,
-          data: { eventId: e.id },
-          link: { label: "Ouvrir mes accès", path: "/app/acces" },
-        });
-      }
+      await notificationsService.notifyMany(tx, users, "event_instructions", {
+        title: `Consignes · ${e.title}`,
+        body: shorten(text, 200),
+        eventId: e.id,
+        eventStartsAt: e.startsAt,
+        data: { eventId: e.id },
+        link: { label: "Ouvrir mes accès", path: "/app/acces" },
+      });
       after(() => notificationsService.kick());
       if (!entry) throw new Error("Consignes non enregistrées");
       return { recipientsCount: users.length, entry: serialize(entry, s.name, v.profile.pseudo) };

@@ -4,7 +4,7 @@
 // Routes sensibles jouées en cookie ET en jeton porteur.
 import { randomUUID } from "node:crypto";
 import { fromWallTime } from "@orasso/shared";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -364,7 +364,8 @@ describe("messages groupés", () => {
       );
       expect(reply.status).toBe(201);
       const inbox = await req(damien, "GET", `/structures/${s.id}/conversations`, undefined, mode);
-      expect(inbox.json.items.map((c: { title: string }) => c.title)).toEqual([kenji.pseudo, lea.pseudo]);
+      // Seulement les conversations où la personne a répondu (Léa n'a rien écrit).
+      expect(inbox.json.items.map((c: { title: string }) => c.title)).toEqual([kenji.pseudo]);
       expect((await req(damien, "GET", `/structures/${s.id}/inbox/summary`, undefined, mode)).json).toMatchObject({
         participantMessages: 1,
         staffRequests: 0,
@@ -577,10 +578,6 @@ describe("discussions du staff", () => {
       .from(conversations)
       .where(and(eq(conversations.kind, "event_staff"), eq(conversations.eventId, draft.id)));
     expect(chat).toBeTruthy();
-    // Tâches de fermeture (J+1) et de purge (1 an) planifiées.
-    const names = clock.jobs.jobs.map((j) => j.name);
-    expect(names).toContain("event.close-staff-chat");
-    expect(names).toContain("messaging.purge-event-staff");
     // Un staff invité qui accepte devient participant des discussions ouvertes.
     const staff = await signUp("Nouveau");
     const permanent = await req(damien, "GET", `/structures/${s.id}/staff-conversation`);
@@ -617,16 +614,32 @@ describe("discussions du staff", () => {
     expect(list.json.items.map((c: { kind: string }) => c.kind)).toEqual(["structure_staff", "event_staff"]);
   });
 
-  it("purge à un an", async () => {
-    const { damien, e } = await setup();
+  it("balayage : fermeture à J+1 (le staff quitte), purge à un an", async () => {
+    const { damien, e, s } = await setup();
+    const staff = await signUp("Staffeur");
+    await addMember(s.id, staff.id, "staff", ["scan"]);
     const chat = await req(damien, "GET", `/events/${e.id}/staff-conversation`);
     await req(damien, "POST", `/conversations/${chat.json.conversationId}/messages`, {
       clientId: randomUUID(),
       body: "x",
     });
-    expect(await staffChatsService.purgeEventChat(e.id)).toBe(false);
+    expect(await staffChatsService.sweep()).toEqual({ closed: 0, purged: 0 });
+    clock.set(new Date(e.endsAt.getTime() + DAY + 60_000));
+    expect(await staffChatsService.sweep()).toEqual({ closed: 1, purged: 0 });
+    const [row] = await db
+      .select()
+      .from(conversationParticipants)
+      .where(
+        and(
+          eq(conversationParticipants.conversationId, chat.json.conversationId),
+          eq(conversationParticipants.userId, staff.id),
+        ),
+      );
+    expect(row?.leftAt).not.toBeNull();
+    // Rien de plus au passage suivant.
+    expect(await staffChatsService.sweep()).toEqual({ closed: 0, purged: 0 });
     clock.set(new Date(e.endsAt.getTime() + 366 * DAY));
-    expect(await staffChatsService.purgeEventChat(e.id)).toBe(true);
+    expect(await staffChatsService.sweep()).toEqual({ closed: 0, purged: 1 });
     expect(await db.select().from(conversations).where(eq(conversations.id, chat.json.conversationId))).toHaveLength(0);
   });
 });
@@ -653,5 +666,93 @@ describe("anonymisation", () => {
     const list = await req(kenji, "GET", "/me/conversations");
     const msgs = await req(kenji, "GET", `/conversations/${list.json.items[0].id}/messages`);
     expect(msgs.json.items[0]).toMatchObject({ body: "Message de Sarah", sender: null, asStructure: true });
+  });
+});
+
+describe("corrections de la relecture", () => {
+  it("I1 : lot suivant jamais planifié → le balayage termine l'envoi, sans doublon", async () => {
+    const { damien, s } = await setup();
+    for (const pseudo of ["B1", "B2", "B3"]) {
+      const u = await signUp(pseudo);
+      await db.insert(structureFollows).values({ structureId: s.id, userId: u.id, source: "manual" });
+    }
+    const sent = await req(damien, "POST", `/structures/${s.id}/group-messages`, {
+      clientId: randomUUID(),
+      segment: "followers",
+      body: "Bonjour",
+    });
+    const gid = sent.json.groupMessageId as string;
+    // Premier lot de 2 ; la tâche du lot suivant reste dans la file en mémoire (jamais exécutée).
+    expect(await groupMessagesService.sendBatch(gid, 2)).toBe(1);
+    // Moins de 2 minutes : le balayage n'y touche pas.
+    expect(await groupMessagesService.sweep()).toBe(0);
+    await db
+      .update(groupMessages)
+      .set({ updatedAt: sql`now() - interval '3 minutes'` })
+      .where(eq(groupMessages.id, gid));
+    expect(await groupMessagesService.sweep()).toBe(1);
+    const [gm] = await db.select().from(groupMessages).where(eq(groupMessages.id, gid));
+    expect(gm).toMatchObject({ status: "sent", sentCount: 3 });
+    expect(await db.select().from(messages).where(eq(messages.groupMessageId, gid))).toHaveLength(3);
+    // Un message envoyé n'est plus repris.
+    await db
+      .update(groupMessages)
+      .set({ updatedAt: sql`now() - interval '3 minutes'` })
+      .where(eq(groupMessages.id, gid));
+    expect(await groupMessagesService.sweep()).toBe(0);
+  });
+
+  it("I2 : inscrits d'un événement fini depuis plus de 7 jours → 409 (cookie et porteur)", async () => {
+    const { damien, s, e } = await setup();
+    clock.set(new Date(e.endsAt.getTime() + 6 * DAY));
+    const ok = await req(damien, "GET", `/structures/${s.id}/group-messages/preview?segment=accepted&eventId=${e.id}`);
+    expect(ok.status).toBe(200);
+    clock.set(new Date(e.endsAt.getTime() + 8 * DAY));
+    for (const mode of MODES) {
+      for (const segment of ["accepted", "waitlisted", "pending", "providers", "checked_in"]) {
+        const r = await req(
+          damien,
+          "POST",
+          `/structures/${s.id}/group-messages`,
+          { clientId: randomUUID(), segment, eventId: e.id, body: "Revenez !" },
+          mode,
+        );
+        expect(r.status).toBe(409);
+      }
+    }
+    // Les abonnés restent joignables (dans leur quota), l'événement ne servant qu'aux variables.
+    const follower = await signUp("Abo");
+    await db.insert(structureFollows).values({ structureId: s.id, userId: follower.id, source: "manual" });
+    const followers = await req(damien, "POST", `/structures/${s.id}/group-messages`, {
+      clientId: randomUUID(),
+      segment: "followers",
+      eventId: e.id,
+      body: "À l'année prochaine pour {{event.title}}",
+    });
+    expect(followers.status).toBe(202);
+  });
+
+  it("banni entre la création et l'envoi : sauté ; texte trop long après remplacement : 400", async () => {
+    const { damien, s, e, kenji, lea } = await setup();
+    const sent = await req(damien, "POST", `/structures/${s.id}/group-messages`, {
+      clientId: randomUUID(),
+      segment: "accepted",
+      eventId: e.id,
+      body: "Bonjour",
+    });
+    await db.insert(structureBans).values({ structureId: s.id, userId: lea.id });
+    await groupMessagesService.drain(sent.json.groupMessageId);
+    const rows = await db.select().from(messages).where(eq(messages.groupMessageId, sent.json.groupMessageId));
+    expect(rows).toHaveLength(1);
+    expect((await req(kenji, "GET", "/me/conversations")).json.items).toHaveLength(1);
+    expect((await req(lea, "GET", "/me/conversations")).json.items).toHaveLength(0);
+    const long = await req(damien, "POST", `/structures/${s.id}/group-messages`, {
+      clientId: randomUUID(),
+      segment: "accepted",
+      eventId: e.id,
+      body: `${"x".repeat(1980)} {{pseudo}}`,
+    });
+    expect(long.status).toBe(400);
+    expect(long.json.error.message).toContain("trop long");
   });
 });
