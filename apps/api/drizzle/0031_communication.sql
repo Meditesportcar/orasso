@@ -3,6 +3,7 @@ CREATE TYPE "public"."announcement_kind" AS ENUM('announcement', 'instructions',
 CREATE TYPE "public"."group_message_status" AS ENUM('queued', 'sending', 'sent');--> statement-breakpoint
 CREATE TYPE "public"."message_segment" AS ENUM('accepted', 'waitlisted', 'pending', 'providers', 'staff', 'followers', 'checked_in');--> statement-breakpoint
 CREATE TYPE "public"."template_kind" AS ENUM('message', 'announcement', 'instructions', 'thanks');--> statement-breakpoint
+ALTER TYPE "public"."email_status" ADD VALUE 'skipped_quota';--> statement-breakpoint
 CREATE TABLE "event_announcements" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"event_id" uuid NOT NULL,

@@ -30,6 +30,11 @@ const schema = z.object({
   MAIL_TRANSPORT: z.enum(["journal", "brevo"]).default("journal"),
   MAIL_FROM: z.string().default("Orasso <contact@orasso.fr>"),
   BREVO_API_KEY: optional,
+  /**
+   * Budget d'e-mails envoyés par Brevo par jour (heure de Paris), relecture du lot 20 : offre gratuite = 300. Les 50
+   * derniers sont réservés au compte et à la sécurité (réinitialisation, vérification, alertes).
+   */
+  MAIL_DAILY_BUDGET: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().int().min(1).default(300)),
   /** Adresse de réponse des e-mails (« contact@orasso.fr » ou « Orasso <contact@orasso.fr> ») ; vide = pas d'en-tête. */
   MAIL_REPLY_TO: optional,
   /** Photos : disque local (dev, dev.orasso.fr) ; S3 OVH quand les clés existeront. */

@@ -1,5 +1,5 @@
 {
-  "id": "123f99f2-e64a-4876-bd1f-ff2dc871c990",
+  "id": "76cc0ba4-1def-49c8-9ea4-475eda240d9f",
   "prevId": "693a0b4c-eb20-4fdb-b5ff-3fd825cab408",
   "version": "7",
   "dialect": "postgresql",
@@ -10849,7 +10849,8 @@
       "values": [
         "queued",
         "sent",
-        "failed"
+        "failed",
+        "skipped_quota"
       ]
     },
     "public.mail_transport": {
