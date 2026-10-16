@@ -24,3 +24,8 @@ export const profileVisibilityRules: Record<ProfileVisibility, string> = {
 /** Ce qui vaut dans les deux cas (docs/01). */
 export const profileVisibilityAlways =
   "Dans tous les cas : l'organisateur voit tout de ses inscrits et de ses abonnés, les profils sont réservés aux utilisateurs connectés, et ta plaque n'est jamais publique.";
+
+/** Compte protégé par une clé d'accès seulement, connecté dans l'appli par mot de passe (lot 16) : l'action se fait sur le site. */
+export const passkeyOnlyMessage =
+  "Ton compte est protégé par une clé d'accès : fais cette action sur le site, connecté avec ta clé.";
+export const passkeyOnlyButton = "Ouvrir la sécurité sur le site";
