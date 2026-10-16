@@ -80,6 +80,9 @@ cleanup() { # garde les $KEEP dernières versions + courante et précédente
   done
   # Images Orasso devenues anonymes (même version reconstruite) : seulement celles qui portent l'étiquette Orasso.
   docker image ls -q -f dangling=true -f label=fr.orasso.image | xargs -r docker image rm >/dev/null 2>&1 || true
+  # Cache de construction borné à 10 Go (accord de Damien du 16/10/2026) : sans cela il grossissait à chaque
+  # déploiement (52 Go le 16/10 sur un disque commun de 99 Go). Ne touche ni images, ni conteneurs, ni volumes.
+  docker builder prune -f --max-used-space 10GB >/dev/null 2>&1 || log "ATTENTION : purge du cache de construction impossible"
 }
 
 deploy() {
