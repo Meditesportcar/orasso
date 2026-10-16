@@ -20,24 +20,24 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
   test.setTimeout(600_000);
   mkdirSync(DIR, { recursive: true });
   const s = unique();
-  const alpha = `AlphaApp_${s}`;
-  const bravo = `BravoApp_${s}`;
   const charlie = `CharlieApp_${s}`;
-  const alphaCookie = await signUpApi(alpha);
-  const bravoCookie = await signUpApi(bravo);
   const charlieCookie = await signUpApi(charlie);
-  const alphaVehicle = await addVehicleApi(alphaCookie, randomPlate());
-  await addVehicleApi(bravoCookie, randomPlate());
   await addVehicleApi(charlieCookie, randomPlate());
-  await apiCall(alphaCookie, "PATCH", "/me/profile", { bio: "Passionné d'anciennes", departments: ["66"] });
-  await apiCall(bravoCookie, "PATCH", "/me/profile", { visibility: "private", bio: "secret", departments: ["66"] });
   await apiCall(charlieCookie, "PATCH", "/me/profile", { departments: ["66"] });
   const errors: string[] = [];
 
-  const bravoQr = (await apiCall<{ secret: string; shortId: string }>(bravoCookie, "GET", "/me/account-qr-secret"))
-    .data;
-  let pass = 0;
   for (const theme of ["sable", "beton"] as const) {
+    // Nouveaux comptes à chaque passage : une même paire ne peut pas redemander avant 24 h (anti-harcèlement).
+    const alpha = `AlphaApp_${theme}_${s}`;
+    const bravo = `BravoApp_${theme}_${s}`;
+    const alphaCookie = await signUpApi(alpha);
+    const bravoCookie = await signUpApi(bravo);
+    const alphaVehicle = await addVehicleApi(alphaCookie, randomPlate());
+    await addVehicleApi(bravoCookie, randomPlate());
+    await apiCall(alphaCookie, "PATCH", "/me/profile", { bio: "Passionné d'anciennes", departments: ["66"] });
+    await apiCall(bravoCookie, "PATCH", "/me/profile", { visibility: "private", bio: "secret", departments: ["66"] });
+    const bravoQr = (await apiCall<{ secret: string; shortId: string }>(bravoCookie, "GET", "/me/account-qr-secret"))
+      .data;
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: APP });
     const page = await ctx.newPage();
     page.on("console", (m) => {
@@ -90,7 +90,7 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     await page.goto("/garage");
     await page.getByTestId("friend-scan-open").click();
     // Un code par minute et par passage (dérive d'une minute acceptée) : le deuxième passage n'est pas un rejeu.
-    const payload = accountQrPayload(bravoQr.secret, bravoQr.shortId, new Date(Date.now() + 60_000 * pass++));
+    const payload = accountQrPayload(bravoQr.secret, bravoQr.shortId, new Date());
     const field = page.getByLabel(/Recette · charge utile/);
     await field.fill(payload);
     await field.press("Enter");
@@ -124,21 +124,6 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     });
     await shot(page, `09-journal-${theme}`);
     await ctx.close();
-
-    // Un second passage (autre thème) repart de zéro : on retire l'amitié pour retrouver l'état initial.
-    await apiCall(
-      alphaCookie,
-      "DELETE",
-      `/friends/${(await apiCall<{ user: { id: string } }>(charlieCookie, "GET", "/me")).data.user.id}`,
-    );
-    const outgoing = (
-      await apiCall<{ items: { person: { userId: string } }[] }>(
-        charlieCookie,
-        "GET",
-        "/me/friends/requests?direction=out",
-      )
-    ).data;
-    for (const r of outgoing.items) await apiCall(charlieCookie, "DELETE", `/friends/${r.person.userId}`);
   }
   console.log(`Erreurs console : ${errors.length} ${errors.slice(0, 5).join(" | ")}`);
 });
