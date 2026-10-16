@@ -2,29 +2,26 @@
 // utilisées (scans du QR de compte).
 import { Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { gradeLabels, grades } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { FlowScreen, SectionTitle } from "@/ui/Screens";
+import { SectionTitle, TabScreen } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
 
 export default function ProStats() {
   const { t } = useTheme();
-  const router = useRouter();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const proId = myPro.data?.id;
   const stats = useApi(() => api.proStats(proId ?? ""), [proId], { enabled: Boolean(proId), cacheKey: "pro-stats" });
   const s = stats.data;
   return (
-    <FlowScreen
+    <TabScreen
       title="Stats"
       facts="30 derniers jours"
-      onClose={() => router.replace("/accueil")}
       onRefresh={async () => {
         await Promise.all([myPro.reload(), stats.reload()]);
       }}
@@ -70,7 +67,7 @@ export default function ProStats() {
           <Muted variant="caption">Tes propres visites de ta fiche ne sont pas comptées.</Muted>
         </>
       )}
-    </FlowScreen>
+    </TabScreen>
   );
 }
 

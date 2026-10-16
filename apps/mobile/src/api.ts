@@ -4,3 +4,10 @@ const baseUrl = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001").rep
 export function apiUrl(path: string): string {
   return `${baseUrl}${path}`;
 }
+
+/** Adresse du site (liens vers les pages web : créer une structure, clés d'accès…). Même hôte que l'API en ligne ; en local, EXPO_PUBLIC_SITE_URL. */
+const siteBase = (process.env.EXPO_PUBLIC_SITE_URL ?? baseUrl).replace(/\/$/, "");
+
+export function siteUrl(path: string): string {
+  return `${siteBase}${path}`;
+}
