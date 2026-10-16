@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { AccountQrSheet } from "@/features/AccountQrSheet";
+import { FriendQrScanner } from "@/features/FriendQrScanner";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";
@@ -24,6 +25,7 @@ export default function Garage() {
   const { me } = useSession();
   const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles" });
   const [qr, setQr] = useState(false);
+  const [scan, setScan] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const profile = me?.profile;
   const active = vehicles.data?.filter((v) => v.status === "active") ?? [];
@@ -33,7 +35,12 @@ export default function Garage() {
     <TabScreen
       title="Mon garage"
       onRefresh={vehicles.reload}
-      overlays={<AccountQrSheet visible={qr} onClose={() => setQr(false)} />}
+      overlays={
+        <>
+          <AccountQrSheet visible={qr} onClose={() => setQr(false)} />
+          <FriendQrScanner visible={scan} onClose={() => setScan(false)} />
+        </>
+      }
     >
       {vehicles.offline ? <Notice>Hors ligne : ton garage tel que ton téléphone l'a gardé.</Notice> : null}
 
@@ -54,9 +61,14 @@ export default function Garage() {
           <Chip variant="accent" surface="plate">
             {profile ? `${gradeLabels[profile.grade]} · ${profile.pointsSeason} pts` : ""}
           </Chip>
-          <Button variant="plate" icon="qr" onPress={() => setQr(true)}>
-            QR
-          </Button>
+          <View style={styles.qrButtons}>
+            <Button variant="plate" icon="add" onPress={() => setScan(true)} testID="friend-scan-open">
+              Scanner
+            </Button>
+            <Button variant="plate" icon="qr" onPress={() => setQr(true)}>
+              QR
+            </Button>
+          </View>
         </View>
       </Plate>
 
@@ -138,6 +150,7 @@ const styles = StyleSheet.create({
   profileHead: { flexDirection: "row", alignItems: "center", gap: space3 },
   profileText: { flex: 1, gap: space1 },
   gradeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
+  qrButtons: { flexDirection: "row", gap: space2 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
   empty: { gap: space2 },
   archived: { gap: space1, padding: space3 },

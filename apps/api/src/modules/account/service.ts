@@ -58,7 +58,7 @@ import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
-import { accountQrShortId, profilesService } from "../profiles/service";
+import { accountQrShortId } from "../profiles/service";
 import { securityMails } from "../security/mails";
 import { socialProfile } from "../social/profile";
 import { socialRepo } from "../social/repo";

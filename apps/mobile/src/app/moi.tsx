@@ -11,7 +11,7 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import { gradeLabels, type PointKind, pointKindLabels } from "@orasso/shared";
+import { gradeLabels, type PointKind, pointKindLabels, socialLabels } from "@orasso/shared";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
@@ -87,6 +87,11 @@ export default function Moi() {
           </Text>
         ) : null}
       </Plate>
+
+      <SectionTitle>{socialLabels.myFriends}</SectionTitle>
+      <Button variant="plate" icon="crew" onPress={() => router.push("/amis")} fullWidth testID="moi-amis">
+        {socialLabels.myFriends}
+      </Button>
 
       <SectionTitle>Mes casquettes</SectionTitle>
       {myPro.data ? (

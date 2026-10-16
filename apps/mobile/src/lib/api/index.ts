@@ -6,6 +6,7 @@ import { applicationsApi } from "./applications";
 import { eventsApi } from "./events";
 import { garageApi } from "./garage";
 import { prosApi } from "./pros";
+import { socialApi } from "./social";
 import { staffApi } from "./staff";
 
 export type { NotificationItem } from "./account";
@@ -18,4 +19,5 @@ export const api = {
   ...eventsApi,
   ...applicationsApi,
   ...staffApi,
+  ...socialApi,
 };

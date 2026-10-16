@@ -29,7 +29,7 @@ export const socialJournal = {
   async friendGoingEvent(tx: Tx, app: { userId: string; eventId: string; kind: string }) {
     if (app.kind !== "vehicle") return;
     const event = await tx.query.events.findFirst({ where: eq(events.id, app.eventId) });
-    if (!event || event.status !== "published" || event.admission === "invite_only") return;
+    if (event?.status !== "published" || event.admission === "invite_only") return;
     const actor = await actorOf(app.userId, tx);
     if (!actor) return;
     const friendIds = await socialRepo.friendIds(app.userId, tx);
@@ -66,9 +66,9 @@ export const socialJournal = {
    */
   async friendNewVehicle(ownerId: string, vehicleId: string) {
     const actor = await actorOf(ownerId, db);
-    if (!actor || actor.visibility !== "public") return 0;
+    if (actor?.visibility !== "public") return 0;
     const vehicle = await vehiclesRepo.findFullById(vehicleId);
-    if (!vehicle || vehicle.status !== "active") return 0;
+    if (vehicle?.status !== "active") return 0;
     const friendIds = await socialRepo.friendIds(ownerId);
     if (!friendIds.length) return 0;
     const already = await db

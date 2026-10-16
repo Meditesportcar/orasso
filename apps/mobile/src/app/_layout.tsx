@@ -16,6 +16,7 @@ import { Platform, StyleSheet, View } from "react-native";
 import { StaffBackground } from "@/features/staff/StaffBackground";
 import { ApplicationsProvider } from "@/lib/applications";
 import { kvGet, kvSet } from "@/lib/kv";
+import { appLinkOf } from "@/lib/links";
 import { registerThisDevice } from "@/lib/push";
 import { initSentry } from "@/lib/sentry";
 import { SessionProvider, useSession } from "@/lib/session";
@@ -26,7 +27,7 @@ initSentry();
 void SplashScreen.preventAutoHideAsync();
 
 /** Écrans ouverts sans compte : premier lancement, connexion, page d'un événement (lien partagé), recette du design. */
-const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "_ds"]);
+const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "ami", "_ds"]);
 
 // Le thème (Béton par défaut, Sable, auto) et les polices Archivo sont posés une fois, à la racine.
 function Shell() {
@@ -55,10 +56,14 @@ function Shell() {
     if (status === "in") void registerThisDevice();
   }, [status]);
 
-  // Toucher une notification ouvre l'onglet Accès.
+  // Toucher une notification ouvre l'onglet Accès, ou l'écran du lien qu'elle porte (profil d'un ami, événement).
   useEffect(() => {
     if (Platform.OS === "web") return;
-    const sub = Notifications.addNotificationResponseReceivedListener(() => router.navigate("/acces"));
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const link = appLinkOf(response.notification.request.content.data?.link);
+      if (link) router.navigate(link as never);
+      else router.navigate("/acces");
+    });
     return () => sub.remove();
   }, [router]);
 
