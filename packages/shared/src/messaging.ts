@@ -27,11 +27,15 @@ export type ContactStatus = (typeof contactStatuses)[number];
 export const uploadPurposes = ["message", "crew_logo", "incident", "report", "provider_photo", "announcement"] as const;
 export type UploadPurpose = (typeof uploadPurposes)[number];
 
-export const privateUploadPurposes: readonly UploadPurpose[] = ["message", "incident", "report"];
+/**
+ * Clés privées. `announcement` (lot 20) l'est **jusqu'à son rattachement** : la photo d'une annonce n'est copiée vers
+ * une clé publique qu'à la publication de l'annonce (sinon la route servirait d'hébergement public d'images).
+ */
+export const privateUploadPurposes: readonly UploadPurpose[] = ["message", "incident", "report", "announcement"];
 
 /**
  * Usages acceptés par `POST /me/uploads` **aujourd'hui** : seulement ceux qui ont un consommateur (relecture du lot 18 :
  * sinon la route servirait d'hébergement public d'images). Les lots 19, 20 et suivants ajoutent le leur ici, avec le code
  * qui rattache le fichier.
  */
-export const acceptedUploadPurposes = ["message"] as const satisfies readonly UploadPurpose[];
+export const acceptedUploadPurposes = ["message", "announcement"] as const satisfies readonly UploadPurpose[];
