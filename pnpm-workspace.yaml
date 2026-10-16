@@ -3,8 +3,12 @@ packages:
   - packages/*
 
 # Paquets autorisés à lancer un script d'installation (esbuild, binaires PostgreSQL locaux).
+# Les binaires PostgreSQL Linux ne servent qu'au développement : explicitement sans script, sinon l'installation
+# échoue (ERR_PNPM_IGNORED_BUILDS) sur les serveurs de build d'Expo et dans les images Docker.
 allowBuilds:
   '@embedded-postgres/windows-x64': true
+  '@embedded-postgres/linux-x64': false
+  '@embedded-postgres/linux-arm64': false
   esbuild: true
 
 minimumReleaseAgeExclude:
