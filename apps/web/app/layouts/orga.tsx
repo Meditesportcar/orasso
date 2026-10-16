@@ -53,9 +53,14 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
             <div className="orga__who">
               <span className="o-t-label">{structure.name}</span>
             </div>
-            <SideLink href={base} on={pathname === base}>
+            <SideLink href={base} on={pathname === base || pathname.startsWith(`${base}/nouvel-evenement`)}>
               Événements
             </SideLink>
+            {eventBase && isOrganizer && (
+              <SideLink href={eventBase} on={pathname === eventBase || pathname.startsWith(`${eventBase}/modifier`)}>
+                Cet événement
+              </SideLink>
+            )}
             {eventBase && isOrganizer && (
               <SideLink href={`${eventBase}/candidatures`} on={pathname.startsWith(`${eventBase}/candidatures`)}>
                 Candidatures
@@ -64,6 +69,11 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
             {eventBase && (
               <SideLink href={`${eventBase}/jour-j`} on={pathname.startsWith(`${eventBase}/jour-j`)}>
                 Jour J et après
+              </SideLink>
+            )}
+            {isOrganizer && (
+              <SideLink href={`${base}/structure`} on={pathname.startsWith(`${base}/structure`)}>
+                Structure
               </SideLink>
             )}
             <div className="orga__spacer" />

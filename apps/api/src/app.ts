@@ -81,7 +81,8 @@ app.route("/ws", ws);
 // Fichiers du pilote de stockage « disque » (photos, avatars, logos, affiches : publics par nature).
 app.get("/files/*", async (c) => {
   const key = c.req.path.replace(/^\/api\/files\//, "");
-  const data = key ? await storage.get(key) : null;
+  // Justificatifs de vérification des structures (`private/`) : lus par l'administration seulement, jamais ici.
+  const data = key && !key.startsWith("private/") ? await storage.get(key) : null;
   if (!data) throw notFound("Fichier introuvable");
   return c.body(new Uint8Array(data), 200, {
     "content-type": key.endsWith(".webp") ? "image/webp" : "application/octet-stream",

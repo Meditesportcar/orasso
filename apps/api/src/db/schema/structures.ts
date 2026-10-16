@@ -1,10 +1,19 @@
 // Structures (organisateurs), membres, abonnés, bannis (ARCHITECTURE.md § 1.2).
-import { followSources, memberStatuses, structureKinds, structureRoles, structureVerifications } from "@orasso/shared";
+import {
+  followSources,
+  memberStatuses,
+  type RegistryCheck,
+  structureKinds,
+  structureRoles,
+  structureVerifications,
+  verificationDocumentKinds,
+} from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import {
   boolean,
   doublePrecision,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -53,6 +62,8 @@ export const structures = pgTable(
     socials: jsonb("socials").$type<Socials>().notNull().default({}),
     siret: text("siret"),
     rna: text("rna"),
+    /** Résultat du dernier contrôle automatique SIRET / RNA (registre public, lot 13). */
+    registryCheck: jsonb("registry_check").$type<RegistryCheck>(),
     verification: structureVerificationEnum("verification").notNull().default("unverified"),
     verifiedAt: tstz("verified_at"),
     badgeExpiresAt: tstz("badge_expires_at"),
@@ -130,4 +141,29 @@ export const structureBans = pgTable(
     ...timestamps,
   },
   (t) => [unique("structure_bans_structure_user_key").on(t.structureId, t.userId)],
+);
+
+export const verificationDocumentKindEnum = pgEnum("verification_document_kind", verificationDocumentKinds);
+
+/**
+ * Justificatifs de la vérification (statuts, récépissé, Kbis, pièce d'identité d'un responsable, lot 13). Fichiers
+ * privés (jamais servis par `/api/files`), lus par l'équipe Orasso seulement. La pièce d'identité est supprimée dès
+ * la validation (docs/01).
+ */
+export const structureVerificationDocuments = pgTable(
+  "structure_verification_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    structureId: uuid("structure_id")
+      .notNull()
+      .references(() => structures.id, { onDelete: "cascade" }),
+    kind: verificationDocumentKindEnum("kind").notNull(),
+    storageKey: text("storage_key").notNull(),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    uploadedBy: text("uploaded_by").references(() => user.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [index("structure_verification_documents_structure_idx").on(t.structureId)],
 );

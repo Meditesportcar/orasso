@@ -822,3 +822,315 @@
 .orga__panel > * {
   min-width: 0;
 }
+
+/* ================================================================================================================
+   Lot 13 : site public, structure, création d'événement. Valeurs de style : jetons du système de design seulement.
+   ================================================================================================================ */
+
+/* ---------- Accueil et présentations ---------- */
+.s-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-6);
+}
+.s-hero__lead {
+  max-width: 62ch;
+}
+.o-plate .s-lead,
+.o-plate .s-muted,
+.o-plate .s-label {
+  color: var(--plate-muted);
+  opacity: 1;
+}
+.o-plate a:where(:not(.o-button)) {
+  color: var(--accent);
+}
+.s-grid--3 {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.s-grid--list {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.s-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.s-entry__text {
+  margin: 0;
+  color: var(--plate-muted);
+}
+.s-download {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+.s-filters {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  align-items: end;
+}
+.s-two {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.s-chips-wrap {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.s-checklist {
+  display: grid;
+  gap: var(--space-2) var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--space-2);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.s-file {
+  max-width: 100%;
+  color: var(--ink);
+}
+.s-recap {
+  margin: 0;
+}
+.s-recap dd {
+  margin: 0;
+  text-align: right;
+}
+.s-docs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.s-zone-row {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: 90px 1fr 110px auto;
+  align-items: end;
+}
+@media (max-width: 640px) {
+  .s-zone-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .s-hero {
+    padding: var(--space-6) var(--space-4);
+  }
+}
+
+/* Carte d'un événement dans une liste */
+.s-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  overflow: hidden;
+}
+.s-main .s-tile__link {
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+}
+.s-tile__photo {
+  height: 150px;
+  background: var(--surface-sunken);
+}
+.s-tile__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.s-tile__none {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--bar-gradient);
+}
+.s-tile__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4) 0;
+}
+.s-tile__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-stretch: var(--stretch-wide);
+  font-style: italic;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: var(--type-poster-m-size);
+  line-height: var(--type-poster-m-line);
+  overflow-wrap: anywhere;
+}
+.s-tile__muted {
+  color: var(--plate-muted);
+}
+.s-tile__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+/* Liste et carte */
+.evs {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr);
+}
+.evs__map {
+  height: 320px;
+}
+@media (min-width: 1000px) {
+  .evs {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
+  .evs__map {
+    order: 2;
+    position: sticky;
+    top: var(--space-4);
+    height: 70vh;
+  }
+}
+.s-marker--button {
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+.s-main .s-popup {
+  color: var(--night);
+  font-weight: 700;
+}
+
+/* Page d'une structure */
+.so__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+.so__logo {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface-raised);
+  color: var(--plate-ink);
+}
+.so__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.so__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 200px;
+}
+
+/* ---------- Sable sur téléphone : la plaque graphite ----------
+   Les deux tiers supérieurs du fond sont dans l'ombre graphite : une section sable ou un texte posé directement
+   dessus se lit mal (recette du lot 12). README du système de design, « Thème Sable : la plaque graphite » : sur
+   le téléphone en Sable, toutes les cartes sont des plaques, et un libellé isolé monte sur une petite plaque. */
+@media (max-width: 760px) {
+  [data-theme="sable"] .s-plated .s-section,
+  [data-theme="sable"] .s-plated .ev__status,
+  [data-theme="sable"] .ev__aside .s-card,
+  [data-theme="sable"] .ev__download,
+  [data-theme="sable"] .s-notice {
+    background: var(--plate);
+    color: var(--plate-ink);
+    border: 1px solid var(--plate-edge);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+  [data-theme="sable"] .s-plated .s-section {
+    margin-top: var(--space-3);
+    padding: var(--space-4);
+  }
+  [data-theme="sable"] .s-plated .s-section--first {
+    padding-top: var(--space-4);
+  }
+  [data-theme="sable"] .s-plated .s-muted,
+  [data-theme="sable"] .ev__aside .s-muted,
+  [data-theme="sable"] .ev__download {
+    color: var(--plate-muted);
+    opacity: 1;
+  }
+  [data-theme="sable"] .s-plated a:where(:not(.o-button)),
+  [data-theme="sable"] .ev__aside a:where(:not(.o-button)),
+  [data-theme="sable"] .s-notice a:where(:not(.o-button)) {
+    color: var(--accent);
+  }
+  [data-theme="sable"] .s-plated .o-chip,
+  [data-theme="sable"] .ev__aside .o-chip {
+    border-color: var(--plate-chip);
+    color: var(--plate-ink);
+  }
+  [data-theme="sable"] .s-plated .s-card {
+    background: transparent;
+    color: inherit;
+    border: 1px solid var(--plate-line);
+    box-shadow: none;
+  }
+  [data-theme="sable"] .s-plated .s-label {
+    color: var(--plate-muted);
+  }
+  [data-theme="sable"] .ev__aside .o-button--secondary,
+  [data-theme="sable"] .ev__aside .o-button--secondary .o-button__label {
+    color: var(--plate-ink);
+    border-color: var(--plate-chip);
+  }
+  [data-theme="sable"] .ev__aside .ev__counts,
+  [data-theme="sable"] .ev__aside .ev__counts * {
+    color: var(--plate-ink);
+  }
+  [data-theme="sable"] .s-head {
+    display: inline-block;
+    align-self: flex-start;
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--plate-edge);
+    border-radius: var(--radius-sm);
+    background: var(--plate);
+    color: var(--plate-ink);
+  }
+  [data-theme="sable"] .s-head .s-label {
+    color: var(--plate-muted);
+  }
+}
+
+/* Texte long (adresse e-mail, nom) : jamais de défilement horizontal. */
+.s-narrow,
+.s-main {
+  overflow-wrap: anywhere;
+}
+/* En-tête étroit : le menu du site tient sur une ligne, sous le logo. */
+@media (max-width: 640px) {
+  .s-nav--main {
+    order: 3;
+    flex: 1 1 100%;
+    gap: var(--space-3);
+  }
+  .s-nav--main a {
+    font-size: var(--type-meta-size);
+  }
+}

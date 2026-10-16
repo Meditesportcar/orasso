@@ -13,6 +13,7 @@ import type {
   StructureVerification,
   VehicleStatus,
   VehicleType,
+  VerificationDocumentKind,
 } from "./enums";
 import type { LocalScanDecision, ScanRefusal } from "./qr/pass";
 import type { ContestStatus, PointKind } from "./rules/points";
@@ -84,6 +85,41 @@ export const structureVerificationLabels: Record<StructureVerification, string> 
   verified: "Structure vérifiée",
   suspended: "Suspendue",
 };
+
+export const verificationDocumentKindLabels: Record<VerificationDocumentKind, string> = {
+  statutes: "Statuts",
+  receipt: "Récépissé de déclaration",
+  kbis: "Extrait Kbis",
+  identity: "Pièce d'identité du responsable",
+  other: "Autre justificatif",
+};
+
+/** Types de prestataires proposés à la création d'un événement (cases à cocher ; « + » pour en ajouter un autre). */
+export const vendorTypeSuggestions = [
+  "Food truck",
+  "Barbier",
+  "Tatoueur",
+  "Photographe",
+  "Animation",
+  "Vente de pièces",
+  "Detailing",
+  "Boisson",
+] as const;
+
+/**
+ * Modèle de règlement proposé par Orasso (docs/01 : « un modèle général proposé par Orasso, et une option de texte
+ * libre »). Texte provisoire, à faire relire par un juriste avant l'ouverture.
+ */
+export const defaultEventRules = [
+  "Règlement de l'événement",
+  "",
+  "1. Je respecte le code de la route et les consignes de l'équipe d'accueil, sur le site comme à l'entrée et à la sortie.",
+  "2. Pas de burn, de départ en trombe ni de bruit excessif : l'organisateur peut refuser l'entrée ou exclure un véhicule.",
+  "3. Mon véhicule est assuré et conforme à la réglementation ; je suis responsable de lui et de mes passagers.",
+  "4. Je me gare à la place indiquée par l'équipe et je ne la quitte pas sans prévenir.",
+  "5. Je respecte les lieux, les riverains et les autres participants : je ne laisse aucun déchet.",
+  "6. Si je ne peux plus venir, je me désiste avant le verrouillage des inscriptions pour libérer ma place.",
+].join("\n");
 
 export const profileVisibilityLabels: Record<ProfileVisibility, string> = {
   public: "Public",

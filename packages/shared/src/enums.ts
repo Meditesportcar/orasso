@@ -18,6 +18,10 @@ export type StructureKind = (typeof structureKinds)[number];
 export const structureVerifications = ["unverified", "pending", "verified", "suspended"] as const;
 export type StructureVerification = (typeof structureVerifications)[number];
 
+/** Justificatifs de la vérification d'une structure (lot 13) ; la pièce d'identité est supprimée à la validation. */
+export const verificationDocumentKinds = ["statutes", "receipt", "kbis", "identity", "other"] as const;
+export type VerificationDocumentKind = (typeof verificationDocumentKinds)[number];
+
 export const memberStatuses = ["invited", "requested", "active", "removed"] as const;
 export type MemberStatus = (typeof memberStatuses)[number];
 
@@ -150,3 +154,16 @@ export type ScanServerResult = (typeof scanServerResults)[number];
 
 /** Fuseau métier unique en V1. */
 export const BUSINESS_TIMEZONE = "Europe/Paris";
+
+/** Département d'un code postal français (Corse 2A / 2B, outre-mer sur 3 chiffres) ; `null` si inconnu. */
+export function departmentFromPostalCode(postalCode: string | null | undefined): string | null {
+  const code = (postalCode ?? "").trim();
+  if (!/^\d{5}$/.test(code)) return null;
+  if (code.startsWith("97") || code.startsWith("98")) {
+    const dom = code.slice(0, 3);
+    return (departments as readonly string[]).includes(dom) ? dom : null;
+  }
+  if (code.startsWith("20")) return Number(code) < 20200 ? "2A" : "2B";
+  const dep = code.slice(0, 2);
+  return (departments as readonly string[]).includes(dep) ? dep : null;
+}

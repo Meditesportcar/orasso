@@ -11,19 +11,15 @@ import { vehiclesService } from "./service";
 const CACHE_1H = { "cache-control": "private, max-age=3600" };
 
 export const vehiclesRoutes = new Hono<AppEnv>()
-  // Référentiel (enrichi par l'équipe Orasso seulement).
-  .get("/vehicle-reference/makes", async (c) => {
-    await requireUser(c);
-    return c.json(await vehiclesRepo.makes(), 200, CACHE_1H);
-  })
-  .get("/vehicle-reference/makes/:id/models", async (c) => {
-    await requireUser(c);
-    return c.json(await vehiclesRepo.models(uuidParam(c, "id")), 200, CACHE_1H);
-  })
-  .get("/vehicle-reference/models/:id/generations", async (c) => {
-    await requireUser(c);
-    return c.json(await vehiclesRepo.generations(uuidParam(c, "id")), 200, CACHE_1H);
-  })
+  // Référentiel (enrichi par l'équipe Orasso seulement). Public depuis le lot 13 : le formulaire d'inscription express
+  // le lit avant que la personne ait un compte ; ce sont des listes de marques et de modèles, sans donnée personnelle.
+  .get("/vehicle-reference/makes", async (c) => c.json(await vehiclesRepo.makes(), 200, CACHE_1H))
+  .get("/vehicle-reference/makes/:id/models", async (c) =>
+    c.json(await vehiclesRepo.models(uuidParam(c, "id")), 200, CACHE_1H),
+  )
+  .get("/vehicle-reference/models/:id/generations", async (c) =>
+    c.json(await vehiclesRepo.generations(uuidParam(c, "id")), 200, CACHE_1H),
+  )
   // Public : la page d'un événement affiche les catégories recherchées aux visiteurs sans compte.
   .get("/vehicle-reference/categories", async (c) => {
     const rows = await vehiclesRepo.categories();

@@ -1,0 +1,53 @@
+import type { Category, EventOrganizer, StructureOrganizer, VehicleMake } from "@orasso/shared";
+
+import { EventWizard } from "../components/EventWizard";
+import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import type { Route } from "./+types/orga-evenement-modifier";
+
+export function meta() {
+  return [{ title: "Modifier l'événement · Orasso" }, { name: "robots", content: "noindex" }];
+}
+
+export async function loader({ request, params }: Route.LoaderArgs) {
+  const me = await requireMe(request);
+  const membership = me.memberships.find((m) => m.structureSlug === params.structure && m.status === "active");
+  if (!membership || membership.role === "staff") {
+    throw new Response("Réservé aux organisateurs de la structure.", { status: 403 });
+  }
+  const [structure, event, categories, makes] = await Promise.all([
+    apiOrThrow<StructureOrganizer>(request, `/structures/${membership.structureId}`),
+    apiOrThrow<EventOrganizer>(request, `/events/${params.eventId}`),
+    api<Category[]>(request, "/vehicle-reference/categories"),
+    api<VehicleMake[]>(request, "/vehicle-reference/makes"),
+  ]);
+  if (event.structure.id !== structure.id) throw new Response("Événement introuvable.", { status: 404 });
+  return {
+    structure: { id: structure.id, slug: structure.slug, verified: structure.verified },
+    event,
+    categories: categories.ok ? categories.data : [],
+    makes: makes.ok ? makes.data : [],
+  };
+}
+
+export default function ModifierEvenement({ loaderData }: Route.ComponentProps) {
+  const { structure, event, categories, makes } = loaderData;
+  return (
+    <>
+      <div className="orga__head">
+        <div>
+          <div className="s-label o-t-label">Modifier</div>
+          <h1 className="s-title">{event.title}</h1>
+        </div>
+      </div>
+      <EventWizard
+        key={event.id}
+        structureId={structure.id}
+        structureSlug={structure.slug}
+        verified={structure.verified}
+        categories={categories}
+        makes={makes}
+        event={event}
+      />
+    </>
+  );
+}

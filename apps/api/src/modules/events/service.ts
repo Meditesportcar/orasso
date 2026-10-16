@@ -1,7 +1,9 @@
-// Événements (ARCHITECTURE.md § 1.4, § 2.8) : lecture publique, création minimale (l'assistant complet est au
-// lot 13), publication, modification, statut Maintenu/Incertain, annulation, zones.
+// Événements (ARCHITECTURE.md § 1.4, § 2.8) : lecture publique, création (assistant du lot 13), duplication,
+// récurrence, publication, modification, statut Maintenu/Incertain, annulation, zones.
 import { randomBytes } from "node:crypto";
 import {
+  departmentFromPostalCode,
+  duplicateDates,
   type EventCard,
   type EventCreate,
   type EventListQuery,
@@ -13,21 +15,26 @@ import {
   isLocked,
   lockAt,
   type Page,
+  type RecurrenceRule,
+  recurrenceOccurrences,
   registrationOpensAt,
   staffRoles,
   type zoneCreateSchema,
   type zoneUpdateSchema,
 } from "@orasso/shared";
-import { and, asc, eq, gte, ilike, ne, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, lt, ne, or, type SQL, sql } from "drizzle-orm";
+import sharp from "sharp";
 import type { z } from "zod";
 
 import { db } from "../../db/client";
 import { applications, events, eventZones, structureFollows, structureMembers, structures } from "../../db/schema";
 import { requireOrganizer, staffAccess } from "../../lib/access";
 import { now } from "../../lib/deps";
-import { conflict, forbidden, notFound, validation } from "../../lib/errors";
+import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
+import { addressQuery, geocode } from "../../lib/geocode";
 import { escapeLike } from "../../lib/pagination";
+import { rateLimit } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
@@ -56,6 +63,8 @@ function card(
     endsAt: e.endsAt.toISOString(),
     city: e.city,
     department: e.department,
+    lat: e.lat,
+    lng: e.lng,
     posterUrl: storage.url(e.posterKey),
     status: e.status,
     outlook: e.outlook,
@@ -73,9 +82,8 @@ async function publicView(e: EventRow, s: StructureRow, showInstructions: boolea
     description: e.description,
     addressLine: e.addressLine,
     postalCode: e.postalCode,
-    lat: e.lat,
-    lng: e.lng,
     timezone: e.timezone,
+    vendorTypes: e.vendorTypes,
     admittedVehicleTypes: e.admittedVehicleTypes as EventPublic["admittedVehicleTypes"],
     maxVehiclesPerUser: e.maxVehiclesPerUser,
     admission: e.admission,
@@ -113,6 +121,60 @@ async function organizerEvent(v: Viewer, id: string) {
 
 const ADDRESS_FIELDS = ["addressLine", "postalCode", "city", "lat", "lng"] as const;
 
+/** Département et position d'une adresse saisie (meilleur effort : une adresse introuvable ne bloque rien). */
+async function locate(a: {
+  addressLine?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  department?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+}) {
+  const out: { department?: string; lat?: number; lng?: number } = {};
+  if (!a.department) {
+    const d = departmentFromPostalCode(a.postalCode);
+    if (d) out.department = d;
+  }
+  if (a.lat == null || a.lng == null) {
+    const hit = await geocode(addressQuery(a));
+    if (hit) {
+      out.lat = hit.lat;
+      out.lng = hit.lng;
+      if (!out.department && !a.department && hit.department) out.department = hit.department;
+    }
+  }
+  return out;
+}
+
+/** Réglages recopiés d'un événement à sa copie ou à ses occurrences. */
+function copyValues(e: EventRow) {
+  return {
+    title: e.title,
+    description: e.description,
+    posterKey: e.posterKey,
+    format: e.format,
+    timezone: e.timezone,
+    addressLine: e.addressLine,
+    postalCode: e.postalCode,
+    city: e.city,
+    department: e.department,
+    lat: e.lat,
+    lng: e.lng,
+    admittedVehicleTypes: e.admittedVehicleTypes,
+    capacity: e.capacity,
+    maxVehiclesPerUser: e.maxVehiclesPerUser,
+    admission: e.admission,
+    criteria: e.criteria,
+    publicAccess: e.publicAccess,
+    externalTicketUrl: e.externalTicketUrl,
+    previewHours: e.previewHours,
+    lockOffsetMinutes: e.lockOffsetMinutes,
+    rulesText: e.rulesText,
+    instructions: e.instructions,
+    vendorTypes: e.vendorTypes,
+  };
+}
+
 export const eventsService = {
   async list(q: EventListQuery): Promise<Page<EventCard>> {
     const t = now();
@@ -120,7 +182,7 @@ export const eventsService = {
       eq(events.status, "published"),
       ne(events.admission, "invite_only"),
       eq(structures.verification, "verified"),
-      gte(events.endsAt, q.from ?? t),
+      q.scope === "past" ? lt(events.endsAt, t) : gte(events.endsAt, q.from ?? t),
     ];
     if (q.to) filters.push(sql`${events.startsAt} <= ${q.to.toISOString()}::timestamptz`);
     if (q.format) filters.push(eq(events.format, q.format));
@@ -144,7 +206,9 @@ export const eventsService = {
       .from(events)
       .innerJoin(structures, eq(structures.id, events.structureId))
       .where(and(...filters))
-      .orderBy(asc(events.startsAt), asc(events.id))
+      .orderBy(
+        ...(q.scope === "past" ? [desc(events.startsAt), asc(events.id)] : [asc(events.startsAt), asc(events.id)]),
+      )
       .limit(q.limit + 1)
       .offset(offset);
     const items = await Promise.all(
@@ -194,6 +258,8 @@ export const eventsService = {
       publishedAt: e.publishedAt?.toISOString() ?? null,
       cancelledAt: e.cancelledAt?.toISOString() ?? null,
       lockedAt: e.lockedAt?.toISOString() ?? null,
+      parentEventId: e.parentEventId,
+      recurrenceRule: e.recurrenceRule ?? null,
     };
   },
 
@@ -212,10 +278,12 @@ export const eventsService = {
     await requireOrganizer(v, structureId);
     const year = input.startsAt.getUTCFullYear();
     const slug = await uniqueSlug(`${input.title} ${year}`, (s) => eventsRepo.slugTaken(s));
+    const located = await locate(input);
     const [e] = await db
       .insert(events)
       .values({
         ...input,
+        ...located,
         criteria: input.criteria ?? null,
         slug,
         structureId,
@@ -238,11 +306,22 @@ export const eventsService = {
     const startsAt = input.startsAt ?? e.startsAt;
     const endsAt = input.endsAt ?? e.endsAt;
     if (endsAt <= startsAt) throw validation("La fin doit suivre le début", { field: "endsAt" });
+    // Nouvelle adresse sans position : la position est recalculée (jamais bloquant).
+    const touchesAddress = ["addressLine", "postalCode", "city"].some((k) => k in input);
+    const located =
+      touchesAddress && !("lat" in input)
+        ? await locate({
+            addressLine: input.addressLine ?? e.addressLine,
+            postalCode: input.postalCode ?? e.postalCode,
+            city: input.city ?? e.city,
+            department: "postalCode" in input ? (input.department ?? null) : e.department,
+          })
+        : {};
     const updated = await withTx(async (tx, after) => {
       const current = await eventsRepo.lockForUpdate(tx, id);
       const [row] = await tx
         .update(events)
-        .set({ ...input, criteria: input.criteria === undefined ? undefined : (input.criteria ?? null) })
+        .set({ ...input, ...located, criteria: input.criteria === undefined ? undefined : (input.criteria ?? null) })
         .where(eq(events.id, id))
         .returning();
       if (!row) throw notFound("Événement introuvable");
@@ -338,6 +417,128 @@ export const eventsService = {
       after(() => realtime.publish(`event:${id}:access`, "event.cancelled", { eventId: id }));
       after(() => notificationsService.kick());
     });
+    return this.getForOrganizer(v, id);
+  },
+
+  /**
+   * Duplication en un clic (docs/01) : copie en brouillon, mêmes réglages et mêmes zones, dates décalées de 52
+   * semaines (même jour, même heure) tant que ce n'est pas dans le futur. Ni candidatures ni avis ne sont copiés.
+   */
+  async duplicate(v: Viewer, id: string): Promise<EventOrganizer> {
+    const { e } = await organizerEvent(v, id);
+    const dates = duplicateDates(e.startsAt, e.endsAt, now());
+    const shiftMs = dates.startsAt.getTime() - e.startsAt.getTime();
+    const copyId = await withTx(async (tx) => {
+      const slug = await uniqueSlug(`${e.title} ${dates.startsAt.getUTCFullYear()}`, (s) => eventsRepo.slugTaken(s));
+      const opens = new Date(Math.max(e.registrationsOpenAt.getTime() + shiftMs, now().getTime()));
+      const [copy] = await tx
+        .insert(events)
+        .values({
+          ...copyValues(e),
+          slug,
+          structureId: e.structureId,
+          plateSalt: randomBytes(16),
+          startsAt: dates.startsAt,
+          endsAt: dates.endsAt,
+          registrationsOpenAt: opens,
+          status: "draft",
+          parentEventId: e.id,
+          createdBy: v.user.id,
+        })
+        .returning();
+      if (!copy) throw new Error("Duplication impossible");
+      const zones = await tx.select().from(eventZones).where(eq(eventZones.eventId, e.id));
+      if (zones.length) {
+        await tx.insert(eventZones).values(
+          zones.map((z) => ({
+            eventId: copy.id,
+            code: z.code,
+            name: z.name,
+            capacity: z.capacity,
+            position: z.position,
+          })),
+        );
+      }
+      return copy.id;
+    });
+    return this.getForOrganizer(v, copyId);
+  },
+
+  /**
+   * Récurrence (« chaque premier dimanche du mois ») créée une seule fois : les occurrences suivantes sont créées
+   * d'un coup en brouillons, rattachées à l'événement d'origine qui garde la règle. Une seule règle par série.
+   */
+  async createRecurrence(v: Viewer, id: string, rule: RecurrenceRule) {
+    const { e } = await organizerEvent(v, id);
+    if (e.recurrenceRule) throw conflict("conflict", "Cet événement a déjà une récurrence");
+    if (e.parentEventId) throw conflict("conflict", "La récurrence se crée depuis l'événement d'origine");
+    const dates = recurrenceOccurrences(e.startsAt, e.endsAt, rule);
+    if (dates.length === 0) throw validation("Aucune occurrence à créer avec cette règle");
+    const openLead = e.startsAt.getTime() - e.registrationsOpenAt.getTime();
+    const ids = await withTx(async (tx) => {
+      await tx.update(events).set({ recurrenceRule: rule }).where(eq(events.id, id));
+      const zones = await tx.select().from(eventZones).where(eq(eventZones.eventId, e.id));
+      const out: string[] = [];
+      for (const d of dates) {
+        const slug = await uniqueSlug(`${e.title} ${d.startsAt.toISOString().slice(0, 10)}`, (s) =>
+          eventsRepo.slugTaken(s),
+        );
+        const [copy] = await tx
+          .insert(events)
+          .values({
+            ...copyValues(e),
+            slug,
+            structureId: e.structureId,
+            plateSalt: randomBytes(16),
+            startsAt: d.startsAt,
+            endsAt: d.endsAt,
+            registrationsOpenAt: new Date(d.startsAt.getTime() - openLead),
+            status: "draft",
+            parentEventId: e.id,
+            createdBy: v.user.id,
+          })
+          .returning();
+        if (!copy) throw new Error("Occurrence non créée");
+        if (zones.length) {
+          await tx.insert(eventZones).values(
+            zones.map((z) => ({
+              eventId: copy.id,
+              code: z.code,
+              name: z.name,
+              capacity: z.capacity,
+              position: z.position,
+            })),
+          );
+        }
+        out.push(copy.id);
+      }
+      return out;
+    });
+    const s = await structureById(e.structureId);
+    const rows = await Promise.all(ids.map((x) => eventsRepo.byId(x)));
+    return rows.map((r) => card(r, s, r.capacity));
+  },
+
+  /** Affiche de l'événement (WebP, 1600 px de large au plus). */
+  async setPoster(v: Viewer, id: string, file: File): Promise<EventOrganizer> {
+    await organizerEvent(v, id);
+    rateLimit("fileUpload", v.user.id);
+    if (file.size === 0) throw validation("Fichier vide");
+    if (file.size > 15 * 1024 * 1024) throw new AppError(413, "payload_too_large", "Affiche de 15 Mo au plus");
+    let data: Buffer;
+    try {
+      data = await sharp(Buffer.from(await file.arrayBuffer()))
+        .rotate()
+        .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 82 })
+        .toBuffer();
+    } catch {
+      throw new AppError(415, "unsupported_media_type", "Image illisible (JPEG, PNG ou WebP)");
+    }
+    const key = `events/${id}/poster-${randomBytes(6).toString("hex")}.webp`;
+    await storage.put(key, data);
+    await db.update(events).set({ posterKey: key }).where(eq(events.id, id));
+    // L'ancienne affiche peut servir à une copie : elle reste sur le disque (pas de ramasse-miettes en V1).
     return this.getForOrganizer(v, id);
   },
 

@@ -34,11 +34,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         };
       }),
     );
-    return { organizer: true, rows };
+    return { organizer: true, verified: structure.verified, rows };
   }
   const mine = await apiOrThrow<MyStaffEvent[]>(request, "/me/staff-events");
   return {
     organizer: false,
+    verified: structure.verified,
     rows: mine
       .filter((m) => m.structure.id === structure.id)
       .map((m) => ({
@@ -54,7 +55,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export default function OrgaIndex({ loaderData }: Route.ComponentProps) {
-  const { organizer, rows } = loaderData;
+  const { organizer, rows, verified } = loaderData;
   const base = `/orga/${useParams().structure}`;
   // Un seul bouton principal par écran : le tri du premier événement qui a des candidatures à trier.
   const primaryId = rows.find((r) => r.status === "published" && (r.counters?.pending ?? 0) > 0)?.id;
@@ -65,7 +66,18 @@ export default function OrgaIndex({ loaderData }: Route.ComponentProps) {
           <div className="s-label o-t-label">Espace organisateur</div>
           <h1 className="s-title">Événements</h1>
         </div>
+        {organizer && (
+          <Button variant={rows.length === 0 ? "primary" : "secondary"} icon="add" href={`${base}/nouvel-evenement`}>
+            Nouvel événement
+          </Button>
+        )}
       </div>
+      {organizer && !verified && (
+        <p className="s-notice" data-testid="unverified-note">
+          Ta structure n'est pas encore vérifiée : tu peux préparer des événements en brouillon, mais pas les publier.{" "}
+          <a href={`${base}/structure`}>Faire vérifier ma structure</a>
+        </p>
+      )}
       {rows.length === 0 && <p className="s-notice">Aucun événement pour l'instant.</p>}
       {rows.map((event) => (
         <section key={event.id} className="orga__panel" data-testid="orga-event">
@@ -89,6 +101,11 @@ export default function OrgaIndex({ loaderData }: Route.ComponentProps) {
             />
           )}
           <div className="s-row">
+            {organizer && (
+              <Button variant="secondary" icon="incident" href={`${base}/e/${event.id}`}>
+                Gérer
+              </Button>
+            )}
             {organizer && (
               <Button
                 variant={event.id === primaryId ? "primary" : "secondary"}

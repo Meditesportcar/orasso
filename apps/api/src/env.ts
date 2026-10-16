@@ -50,6 +50,10 @@ const schema = z.object({
   QR_SIGNING_KEYS: optional,
   /** Clé qui signe les nouveaux pass (les autres restent en vérification, rotation § 3.1). */
   QR_SIGNING_ACTIVE_KID: optional,
+  /** Registre public des entreprises et associations (SIRET, RNA) : API Recherche d'entreprises de l'État, sans clé. */
+  REGISTRY_API_URL: z.url().default("https://recherche-entreprises.api.gouv.fr"),
+  /** Géocodage des adresses (Géoplateforme de l'IGN, sans clé). `off` le désactive (les tests le désactivent). */
+  GEOCODER_URL: z.string().default("https://data.geopf.fr/geocodage"),
 });
 
 const parsed = schema.safeParse(process.env);

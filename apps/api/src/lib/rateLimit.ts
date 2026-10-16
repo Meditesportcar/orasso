@@ -17,6 +17,14 @@ export const rateRules = {
   accountQrVerify: { max: 30, windowMs: 60_000, message: "Trop de vérifications : réessaie dans une minute." },
   /** Recherche du staff par début de plaque ou pseudo. */
   staffSearch: { max: 60, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
+  /** Contrôle SIRET / RNA : chaque appel interroge le registre public de l'État (lot 13). */
+  registryCheck: { max: 10, windowMs: 3_600_000, message: "Trop de contrôles : réessaie dans une heure." },
+  /** Recherche d'adresse de l'assistant d'événement (service de géocodage public). */
+  geocode: { max: 60, windowMs: 60_000, message: "Trop de recherches d'adresse : réessaie dans une minute." },
+  /** Envoi de justificatifs, logos et affiches. */
+  fileUpload: { max: 30, windowMs: 3_600_000, message: "Trop d'envois de fichiers : réessaie plus tard." },
+  /** Création d'une structure : n'importe quel utilisateur peut en créer, pas des dizaines. */
+  structureCreate: { max: 5, windowMs: 86_400_000, message: "Trop de structures créées aujourd'hui." },
   /** Pointage rapide par plaques (jusqu'à 300 plaques par envoi). */
   plateCheckins: { max: 30, windowMs: 60_000, message: "Trop d'envois de plaques : réessaie dans une minute." },
 } satisfies Record<string, RateRule>;
