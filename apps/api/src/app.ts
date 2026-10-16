@@ -27,6 +27,7 @@ import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
 import { prosRoutes } from "./modules/pros/routes";
 import { reviewsRoutes } from "./modules/reviews/routes";
+import { authGuard, type SessionLike } from "./modules/security/auth-guard";
 import { staffRoutes } from "./modules/staff/routes";
 import { structuresRoutes } from "./modules/structures/routes";
 import { ticketsRoutes } from "./modules/tickets/routes";
@@ -79,7 +80,13 @@ app.get("/health", async (c) => {
   }
 });
 
-app.on(["GET", "POST"], "/auth/*", (c) => auth.handler(c.req.raw));
+// Garde unique des routes de Better Auth (session lue en cookie ou en jeton porteur) : `modules/security/auth-guard.ts`.
+app.on(
+  ["GET", "POST"],
+  "/auth/*",
+  authGuard((headers) => auth.api.getSession({ headers }) as Promise<SessionLike | null>),
+  (c) => auth.handler(c.req.raw),
+);
 
 app.route("/ws", ws);
 

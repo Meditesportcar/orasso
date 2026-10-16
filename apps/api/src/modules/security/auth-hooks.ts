@@ -4,15 +4,7 @@
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 
-import {
-  FACTOR_ENROLLMENT_PATHS,
-  FRESH_SESSION_MS,
-  isSecondFactor,
-  PASSKEY_SIGN_IN_PATH,
-  TOTP_VERIFY_PATHS,
-  USER_VERIFICATION_REQUIRED_MESSAGE,
-  userVerified,
-} from "./passkey";
+import { PASSKEY_SIGN_IN_PATH, TOTP_VERIFY_PATHS, USER_VERIFICATION_REQUIRED_MESSAGE, userVerified } from "./passkey";
 import { securityService } from "./service";
 
 type Ctx = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
@@ -32,34 +24,18 @@ async function currentToken(ctx: Ctx): Promise<string | null> {
   return session?.session.token ?? null;
 }
 
+/**
+ * Le garde des facteurs n'est **pas** ici : un crochet « before » de Better Auth voit la requête avant la conversion du
+ * jeton porteur et ne connaît donc pas la session d'une requête `Authorization: Bearer`. Il est dans le middleware Hono
+ * `auth-guard.ts`, devant le handler. Ici : double défense sur la vérification de l'utilisateur d'une clé (sans session)
+ * et révocation des autres sessions au changement de mot de passe.
+ */
 export async function securityBefore(ctx: Ctx) {
-  // Connexion par clé : la vérification de l'utilisateur (code, Face ID, empreinte) est exigée ; le plugin ne la
-  // contrôle pas.
   if (ctx.path === PASSKEY_SIGN_IN_PATH && !userVerified((ctx.body as { response?: unknown } | undefined)?.response)) {
     throw new APIError("UNAUTHORIZED", {
       message: USER_VERIFICATION_REQUIRED_MESSAGE,
       code: USER_VERIFICATION_REQUIRED_MESSAGE,
     });
-  }
-  // Ajouter, retirer ou changer un facteur : si le compte en a déjà un, la session doit le prouver ; sinon
-  // (premier facteur, amorçage), une session récente suffit.
-  if (FACTOR_ENROLLMENT_PATHS.includes(ctx.path)) {
-    const current = await getSessionFromCtx(ctx).catch(() => null);
-    if (current) {
-      const proven = isSecondFactor((current.session as { secondFactor?: unknown }).secondFactor);
-      const hasFactor = await securityService.accountHasFactor(current.user.id);
-      if (hasFactor && !proven) {
-        throw new APIError("FORBIDDEN", {
-          message:
-            "Reconnecte-toi avec ta clé d'accès ou ton code de double authentification pour changer tes facteurs",
-          code: "TWO_FACTOR_REQUIRED",
-        });
-      }
-      const created = new Date(current.session.createdAt).getTime();
-      if (!hasFactor && Date.now() - created > FRESH_SESSION_MS) {
-        throw new APIError("FORBIDDEN", { message: "Reconnecte-toi d'abord", code: "SESSION_NOT_FRESH" });
-      }
-    }
   }
   // Changement de mot de passe : toujours déconnecter les autres appareils (§ 1.1).
   if (ctx.path === "/change-password" && ctx.body && typeof ctx.body === "object") {

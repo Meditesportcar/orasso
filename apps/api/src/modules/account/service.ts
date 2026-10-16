@@ -60,6 +60,8 @@ import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
 import { accountQrShortId, profilesService } from "../profiles/service";
 import { securityMails } from "../security/mails";
+import { isSecondFactor } from "../security/passkey";
+import { securityService } from "../security/service";
 
 type MailUser = { id: string; email: string; name: string };
 
@@ -245,15 +247,17 @@ export const accountService = {
   async deleteAccount(v: Viewer, input: AccountDelete, ip?: string | null) {
     if (v.profile.deletedAt) throw new AppError(401, "unauthenticated", "Compte supprimé");
     rateLimit("accountDelete", v.user.id);
-    const passkeySession = v.session?.secondFactor === "passkey";
+    // Session qui prouve un second facteur (clé d'accès vérifiée, ou code TOTP / de secours / appareil de confiance).
+    const provenSession = isSecondFactor(v.session?.secondFactor);
     const cred = await db.query.account.findFirst({
       where: and(eq(account.userId, v.user.id), eq(account.providerId, "credential")),
       columns: { password: true },
     });
-    const passwordOk = cred?.password ? await checkPassword(v.user.id, input.password) : passkeySession;
+    const passwordOk = cred?.password ? await checkPassword(v.user.id, input.password) : provenSession;
+    // Compte protégé par un facteur (TOTP ou clé d'accès) : session qui le prouve, ou code valide.
     const secondOk =
-      !v.user.twoFactorEnabled ||
-      passkeySession ||
+      !(await securityService.accountHasFactor(v.user.id)) ||
+      provenSession ||
       (Boolean(input.totpCode) && (await checkTotpOrBackupCode(v.user.id, input.totpCode ?? "")));
     if (!passwordOk || !secondOk) throw new AppError(403, "invalid_credentials", "Confirmation incorrecte");
     const owned = await db

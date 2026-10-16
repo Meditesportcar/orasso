@@ -1,10 +1,10 @@
 // Sécurité du compte (lot 15, ARCHITECTURE-SUITE § 1.1) : alerte « nouvelle connexion », alerte « mot de passe
 // changé », clés d'accès comme double authentification, sessions. Appelé par les crochets de Better Auth (`auth.ts`).
 import { createHash } from "node:crypto";
-import { and, count, desc, eq, lt, ne } from "drizzle-orm";
+import { and, count, desc, eq, like, lt, ne } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { knownLogins, passkey, profiles, session, user } from "../../db/schema";
+import { knownLogins, passkey, profiles, session, twoFactor, user, verification } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import { withTx } from "../../lib/tx";
@@ -127,6 +127,8 @@ export const securityService = {
 
   /** Mot de passe changé ou réinitialisé : e-mail toujours (notification `security_password_changed`). */
   async onPasswordChanged(userId: string) {
+    // Un nouveau mot de passe oublie aussi les appareils de confiance (le code sera redemandé).
+    await this.forgetTrustedDevices(userId);
     const at = now();
     const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, userId) });
     const mail = securityMails.passwordChanged(profile?.pseudo ?? "", at);
@@ -158,6 +160,25 @@ export const securityService = {
     return Boolean(row?.twoFactorEnabled);
   },
 
+  /** Activation du TOTP commencée mais pas confirmée (ligne `two_factor` non vérifiée). */
+  async totpPendingActivation(userId: string): Promise<boolean> {
+    const row = await db.query.twoFactor.findFirst({
+      where: eq(twoFactor.userId, userId),
+      columns: { verified: true },
+    });
+    return Boolean(row) && row?.verified !== true;
+  },
+
+  /**
+   * Oublie les appareils de confiance du compte (lignes `verification` du plugin TOTP) : désactivation du TOTP,
+   * changement ou réinitialisation du mot de passe, ajout ou retrait d'un facteur.
+   */
+  async forgetTrustedDevices(userId: string) {
+    await db
+      .delete(verification)
+      .where(and(like(verification.identifier, "trust-device-%"), eq(verification.value, userId)));
+  },
+
   /** La session `token` prouve désormais ce second facteur (code vérifié, appareil de confiance). */
   async markSessionFactor(token: string, factor: SecondFactor) {
     await db.update(session).set({ secondFactor: factor }).where(eq(session.token, token));
@@ -182,6 +203,7 @@ export const securityService = {
       after(() => notificationsService.kick());
     });
     await this.revokeOtherSessions(userId, keepToken);
+    await this.forgetTrustedDevices(userId);
   },
 
   async passkeyCount(userId: string): Promise<number> {
