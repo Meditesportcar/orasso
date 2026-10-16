@@ -76,7 +76,8 @@ const json = (c: Context, status: 401 | 403 | 404 | 429, code: string, message: 
 
 /** Chemin Better Auth d'une URL (`/api/auth/reset-password/abc` → `/reset-password/:token`). */
 export function authRouteOf(pathname: string): string | null {
-  const path = pathname.replace(/^\/api\/auth/, "").replace(/\/+$/, "") || "/";
+  // Fermé par défaut : aucune normalisation (barre finale, majuscules, `//`, `%2F` → route inconnue, donc 404).
+  const path = pathname.replace(/^\/api\/auth/, "");
   if (AUTH_ROUTES[path]) return path;
   if (/^\/reset-password\/[^/]+$/.test(path)) return "/reset-password/:token";
   if (/^\/callback\/[^/]+$/.test(path)) return "/callback/:id";
@@ -120,8 +121,14 @@ export function authGuard(getSession: (headers: Headers) => Promise<SessionLike 
       } catch {
         return json(c, 429, "TOO_MANY_REQUESTS", "Trop d'essais : réessaie dans un quart d'heure.");
       }
+      const pending = await securityService.totpPendingActivation(userId);
+      // Une activation se confirme par un code TOTP, jamais par un code de secours : le plugin ne vérifie pas que la
+      // ligne est confirmée et n'active rien sur cette route.
+      if (pending && route === "/two-factor/verify-backup-code") {
+        return json(c, 403, "TWO_FACTOR_REQUIRED", "Confirme l'activation avec le code de ton application.");
+      }
       // Confirmation d'une activation (ligne TOTP encore non vérifiée) : même règle qu'un ajout de facteur.
-      if (!(await securityService.totpPendingActivation(userId))) return next();
+      if (!pending) return next();
     }
 
     if (route === "/passkey/verify-registration") {

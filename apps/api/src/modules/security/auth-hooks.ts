@@ -54,10 +54,13 @@ export async function securityAfter(ctx: Ctx) {
   // Code TOTP ou code de secours vérifié par une session déjà ouverte : elle prouve désormais le second facteur.
   if (TOTP_VERIFY_PATHS.includes(ctx.path)) {
     const token = await currentToken(ctx);
-    if (token) await securityService.markSessionFactor(token, "totp");
-    // Première vérification = activation du TOTP (l'utilisateur renvoyé est celui d'avant l'activation).
     const userId = returned?.user?.id;
-    if (userId && returned?.user?.twoFactorEnabled === false && (await securityService.totpEnabled(userId))) {
+    // Preuve posée seulement si le TOTP est effectivement actif après l'appel (défense : un code de secours d'une
+    // activation non confirmée ne prouve rien).
+    const active = userId ? await securityService.totpEnabled(userId) : false;
+    if (token && active) await securityService.markSessionFactor(token, "totp");
+    // Première vérification = activation du TOTP (l'utilisateur renvoyé est celui d'avant l'activation).
+    if (userId && returned?.user?.twoFactorEnabled === false && active) {
       await securityService.onFactorChanged(userId, "security_two_factor_enabled", token);
     }
     return;

@@ -80,6 +80,16 @@ app.get("/health", async (c) => {
   }
 });
 
+// Corps des requêtes de Better Auth limités à 1 Mo (le garde ci-dessous clone et lit le JSON).
+app.use(
+  "/auth/*",
+  bodyLimit({
+    maxSize: 1024 * 1024,
+    onError: () => {
+      throw new AppError(413, "payload_too_large", "Requête trop lourde");
+    },
+  }),
+);
 // Garde unique des routes de Better Auth (session lue en cookie ou en jeton porteur) : `modules/security/auth-guard.ts`.
 app.on(
   ["GET", "POST"],

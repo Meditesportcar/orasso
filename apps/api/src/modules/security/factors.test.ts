@@ -136,6 +136,22 @@ describe("liste des routes de Better Auth", () => {
     expect(authRouteOf("/api/auth/inconnue")).toBeNull();
   });
 
+  it("variantes d'URL (barre finale, majuscules, //, %2F) : fermées par défaut (404)", async () => {
+    const u = await signUp("Variantes_01");
+    for (const path of [
+      "/auth/two-factor/enable/",
+      "/auth/Two-Factor/Enable",
+      "/auth//two-factor/enable",
+      "/auth/two-factor%2Fenable",
+      "/auth/passkey/delete-passkey/",
+      "/auth/sign-in/email/",
+    ]) {
+      const res = await req(as(u, "cookie"), "POST", path, { password: "motdepasse-test-123" });
+      expect(res.status, path).toBe(404);
+    }
+    expect(await db.query.twoFactor.findFirst({ where: eq(twoFactor.userId, u.id) })).toBeUndefined();
+  });
+
   it("routes inutiles et risquées refusées", async () => {
     const u = await signUp("Refus_01");
     for (const mode of MODES) {
@@ -206,6 +222,21 @@ describe.each(MODES)("ajout, retrait et révélation des facteurs (%s)", (mode) 
     const code = await createOTP(await totpSecretOf(u.id), { digits: 6, period: 30 }).totp();
     expect((await req(as(u, mode), "POST", "/auth/two-factor/verify-totp", { code })).status).toBe(403);
     expect((await db.query.user.findFirst({ where: eq(user.id, u.id) }))?.twoFactorEnabled).toBe(false);
+  });
+
+  it("activation non confirmée : un code de secours depuis la session est refusé et ne prouve rien", async () => {
+    const u = await signUp(`Secours_${mode}`);
+    const s = await createStructure(u.id);
+    const e = await createEvent(s.id);
+    const enabled = await req(as(u, mode), "POST", "/auth/two-factor/enable", { password: "motdepasse-test-123" });
+    expect(enabled.status).toBe(200);
+    const res = await req(as(u, mode), "POST", "/auth/two-factor/verify-backup-code", {
+      code: enabled.json.backupCodes[0],
+    });
+    expect(res.status).toBe(403);
+    expect((await sessionsOf(u.id))[0]?.secondFactor).toBeNull();
+    expect((await db.query.user.findFirst({ where: eq(user.id, u.id) }))?.twoFactorEnabled).toBe(false);
+    expect((await req(as(u, mode), "GET", `/events/${e.id}`)).status).toBe(403);
   });
 
   it("premier facteur (amorçage) : session récente acceptée ; trop ancienne refusée", async () => {
