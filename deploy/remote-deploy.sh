@@ -97,18 +97,29 @@ deploy() {
   tar -xzf "$archive" -C "$dir"
   rm -f "$archive"
 
+  # DSN GlitchTip du site, lu par le navigateur : inscrit à la construction (lot 15) ; vide si absent de dev.env.
+  # Lu comme docker compose --env-file : \r et guillemets simples ou doubles autour de la valeur retirés.
+  local sentry_dsn dsn_hash
+  sentry_dsn=$(sed -n 's/^VITE_SENTRY_DSN=//p' "$ENV_FILE" 2>/dev/null | tail -n 1 | tr -d '\r')
+  sentry_dsn=$(printf '%s' "$sentry_dsn" | sed -e "s/^'\(.*\)'\$/\1/" -e 's/^"\(.*\)"$/\1/')
+  dsn_hash=$(printf '%s' "$sentry_dsn" | sha256sum | cut -c1-12)
+
   local app
   for app in api web; do
     # Même commit = même contenu : ne pas reconstruire (une reconstruction déplacerait l'étiquette sans rien changer).
+    # Exception : l'image du site porte le DSN du navigateur ; si sa valeur a changé (étiquette fr.orasso.dsn), on
+    # la reconstruit même à commit égal.
     if docker image inspect "orasso-$app:$tag" >/dev/null 2>&1; then
-      log "image orasso-$app:$tag déjà construite"
-      continue
+      local built_dsn=""
+      [ "$app" = web ] && built_dsn=$(docker image inspect -f '{{ index .Config.Labels "fr.orasso.dsn" }}' "orasso-web:$tag" 2>/dev/null)
+      if [ "$app" != web ] || [ "$built_dsn" = "$dsn_hash" ]; then
+        log "image orasso-$app:$tag déjà construite"
+        continue
+      fi
+      log "DSN GlitchTip du site changé : reconstruction de orasso-web:$tag"
     fi
     log "construction de orasso-$app:$tag (journal : $STATE/build.log)"
-    # DSN GlitchTip du site, lu par le navigateur : inscrit à la construction (lot 15) ; vide si absent de dev.env.
-    local sentry_dsn
-    sentry_dsn=$(sed -n 's/^VITE_SENTRY_DSN=//p' "$ENV_FILE" 2>/dev/null | tail -n 1)
-    docker build --progress=plain --build-arg "VITE_SENTRY_DSN=$sentry_dsn" \
+    docker build --progress=plain --build-arg "VITE_SENTRY_DSN=$sentry_dsn" --label "fr.orasso.dsn=$dsn_hash" \
       -f "$dir/apps/$app/Dockerfile" -t "orasso-$app:$tag" "$dir" >"$STATE/build.log" 2>&1 ||
       { tail -n 40 "$STATE/build.log"; die "construction de l'image $app impossible"; }
   done
