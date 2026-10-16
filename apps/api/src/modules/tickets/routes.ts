@@ -74,7 +74,7 @@ export const ticketsRoutes = new Hono<AppEnv>()
   // Stripe : retour du parcours de connexion (redirige vers le site) et webhooks signés.
   .get("/stripe/connect/callback", async (c) => {
     const q = parse(stripeCallbackQuery, c.req.query());
-    const result = await ticketsService.finishConnect(q);
+    const result = await ticketsService.finishConnect(await optionalUser(c), q);
     const target = result.slug
       ? `${env.PUBLIC_URL}/orga/${result.slug}/structure?stripe=${result.ok ? "connecte" : "erreur"}`
       : `${env.PUBLIC_URL}/`;

@@ -66,7 +66,7 @@ test("parcours 6 : fiche pro vérifiée et publiée, annuaire, remises, QR de co
   const siret = pro.getByTestId("pro-siret");
   await siret.getByLabel(/SIRET/).fill("356 000 000 00048");
   await siret.getByRole("button", { name: "Contrôler" }).click();
-  await expect(siret.getByRole("status")).toBeVisible();
+  await expect(siret.getByRole("status").or(siret.getByRole("alert"))).toBeVisible();
   const verified = await pro.getByTestId("pro-verified-chip").isVisible();
   // Si le registre public de l'État ne répond pas, le badge reste absent : le test continue sans lui.
   if (verified) await expect(pro.getByTestId("pro-verified-chip")).toHaveText("Pro vérifié");

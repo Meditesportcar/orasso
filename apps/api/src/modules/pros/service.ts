@@ -114,6 +114,7 @@ function toCard(p: ProRow, followers: number): ProCard {
     lng: p.lng,
     interventionDepartments: p.interventionDepartments,
     verified: p.verifiedAt !== null,
+    registryName: p.verifiedAt !== null ? (p.registryCheck?.name ?? null) : null,
     followersCount: followers,
   };
 }
@@ -216,9 +217,12 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
   };
 }
 
-async function postsUsedThisMonth(proId: string): Promise<number> {
+async function postsUsedThisMonth(
+  proId: string,
+  ex: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
+): Promise<number> {
   const { start, end } = monthBounds(now());
-  const [row] = await db
+  const [row] = await ex
     .select({ n: count() })
     .from(proPosts)
     .where(and(eq(proPosts.proId, proId), gte(proPosts.createdAt, start), lt(proPosts.createdAt, end)));
@@ -301,7 +305,12 @@ export const prosService = {
     const located = addressChanged ? await locate({ ...current, ...input }) : {};
     const [p] = await db
       .update(proProfiles)
-      .set({ ...input, ...located })
+      // Le badge « Pro vérifié » certifie un nom : un nouveau nom demande un nouveau contrôle du SIRET.
+      .set({
+        ...input,
+        ...located,
+        ...(input.name !== undefined && input.name !== current.name ? { verifiedAt: null } : {}),
+      })
       .where(eq(proProfiles.id, id))
       .returning();
     if (!p) throw notFound("Fiche pro introuvable");
@@ -394,17 +403,35 @@ export const prosService = {
     if (parsed.source !== "siret") throw validation("Un professionnel se vérifie avec son SIRET (14 chiffres).");
     rateLimit("registryCheck", v.user.id);
     const check = await lookupRegistry("siret", parsed.value);
+    // Registre injoignable : rien ne change (un badge déjà obtenu n'est pas retiré par une panne).
+    if (check.status === "unavailable") {
+      if (p.verifiedAt) return toOwner(p, v);
+      const [kept] = await db
+        .update(proProfiles)
+        .set({ registryCheck: check })
+        .where(eq(proProfiles.id, id))
+        .returning();
+      return toOwner(kept ?? p, v);
+    }
     const matched = check.status === "matched";
-    const [row] = await db
-      .update(proProfiles)
-      .set({
-        registryCheck: check,
-        siret: matched || check.status === "closed" ? (check.siret ?? parsed.value) : p.siret,
-        verifiedAt: matched ? now() : null,
-      })
-      .where(eq(proProfiles.id, id))
-      .returning();
-    return toOwner(row ?? p, v);
+    const siret = matched || check.status === "closed" ? (check.siret ?? parsed.value) : p.siret;
+    try {
+      const [row] = await db
+        .update(proProfiles)
+        .set({ registryCheck: check, siret, verifiedAt: matched ? now() : null })
+        .where(eq(proProfiles.id, id))
+        .returning();
+      return toOwner(row ?? p, v);
+    } catch (error) {
+      // Index unique partiel sur le SIRET : une fiche par établissement.
+      if (
+        (error as { code?: string; cause?: { code?: string } }).code === "23505" ||
+        (error as { cause?: { code?: string } }).cause?.code === "23505"
+      ) {
+        throw conflict("conflict", "Ce SIRET est déjà utilisé par une autre fiche pro.");
+      }
+      throw error;
+    }
   },
 
   // --- Annuaire et fiche publique -------------------------------------------------------------------------------
@@ -417,7 +444,7 @@ export const prosService = {
     activity?: ProActivity;
     department?: string;
   }): Promise<Page<ProCard>> {
-    const offset = q.cursor ? Number(Buffer.from(q.cursor, "base64url").toString()) || 0 : 0;
+    const offset = q.cursor ? Math.max(0, Number(Buffer.from(q.cursor, "base64url").toString()) || 0) : 0;
     const where = and(
       isNull(proProfiles.deletedAt),
       isNotNull(proProfiles.publishedAt),
@@ -504,15 +531,20 @@ export const prosService = {
     rateLimit("proWrite", v.user.id);
     const p = await ownedPro(v, id);
     if (!p.publishedAt) throw validation("Publie ta fiche avant de publier une offre ou une actualité.");
-    if (postsRemaining(await postsUsedThisMonth(id)) === 0) {
-      throw conflict("conflict", `Limite atteinte : ${PRO_POSTS_PER_MONTH} publications par mois.`, {
-        limit: PRO_POSTS_PER_MONTH,
-      });
-    }
-    const [row] = await db
-      .insert(proPosts)
-      .values({ proId: id, ...input })
-      .returning();
+    // Verrou par fiche : deux publications simultanées ne dépassent pas la limite du mois.
+    const row = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`pro-posts:${id}`}, 0))`);
+      if (postsRemaining(await postsUsedThisMonth(id, tx)) === 0) {
+        throw conflict("conflict", `Limite atteinte : ${PRO_POSTS_PER_MONTH} publications par mois.`, {
+          limit: PRO_POSTS_PER_MONTH,
+        });
+      }
+      const [created] = await tx
+        .insert(proPosts)
+        .values({ proId: id, ...input })
+        .returning();
+      return created;
+    });
     if (!row) throw new Error("Publication non créée");
     return postView(row);
   },

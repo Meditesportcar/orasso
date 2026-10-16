@@ -63,6 +63,8 @@ export const proProfiles = pgTable(
   (t) => [
     uniqueIndex("pro_profiles_owner_key").on(t.ownerUserId).where(sql`${t.deletedAt} is null`),
     index("pro_profiles_department_idx").on(t.department),
+    // Un établissement (SIRET) = une fiche non supprimée.
+    uniqueIndex("pro_profiles_siret_key").on(t.siret).where(sql`${t.deletedAt} is null and ${t.siret} is not null`),
     index("pro_profiles_published_idx").on(t.publishedAt),
   ],
 );

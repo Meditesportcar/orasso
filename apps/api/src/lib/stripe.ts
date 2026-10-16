@@ -104,35 +104,6 @@ async function request<T>(
 
 // --- Connexion du compte de l'organisateur (OAuth Connect) -------------------------------------------------------
 
-const STATE_TTL_MS = 15 * 60_000;
-
-function stateMac(payload: string): string {
-  return createHmac("sha256", env.BETTER_AUTH_SECRET).update(`stripe-connect:${payload}`).digest("base64url");
-}
-
-/** Paramètre `state` signé du parcours de connexion : structure, utilisateur, expiration. */
-export function makeConnectState(structureId: string, userId: string, at: Date): string {
-  const payload = Buffer.from(JSON.stringify({ s: structureId, u: userId, e: at.getTime() + STATE_TTL_MS })).toString(
-    "base64url",
-  );
-  return `${payload}.${stateMac(payload)}`;
-}
-
-export function readConnectState(state: string, at: Date): { structureId: string; userId: string } | null {
-  const [payload, mac] = state.split(".");
-  if (!payload || !mac) return null;
-  const expected = Buffer.from(stateMac(payload));
-  const given = Buffer.from(mac);
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
-  try {
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString()) as { s?: string; u?: string; e?: number };
-    if (!data.s || !data.u || typeof data.e !== "number" || data.e < at.getTime()) return null;
-    return { structureId: data.s, userId: data.u };
-  } catch {
-    return null;
-  }
-}
-
 /** Adresse du parcours Stripe où l'organisateur connecte (ou crée) son compte. */
 export function connectAuthorizeUrl(state: string, redirectUri: string): string {
   const { connectClientId } = config();

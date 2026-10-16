@@ -19,6 +19,7 @@ import { signingKeys } from "./access";
 import { user } from "./auth";
 import { bytea, timestamps, tstz } from "./common";
 import { events } from "./events";
+import { structures } from "./structures";
 
 export const orderStatuses = ["pending", "paid", "cancelled", "expired", "refunded"] as const;
 export const orderStatusEnum = pgEnum("order_status", orderStatuses);
@@ -127,3 +128,16 @@ export const tickets = pgTable(
     index("tickets_order_idx").on(t.orderId),
   ],
 );
+
+/** Jetons `state` du parcours de connexion Stripe : aléatoires, à usage unique, liés au propriétaire (lot 14, relecture). */
+export const stripeConnectStates = pgTable("stripe_connect_states", {
+  nonce: text("nonce").primaryKey(),
+  structureId: uuid("structure_id")
+    .notNull()
+    .references(() => structures.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  expiresAt: tstz("expires_at").notNull(),
+  ...timestamps,
+});

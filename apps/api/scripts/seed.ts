@@ -1177,7 +1177,7 @@ async function seedPros(hash: string) {
         lng: 2.8948,
         phone: "04 68 00 56 78",
         hours: { mon: "9h-18h", tue: "9h-18h", wed: "9h-18h", thu: "9h-18h", fri: "9h-18h" },
-        siret: "35600000000048",
+        siret: "35600000000049",
         verifiedAt: now,
       },
       discounts: { route: 5, sport: 8, legende: 12 },

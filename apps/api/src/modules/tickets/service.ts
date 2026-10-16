@@ -6,11 +6,11 @@
 //   plateforme `PLATFORM_FEE_BASIS_POINTS`.
 // - QR d'un billet : même mécanique que le QR d'inscription (message signé Ed25519 : l'identifiant du billet prend la
 //   place de celui du pass). Contrôle à l'entrée en ligne par le staff « scan » (la boutique n'est pas confirmée).
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   type EventTicketing,
-  encodePassMessage,
-  encodePassPayload,
+  encodeTicketMessage,
+  encodeTicketPayload,
   type MyTicket,
   platformFeeCents,
   type StripeAccountState,
@@ -21,14 +21,14 @@ import {
   type TicketOffer,
   ticketingBlock,
   ticketingBlockLabels,
-  verifyPassPayload,
+  verifyTicketPayload,
 } from "@orasso/shared";
-import { and, asc, count, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { events, orders, structures, tickets, ticketTypes } from "../../db/schema";
+import { adminAuditLog, events, orders, stripeConnectStates, structures, tickets, ticketTypes } from "../../db/schema";
 import { env } from "../../env";
-import { requireOrganizer, staffAccess } from "../../lib/access";
+import { activeMembership, requireOrganizer, staffAccess } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -39,14 +39,15 @@ import {
   createCheckoutSession,
   deauthorizeAccount,
   exchangeConnectCode,
-  makeConnectState,
   parseWebhook,
-  readConnectState,
   stripePlatform,
 } from "../../lib/stripe";
 import { type Tx, withTx } from "../../lib/tx";
 import { eventsRepo } from "../events/repo";
+import { notificationsService } from "../notifications/service";
 import { settingsService } from "./settings";
+
+const CONNECT_STATE_MS = 15 * 60_000;
 
 type EventRow = typeof events.$inferSelect;
 type TicketRow = typeof tickets.$inferSelect;
@@ -98,7 +99,8 @@ async function paymentsReady(structure: { stripeAccountId: string | null }): Pro
   return (
     stripePlatform().configured &&
     Boolean(structure.stripeAccountId) &&
-    (await settingsService.get("ticketing.presentation_mode"))
+    (await settingsService.get("ticketing.presentation_mode")) &&
+    (await settingsService.get("ticketing.paid_demo_enabled"))
   );
 }
 
@@ -121,6 +123,24 @@ async function blockOf(ex: typeof db | Tx, e: EventRow, structure: { stripeAccou
   return { type, remaining, block };
 }
 
+/**
+ * Commande d'une session Stripe : par l'identifiant de session, sinon par `client_reference_id` / `metadata.order_id`
+ * (la session a pu être créée sans que son identifiant ait été enregistré). Contrôle de cohérence : la commande ne doit
+ * pas être liée à une autre session.
+ */
+async function findOrderOf(object: Record<string, unknown>) {
+  const sessionId = String(object.id ?? "");
+  const bySession = await db.query.orders.findFirst({ where: eq(orders.stripeSessionId, sessionId) });
+  if (bySession) return bySession;
+  const meta = (object.metadata ?? {}) as Record<string, unknown>;
+  const ref = String(object.client_reference_id ?? meta.order_id ?? "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref)) return null;
+  const order = await db.query.orders.findFirst({ where: eq(orders.id, ref) });
+  if (!order || (order.stripeSessionId && order.stripeSessionId !== sessionId)) return null;
+  if (meta.order_id !== undefined && String(meta.order_id) !== order.id) return null;
+  return order;
+}
+
 const accountHint = (id: string | null) => (id ? `${id.slice(0, 5)}…${id.slice(-4)}` : null);
 
 function stripeState(s: { stripeAccountId: string | null }): StripeAccountState {
@@ -132,7 +152,7 @@ function stripeState(s: { stripeAccountId: string | null }): StripeAccountState 
 }
 
 function payloadOf(t: Pick<TicketRow, "id" | "kid" | "signature">, eventNo: number): string {
-  return encodePassPayload(encodePassMessage({ kid: t.kid, eventNo, passId: t.id }), t.signature);
+  return encodeTicketPayload(encodeTicketMessage({ kid: t.kid, eventNo, passId: t.id }), t.signature);
 }
 
 /** Émet les billets d'une commande payée (idempotent : une commande n'en reçoit qu'une fois). */
@@ -142,7 +162,7 @@ async function issueTickets(tx: Tx, order: typeof orders.$inferSelect, eventNo: 
   await signing.ensureSynced();
   const rows = Array.from({ length: order.quantity }, () => {
     const id = randomUUID();
-    const { kid, signature } = signing.sign(encodePassMessage({ kid: signing.activeKid, eventNo, passId: id }));
+    const { kid, signature } = signing.sign(encodeTicketMessage({ kid: signing.activeKid, eventNo, passId: id }));
     return {
       id,
       orderId: order.id,
@@ -321,8 +341,9 @@ export const ticketsService = {
       return { order, e, type, accountId: s.stripeAccountId };
     });
 
+    let session: Awaited<ReturnType<typeof createCheckoutSession>>;
     try {
-      const session = await createCheckoutSession({
+      session = await createCheckoutSession({
         accountId: reserved.accountId,
         orderId: reserved.order.id,
         eventId: reserved.e.id,
@@ -335,16 +356,18 @@ export const ticketsService = {
         cancelUrl: `${env.PUBLIC_URL}/e/${reserved.e.slug}?paiement=annule`,
         expiresAt: reserved.order.expiresAt ?? new Date(t.getTime() + PENDING_MINUTES * 60_000),
       });
-      await db
-        .update(orders)
-        .set({ stripeSessionId: session.id, stripePaymentIntentId: session.paymentIntentId })
-        .where(eq(orders.id, reserved.order.id));
-      return { url: session.url };
     } catch (error) {
-      // Stripe a refusé ou ne répond pas : la place est rendue tout de suite.
+      // Stripe a refusé ou ne répond pas : aucune session n'existe, la place est rendue tout de suite.
       await db.update(orders).set({ status: "cancelled" }).where(eq(orders.id, reserved.order.id));
       throw error;
     }
+    // La session existe chez Stripe : la commande n'est plus jamais annulée d'ici (le client peut payer). Si cette
+    // écriture échoue, le webhook retrouve la commande par `client_reference_id` / `metadata.order_id`.
+    await db
+      .update(orders)
+      .set({ stripeSessionId: session.id, stripePaymentIntentId: session.paymentIntentId })
+      .where(eq(orders.id, reserved.order.id));
+    return { url: session.url };
   },
 
   /**
@@ -357,11 +380,10 @@ export const ticketsService = {
     const object = event.data.object as Record<string, unknown>;
 
     if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
-      const sessionId = String(object.id ?? "");
-      const order = await db.query.orders.findFirst({ where: eq(orders.stripeSessionId, sessionId) });
+      const order = await findOrderOf(object);
       if (!order) return { handled: false };
-      // Le compte et le montant doivent correspondre à la commande ; le paiement doit être réglé.
-      if (event.account && order.stripeAccountId && event.account !== order.stripeAccountId) return { handled: false };
+      // Le compte (toujours exigé) et le montant doivent correspondre à la commande ; le paiement doit être réglé.
+      if (!event.account || event.account !== order.stripeAccountId) return { handled: false };
       if (object.payment_status !== "paid") return { handled: false };
       if (typeof object.amount_total === "number" && object.amount_total !== order.amountCents)
         return { handled: false };
@@ -376,6 +398,7 @@ export const ticketsService = {
           .set({
             status: "paid",
             paidAt: now(),
+            stripeSessionId: locked.stripeSessionId ?? String(object.id ?? ""),
             stripePaymentIntentId:
               typeof object.payment_intent === "string" ? object.payment_intent : locked.stripePaymentIntentId,
           })
@@ -387,10 +410,12 @@ export const ticketsService = {
     }
 
     if (event.type === "checkout.session.expired") {
+      const order = await findOrderOf(object);
+      if (!order || !event.account || event.account !== order.stripeAccountId) return { handled: false };
       const res = await db
         .update(orders)
         .set({ status: "expired" })
-        .where(and(eq(orders.stripeSessionId, String(object.id ?? "")), eq(orders.status, "pending")))
+        .where(and(eq(orders.id, order.id), eq(orders.status, "pending")))
         .returning({ id: orders.id });
       return { handled: res.length > 0 };
     }
@@ -452,11 +477,13 @@ export const ticketsService = {
     }
     const paid = e.publicAccess === "paid_orasso";
     if (paid && input.enabled && !input.priceCents) throw validation("Indique le prix du billet.");
-    const taken = await takenCount(db, e.id);
-    if (input.capacity !== null && input.capacity < taken) {
-      throw conflict("conflict", `${taken} billets sont déjà pris : la capacité ne peut pas être plus basse.`);
-    }
-    await db.transaction(async (tx) => {
+    await withTx(async (tx) => {
+      // Même verrou que les réservations : la capacité se compare aux billets réellement pris.
+      await lockTickets(tx, e.id);
+      const taken = await takenCount(tx, e.id);
+      if (input.capacity !== null && input.capacity < taken) {
+        throw conflict("conflict", `${taken} billets sont déjà pris : la capacité ne peut pas être plus basse.`);
+      }
       await tx
         .insert(ticketTypes)
         .values({
@@ -485,33 +512,62 @@ export const ticketsService = {
     return stripeState(await structureRow(structureId));
   },
 
-  /** `POST /structures/:id/stripe/connect` : adresse du parcours Stripe (propriétaire seulement). */
+  /**
+   * `POST /structures/:id/stripe/connect` : adresse du parcours Stripe (propriétaire seulement, super admin exclu).
+   * Le `state` est un jeton aléatoire à usage unique, lié au propriétaire et à la structure (15 minutes).
+   */
   async startConnect(v: Viewer, structureId: string): Promise<{ url: string }> {
     const access = await requireOrganizer(v, structureId);
-    if (access.role === "co_organizer")
-      throw forbidden("La connexion Stripe est réservée au propriétaire de la structure.");
+    if (access.role !== "owner") throw forbidden("La connexion Stripe est réservée au propriétaire de la structure.");
     if (!stripePlatform().configured) throw conflict("conflict", ticketingBlockLabels.payments_soon);
-    const state = makeConnectState(structureId, v.user.id, now());
-    return { url: connectAuthorizeUrl(state, `${env.PUBLIC_URL}/api/stripe/connect/callback`) };
+    await db.delete(stripeConnectStates).where(lt(stripeConnectStates.expiresAt, now()));
+    const nonce = randomBytes(24).toString("base64url");
+    await db.insert(stripeConnectStates).values({
+      nonce,
+      structureId,
+      userId: v.user.id,
+      expiresAt: new Date(now().getTime() + CONNECT_STATE_MS),
+    });
+    return { url: connectAuthorizeUrl(nonce, `${env.PUBLIC_URL}/api/stripe/connect/callback`) };
   },
 
   /**
-   * `GET /stripe/connect/callback` : retour du parcours Stripe. Renvoie le slug de la structure et le résultat ; la
-   * route redirige ensuite vers le site. Le `state` signé tient lieu de session (le navigateur revient de Stripe).
+   * `GET /stripe/connect/callback` : retour du parcours Stripe. Exige la session du propriétaire qui a lancé la
+   * connexion, consomme le `state` (usage unique), refait le contrôle « propriétaire », journalise et notifie quand un
+   * compte déjà connecté est remplacé. La route redirige ensuite vers le site.
    */
-  async finishConnect(query: {
-    code?: string;
-    state?: string;
-    error?: string;
-  }): Promise<{ slug: string | null; ok: boolean }> {
-    const decoded = query.state ? readConnectState(query.state, now()) : null;
-    if (!decoded) return { slug: null, ok: false };
-    const s = await db.query.structures.findFirst({ where: eq(structures.id, decoded.structureId) });
+  async finishConnect(
+    viewer: Viewer | null,
+    query: { code?: string; state?: string; error?: string },
+  ): Promise<{ slug: string | null; ok: boolean }> {
+    if (!viewer || !query.state) return { slug: null, ok: false };
+    // Usage unique : le jeton est supprimé dès sa première présentation, réussie ou non.
+    const [row] = await db.delete(stripeConnectStates).where(eq(stripeConnectStates.nonce, query.state)).returning();
+    if (!row || row.expiresAt < now() || row.userId !== viewer.user.id) return { slug: null, ok: false };
+    const s = await db.query.structures.findFirst({ where: eq(structures.id, row.structureId) });
     if (!s) return { slug: null, ok: false };
+    const member = await activeMembership(viewer.user.id, s.id);
+    if (member?.role !== "owner") return { slug: null, ok: false };
     if (query.error || !query.code) return { slug: s.slug, ok: false };
     try {
       const { accountId } = await exchangeConnectCode(query.code);
+      const replaced = Boolean(s.stripeAccountId && s.stripeAccountId !== accountId);
       await db.update(structures).set({ stripeAccountId: accountId }).where(eq(structures.id, s.id));
+      await db.insert(adminAuditLog).values({
+        actorUserId: viewer.user.id,
+        action: replaced ? "structure.stripe_replaced" : "structure.stripe_connected",
+        targetType: "structure",
+        targetId: s.id,
+        structureId: s.id,
+        reason: accountHint(accountId),
+      });
+      if (replaced) {
+        await notificationsService.notify(db, viewer.user.id, "stripe_account_changed", {
+          title: "Compte Stripe remplacé",
+          body: `Le compte Stripe de « ${s.name} » est maintenant ${accountHint(accountId)} (avant : ${accountHint(s.stripeAccountId)}).`,
+          link: { label: "Voir la structure", path: `/orga/${s.slug}/structure` },
+        });
+      }
       return { slug: s.slug, ok: true };
     } catch (error) {
       console.error("Connexion Stripe :", error instanceof Error ? error.message : error);
@@ -522,8 +578,7 @@ export const ticketsService = {
   /** `DELETE /structures/:id/stripe` */
   async disconnect(v: Viewer, structureId: string): Promise<StripeAccountState> {
     const access = await requireOrganizer(v, structureId);
-    if (access.role === "co_organizer")
-      throw forbidden("La connexion Stripe est réservée au propriétaire de la structure.");
+    if (access.role !== "owner") throw forbidden("La connexion Stripe est réservée au propriétaire de la structure.");
     const s = await structureRow(structureId);
     if (s.stripeAccountId) await deauthorizeAccount(s.stripeAccountId);
     await db.update(structures).set({ stripeAccountId: null }).where(eq(structures.id, structureId));
@@ -542,16 +597,17 @@ export const ticketsService = {
     if (!access) throw forbidden("Réservé à l'organisation et au staff d'accueil");
     rateLimit("ticketCheck", v.user.id);
     const trusted = await signing.trustedKeys();
-    const verdict = verifyPassPayload(payload.trim(), trusted, ed25519Verify);
+    const verdict = verifyTicketPayload(payload.trim(), trusted, ed25519Verify);
     if (!verdict.ok) {
       return { result: "refused", reason: verdict.reason === "malformed" ? "malformed" : "forged" };
     }
-    if (verdict.pass.eventNo !== e.eventNo) return { result: "refused", reason: "other_event" };
+    if (e.status === "cancelled") return { result: "refused", reason: "cancelled" };
+    if (verdict.ticket.eventNo !== e.eventNo) return { result: "refused", reason: "other_event" };
     const row = await db
       .select({ t: tickets, type: ticketTypes })
       .from(tickets)
       .innerJoin(ticketTypes, eq(ticketTypes.id, tickets.ticketTypeId))
-      .where(and(eq(tickets.id, verdict.pass.passId), eq(tickets.eventId, e.id)))
+      .where(and(eq(tickets.id, verdict.ticket.passId), eq(tickets.eventId, e.id)))
       .then((r) => r[0]);
     if (!row) return { result: "refused", reason: "unknown" };
     const holder = await db.query.profiles.findFirst({
@@ -597,10 +653,18 @@ export const ticketsService = {
       .where(and(eq(tickets.eventId, e.id), inArray(tickets.status, ["valid", "used"])))
       .orderBy(desc(tickets.usedAt), asc(tickets.issuedAt))
       .limit(500);
+    const [sold] = await db
+      .select({ n: count() })
+      .from(tickets)
+      .where(and(eq(tickets.eventId, e.id), inArray(tickets.status, ["valid", "used"])));
+    const [used] = await db
+      .select({ n: count() })
+      .from(tickets)
+      .where(and(eq(tickets.eventId, e.id), eq(tickets.status, "used")));
     return {
       event: { title: e.title, slug: e.slug },
-      sold: rows.length,
-      used: rows.filter((r) => r.t.status === "used").length,
+      sold: sold?.n ?? 0,
+      used: used?.n ?? 0,
       items: rows.map(({ t, o, pseudo }) => ({
         id: t.id,
         pseudo: pseudo ?? "—",

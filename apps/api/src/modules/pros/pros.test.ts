@@ -354,6 +354,74 @@ describe("partenaires des organisateurs", () => {
   });
 });
 
+describe("relecture : badge, SIRET unique, publications simultanées, annuaire, URL", () => {
+  it("le badge tombe si le nom change ; il reste si le registre est injoignable ; raison sociale gardée", async () => {
+    const pro = await createdPro();
+    fakeRegistry([company(SIRET)]);
+    await call(owner, "POST", `/pros/${pro.id}/siret/check`, { number: SIRET });
+    await call(owner, "PUT", `/pros/${pro.id}/published`, { published: true });
+    expect((await call(null, "GET", `/pros/by-slug/${pro.slug}`)).json).toMatchObject({
+      verified: true,
+      registryName: "GARAGE DU PORT",
+    });
+    // Registre en panne : le badge n'est pas retiré.
+    fakeRegistry([], false);
+    expect(
+      (await call(owner, "POST", `/pros/${pro.id}/siret/check`, { number: SIRET })).json.verifiedAt,
+    ).not.toBeNull();
+    // Autre nom : nouveau contrôle exigé.
+    const renamed = await call(owner, "PATCH", `/pros/${pro.id}`, { name: "Garage Autre Nom" });
+    expect(renamed.json.verifiedAt).toBeNull();
+    expect((await call(null, "GET", `/pros/by-slug/${pro.slug}`)).json.registryName).toBeNull();
+    // Même nom : le badge reste.
+    fakeRegistry([company(SIRET)]);
+    await call(owner, "POST", `/pros/${pro.id}/siret/check`, { number: SIRET });
+    expect(
+      (await call(owner, "PATCH", `/pros/${pro.id}`, { name: "Garage Autre Nom" })).json.verifiedAt,
+    ).not.toBeNull();
+  });
+
+  it("un SIRET = une fiche : le même établissement ne peut pas vérifier deux fiches", async () => {
+    const pro = await createdPro();
+    fakeRegistry([company(SIRET)]);
+    expect((await call(owner, "POST", `/pros/${pro.id}/siret/check`, { number: SIRET })).status).toBe(200);
+    const other = await signUp("Autre_Pro");
+    const second = await call(other, "POST", "/pros", input({ name: "Garage Jumeau" }));
+    const res = await call(other, "POST", `/pros/${second.json.id}/siret/check`, { number: SIRET });
+    expect(res.status).toBe(409);
+  });
+
+  it("publications simultanées : jamais plus que la limite du mois", async () => {
+    const pro = await createdPro();
+    await call(owner, "PUT", `/pros/${pro.id}/published`, { published: true });
+    const results = await Promise.all(
+      Array.from({ length: PRO_POSTS_PER_MONTH + 3 }, (_, i) =>
+        call(owner, "POST", `/pros/${pro.id}/posts`, { title: `Offre ${i}`, body: "Texte de l'offre" }),
+      ),
+    );
+    expect(results.filter((r) => r.status === 201)).toHaveLength(PRO_POSTS_PER_MONTH);
+  });
+
+  it("curseur de l'annuaire négatif : borné à 0", async () => {
+    await createPro(owner.id);
+    const cursor = Buffer.from("-500").toString("base64url");
+    const res = await call(null, "GET", `/pros?cursor=${cursor}`);
+    expect(res.status).toBe(200);
+    expect(res.json.items).toHaveLength(1);
+  });
+
+  it("adresses web : http ou https seulement", async () => {
+    const pro = await createdPro();
+    for (const website of ["javascript:alert(1)", "data:text/html,x", "ftp://exemple.fr"]) {
+      expect((await call(owner, "PATCH", `/pros/${pro.id}`, { website })).status).toBe(400);
+    }
+    expect(
+      (await call(owner, "PATCH", `/pros/${pro.id}`, { socials: { instagram: "javascript:alert(1)" } })).status,
+    ).toBe(400);
+    expect((await call(owner, "PATCH", `/pros/${pro.id}`, { website: "https://exemple.fr" })).status).toBe(200);
+  });
+});
+
 describe("suppression de compte", () => {
   it("la fiche suit le compte (cascade)", async () => {
     const pro = await createdPro();

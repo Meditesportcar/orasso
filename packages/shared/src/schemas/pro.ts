@@ -15,12 +15,15 @@ import {
 import { optionalText } from "./common";
 import type { RegistryCheck } from "./structure";
 
+/** Adresse web : http ou https seulement (jamais javascript:, data:…). */
+const httpUrl = z.url().refine((u) => /^https?:\/\//i.test(u), "Adresse en http ou https");
+
 const socialsSchema = z
   .object({
-    instagram: z.url().max(200).nullish(),
-    facebook: z.url().max(200).nullish(),
-    tiktok: z.url().max(200).nullish(),
-    youtube: z.url().max(200).nullish(),
+    instagram: httpUrl.max(200).nullish(),
+    facebook: httpUrl.max(200).nullish(),
+    tiktok: httpUrl.max(200).nullish(),
+    youtube: httpUrl.max(200).nullish(),
   })
   .partial();
 
@@ -51,8 +54,7 @@ const proFields = z.object({
     .max(120)
     .nullish()
     .or(z.literal("").transform(() => null)),
-  website: z
-    .url()
+  website: httpUrl
     .max(200)
     .nullish()
     .or(z.literal("").transform(() => null)),
@@ -111,6 +113,8 @@ export type ProCard = {
   /** Zone d'intervention (pros sans local) : affichée quand il n'y a pas d'adresse. */
   interventionDepartments: string[];
   verified: boolean;
+  /** Raison sociale du registre, affichée à côté du badge « Pro vérifié » (`null` sans badge). */
+  registryName: string | null;
   followersCount: number;
 };
 

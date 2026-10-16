@@ -222,8 +222,9 @@ export default function ProFiche({ loaderData, actionData }: Route.ComponentProp
         </h2>
         {pro.verifiedAt ? (
           <p>
-            SIRET <strong>{pro.siret}</strong> vérifié le {formatDay(pro.verifiedAt)} : ta fiche porte le badge « Pro
-            vérifié ».
+            SIRET <strong>{pro.siret}</strong>
+            {pro.registryCheck?.name ? ` (${pro.registryCheck.name})` : ""} vérifié le {formatDay(pro.verifiedAt)} : ta
+            fiche porte le badge « Pro vérifié ».
           </p>
         ) : (
           <p className="s-muted">

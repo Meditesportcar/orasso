@@ -109,6 +109,7 @@ export const notificationTypes = {
   malus_applied: "grade",
   contest_decided: "grade",
   grade_changed: "grade",
+  stripe_account_changed: "staff",
   season_ended: "grade",
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;

@@ -70,7 +70,11 @@ export const ticketingBlockLabels: Record<TicketingBlock, string> = {
 };
 
 /** Clés de réglage de la plateforme (table `platform_settings`, modifiées par le super admin). */
-export const platformSettingKeys = ["ticketing.free_enabled", "ticketing.presentation_mode"] as const;
+export const platformSettingKeys = [
+  "ticketing.free_enabled",
+  "ticketing.paid_demo_enabled",
+  "ticketing.presentation_mode",
+] as const;
 export type PlatformSettingKey = (typeof platformSettingKeys)[number];
 
 export const platformSettingDefaults: Record<PlatformSettingKey, boolean> = {
@@ -78,11 +82,14 @@ export const platformSettingDefaults: Record<PlatformSettingKey, boolean> = {
   "ticketing.free_enabled": true,
   /** Mode présentation : aucun encaissement réel. Ne peut pas être coupé avant le 21 juin 2027. */
   "ticketing.presentation_mode": true,
+  /** Paiements de démonstration (Stripe en test) : fermés par défaut, coupables à tout moment. */
+  "ticketing.paid_demo_enabled": false,
 };
 
 export const platformSettingLabels: Record<PlatformSettingKey, string> = {
   "ticketing.free_enabled": "Billets gratuits (réservation du public)",
   "ticketing.presentation_mode": "Billetterie payante en mode présentation (aucun encaissement réel)",
+  "ticketing.paid_demo_enabled": "Paiements de démonstration des billets payants (Stripe en mode test)",
 };
 
 /** Le mode présentation est imposé jusqu'à la date d'ouverture des paiements. */

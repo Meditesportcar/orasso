@@ -128,7 +128,7 @@ describe("billets gratuits : réservation", () => {
     const res = await reserve(fan, e.id, 2);
     expect(res.status).toBe(201);
     expect(res.json).toHaveLength(2);
-    expect(res.json[0].payload).toMatch(/^OR1[A-Z2-7]{138}$/);
+    expect(res.json[0].payload).toMatch(/^OB1[A-Z2-7]{138}$/);
     expect(res.json[0]).toMatchObject({ status: "valid", priceCents: null, event: { slug: e.slug } });
     expect((await call(fan, "GET", "/me/tickets")).json).toHaveLength(2);
     // Capacité 3 : il reste 1 place.
@@ -283,7 +283,8 @@ function fakeStripe(opts: { livemode?: boolean; failCheckout?: boolean } = {}) {
   return calls;
 }
 
-async function connectStripe() {
+/** Lance la connexion (propriétaire) puis simule le retour de Stripe dans le navigateur du même propriétaire. */
+async function connectStripe(opts: { code?: string; as?: TestUser } = {}) {
   const start = await call(orga, "POST", `/structures/${structure.id}/stripe/connect`);
   expect(start.status).toBe(200);
   const url = new URL(start.json.url);
@@ -291,9 +292,12 @@ async function connectStripe() {
   expect(url.searchParams.get("client_id")).toBe("ca_test_123");
   expect(url.searchParams.get("scope")).toBe("read_write");
   const state = url.searchParams.get("state") ?? "";
-  const back = await app.request(`/api/stripe/connect/callback?code=ac_test_1&state=${encodeURIComponent(state)}`);
+  const back = await callback(`code=${opts.code ?? "ac_test_1"}&state=${encodeURIComponent(state)}`, opts.as ?? orga);
   return { back, state };
 }
+
+const callback = (query: string, u: TestUser | null) =>
+  app.request(`/api/stripe/connect/callback?${query}`, { headers: u ? { cookie: u.cookie } : {} });
 
 describe("billets payants : Stripe Connect en mode test (simulé)", () => {
   it("connexion du compte de l'organisateur : seul le propriétaire, identifiant du compte uniquement", async () => {
@@ -320,22 +324,27 @@ describe("billets payants : Stripe Connect en mode test (simulé)", () => {
     expect(JSON.stringify(state.json)).not.toContain("acct_TEST123456");
   });
 
-  it("state falsifié ou expiré, compte réel, refus de l'organisateur : rien n'est enregistré", async () => {
+  it("state inconnu, expiré, compte réel, refus de l'organisateur : rien n'est enregistré", async () => {
     setStripeConfig(TEST_KEYS);
     fakeStripe({ livemode: true });
-    const forged = await app.request("/api/stripe/connect/callback?code=ac_1&state=truc.faux");
+    const forged = await callback("code=ac_1&state=truc.faux", orga);
     expect(forged.headers.get("location")).toBe(`${process.env.PUBLIC_URL}/`);
     const live = await connectStripe();
     expect(live.back.headers.get("location")).toContain("stripe=erreur");
     expect(
       (await db.query.structures.findFirst({ where: eq(structures.id, structure.id) }))?.stripeAccountId,
     ).toBeNull();
-    const denied = await app.request(
-      `/api/stripe/connect/callback?error=access_denied&state=${encodeURIComponent(live.state)}`,
-    );
+    // Le state est à usage unique : déjà consommé par le retour précédent.
+    const reused = await callback(`code=x&state=${encodeURIComponent(live.state)}`, orga);
+    expect(reused.headers.get("location")).toBe(`${process.env.PUBLIC_URL}/`);
+    const start = await call(orga, "POST", `/structures/${structure.id}/stripe/connect`);
+    const state = new URL(start.json.url).searchParams.get("state") ?? "";
+    const denied = await callback(`error=access_denied&state=${encodeURIComponent(state)}`, orga);
     expect(denied.headers.get("location")).toContain("stripe=erreur");
+    const again = await call(orga, "POST", `/structures/${structure.id}/stripe/connect`);
+    const late = new URL(again.json.url).searchParams.get("state") ?? "";
     clock.advance(20 * 60_000);
-    const expired = await app.request(`/api/stripe/connect/callback?code=x&state=${encodeURIComponent(live.state)}`);
+    const expired = await callback(`code=x&state=${encodeURIComponent(late)}`, orga);
     expect(expired.headers.get("location")).toBe(`${process.env.PUBLIC_URL}/`);
   });
 
@@ -345,6 +354,11 @@ describe("billets payants : Stripe Connect en mode test (simulé)", () => {
       startsAt: new Date(clock.now.getTime() + 10 * 86_400_000),
     });
     await setup(e.id, { priceCents: 1500, capacity: 10 });
+    // Paiements de démonstration : fermés par défaut, ouverts par l'administration.
+    await db
+      .insert(platformSettings)
+      .values({ key: "ticketing.paid_demo_enabled", value: true })
+      .onConflictDoUpdate({ target: platformSettings.key, set: { value: true } });
     return e;
   }
 

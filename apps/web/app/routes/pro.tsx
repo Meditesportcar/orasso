@@ -118,6 +118,7 @@ export default function ProPage({ loaderData }: Route.ComponentProps) {
                 <span className="s-verified" data-testid="verified-badge">
                   Pro vérifié
                 </span>
+                {pro.registryName && <span data-testid="registry-name"> · {pro.registryName}</span>}
               </>
             )}
           </div>

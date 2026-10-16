@@ -27,7 +27,16 @@ import sharp from "sharp";
 import type { z } from "zod";
 
 import { db } from "../../db/client";
-import { applications, events, eventZones, structureFollows, structureMembers, structures } from "../../db/schema";
+import {
+  applications,
+  events,
+  eventZones,
+  orders,
+  structureFollows,
+  structureMembers,
+  structures,
+  tickets,
+} from "../../db/schema";
 import { requireOrganizer, staffAccess } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
@@ -404,7 +413,17 @@ export const eventsService = {
         .returning();
       if (!row) throw notFound("Événement introuvable");
       const cancelled = await applicationsService.cancelAll(tx, row, after);
-      for (const userId of new Set(cancelled.map((a) => a.userId))) {
+      // Billets de visiteurs (lot 14) : les billets valables sont annulés, les paiements en cours abandonnés.
+      const cancelledTickets = await tx
+        .update(tickets)
+        .set({ status: "cancelled", cancelledAt: now() })
+        .where(and(eq(tickets.eventId, id), eq(tickets.status, "valid")))
+        .returning({ userId: tickets.userId });
+      await tx
+        .update(orders)
+        .set({ status: "cancelled" })
+        .where(and(eq(orders.eventId, id), eq(orders.status, "pending")));
+      for (const userId of new Set([...cancelled.map((a) => a.userId), ...cancelledTickets.map((t) => t.userId)])) {
         await notificationsService.notify(tx, userId, "event_cancelled", {
           title: "Événement annulé",
           body: `« ${row.title} » (${formatDateTime(row.startsAt)}) est annulé par l'organisateur.`,

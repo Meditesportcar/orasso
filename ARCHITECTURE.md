@@ -360,6 +360,10 @@ Vérification : `POST /api/account-qr/verify {payload}` (authentifié ; pro au l
 
 Tests (`qr.test.ts`) : encodage/décodage ; signature valide ; charge utile altérée (1 bit) ; mauvaise clé ; `kid` inconnu ; autre événement ; TOTP : fenêtres valides c−1/c/c+1, c−2 refusé, rejeu refusé, secret régénéré invalide l'ancien.
 
+### 3.4 QR de billet de visiteur (lot 14)
+
+Même construction que § 3.1 (message de 22 octets signé Ed25519, base32 majuscules, 141 caractères, version 6-M, mêmes clés) mais **format distinct** : préfixe `OB1` et version de message `2` (signée, donc non modifiable). `identifiant de billet` à la place de l'identifiant de pass. `packages/shared/src/qr/ticket.ts` (`encodeTicketMessage`, `encodeTicketPayload`, `decodeTicketPayload`, `verifyTicketPayload`). `decodePassPayload` refuse un billet (QR inconnu au scanner véhicules, qui n'ouvre jamais « Accepter quand même » sur un billet) ; le contrôle des billets (`POST /events/:id/tickets/check`) n'accepte que ce format. Une clé révoquée re-signe aussi les billets valables (`revokeSigningKey`).
+
 ---
 
 ## 4. Mode staff hors ligne (appli, lot 10 ; API lot 06)

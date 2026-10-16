@@ -2,11 +2,11 @@
 // elle ne l'est plus. Pas de nouveau QR après un scan : un pass n'est remplacé que si la candidature, révoquée, est
 // retenue de nouveau (correction de l'organisateur) ; l'ancien garde son motif. `replaced` : pass valide remplacé (clé révoquée).
 import { randomUUID } from "node:crypto";
-import { encodePassMessage, encodePassPayload, type PassRevokedReason } from "@orasso/shared";
+import { encodePassMessage, encodePassPayload, encodeTicketMessage, type PassRevokedReason } from "@orasso/shared";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { accessPasses, applications, events, signingKeys } from "../../db/schema";
+import { accessPasses, applications, events, signingKeys, tickets } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import { realtime } from "../../lib/realtime";
@@ -73,6 +73,16 @@ export const accessService = {
           .where(and(eq(accessPasses.id, pass.id), isNull(accessPasses.revokedAt)));
         await this.issue(tx, { id: pass.applicationId, eventId: pass.eventId, userId: pass.userId });
       }
+      // Billets de visiteurs signés avec la clé compromise : re-signés avec la clé active (lot 14).
+      const exposedTickets = await tx.query.tickets.findMany({
+        where: and(eq(tickets.kid, kid), eq(tickets.status, "valid")),
+      });
+      for (const t of exposedTickets) {
+        const ev = await tx.query.events.findFirst({ where: eq(events.id, t.eventId), columns: { eventNo: true } });
+        if (!ev) continue;
+        const next = signing.sign(encodeTicketMessage({ kid: signing.activeKid, eventNo: ev.eventNo, passId: t.id }));
+        await tx.update(tickets).set({ kid: next.kid, signature: next.signature }).where(eq(tickets.id, t.id));
+      }
       const eventIds = [...new Set(exposed.map((p) => p.eventId))];
       after(() => {
         for (const eventId of eventIds) {
@@ -80,7 +90,7 @@ export const accessService = {
           realtime.publish(`event:${eventId}:access`, "access.changed", { applicationIds });
         }
       });
-      return { reissued: exposed.length };
+      return { reissued: exposed.length + exposedTickets.length };
     });
   },
 
