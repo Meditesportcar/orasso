@@ -1,5 +1,5 @@
 // Amitiés (lot 17, ARCHITECTURE-SUITE § 2.1) : suivi d'amis avec acceptation des deux côtés.
-import { friendshipStatuses, friendSources } from "@orasso/shared";
+import { friendSources, friendshipStatuses } from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import { check, index, pgEnum, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
@@ -30,7 +30,10 @@ export const friendships = pgTable(
     ...timestamps,
   },
   (t) => [
-    uniqueIndex("friendships_pair_key").on(sql`least(${t.requesterId}, ${t.addresseeId})`, sql`greatest(${t.requesterId}, ${t.addresseeId})`),
+    uniqueIndex("friendships_pair_key").on(
+      sql`least(${t.requesterId}, ${t.addresseeId})`,
+      sql`greatest(${t.requesterId}, ${t.addresseeId})`,
+    ),
     index("friendships_addressee_status_idx").on(t.addresseeId, t.status),
     index("friendships_requester_status_idx").on(t.requesterId, t.status),
     check("friendships_not_self_check", sql`${t.requesterId} <> ${t.addresseeId}`),

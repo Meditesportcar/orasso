@@ -58,10 +58,10 @@ import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
-import { socialProfile } from "../social/profile";
-import { socialRepo } from "../social/repo";
 import { accountQrShortId, profilesService } from "../profiles/service";
 import { securityMails } from "../security/mails";
+import { socialProfile } from "../social/profile";
+import { socialRepo } from "../social/repo";
 
 type MailUser = { id: string; email: string; name: string };
 

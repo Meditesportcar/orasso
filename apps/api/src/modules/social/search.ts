@@ -5,14 +5,13 @@
 // grade). Sa génération, son département et ses centres d'intérêt ne servent à aucun filtre pour un inconnu : sinon
 // la recherche les révélerait. Les amis voient tout, donc tout sert. Comptes supprimés et suspendus : jamais.
 import {
+  friendshipState,
   hasPeopleSearchCriteria,
   type PeopleSearchPage,
   type PeopleSearchQuery,
   type PersonCard,
-  friendshipState,
 } from "@orasso/shared";
-import { and, inArray, eq } from "drizzle-orm";
-import { sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { vehicles } from "../../db/schema";
@@ -115,10 +114,12 @@ async function run(
   }
   if (query.department) where.push(sql`(p.departments @> ARRAY[${query.department}]::text[] and ${detail})`);
   if (options.departmentsAny?.length) {
-    where.push(sql`(p.departments && ARRAY[${sql.join(
-      options.departmentsAny.map((d) => sql`${d}`),
-      sql`, `,
-    )}]::text[] and ${detail})`);
+    where.push(
+      sql`(p.departments && ARRAY[${sql.join(
+        options.departmentsAny.map((d) => sql`${d}`),
+        sql`, `,
+      )}]::text[] and ${detail})`,
+    );
   }
   if (query.categoryId) {
     where.push(
@@ -154,6 +155,7 @@ async function cards(viewer: Viewer, rows: Row[]): Promise<PersonCard[]> {
       .slice(0, 3)
       .map((g) => ({ id: g.id, label: r.detail ? vehicleLabel(g) : vehicleBriefLabel(g) })),
     friendship: friendshipState(relations.get(r.user_id), viewer.user.id),
+    friendshipId: relations.get(r.user_id)?.status === "pending" ? (relations.get(r.user_id)?.id ?? null) : null,
   }));
 }
 

@@ -2,13 +2,12 @@
 // Jamais la plaque. Nom, prénom, téléphone et e-mail : audience `organizer` seulement.
 import {
   friendshipState,
+  type OtherVehicle,
   type ProfileAudience,
   type ProfileVehicle,
   profileAudience,
   profileFields,
   type UserProfileView,
-  type VehicleBrief,
-  type VehiclePublic,
 } from "@orasso/shared";
 import { and, asc, desc, eq, gt, gte, lt, ne, sql } from "drizzle-orm";
 
@@ -187,7 +186,7 @@ export const socialProfile = {
   },
 
   /** `GET /vehicles/:id` : fiche d'un véhicule d'un autre, complète ou réduite selon le compte de son propriétaire. */
-  async vehicleOf(viewer: Viewer, id: string): Promise<VehiclePublic | VehicleBrief> {
+  async vehicleOf(viewer: Viewer, id: string): Promise<OtherVehicle> {
     const row = await vehiclesRepo.findFullById(id);
     if (!row) throw notFound("Véhicule introuvable");
     const owner = await profilesRepo.byUserId(row.ownerId);
@@ -195,7 +194,17 @@ export const socialProfile = {
     // Un véhicule archivé (vendu, accidenté…) n'est plus visible que de son propriétaire.
     if (row.status !== "active" && row.ownerId !== viewer.user.id) throw notFound("Véhicule introuvable");
     const { audience } = await audienceFor(viewer, owner);
-    return profileFields(audience).vehicleDetails ? vehiclePublic(row) : vehicleBrief(row);
+    const detailed = profileFields(audience).vehicleDetails;
+    return {
+      ...(detailed ? vehiclePublic(row) : vehicleBrief(row)),
+      detailed,
+      owner: {
+        userId: owner.userId,
+        pseudo: owner.pseudo,
+        avatarUrl: storage.url(owner.avatarKey),
+        grade: owner.grade,
+      },
+    };
   },
 
   /** Niveau de détail des véhicules d'un propriétaire pour `viewer` (recherche, propriétaires près de chez moi). */

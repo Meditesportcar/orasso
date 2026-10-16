@@ -24,7 +24,8 @@ export const socialLabels = {
   vehicles: "Véhicules",
   upcomingEvents: "Événements à venir",
   pastEvents: "Événements passés",
-  pastEventsCount: (n: number) => (n > 1 ? `${n} événements sur les 12 derniers mois` : `${n} événement sur les 12 derniers mois`),
+  pastEventsCount: (n: number) =>
+    n > 1 ? `${n} événements sur les 12 derniers mois` : `${n} événement sur les 12 derniers mois`,
   crews: "Crews",
   crewsEmpty: "Aucun crew pour l'instant.",
   noVehicles: "Aucun véhicule visible.",

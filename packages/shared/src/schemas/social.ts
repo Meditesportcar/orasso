@@ -6,6 +6,7 @@ import { FRIEND_MESSAGE_MAX, type FriendshipState, type ProfileAudience } from "
 import { optionalText, pageQuery } from "./common";
 import type { PublicProfile } from "./profile";
 import { pseudoSchema } from "./profile";
+import type { VehicleBrief, VehiclePublic } from "./vehicle";
 
 // Social (lot 17) : amis, profils des autres, recherche de personnes. Routes : ARCHITECTURE-SUITE § 2.3.
 
@@ -45,6 +46,15 @@ export type PersonCard = {
   /** Marque + modèle (+ génération si le profil le permet, jamais l'année ni la plaque). */
   vehicles: { id: string; label: string }[];
   friendship: FriendshipState;
+  /** Demande d'ami en cours (pour l'accepter depuis une liste), sinon null. */
+  friendshipId: string | null;
+};
+
+/** Fiche d'un véhicule d'un autre (`GET /vehicles/:id`) : complète ou réduite, avec son propriétaire. */
+export type OtherVehicle = (VehiclePublic | VehicleBrief) & {
+  /** Vrai si la fiche complète est consultable (compte public ou ami). */
+  detailed: boolean;
+  owner: Pick<PersonCard, "userId" | "pseudo" | "avatarUrl" | "grade">;
 };
 
 export type PeopleSearchPage = { items: PersonCard[]; nextCursor: string | null };

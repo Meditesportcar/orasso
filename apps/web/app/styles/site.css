@@ -1253,3 +1253,133 @@
   width: 100%;
   accent-color: var(--accent);
 }
+
+/* ================================================================================================================
+   Lot 17 : social (profils des autres, recherche de personnes, amis, Journal). Jetons du système de design seulement.
+   ================================================================================================================ */
+.s-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--surface-sunken);
+  color: var(--ink);
+  border: 1.5px solid var(--line);
+  font-weight: 700;
+}
+.s-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.s-row--top {
+  align-items: flex-start;
+  flex-wrap: nowrap;
+}
+.s-row--tight {
+  gap: var(--space-2);
+}
+.s-cardlink {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.s-cardlink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-lg);
+}
+.s-gallery__img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+.s-people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.s-person {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.s-person__main {
+  display: flex;
+  flex: 1 1 200px;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.s-person__name {
+  color: var(--ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.s-person__vehicles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink);
+}
+.s-journal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.s-journal__item {
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.s-journal__item[data-read="false"] {
+  border-color: var(--ink);
+}
+.s-journal__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  color: inherit;
+  text-decoration: none;
+}
+.s-journal__main {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.s-journal__title {
+  overflow-wrap: anywhere;
+}
+.s-journal__body {
+  color: var(--ink);
+  opacity: 0.85;
+}
+.s-journal__dot {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface-sunken);
+  border: 1.5px solid var(--line);
+}

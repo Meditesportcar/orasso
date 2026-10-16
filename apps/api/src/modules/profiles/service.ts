@@ -1,10 +1,5 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
-import {
-  type DeviceRegister,
-  defaultNotificationPrefs,
-  type Me,
-  type ProfileUpdate,
-} from "@orasso/shared";
+import { type DeviceRegister, defaultNotificationPrefs, type Me, type ProfileUpdate } from "@orasso/shared";
 import { and, count, eq, gt, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";

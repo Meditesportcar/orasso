@@ -173,7 +173,9 @@ export const vehiclesService = {
       });
       // Journal des amis (lot 17) : « <pseudo> a ajouté un véhicule » ; ne bloque jamais l'ajout.
       if (input.status === "active") {
-        await socialJournal.friendNewVehicle(v.user.id, id).catch((error) => console.error("Journal des amis :", error));
+        await socialJournal
+          .friendNewVehicle(v.user.id, id)
+          .catch((error) => console.error("Journal des amis :", error));
       }
       return full(id);
     } catch (error) {

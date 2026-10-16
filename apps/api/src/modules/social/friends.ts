@@ -192,7 +192,9 @@ export const friendsService = {
       throw new AppError(
         400,
         "validation_error",
-        reason === "malformed" || reason === "unknown" ? socialLabels.scanFriendNotAccount : socialLabels.scanFriendExpired,
+        reason === "malformed" || reason === "unknown"
+          ? socialLabels.scanFriendNotAccount
+          : socialLabels.scanFriendExpired,
         { reason },
       );
     };
@@ -356,5 +358,4 @@ export const friendsService = {
   async inboxSummary(viewer: Viewer) {
     return { requests: { friend: await socialRepo.pendingIncomingCount(viewer.user.id) } };
   },
-
 };

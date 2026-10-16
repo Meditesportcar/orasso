@@ -32,7 +32,10 @@ export const socialRepo = {
       .select({ requester: friendships.requesterId, addressee: friendships.addresseeId })
       .from(friendships)
       .where(
-        and(eq(friendships.status, "accepted"), or(eq(friendships.requesterId, userId), eq(friendships.addresseeId, userId))),
+        and(
+          eq(friendships.status, "accepted"),
+          or(eq(friendships.requesterId, userId), eq(friendships.addresseeId, userId)),
+        ),
       );
     return rows.map((r) => (r.requester === userId ? r.addressee : r.requester));
   },

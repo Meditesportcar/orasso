@@ -59,7 +59,10 @@ beforeEach(async () => {
 
 type Person = TestUser & { dept?: string };
 
-async function person(pseudo: string, opts: { visibility?: "public" | "private"; departments?: string[]; bio?: string } = {}) {
+async function person(
+  pseudo: string,
+  opts: { visibility?: "public" | "private"; departments?: string[]; bio?: string } = {},
+) {
   const u = await signUp(pseudo);
   await db
     .update(profiles)
@@ -73,16 +76,19 @@ async function person(pseudo: string, opts: { visibility?: "public" | "private";
 }
 
 const flush = () => notificationsService.flush();
-const journal = async (u: TestUser) => (await call(u, "GET", "/me/notifications")).json.items as {
-  type: string;
-  title: string;
-  readAt: string | null;
-  data: { actor?: { pseudo: string; userId: string }; link?: string };
-}[];
+const journal = async (u: TestUser) =>
+  (await call(u, "GET", "/me/notifications")).json.items as {
+    type: string;
+    title: string;
+    readAt: string | null;
+    data: { actor?: { pseudo: string; userId: string }; link?: string };
+  }[];
 
 /** Amitié acceptée posée directement en base. */
 async function befriend(a: TestUser, b: TestUser) {
-  await db.insert(friendships).values({ requesterId: a.id, addresseeId: b.id, status: "accepted", respondedAt: new Date() });
+  await db
+    .insert(friendships)
+    .values({ requesterId: a.id, addresseeId: b.id, status: "accepted", respondedAt: new Date() });
   await socialRepo.recountFriends([a.id, b.id]);
 }
 
@@ -156,7 +162,10 @@ describe("audience d'un profil", () => {
     const orga = await signUp("Orga_66", { twoFactor: true });
     const other = await person("Autre_O");
     const k = await person("Kenji_66", { visibility: "private" });
-    await db.update(profiles).set({ firstName: "Kenji", lastName: "Mori", phone: "0600000000" }).where(eq(profiles.userId, k.id));
+    await db
+      .update(profiles)
+      .set({ firstName: "Kenji", lastName: "Mori", phone: "0600000000" })
+      .where(eq(profiles.userId, k.id));
     const s = await createStructure(orga.id);
     const e = await createEvent(s.id, { admission: "open", capacity: 5 });
     const v = await createVehicle(k.id, ref);
@@ -325,13 +334,19 @@ describe("demandes d'ami", () => {
     expect(again.status).toBe(201);
     expect(again.json.id).toBe(req.json.id);
     expect(await db.select().from(friendships)).toHaveLength(1);
-    expect((await db.select().from(friendships))[0]).toMatchObject({ status: "pending", message: "On réessaie", respondedAt: null });
+    expect((await db.select().from(friendships))[0]).toMatchObject({
+      status: "pending",
+      message: "On réessaie",
+      respondedAt: null,
+    });
   });
 
   it("retirer une demande envoyée ; message limité à 200 caractères ; 20 demandes par jour", async () => {
     const b = await person("Bravo_B");
     const c = await person("Charlie_C");
-    expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B", message: "x".repeat(201) })).status).toBe(400);
+    expect((await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B", message: "x".repeat(201) })).status).toBe(
+      400,
+    );
     await call(c, "POST", "/friends/requests", { pseudo: "Bravo_B" });
     // Le destinataire ne retire pas la demande (il la refuse) ; l'envoyeur la retire.
     expect((await call(b, "DELETE", `/friends/${c.id}`)).status).toBe(404);
@@ -350,7 +365,10 @@ describe("demandes d'ami", () => {
     const c = await person("Charlie_C");
     await befriend(a, b);
     await befriend(a, c);
-    await db.update(profiles).set({ suspendedUntil: new Date(Date.now() + DAY * 400) }).where(eq(profiles.userId, b.id));
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(Date.now() + DAY * 400) })
+      .where(eq(profiles.userId, b.id));
     await db.update(profiles).set({ deletedAt: new Date() }).where(eq(profiles.userId, c.id));
     expect((await call(a, "GET", "/me/friends")).json.items).toEqual([]);
     await socialRepo.removeAllFor(c.id, db as never);
@@ -385,7 +403,9 @@ describe("QR ami", () => {
     expect(replay.json.error.details.reason).toBe("replayed");
     // Un code périmé (capture d'écran d'il y a plus de 2 minutes).
     const old = await qrOf(b, new Date(clock.now.getTime() - 3 * 60_000));
-    expect((await call(c, "POST", "/friends/requests/by-qr", { payload: old })).json.error.details.reason).toBe("expired");
+    expect((await call(c, "POST", "/friends/requests/by-qr", { payload: old })).json.error.details.reason).toBe(
+      "expired",
+    );
     // Pas un QR de compte.
     const bad = await call(c, "POST", "/friends/requests/by-qr", { payload: "OR1ABCDEFGHIJKL" });
     expect(bad.status).toBe(400);
@@ -405,7 +425,9 @@ describe("QR ami", () => {
   it("trop de codes refusés : le lecteur est bloqué", async () => {
     const c = await person("Charlie_C");
     for (let i = 0; i < 10; i++) {
-      expect((await call(c, "POST", "/friends/requests/by-qr", { payload: "OA1AAAAAAAAAAAAAAAAAAA" })).status).toBe(400);
+      expect((await call(c, "POST", "/friends/requests/by-qr", { payload: "OA1AAAAAAAAAAAAAAAAAAA" })).status).toBe(
+        400,
+      );
     }
     expect((await call(c, "POST", "/friends/requests/by-qr", { payload: "OA1AAAAAAAAAAAAAAAAAAA" })).status).toBe(429);
   });
@@ -434,7 +456,10 @@ describe("recherche de personnes", () => {
     await createVehicle(gone.id, supra);
     await createVehicle(susp.id, supra);
     await db.update(profiles).set({ deletedAt: new Date() }).where(eq(profiles.userId, gone.id));
-    await db.update(profiles).set({ suspendedUntil: new Date(Date.now() + 400 * DAY) }).where(eq(profiles.userId, susp.id));
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(Date.now() + 400 * DAY) })
+      .where(eq(profiles.userId, susp.id));
     await createVehicle(me.id, supra);
     void e36;
 
@@ -475,16 +500,26 @@ describe("recherche de personnes", () => {
     expect(byDept66.json.items.map((i: { pseudo: string }) => i.pseudo)).not.toContain("Priv_Owner");
     // Une fois amis, tout ressort pour le privé.
     await befriend(me, b);
-    expect((await call(me, "GET", "/users/search?department=66")).json.items.map((i: { pseudo: string }) => i.pseudo)).toContain(
-      "Priv_Owner",
-    );
-    expect((await call(me, "GET", `/users/search?generationId=${supra.generationId}`)).json.items.map((i: { pseudo: string }) => i.pseudo).sort()).toEqual(["Priv_Owner", "Supra_Fan"]);
+    expect(
+      (await call(me, "GET", "/users/search?department=66")).json.items.map((i: { pseudo: string }) => i.pseudo),
+    ).toContain("Priv_Owner");
+    expect(
+      (await call(me, "GET", `/users/search?generationId=${supra.generationId}`)).json.items
+        .map((i: { pseudo: string }) => i.pseudo)
+        .sort(),
+    ).toEqual(["Priv_Owner", "Supra_Fan"]);
     // Grade minimum.
     await db.update(profiles).set({ grade: "sport" }).where(eq(profiles.userId, a.id));
-    expect((await call(me, "GET", "/users/search?grade=route")).json.items.map((i: { pseudo: string }) => i.pseudo)).toEqual(["Supra_Fan"]);
+    expect(
+      (await call(me, "GET", "/users/search?grade=route")).json.items.map((i: { pseudo: string }) => i.pseudo),
+    ).toEqual(["Supra_Fan"]);
     // Centre d'intérêt.
     await db.insert(profileInterests).values({ userId: a.id, categoryId: ref.jdm.id });
-    expect((await call(me, "GET", `/users/search?categoryId=${ref.jdm.id}`)).json.items.map((i: { pseudo: string }) => i.pseudo)).toEqual(["Supra_Fan"]);
+    expect(
+      (await call(me, "GET", `/users/search?categoryId=${ref.jdm.id}`)).json.items.map(
+        (i: { pseudo: string }) => i.pseudo,
+      ),
+    ).toEqual(["Supra_Fan"]);
     void categories;
   });
 
@@ -523,7 +558,11 @@ describe("recherche de personnes", () => {
     expect(empty.json).toMatchObject({ items: [], sector: [] });
     // Ami du privé : il ressort.
     await befriend(me, privNear);
-    expect((await call(me, "GET", `/vehicles/${v.id}/owners-nearby`)).json.items.map((i: { pseudo: string }) => i.pseudo).sort()).toEqual(["Prive_66", "Voisin_66"]);
+    expect(
+      (await call(me, "GET", `/vehicles/${v.id}/owners-nearby`)).json.items
+        .map((i: { pseudo: string }) => i.pseudo)
+        .sort(),
+    ).toEqual(["Prive_66", "Voisin_66"]);
   });
 
   it("propriétaires depuis la voiture d'un compte privé : recherche par modèle seulement (la génération ne fuit pas)", async () => {
@@ -572,7 +611,9 @@ describe("Journal des amis", () => {
     expect((await journal(stranger)).filter((n) => n.type === "friend_going_event")).toHaveLength(0);
     expect((await journal(a)).filter((n) => n.type === "friend_going_event")).toHaveLength(0);
     // Ni push ni e-mail : jamais « livrée » par un canal, uniquement dans le Journal.
-    const row = await db.query.notifications.findFirst({ where: and(eq(notifications.userId, friend.id), eq(notifications.type, "friend_going_event")) });
+    const row = await db.query.notifications.findFirst({
+      where: and(eq(notifications.userId, friend.id), eq(notifications.type, "friend_going_event")),
+    });
     expect(row).toMatchObject({ pushSentAt: null, emailSentAt: null, inJournal: true });
     expect(row?.deliveredAt).toBeTruthy();
   });
@@ -614,7 +655,14 @@ describe("Journal des amis", () => {
     const priv = await createEvent(s.id, { admission: "invite_only", capacity: 5 });
     const row = await db
       .insert(applications)
-      .values({ eventId: priv.id, userId: a.id, vehicleId: v.id, status: "pending", rulesAcceptedAt: new Date(), followStructure: false })
+      .values({
+        eventId: priv.id,
+        userId: a.id,
+        vehicleId: v.id,
+        status: "pending",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+      })
       .returning();
     await db.transaction((tx) =>
       applicationsService.transition(tx, row[0]!, "accepted", { kind: "organizer", userId: orga.id }),
@@ -657,7 +705,14 @@ describe("Journal des amis", () => {
     const u = await person("Alpha_A");
     // La notification de sécurité de l'inscription est lue : elle ne fausse pas le compte.
     await call(u, "POST", "/me/notifications/read", { all: true });
-    const base = { userId: u.id, family: "social" as const, title: "t", body: "b", deliverAfter: new Date(), deliveredAt: new Date() };
+    const base = {
+      userId: u.id,
+      family: "social" as const,
+      title: "t",
+      body: "b",
+      deliverAfter: new Date(),
+      deliveredAt: new Date(),
+    };
     const old = new Date(Date.now() - 10 * DAY);
     await db.insert(notifications).values([
       { ...base, type: "friend_request", title: "ancienne lue", createdAt: old, readAt: old },
