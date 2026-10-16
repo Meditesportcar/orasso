@@ -10,6 +10,7 @@ import { notificationsService } from "./modules/notifications/service";
 import { pointsService } from "./modules/points/service";
 import { securityService } from "./modules/security/service";
 import { staffService } from "./modules/staff/service";
+import { weatherService } from "./modules/weather/service";
 
 // Tâches planifiées dans PostgreSQL (schéma « pgboss », créé et mis à jour par pg-boss lui-même).
 // Les gestionnaires n'ont pas de logique : ils appellent un service, qui revérifie l'état en base.
@@ -32,6 +33,8 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   // Lot 15 : « événement près de chez toi » (à la publication) et oubli des connexions connues de plus d'un an.
   "event.notify-nearby": (d) => nearbyService.notifyNearby(d.eventId ?? ""),
   "security.purge-known-logins": () => securityService.purgeKnownLogins(),
+  // Lot 28 : prévisions des événements des 7 prochains jours (cron toutes les 3 h), suggestion « Incertain ».
+  "weather.refresh": (d) => weatherService.refresh(d.eventId),
 };
 
 /**
@@ -68,6 +71,7 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("season.rollover", "10 0 1 1 *", null, { tz: "Europe/Paris" });
     await boss.schedule("points.sweep", "5 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("security.purge-known-logins", "20 4 * * 1", null, { tz: "Europe/Paris" });
+    await boss.schedule("weather.refresh", "15 */3 * * *", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {
     async send(name, data, startAfter) {
