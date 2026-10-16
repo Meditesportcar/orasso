@@ -34,6 +34,8 @@ export default function ProFiche() {
         )
       ) : (
         <>
+          {/* Copie en cache d'avant le lot 21 : pas de `visibility`. */}
+          {pro.visibility?.banner ? <Notice>{pro.visibility.banner}</Notice> : null}
           <Plate style={styles.block}>
             <ChipRow>
               <Chip selected={pro.published}>{pro.published ? "Publiée" : "Brouillon"}</Chip>
