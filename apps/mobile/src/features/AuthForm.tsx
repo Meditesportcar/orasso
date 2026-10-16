@@ -22,11 +22,14 @@ export function AuthForm({
   mode,
   onSwitchMode,
   next,
+  onForgotPassword,
 }: {
   mode: "signup" | "signin";
   onSwitchMode: () => void;
   /** Où aller après la connexion (retour exactement là où on était : lien partagé vers un événement). */
   next?: string;
+  /** Ouvre la feuille « Mot de passe oublié » (écran d'auth). */
+  onForgotPassword?: () => void;
 }) {
   const { t } = useTheme();
   const { signIn, signUp, verifyTwoFactor } = useSession();
@@ -167,6 +170,11 @@ export function AuthForm({
         >
           {signup ? "Créer mon compte" : "Me connecter"}
         </Button>
+        {!signup && onForgotPassword ? (
+          <Button variant="plate" icon="inbox" onPress={onForgotPassword} fullWidth>
+            Mot de passe oublié ?
+          </Button>
+        ) : null}
         <Button variant="plate" icon="profile" onPress={onSwitchMode} fullWidth>
           {signup ? "J'ai déjà un compte" : "Créer un compte"}
         </Button>

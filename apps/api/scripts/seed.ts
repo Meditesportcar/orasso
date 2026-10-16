@@ -14,6 +14,7 @@ import * as t from "../src/db/schema";
 import { storageDir } from "../src/lib/storage";
 import { notificationsService } from "../src/modules/notifications/service";
 import { seedBase } from "./seed/base";
+import { seedCasquettes } from "./seed/casquettes";
 import { seedDayJ } from "./seed/day-j";
 import { seedPros } from "./seed/pros";
 import { seedSecurity } from "./seed/security";
@@ -72,6 +73,8 @@ async function main() {
   await seedPros(hash);
   // Lot 15 : compte à confirmer, parrainage.
   await seedSecurity(hash);
+  // Lot 16 : seconde structure de Sarah_66 (feuille « Mes casquettes »).
+  await seedCasquettes();
 }
 
 try {

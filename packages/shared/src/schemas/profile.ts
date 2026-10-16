@@ -53,6 +53,22 @@ export type Membership = {
   status: "invited" | "requested" | "active" | "removed";
 };
 
+/** Les casquettes de l'appli (lot 16) : le passionné, une structure, la fiche pro, le profil prestataire. */
+export const personaKinds = ["fan", "organizer", "pro", "provider"] as const;
+export type PersonaKind = (typeof personaKinds)[number];
+
+/**
+ * Une casquette du compte (`GET /me` → `personas`). `id` = identifiant de la structure, de la fiche pro ou du profil
+ * prestataire (`"fan"` pour le passionné, toujours en premier). `badge` = « quelque chose à traiter » (0 = rien).
+ */
+export type PersonaEntry = {
+  kind: PersonaKind;
+  id: string;
+  label: string;
+  logoUrl: string | null;
+  badge: number;
+};
+
 export type Me = {
   user: { id: string; email: string; emailVerified: boolean; twoFactorEnabled: boolean };
   profile: {
@@ -81,6 +97,10 @@ export type Me = {
   /** Lot 15 : que faire quand la 2FA est exigée — l'activer, ou se reconnecter avec sa clé d'accès (la session doit la prouver). */
   twoFactorHint: "setup" | "passkey_sign_in" | "totp_sign_in" | null;
   counts: { vehicles: number; upcomingApplications: number; unreadNotifications: number };
+  /** Lot 16 : les casquettes du compte, le passionné en premier. */
+  personas: PersonaEntry[];
+  /** Lot 16 : messages non lus de la Boîte (0 jusqu'au lot 18). */
+  unreadInbox: number;
 };
 
 /** Profil vu par un autre utilisateur connecté (compte privé : version réduite). */

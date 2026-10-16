@@ -7,6 +7,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "re
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AuthForm } from "@/features/AuthForm";
+import { ForgotPasswordSheet } from "@/features/ForgotPasswordSheet";
 import { Muted } from "@/ui/Muted";
 
 const { space3, space4 } = tokens.spacing;
@@ -15,6 +16,7 @@ export default function Auth() {
   const { t } = useTheme();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ mode?: string; next?: string }>();
+  const [forgot, setForgot] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup">(params.mode === "signup" ? "signup" : "signin");
   // Seuls les chemins internes sont acceptés comme destination.
   const next = params.next?.startsWith("/") ? params.next : undefined;
@@ -39,10 +41,16 @@ export default function Auth() {
                 ? "Connecte-toi pour retrouver ton garage et tes accès."
                 : "Un pseudo, un e-mail. Les véhicules, tu les ajouteras au moment de candidater."}
             </Muted>
-            <AuthForm mode={mode} next={next} onSwitchMode={() => setMode(mode === "signin" ? "signup" : "signin")} />
+            <AuthForm
+              mode={mode}
+              next={next}
+              onSwitchMode={() => setMode(mode === "signin" ? "signup" : "signin")}
+              onForgotPassword={() => setForgot(true)}
+            />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <ForgotPasswordSheet visible={forgot} onClose={() => setForgot(false)} />
     </Ground>
   );
 }
