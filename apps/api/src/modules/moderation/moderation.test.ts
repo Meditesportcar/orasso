@@ -107,14 +107,14 @@ async function age(u: TestUser, days: number) {
     .where(eq(user.id, u.id));
 }
 
-async function oldUsers(...names: string[]) {
+async function oldUsers<const N extends readonly string[]>(...names: N): Promise<{ [K in keyof N]: TestUser }> {
   const out: TestUser[] = [];
   for (const n of names) {
     const u = await signUp(n);
     await age(u, 30);
     out.push(u);
   }
-  return out;
+  return out as { [K in keyof N]: TestUser };
 }
 
 const reportProfile = (by: TestUser, target: TestUser, mode: Mode = "cookie", reason = "harassment") =>

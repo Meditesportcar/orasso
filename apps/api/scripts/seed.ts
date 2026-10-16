@@ -21,6 +21,7 @@ import { seedDayJ } from "./seed/day-j";
 import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
 import { seedMessaging } from "./seed/messaging";
+import { seedModeration } from "./seed/moderation";
 import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
@@ -99,6 +100,8 @@ async function main() {
   await seedExplorer(hash);
   // Lot 20 : modèles Orasso, annonce et message groupé sur la Nocturne, discussions du staff.
   await seedCommunication();
+  // Lot 32 : modératrice, signalements, suspension automatique contestée.
+  await seedModeration(hash);
 }
 
 try {

@@ -492,6 +492,10 @@ export const moderationService = {
             kind: sanction.kind,
             auto: sanction.auto,
             liftedAt: sanction.liftedAt?.toISOString() ?? null,
+            liftable:
+              !sanction.liftedAt &&
+              isSanctionActive(sanction, at) &&
+              (isSuperAdmin(v) || (sanction.auto && sanction.kind === "suspension_7d")),
           }
         : null,
       can: permissions(v, report),
