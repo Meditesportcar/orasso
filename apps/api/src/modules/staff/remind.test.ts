@@ -15,7 +15,7 @@ import {
 } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { eventStaff, notifications } from "../../db/schema";
+import { eventStaff, notifications, structureMembers } from "../../db/schema";
 import { notificationsService } from "../notifications/service";
 
 afterAll(async () => {
@@ -133,5 +133,22 @@ describe("relance à la demande du staff", () => {
     const dayOf = await req(orga, "POST", `/events/${eventId}/staff/${theo.id}/remind`, "bearer");
     expect(dayOf.status).toBe(409);
     expect(await remindedCount(theo.id)).toBe(0);
+  });
+});
+
+describe("casquette Organisateur : demandes de staff et pastille", () => {
+  it("compte les demandes en attente dans la Boîte et dans la pastille de la casquette (cookie et porteur)", async () => {
+    const marc = await signUp("Marc_11");
+    await db.insert(structureMembers).values({ structureId, userId: marc.id, role: "staff", status: "requested" });
+    for (const mode of ["cookie", "bearer"] as const) {
+      const summary = await req(orga, "GET", `/structures/${structureId}/inbox/summary`, mode);
+      expect(summary.status).toBe(200);
+      expect(summary.json.staffRequests).toBe(1);
+      const me = await req(orga, "GET", "/me", mode);
+      const entry = me.json.personas.find((p: { kind: string }) => p.kind === "organizer");
+      expect(entry.badge).toBe(1);
+    }
+    // Une personne qui n'est pas de la structure n'en voit rien.
+    expect((await req(marc, "GET", `/structures/${structureId}/inbox/summary`)).status).toBe(403);
   });
 });
