@@ -43,10 +43,7 @@ describe("casquettes dans GET /me", () => {
     await addMember(s.id, co.id, "co_organizer", [], true);
     await addMember(s.id, staff.id, "staff", ["scan"]);
     await addMember(s.id, gone.id, "co_organizer");
-    await db
-      .update(structureMembers)
-      .set({ status: "removed" })
-      .where(eq(structureMembers.userId, gone.id));
+    await db.update(structureMembers).set({ status: "removed" }).where(eq(structureMembers.userId, gone.id));
 
     for (const u of [owner, co]) {
       const { json } = await call(u, "GET", "/me");
