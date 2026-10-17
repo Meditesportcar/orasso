@@ -15,7 +15,8 @@
     "keys:generate": "tsx scripts/keys-generate.ts",
     "keys:revoke": "tsx scripts/keys-revoke.ts",
     "pass:verify": "tsx scripts/verify-pass-offline.ts",
-    "events:simulate-settle": "tsx scripts/simulate-settle.ts"
+    "events:simulate-settle": "tsx scripts/simulate-settle.ts",
+    "dev:clock": "tsx scripts/dev-clock.ts"
   },
   "dependencies": {
     "@better-auth/passkey": "1.7.9",

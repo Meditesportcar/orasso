@@ -12,6 +12,7 @@ import type {
 } from "@orasso/shared";
 import { distanceFromEntryLabel, eventDaysLabels, formatDayDate, liveLabels, localDate } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { now as clockNow } from "../lib/clock";
 import "../styles/staff.css";
 
 import { AfterEvent } from "../components/AfterEvent";
@@ -69,7 +70,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!event) throw new Response("Événement introuvable", { status: 404 });
   // Lot 26 : le jour affiché (`?jour=`, sinon aujourd'hui s'il fait partie des jours, sinon tous les jours).
   const asked = new URL(request.url).searchParams.get("jour");
-  const today = localDate(new Date());
+  const today = localDate(clockNow());
   const dayId =
     asked === "tous"
       ? null

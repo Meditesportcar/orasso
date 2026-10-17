@@ -7,9 +7,9 @@ import {
   type StructureSuspensionReason,
 } from "@orasso/shared";
 import { Form, Outlet, useLocation, useParams } from "react-router";
-
 import { TwoFactorNotice } from "../components/TwoFactorNotice";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { now as clockNow } from "../lib/clock";
 import type { Route } from "./+types/orga";
 import "../styles/after-event.css";
 
@@ -33,7 +33,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       const o = organizer.data;
       if (o.verification === "suspended") badge = { kind: "suspended", reason: o.suspendedReason };
       else if (o.verification === "verified" && o.badgeExpiresAt) {
-        const days = badgeDaysLeft(new Date(o.badgeExpiresAt), new Date());
+        const days = badgeDaysLeft(new Date(o.badgeExpiresAt), clockNow());
         if (days <= 30) badge = { kind: "expiring", days };
       }
     }

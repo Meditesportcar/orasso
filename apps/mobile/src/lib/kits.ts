@@ -1,9 +1,10 @@
 // Kit « jour J » : tout ce qu'il faut pour entrer sans réseau (QR d'inscription signé, infos de l'événement, zone,
 // consignes, dernière météo connue). Enregistré dès que la candidature est retenue, rafraîchi à chaque ouverture
 // de l'appli avec du réseau (donc la veille aussi), effacé à J+1 ou quand la place n'est plus valide.
-import type { EventOutlook, EventWeather, MyApplication } from "@orasso/shared";
 
+import type { EventOutlook, EventWeather, MyApplication } from "@orasso/shared";
 import { api } from "./api";
+import { now as clockNow } from "./clock";
 import { jourJClosesAt } from "./jourj";
 import { kvDel, kvGetJson, kvSetJson } from "./kv";
 import { mergeWeather } from "./weather";
@@ -133,7 +134,7 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
  */
 export async function syncKits(apps: MyApplication[], pseudo: string): Promise<void> {
   // Une place retenue dont le mode jour J est fermé (J+1 passé) n'a plus besoin de kit.
-  const now = new Date();
+  const now = clockNow();
   const accepted = apps.filter((a) => a.status === "accepted" && now < jourJClosesAt(a.event));
   const acceptedIds = new Set(accepted.map((a) => a.id));
   const known = (await kvGetJson<string[]>(INDEX_KEY)) ?? [];
@@ -141,7 +142,7 @@ export async function syncKits(apps: MyApplication[], pseudo: string): Promise<v
     if (acceptedIds.has(id)) continue;
     const kit = await loadKit(id);
     // Place perdue (désistement, refus, annulation) ou événement terminé : le QR n'a plus de raison d'être ici.
-    if (!kit || apps.some((a) => a.id === id) || new Date() >= jourJClosesAt(kit.event, kit.event.timezone)) {
+    if (!kit || apps.some((a) => a.id === id) || clockNow() >= jourJClosesAt(kit.event, kit.event.timezone)) {
       await dropKit(id);
     }
   }

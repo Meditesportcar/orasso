@@ -1,8 +1,10 @@
 import { Ground, Monogram, ThemeScope } from "@orasso/design-system/web";
+import { devClockLabels } from "@orasso/shared";
 import { Outlet, redirect, useLocation } from "react-router";
 
 import { TwoFactorNotice } from "../components/TwoFactorNotice";
 import { requireModeration } from "../lib/admin.server";
+import { devClockEnabled } from "../lib/clock.server";
 import type { Route } from "./+types/admin";
 
 // Administration (super admin seulement), Sable imposé comme les autres outils de gestion. Une page = une route
@@ -26,7 +28,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const moderator = me.profile.platformRole === "moderator";
   const path = new URL(request.url).pathname.replace(/\/+$/, "");
   if (moderator && path !== "/admin/signalements") throw redirect("/admin/signalements");
-  return { pseudo: me.profile.pseudo, twoFactorHint: me.twoFactorHint, moderator };
+  // Lot 34a : le lien de l'horloge simulée n'existe que si DEV_CLOCK est posée (et pour le super admin).
+  return {
+    pseudo: me.profile.pseudo,
+    twoFactorHint: me.twoFactorHint,
+    moderator,
+    devClock: !moderator && devClockEnabled(),
+  };
 }
 
 export function meta() {
@@ -34,8 +42,11 @@ export function meta() {
 }
 
 export default function AdminLayout({ loaderData }: Route.ComponentProps) {
-  const { pseudo, twoFactorHint, moderator } = loaderData;
+  const { pseudo, twoFactorHint, moderator, devClock } = loaderData;
   const { pathname } = useLocation();
+  const sections: AdminSection[] = devClock
+    ? [...adminSections, { href: "/admin/horloge", label: devClockLabels.navLink }]
+    : adminSections;
   return (
     <ThemeScope theme="sable">
       <Ground variant="site" fixed>
@@ -47,7 +58,7 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
             <div className="orga__who">
               <span className="o-t-label">{moderator ? "Modération" : "Administration"}</span>
             </div>
-            {adminSections
+            {sections
               .filter((s) => !moderator || s.moderator)
               .map((s) => {
                 const on =

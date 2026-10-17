@@ -2,6 +2,7 @@
 // deux véhicules. Chaque QR est vérifié sur le téléphone (signature Ed25519, liste locale) puis le résultat couvre
 // l'écran 1 s, coloré, sonore et vibrant (OK + zone moutarde / déjà entré crème / refusé rouge), et la caméra revient
 // seule. Boutons toujours visibles en bas : plaque ou pseudo, express, sans scan, liste, incident, alerte.
+
 import {
   AppBar,
   Button,
@@ -27,6 +28,7 @@ import { ExpressSheet } from "@/features/staff/ExpressSheet";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock, pointedResult, resultOf, resultProps, type ShownResult, vibrate } from "@/features/staff/result";
 import { SearchSheet } from "@/features/staff/SearchSheet";
+import { now as clockNow } from "@/lib/clock";
 import { ed25519Verify } from "@/lib/staff/crypto";
 import { counters, decideLocal, ScanGate } from "@/lib/staff/model";
 import { clearWriteError, getWriteError, newId, trustedKeysNow } from "@/lib/staff/runtime";
@@ -91,7 +93,7 @@ export default function Scan() {
       const detectedAt = performance.now();
       if (!state || !userId) return;
       if (!gate.current.accept(payload, Date.now())) return;
-      const decision = decideLocal(state, payload, trustedKeysNow() ?? new Map(), ed25519Verify, new Date());
+      const decision = decideLocal(state, payload, trustedKeysNow() ?? new Map(), ed25519Verify, clockNow());
       // Un panneau « autre jour » laissé sans réponse compte comme refusé.
       const previousDay = otherDayRef.current;
       if (previousDay) {

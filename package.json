@@ -10,6 +10,7 @@
     "dev:api": "pnpm --filter @orasso/api dev",
     "dev:web": "pnpm --filter @orasso/web dev",
     "dev:mobile": "pnpm --filter @orasso/mobile dev",
+    "dev:clock": "pnpm --filter @orasso/api dev:clock",
     "db:start": "node scripts/db.mjs start",
     "db:stop": "node scripts/db.mjs stop",
     "db:status": "node scripts/db.mjs status",

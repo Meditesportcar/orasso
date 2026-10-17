@@ -25,7 +25,6 @@ import {
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-router";
-
 import { Countdown } from "../components/Countdown";
 import { CrewConfirm } from "../components/Crews";
 import { dayLabel, hourOf } from "../components/EventDays";
@@ -34,6 +33,7 @@ import { Qr } from "../components/Qr";
 import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { nowMs } from "../lib/clock";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
 import { formatDateTime, formatWhen } from "../lib/format";
 import { invitationAction, isInvitationIntent, myActiveVehicles } from "../lib/invitations.server";
@@ -72,8 +72,8 @@ export async function loader({ request }: Route.LoaderArgs) {
         (a) =>
           !past &&
           a.status === "accepted" &&
-          new Date(a.event.startsAt).getTime() - Date.now() <= 48 * 3_600_000 &&
-          new Date(a.event.endsAt).getTime() > Date.now(),
+          new Date(a.event.startsAt).getTime() - nowMs() <= 48 * 3_600_000 &&
+          new Date(a.event.endsAt).getTime() > nowMs(),
       )
       .map(async (a) => {
         const res = await api<EventWeather | null>(
@@ -201,7 +201,7 @@ function ApplicationCard({
   const badge = badgeFor(app);
   const confirmWithdraw = (e: React.FormEvent<HTMLFormElement>) => {
     const message =
-      new Date(app.withdrawDeadline).getTime() > Date.now()
+      new Date(app.withdrawDeadline).getTime() > nowMs()
         ? "Te désister ? Sans pénalité jusqu'au verrouillage."
         : "Te désister maintenant ? Après le verrouillage, un malus sera appliqué à J+2.";
     if (!window.confirm(message)) e.preventDefault();
@@ -347,7 +347,7 @@ function ApplicationCard({
             Me désister
           </Button>
           <p className="o-t-caption s-muted">
-            {new Date(app.withdrawDeadline).getTime() > Date.now()
+            {new Date(app.withdrawDeadline).getTime() > nowMs()
               ? `Sans pénalité jusqu'au ${formatDateTime(app.withdrawDeadline)}.`
               : "Inscriptions verrouillées : un désistement entraîne un malus."}
           </p>

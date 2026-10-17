@@ -536,6 +536,16 @@ Code : `apps/web/app/` (routes, `layouts/`, `components/`, `lib/`, `styles/site.
 - **Anonymisation** (`anonymizeStaffForDeletedAccount`, un appel dans `account/service.ts`) : positions d'alerte effacées, auteur des alertes, incidents, lectures de billets et touchers du compteur détaché, `tickets.used_by` vidé ; demandes et invitations tombent avec les appartenances (déjà passées à `removed`).
 - **Seed** (`scripts/seed/staff.ts`, vrais services) : boutique activée sur le Salon Argelès (billets gratuits ouverts), Boutique_66 (`boutique@orasso.local`, rôle boutique), deux billets chacun pour Kenji et Léa, demande de staff de Pilote_001 en attente de Damien.
 
+## Lot 34a — Horloge simulée (développement seulement)
+
+- **Variable et garde-fou** (17/10/2026) : `DEV_CLOCK=on` ; `env.ts` refuse de démarrer avec elle en production (comme `DEV_SKIP_2FA`). Sans elle : routes 404 (garde évaluée à chaque requête, ce qui permet de la tester), aucun en-tête, lien et page absents. Conséquence à noter : dev.orasso.fr tourne en `NODE_ENV=production`, donc la variable y est refusée ; la simulation en ligne avec Damien demande un autre signal (ex. `ORASSO_ENV=dev`), à décider par le coordinateur. `deploy/compose.yml` passe `DEV_CLOCK` au site (vide par défaut).
+- **Décalage** : table `dev_clock` (une ligne, `offset_ms >= 0` par contrainte), migration `0039_dev-clock` (aucun DROP ; à renuméroter à la fusion avec `0039_admin`). Relu toutes les 2 s par l'API ; le script attend 2,5 s avant de libérer les tâches pg-boss pour qu'elles s'exécutent à la bonne heure.
+- **Jalons** : `h-2` = verrouillage (`lockAt`), `start`, `end`, `j+2` = `settleAt`, `j+8` = `reportRefreshAt` ; l'instant visé est le jalon exact (l'heure réelle continue d'avancer, donc il est franchi aussitôt). Un jalon déjà passé est refusé en 409 (pas de recul).
+- **Droits** : `requirePlatformRole("super_admin")` comme le reste de l'administration, donc `DEV_SKIP_2FA` (local) la contourne, jamais en production. Seuls les changements (avance, remise à zéro) sont tracés ; la lecture ne l'est pas (la page se rafraîchit souvent).
+- **Excluent des balayages** : `weather.refresh` (réseau), `season.rollover`, `security.purge-known-logins`, `uploads.purge`. `staff.remind` est inclus (une relance par personne et par jour).
+- **Remise à zéro** : ne défait rien (points réglés, tâches exécutées restent).
+- **Clients** : sans l'en-tête, décalage 0 ; une réponse sans l'en-tête (hors 5xx) ramène à 0. Laissés sur l'heure de l'appareil : anti-rebond des scans (`REPEAT_MS`), gestes du tri (`Deck`), heures « aujourd'hui / hier » des messages (horodatages réels du serveur). Site : le loader racine lit `/health` seulement si `DEV_CLOCK=on` côté site.
+- **À revoir avec Damien** : aucun point métier ; limite connue, les horodatages techniques (`created_at`) restent à l'heure système, donc une ligne créée après une avance de plusieurs jours paraît plus ancienne qu'elle n'est (ex. confirmation de venue en crew à 72 h).
 ## À revoir avec Damien
 
 ### Staff et boutique (lot 24)

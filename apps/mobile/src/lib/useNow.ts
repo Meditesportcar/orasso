@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 
-/** L'heure de l'appareil, remise à jour à intervalle régulier (compte à rebours, délais d'une offre). */
+import { now as clockNow, useClockOffset } from "./clock";
+
+/** L'heure d'Orasso (heure de l'appareil, alignée sur le serveur en simulation), remise à jour à intervalle régulier. */
 export function useNow(intervalMs = 30_000): Date {
-  const [now, setNow] = useState(() => new Date());
+  const offset = useClockOffset();
+  const [now, setNow] = useState(() => clockNow());
+  // biome-ignore lint/correctness/useExhaustiveDependencies: le décalage change l'heure affichée sans attendre le tick.
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), intervalMs);
+    setNow(clockNow());
+    const timer = setInterval(() => setNow(clockNow()), intervalMs);
     return () => clearInterval(timer);
-  }, [intervalMs]);
+  }, [intervalMs, offset]);
   return now;
 }

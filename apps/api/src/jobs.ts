@@ -28,7 +28,7 @@ import { weatherService } from "./modules/weather/service";
 // Les gestionnaires n'ont pas de logique : ils appellent un service, qui revérifie l'état en base.
 type Payload = Record<string, string>;
 
-const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
+export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "waitlist.offer-expire": (d) => applicationsService.expireOffer(d.applicationId ?? "", d.offeredAt ?? ""),
   "event.lock": (d) => eventJobs.lock({ eventId: d.eventId ?? "" }),
   "event.preview-open": (d) => eventJobs.previewOpen({ eventId: d.eventId ?? "", at: d.at ?? "" }),

@@ -1,0 +1,65 @@
+/* Horloge simulée (lot 34a, développement seulement) : bandeau visible partout et page /admin/horloge. Jetons seulement. */
+.clock-banner {
+  position: fixed;
+  inset-block-end: var(--space-3);
+  inset-inline: var(--space-4);
+  z-index: 1000;
+  margin: 0 auto;
+  inline-size: fit-content;
+  max-inline-size: calc(100vw - 2 * var(--space-4));
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px dashed var(--plate-line);
+  border-radius: var(--radius-md);
+  background: var(--plate);
+  color: var(--plate-ink);
+  box-shadow: var(--shadow-card);
+  font-weight: 800;
+  pointer-events: none;
+}
+.clock-banner svg {
+  flex: none;
+}
+
+.clock-page__now {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+.clock-page__time {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.clock-page__milestones {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.clock-page__milestone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.clock-page__milestone[data-reached="true"] {
+  border-style: dashed;
+  color: var(--ink-muted);
+}
+.clock-page__sweeps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

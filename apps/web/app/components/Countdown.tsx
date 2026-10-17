@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { nowMs } from "../lib/clock";
 
 import { formatRemaining } from "../lib/format";
 
@@ -6,8 +7,8 @@ import { formatRemaining } from "../lib/format";
 export function Countdown({ until }: { until: string }) {
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    setNow(nowMs());
+    const timer = setInterval(() => setNow(nowMs()), 1000);
     return () => clearInterval(timer);
   }, []);
   return (

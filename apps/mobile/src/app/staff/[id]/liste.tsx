@@ -1,15 +1,16 @@
 // Liste du staff (docs/02, prototype « Liste · Salon Argelès ») : participants retenus, recherche « pseudo, véhicule ou
 // plaque », filtres Tous / Arrivés / Attendus / Sans scan, « Pointer », pointage rapide par plaque après coup (« Tape
 // les 3 premiers caractères de la plaque, valide, suivant »), coordonnées pour le super staff seulement. Hors ligne.
+
 import { AppBar, Button, Chip, Ground, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { type AccessListEntry, eventDaysLabels, formatDayDate } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { pointEntry } from "@/features/staff/actions";
 import { clock } from "@/features/staff/result";
+import { now as clockNow } from "@/lib/clock";
 import {
   arrivedOn,
   checkedInAt,
@@ -64,10 +65,10 @@ export default function StaffList() {
         : [...state.entries.values()].sort((a, b) => a.pseudo.localeCompare(b.pseudo, "fr"));
     return base.filter((e) => {
       if (e.status !== "valid") return false;
-      if (multiDay && today && !expectedOn(state.meta, e, new Date())) return false;
+      if (multiDay && today && !expectedOn(state.meta, e, clockNow())) return false;
       const inside = Boolean(checkedInAt(state, e));
       // Lot 26 : « Arrivés » / « Attendus » du jour (un « tout l'événement » entré un jour précédent est attendu).
-      const arrived = arrivedOn(state, e, new Date());
+      const arrived = arrivedOn(state, e, clockNow());
       if (filter === "in") return arrived;
       if (filter === "out") return !arrived;
       if (filter === "noscan") return inside && methodOf(state, e) !== "scan";

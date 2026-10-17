@@ -1,11 +1,12 @@
 // Client HTTP de l'API Orasso : jeton de session en `Authorization: Bearer` (plugin `bearer` de Better Auth),
 // erreurs de l'API (`{"error":{"code","message","details"}}`) et pannes réseau rendues sous une même forme.
-import { authErrorFallback, authErrorLabels, type ErrorCode } from "@orasso/shared";
+import { authErrorFallback, authErrorLabels, CLOCK_OFFSET_HEADER, type ErrorCode } from "@orasso/shared";
 import { Platform } from "react-native";
 
 import { apiUrl } from "@/api";
 
 import { authOriginHeader } from "./api/cookies";
+import { applyClockHeader } from "./clock";
 
 let sessionToken: string | null = null;
 export const setSessionToken = (token: string | null) => {
@@ -84,6 +85,9 @@ export async function requestWithHeaders<T>(
   } finally {
     clearTimeout(timer);
   }
+  // Horloge simulée (lot 34a) : l'API annonce son décalage en développement ; sans l'en-tête, il retombe à 0.
+  // Une réponse d'erreur du serveur frontal (5xx, sans en-tête) ne dit rien de l'horloge.
+  if (response.status < 500) applyClockHeader(response.headers.get(CLOCK_OFFSET_HEADER));
   const text = await response.text();
   let json: unknown = null;
   try {
