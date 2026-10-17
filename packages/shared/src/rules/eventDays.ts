@@ -45,7 +45,10 @@ export function dayFor<T extends Pick<EventDayLike, "dayDate">>(
 }
 
 /** Capacité d'un jour : la sienne si l'organisateur l'a fixée, sinon celle de l'événement (`null` = sans limite). */
-export function capacityFor(event: { capacity: number | null }, day: { capacity: number | null } | null): number | null {
+export function capacityFor(
+  event: { capacity: number | null },
+  day: { capacity: number | null } | null,
+): number | null {
   return day?.capacity ?? event.capacity;
 }
 

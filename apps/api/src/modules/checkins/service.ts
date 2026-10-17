@@ -582,11 +582,7 @@ export const checkinsService = {
   },
 
   /** Liste des retenus et de leur entrée (« Tous / Arrivés / Attendus », filtre « Sans scan » par méthode). */
-  async list(
-    v: Viewer,
-    eventId: string,
-    q: { method?: CheckinMethod; zoneId?: string; q?: string; dayId?: string },
-  ) {
+  async list(v: Viewer, eventId: string, q: { method?: CheckinMethod; zoneId?: string; q?: string; dayId?: string }) {
     const { event, access } = await staffEvent(v, eventId);
     assertStaffWindow(event, access);
     const filters: (SQL | undefined)[] = [];

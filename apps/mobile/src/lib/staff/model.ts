@@ -644,7 +644,11 @@ export type ZoneCount = {
  * Lot 26 : une entrée est attendue ce jour-là — toujours pour un événement d'un jour ; sinon tout l'événement, ou le
  * jour de sa candidature (date locale de Paris).
  */
-export function expectedOn(meta: Pick<StaffEventMeta, "days">, entry: Pick<AccessListEntry, "dayDate">, now: Date): boolean {
+export function expectedOn(
+  meta: Pick<StaffEventMeta, "days">,
+  entry: Pick<AccessListEntry, "dayDate">,
+  now: Date,
+): boolean {
   if ((meta.days?.length ?? 0) < 2) return true;
   return !entry.dayDate || entry.dayDate === localDate(now);
 }

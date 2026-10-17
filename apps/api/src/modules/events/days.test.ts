@@ -211,7 +211,9 @@ describe("route des jours : validation et retour à un jour", () => {
       where: and(eq(notifications.userId, k.u.id), eq(notifications.type, "event_updated")),
     });
     expect(notes).toHaveLength(1);
-    expect(clock.jobs.jobs.slice(before).filter((j) => j.name === "event.reminder-eve" && j.data.dayId)).toHaveLength(3);
+    expect(clock.jobs.jobs.slice(before).filter((j) => j.name === "event.reminder-eve" && j.data.dayId)).toHaveLength(
+      3,
+    );
     clock.set(paris(3, 14, 10));
     expect((await req(owner, "PUT", `/events/${event.id}/days`, { days: threeDays() })).status).toBe(423);
   });

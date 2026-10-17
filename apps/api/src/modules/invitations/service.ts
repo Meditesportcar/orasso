@@ -411,7 +411,10 @@ async function receivedView(rows: InvitationRow[], ex: Executor = db): Promise<R
       ),
     );
   const byEvent = new Map(evRows.map((r) => [r.e.id, r]));
-  const multiDay = await daysRepo.manyMultiDay(evRows.map((r) => r.e.id), ex);
+  const multiDay = await daysRepo.manyMultiDay(
+    evRows.map((r) => r.e.id),
+    ex,
+  );
   const labels = await vehicleLabels(
     rows.flatMap((r) => (r.vehicleId ? [r.vehicleId] : [])),
     ex,

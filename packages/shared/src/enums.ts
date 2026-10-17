@@ -74,7 +74,7 @@ export type EventAdmission = (typeof eventAdmissions)[number];
 export const dayAccesses = ["whole", "per_day", "both"] as const;
 export type DayAccess = (typeof dayAccesses)[number];
 
-export const eventPublicAccesses =["free", "free_reservation", "paid_orasso", "paid_external", "closed"] as const;
+export const eventPublicAccesses = ["free", "free_reservation", "paid_orasso", "paid_external", "closed"] as const;
 export type EventPublicAccess = (typeof eventPublicAccesses)[number];
 
 export const eventStatuses = ["draft", "published", "cancelled"] as const;

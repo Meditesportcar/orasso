@@ -220,7 +220,10 @@ describe("événement sur plusieurs jours (lot 26)", () => {
 
     // Décision de scan hors ligne avec la seule liste synchronisée.
     const keys = new Map<number, Uint8Array>(
-      sync.keys.map((k: { kid: number; publicKey: string }) => [k.kid, new Uint8Array(Buffer.from(k.publicKey, "base64url"))]),
+      sync.keys.map((k: { kid: number; publicKey: string }) => [
+        k.kid,
+        new Uint8Array(Buffer.from(k.publicKey, "base64url")),
+      ]),
     );
     const payloadOf = async (p: { u: TestUser; appId: string }) =>
       (await call(p.u, "GET", `/applications/${p.appId}/pass`)).json.payload as string;
@@ -231,7 +234,11 @@ describe("événement sur plusieurs jours (lot 26)", () => {
       decideScan(payload, { eventNo: sync.event.eventNo, keys, verify, findEntry: (id) => list.get(id), now });
     const dPayload = await payloadOf(D);
     const aPayload = await payloadOf(A);
-    expect(scan(dPayload, paris(3, 14, 10))).toMatchObject({ decision: "refused", reason: "other_day", dayDate: "2027-03-15" });
+    expect(scan(dPayload, paris(3, 14, 10))).toMatchObject({
+      decision: "refused",
+      reason: "other_day",
+      dayDate: "2027-03-15",
+    });
     expect(scan(dPayload, paris(3, 15, 10))).toMatchObject({ decision: "ok" });
     expect(scan(aPayload, paris(3, 14, 10))).toMatchObject({ decision: "ok" });
 
@@ -242,8 +249,20 @@ describe("événement sur plusieurs jours (lot 26)", () => {
     const day1 = await call(julie, "POST", `/events/${eventId}/scans`, {
       deviceId: dev!.id,
       items: [
-        { kind: "scan", id: randomUUID(), passId: passOf(A.appId), decision: "ok", scannedAt: paris(3, 14, 10).toISOString() },
-        { kind: "scan", id: randomUUID(), passId: passOf(C.appId), decision: "ok", scannedAt: paris(3, 14, 10, 2).toISOString() },
+        {
+          kind: "scan",
+          id: randomUUID(),
+          passId: passOf(A.appId),
+          decision: "ok",
+          scannedAt: paris(3, 14, 10).toISOString(),
+        },
+        {
+          kind: "scan",
+          id: randomUUID(),
+          passId: passOf(C.appId),
+          decision: "ok",
+          scannedAt: paris(3, 14, 10, 2).toISOString(),
+        },
       ],
     });
     expect(day1.json.results.map((r: { result: string }) => r.result)).toEqual(["accepted", "accepted"]);
@@ -251,7 +270,9 @@ describe("événement sur plusieurs jours (lot 26)", () => {
     // Jour 2 : la liste resynchronisée montre A déjà entré → « déjà entré » (S29), le staff laisse passer.
     clock.set(paris(3, 15, 9, 30));
     const sync2 = (await call(julie, "GET", `/events/${eventId}/staff/sync`)).json;
-    const entries2 = new Map<string, LocalAccessEntry>(sync2.entries.map((e: LocalAccessEntry) => [e.passId, e] as const));
+    const entries2 = new Map<string, LocalAccessEntry>(
+      sync2.entries.map((e: LocalAccessEntry) => [e.passId, e] as const),
+    );
     expect(scan(aPayload, paris(3, 15, 10), entries2)).toMatchObject({ decision: "already" });
     // Direct du jour 2 : attendus A + D ; A pas encore lu ce jour-là (son entrée date du jour 1).
     const live0 = (await call(damien, "GET", `/events/${eventId}/live?dayId=${d2.id}`)).json;
@@ -260,8 +281,20 @@ describe("événement sur plusieurs jours (lot 26)", () => {
     const day2 = await call(julie, "POST", `/events/${eventId}/scans`, {
       deviceId: dev!.id,
       items: [
-        { kind: "scan", id: randomUUID(), passId: passOf(D.appId), decision: "ok", scannedAt: paris(3, 15, 10).toISOString() },
-        { kind: "scan", id: randomUUID(), passId: passOf(A.appId), decision: "already", scannedAt: paris(3, 15, 10, 1).toISOString() },
+        {
+          kind: "scan",
+          id: randomUUID(),
+          passId: passOf(D.appId),
+          decision: "ok",
+          scannedAt: paris(3, 15, 10).toISOString(),
+        },
+        {
+          kind: "scan",
+          id: randomUUID(),
+          passId: passOf(A.appId),
+          decision: "already",
+          scannedAt: paris(3, 15, 10, 1).toISOString(),
+        },
       ],
     });
     expect(day2.json.results.map((r: { result: string }) => r.result)).toEqual(["accepted", "duplicate_same_device"]);

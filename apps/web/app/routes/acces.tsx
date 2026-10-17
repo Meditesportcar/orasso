@@ -26,8 +26,8 @@ import { useState } from "react";
 import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-router";
 
 import { Countdown } from "../components/Countdown";
-import { dayLabel, hourOf } from "../components/EventDays";
 import { CrewConfirm } from "../components/Crews";
+import { dayLabel, hourOf } from "../components/EventDays";
 import { ReceivedInvitationCard } from "../components/Invitations";
 import { Qr } from "../components/Qr";
 import { Stars } from "../components/Stars";

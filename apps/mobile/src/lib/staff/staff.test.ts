@@ -29,8 +29,8 @@ import {
   checkinAction,
   counters,
   decideLocal,
-  expectedOn,
   dueBatches,
+  expectedOn,
   isPurgeDue,
   mergeSync,
   type PendingAction,
@@ -413,7 +413,13 @@ describe("événement sur plusieurs jours", () => {
   it("accepté quand même : une entrée locale (override) rattachée à la candidature", () => {
     const s = multi();
     const p2 = passPayload(server, uuid(2));
-    const { item, checkin } = scanAction({ decision: "override", passId: uuid(2) }, p2, uuid(600), day1, s.entries.get(uuid(2)));
+    const { item, checkin } = scanAction(
+      { decision: "override", passId: uuid(2) },
+      p2,
+      uuid(600),
+      day1,
+      s.entries.get(uuid(2)),
+    );
     expect(item).toMatchObject({ decision: "override", passId: uuid(2) });
     expect(checkin).toMatchObject({ applicationId: uuid(1002), method: "override" });
   });

@@ -193,7 +193,12 @@ describe("décision de scan hors ligne (decideScan)", () => {
     });
     it("candidature d'un jour lue un autre jour : « Autre jour », avec l'entrée pour accepter quand même", () => {
       const d = decideScan(makePayload(), at(entry({ dayDate: "2027-03-15" }), day1));
-      expect(d).toMatchObject({ decision: "refused", reason: "other_day", dayDate: "2027-03-15", entry: { pseudo: "Kenji_66" } });
+      expect(d).toMatchObject({
+        decision: "refused",
+        reason: "other_day",
+        dayDate: "2027-03-15",
+        entry: { pseudo: "Kenji_66" },
+      });
     });
     it("le jour se lit en heure de Paris (23:30 UTC le 14 = 00:30 le 15 à Paris)", () => {
       const d = decideScan(makePayload(), at(entry({ dayDate: "2027-03-15" }), new Date("2027-03-14T23:30:00.000Z")));
@@ -205,7 +210,10 @@ describe("décision de scan hors ligne (decideScan)", () => {
       expect(decideScan(makePayload(), at(later, day2))).toMatchObject({ decision: "already" });
     });
     it("un pass révoqué reste « Désisté » avant le contrôle du jour", () => {
-      const d = decideScan(makePayload(), at(entry({ dayDate: "2027-03-15", status: "revoked", revokedReason: "withdrawn" }), day1));
+      const d = decideScan(
+        makePayload(),
+        at(entry({ dayDate: "2027-03-15", status: "revoked", revokedReason: "withdrawn" }), day1),
+      );
       expect(d).toMatchObject({ decision: "refused", reason: "withdrawn" });
     });
     it("sans heure fournie (ancien appel), aucun contrôle du jour", () => {

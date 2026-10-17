@@ -126,8 +126,7 @@ export default function JourJ() {
   // QR revient chaque jour (une entrée d'un jour précédent ne ferme pas le mode : « déjà entré » au scan, S29).
   const span = kit.day ?? kit.event;
   const entered = Boolean(
-    kit.checkedInAt &&
-      (!kit.multiDay || kit.day || localDate(new Date(kit.checkedInAt), tz) === localDate(now, tz)),
+    kit.checkedInAt && (!kit.multiDay || kit.day || localDate(new Date(kit.checkedInAt), tz) === localDate(now, tz)),
   );
   const state = jourJState(span, now, entered, tz);
   const untilStart = new Date(span.startsAt).getTime() - now.getTime();

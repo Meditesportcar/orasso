@@ -8,12 +8,12 @@ import {
   dayAccesses,
   dayAccessLabels,
   defaultEventRules,
-  eventDaysLabels,
   type EventAdmission,
   type EventFormat,
   type EventOrganizer,
   type EventPublicAccess,
   eventAdmissionLabels,
+  eventDaysLabels,
   eventFormatLabels,
   eventFormats,
   eventPublicAccessLabels,
@@ -223,9 +223,11 @@ function validate(step: StepId, d: Draft): string | null {
       if (d.title.trim().length < 3) return "Donne un titre d'au moins 3 caractères.";
       if (d.multiDay) {
         if (d.days.length < 2) return "Un événement sur plusieurs jours a au moins deux jours.";
-        if (d.days.some((x) => !x.date || !x.startTime || !x.endTime)) return "Indique la date et les horaires de chaque jour.";
+        if (d.days.some((x) => !x.date || !x.startTime || !x.endTime))
+          return "Indique la date et les horaires de chaque jour.";
         if (new Set(d.days.map((x) => x.date)).size !== d.days.length) return "Deux jours ont la même date.";
-        if (d.days.some((x) => x.capacity !== "" && !(Number(x.capacity) > 0))) return "Places d'un jour : un nombre supérieur à zéro, ou vide.";
+        if (d.days.some((x) => x.capacity !== "" && !(Number(x.capacity) > 0)))
+          return "Places d'un jour : un nombre supérieur à zéro, ou vide.";
         return null;
       }
       const start = fromInput(d.startsAt);
@@ -1155,7 +1157,12 @@ function Recap({ d }: { d: Draft }) {
     ["Format", eventFormatLabels[d.format]],
     ["Titre", d.title || "—"],
     d.multiDay
-      ? [eventDaysLabels.days, `${sortedDays(d).map((x) => `${x.date} ${x.startTime}–${x.endTime}`).join(", ")} · ${dayAccessLabels[d.dayAccess]}`]
+      ? [
+          eventDaysLabels.days,
+          `${sortedDays(d)
+            .map((x) => `${x.date} ${x.startTime}–${x.endTime}`)
+            .join(", ")} · ${dayAccessLabels[d.dayAccess]}`,
+        ]
       : ["Début", d.startsAt ? d.startsAt.replace("T", " ") : "—"],
     ["Adresse", [d.addressLine, d.postalCode, d.city].filter(Boolean).join(" ") || "—"],
     ["Véhicules", d.vehicleTypes.map((t) => vehicleTypeLabels[t]).join(", ")],

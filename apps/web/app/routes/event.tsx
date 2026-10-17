@@ -22,12 +22,11 @@ import {
   vehicleTypeLabels,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
-
+import { dayLabel, EventDays } from "../components/EventDays";
 import { EventFeed } from "../components/EventFeed";
 import { EventMap } from "../components/EventMap";
 import { ContactOrganizer } from "../components/Messaging";
 import { ReportDialog } from "../components/ReportDialog";
-import { dayLabel, EventDays } from "../components/EventDays";
 import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
@@ -430,7 +429,9 @@ function EventPage({
         <EventDays
           days={event.days}
           dayAccess={event.dayAccess}
-          candidateHref={connected && state.kind === "open" && event.admission !== "invite_only" ? candidateHref : undefined}
+          candidateHref={
+            connected && state.kind === "open" && event.admission !== "invite_only" ? candidateHref : undefined
+          }
         />
 
         <section className="s-section s-section--first">
@@ -573,8 +574,16 @@ function EventPage({
                 event.dayAccess !== "whole" &&
                 state.kind === "open" &&
                 event.admission !== "invite_only" &&
-                !mine.some((a) => a.eventDayId === null && ["pending", "accepted", "waitlisted", "offered"].includes(a.status)) && (
-                  <Button variant="secondary" icon="calendar" href={candidateHref} fullWidth data-testid="apply-other-day">
+                !mine.some(
+                  (a) => a.eventDayId === null && ["pending", "accepted", "waitlisted", "offered"].includes(a.status),
+                ) && (
+                  <Button
+                    variant="secondary"
+                    icon="calendar"
+                    href={candidateHref}
+                    fullWidth
+                    data-testid="apply-other-day"
+                  >
                     Candidater pour un autre jour
                   </Button>
                 )}

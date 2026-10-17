@@ -141,7 +141,11 @@ export default function StaffList() {
                   <Text variant="meta" color={inside ? c.accent : c.plateMuted}>
                     {[
                       item.zoneCode ? `Zone ${item.zoneCode}` : "Sans zone",
-                      multiDay ? (item.dayDate ? formatDayDate(item.dayDate, { weekday: false }) : eventDaysLabels.wholeEvent) : null,
+                      multiDay
+                        ? item.dayDate
+                          ? formatDayDate(item.dayDate, { weekday: false })
+                          : eventDaysLabels.wholeEvent
+                        : null,
                       item.plateHint ? `${item.plateHint}-…` : null,
                       inside ? `entré ${clock(inside)}` : null,
                     ]

@@ -16,14 +16,14 @@ import {
   applicationStatusLabels,
   crewLabels,
   dayAccessLabels,
-  eventDaysLabels,
-  formatDayDate,
   type EventPublic,
   type EventReviews,
   eventAcceptsVendorType,
   eventAdmissionLabels,
+  eventDaysLabels,
   eventFormatLabels,
   eventOutlookLabels,
+  formatDayDate,
   instagramHandle,
   invitationLabels,
   previewSummary,
@@ -267,7 +267,11 @@ export default function EventPage() {
           {e.days.map((d) => (
             <Text key={d.id} variant="body" color={t.color.plateInk}>
               {formatDayDate(d.date)} · {formatHour(d.startsAt)} – {formatHour(d.endsAt)}
-              {d.remaining === null ? "" : d.remaining === 0 ? ` · ${eventDaysLabels.dayFull}` : ` · ${d.remaining} places`}
+              {d.remaining === null
+                ? ""
+                : d.remaining === 0
+                  ? ` · ${eventDaysLabels.dayFull}`
+                  : ` · ${d.remaining} places`}
             </Text>
           ))}
         </Plate>

@@ -106,9 +106,12 @@ export const eventDayInputSchema = z.object({
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date au format AAAA-MM-JJ")
-    .refine((s) => !Number.isNaN(Date.parse(`${s}T12:00:00Z`)) && new Date(`${s}T12:00:00Z`).toISOString().startsWith(s), {
-      message: "Date inconnue",
-    }),
+    .refine(
+      (s) => !Number.isNaN(Date.parse(`${s}T12:00:00Z`)) && new Date(`${s}T12:00:00Z`).toISOString().startsWith(s),
+      {
+        message: "Date inconnue",
+      },
+    ),
   startTime: hhmm,
   /** Avant ou égale au début : le lendemain (nocturne après minuit). */
   endTime: hhmm,

@@ -370,7 +370,8 @@ export const applicationsQueries = {
     if (q.status) filters.push(eq(applications.status, q.status));
     if (q.crewId) filters.push(eq(applications.crewId, q.crewId));
     // Plusieurs jours (lot 26) : un jour, ou tout l'événement.
-    if (q.dayId) filters.push(q.dayId === "whole" ? isNull(applications.eventDayId) : eq(applications.eventDayId, q.dayId));
+    if (q.dayId)
+      filters.push(q.dayId === "whole" ? isNull(applications.eventDayId) : eq(applications.eventDayId, q.dayId));
     if (q.makeId) filters.push(eq(vehicles.makeId, q.makeId));
     if (q.country) filters.push(eq(vehicleMakes.country, q.country.toUpperCase()));
     if (q.yearFrom) filters.push(sql`${vehicles.year} >= ${q.yearFrom}`);

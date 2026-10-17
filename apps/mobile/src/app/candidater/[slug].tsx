@@ -82,7 +82,13 @@ export default function Candidater() {
     e.days.length > 1
       ? [
           ...(e.dayAccess !== "per_day"
-            ? [{ id: null, label: eventDaysLabels.wholeEvent, full: e.days.some((d) => d.remaining === 0) || taken.length > 0 }]
+            ? [
+                {
+                  id: null,
+                  label: eventDaysLabels.wholeEvent,
+                  full: e.days.some((d) => d.remaining === 0) || taken.length > 0,
+                },
+              ]
             : []),
           ...(e.dayAccess !== "whole"
             ? e.days.map((d) => ({

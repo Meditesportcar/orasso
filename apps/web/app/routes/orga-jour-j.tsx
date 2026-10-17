@@ -68,7 +68,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const dayId =
     asked === "tous"
       ? null
-      : (event.days.find((d) => d.id === asked) ?? event.days.find((d) => d.date === today))?.id ?? null;
+      : ((event.days.find((d) => d.id === asked) ?? event.days.find((d) => d.date === today))?.id ?? null);
   const dayQs = dayId ? `?dayId=${dayId}` : "";
   const list = await api<CheckinListItem[]>(request, `/events/${eventId}/checkins${dayQs}`);
   const live = organizer ? await api<LiveCounters>(request, `/events/${eventId}/live${dayQs}`) : null;

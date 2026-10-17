@@ -5,10 +5,10 @@
 // `capacité − retenues − offres`, comme avant le lot 26.
 import {
   type ApplicationStatus,
+  checkDayChoice,
   type DayChoiceError,
   type DayTaken,
   type EventDay,
-  checkDayChoice,
   freePlaces,
   isMultiDay,
 } from "@orasso/shared";

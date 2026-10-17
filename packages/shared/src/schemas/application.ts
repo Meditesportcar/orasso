@@ -134,7 +134,7 @@ export type MyApplication = {
 /** Jour d'une candidature (lot 26) : identifiant, date locale `AAAA-MM-JJ`, horaires. */
 export type ApplicationDay = { id: string; date: string; startsAt: string; endsAt: string };
 
-export type ApplicationAlert ="duplicatePlate" | "banned" | "unregistered";
+export type ApplicationAlert = "duplicatePlate" | "banned" | "unregistered";
 
 /** Fiche de tri (organisateur) : véhicule complet avec la plaque, candidat, historique, alertes. */
 export type ApplicationForTriage = {

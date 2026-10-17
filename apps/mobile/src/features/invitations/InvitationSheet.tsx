@@ -75,8 +75,7 @@ export function InvitationSheet({
   const needsChoice = Boolean(inv && !inv.vehicle);
   const blocked = needsChoice && vehicles !== null && vehicles.length === 0;
   const days = inv && inv.event.days.length > 1 && inv.event.dayAccess !== "whole" ? inv.event.days : [];
-  const dayId =
-    dayChoice !== undefined ? dayChoice : inv?.event.dayAccess === "per_day" ? (days[0]?.id ?? null) : null;
+  const dayId = dayChoice !== undefined ? dayChoice : inv?.event.dayAccess === "per_day" ? (days[0]?.id ?? null) : null;
 
   async function answer(kind: "accept" | "decline") {
     if (!inv) return;

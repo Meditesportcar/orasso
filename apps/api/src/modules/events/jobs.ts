@@ -11,8 +11,8 @@ import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
 import { weatherService } from "../weather/service";
-import { highGradePreviewAt, lockPreview } from "./high-grade";
 import { daysRepo } from "./days";
+import { highGradePreviewAt, lockPreview } from "./high-grade";
 import { type EventRow, eventsRepo } from "./repo";
 
 const DAY = 86_400_000;
@@ -53,7 +53,8 @@ export async function scheduleEventJobs(e: EventRow) {
   if (isMultiDay(days)) {
     for (const day of days.slice(1)) {
       const at = reminderEveAt(e, day.startsAt);
-      if (at > t) await deps.jobs.send("event.reminder-eve", { eventId: e.id, at: at.toISOString(), dayId: day.id }, at);
+      if (at > t)
+        await deps.jobs.send("event.reminder-eve", { eventId: e.id, at: at.toISOString(), dayId: day.id }, at);
     }
   }
 }
@@ -145,7 +146,9 @@ export const eventJobs = {
       const day = multi ? days.find((d) => d.id === data.dayId) : undefined;
       // Jour retiré, déplacé, ou premier jour devenu le seul rappel : une autre tâche a été planifiée.
       if (!day || day.id === days[0]?.id || !sameInstant(reminderEveAt(e, day.startsAt), data.at)) return false;
-      const body = [`« ${e.title} », ${formatDateTime(day.startsAt)}.`, e.instructions ?? ""].filter(Boolean).join("\n");
+      const body = [`« ${e.title} », ${formatDateTime(day.startsAt)}.`, e.instructions ?? ""]
+        .filter(Boolean)
+        .join("\n");
       await notifyAccepted(e, "event_reminder_eve", "C'est demain", body, { dayId: day.id });
       return true;
     }

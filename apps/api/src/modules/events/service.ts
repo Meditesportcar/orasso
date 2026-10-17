@@ -11,24 +11,24 @@ import {
   type EventCreate,
   type EventDaysPut,
   type EventListQuery,
-  formatDayDate,
-  fromWallTime,
-  isMultiDay,
-  localDate,
-  resolveDays,
-  wallTime,
   type EventOrganizer,
   type EventOutlook,
   type EventPublic,
   type EventUpdate,
   eventOutlookLabels,
+  formatDayDate,
+  fromWallTime,
   isLocked,
+  isMultiDay,
+  localDate,
   lockAt,
   type Page,
   type RecurrenceRule,
   recurrenceOccurrences,
   registrationOpensAt,
+  resolveDays,
   staffRoles,
+  wallTime,
   type zoneCreateSchema,
   type zoneUpdateSchema,
 } from "@orasso/shared";
@@ -407,10 +407,7 @@ export const eventsService = {
       const existing = await daysRepo.list(id, tx);
       const keep = new Set(next.map((d) => d.dayDate));
       for (const old of existing.filter((d) => !keep.has(d.dayDate))) {
-        const [used] = await tx
-          .select({ n: count() })
-          .from(applications)
-          .where(eq(applications.eventDayId, old.id));
+        const [used] = await tx.select({ n: count() }).from(applications).where(eq(applications.eventDayId, old.id));
         if ((used?.n ?? 0) > 0) throw dayInUse(formatDayDate(old.dayDate));
         await tx.delete(eventDays).where(eq(eventDays.id, old.id));
       }

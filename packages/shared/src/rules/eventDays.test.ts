@@ -14,9 +14,27 @@ import {
   resolveDays,
 } from "./eventDays";
 
-const d1 = { id: "d1", dayDate: "2027-03-14", startsAt: new Date("2027-03-14T08:00:00Z"), endsAt: new Date("2027-03-14T17:00:00Z"), capacity: null };
-const d2 = { id: "d2", dayDate: "2027-03-15", startsAt: new Date("2027-03-15T08:00:00Z"), endsAt: new Date("2027-03-15T17:00:00Z"), capacity: 3 };
-const d3 = { id: "d3", dayDate: "2027-03-16", startsAt: new Date("2027-03-16T08:00:00Z"), endsAt: new Date("2027-03-16T17:00:00Z"), capacity: null };
+const d1 = {
+  id: "d1",
+  dayDate: "2027-03-14",
+  startsAt: new Date("2027-03-14T08:00:00Z"),
+  endsAt: new Date("2027-03-14T17:00:00Z"),
+  capacity: null,
+};
+const d2 = {
+  id: "d2",
+  dayDate: "2027-03-15",
+  startsAt: new Date("2027-03-15T08:00:00Z"),
+  endsAt: new Date("2027-03-15T17:00:00Z"),
+  capacity: 3,
+};
+const d3 = {
+  id: "d3",
+  dayDate: "2027-03-16",
+  startsAt: new Date("2027-03-16T08:00:00Z"),
+  endsAt: new Date("2027-03-16T17:00:00Z"),
+  capacity: null,
+};
 const days = [d1, d2, d3];
 
 describe("jours d'un événement", () => {
