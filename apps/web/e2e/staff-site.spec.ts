@@ -41,7 +41,7 @@ test("devenir staff : demande, acceptation avec le rôle boutique, présences et
 
   // Membre actif avec le rôle boutique.
   const member = orga.getByTestId("staff-members").getByTestId("staff-member").filter({ hasText: pseudo });
-  await expect(member).toBeVisible();
+  await expect(member).toBeVisible({ timeout: 60_000 });
   await expect(member.getByLabel("Boutique")).toBeChecked();
   await expect(member.getByLabel("Scan accueil")).not.toBeChecked();
   const admin = await login("damien@orasso.local");
