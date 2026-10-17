@@ -2,6 +2,7 @@ import {
   checkinCreateSchema,
   checkinsByPlatesSchema,
   checkinsQuerySchema,
+  dayQuerySchema,
   expressInviteSchema,
   expressSignupSchema,
   scanBatchSchema,
@@ -49,7 +50,10 @@ export const checkinsRoutes = new Hono<AppEnv>()
   .get("/events/:id/scan-report", async (c) =>
     c.json(await checkinsService.report(await requireUser(c), uuidParam(c, "id"))),
   )
-  .get("/events/:id/live", async (c) => c.json(await checkinsService.live(await requireUser(c), uuidParam(c, "id"))))
+  // Lot 26 : `?dayId=` = le direct d'un jour d'un événement sur plusieurs jours.
+  .get("/events/:id/live", async (c) =>
+    c.json(await checkinsService.live(await requireUser(c), uuidParam(c, "id"), query(c, dayQuerySchema).dayId)),
+  )
   .post("/events/:id/express-invites", async (c) => {
     const v = await requireUser(c);
     const { email } = await body(c, expressInviteSchema);

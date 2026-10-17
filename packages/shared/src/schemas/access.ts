@@ -237,6 +237,8 @@ export const checkinsQuerySchema = z.object({
   method: z.enum(checkinMethods).optional(),
   zoneId: z.uuid().optional(),
   q: z.string().trim().max(40).optional(),
+  /** Lot 26 : attendus d'un jour (ses candidatures et celles de tout l'événement). */
+  dayId: z.uuid().optional(),
 });
 
 export const staffSearchQuerySchema = z.object({ q: z.string().trim().min(2).max(40) });
@@ -251,6 +253,8 @@ export type CheckinListItem = {
   checkedInAt: string | null;
   method: CheckinMethod | null;
   note: string | null;
+  /** Lot 26 : jour de la candidature (`AAAA-MM-JJ`) ; `null` = tout l'événement ou événement d'un jour. */
+  dayDate?: string | null;
 };
 
 export type CheckinResult = CheckinListItem & { created: boolean };

@@ -52,8 +52,12 @@ export const applications = pgTable(
     providerProfileId: uuid("provider_profile_id").references(() => providerProfiles.id, { onDelete: "restrict" }),
     /** Accréditation « média officiel » donnée par l'organisateur à un photographe retenu (par événement, S23). */
     accreditedMedia: boolean("accredited_media").notNull().default(false),
-    /** [préparé] Multi-jours. */
-    eventDayId: uuid("event_day_id").references(() => eventDays.id, { onDelete: "set null" }),
+    /**
+     * Événement sur plusieurs jours (lot 26) : le jour choisi ; `null` = tout l'événement (et toujours `null` pour un
+     * événement d'un jour). `restrict` : un jour qui a des candidatures ne se supprime pas (avant le lot 26 :
+     * `set null`, qui aurait changé en silence une candidature d'un jour en candidature pour tout l'événement).
+     */
+    eventDayId: uuid("event_day_id").references(() => eventDays.id, { onDelete: "restrict" }),
     status: applicationStatusEnum("status").notNull(),
     /** Règlement accepté. Nul seulement pour un membre inscrit par son chef qui n'a pas (encore) confirmé (lot 19). */
     rulesAcceptedAt: tstz("rules_accepted_at"),
@@ -89,9 +93,13 @@ export const applications = pgTable(
     // crew bloque le véhicule). Écrit par les statuts terminés : la migration qui ajoute `awaiting_member` à l'enum ne
     // peut pas citer la nouvelle valeur dans la même transaction. **Liste noire** : tout futur statut terminal doit être
     // ajouté ici (sinon il bloquerait le véhicule pour toujours).
+    // Lot 26 (§ 10) : par jour — le même véhicule peut candidater pour le jour 1 et pour le jour 2 ; « tout
+    // l'événement » (`event_day_id` nul) a sa propre clé (uuid nul). Qu'un véhicule n'ait pas à la fois une candidature
+    // « tout l'événement » et une candidature d'un jour est vérifié par le service, sous le verrou de l'événement.
     uniqueIndex("applications_active_vehicle_key")
-      .on(t.eventId, t.vehicleId)
+      .on(t.eventId, t.vehicleId, sql`coalesce(${t.eventDayId}, '00000000-0000-0000-0000-000000000000'::uuid)`)
       .where(sql`${t.status} not in ('refused', 'withdrawn', 'expired', 'cancelled')`),
+    index("applications_event_day_idx").on(t.eventDayId).where(sql`${t.eventDayId} is not null`),
     index("applications_crew_idx").on(t.crewId, t.eventId).where(sql`${t.crewId} is not null`),
     // Règlement accepté, sauf pour un membre de crew qui n'a pas confirmé (`awaiting_member`, puis désisté ou annulé).
     check("applications_rules_check", sql`${t.rulesAcceptedAt} is not null or ${t.crewApplicationId} is not null`),

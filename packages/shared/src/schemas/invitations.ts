@@ -32,7 +32,11 @@ export const invitationFromEventSchema = z.object({
 export type InvitationFromEvent = z.infer<typeof invitationFromEventSchema>;
 
 /** `POST /event-invitations/:id/accept` : le véhicule (imposé pour une invitation de véhicule). */
-export const invitationAcceptSchema = z.object({ vehicleId: z.uuid().optional() });
+export const invitationAcceptSchema = z.object({
+  vehicleId: z.uuid().optional(),
+  /** Lot 26 : jour choisi par l'invité d'un événement sur plusieurs jours (mêmes règles qu'une candidature). */
+  eventDayId: z.uuid().nullish(),
+});
 export type InvitationAccept = z.infer<typeof invitationAcceptSchema>;
 
 export type InvitationTargetKind = "user" | "vehicle" | "email";

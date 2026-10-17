@@ -64,8 +64,10 @@ export const crewRegistrationSchema = z.object({
   rulesAccepted: z.literal(true),
   followStructure: z.boolean().default(true),
   message: optionalText(120),
+  /** Lot 26 : jour choisi par le chef pour tout le crew (événement sur plusieurs jours) ; `null` = tout l'événement. */
+  eventDayId: z.uuid().nullish(),
 });
-export type CrewRegistration = z.infer<typeof crewRegistrationSchema>;
+export type CrewRegistration =z.infer<typeof crewRegistrationSchema>;
 
 /** Confirmation de venue d'un membre : règlement accepté, et ses propres réglages de candidature. */
 export const crewConfirmSchema = z.object({

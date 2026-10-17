@@ -253,6 +253,13 @@
       "when": 1792211265804,
       "tag": "0035_staff-shop",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792222008579,
+      "tag": "0036_multi-day",
+      "breakpoints": true
     }
   ]
 }

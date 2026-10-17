@@ -41,6 +41,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { type ApplicationRow, applicationsService } from "../applications/service";
+import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { assertCanSeeEvent } from "../invitations/access";
 import { inboxService } from "../messaging/inbox";
@@ -76,10 +77,15 @@ async function leaderCrew(ex: Tx | typeof db, crewId: string, v: Viewer, lock = 
 }
 
 /** Candidatures « véhicule » actives de chaque personne sur l'événement (limite de véhicules par personne). */
-async function activeCounts(ex: Tx | typeof db, eventId: string, userIds: string[]) {
-  if (!userIds.length) return new Map<string, number>();
+/**
+ * Véhicules ayant une candidature active, par personne (limite de véhicules par personne). Plusieurs jours (lot 26) :
+ * un même véhicule inscrit deux jours ne compte qu'une fois.
+ */
+async function activeVehicles(ex: Tx | typeof db, eventId: string, userIds: string[]) {
+  const out = new Map<string, Set<string>>();
+  if (!userIds.length) return out;
   const rows = await ex
-    .select({ userId: applications.userId, n: count() })
+    .selectDistinct({ userId: applications.userId, vehicleId: applications.vehicleId })
     .from(applications)
     .where(
       and(
@@ -88,9 +94,9 @@ async function activeCounts(ex: Tx | typeof db, eventId: string, userIds: string
         eq(applications.kind, "vehicle"),
         inArray(applications.status, [...ACTIVE]),
       ),
-    )
-    .groupBy(applications.userId);
-  return new Map(rows.map((r) => [r.userId, r.n]));
+    );
+  for (const r of rows) if (r.vehicleId) out.set(r.userId, (out.get(r.userId) ?? new Set()).add(r.vehicleId));
+  return out;
 }
 
 async function bannedIds(ex: Tx | typeof db, structureId: string, userIds: string[]) {
@@ -175,7 +181,7 @@ export const crewRegistrationService = {
           .where(and(eq(applications.eventId, eventId), inArray(applications.status, [...ACTIVE])))
       : [];
     const appliedVehicles = new Set(applied.map((a) => a.vehicleId));
-    const counts = await activeCounts(db, eventId, ids);
+    const counts = await activeVehicles(db, eventId, ids);
     const banned = await bannedIds(db, event.structureId, ids);
     const t = now();
     // Ce que le chef voit des véhicules de chacun : les règles du profil (lot 17). Compte privé et non ami : marque et
@@ -191,7 +197,7 @@ export const crewRegistrationService = {
       members: members.map((m) => {
         const suspended = Boolean(m.p.suspendedUntil && m.p.suspendedUntil > t);
         const unavailable =
-          banned.has(m.p.userId) || suspended || (counts.get(m.p.userId) ?? 0) >= event.maxVehiclesPerUser;
+          banned.has(m.p.userId) || suspended || (counts.get(m.p.userId)?.size ?? 0) >= event.maxVehiclesPerUser;
         const full = detailed.get(m.p.userId) ?? false;
         return {
           person: { userId: m.p.userId, pseudo: m.p.pseudo, avatarUrl: storage.url(m.p.avatarKey), grade: m.p.grade },
@@ -244,6 +250,8 @@ export const crewRegistrationService = {
           throw conflict("conflict", "Événement annulé");
         }
         const crew = await leaderCrew(tx, input.crewId, v, true);
+        // Plusieurs jours (lot 26) : un jour pour tout le crew, choisi par le chef (mêmes règles qu'une candidature).
+        const { dayId } = await daysRepo.checkChoice(tx, event, input.eventDayId);
 
         const memberRows = await tx
           .select({ p: profiles, status: crewMembers.status })
@@ -252,7 +260,7 @@ export const crewRegistrationService = {
           .where(and(eq(crewMembers.crewId, crew.id), inArray(crewMembers.userId, userIds)));
         const byUser = new Map(memberRows.map((m) => [m.p.userId, m]));
         const banned = await bannedIds(tx, event.structureId, userIds);
-        const counts = await activeCounts(tx, eventId, userIds);
+        const counts = await activeVehicles(tx, eventId, userIds);
         const garage = await vehiclesRepo.findFullByIds(
           input.members.map((m) => m.vehicleId),
           tx,
@@ -272,13 +280,22 @@ export const crewRegistrationService = {
             (member.p.suspendedUntil && member.p.suspendedUntil > t) ||
             banned.has(m.userId) ||
             x.pendingTransferId ||
-            (counts.get(m.userId) ?? 0) + 1 > event.maxVehiclesPerUser
+            (counts.get(m.userId)?.size ?? 0) + (dayId && counts.get(m.userId)?.has(m.vehicleId) ? 0 : 1) >
+              event.maxVehiclesPerUser
           ) {
             throw conflict("conflict", crewErrors.memberUnavailable(pseudo), { userId: m.userId });
           }
           const block = vehicleBlock(x, event);
           if (block) throw validation(`${pseudo}, ${vehicleLabel(x)} : ${block.toLowerCase()}`);
         }
+        // Une candidature active par véhicule et par jour, jamais « tout l'événement » et un jour à la fois (lot 26).
+        await daysRepo.assertVehiclesFree(
+          tx,
+          eventId,
+          input.members.map((m) => m.vehicleId),
+          dayId,
+          crewErrors.someUnavailable,
+        );
         // Anti-harcèlement : pas de nouvelle inscription d'un membre à cet événement moins de 24 h après son « Je ne
         // viens pas » ou son retrait par le chef (chaque inscription lui envoie une notification et bloque son véhicule).
         const others = userIds.filter((id) => id !== v.user.id);
@@ -323,6 +340,7 @@ export const crewRegistrationService = {
               eventId,
               userId: m.userId,
               vehicleId: m.vehicleId,
+              eventDayId: dayId,
               status: isLeader ? "pending" : "awaiting_member",
               rulesAcceptedAt: isLeader ? t : null,
               memberConfirmedAt: isLeader ? t : null,

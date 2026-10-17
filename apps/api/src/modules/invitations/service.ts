@@ -776,7 +776,12 @@ export const invitationsService = {
           throw error;
         }
       }
-      const app = await applicationsService.createFromInvitation(tx, after, event, { userId: v.user.id, vehicleId });
+      const app = await applicationsService.createFromInvitation(tx, after, event, {
+        userId: v.user.id,
+        vehicleId,
+        // Plusieurs jours (lot 26) : le jour choisi par l'invité (validé comme une candidature).
+        eventDayId: input.eventDayId,
+      });
       const [updated] = await tx
         .update(eventInvitations)
         .set({ status: "accepted", acceptedApplicationId: app.id })

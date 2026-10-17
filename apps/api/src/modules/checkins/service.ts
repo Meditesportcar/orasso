@@ -5,6 +5,7 @@ import {
   type CheckinMethod,
   type CheckinResult,
   type LiveCounters,
+  localDate,
   MINUTE,
   normalizePlate,
   providerTypeLabel,
@@ -46,6 +47,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { ed25519Verify, signing } from "../../lib/signing";
 import { type Tx, withTx } from "../../lib/tx";
+import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { loadProviders } from "../providers/serializers";
 import { assertStaffWindow, staffService } from "../staff/service";
@@ -372,6 +374,7 @@ async function listItems(eventId: string, where: SQL | undefined, limit = 1000):
   const providers = await loadProviders(
     rows.flatMap((r) => (r.app.providerProfileId ? [r.app.providerProfileId] : [])),
   );
+  const dayDates = await daysRepo.byIds(rows.map((r) => r.app.eventDayId));
   return rows.map(({ app, checkin, pseudo }) => {
     const v = app.vehicleId ? vs.get(app.vehicleId) : undefined;
     const z = app.zoneId ? zones.get(app.zoneId) : undefined;
@@ -389,8 +392,15 @@ async function listItems(eventId: string, where: SQL | undefined, limit = 1000):
       checkedInAt: checkin?.checkedInAt.toISOString() ?? null,
       method: checkin?.method ?? null,
       note: checkin?.note ?? null,
+      dayDate: app.eventDayId ? (dayDates.get(app.eventDayId)?.dayDate ?? null) : null,
     };
   });
+}
+
+/** Jour d'un autre événement (IDOR) ou inconnu : introuvable (lot 26). */
+async function assertEventDay(eventId: string, dayId: string | undefined) {
+  if (!dayId) return;
+  if (!(await daysRepo.list(eventId)).some((d) => d.id === dayId)) throw notFound("Jour introuvable");
 }
 
 async function staffEvent(v: Viewer, eventId: string) {
@@ -572,10 +582,19 @@ export const checkinsService = {
   },
 
   /** Liste des retenus et de leur entrée (« Tous / Arrivés / Attendus », filtre « Sans scan » par méthode). */
-  async list(v: Viewer, eventId: string, q: { method?: CheckinMethod; zoneId?: string; q?: string }) {
+  async list(
+    v: Viewer,
+    eventId: string,
+    q: { method?: CheckinMethod; zoneId?: string; q?: string; dayId?: string },
+  ) {
     const { event, access } = await staffEvent(v, eventId);
     assertStaffWindow(event, access);
     const filters: (SQL | undefined)[] = [];
+    // Plusieurs jours (lot 26) : les attendus d'un jour (ses candidatures et celles de tout l'événement).
+    if (q.dayId) {
+      await assertEventDay(eventId, q.dayId);
+      filters.push(or(isNull(applications.eventDayId), eq(applications.eventDayId, q.dayId)));
+    }
     if (q.method) filters.push(eq(checkins.method, q.method));
     if (q.zoneId) filters.push(eq(applications.zoneId, q.zoneId));
     if (q.q) {
@@ -713,20 +732,58 @@ export const checkinsService = {
     };
   },
 
-  /** Direct de l'organisateur : arrivés / attendus par catégorie et par zone, staff présent, alertes ouvertes. */
-  async liveCounters(eventId: string): Promise<LiveCounters> {
+  /**
+   * Direct de l'organisateur : arrivés / attendus par catégorie et par zone, staff présent, alertes ouvertes.
+   * Plusieurs jours (lot 26) : `dayId` = un jour — attendus : candidatures de ce jour et de tout l'événement ;
+   * arrivés : entrée enregistrée (candidature du jour), ou, pour tout l'événement, entrée ou lecture du QR ce jour-là
+   * (l'entrée garde le premier passage, S29 : les jours suivants, la lecture « déjà entré » fait foi).
+   */
+  async liveCounters(eventId: string, dayId: string | null = null): Promise<LiveCounters> {
     const event = await eventsRepo.byId(eventId);
+    const day = dayId ? (await daysRepo.list(eventId)).find((d) => d.id === dayId) : undefined;
     let rows = await db
       .select({
         appId: applications.id,
         zoneId: applications.zoneId,
         vehicleId: applications.vehicleId,
         kind: applications.kind,
+        eventDayId: applications.eventDayId,
         at: checkins.checkedInAt,
       })
       .from(applications)
       .leftJoin(checkins, eq(checkins.applicationId, applications.id))
-      .where(and(eq(applications.eventId, eventId), eq(applications.status, "accepted")));
+      .where(
+        and(
+          eq(applications.eventId, eventId),
+          eq(applications.status, "accepted"),
+          day ? or(isNull(applications.eventDayId), eq(applications.eventDayId, day.id)) : undefined,
+        ),
+      );
+    if (day) {
+      const whole = rows.filter((r) => r.eventDayId === null && r.at).map((r) => r.appId);
+      const seenThatDay = whole.length
+        ? new Set(
+            (
+              await db
+                .selectDistinct({ appId: scanEvents.applicationId })
+                .from(scanEvents)
+                .where(
+                  and(
+                    eq(scanEvents.eventId, eventId),
+                    inArray(scanEvents.applicationId, whole),
+                    inArray(scanEvents.serverResult, ["accepted", "duplicate_same_device", "duplicate_other_device"]),
+                    sql`(${scanEvents.scannedAt} at time zone ${event.timezone})::date = ${day.dayDate}::date`,
+                  ),
+                )
+            ).map((s) => s.appId),
+          )
+        : new Set<string | null>();
+      rows = rows.map((r) =>
+        r.eventDayId === null && r.at && localDate(r.at, event.timezone) !== day.dayDate && !seenThatDay.has(r.appId)
+          ? { ...r, at: null }
+          : r,
+      );
+    }
     // Les prestataires ont leur propre compteur : jamais dans les véhicules, les catégories ni les zones (lot 21).
     const providerRows = rows.filter((r) => r.kind === "provider");
     rows = rows.filter((r) => r.kind === "vehicle");
@@ -773,6 +830,7 @@ export const checkinsService = {
       .from(staffAlerts)
       .where(and(eq(staffAlerts.eventId, eventId), isNull(staffAlerts.resolvedAt)));
     return {
+      dayId: day?.id ?? null,
       arrived: rows.filter((r) => r.at).length,
       expected: rows.length,
       byCategory: [...byCategory.values()]
@@ -789,9 +847,10 @@ export const checkinsService = {
     };
   },
 
-  async live(v: Viewer, eventId: string): Promise<LiveCounters> {
+  async live(v: Viewer, eventId: string, dayId?: string): Promise<LiveCounters> {
     const event = await eventsRepo.byId(eventId);
     await requireOrganizer(v, event.structureId);
-    return this.liveCounters(eventId);
+    await assertEventDay(eventId, dayId);
+    return this.liveCounters(eventId, dayId ?? null);
   },
 };

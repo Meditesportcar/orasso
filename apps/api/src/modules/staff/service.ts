@@ -10,6 +10,7 @@ import {
   type EventStaffUpdate,
   fromWallTime,
   isEventDay,
+  isMultiDay,
   isLocked,
   lockAt,
   type MyStaffEvent,
@@ -46,6 +47,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { signing } from "../../lib/signing";
 import { type Executor, withTx } from "../../lib/tx";
+import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { loadProviders } from "../providers/serializers";
@@ -315,7 +317,9 @@ export const staffService = {
     const access = await requireEventStaff(v, event);
     const t = now();
     assertStaffWindow(event, access);
-    const entries = await accessEntries(event, access);
+    const days = await daysRepo.list(event.id);
+    const multiDays = isMultiDay(days) ? days : [];
+    const entries = await accessEntries(event, access, new Map(multiDays.map((d) => [d.id, d.dayDate])));
     // Rôle boutique (lot 24) : billets du public, seulement si la boutique est activée pour cet événement. Un staff
     // sans ce rôle n'en reçoit jamais (le corps signé ne contient alors ni `tickets` ni `shopEnabled`).
     const withShop = event.shopEnabled && access.roles.includes("shop");
@@ -340,6 +344,13 @@ export const staffService = {
         isLocked: isLocked(event, t),
         plateSalt: event.plateSalt.toString("base64url"),
         zones: zones.map((z) => ({ id: z.id, code: z.code, name: z.name, capacity: z.capacity })),
+        // Plusieurs jours (lot 26) : les jours, pour le filtre « Aujourd'hui » et le jour affiché de chaque entrée.
+        days: multiDays.map((d) => ({
+          id: d.id,
+          date: d.dayDate,
+          startsAt: d.startsAt.toISOString(),
+          endsAt: d.endsAt.toISOString(),
+        })),
       },
       keys: (await signing.publicKeys()).map((k) => ({ kid: k.kid, publicKey: k.publicKey, retiredAt: k.retiredAt })),
       myRoles: access.roles,
@@ -415,7 +426,11 @@ export const staffService = {
 };
 
 /** Entrées de la liste d'accès, une par pass de l'événement. */
-async function accessEntries(event: EventRow, access: StaffAccess): Promise<AccessListEntry[]> {
+async function accessEntries(
+  event: EventRow,
+  access: StaffAccess,
+  dayDates: Map<string, string> = new Map(),
+): Promise<AccessListEntry[]> {
   const organizer = access.actor !== "staff";
   const withContact = organizer || access.roles.includes("super_staff");
   const rows = await db
@@ -465,6 +480,7 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
         zoneName: null,
         checkedInAt: null,
         checkinMethod: null,
+        dayDate: null,
         updatedAt: new Date(updatedAt).toISOString(),
       } satisfies AccessListEntry;
     }
@@ -489,6 +505,8 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
       zoneName: zone?.name ?? null,
       checkedInAt: checkin ? checkin.checkedInAt.toISOString() : null,
       checkinMethod: checkin ? (checkin.method as CheckinMethod) : null,
+      // Lot 26 : jour de la candidature (`null` = tout l'événement), lu au scan (« Autre jour »).
+      dayDate: app.eventDayId ? (dayDates.get(app.eventDayId) ?? null) : null,
       updatedAt: new Date(updatedAt).toISOString(),
     };
     if (organizer) entry.plate = v?.plate ?? null;

@@ -31,7 +31,7 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "event.preview-open": (d) => eventJobs.previewOpen({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "event.high-grade-preview": (d) => highGradePreview.notify({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "event.reminder-week": (d) => eventJobs.reminderWeek({ eventId: d.eventId ?? "", at: d.at ?? "" }),
-  "event.reminder-eve": (d) => eventJobs.reminderEve({ eventId: d.eventId ?? "", at: d.at ?? "" }),
+  "event.reminder-eve": (d) => eventJobs.reminderEve({ eventId: d.eventId ?? "", at: d.at ?? "", dayId: d.dayId }),
   "notifications.deliver": () => notificationsService.deliverDue(),
   "waitlist.sweep": () => applicationsService.expireDueOffers(),
   "staff.remind": () => staffService.remindUnanswered(),

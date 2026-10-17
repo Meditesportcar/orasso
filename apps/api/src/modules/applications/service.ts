@@ -8,8 +8,10 @@ import {
   canTransition,
   computeOfferDeadline,
   type Decide,
+  freePlaces,
   invitationLabels,
   isLocked,
+  isMultiDay,
   lockAt,
   type PassRevokedReason,
   providerApplicationsLink,
@@ -42,6 +44,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { type Tx, withTx } from "../../lib/tx";
 import { accessService } from "../access/service";
+import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { expirePendingInvitations } from "../invitations/expire";
 import { notificationsService } from "../notifications/service";
@@ -130,6 +133,10 @@ async function waitlistPosition(tx: Tx | typeof db, app: ApplicationRow): Promis
         eq(applications.eventId, app.eventId),
         eq(applications.status, "waitlisted"),
         eq(applications.kind, app.kind),
+        // Plusieurs jours (lot 26) : devant une candidature d'un jour, seules celles de ce jour et de tout l'événement.
+        app.eventDayId
+          ? sql`(${applications.eventDayId} is null or ${applications.eventDayId} = ${app.eventDayId})`
+          : undefined,
         sql`(${applications.waitlistRank}, ${applications.waitlistedAt}) < (${app.waitlistRank}, ${app.waitlistedAt?.toISOString() ?? null}::timestamptz)`,
       ),
     );
@@ -199,15 +206,26 @@ function broadcast(after: After, event: EventRow, changed: ApplicationRow[]) {
 /**
  * Liste d'attente automatique (§ 2.2) : tant qu'il reste des places libres, la première candidature en liste
  * d'attente reçoit une offre, avec une échéance (24 h, 3 h la veille, 2 h le jour J, jamais après le verrouillage).
+ *
+ * Plusieurs jours (lot 26, § 10) : offres **par jour** — la première candidature de la liste pour qui une place est
+ * libre (son jour ; tout l'événement : une place chaque jour) reçoit l'offre. Sans limite de places (ni l'événement ni
+ * aucun jour), la liste d'attente reste un parking manuel de l'organisateur : rien d'automatique.
  */
 async function offerNext(tx: Tx, event: EventRow, after: After): Promise<ApplicationRow[]> {
   const t = now();
   const offered: ApplicationRow[] = [];
-  if (event.capacity === null || event.status !== "published" || isLocked(event, t)) return offered;
+  if (event.status !== "published" || isLocked(event, t)) return offered;
+  const days = await daysRepo.list(event.id, tx);
+  if (!isMultiDay(days) && event.capacity === null) return offered;
   for (;;) {
-    const c = await eventsRepo.statusCounts(event.id, tx);
-    if (event.capacity - c.accepted - c.offered <= 0) break;
-    const next = await tx.query.applications.findFirst({
+    const taken = await daysRepo.taken(event.id, tx);
+    const fits = (dayId: string | null) => {
+      const free = freePlaces(event, days, taken, dayId);
+      return free !== null && free > 0;
+    };
+    // Événement d'un jour : une seule file, servie dans l'ordre (aucune place → rien).
+    if (!isMultiDay(days) && !fits(null)) break;
+    const queue = await tx.query.applications.findMany({
       // Les prestataires ne comptent jamais dans la capacité : leur liste d'attente est manuelle (lot 21).
       where: and(
         eq(applications.eventId, event.id),
@@ -220,6 +238,7 @@ async function offerNext(tx: Tx, event: EventRow, after: After): Promise<Applica
         asc(applications.createdAt),
       ],
     });
+    const next = queue.find((a) => fits(a.eventDayId));
     if (!next) break;
     const deadline = computeOfferDeadline(event, t);
     if (!deadline) {
@@ -305,8 +324,9 @@ async function waitlistEntryRank(
 async function admitOpen(tx: Tx, event: EventRow, app: ApplicationRow): Promise<ApplicationRow> {
   const t = now();
   let row: ApplicationRow;
-  const c = await eventsRepo.statusCounts(event.id, tx);
-  if (event.capacity === null || c.accepted + c.offered < event.capacity) {
+  // Plusieurs jours (lot 26) : une place libre le jour choisi (tout l'événement : chaque jour).
+  const free = await daysRepo.freeFor(tx, event, app.eventDayId);
+  if (free === null || free > 0) {
     row = await transition(tx, app, "accepted", SYSTEM, { decidedAt: t }, "admission.open");
   } else {
     row = await transition(
@@ -379,12 +399,15 @@ async function decideInTx(
   let patch: Partial<typeof applications.$inferInsert> = { decidedAt: t, decidedBy: v.user.id };
   if (to === "accepted") {
     // Un prestataire est retenu hors capacité (lot 21).
-    if (event.capacity !== null && app.kind === "vehicle") {
-      const c = await eventsRepo.statusCounts(eventId, tx);
+    if (app.kind === "vehicle") {
       // Les offres en cours réservent leur place ; une offre forcée par l'organisateur occupe déjà la sienne.
-      const taken = c.accepted + c.offered - (app.status === "offered" ? 1 : 0);
-      if (taken >= event.capacity) {
-        throw conflict("event_full", "Plus de place : passe par la liste d'attente", { capacity: event.capacity });
+      // Plusieurs jours (lot 26) : places du jour de la candidature (tout l'événement : chaque jour).
+      const free = await daysRepo.freeFor(tx, event, app.eventDayId);
+      if (free !== null && free + (app.status === "offered" ? 1 : 0) <= 0) {
+        throw conflict("event_full", "Plus de place : passe par la liste d'attente", {
+          capacity: event.capacity,
+          dayId: app.eventDayId,
+        });
       }
     }
     patch = { ...patch, waitlistRank: null, refusalReasons: [], refusalNote: null, zoneId: input.zoneId ?? app.zoneId };
@@ -451,6 +474,8 @@ export const applicationsService = {
         });
         if (banned) throw forbidden("Tu ne peux pas candidater aux événements de cette structure");
 
+        // Plusieurs jours (lot 26, S27) : jour choisi selon le mode d'accès ; un événement d'un jour n'en a jamais.
+        const { dayId } = await daysRepo.checkChoice(tx, event, input.eventDayId);
         const ids = [...new Set(input.vehicleIds)];
         const vehicles = await vehiclesRepo.findFullByIds(ids, tx);
         if (vehicles.length !== ids.length || vehicles.some((x) => x.ownerId !== v.user.id)) {
@@ -470,8 +495,8 @@ export const applicationsService = {
           }
           if (x.photos.length === 0) throw validation(`${label} : ajoute au moins une photo`);
         }
-        const [mine] = await tx
-          .select({ n: count() })
+        const mine = await tx
+          .select({ vehicleId: applications.vehicleId })
           .from(applications)
           .where(
             and(
@@ -482,11 +507,18 @@ export const applicationsService = {
               inArray(applications.status, [...ACTIVE]),
             ),
           );
-        if ((mine?.n ?? 0) + ids.length > event.maxVehiclesPerUser) {
+        // Plusieurs jours (lot 26) : la limite compte des véhicules, un véhicule inscrit un autre jour ne compte qu'une
+        // fois. Événement d'un jour (ou tout l'événement) : une candidature par véhicule, comme avant.
+        const counted = dayId
+          ? new Set([...mine.flatMap((a) => (a.vehicleId ? [a.vehicleId] : [])), ...ids]).size
+          : mine.length + ids.length;
+        if (counted > event.maxVehiclesPerUser) {
           throw conflict("conflict", `Limite : ${event.maxVehiclesPerUser} véhicule(s) par personne`, {
             max: event.maxVehiclesPerUser,
           });
         }
+        // Une candidature active par véhicule et par jour, jamais « tout l'événement » et un jour à la fois (§ 10).
+        await daysRepo.assertVehiclesFree(tx, eventId, ids, dayId);
 
         const created: ApplicationRow[] = [];
         for (const vehicleId of ids) {
@@ -496,6 +528,7 @@ export const applicationsService = {
               eventId,
               userId: v.user.id,
               vehicleId,
+              eventDayId: dayId,
               status: "pending",
               rulesAcceptedAt: t,
               companions: input.companions,
@@ -628,10 +661,9 @@ export const applicationsService = {
       if (app.userId !== v.user.id) throw notFound("Candidature introuvable");
       if (app.status !== "offered") throw invalidTransition(app.status, "accepted");
       if (!app.offerExpiresAt || t >= app.offerExpiresAt) throw conflict("offer_expired", "L'offre a expiré");
-      if (event.capacity !== null) {
-        const c = await eventsRepo.statusCounts(event.id, tx);
-        if (c.accepted >= event.capacity) throw conflict("event_full", "La place n'est plus disponible");
-      }
+      // L'offre occupe déjà sa place : seules les retenues comptent ici (son jour ; tout l'événement : chaque jour).
+      const free = await daysRepo.freeFor(tx, event, app.eventDayId, { statuses: ["accepted"] });
+      if (free !== null && free <= 0) throw conflict("event_full", "La place n'est plus disponible");
       const row = await transition(tx, app, "accepted", { kind: "user", userId: v.user.id }, { decidedAt: t });
       broadcast(after, event, [row]);
       return row;
@@ -831,11 +863,13 @@ export const applicationsService = {
     tx: Tx,
     after: After,
     event: EventRow,
-    input: { userId: string; vehicleId: string },
+    input: { userId: string; vehicleId: string; eventDayId?: string | null },
   ): Promise<ApplicationRow> {
     const t = now();
-    const [mine] = await tx
-      .select({ n: count() })
+    // Plusieurs jours (lot 26) : le jour choisi par l'invité, mêmes règles qu'une candidature.
+    const { dayId } = await daysRepo.checkChoice(tx, event, input.eventDayId);
+    const mine = await tx
+      .select({ vehicleId: applications.vehicleId })
       .from(applications)
       .where(
         and(
@@ -845,13 +879,18 @@ export const applicationsService = {
           inArray(applications.status, [...ACTIVE]),
         ),
       );
-    if ((mine?.n ?? 0) + 1 > event.maxVehiclesPerUser) {
+    // Plusieurs jours (lot 26) : un véhicule inscrit un autre jour ne compte qu'une fois.
+    const counted = dayId
+      ? new Set([...mine.flatMap((a) => (a.vehicleId ? [a.vehicleId] : [])), input.vehicleId]).size
+      : mine.length + 1;
+    if (counted > event.maxVehiclesPerUser) {
       throw conflict("conflict", `Limite : ${event.maxVehiclesPerUser} véhicule(s) par personne`, {
         max: event.maxVehiclesPerUser,
       });
     }
-    const c = await eventsRepo.statusCounts(event.id, tx);
-    const full = event.capacity !== null && c.accepted + c.offered >= event.capacity;
+    await daysRepo.assertVehiclesFree(tx, event.id, [input.vehicleId], dayId);
+    const free = await daysRepo.freeFor(tx, event, dayId);
+    const full = free !== null && free <= 0;
     const to: ApplicationStatus = full ? "waitlisted" : "accepted";
     if (!canTransition(null, to, "user")) throw invalidTransition(null, to);
     const waitlistRank = full
@@ -865,6 +904,7 @@ export const applicationsService = {
           eventId: event.id,
           userId: input.userId,
           vehicleId: input.vehicleId,
+          eventDayId: dayId,
           status: to,
           source: "invitation",
           rulesAcceptedAt: t,
