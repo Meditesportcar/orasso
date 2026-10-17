@@ -124,9 +124,11 @@ export const orgaManageLabels = {
   verifUnavailableHelp: "Le registre de l'État ne répond pas : réessaie dans quelques minutes.",
   verifStepDocument: "2. Justificatif",
   verifDocumentHelp:
-    "Statuts, récépissé de déclaration ou Kbis (photo ou image, 10 Mo au plus). Un club sérieux non déclaré joint la pièce d'identité de son responsable : elle est supprimée dès la validation.",
+    "Statuts, récépissé de déclaration ou Kbis (photo, image ou PDF, 10 Mo au plus). Un club sérieux non déclaré joint la pièce d'identité de son responsable : elle est supprimée dès la validation.",
   verifDocumentKind: "Nature du document",
   verifDocumentAdd: "Ajouter un justificatif",
+  /** Lot 34 : justificatif en PDF depuis les fichiers du téléphone. */
+  verifDocumentAddPdf: "Ajouter un PDF",
   verifDocumentAdded: "Justificatif ajouté.",
   verifDocumentRemove: "Retirer",
   verifDocumentRemoveTitle: "Retirer ce justificatif",

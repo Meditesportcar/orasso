@@ -18,7 +18,7 @@ import { api } from "@/lib/api";
 import { now } from "@/lib/clock";
 import { errorMessage } from "@/lib/http";
 import { Muted } from "@/ui/Muted";
-import { Choices, DateTimeFields, Group, TimeField, wizardStyles } from "./fields";
+import { Choices, DateField, DateTimeFields, Group, TimeField, wizardStyles } from "./fields";
 import type { StepContext } from "./types";
 
 export function FormatStep({ d, set, formats }: StepContext) {
@@ -69,13 +69,10 @@ export function DatesStep({ d, set, setD }: StepContext) {
               <Text variant="bodyStrong" color={t.color.plateInk}>
                 {`${eventDaysLabels.day} ${i + 1}`}
               </Text>
-              <TextField
+              <DateField
                 label={L.date}
                 value={day.date}
-                placeholder={L.datePlaceholder}
-                onChangeText={(v) => updateDay(i, { date: v.trim() })}
-                keyboardType="numbers-and-punctuation"
-                maxLength={10}
+                onChange={(date) => updateDay(i, { date })}
                 testID={`wizard-day-${i}-date`}
               />
               <View style={wizardStyles.row}>

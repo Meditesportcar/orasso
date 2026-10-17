@@ -78,6 +78,8 @@ export const eventEditorLabels = {
   datePlaceholder: "AAAA-MM-JJ",
   timePlaceholder: "HH:MM",
   datesHint: "Heure de Paris.",
+  /** Lot 34 : sélecteur natif de date et d'heure de l'appli (iOS : roue sous le champ, à refermer). */
+  pickerDone: "Valider",
 
   // Lieu.
   addressLine: "Adresse",
