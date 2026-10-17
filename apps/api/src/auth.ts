@@ -1,9 +1,10 @@
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { bearer } from "better-auth/plugins/bearer";
 import { twoFactor } from "better-auth/plugins/two-factor";
+import { eq } from "drizzle-orm";
 
 import { db } from "./db/client";
 import * as schema from "./db/schema";
@@ -112,6 +113,14 @@ export const auth = betterAuth({
         // Preuve du second facteur posée par le chemin qui crée la session (clé, code TOTP), ou reportée de la session
         // courante quand Better Auth la recrée (changement de mot de passe, activation ou désactivation du TOTP).
         before: async (session, ctx) => {
+          // Lot 32 : compte banni de la plateforme, connexion refusée (site, appli, clé d'accès, Google / Apple).
+          const [banned] = await db
+            .select({ at: schema.profiles.bannedAt })
+            .from(schema.profiles)
+            .where(eq(schema.profiles.userId, session.userId));
+          if (banned?.at) {
+            throw new APIError("FORBIDDEN", { message: "Ce compte a été banni d'Orasso.", code: "BANNED" });
+          }
           const current = (ctx?.context as { session?: { session?: { secondFactor?: unknown } } | null } | undefined)
             ?.session?.session?.secondFactor;
           const secondFactor = secondFactorForPath(ctx?.path, current);

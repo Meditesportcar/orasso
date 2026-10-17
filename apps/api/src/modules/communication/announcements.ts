@@ -31,6 +31,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { type EventRow, eventsRepo } from "../events/repo";
+import { canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { uploadsService } from "../uploads/service";
 import { memberRole, requireEventReader, requireEventSpeaker } from "./guards";
@@ -113,15 +114,8 @@ export const announcementsService = {
     if (!row || row.e.status === "draft") throw notFound("Événement introuvable");
     const audience = await audienceOf(v, row.e);
     // Événement sur invitation : invisible pour qui n'y a ni candidature ni place dans l'équipe (comme sa page).
-    if (row.e.admission === "invite_only" && audience !== "team") {
-      const [mine] = v
-        ? await db
-            .select({ id: applications.id })
-            .from(applications)
-            .where(and(eq(applications.eventId, row.e.id), eq(applications.userId, v.user.id)))
-            .limit(1)
-        : [];
-      if (!mine) throw notFound("Événement introuvable");
+    if (row.e.admission === "invite_only" && audience !== "team" && !(await canSeeEvent(row.e, v))) {
+      throw notFound("Événement introuvable");
     }
     const audiences: AnnouncementAudience[] = audience === "public" ? ["public"] : ["public", "participants"];
     const rows = await db

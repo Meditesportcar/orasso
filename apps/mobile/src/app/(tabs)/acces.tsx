@@ -5,9 +5,11 @@ import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-syst
 import {
   type ContestStatus,
   contestStatusLabels,
+  invitationLabels,
   type MyApplication,
   type MyStaffEvent,
   POINTS_PENDING_LABEL,
+  type ReceivedInvitation,
   staffPresenceLabels,
   staffRequestLabels,
 } from "@orasso/shared";
@@ -17,6 +19,8 @@ import { StyleSheet, View } from "react-native";
 
 import { ContestSheet } from "@/features/ContestSheet";
 import { CrewConfirmSheet } from "@/features/CrewConfirmSheet";
+import { InvitationSheet } from "@/features/invitations/InvitationSheet";
+import { InvitationCard } from "@/features/invitations/ReceivedInvitations";
 import { ReviewSheet, type ReviewTarget } from "@/features/ReviewSheet";
 import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { api } from "@/lib/api";
@@ -41,6 +45,10 @@ export default function Acces() {
   const now = useNow();
   const { upcoming, past, loading, offline, reload } = useApplications();
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
+  // Invitations nominatives reçues (lot 25, docs/02 « Accès »).
+  const invitations = useApi(() => api.myEventInvitations(), []);
+  const [answering, setAnswering] = useState<ReceivedInvitation | null>(null);
+  const [answered, setAnswered] = useState<string | null>(null);
   const { me } = useSession();
   const staffActions = useStaffActions(me?.user.id ?? null);
   const unsentBy = new Map<string, { title: string; count: number }>();
@@ -78,7 +86,7 @@ export default function Acces() {
     <TabScreen
       title="Accès"
       onRefresh={async () => {
-        await Promise.all([reload(), staff.reload()]);
+        await Promise.all([reload(), staff.reload(), invitations.reload()]);
       }}
       overlays={
         <>
@@ -108,6 +116,16 @@ export default function Acces() {
               void reload();
             }}
           />
+          <InvitationSheet
+            invitation={answering}
+            onClose={() => setAnswering(null)}
+            onDone={(message) => {
+              setAnswering(null);
+              setAnswered(message);
+              void invitations.reload();
+              void reload();
+            }}
+          />
           <ReviewSheet
             target={reviewing}
             onClose={() => setReviewing(null)}
@@ -123,6 +141,21 @@ export default function Acces() {
         <Notice>Hors ligne : voici ce que ton téléphone a gardé. Tes QR du jour J restent disponibles.</Notice>
       ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {answered ? <Notice>{answered}</Notice> : null}
+
+      {invitations.data && invitations.data.length > 0 ? (
+        <>
+          <SectionTitle>{invitationLabels.received}</SectionTitle>
+          {invitations.data.map((inv) => (
+            <InvitationCard
+              key={inv.id}
+              inv={inv}
+              onAnswer={() => setAnswering(inv)}
+              onOpenEvent={() => router.push(`/e/${inv.event.slug}`)}
+            />
+          ))}
+        </>
+      ) : null}
 
       <SectionTitle>À venir</SectionTitle>
       {upcoming && upcoming.length > 0 ? (

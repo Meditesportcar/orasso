@@ -14,6 +14,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
 import { PersonAvatar } from "../components/People";
+import { ReportDialog } from "../components/ReportDialog";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { type CrewActionData, crewAction, isCrewIntent } from "../lib/crews.server";
 import type { Route } from "./+types/crew";
@@ -192,6 +193,7 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
         </Button>
       )}
       {!member && <p className="o-t-caption s-muted">{crewLabels.membersPrivate}</p>}
+      {!leader && !crew.archived && <ReportDialog look="link" targetType="crew" targetId={crew.id} />}
 
       {leader && pending && (
         <section className="s-section" aria-labelledby="demandes-titre" data-testid="crew-pending">

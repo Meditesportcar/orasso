@@ -7,9 +7,11 @@ import { applicationsService } from "./modules/applications/service";
 import { groupMessagesService } from "./modules/communication/group-messages";
 import { staffChatsService } from "./modules/communication/staff-chats";
 import { crewRegistrationService } from "./modules/crews/registration";
+import { highGradePreview } from "./modules/events/high-grade";
 import { eventJobs } from "./modules/events/jobs";
 import { nearbyService } from "./modules/events/nearby";
 import { fieldService } from "./modules/field/service";
+import { moderationService } from "./modules/moderation/service";
 import { notificationsService } from "./modules/notifications/service";
 import { pointsService } from "./modules/points/service";
 import { securityService } from "./modules/security/service";
@@ -27,6 +29,7 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "waitlist.offer-expire": (d) => applicationsService.expireOffer(d.applicationId ?? "", d.offeredAt ?? ""),
   "event.lock": (d) => eventJobs.lock({ eventId: d.eventId ?? "" }),
   "event.preview-open": (d) => eventJobs.previewOpen({ eventId: d.eventId ?? "", at: d.at ?? "" }),
+  "event.high-grade-preview": (d) => highGradePreview.notify({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "event.reminder-week": (d) => eventJobs.reminderWeek({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "event.reminder-eve": (d) => eventJobs.reminderEve({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "notifications.deliver": () => notificationsService.deliverDue(),
@@ -58,6 +61,8 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "messaging.staff-chats-sweep": () => staffChatsService.sweep(),
   // Lot 24 : position d'une alerte close ou vieille de 24 h effacée ; photos de main courante effacées un an après l'événement.
   "field.sweep": () => fieldService.sweep(),
+  // Lot 32 : signalements et captures échus (un an après la décision), sanctions finies depuis un an.
+  "moderation.purge": () => moderationService.purge(),
 };
 
 /**
@@ -103,6 +108,7 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("messaging.group-sweep", "* * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("messaging.staff-chats-sweep", "25 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("field.sweep", "50 * * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("moderation.purge", "50 4 * * *", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {
     async send(name, data, startAfter) {

@@ -1,0 +1,89 @@
+/* Modération (lot 32) : fenêtre « Signaler », bandeau du compte suspendu, file des signalements. Jetons seulement. */
+.mod-dialog {
+  width: min(34rem, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100dvh - 2 * var(--space-4));
+  overflow: auto;
+  padding: var(--space-6);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sheet);
+  opacity: 1;
+  transition: opacity var(--timing-fast) var(--ease-linear);
+}
+.mod-dialog::backdrop {
+  background: var(--scrim);
+}
+.mod-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.mod-dialog__title {
+  margin: 0;
+}
+.mod-reportlink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--touch);
+}
+.mod-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  border-color: var(--win);
+}
+.mod-context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mod-context__item {
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--plate-ink);
+  overflow-wrap: anywhere;
+}
+.mod-context__item--reported {
+  border-left-color: var(--win);
+}
+.mod-shot {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+.mod-target__img {
+  width: 160px;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+.mod-queue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mod-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mod-dialog {
+    transition: opacity 120ms linear;
+  }
+}

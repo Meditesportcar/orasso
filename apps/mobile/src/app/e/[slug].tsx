@@ -22,6 +22,8 @@ import {
   eventFormatLabels,
   eventOutlookLabels,
   instagramHandle,
+  invitationLabels,
+  previewSummary,
   publicAccessText,
   type VendorTypeCode,
 } from "@orasso/shared";
@@ -32,6 +34,7 @@ import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { ContactOrganizerButton } from "@/features/boite/MessageButton";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { ApplySheet } from "@/features/provider/ApplySheet";
+import { ReportButton } from "@/features/ReportSheet";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
 import { breakTitle, formatDay, formatDayHour, formatHour } from "@/lib/format";
@@ -77,7 +80,20 @@ export default function EventPage() {
   if (!e) {
     return (
       <FlowScreen title="Événement" onClose={close}>
-        {event.error ? (
+        {event.error?.code === "invite_only" ? (
+          // Événement privé sur invitation (lot 25) : rien de l'événement pour qui n'est pas invité.
+          <Plate style={styles.info} testID="private-event">
+            <Text variant="title" color={t.color.plateInk}>
+              {invitationLabels.privateEvent}
+            </Text>
+            <Text variant="body" color={t.color.plateMuted}>
+              {invitationLabels.privateEventHint}
+            </Text>
+            <Button variant="plate" icon="entry" onPress={() => router.navigate(status === "in" ? "/acces" : "/auth")}>
+              {status === "in" ? invitationLabels.openAccess : invitationLabels.linkSignIn}
+            </Button>
+          </Plate>
+        ) : event.error ? (
           <Notice tone="error">
             {event.error.status === 404 ? "Cet événement n'existe pas ou plus." : event.error.message}
           </Notice>
@@ -92,8 +108,15 @@ export default function EventPage() {
   const opensAt = new Date(e.registrationOpensAtForMe ?? e.registrationsOpenAt);
   const notYetOpen = Date.now() < opensAt.getTime();
   const cancelled = e.status === "cancelled";
+  // Événement privé (lot 25) : pas de candidature libre, l'invitation se répond dans Accès.
+  const inviteOnly = e.admission === "invite_only";
   const canApply =
-    !cancelled && !e.isLocked && !notYetOpen && (e.remaining === null || e.remaining > 0 || e.admission !== "open");
+    !inviteOnly &&
+    !cancelled &&
+    !e.isLocked &&
+    !notYetOpen &&
+    (e.remaining === null || e.remaining > 0 || e.admission !== "open");
+  const preview = previewSummary(e);
   const wanted = (e.criteria?.categoryIds ?? [])
     .map((id) => categories.data?.find((c) => c.id === id)?.label)
     .filter((l): l is string => Boolean(l));
@@ -145,7 +168,14 @@ export default function EventPage() {
             ? { label: "Voir mes accès", icon: "qr", next: true, onPress: () => router.navigate("/acces") }
             : canApply
               ? { label: "Candidater avec un véhicule", icon: "add", next: true, onPress: apply }
-              : undefined
+              : inviteOnly && !cancelled
+                ? {
+                    label: invitationLabels.openAccess,
+                    icon: "entry",
+                    next: true,
+                    onPress: () => router.navigate("/acces"),
+                  }
+                : undefined
         }
       />
 
@@ -155,6 +185,8 @@ export default function EventPage() {
         </Notice>
       ) : cancelled ? (
         <Notice tone="error">Cet événement est annulé.</Notice>
+      ) : inviteOnly ? (
+        <Notice>{invitationLabels.invitationRequired}</Notice>
       ) : e.isLocked ? (
         <Notice>Les inscriptions sont verrouillées.</Notice>
       ) : notYetOpen ? (
@@ -223,6 +255,7 @@ export default function EventPage() {
       <Info label="Admission">
         {eventAdmissionLabels[e.admission]}
         {e.maxVehiclesPerUser > 1 ? ` · ${e.maxVehiclesPerUser} véhicules par personne au plus` : ""}
+        {preview ? `\n${preview}` : ""}
       </Info>
       <Info label="Public">{publicAccessText(e.publicAccess, e.externalTicketUrl)}</Info>
       {e.vendorTypes.length > 0 ? <Info label="Prestataires attendus">{e.vendorTypes.join(" · ")}</Info> : null}
@@ -256,6 +289,7 @@ export default function EventPage() {
                   Média officiel
                 </Chip>
               ) : null}
+              {status === "in" ? <ReportButton look="link" onPlate type="provider" id={p.id} /> : null}
             </View>
           ))}
         </Plate>
@@ -275,12 +309,13 @@ export default function EventPage() {
         </>
       ) : null}
       {e.description ? <Info label="À propos">{e.description}</Info> : null}
-      {feed.data ? <EventFeed items={feed.data.items} /> : null}
+      {feed.data ? <EventFeed items={feed.data.items} reportable={status === "in"} /> : null}
       {e.instructions ? <Info label="Consignes de l'organisateur">{e.instructions}</Info> : null}
       {/* Contacter l'organisateur (lot 18) : toujours possible pour une personne connectée. */}
       {status === "in" ? <ContactOrganizerButton structureId={e.structure.id} /> : null}
+      {status === "in" ? <ReportButton look="link" type="event" id={e.id} /> : null}
       {reviews.data && (reviews.data.count > 0 || new Date(e.endsAt).getTime() <= Date.now()) ? (
-        <Reviews data={reviews.data} />
+        <Reviews data={reviews.data} reportable={status === "in"} />
       ) : null}
       <ApplySheet
         eventTitle={applying ? e.title : null}
@@ -303,7 +338,7 @@ function posterStatus(e: EventPublic, retained: boolean) {
 }
 
 /** Avis des participants pointés : moyenne à partir du minimum d'avis, réponse publique de l'organisateur. */
-function Reviews({ data }: { data: EventReviews }) {
+function Reviews({ data, reportable }: { data: EventReviews; reportable: boolean }) {
   const { t } = useTheme();
   const c = t.color;
   const average = data.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
@@ -341,6 +376,7 @@ function Reviews({ data }: { data: EventReviews }) {
               Réponse de l'organisateur : {r.reply.text}
             </Text>
           ) : null}
+          {reportable ? <ReportButton look="link" onPlate type="review" id={r.id} /> : null}
         </View>
       ))}
     </Plate>

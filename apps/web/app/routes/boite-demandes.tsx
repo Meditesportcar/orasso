@@ -8,7 +8,9 @@ import {
   type FriendRequestView,
   gradeLabels,
   type InboxSummary,
+  invitationLabels,
   messagingLabels,
+  type ReceivedInvitation,
   type StaffInvitationView,
   staffRequestLabels,
   staffRoleLabels,
@@ -42,6 +44,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     // Invitations à rejoindre une structure (lot 24).
     apiOrThrow<StaffInvitationView[]>(request, "/me/staff-invitations"),
   ]);
+  // Invitations à un événement (lot 25) : la réponse (avec le choix du véhicule) se fait dans Accès.
+  const invitations = await api<ReceivedInvitation[]>(request, "/me/event-invitations");
   return {
     friends: friends.items,
     contactsIn: contacts.items.filter((c) => c.direction === "in"),
@@ -50,6 +54,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     crews,
     confirmations,
     staffInvitations,
+    invitations: invitations.ok ? invitations.data : [],
   };
 }
 
@@ -119,7 +124,7 @@ function Decide({ intentPrefix, id, busy }: { intentPrefix: "friend" | "contact"
 }
 
 export default function Demandes({ loaderData, actionData }: Route.ComponentProps) {
-  const { friends, contactsIn, contactsOut, summary, crews, confirmations, staffInvitations } = loaderData;
+  const { friends, contactsIn, contactsOut, summary, crews, confirmations, staffInvitations, invitations } = loaderData;
   const busy = useNavigation().state !== "idle";
   const requests = Object.values(summary.requests).reduce((a, b) => a + b, 0);
   const empty =
@@ -127,7 +132,8 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
     contactsIn.length === 0 &&
     crews.length === 0 &&
     confirmations.length === 0 &&
-    staffInvitations.length === 0;
+    staffInvitations.length === 0 &&
+    invitations.length === 0;
   return (
     <div className="s-narrow s-stack" data-testid="demandes">
       <h1 className="s-title">{messagingLabels.inbox}</h1>
@@ -161,6 +167,32 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
             </li>
           ))}
         </ul>
+      )}
+      {invitations.length > 0 && (
+        <section className="s-section" aria-labelledby="invitations-titre">
+          <h2 id="invitations-titre" className="s-h2">
+            {invitationLabels.notifTitle}
+          </h2>
+          <ul className="s-people">
+            {invitations.map((i) => (
+              <li key={i.id} className="s-person" data-testid="request-event-invitation">
+                <div className="s-person__main">
+                  <span className="s-label o-t-label">{invitationLabels.invitedBy(i.event.structure.name)}</span>
+                  <a href={`/e/${i.event.slug}`} className="o-t-title">
+                    {i.event.title}
+                  </a>
+                  {i.vehicle && <span className="o-never-truncate">{i.vehicle.label}</span>}
+                  <span className="o-t-caption s-muted">
+                    {invitationLabels.validUntil(formatDateTime(i.event.lockAt))}
+                  </span>
+                </div>
+                <Button variant="secondary" icon="entry" href="/app/acces">
+                  {invitationLabels.openAccess}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       {confirmations.length > 0 && (
         <section className="s-section" aria-labelledby="venues-titre">

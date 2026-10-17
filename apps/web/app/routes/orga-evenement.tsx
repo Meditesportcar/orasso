@@ -20,6 +20,7 @@ import {
   eventOutlookLabels,
   eventPublicAccessLabels,
   eventStatusLabels,
+  invitationLabels,
   isBadWeather,
   RECURRENCE_MAX_COUNT,
   type RecurrenceRule,
@@ -389,6 +390,15 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
             </Button>
             <Button variant="secondary" icon="live" href={`${base}/e/${event.id}/jour-j`}>
               Jour J et après
+            </Button>
+            {/* Invitations nominatives (lot 25). */}
+            <Button
+              variant="secondary"
+              icon="entry"
+              href={`${base}/e/${event.id}/invitations`}
+              data-testid="orga-invitations-link"
+            >
+              {invitationLabels.invitations}
             </Button>
             <Button variant="secondary" icon="share" href={`/e/${event.slug}`}>
               Page publique

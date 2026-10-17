@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { MessageButton } from "@/features/boite/MessageButton";
 import { CrewRowNative } from "@/features/crews/CrewSearch";
+import { ReportButton } from "@/features/ReportSheet";
 import { FriendButton } from "@/features/social/FriendButton";
 import { api } from "@/lib/api";
 import { formatDay, formatHour } from "@/lib/format";
@@ -88,12 +89,10 @@ export default function UserProfile() {
             primary
             onChanged={() => void profile.reload()}
           />
-          {/* Messagerie (lot 18) : ami → conversation, sinon demande de contact. Signalement : lot 32 (désactivé). */}
+          {/* Messagerie (lot 18) : ami → conversation, sinon demande de contact. Signaler : lot 32. */}
           <View style={styles.row}>
             <MessageButton userId={p.userId} pseudo={p.pseudo} />
-            <Button variant="secondary" icon="alert" disabled>
-              {socialLabels.reportSoon}
-            </Button>
+            <ReportButton type="profile" id={p.userId} />
           </View>
         </View>
       )}

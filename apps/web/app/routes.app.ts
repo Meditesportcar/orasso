@@ -16,6 +16,8 @@ export default [
     route("app/garage/:id", "routes/garage-vehicule.tsx"),
     route("app/moi", "routes/moi.tsx"),
     route("app/securite", "routes/securite.tsx"),
+    // Lot 32 : mes sanctions et la contestation (une seule fois par sanction).
+    route("app/sanctions", "routes/sanctions.tsx"),
     route("app/structure/nouvelle", "routes/structure-nouvelle.tsx"),
     route("app/pro/nouvelle", "routes/pro-nouvelle.tsx"),
     route("app/prestataire", "routes/prestataire.tsx"),

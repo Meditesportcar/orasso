@@ -1,14 +1,7 @@
-// Événements, jours, zones, invitations (ARCHITECTURE.md § 1.4).
+// Événements, jours, zones (ARCHITECTURE.md § 1.4). Invitations nominatives : `invitations.ts` (lot 25).
 
 import type { RecurrenceRule } from "@orasso/shared";
-import {
-  eventAdmissions,
-  eventFormats,
-  eventOutlooks,
-  eventPublicAccesses,
-  eventStatuses,
-  invitationStatuses,
-} from "@orasso/shared";
+import { eventAdmissions, eventFormats, eventOutlooks, eventPublicAccesses, eventStatuses } from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -29,15 +22,14 @@ import {
 
 import { user } from "./auth";
 import { bytea, timestamps, tstz } from "./common";
+import { gradeEnum } from "./profiles";
 import { structures } from "./structures";
-import { vehicles } from "./vehicles";
 
 export const eventFormatEnum = pgEnum("event_format", eventFormats);
 export const eventAdmissionEnum = pgEnum("event_admission", eventAdmissions);
 export const eventPublicAccessEnum = pgEnum("event_public_access", eventPublicAccesses);
 export const eventStatusEnum = pgEnum("event_status", eventStatuses);
 export const eventOutlookEnum = pgEnum("event_outlook", eventOutlooks);
-export const invitationStatusEnum = pgEnum("invitation_status", invitationStatuses);
 
 export type EventCriteria = { categoryIds: string[]; makeIds: string[]; countries: string[]; text: string | null };
 
@@ -83,6 +75,10 @@ export const events = pgTable(
     registrationsOpenAt: tstz("registrations_open_at").notNull(),
     previewHours: smallint("preview_hours").notNull().default(24),
     lockOffsetMinutes: integer("lock_offset_minutes").notNull().default(120),
+    /** Hauts grades (lot 25, ARCHITECTURE-SUITE § 9.2) : priorité en liste d'attente, avant-première supplémentaire. */
+    highGradePriority: boolean("high_grade_priority").notNull().default(false),
+    highGradePreviewHours: smallint("high_grade_preview_hours").notNull().default(0),
+    highGradeMin: gradeEnum("high_grade_min").notNull().default("circuit"),
     /** Trace posée par la tâche `event.lock` ; la règle vit dans `isLocked()`. */
     lockedAt: tstz("locked_at"),
     rulesText: text("rules_text"),
@@ -113,6 +109,7 @@ export const events = pgTable(
     check("events_capacity_check", sql`${t.capacity} is null or ${t.capacity} > 0`),
     check("events_lock_offset_check", sql`${t.lockOffsetMinutes} between 0 and 1440`),
     check("events_max_vehicles_check", sql`${t.maxVehiclesPerUser} >= 1`),
+    check("events_high_grade_preview_check", sql`${t.highGradePreviewHours} between 0 and 168`),
   ],
 );
 
@@ -147,24 +144,4 @@ export const eventZones = pgTable(
     ...timestamps,
   },
   (t) => [unique("event_zones_event_code_key").on(t.eventId, t.code)],
-);
-
-/** [préparé] Invitations nominatives (`admission = invite_only`) ; routes au lot 13. */
-export const eventInvitations = pgTable(
-  "event_invitations",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    eventId: uuid("event_id")
-      .notNull()
-      .references(() => events.id, { onDelete: "cascade" }),
-    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
-    vehicleId: uuid("vehicle_id").references(() => vehicles.id, { onDelete: "set null" }),
-    email: text("email"),
-    token: text("token").notNull().unique("event_invitations_token_key"),
-    status: invitationStatusEnum("status").notNull().default("pending"),
-    expiresAt: tstz("expires_at"),
-    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
-    ...timestamps,
-  },
-  (t) => [index("event_invitations_event_idx").on(t.eventId)],
 );

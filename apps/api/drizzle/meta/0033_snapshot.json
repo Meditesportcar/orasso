@@ -1,5 +1,5 @@
 {
-  "id": "f3bec07f-aeec-4b46-9abc-445381519655",
+  "id": "2a57d931-5e06-4338-821d-987ae1a1cafb",
   "prevId": "259451c6-eb9e-4a8a-99e0-a57124e6cc4b",
   "version": "7",
   "dialect": "postgresql",
@@ -3322,167 +3322,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.event_invitations": {
-      "name": "event_invitations",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "token": {
-          "name": "token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "invitation_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "event_invitations_event_idx": {
-          "name": "event_invitations_event_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "event_invitations_event_id_events_id_fk": {
-          "name": "event_invitations_event_id_events_id_fk",
-          "tableFrom": "event_invitations",
-          "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "event_invitations_user_id_user_id_fk": {
-          "name": "event_invitations_user_id_user_id_fk",
-          "tableFrom": "event_invitations",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "event_invitations_vehicle_id_vehicles_id_fk": {
-          "name": "event_invitations_vehicle_id_vehicles_id_fk",
-          "tableFrom": "event_invitations",
-          "tableTo": "vehicles",
-          "columnsFrom": [
-            "vehicle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "event_invitations_created_by_user_id_fk": {
-          "name": "event_invitations_created_by_user_id_fk",
-          "tableFrom": "event_invitations",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "event_invitations_token_key": {
-          "name": "event_invitations_token_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.event_zones": {
       "name": "event_zones",
       "schema": "",
@@ -3750,13 +3589,6 @@
           "notNull": true,
           "default": false
         },
-        "shop_enabled": {
-          "name": "shop_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "status": {
           "name": "status",
           "type": "event_status",
@@ -3792,6 +3624,28 @@
           "primaryKey": false,
           "notNull": true,
           "default": 120
+        },
+        "high_grade_priority": {
+          "name": "high_grade_priority",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "high_grade_preview_hours": {
+          "name": "high_grade_preview_hours",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "high_grade_min": {
+          "name": "high_grade_min",
+          "type": "grade",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'circuit'"
         },
         "locked_at": {
           "name": "locked_at",
@@ -4062,6 +3916,10 @@
         "events_max_vehicles_check": {
           "name": "events_max_vehicles_check",
           "value": "\"events\".\"max_vehicles_per_user\" >= 1"
+        },
+        "events_high_grade_preview_check": {
+          "name": "events_high_grade_preview_check",
+          "value": "\"events\".\"high_grade_preview_hours\" between 0 and 168"
         }
       },
       "isRLSEnabled": false
@@ -4356,6 +4214,297 @@
           "nullsNotDistinct": false,
           "columns": [
             "client_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.event_invitations": {
+      "name": "event_invitations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vehicle_id": {
+          "name": "vehicle_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "invitation_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_event_id": {
+          "name": "source_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accepted_application_id": {
+          "name": "accepted_application_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "declined_at": {
+          "name": "declined_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sent_at": {
+          "name": "sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "event_invitations_event_idx": {
+          "name": "event_invitations_event_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_invitations_user_idx": {
+          "name": "event_invitations_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_invitations_event_user_key": {
+          "name": "event_invitations_event_user_key",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_invitations\".\"user_id\" is not null and \"event_invitations\".\"status\" in ('pending', 'accepted', 'declined')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_invitations_event_email_key": {
+          "name": "event_invitations_event_email_key",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"email\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_invitations\".\"email\" is not null and \"event_invitations\".\"user_id\" is null and \"event_invitations\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_invitations_application_key": {
+          "name": "event_invitations_application_key",
+          "columns": [
+            {
+              "expression": "accepted_application_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "event_invitations_event_id_events_id_fk": {
+          "name": "event_invitations_event_id_events_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_invitations_user_id_user_id_fk": {
+          "name": "event_invitations_user_id_user_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_invitations_vehicle_id_vehicles_id_fk": {
+          "name": "event_invitations_vehicle_id_vehicles_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "vehicles",
+          "columnsFrom": [
+            "vehicle_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "event_invitations_created_by_user_id_fk": {
+          "name": "event_invitations_created_by_user_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "event_invitations_source_event_id_events_id_fk": {
+          "name": "event_invitations_source_event_id_events_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "events",
+          "columnsFrom": [
+            "source_event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "event_invitations_accepted_application_id_applications_id_fk": {
+          "name": "event_invitations_accepted_application_id_applications_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "applications",
+          "columnsFrom": [
+            "accepted_application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "event_invitations_token_key": {
+          "name": "event_invitations_token_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
           ]
         }
       },
@@ -8556,314 +8705,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.ticket_scans": {
-      "name": "ticket_scans",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "staff_user_id": {
-          "name": "staff_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ticket_id": {
-          "name": "ticket_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "local_decision": {
-          "name": "local_decision",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "scanned_at": {
-          "name": "scanned_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "received_at": {
-          "name": "received_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "server_result": {
-          "name": "server_result",
-          "type": "ticket_scan_result",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "ticket_scans_event_idx": {
-          "name": "ticket_scans_event_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "received_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ticket_scans_ticket_idx": {
-          "name": "ticket_scans_ticket_idx",
-          "columns": [
-            {
-              "expression": "ticket_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "ticket_scans_event_id_events_id_fk": {
-          "name": "ticket_scans_event_id_events_id_fk",
-          "tableFrom": "ticket_scans",
-          "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "ticket_scans_device_id_devices_id_fk": {
-          "name": "ticket_scans_device_id_devices_id_fk",
-          "tableFrom": "ticket_scans",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "ticket_scans_staff_user_id_user_id_fk": {
-          "name": "ticket_scans_staff_user_id_user_id_fk",
-          "tableFrom": "ticket_scans",
-          "tableTo": "user",
-          "columnsFrom": [
-            "staff_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "ticket_scans_ticket_id_tickets_id_fk": {
-          "name": "ticket_scans_ticket_id_tickets_id_fk",
-          "tableFrom": "ticket_scans",
-          "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.visitor_entries": {
-      "name": "visitor_entries",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "device_id": {
-          "name": "device_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "staff_user_id": {
-          "name": "staff_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "delta": {
-          "name": "delta",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "at": {
-          "name": "at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "visitor_entries_event_idx": {
-          "name": "visitor_entries_event_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "visitor_entries_event_id_events_id_fk": {
-          "name": "visitor_entries_event_id_events_id_fk",
-          "tableFrom": "visitor_entries",
-          "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "visitor_entries_device_id_devices_id_fk": {
-          "name": "visitor_entries_device_id_devices_id_fk",
-          "tableFrom": "visitor_entries",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "device_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "visitor_entries_staff_user_id_user_id_fk": {
-          "name": "visitor_entries_staff_user_id_user_id_fk",
-          "tableFrom": "visitor_entries",
-          "tableTo": "user",
-          "columnsFrom": [
-            "staff_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "visitor_entries_delta_check": {
-          "name": "visitor_entries_delta_check",
-          "value": "\"visitor_entries\".\"delta\" in (-10, -1, 1, 10)"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.structure_bans": {
       "name": "structure_bans",
       "schema": "",
@@ -10119,12 +9960,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "used_by_device_id": {
-          "name": "used_by_device_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "cancelled_at": {
           "name": "cancelled_at",
           "type": "timestamp with time zone",
@@ -10271,19 +10106,6 @@
           "tableTo": "user",
           "columnsFrom": [
             "used_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "tickets_used_by_device_id_devices_id_fk": {
-          "name": "tickets_used_by_device_id_devices_id_fk",
-          "tableFrom": "tickets",
-          "tableTo": "devices",
-          "columnsFrom": [
-            "used_by_device_id"
           ],
           "columnsTo": [
             "id"
@@ -11552,7 +11374,8 @@
         "pending",
         "accepted",
         "declined",
-        "expired"
+        "expired",
+        "withdrawn"
       ]
     },
     "public.contact_status": {
@@ -11729,16 +11552,6 @@
         "unknown",
         "present",
         "absent"
-      ]
-    },
-    "public.ticket_scan_result": {
-      "name": "ticket_scan_result",
-      "schema": "public",
-      "values": [
-        "accepted",
-        "already",
-        "refused",
-        "rejected"
       ]
     },
     "public.follow_source": {

@@ -133,7 +133,10 @@ export const socialProfile = {
   /** `GET /users/:pseudo` (et l'aperçu `/me/public-preview` avec `asStranger`). */
   async view(viewer: Viewer, pseudo: string, opts: { asStranger?: boolean } = {}): Promise<UserProfileView> {
     const target = await profilesRepo.byPseudo(pseudo);
-    if (!target || target.deletedAt) throw notFound("Profil introuvable");
+    // Lot 32 (relecture) : un compte banni n'est plus consultable par lien, sauf par lui-même.
+    if (!target || target.deletedAt || (target.bannedAt && target.userId !== viewer.user.id)) {
+      throw notFound("Profil introuvable");
+    }
     const { audience, friendshipId, state } = await audienceFor(viewer, target, opts);
     const fields = profileFields(audience);
     const at = now();
@@ -196,7 +199,9 @@ export const socialProfile = {
     const row = await vehiclesRepo.findFullById(id);
     if (!row) throw notFound("Véhicule introuvable");
     const owner = await profilesRepo.byUserId(row.ownerId);
-    if (!owner || owner.deletedAt) throw notFound("Véhicule introuvable");
+    if (!owner || owner.deletedAt || (owner.bannedAt && owner.userId !== viewer.user.id)) {
+      throw notFound("Véhicule introuvable");
+    }
     // Un véhicule archivé (vendu, accidenté…) n'est plus visible que de son propriétaire.
     if (row.status !== "active" && row.ownerId !== viewer.user.id) throw notFound("Véhicule introuvable");
     const { audience } = await audienceFor(viewer, owner);

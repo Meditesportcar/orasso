@@ -11,25 +11,30 @@ import {
   type EventWeather,
   eventFormatLabels,
   gradeLabels,
+  invitationLabels,
   type MyApplication,
   type MyPoints,
   type MyReview,
   type MyTicket,
   POINTS_PENDING_LABEL,
   REVIEW_MAX_RATING,
+  type ReceivedInvitation,
   refusalReasonLabels,
+  type VehicleFull,
 } from "@orasso/shared";
 import { useState } from "react";
 import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-router";
 
 import { Countdown } from "../components/Countdown";
 import { CrewConfirm } from "../components/Crews";
+import { ReceivedInvitationCard } from "../components/Invitations";
 import { Qr } from "../components/Qr";
 import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { crewAction, isCrewIntent } from "../lib/crews.server";
 import { formatDateTime, formatWhen } from "../lib/format";
+import { invitationAction, isInvitationIntent, myActiveVehicles } from "../lib/invitations.server";
 import { badgeFor } from "../lib/status";
 import { useChannel } from "../lib/useChannel";
 import type { Route } from "./+types/acces";
@@ -104,7 +109,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const points = past ? await apiOrThrow<MyPoints>(request, "/me/points") : null;
   const me = await requireMe(request);
   const tickets = await api<MyTicket[]>(request, "/me/tickets");
+  // Invitations nominatives reçues (lot 25, docs/02 « Accès ») : accepter avec un véhicule ou refuser.
+  const invitationsRes = past ? null : await api<ReceivedInvitation[]>(request, "/me/event-invitations");
+  const invitations = invitationsRes?.ok ? invitationsRes.data : [];
+  const vehicles: VehicleFull[] = invitations.some((i) => !i.vehicle) ? await myActiveVehicles(request) : [];
   return {
+    invitations,
+    vehicles,
     past,
     applications,
     passes,
@@ -121,6 +132,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
+  // Invitation nominative : accepter ou refuser (lot 25).
+  if (isInvitationIntent(intent)) {
+    const res = await invitationAction(request, form);
+    return data({ error: res.error, ok: res.ok }, { status: res.status });
+  }
   // Confirmer ma venue en crew / Je ne viens pas (lot 19).
   if (isCrewIntent(intent)) {
     const res = await crewAction(request, form);
@@ -428,13 +444,33 @@ function ReviewBlock({ app, review, busy }: { app: MyApplication; review: MyRevi
 }
 
 export default function Acces({ loaderData, actionData }: Route.ComponentProps) {
-  const { past, applications, passes, weather, rules, notes, points, sent, userId, ticketCount } = loaderData;
+  const {
+    past,
+    applications,
+    passes,
+    weather,
+    rules,
+    notes,
+    points,
+    sent,
+    userId,
+    ticketCount,
+    invitations,
+    vehicles,
+  } = loaderData;
+  const busy = useNavigation().state !== "idle";
   const okMessage = actionData && "ok" in actionData ? actionData.ok : null;
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   // Une décision de l'organisateur, une offre ou un pass émis : la page se met à jour sans rechargement.
   useChannel(`user:${userId}`, (message) => {
-    if (message.type === "application.changed" || message.type === "notification") revalidator.revalidate();
+    if (
+      message.type === "application.changed" ||
+      message.type === "notification" ||
+      message.type === "invitation.received"
+    ) {
+      revalidator.revalidate();
+    }
   });
   return (
     <div className="s-stack">
@@ -464,6 +500,19 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
         <p className="s-notice s-notice--ok" role="status" data-testid="acces-ok">
           {okMessage}
         </p>
+      )}
+
+      {!past && invitations.length > 0 && (
+        <section className="s-stack" aria-labelledby="invitations-title" data-testid="received-invitations">
+          <h2 id="invitations-title" className="s-h2">
+            {invitationLabels.received}
+          </h2>
+          <div className="inv-list">
+            {invitations.map((inv) => (
+              <ReceivedInvitationCard key={inv.id} inv={inv} vehicles={vehicles} busy={busy} primary={false} />
+            ))}
+          </div>
+        </section>
       )}
 
       {past && points && (

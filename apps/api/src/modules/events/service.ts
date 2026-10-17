@@ -38,10 +38,11 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
-import { withTx } from "../../lib/tx";
+import { type Tx, withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { announcementsService } from "../communication/announcements";
 import { staffChatsService } from "../communication/staff-chats";
+import { assertCanSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
@@ -68,6 +69,9 @@ async function publicView(e: EventRow, s: StructureRow, showInstructions: boolea
     externalTicketUrl: e.externalTicketUrl,
     registrationsOpenAt: e.registrationsOpenAt.toISOString(),
     previewHours: e.previewHours,
+    highGradePriority: e.highGradePriority,
+    highGradePreviewHours: e.highGradePreviewHours,
+    highGradeMin: e.highGradeMin,
     lockAt: lockAt(e).toISOString(),
     isLocked: isLocked(e, t),
     rulesText: e.rulesText,
@@ -144,6 +148,9 @@ function copyValues(e: EventRow) {
     publicAccess: e.publicAccess,
     externalTicketUrl: e.externalTicketUrl,
     previewHours: e.previewHours,
+    highGradePriority: e.highGradePriority,
+    highGradePreviewHours: e.highGradePreviewHours,
+    highGradeMin: e.highGradeMin,
     lockOffsetMinutes: e.lockOffsetMinutes,
     rulesText: e.rulesText,
     instructions: e.instructions,
@@ -158,7 +165,10 @@ export const eventsService = {
     return exploreEvents(q, viewer);
   },
 
-  /** Page publique d'un événement (`/e/<slug>`). Brouillon : 404 ; sur invitation : membres et candidats seulement. */
+  /**
+   * Page publique d'un événement (`/e/<slug>`). Brouillon : 404. Sur invitation (lot 25, § 9.1) : `403 invite_only`
+   * sans rien de l'événement, sauf pour les ayants droit (organisation, staff, inscrits, invités).
+   */
   async getPublic(slug: string, viewer: Viewer | null): Promise<EventPublic> {
     const e = await db.query.events.findFirst({ where: eq(events.slug, slug) });
     if (!e || e.status === "draft") throw notFound("Événement introuvable");
@@ -170,7 +180,7 @@ export const eventsService = {
         })
       : [];
     const member = viewer ? await isMember(e.structureId, viewer.user.id) : false;
-    if (e.admission === "invite_only" && !member && mine.length === 0) throw notFound("Événement introuvable");
+    await assertCanSeeEvent(e, viewer);
     const accepted = mine.some((a) => a.status === "accepted");
     const view = await publicView(e, s, member || accepted);
     if (!viewer) return view;
@@ -181,7 +191,7 @@ export const eventsService = {
       myApplications: mine
         .filter((a) => a.kind === "vehicle")
         .map((a) => ({ id: a.id, vehicleId: a.vehicleId, status: a.status })),
-      registrationOpensAtForMe: registrationOpensAt(e, follower).toISOString(),
+      registrationOpensAtForMe: registrationOpensAt(e, { follower, grade: viewer.profile.grade }).toISOString(),
     };
   },
 
@@ -288,6 +298,8 @@ export const eventsService = {
         datesChanged ||
         row.lockOffsetMinutes !== current.lockOffsetMinutes ||
         row.previewHours !== current.previewHours ||
+        row.highGradePreviewHours !== current.highGradePreviewHours ||
+        row.highGradeMin !== current.highGradeMin ||
         row.registrationsOpenAt.getTime() !== current.registrationsOpenAt.getTime();
       if (rescheduled) after(() => scheduleEventJobs(row));
       await applicationsService.offerNext(tx, row, after);
@@ -343,6 +355,23 @@ export const eventsService = {
     await withTx(async (tx, after) => {
       const e = await eventsRepo.lockForUpdate(tx, id);
       if (e.status === "cancelled") throw conflict("conflict", "Déjà annulé");
+      await this.cancelInTx(tx, after, id, v.user.id, "organizer");
+    });
+    return this.getForOrganizer(v, id);
+  },
+
+  /**
+   * Annulation dans une transaction ouverte, l'événement déjà verrouillé et non annulé : par l'organisateur, ou par
+   * l'équipe Orasso quand la modération retire l'événement (lot 32, dans la transaction de sa décision).
+   */
+  async cancelInTx(
+    tx: Tx,
+    after: (cb: () => unknown) => void,
+    id: string,
+    actorId: string,
+    by: "organizer" | "orasso",
+  ) {
+    {
       const [row] = await tx
         .update(events)
         .set({ status: "cancelled", cancelledAt: now() })
@@ -351,7 +380,7 @@ export const eventsService = {
       if (!row) throw notFound("Événement introuvable");
       const cancelled = await applicationsService.cancelAll(tx, row, after);
       // Fil de l'événement (lot 20) : une entrée « Annulé », une seule fois (verrou + statut contrôlé ci-dessus).
-      await announcementsService.recordStatusChange(tx, id, "cancelled", v.user.id);
+      await announcementsService.recordStatusChange(tx, id, "cancelled", actorId);
       // Billets de visiteurs (lot 14) : les billets valables sont annulés, les paiements en cours abandonnés.
       const cancelledTickets = await tx
         .update(tickets)
@@ -365,7 +394,7 @@ export const eventsService = {
       for (const userId of new Set([...cancelled.map((a) => a.userId), ...cancelledTickets.map((t) => t.userId)])) {
         await notificationsService.notify(tx, userId, "event_cancelled", {
           title: "Événement annulé",
-          body: `« ${row.title} » (${formatDateTime(row.startsAt)}) est annulé par l'organisateur.`,
+          body: `« ${row.title} » (${formatDateTime(row.startsAt)}) est annulé par ${by === "orasso" ? "l'équipe Orasso" : "l'organisateur"}.`,
           eventId: id,
           eventStartsAt: row.startsAt,
           data: { eventId: id },
@@ -374,8 +403,7 @@ export const eventsService = {
       }
       after(() => realtime.publish(`event:${id}:access`, "event.cancelled", { eventId: id }));
       after(() => notificationsService.kick());
-    });
-    return this.getForOrganizer(v, id);
+    }
   },
 
   /**

@@ -24,7 +24,9 @@ import { crewsRoutes } from "./modules/crews/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { fieldRoutes } from "./modules/field/routes";
+import { invitationsRoutes } from "./modules/invitations/routes";
 import { messagingRoutes } from "./modules/messaging/routes";
+import { moderationRoutes } from "./modules/moderation/routes";
 import { notificationsRoutes } from "./modules/notifications/routes";
 import { pointsRoutes } from "./modules/points/routes";
 import { profilesRepo } from "./modules/profiles/repo";
@@ -158,8 +160,10 @@ app.route("/", socialRoutes);
 app.route("/", uploadsRoutes);
 app.route("/", messagingRoutes);
 app.route("/", crewsRoutes);
+app.route("/", invitationsRoutes);
 app.route("/", searchRoutes);
 app.route("/", communicationRoutes);
+app.route("/", moderationRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes, avec la preuve de second facteur de la
 // session qui a ouvert la connexion (sans elle, les organisateurs perdaient le tri en direct depuis le lot 15).

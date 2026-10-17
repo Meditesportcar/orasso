@@ -10,9 +10,10 @@ import * as Notifications from "expo-notifications";
 import { Stack, useGlobalSearchParams, useRootNavigationState, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
+import { ReportSheetHost } from "@/features/ReportSheet";
 import { StaffBackground } from "@/features/staff/StaffBackground";
 import { ApplicationsProvider } from "@/lib/applications";
 import { kvGet, kvSet } from "@/lib/kv";
@@ -37,7 +38,7 @@ const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "o", "p", "ami", "_ds"]);
 // Le thème (Béton par défaut, Sable, auto) et les polices Archivo sont posés une fois, à la racine.
 function Shell() {
   const { theme } = useTheme();
-  const { status } = useSession();
+  const { status, me } = useSession();
   const { persona, backToFan, choose } = usePersona();
   const router = useRouter();
   const segments = useSegments();
@@ -63,6 +64,14 @@ function Shell() {
     if (status !== "in" || !navigation?.key) return;
     if (misplacedGroup(persona, segments[0] as string | undefined)) router.replace(homeOf(persona));
   }, [status, persona, segments, router, navigation?.key]);
+
+  // Lot 32 : compte suspendu → l'écran « Compte suspendu » (motif, contestation) s'ouvre une fois par lancement.
+  const suspendedShown = useRef(false);
+  useEffect(() => {
+    if (status !== "in" || !navigation?.key || !me?.suspension || suspendedShown.current) return;
+    suspendedShown.current = true;
+    router.push("/suspendu");
+  }, [status, me?.suspension, router, navigation?.key]);
 
   // Appareil enregistré auprès de l'API dès que le compte est ouvert (utile aux notifications et au staff).
   useEffect(() => {
@@ -93,6 +102,8 @@ function Shell() {
       {/* Les écrans attendent la lecture de la session : sans jeton, leurs premières requêtes partiraient anonymes. */}
       {status === "loading" ? null : <Stack screenOptions={{ headerShown: false, animation: "none" }} />}
       <AnnouncementSheet />
+      {/* Lot 32 : feuille « Signaler », une pour toute l'appli. */}
+      {status === "in" ? <ReportSheetHost /> : null}
       {status === "in" ? <StaffBackground /> : null}
       {opening ? (
         <View style={StyleSheet.absoluteFill}>

@@ -23,6 +23,8 @@ export default [
     route("pros", "routes/pros.tsx"),
     route("p/:slug", "routes/pro.tsx"),
     route("invitation/:jeton", "routes/invitation.tsx"),
+    // Invitation nominative à un événement, lien envoyé par e-mail (lot 25).
+    route("invitation-evenement/:jeton", "routes/invitation-evenement.tsx"),
     route("express/:jeton", "routes/express.tsx"),
     route("connexion", "routes/connexion.tsx"),
     route("connexion/verification", "routes/verification.tsx"),

@@ -7,6 +7,7 @@ import type { ComponentType } from "react";
 import { ContactRequests } from "./contact";
 import { CrewRequests } from "./crew";
 import { CrewConfirmations } from "./crewConfirmation";
+import { EventInvitations } from "./eventInvitation";
 import { FriendRequests } from "./friend";
 import { StaffInvitations } from "./staffInvitation";
 import type { RequestSectionProps } from "./types";
@@ -19,6 +20,7 @@ export const requestSections: RequestSection[] = [
   { kind: "crewConfirmation", Section: CrewConfirmations },
   { kind: "crew", Section: CrewRequests },
   { kind: "staffInvitation", Section: StaffInvitations },
+  { kind: "eventInvitation", Section: EventInvitations },
 ];
 
 export type { RequestSectionProps } from "./types";

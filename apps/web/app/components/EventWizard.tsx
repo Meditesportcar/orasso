@@ -13,6 +13,11 @@ import {
   eventFormatLabels,
   eventFormats,
   eventPublicAccessLabels,
+  type Grade,
+  gradeLabels,
+  grades,
+  highGradesText,
+  invitationLabels,
   ON_SITE_PAYMENT_LABEL,
   shopLabels,
   type VehicleMake,
@@ -98,6 +103,10 @@ type Draft = {
   criteriaText: string;
   registrationsOpenAt: string;
   previewHours: string;
+  /** Hauts grades (lot 25) : priorité en liste d'attente, avant-première supplémentaire, seuil. */
+  highGradePriority: boolean;
+  highGradePreviewHours: string;
+  highGradeMin: Grade;
   lockOffsetMinutes: string;
   rulesText: string;
   instructions: string;
@@ -133,6 +142,9 @@ function initial(event?: EventOrganizer): Draft {
       criteriaText: "",
       registrationsOpenAt: toInput(new Date()),
       previewHours: "24",
+      highGradePriority: false,
+      highGradePreviewHours: "0",
+      highGradeMin: "circuit",
       lockOffsetMinutes: "120",
       rulesText: defaultEventRules,
       instructions: "",
@@ -166,6 +178,9 @@ function initial(event?: EventOrganizer): Draft {
     criteriaText: event.criteria?.text ?? "",
     registrationsOpenAt: toInput(event.registrationsOpenAt),
     previewHours: String(event.previewHours),
+    highGradePriority: event.highGradePriority,
+    highGradePreviewHours: String(event.highGradePreviewHours),
+    highGradeMin: event.highGradeMin,
     lockOffsetMinutes: String(
       event.lockAt ? Math.round((new Date(event.startsAt).getTime() - new Date(event.lockAt).getTime()) / 60_000) : 120,
     ),
@@ -243,6 +258,9 @@ function payloadOf(d: Draft) {
       d.publicAccess === "paid_external" && d.paymentMode === "link" ? d.externalTicketUrl.trim() : null,
     registrationsOpenAt: fromInput(d.registrationsOpenAt),
     previewHours: Number(d.previewHours),
+    highGradePriority: d.highGradePriority,
+    highGradePreviewHours: Number(d.highGradePreviewHours),
+    highGradeMin: d.highGradeMin,
     lockOffsetMinutes: Number(d.lockOffsetMinutes),
     rulesText: d.rulesText.trim() || null,
     instructions: d.instructions.trim() || null,
@@ -612,7 +630,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
             <fieldset className="s-fieldset s-stack s-stack--tight">
               <legend className="o-t-label s-label">Mode d'admission</legend>
               <ChipRow className="s-chips-wrap">
-                {(["open", "filtered"] as const).map((a) => (
+                {(["open", "filtered", "invite_only"] as const).map((a) => (
                   <Chip key={a} selected={d.admission === a} onClick={() => set("admission", a)}>
                     {eventAdmissionLabels[a]}
                   </Chip>
@@ -622,8 +640,9 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
             <p className="s-muted">
               {d.admission === "open"
                 ? "Tout le monde est retenu d'office, dans la limite des places."
-                : "Tu trieras les candidatures une à une ou en liste, avec ton équipe de filtration."}{" "}
-              « Sur invitation » (événement privé) arrive avec les invitations nominatives.
+                : d.admission === "invite_only"
+                  ? "Événement privé : il n'apparaît nulle part et seuls tes invités le voient. Tu invites des personnes, des véhicules ou des adresses e-mail depuis la page de l'événement, une fois publié."
+                  : "Tu trieras les candidatures une à une ou en liste, avec ton équipe de filtration."}
             </p>
           </>
         )}
@@ -708,6 +727,37 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
               ]}
               help="Les abonnés de ta structure peuvent candidater avant l'ouverture publique."
             />
+            <fieldset className="s-fieldset s-stack s-stack--tight" data-testid="wizard-high-grades">
+              <legend className="o-t-label s-label">{invitationLabels.highGradeTitle}</legend>
+              <CheckboxField
+                name="highGradePriority"
+                label={invitationLabels.highGradePriority}
+                checked={d.highGradePriority}
+                onChange={(e) => set("highGradePriority", e.currentTarget.checked)}
+              />
+              <p className="o-t-caption s-muted">{invitationLabels.highGradePriorityHint}</p>
+              <SelectField
+                label={invitationLabels.highGradePreview}
+                name="highGradePreviewHours"
+                value={d.highGradePreviewHours}
+                onChange={(e) => set("highGradePreviewHours", e.currentTarget.value)}
+                options={[
+                  { value: "0", label: "Aucune" },
+                  { value: "24", label: "24 h avant" },
+                  { value: "48", label: "48 h avant" },
+                  { value: "72", label: "72 h avant" },
+                ]}
+                help={invitationLabels.highGradePreviewHint}
+              />
+              <SelectField
+                label={invitationLabels.highGradeMin}
+                name="highGradeMin"
+                value={d.highGradeMin}
+                onChange={(e) => set("highGradeMin", e.currentTarget.value as Grade)}
+                options={grades.filter((g) => g !== "rodage").map((g) => ({ value: g, label: gradeLabels[g] }))}
+                help={`Concerne : ${highGradesText(d.highGradeMin)}.`}
+              />
+            </fieldset>
             <SelectField
               label="Verrouillage des inscriptions"
               name="lockOffsetMinutes"

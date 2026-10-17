@@ -20,7 +20,9 @@ import { seedCrews } from "./seed/crews";
 import { seedDayJ } from "./seed/day-j";
 import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
+import { seedInvitations } from "./seed/invitations";
 import { seedMessaging } from "./seed/messaging";
+import { seedModeration } from "./seed/moderation";
 import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
@@ -102,6 +104,10 @@ async function main() {
   await seedCommunication();
   // Lot 24 : rôle boutique du Salon Argelès (billets gratuits, staff boutique) et une demande de staff en attente.
   await seedStaff(hash);
+  // Lot 32 : modératrice, signalements, suspension automatique contestée.
+  await seedModeration(hash);
+  // Lot 25 : événement privé « Soirée partenaires » et ses invitations ; hauts grades sur l'Expo Rivesaltes.
+  await seedInvitations();
 }
 
 try {

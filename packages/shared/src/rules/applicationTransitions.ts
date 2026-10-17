@@ -60,6 +60,10 @@ const TRANSITIONS: ReadonlyArray<readonly [ApplicationStatus | null, Application
   ["awaiting_member", "pending", USER],
   ["awaiting_member", "withdrawn", [...USER, ...SYSTEM]],
   ["awaiting_member", "cancelled", SYSTEM],
+  // Invitation nominative acceptée (lot 25, ARCHITECTURE-SUITE § 9.1, S25) : l'invité est retenu directement (pass
+  // émis) s'il reste une place, sinon mis en tête de la liste d'attente. Seul `invitationsService.accept` crée ainsi.
+  [null, "accepted", USER],
+  [null, "waitlisted", USER],
 ];
 
 export function canTransition(from: ApplicationStatus | null, to: ApplicationStatus, actor: TransitionActor): boolean {

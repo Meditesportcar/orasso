@@ -21,6 +21,7 @@ import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { twoFactorOk } from "../messaging/core";
 import { inboxService } from "../messaging/inbox";
+import { suspensionInfo } from "../moderation/suspension";
 import { notificationsService } from "../notifications/service";
 import { personasOf } from "./personas";
 import { type Profile, profilesRepo } from "./repo";
@@ -151,6 +152,7 @@ export const profilesService = {
         ...m,
         staffRoles: m.staffRoles as Me["memberships"][number]["staffRoles"],
       })),
+      suspension: await suspensionInfo(v.user.id, p.suspendedUntil),
       twoFactorRequired: required,
       twoFactorHint: required
         ? (await hasPasskey(v.user.id))

@@ -19,6 +19,7 @@ import {
   type EventCounters,
   eventOutlookLabels,
   eventStatusLabels,
+  invitationLabels,
   orgaLabels,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
@@ -369,8 +370,15 @@ export function EventPage({ eventId }: { eventId: string }) {
           ) : null}
 
           <View style={styles.buttons}>
-            <Button variant="plate" icon="share" disabled onPress={() => undefined} fullWidth>
-              {orgaLabels.inviteSoon}
+            {/* Invitations nominatives (lot 25). */}
+            <Button
+              variant="plate"
+              icon="entry"
+              onPress={() => router.push(`/evenement/${eventId}/inviter`)}
+              fullWidth
+              testID="orga-invite"
+            >
+              {invitationLabels.invite}
             </Button>
             <Button variant="plate" icon="list" disabled onPress={() => undefined} fullWidth>
               {orgaLabels.reportSoon}

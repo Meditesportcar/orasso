@@ -151,7 +151,8 @@ export const structuresService = {
     const upcoming = db
       .select({ structureId: events.structureId, n: count().as("n") })
       .from(events)
-      .where(and(eq(events.status, "published"), gte(events.endsAt, t)))
+      // Événements privés sur invitation jamais comptés (lot 25).
+      .where(and(eq(events.status, "published"), gte(events.endsAt, t), ne(events.admission, "invite_only")))
       .groupBy(events.structureId)
       .as("upcoming");
     const rows = await db

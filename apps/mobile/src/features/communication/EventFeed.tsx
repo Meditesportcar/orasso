@@ -4,12 +4,13 @@ import { Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/nativ
 import { type AnnouncementView, announcementKindLabels, communicationLabels } from "@orasso/shared";
 import { Image, StyleSheet, View } from "react-native";
 
+import { ReportButton } from "@/features/ReportSheet";
 import { formatDayHour } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
 
 const { space1, space2, space3 } = tokens.spacing;
 
-export function FeedEntry({ item }: { item: AnnouncementView }) {
+export function FeedEntry({ item, reportable = false }: { item: AnnouncementView; reportable?: boolean }) {
   const { t } = useTheme();
   const c = t.color;
   return (
@@ -38,12 +39,15 @@ export function FeedEntry({ item }: { item: AnnouncementView }) {
           accessibilityIgnoresInvertColors
         />
       ) : null}
+      {reportable && (item.kind === "announcement" || item.kind === "instructions") ? (
+        <ReportButton look="link" onPlate type="announcement" id={item.id} />
+      ) : null}
     </View>
   );
 }
 
-/** Bloc « Fil de l'événement » de la page événement. */
-export function EventFeed({ items }: { items: AnnouncementView[] }) {
+/** Bloc « Fil de l'événement » de la page événement. `reportable` : « Signaler » sous chaque annonce (lot 32). */
+export function EventFeed({ items, reportable = false }: { items: AnnouncementView[]; reportable?: boolean }) {
   const { t } = useTheme();
   const c = t.color;
   return (
@@ -56,7 +60,7 @@ export function EventFeed({ items }: { items: AnnouncementView[] }) {
           {communicationLabels.feedEmpty}
         </Text>
       ) : (
-        items.map((item) => <FeedEntry key={item.id} item={item} />)
+        items.map((item) => <FeedEntry key={item.id} item={item} reportable={reportable} />)
       )}
     </Plate>
   );

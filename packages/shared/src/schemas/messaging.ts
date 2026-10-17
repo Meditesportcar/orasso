@@ -62,6 +62,8 @@ export type MessageView = {
   clientId: string | null;
   createdAt: string;
   deleted: boolean;
+  /** Lot 32 : retiré par la modération (« Message retiré par la modération ») ; `deleted` est vrai aussi. */
+  moderated?: boolean;
   /** « Lu par » : sur les messages de mon côté de la première page seulement. */
   readBy: { userId: string; pseudo: string }[] | null;
 };
@@ -124,6 +126,8 @@ export type InboxRequestCounts = {
   crewConfirmation: number;
   /** Lot 24 : invitations à rejoindre une structure (staff ou co-organisateur) reçues et pas encore acceptées. */
   staffInvitation: number;
+  /** Lot 25 : invitations nominatives à un événement en attente de réponse. */
+  eventInvitation: number;
 };
 
 /** Pastille de la Boîte : conversations qui ont du non lu, et demandes en attente par sorte. */

@@ -515,8 +515,16 @@ export const crewsService = {
     for (const k of keys) await storage.remove(k).catch(() => undefined);
   },
 
-  /** Dissolution dans une transaction ouverte (chef qui dissout, ou chef qui supprime son compte). Rend les fichiers. */
-  async archiveInTx(tx: Tx, after: After, crew: CrewRow, reason: "leader" | "account_deleted"): Promise<string[]> {
+  /**
+   * Dissolution dans une transaction ouverte (chef qui dissout, chef qui supprime son compte, ou retrait par la
+   * modération, lot 32). Rend les fichiers.
+   */
+  async archiveInTx(
+    tx: Tx,
+    after: After,
+    crew: CrewRow,
+    reason: "leader" | "account_deleted" | "moderation",
+  ): Promise<string[]> {
     const at = now();
     await tx.update(crews).set({ deletedAt: at, logoKey: null }).where(eq(crews.id, crew.id));
     // Venues à confirmer avec ce crew : retirées (sans malus) ; les venues déjà confirmées vivent seules.
@@ -547,7 +555,9 @@ export const crewsService = {
         body:
           reason === "account_deleted"
             ? `Le chef de « ${crew.name} » a supprimé son compte : le crew est dissous. La discussion reste lisible.`
-            : `« ${crew.name} » a été dissous par son chef. La discussion reste lisible.`,
+            : reason === "moderation"
+              ? `« ${crew.name} » a été retiré par l'équipe Orasso. La discussion reste lisible.`
+              : `« ${crew.name} » a été dissous par son chef. La discussion reste lisible.`,
         data: { crewId: crew.id, link: crewPath(crew) },
       });
     }

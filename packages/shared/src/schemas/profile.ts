@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { departmentSchema, devicePlatforms, type notificationFamilies, profileVisibilities } from "../enums";
 import type { Grade } from "../grades";
+import type { SuspensionInfo } from "../moderation";
 import type { PlatformRole, StaffRole, StructureRole } from "../roles";
 import { optionalText } from "./common";
 
@@ -101,6 +102,8 @@ export type Me = {
   personas: PersonaEntry[];
   /** Lot 16 : messages non lus de la Boîte (0 jusqu'au lot 18). */
   unreadInbox: number;
+  /** Lot 32 : compte suspendu ou banni en ce moment (`null` sinon). */
+  suspension: SuspensionInfo | null;
 };
 
 /** Profil vu par un autre utilisateur connecté (compte privé : version réduite). */
