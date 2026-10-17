@@ -3,6 +3,7 @@
 
 export const triageAppLabels = {
   title: "Tri",
+  sortThis: (n: number) => `Trier · ${n} à trier`,
   eventPicker: "Événement à trier",
   noEvent: "Aucun événement publié à trier pour l'instant.",
   loading: "Chargement…",

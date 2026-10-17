@@ -21,6 +21,7 @@ import {
   eventStatusLabels,
   invitationLabels,
   orgaLabels,
+  triageAppLabels,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -370,6 +371,18 @@ export function EventPage({ eventId }: { eventId: string }) {
           ) : null}
 
           <View style={styles.buttons}>
+            {/* Tri par glissement (lot 23), seulement s'il y a des candidatures à trier. */}
+            {e.status === "published" && counters && counters.pending > 0 ? (
+              <Button
+                variant="plate"
+                icon="check"
+                onPress={() => router.push({ pathname: "/tri", params: { event: eventId } })}
+                fullWidth
+                testID="orga-event-sort"
+              >
+                {triageAppLabels.sortThis(counters.pending)}
+              </Button>
+            ) : null}
             {/* Invitations nominatives (lot 25). */}
             <Button
               variant="plate"
