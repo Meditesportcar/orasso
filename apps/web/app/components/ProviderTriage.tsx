@@ -7,7 +7,6 @@ import {
   instagramHandle,
   type RefusalReason,
   refusalReasonLabels,
-  refusalReasons,
   type TriageDecision,
   type VendorTypeCode,
 } from "@orasso/shared";
@@ -15,6 +14,7 @@ import { useState } from "react";
 
 import { apiFetch } from "../lib/api.client";
 import { formatDateTime } from "../lib/format";
+import { useRefusalReasons } from "../lib/lists";
 import { badgeFor } from "../lib/status";
 import { StructureNotes } from "./StructureNotes";
 import "../styles/providers.css";
@@ -47,6 +47,8 @@ export function ProviderTriage({
   canAccreditMedia: boolean;
   onChanged: () => void;
 }) {
+  // Lot 33 : motifs proposés par l'administration (repli sur les constantes partagées).
+  const refusalReasons = useRefusalReasons();
   const [status, setStatus] = useState<ApplicationStatus>(() =>
     items.some((i) => i.status === "pending") ? "pending" : "accepted",
   );

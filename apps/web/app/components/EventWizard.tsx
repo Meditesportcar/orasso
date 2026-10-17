@@ -16,7 +16,6 @@ import {
   eventDaysPayload,
   eventEditorLabels,
   eventFormatLabels,
-  eventFormats,
   eventPayload,
   eventPublicAccessLabels,
   eventStepProblem,
@@ -38,7 +37,7 @@ import {
   type VehicleMake,
   vehicleTypeLabels,
   vehicleTypes,
-  vendorTypeSuggestions,
+  vendorTypeLabels,
   withAddedDay,
   withMultiDay,
   zoneChanges,
@@ -46,6 +45,7 @@ import {
 import { useState } from "react";
 import { apiFetch } from "../lib/api.client";
 import { now as clockNow } from "../lib/clock";
+import { useEventFormats, useVendorTypes } from "../lib/lists";
 import { FileField, TextAreaField } from "./Fields";
 
 const STEPS = eventWizardSteps.map((id) => ({ id, label: eventEditorLabels.steps[id] }));
@@ -65,6 +65,11 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
   const targetId = event?.id ?? createdId;
   const editing = Boolean(event);
   const [d, setD] = useState<EventDraft>(() => initialEventDraft(clockNow(), event));
+  // Lot 33 : types de prestataires proposés par l'administration (repli sur les constantes partagées).
+  const vendorTypeSuggestions: readonly string[] = useVendorTypes().map((c) => vendorTypeLabels[c]);
+  // Formats proposés par l'administration ; celui d'un événement existant reste proposé.
+  const formatsOn = useEventFormats();
+  const offeredFormats = formatsOn.includes(d.format) ? formatsOn : [...formatsOn, d.format];
   const [index, setIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -191,7 +196,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
             <fieldset className="s-fieldset s-stack s-stack--tight">
               <legend className="o-t-label s-label">Format</legend>
               <ChipRow className="s-chips-wrap">
-                {eventFormats.map((f) => (
+                {offeredFormats.map((f) => (
                   <Chip key={f} selected={d.format === f} onClick={() => set("format", f)}>
                     {eventFormatLabels[f]}
                   </Chip>

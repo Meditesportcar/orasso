@@ -12,11 +12,10 @@ import {
   type EventDraft,
   type EventFormat,
   type EventOrganizer,
-  eventFormats,
   initialEventDraft,
   eventEditorLabels as L,
   type VehicleMake,
-  vendorTypeSuggestions,
+  vendorTypeLabels,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -28,6 +27,7 @@ import { appStepProblem, draftWorthKeeping, moveStep, progressOf, type StoredDra
 import { clearEventDraft, loadEventDraft, saveEventDraft } from "@/lib/eventDraftStore";
 import { saveEvent } from "@/lib/eventSave";
 import { formatStamp } from "@/lib/format";
+import { useEventFormats, useVendorTypes } from "@/lib/lists";
 import type { PickedPhoto } from "@/lib/photos";
 import { imageForm } from "@/lib/structureFiles";
 import { useApi } from "@/lib/useApi";
@@ -132,10 +132,15 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
   const step = appWizardSteps[index] ?? "format";
   const last = index === appWizardSteps.length - 1;
   const progress = progressOf(index, d);
+  // Lot 33 : formats et types de prestataires proposés par l'administration (repli sur les constantes partagées) ;
+  // le format d'un événement existant reste proposé, comme sur le site.
+  const formatsOn = useEventFormats();
   const formats = useMemo<EventFormat[]>(
-    () => (eventFormats.includes(d.format) ? [...eventFormats] : [...eventFormats, d.format]),
-    [d.format],
+    () => (formatsOn.includes(d.format) ? formatsOn : [...formatsOn, d.format]),
+    [formatsOn, d.format],
   );
+  const vendorTypes = useVendorTypes();
+  const vendorSuggestions = useMemo(() => vendorTypes.map((c) => vendorTypeLabels[c]), [vendorTypes]);
 
   const leave = () =>
     router.canGoBack() ? router.back() : router.replace(event ? `/evenement/${event.id}` : "/evenements");
@@ -205,7 +210,7 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     categories: refs.data?.categories ?? [],
     makes: refs.data?.makes ?? [],
     formats,
-    vendorSuggestions: vendorTypeSuggestions,
+    vendorSuggestions,
     poster,
     setPoster,
     openStructure: () => router.push("/ma-structure"),

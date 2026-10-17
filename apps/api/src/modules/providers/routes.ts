@@ -10,8 +10,9 @@ import {
 } from "@orasso/shared";
 import { Hono } from "hono";
 
-import { validation } from "../../lib/errors";
+import { AppError, validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
+import { settingsStore } from "../../lib/settings";
 import { storage } from "../../lib/storage";
 import { body, query, uuidParam } from "../../lib/validate";
 import { registerPersonaSource } from "../profiles/personas";
@@ -34,6 +35,13 @@ registerPersonaSource(async (v) => {
   ];
 });
 
+/** Lot 33 : interrupteur « candidatures des prestataires » de l'administration (profil et candidatures). */
+async function assertProvidersEnabled() {
+  if (!(await settingsStore.get("providers.enabled"))) {
+    throw new AppError(403, "providers_disabled", "Les candidatures des prestataires sont momentanément fermées.");
+  }
+}
+
 export const providersRoutes = new Hono<AppEnv>()
   .get("/me/provider-profile", async (c) => {
     c.header("cache-control", "no-store");
@@ -41,9 +49,14 @@ export const providersRoutes = new Hono<AppEnv>()
   })
   .put("/me/provider-profile", async (c) => {
     const v = await requireUser(c);
+    await assertProvidersEnabled();
     return c.json(await providersService.upsert(v, await body(c, providerProfileSchema)));
   })
-  .post("/me/provider-profile/from-pro", async (c) => c.json(await providersService.fromPro(await requireUser(c)), 201))
+  .post("/me/provider-profile/from-pro", async (c) => {
+    const v = await requireUser(c);
+    await assertProvidersEnabled();
+    return c.json(await providersService.fromPro(v), 201);
+  })
   .post("/me/provider-profile/photos", async (c) => {
     const v = await requireUser(c);
     const form = await c.req.parseBody();
@@ -74,6 +87,7 @@ export const providersRoutes = new Hono<AppEnv>()
   })
   .post("/events/:id/provider-applications", async (c) => {
     const v = await requireUser(c);
+    await assertProvidersEnabled();
     return c.json(
       await providersService.apply(v, uuidParam(c, "id"), await body(c, providerApplicationCreateSchema)),
       201,

@@ -14,8 +14,24 @@ log() { printf '[orasso] %s\n' "$*"; }
 die() { printf '[orasso] ERREUR : %s\n' "$*" >&2; exit 1; }
 
 # Crée /etc/orasso/dev.env au premier déploiement, secrets générés ici et jamais affichés.
+ensure_secret() { # ensure_secret <NOM> : ajoute NOM=<aléatoire> au fichier s'il manque, sans jamais l'afficher
+  local name=$1
+  grep -q "^$name=" "$ENV_FILE" && return 0
+  log "ajout de $name dans $ENV_FILE (généré sur le serveur)"
+  (
+    umask 077
+    # Fichier sans fin de ligne finale : la nouvelle variable ne doit pas se coller à la dernière.
+    [ -n "$(tail -c 1 "$ENV_FILE")" ] && printf '\n' >>"$ENV_FILE"
+    printf '%s=%s\n' "$name" "$(openssl rand -hex 32)" >>"$ENV_FILE"
+  )
+}
+
 ensure_env() {
-  [ -f "$ENV_FILE" ] && return
+  if [ -f "$ENV_FILE" ]; then
+    # Lot 33 : secret des liens de désinscription de la newsletter (l'API refuse de démarrer sans en production).
+    ensure_secret UNSUBSCRIBE_SECRET
+    return
+  fi
   log "création de $ENV_FILE (secrets générés sur le serveur)"
   install -d -m 700 -o root -g root /etc/orasso
   (
@@ -25,6 +41,7 @@ POSTGRES_PASSWORD=$(openssl rand -hex 24)
 NODE_ENV=production
 PUBLIC_URL=https://dev.orasso.fr
 BETTER_AUTH_SECRET=$(openssl rand -hex 32)
+UNSUBSCRIBE_SECRET=$(openssl rand -hex 32)
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 APPLE_CLIENT_ID=

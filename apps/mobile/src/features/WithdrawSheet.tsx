@@ -2,10 +2,11 @@
 // appliqué au règlement des points (J+2), sauf contestation (règles de l'API ; l'appli ne fait que l'annoncer).
 
 import { Button, Text, useTheme } from "@orasso/design-system/native";
-import { type MyApplication, POINTS } from "@orasso/shared";
+import type { MyApplication } from "@orasso/shared";
 import { useState } from "react";
 import { formatDayHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
+import { useMalusPoints } from "@/lib/lists";
 import { AppSheet } from "@/ui/AppSheet";
 
 export function WithdrawSheet({
@@ -21,6 +22,8 @@ export function WithdrawSheet({
 }) {
   const { t } = useTheme();
   const [busy, setBusy] = useState(false);
+  // Lot 33 : malus du barème en vigueur (administration).
+  const malus = useMalusPoints();
   const [error, setError] = useState<string | null>(null);
   const late = app ? now >= new Date(app.withdrawDeadline) && app.status === "accepted" : false;
 
@@ -36,7 +39,7 @@ export function WithdrawSheet({
           </Text>
           <Text variant="body" color={t.color.inkMuted}>
             {late
-              ? `Les inscriptions sont verrouillées : un malus de ${Math.abs(POINTS.malus)} points sera appliqué au règlement des points, deux jours après l'événement.`
+              ? `Les inscriptions sont verrouillées : un malus de ${Math.abs(malus)} points sera appliqué au règlement des points, deux jours après l'événement.`
               : app.status === "accepted"
                 ? `Ta place retourne à la liste d'attente. Sans pénalité : le désistement est gratuit jusqu'au ${formatDayHour(app.withdrawDeadline)}.`
                 : "L'organisateur est prévenu, sans pénalité."}

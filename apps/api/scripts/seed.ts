@@ -13,6 +13,7 @@ import { db, pool } from "../src/db/client";
 import * as t from "../src/db/schema";
 import { storageDir } from "../src/lib/storage";
 import { notificationsService } from "../src/modules/notifications/service";
+import { seedAdmin } from "./seed/admin";
 import { seedAfterEvent } from "./seed/after-event";
 import { seedBase } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
@@ -117,6 +118,8 @@ async function main() {
   await seedAfterEvent(hash);
   // Lot 26 : « Salon de printemps » sur trois jours (accès au choix, 100 places par jour), candidatures mixtes.
   await seedMultiDay();
+  // Lot 33 : réglages par défaut, second super admin, newsletter en brouillon, demande d'aide ouverte, file « Autre ».
+  await seedAdmin(hash);
 }
 
 try {

@@ -2,6 +2,8 @@
 // justificatif validé à la main par l'équipe Orasso → badge « Structure vérifiée »).
 import { Button, Chip, Plate, SelectField, TextField } from "@orasso/design-system/web";
 import {
+  type AssistanceState,
+  assistanceTexts,
   departmentSchema,
   type StripeAccountState,
   type StructureNoteView,
@@ -40,13 +42,15 @@ async function organizerStructure(request: Request, slug: string) {
 export async function loader({ request, params }: Route.LoaderArgs) {
   const membership = await organizerStructure(request, params.structure);
   const id = membership.structureId;
-  const [structure, verification, stripe, partners, notes] = await Promise.all([
+  const [structure, verification, stripe, partners, notes, assistance] = await Promise.all([
     apiOrThrow<StructureOrganizer>(request, `/structures/${id}`),
     apiOrThrow<StructureVerificationView>(request, `/structures/${id}/verification`),
     api<StripeAccountState>(request, `/structures/${id}/stripe`),
     api<StructurePartnerRow[]>(request, `/structures/${id}/partners`),
     // Lot 27 : notes internes de la structure (les plus récentes).
     api<{ items: StructureNoteView[] }>(request, `/structures/${id}/notes?limit=50`),
+    // Lot 33 : demande d'aide à Orasso (mode assistance).
+    api<AssistanceState>(request, `/structures/${id}/assistance`),
   ]);
   const url = new URL(request.url);
   return {
@@ -60,11 +64,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     isOwner: membership.role === "owner",
     partners: partners.ok ? partners.data : [],
     notes: notes.ok ? notes.data.items : [],
+    assistance: assistance.ok ? assistance.data : null,
+    assisted: Boolean(membership.assisted),
   };
 }
 
 type Result = {
-  section: "fiche" | "check" | "documents" | "submit" | "stripe" | "partners";
+  section: "fiche" | "check" | "documents" | "submit" | "stripe" | "partners" | "assistance";
   error?: string;
   ok?: string;
 };
@@ -100,6 +106,25 @@ export async function action({ request, params }: Route.ActionArgs) {
       section: "partners",
       ok: intent === "partner-accept" ? "Partenaire accepté." : "Partenaire retiré.",
     } satisfies Result);
+  }
+
+  // Lot 33 : « Demander l'aide d'Orasso » (mode assistance, S41) et fermeture de la demande.
+  if (intent === "assistance-ask") {
+    const res = await api(request, `/structures/${id}/assistance-requests`, {
+      method: "POST",
+      json: { message: text("message") },
+    });
+    if (!res.ok)
+      return data({ section: "assistance", error: res.error.message } satisfies Result, { status: res.status });
+    return data({ section: "assistance", ok: "Demande envoyée à l'équipe Orasso." } satisfies Result);
+  }
+  if (intent === "assistance-close") {
+    const res = await api(request, `/assistance-requests/${encodeURIComponent(text("requestId"))}/close`, {
+      method: "POST",
+    });
+    if (!res.ok)
+      return data({ section: "assistance", error: res.error.message } satisfies Result, { status: res.status });
+    return data({ section: "assistance", ok: "Demande fermée." } satisfies Result);
   }
 
   if (intent === "check") {
@@ -190,8 +215,20 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function OrgaStructure({ loaderData, actionData }: Route.ComponentProps) {
-  const { structure, verification, origin, created, logoRefused, stripe, stripeResult, isOwner, partners, notes } =
-    loaderData;
+  const {
+    structure,
+    verification,
+    origin,
+    created,
+    logoRefused,
+    stripe,
+    stripeResult,
+    isOwner,
+    partners,
+    notes,
+    assistance,
+    assisted,
+  } = loaderData;
   const busy = useNavigation().state !== "idle";
   const result = actionData as Result | undefined;
   const check = verification.registryCheck;
@@ -516,6 +553,44 @@ export default function OrgaStructure({ loaderData, actionData }: Route.Componen
         initial={notes}
         writable={structure.verification !== "suspended"}
       />
+
+      {!assisted && (
+        <section className="orga__panel s-stack" aria-labelledby="help-title" data-testid="assistance">
+          <h2 id="help-title" className="s-h2">
+            {assistanceTexts.ask}
+          </h2>
+          {assistance?.current ? (
+            <Form method="post" className="s-stack">
+              <input type="hidden" name="intent" value="assistance-close" />
+              <input type="hidden" name="requestId" value={assistance.current.id} />
+              <p data-testid="assistance-current">
+                <strong>{assistanceTexts.current}</strong> · {formatDay(assistance.current.createdAt)} · jusqu'au{" "}
+                {formatDay(assistance.current.expiresAt)}
+                <br />
+                {assistance.current.message}
+              </p>
+              <p className="o-t-caption">{assistance.current.interventions} intervention(s) de l'équipe Orasso.</p>
+              <div className="s-row">
+                <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                  {assistanceTexts.close}
+                </Button>
+              </div>
+            </Form>
+          ) : (
+            <Form method="post" className="s-stack">
+              <input type="hidden" name="intent" value="assistance-ask" />
+              <p className="s-muted">{assistanceTexts.askHint}</p>
+              <TextAreaField label={assistanceTexts.messageLabel} name="message" rows={3} required minLength={10} />
+              <div className="s-row">
+                <Button type="submit" variant="secondary" icon="chat" loading={busy}>
+                  {assistanceTexts.ask}
+                </Button>
+              </div>
+            </Form>
+          )}
+          {message("assistance")}
+        </section>
+      )}
 
       <section className="orga__panel s-stack" aria-labelledby="invite-title">
         <h2 id="invite-title" className="s-h2">

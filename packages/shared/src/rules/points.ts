@@ -86,17 +86,23 @@ export function seasonDates(year: number): { name: string; startsOn: string; end
 }
 
 /** Fin de saison : « on descend d'un grade et on continue » — points de départ = seuil du grade inférieur. */
-export function carryoverPoints(previousSeasonPoints: number): number {
-  const index = grades.indexOf(gradeFor(previousSeasonPoints));
+export function carryoverPoints(
+  previousSeasonPoints: number,
+  thresholds: Record<Grade, number> = GRADE_THRESHOLDS,
+): number {
+  const index = grades.indexOf(gradeFor(previousSeasonPoints, thresholds));
   const lower = grades[Math.max(index - 1, 0)] as Grade;
-  return GRADE_THRESHOLDS[lower];
+  return thresholds[lower];
 }
 
 /** Prochain grade et son seuil ; `null` au sommet. */
-export function nextGrade(points: number): { grade: Grade; threshold: number } | null {
-  const index = grades.indexOf(gradeFor(points));
+export function nextGrade(
+  points: number,
+  thresholds: Record<Grade, number> = GRADE_THRESHOLDS,
+): { grade: Grade; threshold: number } | null {
+  const index = grades.indexOf(gradeFor(points, thresholds));
   const next = grades[index + 1];
-  return next ? { grade: next, threshold: GRADE_THRESHOLDS[next] } : null;
+  return next ? { grade: next, threshold: thresholds[next] } : null;
 }
 
 /** Mode staff ouvert à partir de la veille 00:00 (heure de Paris), choix C14. */

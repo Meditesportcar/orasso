@@ -281,6 +281,13 @@
       "when": 1792232931932,
       "tag": "0039_dev-clock",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792239499397,
+      "tag": "0040_admin",
+      "breakpoints": true
     }
   ]
 }

@@ -9,13 +9,13 @@ import {
   type Page,
   type RefusalReason,
   refusalReasonLabels,
-  refusalReasons,
   type TriageDecision,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../lib/api.client";
 import { formatDateTime } from "../lib/format";
+import { useRefusalReasons } from "../lib/lists";
 import { StructureNotes } from "./StructureNotes";
 
 type Decided = { item: ApplicationForTriage; decision: TriageDecision };
@@ -47,6 +47,8 @@ export function TriageFile({
   canDecide: boolean;
   onDecided?: () => void;
 }) {
+  // Lot 33 : motifs proposés par l'administration (repli sur les constantes partagées).
+  const refusalReasons = useRefusalReasons();
   const [queue, setQueue] = useState<ApplicationForTriage[]>(initial);
   const [skipped, setSkipped] = useState<string[]>([]);
   const [history, setHistory] = useState<Decided[]>([]);

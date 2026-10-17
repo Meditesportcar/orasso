@@ -4,6 +4,9 @@
 import { Button, Chip, SelectField, TextField } from "@orasso/design-system/web";
 import {
   type AdminStructureDetail,
+  type AssistanceState,
+  adminTexts,
+  assistanceTexts,
   afterEventLabels as L,
   type StructureRole,
   structureRoleLabels,
@@ -27,10 +30,25 @@ export function meta() {
 export async function loader({ request, params }: Route.LoaderArgs) {
   await requireSuperAdmin(request);
   const structure = await apiOrThrow<AdminStructureDetail>(request, `/admin/structures/${params.id}`);
-  return { structure, done: new URL(request.url).searchParams.get("fait") };
+  // Lot 33 : demande d'aide (mode assistance) et quota des messages groupés aux abonnés (S18).
+  const [assistance, registry] = await Promise.all([
+    api<AssistanceState>(request, `/structures/${params.id}/assistance`),
+    api<{ id: string; slug: string; followerMessageQuota: number | null }[]>(
+      request,
+      `/admin/structure-registry?q=${encodeURIComponent(structure.name)}`,
+    ),
+  ]);
+  const row = registry.ok ? registry.data.find((r) => r.id === structure.id) : undefined;
+  return {
+    structure,
+    done: new URL(request.url).searchParams.get("fait"),
+    assistance: assistance.ok ? assistance.data : null,
+    slug: row?.slug ?? structure.slug,
+    quota: row?.followerMessageQuota ?? null,
+  };
 }
 
-type Result = { section: "badge" | "document" | "transfer"; error?: string };
+type Result = { section: "badge" | "document" | "transfer" | "quota" | "assistance"; error?: string };
 
 export async function action({ request, params }: Route.ActionArgs) {
   await requireSuperAdmin(request);
@@ -41,6 +59,20 @@ export async function action({ request, params }: Route.ActionArgs) {
   const fail = (section: Result["section"], res: { status: number; error: { message: string } }) =>
     data({ section, error: res.error.message } satisfies Result, { status: res.status });
 
+  if (intent === "quota") {
+    const raw = text("quota");
+    const res = await api(request, `${base}/quota`, {
+      method: "PATCH",
+      json: { followerMessageQuota: raw === "" ? null : Number(raw), reason: text("reason") },
+    });
+    return res.ok ? redirect(`/admin/structures/${params.id}?fait=quota`) : fail("quota", res);
+  }
+  if (intent === "close-assistance") {
+    const res = await api(request, `/admin/assistance-requests/${encodeURIComponent(text("requestId"))}/close`, {
+      method: "POST",
+    });
+    return res.ok ? redirect(`/admin/structures/${params.id}?fait=assistance`) : fail("assistance", res);
+  }
   if (intent === "document") {
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) {
@@ -67,7 +99,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function AdminStructure({ loaderData, actionData }: Route.ComponentProps) {
-  const { structure: s, done } = loaderData;
+  const { structure: s, done, assistance, slug, quota } = loaderData;
   const busy = useNavigation().state !== "idle";
   const result = actionData as Result | undefined;
   const others = s.documents.filter((d) => d.kind === "other");
@@ -98,6 +130,65 @@ export default function AdminStructure({ loaderData, actionData }: Route.Compone
           {done === "transfer" ? L.transferDone : L.adminDone}
         </p>
       )}
+
+      <section className="orga__panel s-stack" aria-labelledby="assist-title" data-testid="admin-assistance">
+        <div className="adm-assist">
+          <h2 className="s-h2" id="assist-title">
+            {assistanceTexts.current}
+          </h2>
+          <a href={`/orga/${slug}`}>{assistanceTexts.survey}</a>
+        </div>
+        {assistance?.current ? (
+          <Form method="post" className="s-stack">
+            <input type="hidden" name="intent" value="close-assistance" />
+            <input type="hidden" name="requestId" value={assistance.current.id} />
+            <p>
+              {assistance.current.message}
+              <br />
+              <span className="o-t-caption s-muted">
+                {assistance.current.requestedBy?.pseudo ?? "—"} · {formatDay(assistance.current.createdAt)} · jusqu'au{" "}
+                {formatDay(assistance.current.expiresAt)} · {assistance.current.interventions} intervention(s)
+              </span>
+            </p>
+            {result?.section === "assistance" && result.error && (
+              <p className="s-error" role="alert">
+                {result.error}
+              </p>
+            )}
+            <div className="s-row">
+              <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                {assistanceTexts.close}
+              </Button>
+            </div>
+          </Form>
+        ) : (
+          <p className="s-muted">{assistanceTexts.readOnlyHint}</p>
+        )}
+      </section>
+
+      <section className="orga__panel s-stack" aria-labelledby="quota-title" data-testid="admin-quota">
+        <h2 className="s-h2" id="quota-title">
+          Messages groupés aux abonnés
+        </h2>
+        <p className="o-t-caption s-muted">
+          Nombre de messages par 30 jours (vide = valeur par défaut d'Orasso). Actuel : {quota ?? "par défaut"}.
+        </p>
+        <Form method="post" className="s-stack">
+          <input type="hidden" name="intent" value="quota" />
+          <TextField label="Quota" name="quota" type="number" min={0} max={30} defaultValue={quota ?? ""} />
+          <TextField label={adminTexts.reasonLabel} name="reason" required minLength={5} />
+          {result?.section === "quota" && result.error && (
+            <p className="s-error" role="alert">
+              {result.error}
+            </p>
+          )}
+          <div className="s-row">
+            <Button type="submit" variant="secondary" icon="check" loading={busy}>
+              Enregistrer le quota
+            </Button>
+          </div>
+        </Form>
+      </section>
 
       <section className="orga__panel s-stack" aria-labelledby="badge-title" data-testid="admin-badge">
         <h2 className="s-h2" id="badge-title">

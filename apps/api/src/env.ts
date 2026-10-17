@@ -105,6 +105,15 @@ const schema = z.object({
     ),
   /** `User-Agent` envoyé à ces sources (nom de l'appli + contact, exigé par la politique d'usage d'Overpass). */
   EXTERNAL_USER_AGENT: z.string().default("Orasso/0.1 contact@orasso.fr"),
+  /**
+   * Newsletter (lot 33) : expéditeur propre (« Orasso <newsletter@mail.orasso.fr> ») ; vide = `MAIL_FROM`.
+   */
+  NEWSLETTER_FROM: optional,
+  /**
+   * Secret des liens de désinscription de la newsletter (HMAC de l'identifiant du compte), 32 caractères au moins.
+   * Obligatoire en production (l'API refuse de démarrer sans) ; en développement, dérivé de BETTER_AUTH_SECRET.
+   */
+  UNSUBSCRIBE_SECRET: optional.pipe(z.string().min(32, "UNSUBSCRIBE_SECRET : au moins 32 caractères").optional()),
 });
 
 /**
@@ -143,6 +152,15 @@ if (parsed.data.NODE_ENV === "production" && (!parsed.data.QR_SIGNING_KEYS || !p
 const stripeKeyProblem = stripeKeyError(parsed.data.STRIPE_SECRET_KEY);
 if (stripeKeyProblem) {
   console.error(`Configuration invalide : ${stripeKeyProblem}`);
+  process.exit(1);
+}
+if (
+  parsed.data.NODE_ENV === "production" &&
+  (!parsed.data.UNSUBSCRIBE_SECRET || parsed.data.UNSUBSCRIBE_SECRET.startsWith("change-me"))
+) {
+  console.error(
+    "Configuration invalide : UNSUBSCRIBE_SECRET est obligatoire en production (liens de désinscription), et pas la valeur d'exemple.",
+  );
   process.exit(1);
 }
 if (parsed.data.MAIL_TRANSPORT === "brevo" && !parsed.data.BREVO_API_KEY) {

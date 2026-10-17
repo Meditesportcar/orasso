@@ -1,12 +1,14 @@
 // Droits : rôles de plateforme, rôles de structure, double authentification obligatoire (ARCHITECTURE.md § 5.2).
-import { staffRoles as ALL_STAFF_ROLES, type StaffRole, type StructureRole } from "@orasso/shared";
+import { staffRoles as ALL_STAFF_ROLES, assistanceActive, type StaffRole, type StructureRole } from "@orasso/shared";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../db/client";
-import { adminAuditLog, eventStaff, passkey, structureMembers, structures } from "../db/schema";
+import { adminAuditLog, assistanceRequests, eventStaff, passkey, structureMembers, structures } from "../db/schema";
 import { env } from "../env";
 import { isSecondFactor } from "../modules/security/passkey";
+import { now } from "./deps";
 import { AppError, forbidden } from "./errors";
+import { requestContext } from "./request-context";
 import type { Viewer } from "./session";
 
 export const isSuperAdmin = (v: Viewer) => v.profile.platformRole === "super_admin";
@@ -49,9 +51,22 @@ export type OrganizerAccess = { role: StructureRole | "super_admin" };
 export const organizerActor = (a: OrganizerAccess): "admin" | "organizer" =>
   a.role === "super_admin" ? "admin" : "organizer";
 
+/** Demande d'aide ouverte de la structure et encore valable (7 jours au plus), lot 33. */
+export async function openAssistanceRequest(structureId: string) {
+  const [row] = await db
+    .select({ id: assistanceRequests.id, status: assistanceRequests.status, createdAt: assistanceRequests.createdAt })
+    .from(assistanceRequests)
+    .where(and(eq(assistanceRequests.structureId, structureId), eq(assistanceRequests.status, "open")))
+    .limit(1);
+  return row && assistanceActive(row, now()) ? row : null;
+}
+
 /**
  * Organisateur de la structure (propriétaire ou co-organisateur), 2FA exigée.
- * Un super admin passe partout ; chaque passage est tracé (`structure.view_as`).
+ * Un super admin passe partout en lecture ; chaque passage est tracé (`structure.view_as`). Mode assistance (lot 33,
+ * S41) : une écriture d'un super admin dans l'espace de la structure n'est permise que si la structure a une demande
+ * d'aide ouverte ; elle est tracée (`structure.assist`) avec l'identifiant de la demande. Les routes `/api/admin/*`
+ * (décisions de l'équipe, déjà tracées par elles-mêmes) ne sont pas concernées.
  */
 export async function requireOrganizer(v: Viewer, structureId: string, ip?: string | null): Promise<OrganizerAccess> {
   const member = await activeMembership(v.user.id, structureId);
@@ -61,13 +76,27 @@ export async function requireOrganizer(v: Viewer, structureId: string, ip?: stri
   }
   if (isSuperAdmin(v)) {
     await assertTwoFactor(v);
+    const req = requestContext.get();
+    if (requestContext.isWrite() && req && !req.path.startsWith("/api/admin/")) {
+      const open = await openAssistanceRequest(structureId);
+      if (!open) {
+        throw new AppError(
+          403,
+          "assistance_required",
+          "Mode assistance : lecture seule. La structure doit demander l'aide d'Orasso pour qu'on intervienne.",
+        );
+      }
+      // Une seule trace par requête, écrite après la réponse si l'écriture a réussi (`requestContextMiddleware`).
+      requestContext.noteAssist({ actorUserId: v.user.id, structureId, assistanceRequestId: open.id });
+      return { role: "super_admin" };
+    }
     await db.insert(adminAuditLog).values({
       actorUserId: v.user.id,
       action: "structure.view_as",
       targetType: "structure",
       targetId: structureId,
       structureId,
-      ip: ip ?? null,
+      ip: ip ?? req?.ip ?? null,
     });
     return { role: "super_admin" };
   }

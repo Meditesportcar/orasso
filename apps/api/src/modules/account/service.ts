@@ -301,7 +301,12 @@ export const accountService = {
    * Anonymisation complète des données identifiantes ; historique (candidatures passées, entrées, points, avis)
    * conservé. Candidatures à venir désistées sans malus. Rejouée, elle ne fait rien.
    */
-  async anonymize(userId: string, ip: string | null, opts: { confirm?: boolean } = {}) {
+  async anonymize(
+    userId: string,
+    ip: string | null,
+    // Lot 33 : `actor` = anonymisation décidée par l'équipe (même service, trace `user.anonymize` avec le motif).
+    opts: { confirm?: boolean; actor?: { userId: string; reason: string } } = {},
+  ) {
     const tag = randomBytes(4).toString("hex");
     const anonEmail = `supprime+${tag}@orasso.invalid`;
     const at = now();
@@ -460,11 +465,11 @@ export const accountService = {
       // Profil prestataire (lot 21) : retiré et vidé de ce qui l'identifie (les candidatures passées gardent leur lien).
       photoKeys.push(...(await anonymizeProviderForDeletedAccount(tx, userId, at)));
       await tx.insert(adminAuditLog).values({
-        actorUserId: userId,
-        action: "user.self_delete",
+        actorUserId: opts.actor?.userId ?? userId,
+        action: opts.actor ? "user.anonymize" : "user.self_delete",
         targetType: "user",
         targetId: userId,
-        reason: "Suppression du compte par son titulaire (anonymisation)",
+        reason: opts.actor?.reason ?? "Suppression du compte par son titulaire (anonymisation)",
         ip,
       });
     });
@@ -474,7 +479,10 @@ export const accountService = {
     if (oldEmail && opts.confirm) {
       // Confirmation à l'ancienne adresse, après la validation ; la trace dans la file des e-mails est aussitôt
       // anonymisée et la copie du transport journal supprimée.
-      await mail.send("account_deleted", oldEmail, securityMails.accountDeleted(oldPseudo ?? ""), { userId });
+      const content = opts.actor
+        ? securityMails.accountAnonymizedByTeam(oldPseudo ?? "")
+        : securityMails.accountDeleted(oldPseudo ?? "");
+      await mail.send("account_deleted", oldEmail, content, { userId });
       const sent = await db
         .update(emailOutbox)
         .set({ to: anonEmail })
