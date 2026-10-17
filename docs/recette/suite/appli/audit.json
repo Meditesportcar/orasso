@@ -1,0 +1,52 @@
+{
+  "01-billets-visiteurs-beton": {
+    "greens": [],
+    "truncated": [],
+    "horizontalScroll": false
+  },
+  "02-mes-billets-beton": {
+    "greens": [],
+    "truncated": [],
+    "horizontalScroll": false
+  },
+  "03-creer-fiche-pro-beton": {
+    "greens": [],
+    "truncated": [],
+    "horizontalScroll": false
+  },
+  "04-justificatif-pdf-beton": {
+    "greens": [],
+    "truncated": [],
+    "horizontalScroll": false
+  },
+  "05-tri-filtre-jour-beton": {
+    "greens": [],
+    "truncated": [],
+    "horizontalScroll": false
+  },
+  "01-billets-visiteurs-sable": {
+    "greens": [],
+    "truncated": [],
+    "horizontalScroll": false
+  },
+  "02-mes-billets-sable": {
+    "greens": [],
+    "truncated": [],
+    "horizontalScroll": false
+  },
+  "03-creer-fiche-pro-sable": {
+    "greens": [],
+    "truncated": [],
+    "horizontalScroll": false
+  },
+  "04-justificatif-pdf-sable": {
+    "greens": [],
+    "truncated": [],
+    "horizontalScroll": false
+  },
+  "05-tri-filtre-jour-sable": {
+    "greens": [],
+    "truncated": [],
+    "horizontalScroll": false
+  }
+}

@@ -156,7 +156,14 @@ export function TriageScreen() {
               ) : null}
               {segment === "waitlist" ? <Waitlist key={event.id} eventId={event.id} onChanged={onChanged} /> : null}
               {segment === "list" ? (
-                <ListMode key={event.id} eventId={event.id} kind="vehicle" zones={zones} onChanged={onChanged} />
+                <ListMode
+                  key={event.id}
+                  eventId={event.id}
+                  kind="vehicle"
+                  zones={zones}
+                  days={detail.data?.days ?? []}
+                  onChanged={onChanged}
+                />
               ) : null}
             </View>
           </>

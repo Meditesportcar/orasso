@@ -1,5 +1,5 @@
 // Avatar rond : la photo du compte, ou l'initiale du pseudo sur la plaque graphite.
-import { Photo, Text, useTheme } from "@orasso/design-system/native";
+import { Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
@@ -24,5 +24,5 @@ export function Avatar({ url, pseudo, size = 26 }: { url?: string | null; pseudo
 }
 
 const styles = StyleSheet.create({
-  round: { borderRadius: 999, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  round: { borderRadius: tokens.radius.radiusPill, overflow: "hidden", alignItems: "center", justifyContent: "center" },
 });

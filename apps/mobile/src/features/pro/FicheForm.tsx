@@ -1,14 +1,24 @@
 // Casquette Pro, modifier la fiche (lot 35c) : mêmes champs que « Fiche publique » de l'espace pro du site (nom,
 // activités, présentation, adresse et zone d'intervention, contact, réseaux, horaires). Le logo, les photos, les remises
 // et le SIRET sont des blocs de la fiche. Un nouveau nom demande un nouveau contrôle du SIRET (règle de l'API).
+// Création (lot 34, parité D20) : le même formulaire, vide, depuis Moi > Mes casquettes ; la casquette Pro s'ouvre ensuite.
 import { Button, Chip, ChipRow, Plate, TextField, tokens } from "@orasso/design-system/native";
-import { proAppLabels as L, proActivities, proActivityLabels, weekdayLabels, weekdays } from "@orasso/shared";
+import {
+  proAppLabels as L,
+  type ProCreate,
+  proActivities,
+  proActivityLabels,
+  weekdayLabels,
+  weekdays,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
 
 import { api } from "@/lib/api";
-import { formOfPro, type ProFicheForm, proBody, socialNetworks, toggleActivity } from "@/lib/proForm";
+import { usePersona } from "@/lib/persona";
+import { emptyProForm, formOfPro, type ProFicheForm, proBody, socialNetworks, toggleActivity } from "@/lib/proForm";
+import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useRun } from "@/lib/useRun";
 import { Feedback } from "@/ui/Feedback";
@@ -18,18 +28,20 @@ import { SectionTitle, TabScreen } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
 
-export function FicheForm() {
+export function FicheForm({ create = false }: { create?: boolean } = {}) {
   const router = useRouter();
+  const { refreshMe } = useSession();
+  const { choose } = usePersona();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
-  const [form, setForm] = useState<ProFicheForm | null>(null);
+  const [form, setForm] = useState<ProFicheForm | null>(() => (create ? emptyProForm() : null));
   const dirty = useRef(false);
   const { busy, error, notice, run, setError, setNotice } = useRun();
 
   // Les champs reprennent la fiche de l'API, sauf pendant une saisie non enregistrée.
   useEffect(() => {
-    if (pro && !dirty.current) setForm(formOfPro(pro));
-  }, [pro]);
+    if (pro && !create && !dirty.current) setForm(formOfPro(pro));
+  }, [pro, create]);
 
   const edit = (patch: Partial<ProFicheForm>) => {
     dirty.current = true;
@@ -38,9 +50,23 @@ export function FicheForm() {
   };
 
   async function save() {
-    if (!pro || !form) return;
+    if (!form) return;
     const parsed = proBody(form);
     if ("error" in parsed) return setError(parsed.error);
+    if (create) {
+      const body = parsed.body as ProCreate;
+      const ok = await run("save", async () => {
+        const created = await api.createPro(body);
+        dirty.current = false;
+        await refreshMe();
+        await myPro.reload();
+        choose({ kind: "pro", proProfileId: created.id });
+        router.replace({ pathname: "/fiche", params: { fait: "creee" } });
+      });
+      if (!ok) dirty.current = true;
+      return;
+    }
+    if (!pro) return;
     const ok = await run(
       "save",
       async () => {
@@ -54,12 +80,17 @@ export function FicheForm() {
   }
 
   return (
-    <TabScreen title={L.editTitle} facts={pro?.name}>
-      <Button variant="plate" icon="back" onPress={() => router.replace("/fiche")} fullWidth>
-        {L.editBack}
-      </Button>
-      {!pro ? myPro.loading ? null : <Notice>{L.noPro}</Notice> : null}
-      {pro && form ? (
+    <TabScreen title={create ? L.createTitle : L.editTitle} facts={create ? undefined : pro?.name}>
+      {create ? (
+        <Muted variant="body">{L.createIntro}</Muted>
+      ) : (
+        <Button variant="plate" icon="back" onPress={() => router.replace("/fiche")} fullWidth>
+          {L.editBack}
+        </Button>
+      )}
+      {create && pro ? <Notice>{L.createExists}</Notice> : null}
+      {!create && !pro ? myPro.loading ? null : <Notice>{L.noPro}</Notice> : null}
+      {form && (create ? !pro : pro) ? (
         <>
           <Plate style={styles.block} testID="pro-form">
             <TextField label={L.name} value={form.name} onChangeText={(name) => edit({ name })} maxLength={80} />
@@ -170,7 +201,7 @@ export function FicheForm() {
             fullWidth
             testID="pro-form-save"
           >
-            {L.saveFiche}
+            {create ? L.createSave : L.saveFiche}
           </Button>
         </>
       ) : null}

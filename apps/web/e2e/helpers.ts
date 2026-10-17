@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { resolve } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import type { Page } from "@playwright/test";
+import pg from "pg";
 
 export const SEED_PASSWORD = process.env.SEED_PASSWORD ?? "orasso-demo-2026";
 const API = `http://localhost:${process.env.API_PORT ?? 3001}`;
@@ -10,6 +11,25 @@ const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 
 export type Cookie = string;
 export type CreatedEvent = { id: string; slug: string; title: string };
+
+/**
+ * Remet une structure du seed « suspendue faute de badge renouvelé » (lot 34) : la recette du site « après l'événement »
+ * lève la suspension de Tramontane Auto Club, et les recettes de l'appli qui passent après en ont besoin.
+ */
+export async function resuspendSeedStructure(slug = "tramontane-auto"): Promise<void> {
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query(
+      `update structures set verification = 'suspended', suspended_reason = 'badge_expired',
+         suspended_at = now() - interval '3 days', badge_expires_at = now() - interval '3 days'
+       where slug = $1`,
+      [slug],
+    );
+  } finally {
+    await client.end();
+  }
+}
 
 /** Appel direct de l'API (comme le ferait le site), avec un cookie de session. */
 export async function apiCall<T = unknown>(
@@ -48,6 +68,9 @@ export async function loginInBrowser(page: Page, email: string, password = SEED_
   await page.getByLabel("Mot de passe", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Se connecter", exact: true }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/connexion"));
+  // La redirection après connexion est une navigation du routeur (pas de nouvel événement « load ») : attendre que ses
+  // données soient chargées, sinon un `page.goto` aussitôt après est interrompu (ERR_ABORTED, lot 34).
+  await page.waitForLoadState("networkidle");
 }
 
 /** J+2 simulé : recule les dates de l'événement puis règle les points (script de l'API, développement seulement). */

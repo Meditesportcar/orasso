@@ -148,7 +148,10 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
         ),
       )
       .orderBy(asc(structures.name)),
-    db.select({ n: count() }).from(proPosts).where(eq(proPosts.proId, p.id)),
+    db
+      .select({ n: count() })
+      .from(proPosts)
+      .where(and(eq(proPosts.proId, p.id), isNull(proPosts.deletedAt))),
     viewer
       ? db.query.proFollows.findFirst({
           where: and(eq(proFollows.proId, p.id), eq(proFollows.userId, viewer.user.id)),
@@ -168,8 +171,8 @@ async function toPublic(p: ProRow, viewer: Viewer | null): Promise<ProPublic> {
   const posts = canSeePosts
     ? (
         await db.query.proPosts.findMany({
-          where: eq(proPosts.proId, p.id),
-          orderBy: [desc(proPosts.createdAt)],
+          where: and(eq(proPosts.proId, p.id), isNull(proPosts.deletedAt)),
+          orderBy: [desc(proPosts.createdAt), desc(proPosts.id)],
           limit: 20,
         })
       ).map(postView)
@@ -200,6 +203,7 @@ async function postsUsedThisMonth(
   proId: string,
   ex: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
 ): Promise<number> {
+  // Les publications supprimées comptent (suppression douce, lot 34) : supprimer ne rend pas la place du mois.
   const { start, end } = monthBounds(now());
   const [row] = await ex
     .select({ n: count() })
@@ -487,7 +491,8 @@ export const prosService = {
       }
       const [created] = await tx
         .insert(proPosts)
-        .values({ proId: id, ...input })
+        // Date de l'horloge de l'appli (et non celle de la base) : le mois compté suit l'horloge simulée en dev.
+        .values({ proId: id, ...input, createdAt: now(), updatedAt: now() })
         .returning();
       return created;
     });
@@ -505,16 +510,22 @@ export const prosService = {
     const [row] = await db
       .update(proPosts)
       .set(input)
-      .where(and(eq(proPosts.id, postId), eq(proPosts.proId, id)))
+      .where(and(eq(proPosts.id, postId), eq(proPosts.proId, id), isNull(proPosts.deletedAt)))
       .returning();
     if (!row) throw notFound("Publication introuvable");
     return postView(row);
   },
 
-  /** `DELETE /pros/:id/posts/:postId` (le compteur du mois ne se libère pas : seule la limite compte). */
+  /**
+   * `DELETE /pros/:id/posts/:postId` : suppression douce (lot 34). La publication disparaît de la fiche et des abonnés,
+   * mais garde sa ligne : elle compte toujours dans la limite du mois, comme le dit le site.
+   */
   async deletePost(v: Viewer, id: string, postId: string): Promise<void> {
     await ownedPro(v, id);
-    await db.delete(proPosts).where(and(eq(proPosts.id, postId), eq(proPosts.proId, id)));
+    await db
+      .update(proPosts)
+      .set({ deletedAt: now() })
+      .where(and(eq(proPosts.id, postId), eq(proPosts.proId, id), isNull(proPosts.deletedAt)));
   },
 
   // --- Statistiques ---------------------------------------------------------------------------------------------

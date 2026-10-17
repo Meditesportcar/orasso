@@ -1,5 +1,5 @@
 // Petits morceaux de l'assistant d'événement de l'appli (lot 35b) : choix en pastilles qui passent à la ligne, date et
-// heure saisies au clavier (pas de sélecteur natif de date : aucune dépendance native de plus), intitulé de groupe.
+// heure (sélecteur natif sur le téléphone depuis le lot 34, saisie au clavier dans le navigateur), intitulé de groupe.
 import { Chip, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { eventEditorLabels as L } from "@orasso/shared";
 import type { ReactNode } from "react";
@@ -7,6 +7,7 @@ import { StyleSheet, View } from "react-native";
 
 import { datePart, joinDateTime, normalizeTime, timePart } from "@/lib/eventDraft";
 import { Muted } from "@/ui/Muted";
+import { useDateTimePicker } from "./datePicker";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -103,31 +104,37 @@ export function DateTimeFields({
 }) {
   const date = datePart(value);
   const time = timePart(value);
+  const native = useDateTimePicker();
   return (
-    <View style={styles.row}>
-      <TextField
-        label={dateLabel}
-        value={date}
-        placeholder={L.datePlaceholder}
-        onChangeText={(v) => onChange(joinDateTime(v, time, false))}
-        keyboardType="numbers-and-punctuation"
-        autoCorrect={false}
-        maxLength={10}
-        style={styles.date}
-        testID={testID ? `${testID}-date` : undefined}
-      />
-      <TextField
-        label={timeLabel}
-        value={time}
-        placeholder={L.timePlaceholder}
-        onChangeText={(v) => onChange(joinDateTime(date, v, false))}
-        onBlur={() => onChange(joinDateTime(date, time))}
-        keyboardType="numbers-and-punctuation"
-        autoCorrect={false}
-        maxLength={5}
-        style={styles.time}
-        testID={testID ? `${testID}-time` : undefined}
-      />
+    <View style={styles.group}>
+      <View style={styles.row}>
+        <TextField
+          {...native.fieldProps("date", date, (v) => onChange(joinDateTime(v, time)))}
+          label={dateLabel}
+          value={date}
+          placeholder={L.datePlaceholder}
+          onChangeText={(v) => onChange(joinDateTime(v, time, false))}
+          keyboardType="numbers-and-punctuation"
+          autoCorrect={false}
+          maxLength={10}
+          style={styles.date}
+          testID={testID ? `${testID}-date` : undefined}
+        />
+        <TextField
+          label={timeLabel}
+          value={time}
+          placeholder={L.timePlaceholder}
+          onChangeText={(v) => onChange(joinDateTime(date, v, false))}
+          onBlur={() => onChange(joinDateTime(date, time))}
+          keyboardType="numbers-and-punctuation"
+          autoCorrect={false}
+          maxLength={5}
+          style={styles.time}
+          testID={testID ? `${testID}-time` : undefined}
+          {...native.fieldProps("time", time, (v) => onChange(joinDateTime(date, v)))}
+        />
+      </View>
+      {native.picker}
     </View>
   );
 }
@@ -144,19 +151,53 @@ export function TimeField({
   onChange: (value: string) => void;
   testID?: string;
 }) {
+  const native = useDateTimePicker();
   return (
-    <TextField
-      label={label}
-      value={value}
-      placeholder={L.timePlaceholder}
-      onChangeText={onChange}
-      onBlur={() => onChange(normalizeTime(value))}
-      keyboardType="numbers-and-punctuation"
-      autoCorrect={false}
-      maxLength={5}
-      style={styles.time}
-      testID={testID}
-    />
+    <View style={[styles.group, styles.time]}>
+      <TextField
+        label={label}
+        value={value}
+        placeholder={L.timePlaceholder}
+        onChangeText={onChange}
+        onBlur={() => onChange(normalizeTime(value))}
+        keyboardType="numbers-and-punctuation"
+        autoCorrect={false}
+        maxLength={5}
+        testID={testID}
+        {...native.fieldProps("time", value, onChange)}
+      />
+      {native.picker}
+    </View>
+  );
+}
+
+/** Une date seule (jours d'un événement sur plusieurs jours) : même sélecteur natif que `DateTimeFields`. */
+export function DateField({
+  label,
+  value,
+  onChange,
+  testID,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  testID?: string;
+}) {
+  const native = useDateTimePicker();
+  return (
+    <View style={styles.group}>
+      <TextField
+        label={label}
+        value={value}
+        placeholder={L.datePlaceholder}
+        onChangeText={(v) => onChange(v.trim())}
+        keyboardType="numbers-and-punctuation"
+        maxLength={10}
+        testID={testID}
+        {...native.fieldProps("date", value, onChange)}
+      />
+      {native.picker}
+    </View>
   );
 }
 

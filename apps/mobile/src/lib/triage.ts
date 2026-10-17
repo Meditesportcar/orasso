@@ -332,6 +332,8 @@ export type ListFilters = {
   yearTo: string;
   grade: string;
   crewId: string;
+  /** Lot 34 : un jour (id), `whole` (tout l'événement) ou vide (tous les jours), comme le filtre « Jour » du site. */
+  dayId: string;
   q: string;
 };
 
@@ -344,6 +346,7 @@ export const emptyFilters: ListFilters = {
   yearTo: "",
   grade: "",
   crewId: "",
+  dayId: "",
   q: "",
 };
 
@@ -369,6 +372,7 @@ export function listQuery(
     yearTo: toYear(filters.yearTo),
     grade: filters.grade || undefined,
     crewId: filters.crewId || undefined,
+    dayId: filters.dayId || undefined,
     q: filters.q.trim() || undefined,
     cursor,
     limit: 30,
@@ -377,9 +381,17 @@ export function listQuery(
 
 /** Nombre de filtres posés en plus du statut (pastille du bouton « Filtrer »). */
 export const activeFilterCount = (f: ListFilters): number =>
-  [f.categoryId, f.makeId, f.country, toYear(f.yearFrom), toYear(f.yearTo), f.grade, f.crewId, f.q.trim()].filter(
-    Boolean,
-  ).length;
+  [
+    f.categoryId,
+    f.makeId,
+    f.country,
+    toYear(f.yearFrom),
+    toYear(f.yearTo),
+    f.grade,
+    f.crewId,
+    f.dayId,
+    f.q.trim(),
+  ].filter(Boolean).length;
 
 export const toggleId = (selected: readonly string[], id: string): string[] =>
   selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];

@@ -13,6 +13,7 @@ import {
   type ReceivedInvitation,
   staffPresenceLabels,
   staffRequestLabels,
+  ticketAppLabels,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -48,6 +49,9 @@ export default function Acces() {
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
   // Invitations nominatives reçues (lot 25, docs/02 « Accès »).
   const invitations = useApi(() => api.myEventInvitations(), []);
+  // Billets du public (lot 34) : un accès vers « Mes billets » quand on en a.
+  const tickets = useApi(() => api.myTickets(), []);
+  const validTickets = (tickets.data ?? []).filter((x) => x.status === "valid").length;
   const [answering, setAnswering] = useState<ReceivedInvitation | null>(null);
   const [answered, setAnswered] = useState<string | null>(null);
   const { me } = useSession();
@@ -177,6 +181,11 @@ export default function Acces() {
       ) : null}
 
       <SectionTitle>À venir</SectionTitle>
+      {validTickets > 0 ? (
+        <Button variant="plate" icon="qr" onPress={() => router.push("/billets")} fullWidth testID="my-tickets">
+          {ticketAppLabels.accessLink(validTickets)}
+        </Button>
+      ) : null}
       {upcoming && upcoming.length > 0 ? (
         upcoming.map((app) => (
           <AccessCard

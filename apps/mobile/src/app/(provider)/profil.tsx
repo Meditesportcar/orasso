@@ -119,5 +119,5 @@ export default function Profil() {
 
 const styles = StyleSheet.create({
   photos: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  photo: { width: 92, height: 70, borderRadius: 8 },
+  photo: { width: 92, height: 70, borderRadius: tokens.radius.radiusSm },
 });

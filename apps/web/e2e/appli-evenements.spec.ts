@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD, samplePhoto } from "./helpers";
+import { apiCall, login, resuspendSeedStructure, SEED_PASSWORD, samplePhoto } from "./helpers";
 
 // Appli dans le navigateur (lot 35b, décision D20 : tout se gère depuis l'appli). Deux parcours de la fiche :
 // 1. créer un événement d'un jour de bout en bout depuis l'appli (brouillon gardé après une sortie), le publier, le
@@ -458,6 +458,8 @@ test("thème Sable, structure suspendue et passionné sans accès", async ({ bro
   await ctx.close();
 
   // Structure suspendue : l'assistant s'ouvre, l'enregistrement est refusé avec le message de l'API (sans plantage).
+  // La recette du site « après l'événement » lève la suspension du seed : on la remet (lot 34, ordre des recettes).
+  await resuspendSeedStructure();
   const tram = await openApp(browser, "pres_tramontane@orasso.local", "sable");
   await chooseOrganizer(tram.page, "Tramontane Auto Club");
   await go(tram.page, "/nouvel-evenement");

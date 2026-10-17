@@ -427,7 +427,7 @@ export default function VehiculeFiche() {
 
 const styles = StyleSheet.create({
   photos: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  photo: { width: 160, height: 120, borderRadius: 8 },
+  photo: { width: 160, height: 120, borderRadius: tokens.radius.radiusSm },
   remove: { position: "absolute", top: space1, right: space1 },
   plate: { gap: space2, padding: space3 },
   fact: { flexDirection: "row", justifyContent: "space-between", gap: space3 },

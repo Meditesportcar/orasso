@@ -119,7 +119,12 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
   await page.goto("/app/explorer?segment=evenements&tri=distance");
   await expect(firstTile()).toContainText(/à \d+(,\d)? km/);
   const near = await page.getByTestId("event-tile").locator("h3").allTextContents();
-  expect(near.indexOf("Rassemblement de Toulouse")).toBeGreaterThan(near.indexOf("Expo Rivesaltes"));
+  // Toulouse après Rivesaltes, ou au-delà de la première page quand les recettes ont ajouté des événements proches
+  // (lot 34 : la base de recette n'est pas remise à zéro entre deux passages).
+  const rivesaltes = near.indexOf("Expo Rivesaltes");
+  const toulouse = near.indexOf("Rassemblement de Toulouse");
+  expect(rivesaltes).toBeGreaterThanOrEqual(0);
+  expect(toulouse === -1 || toulouse > rivesaltes).toBe(true);
 
   // Rayon : 50 km autour du secteur n'inclut pas Toulouse.
   await page.goto("/app/explorer?segment=evenements&tri=distance&rayon=50");

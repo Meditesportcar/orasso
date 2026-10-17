@@ -71,7 +71,9 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   // Emplacement sponsorisé ciblé 66 + JDM : même apparence, mention « Sponsorisé ».
   const sponsored = page.getByTestId("widget-sponsored");
   await expect(sponsored).toContainText("Sponsorisé");
-  await expect(sponsored).toContainText("Polish avant saison");
+  // Tirage pondéré avec une graine (personne + jour) : l'emplacement ciblé 66 + JDM sort le plus souvent, l'emplacement
+  // ouvert à tous certains jours (lot 34 : la recette ne dépend plus de la date).
+  await expect(sponsored).toContainText(/Polish avant saison|Covering sur mesure/);
 
   // Curseur de rayon : 150 km, enregistré dans le profil (la page se recharge avec ?rayon=150).
   // Glisser le curseur (beaucoup d'événements `input`) n'envoie rien : une seule requête, au relâchement (`change`).

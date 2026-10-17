@@ -24,7 +24,7 @@ import { StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { now } from "@/lib/clock";
 import { appStepProblem, draftWorthKeeping, moveStep, progressOf, type StoredDraft } from "@/lib/eventDraft";
-import { clearEventDraft, loadEventDraft, saveEventDraft } from "@/lib/eventDraftStore";
+import { clearEventDraft, keepEventDraftPoster, loadEventDraft, saveEventDraft } from "@/lib/eventDraftStore";
 import { saveEvent } from "@/lib/eventSave";
 import { formatStamp } from "@/lib/format";
 import { useEventFormats, useVendorTypes } from "@/lib/lists";
@@ -70,7 +70,9 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const [poster, setPoster] = useState<PickedPhoto | null>(null);
+  const [poster, setPosterState] = useState<PickedPhoto | null>(null);
+  // Affiche gardée avec le brouillon d'une création (lot 34) : copie faite à part, écrite avec le brouillon.
+  const [keptPoster, setKeptPoster] = useState<PickedPhoto | null>(null);
   const [quitting, setQuitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(initialNotice ?? null);
   // Création : le brouillon gardé est relu une fois avant d'écrire quoi que ce soit (sinon on l'écraserait).
@@ -100,6 +102,8 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
         setDraft(stored.draft);
         setIndex(stored.step);
         setCreatedId(stored.createdId);
+        setPosterState(stored.poster ?? null);
+        setKeptPoster(stored.poster ?? null);
         setResumed(stored);
       }
       setLoaded(true);
@@ -116,12 +120,27 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     if (editing || !loaded || !draftWorthKeeping(d)) return;
     const write = () => {
       pending.current = null;
-      void saveEventDraft(structureId, { draft: d, step: index, createdId, savedAt: now().toISOString() });
+      void saveEventDraft(structureId, {
+        draft: d,
+        step: index,
+        createdId,
+        savedAt: now().toISOString(),
+        poster: keptPoster,
+      });
     };
     pending.current = write;
     const timer = setTimeout(write, 400);
     return () => clearTimeout(timer);
-  }, [editing, loaded, d, index, createdId, structureId]);
+  }, [editing, loaded, d, index, createdId, structureId, keptPoster]);
+
+  const setPoster = useCallback(
+    (photo: PickedPhoto | null) => {
+      setPosterState(photo);
+      if (editing) return;
+      void keepEventDraftPoster(structureId, photo).then(setKeptPoster);
+    },
+    [editing, structureId],
+  );
   useEffect(() => () => pending.current?.(), []);
 
   const set = useCallback(<K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
@@ -165,7 +184,8 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     setDraft(fresh);
     setIndex(0);
     setCreatedId(null);
-    setPoster(null);
+    setPosterState(null);
+    setKeptPoster(null);
     setResumed(null);
     setError(null);
   }

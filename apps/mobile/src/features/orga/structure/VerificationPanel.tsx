@@ -1,5 +1,5 @@
 // Vérification et badge de la structure (lot 35a, décision D20) : mêmes étapes que la page Structure du site. 1. Le
-// numéro SIRET ou RNA est contrôlé dans les registres publics ; 2. un justificatif (photo ici : pas de sélecteur de PDF)
+// numéro SIRET ou RNA est contrôlé dans les registres publics ; 2. un justificatif (photo ou PDF, lot 34)
 // que l'équipe Orasso valide à la main ; puis l'envoi. Le badge dit son échéance et pourquoi une structure est suspendue.
 import { Button, Chip, Plate, SelectField, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
@@ -19,7 +19,7 @@ import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
-import { imageForm, pickOneImage } from "@/lib/structureFiles";
+import { imageForm, pdfForm, pickOneImage, pickOnePdf } from "@/lib/structureFiles";
 import {
   badgeDaysLeft,
   canAddDocument,
@@ -60,7 +60,7 @@ export function VerificationPanel({
   const structureId = structure.id;
   const [number, setNumber] = useState(view.siret ?? view.rna ?? "");
   const [kind, setKind] = useState<VerificationDocumentKind>("statutes");
-  const [busy, setBusy] = useState<"check" | "add" | "remove" | "submit" | null>(null);
+  const [busy, setBusy] = useState<"check" | "add" | "pdf" | "remove" | "submit" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<VerificationDocument | null>(null);
 
@@ -86,6 +86,14 @@ export function VerificationPanel({
       const photo = await pickOneImage();
       if (!photo) return null;
       await api.addVerificationDocument(structureId, await imageForm(photo, "file", "justificatif.jpg", { kind }));
+      return L.verifDocumentAdded;
+    });
+
+  const addPdf = () =>
+    run("pdf", async () => {
+      const pdf = await pickOnePdf();
+      if (!pdf) return null;
+      await api.addVerificationDocument(structureId, await pdfForm(pdf, { kind }));
       return L.verifDocumentAdded;
     });
 
@@ -252,6 +260,17 @@ export function VerificationPanel({
                   testID="orga-verification-add"
                 >
                   {L.verifDocumentAdd}
+                </Button>
+                <Button
+                  variant="plate"
+                  icon="add"
+                  loading={busy === "pdf"}
+                  disabled={busy !== null}
+                  onPress={() => void addPdf()}
+                  fullWidth
+                  testID="orga-verification-add-pdf"
+                >
+                  {L.verifDocumentAddPdf}
                 </Button>
               </>
             ) : null}

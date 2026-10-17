@@ -25,6 +25,7 @@ import { socialApi } from "./social";
 import { staffApi } from "./staff";
 import { structureApi } from "./structure";
 import { ticketingApi } from "./ticketing";
+import { ticketsApi } from "./tickets";
 import { triageApi } from "./triage";
 import { weatherApi } from "./weather";
 
@@ -63,5 +64,6 @@ export const api = {
   ...structureApi,
   ...triageApi,
   ...ticketingApi,
+  ...ticketsApi,
   ...eventEditorApi,
 };

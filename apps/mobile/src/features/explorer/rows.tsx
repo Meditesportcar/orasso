@@ -157,7 +157,7 @@ export function VehicleHitRow({ hit }: { hit: SearchVehicleHit }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: space3, padding: space3, alignItems: "center" },
-  thumb: { width: 84, height: 84, borderRadius: 8 },
+  thumb: { width: 84, height: 84, borderRadius: tokens.radius.radiusSm },
   body: { flex: 1, gap: space1 },
   owner: { alignItems: "center", gap: space2, maxWidth: 120 },
 });

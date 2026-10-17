@@ -178,6 +178,10 @@ test("billetterie : billet gratuit configuré, billet payant avec compte Stripe 
   test.setTimeout(420_000);
   mkdirSync(DIR, { recursive: true });
   const damien = await login("damien@orasso.local");
+  // Sans variables Stripe factices côté API, la billetterie payante est « bientôt » : la recette ne s'applique pas
+  // (lot 34 : sautée proprement au lieu d'échouer dans une recette complète sans Stripe).
+  const settings = await apiCall<{ stripe: { configured: boolean } }>(damien, "GET", "/admin/settings");
+  test.skip(!settings.data.stripe?.configured, "API à lancer avec STRIPE_* factices (voir l'en-tête du fichier)");
   const free = await createEvent(damien, { publicAccess: "free_reservation", title: `Billets gratuits ${unique()}` });
   const paid = await createEvent(damien, { publicAccess: "paid_orasso", title: `Billets payants ${unique()}` });
   const closed = await createEvent(damien, { publicAccess: "free", title: `Entrée libre ${unique()}` });
@@ -276,6 +280,68 @@ test("billetterie : billet gratuit configuré, billet payant avec compte Stripe 
   // Droits : un passionné sans casquette Organisateur n'a pas l'API de la billetterie.
   const fan = await signUpApi(`FanBillets_${unique()}`);
   expect((await apiCall(fan, "GET", `/events/${free.id}/ticketing`)).status).toBe(403);
+});
+
+test("billets du public : réserver dans l'appli, QR dans Mes billets, rendre un billet (lot 34)", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  mkdirSync(DIR, { recursive: true });
+  const damien = await login("damien@orasso.local");
+  const ev = await createEvent(damien, { publicAccess: "free_reservation", title: `Billets appli ${unique()}` });
+  const opened = await apiCall(damien, "PUT", `/events/${ev.id}/ticketing`, { enabled: true, capacity: 3 });
+  expect(opened.status).toBe(200);
+  const pseudo = `Visiteur_${unique()}`.slice(0, 24);
+  const fan = await signUpApi(pseudo);
+  const { ctx, page } = await openApp(browser, `${pseudo.toLowerCase()}@e2e.orasso.test`, "sable");
+  await page.goto(`/e/${ev.slug}`);
+  const block = page.getByTestId("ticket-block");
+  await expect(block).toContainText("Billets visiteurs", { timeout: 30_000 });
+  await expect(block).toContainText("3 places restantes");
+  await block.getByLabel("2 billets").click();
+  await shot(page, "03-billets-reserver", "sable");
+  await page.getByTestId("ticket-reserve").click();
+  await page.waitForURL(/billets/, { timeout: 30_000 });
+  await expect(page.getByText("Réservation confirmée").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("ticket")).toHaveCount(2);
+  await expect(page.getByTestId("ticket-qr").first()).toBeVisible();
+  await shot(page, "04-mes-billets", "sable");
+  await page.getByTestId("ticket-give-back").first().click();
+  await page.getByRole("button", { name: "Rendre ce billet" }).filter({ visible: true }).last().click();
+  await expect(page.getByText("Billet rendu : la place est libérée.").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("ticket")).toHaveCount(1);
+  const mine = await apiCall<{ status: string }[]>(fan, "GET", "/me/tickets");
+  expect(mine.data.filter((t) => t.status === "valid")).toHaveLength(1);
+  // Accès : un raccourci vers Mes billets.
+  await page.goto("/acces");
+  await expect(page.getByTestId("my-tickets")).toContainText("Mes billets · 1", { timeout: 30_000 });
+  await ctx.close();
+});
+
+test("pro : créer sa fiche depuis Mes casquettes (lot 34)", async ({ browser }) => {
+  test.setTimeout(240_000);
+  mkdirSync(DIR, { recursive: true });
+  const pseudo = `FicheApp_${unique()}`.slice(0, 24);
+  await signUpApi(pseudo);
+  const { ctx, page } = await openApp(browser, `${pseudo.toLowerCase()}@e2e.orasso.test`, "sable");
+  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.getByTestId("casquette-create-pro").click();
+  await page.waitForURL(/pro-nouvelle/, { timeout: 20_000 });
+  await expect(page.getByTestId("pro-form")).toBeVisible({ timeout: 30_000 });
+  // Formulaire refusé sans activité (règle du site), puis créé.
+  await page.getByLabel("Nom de l'activité").fill(`Atelier ${pseudo}`);
+  await page.getByTestId("pro-form-save").click();
+  await expect(page.getByText("Choisis au moins une activité.")).toBeVisible();
+  await page.getByTestId("pro-form").getByText("Covering", { exact: true }).click();
+  await page.getByLabel("Ville").first().fill("Perpignan");
+  await shot(page, "00-creer-fiche-pro", "sable");
+  await page.getByTestId("pro-form-save").click();
+  await page.waitForURL(/\/fiche/, { timeout: 30_000 });
+  await expect(page.getByText("Fiche pro créée.").first()).toBeVisible({ timeout: 20_000 });
+  const cookie = await login(`${pseudo.toLowerCase()}@e2e.orasso.test`);
+  const mine = await apiCall<{ name: string } | null>(cookie, "GET", "/me/pro");
+  expect(mine.data?.name).toBe(`Atelier ${pseudo}`);
+  await ctx.close();
 });
 
 test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, abonnement en consultation", async ({

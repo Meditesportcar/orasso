@@ -490,7 +490,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   // Une décision de l'organisateur, une offre ou un pass émis : la page se met à jour sans rechargement.
-  useChannel(`user:${userId}`, (message) => {
+  const live = useChannel(`user:${userId}`, (message) => {
     if (
       message.type === "application.changed" ||
       message.type === "notification" ||
@@ -500,7 +500,8 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
     }
   });
   return (
-    <div className="s-stack">
+    // `data-live` : canal temps réel ouvert (les recettes attendent qu'il le soit avant une offre en direct, lot 34).
+    <div className="s-stack" data-testid="acces" data-live={live.connected ? "on" : "off"}>
       <h1 className="s-title">Accès</h1>
       <div className="s-tabs" role="tablist">
         <Chip selected={!past} onClick={() => navigate("/app/acces")}>

@@ -37,6 +37,7 @@ import { ContactOrganizerButton } from "@/features/boite/MessageButton";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { ReportButton } from "@/features/ReportSheet";
+import { TicketsBlock } from "@/features/tickets/TicketsBlock";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
@@ -288,6 +289,8 @@ export default function EventPage() {
         {preview ? `\n${preview}` : ""}
       </Info>
       <Info label="Public">{publicAccessText(e.publicAccess, e.externalTicketUrl)}</Info>
+      {/* Lot 34 (parité D20) : billets du public réservés dans l'appli, comme sur la page du site. */}
+      {!cancelled ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
       {e.vendorTypes.length > 0 ? <Info label="Prestataires attendus">{e.vendorTypes.join(" · ")}</Info> : null}
       {providers.data && providers.data.length > 0 ? (
         <Plate style={styles.info} testID="providers-present">

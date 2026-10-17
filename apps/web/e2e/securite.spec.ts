@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, loginInBrowser, SEED_PASSWORD, unique } from "./helpers";
+import pg from "pg";
+import { apiCall, login, loginInBrowser, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 
 // Lot 15 : compte et sécurité de bout en bout, avec le transport d'e-mails « journal » (fichiers `.data/mail`).
 // Prérequis : API et site lancés sur la base locale avec le seed.
@@ -75,11 +76,13 @@ test("inscription → e-mail de vérification → lien → adresse confirmée", 
 });
 
 test("lien d'ami → inscription → adresse confirmée → +10 points au parrain", async ({ browser }) => {
-  const kenji = await login("kenji@orasso.local");
-  const me = async () =>
-    (await apiCall<{ profile: { inviteToken: string; pointsSeason: number } }>(kenji, "GET", "/me")).data.profile;
-  const before = await me();
+  // Parrain neuf à chaque passage (lot 34) : Kenji partage ses points avec d'autres recettes et atteint vite le plafond
+  // de 20 parrainages par saison sur une base rejouée sans --reset.
   const s = unique();
+  const sponsor = await signUpApi(`Parrain_${s}`.slice(0, 24), `parrain-${s}@orasso.test`);
+  const me = async () =>
+    (await apiCall<{ profile: { inviteToken: string; pointsSeason: number } }>(sponsor, "GET", "/me")).data.profile;
+  const before = await me();
   const email = `filleul-${s}@orasso.test`;
   const { ctx, page } = await newPage(browser);
   await page.goto(`/ami/${before.inviteToken}`);
@@ -124,8 +127,13 @@ test("mot de passe oublié → e-mail → nouveau mot de passe → sessions rév
 });
 
 test("connexion depuis un autre navigateur → e-mail « nouvelle connexion »", async ({ browser }) => {
-  // Compte du seed (créé il y a plus de 10 minutes).
+  // Compte du seed, vieilli d'un jour (lot 34) : juste après un `db:seed --reset`, il a moins de 10 minutes et la règle
+  // « pas d'alerte pour un compte neuf » ne l'alerterait pas.
   const email = "julie@orasso.local";
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  await db.query(`update "user" set created_at = now() - interval '1 day' where email = $1`, [email]);
+  await db.end();
   const a = await newPage(browser);
   await loginInBrowser(a.page, email, SEED_PASSWORD, "/app");
   const since = Date.now();

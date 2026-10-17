@@ -46,7 +46,14 @@ export const ticketingAppLabels = {
 
 export const proAppLabels = {
   // Fiche (casquette Pro).
-  noPro: "Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso (menu Professionnels).",
+  noPro: "Tu n'as pas encore de fiche pro. Crée-la depuis Moi > Mes casquettes.",
+  // Création de la fiche (lot 34, parité D20 : elle n'existait que sur le site).
+  createTitle: "Créer ma fiche pro",
+  createIntro:
+    "Gratuit jusqu'au 21 juin 2027. Tu complèteras ensuite tes remises par grade, tes photos et la vérification de ton SIRET.",
+  createSave: "Créer ma fiche",
+  created: "Fiche pro créée. Publie-la quand elle est prête.",
+  createExists: "Tu as déjà une fiche pro.",
   published: "Publiée",
   draft: "Brouillon",
   verified: "Pro vérifié",

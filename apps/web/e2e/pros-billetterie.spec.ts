@@ -229,13 +229,14 @@ test("billets gratuits : interrupteur de l'événement, réservation, QR, contr�
   // Interrupteur général de l'administration : éteint, la réservation se ferme partout.
   await orga.goto("/admin/reglages");
   const general = orga.getByTestId("setting-ticketing.free_enabled");
-  await expect(general).toContainText("activé");
+  // État exact dans <strong> (lot 34) : « désactivé » contient « activé », l'attente passait avant la fin de l'action.
+  await expect(general.locator("strong")).toHaveText("activé");
   await general.getByRole("button", { name: "Désactiver" }).click();
-  await expect(orga.getByTestId("setting-ticketing.free_enabled")).toContainText("désactivé");
+  await expect(orga.getByTestId("setting-ticketing.free_enabled").locator("strong")).toHaveText("désactivé");
   await fan.reload();
   await expect(fan.getByTestId("ticket-block")).toContainText("momentanément indisponible");
   await orga.getByTestId("setting-ticketing.free_enabled").getByRole("button", { name: "Activer" }).click();
-  await expect(orga.getByTestId("setting-ticketing.free_enabled")).toContainText("activé");
+  await expect(orga.getByTestId("setting-ticketing.free_enabled").locator("strong")).toHaveText("activé");
   // Le mode présentation est imposé : on ne peut pas le désactiver.
   await expect(
     orga.getByTestId("setting-ticketing.presentation_mode").getByRole("button", { name: "Désactiver" }),

@@ -96,6 +96,15 @@ describe("brouillon gardé sur le téléphone", () => {
     );
   });
 
+  it("garde l'affiche choisie (lot 34) ; une affiche abîmée est ignorée", () => {
+    const poster = { uri: "file:///doc/affiche.jpg", width: 1200, height: 1600 };
+    const raw = serializeDraft({ draft: draft(), step: 2, createdId: null, savedAt: "x", poster });
+    expect(parseStoredDraft(raw)?.poster).toEqual(poster);
+    const broken = serializeDraft({ draft: draft(), step: 2, createdId: null, savedAt: "x" });
+    expect(parseStoredDraft(broken)?.poster).toBeNull();
+    expect(parseStoredDraft(JSON.stringify({ ...JSON.parse(broken), poster: { uri: 3 } }))?.poster).toBeNull();
+  });
+
   it("n'est gardé qu'une fois quelque chose saisi", () => {
     expect(draftWorthKeeping(initialEventDraft(NOW))).toBe(false);
     expect(draftWorthKeeping({ ...initialEventDraft(NOW), title: "R" })).toBe(true);

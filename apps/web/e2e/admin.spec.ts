@@ -8,6 +8,7 @@ import {
   applyApi,
   createEvent,
   decideApi,
+  deliverNow,
   login,
   randomPlate,
   signUpApi,
@@ -127,6 +128,8 @@ test("administration : accueil, 2FA, base véhicules, mode assistance, barème, 
   await row.getByRole("button", { name: "Rattacher ce véhicule" }).click();
   await pageD.waitForURL(/fait=rattache/);
   await expect(pageD.getByTestId("other-vehicle").filter({ hasText: `Alpine A110 bleue ${s}` })).toHaveCount(0);
+  // La nuit, les heures calmes reportent la notification à 08:00 : on la livre tout de suite (lot 34, recette de nuit).
+  deliverNow(`proprio_${s}@e2e.orasso.test`.toLowerCase());
   const notes = await apiCall<{ items: { type: string; body: string }[] }>(owner, "GET", "/me/notifications");
   expect(notes.data.items.find((n) => n.type === "vehicle_reassigned")?.body).toContain(`Alpine ${s} A110`);
 

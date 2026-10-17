@@ -125,8 +125,10 @@ test("certification : Kenji demande, Damien certifie, la puissance change et ell
   expect(supra, "la Supra de Kenji existe (seed)").toBeTruthy();
   const id = (supra as VehicleRow).id;
   for (let n = (supra as VehicleRow).photos.length; n < 3; n++) await uploadPhoto(kenji, id);
+  // Départ propre (lot 34) : une puissance différente fait perdre une certification laissée par un passage précédent.
   const patched = await apiCall(kenji, "PATCH", `/me/vehicles/${id}`, {
     description: "Supra Mk4, 2JZ turbo, d'origine.",
+    powerHp: 320 + Math.floor(Math.random() * 100),
   });
   expect(patched.status).toBe(200);
 
@@ -167,7 +169,9 @@ test("certification : Kenji demande, Damien certifie, la puissance change et ell
 
   // Modifier la puissance : certification perdue.
   await page.locator("details.g-sheet", { hasText: "Modifier la fiche" }).locator("summary").click();
-  await page.getByLabel("Puissance (ch)").fill("455");
+  // Une valeur différente de l'actuelle (lot 34 : un passage précédent a pu laisser 455 ch, rien ne changeait alors).
+  const power = page.getByLabel("Puissance (ch)");
+  await power.fill(String((Number(await power.inputValue()) || 450) + 1));
   await page.getByRole("button", { name: "Enregistrer" }).click();
   await expect(page.getByTestId("certification")).toContainText("Certification perdue : fiche modifiée");
   await ctx.close();

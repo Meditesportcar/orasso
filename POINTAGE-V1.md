@@ -1,71 +1,62 @@
-# Pointage V1 d'Orasso — ce qui est fait, ce qui manque (16/10/2026)
+# Pointage V1 d'Orasso — ce qui est fait, ce qui manque (repointé le 17/10/2026, lot 34)
 
-Comparaison de chaque fonction **validée** du projet (`docs/01` section « Validé », `docs/02`) avec le code de `main` (`fffe6a3`, après le lot 13 ; le lot 14 pros/billetterie est en cours). Référence : le projet **corrigé** par nos décisions (`docs/JOURNAL-DES-CHOIX.md`, `ARCHITECTURE.md`, décisions du plan) — quand une correction existe, c'est elle qui compte (ex. format des QR, désistement après verrouillage). Règle de Damien : une absence n'est justifiée que par une **raison écrite valable** ; « plus tard », « pas dans ce lot » ou « l'API ne l'a pas » ne sont pas des raisons → **à faire**.
+Comparaison de chaque fonction **validée** du projet (`docs/01` section « Validé », `docs/02`) avec le code de la branche `lot-34-recette-finale` (depuis `main` `0fabe76` : lots 01 à 35d fusionnés). Référence : le projet **corrigé** par nos décisions (`docs/JOURNAL-DES-CHOIX.md`, `ARCHITECTURE.md`, décisions du plan, dont D20 « tout se gère depuis l'appli »). Règle de Damien : une absence n'est justifiée que par une **raison écrite valable** ; « plus tard » ou « pas dans ce lot » ne sont pas des raisons.
 
-Détail par chapitre (preuves fichier:ligne) : `C:\Users\DELL\.claude\relais\orasso\pointage\01…08-*.md`.
+Premier pointage (16/10, après le lot 13) et preuves par chapitre : `C:\Users\DELL\.claude\relais\orasso\pointage\01…08-*.md`. Ce repointage reprend chaque ligne de l'ancienne section « À faire » et dit quel lot l'a faite ; la recette du lot 34 l'a vérifiée (Playwright du site et de l'appli dans le navigateur, tests d'intégration de l'API).
 
-## Ce qui est fait (parcours n° 1 complet, site public, création d'événement)
-Socle et déploiement (dev.orasso.fr, sauvegardes, APK), design system web et natif, comptes e-mail + mot de passe, 2FA obligatoire organisateurs, structures et vérification SIRET/RNA + justificatif + badge, création d'événement en 12 étapes (formats V1, véhicules, places, public, admission libre/filtration, critères, avant-première, règlement, zones, duplication, récurrence), page événement publique et `/evenements` avec carte, candidatures, tri (file au clavier, vue liste, décisions en masse, motifs, compteurs temps réel), liste d'attente automatique et délais, désistement et verrouillage H-2, QR d'inscription signés, mode staff hors ligne (synchro vérifiée, scan continu, recherche plaque/pseudo, pointage manuel et par plaque, placement, alerte, main courante), inscription express, points et malus à J+2, contestation, grades et saisons, QR de compte dynamique (appli), avis et réponse de l'organisateur, notifications (base, push, e-mail journal, heures calmes, préférences par type côté API), premier lancement, jour J hors ligne, garage (véhicules, photos, plaque unique), deux thèmes.
+## Ce qui est fait
+
+### Socle et parcours n° 1 (lots 01 à 14)
+Socle et déploiement (dev.orasso.fr, sauvegardes, APK), design system web et natif, comptes e-mail + mot de passe, 2FA obligatoire organisateurs, structures et vérification SIRET/RNA + justificatif + badge, création d'événement par étapes, page événement publique et `/evenements` avec carte, candidatures, tri (file au clavier, vue liste, décisions en masse, motifs, compteurs temps réel), liste d'attente automatique et délais, désistement et verrouillage H-2, QR d'inscription signés, mode staff hors ligne, inscription express, points et malus à J+2, contestation, grades et saisons, QR de compte, avis et réponse de l'organisateur, notifications, premier lancement, jour J hors ligne, garage, deux thèmes, pros (fiche, remises, QR de compte, statistiques) et billetterie en mode présentation.
+
+### Ancienne section « À faire » : tout est livré
+| Fonction | Lot | Vérifié au lot 34 par |
+|---|---|---|
+| Réinitialisation du mot de passe, vérification de l'e-mail, alertes (changement de mot de passe, nouvel appareil) | 15 | `securite.spec.ts` (8 tests) |
+| Clé d'accès comme double authentification | 15 (création sur le site), 35c (liste, renommage, suppression dans l'appli) | `securite.spec.ts`, `appli-parite.spec.ts` |
+| Suppression du compte (appli et site) | 15, 16 | `securite.spec.ts`, `appli-moi.spec.ts` |
+| Écran Moi complet (appli et `/app/moi`) | 16 | `appli-moi.spec.ts` |
+| Notifications « événement près de chez toi » | 15 | tests de l'API (`account.test.ts`) |
+| Sentry / GlitchTip (actif dès qu'un DSN existe) | 15 | tests de l'API (`sentry.test.ts`) |
+| Amis, profils des autres, recherche de personnes, QR ami | 17 | `social.spec.ts`, `appli-social.spec.ts` |
+| Messagerie, demandes de contact, organisateurs joignables, lu par, Boîte | 18 | `messagerie.spec.ts`, `appli-messagerie.spec.ts` |
+| Journal fusionné (fil + notifications) | 17 | `social.spec.ts` |
+| Crews et inscription en crew, crew au tri | 19 | `crews.spec.ts`, `appli-crews.spec.ts` |
+| Explorer complet, recherche de premier niveau | 29 | `explorer.spec.ts`, `appli-explorer.spec.ts` |
+| Accueil (widgets, rayon, météo, garage favori, lavage, carburant, sponsorisé) et `/app` | 30 | `accueil.spec.ts`, `appli-accueil.spec.ts` |
+| Garage : poids, pays, statuts, catégories cohérentes, transfert de plaque, fiches Instagram, certification | 31 | `garage.spec.ts`, `appli-parite.spec.ts` |
+| Points de parrainage, priorité des hauts grades | 15, 25 | `securite.spec.ts`, tests de l'API |
+| Casquettes de l'appli, casquette Organisateur (Direct, Événements, Tri par glissement, Boîte, Staff), créer une structure | 16, 22, 23 | `appli-orga.spec.ts`, `appli-tri.spec.ts` |
+| Communication (annonces, consignes, messages groupés, modèles, fil public, discussions du staff), statut Maintenu / Incertain / Annulé | 20 | `communication.spec.ts`, `appli-communication.spec.ts` |
+| Météo (suggestion « Incertain », rappel, jour J) | 28 | `meteo.spec.ts` |
+| Staff côté site, rôle boutique | 24 | `staff-site.spec.ts`, `appli-boutique.spec.ts` |
+| Invitations nominatives, événement privé, invitation des retenus à l'édition suivante | 25, 27 | `invitations.spec.ts`, `appli-invitations.spec.ts`, `appli-evenements.spec.ts` |
+| Événements sur plusieurs jours | 26 | `multi-jours.spec.ts`, `appli-tri.spec.ts` (filtre « Jour », lot 34) |
+| Après l'événement : bilan, remerciement, export tracé, notes internes | 27 | `apres-evenement.spec.ts`, `appli-structure-staff.spec.ts` |
+| Jour J : direct par catégorie, prestataires arrivés, photo de main courante, position de l'alerte | 24 | `appli-boutique.spec.ts`, `appli-orga.spec.ts` |
+| Badge de structure : rappels, suspension, changement de propriétaire par l'équipe | 27, 33 | `apres-evenement.spec.ts`, `admin.spec.ts` |
+| Casquette Prestataire, candidatures des prestataires, photographes, stand d'un pro | 21 | `prestataires.spec.ts` |
+| Signaler partout, file du modérateur, sanctions, suspension automatique, contestation, conservation | 32 | `moderation.spec.ts`, `appli-administration.spec.ts` |
+| Administration : registres, réglages, newsletter, mode assistance, file des « Autre » | 33, 35d | `admin.spec.ts`, `appli-administration.spec.ts` |
+| Emplacements sponsorisés, fiche de base après le 21/06/2027, « paiement sur place » | 21, 30, 33 | `accueil.spec.ts`, `prestataires.spec.ts`, `admin.spec.ts` |
+| **Parité de l'appli (D20)** : structure, équipe, demandes de staff, événements (créer, modifier, dupliquer, publier), billetterie de l'organisateur, pro, compte, garage, administration | 35a à 35d | `appli-structure-staff`, `appli-evenements`, `appli-parite`, `appli-administration` |
+| Parité, compléments du lot 34 : sélecteur natif de date et d'heure, justificatifs en PDF, filtre « Jour » du tri, affiche gardée dans le brouillon, **création de la fiche pro dans l'appli**, **billets du public réservés dans l'appli (Mes billets)** | 34 | `appli-parite.spec.ts`, `appli-tri.spec.ts`, `appli-structure-staff.spec.ts`, tests de l'appli |
 
 ## Reporté avec une raison valable (ne bloque pas)
 | Fonction | Raison |
 |---|---|
-| E-mails réels (Brevo) | clé Brevo et adresses d'envoi à créer (contact@orasso.fr en cours) — le code est prêt |
-| Photos sur stockage objet OVH | clés OVH à créer — pilote disque en attendant (le pilote S3 sera écrit) |
+| Première newsletter réelle | envoi à décider par Damien (Brevo est branché sur dev ; offre gratuite de 300 e-mails par jour, budget partagé avec les e-mails du compte) |
+| Photos sur stockage objet OVH | clés OVH à créer — pilote disque en attendant |
 | Connexion Google / Apple | identifiants OAuth et compte Apple Developer à créer |
 | Publication Play Store / App Store, iPhone réel | comptes développeur Google / Apple à créer |
-| Billetterie payante réelle (Stripe) | clés de test Stripe à fournir ; encaissement réel après le 21/06/2027 (docs) |
+| Billetterie payante réelle (Stripe) | clés de test Stripe à fournir ; encaissement réel après le 21/06/2027 (docs) ; aucun paiement dans l'appli (règles des stores, « À revoir avec Damien ») |
+| Création d'une clé d'accès depuis l'appli | demande un module natif WebAuthn (non prévu dans l'APK de référence) ; la clé se crée sur le site, l'appli la liste, la renomme et la supprime (lot 35c) |
 | Floutage automatique des plaques | docs : « plus tard » |
 | Formats roulants et piste | docs : « viendront après » |
 | Lecture de plaque par caméra | docs : « à tester », pas une fonction ferme |
 | Motorisation générée depuis une base Orasso | la base de motorisations est à constituer (C18 : texte libre en V1) |
 | Avantage de l'organisateur qui amène ses partenaires | docs : « forme à définir » |
+| Placement groupé des crews, galerie et filigrane des photographes | docs : « en discussion » / « plus tard » |
 
-## À faire (absent ou partiel sans raison valable)
-### Compte et sécurité
-- Réinitialisation du mot de passe par e-mail ; vérification de l'e-mail à l'inscription.
-- Alerte e-mail au changement de mot de passe et à la connexion depuis un nouvel appareil.
-- Clé d'accès (passkey, Face ID / empreinte) comme double authentification.
-- **Suppression du compte depuis l'appli** (exigée par les stores) et le site.
-- Écran **Moi** complet (appli et site `/app/moi`) : modifier le profil (photo, pseudo, description, aperçu « ce que voient les autres »), notifications par type, compte public/privé et ses règles d'affichage, secteur, centres d'intérêt, rayon, 2FA et appareils, mes casquettes, devenir staff.
-- Notifications « événement correspondant à tes centres d'intérêt dans ton rayon ».
-- SDK Sentry/GlitchTip posé (actif dès qu'un DSN existe).
-
-### Social
-- **Amis** : suivi avec acceptation des deux côtés ; profils des autres (public/privé, amis voient tout).
-- **Recherche de personnes** : pseudo, véhicule (marque, modèle, génération), « autres propriétaires près de chez moi », filtres département / centres d'intérêt / véhicule / grade ; **QR ami**.
-- **Messagerie** : messages entre amis, demande de contact unique et filtrée, organisateurs toujours joignables, **confirmation de lecture** ; onglet **Boîte** (messages + demandes) appli et site.
-- **Fil d'actualité** fusionné avec les notifications dans le **Journal** (appli et site).
-- **Crews** : crews privés (logo, nom, description, département, créateur), demandes et invitations, fil de discussion de groupe avec images, trouvables par nom et département ; **inscription en crew** aux événements (chaque membre, confirmation, retrait individuel), crew visible au tri.
-
-### Découverte et accueil
-- Explorer de l'appli complet : carte, segments **Pros** et **Personnes et crews**, filtres ; découverte par affinités et organisateurs suivis.
-- **Recherche de premier niveau** (personnes, véhicules, crews, événements, pros) dans l'appli et le site.
-- **Accueil** : widgets réglables (statuts, suggestions autour de moi avec rayon, météo, garage favori, lavage et carburant les plus proches), emplacement sponsorisé.
-- Site : `/app` (accueil complet), `/app/explorer`, `/app/boite`, `/app/moi`, QR de compte sur le site.
-
-### Garage, points, certification
-- Poids et pays de la marque ; statuts **vendu / souvenir / accidenté** ; catégories incohérentes limitées par marque et type.
-- **Transfert de plaque** confirmé par l'ancien propriétaire, sinon arbitré par l'équipe Orasso.
-- **Fiches véhicule à partager sur Instagram** (story 9:16, publication 1:1).
-- **Certification** : demande à partir d'un seuil, validation manuelle, perte après modification ou 6 mois sans événement.
-- **Points de parrainage** (ami invité dont l'e-mail est confirmé) ; **priorité liste d'attente et avant-première pour les hauts grades** si l'organisateur l'active.
-
-### Organisateurs
-- **Casquettes** dans l'appli (organisateur, pro, prestataire ; avatar, appui long, pastille) et **casquette Organisateur** de l'appli : Direct, Événements, **Tri par glissement**, Boîte, Staff ; créer une structure depuis l'appli.
-- **Communication** : consignes et annonces, **messages groupés par segment** (avec limite aux abonnés), **modèles de messages**, **fil public de l'événement**, **discussions du staff** (permanente et par événement, fermée à J+1, lisible à J+7) ; statut Maintenu/Incertain/Annulé envoyé et affiché ; **météo** (suggestion « Incertain », rappel de la veille, jour J).
-- **Staff côté site** : membres, rôles, invitations, présences ; rôle **boutique** (contrôle des billets du public, compteur d'entrées).
-- **Invitations nominatives** (personne ou véhicule), **événement privé sur invitation**, invitation des retenus à l'édition suivante ; **événements sur plusieurs jours** (accès à tout l'événement ou par jour).
-- **Après l'événement** : **bilan automatique**, **remerciement** avec lien d'avis, **export** des participants (tracé), **note interne** privée.
-- Jour J : direct **par catégorie** et prestataires arrivés, **photo** dans la main courante, **position** dans l'alerte.
-- Badge de structure : **rappels** à 1 mois, 1 semaine, la veille et **suspension** sans nouvelles ; changement de propriétaire par l'équipe sur justificatif.
-
-### Prestataires et photographes
-- **Casquette Prestataire** (candidatures, profil, boîte, QR de stand), **candidature des prestataires** aux événements et onglet de tri dédié, présence affichée sur la fiche de l'événement ; **photographes** (Instagram, portfolio, contact, accréditation « média officiel », amateurs sans structure) ; un pro peut candidater pour tenir un stand.
-
-### Modération et administration
-- **Signaler** partout (profil, véhicule, message, photo, événement, avis, crew) avec motif et capture ; file du **modérateur** (suspension) ; échelle des **sanctions** ; suspension automatique sur signalements répétés avec protections contre les meutes ; **contestation** d'une sanction ; information du signaleur et du sanctionné ; historique d'un message privé signalé ; conservation un an puis suppression.
-- **Administration** : registres (utilisateurs, structures, pros, base véhicules, journal des accès), réglages (interrupteurs, listes, points et grades), **newsletter** gérée dans l'admin, mode assistance (survol, intervention sur demande tracée), file des « Autre » du référentiel.
-
-### Pros et billetterie (à repointer après le lot 14)
-- Hors lot 14 : fiche de base gratuite après le 21/06/2027, **emplacements sponsorisés** (tarif en constante), mention « paiement sur place » pour une entrée payante hors Orasso.
+## À faire
+Rien sans raison écrite. Les points ouverts sont des **décisions** de Damien, rassemblées dans `docs/JOURNAL-DES-CHOIX.md`, section « À revoir avec Damien — liste consolidée (lot 34) », et les **essais sur téléphone** de la liste de contrôle du lot 34 (relais, `JOURNAL.md`).

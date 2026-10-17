@@ -19,7 +19,10 @@ import {
   type ApplicationKind,
   applicationStatusLabels,
   type EventCrewFilter,
+  type EventDay,
   type EventZone,
+  eventDaysLabels,
+  formatDayDate,
   gradeLabels,
   grades,
   type RefusalReason,
@@ -78,6 +81,7 @@ function FiltersSheet({
   filters,
   refs,
   kind,
+  days,
   onApply,
   onClose,
 }: {
@@ -85,6 +89,7 @@ function FiltersSheet({
   filters: ListFilters;
   refs: Refs;
   kind: ApplicationKind;
+  days: readonly EventDay[];
   onApply: (f: ListFilters) => void;
   onClose: () => void;
 }) {
@@ -114,6 +119,18 @@ function FiltersSheet({
         value={draft.status}
         onValueChange={(status) => set({ status })}
       />
+      {days.length > 1 ? (
+        <SelectField
+          label={eventDaysLabels.day}
+          options={[
+            { value: "", label: eventDaysLabels.allDays },
+            { value: "whole", label: eventDaysLabels.wholeEvent },
+            ...days.map((d) => ({ value: d.id, label: formatDayDate(d.date) })),
+          ]}
+          value={draft.dayId}
+          onValueChange={(dayId) => set({ dayId })}
+        />
+      ) : null}
       {vehicle ? (
         <>
           <SelectField
@@ -188,11 +205,14 @@ export function ListMode({
   eventId,
   kind,
   zones,
+  days = [],
   onChanged,
 }: {
   eventId: string;
   kind: ApplicationKind;
   zones: readonly EventZone[];
+  /** Lot 34 : jours d'un événement sur plusieurs jours (filtre « Jour » et jour de chaque ligne, comme le site). */
+  days?: readonly EventDay[];
   onChanged: () => void;
 }) {
   const { t } = useTheme();
@@ -346,6 +366,11 @@ export function ListMode({
             />
             <View style={styles.meta}>
               <RowBadge item={item} />
+              {days.length > 1 ? (
+                <Text variant="meta" color={t.color.plateMuted} testID="triage-row-day">
+                  {item.day ? formatDayDate(item.day.date, { weekday: false }) : eventDaysLabels.wholeEvent}
+                </Text>
+              ) : null}
               {item.crew ? (
                 <Text variant="meta" color={t.color.plateMuted}>
                   {item.crew.name}
@@ -432,6 +457,7 @@ export function ListMode({
         filters={filters}
         refs={refs}
         kind={kind}
+        days={days}
         onApply={(f) => {
           setFiltersOpen(false);
           setFilters(f);

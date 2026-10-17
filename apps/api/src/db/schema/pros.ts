@@ -124,7 +124,10 @@ export const proPartnerLinks = pgTable(
   ],
 );
 
-/** Publications (offres, actualités), visibles par les abonnés ; limite mensuelle dans `PRO_POSTS_PER_MONTH`. */
+/**
+ * Publications (offres, actualités), visibles par les abonnés ; limite mensuelle dans `PRO_POSTS_PER_MONTH`.
+ * Suppression douce (lot 34) : une publication supprimée disparaît partout mais compte toujours dans la limite du mois.
+ */
 export const proPosts = pgTable(
   "pro_posts",
   {
@@ -134,6 +137,7 @@ export const proPosts = pgTable(
       .references(() => proProfiles.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     body: text("body").notNull(),
+    deletedAt: tstz("deleted_at"),
     ...timestamps,
   },
   (t) => [index("pro_posts_pro_idx").on(t.proId, t.createdAt)],

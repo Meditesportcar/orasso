@@ -26,6 +26,8 @@ export type TriageListQuery = {
   yearTo?: number;
   grade?: string;
   crewId?: string;
+  /** Lot 34 : un jour (id) ou `whole` (tout l'événement), comme le filtre « Jour » du site. */
+  dayId?: string;
   q?: string;
   cursor?: string | null;
   limit?: number;

@@ -53,6 +53,24 @@ export function formOfPro(pro: ProOwner): ProFicheForm {
   };
 }
 
+/** Formulaire vide d'une création (lot 34). */
+export function emptyProForm(): ProFicheForm {
+  return {
+    name: "",
+    activities: [],
+    description: "",
+    addressLine: "",
+    postalCode: "",
+    city: "",
+    zone: "",
+    phone: "",
+    email: "",
+    website: "",
+    socials: Object.fromEntries(socialNetworks.map((n) => [n, ""])) as Record<SocialNetwork, string>,
+    hours: Object.fromEntries(weekdays.map((d) => [d, ""])) as Record<Weekday, string>,
+  };
+}
+
 /** Ajoute ou retire une activité (six au plus, vérifié par l'API). */
 export function toggleActivity(list: ProActivity[], activity: ProActivity): ProActivity[] {
   return list.includes(activity) ? list.filter((a) => a !== activity) : [...list, activity];

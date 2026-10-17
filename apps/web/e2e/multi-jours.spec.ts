@@ -21,7 +21,11 @@ async function context(
   cookie: string,
   opts: { theme?: string; width?: number; height?: number } = {},
 ) {
-  const ctx = await browser.newContext({ viewport: { width: opts.width ?? 1280, height: opts.height ?? 900 } });
+  // `baseURL` : un contexte créé à la main n'hérite pas de celui de la configuration (adresses relatives des captures).
+  const ctx = await browser.newContext({
+    baseURL: WEB,
+    viewport: { width: opts.width ?? 1280, height: opts.height ?? 900 },
+  });
   const url = new URL(WEB);
   const cookies = [{ name: "orasso-theme", value: opts.theme ?? "beton", url: WEB }];
   for (const pair of cookie.split("; ").filter(Boolean)) {
