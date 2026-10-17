@@ -67,6 +67,10 @@ export const rateRules = {
   crewSearch: { max: 60, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
   crewInvite: { max: 50, windowMs: 86_400_000, message: "Trop d'invitations aujourd'hui : réessaie demain." },
   crewWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  /** Accueil (lot 30) : lecture agrégée, réglages (widgets, garage favori) et clics sur l'emplacement sponsorisé. */
+  homeRead: { max: 60, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
+  homeWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  sponsoredClick: { max: 60, windowMs: 3_600_000, message: "Trop de clics : réessaie plus tard." },
   /** Staff (lot 24) : demandes pour rejoindre une structure, et invitations envoyées par une organisation. */
   staffRequest: { max: 10, windowMs: 86_400_000, message: "Trop de demandes de staff aujourd'hui : réessaie demain." },
   /** Boutique (lot 24) : billets et compteur séparés, plafond cohérent avec une entrée chargée (lots groupés côté appli). */

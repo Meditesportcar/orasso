@@ -4,6 +4,7 @@ export * from "./enums";
 export * from "./garage";
 export * from "./geo";
 export * from "./grades";
+export * from "./home";
 export * from "./labels.fr";
 export * from "./messaging";
 export * from "./moderation";

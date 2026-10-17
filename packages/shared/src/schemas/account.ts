@@ -1,20 +1,8 @@
 // Compte et sécurité (lot 15, ARCHITECTURE-SUITE § 1.2).
 import { z } from "zod";
 import { departmentSchema, type NotificationFamily, notificationTypes, profileVisibilities } from "../enums";
+import { type HomeWidgets, homeWidgetsSchema } from "./home";
 import type { UserProfileView } from "./social";
-
-/**
- * Widgets de l'accueil (lot 30) : liste bornée d'objets courts (identifiant, visibilité, position, réglages simples).
- * Le lot 30 précisera la forme ; ici on borne seulement la taille.
- */
-export const homeWidgetsSchema = z
-  .array(
-    z
-      .record(z.string().max(40), z.union([z.string().max(120), z.number(), z.boolean(), z.null()]))
-      .refine((o) => Object.keys(o).length <= 12, "12 réglages au plus"),
-  )
-  .max(30);
-export type HomeWidgets = z.infer<typeof homeWidgetsSchema>;
 
 const notificationTypeNames = Object.keys(notificationTypes) as [string, ...string[]];
 
