@@ -1,5 +1,6 @@
 // Du résultat d'une lecture à l'écran ScanResult (OK + zone moutarde / déjà entré crème / refusé rouge), à la
 // vibration et à l'heure « 09:48 » des écrans du staff.
+
 import type { ScanResultProps } from "@orasso/design-system/native";
 import {
   type AccessListEntry,
@@ -14,6 +15,7 @@ import {
 } from "@orasso/shared";
 import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
+import { now as clockNow } from "@/lib/clock";
 
 import { scanLines } from "@/lib/staff/model";
 
@@ -44,7 +46,7 @@ export function resultOf(
     return { key, detectedAt, state: "ok", time: "à l'instant", ...entryView(decision.entry) };
   if (decision.decision === "already") {
     // Lot 26 (S29) : « tout l'événement » déjà entré un jour précédent → « le 14 mars · 09:48 », le staff laisse passer.
-    const earlier = localDate(new Date(decision.checkedInAt)) !== localDate(new Date());
+    const earlier = localDate(new Date(decision.checkedInAt)) !== localDate(clockNow());
     const time = earlier
       ? `le ${formatDayDate(localDate(new Date(decision.checkedInAt)), { weekday: false })} · ${clock(decision.checkedInAt)}`
       : clock(decision.checkedInAt);

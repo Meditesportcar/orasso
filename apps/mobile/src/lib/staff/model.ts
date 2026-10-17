@@ -1,6 +1,7 @@
 // Logique pure du mode staff hors ligne (ARCHITECTURE.md § 4) : fusion des synchros, décision d'un scan avec la liste
 // locale, anti-rebond, recherche par plaque ou pseudo, compteurs, file d'envoi et lecture des réponses du serveur.
 // Sans React Native ni stockage : testée par Vitest (staff.test.ts) ; le stockage est dans store.ts.
+
 import {
   type AccessListEntry,
   decideScan,
@@ -20,6 +21,7 @@ import {
   type TicketScanResultView,
   type VisitorDelta,
 } from "@orasso/shared";
+import { now as clockNow } from "../clock";
 
 import { plateHashOf } from "./crypto";
 
@@ -297,7 +299,7 @@ export function decideLocal(
   keys: ReadonlyMap<number, Uint8Array>,
   verify: Ed25519Verify,
   /** Lot 26 : heure du scan (règle « Autre jour » d'un événement sur plusieurs jours). */
-  now: Date = new Date(),
+  now: Date = clockNow(),
 ): ScanDecision {
   return decideScan(payload, {
     eventNo: state.meta.eventNo,
@@ -640,7 +642,7 @@ export type QuickMatch =
  * hachage ; sinon les 3 premiers caractères. Un seul pass valide → pointé directement ; plusieurs → choix ; aucun →
  * « Non reconnues ».
  */
-export function quickPlateMatch(state: StaffState, text: string, now: Date = new Date()): QuickMatch {
+export function quickPlateMatch(state: StaffState, text: string, now: Date = clockNow()): QuickMatch {
   const plate = normalizePlate(text);
   if (plate.length < 3) return { kind: "none", typed: plate };
   // Lot 26 : sur plusieurs jours, seulement les attendus du jour (même véhicule inscrit un autre jour : pas pointé ici).
@@ -688,7 +690,7 @@ export function expectedOn(
  */
 export function counters(
   state: StaffState,
-  now: Date = new Date(),
+  now: Date = clockNow(),
 ): { arrived: number; expected: number; zones: ZoneCount[] } {
   const zones = new Map<string | null, ZoneCount>();
   for (const z of state.meta.zones) {

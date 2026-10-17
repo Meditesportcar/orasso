@@ -1,6 +1,7 @@
 // Mode staff, écran d'entrée (docs/02 « Mode staff (détail) », prototype « Mode staff · accueil ») : l'événement,
 // l'état de la synchro, mon rôle, « je suis là », les tuiles selon mes rôles, la file d'envoi et les doublons
 // rapportés par le serveur. Tout s'affiche sans réseau depuis la liste du téléphone.
+
 import { Button, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   communicationLabels,
@@ -19,6 +20,7 @@ import { recordAlert, recordIncident } from "@/features/staff/actions";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock } from "@/features/staff/result";
 import { api } from "@/lib/api";
+import { now as clockNow } from "@/lib/clock";
 import { formatDayHour } from "@/lib/format";
 import { counters, serverReport, shopAccess, ticketDuplicates } from "@/lib/staff/model";
 import { askLocationConsent, type LocationConsent, locationConsent } from "@/lib/staff/position";
@@ -61,7 +63,7 @@ export default function StaffHome() {
   }, []);
   const autoSynced = useRef(false);
   // Fermé à J+1 : la liste est purgée du téléphone (openEvent), on ne la redemande pas.
-  const closed = mine ? !mine.staffModeOpen && new Date() >= new Date(mine.staffModeClosesAt) : false;
+  const closed = mine ? !mine.staffModeOpen && clockNow() >= new Date(mine.staffModeClosesAt) : false;
 
   /** `auto` : synchro d'ouverture, silencieuse sans réseau (la liste du téléphone suffit). */
   async function sync(full: boolean, auto = false) {

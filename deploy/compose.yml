@@ -79,6 +79,8 @@ services:
       VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-dev}
       SENTRY_RELEASE: ${ORASSO_TAG}
+      # Horloge simulée (lot 34a) : le site la connaît par la même variable que l'API (vide = rien n'existe côté site).
+      DEV_CLOCK: ${DEV_CLOCK:-}
     depends_on:
       orasso-api:
         condition: service_healthy

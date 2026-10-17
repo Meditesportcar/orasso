@@ -1,6 +1,7 @@
 // Espace organisateur > Communication (lot 20, docs/02 « communication (consignes, annonces, messages groupés, modèles,
 // fil public) » ; « staff (discussions) ») : onglets Consignes et annonces · Messages groupés · Modèles · Messages des
 // participants · Discussions du staff. Le staff de la structure n'y voit que ses discussions. Sable imposé (layout).
+
 import { Button, CheckboxField, Chip, SelectField, TextField } from "@orasso/design-system/web";
 import {
   type AnnouncementView,
@@ -27,12 +28,12 @@ import {
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { data, Form, redirect, useActionData, useNavigation } from "react-router";
-
 import { FeedItem } from "../components/EventFeed";
 import { TextAreaField } from "../components/Fields";
 import { ConversationRow } from "../components/Messaging";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { nowMs } from "../lib/clock";
 import { formatDateTime, formatDay, formatWhen } from "../lib/format";
 import "../styles/communication.css";
 import type { Route } from "./+types/orga-communication";
@@ -117,7 +118,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     };
   }
   // Consignes et annonces : un événement à la fois (le prochain par défaut).
-  const upcoming = events.find((e) => new Date(e.endsAt).getTime() > Date.now()) ?? events.at(-1) ?? null;
+  const upcoming = events.find((e) => new Date(e.endsAt).getTime() > nowMs()) ?? events.at(-1) ?? null;
   const selectedId = url.searchParams.get("e") ?? upcoming?.id ?? null;
   if (!selectedId) return { ...base, events, event: null, feed: [] as AnnouncementView[] };
   const [event, feed] = await Promise.all([
@@ -497,7 +498,7 @@ function GroupTab({
   const busy = useNavigation().state !== "idle";
   const result = useActionData() as Result | undefined;
   const initial = templates.find((t) => t.id === templateId) ?? null;
-  const upcoming = events.find((e) => new Date(e.endsAt).getTime() > Date.now()) ?? null;
+  const upcoming = events.find((e) => new Date(e.endsAt).getTime() > nowMs()) ?? null;
   const [segment, setSegment] = useState<MessageSegment>("accepted");
   const [eventId, setEventId] = useState<string>(upcoming?.id ?? "");
   const [tpl, setTpl] = useState<string>(initial?.id ?? "");

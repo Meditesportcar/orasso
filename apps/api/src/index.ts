@@ -8,10 +8,13 @@ import { app } from "./app";
 import { pool } from "./db/client";
 import { env } from "./env";
 import { startJobs } from "./jobs";
+import { installDevClock } from "./lib/dev-clock";
 import { signing } from "./lib/signing";
 
 // Clés publiques des QR recopiées dans `signing_keys` (refus de démarrer si une clé diffère de celle en base).
 await signing.ensureSynced();
+// Horloge simulée (lot 34a) : seulement avec DEV_CLOCK=on (refusée en production par env.ts), décalage lu en base.
+if (await installDevClock()) console.log("Horloge simulée active (DEV_CLOCK=on).");
 const boss = await startJobs();
 
 const server = serve(

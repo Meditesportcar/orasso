@@ -1,14 +1,15 @@
 // Casquette Organisateur, bilan d'un événement (lot 27, docs/02 : page événement côté organisateur > bilan) : les
 // compteurs du bilan automatique (retenus, présents, absents, taux) et « Remercier les présents » (un message dans la
 // Boîte de chaque présent, avec son lien d'avis, une seule fois). L'export et l'édition suivante restent sur le site.
+
 import { Button, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventReportView, formatDayDate, afterEventLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
-
 import { siteUrl } from "@/api";
 import { api } from "@/lib/api";
+import { nowMs } from "@/lib/clock";
 import { formatDayHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { orgaSitePath, structureSlugOf } from "@/lib/orga";
@@ -142,7 +143,7 @@ export function Bilan({ eventId }: { eventId: string }) {
               <Ranked items={d.byDepartment} />
             </>
           ) : (
-            <Notice>{Date.parse(e?.endsAt ?? "") > Date.now() ? L.notEnded : L.notReady}</Notice>
+            <Notice>{Date.parse(e?.endsAt ?? "") > nowMs() ? L.notEnded : L.notReady}</Notice>
           )}
 
           <SectionTitle>{L.thanksTitle}</SectionTitle>

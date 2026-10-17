@@ -1,5 +1,6 @@
 export * from "./application";
 export * from "./communication";
+export * from "./devClock";
 export * from "./enums";
 export * from "./garage";
 export * from "./geo";

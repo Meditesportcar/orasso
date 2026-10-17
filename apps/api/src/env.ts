@@ -26,6 +26,14 @@ const schema = z.object({
     .enum(["true", "false", ""])
     .optional()
     .transform((v) => v === "true"),
+  /**
+   * Horloge simulée (lot 34a, développement seulement) : `on` permet d'avancer le temps d'Orasso (routes `/dev/clock`,
+   * en-tête `x-orasso-clock-offset`). Sans elle, rien de l'horloge n'existe. Refusée en production, comme DEV_SKIP_2FA.
+   */
+  DEV_CLOCK: z
+    .enum(["on", "off", ""])
+    .optional()
+    .transform((v) => v === "on"),
   /** E-mails : « journal » écrit dans DATA_DIR/mail et affiche en console ; « brevo » envoie (clé requise). */
   MAIL_TRANSPORT: z.enum(["journal", "brevo"]).default("journal"),
   MAIL_FROM: z.string().default("Orasso <contact@orasso.fr>"),
@@ -131,6 +139,10 @@ if (!parsed.success) {
 }
 if (parsed.data.NODE_ENV === "production" && parsed.data.DEV_SKIP_2FA) {
   console.error("Configuration invalide : DEV_SKIP_2FA est interdit en production.");
+  process.exit(1);
+}
+if (parsed.data.NODE_ENV === "production" && parsed.data.DEV_CLOCK) {
+  console.error("Configuration invalide : DEV_CLOCK est interdit en production.");
   process.exit(1);
 }
 if (parsed.data.NODE_ENV === "production" && (!parsed.data.QR_SIGNING_KEYS || !parsed.data.QR_SIGNING_ACTIVE_KID)) {

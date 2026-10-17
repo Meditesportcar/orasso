@@ -31,6 +31,7 @@ import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
+import { nowMs } from "../lib/clock";
 import { formatDateTime, formatPrice, formatWhen } from "../lib/format";
 import { messageAction } from "../lib/messaging.server";
 import { badgeFor, registrationState } from "../lib/status";
@@ -76,11 +77,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     offer: tickets.ok ? tickets.data.offer : null,
     myTickets: tickets.ok ? tickets.data.mine : [],
     paymentCancelled: new URL(request.url).searchParams.get("paiement") === "annule",
-    ended: new Date(event.endsAt).getTime() <= Date.now(),
+    ended: new Date(event.endsAt).getTime() <= nowMs(),
     categories: categories.ok ? categories.data : [],
     connected: Boolean(me),
     origin: originOf(request),
-    state: registrationState(event, Date.now()),
+    state: registrationState(event, nowMs()),
   };
 }
 

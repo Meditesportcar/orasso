@@ -17,6 +17,8 @@ export default [
     // Lot 27 : badges des structures (rappels, suspension, levée) et fiche d'une structure (propriétaire).
     route("badges", "routes/admin/badges.tsx"),
     route("structures/:id", "routes/admin/structure.tsx"),
+    // Lot 34a : horloge simulée (développement seulement : la page répond 404 sans DEV_CLOCK).
+    route("horloge", "routes/admin/horloge.tsx"),
     // Lot 33 : registres, base véhicules, journal, mode assistance, contestations de malus, réglages, newsletter,
     // emplacements sponsorisés.
     route("utilisateurs", "routes/admin/utilisateurs.tsx"),

@@ -1,11 +1,12 @@
 import { Ground, Monogram } from "@orasso/design-system/web";
-import { type AdminOverview, adminNavLabels as N } from "@orasso/shared";
+import { type AdminOverview, devClockLabels, adminNavLabels as N } from "@orasso/shared";
 import { Form, Outlet, redirect, useLocation } from "react-router";
 
 import { ThemeSwitch } from "../components/SiteChrome";
 import { TwoFactorNotice } from "../components/TwoFactorNotice";
 import { requireModeration } from "../lib/admin.server";
 import { api } from "../lib/api.server";
+import { devClockEnabled } from "../lib/clock.server";
 import type { Route } from "./+types/admin";
 import "../styles/admin.css";
 
@@ -47,6 +48,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     twoFactorHint: me.twoFactorHint,
     moderator,
     counts: overview?.ok ? overview.data : null,
+    devClock: !moderator && devClockEnabled(),
   };
 }
 
@@ -55,7 +57,11 @@ export function meta() {
 }
 
 export default function AdminLayout({ loaderData }: Route.ComponentProps) {
-  const { pseudo, twoFactorHint, moderator, counts } = loaderData;
+  const { pseudo, twoFactorHint, moderator, counts, devClock } = loaderData;
+  // Lot 34a : le lien de l'horloge simulée n'existe que si DEV_CLOCK est posée (et pour le super admin).
+  const sections: AdminSection[] = devClock
+    ? [...adminSections, { href: "/admin/horloge", label: devClockLabels.navLink }]
+    : adminSections;
   const { pathname } = useLocation();
   return (
     <Ground variant="site" fixed>
@@ -67,7 +73,7 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
           <div className="orga__who">
             <span className="o-t-label">{moderator ? "Modération" : "Administration"}</span>
           </div>
-          {adminSections
+          {sections
             .filter((s) => !moderator || s.moderator)
             .map((s) => {
               const on =

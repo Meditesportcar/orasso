@@ -208,7 +208,7 @@
   - Newsletter : rédaction en Markdown réduit avec aperçu, test à soi-même, planification, historique ; envoi par lots de 200 (tâche `newsletter.send` chaque minute) aux seuls comptes qui l'ont acceptée avec une adresse confirmée, un destinataire servi une seule fois, arrêt au budget du jour sans toucher la réserve des e-mails de sécurité ; lien de désinscription signé (HMAC) sans connexion (`/desinscription/:token`) et en-tête `List-Unsubscribe`.
   - Sponsorisés : `/admin/sponsorises` (création, statut, image, affichages et clics) sur les routes du lot 30.
   - Listes administrables consommées par le site (tri, assistant d'événement, profil prestataire, fiche pro) et l'appli (feuille des motifs du tri, profil prestataire) via `GET /settings/public`, repli sur les constantes partagées.
-  - API : migration `0039_admin` (`assistance_requests`, `newsletters`, `newsletter_deliveries`, `admin_audit_log.assistance_request_id`), module `modules/admin/`, `lib/settings.ts`, `lib/request-context.ts`, `lib/unsubscribe.ts`. Variables : `NEWSLETTER_FROM` (facultative), `UNSUBSCRIBE_SECRET` (obligatoire en production). Seed : second super admin `Equipe_Orasso` (`equipe@orasso.local`, sans structure, pour voir le mode assistance), réglages par défaut, newsletter en brouillon, Kenji et Léa abonnés, demande d'aide ouverte de « Roues Libres 66 », trois véhicules « Autre ».
+  - API : migration `0040_admin` (`assistance_requests`, `newsletters`, `newsletter_deliveries`, `admin_audit_log.assistance_request_id`), module `modules/admin/`, `lib/settings.ts`, `lib/request-context.ts`, `lib/unsubscribe.ts`. Variables : `NEWSLETTER_FROM` (facultative), `UNSUBSCRIBE_SECRET` (obligatoire en production). Seed : second super admin `Equipe_Orasso` (`equipe@orasso.local`, sans structure, pour voir le mode assistance), réglages par défaut, newsletter en brouillon, Kenji et Léa abonnés, demande d'aide ouverte de « Roues Libres 66 », trois véhicules « Autre ».
   - Vérifié : voir l'entrée du lot 33 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-33-captures\`.
 
 ## En cours
@@ -218,7 +218,7 @@
 ## Prochaine étape
 
 - Lot 26 : déployer (migration `0038_multi-day` au démarrage, aucune variable nouvelle ; `pnpm db:seed` ajoute « Salon de printemps » à une base existante). Damien relit les « À revoir » du lot 26 (AS6 verrouillage au premier jour, malus d'une candidature d'un jour, places affichées = meilleur jour). À essayer sur téléphone : panneau « Inscrit pour un autre jour » au scan, filtre « Aujourd'hui », choix du jour à la candidature, sélecteur de jour du Direct.
-- Lot 33 : déployer (migration `0039_admin` au démarrage ; `UNSUBSCRIBE_SECRET` est ajouté de lui-même à `/etc/orasso/dev.env` par `deploy/remote-deploy.sh` s'il manque (jamais affiché ; l'API refuse de démarrer sans en production) ; `NEWSLETTER_FROM` facultative ; `pnpm db:seed` ajoute `Equipe_Orasso`, la newsletter en brouillon, la demande d'aide et la file « Autre » à une base existante). Première newsletter réelle : clé Brevo. Damien relit les « À revoir » du lot 33 (listes administrables sans ajout de code, quota S18 par structure).
+- Lot 33 : déployer (migration `0040_admin` au démarrage ; `UNSUBSCRIBE_SECRET` est ajouté de lui-même à `/etc/orasso/dev.env` par `deploy/remote-deploy.sh` s'il manque (jamais affiché ; l'API refuse de démarrer sans en production) ; `NEWSLETTER_FROM` facultative ; `pnpm db:seed` ajoute `Equipe_Orasso`, la newsletter en brouillon, la demande d'aide et la file « Autre » à une base existante). Première newsletter réelle : clé Brevo. Damien relit les « À revoir » du lot 33 (listes administrables sans ajout de code, quota S18 par structure).
 
 - Lot 23 : aucune migration ni variable ; à essayer sur téléphone (APK de la vague, aucune dépendance native nouvelle) : sensation du glissement, lisibilité en plein soleil (Sable), photos au toucher, poignée de la liste d'attente.
 - Lot 30 : déployer (migration `0036_home` au démarrage ; variables facultatives `OVERPASS_URL`, `FUEL_API_URL` (`off` les désactive) et `EXTERNAL_USER_AGENT` dans `deploy/dev.env.example` ; le VPS doit sortir en HTTPS vers overpass-api.de et data.economie.gouv.fr ; `pnpm db:seed` ajoute le garage favori de Kenji, deux emplacements sponsorisés et un cache factice). Aucun compte ni clé à créer. À essayer sur téléphone : curseur de rayon, appui long, « Utiliser ma position ».
@@ -287,6 +287,24 @@ Créer un compte de test (API lancée) :
 curl -X POST http://localhost:3001/api/auth/sign-up/email -H "Content-Type: application/json" -H "Origin: http://localhost:5173" -d "{\"email\":\"test@orasso.test\",\"password\":\"motdepasse-test-123\",\"name\":\"Test\"}"
 ```
 
+## Avancer le temps en développement (horloge simulée, lot 34a)
+
+Pour voir verrouillage (H-2), points et malus (J+2), bilan (J+8), expirations d'offres sans attendre. **Développement seulement** : `DEV_CLOCK=on` dans le `.env` (modèle : `.env.example`) ; l'API refuse de démarrer en production avec cette variable ; sans elle, ni route, ni page, ni en-tête. Le site doit voir la même variable (même `.env` en local).
+
+```
+pnpm dev:clock status                       # heure simulée, heure réelle, décalage
+pnpm dev:clock +2h                          # aussi +1d, +1d4h, +30m
+pnpm dev:clock to 2026-11-18T09:00          # heure de Paris (ou une date ISO avec fuseau)
+pnpm dev:clock event <slug> h-2|start|end|j+2|j+8
+pnpm dev:clock reset                        # retour à l'heure réelle
+```
+
+- Le décalage ne fait qu'avancer (un recul répond 409) ; il est gardé en base (table `dev_clock`), survit au redémarrage de l'API, qui le relit en moins de 3 s quand le script le change.
+- Chaque avance libère les tâches pg-boss dont l'échéance simulée est passée et lance les balayages de rattrapage (points, offres de la liste d'attente, bilans, badges…) ; tout est idempotent.
+- Page `/admin/horloge` du site (super admin, 2FA de session) : +1 h, +1 jour, une date, les jalons d'un événement, « Revenir à l'heure réelle » ; routes `GET /dev/clock`, `GET /dev/clock/events`, `POST /dev/clock/advance`, `POST /dev/clock/reset` (tracées dans `admin_audit_log`).
+- Le site et l'appli prennent l'heure du serveur (en-tête `x-orasso-clock-offset`) ; bandeau « Horloge simulée : +2 j 4 h » tant que le décalage n'est pas nul. Le mode staff hors ligne garde le dernier décalage connu.
+- Limite : les horodatages techniques (`created_at`, `updated_at`) restent à l'heure système ; créer les données avant d'avancer le temps plutôt qu'après (par exemple la confirmation d'une venue en crew, 72 h après sa création, se calcule sur l'heure système de sa création).
+- Sur dev.orasso.fr, l'API tourne en `NODE_ENV=production` : `DEV_CLOCK` y est refusée. La simulation en ligne demande un autre signal que `NODE_ENV` (décision du coordinateur).
 ## Déployer la version de test (dev.orasso.fr)
 
 Depuis le PC, dans Git Bash, à la racine du dépôt (accès SSH `claude@51.210.242.118` par clé) :

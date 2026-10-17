@@ -6,10 +6,10 @@ import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { ACCOUNT_QR_STEP_SECONDS, type AccountQrSecret, gradeLabels } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
-
 import { accountQrAt, secondsLeft } from "@/lib/accountQr";
 import { loadAccountQrSecret, saveAccountQrSecret } from "@/lib/accountQrStore";
 import { api } from "@/lib/api";
+import { now as clockNow } from "@/lib/clock";
 import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
 import { QrCode } from "@/ui/QrCode";
@@ -22,7 +22,7 @@ export function AccountQrSheet({ visible, onClose }: { visible: boolean; onClose
   const { width } = useWindowDimensions();
   const [secret, setSecret] = useState<AccountQrSecret | null>(null);
   const [missing, setMissing] = useState(false);
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState(() => clockNow());
 
   // Le secret vient du trousseau ; s'il manque (premier lancement après une mise à jour), on le redemande à l'API.
   useEffect(() => {
@@ -56,7 +56,7 @@ export function AccountQrSheet({ visible, onClose }: { visible: boolean; onClose
   // Le code change toutes les 60 s : on regarde l'heure chaque seconde (aucun réseau).
   useEffect(() => {
     if (!visible) return;
-    const timer = setInterval(() => setNow(new Date()), 1000);
+    const timer = setInterval(() => setNow(clockNow()), 1000);
     return () => clearInterval(timer);
   }, [visible]);
 

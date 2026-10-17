@@ -1,6 +1,7 @@
 // Création et modification d'un événement par étapes (docs/02 « Espace organisateur » : format, véhicules, places,
 // prestataires, public, admission, critères, avant-première, règlement, infos, zones, billetterie). Écran non
 // prototypé : composé avec le système de design, choix consignés dans docs/JOURNAL-DES-CHOIX.md (lot 13).
+
 import { Button, CheckboxField, Chip, ChipRow, SelectField, TextField } from "@orasso/design-system/web";
 import {
   type Category,
@@ -30,8 +31,8 @@ import {
   vendorTypeLabels,
 } from "@orasso/shared";
 import { useState } from "react";
-
 import { apiFetch } from "../lib/api.client";
+import { now as clockNow } from "../lib/clock";
 import { fromInput, toInput } from "../lib/datetime";
 import { useEventFormats, useVendorTypes } from "../lib/lists";
 import { FileField, TextAreaField } from "./Fields";
@@ -154,7 +155,7 @@ function initial(event?: EventOrganizer): Draft {
       makeIds: [],
       countries: [],
       criteriaText: "",
-      registrationsOpenAt: toInput(new Date()),
+      registrationsOpenAt: toInput(clockNow()),
       previewHours: "24",
       highGradePriority: false,
       highGradePreviewHours: "0",
@@ -518,7 +519,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
                 setD((p) => {
                   if (!multiDay || p.days.length >= 2) return { ...p, multiDay };
                   // Deux premiers jours préremplis depuis le début saisi (le lendemain aux mêmes heures).
-                  const start = p.startsAt || toInput(new Date());
+                  const start = p.startsAt || toInput(clockNow());
                   const date = start.slice(0, 10);
                   const next = new Date(`${date}T12:00:00Z`);
                   next.setUTCDate(next.getUTCDate() + 1);
@@ -611,7 +612,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
                     onClick={() =>
                       setD((p) => {
                         const last = p.days[p.days.length - 1];
-                        const next = new Date(`${last?.date || new Date().toISOString().slice(0, 10)}T12:00:00Z`);
+                        const next = new Date(`${last?.date || clockNow().toISOString().slice(0, 10)}T12:00:00Z`);
                         next.setUTCDate(next.getUTCDate() + 1);
                         return {
                           ...p,

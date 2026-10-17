@@ -1,14 +1,15 @@
+import { CLOCK_OFFSET_HEADER } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
-
 import { auth } from "./auth";
 import { db } from "./db/client";
 import { user } from "./db/schema";
 import { env } from "./env";
 import { hasSecondFactor } from "./lib/access";
+import { clockOffsetHeader } from "./lib/dev-clock";
 import { AppError, errorResponse, notFound } from "./lib/errors";
 import { realtime } from "./lib/realtime";
 import { requestContextMiddleware } from "./lib/request-context";
@@ -24,6 +25,7 @@ import { applicationsRoutes } from "./modules/applications/routes";
 import { checkinsRoutes } from "./modules/checkins/routes";
 import { communicationRoutes } from "./modules/communication/routes";
 import { crewsRoutes } from "./modules/crews/routes";
+import { devClockRoutes } from "./modules/dev-clock/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { fieldRoutes } from "./modules/field/routes";
@@ -77,12 +79,16 @@ if (corsOrigins.length) {
       origin: corsOrigins,
       allowHeaders: ["authorization", "content-type", "x-device-id"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      exposeHeaders: ["set-auth-token"],
+      exposeHeaders: ["set-auth-token", CLOCK_OFFSET_HEADER],
       // Recette web de l'appli : cookies de l'étape « code » de la double authentification (lot 15).
       credentials: true,
     }),
   );
 }
+
+// Horloge simulée (lot 34a) : le décalage accompagne chaque réponse pour aligner le site et l'appli sur l'heure du
+// serveur. Sans DEV_CLOCK, aucun en-tête.
+app.use("*", clockOffsetHeader);
 
 app.onError(errorResponse);
 // Lot 33 : méthode, chemin et adresse de la requête lisibles par les gardes (mode assistance, journal, inscriptions),
@@ -181,6 +187,7 @@ app.route("/", communicationRoutes);
 app.route("/", moderationRoutes);
 app.route("/", homeRoutes);
 app.route("/", afterEventRoutes);
+app.route("/", devClockRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes, avec la preuve de second facteur de la
 // session qui a ouvert la connexion (sans elle, les organisateurs perdaient le tri en direct depuis le lot 15).

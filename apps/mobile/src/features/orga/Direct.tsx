@@ -2,13 +2,14 @@
 // et attendus par catégorie, staff et prestataires, alertes en cours (avec la position), main courante, rapport des
 // scans. Compteurs en direct par le canal `event:{id}:live` (preuve de la double authentification de la session), et
 // rechargement toutes les 60 s au cas où le canal se coupe.
+
 import { Button, Chip, ChipRow, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { eventDaysLabels, formatDayDate, type LiveCounters, localDate, orgaLabels } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
-
 import { api, type FieldIncident } from "@/lib/api";
+import { now as clockNow } from "@/lib/clock";
 import { formatDayHour, formatHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import {
@@ -79,7 +80,7 @@ function DirectEvent({
   const detail = useApi(() => api.orgEvent(eventId), [eventId]);
   const days = detail.data?.days ?? [];
   const [dayId, setDayId] = useState<string | null | undefined>(undefined);
-  const shownDay = dayId === undefined ? (days.find((d) => d.date === localDate(new Date()))?.id ?? null) : dayId;
+  const shownDay = dayId === undefined ? (days.find((d) => d.date === localDate(clockNow()))?.id ?? null) : dayId;
   const live = useApi(() => api.liveCounters(eventId, shownDay), [eventId, shownDay], { refreshMs: 60_000 });
   const alerts = useApi(() => api.eventAlerts(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
   const incidents = useApi(() => api.eventIncidents(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
@@ -110,7 +111,7 @@ function DirectEvent({
         }, 5_000);
       }
     } else if (event.type === "alert" || event.type === "alert.resolved") {
-      alerts.setData(applyAlertEvent(alerts.data ?? [], event.type, event.payload, new Date()));
+      alerts.setData(applyAlertEvent(alerts.data ?? [], event.type, event.payload, clockNow()));
     } else if (event.type === "incident") {
       void incidents.reload();
     }

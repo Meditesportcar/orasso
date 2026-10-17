@@ -1,7 +1,9 @@
 // Appels de l'API pendant le rendu serveur (loaders et actions). Le cookie de session du visiteur est transmis tel
 // quel ; les `Set-Cookie` de l'API (connexion, déconnexion) sont renvoyés au navigateur par `withCookies`.
-import type { ApiError, Me } from "@orasso/shared";
+import { type ApiError, CLOCK_OFFSET_HEADER, type Me } from "@orasso/shared";
 import { redirect } from "react-router";
+
+import { applyClockHeader } from "./clock";
 
 function apiBase(): string {
   return process.env.API_INTERNAL_URL ?? `http://localhost:${process.env.API_PORT ?? 3001}`;
@@ -62,6 +64,9 @@ export async function api<T>(request: Request, path: string, init: Init = {}): P
       headers: new Headers(),
     };
   }
+  // Horloge simulée (lot 34a) : l'API annonce son décalage ; sans l'en-tête, il retombe à 0 (une erreur 5xx du serveur
+  // frontal ne dit rien de l'horloge).
+  if (res.status < 500) applyClockHeader(res.headers.get(CLOCK_OFFSET_HEADER));
   if (res.ok) {
     const data = res.status === 204 ? null : await res.json().catch(() => null);
     return { ok: true, status: res.status, data: data as T, headers: res.headers };

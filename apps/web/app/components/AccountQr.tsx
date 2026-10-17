@@ -2,6 +2,7 @@
 // `GET /me/account-qr-secret` (chargé côté serveur, page jamais mise en cache) ; le code à 8 chiffres (HOTP, compteur =
 // minutes Unix) est calculé ici, dans le navigateur, avec WebCrypto, et se redessine toutes les 60 s. Un pro le lit avec
 // son lecteur (lot 14). Le secret ne sert qu'à cela : il n'est ni affiché ni envoyé ailleurs.
+
 import { Plate } from "@orasso/design-system/web";
 import {
   ACCOUNT_QR_STEP_SECONDS,
@@ -14,6 +15,7 @@ import {
   hotpFromDigest,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
+import { now as clockNow } from "../lib/clock";
 
 import { Qr } from "./Qr";
 
@@ -52,7 +54,7 @@ export function AccountQr({ secret }: { secret: AccountQrSecret }) {
       }
       if (cancelled) return;
       const tick = async () => {
-        const now = new Date();
+        const now = clockNow();
         const counter = accountQrCounter(now);
         setLeft(ACCOUNT_QR_STEP_SECONDS - (Math.floor(now.getTime() / 1000) % ACCOUNT_QR_STEP_SECONDS));
         if (counter === last || !key) return;
