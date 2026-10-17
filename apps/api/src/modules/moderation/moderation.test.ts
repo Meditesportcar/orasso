@@ -752,16 +752,14 @@ describe("corrections de la relecture", () => {
     const e = await createEvent(s.id, { startsAt: new Date(clock.now.getTime() + 5 * DAY) });
     const ref = await seedReference();
     const veh = await createVehicle(participant.id, ref);
-    await db
-      .insert(applications)
-      .values({
-        eventId: e.id,
-        userId: participant.id,
-        vehicleId: veh.id,
-        status: "accepted",
-        rulesAcceptedAt: new Date(),
-        followStructure: false,
-      });
+    await db.insert(applications).values({
+      eventId: e.id,
+      userId: participant.id,
+      vehicleId: veh.id,
+      status: "accepted",
+      rulesAcceptedAt: new Date(),
+      followStructure: false,
+    });
     const r = await req(a, "POST", "/reports", { targetType: "event", targetId: e.id, reason: "scam" });
     expect(r.status).toBe(201);
     expect((await req(damien, "POST", `/admin/reports/${r.json.id}/sanction`, { hideContent: true })).status).toBe(200);
