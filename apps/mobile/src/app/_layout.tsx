@@ -17,7 +17,7 @@ import { ReportSheetHost } from "@/features/ReportSheet";
 import { StaffBackground } from "@/features/staff/StaffBackground";
 import { ApplicationsProvider } from "@/lib/applications";
 import { kvGet, kvSet } from "@/lib/kv";
-import { appLinkOf } from "@/lib/links";
+import { appLinkOf, teamRequestTarget } from "@/lib/links";
 import { PersonaProvider, usePersona } from "@/lib/persona";
 import { homeOf, misplacedGroup } from "@/lib/personaModel";
 import { registerThisDevice } from "@/lib/push";
@@ -85,6 +85,12 @@ function Shell() {
       // Décision sur une candidature de prestataire (lot 21) : l'écran Candidatures de la casquette Prestataire.
       if (response.notification.request.content.data?.screen === "provider_applications") {
         choose({ kind: "provider" });
+        return;
+      }
+      // Demande pour devenir staff (lot 35a) : l'écran Équipe de la structure, sous la casquette Organisateur.
+      const team = teamRequestTarget(response.notification.request.content.data);
+      if (team) {
+        choose({ kind: "organizer", structureId: team }, "/(orga)/staff");
         return;
       }
       backToFan();

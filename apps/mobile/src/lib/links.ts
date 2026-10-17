@@ -19,3 +19,14 @@ export function appLinkOf(value: unknown): string | null {
   if (inbox) return inbox[1] && inbox[1] !== "demandes" ? `/boite/${inbox[1]}` : "/(tabs)/boite";
   return null;
 }
+
+/**
+ * Notification « demande pour rejoindre le staff » (lot 24, `data.screen = "staff-requests"`) : la structure dont il
+ * faut ouvrir l'écran Équipe (lot 35a). Sans identifiant valide, rien : la notification ne mène nulle part.
+ */
+export function teamRequestTarget(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const { screen, structureId } = data as Record<string, unknown>;
+  if (screen !== "staff-requests") return null;
+  return typeof structureId === "string" && /^[0-9a-f-]{36}$/i.test(structureId) ? structureId : null;
+}
