@@ -16,6 +16,7 @@ import { Platform, StyleSheet, View } from "react-native";
 import { ReportSheetHost } from "@/features/ReportSheet";
 import { StaffBackground } from "@/features/staff/StaffBackground";
 import { ApplicationsProvider } from "@/lib/applications";
+import { initClock } from "@/lib/clockStore";
 import { kvGet, kvSet } from "@/lib/kv";
 import { appLinkOf } from "@/lib/links";
 import { PersonaProvider, usePersona } from "@/lib/persona";
@@ -24,6 +25,7 @@ import { registerThisDevice } from "@/lib/push";
 import { initSentry } from "@/lib/sentry";
 import { SessionProvider, useSession } from "@/lib/session";
 import { AnnouncementSheet } from "@/ui/AnnouncementSheet";
+import { ClockBanner } from "@/ui/ClockBanner";
 
 // GlitchTip / Sentry (lot 15) : seulement si EXPO_PUBLIC_SENTRY_DSN est renseigné au build.
 initSentry();
@@ -48,6 +50,8 @@ function Shell() {
 
   useEffect(() => {
     void kvGet("onboarded").then((v) => setOnboarded(v === "1"));
+    // Dernier décalage de l'horloge simulée connu (mode staff hors ligne) ; 0 et sans effet hors développement.
+    void initClock();
   }, []);
 
   // Déconnecté (ou jamais connecté) : seuls les écrans publics restent accessibles.
@@ -99,6 +103,8 @@ function Shell() {
   return (
     <View style={styles.fill}>
       <StatusBar style={theme === "sable" ? "dark" : "light"} />
+      {/* Lot 34a : bandeau de l'horloge simulée (rien hors développement). */}
+      <ClockBanner />
       {/* Les écrans attendent la lecture de la session : sans jeton, leurs premières requêtes partiraient anonymes. */}
       {status === "loading" ? null : <Stack screenOptions={{ headerShown: false, animation: "none" }} />}
       <AnnouncementSheet />

@@ -33,13 +33,13 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
-
 import { ContactOrganizerButton } from "@/features/boite/MessageButton";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { ReportButton } from "@/features/ReportSheet";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
+import { nowMs } from "@/lib/clock";
 import { breakTitle, formatDay, formatDayHour, formatHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
@@ -109,7 +109,7 @@ export default function EventPage() {
 
   const mine = e.myApplications?.filter((a) => OPEN_STATUSES.includes(a.status)) ?? [];
   const opensAt = new Date(e.registrationOpensAtForMe ?? e.registrationsOpenAt);
-  const notYetOpen = Date.now() < opensAt.getTime();
+  const notYetOpen = nowMs() < opensAt.getTime();
   const cancelled = e.status === "cancelled";
   // Événement privé (lot 25) : pas de candidature libre, l'invitation se répond dans Accès.
   const inviteOnly = e.admission === "invite_only";
@@ -126,7 +126,7 @@ export default function EventPage() {
 
   // Prestataires (lot 21) : un prestataire candidate avec son profil ; un pro, avec le stand de sa fiche pro.
   const profileData = providerProfile.data;
-  const providerOpen = !cancelled && !e.isLocked && new Date(e.endsAt).getTime() > Date.now();
+  const providerOpen = !cancelled && !e.isLocked && new Date(e.endsAt).getTime() > nowMs();
   const providerAccepted = profileData
     ? eventAcceptsVendorType(e.vendorTypes, profileData.type as VendorTypeCode, profileData.customType)
     : hasPro && eventAcceptsVendorType(e.vendorTypes, "stand");
@@ -344,7 +344,7 @@ export default function EventPage() {
       {/* Contacter l'organisateur (lot 18) : toujours possible pour une personne connectée. */}
       {status === "in" ? <ContactOrganizerButton structureId={e.structure.id} /> : null}
       {status === "in" ? <ReportButton look="link" type="event" id={e.id} /> : null}
-      {reviews.data && (reviews.data.count > 0 || new Date(e.endsAt).getTime() <= Date.now()) ? (
+      {reviews.data && (reviews.data.count > 0 || new Date(e.endsAt).getTime() <= nowMs()) ? (
         <Reviews data={reviews.data} reportable={status === "in"} />
       ) : null}
       <ApplySheet

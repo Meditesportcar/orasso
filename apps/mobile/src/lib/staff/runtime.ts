@@ -1,13 +1,14 @@
 // Le mode staff en marche : liste en mémoire par événement, synchro vérifiée, enregistrement des lectures et
 // pointages, envoi de la file au retour du réseau, purge à J+1. Un seul exemplaire pour toute l'appli (les écrans du
 // mode staff et l'envoi en arrière-plan partagent la même liste et la même file).
+
 import Constants from "expo-constants";
 import { randomUUID } from "expo-crypto";
 import * as Device from "expo-device";
 import { Platform } from "react-native";
-
 import { apiUrl } from "@/api";
 import { api } from "../api";
+import { now as clockNow, nowMs } from "../clock";
 import { ApiRequestError, errorMessage, getSessionToken } from "../http";
 import { kvDel, kvGet, kvSet } from "../kv";
 import { staffStore } from "./db";
@@ -99,7 +100,7 @@ export async function openEvent(eventId: string, userId: string): Promise<StaffS
     states.delete(eventId);
     return null;
   }
-  if (isPurgeDue(meta, new Date())) {
+  if (isPurgeDue(meta, clockNow())) {
     await store.purgeEvent(eventId);
     states.delete(eventId);
     emit();
@@ -198,8 +199,8 @@ async function doSync(eventId: string, userId: string, full: boolean): Promise<S
       };
     }
     // Fermé à J+1 : l'API sert encore la liste jusqu'au règlement (J+2), le téléphone ne la garde plus.
-    const serverNow = { endsAt: sync.event.endsAt, serverOffsetMs: Date.parse(sync.generatedAt) - Date.now() };
-    if (isPurgeDue(serverNow, new Date())) {
+    const serverNow = { endsAt: sync.event.endsAt, serverOffsetMs: Date.parse(sync.generatedAt) - nowMs() };
+    if (isPurgeDue(serverNow, clockNow())) {
       await store.purgeEvent(eventId);
       states.delete(eventId);
       emit();
@@ -211,7 +212,7 @@ async function doSync(eventId: string, userId: string, full: boolean): Promise<S
         : null,
       sync,
       userId,
-      new Date(),
+      clockNow(),
     );
     if (!merged.ok && merged.reason === "needs_full") return doSync(eventId, userId, true);
     if (!merged.ok) return { ok: false, message: "Liste plus ancienne que celle du téléphone : ignorée." };
@@ -249,7 +250,7 @@ export async function refreshOpenEvents(userId: string): Promise<void> {
   if (!getSessionToken()) return;
   const store = await staffStore();
   for (const meta of await store.metas()) {
-    if (meta.userId !== userId || isPurgeDue(meta, new Date())) continue;
+    if (meta.userId !== userId || isPurgeDue(meta, clockNow())) continue;
     const r = await syncEvent(meta.eventId, userId);
     if (!r.ok && r.offline) return;
   }
@@ -285,7 +286,7 @@ export async function record(
 ): Promise<string> {
   const store = await staffStore();
   const id = payload.id ?? newId();
-  const now = new Date().toISOString();
+  const now = clockNow().toISOString();
   const state = states.get(eventId);
   const action: PendingAction = {
     id,
@@ -354,18 +355,18 @@ export function flush(userId: string): Promise<void> {
 
 /** Retour du réseau ou « Envoyer maintenant » : tout repart sans attendre le délai. */
 export async function flushNow(userId: string): Promise<void> {
-  await (await staffStore()).retryNow(userId, new Date());
+  await (await staffStore()).retryNow(userId, clockNow());
   await flush(userId);
 }
 
-const later = (attempts: number) => new Date(Date.now() + backoffMs(attempts));
+const later = (attempts: number) => new Date(nowMs() + backoffMs(attempts));
 
 async function doFlush(userId: string) {
   if (!getSessionToken()) return;
   const store = await staffStore();
   const unsent = await store.actions(userId, { unsentOnly: true });
   if (!unsent.length) return;
-  const now = new Date();
+  const now = clockNow();
 
   for (const [eventId, batch] of dueBatches(unsent, now)) {
     let device: string;
@@ -458,7 +459,7 @@ async function sendShopBatch(
       await store.markSent(
         eventId,
         effects.map((e) => ({ id: e.id, result: { ...e.result }, use: e.use })),
-        new Date(),
+        clockNow(),
       );
       if (missing.length) await store.markFailed(missing, "Sans réponse du serveur", later);
       const current = states.get(eventId);
@@ -483,7 +484,7 @@ async function sendShopBatch(
           id: r.id,
           result: { applied: r.applied, total: res.total, ...(r.reason ? { reason: r.reason } : {}) },
         })),
-        new Date(),
+        clockNow(),
       );
       const missing = batch.filter((a) => !known.has(a.id)).map((a) => a.id);
       if (missing.length) await store.markFailed(missing, "Sans réponse du serveur", later);
@@ -502,7 +503,7 @@ async function sendShopBatch(
       } else {
         const [only] = batch;
         if (only) {
-          await store.markSent(eventId, [{ id: only.id, result: { error: e.message, status: e.status } }], new Date());
+          await store.markSent(eventId, [{ id: only.id, result: { error: e.message, status: e.status } }], clockNow());
         }
       }
       return;
@@ -528,7 +529,7 @@ async function sendBatch(store: Store, eventId: string, device: string, batch: P
   });
   const state = states.get(eventId);
   const { effects, missing } = applyResults(batch, results, (appId) => state?.byApplication.get(appId));
-  await store.markSent(eventId, effects, new Date());
+  await store.markSent(eventId, effects, clockNow());
   if (missing.length) await store.markFailed(missing, "Sans réponse du serveur", later);
   // Mémoire alignée comme la base (sans la relire : une lecture faite entre-temps y reste).
   const current = states.get(eventId);
@@ -545,7 +546,7 @@ const DEFINITIVE = new Set([403, 404, 409, 423]);
 
 async function reject(store: Store, eventId: string, actions: PendingAction[], e: ApiRequestError) {
   const ids = actions.map((a) => a.id);
-  await store.markRejected(eventId, ids, { error: e.message, status: e.status }, new Date());
+  await store.markRejected(eventId, ids, { error: e.message, status: e.status }, clockNow());
   const state = states.get(eventId);
   if (state) {
     for (const [passId, local] of state.local) if (ids.includes(local.actionId)) state.local.delete(passId);
@@ -605,7 +606,7 @@ async function sendOther(store: Store, action: PendingAction): Promise<boolean> 
       await api.attachIncidentPhoto(action.eventId, String(p.incidentId), uploaded.key);
       await deleteLocalPhoto(String(p.fileUri));
     }
-    await store.markSent(action.eventId, [{ id: action.id, result }], new Date());
+    await store.markSent(action.eventId, [{ id: action.id, result }], clockNow());
     if (action.kind === "alert") await store.scrubPosition(action.id);
     return true;
   } catch (error) {
@@ -619,7 +620,7 @@ async function sendOther(store: Store, action: PendingAction): Promise<boolean> 
       await store.markSent(
         action.eventId,
         [{ id: action.id, result: { error: e.message, status: e.status } }],
-        new Date(),
+        clockNow(),
       );
       if (action.kind === "alert") await store.scrubPosition(action.id);
       return true;
@@ -636,7 +637,7 @@ export async function purgeExpired(): Promise<void> {
   const store = await staffStore();
   let changed = false;
   for (const meta of await store.metas()) {
-    if (!isPurgeDue(meta, new Date())) continue;
+    if (!isPurgeDue(meta, clockNow())) continue;
     await store.purgeEvent(meta.eventId);
     states.delete(meta.eventId);
     changed = true;
