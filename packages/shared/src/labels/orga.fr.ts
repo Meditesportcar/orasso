@@ -97,7 +97,6 @@ export const orgaLabels = {
   announcementPinned: "Épinglée",
   announcementDelete: "Supprimer",
   inviteSoon: "Inviter · bientôt",
-  reportSoon: "Bilan · bientôt",
   sortSoon: "Tri par glissement : bientôt",
   sortSoonBody:
     "Le tri des candidatures par glissement arrive dans une prochaine version. En attendant, trie sur le site.",

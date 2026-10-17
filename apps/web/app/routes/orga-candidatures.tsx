@@ -59,6 +59,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const providersPending = providers.filter((p) => p.status === "pending").length;
   const eventHead = {
     id: event.id,
+    structureId: event.structure.id,
     title: event.title,
     startsAt: event.startsAt,
     endsAt: event.endsAt,
@@ -257,10 +258,18 @@ export default function OrgaCandidatures({ loaderData }: Route.ComponentProps) {
         ]}
       />
 
-      {view === "file" && <TriageFile eventId={event.id} initial={file} canDecide={canDecide} />}
+      {view === "file" && (
+        <TriageFile
+          eventId={event.id}
+          structureId={isOrganizer ? event.structureId : undefined}
+          initial={file}
+          canDecide={canDecide}
+        />
+      )}
       {view === "liste" && (
         <TriageList
           eventId={event.id}
+          structureId={isOrganizer ? event.structureId : undefined}
           items={list}
           nextHref={nextHref}
           filters={filters}

@@ -10,5 +10,8 @@ export default [
     // Lot 32 : file des signalements (modérateur et super admin), sanctions et contestations (super admin).
     route("signalements", "routes/admin/signalements.tsx"),
     route("sanctions", "routes/admin/sanctions.tsx"),
+    // Lot 27 : badges des structures (rappels, suspension, levée) et fiche d'une structure (propriétaire).
+    route("badges", "routes/admin/badges.tsx"),
+    route("structures/:id", "routes/admin/structure.tsx"),
   ]),
 ] satisfies RouteConfig;

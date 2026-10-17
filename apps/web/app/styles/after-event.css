@@ -1,0 +1,84 @@
+/* Après l'événement et badge de structure (lot 27). Jetons seulement. */
+
+.ae-lists {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.ae-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ae-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--line);
+}
+
+.ae-facts {
+  display: grid;
+  gap: var(--space-2) var(--space-5);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin: 0;
+}
+
+.ae-facts dt {
+  margin: 0;
+}
+
+.ae-facts dd {
+  margin: 0;
+}
+
+.ae-preview {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--line);
+  white-space: pre-wrap;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-md);
+}
+
+.ae-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.ae-note {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  border: 1px dashed var(--line);
+}
+
+.ae-note__text {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.ae-notes {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Carte ouverte par un lien d'avis : un contour d'encre, sans néon (un seul par écran). */
+.acc[data-focused="true"] {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}

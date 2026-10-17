@@ -1,6 +1,7 @@
 import { Button, CheckboxField, Chip, ChipRow } from "@orasso/design-system/web";
 import {
   type ApplicationForTriage,
+  afterEventLabels,
   applicationStatusLabels,
   crewLabels,
   type Page,
@@ -13,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "../lib/api.client";
 import { formatDateTime } from "../lib/format";
+import { StructureNotes } from "./StructureNotes";
 
 type Decided = { item: ApplicationForTriage; decision: TriageDecision };
 
@@ -29,11 +31,16 @@ const DECISION_LABEL: Record<TriageDecision, string> = {
  */
 export function TriageFile({
   eventId,
+  structureId,
+  notesWritable = true,
   initial,
   canDecide,
   onDecided,
 }: {
   eventId: string;
+  /** Notes internes de la structure (lot 27) : affichées pour les organisateurs seulement. */
+  structureId?: string;
+  notesWritable?: boolean;
   initial: ApplicationForTriage[];
   canDecide: boolean;
   onDecided?: () => void;
@@ -268,6 +275,21 @@ export function TriageFile({
               : `Retenu ${current.applicant.historyWithStructure.accepted} fois · refusé ${current.applicant.historyWithStructure.refused}`}
           </span>
         </div>
+        {structureId && (
+          <details className="tri__kv" data-testid="triage-notes" open={current.applicant.notes.length > 0}>
+            <summary>
+              {afterEventLabels.notesTitle} · {current.applicant.notes.length}
+            </summary>
+            <StructureNotes
+              key={current.id}
+              structureId={structureId}
+              pseudo={current.applicant.pseudo}
+              eventId={eventId}
+              initial={current.applicant.notes}
+              writable={notesWritable}
+            />
+          </details>
+        )}
         {current.crew && (
           <div className="tri__kv" data-testid="triage-crew">
             <span>{crewLabels.triageCrew}</span>

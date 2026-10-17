@@ -31,4 +31,11 @@ describe("temps réel de l'appli", () => {
     expect(appLinkOf("/u/Kenji_66")).toBe("/u/Kenji_66");
     expect(appLinkOf("https://exemple.com")).toBeNull();
   });
+
+  it("lien d'avis d'un remerciement vers la feuille d'avis de l'onglet Accès (lot 27)", () => {
+    const id = "8f8e2f0a-1c1c-4c4c-8a8a-0123456789ab";
+    expect(appLinkOf(`/app/acces?avis=${id}`)).toBe(`/(tabs)/acces?avis=${id}`);
+    expect(appLinkOf("/app/acces?avis=../../x")).toBeNull();
+    expect(appLinkOf("/app/acces")).toBeNull();
+  });
 });
