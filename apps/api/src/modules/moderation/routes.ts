@@ -25,7 +25,9 @@ function clientIp(header: string | undefined): string | null {
 export const moderationRoutes = new Hono<AppEnv>()
   .post("/reports", async (c) => {
     const v = await requireUser(c);
-    return c.json(await moderationService.create(v, await body(c, reportCreateSchema)), 201);
+    // Relecture (M9) : le signaleur ne sait pas s'il a déclenché une suspension automatique.
+    const { id } = await moderationService.create(v, await body(c, reportCreateSchema));
+    return c.json({ id }, 201);
   })
   .get("/me/sanctions", async (c) => c.json(await moderationService.mySanctions(await requireUser(c))))
   // Seule écriture permise à un compte suspendu (avec la suppression du compte), § 0.4.
@@ -45,7 +47,11 @@ export const moderationRoutes = new Hono<AppEnv>()
     );
   })
   .get("/admin/reports/:id/screenshot", async (c) => {
-    const data = await moderationService.screenshot(await requireUser(c), uuidParam(c, "id"));
+    const data = await moderationService.screenshot(
+      await requireUser(c),
+      uuidParam(c, "id"),
+      clientIp(c.req.header("x-forwarded-for")),
+    );
     return c.body(new Uint8Array(data), 200, { "content-type": "image/webp", "cache-control": "private, no-store" });
   })
   .post("/admin/reports/:id/status", async (c) => {

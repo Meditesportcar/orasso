@@ -9,6 +9,7 @@ import { now } from "../../../lib/deps";
 import { notFound } from "../../../lib/errors";
 import { storage } from "../../../lib/storage";
 import { announcementsService } from "../../communication/announcements";
+import { eventsRepo } from "../../events/repo";
 import { eventsService } from "../../events/service";
 import { profilesRepo } from "../../profiles/repo";
 import { goneView, type TargetRules, UUID_RE } from "./types";
@@ -51,11 +52,13 @@ export const eventTarget: TargetRules = {
       removed: e.status === "cancelled",
     };
   },
-  // Annulation par le service des événements (candidatures, billets, notifications), hors de la transaction.
-  async removeOutside(v, report) {
-    const e = await eventRow(report.targetId);
-    if (!e || e.status === "cancelled") return;
-    await eventsService.cancel(v, e.id);
+  // Annulation par le service des événements (candidatures, billets, notifications), dans la transaction de la
+  // décision (relecture : atomique) ; idempotente si l'événement est déjà annulé.
+  async remove(tx, v, report, after) {
+    const e = await eventsRepo.lockForUpdate(tx, report.targetId).catch(() => null);
+    if (!e || e.status === "cancelled") return [];
+    await eventsService.cancelInTx(tx, after, e.id, v.user.id, "orasso");
+    return [];
   },
 };
 

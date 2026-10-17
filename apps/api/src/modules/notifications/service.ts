@@ -242,21 +242,29 @@ async function deliverOne(n: NotificationRow) {
   const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, n.userId) });
   // Compte supprimé : plus rien n'est livré.
   if (profile?.deletedAt) return;
+  // Compte banni (lot 32, relecture) : seulement la famille « Sécurité du compte », par e-mail (appareils révoqués).
+  const banned = Boolean(profile?.bannedAt);
+  if (banned && n.family !== "account") return;
   // Chaque famille et chaque type peuvent être coupés, sauf `staff` et `account` ; la notification reste au Journal.
   if (!shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type)) return;
 
   const tokens = (
-    await db
-      .select({ token: devices.expoPushToken })
-      .from(devices)
-      .where(and(eq(devices.userId, n.userId), isNull(devices.revokedAt), isNotNull(devices.expoPushToken)))
+    banned
+      ? []
+      : await db
+          .select({ token: devices.expoPushToken })
+          .from(devices)
+          .where(and(eq(devices.userId, n.userId), isNull(devices.revokedAt), isNotNull(devices.expoPushToken)))
   )
     .map((d) => d.token)
     .filter((t): t is string => Boolean(t));
   let pushed = 0;
   if (tokens.length) {
     const data = stripInternal(n.data);
-    pushed = await push.send(tokens.map((to) => ({ to, title: n.title, body: n.body, data })));
+    // Compte suspendu (lot 32, relecture) : pas d'aperçu de message sur l'écran verrouillé, il lit dans sa Boîte.
+    const suspended = Boolean(profile?.suspendedUntil && profile.suspendedUntil > now());
+    const body = suspended && n.type === "message_received" ? "Nouveau message" : n.body;
+    pushed = await push.send(tokens.map((to) => ({ to, title: n.title, body, data })));
     if (pushed) await db.update(notifications).set({ pushSentAt: now() }).where(eq(notifications.id, n.id));
   }
   // Push seulement (message reçu, lot 18) : pas d'e-mail de repli sans appareil.

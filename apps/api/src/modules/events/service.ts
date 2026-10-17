@@ -38,7 +38,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { uniqueSlug } from "../../lib/slug";
 import { storage } from "../../lib/storage";
-import { withTx } from "../../lib/tx";
+import { type Tx, withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { announcementsService } from "../communication/announcements";
 import { staffChatsService } from "../communication/staff-chats";
@@ -341,6 +341,23 @@ export const eventsService = {
     await withTx(async (tx, after) => {
       const e = await eventsRepo.lockForUpdate(tx, id);
       if (e.status === "cancelled") throw conflict("conflict", "Déjà annulé");
+      await this.cancelInTx(tx, after, id, v.user.id, "organizer");
+    });
+    return this.getForOrganizer(v, id);
+  },
+
+  /**
+   * Annulation dans une transaction ouverte, l'événement déjà verrouillé et non annulé : par l'organisateur, ou par
+   * l'équipe Orasso quand la modération retire l'événement (lot 32, dans la transaction de sa décision).
+   */
+  async cancelInTx(
+    tx: Tx,
+    after: (cb: () => unknown) => void,
+    id: string,
+    actorId: string,
+    by: "organizer" | "orasso",
+  ) {
+    {
       const [row] = await tx
         .update(events)
         .set({ status: "cancelled", cancelledAt: now() })
@@ -349,7 +366,7 @@ export const eventsService = {
       if (!row) throw notFound("Événement introuvable");
       const cancelled = await applicationsService.cancelAll(tx, row, after);
       // Fil de l'événement (lot 20) : une entrée « Annulé », une seule fois (verrou + statut contrôlé ci-dessus).
-      await announcementsService.recordStatusChange(tx, id, "cancelled", v.user.id);
+      await announcementsService.recordStatusChange(tx, id, "cancelled", actorId);
       // Billets de visiteurs (lot 14) : les billets valables sont annulés, les paiements en cours abandonnés.
       const cancelledTickets = await tx
         .update(tickets)
@@ -363,7 +380,7 @@ export const eventsService = {
       for (const userId of new Set([...cancelled.map((a) => a.userId), ...cancelledTickets.map((t) => t.userId)])) {
         await notificationsService.notify(tx, userId, "event_cancelled", {
           title: "Événement annulé",
-          body: `« ${row.title} » (${formatDateTime(row.startsAt)}) est annulé par l'organisateur.`,
+          body: `« ${row.title} » (${formatDateTime(row.startsAt)}) est annulé par ${by === "orasso" ? "l'équipe Orasso" : "l'organisateur"}.`,
           eventId: id,
           eventStartsAt: row.startsAt,
           data: { eventId: id },
@@ -372,8 +389,7 @@ export const eventsService = {
       }
       after(() => realtime.publish(`event:${id}:access`, "event.cancelled", { eventId: id }));
       after(() => notificationsService.kick());
-    });
-    return this.getForOrganizer(v, id);
+    }
   },
 
   /**

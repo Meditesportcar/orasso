@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { fromWallTime } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createEvent,
@@ -22,6 +22,9 @@ import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import {
   adminAuditLog,
+  applications,
+  devices,
+  events,
   messages,
   notifications,
   profiles,
@@ -32,8 +35,10 @@ import {
   user,
   vehiclePhotos,
 } from "../../db/schema";
+import { push } from "../../lib/push";
 import { storage } from "../../lib/storage";
 import { accountService } from "../account/service";
+import { notificationsService } from "../notifications/service";
 import { moderationService } from "./service";
 
 afterAll(async () => {
@@ -228,7 +233,7 @@ describe("suspension automatique (S39, S40)", () => {
       await reportProfile(b, x, mode, "harassment");
       clock.advance(3_600_000);
       const third = await reportProfile(c, x, mode, "insult");
-      expect(third.json.autoSuspended).toBe(true);
+      expect(Object.keys(third.json)).toEqual(["id"]); // M9 : le signaleur ne sait pas qu'il a déclenché la suspension
 
       const [s] = await sanctionsOf(x);
       expect(s).toMatchObject({ kind: "suspension_7d", auto: true, reason: "harassment", issuedBy: null });
@@ -281,7 +286,7 @@ describe("suspension automatique (S39, S40)", () => {
     await age(recent, 3);
     await reportProfile(a, x);
     await reportProfile(b, x);
-    expect((await reportProfile(recent, x)).json.autoSuspended).toBe(false);
+    await reportProfile(recent, x);
     expect(await sanctionsOf(x)).toHaveLength(0);
 
     const [abusive] = await oldUsers("Abusif");
@@ -292,19 +297,56 @@ describe("suspension automatique (S39, S40)", () => {
     await db.update(reports).set({ status: "dismissed_abusive" }).where(eq(reports.reporterId, abusive!.id));
     await reportProfile(a, y);
     await reportProfile(b, y);
-    expect((await reportProfile(abusive!, y)).json.autoSuspended).toBe(false);
+    await reportProfile(abusive!, y);
+    expect(await sanctionsOf(y)).toHaveLength(0);
   });
 
   it("déjà suspendu : pas de seconde sanction automatique ; signalements de plus de 24 heures ignorés", async () => {
     const [a, b, c, d, x, z] = await oldUsers("Alice", "Bruno", "Carla", "Dora", "Xavier", "Zoe");
     for (const u of [a, b, c]) await reportProfile(u!, x!);
-    expect((await reportProfile(d!, x!)).json.autoSuspended).toBe(false);
+    await reportProfile(d!, x!);
     expect(await sanctionsOf(x!)).toHaveLength(1);
 
     await reportProfile(a!, z!);
     await reportProfile(b!, z!);
     clock.advance(DAY + 1000);
-    expect((await reportProfile(c!, z!)).json.autoSuspended).toBe(false);
+    await reportProfile(c!, z!);
+    expect(await sanctionsOf(z!)).toHaveLength(0);
+  });
+
+  it.each(["lift", "contest"] as const)(
+    "levée (%s) puis nouveau signalement d'un membre de la meute : pas de resuspension",
+    async (how) => {
+      const { damien } = await team();
+      const ref = await seedReference();
+      const [a, b, c, x] = await oldUsers("Alice", "Bruno", "Carla", "Xavier");
+      for (const u of [a, b, c]) await reportProfile(u, x);
+      const [s] = await sanctionsOf(x);
+      if (how === "lift") {
+        expect((await req(damien, "POST", `/admin/sanctions/${s!.id}/lift`, {})).status).toBe(204);
+      } else {
+        await req(x, "POST", `/sanctions/${s!.id}/contest`, { message: "Meute" });
+        expect((await req(damien, "POST", `/admin/sanctions/${s!.id}/decide`, { decision: "lift" })).status).toBe(204);
+      }
+      const v = await createVehicle(x.id, ref);
+      expect((await req(a, "POST", "/reports", { targetType: "vehicle", targetId: v.id, reason: "spam" })).status).toBe(
+        201,
+      );
+      expect((await profileOf(x)).suspendedUntil).toBeNull();
+      expect(await sanctionsOf(x)).toHaveLength(1);
+    },
+  );
+
+  it("un signaleur suspendu ou banni ne compte pas (M3)", async () => {
+    const { damien } = await team();
+    const [a, b, c, x, w] = await oldUsers("Alice", "Bruno", "Carla", "Xavier", "Wanda");
+    await reportProfile(a, x);
+    await reportProfile(c, x);
+    // C est suspendue après coup : son signalement déjà posé ne compte plus.
+    const r = await reportProfile(w, c);
+    await req(damien, "POST", `/admin/reports/${r.json.id}/sanction`, { kind: "suspension_30d" });
+    await reportProfile(b, x);
+    expect(await sanctionsOf(x)).toHaveLength(0);
   });
 
   it("un compte de l'équipe n'est jamais suspendu automatiquement (alerte seulement)", async () => {
@@ -574,5 +616,158 @@ describe("conservation (moderation.purge)", () => {
     await accountService.anonymize(x!.id, null);
     expect((await sanctionsOf(x!))[0]?.contestStatus).toBe("upheld");
     expect(await db.select().from(reports)).toHaveLength(3);
+  });
+});
+
+describe("corrections de la relecture", () => {
+  it.each(MODES)(
+    "comptes de l'équipe : le modérateur ne les sanctionne pas, personne ne sanctionne un super admin (%s)",
+    async (mode) => {
+      const { damien, moderatrice } = await team();
+      const autreModo = await signUp("AutreModo", { twoFactor: true, role: "moderator" });
+      const autreAdmin = await signUp("AutreAdmin", { twoFactor: true, role: "super_admin" });
+      const [a] = await oldUsers("Alice");
+      const onModo = await reportProfile(a, autreModo, mode);
+      const onAdmin = await reportProfile(a, autreAdmin, mode);
+      const byModo = await req(
+        moderatrice,
+        "POST",
+        `/admin/reports/${onModo.json.id}/sanction`,
+        { kind: "suspension_7d" },
+        mode,
+      );
+      expect(byModo.status).toBe(403);
+      const byModoOnAdmin = await req(
+        moderatrice,
+        "POST",
+        `/admin/reports/${onAdmin.json.id}/sanction`,
+        { kind: "suspension_7d" },
+        mode,
+      );
+      expect(byModoOnAdmin.status).toBe(409);
+      const byAdmin = await req(damien, "POST", `/admin/reports/${onAdmin.json.id}/sanction`, { kind: "ban" }, mode);
+      expect(byAdmin.status).toBe(409);
+      expect(await sanctionsOf(autreAdmin)).toHaveLength(0);
+      // Par sûreté : un super admin suspendu (posé à la main) garde les routes d'administration.
+      await db
+        .update(profiles)
+        .set({ suspendedUntil: new Date(clock.now.getTime() + DAY) })
+        .where(eq(profiles.userId, autreAdmin.id));
+      const still = await req(
+        autreAdmin,
+        "POST",
+        `/admin/reports/${onModo.json.id}/status`,
+        { status: "reviewing" },
+        mode,
+      );
+      expect(still.status).toBe(200);
+      expect((await req(autreAdmin, "PATCH", "/me/profile", { bio: "x" }, mode)).status).toBe(403);
+    },
+  );
+
+  it("bannissement : appareils révoqués, seules les notifications « Sécurité du compte » partent, par e-mail", async () => {
+    const { damien } = await team();
+    const [a, x] = await oldUsers("Alice", "Xbanni");
+    const dev = await req(x, "POST", "/me/devices", {
+      platform: "android",
+      expoPushToken: "ExponentPushToken[test-x]",
+    });
+    expect(dev.status).toBe(201);
+    const r = await reportProfile(a, x);
+    await req(damien, "POST", `/admin/reports/${r.json.id}/sanction`, { kind: "ban" });
+    const devs = await db.select().from(devices).where(eq(devices.userId, x.id));
+    expect(devs.length).toBeGreaterThan(0);
+    expect(devs.every((d) => d.revokedAt !== null)).toBe(true);
+    await notificationsService.flush();
+    const spy = vi.spyOn(push, "send");
+    await notificationsService.notify(db, x.id, "message_received", { title: "Bob", body: "Bob : coucou" });
+    await notificationsService.deliverDue();
+    const [msg] = await notesOf(x, "message_received");
+    expect(msg?.pushSentAt).toBeNull();
+    expect(msg?.emailSentAt).toBeNull();
+    const [banned] = await notesOf(x, "sanction_received");
+    expect(banned?.emailSentAt).not.toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("suspendu : le push d'un message ne montre pas l'aperçu", async () => {
+    const [a, b, c, x] = await oldUsers("Alice", "Bruno", "Carla", "Xavier");
+    for (const u of [a, b, c]) await reportProfile(u, x);
+    await req(x, "POST", "/me/devices", { platform: "android", expoPushToken: "ExponentPushToken[test-s]" });
+    await notificationsService.flush();
+    const spy = vi.spyOn(push, "send").mockResolvedValue(1);
+    await notificationsService.notify(db, x.id, "message_received", { title: "Bob", body: "Bob : secret" });
+    await notificationsService.deliverDue();
+    const bodies = spy.mock.calls.flatMap((call) => call[0].map((m) => m.body));
+    expect(bodies).toContain("Nouveau message");
+    expect(bodies.join(" ")).not.toContain("secret");
+    spy.mockRestore();
+  });
+
+  it("modérateur : ne clôt pas un signalement déjà sanctionné, ne lève pas une sanction maintenue ; capture tracée", async () => {
+    const { damien, moderatrice } = await team();
+    const [a, b, c, x] = await oldUsers("Alice", "Bruno", "Carla", "Xavier");
+    for (const u of [a, b, c]) await reportProfile(u, x);
+    const [s] = await sanctionsOf(x);
+    const [rep] = await db.select().from(reports).where(eq(reports.reporterId, a.id));
+    const close = await req(moderatrice, "POST", `/admin/reports/${rep!.id}/status`, { status: "resolved_no_action" });
+    expect(close.status).toBe(403);
+    await req(x, "POST", `/sanctions/${s!.id}/contest`, { message: "Non" });
+    await req(damien, "POST", `/admin/sanctions/${s!.id}/decide`, { decision: "uphold" });
+    expect((await req(moderatrice, "POST", `/admin/sanctions/${s!.id}/lift`, {})).status).toBe(403);
+
+    const up = await uploadCapture(a);
+    const y = (await oldUsers("Yann"))[0];
+    const withShot = await req(a, "POST", "/reports", {
+      targetType: "profile",
+      targetId: y.id,
+      reason: "insult",
+      screenshotKey: up.json.key,
+    });
+    expect((await req(moderatrice, "GET", `/admin/reports/${withShot.json.id}/screenshot`)).status).toBe(200);
+    const logs = await db.select().from(adminAuditLog).where(eq(adminAuditLog.action, "moderation.screenshot_view"));
+    expect(logs).toHaveLength(1);
+  });
+
+  it("profil et véhicule d'un banni : introuvables pour les autres ; suspendu : se désister reste possible", async () => {
+    const { damien } = await team();
+    const ref = await seedReference();
+    const [a, x] = await oldUsers("Alice", "Xbanni");
+    const v = await createVehicle(x.id, ref);
+    const r = await reportProfile(a, x);
+    await req(damien, "POST", `/admin/reports/${r.json.id}/sanction`, { kind: "ban" });
+    expect((await req(a, "GET", `/users/${x.pseudo}`)).status).toBe(404);
+    expect((await req(a, "GET", `/vehicles/${v.id}`)).status).toBe(404);
+    const [b1, b2, b3, y] = await oldUsers("Bea1", "Bea2", "Bea3", "Yves");
+    for (const u of [b1, b2, b3]) await reportProfile(u, y);
+    const w = await req(y, "POST", `/applications/${randomUUID()}/withdraw`);
+    expect(w.json?.error?.code).not.toBe("suspended");
+  });
+
+  it("événement retiré : annulé dans la décision, « par l'équipe Orasso »", async () => {
+    const { damien } = await team();
+    const [a, owner, participant] = await oldUsers("Alice", "Orga", "Pilote");
+    const s = await createStructure(owner.id);
+    const e = await createEvent(s.id, { startsAt: new Date(clock.now.getTime() + 5 * DAY) });
+    const ref = await seedReference();
+    const veh = await createVehicle(participant.id, ref);
+    await db
+      .insert(applications)
+      .values({
+        eventId: e.id,
+        userId: participant.id,
+        vehicleId: veh.id,
+        status: "accepted",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+      });
+    const r = await req(a, "POST", "/reports", { targetType: "event", targetId: e.id, reason: "scam" });
+    expect(r.status).toBe(201);
+    expect((await req(damien, "POST", `/admin/reports/${r.json.id}/sanction`, { hideContent: true })).status).toBe(200);
+    const [row] = await db.select().from(events).where(eq(events.id, e.id));
+    expect(row?.status).toBe("cancelled");
+    const [n] = await notesOf(participant, "event_cancelled");
+    expect(n?.body).toContain("l'équipe Orasso");
   });
 });

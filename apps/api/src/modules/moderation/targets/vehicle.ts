@@ -1,12 +1,13 @@
 // Cibles « véhicule » et « photo » (photo d'un véhicule). Un véhicule se traite par la sanction de son propriétaire ;
 // une photo peut être supprimée par le super administrateur. Jamais la plaque.
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 
 import { db } from "../../../db/client";
-import { vehiclePhotos } from "../../../db/schema";
+import { vehiclePhotos, vehicles } from "../../../db/schema";
 import { notFound } from "../../../lib/errors";
 import { storage } from "../../../lib/storage";
 import { socialProfile } from "../../social/profile";
+import { certificationService } from "../../vehicles/certification";
 import { vehiclesRepo } from "../../vehicles/repo";
 import { vehicleLabel } from "../../vehicles/serializers";
 import { goneView, type TargetRules, UUID_RE } from "./types";
@@ -61,11 +62,25 @@ export const photoTarget: TargetRules = {
       removed: false,
     };
   },
-  async remove(tx, _v, report) {
-    const deleted = await tx
-      .delete(vehiclePhotos)
-      .where(eq(vehiclePhotos.id, report.targetId))
-      .returning({ key: vehiclePhotos.storageKey });
-    return deleted.map((d) => d.key);
+  // Même chemin que la suppression par le propriétaire (relecture, M5) : véhicule verrouillé, positions renumérotées,
+  // certification recalculée (une photo retirée peut la faire perdre).
+  async remove(tx, _v, report, after) {
+    const [photo] = await tx.select().from(vehiclePhotos).where(eq(vehiclePhotos.id, report.targetId));
+    if (!photo) return [];
+    await tx.select({ id: vehicles.id }).from(vehicles).where(eq(vehicles.id, photo.vehicleId)).for("update");
+    const certifiedBefore = await certificationService.fieldsBeforeChange(tx, photo.vehicleId);
+    await tx.delete(vehiclePhotos).where(eq(vehiclePhotos.id, photo.id));
+    const rest = await tx
+      .select()
+      .from(vehiclePhotos)
+      .where(eq(vehiclePhotos.vehicleId, photo.vehicleId))
+      .orderBy(asc(vehiclePhotos.position));
+    let position = 1;
+    for (const p of rest) {
+      if (p.position !== position) await tx.update(vehiclePhotos).set({ position }).where(eq(vehiclePhotos.id, p.id));
+      position++;
+    }
+    await certificationService.afterChange(tx, after, photo.vehicleId, certifiedBefore);
+    return [photo.storageKey];
   },
 };

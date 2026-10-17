@@ -22,10 +22,10 @@ import {
   terminalReportStatuses,
   moderationNotificationTexts as texts,
 } from "@orasso/shared";
-import { and, count, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { adminAuditLog, profiles, reports, sanctions, session, uploads, user } from "../../db/schema";
+import { adminAuditLog, devices, profiles, reports, sanctions, session, uploads, user } from "../../db/schema";
 import { isSuperAdmin, requirePlatformRole } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
@@ -143,6 +143,11 @@ async function closeReports(
 /** Révoque toutes les sessions (bannissement) : site et appli (le jeton porteur est une session). */
 async function revokeSessions(tx: Tx, userId: string) {
   await tx.delete(session).where(eq(session.userId, userId));
+  // Relecture : plus aucun push vers ses appareils (aperçus de messages compris).
+  await tx
+    .update(devices)
+    .set({ revokedAt: now() })
+    .where(and(eq(devices.userId, userId), isNull(devices.revokedAt)));
 }
 
 function permissions(v: Viewer, report: ReportRow): AdminReportDetail["can"] {
@@ -151,7 +156,8 @@ function permissions(v: Viewer, report: ReportRow): AdminReportDetail["can"] {
   const hasRemoval = Boolean(targetOf(report.targetType).remove || targetOf(report.targetType).removeOutside);
   return {
     review: open && report.status !== "reviewing",
-    closeNoAction: open,
+    // Relecture (M1) : un signalement déjà suivi d'une sanction se clôt par le super administrateur seulement.
+    closeNoAction: open && (admin || !report.sanctionId),
     resolveAction: admin && open,
     dismissAbusive: admin && open,
     sanctionKinds:
@@ -164,6 +170,10 @@ function permissions(v: Viewer, report: ReportRow): AdminReportDetail["can"] {
     sanctionReporter: admin && report.status === "dismissed_abusive",
   };
 }
+
+/** Relecture (M2) : suspension automatique, pas encore maintenue ni levée par le super administrateur. */
+const moderatorMayLift = (s: SanctionRow) =>
+  s.auto && s.kind === "suspension_7d" && (s.contestStatus === "none" || s.contestStatus === "pending");
 
 function toMySanction(s: SanctionRow, at: Date): MySanction {
   return {
@@ -262,11 +272,19 @@ export const moderationService = {
       })
       .from(reports)
       .innerJoin(user, eq(user.id, reports.reporterId))
+      .innerJoin(profiles, eq(profiles.userId, reports.reporterId))
       .where(
         and(
           eq(reports.targetOwnerId, ownerId),
           inArray(reports.status, OPEN),
           gt(reports.createdAt, new Date(at.getTime() - MODERATION.autoSuspendWindowMs)),
+          // Relecture : un signalement qui a déjà servi à une sanction (levée ou non) ne recompte jamais ; sinon une
+          // suspension levée reviendrait au premier nouveau signalement d'un membre de la meute.
+          isNull(reports.sanctionId),
+          // S39 (relecture, M3) : un signaleur banni, supprimé ou suspendu ne compte pas.
+          isNull(profiles.deletedAt),
+          isNull(profiles.bannedAt),
+          or(isNull(profiles.suspendedUntil), lte(profiles.suspendedUntil, at)),
         ),
       );
     const counted = recent.filter((r) =>
@@ -493,9 +511,7 @@ export const moderationService = {
             auto: sanction.auto,
             liftedAt: sanction.liftedAt?.toISOString() ?? null,
             liftable:
-              !sanction.liftedAt &&
-              isSanctionActive(sanction, at) &&
-              (isSuperAdmin(v) || (sanction.auto && sanction.kind === "suspension_7d")),
+              !sanction.liftedAt && isSanctionActive(sanction, at) && (isSuperAdmin(v) || moderatorMayLift(sanction)),
           }
         : null,
       can: permissions(v, report),
@@ -503,11 +519,13 @@ export const moderationService = {
   },
 
   /** `GET /admin/reports/:id/screenshot` : capture privée, à l'équipe seulement. */
-  async screenshot(v: Viewer, id: string): Promise<Buffer> {
+  async screenshot(v: Viewer, id: string, ip: string | null = null): Promise<Buffer> {
     await requirePlatformRole(v, "moderator");
     const [report] = await db.select({ key: reports.screenshotKey }).from(reports).where(eq(reports.id, id));
     const data = report?.key ? await storage.get(report.key) : null;
     if (!data) throw notFound("Capture introuvable");
+    // Relecture (M6) : la consultation de la capture est tracée comme celle du signalement.
+    await audit(db, v, "moderation.screenshot_view", "report", id, null, ip);
     return data;
   },
 
@@ -523,6 +541,9 @@ export const moderationService = {
     await withTx(async (tx, after) => {
       const report = await lockReport(tx, id);
       if (isTerminal(report.status)) throw conflict("already_handled", "Ce signalement a déjà été traité.");
+      if (input.status === "resolved_no_action" && report.sanctionId && !isSuperAdmin(v)) {
+        throw forbidden("Une sanction a été prononcée : la décision revient au super administrateur.");
+      }
       if (input.status === "reviewing") {
         if (report.status === "reviewing") return;
         await tx
@@ -583,6 +604,14 @@ export const moderationService = {
         const at = now();
         const [target] = await tx.select().from(profiles).where(eq(profiles.userId, subjectId));
         if (!target || target.deletedAt) throw conflict("conflict", "Ce compte a été supprimé.");
+        // Relecture : jamais de sanction d'un super administrateur (il serait bloqué hors de ses décisions) ; le
+        // modérateur ne sanctionne qu'un compte ordinaire.
+        if (target.platformRole === "super_admin") {
+          throw conflict("conflict", "Un super administrateur ne peut pas être sanctionné.");
+        }
+        if (!admin && target.platformRole !== "user") {
+          throw forbidden("Le modérateur ne sanctionne pas un compte de l'équipe Orasso.");
+        }
         const active = await activeSanctions(tx, subjectId, at);
         if (!admin && active.length) throw conflict("already_handled", "Ce compte est déjà suspendu.");
         if (input.subject === "reporter") {
@@ -733,8 +762,10 @@ export const moderationService = {
     await withTx(async (tx, after) => {
       const [s] = await tx.select().from(sanctions).where(eq(sanctions.id, id)).for("update");
       if (!s) throw notFound("Sanction introuvable");
-      if (!isSuperAdmin(v) && !(s.auto && s.kind === "suspension_7d")) {
-        throw forbidden("Le modérateur ne lève qu'une suspension automatique.");
+      if (!isSuperAdmin(v) && !moderatorMayLift(s)) {
+        throw forbidden(
+          "Le modérateur ne lève qu'une suspension automatique (pas une sanction maintenue par le super administrateur).",
+        );
       }
       if (s.liftedAt) throw conflict("already_handled", "Cette sanction est déjà levée.");
       await lockAccount(tx, s.userId);

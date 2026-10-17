@@ -52,11 +52,15 @@ const WRITES_WHILE_SUSPENDED: [method: string, path: RegExp][] = [
   ["POST", /^\/api\/me\/devices$/],
   ["DELETE", /^\/api\/me\/devices\/[^/]+$/],
   ["DELETE", /^\/api\/me\/sessions\/[^/]+$/],
+  // Relecture : se désister d'un événement (sinon malus d'absence à J+2 à cause de la suspension).
+  ["POST", /^\/api\/applications\/[^/]+\/withdraw$/],
 ];
 
-function writeAllowedWhileSuspended(c: Context<AppEnv>): boolean {
+function writeAllowedWhileSuspended(c: Context<AppEnv>, profile: Profile): boolean {
   const method = c.req.method.toUpperCase();
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") return true;
+  // Par sûreté (relecture) : un super administrateur garde ses décisions même si une suspension lui était posée.
+  if (profile.platformRole === "super_admin" && c.req.path.startsWith("/api/admin/")) return true;
   return WRITES_WHILE_SUSPENDED.some(([m, re]) => m === method && re.test(c.req.path));
 }
 
@@ -74,7 +78,9 @@ export async function requireUser(c: Context<AppEnv>): Promise<Viewer> {
   }
   // Compte supprimé (anonymisé) : plus aucun accès, même si une session avait survécu.
   if (profile.deletedAt) throw unauthenticated();
-  if (profile.suspendedUntil && profile.suspendedUntil > now() && !writeAllowedWhileSuspended(c)) {
+  // Relecture (M7) : compte banni, plus aucun accès, même avec une session ouverte pendant le bannissement.
+  if (profile.bannedAt) throw new AppError(403, "banned", "Ce compte a été banni d'Orasso.");
+  if (profile.suspendedUntil && profile.suspendedUntil > now() && !writeAllowedWhileSuspended(c, profile)) {
     throw new AppError(403, "suspended", "Ton compte est suspendu : lecture seule.");
   }
   return { user, profile, session: { secondFactor: c.get("sessionSecondFactor") ?? null } };
