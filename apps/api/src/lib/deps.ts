@@ -39,7 +39,11 @@ export type JobName =
   | "messaging.group-sweep"
   | "messaging.staff-chats-sweep"
   // Lot 32 : conservation des signalements et sanctions (un an), quotidienne.
-  | "moderation.purge";
+  | "moderation.purge"
+  // Lot 27 : bilan rafraîchi à J+8 (et balayage horaire de secours), rappels et suspension des badges (quotidienne).
+  | "event.report-refresh"
+  | "event.report-sweep"
+  | "structure.badge-sweep";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

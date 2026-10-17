@@ -42,6 +42,7 @@ import { formatDateTime } from "../../lib/format";
 import { lockEventCheckins } from "../../lib/locks";
 import type { Viewer } from "../../lib/session";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
+import { reportService } from "../after-event/report";
 import { eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
@@ -297,6 +298,8 @@ export const pointsService = {
       }
       await tx.update(events).set({ settledAt: t }).where(eq(events.id, eventId));
       for (const userId of users) await recompute(tx, userId);
+      // Lot 27 : bilan de l'événement, calculé sur les points qui viennent d'être écrits (même transaction).
+      await reportService.onSettled(tx, event, after);
       after(() => notificationsService.kick());
       return true;
     });

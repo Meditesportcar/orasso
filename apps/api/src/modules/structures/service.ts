@@ -106,6 +106,7 @@ async function toOrganizer(s: StructureRow, access: OrganizerAccess): Promise<St
     verification: s.verification,
     verifiedAt: s.verifiedAt?.toISOString() ?? null,
     badgeExpiresAt: s.badgeExpiresAt?.toISOString() ?? null,
+    suspendedReason: s.suspendedReason,
     siret: s.siret,
     rna: s.rna,
     inviteToken: s.inviteToken,
@@ -464,8 +465,23 @@ export const structuresService = {
         .update(structures)
         .set(
           verified
-            ? { verification: "verified", verifiedAt: at, badgeExpiresAt: new Date(at.getTime() + YEAR_MS) }
-            : { verification: "unverified", verifiedAt: null, badgeExpiresAt: null },
+            ? {
+                verification: "verified",
+                verifiedAt: at,
+                badgeExpiresAt: new Date(at.getTime() + YEAR_MS),
+                // Lot 27 : une validation lève la suspension et repart d'un badge neuf (rappels remis à zéro).
+                suspendedReason: null,
+                suspendedAt: null,
+                badgeRemindedAt: {},
+              }
+            : {
+                verification: "unverified",
+                verifiedAt: null,
+                badgeExpiresAt: null,
+                suspendedReason: null,
+                suspendedAt: null,
+                badgeRemindedAt: {},
+              },
         )
         .where(eq(structures.id, id));
       await tx.insert(adminAuditLog).values({

@@ -17,6 +17,7 @@ export * from "./profiles";
 export * from "./pros";
 export * from "./providers";
 export * from "./relations";
+export * from "./reports";
 export * from "./reviews";
 export * from "./security";
 export * from "./social";

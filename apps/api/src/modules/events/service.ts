@@ -99,6 +99,13 @@ async function organizerEvent(v: Viewer, id: string) {
   return { e, access };
 }
 
+/** Structure suspendue (lot 27) : plus de création ni de publication d'événement ; tout reste lisible (S31). */
+const SUSPENDED_MESSAGE = "Structure suspendue : plus de création ni de publication d'événement.";
+async function assertNotSuspended(structureId: string) {
+  const s = await structureById(structureId);
+  if (s.verification === "suspended") throw forbidden(SUSPENDED_MESSAGE);
+}
+
 const ADDRESS_FIELDS = ["addressLine", "postalCode", "city", "lat", "lng"] as const;
 
 /** Département et position d'une adresse saisie (meilleur effort : une adresse introuvable ne bloque rien). */
@@ -226,6 +233,7 @@ export const eventsService = {
   /** Création minimale en brouillon (organisateur). */
   async create(v: Viewer, structureId: string, input: EventCreate): Promise<EventOrganizer> {
     await requireOrganizer(v, structureId);
+    await assertNotSuspended(structureId);
     const year = input.startsAt.getUTCFullYear();
     const slug = await uniqueSlug(`${input.title} ${year}`, (s) => eventsRepo.slugTaken(s));
     const located = await locate(input);
@@ -311,6 +319,7 @@ export const eventsService = {
   async publish(v: Viewer, id: string): Promise<EventOrganizer> {
     const { e } = await organizerEvent(v, id);
     const s = await structureById(e.structureId);
+    if (s.verification === "suspended") throw forbidden(SUSPENDED_MESSAGE);
     if (s.verification !== "verified") throw forbidden("Publication réservée aux structures vérifiées");
     if (e.status !== "draft") throw conflict("conflict", "Déjà publié ou annulé");
     await withTx(async (tx, after) => {
@@ -410,6 +419,7 @@ export const eventsService = {
    */
   async duplicate(v: Viewer, id: string): Promise<EventOrganizer> {
     const { e } = await organizerEvent(v, id);
+    await assertNotSuspended(e.structureId);
     const dates = duplicateDates(e.startsAt, e.endsAt, now());
     const shiftMs = dates.startsAt.getTime() - e.startsAt.getTime();
     const copyId = await withTx(async (tx) => {

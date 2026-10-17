@@ -11,6 +11,7 @@ import {
   type Page,
   pointsPending,
   type RefusalReason,
+  type StructureNoteView,
   type TriageQuery,
 } from "@orasso/shared";
 import { and, asc, count, desc, eq, gt, ilike, inArray, lte, ne, or, type SQL, sql } from "drizzle-orm";
@@ -37,6 +38,8 @@ import { now } from "../../lib/deps";
 import { forbidden, notFound } from "../../lib/errors";
 import { escapeLike } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
+import { contactViews } from "../after-event/contact-views";
+import { notesService } from "../after-event/notes";
 import { crewsForApplications, crewsForTriage, eventCrewFilters } from "../crews/application-info";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { pointsService } from "../points/service";
@@ -153,8 +156,17 @@ async function toTriage(
   event: EventRow,
   rows: ApplicationRow[],
   withContact: boolean,
+  viewerId: string,
 ): Promise<ApplicationForTriage[]> {
   if (!rows.length) return [];
+  // Lot 27 : après J+7, montrer des coordonnées est tracé (une entrée par fiche et par jour), avant de les rendre.
+  if (withContact) {
+    await contactViews.trace(
+      viewerId,
+      event,
+      rows.map((r) => r.id),
+    );
+  }
   const userIds = [...new Set(rows.map((r) => r.userId))];
   const vehicleRows = await vehiclesRepo.findFullByIds(rows.flatMap((r) => (r.vehicleId ? [r.vehicleId] : [])));
   const vehiclesById = new Map(vehicleRows.map((v) => [v.id, v]));
@@ -233,6 +245,10 @@ async function toTriage(
   const ranks = await waitlistRanks([event.id]);
   // Crew et autres candidatures confirmées du crew (lot 19).
   const crewOf = await crewsForTriage(event.id, rows);
+  // Notes internes de la structure (lot 27) : l'organisateur seulement, jamais le staff de filtration.
+  const notesOf = withContact
+    ? await notesService.forSubjects(db, event.structureId, userIds, viewerId)
+    : new Map<string, StructureNoteView[]>();
 
   return rows.map((r) => {
     const v = r.vehicleId ? vehiclesById.get(r.vehicleId) : undefined;
@@ -278,6 +294,7 @@ async function toTriage(
           refused: h.filter((x) => x.status === "refused").reduce((a, x) => a + x.n, 0),
           total: h.reduce((a, x) => a + x.n, 0),
         },
+        notes: notesOf.get(r.userId) ?? [],
       },
       filteringOpinions: (r.filteringOpinion ?? []).map((o) => ({ ...o, pseudo: authorPseudo.get(o.userId) ?? "" })),
       alerts,
@@ -332,7 +349,7 @@ export const applicationsQueries = {
     const event = await eventsRepo.byId(app.eventId);
     const access = await staffAccess(v, event.structureId, ["filtering"], event.id).catch(() => null);
     if (!access) throw notFound("Candidature introuvable");
-    const [card] = await toTriage(event, [app], access.actor !== "staff");
+    const [card] = await toTriage(event, [app], access.actor !== "staff", v.user.id);
     if (!card) throw notFound("Candidature introuvable");
     return card;
   },
@@ -399,6 +416,7 @@ export const applicationsQueries = {
       event,
       rows.slice(0, q.limit).map((r) => r.a),
       withContact,
+      v.user.id,
     );
     return { items, nextCursor: rows.length > q.limit ? encodeOffset(offset + q.limit) : null };
   },
@@ -412,7 +430,7 @@ export const applicationsQueries = {
       orderBy: [asc(applications.createdAt), asc(applications.id)],
     });
     if (!app) return null;
-    const [card] = await toTriage(event, [app], withContact);
+    const [card] = await toTriage(event, [app], withContact, v.user.id);
     return card ?? null;
   },
 
