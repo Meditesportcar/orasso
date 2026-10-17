@@ -33,6 +33,12 @@ export type EventReportData = {
   scans: { total: number; duplicates: number; overrides: number };
   /** Points de l'événement : doit coïncider avec les présents (contrôle de cohérence). */
   points: { participations: number; malus: number };
+  /**
+   * Lot 26 : bilan par jour d'un événement sur plusieurs jours (absent ou vide = un seul jour). Un jour compte ses
+   * candidatures et celles de tout l'événement ; présent ce jour-là = entrée de la candidature du jour, ou pour tout
+   * l'événement, entrée ou lecture du QR à cette date (une seule entrée par candidature, S29).
+   */
+  byDay?: { dayId: string; date: string; accepted: number; present: number; absent: number }[];
 };
 
 export type ThanksState = {

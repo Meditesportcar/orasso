@@ -195,12 +195,19 @@
   - **Contenu du rôle boutique appliqué tel que proposé (AS4)** : Damien confirme ou corrige après essai sur l'APK ; seule la tuile change.
   - Vérifié : voir l'entrée du lot 24 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-24-captures\`.
 
+- **Événements sur plusieurs jours (lot 26, 17/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 26) ; état technique : `ARCHITECTURE.md` « État après le lot 26 ».
+  - L'organisateur coche « Plusieurs jours » dans l'assistant (étape Format) : deux à quatorze jours, horaires de chacun, places d'un jour (facultatif), accès « Tout l'événement », « Par jour » ou « Au choix ». Les dates de l'événement deviennent les bornes. Un événement d'un jour reste exactement comme avant.
+  - Le passionné choisit tout l'événement ou un jour (page `/e/:slug` avec les jours et leurs places, candidature, invitation, inscription en crew) ; le même véhicule peut venir plusieurs jours. Capacité et liste d'attente par jour ; un seul verrouillage au premier jour (S28) ; rappel la veille de chaque jour ; règlement unique à la fin du dernier jour + 48 h.
+  - Jour J : la liste du staff porte le jour de chaque entrée ; un QR d'un autre jour est refusé « Inscrit pour un autre jour » (« Accepter quand même » possible), un « tout l'événement » déjà entré est « Déjà entré le … » ; filtre « Aujourd'hui ». Tri : colonne et filtre « Jour ». Direct, jour J du site et bilan : par jour.
+  - Migration `0038_multi-day` (aucune donnée réécrite). Seed : « Salon de printemps » sur trois jours.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
 
+- Lot 26 : déployer (migration `0038_multi-day` au démarrage, aucune variable nouvelle ; `pnpm db:seed` ajoute « Salon de printemps » à une base existante). Damien relit les « À revoir » du lot 26 (AS6 verrouillage au premier jour, malus d'une candidature d'un jour, places affichées = meilleur jour). À essayer sur téléphone : panneau « Inscrit pour un autre jour » au scan, filtre « Aujourd'hui », choix du jour à la candidature, sélecteur de jour du Direct.
 - Lot 23 : aucune migration ni variable ; à essayer sur téléphone (APK de la vague, aucune dépendance native nouvelle) : sensation du glissement, lisibilité en plein soleil (Sable), photos au toucher, poignée de la liste d'attente.
 - Lot 30 : déployer (migration `0036_home` au démarrage ; variables facultatives `OVERPASS_URL`, `FUEL_API_URL` (`off` les désactive) et `EXTERNAL_USER_AGENT` dans `deploy/dev.env.example` ; le VPS doit sortir en HTTPS vers overpass-api.de et data.economie.gouv.fr ; `pnpm db:seed` ajoute le garage favori de Kenji, deux emplacements sponsorisés et un cache factice). Aucun compte ni clé à créer. À essayer sur téléphone : curseur de rayon, appui long, « Utiliser ma position ».
 - Lot 27 : déployer (migration `0037_after-event` au démarrage ; aucune variable nouvelle ; `pnpm db:seed` ajoute le bilan, les notes et les deux structures à une base existante). Damien relit les « À revoir » du lot 27 (notes effacées avec le compte, export sans bannis ni prestataires, grâce de 30 jours après une levée). Lot 33 : le compteur « badges à renouveler » de l'accueil de `/admin` existe dans `GET /admin/structures?badge=expiring` (`counts`). À essayer sur téléphone : écran Bilan, lien d'avis `orasso://acces?avis=`.

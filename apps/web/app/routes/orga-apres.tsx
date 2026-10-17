@@ -4,6 +4,8 @@
 import { Button, Counters, TextField } from "@orasso/design-system/web";
 import {
   type EventOrganizer,
+  eventDaysLabels,
+  formatDayDate,
   type EventReportView,
   EXPORT_REASON_MIN,
   afterEventLabels as L,
@@ -123,6 +125,31 @@ export default function OrgaApres({ loaderData, actionData, params }: Route.Comp
                 ? L.reportFinal(formatDay(report.refreshedAt))
                 : L.reportProvisional(formatDay(view?.refreshAt ?? report.generatedAt))}
             </p>
+            {/* Lot 26 : bilan par jour d'un événement sur plusieurs jours. */}
+            {d.byDay && d.byDay.length > 1 && (
+              <div className="s-table-wrap" data-testid="ae-by-day">
+                <table className="s-table">
+                  <thead>
+                    <tr className="o-t-label">
+                      <th scope="col">{eventDaysLabels.day}</th>
+                      <th scope="col">{L.accepted}</th>
+                      <th scope="col">{L.present}</th>
+                      <th scope="col">{L.absent}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.byDay.map((day) => (
+                      <tr key={day.dayId}>
+                        <td>{formatDayDate(day.date)}</td>
+                        <td>{day.accepted}</td>
+                        <td>{day.present}</td>
+                        <td>{day.absent}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <div className="ae-lists">
               <Ranked title={L.byCategory} items={d.byCategory} />
               <Ranked title={L.byMake} items={d.byMake} />

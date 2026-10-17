@@ -319,5 +319,20 @@ describe("événement sur plusieurs jours (lot 26)", () => {
     expect(sum(D.u)).toBe(20);
     expect(sum(B.u)).toBe(-10);
     expect(pts.filter((p) => p.userId === A.u.id)).toHaveLength(1);
+
+    // Bilan par jour (lot 27 + lot 26) : jour 1 A et C présents ; jour 2 D et A (lu ce jour-là) ; jour 3 personne.
+    const report = (await call(damien, "GET", `/events/${eventId}/report`)).json;
+    expect(
+      report.report.data.byDay.map((d: { date: string; accepted: number; present: number; absent: number }) => [
+        d.date,
+        d.accepted,
+        d.present,
+        d.absent,
+      ]),
+    ).toEqual([
+      ["2027-03-14", 2, 2, 0],
+      ["2027-03-15", 2, 2, 0],
+      ["2027-03-16", 2, 0, 2],
+    ]);
   });
 });

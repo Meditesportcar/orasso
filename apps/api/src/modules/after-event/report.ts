@@ -114,7 +114,27 @@ export async function computeReport(ex: Executor, event: EventRow): Promise<Even
       from point_entries where event_id = ${eventId}`),
   );
 
+  // Lot 26 : par jour (événement sur plusieurs jours), retenus et présents de chaque jour.
+  const byDay = rowsOf<{ dayId: string; date: string; accepted: number; present: number }>(
+    await ex.execute(sql`
+      select d.id as "dayId", d.day_date::text as date,
+             count(a.id)::int as accepted,
+             (count(a.id) filter (where c.id is not null and (
+                a.event_day_id = d.id
+                or (c.checked_in_at at time zone ${event.timezone})::date = d.day_date
+                or exists (select 1 from scan_events s where s.application_id = a.id
+                             and s.server_result in ('accepted', 'duplicate_same_device', 'duplicate_other_device')
+                             and (s.scanned_at at time zone ${event.timezone})::date = d.day_date))))::int as present
+      from event_days d
+      left join applications a on a.event_id = d.event_id and a.kind = 'vehicle' and a.status = 'accepted'
+        and (a.event_day_id is null or a.event_day_id = d.id) and ${CONFIRMED}
+      left join checkins c on c.application_id = a.id
+      where d.event_id = ${eventId}
+      group by d.id, d.day_date order by d.day_date`),
+  );
+
   return {
+    byDay: byDay.length > 1 ? byDay.map((d) => ({ ...d, absent: Math.max(0, d.accepted - d.present) })) : [],
     registered: counts?.registered ?? 0,
     accepted: counts?.accepted ?? 0,
     present,
