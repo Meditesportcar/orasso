@@ -86,6 +86,21 @@ export type StoredDraft = {
   /** Événement déjà créé dont l'enregistrement des jours ou des zones a échoué : la suite passe en modification. */
   createdId: string | null;
   savedAt: string;
+  /**
+   * Affiche choisie (lot 34) : copie gardée dans le dossier de l'appli (ou adresse `data:` dans le navigateur), envoyée
+   * à l'enregistrement. Absente des brouillons d'avant le lot 34.
+   */
+  poster?: StoredPoster | null;
+};
+
+/** Même forme que `PickedPhoto` (lib/photos), sans dépendre du sélecteur d'images. */
+export type StoredPoster = { uri: string; width: number; height: number };
+
+const posterOf = (value: unknown): StoredPoster | null => {
+  const p = value as Partial<StoredPoster> | null | undefined;
+  return p && typeof p.uri === "string" && p.uri && typeof p.width === "number" && typeof p.height === "number"
+    ? { uri: p.uri, width: p.width, height: p.height }
+    : null;
 };
 
 export const serializeDraft = (value: Omit<StoredDraft, "v">) => JSON.stringify({ v: 1, ...value });
@@ -106,6 +121,7 @@ export function parseStoredDraft(raw: string | null): StoredDraft | null {
       step,
       createdId: typeof value.createdId === "string" ? value.createdId : null,
       savedAt: value.savedAt,
+      poster: posterOf(value.poster),
     };
   } catch {
     return null;

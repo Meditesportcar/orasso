@@ -260,10 +260,13 @@ describe("mode liste", () => {
     expect(q.yearTo).toBeUndefined();
     expect(q.categoryId).toBeUndefined();
     expect(listQuery({ ...emptyFilters, status: "" }, "provider").status).toBeUndefined();
+    expect(q.dayId).toBeUndefined();
+    expect(listQuery({ ...emptyFilters, dayId: "whole" }, "vehicle").dayId).toBe("whole");
   });
   it("compte les filtres posés (hors statut)", () => {
     expect(activeFilterCount(emptyFilters)).toBe(0);
     expect(activeFilterCount({ ...emptyFilters, grade: "sport", yearFrom: "1980" })).toBe(2);
+    expect(activeFilterCount({ ...emptyFilters, dayId: "whole" })).toBe(1);
   });
   it("sélection multiple", () => {
     expect(toggleId(["a"], "b")).toEqual(["a", "b"]);
