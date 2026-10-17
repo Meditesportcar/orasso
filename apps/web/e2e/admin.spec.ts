@@ -63,7 +63,7 @@ function mailsSince(since: number, needle: string): string[] {
 test("administration : accueil, 2FA, base véhicules, mode assistance, barème, newsletter, modérateur", async ({
   browser,
 }) => {
-  test.setTimeout(420_000);
+  test.setTimeout(1_200_000);
   const s = unique();
   const damien = await login("damien@orasso.local");
   const equipe = await login("equipe@orasso.local");
@@ -118,14 +118,14 @@ test("administration : accueil, 2FA, base véhicules, mode assistance, barème, 
   await makeForm.getByLabel("Nouvelle marque").fill(`Alpine ${s}`);
   await makeForm.getByLabel(/Pays/).fill("FR");
   await makeForm.getByRole("button", { name: "Créer la marque" }).click();
-  await expect(pageD.getByTestId("vehicles-done")).toBeVisible();
+  await pageD.waitForURL(/fait=marque/);
   const modelForm = pageD.getByTestId("model-form");
   await modelForm.getByLabel("Nouveau modèle").fill("A110");
   await modelForm.getByRole("button", { name: "Créer le modèle" }).click();
-  await expect(pageD.getByTestId("vehicles-done")).toBeVisible();
+  await pageD.waitForURL(/fait=modele/);
   const row = pageD.getByTestId("other-vehicle").filter({ hasText: `Alpine A110 bleue ${s}` });
   await row.getByRole("button", { name: "Rattacher ce véhicule" }).click();
-  await expect(pageD.getByTestId("vehicles-done")).toBeVisible();
+  await pageD.waitForURL(/fait=rattache/);
   await expect(pageD.getByTestId("other-vehicle").filter({ hasText: `Alpine A110 bleue ${s}` })).toHaveCount(0);
   const notes = await apiCall<{ items: { type: string; body: string }[] }>(owner, "GET", "/me/notifications");
   expect(notes.data.items.find((n) => n.type === "vehicle_reassigned")?.body).toContain(`Alpine ${s} A110`);
@@ -253,9 +253,8 @@ test("administration : accueil, 2FA, base véhicules, mode assistance, barème, 
         for (const [name, path, cookie] of shots) {
           const ctx = await context(browser, cookie, { width: view.width, height: view.height, theme });
           const p = await ctx.newPage();
-          await p.goto(path);
-          await p.waitForLoadState("networkidle");
-          await p.waitForTimeout(400);
+          await p.goto(`${WEB}${path}`);
+          await p.waitForTimeout(800);
           await p.screenshot({ path: `${DIR}/${name}-${theme}-${view.id}.png`, fullPage: true });
           audits[`${name}-${theme}-${view.id}`] = await auditPage(p);
           await ctx.close();

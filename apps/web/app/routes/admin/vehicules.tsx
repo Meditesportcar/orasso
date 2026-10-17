@@ -272,7 +272,10 @@ export default function AdminVehicles({ loaderData, actionData }: Route.Componen
                         <SelectField
                           label="Génération"
                           name="generationId"
-                          options={generations.map((x) => ({ value: x.id, label: x.name }))}
+                          options={[
+                            { value: "", label: "Sans génération précise" },
+                            ...generations.filter((x) => !x.isOther).map((x) => ({ value: x.id, label: x.name })),
+                          ]}
                         />
                         <Button type="submit" variant="secondary" icon="check" loading={busy}>
                           {adminTexts.reassign}
