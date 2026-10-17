@@ -34,7 +34,7 @@ async function shownOrder(page: Page): Promise<string[]> {
 test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisation persistée", async ({ page }) => {
   const cookie = await login("kenji@orasso.local");
   // Départ propre : rayon de 50 km et réglage par défaut.
-  await apiCall(cookie, "GET", "/me/home?radiusKm=50");
+  await apiCall(cookie, "PATCH", "/me/settings", { radiusKm: 50 });
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: [] });
 
   await loginInBrowser(page, "kenji@orasso.local", undefined, "/app");
@@ -112,7 +112,7 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   await expect(page.getByTestId("widget-wash")).toHaveCount(0);
   // Réglage remis à l'état d'origine pour la suite.
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: [] });
-  await apiCall(cookie, "GET", "/me/home?radiusKm=50");
+  await apiCall(cookie, "PATCH", "/me/settings", { radiusKm: 50 });
 });
 
 test("accueil : un compte d'un autre département ne voit pas l'emplacement ciblé 66", async () => {

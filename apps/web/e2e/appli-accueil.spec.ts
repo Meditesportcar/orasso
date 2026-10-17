@@ -36,7 +36,7 @@ test("appli : Accueil complet, réorganisation enregistrée", async ({ browser }
   mkdirSync(DIR, { recursive: true });
   const cookie = await login("kenji@orasso.local");
   await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: [] });
-  await apiCall(cookie, "GET", "/me/home?radiusKm=50");
+  await apiCall(cookie, "PATCH", "/me/settings", { radiusKm: 50 });
   const errors: string[] = [];
 
   for (const theme of ["sable", "beton"] as const) {
