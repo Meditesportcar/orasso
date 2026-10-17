@@ -23,6 +23,7 @@ import { seedGarage } from "./seed/garage";
 import { seedInvitations } from "./seed/invitations";
 import { seedMessaging } from "./seed/messaging";
 import { seedModeration } from "./seed/moderation";
+import { seedMultiDay } from "./seed/multi-day";
 import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
@@ -108,6 +109,8 @@ async function main() {
   await seedModeration(hash);
   // Lot 25 : événement privé « Soirée partenaires » et ses invitations ; hauts grades sur l'Expo Rivesaltes.
   await seedInvitations();
+  // Lot 26 : « Salon de printemps » sur trois jours (accès au choix, 100 places par jour), candidatures mixtes.
+  await seedMultiDay();
 }
 
 try {
