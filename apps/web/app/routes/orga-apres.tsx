@@ -1,6 +1,7 @@
 // Après l'événement, côté organisateur (lot 27, docs/01 « Organisateurs : après l'événement », docs/02) : bilan
 // automatique, remerciement aux présents (une seule fois, avec le lien d'avis de chacun), export des participants
 // (motif obligatoire, tracé) et édition suivante (duplication, puis invitation des retenus).
+
 import { Button, Counters, TextField } from "@orasso/design-system/web";
 import {
   type EventOrganizer,
@@ -15,10 +16,10 @@ import {
 } from "@orasso/shared";
 import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
-
 import { TextAreaField } from "../components/Fields";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { nowMs } from "../lib/clock";
 import { formatDateTime, formatDay, formatWhen } from "../lib/format";
 import type { Route } from "./+types/orga-apres";
 import "../styles/after-event.css";
@@ -104,7 +105,7 @@ export default function OrgaApres({ loaderData, actionData, params }: Route.Comp
         </h2>
         {!report || !d ? (
           <p className="s-muted" data-testid="ae-report-empty">
-            {Date.parse(event.endsAt) > Date.now() ? L.notEnded : L.notReady}
+            {Date.parse(event.endsAt) > nowMs() ? L.notEnded : L.notReady}
           </p>
         ) : (
           <>

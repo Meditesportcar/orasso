@@ -1,14 +1,15 @@
 // Inscription express sur place (docs/01 « Accueil sur place », docs/02 parcours n° 3) : le staff a saisi l'e-mail du
 // conducteur, qui ouvre ce lien reçu par e-mail. Un formulaire de deux minutes crée le compte, le véhicule (accepté
 // d'office pour l'événement en cours) et affiche le QR d'inscription dans le navigateur.
+
 import { Button, CheckboxField, Icon, Plate, SelectField, TextField } from "@orasso/design-system/web";
 import type { ExpressInvitePublic, VehicleFull, VehicleGeneration, VehicleMake, VehicleModel } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { data, Form, useNavigation } from "react-router";
-
 import { Qr } from "../components/Qr";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, cookieFrom, withCookies } from "../lib/api.server";
+import { nowMs } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
 import type { Route } from "./+types/express";
 
@@ -22,7 +23,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     invite,
     makes: makes.ok ? makes.data : [],
-    expired: new Date(invite.expiresAt).getTime() <= Date.now(),
+    expired: new Date(invite.expiresAt).getTime() <= nowMs(),
   };
 }
 

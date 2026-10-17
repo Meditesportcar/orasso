@@ -21,7 +21,6 @@ export const devClockLabels = {
   noEvent: "Aucun événement publié.",
   goTo: "Aller à ce jalon",
   reset: "Revenir à l'heure réelle",
-  resetConfirm: "Revenir à l'heure réelle ? Les points déjà réglés ne sont pas annulés.",
   advanced: "Horloge avancée.",
   resetDone: "Retour à l'heure réelle.",
   reached: "Atteint",

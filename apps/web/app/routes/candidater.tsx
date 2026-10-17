@@ -1,4 +1,4 @@
-﻿import { AppBar, Button, CheckboxField, Chip, ChipRow, VehicleThumb } from "@orasso/design-system/web";
+import { AppBar, Button, CheckboxField, Chip, ChipRow, VehicleThumb } from "@orasso/design-system/web";
 import {
   type ApplicationCreate,
   type EventPublic,
@@ -11,9 +11,9 @@ import {
 } from "@orasso/shared";
 import { useState } from "react";
 import { redirect, useNavigate } from "react-router";
-
 import { apiFetch } from "../lib/api.client";
 import { apiOrThrow, requireMe } from "../lib/api.server";
+import { nowMs } from "../lib/clock";
 import { registrationState } from "../lib/status";
 import type { Route } from "./+types/candidater";
 
@@ -61,7 +61,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     preselected,
     preselectedDay,
     takenDays: active.map((a) => a.eventDayId),
-    state: registrationState(event, Date.now()),
+    state: registrationState(event, nowMs()),
   };
 }
 

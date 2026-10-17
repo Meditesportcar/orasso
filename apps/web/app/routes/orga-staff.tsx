@@ -2,6 +2,7 @@
 // droit de trancher), invitations, demandes reçues, puis, pour chaque événement à venir, les rôles ajustés, les
 // présences, les relances et le lien vers la discussion du staff. Réservé au propriétaire et aux co-organisateurs
 // (le layout cache l'entrée au staff ; l'API le refuse de toute façon). Sable imposé (layout).
+
 import { Button, CheckboxField, Chip, Plate, SelectField, TextField } from "@orasso/design-system/web";
 import {
   type EventCard,
@@ -16,8 +17,8 @@ import {
   structureRoleLabels,
 } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
-
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { nowMs } from "../lib/clock";
 import { formatDateTime, formatWhen } from "../lib/format";
 import type { Route } from "./+types/orga-staff";
 import "../styles/staff.css";
@@ -43,7 +44,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     apiOrThrow<EventCard[]>(request, `/structures/${id}/events`),
   ]);
   // Événements publiés pas encore fermés (J+1) : leurs présences et leurs relances.
-  const open = events.filter((e) => e.status === "published" && Date.parse(e.endsAt) + 86_400_000 > Date.now());
+  const open = events.filter((e) => e.status === "published" && Date.parse(e.endsAt) + 86_400_000 > nowMs());
   const perEvent = await Promise.all(
     open.map(async (e) => {
       const staff = await api<EventStaffMember[]>(request, `/events/${e.id}/staff`);

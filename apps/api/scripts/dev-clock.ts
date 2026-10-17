@@ -14,8 +14,9 @@ import { clockMilestones, fromWallTime, parseDurationMs } from "@orasso/shared";
 import { pool } from "../src/db/client";
 import { env } from "../src/env";
 import { startJobs } from "../src/jobs";
-import { installDevClock, stopDevClockPolling } from "../src/lib/dev-clock";
+import { installDevClock, OFFSET_POLL_MS, stopDevClockPolling } from "../src/lib/dev-clock";
 import { devClockService } from "../src/modules/dev-clock/service";
+import { notificationsService } from "../src/modules/notifications/service";
 
 if (env.NODE_ENV === "production" || process.env.NODE_ENV === "production") {
   console.error("dev:clock est réservé au développement.");
@@ -58,6 +59,8 @@ try {
     console.log(JSON.stringify(await devClockService.status(), null, 2));
   } else if (command === "reset") {
     console.log(JSON.stringify(await devClockService.reset({ updatedBy: "script" }), null, 2));
+    // L'API en marche relit le décalage toutes les 2 s : on attend qu'elle soit revenue, elle aussi, à l'heure réelle.
+    await new Promise((resolve) => setTimeout(resolve, OFFSET_POLL_MS + 500));
   } else if (command === "to") {
     if (!a) usage();
     console.log(JSON.stringify(await devClockService.advance({ to: parseTarget(a as string) }, opts), null, 2));
@@ -75,6 +78,7 @@ try {
   code = 1;
 } finally {
   stopDevClockPolling();
+  await notificationsService.flush();
   await boss.stop();
   await pool.end();
 }
