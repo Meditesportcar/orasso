@@ -33,7 +33,12 @@ type EventInfo = {
   /** Lot 26 : jours d'un événement sur plusieurs jours (organisateur). */
   days: { id: string; date: string }[];
 };
-type PlateOutcome = { matched: (CheckinResult & { plate: string })[]; unmatched: string[] };
+type PlateOutcome = {
+  matched: (CheckinResult & { plate: string })[];
+  unmatched: string[];
+  /** Lot 26 : plaque retenue plusieurs fois pour aujourd'hui (jour et tout l'événement) : rien de pointé. */
+  ambiguous?: string[];
+};
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const eventId = params.eventId;
@@ -150,10 +155,12 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
     timer.current = setTimeout(() => void refetch(), 400);
   });
 
-  const arrived = items.filter((i) => i.checkedInAt).length;
+  // Lot 26 : liste d'un jour : « arrivé » ce jour-là (même règle que le direct) ; sinon, entrée enregistrée.
+  const isIn = (i: CheckinListItem) => i.arrivedOnDay ?? Boolean(i.checkedInAt);
+  const arrived = items.filter(isIn).length;
   const shown = items.filter((i) => {
-    if (filter === "arrived" && !i.checkedInAt) return false;
-    if (filter === "expected" && i.checkedInAt) return false;
+    if (filter === "arrived" && !isIn(i)) return false;
+    if (filter === "expected" && isIn(i)) return false;
     const q = search.trim().toLowerCase();
     return !q || i.pseudo.toLowerCase().includes(q) || (i.vehicleLabel ?? "").toLowerCase().includes(q);
   });
@@ -417,6 +424,11 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
                 {p} : aucune plaque retenue ne correspond.
               </div>
             ))}
+            {(outcome.ambiguous ?? []).map((p) => (
+              <div key={p} className="s-error" data-testid="plate-ambiguous">
+                {p} : plusieurs inscriptions aujourd'hui, pointe depuis la liste.
+              </div>
+            ))}
           </div>
         )}
       </section>
@@ -465,11 +477,7 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
             </thead>
             <tbody>
               {shown.map((item) => (
-                <tr
-                  key={item.applicationId}
-                  data-testid="participant-row"
-                  data-arrived={item.checkedInAt ? "yes" : "no"}
-                >
+                <tr key={item.applicationId} data-testid="participant-row" data-arrived={isIn(item) ? "yes" : "no"}>
                   <td>
                     {item.pseudo}
                     {event.days.length > 1 && (

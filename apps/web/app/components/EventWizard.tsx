@@ -344,6 +344,9 @@ type Props = {
 };
 
 export function EventWizard({ structureId, structureSlug, verified, categories, makes, event }: Props) {
+  // Lot 26 : un événement créé dont l'enregistrement des jours a échoué passe en modification (pas de second POST).
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const targetId = event?.id ?? createdId;
   const editing = Boolean(event);
   const [d, setD] = useState<Draft>(() => initial(event));
   const [index, setIndex] = useState(0);
@@ -408,15 +411,17 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
     const wasMultiDay = (event?.days.length ?? 0) > 1;
     // Lot 26 : retour à un seul jour d'un événement qui en avait plusieurs : les jours d'abord (les dates suivent).
     if (editing && wasMultiDay && !d.multiDay) {
-      const back = await apiFetch(`/events/${event?.id}/days`, { method: "PUT", json: daysPayloadOf(d) });
+      const back = await apiFetch(`/events/${targetId}/days`, { method: "PUT", json: daysPayloadOf(d) });
       if (!back.ok) {
         setBusy(false);
         return setError(back.error.message);
       }
     }
-    const body = payloadOf(d, editing && wasMultiDay && d.multiDay);
-    const res = editing
-      ? await apiFetch<EventOrganizer>(`/events/${event?.id}`, { method: "PATCH", json: body })
+    // Plusieurs jours, événement existant : pas de dates dans le PATCH (les jours fixent les bornes, et une seule
+    // notification « Événement modifié » part, celle des jours).
+    const body = payloadOf(d, Boolean(targetId) && d.multiDay);
+    const res = targetId
+      ? await apiFetch<EventOrganizer>(`/events/${targetId}`, { method: "PATCH", json: body })
       : await apiFetch<EventOrganizer>(`/structures/${structureId}/events`, { method: "POST", json: body });
     if (!res.ok) {
       setBusy(false);
@@ -428,6 +433,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
     if (d.multiDay) {
       const days = await apiFetch(`/events/${saved.id}/days`, { method: "PUT", json: daysPayloadOf(d) });
       if (!days.ok) {
+        if (!event) setCreatedId(saved.id);
         setBusy(false);
         setIndex(0);
         return setError(days.error.message);

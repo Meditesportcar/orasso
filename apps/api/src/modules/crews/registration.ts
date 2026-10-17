@@ -280,7 +280,7 @@ export const crewRegistrationService = {
             (member.p.suspendedUntil && member.p.suspendedUntil > t) ||
             banned.has(m.userId) ||
             x.pendingTransferId ||
-            (counts.get(m.userId)?.size ?? 0) + (dayId && counts.get(m.userId)?.has(m.vehicleId) ? 0 : 1) >
+            (counts.get(m.userId)?.size ?? 0) + (counts.get(m.userId)?.has(m.vehicleId) ? 0 : 1) >
               event.maxVehiclesPerUser
           ) {
             throw conflict("conflict", crewErrors.memberUnavailable(pseudo), { userId: m.userId });

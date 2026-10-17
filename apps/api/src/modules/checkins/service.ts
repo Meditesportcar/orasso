@@ -4,6 +4,8 @@ import {
   type CheckinListItem,
   type CheckinMethod,
   type CheckinResult,
+  dayFor,
+  isMultiDay,
   type LiveCounters,
   localDate,
   MINUTE,
@@ -397,6 +399,31 @@ async function listItems(eventId: string, where: SQL | undefined, limit = 1000):
   });
 }
 
+/**
+ * Lot 26 : candidatures « tout l'événement » lues ce jour-là (lecture acceptée ou doublon, date locale de l'événement).
+ * Avec l'entrée datée de ce jour, c'est la règle d'un « arrivé » d'un jour (direct, liste du jour J, bilan).
+ */
+async function seenOnDay(
+  eventId: string,
+  appIds: string[],
+  dayDate: string,
+  timezone: string,
+): Promise<Set<string | null>> {
+  if (!appIds.length) return new Set();
+  const rows = await db
+    .selectDistinct({ appId: scanEvents.applicationId })
+    .from(scanEvents)
+    .where(
+      and(
+        eq(scanEvents.eventId, eventId),
+        inArray(scanEvents.applicationId, appIds),
+        inArray(scanEvents.serverResult, ["accepted", "duplicate_same_device", "duplicate_other_device"]),
+        sql`(${scanEvents.scannedAt} at time zone ${timezone})::date = ${dayDate}::date`,
+      ),
+    );
+  return new Set(rows.map((r) => r.appId));
+}
+
 /** Jour d'un autre événement (IDOR) ou inconnu : introuvable (lot 26). */
 async function assertEventDay(eventId: string, dayId: string | undefined) {
   if (!dayId) return;
@@ -529,9 +556,14 @@ export const checkinsService = {
       const n = normalizePlate(p);
       if (n.length >= 2 && !wanted.has(n)) wanted.set(n, p);
     }
-    const rows = wanted.size
+    const all = wanted.size
       ? await db
-          .select({ appId: applications.id, zoneId: applications.zoneId, plate: vehicles.plateNormalized })
+          .select({
+            appId: applications.id,
+            zoneId: applications.zoneId,
+            plate: vehicles.plateNormalized,
+            eventDayId: applications.eventDayId,
+          })
           .from(applications)
           .innerJoin(vehicles, eq(vehicles.id, applications.vehicleId))
           .innerJoin(accessPasses, and(eq(accessPasses.applicationId, applications.id), isNull(accessPasses.revokedAt)))
@@ -543,6 +575,19 @@ export const checkinsService = {
             ),
           )
       : [];
+    // Plusieurs jours (lot 26) : seulement tout l'événement ou le jour même (Paris) ; une plaque qui garde plusieurs
+    // candidatures (jour et tout l'événement, ou hors des jours) est renvoyée ambiguë, rien n'est pointé.
+    const days = await daysRepo.list(eventId);
+    let rows = all;
+    const ambiguous: string[] = [];
+    if (isMultiDay(days)) {
+      const today = dayFor(days, now(), event.timezone);
+      const kept = all.filter((r) => r.eventDayId === null || r.eventDayId === today?.id);
+      const perPlate = new Map<string | null, number>();
+      for (const r of kept) perPlate.set(r.plate, (perPlate.get(r.plate) ?? 0) + 1);
+      rows = kept.filter((r) => perPlate.get(r.plate) === 1);
+      for (const [plate, n] of perPlate) if (n > 1 && plate) ambiguous.push(wanted.get(plate) ?? plate);
+    }
     const createdIds = new Set<string>();
     await withTx(async (tx, after) => {
       await lockEventCheckins(tx, eventId);
@@ -577,8 +622,13 @@ export const checkinsService = {
         ? [{ plate: wanted.get(r.plate ?? "") ?? r.plate ?? "", ...item, created: createdIds.has(r.appId) }]
         : [];
     });
-    const found = new Set(rows.map((r) => r.plate));
-    return { matched, unmatched: [...wanted.entries()].filter(([n]) => !found.has(n)).map(([, raw]) => raw) };
+    // Une plaque connue mais attendue un autre jour seulement n'est pas « inconnue » : elle n'est ni pointée ni listée.
+    const found = new Set(all.map((r) => r.plate));
+    return {
+      matched,
+      unmatched: [...wanted.entries()].filter(([n]) => !found.has(n)).map(([, raw]) => raw),
+      ambiguous,
+    };
   },
 
   /** Liste des retenus et de leur entrée (« Tous / Arrivés / Attendus », filtre « Sans scan » par méthode). */
@@ -597,7 +647,23 @@ export const checkinsService = {
       const l = `%${escapeLike(q.q)}%`;
       filters.push(or(ilike(profiles.pseudo, l), ilike(vehicleMakes.name, l), ilike(vehicleModels.name, l)));
     }
-    return listItems(eventId, and(...filters));
+    const items = await listItems(eventId, and(...filters));
+    if (!q.dayId) return items;
+    // Lot 26 : « arrivé » ce jour-là, même règle que le direct : candidature du jour entrée, ou tout l'événement entré ou
+    // lu ce jour-là (l'entrée garde le premier passage).
+    const day = (await daysRepo.list(eventId)).find((d) => d.id === q.dayId);
+    if (!day) return items;
+    const whole = items.filter((i) => !i.dayDate && i.checkedInAt).map((i) => i.applicationId);
+    const seen = await seenOnDay(eventId, whole, day.dayDate, event.timezone);
+    return items.map((i) => ({
+      ...i,
+      arrivedOnDay: Boolean(
+        i.checkedInAt &&
+          (i.dayDate ||
+            localDate(new Date(i.checkedInAt), event.timezone) === day.dayDate ||
+            seen.has(i.applicationId)),
+      ),
+    }));
   },
 
   /** Recherche en ligne par plaque (début de plaque normalisée) ou pseudo ; la plaque n'est jamais renvoyée. */
@@ -757,23 +823,7 @@ export const checkinsService = {
       );
     if (day) {
       const whole = rows.filter((r) => r.eventDayId === null && r.at).map((r) => r.appId);
-      const seenThatDay = whole.length
-        ? new Set(
-            (
-              await db
-                .selectDistinct({ appId: scanEvents.applicationId })
-                .from(scanEvents)
-                .where(
-                  and(
-                    eq(scanEvents.eventId, eventId),
-                    inArray(scanEvents.applicationId, whole),
-                    inArray(scanEvents.serverResult, ["accepted", "duplicate_same_device", "duplicate_other_device"]),
-                    sql`(${scanEvents.scannedAt} at time zone ${event.timezone})::date = ${day.dayDate}::date`,
-                  ),
-                )
-            ).map((s) => s.appId),
-          )
-        : new Set<string | null>();
+      const seenThatDay = await seenOnDay(eventId, whole, day.dayDate, event.timezone);
       rows = rows.map((r) =>
         r.eventDayId === null && r.at && localDate(r.at, event.timezone) !== day.dayDate && !seenThatDay.has(r.appId)
           ? { ...r, at: null }

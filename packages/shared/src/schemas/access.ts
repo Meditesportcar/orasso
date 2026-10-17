@@ -132,6 +132,11 @@ export type AccessListEntry = {
    * Lu le jour J par `decideScan` (règle « Autre jour »).
    */
   dayDate: string | null;
+  /**
+   * Lot 26 : événement sur plusieurs jours, dernière lecture du QR reçue par le serveur (acceptée ou doublon) : un
+   * « tout l'événement » est « arrivé » un jour si son entrée ou une lecture date de ce jour. Absent sur un jour.
+   */
+  lastSeenAt?: string | null;
   /** Coordonnées : super staff et organisateur seulement. */
   contact?: { firstName: string | null; lastName: string | null; phone: string | null; email: string };
   updatedAt: string;
@@ -255,6 +260,11 @@ export type CheckinListItem = {
   note: string | null;
   /** Lot 26 : jour de la candidature (`AAAA-MM-JJ`) ; `null` = tout l'événement ou événement d'un jour. */
   dayDate?: string | null;
+  /**
+   * Lot 26 : liste d'un jour (`?dayId=`) seulement : arrivé ce jour-là (candidature du jour entrée ; tout l'événement
+   * entré ou lu ce jour-là). Même règle que le direct.
+   */
+  arrivedOnDay?: boolean;
 };
 
 export type CheckinResult = CheckinListItem & { created: boolean };

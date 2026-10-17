@@ -35,6 +35,7 @@ import {
   events,
   eventZones,
   profiles,
+  scanEvents,
   structureMembers,
   structures,
   user,
@@ -447,6 +448,21 @@ async function accessEntries(
   const providers = await loadProviders(
     rows.flatMap((r) => (r.app.providerProfileId ? [r.app.providerProfileId] : [])),
   );
+  // Lot 26 : plusieurs jours, dernière lecture reçue par candidature (arrivés du jour d'un « tout l'événement »).
+  const lastSeen = new Map<string, Date>();
+  if (dayDates.size) {
+    const seen = await db
+      .select({ appId: scanEvents.applicationId, at: sql<Date>`max(${scanEvents.scannedAt})` })
+      .from(scanEvents)
+      .where(
+        and(
+          eq(scanEvents.eventId, event.id),
+          inArray(scanEvents.serverResult, ["accepted", "duplicate_same_device", "duplicate_other_device"]),
+        ),
+      )
+      .groupBy(scanEvents.applicationId);
+    for (const r of seen) if (r.appId && r.at) lastSeen.set(r.appId, new Date(r.at));
+  }
   const zoneIds = [...new Set(rows.flatMap((r) => (r.app.zoneId ? [r.app.zoneId] : [])))];
   const zones = new Map(
     (zoneIds.length ? await db.query.eventZones.findMany({ where: inArray(eventZones.id, zoneIds) }) : []).map((z) => [
@@ -459,7 +475,13 @@ async function accessEntries(
     const zone = app.zoneId ? zones.get(app.zoneId) : undefined;
     const plate = v?.plateNormalized && !v.unregistered ? v.plateNormalized : null;
     const valid = !pass.revokedAt;
-    const updatedAt = Math.max(pass.updatedAt.getTime(), app.updatedAt.getTime(), checkin?.updatedAt.getTime() ?? 0);
+    const seenAt = lastSeen.get(app.id) ?? null;
+    const updatedAt = Math.max(
+      pass.updatedAt.getTime(),
+      app.updatedAt.getTime(),
+      checkin?.updatedAt.getTime() ?? 0,
+      seenAt?.getTime() ?? 0,
+    );
     if (!valid) {
       // Pass révoqué : juste de quoi refuser le QR au scan (« Désisté », « Non admis »…), rien de plus en cache.
       return {
@@ -507,6 +529,7 @@ async function accessEntries(
       checkinMethod: checkin ? (checkin.method as CheckinMethod) : null,
       // Lot 26 : jour de la candidature (`null` = tout l'événement), lu au scan (« Autre jour »).
       dayDate: app.eventDayId ? (dayDates.get(app.eventDayId) ?? null) : null,
+      ...(dayDates.size ? { lastSeenAt: seenAt?.toISOString() ?? null } : {}),
       updatedAt: new Date(updatedAt).toISOString(),
     };
     if (organizer) entry.plate = v?.plate ?? null;

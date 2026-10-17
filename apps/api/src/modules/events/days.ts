@@ -12,7 +12,7 @@ import {
   freePlaces,
   isMultiDay,
 } from "@orasso/shared";
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray, ne } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { applications, eventDays } from "../../db/schema";
@@ -176,6 +176,8 @@ export const daysRepo = {
     vehicleIds: string[],
     dayId: string | null,
     message = "Ce véhicule a déjà une candidature pour cet événement",
+    /** Candidature à ne pas compter (celle qu'on repêche d'un refus). */
+    excludeId?: string,
   ): Promise<void> {
     if (!vehicleIds.length) return;
     const existing = await ex
@@ -186,6 +188,7 @@ export const daysRepo = {
           eq(applications.eventId, eventId),
           inArray(applications.vehicleId, vehicleIds),
           inArray(applications.status, ACTIVE),
+          excludeId ? ne(applications.id, excludeId) : undefined,
         ),
       );
     const clash = existing.some((a) => a.eventDayId === null || dayId === null || a.eventDayId === dayId);

@@ -9,7 +9,7 @@ import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { db, pool } from "../src/db/client";
-import { devices, notifications, pointEntries } from "../src/db/schema";
+import { checkins, devices, notifications, pointEntries } from "../src/db/schema";
 import { ed25519Verify } from "../src/lib/signing";
 import { applicationsService } from "../src/modules/applications/service";
 import { eventJobs } from "../src/modules/events/jobs";
@@ -334,5 +334,78 @@ describe("événement sur plusieurs jours (lot 26)", () => {
       ["2027-03-15", 2, 2, 0],
       ["2027-03-16", 2, 0, 2],
     ]);
+  });
+
+  it("pointage par plaque du jour seulement ; désistement après une entrée : la participation reste", async () => {
+    clock.set(paris(4, 1, 10));
+    const damien = await signUp("Damien_P", { twoFactor: true });
+    const structure = await createStructure(damien.id);
+    const created = await call(damien, "POST", `/structures/${structure.id}/events`, {
+      title: "Salon des plaques",
+      format: "show",
+      startsAt: paris(4, 10, 9).toISOString(),
+      endsAt: paris(4, 10, 18).toISOString(),
+      admittedVehicleTypes: ["car"],
+      capacity: null,
+      admission: "filtered",
+      registrationsOpenAt: paris(4, 1, 9).toISOString(),
+    });
+    const eventId: string = created.json.id;
+    const put = await call(damien, "PUT", `/events/${eventId}/days`, {
+      dayAccess: "both",
+      days: ["2027-04-10", "2027-04-11", "2027-04-12"].map((date) => ({ date, startTime: "09:00", endTime: "18:00" })),
+    });
+    const [, d2, d3] = put.json.days as { id: string }[];
+    expect((await call(damien, "POST", `/events/${eventId}/publish`)).status).toBe(200);
+    const accept = async (u: TestUser, vehicleId: string, eventDayId: string | null) => {
+      const r = await call(u, "POST", `/events/${eventId}/applications`, {
+        vehicleIds: [vehicleId],
+        rulesAccepted: true,
+        ...(eventDayId ? { eventDayId } : {}),
+      });
+      expect(r.status).toBe(201);
+      const id: string = r.json[0].id;
+      expect(
+        (await call(damien, "POST", `/events/${eventId}/applications/${id}/decide`, { decision: "accept" })).json
+          .status,
+      ).toBe("accepted");
+      return id;
+    };
+    // Nina : jour 2 et jour 3 avec la même voiture ; Willy : tout l'événement.
+    const nina = await signUp("Nina_P");
+    const ninaCar = await createVehicle(nina.id, ref);
+    const n2 = await accept(nina, ninaCar.id, d2!.id);
+    const n3 = await accept(nina, ninaCar.id, d3!.id);
+    const willy = await signUp("Willy_P");
+    const willyCar = await createVehicle(willy.id, ref);
+    const w = await accept(willy, willyCar.id, null);
+
+    // Jour 1 : Willy pointé par sa plaque. La plaque de Nina n'est attendue ni ce jour-là : rien de pointé.
+    clock.set(paris(4, 10, 10));
+    const day1 = await call(damien, "POST", `/events/${eventId}/checkins/by-plates`, {
+      plates: [willyCar.plate, ninaCar.plate],
+    });
+    expect(day1.status).toBe(200);
+    expect(day1.json.matched.map((m: { applicationId: string }) => m.applicationId)).toEqual([w]);
+    expect(day1.json.unmatched).toEqual([]);
+    // Jour 2 : la plaque de Nina pointe sa candidature du jour 2, pas celle du jour 3.
+    clock.set(paris(4, 11, 10));
+    const day2 = await call(damien, "POST", `/events/${eventId}/checkins/by-plates`, { plates: [ninaCar.plate] });
+    expect(day2.json.matched.map((m: { applicationId: string }) => m.applicationId)).toEqual([n2]);
+    const entries = await db.query.checkins.findMany({ where: eq(checkins.eventId, eventId) });
+    expect(entries.map((c) => c.applicationId).sort()).toEqual([n2, w].sort());
+    expect(entries.some((c) => c.applicationId === n3)).toBe(false);
+
+    // Willy, entré le jour 1, se désiste le jour 2 (après le verrouillage) : la place des jours suivants se libère,
+    // et le règlement lui donne sa participation, pas de malus.
+    const withdrawn = await call(willy, "POST", `/applications/${w}/withdraw`);
+    expect(withdrawn.json.status).toBe("withdrawn");
+    clock.set(paris(4, 14, 18, 1));
+    expect(await pointsService.settleEvent(eventId)).toBe(true);
+    const pts = await db.query.pointEntries.findMany({ where: eq(pointEntries.eventId, eventId) });
+    const of = (appId: string) => pts.filter((p) => p.applicationId === appId).map((p) => p.kind);
+    expect(of(w)).toEqual(["participation"]);
+    expect(of(n2)).toEqual(["participation"]);
+    expect(of(n3)).toEqual(["malus"]);
   });
 });

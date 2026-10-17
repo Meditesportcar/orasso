@@ -239,6 +239,28 @@ describe("modes d'accès", () => {
     expect((await apply(l, event.id)).status).toBe(201);
   });
 
+  it("repêchage d'un refus : jamais tout l'événement et un jour actifs à la fois pour le même véhicule", async () => {
+    const { owner, event } = await setup({ capacity: null });
+    const days = await setDays(owner, event.id, "both");
+    const k = await candidate("Kenji");
+    const whole = await apply(k, event.id, null);
+    const refused = await req(owner, "POST", `/events/${event.id}/applications/${whole.json[0].id}/decide`, {
+      decision: "refuse",
+      reasons: ["off_theme"],
+    });
+    expect(refused.json.status).toBe("refused");
+    // Le véhicule recandidate pour le jour 1, puis l'organisateur veut repêcher la candidature « tout l'événement ».
+    expect((await apply(k, event.id, days[0]?.id)).status).toBe(201);
+    const back = await req(owner, "POST", `/events/${event.id}/applications/${whole.json[0].id}/decide`, {
+      decision: "accept",
+    });
+    expect(back.status).toBe(409);
+    const active = await db.query.applications.findMany({
+      where: and(eq(applications.eventId, event.id), eq(applications.vehicleId, k.v.id)),
+    });
+    expect(active.filter((a) => a.status !== "refused")).toHaveLength(1);
+  });
+
   it("limite de véhicules : un même véhicule sur deux jours compte une fois", async () => {
     const { owner, event } = await setup({ capacity: null, maxVehiclesPerUser: 1 });
     const days = await setDays(owner, event.id, "per_day");

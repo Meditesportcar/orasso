@@ -391,6 +391,18 @@ async function decideInTx(
   if (app.status === "refused" && isLocked(event, t)) {
     throw lockedError("Inscriptions verrouillées : un refus ne se corrige plus");
   }
+  // Repêchage d'un refus (lot 26) : le véhicule a pu recandidater entre-temps (un autre jour, ou tout l'événement) ;
+  // jamais deux candidatures actives incompatibles. Sous le verrou de l'événement.
+  if (app.status === "refused" && app.vehicleId) {
+    await daysRepo.assertVehiclesFree(
+      tx,
+      eventId,
+      [app.vehicleId],
+      app.eventDayId,
+      "Ce véhicule a déjà une autre candidature active pour cet événement",
+      app.id,
+    );
+  }
   if (input.zoneId) {
     const zone = await tx.query.eventZones.findFirst({ where: eq(eventZones.id, input.zoneId) });
     if (zone?.eventId !== eventId) throw validation("Zone inconnue pour cet événement");
@@ -507,11 +519,8 @@ export const applicationsService = {
               inArray(applications.status, [...ACTIVE]),
             ),
           );
-        // Plusieurs jours (lot 26) : la limite compte des véhicules, un véhicule inscrit un autre jour ne compte qu'une
-        // fois. Événement d'un jour (ou tout l'événement) : une candidature par véhicule, comme avant.
-        const counted = dayId
-          ? new Set([...mine.flatMap((a) => (a.vehicleId ? [a.vehicleId] : [])), ...ids]).size
-          : mine.length + ids.length;
+        // La limite compte des véhicules (lot 26) : un véhicule inscrit un autre jour, ou déjà candidat, ne compte qu'une fois.
+        const counted = new Set([...mine.flatMap((a) => (a.vehicleId ? [a.vehicleId] : [])), ...ids]).size;
         if (counted > event.maxVehiclesPerUser) {
           throw conflict("conflict", `Limite : ${event.maxVehiclesPerUser} véhicule(s) par personne`, {
             max: event.maxVehiclesPerUser,
@@ -879,10 +888,8 @@ export const applicationsService = {
           inArray(applications.status, [...ACTIVE]),
         ),
       );
-    // Plusieurs jours (lot 26) : un véhicule inscrit un autre jour ne compte qu'une fois.
-    const counted = dayId
-      ? new Set([...mine.flatMap((a) => (a.vehicleId ? [a.vehicleId] : [])), input.vehicleId]).size
-      : mine.length + 1;
+    // La limite compte des véhicules (lot 26) : un véhicule inscrit un autre jour ne compte qu'une fois.
+    const counted = new Set([...mine.flatMap((a) => (a.vehicleId ? [a.vehicleId] : [])), input.vehicleId]).size;
     if (counted > event.maxVehiclesPerUser) {
       throw conflict("conflict", `Limite : ${event.maxVehiclesPerUser} véhicule(s) par personne`, {
         max: event.maxVehiclesPerUser,
