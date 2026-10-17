@@ -33,18 +33,22 @@ export function PersonaTabs({
   tabs,
   routes,
   initialRouteName,
+  backBehavior,
   children,
 }: {
   tabs: readonly TabItem[];
   /** Nom de la route → identifiant d'onglet. */
   routes: Record<string, string>;
   initialRouteName: string;
+  /** Retour arrière (lot 35d : « history » pour que ✕ ramène à l'écran d'où l'on vient). Par défaut, celui d'Expo Router. */
+  backBehavior?: ComponentProps<typeof Tabs>["backBehavior"];
   /** Les `<Tabs.Screen name="…" />`, dans l'ordre de la barre. */
   children: ReactNode;
 }) {
   return (
     <Tabs
       initialRouteName={initialRouteName}
+      backBehavior={backBehavior}
       screenOptions={{ headerShown: false, animation: "none" }}
       tabBar={(props) => <PersonaTabBar {...props} tabs={tabs} routes={routes} />}
     >

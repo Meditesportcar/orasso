@@ -2,30 +2,42 @@
 // Une casquette = un groupe de routes Expo Router et une barre d'onglets (`tabSets`). Le passionné est toujours là.
 import type { PersonaEntry, PersonaKind } from "@orasso/shared";
 
+/**
+ * Casquettes de l'appli : celles de `GET /me` → `personas` (passionné, organisateur, pro, prestataire) et, lot 35d,
+ * l'Administration (modérateur et super admin), que l'appli ajoute elle-même d'après le rôle du compte.
+ */
+export type AppPersonaKind = PersonaKind | "admin";
+
+/** Une ligne de casquette de l'appli. `assisted` : structure survolée en mode assistance (super admin, lot 35d), jamais renvoyée par l'API. */
+export type AppPersonaEntry = Omit<PersonaEntry, "kind"> & { kind: AppPersonaKind; assisted?: boolean };
+
 export type Persona =
   | { kind: "fan" }
   | { kind: "organizer"; structureId: string }
   | { kind: "pro"; proProfileId: string }
-  | { kind: "provider" };
+  | { kind: "provider" }
+  | { kind: "admin" };
 
 export const FAN: Persona = { kind: "fan" };
 
 /** Le passionné seul : ce qu'on suppose tant que l'API n'a pas répondu (ou avec un profil mis en cache avant le lot 16). */
-export const FAN_ENTRY: PersonaEntry = { kind: "fan", id: "fan", label: "Passionné", logoUrl: null, badge: 0 };
+export const FAN_ENTRY: AppPersonaEntry = { kind: "fan", id: "fan", label: "Passionné", logoUrl: null, badge: 0 };
 
-export const personaKindLabels: Record<PersonaKind, string> = {
+export const personaKindLabels: Record<AppPersonaKind, string> = {
   fan: "Passionné",
   organizer: "Organisateur",
   pro: "Professionnel",
   provider: "Prestataire",
+  admin: "Administration",
 };
 
 /** Groupe de routes Expo Router de chaque casquette (`app/<groupe>/`). */
-export const personaGroups: Record<PersonaKind, string> = {
+export const personaGroups: Record<AppPersonaKind, string> = {
   fan: "(tabs)",
   organizer: "(orga)",
   pro: "(pro)",
   provider: "(provider)",
+  admin: "(admin)",
 };
 
 /** Premier écran de chaque casquette (l'onglet par défaut de sa barre). */
@@ -34,14 +46,15 @@ export const personaHomes = {
   organizer: "/(orga)/direct",
   pro: "/(pro)/scanner",
   provider: "/(provider)/candidatures",
-} as const satisfies Record<PersonaKind, string>;
+  admin: "/(admin)/accueil",
+} as const satisfies Record<AppPersonaKind, string>;
 
-export function homeOf(persona: Persona): (typeof personaHomes)[PersonaKind] {
+export function homeOf(persona: Persona): (typeof personaHomes)[AppPersonaKind] {
   return personaHomes[persona.kind];
 }
 
 /** Casquette correspondant à une ligne de `GET /me` → `personas`. */
-export function personaOfEntry(entry: PersonaEntry): Persona {
+export function personaOfEntry(entry: AppPersonaEntry): Persona {
   switch (entry.kind) {
     case "organizer":
       return { kind: "organizer", structureId: entry.id };
@@ -49,13 +62,15 @@ export function personaOfEntry(entry: PersonaEntry): Persona {
       return { kind: "pro", proProfileId: entry.id };
     case "provider":
       return { kind: "provider" };
+    case "admin":
+      return { kind: "admin" };
     default:
       return FAN;
   }
 }
 
 /** La ligne de `personas` que désigne cette casquette, `undefined` si elle n'existe plus. */
-export function entryOfPersona(persona: Persona, entries: readonly PersonaEntry[]): PersonaEntry | undefined {
+export function entryOfPersona(persona: Persona, entries: readonly AppPersonaEntry[]): AppPersonaEntry | undefined {
   return entries.find((entry) => {
     if (entry.kind !== persona.kind) return false;
     if (persona.kind === "organizer") return entry.id === persona.structureId;
@@ -65,25 +80,25 @@ export function entryOfPersona(persona: Persona, entries: readonly PersonaEntry[
 }
 
 /** Casquette à utiliser : la mémorisée si elle existe encore dans les casquettes du compte, sinon le passionné. */
-export function resolvePersona(stored: Persona | null, entries: readonly PersonaEntry[]): Persona {
+export function resolvePersona(stored: Persona | null, entries: readonly AppPersonaEntry[]): Persona {
   if (!stored || stored.kind === "fan") return FAN;
   return entryOfPersona(stored, entries) ? stored : FAN;
 }
 
 /** La casquette active est-elle cette ligne ? */
-export function isActive(persona: Persona, entry: PersonaEntry): boolean {
+export function isActive(persona: Persona, entry: AppPersonaEntry): boolean {
   const found = entryOfPersona(persona, [entry]);
   return found !== undefined;
 }
 
 /** Total des pastilles « à traiter » des **autres** casquettes (celle qui est active ne compte pas). */
-export function otherBadges(persona: Persona, entries: readonly PersonaEntry[]): number {
+export function otherBadges(persona: Persona, entries: readonly AppPersonaEntry[]): number {
   return entries.reduce((sum, entry) => sum + (isActive(persona, entry) ? 0 : entry.badge), 0);
 }
 
 /** Groupe de routes que désigne le premier segment de l'URL, `null` si ce n'est pas un groupe de casquette. */
-export function kindOfSegment(segment: string | undefined): PersonaKind | null {
-  const found = (Object.entries(personaGroups) as [PersonaKind, string][]).find(([, group]) => group === segment);
+export function kindOfSegment(segment: string | undefined): AppPersonaKind | null {
+  const found = (Object.entries(personaGroups) as [AppPersonaKind, string][]).find(([, group]) => group === segment);
   return found ? found[0] : null;
 }
 
@@ -111,6 +126,7 @@ export function parsePersona(raw: string | null): Persona | null {
       return { kind: "organizer", structureId: v.structureId };
     if (v.kind === "pro" && typeof v.proProfileId === "string") return { kind: "pro", proProfileId: v.proProfileId };
     if (v.kind === "provider") return { kind: "provider" };
+    if (v.kind === "admin") return { kind: "admin" };
   } catch {
     // Valeur abîmée : on repart du passionné.
   }
@@ -118,6 +134,6 @@ export function parsePersona(raw: string | null): Persona | null {
 }
 
 /** Initiale à afficher dans l'avatar quand la casquette n'a pas de logo. */
-export function initialOf(entry: PersonaEntry): string {
+export function initialOf(entry: AppPersonaEntry): string {
   return entry.label.trim().charAt(0).toUpperCase() || "?";
 }

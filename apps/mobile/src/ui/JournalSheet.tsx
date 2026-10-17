@@ -5,7 +5,7 @@ import { SET_OUTLOOK_UNCERTAIN_ACTION, socialLabels, weatherTexts } from "@orass
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-
+import { adminLinkOf } from "@/lib/adminModel";
 import { api, type NotificationItem } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { ApiRequestError } from "@/lib/http";
@@ -98,11 +98,13 @@ export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: 
           const actor = actorOf(n);
           const link = appLinkOf(n.data?.link);
           const team = teamRequestTarget(n.data);
+          // Lot 35d : alerte de modération, demande d'aide d'une structure → écran de la casquette Administration.
+          const admin = adminLinkOf(n.data?.link);
           return (
             <Pressable
               key={n.id}
-              disabled={!link && !team}
-              accessibilityRole={link || team ? "link" : undefined}
+              disabled={!link && !team && !admin}
+              accessibilityRole={link || team || admin ? "link" : undefined}
               accessibilityLabel={n.title}
               testID="journal-item"
               onPress={() => {
@@ -110,6 +112,11 @@ export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: 
                   // Lot 35a : une demande pour devenir staff ouvre l'écran Équipe de la structure.
                   onClose();
                   choose({ kind: "organizer", structureId: team }, "/(orga)/staff");
+                  return;
+                }
+                if (admin) {
+                  onClose();
+                  choose({ kind: "admin" }, admin);
                   return;
                 }
                 if (!link) return;

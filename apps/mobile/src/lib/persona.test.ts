@@ -110,7 +110,7 @@ describe("casquettes : mémorisation", () => {
     expect(parsePersona(null)).toBeNull();
     expect(parsePersona("pas du json")).toBeNull();
     expect(parsePersona('{"kind":"organizer"}')).toBeNull();
-    expect(parsePersona('{"kind":"admin"}')).toBeNull();
+    expect(parsePersona('{"kind":"inconnue"}')).toBeNull();
   });
 
   it("initiale pour une casquette sans logo", () => {
