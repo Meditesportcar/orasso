@@ -8,16 +8,16 @@ import {
   type GroupMessageView,
   messageSegmentLabels,
   orgaLabels,
+  orgaManageLabels,
   type StaffConversationState,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
-import { siteUrl } from "@/api";
 import { api } from "@/lib/api";
 import { formatDay, formatDayHour, formatHour } from "@/lib/format";
-import { orgaSitePath, staffRequests, structureSlugOf } from "@/lib/orga";
+import { staffRequests } from "@/lib/orga";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
@@ -191,7 +191,6 @@ export function InboxScreen() {
       ),
     [events.data, at],
   );
-  const slug = structureSlugOf(me?.memberships, structureId);
   const s = summary.data;
   const requests = staffRequests(members.data ?? []);
   const chipLabel = (label: string, n: number | undefined) => (n ? `${label} · ${n}` : label);
@@ -308,15 +307,15 @@ export function InboxScreen() {
                   </Text>
                 ))}
               </Plate>
-              <Notice>{orgaLabels.staffRequestsOnSite}</Notice>
               <Button
                 variant="plate"
-                icon="export"
-                disabled={!slug}
-                onPress={() => slug && void Linking.openURL(siteUrl(orgaSitePath(slug, "/structure")))}
+                icon="staff"
+                next
+                onPress={() => router.navigate("/staff")}
                 fullWidth
+                testID="orga-requests-open-team"
               >
-                {orgaLabels.staffRequestsOpenSite}
+                {orgaManageLabels.requestsOpenTeam}
               </Button>
             </>
           )}

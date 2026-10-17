@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { AppSheet } from "@/ui/AppSheet";
 import { Notice } from "@/ui/Notice";
+import { ScreenSheet } from "./triage/ScreenSheet";
 
 export function ConfirmSheet({
   visible,
@@ -16,6 +17,7 @@ export function ConfirmSheet({
   danger = false,
   busy = false,
   disabled = false,
+  modal = false,
   error,
   children,
   onConfirm,
@@ -31,14 +33,17 @@ export function ConfirmSheet({
   danger?: boolean;
   busy?: boolean;
   disabled?: boolean;
+  /** Posée depuis une feuille plein écran (fiche de tri) : s'ouvre dans son propre `Modal` (lot 35a). */
+  modal?: boolean;
   error?: string | null;
   children?: ReactNode;
   onConfirm: () => void;
   onClose: () => void;
 }) {
   const { t } = useTheme();
+  const Sheet = modal ? ScreenSheet : AppSheet;
   return (
-    <AppSheet visible={visible} onClose={onClose} accessibilityLabel={title}>
+    <Sheet visible={visible} onClose={onClose} accessibilityLabel={title}>
       <Text variant="title" color={t.color.ink}>
         {title}
       </Text>
@@ -61,6 +66,6 @@ export function ConfirmSheet({
       <Button variant="plate" icon="close" onPress={onClose} disabled={busy} fullWidth>
         {cancelLabel}
       </Button>
-    </AppSheet>
+    </Sheet>
   );
 }
