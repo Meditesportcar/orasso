@@ -288,6 +288,13 @@
       "when": 1792239499397,
       "tag": "0040_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792260034141,
+      "tag": "0041_pro-posts-soft-delete",
+      "breakpoints": true
     }
   ]
 }

@@ -269,6 +269,22 @@ describe("publications et abonnés", () => {
     expect(follower.posts).toHaveLength(PRO_POSTS_PER_MONTH);
     expect((await call(null, "GET", `/pros/by-slug/${pro.slug}`)).json.posts).toBeNull();
 
+    // Suppression douce (lot 34) : la publication disparaît, mais la place du mois ne se libère pas.
+    const removedId = follower.posts[0].id as string;
+    expect((await call(fan, "DELETE", `/pros/${pro.id}/posts/${removedId}`)).status).toBe(403);
+    expect((await call(owner, "DELETE", `/pros/${pro.id}/posts/${removedId}`)).status).toBe(204);
+    const afterDelete = (await call(fan, "GET", `/pros/by-slug/${pro.slug}`)).json;
+    expect(afterDelete.postsCount).toBe(PRO_POSTS_PER_MONTH - 1);
+    expect(afterDelete.posts.map((p: { id: string }) => p.id)).not.toContain(removedId);
+    expect((await call(owner, "GET", "/me/pro")).json).toMatchObject({
+      postsUsed: PRO_POSTS_PER_MONTH,
+      postsRemaining: 0,
+    });
+    expect((await call(owner, "POST", `/pros/${pro.id}/posts`, { title: "Encore", body: "Une de trop" })).status).toBe(
+      409,
+    );
+    expect((await call(owner, "PATCH", `/pros/${pro.id}/posts/${removedId}`, { title: "Revenue" })).status).toBe(404);
+
     // Mois suivant : le compteur repart.
     clock.set(fromWallTime({ year: 2026, month: 11, day: 2, hour: 9, minute: 0 }));
     expect(
