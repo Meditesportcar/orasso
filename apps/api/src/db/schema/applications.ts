@@ -54,10 +54,10 @@ export const applications = pgTable(
     accreditedMedia: boolean("accredited_media").notNull().default(false),
     /**
      * Événement sur plusieurs jours (lot 26) : le jour choisi ; `null` = tout l'événement (et toujours `null` pour un
-     * événement d'un jour). `restrict` : un jour qui a des candidatures ne se supprime pas (avant le lot 26 :
+     * événement d'un jour). `no action` : un jour qui a des candidatures ne se supprime pas (avant le lot 26 :
      * `set null`, qui aurait changé en silence une candidature d'un jour en candidature pour tout l'événement).
      */
-    eventDayId: uuid("event_day_id").references(() => eventDays.id, { onDelete: "restrict" }),
+    eventDayId: uuid("event_day_id").references(() => eventDays.id, { onDelete: "no action" }),
     status: applicationStatusEnum("status").notNull(),
     /** Règlement accepté. Nul seulement pour un membre inscrit par son chef qui n'a pas (encore) confirmé (lot 19). */
     rulesAcceptedAt: tstz("rules_accepted_at"),
