@@ -114,6 +114,8 @@ export type PublicSettings = {
   proActivities: ProActivity[];
   signupEnabled: boolean;
   providersEnabled: boolean;
+  /** Malus en vigueur (négatif), pour l'avertissement du désistement après le verrouillage. */
+  malusPoints: number;
 };
 
 export const defaultPublicSettings: PublicSettings = {
@@ -122,6 +124,7 @@ export const defaultPublicSettings: PublicSettings = {
   proActivities: adminSettingDefaults["lists.pro_activities"],
   signupEnabled: true,
   providersEnabled: true,
+  malusPoints: POINTS.malus,
 };
 
 /** Garde les seuls codes connus d'une liste reçue (réponse ancienne ou abîmée), dans l'ordre reçu. */

@@ -70,6 +70,7 @@ export const adminSettingsService = {
       proActivities: values["lists.pro_activities"],
       signupEnabled: values["signup.enabled"],
       providersEnabled: values["providers.enabled"],
+      malusPoints: values["points.malus"],
     };
   },
 };

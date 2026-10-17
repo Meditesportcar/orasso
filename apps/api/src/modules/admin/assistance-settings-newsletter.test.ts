@@ -203,6 +203,35 @@ describe("mode assistance", () => {
     ).toBe(201);
   });
 
+  it("IDOR : l'organisateur d'une autre structure ne voit, ne demande ni ne ferme rien", async () => {
+    const other = await signUp("Autre_Orga", { twoFactor: true });
+    await createStructure(other.id);
+    const ask = await req(orga, "POST", `/structures/${structureId}/assistance-requests`, {
+      message: "Aide pour le tri svp",
+    });
+    for (const mode of MODES) {
+      expect((await req(other, "GET", `/structures/${structureId}/assistance`, undefined, mode)).status).toBe(403);
+      expect(
+        (
+          await req(
+            other,
+            "POST",
+            `/structures/${structureId}/assistance-requests`,
+            { message: "Je me fais passer" },
+            mode,
+          )
+        ).status,
+      ).toBe(403);
+      expect((await req(other, "POST", `/assistance-requests/${ask.json.id}/close`, undefined, mode)).status).toBe(403);
+      expect(
+        (await req(other, "POST", `/admin/assistance-requests/${ask.json.id}/close`, undefined, mode)).status,
+      ).toBe(403);
+    }
+    expect(
+      (await db.query.assistanceRequests.findFirst({ where: eq(assistanceRequests.id, ask.json.id) }))?.status,
+    ).toBe("open");
+  });
+
   it("l'équipe peut clore ; la structure est prévenue", async () => {
     const ask = await req(orga, "POST", `/structures/${structureId}/assistance-requests`, {
       message: "Besoin d'aide sur le staff",

@@ -38,7 +38,9 @@ async function context(
 ) {
   const ctx = await browser.newContext({ viewport: { width: opts.width ?? 1280, height: opts.height ?? 900 } });
   const url = new URL(WEB);
-  const cookies = [{ name: "orasso-theme", value: opts.theme ?? "beton", url: WEB }];
+  const cookies: { name: string; value: string; url: string }[] = [
+    { name: "orasso-theme", value: opts.theme ?? "beton", url: WEB },
+  ];
   for (const pair of (cookie ?? "").split("; ").filter(Boolean)) {
     const i = pair.indexOf("=");
     cookies.push({ name: pair.slice(0, i), value: pair.slice(i + 1), url: `${url.protocol}//${url.host}` });
