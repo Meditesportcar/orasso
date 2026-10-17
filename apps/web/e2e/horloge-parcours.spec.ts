@@ -30,6 +30,12 @@ test("horloge simulée : offre, verrouillage H-2, pointage, J+2 (points et malus
   test.setTimeout(300_000);
   const damien = await login(ADMIN);
   expect((await apiCall(damien, "POST", "/dev/clock/reset")).status).toBe(200);
+  // Barème en vigueur (réglable par l'administration, lot 33 ; la recette du site « administration » le modifie).
+  const settings = await apiCall<{ entries: { key: string; value: unknown }[] }>(damien, "GET", "/admin/settings");
+  const setting = (key: string, fallback: number) =>
+    Number(settings.data.entries?.find((e) => e.key === key)?.value ?? fallback);
+  const participation = setting("points.participation", 20);
+  const malus = setting("points.malus", 10);
   try {
     const ev = await createEvent(damien, { capacity: 3, title: `Horloge ${unique()}` });
     const s = unique();
@@ -82,9 +88,9 @@ test("horloge simulée : offre, verrouillage H-2, pointage, J+2 (points et malus
       200,
     );
     // Le rattrapage règle tous les événements de la base passés à J+2 : jusqu'à une minute sur une base de recette.
-    await expect.poll(async () => (await mine(present))?.points ?? null, { timeout: 60_000 }).toBe(20);
+    await expect.poll(async () => (await mine(present))?.points ?? null, { timeout: 60_000 }).toBe(participation);
     const absentAfter = await mine(absent);
-    expect(absentAfter?.points).toBe(-10);
+    expect(absentAfter?.points).toBe(-Math.abs(malus));
     expect(absentAfter?.malus?.canContest).toBe(true);
     // Bilan provisoire calculé avec le règlement.
     const report = await apiCall<{ report: { refreshedAt: string | null; data: { present: number; absent: number } } }>(
