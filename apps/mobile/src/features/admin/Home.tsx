@@ -62,7 +62,7 @@ function Home() {
 
 export function AdminHomeScreen() {
   return (
-    <AdminGate title={L.homeTitle}>
+    <AdminGate title={L.homeTitle} moderator>
       <Home />
     </AdminGate>
   );

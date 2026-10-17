@@ -110,13 +110,9 @@ function BadgesBody() {
   const actions = useBadgeActions(list.reload);
   const counts = list.data?.counts;
   return (
-    <AdminPage
-      title={AL.adminBadgesTitle}
-      facts={AL.adminBadgesIntro}
-      onRefresh={list.reload}
-      overlays={actions.overlay}
-    >
+    <AdminPage title={AL.adminBadgesTitle} onRefresh={list.reload} overlays={actions.overlay}>
       <AdminFailure error={list.error} />
+      <Muted variant="caption">{AL.adminBadgesIntro}</Muted>
       <Filters
         value={filter}
         options={[
@@ -202,7 +198,7 @@ function BadgesBody() {
             <Button
               variant="plate"
               icon="next"
-              onPress={() => router.push(`/(admin)/structure/${s.id}` as never)}
+              onPress={() => router.push(`/(admin)/fiche-structure/${s.id}` as never)}
               fullWidth
             >
               {AL.adminOpen}

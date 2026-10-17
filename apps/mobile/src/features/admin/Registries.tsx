@@ -103,7 +103,7 @@ function StructuresBody() {
           <Button
             variant="plate"
             icon="next"
-            onPress={() => router.push(`/(admin)/structure/${s.id}` as never)}
+            onPress={() => router.push(`/(admin)/fiche-structure/${s.id}` as never)}
             fullWidth
             testID="structure-open"
           >

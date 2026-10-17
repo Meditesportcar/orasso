@@ -135,8 +135,8 @@ export function overviewTotal(overview: AdminOverview): number {
 /** Onglets de la casquette (identifiant, route de l'écran) selon le rôle : le modérateur n'a que ses files. */
 export function adminTabRoutes(role: AdminRole): Record<string, string> {
   return role === "moderator"
-    ? { accueil: "home", signalements: "reports" }
-    : { accueil: "home", signalements: "reports", registres: "registries", gestion: "manage" };
+    ? { administration: "home", signalements: "reports" }
+    : { administration: "home", signalements: "reports", registres: "registries", gestion: "manage" };
 }
 
 // --- Saisies ----------------------------------------------------------------------------------------------------------

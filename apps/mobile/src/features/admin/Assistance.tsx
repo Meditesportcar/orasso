@@ -110,7 +110,6 @@ function AssistanceQueueBody() {
   return (
     <AdminPage
       title="Demandes d'aide"
-      facts={assistanceTexts.askHint}
       onRefresh={rows.reload}
       overlays={
         <ConfirmSheet
@@ -139,6 +138,7 @@ function AssistanceQueueBody() {
       }
     >
       <AdminFailure error={rows.error} />
+      <Muted variant="caption">{assistanceTexts.askHint}</Muted>
       <Filters
         value={status}
         options={[
@@ -180,7 +180,8 @@ export function AssistanceQueueScreen() {
 
 /**
  * Bandeau de la casquette Organisateur quand un super admin survole l'espace d'une structure : « Lecture seule » sans
- * demande ouverte, « Intervention en cours (demande du …) » avec une demande ouverte. Posé au-dessus de la barre d'onglets.
+ * demande ouverte, « Intervention en cours (demande du …) » avec une demande ouverte. Posé au-dessus de l'écran, dans le
+ * flux (rien n'est recouvert).
  */
 export function AssistanceBanner() {
   const { t } = useTheme();
@@ -195,19 +196,12 @@ export function AssistanceBanner() {
   const current = state.data?.current ?? null;
   const intervening = state.data?.mode === "intervention" && current;
   return (
-    <View
-      style={[styles.banner, { bottom: tokens.spacing.barTabs + 16 + insets.bottom + space2 }]}
-      pointerEvents="box-none"
-      testID="assistance-banner"
-    >
+    <View style={[styles.banner, { paddingTop: insets.top + space2 }]} testID="assistance-banner">
       <Plate kind="note" style={styles.bannerPlate}>
         <Text variant="bodyStrong" color={t.color.plateInk}>
           {intervening && current
             ? L.assistanceBannerIntervention(formatDay(current.createdAt))
             : L.assistanceBannerReadOnly}
-        </Text>
-        <Text variant="caption" color={t.color.plateMuted}>
-          {intervening ? assistanceTexts.interventionHint : assistanceTexts.readOnlyHint}
         </Text>
         <Button variant="plate" icon="back" onPress={leaveSurvey} fullWidth testID="assistance-leave">
           {L.assistanceLeave}
@@ -376,6 +370,6 @@ export function AssistancePanel({ structureId }: { structureId: string }) {
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
   stack: { gap: space2 },
-  banner: { position: "absolute", left: 0, right: 0, paddingHorizontal: space4 },
-  bannerPlate: { gap: space2, padding: space3 },
+  banner: { paddingHorizontal: space4, paddingBottom: space2 },
+  bannerPlate: { gap: space2, padding: space2 },
 });

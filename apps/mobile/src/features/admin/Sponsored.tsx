@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 import { imageForm, pickOneImage } from "@/lib/structureFiles";
 import { useApi } from "@/lib/useApi";
+import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { SectionTitle } from "@/ui/Screens";
 import { AdminFailure, AdminGate, AdminPage, EmptyOrLoading, useGesture } from "./kit";
@@ -145,7 +146,6 @@ function SponsoredBody() {
   return (
     <AdminPage
       title="Emplacements sponsorisés"
-      facts={L.sponsoredHint}
       onRefresh={placements.reload}
       overlays={
         <ConfirmSheet
@@ -166,6 +166,7 @@ function SponsoredBody() {
       }
     >
       <AdminFailure error={placements.error} />
+      <Muted variant="caption">{L.sponsoredHint}</Muted>
       {notice ? <Notice>{notice}</Notice> : null}
       {gesture.error && change === null ? <Notice tone="error">{gesture.error}</Notice> : null}
       {!placements.data ? (

@@ -63,7 +63,16 @@ export function AdminFailure({ error }: { error: unknown }) {
  * `two_factor_required` : on affiche l'étape existante). Le premier appel sert aussi à l'accueil : compteurs des files
  * pour le super admin, file des signalements pour le modérateur.
  */
-export function AdminGate({ title, children }: { title: string; children: ReactNode }) {
+export function AdminGate({
+  title,
+  children,
+  moderator = false,
+}: {
+  title: string;
+  children: ReactNode;
+  /** Page ouverte au modérateur (accueil et signalements) ; les autres sont réservées au super admin. */
+  moderator?: boolean;
+}) {
   const { persona } = usePersona();
   const { me } = useSession();
   const role = adminRoleOf(me?.profile.platformRole);
@@ -77,6 +86,13 @@ export function AdminGate({ title, children }: { title: string; children: ReactN
     return (
       <TabScreen title={title}>
         <Notice tone="error">{L.notAdmin}</Notice>
+      </TabScreen>
+    );
+  }
+  if (role === "moderator" && !moderator) {
+    return (
+      <TabScreen title={title}>
+        <Notice tone="error">{L.superAdminOnly}</Notice>
       </TabScreen>
     );
   }
@@ -118,7 +134,7 @@ export function AdminPage({
     <FlowScreen
       title={title}
       facts={facts}
-      onClose={() => (router.canGoBack() ? router.back() : router.replace("/(admin)/accueil"))}
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/(admin)/administration"))}
       onRefresh={onRefresh}
       overlays={overlays}
     >

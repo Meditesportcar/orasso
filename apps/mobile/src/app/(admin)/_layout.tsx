@@ -21,7 +21,7 @@ const moderatorTabs: TabItem[] = superTabs.slice(0, 2);
 
 /** Nom de la route → identifiant d'onglet ; les pages masquées pointent vers l'onglet qui les range (les onglets d'abord). */
 const routes: Record<string, string> = {
-  accueil: "home",
+  administration: "home",
   signalements: "reports",
   registres: "registries",
   gestion: "manage",
@@ -30,7 +30,7 @@ const routes: Record<string, string> = {
   certifications: "home",
   transferts: "home",
   badges: "home",
-  "structure/[id]": "home",
+  "fiche-structure/[id]": "home",
   sanctions: "home",
   contestations: "home",
   assistance: "home",
@@ -52,7 +52,7 @@ const hidden = [
   "certifications",
   "transferts",
   "badges",
-  "structure/[id]",
+  "fiche-structure/[id]",
   "sanctions",
   "contestations",
   "assistance",
@@ -73,8 +73,8 @@ export default function AdminLayout() {
   const role = adminRoleOf(me?.profile.platformRole);
   const tabs = useMemo(() => (role === "moderator" ? moderatorTabs : superTabs), [role]);
   return (
-    <PersonaTabs tabs={tabs} routes={routes} initialRouteName="accueil" backBehavior="history">
-      <Tabs.Screen name="accueil" />
+    <PersonaTabs tabs={tabs} routes={routes} initialRouteName="administration" backBehavior="history">
+      <Tabs.Screen name="administration" />
       <Tabs.Screen name="signalements" />
       <Tabs.Screen name="registres" options={{ href: role === "moderator" ? null : undefined }} />
       <Tabs.Screen name="gestion" options={{ href: role === "moderator" ? null : undefined }} />

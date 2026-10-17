@@ -46,7 +46,7 @@ export const personaHomes = {
   organizer: "/(orga)/direct",
   pro: "/(pro)/scanner",
   provider: "/(provider)/candidatures",
-  admin: "/(admin)/accueil",
+  admin: "/(admin)/administration",
 } as const satisfies Record<AppPersonaKind, string>;
 
 export function homeOf(persona: Persona): (typeof personaHomes)[AppPersonaKind] {

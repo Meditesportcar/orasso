@@ -21,6 +21,7 @@ export const adminAppLabels = {
   settingsTitle: "Réglages et envois",
   moderatorOnly: "Ton rôle de modérateur donne accès à la file des signalements.",
   notAdmin: "Cet espace est réservé à l'équipe Orasso.",
+  superAdminOnly: "Cette page est réservée au super administrateur.",
   // Rubriques de la barre d'onglets Files / Registres / Réglages (libellés du site pour les pages).
   registryUsers: "Utilisateurs",
   registryStructures: "Structures",

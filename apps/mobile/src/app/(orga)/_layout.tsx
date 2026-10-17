@@ -25,6 +25,8 @@ export default function OrgaLayout() {
   );
   return (
     <View style={{ flex: 1 }}>
+      {/* Lot 35d : bandeau du mode assistance (un super admin survole l'espace de la structure). */}
+      <AssistanceBanner />
       <PersonaTabs tabs={tabs} routes={routes} initialRouteName="direct">
         <Tabs.Screen name="direct" />
         <Tabs.Screen name="evenements" />
@@ -42,8 +44,6 @@ export default function OrgaLayout() {
         <Tabs.Screen name="modeles" options={{ href: null }} />
         <Tabs.Screen name="notes" options={{ href: null }} />
       </PersonaTabs>
-      {/* Lot 35d : bandeau du mode assistance (un super admin survole l'espace de la structure). */}
-      <AssistanceBanner />
     </View>
   );
 }

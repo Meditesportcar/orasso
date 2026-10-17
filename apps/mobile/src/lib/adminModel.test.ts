@@ -77,7 +77,7 @@ describe("rôles et casquette Administration", () => {
     if (!entry) return;
     expect(personaOfEntry(entry)).toEqual({ kind: "admin" });
     expect(parsePersona(serializePersona({ kind: "admin" }))).toEqual({ kind: "admin" });
-    expect(homeOf({ kind: "admin" })).toBe("/(admin)/accueil");
+    expect(homeOf({ kind: "admin" })).toBe("/(admin)/administration");
     expect(kindOfSegment("(admin)")).toBe("admin");
     expect(misplacedGroup({ kind: "fan" }, "(admin)")).toBe(true);
     expect(misplacedGroup({ kind: "admin" }, "(admin)")).toBe(false);
@@ -126,8 +126,13 @@ describe("sections de l'administration", () => {
   });
 
   it("les onglets du modérateur se limitent à l'accueil et aux signalements", () => {
-    expect(Object.keys(adminTabRoutes("moderator"))).toEqual(["accueil", "signalements"]);
-    expect(Object.keys(adminTabRoutes("super_admin"))).toEqual(["accueil", "signalements", "registres", "gestion"]);
+    expect(Object.keys(adminTabRoutes("moderator"))).toEqual(["administration", "signalements"]);
+    expect(Object.keys(adminTabRoutes("super_admin"))).toEqual([
+      "administration",
+      "signalements",
+      "registres",
+      "gestion",
+    ]);
   });
 });
 

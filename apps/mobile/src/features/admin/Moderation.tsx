@@ -100,7 +100,7 @@ function ReportsBody() {
 
 export function ReportsScreen() {
   return (
-    <AdminGate title={moderationLabels.queueTitle}>
+    <AdminGate title={moderationLabels.queueTitle} moderator>
       <ReportsBody />
     </AdminGate>
   );
@@ -418,7 +418,7 @@ function ReportBody() {
 
 export function ReportDetailScreen() {
   return (
-    <AdminGate title={moderationLabels.queueTitle}>
+    <AdminGate title={moderationLabels.queueTitle} moderator>
       <ReportBody />
     </AdminGate>
   );

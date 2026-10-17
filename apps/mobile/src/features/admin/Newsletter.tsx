@@ -117,6 +117,7 @@ function NewsletterBody() {
       else await api.deleteNewsletter(id);
     });
     if (!done) return;
+    if (pending === "delete") pick(null);
     setNotice(
       pending === "send"
         ? L.newsletterDone.sending
@@ -129,7 +130,6 @@ function NewsletterBody() {
               : L.newsletterDone.deleted,
     );
     setPending(null);
-    if (pending === "delete") pick(null);
     await list.reload();
   }
 

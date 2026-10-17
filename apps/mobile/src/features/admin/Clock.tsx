@@ -72,7 +72,6 @@ function ClockBody() {
   return (
     <AdminPage
       title={L.title}
-      facts={L.intro}
       onRefresh={async () => {
         await Promise.all([status.reload(), events.reload()]);
       }}
@@ -119,6 +118,7 @@ function ClockBody() {
       }
     >
       <AdminFailure error={status.error} />
+      <Muted variant="caption">{L.intro}</Muted>
       {!status.data ? <EmptyOrLoading loading={status.loading} empty={L.noEvent} /> : null}
       {notice ? <Notice>{notice}</Notice> : null}
       {gesture.error && pending === null && !resetAsk ? <Notice tone="error">{gesture.error}</Notice> : null}
