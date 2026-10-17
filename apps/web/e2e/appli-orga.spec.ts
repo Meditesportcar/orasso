@@ -195,7 +195,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await expect(s.page.getByRole("button", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "23-boite-sable");
   await tab(s.page, "Staff").click();
-  await expect(s.page.getByTestId("orga-members")).toBeVisible({ timeout: 20_000 });
+  await expect(s.page.getByTestId("team-member").first()).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "24-staff-sable");
   await tab(s.page, "Tri").click();
   await shot(s.page, "25-tri-attente-sable");
