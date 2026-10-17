@@ -21,8 +21,9 @@ import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { recordTicketScan, recordVisitor } from "@/features/staff/actions";
+import { AlertSheet } from "@/features/staff/AlertSheet";
+import { recordAlert, recordIncident, recordTicketScan, recordVisitor } from "@/features/staff/actions";
+import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock, resultProps, type ShownResult, ticketResultOf, vibrate } from "@/features/staff/result";
 import { ed25519Verify } from "@/lib/staff/crypto";
 import { decideTicketLocal, ScanGate, shopAccess, visitorTotals } from "@/lib/staff/model";
@@ -43,6 +44,7 @@ export default function Boutique() {
   const gate = useRef(new ScanGate(3_000));
   const [result, setResult] = useState<ShownResult | null>(null);
   const [last, setLast] = useState<ShownResult | null>(null);
+  const [sheet, setSheet] = useState<"alert" | "incident" | null>(null);
   const focused = useIsFocused();
   useKeepAwake();
 
@@ -117,7 +119,8 @@ export default function Boutique() {
             style={StyleSheet.absoluteFill}
             facing="back"
             barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-            onBarcodeScanned={({ data }) => handle(data)}
+            // Une feuille ouverte (alerte, incident) : la caméra ne lit plus derrière elle.
+            onBarcodeScanned={sheet ? undefined : ({ data }) => handle(data)}
           />
         ) : null}
         {writeError ? (
@@ -210,7 +213,33 @@ export default function Boutique() {
             −1
           </Button>
         </View>
+        {/* Toujours accessibles en bas (docs/02) : main courante et alerte. */}
+        <View style={styles.row}>
+          <Button variant="rescue" icon="incident" onPress={() => setSheet("incident")} style={styles.flex}>
+            Main courante
+          </Button>
+          <Button variant="alert" icon="alert" onPress={() => setSheet("alert")} style={styles.flex}>
+            Alerte
+          </Button>
+        </View>
       </View>
+
+      <IncidentSheet
+        visible={sheet === "incident"}
+        onClose={() => setSheet(null)}
+        onSave={(draft) => {
+          if (userId) void recordIncident(id, userId, draft);
+          setSheet(null);
+        }}
+      />
+      <AlertSheet
+        visible={sheet === "alert"}
+        onClose={() => setSheet(null)}
+        onSend={(message, position) => {
+          if (userId) recordAlert(id, userId, message, position);
+          setSheet(null);
+        }}
+      />
 
       {result ? (
         <ScanResult

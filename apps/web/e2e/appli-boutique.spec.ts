@@ -10,6 +10,7 @@ import { apiCall, login, loginInBrowser, SEED_PASSWORD, samplePhoto, signUpApi, 
 // Lancer avec APP_URL=http://localhost:<relais> (Metro derrière apps/mobile/scripts/web-isolated.mjs, EXPO_PUBLIC_API_URL,
 // EXPO_PUBLIC_SITE_URL et CORS_ORIGINS posés) ; le site et l'API tournent sur la base locale du seed.
 const APP = process.env.APP_URL;
+const SITE = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-24-captures/appli";
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
@@ -47,15 +48,24 @@ test("boutique : billet OK puis déjà utilisé, compteur, alerte avec position 
   expect(salon?.roles).toEqual(["shop"]);
   const salonId = salon?.event.id ?? "";
 
-  // Le billet d'un visiteur (Kenji), tel que son téléphone l'affiche.
-  const kenji = await login("kenji@orasso.local");
-  const tickets = await apiCall<{ payload: string; status: string; event: { slug: string } }[]>(
-    kenji,
-    "GET",
-    "/me/tickets",
+  // Le billet gratuit d'un visiteur (compte neuf : la recette se relance sans dépendre des billets du seed), tel que
+  // son téléphone l'affiche.
+  const visitor = await signUpApi(`Visiteur_${unique()}`.slice(0, 24));
+  const reserved = await apiCall<{ payload: string; status: string }[]>(
+    visitor,
+    "POST",
+    `/events/${salonId}/tickets/reserve`,
+    { quantity: 1 },
   );
-  const ticket = tickets.data.find((t) => t.event.slug === "salon-argeles" && t.status === "valid");
+  expect(reserved.status).toBe(201);
+  const ticket = reserved.data[0];
   expect(ticket?.payload).toMatch(/^OB1/);
+
+  const before = await apiCall<{ visitors: number; tickets: { used: number } }>(
+    damien,
+    "GET",
+    `/events/${salonId}/live`,
+  );
 
   // 2. L'appli, en navigateur, avec la géolocalisation autorisée (position de l'alerte).
   const ctx = await browser.newContext({
@@ -113,7 +123,8 @@ test("boutique : billet OK puis déjà utilisé, compteur, alerte avec position 
   await page.getByTestId("visitor-plus-10").click();
   await expect(page.getByTestId("visitor-total")).toHaveText("10");
   await page.screenshot({ path: `${DIR}/04-boutique-compteur-hors-ligne-sable.png` });
-  await page.goBack();
+  // Alerte et main courante restent accessibles en bas de la boutique (docs/02). On ne quitte pas l'écran : sur le web,
+  // expo-keep-awake lève une erreur de développement s'il se ferme avant la prise du verrou d'écran.
   await page.getByRole("button", { name: "Alerte", exact: true }).click();
   await page.getByLabel("Ce qui se passe (facultatif)").fill("Bagarre à l'entrée B, besoin de renfort");
   await page.screenshot({ path: `${DIR}/05-alerte-position-sable.png` });
@@ -130,7 +141,7 @@ test("boutique : billet OK puis déjà utilisé, compteur, alerte avec position 
   await page.screenshot({ path: `${DIR}/06-main-courante-photo-sable.png` });
   await page.getByRole("button", { name: "Enregistrer l'incident" }).click();
   await page.waitForTimeout(1000);
-  await expect(page.getByText(/à envoyer|en attente/i).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("visitor-counter")).toContainText("à envoyer", { timeout: 15_000 });
   await page.screenshot({ path: `${DIR}/07-file-hors-ligne-sable.png` });
 
   // 4. Retour du réseau : tout part ; l'organisateur le voit (API puis site).
@@ -143,7 +154,7 @@ test("boutique : billet OK puis déjà utilisé, compteur, alerte avec position 
           "GET",
           `/events/${salonId}/live`,
         );
-        return `${live.data.visitors}/${live.data.tickets.used}`;
+        return `${live.data.visitors - before.data.visitors}/${live.data.tickets.used - before.data.tickets.used}`;
       },
       { timeout: 120_000, intervals: [3_000] },
     )
@@ -174,17 +185,23 @@ test("boutique : billet OK puis déjà utilisé, compteur, alerte avec position 
 
   const orgaCtx = await browser.newContext({
     viewport: { width: 1280, height: 1100 },
-    baseURL: process.env.E2E_BASE_URL,
+    baseURL: SITE,
   });
   const site = await orgaCtx.newPage();
   await loginInBrowser(site, "damien@orasso.local", undefined, `/orga/meditesportcar/e/${salonId}/jour-j`);
   await site.goto(`/orga/meditesportcar/e/${salonId}/jour-j`);
   const counters = site.getByTestId("live-counters");
   await expect(counters).toContainText("visiteurs");
-  await expect(counters).toContainText("10");
-  await expect(counters).toContainText("1/");
+  const after = await apiCall<{ visitors: number; tickets: { sold: number; used: number } }>(
+    damien,
+    "GET",
+    `/events/${salonId}/live`,
+  );
+  await expect(counters).toContainText(`${after.data.visitors}`);
+  await expect(counters).toContainText(`${after.data.tickets.used}/${after.data.tickets.sold}`);
   await expect(
-    site.getByTestId("field-alert").filter({ hasText: "Bagarre" }).getByTestId("alert-map-link"),
+    // (plusieurs relances de la recette peuvent avoir laissé des alertes ouvertes : la première suffit)
+    site.getByTestId("field-alert").filter({ hasText: "Bagarre" }).getByTestId("alert-map-link").first(),
   ).toBeVisible();
   const photo = site.getByTestId("incident-photo").first();
   await expect(photo).toBeVisible();
