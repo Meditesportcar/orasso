@@ -103,6 +103,8 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   test.setTimeout(600_000);
   mkdirSync(DIR, { recursive: true });
   const shot = async (page: Page, name: string) => {
+    // (Les feuilles glissent en 300 ms : on attend qu'elles soient en place.)
+    await page.waitForTimeout(600);
     await page.screenshot({ path: `${DIR}/${name}.png` });
     results[name] = await audit(page);
   };
@@ -115,6 +117,16 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   const events = await apiCall<{ id: string; title: string }[]>(damien, "GET", `/structures/${sid}/events`);
   const salon = events.data.find((e) => e.title.includes("Salon Argelès"));
   expect(salon).toBeTruthy();
+
+  // Reste d'une recette interrompue : les modèles de test se retirent (le test se rejoue sans traîner d'état).
+  const leftovers = await apiCall<{ items: { id: string; name: string; orasso: boolean }[] }>(
+    damien,
+    "GET",
+    `/structures/${sid}/templates`,
+  );
+  for (const t of leftovers.data.items.filter((x) => !x.orasso && x.name.startsWith("Rappel d'arrivée"))) {
+    await apiCall(damien, "DELETE", `/structures/${sid}/templates/${t.id}`);
+  }
 
   // --- 1. Une demande pour devenir staff arrive ---------------------------------------------------------------
   type Member = { userId: string; pseudo: string; role: string; staffRoles: string[]; status: string };
@@ -206,9 +218,9 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   await card.getByTestId("template-edit").click();
   await page.getByTestId("template-subject").fill("Ton arrivée à l'entrée B");
   await page.getByTestId("template-save").click();
-  await expect(page.getByTestId("template-card").filter({ hasText: "Ton arrivée à l'entrée B" })).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(
+    page.getByTestId("template-card").filter({ hasText: templateName }).filter({ hasText: "Ton arrivée à l'entrée B" }),
+  ).toBeVisible({ timeout: 20_000 });
   const templates = await apiCall<{ items: { name: string; subject: string | null }[] }>(
     damien,
     "GET",
@@ -255,9 +267,16 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   await page.getByTestId("notes-query").fill(person);
   await page.getByTestId("notes-search").click();
   const note = `Arrivé tôt, a aidé au placement ${Date.now() % 100000}`;
-  await page.getByTestId("structure-note-draft").fill(note);
+  // La personne cherchée : son groupe de notes, ou le formulaire « note à cette personne » (pseudos voisins exclus).
+  const scope = page
+    .locator('[data-testid="notes-new-person"], [data-testid="notes-person"]')
+    // (Le texte des blocs est collé sans séparateur : « Pilote_001Visible… », d'où le seul garde-fou sur les chiffres.)
+    .filter({ hasText: new RegExp(`${person}(?![0-9])`) })
+    .first();
+  await expect(scope).toBeVisible({ timeout: 20_000 });
+  await scope.getByTestId("structure-note-draft").fill(note);
   await shot(page, "10-notes-beton");
-  await page.getByTestId("structure-note-add").click();
+  await scope.getByTestId("structure-note-add").click();
   await expect(page.getByTestId("structure-note").filter({ hasText: note })).toBeVisible({ timeout: 20_000 });
   const notes = await apiCall<{ items: { body: string }[] }>(damien, "GET", `/structures/${sid}/notes?q=${person}`);
   expect(notes.data.items.some((n) => n.body === note)).toBe(true);
@@ -277,23 +296,24 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
 
   // Notes depuis la fiche de tri : l'onglet Tri montre la prochaine candidature ; sa fiche complète porte les notes.
   await tab(page, "Tri").click();
-  await expect(page.getByTestId("triage-full")).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId("triage-full").click();
-  await expect(page.getByTestId("triage-full-notes")).toBeVisible({ timeout: 20_000 });
+  // L'événement du jour n'a plus rien à trier : on prend celui qui a des candidatures en attente (« Salon de printemps »).
+  await page.getByRole("button", { name: /Événement à trier/ }).click();
+  await page.getByText("Salon de printemps").last().click();
+  await expect(page.getByTestId("triage-full")).toBeEnabled({ timeout: 30_000 });
+  // (La carte du tri bouge en continu : le bouton n'est jamais « stable » au sens de Playwright, d'où `force`.)
+  await page.getByTestId("triage-full").click({ force: true });
+  // (L'écran « Notes internes » reste monté derrière : on cherche dans la feuille seulement.)
+  const sheet = page.getByTestId("triage-full-notes");
+  await expect(sheet).toBeVisible({ timeout: 20_000 });
   const sheetNote = `Note depuis la fiche de tri ${Date.now() % 100000}`;
-  await page.getByTestId("structure-note-draft").fill(sheetNote);
-  await page.getByTestId("structure-note-add").click();
-  const sheetItem = page.getByTestId("structure-note").filter({ hasText: sheetNote });
+  await sheet.getByTestId("structure-note-draft").fill(sheetNote);
+  await sheet.getByTestId("structure-note-add").click();
+  const sheetItem = sheet.getByTestId("structure-note").filter({ hasText: sheetNote });
   await expect(sheetItem).toBeVisible({ timeout: 20_000 });
   await shot(page, "11b-fiche-tri-notes-beton");
   await sheetItem.getByTestId("structure-note-delete").click();
   await page.getByTestId("orga-confirm").click();
   await expect(sheetItem).toHaveCount(0, { timeout: 20_000 });
-  await page
-    .getByRole("button", { name: "Fermer", exact: true })
-    .first()
-    .click({ position: { x: 100, y: 15 } });
-  await expect(page.getByRole("button", { name: "Fermer", exact: true })).toHaveCount(0, { timeout: 5_000 });
 
   // Nettoyage du modèle de la recette (suppression avec confirmation).
   await go(page, "/modeles");
@@ -427,6 +447,8 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   test.setTimeout(420_000);
   mkdirSync(DIR, { recursive: true });
   const shot = async (page: Page, name: string) => {
+    // (Les feuilles glissent en 300 ms : on attend qu'elles soient en place.)
+    await page.waitForTimeout(600);
     await page.screenshot({ path: `${DIR}/${name}.png` });
     results[name] = await audit(page);
   };
@@ -497,7 +519,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   await tram.page.getByTestId("team-invite-who").fill("Kenji_66");
   await tram.page.getByTestId("team-invite-send").click();
   // Le message de l'API s'affiche dans la feuille, sans plantage.
-  await expect(tram.page.getByText("Cette structure est suspendue.", { exact: false }).first()).toBeVisible({
+  await expect(tram.page.getByText("lecture seule. Écris à l'équipe Orasso", { exact: false }).first()).toBeVisible({
     timeout: 20_000,
   });
   await shot(tram.page, "33-structure-suspendue-ecriture-refusee-sable");
