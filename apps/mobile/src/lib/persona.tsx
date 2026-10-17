@@ -32,8 +32,8 @@ type PersonaValue = {
   active: PersonaEntry;
   /** Pastilles « à traiter » des autres casquettes : l'avatar porte un point moutarde si > 0. */
   elsewhere: number;
-  /** Passe à une casquette et ouvre son premier écran. */
-  choose: (persona: Persona) => void;
+  /** Passe à une casquette et ouvre son premier écran (ou `to`, un écran de cette casquette : lien profond, lot 35a). */
+  choose: (persona: Persona, to?: string) => void;
   /** Appui long sur l'avatar : retour au passionné. */
   backToFan: () => void;
 };
@@ -70,10 +70,10 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
   }, [status, me, stored, entries]);
 
   const choose = useCallback(
-    (next: Persona) => {
+    (next: Persona, to?: string) => {
       setStored(next);
       void kvSet(KEY, serializePersona(next));
-      router.replace(homeOf(next));
+      router.replace((to ?? homeOf(next)) as never);
     },
     [router],
   );

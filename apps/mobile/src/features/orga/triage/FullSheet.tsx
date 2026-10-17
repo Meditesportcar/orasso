@@ -3,9 +3,14 @@
 // puissance, poids, catégories, préparation), candidat, historique avec la structure, crew et ses autres candidatures,
 // avis de filtration avec leurs notes, alertes. Les coordonnées du candidat ne sont pas affichées.
 import { Chip, ChipRow, Plate, Text, useTheme } from "@orasso/design-system/native";
-import { type ApplicationForTriage, triageAppLabels } from "@orasso/shared";
+import { type ApplicationForTriage, afterEventLabels, triageAppLabels } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
+import { api } from "@/lib/api";
+import { isSuspended } from "@/lib/teamModel";
+import { useApi } from "@/lib/useApi";
+import { StructureNotes } from "../Notes";
+import { useOrga } from "../OrgaGate";
 import { FactRows, PhotoCarousel, photosOf, titleOf } from "./CandidateCard";
 import { ScreenSheet } from "./ScreenSheet";
 
@@ -24,8 +29,19 @@ function Fact({ label, value }: { label: string; value: string | number | null |
   );
 }
 
-export function FullSheet({ item, onClose }: { item: ApplicationForTriage | null; onClose: () => void }) {
+export function FullSheet({
+  item,
+  eventId,
+  onClose,
+}: {
+  item: ApplicationForTriage | null;
+  eventId?: string;
+  onClose: () => void;
+}) {
   const { t } = useTheme();
+  const { structureId } = useOrga();
+  // Notes internes (lot 35a) : lecture seule pour une structure suspendue, comme sur le site.
+  const structure = useApi(() => api.orgStructure(structureId), [structureId], { enabled: item !== null });
   const v = item?.vehicle ?? null;
   const p = item?.provider ?? null;
   return (
@@ -94,6 +110,20 @@ export function FullSheet({ item, onClose }: { item: ApplicationForTriage | null
               {triageAppLabels.sectionApplicant}
             </Text>
             <FactRows item={item} full />
+          </Plate>
+          <Plate testID="triage-full-notes">
+            <Text variant="label" color={t.color.plateMuted}>
+              {afterEventLabels.notesTitle}
+            </Text>
+            <StructureNotes
+              key={item.id}
+              structureId={structureId}
+              pseudo={item.applicant.pseudo}
+              eventId={eventId}
+              initial={item.applicant.notes}
+              writable={!isSuspended(structure.data)}
+              modal
+            />
           </Plate>
         </>
       ) : null}

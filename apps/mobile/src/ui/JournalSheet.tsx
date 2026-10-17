@@ -9,7 +9,8 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { api, type NotificationItem } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { ApiRequestError } from "@/lib/http";
-import { appLinkOf } from "@/lib/links";
+import { appLinkOf, teamRequestTarget } from "@/lib/links";
+import { usePersona } from "@/lib/persona";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "./AppSheet";
 import { Avatar } from "./Avatar";
@@ -75,6 +76,7 @@ const asksUncertain = (n: NotificationItem) =>
 export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTheme();
   const router = useRouter();
+  const { choose } = usePersona();
   const list = useApi(() => api.notifications(), [visible], { enabled: visible });
 
   // Ouvrir le Journal, c'est lire : les pastilles de la cloche retombent.
@@ -95,14 +97,21 @@ export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: 
         list.data.items.map((n) => {
           const actor = actorOf(n);
           const link = appLinkOf(n.data?.link);
+          const team = teamRequestTarget(n.data);
           return (
             <Pressable
               key={n.id}
-              disabled={!link}
-              accessibilityRole={link ? "link" : undefined}
+              disabled={!link && !team}
+              accessibilityRole={link || team ? "link" : undefined}
               accessibilityLabel={n.title}
               testID="journal-item"
               onPress={() => {
+                if (team) {
+                  // Lot 35a : une demande pour devenir staff ouvre l'écran Équipe de la structure.
+                  onClose();
+                  choose({ kind: "organizer", structureId: team }, "/(orga)/staff");
+                  return;
+                }
                 if (!link) return;
                 onClose();
                 router.push(link as never);
