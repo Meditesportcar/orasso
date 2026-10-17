@@ -1,0 +1,183 @@
+// Casquette Pro, modifier la fiche (lot 35c) : mêmes champs que « Fiche publique » de l'espace pro du site (nom,
+// activités, présentation, adresse et zone d'intervention, contact, réseaux, horaires). Le logo, les photos, les remises
+// et le SIRET sont des blocs de la fiche. Un nouveau nom demande un nouveau contrôle du SIRET (règle de l'API).
+import { Button, Chip, ChipRow, Plate, TextField, tokens } from "@orasso/design-system/native";
+import { proAppLabels as L, proActivities, proActivityLabels, weekdayLabels, weekdays } from "@orasso/shared";
+import { useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import { StyleSheet } from "react-native";
+
+import { api } from "@/lib/api";
+import { formOfPro, type ProFicheForm, proBody, socialNetworks, toggleActivity } from "@/lib/proForm";
+import { useApi } from "@/lib/useApi";
+import { useRun } from "@/lib/useRun";
+import { Feedback } from "@/ui/Feedback";
+import { Muted } from "@/ui/Muted";
+import { Notice } from "@/ui/Notice";
+import { SectionTitle, TabScreen } from "@/ui/Screens";
+
+const { space2, space3 } = tokens.spacing;
+
+export function FicheForm() {
+  const router = useRouter();
+  const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
+  const pro = myPro.data;
+  const [form, setForm] = useState<ProFicheForm | null>(null);
+  const dirty = useRef(false);
+  const { busy, error, notice, run, setError, setNotice } = useRun();
+
+  // Les champs reprennent la fiche de l'API, sauf pendant une saisie non enregistrée.
+  useEffect(() => {
+    if (pro && !dirty.current) setForm(formOfPro(pro));
+  }, [pro]);
+
+  const edit = (patch: Partial<ProFicheForm>) => {
+    dirty.current = true;
+    setNotice(null);
+    setForm((f) => (f ? { ...f, ...patch } : f));
+  };
+
+  async function save() {
+    if (!pro || !form) return;
+    const parsed = proBody(form);
+    if ("error" in parsed) return setError(parsed.error);
+    const ok = await run(
+      "save",
+      async () => {
+        await api.updatePro(pro.id, parsed.body);
+        dirty.current = false;
+        await myPro.reload();
+      },
+      L.ficheSaved,
+    );
+    if (!ok) dirty.current = true;
+  }
+
+  return (
+    <TabScreen title={L.editTitle} facts={pro?.name}>
+      <Button variant="plate" icon="back" onPress={() => router.replace("/fiche")} fullWidth>
+        {L.editBack}
+      </Button>
+      {!pro ? myPro.loading ? null : <Notice>{L.noPro}</Notice> : null}
+      {pro && form ? (
+        <>
+          <Plate style={styles.block} testID="pro-form">
+            <TextField label={L.name} value={form.name} onChangeText={(name) => edit({ name })} maxLength={80} />
+            <Muted variant="label">{L.activities}</Muted>
+            <ChipRow>
+              {proActivities.map((a) => (
+                <Chip
+                  key={a}
+                  surface="plate"
+                  selected={form.activities.includes(a)}
+                  onPress={() => edit({ activities: toggleActivity(form.activities, a) })}
+                >
+                  {proActivityLabels[a]}
+                </Chip>
+              ))}
+            </ChipRow>
+            <TextField
+              label={L.description}
+              value={form.description}
+              onChangeText={(description) => edit({ description })}
+              multiline
+              maxLength={2000}
+              style={{ minHeight: 96 }}
+            />
+          </Plate>
+
+          <SectionTitle>{L.where}</SectionTitle>
+          <Plate style={styles.block}>
+            <TextField
+              label={L.address}
+              value={form.addressLine}
+              onChangeText={(addressLine) => edit({ addressLine })}
+              maxLength={200}
+            />
+            <TextField
+              label={L.postalCode}
+              value={form.postalCode}
+              onChangeText={(postalCode) => edit({ postalCode })}
+              keyboardType="number-pad"
+              maxLength={10}
+            />
+            <TextField label={L.city} value={form.city} onChangeText={(city) => edit({ city })} maxLength={80} />
+            <TextField
+              label={L.zone}
+              help={L.zoneHelp}
+              value={form.zone}
+              onChangeText={(zone) => edit({ zone })}
+              autoCapitalize="characters"
+            />
+          </Plate>
+
+          <SectionTitle>{L.contact}</SectionTitle>
+          <Plate style={styles.block}>
+            <TextField
+              label={L.phone}
+              value={form.phone}
+              onChangeText={(phone) => edit({ phone })}
+              keyboardType="phone-pad"
+            />
+            <TextField
+              label={L.email}
+              value={form.email}
+              onChangeText={(email) => edit({ email })}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextField
+              label={L.website}
+              value={form.website}
+              onChangeText={(website) => edit({ website })}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {socialNetworks.map((n) => (
+              <TextField
+                key={n}
+                label={L[n]}
+                value={form.socials[n]}
+                onChangeText={(value) => edit({ socials: { ...form.socials, [n]: value } })}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            ))}
+          </Plate>
+
+          <SectionTitle>{L.hours}</SectionTitle>
+          <Plate style={styles.block}>
+            {weekdays.map((d) => (
+              <TextField
+                key={d}
+                label={weekdayLabels[d]}
+                value={form.hours[d]}
+                onChangeText={(value) => edit({ hours: { ...form.hours, [d]: value } })}
+                placeholder={L.hoursHint}
+                maxLength={60}
+              />
+            ))}
+          </Plate>
+
+          <Feedback error={error} notice={notice} onPlate={false} testID="pro-form-notice" />
+          <Button
+            variant="primary"
+            icon="check"
+            loading={busy === "save"}
+            onPress={() => void save()}
+            fullWidth
+            testID="pro-form-save"
+          >
+            {L.saveFiche}
+          </Button>
+        </>
+      ) : null}
+    </TabScreen>
+  );
+}
+
+const styles = StyleSheet.create({
+  block: { gap: space2, padding: space3 },
+});

@@ -1,15 +1,16 @@
 // Moi, sécurité : mot de passe, double authentification (TOTP), appareils et sessions, QR de compte, clés d'accès
-// (renvoi vers le site : pas de module WebAuthn natif en V1, S2). Chaque action ouvre une feuille de Moi.
+// (liste, renommage, suppression dans l'appli depuis le lot 35c ; la création reste sur le site : pas de module
+// WebAuthn natif en V1, S2). Chaque action ouvre une feuille de Moi.
 import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { Linking, StyleSheet, View } from "react-native";
+import { accountAppLabels } from "@orasso/shared";
+import { StyleSheet, View } from "react-native";
 
-import { siteUrl } from "@/api";
 import { useSession } from "@/lib/session";
 import { SectionTitle } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
 
-export type SecuritySheet = "password" | "two-factor" | "sessions" | "qr-secret";
+export type SecuritySheet = "password" | "two-factor" | "sessions" | "qr-secret" | "passkeys";
 
 export function SecuritySection({ onOpen }: { onOpen: (sheet: SecuritySheet) => void }) {
   const { t } = useTheme();
@@ -73,16 +74,10 @@ export function SecuritySection({ onOpen }: { onOpen: (sheet: SecuritySheet) => 
           Clés d'accès
         </Text>
         <Text variant="caption" color={t.color.plateMuted}>
-          Se connecter avec Face ID ou l'empreinte, sans mot de passe. Les clés d'accès se créent sur le site Orasso
-          (dans le navigateur de ce téléphone aussi), dans Sécurité.
+          {accountAppLabels.passkeysHelp}
         </Text>
-        <Button
-          variant="plate"
-          icon="export"
-          onPress={() => void Linking.openURL(siteUrl("/app/securite")).catch(() => undefined)}
-          fullWidth
-        >
-          Gérer mes clés d'accès sur le site
+        <Button variant="plate" icon="plate" onPress={() => onOpen("passkeys")} fullWidth testID="moi-passkeys">
+          {accountAppLabels.passkeysManage}
         </Button>
       </Plate>
     </>

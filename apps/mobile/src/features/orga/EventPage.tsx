@@ -22,6 +22,7 @@ import {
   eventStatusLabels,
   invitationLabels,
   orgaLabels,
+  ticketingAppLabels,
   triageAppLabels,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
@@ -394,6 +395,18 @@ export function EventPage({ eventId }: { eventId: string }) {
             >
               {invitationLabels.invite}
             </Button>
+            {/* Billetterie des visiteurs (lot 35c) : billets, places, prix, compte de paiement. */}
+            {e.status !== "cancelled" ? (
+              <Button
+                variant="plate"
+                icon="qr"
+                onPress={() => router.push(`/evenement/${eventId}/billetterie`)}
+                fullWidth
+                testID="orga-ticketing"
+              >
+                {ticketingAppLabels.open}
+              </Button>
+            ) : null}
             {/* Bilan et « Remercier les présents » (lot 27), une fois l'événement commencé. */}
             <Button
               variant="plate"

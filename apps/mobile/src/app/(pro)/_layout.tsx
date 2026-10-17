@@ -15,11 +15,11 @@ const routeOf = Object.fromEntries(Object.entries(tabIds).map(([route, id]) => [
 
 function ProTabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
-  const current = state.routes[state.index]?.name as keyof typeof tabIds | undefined;
+  const current = state.routes[state.index]?.name as keyof typeof tabIds | "modifier" | undefined;
   return (
     <TabBar
       tabs={tabs}
-      active={current ? tabIds[current] : "scanner"}
+      active={current === "modifier" ? "card" : current ? tabIds[current] : "scanner"}
       safeBottom={insets.bottom}
       onSelect={(id) => {
         const route = routeOf[id];
@@ -40,6 +40,8 @@ export default function ProLayout() {
       <Tabs.Screen name="publier" />
       <Tabs.Screen name="scanner" />
       <Tabs.Screen name="stats" />
+      {/* Modifier la fiche (lot 35c), depuis l'onglet Fiche. */}
+      <Tabs.Screen name="modifier" options={{ href: null }} />
     </Tabs>
   );
 }

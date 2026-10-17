@@ -11,9 +11,11 @@ import { useState } from "react";
 
 import { CasquettesSection } from "@/features/moi/CasquettesSection";
 import { ChangePasswordSheet } from "@/features/moi/ChangePasswordSheet";
+import { DataSection } from "@/features/moi/DataSection";
 import { DeleteAccountSheet } from "@/features/moi/DeleteAccountSheet";
 import { EmailBanner } from "@/features/moi/EmailBanner";
 import { NotificationsSection } from "@/features/moi/NotificationsSection";
+import { PasskeysSheet } from "@/features/moi/PasskeysSheet";
 import { PointsSection } from "@/features/moi/PointsSection";
 import { ProfileSection } from "@/features/moi/ProfileSection";
 import { QrSecretSheet } from "@/features/moi/QrSecretSheet";
@@ -59,6 +61,7 @@ export default function Moi() {
           <TwoFactorSheet visible={sheet === "two-factor"} onClose={close} />
           <SessionsSheet visible={sheet === "sessions"} onClose={close} />
           <QrSecretSheet visible={sheet === "qr-secret"} onClose={close} />
+          <PasskeysSheet visible={sheet === "passkeys"} onClose={close} />
           <StaffRequestSheet visible={sheet === "staff"} onClose={close} />
           <DeleteAccountSheet visible={sheet === "delete"} onClose={close} />
         </>
@@ -74,6 +77,7 @@ export default function Moi() {
       <VisibilitySection settings={settings.settings} save={settings.save} />
       <SectorSection settings={settings.settings} save={settings.save} />
       <SecuritySection onOpen={setSheet} />
+      <DataSection />
 
       {/* Lot 32 : sanctions de la modération et contestation. */}
       <SectionTitle>{moderationLabels.mySanctions}</SectionTitle>

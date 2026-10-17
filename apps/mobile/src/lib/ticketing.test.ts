@@ -1,8 +1,8 @@
 // Lot 35c : billetterie de l'organisateur dans l'appli (formulaire → corps de l'API, mêmes règles que le site).
-import type { EventTicketing } from "@orasso/shared";
+import type { EventTicketing, Membership } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { euros, formOf, isTicketed, priceText, stripeStep, ticketingBody } from "./ticketing";
+import { euros, formOf, isStructureOwner, isTicketed, priceText, stripeStep, ticketingBody } from "./ticketing";
 
 const base: EventTicketing = {
   enabled: false,
@@ -83,6 +83,17 @@ describe("accès et Stripe", () => {
     expect(isTicketed("free_reservation")).toBe(true);
     expect(isTicketed("paid_orasso")).toBe(true);
     for (const access of ["free", "paid_external", "closed"]) expect(isTicketed(access)).toBe(false);
+  });
+
+  it("le propriétaire actif de la structure seulement connecte le compte Stripe", () => {
+    const member = (structureId: string, role: "owner" | "co_organizer" | "staff", status = "active") =>
+      ({ structureId, role, status }) as Membership;
+    expect(isStructureOwner([member("s1", "owner")], "s1")).toBe(true);
+    expect(isStructureOwner([member("s1", "co_organizer")], "s1")).toBe(false);
+    expect(isStructureOwner([member("s1", "staff")], "s1")).toBe(false);
+    expect(isStructureOwner([member("s2", "owner")], "s1")).toBe(false);
+    expect(isStructureOwner([member("s1", "owner", "removed")], "s1")).toBe(false);
+    expect(isStructureOwner(undefined, "s1")).toBe(false);
   });
 
   it("étape du compte Stripe : bientôt, à connecter, connecté", () => {

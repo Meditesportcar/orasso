@@ -4,6 +4,7 @@
 // pour un billet payant ouvert et une capacité sous le nombre de billets déjà pris.
 import {
   type EventTicketing,
+  type Membership,
   TICKET_MAX_PRICE_CENTS,
   TICKET_MIN_PRICE_CENTS,
   type TicketingUpdate,
@@ -61,6 +62,16 @@ export function ticketingBody(form: TicketingForm, paid: boolean): { body: Ticke
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Réglages invalides." };
   return { body: parsed.data };
+}
+
+/** Le compte Stripe d'une structure se connecte et se déconnecte par son propriétaire seulement (l'API refuse les autres). */
+export function isStructureOwner(
+  memberships: readonly Pick<Membership, "structureId" | "role" | "status">[] | undefined,
+  structureId: string,
+): boolean {
+  return Boolean(
+    memberships?.some((m) => m.structureId === structureId && m.role === "owner" && m.status === "active"),
+  );
 }
 
 /** L'accès du public de l'événement ouvre-t-il la billetterie Orasso ? */
