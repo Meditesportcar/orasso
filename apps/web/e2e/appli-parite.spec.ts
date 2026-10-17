@@ -79,9 +79,17 @@ async function audit(page: Page): Promise<Audit> {
       }
       return false;
     };
+    // (Le fond décoratif déborde exprès : on ne regarde que le texte, les boutons et les champs.)
     const clipped = all
-      .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1 && !scrollsX(el))
-      .map(label);
+      .filter(
+        (el) =>
+          el.getBoundingClientRect().right > window.innerWidth + 1 &&
+          !scrollsX(el) &&
+          (el.children.length === 0
+            ? label(el) !== ""
+            : ["button", "checkbox", "combobox"].includes(el.getAttribute("role") ?? "") || el.tagName === "INPUT"),
+      )
+      .map((el) => `${el.getAttribute("role") ?? el.tagName} ${label(el)}`);
     return {
       horizontalScroll: document.documentElement.scrollWidth > window.innerWidth + 1,
       clipped: clipped.slice(0, 10),
