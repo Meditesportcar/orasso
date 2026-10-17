@@ -86,6 +86,8 @@ export const groupMessages = pgTable(
     body: text("body").notNull(),
     clientId: uuid("client_id").notNull(),
     status: groupMessageStatusEnum("status").notNull().default("queued"),
+    /** Lot 27 : remerciement aux présents (lien d'avis propre à chaque destinataire, ligne du Journal en plus). */
+    thanks: boolean("thanks").notNull().default(false),
     recipientsCount: integer("recipients_count").notNull().default(0),
     sentCount: integer("sent_count").notNull().default(0),
     sentAt: tstz("sent_at"),

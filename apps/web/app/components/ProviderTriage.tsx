@@ -2,6 +2,7 @@ import { Button, CheckboxField, Chip, ChipRow, StatusBadge } from "@orasso/desig
 import {
   type ApplicationForTriage,
   type ApplicationStatus,
+  afterEventLabels,
   canAccredit,
   instagramHandle,
   type RefusalReason,
@@ -15,6 +16,7 @@ import { useState } from "react";
 import { apiFetch } from "../lib/api.client";
 import { formatDateTime } from "../lib/format";
 import { badgeFor } from "../lib/status";
+import { StructureNotes } from "./StructureNotes";
 import "../styles/providers.css";
 
 const FILTERS: { id: ApplicationStatus; label: string }[] = [
@@ -30,12 +32,15 @@ const FILTERS: { id: ApplicationStatus; label: string }[] = [
  */
 export function ProviderTriage({
   eventId,
+  structureId,
   items,
   canDecide,
   canAccreditMedia,
   onChanged,
 }: {
   eventId: string;
+  /** Notes internes de la structure sur le prestataire (lot 27) : organisateurs seulement. */
+  structureId?: string;
   items: ApplicationForTriage[];
   canDecide: boolean;
   /** L'accréditation est réservée à l'organisateur (pas au staff de filtration). */
@@ -205,6 +210,19 @@ export function ProviderTriage({
                 <span>Candidature</span>
                 <span>{formatDateTime(item.createdAt)}</span>
               </div>
+              {structureId && (
+                <details className="tri__kv" data-testid="provider-notes" open={item.applicant.notes.length > 0}>
+                  <summary>
+                    {afterEventLabels.notesTitle} · {item.applicant.notes.length}
+                  </summary>
+                  <StructureNotes
+                    structureId={structureId}
+                    pseudo={item.applicant.pseudo}
+                    eventId={eventId}
+                    initial={item.applicant.notes}
+                  />
+                </details>
+              )}
 
               {refusing === item.id ? (
                 <div className="s-stack s-stack--tight" data-testid="refusal-panel">

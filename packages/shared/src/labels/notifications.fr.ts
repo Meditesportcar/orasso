@@ -1,5 +1,6 @@
 import type { NotificationFamily, NotificationType } from "../enums";
 import { accountNotificationLabels } from "../notifications/account";
+import { afterEventNotificationLabels } from "../notifications/after-event";
 import { applicationNotificationLabels } from "../notifications/application";
 import { communicationNotificationLabels } from "../notifications/communication";
 import { crewNotificationLabels } from "../notifications/crews";
@@ -39,4 +40,5 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   ...communicationNotificationLabels,
   ...moderationNotificationLabels,
   ...invitationNotificationLabels,
+  ...afterEventNotificationLabels,
 };

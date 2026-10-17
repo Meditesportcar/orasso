@@ -1,4 +1,5 @@
 import {
+  badgeQuerySchema,
   banCreateSchema,
   memberInviteSchema,
   memberUpdateSchema,
@@ -14,6 +15,7 @@ import { Hono } from "hono";
 import { validation } from "../../lib/errors";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
+import { badgeService } from "../after-event/badge";
 import { structuresService } from "./service";
 import { verificationService } from "./verification";
 
@@ -135,6 +137,11 @@ export const structuresRoutes = new Hono<AppEnv>()
     return c.body(null, 204);
   })
   .get("/admin/structures", async (c) => {
+    // Lot 27 : `?badge=expiring|suspended|all` = les structures vues sous l'angle du badge (page « Badges »).
+    if (c.req.query("badge") !== undefined) {
+      const { badge } = query(c, badgeQuerySchema);
+      return c.json(await badgeService.list(await requireUser(c), badge));
+    }
     const status = c.req.query("status") === "all" ? "all" : "pending";
     return c.json(await verificationService.adminList(await requireUser(c), status));
   })

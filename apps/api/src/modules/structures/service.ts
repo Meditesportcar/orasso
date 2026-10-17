@@ -29,7 +29,13 @@ import {
   structures,
   user,
 } from "../../db/schema";
-import { activeMembership, type OrganizerAccess, requireOrganizer, requirePlatformRole } from "../../lib/access";
+import {
+  activeMembership,
+  type OrganizerAccess,
+  requireOrganizer,
+  requireOrganizerWrite,
+  requirePlatformRole,
+} from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { addressQuery, geocode } from "../../lib/geocode";
@@ -110,6 +116,7 @@ async function toOrganizer(s: StructureRow, access: OrganizerAccess): Promise<St
     verification: s.verification,
     verifiedAt: s.verifiedAt?.toISOString() ?? null,
     badgeExpiresAt: s.badgeExpiresAt?.toISOString() ?? null,
+    suspendedReason: s.suspendedReason,
     siret: s.siret,
     rna: s.rna,
     inviteToken: s.inviteToken,
@@ -209,7 +216,7 @@ export const structuresService = {
 
   /** Logo de la structure (carré, WebP 512 px). */
   async setLogo(v: Viewer, id: string, file: File): Promise<StructureOrganizer> {
-    const access = await requireOrganizer(v, id);
+    const access = await requireOrganizerWrite(v, id);
     rateLimit("fileUpload", v.user.id);
     if (file.size === 0) throw validation("Fichier vide");
     if (file.size > 8 * 1024 * 1024) throw new AppError(413, "payload_too_large", "Logo de 8 Mo au plus");
@@ -236,9 +243,9 @@ export const structuresService = {
     const s = await db.query.structures.findFirst({
       where: and(eq(structures.slug, slug), isNull(structures.deletedAt)),
     });
-    if (!s || s.verification === "suspended") throw notFound("Structure introuvable");
-    // Structure pas (encore) vérifiée (en attente, refusée) : visible de ses membres seulement, comme ses événements, qui
-    // ne sont jamais listés.
+    if (!s) throw notFound("Structure introuvable");
+    // Structure pas (encore) vérifiée (en attente, refusée) ou suspendue : visible de ses membres seulement, comme ses
+    // événements, qui ne sont jamais listés (lot 27 : un membre garde la lecture de sa structure suspendue, S31).
     if (s.verification !== "verified" && !(viewer && (await activeMembership(viewer.user.id, s.id)))) {
       throw notFound("Structure introuvable");
     }
@@ -278,7 +285,7 @@ export const structuresService = {
   },
 
   async update(v: Viewer, id: string, input: StructureUpdate): Promise<StructureOrganizer> {
-    const access = await requireOrganizer(v, id);
+    const access = await requireOrganizerWrite(v, id);
     const current = await structureById(id);
     const { siret: _siret, rna: _rna, ...fields } = input;
     const addressChanged = ["addressLine", "postalCode", "city"].some(
@@ -362,7 +369,7 @@ export const structuresService = {
    * Le propriétaire gère les co-organisateurs ; propriétaire et co-organisateurs gèrent le staff.
    */
   async invite(v: Viewer, id: string, input: MemberInvite) {
-    const access = await requireOrganizer(v, id);
+    const access = await requireOrganizerWrite(v, id);
     if (input.role === "co_organizer" && access.role === "co_organizer") {
       throw forbidden("Seul le propriétaire nomme les co-organisateurs");
     }
@@ -469,7 +476,7 @@ export const structuresService = {
   },
 
   async updateMember(v: Viewer, id: string, userId: string, input: MemberUpdate) {
-    const access = await requireOrganizer(v, id);
+    const access = await requireOrganizerWrite(v, id);
     const m = await db.query.structureMembers.findFirst({
       where: and(eq(structureMembers.structureId, id), eq(structureMembers.userId, userId)),
     });
@@ -483,7 +490,7 @@ export const structuresService = {
   },
 
   async removeMember(v: Viewer, id: string, userId: string) {
-    const access = await requireOrganizer(v, id);
+    const access = await requireOrganizerWrite(v, id);
     const m = await db.query.structureMembers.findFirst({
       where: and(eq(structureMembers.structureId, id), eq(structureMembers.userId, userId)),
     });
@@ -512,7 +519,7 @@ export const structuresService = {
 
   /** Bannissement des événements de la structure (seule l'équipe Orasso bannit de la plateforme). */
   async ban(v: Viewer, id: string, pseudo: string, reason: string | null) {
-    await requireOrganizer(v, id);
+    await requireOrganizerWrite(v, id);
     const target = await profilesRepo.byPseudo(pseudo);
     if (!target) throw notFound("Profil introuvable");
     await db
@@ -522,7 +529,7 @@ export const structuresService = {
   },
 
   async unban(v: Viewer, id: string, userId: string) {
-    await requireOrganizer(v, id);
+    await requireOrganizerWrite(v, id);
     await db.delete(structureBans).where(and(eq(structureBans.structureId, id), eq(structureBans.userId, userId)));
   },
 
@@ -536,8 +543,23 @@ export const structuresService = {
         .update(structures)
         .set(
           verified
-            ? { verification: "verified", verifiedAt: at, badgeExpiresAt: new Date(at.getTime() + YEAR_MS) }
-            : { verification: "unverified", verifiedAt: null, badgeExpiresAt: null },
+            ? {
+                verification: "verified",
+                verifiedAt: at,
+                badgeExpiresAt: new Date(at.getTime() + YEAR_MS),
+                // Lot 27 : une validation lève la suspension et repart d'un badge neuf (rappels remis à zéro).
+                suspendedReason: null,
+                suspendedAt: null,
+                badgeRemindedAt: {},
+              }
+            : {
+                verification: "unverified",
+                verifiedAt: null,
+                badgeExpiresAt: null,
+                suspendedReason: null,
+                suspendedAt: null,
+                badgeRemindedAt: {},
+              },
         )
         .where(eq(structures.id, id));
       await tx.insert(adminAuditLog).values({

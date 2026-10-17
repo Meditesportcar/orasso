@@ -5,6 +5,7 @@
 // par structure et par jour, 4 aux abonnés par 30 jours (S18), idempotence par `clientId`. Jamais d'e-mail : le
 // destinataire reçoit le push « message reçu » dédoublonné comme un message normal (S12), puis lit dans sa Boîte.
 import {
+  afterEventLabels,
   FOLLOWER_QUOTA_DEFAULT,
   FOLLOWER_QUOTA_WINDOW_MS,
   type FollowerQuota,
@@ -25,14 +26,17 @@ import {
   organizerKey,
   PUSH_PREVIEW_MAX,
   renderTemplate,
+  reviewLink,
   segmentNeedsEvent,
   segmentReachable,
   shorten,
 } from "@orasso/shared";
-import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
+  applications,
+  checkins,
   conversationParticipants,
   conversations,
   events,
@@ -197,7 +201,13 @@ export const groupMessagesService = {
    * `POST /structures/:id/group-messages` → `202 {groupMessageId}` : destinataires figés sous le verrou de la
    * structure (quotas sans course), envoi en tâche. Même `clientId` = même envoi (`200`, rien de renvoyé).
    */
-  async create(v: Viewer, structureId: string, input: GroupMessageCreate): Promise<GroupMessageCreated> {
+  async create(
+    v: Viewer,
+    structureId: string,
+    input: GroupMessageCreate,
+    /** Lot 27 : remerciement aux présents (`events.thanks_sent_at` posé dans la même transaction, une seule fois). */
+    opts: { thanks?: boolean } = {},
+  ): Promise<GroupMessageCreated> {
     const s = await requireStructureSpeaker(v, structureId);
     const replay = async () => {
       const [existing] = await db
@@ -216,6 +226,7 @@ export const groupMessagesService = {
       event,
       structureName: s.name,
       pseudo: "x".repeat(PSEUDO_MAX),
+      reviewLink: reviewLink(env.PUBLIC_URL, "x".repeat(36)),
     });
     if (longest.length > GROUP_MESSAGE_BODY_MAX) {
       throw validation(
@@ -282,11 +293,21 @@ export const groupMessagesService = {
             subject: input.subject,
             body: input.body,
             clientId: input.clientId,
+            thanks: Boolean(opts.thanks),
             recipientsCount: ids.length,
             createdAt: now(),
           })
           .returning();
         if (!gm) throw new Error("Message groupé non enregistré");
+        if (opts.thanks && event) {
+          // Écriture conditionnelle : le premier remerciement pose la date, tout autre est refusé (et annulé).
+          const [marked] = await tx
+            .update(events)
+            .set({ thanksSentAt: now() })
+            .where(and(eq(events.id, event.id), isNull(events.thanksSentAt)))
+            .returning({ id: events.id });
+          if (!marked) throw conflict("conflict", "Le remerciement est déjà parti.", { reason: "sent" });
+        }
         for (let i = 0; i < ids.length; i += 1000) {
           await tx
             .insert(groupMessageRecipients)
@@ -392,6 +413,26 @@ export const groupMessagesService = {
           ),
         );
       const byId = new Map(recipients.map((r) => [r.userId, r]));
+      // Lien d'avis (lot 27, § 11.2) : propre à chaque destinataire, celui de sa candidature pointée (véhicule).
+      const reviewApp = new Map<string, string>();
+      if (event) {
+        const entered = await tx
+          .select({ userId: applications.userId, applicationId: applications.id })
+          .from(checkins)
+          .innerJoin(applications, eq(applications.id, checkins.applicationId))
+          .where(
+            and(
+              eq(checkins.eventId, event.id),
+              eq(applications.kind, "vehicle"),
+              inArray(
+                applications.userId,
+                batch.map((b) => b.userId),
+              ),
+            ),
+          )
+          .orderBy(asc(checkins.checkedInAt), asc(applications.id));
+        for (const row of entered) if (!reviewApp.has(row.userId)) reviewApp.set(row.userId, row.applicationId);
+      }
       // Bannis de la structure depuis la création de l'envoi (reprise tardive) : sautés.
       const banned = new Set(
         (
@@ -430,15 +471,35 @@ export const groupMessagesService = {
           continue;
         }
         // Longueur contrôlée à la création (pire cas du pseudo) : la coupe n'est qu'une garde.
-        const body = composeBody(gm, { event, structureName: s.name, pseudo: person.pseudo }).slice(
-          0,
-          GROUP_MESSAGE_BODY_MAX,
-        );
+        const applicationId = reviewApp.get(r.userId) ?? null;
+        const body = composeBody(gm, {
+          event,
+          structureName: s.name,
+          pseudo: person.pseudo,
+          reviewLink: event
+            ? applicationId
+              ? reviewLink(env.PUBLIC_URL, applicationId)
+              : `${env.PUBLIC_URL}/e/${event.slug}`
+            : null,
+        }).slice(0, GROUP_MESSAGE_BODY_MAX);
         const { row, created } = await insertGroupMessage(tx, conversation.id, gm, body);
         await markDone(tx, gm.id, r.userId, conversation.id, row.id);
         if (created) {
           await pushGroupMessage(tx, conversation.id, r.userId, s.name, body, author);
           published.push({ conversationId: conversation.id, userId: r.userId, row });
+          // Remerciement (lot 27) : une ligne du Journal avec le lien d'avis, en plus du message de la Boîte.
+          if (gm.thanks && event) {
+            await notificationsService.notify(tx, r.userId, "event_thanks", {
+              title: afterEventLabels.thanksJournalTitle(event.title),
+              body: afterEventLabels.thanksJournalBody,
+              eventId: event.id,
+              data: { eventId: event.id, ...(applicationId ? { applicationId } : {}) },
+              link: {
+                label: afterEventLabels.thanksJournalAction,
+                path: applicationId ? `/app/acces?avis=${applicationId}` : `/e/${event.slug}`,
+              },
+            });
+          }
         }
         sent += 1;
       }
@@ -499,7 +560,7 @@ export const groupMessagesService = {
 /** Texte d'un destinataire : objet en tête, variables du modèle remplacées (`{{pseudo}}` : le sien). */
 function composeBody(
   gm: typeof groupMessages.$inferSelect,
-  ctx: { event: EventRow | null; structureName: string; pseudo: string },
+  ctx: { event: EventRow | null; structureName: string; pseudo: string; reviewLink: string | null },
 ): string {
   const text = renderTemplate(gm.body, {
     pseudo: ctx.pseudo,
@@ -507,7 +568,7 @@ function composeBody(
     "event.title": ctx.event?.title ?? null,
     "event.date": ctx.event ? formatDateTime(ctx.event.startsAt) : null,
     "event.city": ctx.event?.city ?? null,
-    review_link: ctx.event ? `${env.PUBLIC_URL}/e/${ctx.event.slug}#avis` : null,
+    review_link: ctx.reviewLink,
   });
   return gm.subject ? `${gm.subject}\n\n${text}` : text;
 }

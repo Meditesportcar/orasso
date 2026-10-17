@@ -3,7 +3,7 @@ import { staffRoles as ALL_STAFF_ROLES, type StaffRole, type StructureRole } fro
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../db/client";
-import { adminAuditLog, eventStaff, passkey, structureMembers } from "../db/schema";
+import { adminAuditLog, eventStaff, passkey, structureMembers, structures } from "../db/schema";
 import { env } from "../env";
 import { isSecondFactor } from "../modules/security/passkey";
 import { AppError, forbidden } from "./errors";
@@ -72,6 +72,27 @@ export async function requireOrganizer(v: Viewer, structureId: string, ip?: stri
     return { role: "super_admin" };
   }
   throw forbidden("Réservé aux organisateurs de la structure");
+}
+
+/**
+ * Écriture d'organisateur (lot 27, S31) : comme `requireOrganizer`, mais refusée à une structure suspendue (badge échu
+ * ou décision de l'équipe). Restent permis : tout ce qui se lit, le tri, l'accueil et le jour J des événements déjà
+ * publiés, le staff de ces événements, Maintenu / Incertain et l'annulation (sécurité des inscrits), l'export tracé.
+ */
+export async function requireOrganizerWrite(
+  v: Viewer,
+  structureId: string,
+  ip?: string | null,
+): Promise<OrganizerAccess> {
+  const access = await requireOrganizer(v, structureId, ip);
+  const [s] = await db
+    .select({ verification: structures.verification })
+    .from(structures)
+    .where(eq(structures.id, structureId));
+  if (s?.verification === "suspended") {
+    throw forbidden("Structure suspendue : lecture seule. Écris à l'équipe Orasso pour la rétablir.");
+  }
+  return access;
 }
 
 export async function requirePlatformRole(v: Viewer, role: "moderator" | "super_admin") {

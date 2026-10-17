@@ -71,6 +71,12 @@ export const rateRules = {
   homeRead: { max: 60, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
   homeWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   sponsoredClick: { max: 60, windowMs: 3_600_000, message: "Trop de clics : réessaie plus tard." },
+  /** Export des participants d'un événement (lot 27) : chaque export est tracé, pas de rafale. */
+  participantsExport: { max: 10, windowMs: 3_600_000, message: "Trop d'exports : réessaie dans une heure." },
+  /** Notes internes (lot 27) : créations, modifications, suppressions. */
+  noteWrite: { max: 60, windowMs: 3_600_000, message: "Trop de notes modifiées : réessaie plus tard." },
+  /** Administration des badges (lot 27) : justificatifs téléversés par l'équipe. */
+  adminUpload: { max: 30, windowMs: 3_600_000, message: "Trop d'envois : réessaie plus tard." },
   /** Staff (lot 24) : demandes pour rejoindre une structure, et invitations envoyées par une organisation. */
   staffRequest: { max: 10, windowMs: 86_400_000, message: "Trop de demandes de staff aujourd'hui : réessaie demain." },
   /** Boutique (lot 24) : billets et compteur séparés, plafond cohérent avec une entrée chargée (lots groupés côté appli). */

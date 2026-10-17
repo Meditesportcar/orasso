@@ -1,6 +1,7 @@
 import { Button, CheckboxField, Chip, SelectField, StatusBadge, TextField } from "@orasso/design-system/web";
 import {
   type ApplicationForTriage,
+  afterEventLabels,
   type Category,
   crewLabels,
   type EventCrewFilter,
@@ -17,6 +18,7 @@ import { Form } from "react-router";
 import { apiFetch } from "../lib/api.client";
 import { formatDayShort } from "../lib/format";
 import { badgeFor } from "../lib/status";
+import { StructureNotes } from "./StructureNotes";
 
 const STATUS_OPTIONS = [
   { value: "", label: "Tous les statuts" },
@@ -44,6 +46,7 @@ export type ListFilters = {
 /** Vue liste : filtres, sélection multiple, décisions en masse (chaque candidature réussit ou échoue seule). */
 export function TriageList({
   eventId,
+  structureId,
   items,
   nextHref,
   filters,
@@ -53,6 +56,8 @@ export function TriageList({
   onChanged,
 }: {
   eventId: string;
+  /** Notes internes de la structure (lot 27) : organisateurs seulement. */
+  structureId?: string;
   items: ApplicationForTriage[];
   nextHref: string | null;
   filters: ListFilters;
@@ -242,6 +247,19 @@ export function TriageList({
                   <td>
                     {item.applicant.pseudo}{" "}
                     <span className="s-muted o-t-caption">· {gradeLabels[item.applicant.grade]}</span>
+                    {structureId && (
+                      <details data-testid="triage-row-notes">
+                        <summary className="o-t-caption s-muted">
+                          {afterEventLabels.notesTitle} · {item.applicant.notes.length}
+                        </summary>
+                        <StructureNotes
+                          structureId={structureId}
+                          pseudo={item.applicant.pseudo}
+                          eventId={eventId}
+                          initial={item.applicant.notes}
+                        />
+                      </details>
+                    )}
                     {item.crew && (
                       <span className="s-row s-row--tight" data-testid="triage-row-crew">
                         <Chip>

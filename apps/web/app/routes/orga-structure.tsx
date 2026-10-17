@@ -4,6 +4,7 @@ import { Button, Chip, Plate, SelectField, TextField } from "@orasso/design-syst
 import {
   departmentSchema,
   type StripeAccountState,
+  type StructureNoteView,
   type StructureOrganizer,
   type StructurePartnerRow,
   type StructureUpdate,
@@ -18,6 +19,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 
 import { FileField, TextAreaField } from "../components/Fields";
 import { ShareButtons } from "../components/ShareButtons";
+import { StructureNotesPanel } from "../components/StructureNotesPanel";
 import { api, apiOrThrow, originOf, requireMe } from "../lib/api.server";
 import { formatDay } from "../lib/format";
 import type { Route } from "./+types/orga-structure";
@@ -38,11 +40,13 @@ async function organizerStructure(request: Request, slug: string) {
 export async function loader({ request, params }: Route.LoaderArgs) {
   const membership = await organizerStructure(request, params.structure);
   const id = membership.structureId;
-  const [structure, verification, stripe, partners] = await Promise.all([
+  const [structure, verification, stripe, partners, notes] = await Promise.all([
     apiOrThrow<StructureOrganizer>(request, `/structures/${id}`),
     apiOrThrow<StructureVerificationView>(request, `/structures/${id}/verification`),
     api<StripeAccountState>(request, `/structures/${id}/stripe`),
     api<StructurePartnerRow[]>(request, `/structures/${id}/partners`),
+    // Lot 27 : notes internes de la structure (les plus récentes).
+    api<{ items: StructureNoteView[] }>(request, `/structures/${id}/notes?limit=50`),
   ]);
   const url = new URL(request.url);
   return {
@@ -55,6 +59,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     stripeResult: url.searchParams.get("stripe"),
     isOwner: membership.role === "owner",
     partners: partners.ok ? partners.data : [],
+    notes: notes.ok ? notes.data.items : [],
   };
 }
 
@@ -185,7 +190,8 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function OrgaStructure({ loaderData, actionData }: Route.ComponentProps) {
-  const { structure, verification, origin, created, logoRefused, stripe, stripeResult, isOwner, partners } = loaderData;
+  const { structure, verification, origin, created, logoRefused, stripe, stripeResult, isOwner, partners, notes } =
+    loaderData;
   const busy = useNavigation().state !== "idle";
   const result = actionData as Result | undefined;
   const check = verification.registryCheck;
@@ -504,6 +510,12 @@ export default function OrgaStructure({ loaderData, actionData }: Route.Componen
           {message("stripe")}
         </section>
       )}
+
+      <StructureNotesPanel
+        structureId={structure.id}
+        initial={notes}
+        writable={structure.verification !== "suspended"}
+      />
 
       <section className="orga__panel s-stack" aria-labelledby="invite-title">
         <h2 id="invite-title" className="s-h2">

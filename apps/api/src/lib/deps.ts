@@ -43,7 +43,11 @@ export type JobName =
   // Lot 32 : conservation des signalements et sanctions (un an), quotidienne.
   | "moderation.purge"
   // Lot 30 : lignes « emplacement déjà montré » de plus de deux jours, quotidienne.
-  | "home.purge";
+  | "home.purge"
+  // Lot 27 : bilan rafraîchi à J+8 (et balayage horaire de secours), rappels et suspension des badges (quotidienne).
+  | "event.report-refresh"
+  | "event.report-sweep"
+  | "structure.badge-sweep";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

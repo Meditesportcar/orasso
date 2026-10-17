@@ -2,6 +2,7 @@
 // anti-conflits) : un lot ajoute son fichier et une ligne dans `api` ci-dessous. Aucune règle métier ici : elles sont
 // toutes dans l'API (CLAUDE.md).
 import { accountApi } from "./account";
+import { afterEventApi } from "./after-event";
 import { applicationsApi } from "./applications";
 import { communicationApi } from "./communication";
 import { crewsApi } from "./crews";
@@ -46,6 +47,7 @@ export const api = {
   ...communicationApi,
   ...moderationApi,
   ...invitationsApi,
+  ...afterEventApi,
 
   ...orgaApi,
   ...triageApi,
