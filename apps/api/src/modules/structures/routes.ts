@@ -2,9 +2,9 @@ import {
   banCreateSchema,
   memberInviteSchema,
   memberUpdateSchema,
-  pageQuery,
   registryCheckInputSchema,
   structureCreateSchema,
+  structureListQuery,
   structureUpdateSchema,
   structureVerifySchema,
   verificationDocumentKindSchema,
@@ -26,8 +26,10 @@ export const structuresRoutes = new Hono<AppEnv>()
     return c.json(await structuresService.create(v, await body(c, structureCreateSchema)), 201);
   })
   .get("/structures", async (c) => {
-    const q = query(c, pageQuery);
-    return c.json(await structuresService.list(q.limit, q.cursor), 200, { "cache-control": "public, max-age=60" });
+    const q = query(c, structureListQuery);
+    return c.json(await structuresService.list(q.limit, q.cursor, q.q), 200, {
+      "cache-control": "public, max-age=60",
+    });
   })
   .get("/invitations/:token", async (c) => c.json(await structuresService.byInviteToken(c.req.param("token"))))
   .post("/invitations/:token/accept", async (c) =>

@@ -12,6 +12,8 @@ export default [
     route("e/:eventId/candidatures", "routes/orga-candidatures.tsx"),
     route("e/:eventId/jour-j", "routes/orga-jour-j.tsx"),
     route("e/:eventId/billets", "routes/orga-billets.tsx"),
+    // Lot 24 : staff (membres, rôles, invitations, demandes, présences et relances).
+    route("staff", "routes/orga-staff.tsx"),
     // Lot 25 : invitations nominatives.
     route("e/:eventId/invitations", "routes/orga-invitations.tsx"),
     // Lot 20 : communication (consignes, annonces, messages groupés, modèles, messages des participants, staff).

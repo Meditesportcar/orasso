@@ -15,6 +15,7 @@ export * from "./profile";
 export * from "./provider";
 export * from "./review";
 export * from "./search";
+export * from "./shop";
 export * from "./social";
 export * from "./structure";
 export * from "./ticketing";

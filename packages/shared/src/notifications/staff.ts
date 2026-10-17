@@ -6,6 +6,10 @@ export const staffNotificationTypes = {
   staff_sync_reminder: "staff",
   staff_alert: "staff",
   stripe_account_changed: "staff",
+  // Lot 24 : demande pour devenir staff (aux organisateurs), réponse (au demandeur), invitation reçue d'une structure.
+  staff_request: "staff",
+  staff_request_accepted: "staff",
+  staff_invitation: "staff",
 } as const satisfies Record<string, NotificationFamily>;
 
 export const staffEmailAlwaysTypes = ["staff_presence_reminder"] as const;
@@ -16,4 +20,7 @@ export const staffNotificationLabels: Record<keyof typeof staffNotificationTypes
   staff_sync_reminder: "Synchronisation du mode staff",
   staff_alert: "Alerte du staff",
   stripe_account_changed: "Compte Stripe de la structure",
+  staff_request: "Demande pour rejoindre le staff",
+  staff_request_accepted: "Demande de staff acceptée",
+  staff_invitation: "Invitation à rejoindre une structure",
 };

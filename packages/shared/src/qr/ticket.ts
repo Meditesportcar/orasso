@@ -72,3 +72,58 @@ export function verifyTicketPayload(
   }
   return valid ? { ok: true, ticket } : { ok: false, reason: "bad_signature" };
 }
+
+// --- Décision de scan hors ligne d'un billet (rôle boutique, lot 24) --------------------------------------------
+
+export type TicketState = "valid" | "used" | "cancelled";
+
+/** Billet de la liste locale du rôle boutique : de quoi décider hors ligne, sans coordonnées. */
+export type LocalTicket = {
+  ticketId: string;
+  status: TicketState;
+  /** Pseudo du titulaire (public). */
+  holderLabel: string;
+  /** Nom du type de billet (« Entrée »). */
+  typeLabel: string;
+  usedAt: string | null;
+};
+
+export type TicketRefusal = "malformed" | "unknown_key" | "forged" | "other_event" | "cancelled";
+
+export type TicketScanDecision =
+  | { decision: "refused"; reason: TicketRefusal; ticketId: string | null }
+  /** Billet déjà passé : sur cet appareil ou sur un autre (liste synchronisée). */
+  | { decision: "already"; ticketId: string; ticket: LocalTicket | null; usedAt: string }
+  /** `listed: false` : signature valable mais billet absent de la liste du téléphone (réservé après la synchro). */
+  | { decision: "ok"; ticketId: string; ticket: LocalTicket | null; listed: boolean };
+
+/**
+ * Décision locale d'un QR de billet (fonction pure, rôle boutique, hors ligne) : préfixe `OB1`, clé de confiance,
+ * signature, événement, liste locale, déjà utilisé. Un QR d'inscription (`OR1`) n'est pas un billet : `malformed`.
+ * « Déjà utilisé » combine ce que dit la liste du serveur et ce que cet appareil a déjà accepté (anti-rejeu local).
+ */
+export function decideTicketScan(
+  payload: string,
+  ctx: {
+    eventNo: number;
+    keys: ReadonlyMap<number, Uint8Array>;
+    verify: Ed25519Verify;
+    findTicket: (ticketId: string) => LocalTicket | undefined;
+    /** Heure à laquelle cet appareil a déjà accepté ce billet (absent de la liste, ou liste pas encore à jour). */
+    usedLocally?: (ticketId: string) => string | undefined;
+  },
+): TicketScanDecision {
+  const check = verifyTicketPayload(payload, ctx.keys, ctx.verify);
+  if (!check.ok) {
+    return { decision: "refused", reason: check.reason === "bad_signature" ? "forged" : check.reason, ticketId: null };
+  }
+  const ticketId = check.ticket.passId;
+  if (check.ticket.eventNo !== ctx.eventNo) return { decision: "refused", reason: "other_event", ticketId };
+  const ticket = ctx.findTicket(ticketId);
+  if (ticket?.status === "cancelled") return { decision: "refused", reason: "cancelled", ticketId };
+  const usedAt = ticket?.usedAt || ctx.usedLocally?.(ticketId);
+  if (ticket?.status === "used" || usedAt) {
+    return { decision: "already", ticketId, ticket: ticket ?? null, usedAt: usedAt ?? "" };
+  }
+  return { decision: "ok", ticketId, ticket: ticket ?? null, listed: Boolean(ticket) };
+}
