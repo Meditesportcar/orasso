@@ -1,10 +1,11 @@
-import type { ApplicationStatus, EventCounters } from "@orasso/shared";
-import { and, count, eq, sql } from "drizzle-orm";
+import { type ApplicationStatus, type EventCounters, freePlaces, isMultiDay } from "@orasso/shared";
+import { and, count, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { applications, events } from "../../db/schema";
 import { notFound } from "../../lib/errors";
 import type { Executor, Tx } from "../../lib/tx";
+import { daysRepo } from "./days";
 
 export type EventRow = typeof events.$inferSelect;
 
@@ -22,11 +23,18 @@ export const eventsRepo = {
     return e;
   },
 
-  async statusCounts(eventId: string, ex: Executor = db): Promise<Record<ApplicationStatus, number>> {
+  /** Candidatures de véhicules par statut ; `dayId` (lot 26) : celles de ce jour et de tout l'événement. */
+  async statusCounts(eventId: string, ex: Executor = db, dayId?: string): Promise<Record<ApplicationStatus, number>> {
     const rows = await ex
       .select({ status: applications.status, n: count() })
       .from(applications)
-      .where(and(eq(applications.eventId, eventId), eq(applications.kind, "vehicle")))
+      .where(
+        and(
+          eq(applications.eventId, eventId),
+          eq(applications.kind, "vehicle"),
+          dayId ? or(isNull(applications.eventDayId), eq(applications.eventDayId, dayId)) : undefined,
+        ),
+      )
       .groupBy(applications.status);
     const counts = {
       pending: 0,
@@ -43,11 +51,27 @@ export const eventsRepo = {
     return counts;
   },
 
-  /** Compteurs du tri (places restantes, retenus, à trier, liste d'attente, refusés). */
-  async counters(event: Pick<EventRow, "id" | "capacity">, ex: Executor = db): Promise<EventCounters> {
-    const c = await this.statusCounts(event.id, ex);
+  /**
+   * Compteurs du tri (places restantes, retenus, à trier, liste d'attente, refusés). Plusieurs jours (lot 26) : sans
+   * `dayId`, places du meilleur jour ; avec `dayId`, les candidatures de ce jour et de tout l'événement, et les places
+   * de ce jour.
+   */
+  async counters(
+    event: Pick<EventRow, "id" | "capacity">,
+    ex: Executor = db,
+    dayId: string | null = null,
+  ): Promise<EventCounters> {
+    const days = await daysRepo.list(event.id, ex);
+    const multi = isMultiDay(days);
+    const c = multi && dayId ? await this.statusCounts(event.id, ex, dayId) : await this.statusCounts(event.id, ex);
+    let remaining = event.capacity === null ? null : Math.max(0, event.capacity - c.accepted - c.offered);
+    if (multi) {
+      const taken = await daysRepo.taken(event.id, ex);
+      const free = dayId ? freePlaces(event, days, taken, dayId) : daysRepo.remainingOf(event, days, taken);
+      remaining = free === null || free === undefined ? null : Math.max(0, free);
+    }
     return {
-      remaining: event.capacity === null ? null : Math.max(0, event.capacity - c.accepted - c.offered),
+      remaining,
       accepted: c.accepted,
       pending: c.pending,
       waitlisted: c.waitlisted + c.offered,

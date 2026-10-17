@@ -31,6 +31,9 @@ describe("règlement de J+2", () => {
     expect(settlementKind({ status: "accepted", withdrawnAfterLock: false, checkedIn: false })).toBe("malus");
     expect(settlementKind({ status: "withdrawn", withdrawnAfterLock: true, checkedIn: false })).toBe("malus");
     expect(settlementKind({ status: "withdrawn", withdrawnAfterLock: false, checkedIn: false })).toBeNull();
+    // Lot 26 : désisté après être entré (un jour précédent) : la participation reste, jamais de malus.
+    expect(settlementKind({ status: "withdrawn", withdrawnAfterLock: true, checkedIn: true })).toBe("participation");
+    expect(settlementKind({ status: "withdrawn", withdrawnAfterLock: false, checkedIn: true })).toBe("participation");
     expect(settlementKind({ status: "cancelled", withdrawnAfterLock: false, checkedIn: false })).toBeNull();
     expect(settlementKind({ status: "refused", withdrawnAfterLock: false, checkedIn: false })).toBeNull();
   });

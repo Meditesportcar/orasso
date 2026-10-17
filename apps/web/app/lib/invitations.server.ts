@@ -24,9 +24,11 @@ export async function invitationAction(
       : { ok: null, error: res.error.message, status: res.status };
   }
   const vehicleId = String(form.get("vehicleId") ?? "") || undefined;
+  // Lot 26 : jour choisi (événement sur plusieurs jours) ; vide = tout l'événement.
+  const eventDayId = String(form.get("eventDayId") ?? "") || undefined;
   const res = await api<InvitationAcceptResult>(request, `/event-invitations/${encodeURIComponent(id)}/accept`, {
     method: "POST",
-    json: vehicleId ? { vehicleId } : {},
+    json: { ...(vehicleId ? { vehicleId } : {}), ...(eventDayId ? { eventDayId } : {}) },
   });
   if (!res.ok) return { ok: null, error: res.error.message, status: res.status };
   return {

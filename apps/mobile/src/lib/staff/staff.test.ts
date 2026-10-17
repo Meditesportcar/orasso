@@ -24,13 +24,16 @@ import { describe, expect, it } from "vitest";
 import { DEMO_PUBLIC_KEY, ed25519Verify, plateHashOf } from "./crypto";
 import {
   applyResults,
+  arrivedOn,
   backoffMs,
   buildState,
   checkinAction,
   counters,
   decideLocal,
   dueBatches,
+  expectedOn,
   isPurgeDue,
+  markSeen,
   mergeSync,
   type PendingAction,
   quickPlateMatch,
@@ -107,6 +110,7 @@ function entry(n: number, over: Partial<AccessListEntry> = {}): AccessListEntry 
     zoneName: n % 2 ? "JDM" : "Libre",
     checkedInAt: null,
     checkinMethod: null,
+    dayDate: null,
     updatedAt: "2026-10-15T08:00:00.000Z",
     ...over,
   };
@@ -135,6 +139,7 @@ function syncBody(
         { id: uuid(9001), code: "JDM", name: "JDM", capacity: 30 },
         { id: uuid(9002), code: "LIB", name: "Libre", capacity: 40 },
       ],
+      days: [],
     },
     keys: [],
     myRoles: ["scan"],
@@ -362,6 +367,107 @@ describe("décision d'un scan hors ligne", () => {
     const weird = `OR1${"A".repeat(138)}`;
     const d = decideLocal(state(), weird, keys, ed25519Verify);
     expect(scanAction(d, weird, uuid(503), new Date()).item.rawPayload).toBe(weird);
+  });
+});
+
+// --- Plusieurs jours (lot 26) ----------------------------------------------------------------------------------
+
+describe("événement sur plusieurs jours", () => {
+  const server = newKey(1);
+  const keys = keyMap([{ kid: 1, publicKey: server.publicKey, retiredAt: null }], pinnedTo(server));
+  const days = [
+    { id: uuid(8001), date: "2026-10-15", startsAt: "2026-10-15T07:00:00.000Z", endsAt: "2026-10-15T16:00:00.000Z" },
+    { id: uuid(8002), date: "2026-10-16", startsAt: "2026-10-16T07:00:00.000Z", endsAt: "2026-10-16T16:00:00.000Z" },
+  ];
+  const day1 = new Date("2026-10-15T08:00:00Z");
+  const day2 = new Date("2026-10-16T08:00:00Z");
+  const multi = () => {
+    const body = syncBody([entry(1), entry(2, { dayDate: "2026-10-16" }), entry(3, { dayDate: "2026-10-15" })]);
+    const merged = mergeSync(
+      null,
+      { ...body, event: { ...body.event, days } } as StaffSync,
+      "user-julie",
+      new Date("2026-10-15T07:01:00Z"),
+    );
+    if (!merged.ok) throw new Error("fusion");
+    return buildState(merged.meta, merged.entries, []);
+  };
+
+  it("la synchro garde les jours et le jour de chaque entrée", () => {
+    const s = multi();
+    expect(s.meta.days?.map((d) => d.date)).toEqual(["2026-10-15", "2026-10-16"]);
+    expect(s.entries.get(uuid(2))?.dayDate).toBe("2026-10-16");
+  });
+
+  it("« Autre jour » le jour 1 pour une entrée du jour 2, OK le jour 2 ; tout l'événement OK chaque jour", () => {
+    const s = multi();
+    const p2 = passPayload(server, uuid(2));
+    expect(decideLocal(s, p2, keys, ed25519Verify, day1)).toMatchObject({
+      decision: "refused",
+      reason: "other_day",
+      dayDate: "2026-10-16",
+    });
+    expect(decideLocal(s, p2, keys, ed25519Verify, day2).decision).toBe("ok");
+    expect(decideLocal(s, passPayload(server, uuid(1)), keys, ed25519Verify, day1).decision).toBe("ok");
+    expect(decideLocal(s, passPayload(server, uuid(1)), keys, ed25519Verify, day2).decision).toBe("ok");
+  });
+
+  it("accepté quand même : une entrée locale (override) rattachée à la candidature", () => {
+    const s = multi();
+    const p2 = passPayload(server, uuid(2));
+    const { item, checkin } = scanAction(
+      { decision: "override", passId: uuid(2) },
+      p2,
+      uuid(600),
+      day1,
+      s.entries.get(uuid(2)),
+    );
+    expect(item).toMatchObject({ decision: "override", passId: uuid(2) });
+    expect(checkin).toMatchObject({ applicationId: uuid(1002), method: "override" });
+  });
+
+  it("tout l'événement entré le jour 1 : « déjà entré » le jour 2 (S29)", () => {
+    const s = multi();
+    const p1 = passPayload(server, uuid(1));
+    const first = decideLocal(s, p1, keys, ed25519Verify, day1);
+    const { checkin } = scanAction(first, p1, uuid(601), day1, s.entries.get(uuid(1)));
+    if (checkin) s.local.set(checkin.passId, checkin);
+    expect(decideLocal(s, p1, keys, ed25519Verify, day2)).toMatchObject({ decision: "already" });
+  });
+
+  it("arrivé du jour : un « tout l'événement » entré la veille est attendu, puis arrivé une fois lu aujourd'hui", () => {
+    const s = multi();
+    const whole = s.entries.get(uuid(1));
+    if (!whole) throw new Error("entrée");
+    s.entries.set(uuid(1), { ...whole, checkedInAt: "2026-10-15T08:00:00.000Z" });
+    const now = s.entries.get(uuid(1));
+    if (!now) throw new Error("entrée");
+    expect(arrivedOn(s, now, day1)).toBe(true);
+    expect(arrivedOn(s, now, day2)).toBe(false);
+    expect(counters(s, day2).arrived).toBe(0);
+    markSeen(s, uuid(1), day2);
+    expect(arrivedOn(s, now, day2)).toBe(true);
+    // Lecture reçue par le serveur depuis un autre appareil (`lastSeenAt` de la synchro).
+    s.seen?.clear();
+    s.entries.set(uuid(1), { ...now, lastSeenAt: "2026-10-16T07:30:00.000Z" });
+    expect(counters(s, day2).arrived).toBe(1);
+  });
+
+  it("pointage rapide par plaque : seulement les attendus du jour", () => {
+    const s = multi();
+    const plate2 = `${"AB2".padEnd(3, "0")}102CD`;
+    expect(quickPlateMatch(s, plate2, day1)).toMatchObject({ kind: "none" });
+    expect(quickPlateMatch(s, plate2, day2)).toMatchObject({ kind: "one" });
+  });
+
+  it("compteurs et filtre « Aujourd'hui » : tout l'événement et le jour même", () => {
+    const s = multi();
+    expect(counters(s, day1).expected).toBe(2);
+    expect(counters(s, day2).expected).toBe(2);
+    expect(expectedOn(s.meta, { dayDate: "2026-10-16" }, day1)).toBe(false);
+    expect(expectedOn(s.meta, { dayDate: null }, day1)).toBe(true);
+    // Événement d'un jour : tout le monde, toujours.
+    expect(counters(stateWith([entry(1), entry(2)]), day2).expected).toBe(2);
   });
 });
 

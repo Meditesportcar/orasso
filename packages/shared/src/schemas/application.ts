@@ -28,6 +28,11 @@ export const applicationCreateSchema = z.object({
   newsletterOptIn: z.boolean().default(false),
   companions: z.number().int().min(0).max(9).default(0),
   message: optionalText(120),
+  /**
+   * Événement sur plusieurs jours (lot 26) : le jour choisi ; absent ou `null` = tout l'événement. Obligatoire en
+   * accès « par jour », refusé en accès « tout l'événement » et pour un événement d'un jour.
+   */
+  eventDayId: z.uuid().nullish(),
 });
 export type ApplicationCreate = z.infer<typeof applicationCreateSchema>;
 
@@ -75,6 +80,8 @@ export const triageQuerySchema = pageQuery.extend({
   grade: gradeSchema.optional(),
   /** Candidatures d'un crew (lot 19). */
   crewId: z.uuid().optional(),
+  /** Lot 26 : candidatures d'un jour (identifiant) ou de tout l'événement (`whole`). */
+  dayId: z.union([z.uuid(), z.literal("whole")]).optional(),
   q: z.string().trim().max(80).optional(),
   sort: z.enum(["created_at", "waitlist_rank", "year", "pseudo"]).default("created_at"),
 });
@@ -100,6 +107,8 @@ export type MyApplication = {
     status: "draft" | "published" | "cancelled";
   };
   vehicle: { id: string; label: string } | null;
+  /** Lot 26 : jour choisi d'un événement sur plusieurs jours (`null` = tout l'événement, ou événement d'un jour). */
+  day: ApplicationDay | null;
   waitlistRank: number | null;
   offerExpiresAt: string | null;
   /** « Désistement sans pénalité jusqu'au … » (date du verrouillage). */
@@ -123,6 +132,9 @@ export type MyApplication = {
   crew: ApplicationCrewInfo | null;
 };
 
+/** Jour d'une candidature (lot 26) : identifiant, date locale `AAAA-MM-JJ`, horaires. */
+export type ApplicationDay = { id: string; date: string; startsAt: string; endsAt: string };
+
 export type ApplicationAlert = "duplicatePlate" | "banned" | "unregistered";
 
 /** Fiche de tri (organisateur) : véhicule complet avec la plaque, candidat, historique, alertes. */
@@ -145,6 +157,8 @@ export type ApplicationForTriage = {
   refusalSent: boolean;
   withdrawnAfterLock: boolean;
   zoneId: string | null;
+  /** Lot 26 : jour choisi (`null` = tout l'événement, ou événement d'un jour). */
+  day: ApplicationDay | null;
   vehicle: VehicleFull | null;
   applicant: {
     userId: string;

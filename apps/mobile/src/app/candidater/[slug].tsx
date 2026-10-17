@@ -14,7 +14,7 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import type { MyApplication, VehicleFull } from "@orasso/shared";
+import { eventDaysLabels, formatDayDate, type MyApplication, type VehicleFull } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -36,7 +36,7 @@ const { space1, space2, space3 } = tokens.spacing;
 export default function Candidater() {
   const { t } = useTheme();
   const router = useRouter();
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { slug, jour } = useLocalSearchParams<{ slug: string; jour?: string }>();
   const { reload, markAnnounced } = useApplications();
   const event = useApi(() => api.eventBySlug(slug), [slug]);
   const vehicles = useApi(() => api.vehicles(), []);
@@ -50,6 +50,8 @@ export default function Candidater() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MyApplication[] | null>(null);
+  // Lot 26 : jour choisi (`undefined` = pas encore touché : celui du lien, sinon le premier possible).
+  const [dayChoice, setDayChoice] = useState<string | null | undefined>(undefined);
 
   const e = event.data;
   const wanted = useMemo(() => new Set(e?.criteria?.categoryIds ?? []), [e]);
@@ -72,6 +74,42 @@ export default function Candidater() {
     );
   }
 
+  // Plusieurs jours (lot 26) : « Tout l'événement » et/ou un jour, selon le mode d'accès de l'organisateur.
+  const taken = (e.myApplications ?? [])
+    .filter((a) => ["pending", "accepted", "waitlisted", "offered"].includes(a.status))
+    .map((a) => a.eventDayId);
+  const dayChoices: { id: string | null; label: string; full: boolean; mine: boolean }[] =
+    (e.days?.length ?? 0) > 1
+      ? [
+          ...(e.dayAccess !== "per_day"
+            ? [
+                {
+                  id: null,
+                  label: eventDaysLabels.wholeEvent,
+                  full: (e.days ?? []).some((d) => d.remaining === 0),
+                  mine: taken.length > 0,
+                },
+              ]
+            : []),
+          ...(e.dayAccess !== "whole"
+            ? e.days.map((d) => ({
+                id: d.id as string | null,
+                label: formatDayDate(d.date),
+                full: d.remaining === 0,
+                mine: taken.includes(d.id),
+              }))
+            : []),
+        ]
+      : [];
+  const dayId =
+    dayChoice !== undefined
+      ? dayChoice
+      : ((
+          dayChoices.find((c) => c.id === jour && !c.full && !c.mine) ??
+          dayChoices.find((c) => !c.full && !c.mine) ??
+          dayChoices[0]
+        )?.id ?? null);
+
   const toggle = (id: string) =>
     setPicked((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : ids.length < limit ? [...ids, id] : ids));
 
@@ -87,6 +125,7 @@ export default function Candidater() {
         newsletterOptIn: newsletter,
         companions,
         message: message.trim() || null,
+        eventDayId: (e.days?.length ?? 0) > 1 ? dayId : undefined,
       });
       // Une admission sans sélection est une retenue d'office : annoncée ici, pas une deuxième fois ensuite.
       markAnnounced(apps.filter((a) => a.status === "accepted").map((a) => a.id));
@@ -150,6 +189,24 @@ export default function Candidater() {
             Ceux qui collent aux catégories recherchées sont en premier. Limite : {limit} par personne pour cet
             événement.
           </Muted>
+          {dayChoices.length > 0 ? (
+            <View style={styles.days} testID="apply-day-choice">
+              <Text variant="label" color={t.color.ink}>
+                {eventDaysLabels.chooseDay}
+              </Text>
+              <ChipRow>
+                {dayChoices.map((c) => (
+                  <Chip key={c.id ?? "whole"} selected={dayId === c.id} onPress={() => setDayChoice(c.id)}>
+                    {c.mine
+                      ? `${c.label} · ${eventDaysLabels.alreadyApplied}`
+                      : c.full
+                        ? `${c.label} · ${eventDaysLabels.dayFull}`
+                        : c.label}
+                  </Chip>
+                ))}
+              </ChipRow>
+            </View>
+          ) : null}
           {vehicles.loading ? <Muted variant="body">Chargement de ton garage…</Muted> : null}
           {eligible.map((v) => {
             const on = picked.includes(v.id);
@@ -366,6 +423,7 @@ function Line({ k, v, hint, last }: { k: string; v: string; hint?: string; last?
 }
 
 const styles = StyleSheet.create({
+  days: { gap: space2 },
   vehicle: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3 },
   thumb: { width: 76, height: 58, borderRadius: 8 },
   vehicleBody: { flex: 1, gap: space1 },

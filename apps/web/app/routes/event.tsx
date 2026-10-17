@@ -22,7 +22,7 @@ import {
   vehicleTypeLabels,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
-
+import { dayLabel, EventDays } from "../components/EventDays";
 import { EventFeed } from "../components/EventFeed";
 import { EventMap } from "../components/EventMap";
 import { ContactOrganizer } from "../components/Messaging";
@@ -425,6 +425,15 @@ function EventPage({
           )}
         </div>
 
+        {/* Lot 26 : jours d'un événement sur plusieurs jours (date, horaires, places restantes, mode d'accès). */}
+        <EventDays
+          days={event.days}
+          dayAccess={event.dayAccess}
+          candidateHref={
+            connected && state.kind === "open" && event.admission !== "invite_only" ? candidateHref : undefined
+          }
+        />
+
         <section className="s-section s-section--first">
           <h2 className="s-h2">Véhicules recherchés</h2>
           <ChipRow>
@@ -549,12 +558,35 @@ function EventPage({
                 return (
                   <div key={a.id} className="s-row">
                     {badge ? <StatusBadge status={badge.status} /> : <Chip>{applicationStatusLabels[a.status]}</Chip>}
+                    {event.days.length > 1 && (
+                      <span className="o-t-caption s-muted">
+                        {dayLabel(event.days.find((d) => d.id === a.eventDayId)?.date)}
+                      </span>
+                    )}
                   </div>
                 );
               })}
               <Button variant="primary" icon="qr" href="/app/acces" fullWidth>
                 Voir mon accès
               </Button>
+              {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
+              {event.days.length > 1 &&
+                event.dayAccess !== "whole" &&
+                state.kind === "open" &&
+                event.admission !== "invite_only" &&
+                !mine.some(
+                  (a) => a.eventDayId === null && ["pending", "accepted", "waitlisted", "offered"].includes(a.status),
+                ) && (
+                  <Button
+                    variant="secondary"
+                    icon="calendar"
+                    href={candidateHref}
+                    fullWidth
+                    data-testid="apply-other-day"
+                  >
+                    Candidater pour un autre jour
+                  </Button>
+                )}
               {leadsCrew && state.kind === "open" && (
                 <Button
                   variant="secondary"

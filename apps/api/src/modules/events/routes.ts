@@ -1,5 +1,6 @@
 import {
   eventCreateSchema,
+  eventDaysPutSchema,
   eventListQuerySchema,
   eventUpdateSchema,
   outlookUpdateSchema,
@@ -43,6 +44,11 @@ export const eventsRoutes = new Hono<AppEnv>()
   .patch("/events/:id", async (c) => {
     const v = await requireUser(c);
     return c.json(await eventsService.update(v, uuidParam(c, "id"), await body(c, eventUpdateSchema)));
+  })
+  // Lot 26 : jours d'un événement sur plusieurs jours (liste complète).
+  .put("/events/:id/days", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await eventsService.setDays(v, uuidParam(c, "id"), await body(c, eventDaysPutSchema)));
   })
   .post("/events/:id/duplicate", async (c) =>
     c.json(await eventsService.duplicate(await requireUser(c), uuidParam(c, "id")), 201),

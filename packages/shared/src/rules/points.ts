@@ -57,6 +57,9 @@ export function settlementKind(app: {
   checkedIn: boolean;
 }): "participation" | "malus" | null {
   if (app.status === "accepted") return app.checkedIn ? "participation" : "malus";
+  // Lot 26 : un désistement après une entrée (« tout l'événement » venu le samedi, désisté le dimanche pour le lundi)
+  // garde la participation : la personne est venue. Le désistement libère seulement la place des jours suivants.
+  if (app.status === "withdrawn" && app.checkedIn) return "participation";
   if (app.status === "withdrawn" && app.withdrawnAfterLock) return "malus";
   return null;
 }

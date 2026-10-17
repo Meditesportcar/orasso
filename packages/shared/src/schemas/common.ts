@@ -44,6 +44,8 @@ export const errorCodes = [
   "signup_closed",
   "providers_disabled",
   "self_action",
+  // Lot 26 : événements sur plusieurs jours (jour qui a des candidatures, retrait refusé).
+  "day_in_use",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

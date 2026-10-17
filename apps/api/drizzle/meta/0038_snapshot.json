@@ -1,5 +1,5 @@
 {
-  "id": "4bda63e4-1828-4f34-b468-61c96006f80d",
+  "id": "ea09048c-87b4-4048-b033-e6c436d69af0",
   "prevId": "4ea5398a-572e-4400-a758-84ca94f0bbc8",
   "version": "7",
   "dialect": "postgresql",
@@ -298,12 +298,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "assistance_request_id": {
-          "name": "assistance_request_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "reason": {
           "name": "reason",
           "type": "text",
@@ -360,48 +354,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "admin_audit_log_action_idx": {
-          "name": "admin_audit_log_action_idx",
-          "columns": [
-            {
-              "expression": "action",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "admin_audit_log_structure_idx": {
-          "name": "admin_audit_log_structure_idx",
-          "columns": [
-            {
-              "expression": "structure_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -424,371 +376,6 @@
           "tableTo": "structures",
           "columnsFrom": [
             "structure_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "admin_audit_log_assistance_request_id_assistance_requests_id_fk": {
-          "name": "admin_audit_log_assistance_request_id_assistance_requests_id_fk",
-          "tableFrom": "admin_audit_log",
-          "tableTo": "assistance_requests",
-          "columnsFrom": [
-            "assistance_request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.assistance_requests": {
-      "name": "assistance_requests",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "structure_id": {
-          "name": "structure_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "requested_by": {
-          "name": "requested_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "message": {
-          "name": "message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "assistance_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'open'"
-        },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "closed_by": {
-          "name": "closed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "close_reason": {
-          "name": "close_reason",
-          "type": "assistance_close_reason",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "assistance_requests_open_key": {
-          "name": "assistance_requests_open_key",
-          "columns": [
-            {
-              "expression": "structure_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"assistance_requests\".\"status\" = 'open'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "assistance_requests_status_idx": {
-          "name": "assistance_requests_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "assistance_requests_structure_id_structures_id_fk": {
-          "name": "assistance_requests_structure_id_structures_id_fk",
-          "tableFrom": "assistance_requests",
-          "tableTo": "structures",
-          "columnsFrom": [
-            "structure_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "assistance_requests_requested_by_user_id_fk": {
-          "name": "assistance_requests_requested_by_user_id_fk",
-          "tableFrom": "assistance_requests",
-          "tableTo": "user",
-          "columnsFrom": [
-            "requested_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "assistance_requests_closed_by_user_id_fk": {
-          "name": "assistance_requests_closed_by_user_id_fk",
-          "tableFrom": "assistance_requests",
-          "tableTo": "user",
-          "columnsFrom": [
-            "closed_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.newsletter_deliveries": {
-      "name": "newsletter_deliveries",
-      "schema": "",
-      "columns": {
-        "newsletter_id": {
-          "name": "newsletter_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sent_at": {
-          "name": "sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "newsletter_deliveries_newsletter_id_newsletters_id_fk": {
-          "name": "newsletter_deliveries_newsletter_id_newsletters_id_fk",
-          "tableFrom": "newsletter_deliveries",
-          "tableTo": "newsletters",
-          "columnsFrom": [
-            "newsletter_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "newsletter_deliveries_user_id_user_id_fk": {
-          "name": "newsletter_deliveries_user_id_user_id_fk",
-          "tableFrom": "newsletter_deliveries",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "newsletter_deliveries_pkey": {
-          "name": "newsletter_deliveries_pkey",
-          "columns": [
-            "newsletter_id",
-            "user_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.newsletters": {
-      "name": "newsletters",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "subject": {
-          "name": "subject",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "body_md": {
-          "name": "body_md",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "newsletter_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'draft'"
-        },
-        "scheduled_at": {
-          "name": "scheduled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sent_at": {
-          "name": "sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "recipients_count": {
-          "name": "recipients_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "newsletters_status_idx": {
-          "name": "newsletters_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "scheduled_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "newsletters_created_by_user_id_fk": {
-          "name": "newsletters_created_by_user_id_fk",
-          "tableFrom": "newsletters",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
           ],
           "columnsTo": [
             "id"
@@ -1205,10 +792,32 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "coalesce(\"event_day_id\", '00000000-0000-0000-0000-000000000000'::uuid)",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
             }
           ],
           "isUnique": true,
           "where": "\"applications\".\"status\" not in ('refused', 'withdrawn', 'expired', 'cancelled')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "applications_event_day_idx": {
+          "name": "applications_event_day_idx",
+          "columns": [
+            {
+              "expression": "event_day_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"applications\".\"event_day_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1321,7 +930,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "applications_decided_by_user_id_fk": {
@@ -3696,6 +3305,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "capacity": {
+          "name": "capacity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3739,7 +3354,16 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "event_days_dates_check": {
+          "name": "event_days_dates_check",
+          "value": "\"event_days\".\"ends_at\" > \"event_days\".\"starts_at\""
+        },
+        "event_days_capacity_check": {
+          "name": "event_days_capacity_check",
+          "value": "\"event_days\".\"capacity\" is null or \"event_days\".\"capacity\" > 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.event_zones": {
@@ -4015,6 +3639,14 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "day_access": {
+          "name": "day_access",
+          "type": "day_access",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'whole'"
         },
         "status": {
           "name": "status",
@@ -13255,33 +12887,6 @@
         "replaced"
       ]
     },
-    "public.assistance_close_reason": {
-      "name": "assistance_close_reason",
-      "schema": "public",
-      "values": [
-        "organizer",
-        "admin",
-        "expired"
-      ]
-    },
-    "public.assistance_status": {
-      "name": "assistance_status",
-      "schema": "public",
-      "values": [
-        "open",
-        "closed"
-      ]
-    },
-    "public.newsletter_status": {
-      "name": "newsletter_status",
-      "schema": "public",
-      "values": [
-        "draft",
-        "scheduled",
-        "sending",
-        "sent"
-      ]
-    },
     "public.application_kind": {
       "name": "application_kind",
       "schema": "public",
@@ -13435,6 +13040,15 @@
       "values": [
         "leader",
         "member"
+      ]
+    },
+    "public.day_access": {
+      "name": "day_access",
+      "schema": "public",
+      "values": [
+        "whole",
+        "per_day",
+        "both"
       ]
     },
     "public.event_admission": {

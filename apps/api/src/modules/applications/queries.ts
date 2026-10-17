@@ -14,7 +14,7 @@ import {
   type StructureNoteView,
   type TriageQuery,
 } from "@orasso/shared";
-import { and, asc, count, desc, eq, gt, ilike, inArray, lte, ne, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, ilike, inArray, isNull, lte, ne, or, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -41,6 +41,7 @@ import type { Viewer } from "../../lib/session";
 import { contactViews } from "../after-event/contact-views";
 import { notesService } from "../after-event/notes";
 import { crewsForApplications, crewsForTriage, eventCrewFilters } from "../crews/application-info";
+import { type DayRow, daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { pointsService } from "../points/service";
 import { loadProviders, triageView } from "../providers/serializers";
@@ -52,12 +53,21 @@ import type { ApplicationRow } from "./service";
 /** Candidature seule, ou venue en crew confirmée par le membre (lot 19) : seules visibles de l'organisation. */
 const confirmedByMember = sql`(${applications.crewApplicationId} is null or ${applications.memberConfirmedAt} is not null)`;
 
+/** Jour d'une candidature tel que les clients le reçoivent (lot 26). */
+export const dayView = (d: DayRow | undefined) =>
+  d ? { id: d.id, date: d.dayDate, startsAt: d.startsAt.toISOString(), endsAt: d.endsAt.toISOString() } : null;
+
 /** Rangs affichés (1 = prochain servi) de toutes les candidatures en liste d'attente d'un événement. */
 async function waitlistRanks(eventIds: string[]): Promise<Map<string, number>> {
   const ranks = new Map<string, number>();
   if (!eventIds.length) return ranks;
   const rows = await db
-    .select({ id: applications.id, eventId: applications.eventId, kind: applications.kind })
+    .select({
+      id: applications.id,
+      eventId: applications.eventId,
+      kind: applications.kind,
+      eventDayId: applications.eventDayId,
+    })
     .from(applications)
     .where(and(inArray(applications.eventId, eventIds), eq(applications.status, "waitlisted")))
     .orderBy(
@@ -65,13 +75,18 @@ async function waitlistRanks(eventIds: string[]): Promise<Map<string, number>> {
       asc(applications.waitlistedAt),
       asc(applications.createdAt),
     );
-  // Un rang par file : les prestataires ont leur propre liste d'attente, hors capacité (lot 21).
-  const perEvent = new Map<string, number>();
+  // Un rang par file : les prestataires ont leur propre liste d'attente, hors capacité (lot 21). Plusieurs jours
+  // (lot 26) : devant une candidature d'un jour, seules celles de ce jour et de tout l'événement.
+  const seen: typeof rows = [];
   for (const r of rows) {
-    const key = `${r.eventId}|${r.kind}`;
-    const n = (perEvent.get(key) ?? 0) + 1;
-    perEvent.set(key, n);
-    ranks.set(r.id, n);
+    const ahead = seen.filter(
+      (s) =>
+        s.eventId === r.eventId &&
+        s.kind === r.kind &&
+        (r.eventDayId === null || s.eventDayId === null || s.eventDayId === r.eventDayId),
+    ).length;
+    seen.push(r);
+    ranks.set(r.id, ahead + 1);
   }
   return ranks;
 }
@@ -100,6 +115,8 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
   const myReviews = await reviewsService.mine(rows[0]?.userId ?? "", rows, eventsById, new Set(enteredAt.keys()));
   // Inscription en crew (lot 19) : le crew, son chef, l'échéance de confirmation.
   const crewInfo = await crewsForApplications(rows);
+  // Plusieurs jours (lot 26) : le jour choisi.
+  const daysById = await daysRepo.byIds(rows.map((r) => r.eventDayId));
   const t = now();
   return rows.flatMap((r) => {
     const e = eventsById.get(r.eventId);
@@ -125,6 +142,7 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
           status: e.status,
         },
         vehicle: v ? { id: v.id, label: vehicleLabel(v) } : null,
+        day: dayView(r.eventDayId ? daysById.get(r.eventDayId) : undefined),
         waitlistRank: r.status === "waitlisted" ? (ranks.get(r.id) ?? null) : null,
         offerExpiresAt: r.status === "offered" ? (r.offerExpiresAt?.toISOString() ?? null) : null,
         withdrawDeadline: lockAt(e).toISOString(),
@@ -250,6 +268,7 @@ async function toTriage(
   const notesOf = withNotes
     ? await notesService.forSubjects(db, event.structureId, userIds, viewerId)
     : new Map<string, StructureNoteView[]>();
+  const daysById = await daysRepo.byIds(rows.map((r) => r.eventDayId));
 
   return rows.map((r) => {
     const v = r.vehicleId ? vehiclesById.get(r.vehicleId) : undefined;
@@ -278,6 +297,7 @@ async function toTriage(
       refusalSent: r.refusalSent,
       withdrawnAfterLock: r.withdrawnAfterLock,
       zoneId: r.zoneId,
+      day: dayView(r.eventDayId ? daysById.get(r.eventDayId) : undefined),
       // La plaque n'est visible que de l'organisateur (docs/01) : le staff de filtration voit la fiche sans elle.
       vehicle: vehicle && !withContact ? { ...vehicle, plate: null } : vehicle,
       applicant: {
@@ -367,6 +387,9 @@ export const applicationsQueries = {
     ];
     if (q.status) filters.push(eq(applications.status, q.status));
     if (q.crewId) filters.push(eq(applications.crewId, q.crewId));
+    // Plusieurs jours (lot 26) : un jour, ou tout l'événement.
+    if (q.dayId)
+      filters.push(q.dayId === "whole" ? isNull(applications.eventDayId) : eq(applications.eventDayId, q.dayId));
     if (q.makeId) filters.push(eq(vehicles.makeId, q.makeId));
     if (q.country) filters.push(eq(vehicleMakes.country, q.country.toUpperCase()));
     if (q.yearFrom) filters.push(sql`${vehicles.year} >= ${q.yearFrom}`);
@@ -443,9 +466,15 @@ export const applicationsQueries = {
     return eventCrewFilters(eventId);
   },
 
-  async counters(v: Viewer, eventId: string): Promise<EventCounters> {
+  /** Compteurs du tri ; `dayId` (lot 26) : ceux d'un jour (ses candidatures et celles de tout l'événement). */
+  async counters(v: Viewer, eventId: string, dayId?: string): Promise<EventCounters> {
     const event = await eventsRepo.byId(eventId);
     await requireOrganizer(v, event.structureId);
-    return eventsRepo.counters(event);
+    if (dayId) {
+      // Jour d'un autre événement (IDOR) : introuvable.
+      const days = await daysRepo.list(eventId);
+      if (!days.some((d) => d.id === dayId)) throw notFound("Jour introuvable");
+    }
+    return eventsRepo.counters(event, db, dayId ?? null);
   },
 };

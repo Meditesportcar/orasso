@@ -1,6 +1,7 @@
 // QR d'inscription signé, vérifiable hors ligne (ARCHITECTURE.md § 3.1, correction du coordinateur du 15/10) :
 // « OR1 » + base32 majuscules sans remplissage de (message 22 octets ‖ signature Ed25519 64 octets) = 141 caractères,
 // tous dans le jeu alphanumérique du QR (version 6, correction M).
+import { localDate } from "../rules/eventDays";
 import { base32Decode, base32Encode, bytesToUuid, concatBytes, uuidToBytes } from "./bytes";
 
 export const PASS_PREFIX = "OR1";
@@ -103,15 +104,27 @@ export type LocalAccessEntry = {
   kind?: "vehicle" | "provider";
   providerType?: string | null;
   providerName?: string | null;
+  /**
+   * Événement sur plusieurs jours (lot 26) : date locale `AAAA-MM-JJ` du jour choisi à la candidature ; `null` ou
+   * absent = tout l'événement (valable chaque jour).
+   */
+  dayDate?: string | null;
 };
 
 export const localScanDecisions = ["ok", "already", "refused", "override", "unknown_pass"] as const;
 export type LocalScanDecision = (typeof localScanDecisions)[number];
 
-export type ScanRefusal = "unknown_qr" | "unknown_key" | "forged" | "other_event" | PassRevokedReason;
+export type ScanRefusal = "unknown_qr" | "unknown_key" | "forged" | "other_event" | "other_day" | PassRevokedReason;
 
 export type ScanDecision =
-  | { decision: "refused"; reason: ScanRefusal; passId: string | null }
+  | {
+      decision: "refused";
+      reason: ScanRefusal;
+      passId: string | null;
+      /** « Autre jour » (lot 26) : l'entrée et son jour, pour « Accepter quand même ». */
+      entry?: LocalAccessEntry;
+      dayDate?: string;
+    }
   | { decision: "unknown_pass"; passId: string }
   | { decision: "already"; passId: string; entry: LocalAccessEntry; checkedInAt: string }
   | { decision: "ok"; passId: string; entry: LocalAccessEntry };
@@ -127,6 +140,11 @@ export function decideScan(
     keys: ReadonlyMap<number, Uint8Array>;
     verify: Ed25519Verify;
     findEntry: (passId: string) => LocalAccessEntry | undefined;
+    /**
+     * Heure du scan (lot 26, règle 6 bis) : une entrée d'un jour précis (`dayDate`) lue un autre jour (date locale de
+     * Paris) est refusée « Autre jour » ; le staff peut l'accepter quand même. Absente : pas de contrôle du jour.
+     */
+    now?: Date;
   },
 ): ScanDecision {
   const check = verifyPassPayload(payload, ctx.keys, ctx.verify);
@@ -142,6 +160,13 @@ export function decideScan(
   if (!entry) return { decision: "unknown_pass", passId: pass.passId };
   if (entry.status === "revoked") {
     return { decision: "refused", reason: entry.revokedReason ?? "cancelled", passId: pass.passId };
+  }
+  if (entry.dayDate && ctx.now && localDate(ctx.now) !== entry.dayDate) {
+    // Déjà accepté quand même aujourd'hui : « déjà entré », le panneau ne se rouvre pas à chaque lecture.
+    if (entry.checkedInAt && localDate(new Date(entry.checkedInAt)) === localDate(ctx.now)) {
+      return { decision: "already", passId: pass.passId, entry, checkedInAt: entry.checkedInAt };
+    }
+    return { decision: "refused", reason: "other_day", passId: pass.passId, entry, dayDate: entry.dayDate };
   }
   if (entry.checkedInAt) return { decision: "already", passId: pass.passId, entry, checkedInAt: entry.checkedInAt };
   return { decision: "ok", passId: pass.passId, entry };

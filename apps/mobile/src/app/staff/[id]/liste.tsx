@@ -2,7 +2,7 @@
 // plaque », filtres Tous / Arrivés / Attendus / Sans scan, « Pointer », pointage rapide par plaque après coup (« Tape
 // les 3 premiers caractères de la plaque, valide, suivant »), coordonnées pour le super staff seulement. Hors ligne.
 import { AppBar, Button, Chip, Ground, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import type { AccessListEntry } from "@orasso/shared";
+import { type AccessListEntry, eventDaysLabels, formatDayDate } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
@@ -10,7 +10,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { pointEntry } from "@/features/staff/actions";
 import { clock } from "@/features/staff/result";
-import { checkedInAt, counters, quickPlateMatch, type StaffState, searchLocal } from "@/lib/staff/model";
+import {
+  arrivedOn,
+  checkedInAt,
+  counters,
+  expectedOn,
+  quickPlateMatch,
+  type StaffState,
+  searchLocal,
+} from "@/lib/staff/model";
 import { useStaffEvent } from "@/lib/staff/useStaff";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -39,6 +47,9 @@ export default function StaffList() {
   const { userId, state } = useStaffEvent(id);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  // Lot 26 : événement sur plusieurs jours, « Aujourd'hui » (tout l'événement et le jour même) coché d'office.
+  const multiDay = (state?.meta.days?.length ?? 0) > 1;
+  const [today, setToday] = useState(true);
   const [quick, setQuick] = useState(rapide === "1");
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
@@ -53,13 +64,16 @@ export default function StaffList() {
         : [...state.entries.values()].sort((a, b) => a.pseudo.localeCompare(b.pseudo, "fr"));
     return base.filter((e) => {
       if (e.status !== "valid") return false;
+      if (multiDay && today && !expectedOn(state.meta, e, new Date())) return false;
       const inside = Boolean(checkedInAt(state, e));
-      if (filter === "in") return inside;
-      if (filter === "out") return !inside;
+      // Lot 26 : « Arrivés » / « Attendus » du jour (un « tout l'événement » entré un jour précédent est attendu).
+      const arrived = arrivedOn(state, e, new Date());
+      if (filter === "in") return arrived;
+      if (filter === "out") return !arrived;
       if (filter === "noscan") return inside && methodOf(state, e) !== "scan";
       return true;
     });
-  }, [state, query, filter, tick]);
+  }, [state, query, filter, tick, multiDay, today]);
 
   const count = state ? counters(state) : null;
   const close = () => (router.canGoBack() ? router.back() : router.replace(`/staff/${id}`));
@@ -109,6 +123,11 @@ export default function StaffList() {
                     {label}
                   </Chip>
                 ))}
+                {multiDay ? (
+                  <Chip selected={today} onPress={() => setToday((v) => !v)}>
+                    {eventDaysLabels.today}
+                  </Chip>
+                ) : null}
               </View>
               <Button variant="plate" icon="plate" onPress={() => setQuick((q) => !q)} fullWidth>
                 {quick ? "Fin pointage plaque" : "Pointage rapide par plaque"}
@@ -132,6 +151,11 @@ export default function StaffList() {
                   <Text variant="meta" color={inside ? c.accent : c.plateMuted}>
                     {[
                       item.zoneCode ? `Zone ${item.zoneCode}` : "Sans zone",
+                      multiDay
+                        ? item.dayDate
+                          ? formatDayDate(item.dayDate, { weekday: false })
+                          : eventDaysLabels.wholeEvent
+                        : null,
                       item.plateHint ? `${item.plateHint}-…` : null,
                       inside ? `entré ${clock(inside)}` : null,
                     ]

@@ -5,6 +5,8 @@ import {
   type Category,
   crewLabels,
   type EventCrewFilter,
+  eventDaysLabels,
+  formatDayDate,
   gradeLabels,
   grades,
   type RefusalReason,
@@ -41,6 +43,8 @@ export type ListFilters = {
   grade?: string;
   sort?: string;
   crewId?: string;
+  /** Lot 26 : un jour, ou `whole` (tout l'événement). */
+  dayId?: string;
 };
 
 /** Vue liste : filtres, sélection multiple, décisions en masse (chaque candidature réussit ou échoue seule). */
@@ -52,6 +56,7 @@ export function TriageList({
   filters,
   categories,
   crews = [],
+  days = [],
   canDecide,
   onChanged,
 }: {
@@ -64,6 +69,8 @@ export function TriageList({
   categories: Category[];
   /** Crews inscrits (lot 19) : filtre, puis « tout sélectionner » = décision en masse par crew. */
   crews?: EventCrewFilter[];
+  /** Lot 26 : jours d'un événement sur plusieurs jours (colonne et filtre « Jour »). */
+  days?: { id: string; date: string }[];
   canDecide: boolean;
   onChanged: () => void;
 }) {
@@ -139,6 +146,18 @@ export function TriageList({
             options={[
               { value: "", label: crewLabels.triageFilterAnyCrew },
               ...crews.map((c) => ({ value: c.id, label: `${c.name} (${c.count})` })),
+            ]}
+          />
+        )}
+        {days.length > 1 && (
+          <SelectField
+            label={eventDaysLabels.day}
+            name="dayId"
+            defaultValue={filters.dayId ?? ""}
+            options={[
+              { value: "", label: eventDaysLabels.allDays },
+              { value: "whole", label: eventDaysLabels.wholeEvent },
+              ...days.map((d) => ({ value: d.id, label: formatDayDate(d.date) })),
             ]}
           />
         )}
@@ -227,6 +246,7 @@ export function TriageList({
               <th scope="col">Candidat</th>
               <th scope="col">Véhicule</th>
               <th scope="col">Année</th>
+              {days.length > 1 && <th scope="col">{eventDaysLabels.day}</th>}
               <th scope="col">Statut</th>
               <th scope="col">Reçue</th>
             </tr>
@@ -275,6 +295,11 @@ export function TriageList({
                     {item.vehicle?.certified ? " · Certifié" : ""}
                   </td>
                   <td>{item.vehicle?.year ?? "—"}</td>
+                  {days.length > 1 && (
+                    <td data-testid="triage-row-day">
+                      {item.day ? formatDayDate(item.day.date, { weekday: false }) : eventDaysLabels.wholeEvent}
+                    </td>
+                  )}
                   <td>
                     {badge ? <StatusBadge status={badge.status} rank={badge.rank} /> : <Chip>{item.status}</Chip>}
                   </td>
@@ -284,7 +309,7 @@ export function TriageList({
             })}
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="s-muted">
+                <td colSpan={days.length > 1 ? 7 : 6} className="s-muted">
                   Aucune candidature ne correspond à ces filtres.
                 </td>
               </tr>

@@ -9,6 +9,7 @@ export const scanRefusalLabels: Record<ScanRefusal, string> = {
   unknown_key: "Clé inconnue : synchronise",
   forged: "QR falsifié",
   other_event: "QR d'un autre événement",
+  other_day: "Inscrit pour un autre jour",
   withdrawn: "Désisté",
   refused: "Non admis",
   cancelled: "Annulé",

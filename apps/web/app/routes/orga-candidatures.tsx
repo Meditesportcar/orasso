@@ -65,6 +65,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     endsAt: event.endsAt,
     counters: event.counters,
     zones: event.zones,
+    // Lot 26 : jours d'un événement sur plusieurs jours (filtre et colonne du tri).
+    days: event.days.map((d) => ({ id: d.id, date: d.date })),
   };
   if (tab === "prestataires") {
     return {
@@ -98,6 +100,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     grade: url.searchParams.get("grade") ?? undefined,
     sort: url.searchParams.get("sort") ?? undefined,
     crewId: url.searchParams.get("crewId") ?? undefined,
+    dayId: url.searchParams.get("dayId") ?? undefined,
   };
   let crews: EventCrewFilter[] = [];
   if (view === "file") {
@@ -276,6 +279,7 @@ export default function OrgaCandidatures({ loaderData }: Route.ComponentProps) {
           filters={filters}
           categories={categories}
           crews={crews}
+          days={event.days}
           canDecide={canDecide}
           onChanged={() => revalidator.revalidate()}
         />

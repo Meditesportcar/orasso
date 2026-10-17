@@ -127,10 +127,23 @@ export type AccessListEntry = {
   zoneName: string | null;
   checkedInAt: string | null;
   checkinMethod: CheckinMethod | null;
+  /**
+   * Lot 26 : jour de la candidature (date locale `AAAA-MM-JJ`) ; `null` = tout l'événement (ou événement d'un jour).
+   * Lu le jour J par `decideScan` (règle « Autre jour »).
+   */
+  dayDate: string | null;
+  /**
+   * Lot 26 : événement sur plusieurs jours, dernière lecture du QR reçue par le serveur (acceptée ou doublon) : un
+   * « tout l'événement » est « arrivé » un jour si son entrée ou une lecture date de ce jour. Absent sur un jour.
+   */
+  lastSeenAt?: string | null;
   /** Coordonnées : super staff et organisateur seulement. */
   contact?: { firstName: string | null; lastName: string | null; phone: string | null; email: string };
   updatedAt: string;
 };
+
+/** Un jour dans la synchro du staff (lot 26). */
+export type StaffSyncDay = { id: string; date: string; startsAt: string; endsAt: string };
 
 /**
  * `GET /api/events/:id/staff/sync?since=` (§ 4.1). Signature Ed25519 (clé `signatureKid`) du SHA-256 de
@@ -148,6 +161,8 @@ export type StaffSync = {
     /** Sel du hachage de plaque (16 octets, base64url) : l'appli hache la saisie du staff. */
     plateSalt: string;
     zones: { id: string; code: string; name: string; capacity: number | null }[];
+    /** Lot 26 : jours d'un événement sur plusieurs jours (vide = un seul jour) ; filtre « Aujourd'hui » de la liste. */
+    days: StaffSyncDay[];
   };
   keys: { kid: number; publicKey: string; retiredAt: string | null }[];
   myRoles: StaffRole[];
@@ -227,6 +242,8 @@ export const checkinsQuerySchema = z.object({
   method: z.enum(checkinMethods).optional(),
   zoneId: z.uuid().optional(),
   q: z.string().trim().max(40).optional(),
+  /** Lot 26 : attendus d'un jour (ses candidatures et celles de tout l'événement). */
+  dayId: z.uuid().optional(),
 });
 
 export const staffSearchQuerySchema = z.object({ q: z.string().trim().min(2).max(40) });
@@ -241,6 +258,13 @@ export type CheckinListItem = {
   checkedInAt: string | null;
   method: CheckinMethod | null;
   note: string | null;
+  /** Lot 26 : jour de la candidature (`AAAA-MM-JJ`) ; `null` = tout l'événement ou événement d'un jour. */
+  dayDate?: string | null;
+  /**
+   * Lot 26 : liste d'un jour (`?dayId=`) seulement : arrivé ce jour-là (candidature du jour entrée ; tout l'événement
+   * entré ou lu ce jour-là). Même règle que le direct.
+   */
+  arrivedOnDay?: boolean;
 };
 
 export type CheckinResult = CheckinListItem & { created: boolean };
@@ -289,8 +313,16 @@ export type ScanReport = {
   }[];
 };
 
+/** Lot 26 : direct, liste du jour J et pointage d'un jour précis d'un événement sur plusieurs jours. */
+export const dayQuerySchema = z.object({ dayId: z.uuid().optional() });
+
 /** Direct de l'organisateur (`GET /api/events/:id/live`, canal `event:<id>:live`). */
 export type LiveCounters = {
+  /**
+   * Lot 26 : jour compté (`null` = tous les jours, ou événement d'un jour). Un jour compte ses candidatures et celles
+   * de tout l'événement ; « arrivés » = entrés (une seule entrée par candidature, gardée au premier passage, S29).
+   */
+  dayId?: string | null;
   arrived: number;
   expected: number;
   byCategory: { categoryId: string; slug: string; label: string; arrived: number; expected: number }[];

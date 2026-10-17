@@ -2,7 +2,7 @@
 // compteurs du bilan automatique (retenus, présents, absents, taux) et « Remercier les présents » (un message dans la
 // Boîte de chaque présent, avec son lien d'avis, une seule fois). L'export et l'édition suivante restent sur le site.
 import { Button, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type EventReportView, afterEventLabels as L } from "@orasso/shared";
+import { type EventReportView, formatDayDate, afterEventLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
@@ -109,6 +109,18 @@ export function Bilan({ eventId }: { eventId: string }) {
                   ? L.reportFinal(formatDayHour(r.refreshedAt))
                   : L.reportProvisional(formatDayHour(view.data.refreshAt))}
               </Muted>
+              {/* Lot 26 : bilan par jour d'un événement sur plusieurs jours. */}
+              {d.byDay && d.byDay.length > 1 ? (
+                <Plate style={styles.block} testID="orga-report-days">
+                  {d.byDay.map((day) => (
+                    <Fact
+                      key={day.dayId}
+                      label={formatDayDate(day.date)}
+                      value={`${day.present} / ${day.accepted} · ${day.absent} ${L.absent.toLowerCase()}`}
+                    />
+                  ))}
+                </Plate>
+              ) : null}
               <Plate style={styles.block} testID="orga-report-facts">
                 <Fact label={L.newFollowers} value={String(d.newFollowers)} />
                 <Fact label={L.providers} value={L.providersValue(d.providers.present, d.providers.accepted)} />
