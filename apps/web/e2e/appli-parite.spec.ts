@@ -178,6 +178,10 @@ test("billetterie : billet gratuit configuré, billet payant avec compte Stripe 
   test.setTimeout(420_000);
   mkdirSync(DIR, { recursive: true });
   const damien = await login("damien@orasso.local");
+  // Sans variables Stripe factices côté API, la billetterie payante est « bientôt » : la recette ne s'applique pas
+  // (lot 34 : sautée proprement au lieu d'échouer dans une recette complète sans Stripe).
+  const settings = await apiCall<{ stripe: { configured: boolean } }>(damien, "GET", "/admin/settings");
+  test.skip(!settings.data.stripe?.configured, "API à lancer avec STRIPE_* factices (voir l'en-tête du fichier)");
   const free = await createEvent(damien, { publicAccess: "free_reservation", title: `Billets gratuits ${unique()}` });
   const paid = await createEvent(damien, { publicAccess: "paid_orasso", title: `Billets payants ${unique()}` });
   const closed = await createEvent(damien, { publicAccess: "free", title: `Entrée libre ${unique()}` });
