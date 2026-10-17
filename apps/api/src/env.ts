@@ -142,8 +142,13 @@ if (stripeKeyProblem) {
   console.error(`Configuration invalide : ${stripeKeyProblem}`);
   process.exit(1);
 }
-if (parsed.data.NODE_ENV === "production" && !parsed.data.UNSUBSCRIBE_SECRET) {
-  console.error("Configuration invalide : UNSUBSCRIBE_SECRET est obligatoire en production (liens de désinscription).");
+if (
+  parsed.data.NODE_ENV === "production" &&
+  (!parsed.data.UNSUBSCRIBE_SECRET || parsed.data.UNSUBSCRIBE_SECRET.startsWith("change-me"))
+) {
+  console.error(
+    "Configuration invalide : UNSUBSCRIBE_SECRET est obligatoire en production (liens de désinscription), et pas la valeur d'exemple.",
+  );
   process.exit(1);
 }
 if (parsed.data.MAIL_TRANSPORT === "brevo" && !parsed.data.BREVO_API_KEY) {
