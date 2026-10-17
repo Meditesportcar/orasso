@@ -70,7 +70,7 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   // --- 3. Administration : valider à la main ---------------------------------------------------------------------
   const adminCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const admin = await adminCtx.newPage();
-  await loginInBrowser(admin, "damien@orasso.local", SEED_PASSWORD, "/admin");
+  await loginInBrowser(admin, "damien@orasso.local", SEED_PASSWORD, "/admin/verification");
   const card = admin.getByTestId("admin-structure").filter({ hasText: structureName });
   await expect(card).toBeVisible();
   await expect(card.getByTestId("admin-registry")).toBeVisible();

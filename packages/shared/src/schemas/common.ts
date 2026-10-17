@@ -39,6 +39,11 @@ export const errorCodes = [
   // Lot 25 : événement privé sur invitation.
   "invite_only",
   "invitation_required",
+  // Lot 33 : administration (mode assistance, interrupteurs, actions sur soi-même).
+  "assistance_required",
+  "signup_closed",
+  "providers_disabled",
+  "self_action",
   // Lot 26 : événements sur plusieurs jours (jour qui a des candidatures, retrait refusé).
   "day_in_use",
 ] as const;

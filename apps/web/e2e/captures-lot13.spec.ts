@@ -101,7 +101,7 @@ test("captures du site public, de la structure et de la création d'événement"
     for (const view of VIEWS) {
       const ctx = await context(browser, theme, view, damien);
       const p = await ctx.newPage();
-      await p.goto("/admin");
+      await p.goto("/admin/verification");
       await shot(p, theme, view.id, "20-admin-file");
       await ctx.close();
     }

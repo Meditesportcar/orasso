@@ -9,10 +9,10 @@ export const GRADE_THRESHOLDS: Record<Grade, number> = {
   legende: 800,
 };
 
-/** Plus haut grade dont le seuil est atteint. */
-export function gradeFor(points: number): Grade {
+/** Plus haut grade dont le seuil est atteint (seuils administrables depuis le lot 33, constantes par défaut). */
+export function gradeFor(points: number, thresholds: Record<Grade, number> = GRADE_THRESHOLDS): Grade {
   let result: Grade = "rodage";
-  for (const g of grades) if (points >= GRADE_THRESHOLDS[g]) result = g;
+  for (const g of grades) if (points >= thresholds[g]) result = g;
   return result;
 }
 

@@ -1,5 +1,5 @@
 // Points, malus, contestations, grades, saisons (ARCHITECTURE.md § 2.6, docs/01 « Points et grades » et « après
-// l'événement »). Barème et seuils provisoires (A6) : `POINTS` et `GRADE_THRESHOLDS` de `@orasso/shared`.
+// l'événement »). Barème et seuils administrables (lot 33) : `getPointsConfig()`, constantes de `@orasso/shared` par défaut.
 import {
   CONTEST_RESPONSE_MS,
   canContest,
@@ -12,7 +12,6 @@ import {
   type MalusContestView,
   type MyPoints,
   nextGrade,
-  POINTS,
   type PointKind,
   pointKindLabels,
   REFERRAL_SEASON_CAP,
@@ -41,6 +40,7 @@ import { AppError, conflict, notFound } from "../../lib/errors";
 import { formatDateTime } from "../../lib/format";
 import { lockEventCheckins } from "../../lib/locks";
 import type { Viewer } from "../../lib/session";
+import { getPointsConfig } from "../../lib/settings";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { reportService } from "../after-event/report";
 import { eventsRepo } from "../events/repo";
@@ -98,7 +98,7 @@ async function recompute(tx: Tx, userId: string): Promise<{ points: number; grad
     .from(pointEntries)
     .where(and(eq(pointEntries.userId, userId), eq(pointEntries.seasonId, season.id)));
   const points = sum?.total ?? 0;
-  const grade = gradeFor(points);
+  const grade = gradeFor(points, (await getPointsConfig()).thresholds);
   const [before] = await tx.select({ grade: profiles.grade }).from(profiles).where(eq(profiles.userId, userId));
   await tx.update(profiles).set({ pointsSeason: points, grade }).where(eq(profiles.userId, userId));
   if (before && before.grade !== grade) {
@@ -167,7 +167,10 @@ async function decideContest(
       await award(tx, await seasonFor(tx, t), {
         userId: contest.userId,
         kind: "malus_reversal",
-        points: -POINTS.malus,
+        // Lot 33 : on rend exactement le malus écrit (le barème a pu changer depuis).
+        points: -(
+          (await tx.query.pointEntries.findFirst({ where: eq(pointEntries.id, contest.pointEntryId) }))?.points ?? 0
+        ),
         eventId: contest.eventId,
         applicationId: contest.applicationId,
         createdBy: actor.user.id,
@@ -239,6 +242,7 @@ export const pointsService = {
         return false;
       }
       const season = await seasonFor(tx, t);
+      const cfg = await getPointsConfig();
       const rows = await tx
         .select({ app: applications, checkinId: checkins.id })
         .from(applications)
@@ -252,11 +256,12 @@ export const pointsService = {
           withdrawnAfterLock: app.withdrawnAfterLock,
           checkedIn: Boolean(checkinId),
         });
-        if (!kind) continue;
+        // Lot 33 : barème à 0 → rien d'écrit, aucune notification « 0 point ».
+        if (!kind || (kind === "participation" ? cfg.participation : cfg.malus) === 0) continue;
         const entry = await award(tx, season, {
           userId: app.userId,
           kind,
-          points: POINTS[kind],
+          points: kind === "participation" ? cfg.participation : cfg.malus,
           eventId,
           applicationId: app.id,
         });
@@ -268,14 +273,14 @@ export const pointsService = {
           kind === "participation" ? "points_awarded" : "malus_applied",
           kind === "participation"
             ? {
-                title: `+${POINTS.participation} points`,
+                title: `+${cfg.participation} points`,
                 body: `${pointKindLabels.participation} : « ${event.title} ».`,
                 eventId,
                 data: { eventId, applicationId: app.id },
                 link: pointsLink,
               }
             : {
-                title: `${POINTS.malus} points`,
+                title: `${cfg.malus} points`,
                 body: `${pointKindLabels.malus} : « ${event.title} ». Contestable jusqu'au ${deadline}.`,
                 eventId,
                 data: { eventId, applicationId: app.id, screen: "contest" },
@@ -284,12 +289,12 @@ export const pointsService = {
         );
       }
       for (const m of await staffService.members(event, tx)) {
-        if (m.presence !== "present") continue;
-        const entry = await award(tx, season, { userId: m.userId, kind: "staff", points: POINTS.staff, eventId });
+        if (m.presence !== "present" || cfg.staff === 0) continue;
+        const entry = await award(tx, season, { userId: m.userId, kind: "staff", points: cfg.staff, eventId });
         if (!entry) continue;
         users.add(m.userId);
         await notificationsService.notify(tx, m.userId, "points_awarded", {
-          title: `+${POINTS.staff} points`,
+          title: `+${cfg.staff} points`,
           body: `${pointKindLabels.staff} : « ${event.title} ».`,
           eventId,
           data: { eventId },
@@ -470,6 +475,7 @@ export const pointsService = {
     return withTx(async (tx, after) => {
       const t = now();
       const season = await seasonFor(tx, t);
+      const cfg = await getPointsConfig();
       const [locked] = await tx.select().from(seasons).where(eq(seasons.id, season.id)).for("update");
       if (!locked || locked.openedAt) return false;
       const prevDates = seasonDates(seasonYear(t) - 1);
@@ -482,7 +488,7 @@ export const pointsService = {
             .groupBy(pointEntries.userId)
         : [];
       for (const { userId, total } of totals) {
-        const carry = carryoverPoints(total);
+        const carry = carryoverPoints(total, cfg.thresholds);
         if (carry > 0) await award(tx, locked, { userId, kind: "season_carryover", points: carry });
       }
       await tx.update(seasons).set({ openedAt: t }).where(eq(seasons.id, locked.id));
@@ -495,7 +501,7 @@ export const pointsService = {
       for (const { userId, total } of totals) {
         await notificationsService.notify(tx, userId, "season_ended", {
           title: `${locked.name}`,
-          body: `Nouvelle saison : tu repars de ${carryoverPoints(total)} points (${gradeLabels[gradeFor(carryoverPoints(total))]}).`,
+          body: `Nouvelle saison : tu repars de ${carryoverPoints(total, cfg.thresholds)} points (${gradeLabels[gradeFor(carryoverPoints(total, cfg.thresholds), cfg.thresholds)]}).`,
           link: pointsLink,
         });
       }
@@ -508,6 +514,7 @@ export const pointsService = {
   async mine(v: Viewer): Promise<MyPoints> {
     const t = now();
     const season = await seasonFor(db, t);
+    const cfg = await getPointsConfig();
     const rows = await db
       .select({ e: pointEntries, title: events.title })
       .from(pointEntries)
@@ -537,7 +544,7 @@ export const pointsService = {
     return {
       pointsSeason: points,
       grade: profile?.grade ?? "rodage",
-      next: nextGrade(points),
+      next: nextGrade(points, cfg.thresholds),
       season: { name: season.name, startsOn: season.startsOn, endsOn: season.endsOn },
       entries: rows.map(({ e, title }) => {
         const c = contestOf.get(e.id);
@@ -566,6 +573,8 @@ export const pointsService = {
   /** `POST /admin/users/:id/points-adjust` : ajustement tracé au journal d'administration. */
   async adjust(v: Viewer, userId: string, points: number, note: string) {
     await requirePlatformRole(v, "super_admin");
+    // Lot 33 : jamais ses propres points.
+    if (userId === v.user.id) throw new AppError(409, "self_action", "Action impossible sur ton propre compte.");
     const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, userId) });
     if (!profile) throw notFound("Compte introuvable");
     return withTx(async (tx, after) => {
@@ -592,6 +601,7 @@ export const pointsService = {
   async awardReferral(sponsorId: string, refereeId: string): Promise<EntryRow | null> {
     return withTx(async (tx, after) => {
       const season = await seasonFor(tx, now());
+      const cfg = await getPointsConfig();
       // Verrou consultatif par parrain : deux filleuls confirmés en même temps ne dépassent pas le plafond.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`referral:${sponsorId}`}))`);
       const [done] = await tx
@@ -608,17 +618,19 @@ export const pointsService = {
         console.info(`Parrainage au-delà du plafond de la saison (${REFERRAL_SEASON_CAP}) : ${sponsorId}`);
         return null;
       }
+      // Lot 33 : barème à 0 → rien d'écrit, aucune notification « 0 point ».
+      if (cfg.referral === 0) return null;
       const entry = await award(tx, season, {
         userId: sponsorId,
         kind: "referral",
-        points: POINTS.referral,
+        points: cfg.referral,
         subjectUserId: refereeId,
       });
       if (!entry) return null;
       const referee = await tx.query.profiles.findFirst({ where: eq(profiles.userId, refereeId) });
       await recompute(tx, sponsorId);
       await notificationsService.notify(tx, sponsorId, "referral_confirmed", {
-        title: `+${POINTS.referral} points · parrainage`,
+        title: `+${cfg.referral} points · parrainage`,
         body: `${referee?.pseudo ?? "Ton ami"} a rejoint Orasso grâce à toi.`,
         link: pointsLink,
       });

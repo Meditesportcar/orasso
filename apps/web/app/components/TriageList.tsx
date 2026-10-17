@@ -11,7 +11,6 @@ import {
   grades,
   type RefusalReason,
   refusalReasonLabels,
-  refusalReasons,
   type TriageDecision,
 } from "@orasso/shared";
 import { useState } from "react";
@@ -19,6 +18,7 @@ import { Form } from "react-router";
 
 import { apiFetch } from "../lib/api.client";
 import { formatDayShort } from "../lib/format";
+import { useRefusalReasons } from "../lib/lists";
 import { badgeFor } from "../lib/status";
 import { StructureNotes } from "./StructureNotes";
 
@@ -74,6 +74,8 @@ export function TriageList({
   canDecide: boolean;
   onChanged: () => void;
 }) {
+  // Lot 33 : motifs proposés par l'administration (repli sur les constantes partagées).
+  const refusalReasons = useRefusalReasons();
   const [selected, setSelected] = useState<string[]>([]);
   const [refusing, setRefusing] = useState(false);
   const [reasons, setReasons] = useState<RefusalReason[]>([]);

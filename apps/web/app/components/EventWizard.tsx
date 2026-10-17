@@ -16,7 +16,6 @@ import {
   eventAdmissionLabels,
   eventDaysLabels,
   eventFormatLabels,
-  eventFormats,
   eventPublicAccessLabels,
   type Grade,
   gradeLabels,
@@ -29,12 +28,13 @@ import {
   type VehicleType,
   vehicleTypeLabels,
   vehicleTypes,
-  vendorTypeSuggestions,
+  vendorTypeLabels,
 } from "@orasso/shared";
 import { useState } from "react";
 import { apiFetch } from "../lib/api.client";
 import { now as clockNow } from "../lib/clock";
 import { fromInput, toInput } from "../lib/datetime";
+import { useEventFormats, useVendorTypes } from "../lib/lists";
 import { FileField, TextAreaField } from "./Fields";
 
 type StepId =
@@ -350,6 +350,11 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
   const targetId = event?.id ?? createdId;
   const editing = Boolean(event);
   const [d, setD] = useState<Draft>(() => initial(event));
+  // Lot 33 : types de prestataires proposés par l'administration (repli sur les constantes partagées).
+  const vendorTypeSuggestions: readonly string[] = useVendorTypes().map((c) => vendorTypeLabels[c]);
+  // Formats proposés par l'administration ; celui d'un événement existant reste proposé.
+  const formatsOn = useEventFormats();
+  const offeredFormats = formatsOn.includes(d.format) ? formatsOn : [...formatsOn, d.format];
   const [index, setIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -486,7 +491,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
             <fieldset className="s-fieldset s-stack s-stack--tight">
               <legend className="o-t-label s-label">Format</legend>
               <ChipRow className="s-chips-wrap">
-                {eventFormats.map((f) => (
+                {offeredFormats.map((f) => (
                   <Chip key={f} selected={d.format === f} onClick={() => set("format", f)}>
                     {eventFormatLabels[f]}
                   </Chip>

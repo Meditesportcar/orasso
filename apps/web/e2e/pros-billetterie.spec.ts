@@ -227,7 +227,7 @@ test("billets gratuits : interrupteur de l'événement, réservation, QR, contr�
   await expect(orga.getByTestId("ticketing-state")).toHaveText("Ouverte");
 
   // Interrupteur général de l'administration : éteint, la réservation se ferme partout.
-  await orga.goto("/admin");
+  await orga.goto("/admin/reglages");
   const general = orga.getByTestId("setting-ticketing.free_enabled");
   await expect(general).toContainText("activé");
   await general.getByRole("button", { name: "Désactiver" }).click();

@@ -15,6 +15,7 @@ import type { Route } from "./+types/root";
 import { ClockBanner } from "./components/ClockBanner";
 import { setClockOffset } from "./lib/clock";
 import { readClockOffset } from "./lib/clock.server";
+import { publicSettings } from "./lib/lists.server";
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
@@ -35,8 +36,9 @@ export const headers: Route.HeadersFunction = () => ({
 // La préférence de thème est un cookie : le serveur écrit le bon `data-theme` dans le HTML, sans flash.
 export async function loader({ request }: Route.LoaderArgs) {
   // Horloge simulée (lot 34a) : le décalage de l'API passe au navigateur. 0 (et aucun appel) hors développement.
-  const clockOffsetMs = await readClockOffset(request);
-  return { themePreference: readThemeCookie(request.headers.get("cookie")), clockOffsetMs };
+  // Lot 33 : listes administrables (motifs de refus, types de prestataires, activités), cache de 60 s (`lib/lists`).
+  const [clockOffsetMs, lists] = await Promise.all([readClockOffset(request), publicSettings(request)]);
+  return { themePreference: readThemeCookie(request.headers.get("cookie")), clockOffsetMs, lists };
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {

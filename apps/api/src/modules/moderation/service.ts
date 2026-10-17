@@ -13,9 +13,11 @@ import {
   type MySanction,
   moderatorSanctionKinds,
   type ReportCreate,
+  type ReportReason,
   type ReportStatus,
   reportReasonLabels,
   retainUntil,
+  type SanctionKind,
   sanctionEnds,
   sanctionKindLabels,
   shouldAutoSuspend,
@@ -675,6 +677,61 @@ export const moderationService = {
     });
     for (const key of removedKeys) await storage.remove(key).catch(() => undefined);
     return this.adminDetail(v, id, ip);
+  },
+
+  /**
+   * Lot 33 : sanction directe depuis le registre des utilisateurs (`POST /admin/users/:id/sanction`, super
+   * administrateur), sans signalement. Mêmes effets que `sanction` : suspension recalculée, sessions révoquées pour un
+   * bannissement, notification avec le motif et le lien de contestation, journal. Jamais un super administrateur.
+   */
+  async sanctionUser(
+    v: Viewer,
+    userId: string,
+    input: { kind: SanctionKind; reason: ReportReason; note: string },
+    ip: string | null,
+  ): Promise<MySanction> {
+    await requirePlatformRole(v, "super_admin");
+    if (userId === v.user.id) throw validation("Tu ne peux pas te sanctionner toi-même.");
+    return withTx(async (tx, after) => {
+      await lockAccount(tx, userId);
+      const at = now();
+      const [target] = await tx.select().from(profiles).where(eq(profiles.userId, userId));
+      if (!target) throw notFound("Compte introuvable");
+      if (target.deletedAt) throw conflict("conflict", "Ce compte a été supprimé.");
+      if (target.platformRole === "super_admin") {
+        throw conflict("conflict", "Un super administrateur ne peut pas être sanctionné.");
+      }
+      const [sanction] = (await tx
+        .insert(sanctions)
+        .values({
+          userId,
+          kind: input.kind,
+          reason: input.reason,
+          note: input.note,
+          reportIds: [],
+          startsAt: at,
+          endsAt: sanctionEnds(input.kind, at),
+          issuedBy: v.user.id,
+          auto: false,
+          createdAt: at,
+          updatedAt: at,
+        })
+        .returning()) as [SanctionRow];
+      const state = await recomputeSuspension(tx, userId);
+      if (state.banned) await revokeSessions(tx, userId);
+      await notifySanction(tx, sanction);
+      await audit(
+        tx,
+        v,
+        "moderation.sanction",
+        "user",
+        userId,
+        `${sanctionKindLabels[input.kind]} · ${input.note}`,
+        ip,
+      );
+      after(() => notificationsService.kick());
+      return toMySanction(sanction, at);
+    });
   },
 
   // --- Sanctions et contestations -----------------------------------------------------------------------------------

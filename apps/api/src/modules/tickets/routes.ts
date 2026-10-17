@@ -1,4 +1,5 @@
 import {
+  adminSettingUpdateSchema,
   platformSettingKeySchema,
   platformSettingUpdateSchema,
   stripeCallbackQuery,
@@ -11,6 +12,7 @@ import { Hono } from "hono";
 import { env } from "../../env";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { body, parse, uuidParam } from "../../lib/validate";
+import { adminSettingsService, isAdminSettingKey } from "../admin/settings";
 import { ticketsService } from "./service";
 import { settingsService } from "./settings";
 
@@ -86,10 +88,21 @@ export const ticketsRoutes = new Hono<AppEnv>()
   })
 
   // Administration : interrupteurs
-  .get("/admin/settings", async (c) => c.json(await settingsService.view(await requireUser(c))))
+  // Lot 33 : la même route porte aussi les réglages administrables (`entries`) ; une clé du lot 33 est validée par son
+  // schéma partagé (`adminSettingsService`).
+  .get("/admin/settings", async (c) => {
+    const v = await requireUser(c);
+    return c.json({ ...(await settingsService.view(v)), entries: await adminSettingsService.entries(v) });
+  })
   .put("/admin/settings/:key", async (c) => {
     const v = await requireUser(c);
-    const key = parse(platformSettingKeySchema, c.req.param("key"));
+    const raw = c.req.param("key");
+    if (isAdminSettingKey(raw)) {
+      const input = await body(c, adminSettingUpdateSchema);
+      await adminSettingsService.set(v, raw, input.value);
+      return c.json({ ...(await settingsService.view(v)), entries: await adminSettingsService.entries(v) });
+    }
+    const key = parse(platformSettingKeySchema, raw);
     const { value } = await body(c, platformSettingUpdateSchema);
     return c.json(await settingsService.set(v, key, value, ip(c)));
   });
