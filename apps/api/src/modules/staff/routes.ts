@@ -13,6 +13,7 @@ import { Hono } from "hono";
 import { validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, parse, query, uuidParam } from "../../lib/validate";
+import { staffRemindService } from "./remind";
 import { staffRequestsService } from "./requests";
 import { staffService } from "./service";
 import { shopService } from "./shop";
@@ -36,6 +37,11 @@ export const staffRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     const input = parse(staffRemindSchema, await c.req.json().catch(() => ({})));
     return c.json(await staffService.remind(v, uuidParam(c, "id"), input.userId));
+  })
+  // Relance à la demande d'un membre qui n'a pas répondu (casquette Organisateur de l'appli, lot 22).
+  .post("/events/:id/staff/:userId/remind", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await staffRemindService.remind(v, uuidParam(c, "id"), userIdParam(c.req.param("userId"))));
   })
   .put("/events/:id/staff/me/presence", async (c) => {
     const v = await requireUser(c);

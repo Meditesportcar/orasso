@@ -1,7 +1,6 @@
 // Feuille « Mes casquettes » (docs/02) : le passionné en premier, puis mes structures (avec leur logo), ma fiche pro, mon
 // profil prestataire ; en bas, créer une casquette. Un appui sur une ligne change de casquette (la session reste la
-// même) ; « Moi » ouvre le compte. La création d'une structure, d'une fiche pro ou d'un profil prestataire renvoie
-// vers le site tant que les écrans de l'appli n'existent pas (lots 21 et 22).
+// même) ; « Moi » ouvre le compte. La structure et le profil prestataire se créent dans l'appli (lots 21 et 22), la fiche pro sur le site.
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { useRouter } from "expo-router";
 import { StyleSheet } from "react-native";
@@ -34,7 +33,7 @@ export function CasquettesSheet({ visible, onClose }: { visible: boolean; onClos
       <Text variant="label" color={t.color.inkMuted} style={styles.section} accessibilityRole="header">
         Créer une casquette
       </Text>
-      <CreateCasquettes />
+      <CreateCasquettes onNavigate={onClose} />
     </AppSheet>
   );
 }

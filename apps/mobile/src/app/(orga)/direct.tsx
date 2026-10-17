@@ -1,10 +1,13 @@
-// Casquette Organisateur, Direct : arrivés et attendus par catégorie, alertes, main courante (lot 22).
-import { Soon } from "@/ui/Soon";
+// Casquette Organisateur, Direct : arrivés et attendus par catégorie, alertes, main courante, rapport des scans (lot 22).
+import { orgaLabels } from "@orasso/shared";
+
+import { DirectScreen } from "@/features/orga/Direct";
+import { OrgaGate } from "@/features/orga/OrgaGate";
 
 export default function Direct() {
   return (
-    <Soon title="Direct">
-      Le suivi en direct de ton événement (arrivés et attendus par catégorie, alertes, main courante) arrive ici.
-    </Soon>
+    <OrgaGate title={orgaLabels.directTitle}>
+      <DirectScreen />
+    </OrgaGate>
   );
 }

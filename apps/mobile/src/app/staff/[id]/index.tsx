@@ -43,6 +43,8 @@ export default function StaffHome() {
   const { userId, state, error } = useStaffEvent(id);
   const staffEvents = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
   const mine: MyStaffEvent | null = staffEvents.data?.find((s) => s.event.id === id) ?? null;
+  // Les événements du staff sont chargés et celui-ci n'y est pas : c'est un organisateur (ou l'administration) qui l'ouvre.
+  const organizerView = staffEvents.data !== null && mine === null;
   const actions = useStaffActions(userId, id);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<{ text: string; error: boolean } | null>(null);
@@ -180,31 +182,34 @@ export default function StaffHome() {
         ) : null}
       </Plate>
 
-      <Plate style={styles.block}>
-        <Text variant="label" color={c.plateMuted}>
-          Présence
-        </Text>
-        <Text variant="bodyStrong" color={c.plateInk}>
-          {currentPresence === "present"
-            ? "Je suis là"
-            : currentPresence === "absent"
-              ? "Pas là"
-              : staffPresenceLabels.unknown}
-        </Text>
-        <Button
-          variant="plate"
-          icon={currentPresence === "present" ? "close" : "check"}
-          onPress={() => {
-            if (!userId) return;
-            const next = currentPresence !== "present";
-            setPresence(next ? "present" : "absent");
-            void record(id, userId, "presence", { present: next });
-          }}
-          fullWidth
-        >
-          {currentPresence === "present" ? "Pas là" : "Je suis là"}
-        </Button>
-      </Plate>
+      {/* Un organisateur qui ouvre le mode staff n'est pas dans la liste « Où je suis staff » : pas de réponse de présence (lot 22). */}
+      {organizerView ? null : (
+        <Plate style={styles.block}>
+          <Text variant="label" color={c.plateMuted}>
+            Présence
+          </Text>
+          <Text variant="bodyStrong" color={c.plateInk}>
+            {currentPresence === "present"
+              ? "Je suis là"
+              : currentPresence === "absent"
+                ? "Pas là"
+                : staffPresenceLabels.unknown}
+          </Text>
+          <Button
+            variant="plate"
+            icon={currentPresence === "present" ? "close" : "check"}
+            onPress={() => {
+              if (!userId) return;
+              const next = currentPresence !== "present";
+              setPresence(next ? "present" : "absent");
+              void record(id, userId, "presence", { present: next });
+            }}
+            fullWidth
+          >
+            {currentPresence === "present" ? "Pas là" : "Je suis là"}
+          </Button>
+        </Plate>
+      )}
 
       <Plate style={styles.block}>
         <Text variant="label" color={c.plateMuted}>
