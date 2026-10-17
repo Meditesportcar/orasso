@@ -278,6 +278,42 @@ test("billetterie : billet gratuit configuré, billet payant avec compte Stripe 
   expect((await apiCall(fan, "GET", `/events/${free.id}/ticketing`)).status).toBe(403);
 });
 
+test("billets du public : réserver dans l'appli, QR dans Mes billets, rendre un billet (lot 34)", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  mkdirSync(DIR, { recursive: true });
+  const damien = await login("damien@orasso.local");
+  const ev = await createEvent(damien, { publicAccess: "free_reservation", title: `Billets appli ${unique()}` });
+  const opened = await apiCall(damien, "PUT", `/events/${ev.id}/ticketing`, { enabled: true, capacity: 3 });
+  expect(opened.status).toBe(200);
+  const pseudo = `Visiteur_${unique()}`.slice(0, 24);
+  const fan = await signUpApi(pseudo);
+  const { ctx, page } = await openApp(browser, `${pseudo.toLowerCase()}@e2e.orasso.test`, "sable");
+  await page.goto(`/e/${ev.slug}`);
+  const block = page.getByTestId("ticket-block");
+  await expect(block).toContainText("Billets visiteurs", { timeout: 30_000 });
+  await expect(block).toContainText("3 places restantes");
+  await block.getByLabel("2 billets").click();
+  await shot(page, "03-billets-reserver", "sable");
+  await page.getByTestId("ticket-reserve").click();
+  await page.waitForURL(/billets/, { timeout: 30_000 });
+  await expect(page.getByText("Réservation confirmée").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("ticket")).toHaveCount(2);
+  await expect(page.getByTestId("ticket-qr").first()).toBeVisible();
+  await shot(page, "04-mes-billets", "sable");
+  await page.getByTestId("ticket-give-back").first().click();
+  await page.getByRole("button", { name: "Rendre ce billet" }).filter({ visible: true }).last().click();
+  await expect(page.getByText("Billet rendu : la place est libérée.").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("ticket")).toHaveCount(1);
+  const mine = await apiCall<{ status: string }[]>(fan, "GET", "/me/tickets");
+  expect(mine.data.filter((t) => t.status === "valid")).toHaveLength(1);
+  // Accès : un raccourci vers Mes billets.
+  await page.goto("/acces");
+  await expect(page.getByTestId("my-tickets")).toContainText("Mes billets · 1", { timeout: 30_000 });
+  await ctx.close();
+});
+
 test("pro : créer sa fiche depuis Mes casquettes (lot 34)", async ({ browser }) => {
   test.setTimeout(240_000);
   mkdirSync(DIR, { recursive: true });
