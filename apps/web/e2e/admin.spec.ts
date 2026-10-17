@@ -170,7 +170,10 @@ test("administration : accueil, 2FA, base véhicules, mode assistance, barème, 
   const application = await applyApi(absent, event.id, vehicle);
   await decideApi(damien, event.id, application, "accept");
   simulateSettle(event.slug);
-  const pts = await apiCall<{ entries: { kind: string; points: number }[] }>(absent, "GET", "/me/points");
+  // Le règlement simulé bloque plusieurs secondes : la connexion gardée ouverte a pu être fermée par l'API (ECONNRESET),
+  // on réessaie une fois avec une connexion neuve.
+  const readPoints = () => apiCall<{ entries: { kind: string; points: number }[] }>(absent, "GET", "/me/points");
+  const pts = await readPoints().catch(readPoints);
   expect(pts.data.entries.find((e) => e.kind === "malus")?.points).toBe(-15);
   await apiCall(damien, "PUT", "/admin/settings/points.malus", { value: -10 });
 
