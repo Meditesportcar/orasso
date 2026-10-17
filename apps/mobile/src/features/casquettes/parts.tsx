@@ -2,9 +2,8 @@
 import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { adminAppLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
-import { siteUrl } from "@/api";
 import { usePersona } from "@/lib/persona";
 import { isActive, personaKindLabels, personaOfEntry } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
@@ -12,7 +11,7 @@ import { Avatar } from "@/ui/Avatar";
 
 const { space1, space2, space3 } = tokens.spacing;
 
-/** Créer une casquette : la structure et le profil prestataire se créent dans l'appli (lots 21 et 22), la fiche pro sur le site. */
+/** Créer une casquette : structure (lot 22), profil prestataire (lot 21) et fiche pro (lot 34) se créent dans l'appli. */
 const CREATIONS = [
   { kind: "organizer", label: "Créer une structure", path: "/app/structure/nouvelle" },
   { kind: "pro", label: "Créer une fiche pro", path: "/app/pro/nouvelle" },
@@ -82,13 +81,13 @@ export function CreateCasquettes({ onNavigate }: { onNavigate?: () => void } = {
           variant="plate"
           icon="add"
           fullWidth
-          // Structure (lot 22) et profil prestataire (lot 21) se créent dans l'appli ; la fiche pro, sur le site.
           onPress={() => {
             onNavigate?.();
             if (c.kind === "provider") router.push("/prestataire/nouveau");
             else if (c.kind === "organizer") router.push("/structure/nouvelle");
-            else void Linking.openURL(siteUrl(c.path));
+            else router.push("/pro-nouvelle");
           }}
+          testID={`casquette-create-${c.kind}`}
         >
           {c.label}
         </Button>

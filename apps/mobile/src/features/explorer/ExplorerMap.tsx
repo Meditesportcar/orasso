@@ -71,9 +71,9 @@ export function ExplorerMap({ pins, onOpen }: { pins: MapPin[]; onOpen: (pin: Ma
 
 const styles = StyleSheet.create({
   wrap: { gap: space3 },
-  map: { height: 360, borderRadius: 12, overflow: "hidden", borderWidth: 1 },
+  map: { height: 360, borderRadius: tokens.radius.radiusMd, overflow: "hidden", borderWidth: 1 },
   hit: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  pin: { width: 20, height: 20, borderRadius: 999, borderWidth: 3 },
+  pin: { width: 20, height: 20, borderRadius: tokens.radius.radiusPill, borderWidth: 3 },
   pinSelected: { width: 28, height: 28 },
   card: { gap: space1, padding: space3 },
 });

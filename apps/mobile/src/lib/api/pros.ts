@@ -2,6 +2,7 @@
 // photos, SIRET, remises, partenaires). Aucun paiement dans l'appli : l'abonnement se consulte, il se souscrit sur le site.
 import type {
   AccountQrVerify,
+  ProCreate,
   ProDiscountsInput,
   ProOwner,
   ProPostCreate,
@@ -15,6 +16,8 @@ import { request } from "../http";
 
 export const prosApi = {
   myPro: () => request<ProOwner | null>("/api/me/pro"),
+  /** `POST /pros` : création de la fiche (lot 34 ; une par compte, refus de l'API sinon). */
+  createPro: (body: ProCreate) => request<ProOwner>("/api/pros", { method: "POST", body }),
   verifyAccountQr: (payload: string) =>
     request<AccountQrVerify>("/api/account-qr/verify", { method: "POST", body: { payload } }),
   createProPost: (proId: string, body: ProPostCreate) =>

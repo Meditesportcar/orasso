@@ -278,6 +278,32 @@ test("billetterie : billet gratuit configuré, billet payant avec compte Stripe 
   expect((await apiCall(fan, "GET", `/events/${free.id}/ticketing`)).status).toBe(403);
 });
 
+test("pro : créer sa fiche depuis Mes casquettes (lot 34)", async ({ browser }) => {
+  test.setTimeout(240_000);
+  mkdirSync(DIR, { recursive: true });
+  const pseudo = `FicheApp_${unique()}`.slice(0, 24);
+  await signUpApi(pseudo);
+  const { ctx, page } = await openApp(browser, `${pseudo.toLowerCase()}@e2e.orasso.test`, "sable");
+  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.getByTestId("casquette-create-pro").click();
+  await page.waitForURL(/pro-nouvelle/, { timeout: 20_000 });
+  await expect(page.getByTestId("pro-form")).toBeVisible({ timeout: 30_000 });
+  // Formulaire refusé sans activité (règle du site), puis créé.
+  await page.getByLabel("Nom de l'activité").fill(`Atelier ${pseudo}`);
+  await page.getByTestId("pro-form-save").click();
+  await expect(page.getByText("Choisis au moins une activité.")).toBeVisible();
+  await page.getByTestId("pro-form").getByText("Covering", { exact: true }).click();
+  await page.getByLabel("Ville").first().fill("Perpignan");
+  await shot(page, "00-creer-fiche-pro", "sable");
+  await page.getByTestId("pro-form-save").click();
+  await page.waitForURL(/\/fiche/, { timeout: 30_000 });
+  await expect(page.getByText("Fiche pro créée.").first()).toBeVisible({ timeout: 20_000 });
+  const cookie = await login(`${pseudo.toLowerCase()}@e2e.orasso.test`);
+  const mine = await apiCall<{ name: string } | null>(cookie, "GET", "/me/pro");
+  expect(mine.data?.name).toBe(`Atelier ${pseudo}`);
+  await ctx.close();
+});
+
 test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, abonnement en consultation", async ({
   browser,
 }) => {

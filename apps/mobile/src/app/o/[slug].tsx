@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   head: { gap: space3, padding: space3 },
   headRow: { flexDirection: "row", alignItems: "center", gap: space3 },
   headText: { flex: 1, gap: space1 },
-  logo: { width: 64, height: 64, borderRadius: 8 },
+  logo: { width: 64, height: 64, borderRadius: tokens.radius.radiusSm },
   actions: { gap: space2 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
 });

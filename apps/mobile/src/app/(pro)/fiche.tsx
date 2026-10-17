@@ -3,7 +3,7 @@
 // consultent seulement : aucun prix ni bouton de paiement dans l'appli, la souscription se fait sur le site Orasso.
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { proAppLabels as L, proActivityLabels } from "@orasso/shared";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet } from "react-native";
 
 import {
@@ -25,6 +25,8 @@ const { space2, space3 } = tokens.spacing;
 export default function ProFiche() {
   const { t } = useTheme();
   const router = useRouter();
+  // Fiche créée depuis « Mes casquettes » (lot 34) : un mot de confirmation.
+  const { fait } = useLocalSearchParams<{ fait?: string }>();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
   const reload = () => myPro.reload();
@@ -45,6 +47,7 @@ export default function ProFiche() {
         )
       ) : (
         <>
+          {fait === "creee" ? <Notice>{L.created}</Notice> : null}
           {/* Copie en cache d'avant le lot 21 : pas de `visibility`. */}
           {pro.visibility?.banner ? <Notice>{pro.visibility.banner}</Notice> : null}
           <Plate style={styles.block}>

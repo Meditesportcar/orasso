@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   two: { flexDirection: "row", gap: space2 },
   half: { flex: 1 },
   photos: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  photo: { width: 92, height: 70, borderRadius: 8 },
+  photo: { width: 92, height: 70, borderRadius: tokens.radius.radiusSm },
   category: { flexDirection: "row", alignItems: "center", gap: space2, flexWrap: "wrap" },
   categoryOff: { opacity: 0.55 },
 });

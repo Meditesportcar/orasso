@@ -425,9 +425,9 @@ function Line({ k, v, hint, last }: { k: string; v: string; hint?: string; last?
 const styles = StyleSheet.create({
   days: { gap: space2 },
   vehicle: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3 },
-  thumb: { width: 76, height: 58, borderRadius: 8 },
+  thumb: { width: 76, height: 58, borderRadius: tokens.radius.radiusSm },
   vehicleBody: { flex: 1, gap: space1 },
-  check: { width: 24, height: 24, borderRadius: 8, borderWidth: 2 },
+  check: { width: 24, height: 24, borderRadius: tokens.radius.radiusSm, borderWidth: 2 },
   rules: { gap: space2, padding: space3 },
   stepper: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
   recap: { padding: space3, paddingVertical: space1 },

@@ -134,6 +134,12 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, gap: space1 },
   rowHead: { flexDirection: "row", alignItems: "baseline", gap: space2 },
   grow: { flex: 1 },
-  count: { minWidth: 22, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, alignItems: "center" },
+  count: {
+    minWidth: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: tokens.radius.radiusPill,
+    alignItems: "center",
+  },
   requests: { gap: space3 },
 });

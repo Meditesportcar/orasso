@@ -342,5 +342,11 @@ const styles = StyleSheet.create({
   rowHead: { flexDirection: "row", alignItems: "baseline", gap: space2 },
   grow: { flex: 1 },
   block: { gap: space2, padding: space3 },
-  count: { minWidth: 22, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, alignItems: "center" },
+  count: {
+    minWidth: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: tokens.radius.radiusPill,
+    alignItems: "center",
+  },
 });

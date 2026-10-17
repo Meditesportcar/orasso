@@ -37,7 +37,7 @@ export default function Placement() {
             <Text variant="zone" color={c.plateInk}>
               {z.code ?? "—"}
             </Text>
-            <Text variant="number" color={c.plateInk} style={styles.figure}>
+            <Text variant="number" color={c.plateInk}>
               {z.arrived} / {z.expected}
             </Text>
           </View>
@@ -61,5 +61,4 @@ export default function Placement() {
 const styles = StyleSheet.create({
   zone: { gap: space2, padding: space3 },
   head: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
-  figure: { fontSize: 24, lineHeight: 26 },
 });

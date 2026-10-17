@@ -50,7 +50,8 @@ test("appli : Accueil complet, réorganisation enregistrée", async ({ browser }
     await expect(page.getByTestId("widget-garage")).toContainText("Garage du Port");
     await expect(page.getByTestId("widget-wash")).toContainText("OpenStreetMap");
     await expect(page.getByTestId("widget-fuel")).toContainText("data.economie.gouv.fr");
-    await expect(page.getByTestId("sponsored-card")).toContainText("Polish avant saison");
+    // Tirage pondéré avec une graine (personne + jour) : l'un ou l'autre emplacement du seed selon la date (lot 34).
+    await expect(page.getByTestId("sponsored-card")).toContainText(/Polish avant saison|Covering sur mesure/);
     await expect(page.getByText("Sponsorisé", { exact: true })).toBeVisible();
     await shot(page, `01-accueil-${theme}`);
 
