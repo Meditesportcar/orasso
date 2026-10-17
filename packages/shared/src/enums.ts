@@ -67,7 +67,14 @@ export type EventFormat = (typeof eventFormats)[number];
 export const eventAdmissions = ["open", "filtered", "invite_only"] as const;
 export type EventAdmission = (typeof eventAdmissions)[number];
 
-export const eventPublicAccesses = ["free", "free_reservation", "paid_orasso", "paid_external", "closed"] as const;
+/**
+ * Événements sur plusieurs jours (lot 26, S27) : accès à tout l'événement, par jour, ou au choix du participant. Un
+ * événement d'un seul jour est toujours `whole`.
+ */
+export const dayAccesses = ["whole", "per_day", "both"] as const;
+export type DayAccess = (typeof dayAccesses)[number];
+
+export const eventPublicAccesses =["free", "free_reservation", "paid_orasso", "paid_external", "closed"] as const;
 export type EventPublicAccess = (typeof eventPublicAccesses)[number];
 
 export const eventStatuses = ["draft", "published", "cancelled"] as const;

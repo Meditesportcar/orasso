@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { ApplicationStatus } from "../application";
 import {
+  type DayAccess,
+  dayAccesses,
   departmentSchema,
   type EventAdmission,
   type EventFormat,
@@ -16,6 +18,7 @@ import {
 } from "../enums";
 import { type Grade, grades } from "../grades";
 import type { Affinity } from "../rules/affinity";
+import { type EventDayInput, MAX_EVENT_DAYS } from "../rules/eventDays";
 import { RECURRENCE_MAX_COUNT, type RecurrenceRule } from "../rules/recurrence";
 import { isoDate, optionalText, pageQuery } from "./common";
 
@@ -59,6 +62,11 @@ const eventFields = z.object({
   vendorTypes: z.array(z.string().trim().min(1).max(40)).max(16),
   /** Rôle « boutique » du staff activé pour cet événement (lot 24). */
   shopEnabled: z.boolean(),
+  /**
+   * Accès des participants d'un événement sur plusieurs jours (lot 26, S27). Sans effet tant que l'événement n'a pas
+   * au moins deux jours (`PUT /events/:id/days`).
+   */
+  dayAccess: z.enum(dayAccesses),
 });
 
 const datesRule = (v: { startsAt?: Date; endsAt?: Date }, ctx: z.RefinementCtx) => {
@@ -81,6 +89,7 @@ export const eventCreateSchema = eventFields
     highGradeMin: eventFields.shape.highGradeMin.default("circuit"),
     vendorTypes: eventFields.shape.vendorTypes.default([]),
     shopEnabled: eventFields.shape.shopEnabled.default(false),
+    dayAccess: eventFields.shape.dayAccess.default("whole"),
   })
   .superRefine(datesRule);
 export type EventCreate = z.infer<typeof eventCreateSchema>;
@@ -89,6 +98,46 @@ export const eventUpdateSchema = eventFields.partial().superRefine(datesRule);
 export type EventUpdate = z.infer<typeof eventUpdateSchema>;
 
 export const outlookUpdateSchema = z.object({ outlook: z.enum(eventOutlooks) });
+
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM");
+
+/** Un jour saisi dans l'assistant (lot 26) : date locale, heures murales dans le fuseau de l'événement. */
+export const eventDayInputSchema = z.object({
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date au format AAAA-MM-JJ")
+    .refine((s) => !Number.isNaN(Date.parse(`${s}T12:00:00Z`)) && new Date(`${s}T12:00:00Z`).toISOString().startsWith(s), {
+      message: "Date inconnue",
+    }),
+  startTime: hhmm,
+  /** Avant ou égale au début : le lendemain (nocturne après minuit). */
+  endTime: hhmm,
+  /** `null` = la capacité de l'événement. */
+  capacity: z.number().int().positive().max(100_000).nullable().default(null),
+}) satisfies z.ZodType<EventDayInput, unknown>;
+
+/**
+ * `PUT /events/:id/days` : la liste complète des jours (lot 26). Liste vide = événement d'un seul jour (dates de
+ * l'événement inchangées). Deux jours ou plus : les dates de l'événement deviennent les bornes.
+ */
+export const eventDaysPutSchema = z.object({
+  days: z.array(eventDayInputSchema).max(MAX_EVENT_DAYS),
+  dayAccess: z.enum(dayAccesses).optional(),
+});
+export type EventDaysPut = z.infer<typeof eventDaysPutSchema>;
+
+/** Un jour d'un événement sur plusieurs jours, tel que les clients le reçoivent. */
+export type EventDay = {
+  id: string;
+  /** Date locale `AAAA-MM-JJ` (fuseau de l'événement). */
+  date: string;
+  startsAt: string;
+  endsAt: string;
+  /** `null` = la capacité de l'événement. */
+  capacity: number | null;
+  /** Places restantes ce jour (`null` = sans limite). */
+  remaining: number | null;
+};
 
 /** Récurrence (« chaque premier dimanche du mois ») : créée une seule fois, les occurrences sont des brouillons. */
 export const recurrenceRuleSchema = z.discriminatedUnion("kind", [
@@ -180,7 +229,13 @@ export type EventCard = {
   affinity?: Affinity;
 };
 
-export type MyApplicationBrief = { id: string; vehicleId: string | null; status: ApplicationStatus };
+export type MyApplicationBrief = {
+  id: string;
+  vehicleId: string | null;
+  status: ApplicationStatus;
+  /** Lot 26 : jour choisi (`null` = tout l'événement). */
+  eventDayId: string | null;
+};
 
 export type EventPublic = EventCard & {
   description: string | null;
@@ -206,6 +261,9 @@ export type EventPublic = EventCard & {
   /** Consignes : réservées aux inscrits retenus et à l'organisation. */
   instructions: string | null;
   acceptedCount: number;
+  /** Lot 26 : jours (vide = événement d'un jour) et mode d'accès (`whole` pour un événement d'un jour). */
+  days: EventDay[];
+  dayAccess: DayAccess;
   /** Connecté seulement. */
   myApplications?: MyApplicationBrief[];
   registrationOpensAtForMe?: string;

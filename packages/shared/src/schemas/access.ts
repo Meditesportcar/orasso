@@ -127,10 +127,18 @@ export type AccessListEntry = {
   zoneName: string | null;
   checkedInAt: string | null;
   checkinMethod: CheckinMethod | null;
+  /**
+   * Lot 26 : jour de la candidature (date locale `AAAA-MM-JJ`) ; `null` = tout l'événement (ou événement d'un jour).
+   * Lu le jour J par `decideScan` (règle « Autre jour »).
+   */
+  dayDate: string | null;
   /** Coordonnées : super staff et organisateur seulement. */
   contact?: { firstName: string | null; lastName: string | null; phone: string | null; email: string };
   updatedAt: string;
 };
+
+/** Un jour dans la synchro du staff (lot 26). */
+export type StaffSyncDay = { id: string; date: string; startsAt: string; endsAt: string };
 
 /**
  * `GET /api/events/:id/staff/sync?since=` (§ 4.1). Signature Ed25519 (clé `signatureKid`) du SHA-256 de
@@ -148,6 +156,8 @@ export type StaffSync = {
     /** Sel du hachage de plaque (16 octets, base64url) : l'appli hache la saisie du staff. */
     plateSalt: string;
     zones: { id: string; code: string; name: string; capacity: number | null }[];
+    /** Lot 26 : jours d'un événement sur plusieurs jours (vide = un seul jour) ; filtre « Aujourd'hui » de la liste. */
+    days: StaffSyncDay[];
   };
   keys: { kid: number; publicKey: string; retiredAt: string | null }[];
   myRoles: StaffRole[];
@@ -289,8 +299,16 @@ export type ScanReport = {
   }[];
 };
 
+/** Lot 26 : direct, liste du jour J et pointage d'un jour précis d'un événement sur plusieurs jours. */
+export const dayQuerySchema = z.object({ dayId: z.uuid().optional() });
+
 /** Direct de l'organisateur (`GET /api/events/:id/live`, canal `event:<id>:live`). */
 export type LiveCounters = {
+  /**
+   * Lot 26 : jour compté (`null` = tous les jours, ou événement d'un jour). Un jour compte ses candidatures et celles
+   * de tout l'événement ; « arrivés » = entrés (une seule entrée par candidature, gardée au premier passage, S29).
+   */
+  dayId?: string | null;
   arrived: number;
   expected: number;
   byCategory: { categoryId: string; slug: string; label: string; arrived: number; expected: number }[];

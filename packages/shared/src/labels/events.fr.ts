@@ -1,4 +1,5 @@
 import type {
+  DayAccess,
   EventAdmission,
   EventFormat,
   EventOutlook,
@@ -24,6 +25,33 @@ export const eventAdmissionLabels: Record<EventAdmission, string> = {
   filtered: "Sur filtration",
   invite_only: "Sur invitation",
 };
+
+/** Événements sur plusieurs jours (lot 26) : mode d'accès choisi par l'organisateur dans l'assistant. */
+export const dayAccessLabels: Record<DayAccess, string> = {
+  whole: "Tout l'événement",
+  per_day: "Par jour",
+  both: "Au choix : tout l'événement ou un jour",
+};
+
+/** Libellés des jours (assistant, page événement, candidature, Accès, tri, jour J, mode staff). */
+export const eventDaysLabels = {
+  multiDay: "Plusieurs jours",
+  days: "Jours",
+  day: "Jour",
+  addDay: "Ajouter un jour",
+  removeDay: "Retirer ce jour",
+  dayCapacity: "Places ce jour (facultatif)",
+  dayCapacityHint: "Vide = la capacité de l'événement",
+  dayAccess: "Accès des participants",
+  wholeEvent: "Tout l'événement",
+  chooseDay: "Pour quel jour ?",
+  allDays: "Tous les jours",
+  today: "Aujourd'hui",
+  dayFull: "Complet ce jour",
+  otherDay: "Inscrit pour un autre jour",
+  otherDayHint: "Ce QR est valable un autre jour. Vérifie avec le conducteur avant d'accepter.",
+  dayInUse: "Ce jour a des candidatures : il ne peut plus être retiré",
+} as const;
 
 export const eventPublicAccessLabels: Record<EventPublicAccess, string> = {
   free: "Entrée libre",
