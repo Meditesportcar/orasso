@@ -460,7 +460,12 @@ export const structuresService = {
     // Seul le destinataire répond (la ligne est cherchée par son identifiant de session), une seule fois.
     const [m] = await db
       .update(structureMembers)
-      .set(accept ? { status: "active", joinedAt: now() } : { status: "removed", joinedAt: null })
+      // `updatedAt` à l'heure de l'appli : le délai de 24 h après un refus se compare à `now()` (recentlyDeclined).
+      .set(
+        accept
+          ? { status: "active", joinedAt: now(), updatedAt: now() }
+          : { status: "removed", joinedAt: null, updatedAt: now() },
+      )
       .where(
         and(
           eq(structureMembers.structureId, structureId),
@@ -499,7 +504,7 @@ export const structuresService = {
     if (access.role === "co_organizer" && m.role === "co_organizer") {
       throw forbidden("Seul le propriétaire gère les co-organisateurs");
     }
-    await db.update(structureMembers).set({ status: "removed" }).where(eq(structureMembers.id, m.id));
+    await db.update(structureMembers).set({ status: "removed", updatedAt: now() }).where(eq(structureMembers.id, m.id));
     await staffChatsService.syncStructure(id);
   },
 

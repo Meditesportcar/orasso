@@ -222,7 +222,8 @@ export const staffRequestsService = {
       await lockStructureStaff(tx, structureId);
       const [row] = await tx
         .update(structureMembers)
-        .set({ status: "removed", joinedAt: null })
+        // Heure de l'appli (et non celle de la base) : le délai de 24 h se compare à `now()`.
+        .set({ status: "removed", joinedAt: null, updatedAt: now() })
         .where(
           and(
             eq(structureMembers.structureId, structureId),
