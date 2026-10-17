@@ -20,7 +20,11 @@ const VIEWS = [
 const THEMES = ["beton", "sable"] as const;
 const audits: Record<string, Audit> = {};
 
-async function context(browser: Browser, cookie: Cookie, opts: { theme?: string; width?: number; height?: number } = {}) {
+async function context(
+  browser: Browser,
+  cookie: Cookie,
+  opts: { theme?: string; width?: number; height?: number } = {},
+) {
   const ctx = await browser.newContext({ viewport: { width: opts.width ?? 1280, height: opts.height ?? 900 } });
   const cookies = [{ name: "orasso-theme", value: opts.theme ?? "beton", url: WEB }];
   for (const pair of cookie.split("; ").filter(Boolean)) {
@@ -63,9 +67,9 @@ test("modération : suspension automatique, bandeau, contestation, levée ; mess
 }) => {
   test.setTimeout(300_000);
   const s = unique();
-  const [xCookie, aCookie, bCookie, cCookie] = await Promise.all(
+  const [xCookie, aCookie, bCookie, cCookie] = (await Promise.all(
     [`Xav_${s}`, `Ana_${s}`, `Bea_${s}`, `Cyr_${s}`].map((p) => signUpApi(p)),
-  );
+  )) as [Cookie, Cookie, Cookie, Cookie];
   const ids = await Promise.all([xCookie, aCookie, bCookie, cCookie].map(userId));
   const [xId, , , cId] = ids as [string, string, string, string];
   await age(ids.slice(1));
@@ -117,7 +121,11 @@ test("modération : suspension automatique, bandeau, contestation, levée ; mess
     "Signalements",
     /Mon compte/,
   ]);
-  await pageM.getByTestId("report-item").filter({ hasText: `Xav_${s}` }).first().click();
+  await pageM
+    .getByTestId("report-item")
+    .filter({ hasText: `Xav_${s}` })
+    .first()
+    .click();
   await expect(pageM.getByTestId("report-detail")).toBeVisible();
   await shot(pageM, "file-signalements");
 
