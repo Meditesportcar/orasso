@@ -22,6 +22,8 @@ import {
   eventFormatLabels,
   eventOutlookLabels,
   instagramHandle,
+  invitationLabels,
+  previewSummary,
   publicAccessText,
   type VendorTypeCode,
 } from "@orasso/shared";
@@ -77,7 +79,20 @@ export default function EventPage() {
   if (!e) {
     return (
       <FlowScreen title="Événement" onClose={close}>
-        {event.error ? (
+        {event.error?.code === "invite_only" ? (
+          // Événement privé sur invitation (lot 25) : rien de l'événement pour qui n'est pas invité.
+          <Plate style={styles.info} testID="private-event">
+            <Text variant="title" color={t.color.plateInk}>
+              {invitationLabels.privateEvent}
+            </Text>
+            <Text variant="body" color={t.color.plateMuted}>
+              {invitationLabels.privateEventHint}
+            </Text>
+            <Button variant="plate" icon="entry" onPress={() => router.navigate(status === "in" ? "/acces" : "/auth")}>
+              {status === "in" ? invitationLabels.openAccess : invitationLabels.linkSignIn}
+            </Button>
+          </Plate>
+        ) : event.error ? (
           <Notice tone="error">
             {event.error.status === 404 ? "Cet événement n'existe pas ou plus." : event.error.message}
           </Notice>
@@ -92,8 +107,15 @@ export default function EventPage() {
   const opensAt = new Date(e.registrationOpensAtForMe ?? e.registrationsOpenAt);
   const notYetOpen = Date.now() < opensAt.getTime();
   const cancelled = e.status === "cancelled";
+  // Événement privé (lot 25) : pas de candidature libre, l'invitation se répond dans Accès.
+  const inviteOnly = e.admission === "invite_only";
   const canApply =
-    !cancelled && !e.isLocked && !notYetOpen && (e.remaining === null || e.remaining > 0 || e.admission !== "open");
+    !inviteOnly &&
+    !cancelled &&
+    !e.isLocked &&
+    !notYetOpen &&
+    (e.remaining === null || e.remaining > 0 || e.admission !== "open");
+  const preview = previewSummary(e);
   const wanted = (e.criteria?.categoryIds ?? [])
     .map((id) => categories.data?.find((c) => c.id === id)?.label)
     .filter((l): l is string => Boolean(l));
@@ -145,7 +167,14 @@ export default function EventPage() {
             ? { label: "Voir mes accès", icon: "qr", next: true, onPress: () => router.navigate("/acces") }
             : canApply
               ? { label: "Candidater avec un véhicule", icon: "add", next: true, onPress: apply }
-              : undefined
+              : inviteOnly && !cancelled
+                ? {
+                    label: invitationLabels.openAccess,
+                    icon: "entry",
+                    next: true,
+                    onPress: () => router.navigate("/acces"),
+                  }
+                : undefined
         }
       />
 
@@ -155,6 +184,8 @@ export default function EventPage() {
         </Notice>
       ) : cancelled ? (
         <Notice tone="error">Cet événement est annulé.</Notice>
+      ) : inviteOnly ? (
+        <Notice>{invitationLabels.invitationRequired}</Notice>
       ) : e.isLocked ? (
         <Notice>Les inscriptions sont verrouillées.</Notice>
       ) : notYetOpen ? (
@@ -223,6 +254,7 @@ export default function EventPage() {
       <Info label="Admission">
         {eventAdmissionLabels[e.admission]}
         {e.maxVehiclesPerUser > 1 ? ` · ${e.maxVehiclesPerUser} véhicules par personne au plus` : ""}
+        {preview ? `\n${preview}` : ""}
       </Info>
       <Info label="Public">{publicAccessText(e.publicAccess, e.externalTicketUrl)}</Info>
       {e.vendorTypes.length > 0 ? <Info label="Prestataires attendus">{e.vendorTypes.join(" · ")}</Info> : null}

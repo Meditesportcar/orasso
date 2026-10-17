@@ -24,6 +24,7 @@ import { crewsRoutes } from "./modules/crews/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
 import { fieldRoutes } from "./modules/field/routes";
+import { invitationsRoutes } from "./modules/invitations/routes";
 import { messagingRoutes } from "./modules/messaging/routes";
 import { notificationsRoutes } from "./modules/notifications/routes";
 import { pointsRoutes } from "./modules/points/routes";
@@ -158,6 +159,7 @@ app.route("/", socialRoutes);
 app.route("/", uploadsRoutes);
 app.route("/", messagingRoutes);
 app.route("/", crewsRoutes);
+app.route("/", invitationsRoutes);
 app.route("/", searchRoutes);
 app.route("/", communicationRoutes);
 

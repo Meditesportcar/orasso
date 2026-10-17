@@ -12,8 +12,10 @@ import {
   eventFormatLabels,
   eventOutlookLabels,
   instagramHandle,
+  invitationLabels,
   type MyCrew,
   type MyTicket,
+  previewSummary,
   publicAccessText,
   type StructurePublic,
   type TicketOffer,
@@ -31,12 +33,20 @@ import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
 import { formatDateTime, formatPrice, formatWhen } from "../lib/format";
 import { messageAction } from "../lib/messaging.server";
 import { badgeFor, registrationState } from "../lib/status";
+import "../styles/invitations.css";
 import "../styles/providers.css";
 import type { Route } from "./+types/event";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const slug = params.slug;
-  const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
+  const found = await api<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
+  // Événement privé sur invitation (lot 25) : rien de l'événement pour qui n'est pas invité, écran dédié.
+  if (!found.ok && found.error.code === "invite_only") {
+    return data({ privateEvent: true as const, connected: Boolean(await getMe(request)) }, { status: 403 });
+  }
+  const event = found.ok
+    ? found.data
+    : await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
   const [structure, categories, me, reviews, tickets, providers, weather, feed] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     api<Category[]>(request, "/vehicle-reference/categories"),
@@ -75,13 +85,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [{ title: "Événement introuvable · Orasso" }];
+  if ("privateEvent" in loaderData) {
+    return [{ title: `${invitationLabels.privateEvent} · Orasso` }, { name: "robots", content: "noindex, nofollow" }];
+  }
   const { event, origin } = loaderData;
   const where = [event.city, event.department].filter(Boolean).join(" ");
   const description = `${eventFormatLabels[event.format]} · ${formatWhen(event.startsAt, event.endsAt)}${where ? ` · ${where}` : ""} · ${event.structure.name}`;
   const image = event.posterUrl ? new URL(event.posterUrl, origin).toString() : `${origin}/og-image.png`;
   const title = `${event.title} · Orasso`;
+  // Événement privé : jamais référencé, même pour un invité qui partage la page.
+  const robots = event.admission === "invite_only" ? [{ name: "robots", content: "noindex, nofollow" }] : [];
   return [
     { title },
+    ...robots,
     { name: "description", content: description },
     { property: "og:type", content: "website" },
     { property: "og:site_name", content: "Orasso" },
@@ -281,7 +297,45 @@ function ReviewsSection({ reviews }: { reviews: EventReviews }) {
   );
 }
 
-export default function EventPage({ loaderData, actionData }: Route.ComponentProps) {
+type EventData = Exclude<Route.ComponentProps["loaderData"], { privateEvent: true }>;
+
+/** Événement privé sur invitation (lot 25) : écran sans rien de l'événement pour qui n'est pas invité. */
+function PrivateEvent({ connected }: { connected: boolean }) {
+  return (
+    <div className="ev-private" data-testid="private-event">
+      <div className="s-card s-stack">
+        <span className="s-row">
+          <Icon name="eyeOff" size={24} />
+          <span className="s-label o-t-label">{invitationLabels.privateBadge}</span>
+        </span>
+        <h1 className="s-title s-title--xl">{invitationLabels.privateEvent}</h1>
+        <p className="s-muted">{invitationLabels.privateEventHint}</p>
+        {connected ? (
+          <Button variant="primary" icon="entry" href="/app/acces">
+            {invitationLabels.openAccess}
+          </Button>
+        ) : (
+          <Button variant="primary" icon="profile" href="/connexion?retour=%2Fapp%2Facces">
+            {invitationLabels.linkSignIn}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function EventRoute({ loaderData, actionData }: Route.ComponentProps) {
+  if ("privateEvent" in loaderData) return <PrivateEvent connected={loaderData.connected} />;
+  return <EventPage loaderData={loaderData} actionData={actionData} />;
+}
+
+function EventPage({
+  loaderData,
+  actionData,
+}: {
+  loaderData: EventData;
+  actionData: Route.ComponentProps["actionData"];
+}) {
   const {
     event,
     structure,
@@ -362,6 +416,11 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
             </span>
           )}
           <span className="o-t-meta s-muted">{eventAdmissionLabels[event.admission]}</span>
+          {previewSummary(event) && (
+            <span className="o-t-meta s-muted" data-testid="preview-summary">
+              {previewSummary(event)}
+            </span>
+          )}
         </div>
 
         <section className="s-section s-section--first">
@@ -505,6 +564,13 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
                 </Button>
               )}
             </div>
+          ) : event.admission === "invite_only" ? (
+            <div className="s-stack s-stack--tight" data-testid="invite-only">
+              <p className="o-t-caption s-muted">{invitationLabels.invitationRequired}</p>
+              <Button variant="primary" icon="entry" href="/app/acces" fullWidth>
+                {invitationLabels.openAccess}
+              </Button>
+            </div>
           ) : state.kind === "open" ? (
             <>
               <Button variant="primary" icon="vehicle" href={candidateHref} fullWidth>
@@ -600,10 +666,12 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
           </div>
         )}
 
-        <div className="s-card">
-          <div className="s-label o-t-label">Partager</div>
-          <ShareButtons url={`${origin}/e/${event.slug}`} title={event.title} />
-        </div>
+        {event.admission !== "invite_only" && (
+          <div className="s-card">
+            <div className="s-label o-t-label">Partager</div>
+            <ShareButtons url={`${origin}/e/${event.slug}`} title={event.title} />
+          </div>
+        )}
 
         {mine.length > 0 && (
           <div className="ev__download">

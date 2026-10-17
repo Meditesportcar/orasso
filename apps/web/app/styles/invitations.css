@@ -1,0 +1,130 @@
+/* Invitations nominatives et événement privé (lot 25). Jetons seulement. */
+
+.ev-private {
+  max-width: 560px;
+  margin: var(--space-8) auto;
+}
+
+.inv-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.inv-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+}
+
+.inv-card__head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.inv-card__poster {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-sunken);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.inv-card__poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inv-card__text {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.inv-card__message {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--line);
+  white-space: pre-line;
+}
+
+.inv-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-end;
+}
+.inv-card__actions > * {
+  flex: 1 1 200px;
+}
+
+.inv-picker {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 420px;
+  overflow-y: auto;
+  padding: var(--space-1);
+}
+
+.inv-pick {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.inv-pick img,
+.inv-pick__thumb {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--surface-sunken);
+}
+.inv-pick__text {
+  display: grid;
+  min-width: 0;
+}
+
+.inv-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.inv-table th,
+.inv-table td {
+  text-align: left;
+  padding: var(--space-2);
+  border-top: 1px solid var(--line);
+  vertical-align: top;
+}
+@media (max-width: 640px) {
+  .inv-table thead {
+    display: none;
+  }
+  .inv-table tr {
+    display: grid;
+    gap: var(--space-1);
+    padding: var(--space-2) 0;
+    border-top: 1px solid var(--line);
+  }
+  .inv-table td {
+    border-top: 0;
+    padding: 0 var(--space-2);
+  }
+}
+
+.inv-grid {
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+}

@@ -18,6 +18,8 @@ export default function OrgaLayout() {
       <Tabs.Screen name="boite" />
       <Tabs.Screen name="staff" />
       <Tabs.Screen name="evenement/[id]" options={{ href: null }} />
+      {/* Inviter (lot 25), depuis la page d'un événement. */}
+      <Tabs.Screen name="evenement/[id]/inviter" options={{ href: null }} />
     </PersonaTabs>
   );
 }

@@ -31,6 +31,9 @@ export const errorCodes = [
   "conversation_closed",
   // Lot 20 : communication de l'organisateur.
   "follower_quota_exceeded",
+  // Lot 25 : événement privé sur invitation.
+  "invite_only",
+  "invitation_required",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

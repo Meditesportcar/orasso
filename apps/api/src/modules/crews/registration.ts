@@ -42,6 +42,7 @@ import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { type ApplicationRow, applicationsService } from "../applications/service";
 import { type EventRow, eventsRepo } from "../events/repo";
+import { assertCanSeeEvent } from "../invitations/access";
 import { inboxService } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
@@ -154,6 +155,8 @@ export const crewRegistrationService = {
   async options(v: Viewer, eventId: string, crewId: string): Promise<CrewRegistrationOptions> {
     const event = await eventsRepo.byId(eventId);
     if (event.status === "draft") throw notFound("Événement introuvable");
+    // Événement privé sur invitation (lot 25) : 403 pour qui n'y est pas invité (rien de l'événement).
+    await assertCanSeeEvent(event, v);
     const crew = await leaderCrew(db, crewId, v);
     const members = await db
       .select({ p: profiles, role: crewMembers.role })
