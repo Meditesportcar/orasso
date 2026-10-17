@@ -18,11 +18,13 @@ import { securityApi } from "./security";
 import { settingsApi } from "./settings";
 import { socialApi } from "./social";
 import { staffApi } from "./staff";
+import { triageApi } from "./triage";
 import { weatherApi } from "./weather";
 
 export type { NotificationItem } from "./account";
 export { authApi } from "./auth";
 export type { FieldAlert, FieldIncident } from "./orga";
+export type { DecideBody, DecideManyResult, TriageListQuery } from "./triage";
 
 export const api = {
   ...accountApi,
@@ -44,4 +46,5 @@ export const api = {
   ...invitationsApi,
 
   ...orgaApi,
+  ...triageApi,
 };
