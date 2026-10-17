@@ -113,7 +113,7 @@ export function FullSheet({
           </Plate>
           <Plate testID="triage-full-notes">
             <Text variant="label" color={t.color.plateMuted}>
-              {afterEventLabels.notesTitle} · {item.applicant.notes.length}
+              {afterEventLabels.notesTitle}
             </Text>
             <StructureNotes
               key={item.id}

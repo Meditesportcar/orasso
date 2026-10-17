@@ -127,36 +127,38 @@ export function BansScreen() {
       <Muted variant="caption">{L.bansIntro}</Muted>
 
       <SectionTitle>{L.bansAddTitle}</SectionTitle>
-      <TextField
-        label={L.bansPseudo}
-        value={pseudo}
-        onChangeText={(v) => {
-          setPseudo(v);
-          setFieldError(undefined);
-        }}
-        autoCapitalize="none"
-        autoCorrect={false}
-        error={fieldError}
-        testID="bans-pseudo"
-      />
-      <TextField
-        label={L.bansReason}
-        value={reason}
-        onChangeText={setReason}
-        maxLength={500}
-        multiline
-        testID="bans-reason"
-      />
-      <Button
-        variant="secondary"
-        icon="flag"
-        disabled={pseudo.trim() === ""}
-        onPress={askAdd}
-        fullWidth
-        testID="bans-add"
-      >
-        {L.bansAdd}
-      </Button>
+      <Plate style={styles.block}>
+        <TextField
+          label={L.bansPseudo}
+          value={pseudo}
+          onChangeText={(v) => {
+            setPseudo(v);
+            setFieldError(undefined);
+          }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          error={fieldError}
+          testID="bans-pseudo"
+        />
+        <TextField
+          label={L.bansReason}
+          value={reason}
+          onChangeText={setReason}
+          maxLength={500}
+          multiline
+          testID="bans-reason"
+        />
+        <Button
+          variant="plate"
+          icon="flag"
+          disabled={pseudo.trim() === ""}
+          onPress={askAdd}
+          fullWidth
+          testID="bans-add"
+        >
+          {L.bansAdd}
+        </Button>
+      </Plate>
 
       <SectionTitle>{`${L.bansTitle} · ${list.length}`}</SectionTitle>
       {list.length === 0 ? (

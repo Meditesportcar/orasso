@@ -188,34 +188,36 @@ export function StructureScreen() {
             {L.logoChange}
           </Button>
 
-          <TextField
-            label={L.structureName}
-            value={form.name}
-            onChangeText={(v) => set("name", v)}
-            maxLength={80}
-            testID="orga-structure-name"
-          />
-          <TextField
-            label={L.structureDescription}
-            value={form.description}
-            onChangeText={(v) => set("description", v)}
-            multiline
-            maxLength={2000}
-            testID="orga-structure-description"
-          />
-          <TextField
-            label={L.structureAddress}
-            value={form.addressLine}
-            onChangeText={(v) => set("addressLine", v)}
-            maxLength={200}
-          />
-          <TextField
-            label={L.structurePostalCode}
-            value={form.postalCode}
-            onChangeText={(v) => set("postalCode", v)}
-            maxLength={10}
-          />
-          <TextField label={L.structureCity} value={form.city} onChangeText={(v) => set("city", v)} maxLength={80} />
+          <Plate style={styles.block}>
+            <TextField
+              label={L.structureName}
+              value={form.name}
+              onChangeText={(v) => set("name", v)}
+              maxLength={80}
+              testID="orga-structure-name"
+            />
+            <TextField
+              label={L.structureDescription}
+              value={form.description}
+              onChangeText={(v) => set("description", v)}
+              multiline
+              maxLength={2000}
+              testID="orga-structure-description"
+            />
+            <TextField
+              label={L.structureAddress}
+              value={form.addressLine}
+              onChangeText={(v) => set("addressLine", v)}
+              maxLength={200}
+            />
+            <TextField
+              label={L.structurePostalCode}
+              value={form.postalCode}
+              onChangeText={(v) => set("postalCode", v)}
+              maxLength={10}
+            />
+            <TextField label={L.structureCity} value={form.city} onChangeText={(v) => set("city", v)} maxLength={80} />
+          </Plate>
 
           <Plate style={styles.block}>
             <Text variant="label" color={t.color.plateMuted}>
@@ -260,41 +262,43 @@ export function StructureScreen() {
             </Button>
           </Plate>
 
-          <TextField
-            label={L.structureWebsite}
-            value={form.website}
-            onChangeText={(v) => set("website", v)}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <TextField
-            label={L.structureInstagram}
-            value={form.instagram}
-            onChangeText={(v) => set("instagram", v)}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <TextField
-            label={L.structureFacebook}
-            value={form.facebook}
-            onChangeText={(v) => set("facebook", v)}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <TextField
-            label={L.structureTiktok}
-            value={form.tiktok}
-            onChangeText={(v) => set("tiktok", v)}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <TextField
-            label={L.structureYoutube}
-            value={form.youtube}
-            onChangeText={(v) => set("youtube", v)}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          <Plate style={styles.block}>
+            <TextField
+              label={L.structureWebsite}
+              value={form.website}
+              onChangeText={(v) => set("website", v)}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextField
+              label={L.structureInstagram}
+              value={form.instagram}
+              onChangeText={(v) => set("instagram", v)}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextField
+              label={L.structureFacebook}
+              value={form.facebook}
+              onChangeText={(v) => set("facebook", v)}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextField
+              label={L.structureTiktok}
+              value={form.tiktok}
+              onChangeText={(v) => set("tiktok", v)}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextField
+              label={L.structureYoutube}
+              value={form.youtube}
+              onChangeText={(v) => set("youtube", v)}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </Plate>
           {fieldError ? <Notice tone="error">{fieldError}</Notice> : null}
           <Button
             variant="secondary"

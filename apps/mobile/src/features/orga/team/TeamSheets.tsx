@@ -9,7 +9,7 @@ import {
   type StructureRole,
   structureRoleLabels,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
 import { rolesChanged } from "@/lib/orga";
@@ -41,12 +41,14 @@ export function AcceptSheet({
   const [canDecide, setCanDecide] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Remis à zéro à chaque demande ouverte (l'identifiant), pas à chaque rechargement de la liste.
+  const id = member?.userId ?? null;
   useEffect(() => {
-    if (!member) return;
+    if (id === null) return;
     setRoles([]);
     setCanDecide(false);
     setError(null);
-  }, [member]);
+  }, [id]);
 
   async function accept() {
     if (!member) return;
@@ -121,13 +123,18 @@ export function MemberSheet({
   const [role, setRole] = useState<"co_organizer" | "staff">("staff");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Rempli à l'ouverture sur un membre (l'identifiant), pas à chaque rechargement de la liste : la saisie en cours reste.
+  const latest = useRef(member);
+  latest.current = member;
+  const id = member?.userId ?? null;
   useEffect(() => {
-    if (!member) return;
-    setRoles(member.staffRoles);
-    setCanDecide(member.canDecide);
-    setRole(member.role === "co_organizer" ? "co_organizer" : "staff");
+    const m = id === null ? null : latest.current;
+    if (!m) return;
+    setRoles(m.staffRoles);
+    setCanDecide(m.canDecide);
+    setRole(m.role === "co_organizer" ? "co_organizer" : "staff");
     setError(null);
-  }, [member]);
+  }, [id]);
 
   const editable = member ? canManageMember(viewer, member) : false;
   const roleChanged = member ? role !== (member.role === "co_organizer" ? "co_organizer" : "staff") : false;

@@ -258,6 +258,17 @@ export function InboxScreen() {
           >
             {orgaLabels.groupNew}
           </Button>
+          {/* Lot 35a : les modèles se créent, se modifient et se suppriment ici (prototype : bouton « Modèles »). */}
+          <Button
+            variant="plate"
+            icon="chat"
+            next
+            onPress={() => router.push("/modeles")}
+            fullWidth
+            testID="orga-templates-open"
+          >
+            {orgaManageLabels.templatesOpen}
+          </Button>
           <SectionTitle>{communicationLabels.groupHistory}</SectionTitle>
           {(groups.data?.items ?? []).length === 0 ? (
             <Muted variant="body">{groups.loading ? "Chargement…" : communicationLabels.groupHistoryEmpty}</Muted>

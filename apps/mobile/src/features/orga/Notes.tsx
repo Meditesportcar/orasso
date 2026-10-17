@@ -270,44 +270,51 @@ export function NotesScreen() {
     >
       <OrgaFailure error={error ?? notes.error} />
       <Muted variant="caption">{A.notesIntro}</Muted>
-      <TextField
-        label={A.notesSearch}
-        value={query}
-        onChangeText={setQuery}
-        autoCapitalize="none"
-        autoCorrect={false}
-        maxLength={40}
-        onSubmitEditing={() => setSearched(query.trim())}
-        testID="notes-query"
-      />
-      <Button
-        variant="secondary"
-        icon="search"
-        loading={notes.loading}
-        onPress={() => setSearched(query.trim())}
-        fullWidth
-        testID="notes-search"
-      >
-        {L.notesSearchButton}
-      </Button>
+      <Plate style={styles.block}>
+        <TextField
+          label={A.notesSearch}
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={40}
+          onSubmitEditing={() => setSearched(query.trim())}
+          testID="notes-query"
+        />
+        <Button
+          variant="plate"
+          icon="search"
+          loading={notes.loading}
+          onPress={() => setSearched(query.trim())}
+          fullWidth
+          testID="notes-search"
+        >
+          {L.notesSearchButton}
+        </Button>
+      </Plate>
       {!writable ? <Notice tone="error">{L.notesNoWrite}</Notice> : null}
 
       {groups.length === 0 && !notes.loading ? (
-        <>
-          <Muted variant="body">{searched ? L.notesEmptySearch(searched) : A.notesEmpty}</Muted>
-          {searched && writable ? (
-            <Plate style={styles.block}>
-              <StructureNotes
-                key={searched}
-                structureId={structureId}
-                pseudo={searched}
-                initial={[]}
-                writable={writable}
-                onTwoFactor={setError}
-              />
-            </Plate>
-          ) : null}
-        </>
+        <Muted variant="body">{searched ? L.notesEmptySearch(searched) : A.notesEmpty}</Muted>
+      ) : null}
+      {/* Une note sur la personne cherchée, même si aucune note n'existe encore à son nom (ou seulement des pseudos voisins). */}
+      {searched &&
+      writable &&
+      !notes.loading &&
+      !groups.some((g) => g.pseudo.toLowerCase() === searched.toLowerCase()) ? (
+        <View style={styles.group} testID="notes-new-person">
+          <SectionTitle>{`${L.notesNew} · ${searched}`}</SectionTitle>
+          <Plate style={styles.block}>
+            <StructureNotes
+              key={searched}
+              structureId={structureId}
+              pseudo={searched}
+              initial={[]}
+              writable={writable}
+              onTwoFactor={setError}
+            />
+          </Plate>
+        </View>
       ) : null}
       {groups.map((g) => (
         <View key={`${g.userId}-${notes.data?.items.length}`} style={styles.group} testID="notes-person">

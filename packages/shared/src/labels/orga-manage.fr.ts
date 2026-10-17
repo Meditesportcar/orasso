@@ -97,7 +97,7 @@ export const orgaManageLabels = {
   structureSaved: "Fiche enregistrée.",
   structurePublicPage: "Voir la page publique",
   logoTitle: "Logo",
-  logoChange: "Choisir un nouveau logo",
+  logoChange: "Changer le logo",
   logoSaved: "Logo enregistré.",
   logoNone: "Pas encore de logo.",
 
@@ -126,7 +126,7 @@ export const orgaManageLabels = {
   verifDocumentHelp:
     "Statuts, récépissé de déclaration ou Kbis (photo ou image, 10 Mo au plus). Un club sérieux non déclaré joint la pièce d'identité de son responsable : elle est supprimée dès la validation.",
   verifDocumentKind: "Nature du document",
-  verifDocumentAdd: "Ajouter un justificatif (photo)",
+  verifDocumentAdd: "Ajouter un justificatif",
   verifDocumentAdded: "Justificatif ajouté.",
   verifDocumentRemove: "Retirer",
   verifDocumentRemoveTitle: "Retirer ce justificatif",
