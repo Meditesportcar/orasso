@@ -27,7 +27,7 @@ import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
-import { fetchForecast, type ProviderForecast } from "../../lib/weather";
+import { fetchForecast, type ProviderForecast, weatherEnabled } from "../../lib/weather";
 import type { EventRow } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 
@@ -80,6 +80,9 @@ async function organizerIds(structureId: string): Promise<string[]> {
 
 /** Départements en cours de récupération (une seule requête au fournisseur par département à la fois). */
 const departmentFlights = new Map<string, Promise<typeof weatherDepartments.$inferSelect | null>>();
+/** Dernier échec du fournisseur par département (lot 30) et délai avant de réessayer. */
+const departmentFailures = new Map<string, number>();
+const DEPARTMENT_RETRY_MS = 10 * 60_000;
 
 export const weatherService = {
   /**
@@ -288,11 +291,19 @@ export const weatherService = {
     if (cached && now().getTime() - cached.fetchedAt.getTime() < DEPARTMENT_TTL_MS) return cached;
     const centre = departmentCentroids[department];
     if (!centre) return cached ?? null;
+    // Lot 30 : après un échec du fournisseur, on ne le réinterroge pas avant 10 minutes (l'Accueil appelle cette fonction
+    // à chaque chargement : sans cela, chaque chargement attendrait le délai d'attente du fournisseur en panne).
+    const failedAt = departmentFailures.get(department);
+    if (failedAt !== undefined && now().getTime() - failedAt < DEPARTMENT_RETRY_MS) return cached ?? null;
     let flight = departmentFlights.get(department);
     if (!flight) {
       flight = (async () => {
         const result = await fetchForecast(centre.lat, centre.lng);
-        if (!result) return cached ?? null;
+        if (!result) {
+          if (weatherEnabled()) departmentFailures.set(department, now().getTime());
+          return cached ?? null;
+        }
+        departmentFailures.delete(department);
         const values = {
           department,
           provider: result.provider,

@@ -20,6 +20,7 @@ import { seedCrews } from "./seed/crews";
 import { seedDayJ } from "./seed/day-j";
 import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
+import { seedHome } from "./seed/home";
 import { seedInvitations } from "./seed/invitations";
 import { seedMessaging } from "./seed/messaging";
 import { seedModeration } from "./seed/moderation";
@@ -105,6 +106,8 @@ async function main() {
   await seedModeration(hash);
   // Lot 25 : événement privé « Soirée partenaires » et ses invitations ; hauts grades sur l'Expo Rivesaltes.
   await seedInvitations();
+  // Lot 30 : garage favori de Kenji, deux emplacements sponsorisés (dont un ciblé 66 + JDM), cache factice lavage et carburant.
+  await seedHome();
 }
 
 try {

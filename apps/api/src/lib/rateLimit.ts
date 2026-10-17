@@ -67,6 +67,10 @@ export const rateRules = {
   crewSearch: { max: 60, windowMs: 60_000, message: "Trop de recherches : réessaie dans une minute." },
   crewInvite: { max: 50, windowMs: 86_400_000, message: "Trop d'invitations aujourd'hui : réessaie demain." },
   crewWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  /** Accueil (lot 30) : lecture agrégée, réglages (widgets, garage favori) et clics sur l'emplacement sponsorisé. */
+  homeRead: { max: 60, windowMs: 60_000, message: "Trop de chargements : réessaie dans une minute." },
+  homeWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  sponsoredClick: { max: 60, windowMs: 3_600_000, message: "Trop de clics : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

@@ -3,6 +3,7 @@
 import type { ProHours, RegistryCheck } from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   doublePrecision,
@@ -147,11 +148,14 @@ export const proFollows = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    /** Garage favori de l'Accueil (lot 30) : au plus un par personne (index unique partiel). */
+    favorite: boolean("favorite").notNull().default(false),
     ...timestamps,
   },
   (t) => [
     primaryKey({ name: "pro_follows_pkey", columns: [t.proId, t.userId] }),
     index("pro_follows_user_idx").on(t.userId),
+    uniqueIndex("pro_follows_favorite_key").on(t.userId).where(sql`${t.favorite}`),
   ],
 );
 
