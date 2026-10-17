@@ -4,7 +4,14 @@
 // se ferme après le scan ou à J+1.
 
 import { Button, Chip, Plate, StatusBadge, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { communicationLabels, gradeLabels, weatherTexts } from "@orasso/shared";
+import {
+  communicationLabels,
+  eventDaysLabels,
+  formatDayDate,
+  gradeLabels,
+  localDate,
+  weatherTexts,
+} from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -115,8 +122,15 @@ export default function JourJ() {
   const tz = kit.event.timezone;
   // Kits enregistrés avant le lot 28 : ancienne forme de météo, ignorée jusqu'au prochain rafraîchissement.
   const weather = kit.weather && "summary" in kit.weather ? kit.weather : null;
-  const state = jourJState(kit.event, now, Boolean(kit.checkedInAt), tz);
-  const untilStart = new Date(kit.event.startsAt).getTime() - now.getTime();
+  // Lot 26 : un jour choisi → la fenêtre et le compte à rebours de ce jour ; tout l'événement sur plusieurs jours → le
+  // QR revient chaque jour (une entrée d'un jour précédent ne ferme pas le mode : « déjà entré » au scan, S29).
+  const span = kit.day ?? kit.event;
+  const entered = Boolean(
+    kit.checkedInAt &&
+      (!kit.multiDay || kit.day || localDate(new Date(kit.checkedInAt), tz) === localDate(now, tz)),
+  );
+  const state = jourJState(span, now, entered, tz);
+  const untilStart = new Date(span.startsAt).getTime() - now.getTime();
   const qrSize = Math.min(width - 4 * space4, 320);
   const place = [kit.event.addressLine, [kit.event.postalCode, kit.event.city].filter(Boolean).join(" ")]
     .filter(Boolean)
@@ -160,9 +174,14 @@ export default function JourJ() {
         <Text variant="posterXl" color={c.plateInk}>
           {kit.event.title}
         </Text>
+        {kit.multiDay ? (
+          <Text variant="label" color={c.plateInk} testID="jourj-day">
+            {kit.day ? formatDayDate(kit.day.date) : eventDaysLabels.wholeEvent}
+          </Text>
+        ) : null}
         <Text variant="body" color={c.plateMuted}>
           {untilStart > 0
-            ? `${formatDay(kit.event.startsAt, tz)} · ouverture des portes dans ${formatDuration(untilStart)}`
+            ? `${formatDay(span.startsAt, tz)} · ouverture des portes dans ${formatDuration(untilStart)}`
             : "L'événement a commencé."}
         </Text>
         <View style={styles.chips}>
@@ -187,7 +206,7 @@ export default function JourJ() {
           </Text>
           <Text variant="body" color={c.plateMuted}>
             Il est enregistré sur ce téléphone et fonctionnera sans réseau. Le mode jour J s'ouvre la veille, le{" "}
-            {formatDayHour(jourJOpensAt(kit.event, tz), tz)}.
+            {formatDayHour(jourJOpensAt(span, tz), tz)}.
           </Text>
         </Plate>
       ) : state === "closed" ? (

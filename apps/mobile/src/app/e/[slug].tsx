@@ -15,6 +15,9 @@ import {
 import {
   applicationStatusLabels,
   crewLabels,
+  dayAccessLabels,
+  eventDaysLabels,
+  formatDayDate,
   type EventPublic,
   type EventReviews,
   eventAcceptsVendorType,
@@ -192,6 +195,16 @@ export default function EventPage() {
       ) : notYetOpen ? (
         <Notice>Les candidatures ouvrent le {formatDayHour(opensAt)}.</Notice>
       ) : null}
+      {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
+      {mine.length > 0 &&
+      e.days.length > 1 &&
+      e.dayAccess !== "whole" &&
+      canApply &&
+      !mine.some((a) => a.eventDayId === null) ? (
+        <Button variant="secondary" icon="calendar" fullWidth testID="apply-other-day" onPress={apply}>
+          Candidater pour un autre jour
+        </Button>
+      ) : null}
       {leadsCrew && !cancelled && !e.isLocked && !notYetOpen && e.admission !== "invite_only" ? (
         <Button
           variant="secondary"
@@ -246,6 +259,19 @@ export default function EventPage() {
           </Text>
         </Plate>
       </Pressable>
+      {e.days.length > 1 ? (
+        <Plate style={styles.info} testID="event-days">
+          <Text variant="label" color={t.color.plateMuted}>
+            {eventDaysLabels.days} · {dayAccessLabels[e.dayAccess]}
+          </Text>
+          {e.days.map((d) => (
+            <Text key={d.id} variant="body" color={t.color.plateInk}>
+              {formatDayDate(d.date)} · {formatHour(d.startsAt)} – {formatHour(d.endsAt)}
+              {d.remaining === null ? "" : d.remaining === 0 ? ` · ${eventDaysLabels.dayFull}` : ` · ${d.remaining} places`}
+            </Text>
+          ))}
+        </Plate>
+      ) : null}
       <Info label="Quand et où">
         {formatDayHour(e.startsAt)} → {formatDayHour(e.endsAt)}
         {e.addressLine || e.city

@@ -2,7 +2,7 @@
 // quel véhicule, relit le récapitulatif et envoie ; chaque membre confirme sa venue (rien n'est envoyé à l'organisateur
 // sans son accord). Le chef suit ici les confirmations et peut retirer un membre qui n'a pas confirmé.
 import { Button, CheckboxField, Chip, ChipRow, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { crewLabels } from "@orasso/shared";
+import { crewLabels, eventDaysLabels, formatDayDate } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -41,6 +41,8 @@ export default function CrewRegistration() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<number | null>(null);
+  // Lot 26 : un jour pour tout le crew (événement sur plusieurs jours ; `undefined` = pas encore touché).
+  const [dayChoice, setDayChoice] = useState<string | null | undefined>(undefined);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace(`/e/${slug}`));
   const members = options.data?.members ?? [];
@@ -200,6 +202,27 @@ export default function CrewRegistration() {
             );
           })}
 
+          {e && e.days.length > 1 && e.dayAccess !== "whole" ? (
+            <>
+              <SectionTitle>{eventDaysLabels.chooseDay}</SectionTitle>
+              <ChipRow>
+                {e.dayAccess === "both" ? (
+                  <Chip selected={dayChoice === null || dayChoice === undefined} onPress={() => setDayChoice(null)}>
+                    {eventDaysLabels.wholeEvent}
+                  </Chip>
+                ) : null}
+                {e.days.map((d, i) => (
+                  <Chip
+                    key={d.id}
+                    selected={dayChoice === d.id || (dayChoice === undefined && e.dayAccess === "per_day" && i === 0)}
+                    onPress={() => setDayChoice(d.id)}
+                  >
+                    {formatDayDate(d.date)}
+                  </Chip>
+                ))}
+              </ChipRow>
+            </>
+          ) : null}
           <SectionTitle>{crewLabels.registerCrewRecap}</SectionTitle>
           <Plate style={styles.member} testID="crew-registration-recap">
             {chosen.length === 0 ? (
@@ -242,6 +265,14 @@ export default function CrewRegistration() {
                   rulesAccepted: true,
                   followStructure: follow,
                   message: null,
+                  eventDayId:
+                    e.days.length > 1 && e.dayAccess !== "whole"
+                      ? dayChoice !== undefined
+                        ? dayChoice
+                        : e.dayAccess === "per_day"
+                          ? (e.days[0]?.id ?? null)
+                          : null
+                      : undefined,
                 });
                 setSent(others.length);
                 setPicked({});

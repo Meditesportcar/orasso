@@ -17,6 +17,12 @@ export type AccessKit = {
   vehicleLabel: string | null;
   zone: { code: string; name: string } | null;
   checkedInAt: string | null;
+  /**
+   * Lot 26 : jour choisi d'un événement sur plusieurs jours (`null` = tout l'événement), et l'événement est-il sur
+   * plusieurs jours. Absents des kits enregistrés avant le lot 26 (= événement d'un jour).
+   */
+  day?: { date: string; startsAt: string; endsAt: string } | null;
+  multiDay?: boolean;
   event: {
     id: string;
     slug: string;
@@ -96,6 +102,8 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
     vehicleLabel: app.vehicle?.label ?? null,
     zone: app.zone,
     checkedInAt: app.checkedInAt,
+    day: app.day ? { date: app.day.date, startsAt: app.day.startsAt, endsAt: app.day.endsAt } : null,
+    multiDay: event.days.length > 1,
     event: {
       id: event.id,
       slug: event.slug,

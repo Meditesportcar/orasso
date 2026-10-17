@@ -17,10 +17,10 @@ export const invitationsApi = {
   /** Vue organisateur de l'événement (titre, verrouillage, statut) pour l'écran « Inviter ». */
   eventForInvitations: (eventId: string) => request<EventOrganizer>(`/api/events/${eventId}`),
   myEventInvitations: () => request<ReceivedInvitation[]>("/api/me/event-invitations"),
-  acceptEventInvitation: (id: string, vehicleId?: string) =>
+  acceptEventInvitation: (id: string, vehicleId?: string, eventDayId?: string | null) =>
     request<InvitationAcceptResult>(`/api/event-invitations/${id}/accept`, {
       method: "POST",
-      body: vehicleId ? { vehicleId } : {},
+      body: { ...(vehicleId ? { vehicleId } : {}), ...(eventDayId ? { eventDayId } : {}) },
     }),
   declineEventInvitation: (id: string) => request<unknown>(`/api/event-invitations/${id}/decline`, { method: "POST" }),
   eventInvitations: (eventId: string) => request<OrganizerInvitation[]>(`/api/events/${eventId}/invitations`),

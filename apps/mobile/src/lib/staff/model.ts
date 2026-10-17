@@ -8,6 +8,7 @@ import {
   type Ed25519Verify,
   type LocalScanDecision,
   type LocalTicket,
+  localDate,
   normalizePlate,
   type ScanBatchResult,
   type ScanDecision,
@@ -37,6 +38,8 @@ export type StaffEventMeta = {
   isLocked: boolean;
   plateSalt: string;
   zones: StaffSync["event"]["zones"];
+  /** Lot 26 : jours d'un événement sur plusieurs jours (vide ou absent = un jour). */
+  days?: StaffSync["event"]["days"];
   myRoles: StaffRole[];
   /** Lot 24 : la boutique est activée pour cet événement (tuile « Boutique », billets dans la synchro). */
   shopEnabled?: boolean;
@@ -223,6 +226,7 @@ export function mergeSync(
     isLocked: sync.event.isLocked,
     plateSalt: sync.event.plateSalt,
     zones: sync.event.zones,
+    days: sync.event.days ?? [],
     myRoles: sync.myRoles,
     shopEnabled: sync.shopEnabled === true,
     // Une synchro différentielle sans base locale ne peut pas servir de point de départ : on repartira de zéro.
@@ -266,11 +270,14 @@ export function decideLocal(
   payload: string,
   keys: ReadonlyMap<number, Uint8Array>,
   verify: Ed25519Verify,
+  /** Lot 26 : heure du scan (règle « Autre jour » d'un événement sur plusieurs jours). */
+  now: Date = new Date(),
 ): ScanDecision {
   return decideScan(payload, {
     eventNo: state.meta.eventNo,
     keys,
     verify,
+    now,
     findEntry: (passId) => {
       const entry = state.entries.get(passId);
       if (entry) return { ...entry, checkedInAt: checkedInAt(state, entry) };
@@ -633,8 +640,23 @@ export type ZoneCount = {
   capacity: number | null;
 };
 
-/** « 62 / 116 » (entrés / retenus) et attendus / arrivés par zone, d'après la liste locale. */
-export function counters(state: StaffState): { arrived: number; expected: number; zones: ZoneCount[] } {
+/**
+ * Lot 26 : une entrée est attendue ce jour-là — toujours pour un événement d'un jour ; sinon tout l'événement, ou le
+ * jour de sa candidature (date locale de Paris).
+ */
+export function expectedOn(meta: Pick<StaffEventMeta, "days">, entry: Pick<AccessListEntry, "dayDate">, now: Date): boolean {
+  if ((meta.days?.length ?? 0) < 2) return true;
+  return !entry.dayDate || entry.dayDate === localDate(now);
+}
+
+/**
+ * « 62 / 116 » (entrés / retenus) et attendus / arrivés par zone, d'après la liste locale. Plusieurs jours (lot 26) :
+ * les attendus du jour (tout l'événement et le jour de `now`).
+ */
+export function counters(
+  state: StaffState,
+  now: Date = new Date(),
+): { arrived: number; expected: number; zones: ZoneCount[] } {
   const zones = new Map<string | null, ZoneCount>();
   for (const z of state.meta.zones) {
     zones.set(z.code, { code: z.code, name: z.name, arrived: 0, expected: 0, capacity: z.capacity });
@@ -642,7 +664,7 @@ export function counters(state: StaffState): { arrived: number; expected: number
   let arrived = 0;
   let expected = 0;
   for (const e of state.entries.values()) {
-    if (e.status !== "valid") continue;
+    if (e.status !== "valid" || !expectedOn(state.meta, e, now)) continue;
     expected++;
     const inside = Boolean(checkedInAt(state, e));
     if (inside) arrived++;

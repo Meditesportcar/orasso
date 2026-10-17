@@ -74,7 +74,8 @@ export const orgaApi = {
     request<unknown>(`/api/events/${eventId}/announcements/${announcementId}`, { method: "DELETE" }),
 
   // Direct du jour J.
-  liveCounters: (eventId: string) => request<LiveCounters>(`/api/events/${eventId}/live`),
+  liveCounters: (eventId: string, dayId?: string | null) =>
+    request<LiveCounters>(`/api/events/${eventId}/live${dayId ? `?dayId=${dayId}` : ""}`),
   eventAlerts: (eventId: string) => request<FieldAlert[]>(`/api/events/${eventId}/alerts`),
   resolveAlert: (eventId: string, alertId: string) =>
     request<{ resolved: boolean }>(`/api/events/${eventId}/alerts/${alertId}/resolve`, { method: "POST" }),
