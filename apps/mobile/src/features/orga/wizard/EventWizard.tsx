@@ -109,14 +109,20 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     };
   }, [editing, structureId]);
 
-  // Chaque saisie d'une création est gardée sur le téléphone (un court délai pour ne pas écrire à chaque lettre).
+  // Chaque saisie d'une création est gardée sur le téléphone (un court délai pour ne pas écrire à chaque lettre ; la
+  // dernière saisie est écrite aussi quand l'écran se ferme).
+  const pending = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (editing || !loaded || !draftWorthKeeping(d)) return;
-    const timer = setTimeout(() => {
+    const write = () => {
+      pending.current = null;
       void saveEventDraft(structureId, { draft: d, step: index, createdId, savedAt: now().toISOString() });
-    }, 400);
+    };
+    pending.current = write;
+    const timer = setTimeout(write, 400);
     return () => clearTimeout(timer);
   }, [editing, loaded, d, index, createdId, structureId]);
+  useEffect(() => () => pending.current?.(), []);
 
   const set = useCallback(<K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -147,6 +153,7 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
   }
 
   async function restart() {
+    pending.current = null;
     await clearEventDraft(structureId);
     const fresh = initialEventDraft(now());
     pristine.current = JSON.stringify(fresh);
@@ -170,7 +177,10 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
         if (res.createdId) setCreatedId(res.createdId);
         return;
       }
-      if (!editing) await clearEventDraft(structureId);
+      if (!editing) {
+        pending.current = null;
+        await clearEventDraft(structureId);
+      }
       pristine.current = JSON.stringify(d);
       router.replace({
         pathname: "/evenement/[id]",
@@ -205,7 +215,7 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
   return (
     <FlowScreen
       title={editing ? L.editTitle : L.newTitle}
-      facts={L.stepOf(progress.n, progress.total, L.steps[step])}
+      facts={event?.title}
       onClose={close}
       footer={
         <>
@@ -217,9 +227,16 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
               />
             ))}
           </View>
-          <View style={styles.actions}>
+          {/* Dernière étape : le libellé « Enregistrer le brouillon » prend toute la largeur, « Retour » dessous. */}
+          <View style={last ? styles.actionsLast : styles.actions}>
             {index > 0 ? (
-              <Button variant="secondary" icon="back" onPress={() => go(-1)} style={styles.grow} testID="wizard-back">
+              <Button
+                variant="secondary"
+                icon="back"
+                onPress={() => go(-1)}
+                style={last ? undefined : styles.grow}
+                testID="wizard-back"
+              >
                 {L.back}
               </Button>
             ) : (
@@ -233,7 +250,6 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
                 loading={busy}
                 disabled={busy || !loaded}
                 onPress={() => void save()}
-                style={styles.grow}
                 testID="wizard-save"
               >
                 {editing ? L.saveChanges : L.saveDraft}
@@ -285,6 +301,7 @@ const styles = StyleSheet.create({
   progress: { flexDirection: "row", gap: space1 },
   segment: { flex: 1, height: 4 },
   actions: { flexDirection: "row", gap: space2 },
+  actionsLast: { flexDirection: "column-reverse", gap: space2 },
   grow: { flex: 1 },
   resume: { gap: space2 },
 });

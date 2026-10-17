@@ -114,7 +114,7 @@ export default function Inviter() {
   return (
     <FlowScreen
       title={L.inviteTitle}
-      facts={e ? `${e.title} · ${formatDayHour(e.startsAt)}` : undefined}
+      facts={e?.title}
       onClose={close}
       onRefresh={async () => {
         await Promise.all([event.reload(), sources.reload(), candidates.reload(), sent.reload()]);

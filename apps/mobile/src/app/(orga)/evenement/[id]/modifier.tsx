@@ -1,7 +1,7 @@
 // Casquette Organisateur, « Modifier » un événement (lot 35b, D20) : l'assistant prérempli, depuis la page de
 // l'événement (ou juste après « Dupliquer », `?copie=1`). Hors de la barre d'onglets (`href: null`).
 import { eventEditorLabels as L, orgaLabels } from "@orasso/shared";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 
 import { OrgaFailure, OrgaGate, useOrga } from "@/features/orga/OrgaGate";
 import { EventWizard } from "@/features/orga/wizard/EventWizard";
@@ -34,9 +34,9 @@ function Editor({ eventId, copy }: { eventId: string; copy: boolean }) {
 
 export default function ModifierEvenement() {
   const { id, copie } = useLocalSearchParams<{ id: string; copie?: string }>();
+  // Rendu seulement à l'écran : chaque ouverture relit l'événement (jamais un formulaire périmé).
+  const focused = useIsFocused();
   return (
-    <OrgaGate title={L.editTitle}>
-      <Editor key={id} eventId={id} copy={copie === "1"} />
-    </OrgaGate>
+    <OrgaGate title={L.editTitle}>{focused ? <Editor key={id} eventId={id} copy={copie === "1"} /> : null}</OrgaGate>
   );
 }
