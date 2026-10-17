@@ -10,6 +10,7 @@ export type JobName =
   | "waitlist.offer-expire"
   | "event.lock"
   | "event.preview-open"
+  | "event.high-grade-preview"
   | "event.reminder-week"
   | "event.reminder-eve"
   | "notifications.deliver"

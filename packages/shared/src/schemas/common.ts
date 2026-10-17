@@ -36,6 +36,9 @@ export const errorCodes = [
   "banned",
   "already_reported",
   "already_handled",
+  // Lot 25 : événement privé sur invitation.
+  "invite_only",
+  "invitation_required",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

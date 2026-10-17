@@ -210,7 +210,8 @@ export const weatherService = {
   async forEvent(slug: string): Promise<EventWeather | null> {
     const e = await db.query.events.findFirst({ where: eq(events.slug, slug) });
     if (!e || e.status === "draft") throw notFound("Événement introuvable");
-    if (e.status !== "published" || !weatherVisible(e, now())) return null;
+    // Événement privé sur invitation (lot 25) : la route est publique et mise en cache, rien n'en sort.
+    if (e.status !== "published" || e.admission === "invite_only" || !weatherVisible(e, now())) return null;
     const found = await this.stored(e);
     if (!found) return null;
     return {

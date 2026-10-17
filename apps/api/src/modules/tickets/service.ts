@@ -44,6 +44,7 @@ import {
 } from "../../lib/stripe";
 import { type Tx, withTx } from "../../lib/tx";
 import { eventsRepo } from "../events/repo";
+import { assertCanSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { settingsService } from "./settings";
 
@@ -227,6 +228,8 @@ export const ticketsService = {
   async offerBySlug(slug: string, viewer: Viewer | null): Promise<{ offer: TicketOffer | null; mine: MyTicket[] }> {
     const e = await db.query.events.findFirst({ where: eq(events.slug, slug) });
     if (!e || e.status === "draft") throw notFound("Événement introuvable");
+    // Événement privé sur invitation (lot 25) : mêmes ayants droit que sa page.
+    await assertCanSeeEvent(e, viewer);
     const s = await db.query.structures.findFirst({ where: eq(structures.id, e.structureId) });
     if (!s) throw notFound("Événement introuvable");
     const mine = viewer ? await myTicketsOf(viewer.user.id, e.id) : [];
@@ -259,6 +262,8 @@ export const ticketsService = {
     const orderId = await withTx(async (tx) => {
       await lockTickets(tx, eventId);
       const e = await eventsRepo.byId(eventId, tx);
+      // Événement privé sur invitation (lot 25) : mêmes ayants droit que sa page.
+      await assertCanSeeEvent(e, v, tx);
       const s = await tx.query.structures.findFirst({ where: eq(structures.id, e.structureId) });
       if (e.publicAccess !== "free_reservation") throw validation("Cet événement n'a pas de billets gratuits.");
       const { type, remaining, block } = await blockOf(tx, e, s ?? { stripeAccountId: null });
@@ -311,6 +316,7 @@ export const ticketsService = {
     const reserved = await withTx(async (tx) => {
       await lockTickets(tx, eventId);
       const e = await eventsRepo.byId(eventId, tx);
+      await assertCanSeeEvent(e, v, tx);
       const s = await tx.query.structures.findFirst({ where: eq(structures.id, e.structureId) });
       if (e.publicAccess !== "paid_orasso" || !s)
         throw validation("Cet événement n'a pas de billetterie payante Orasso.");

@@ -6,6 +6,7 @@ export * from "./communication";
 export * from "./crews";
 export * from "./event";
 export * from "./garage";
+export * from "./invitations";
 export * from "./messaging";
 export * from "./moderation";
 export * from "./pro";

@@ -8,6 +8,7 @@ export * from "./communication";
 export * from "./crews";
 export * from "./events";
 export * from "./field";
+export * from "./invitations";
 export * from "./messaging";
 export * from "./moderation";
 export * from "./notifications";

@@ -7,6 +7,7 @@ import { applicationsService } from "./modules/applications/service";
 import { groupMessagesService } from "./modules/communication/group-messages";
 import { staffChatsService } from "./modules/communication/staff-chats";
 import { crewRegistrationService } from "./modules/crews/registration";
+import { highGradePreview } from "./modules/events/high-grade";
 import { eventJobs } from "./modules/events/jobs";
 import { nearbyService } from "./modules/events/nearby";
 import { moderationService } from "./modules/moderation/service";
@@ -27,6 +28,7 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "waitlist.offer-expire": (d) => applicationsService.expireOffer(d.applicationId ?? "", d.offeredAt ?? ""),
   "event.lock": (d) => eventJobs.lock({ eventId: d.eventId ?? "" }),
   "event.preview-open": (d) => eventJobs.previewOpen({ eventId: d.eventId ?? "", at: d.at ?? "" }),
+  "event.high-grade-preview": (d) => highGradePreview.notify({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "event.reminder-week": (d) => eventJobs.reminderWeek({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "event.reminder-eve": (d) => eventJobs.reminderEve({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "notifications.deliver": () => notificationsService.deliverDue(),

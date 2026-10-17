@@ -23,7 +23,6 @@ import {
   categories,
   devices,
   emailOutbox,
-  eventInvitations,
   events,
   expressInvites,
   knownLogins,
@@ -58,6 +57,7 @@ import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { anonymizeCommunicationForDeletedAccount } from "../communication/anonymize";
 import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
+import { invitationsService } from "../invitations/service";
 import { anonymizeMessagingForDeletedAccount } from "../messaging/anonymize";
 import { anonymizeModerationForDeletedAccount } from "../moderation/anonymize";
 import { pointsService } from "../points/service";
@@ -374,9 +374,7 @@ export const accountService = {
           .returning({ id: emailOutbox.id });
         mailIds.push(...sent.map((m) => m.id));
         await tx.update(expressInvites).set({ email: anonEmail }).where(eq(expressInvites.email, oldEmail));
-        await tx.update(eventInvitations).set({ email: null }).where(eq(eventInvitations.email, oldEmail));
       }
-      await tx.update(eventInvitations).set({ email: null }).where(eq(eventInvitations.userId, userId));
       await tx.delete(plateTransferRequests).where(eq(plateTransferRequests.toUserId, userId));
       await tx.update(applications).set({ message: null }).where(eq(applications.userId, userId));
       await tx.update(malusContests).set({ message: "[message supprimé]" }).where(eq(malusContests.userId, userId));
@@ -412,6 +410,7 @@ export const accountService = {
       await anonymizeCommunicationForDeletedAccount(tx, userId);
       // Modération (lot 32) : signalements et sanctions conservés un an (docs/01) ; contestation en cours close.
       await anonymizeModerationForDeletedAccount(tx, userId);
+      await invitationsService.anonymizeForDeletedAccount(tx, userId, oldEmail);
       await tx.delete(structureFollows).where(eq(structureFollows.userId, userId));
       await tx.delete(proFollows).where(eq(proFollows.userId, userId));
       await tx

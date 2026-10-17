@@ -14,6 +14,7 @@ import {
   type VehicleType,
   vehicleTypes,
 } from "../enums";
+import { type Grade, grades } from "../grades";
 import type { Affinity } from "../rules/affinity";
 import { RECURRENCE_MAX_COUNT, type RecurrenceRule } from "../rules/recurrence";
 import { isoDate, optionalText, pageQuery } from "./common";
@@ -48,6 +49,10 @@ const eventFields = z.object({
   registrationsOpenAt: isoDate,
   previewHours: z.number().int().min(0).max(168),
   lockOffsetMinutes: z.number().int().min(0).max(1440),
+  /** Hauts grades (lot 25, § 9.2) : priorité en liste d'attente, avant-première supplémentaire, à partir de quel grade. */
+  highGradePriority: z.boolean(),
+  highGradePreviewHours: z.number().int().min(0).max(168),
+  highGradeMin: z.enum(grades),
   rulesText: optionalText(10000),
   instructions: optionalText(2000),
   /** Types de prestataires attendus (cases à cocher et « + »), sans candidature en V1. */
@@ -69,6 +74,9 @@ export const eventCreateSchema = eventFields
     publicAccess: eventFields.shape.publicAccess.default("free"),
     previewHours: eventFields.shape.previewHours.default(24),
     lockOffsetMinutes: eventFields.shape.lockOffsetMinutes.default(120),
+    highGradePriority: eventFields.shape.highGradePriority.default(false),
+    highGradePreviewHours: eventFields.shape.highGradePreviewHours.default(0),
+    highGradeMin: eventFields.shape.highGradeMin.default("circuit"),
     vendorTypes: eventFields.shape.vendorTypes.default([]),
   })
   .superRefine(datesRule);
@@ -185,6 +193,10 @@ export type EventPublic = EventCard & {
   externalTicketUrl: string | null;
   registrationsOpenAt: string;
   previewHours: number;
+  /** Hauts grades (lot 25) : priorité en liste d'attente et avant-première supplémentaire, à partir de `highGradeMin`. */
+  highGradePriority: boolean;
+  highGradePreviewHours: number;
+  highGradeMin: Grade;
   lockAt: string;
   isLocked: boolean;
   rulesText: string | null;

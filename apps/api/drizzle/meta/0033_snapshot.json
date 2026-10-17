@@ -1,5 +1,5 @@
 {
-  "id": "d4ae3d1d-acc7-4bf3-b202-f97c69c547db",
+  "id": "2a57d931-5e06-4338-821d-987ae1a1cafb",
   "prevId": "259451c6-eb9e-4a8a-99e0-a57124e6cc4b",
   "version": "7",
   "dialect": "postgresql",
@@ -3322,167 +3322,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.event_invitations": {
-      "name": "event_invitations",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "token": {
-          "name": "token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "invitation_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "event_invitations_event_idx": {
-          "name": "event_invitations_event_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "event_invitations_event_id_events_id_fk": {
-          "name": "event_invitations_event_id_events_id_fk",
-          "tableFrom": "event_invitations",
-          "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "event_invitations_user_id_user_id_fk": {
-          "name": "event_invitations_user_id_user_id_fk",
-          "tableFrom": "event_invitations",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "event_invitations_vehicle_id_vehicles_id_fk": {
-          "name": "event_invitations_vehicle_id_vehicles_id_fk",
-          "tableFrom": "event_invitations",
-          "tableTo": "vehicles",
-          "columnsFrom": [
-            "vehicle_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "event_invitations_created_by_user_id_fk": {
-          "name": "event_invitations_created_by_user_id_fk",
-          "tableFrom": "event_invitations",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "event_invitations_token_key": {
-          "name": "event_invitations_token_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.event_zones": {
       "name": "event_zones",
       "schema": "",
@@ -3786,6 +3625,28 @@
           "notNull": true,
           "default": 120
         },
+        "high_grade_priority": {
+          "name": "high_grade_priority",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "high_grade_preview_hours": {
+          "name": "high_grade_preview_hours",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "high_grade_min": {
+          "name": "high_grade_min",
+          "type": "grade",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'circuit'"
+        },
         "locked_at": {
           "name": "locked_at",
           "type": "timestamp with time zone",
@@ -4055,6 +3916,10 @@
         "events_max_vehicles_check": {
           "name": "events_max_vehicles_check",
           "value": "\"events\".\"max_vehicles_per_user\" >= 1"
+        },
+        "events_high_grade_preview_check": {
+          "name": "events_high_grade_preview_check",
+          "value": "\"events\".\"high_grade_preview_hours\" between 0 and 168"
         }
       },
       "isRLSEnabled": false
@@ -4349,6 +4214,297 @@
           "nullsNotDistinct": false,
           "columns": [
             "client_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.event_invitations": {
+      "name": "event_invitations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vehicle_id": {
+          "name": "vehicle_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "invitation_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_event_id": {
+          "name": "source_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accepted_application_id": {
+          "name": "accepted_application_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "declined_at": {
+          "name": "declined_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sent_at": {
+          "name": "sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "event_invitations_event_idx": {
+          "name": "event_invitations_event_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_invitations_user_idx": {
+          "name": "event_invitations_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_invitations_event_user_key": {
+          "name": "event_invitations_event_user_key",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_invitations\".\"user_id\" is not null and \"event_invitations\".\"status\" in ('pending', 'accepted', 'declined')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_invitations_event_email_key": {
+          "name": "event_invitations_event_email_key",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"email\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"event_invitations\".\"email\" is not null and \"event_invitations\".\"user_id\" is null and \"event_invitations\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_invitations_application_key": {
+          "name": "event_invitations_application_key",
+          "columns": [
+            {
+              "expression": "accepted_application_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "event_invitations_event_id_events_id_fk": {
+          "name": "event_invitations_event_id_events_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_invitations_user_id_user_id_fk": {
+          "name": "event_invitations_user_id_user_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "event_invitations_vehicle_id_vehicles_id_fk": {
+          "name": "event_invitations_vehicle_id_vehicles_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "vehicles",
+          "columnsFrom": [
+            "vehicle_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "event_invitations_created_by_user_id_fk": {
+          "name": "event_invitations_created_by_user_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "event_invitations_source_event_id_events_id_fk": {
+          "name": "event_invitations_source_event_id_events_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "events",
+          "columnsFrom": [
+            "source_event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "event_invitations_accepted_application_id_applications_id_fk": {
+          "name": "event_invitations_accepted_application_id_applications_id_fk",
+          "tableFrom": "event_invitations",
+          "tableTo": "applications",
+          "columnsFrom": [
+            "accepted_application_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "event_invitations_token_key": {
+          "name": "event_invitations_token_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
           ]
         }
       },
@@ -5176,523 +5332,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.reports": {
-      "name": "reports",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "reporter_id": {
-          "name": "reporter_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target_type": {
-          "name": "target_type",
-          "type": "report_target",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target_id": {
-          "name": "target_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target_owner_id": {
-          "name": "target_owner_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "report_reason",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "details": {
-          "name": "details",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "screenshot_key": {
-          "name": "screenshot_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "context": {
-          "name": "context",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "report_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "handled_by": {
-          "name": "handled_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "handled_at": {
-          "name": "handled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sanction_id": {
-          "name": "sanction_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "retain_until": {
-          "name": "retain_until",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "reports_reporter_target_key": {
-          "name": "reports_reporter_target_key",
-          "columns": [
-            {
-              "expression": "reporter_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "target_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "target_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "reports_status_created_idx": {
-          "name": "reports_status_created_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "reports_owner_created_idx": {
-          "name": "reports_owner_created_idx",
-          "columns": [
-            {
-              "expression": "target_owner_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "reports_reporter_created_idx": {
-          "name": "reports_reporter_created_idx",
-          "columns": [
-            {
-              "expression": "reporter_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "reports_retain_idx": {
-          "name": "reports_retain_idx",
-          "columns": [
-            {
-              "expression": "retain_until",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"reports\".\"retain_until\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "reports_reporter_id_user_id_fk": {
-          "name": "reports_reporter_id_user_id_fk",
-          "tableFrom": "reports",
-          "tableTo": "user",
-          "columnsFrom": [
-            "reporter_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "reports_target_owner_id_user_id_fk": {
-          "name": "reports_target_owner_id_user_id_fk",
-          "tableFrom": "reports",
-          "tableTo": "user",
-          "columnsFrom": [
-            "target_owner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "reports_handled_by_user_id_fk": {
-          "name": "reports_handled_by_user_id_fk",
-          "tableFrom": "reports",
-          "tableTo": "user",
-          "columnsFrom": [
-            "handled_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "reports_sanction_id_sanctions_id_fk": {
-          "name": "reports_sanction_id_sanctions_id_fk",
-          "tableFrom": "reports",
-          "tableTo": "sanctions",
-          "columnsFrom": [
-            "sanction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "reports_details_check": {
-          "name": "reports_details_check",
-          "value": "\"reports\".\"details\" is null or char_length(\"reports\".\"details\") <= 1000"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.sanctions": {
-      "name": "sanctions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "sanction_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "report_reason",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "report_ids": {
-          "name": "report_ids",
-          "type": "uuid[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::uuid[]"
-        },
-        "starts_at": {
-          "name": "starts_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ends_at": {
-          "name": "ends_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "issued_by": {
-          "name": "issued_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "auto": {
-          "name": "auto",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "contest_status": {
-          "name": "contest_status",
-          "type": "contest_state",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'none'"
-        },
-        "contest_message": {
-          "name": "contest_message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "contested_at": {
-          "name": "contested_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "contest_decided_by": {
-          "name": "contest_decided_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "contest_decided_at": {
-          "name": "contest_decided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lifted_at": {
-          "name": "lifted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lifted_by": {
-          "name": "lifted_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "sanctions_user_idx": {
-          "name": "sanctions_user_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "starts_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "sanctions_contest_idx": {
-          "name": "sanctions_contest_idx",
-          "columns": [
-            {
-              "expression": "contest_status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"sanctions\".\"contest_status\" = 'pending'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "sanctions_user_id_user_id_fk": {
-          "name": "sanctions_user_id_user_id_fk",
-          "tableFrom": "sanctions",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "sanctions_issued_by_user_id_fk": {
-          "name": "sanctions_issued_by_user_id_fk",
-          "tableFrom": "sanctions",
-          "tableTo": "user",
-          "columnsFrom": [
-            "issued_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "sanctions_contest_decided_by_user_id_fk": {
-          "name": "sanctions_contest_decided_by_user_id_fk",
-          "tableFrom": "sanctions",
-          "tableTo": "user",
-          "columnsFrom": [
-            "contest_decided_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "sanctions_lifted_by_user_id_fk": {
-          "name": "sanctions_lifted_by_user_id_fk",
-          "tableFrom": "sanctions",
-          "tableTo": "user",
-          "columnsFrom": [
-            "lifted_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "sanctions_note_check": {
-          "name": "sanctions_note_check",
-          "value": "\"sanctions\".\"note\" is null or char_length(\"sanctions\".\"note\") <= 1000"
-        },
-        "sanctions_contest_message_check": {
-          "name": "sanctions_contest_message_check",
-          "value": "\"sanctions\".\"contest_message\" is null or char_length(\"sanctions\".\"contest_message\") <= 1000"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.email_outbox": {
@@ -7025,12 +6664,6 @@
         },
         "suspended_until": {
           "name": "suspended_until",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "banned_at": {
-          "name": "banned_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -11741,7 +11374,8 @@
         "pending",
         "accepted",
         "declined",
-        "expired"
+        "expired",
+        "withdrawn"
       ]
     },
     "public.contact_status": {
@@ -11791,67 +11425,6 @@
         "report",
         "provider_photo",
         "announcement"
-      ]
-    },
-    "public.contest_state": {
-      "name": "contest_state",
-      "schema": "public",
-      "values": [
-        "none",
-        "pending",
-        "upheld",
-        "lifted"
-      ]
-    },
-    "public.report_reason": {
-      "name": "report_reason",
-      "schema": "public",
-      "values": [
-        "insult",
-        "scam",
-        "shocking",
-        "fake_profile",
-        "harassment",
-        "spam",
-        "dangerous_driving",
-        "other"
-      ]
-    },
-    "public.report_status": {
-      "name": "report_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "reviewing",
-        "resolved_action",
-        "resolved_no_action",
-        "dismissed_abusive"
-      ]
-    },
-    "public.report_target": {
-      "name": "report_target",
-      "schema": "public",
-      "values": [
-        "profile",
-        "vehicle",
-        "photo",
-        "message",
-        "event",
-        "review",
-        "crew",
-        "pro",
-        "provider",
-        "announcement"
-      ]
-    },
-    "public.sanction_kind": {
-      "name": "sanction_kind",
-      "schema": "public",
-      "values": [
-        "warning",
-        "suspension_7d",
-        "suspension_30d",
-        "ban"
       ]
     },
     "public.email_status": {

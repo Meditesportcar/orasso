@@ -10,6 +10,7 @@ import {
 import { crewNotificationTypes } from "./notifications/crews";
 import { eventEmailAlwaysTypes, eventNotificationTypes } from "./notifications/events";
 import { garageNotificationTypes } from "./notifications/garage";
+import { invitationNotificationTypes } from "./notifications/invitations";
 import { messagingNotificationTypes, pushOnlyNotificationTypes as messagingPushOnly } from "./notifications/messaging";
 import { moderationEmailAlwaysTypes, moderationNotificationTypes } from "./notifications/moderation";
 import { pointsNotificationTypes } from "./notifications/points";
@@ -75,7 +76,9 @@ export type EventStatus = (typeof eventStatuses)[number];
 export const eventOutlooks = ["maintained", "uncertain"] as const;
 export type EventOutlook = (typeof eventOutlooks)[number];
 
-export const invitationStatuses = ["pending", "accepted", "declined", "expired"] as const;
+/** `withdrawn` (lot 25, relecture) : retirée par l'organisateur ; la ligne reste (quotas, garde de 24 h). */
+export const invitationStatuses = ["pending", "accepted", "declined", "expired", "withdrawn"] as const;
+export type InvitationStatus = (typeof invitationStatuses)[number];
 
 export const applicationKinds = ["vehicle", "provider"] as const;
 export type ApplicationKind = (typeof applicationKinds)[number];
@@ -127,6 +130,7 @@ export const notificationTypes = {
   ...crewNotificationTypes,
   ...communicationNotificationTypes,
   ...moderationNotificationTypes,
+  ...invitationNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 
