@@ -1,5 +1,12 @@
 import { Button, Icon, SelectField } from "@orasso/design-system/web";
-import { eventFormatLabels, invitationLabels, type ReceivedInvitation, type VehicleFull } from "@orasso/shared";
+import {
+  eventDaysLabels,
+  eventFormatLabels,
+  formatDayDate,
+  invitationLabels,
+  type ReceivedInvitation,
+  type VehicleFull,
+} from "@orasso/shared";
 import { Form } from "react-router";
 
 import { formatDateTime, formatWhen } from "../lib/format";
@@ -74,6 +81,18 @@ export function ReceivedInvitationCard({
             defaultValue={choices.length === 1 ? choices[0]?.id : ""}
             placeholder="Choisir"
             options={choices.map((v) => ({ value: v.id, label: v.label }))}
+          />
+        )}
+        {/* Lot 26 : événement sur plusieurs jours, le jour choisi par l'invité (selon le mode d'accès). */}
+        {inv.event.days.length > 1 && inv.event.dayAccess !== "whole" && (
+          <SelectField
+            name="eventDayId"
+            label={eventDaysLabels.chooseDay}
+            defaultValue={inv.event.dayAccess === "both" ? "" : (inv.event.days[0]?.id ?? "")}
+            options={[
+              ...(inv.event.dayAccess === "both" ? [{ value: "", label: eventDaysLabels.wholeEvent }] : []),
+              ...inv.event.days.map((d) => ({ value: d.id, label: formatDayDate(d.date) })),
+            ]}
           />
         )}
         <Button

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ApplicationStatus } from "../application";
-import type { EventFormat, EventStatus, InvitationStatus, VehicleType } from "../enums";
+import type { DayAccess, EventFormat, EventStatus, InvitationStatus, VehicleType } from "../enums";
 import { INVITATION_MESSAGE_MAX, INVITATIONS_PER_REQUEST } from "../rules/invitations";
 import { optionalText } from "./common";
 
@@ -68,6 +68,9 @@ export type InvitationEventBrief = {
   rulesText: string | null;
   admittedVehicleTypes: VehicleType[];
   structure: { name: string; slug: string; logoUrl: string | null };
+  /** Lot 26 : jours d'un événement sur plusieurs jours (vide = un jour) et mode d'accès (choix à l'acceptation). */
+  days: { id: string; date: string }[];
+  dayAccess: DayAccess;
 };
 
 /** Invitation reçue (Accès > Invitations reçues, Boîte > Demandes). */

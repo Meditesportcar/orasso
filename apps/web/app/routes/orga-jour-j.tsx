@@ -10,7 +10,7 @@ import type {
   MyStaffEvent,
   StaffAlertView,
 } from "@orasso/shared";
-import { distanceFromEntryLabel, liveLabels } from "@orasso/shared";
+import { distanceFromEntryLabel, eventDaysLabels, formatDayDate, liveLabels, localDate } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import "../styles/staff.css";
 
@@ -25,7 +25,14 @@ export function meta() {
   return [{ title: "Jour J · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
-type EventInfo = { id: string; title: string; startsAt: string; endsAt: string };
+type EventInfo = {
+  id: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  /** Lot 26 : jours d'un événement sur plusieurs jours (organisateur). */
+  days: { id: string; date: string }[];
+};
 type PlateOutcome = { matched: (CheckinResult & { plate: string })[]; unmatched: string[] };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -35,7 +42,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const full = await api<EventOrganizer>(request, `/events/${eventId}`);
   if (full.ok) {
     organizer = true;
-    event = { id: full.data.id, title: full.data.title, startsAt: full.data.startsAt, endsAt: full.data.endsAt };
+    event = {
+      id: full.data.id,
+      title: full.data.title,
+      startsAt: full.data.startsAt,
+      endsAt: full.data.endsAt,
+      days: full.data.days.map((d) => ({ id: d.id, date: d.date })),
+    };
   } else {
     const mine = await api<MyStaffEvent[]>(request, "/me/staff-events");
     const found = mine.ok ? mine.data.find((m) => m.event.id === eventId) : undefined;
@@ -45,11 +58,20 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         title: found.event.title,
         startsAt: found.event.startsAt,
         endsAt: found.event.endsAt,
+        days: [],
       };
   }
   if (!event) throw new Response("Événement introuvable", { status: 404 });
-  const list = await api<CheckinListItem[]>(request, `/events/${eventId}/checkins`);
-  const live = organizer ? await api<LiveCounters>(request, `/events/${eventId}/live`) : null;
+  // Lot 26 : le jour affiché (`?jour=`, sinon aujourd'hui s'il fait partie des jours, sinon tous les jours).
+  const asked = new URL(request.url).searchParams.get("jour");
+  const today = localDate(new Date());
+  const dayId =
+    asked === "tous"
+      ? null
+      : (event.days.find((d) => d.id === asked) ?? event.days.find((d) => d.date === today))?.id ?? null;
+  const dayQs = dayId ? `?dayId=${dayId}` : "";
+  const list = await api<CheckinListItem[]>(request, `/events/${eventId}/checkins${dayQs}`);
+  const live = organizer ? await api<LiveCounters>(request, `/events/${eventId}/live${dayQs}`) : null;
   // Après l'événement (organisateur) : avis et droit de réponse, contestations de malus.
   const reviews = organizer ? await api<EventReviews>(request, `/events/${eventId}/reviews`) : null;
   const contests = organizer ? await api<MalusContestView[]>(request, `/events/${eventId}/malus-contests`) : null;
@@ -60,6 +82,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     alerts: alerts?.ok ? alerts.data : [],
     incidents: incidents?.ok ? incidents.data : [],
     event,
+    dayId,
     organizer,
     items: list.ok ? list.data : [],
     listError: list.ok ? null : list.error.message,
@@ -72,7 +95,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 type Filter = "all" | "arrived" | "expected";
 
 export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
-  const { event, organizer, listError } = loaderData;
+  const { event, organizer, listError, dayId } = loaderData;
+  const dayQs = dayId ? `?dayId=${dayId}` : "";
   const [items, setItems] = useState<CheckinListItem[]>(loaderData.items);
   const [live, setLive] = useState<LiveCounters | null>(loaderData.live);
   const [alerts, setAlerts] = useState<StaffAlertView[]>(loaderData.alerts);
@@ -92,9 +116,15 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
   useEffect(() => setIncidents(loaderData.incidents), [loaderData.incidents]);
 
   const refetch = useCallback(async () => {
-    const res = await apiFetch<CheckinListItem[]>(`/events/${event.id}/checkins`);
+    const res = await apiFetch<CheckinListItem[]>(`/events/${event.id}/checkins${dayQs}`);
     if (res.ok) setItems(res.data);
-  }, [event.id]);
+  }, [event.id, dayQs]);
+
+  // Lot 26 : un jour choisi, le direct se relit pour ce jour (la diffusion compte tous les jours).
+  const refetchLive = useCallback(async () => {
+    const res = await apiFetch<LiveCounters>(`/events/${event.id}/live${dayQs}`);
+    if (res.ok) setLive(res.data);
+  }, [event.id, dayQs]);
 
   const refetchField = useCallback(async () => {
     const [a, i] = await Promise.all([
@@ -107,7 +137,10 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
 
   // Direct : les compteurs arrivent par WebSocket, la liste se rafraîchit juste après (autres appareils du staff).
   useChannel(organizer ? `event:${event.id}:live` : null, (m) => {
-    if (m.type === "live") setLive(m.payload as LiveCounters);
+    if (m.type === "live") {
+      if (dayId) void refetchLive();
+      else setLive(m.payload as LiveCounters);
+    }
     if (m.type === "alert" || m.type === "alert.resolved" || m.type === "incident") void refetchField();
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void refetch(), 400);
@@ -168,6 +201,19 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
           <div className="o-t-meta s-label">{formatWhen(event.startsAt, event.endsAt)}</div>
         </div>
       </div>
+
+      {event.days.length > 1 && (
+        <nav className="s-row s-chips-wrap" aria-label={eventDaysLabels.days} data-testid="jourj-days">
+          <a href="?jour=tous" aria-current={dayId === null ? "page" : undefined}>
+            <Chip selected={dayId === null}>{eventDaysLabels.allDays}</Chip>
+          </a>
+          {event.days.map((d) => (
+            <a key={d.id} href={`?jour=${d.id}`} aria-current={dayId === d.id ? "page" : undefined}>
+              <Chip selected={dayId === d.id}>{formatDayDate(d.date)}</Chip>
+            </a>
+          ))}
+        </nav>
+      )}
 
       {listError && (
         <p className="s-notice s-notice--alert" role="alert">
@@ -424,7 +470,15 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
                   data-testid="participant-row"
                   data-arrived={item.checkedInAt ? "yes" : "no"}
                 >
-                  <td>{item.pseudo}</td>
+                  <td>
+                    {item.pseudo}
+                    {event.days.length > 1 && (
+                      <span className="s-muted o-t-caption" data-testid="participant-day">
+                        {" · "}
+                        {item.dayDate ? formatDayDate(item.dayDate, { weekday: false }) : eventDaysLabels.wholeEvent}
+                      </span>
+                    )}
+                  </td>
                   <td className="o-never-truncate">{item.vehicleLabel ?? "—"}</td>
                   <td>{item.zone?.code ?? "—"}</td>
                   <td>

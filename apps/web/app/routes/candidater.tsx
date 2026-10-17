@@ -1,7 +1,9 @@
-﻿import { AppBar, Button, CheckboxField, VehicleThumb } from "@orasso/design-system/web";
+﻿import { AppBar, Button, CheckboxField, Chip, ChipRow, VehicleThumb } from "@orasso/design-system/web";
 import {
   type ApplicationCreate,
   type EventPublic,
+  eventDaysLabels,
+  formatDayDate,
   type MyApplication,
   type StructurePublic,
   type VehicleFull,
@@ -22,7 +24,11 @@ export function meta() {
 export async function loader({ request, params }: Route.LoaderArgs) {
   await requireMe(request);
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(params.slug)}`);
-  if ((event.myApplications ?? []).some((a) => ["pending", "accepted", "waitlisted", "offered"].includes(a.status))) {
+  // Plusieurs jours (lot 26) : on peut candidater pour un autre jour ; l'API refuse le doublon du même jour.
+  const active = (event.myApplications ?? []).filter((a) =>
+    ["pending", "accepted", "waitlisted", "offered"].includes(a.status),
+  );
+  if (active.length && (event.days.length === 0 || active.some((a) => a.eventDayId === null))) {
     throw redirect("/app/acces");
   }
   const [structure, vehicles] = await Promise.all([
@@ -30,17 +36,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     apiOrThrow<VehicleFull[]>(request, "/me/vehicles"),
   ]);
   const wanted = new Set(event.criteria?.categoryIds ?? []);
-  const active = vehicles
+  const activeVehicles = vehicles
     .filter((v) => v.status === "active")
     // Ceux qui collent aux catégories recherchées d'abord (écran 1 du prototype).
     .sort(
       (a, b) => Number(b.categories.some((c) => wanted.has(c.id))) - Number(a.categories.some((c) => wanted.has(c.id))),
     );
   const preselected = new URL(request.url).searchParams.get("vehicule");
+  const preselectedDay = new URL(request.url).searchParams.get("jour");
   return {
     event,
     structure,
-    vehicles: active.map((v) => ({
+    vehicles: activeVehicles.map((v) => ({
       id: v.id,
       label: v.label,
       year: v.year,
@@ -52,6 +59,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       matches: v.categories.filter((c) => wanted.has(c.id)).map((c) => c.label),
     })),
     preselected,
+    preselectedDay,
+    takenDays: active.map((a) => a.eventDayId),
     state: registrationState(event, Date.now()),
   };
 }
@@ -59,7 +68,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 type Step = 1 | 2 | 3;
 
 export default function Candidater({ loaderData }: Route.ComponentProps) {
-  const { event, structure, vehicles, preselected, state } = loaderData;
+  const { event, structure, vehicles, preselected, preselectedDay, takenDays, state } = loaderData;
   const navigate = useNavigate();
   const backHref = `/e/${event.slug}`;
   const here = `/e/${event.slug}/candidater`;
@@ -69,6 +78,33 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
     const first = preselected && selectable.some((v) => v.id === preselected) ? [preselected] : [];
     if (first.length === 0 && selectable.length === 1 && selectable[0]) return [selectable[0].id];
     return first;
+  });
+  // Plusieurs jours (lot 26) : « Tout l'événement » et/ou un jour, selon le mode d'accès choisi par l'organisateur.
+  const multiDay = event.days.length > 1;
+  const dayChoices: { id: string | null; label: string; full: boolean }[] = multiDay
+    ? [
+        ...(event.dayAccess !== "per_day"
+          ? [
+              {
+                id: null,
+                label: eventDaysLabels.wholeEvent,
+                full: event.days.some((d) => d.remaining === 0) || takenDays.length > 0,
+              },
+            ]
+          : []),
+        ...(event.dayAccess !== "whole"
+          ? event.days.map((d) => ({
+              id: d.id as string | null,
+              label: formatDayDate(d.date),
+              full: d.remaining === 0 || takenDays.includes(d.id),
+            }))
+          : []),
+      ]
+    : [];
+  const [dayId, setDayId] = useState<string | null>(() => {
+    if (!multiDay) return null;
+    const wanted = dayChoices.find((c) => c.id === preselectedDay && !c.full);
+    return (wanted ?? dayChoices.find((c) => !c.full) ?? dayChoices[0])?.id ?? null;
   });
   const [rules, setRules] = useState(false);
   const [follow, setFollow] = useState(true);
@@ -112,6 +148,7 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
       newsletterOptIn: newsletter,
       companions: 0,
       message: null,
+      eventDayId: multiDay ? dayId : undefined,
     };
     const res = await apiFetch<MyApplication[]>(`/events/${event.id}/applications`, { method: "POST", json: body });
     if (res.ok) {
@@ -141,6 +178,23 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
               personne pour cet événement.
             </p>
           </div>
+          {multiDay ? (
+            <fieldset className="s-fieldset s-stack s-stack--tight" data-testid="day-choice">
+              <legend className="o-t-label s-label">{eventDaysLabels.chooseDay}</legend>
+              <ChipRow className="s-chips-wrap">
+                {dayChoices.map((c) => (
+                  <Chip key={c.id ?? "whole"} selected={dayId === c.id} onClick={() => setDayId(c.id)}>
+                    {c.full ? `${c.label} · ${eventDaysLabels.dayFull}` : c.label}
+                  </Chip>
+                ))}
+              </ChipRow>
+              {dayChoices.find((c) => c.id === dayId)?.full ? (
+                <p className="o-t-caption s-muted">
+                  Complet : ta candidature passera par la liste d'attente si l'organisateur le décide.
+                </p>
+              ) : null}
+            </fieldset>
+          ) : null}
           {vehicles.length === 0 ? (
             <div className="s-card">
               <p>Ton garage est vide. Ajoute un véhicule, tu reviendras ici juste après.</p>

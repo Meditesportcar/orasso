@@ -5,6 +5,8 @@ import {
   type CrewRegistrationView,
   crewLabels,
   type EventPublic,
+  eventDaysLabels,
+  formatDayDate,
   type MyCrew,
 } from "@orasso/shared";
 import { Fragment, useState } from "react";
@@ -67,6 +69,8 @@ export async function action({ request, params }: Route.ActionArgs) {
       members,
       rulesAccepted: true,
       followStructure: form.get("follow") === "on",
+      // Lot 26 : jour choisi par le chef (vide = tout l'événement).
+      ...(form.get("eventDayId") ? { eventDayId: String(form.get("eventDayId")) } : {}),
     },
   });
   if (!res.ok) return data({ error: res.error.message }, { status: res.status });
@@ -174,6 +178,18 @@ export default function CrewInscription({ loaderData, actionData }: Route.Compon
             <h2 className="s-h2 o-never-truncate">{crew.name}</h2>
           </div>
           <p className="o-t-caption s-muted">{crewLabels.registerCrewHint}</p>
+          {/* Lot 26 : événement sur plusieurs jours, un jour pour tout le crew (selon le mode d'accès). */}
+          {event.days.length > 1 && event.dayAccess !== "whole" && (
+            <SelectField
+              name="eventDayId"
+              label={eventDaysLabels.chooseDay}
+              defaultValue={event.dayAccess === "both" ? "" : (event.days[0]?.id ?? "")}
+              options={[
+                ...(event.dayAccess === "both" ? [{ value: "", label: eventDaysLabels.wholeEvent }] : []),
+                ...event.days.map((d) => ({ value: d.id, label: formatDayDate(d.date) })),
+              ]}
+            />
+          )}
           <section className="s-card" aria-label={crewLabels.registerCrewWho}>
             <h3 className="s-label o-t-label">{crewLabels.registerCrewWho}</h3>
             {options.members.map((m) => {

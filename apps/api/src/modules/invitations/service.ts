@@ -53,6 +53,7 @@ import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { requireEventReader, requireEventSpeaker, type StructureRow } from "../communication/guards";
+import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { inboxService } from "../messaging/inbox";
 import { notificationsService } from "../notifications/service";
@@ -90,8 +91,11 @@ function isRecipient(inv: Pick<InvitationRow, "userId" | "email">, v: Viewer): b
 
 const isSuspended = (v: Viewer) => Boolean(v.profile.suspendedUntil && v.profile.suspendedUntil > now());
 
-function brief(e: EventRow, s: StructureRow): InvitationEventBrief {
+function brief(e: EventRow, s: StructureRow, days: { id: string; dayDate: string }[] = []): InvitationEventBrief {
   return {
+    // Lot 26 : jours d'un événement sur plusieurs jours, pour choisir le sien à l'acceptation.
+    days: days.length > 1 ? days.map((d) => ({ id: d.id, date: d.dayDate })) : [],
+    dayAccess: days.length > 1 ? e.dayAccess : "whole",
     id: e.id,
     slug: e.slug,
     title: e.title,
@@ -407,6 +411,7 @@ async function receivedView(rows: InvitationRow[], ex: Executor = db): Promise<R
       ),
     );
   const byEvent = new Map(evRows.map((r) => [r.e.id, r]));
+  const multiDay = await daysRepo.manyMultiDay(evRows.map((r) => r.e.id), ex);
   const labels = await vehicleLabels(
     rows.flatMap((r) => (r.vehicleId ? [r.vehicleId] : [])),
     ex,
@@ -429,7 +434,7 @@ async function receivedView(rows: InvitationRow[], ex: Executor = db): Promise<R
         status: displayStatus(r, found.e, t),
         message: r.message,
         createdAt: r.createdAt.toISOString(),
-        event: brief(found.e, found.s),
+        event: brief(found.e, found.s, multiDay.get(found.e.id)?.days),
         vehicle: r.vehicleId ? { id: r.vehicleId, label: labels.get(r.vehicleId) ?? "Véhicule" } : null,
         application: app ? { id: app.id, status: app.status } : null,
       },
@@ -856,7 +861,7 @@ export const invitationsService = {
     if (status !== "pending" && !mine) throw notFound(L.linkGone);
     return {
       status,
-      event: brief(e, s),
+      event: brief(e, s, await daysRepo.list(e.id)),
       invitedBy: s.name,
       vehicle: inv.vehicleId ? { id: inv.vehicleId, label: labels.get(inv.vehicleId) ?? "Véhicule" } : null,
       mine,
