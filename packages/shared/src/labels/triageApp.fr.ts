@@ -10,7 +10,7 @@ export const triageAppLabels = {
   // Segments.
   segVehicles: "Véhicules",
   segProviders: "Prestataires",
-  segWaitlist: "Liste d'attente",
+  segWaitlist: "Attente",
   segList: "Liste",
   providersCount: (n: number) => `Prestataires · ${n}`,
 
@@ -85,6 +85,7 @@ export const triageAppLabels = {
   alertDuplicatePlate: "Plaque en double",
   alertBanned: "Banni",
   alertUnregistered: "Non immatriculé",
+  companionsRow: "Venue",
   companions: (n: number) => `${n} accompagnant${n > 1 ? "s" : ""}`,
   message: "Message",
   appliedAt: "Candidature",
@@ -92,7 +93,7 @@ export const triageAppLabels = {
   fullSheetShort: "Fiche",
   fullSheetTitle: "Fiche de la candidature",
   sectionVehicle: "Véhicule",
-  sectionApplicant: "Candidat",
+  sectionApplicant: "Candidature",
   sectionCrew: "Crew",
   sectionProvider: "Prestataire",
   sectionContact: "Coordonnées",

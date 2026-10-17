@@ -33,12 +33,12 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { activeFilterCount, bulkOutcome, emptyFilters, type ListFilters, listQuery, toggleId } from "@/lib/triage";
-import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { titleOf } from "./CandidateCard";
 import { FullSheet } from "./FullSheet";
 import { RefusalSheet } from "./RefusalSheet";
+import { ScreenSheet } from "./ScreenSheet";
 import { ZoneSheet } from "./ZoneSheet";
 
 const { space2, space3 } = tokens.spacing;
@@ -97,7 +97,7 @@ function FiltersSheet({
   const countries = [...new Set(refs.makes.map((m) => m.country).filter((c): c is string => Boolean(c)))].sort();
   const vehicle = kind === "vehicle";
   return (
-    <AppSheet visible={visible} onClose={onClose} accessibilityLabel={triageAppLabels.listTitle} maxHeight={0.9}>
+    <ScreenSheet visible={visible} onClose={onClose} accessibilityLabel={triageAppLabels.listTitle} maxHeight={0.9}>
       <Text variant="title" color={t.color.ink}>
         {triageAppLabels.listTitle}
       </Text>
@@ -180,7 +180,7 @@ function FiltersSheet({
       <Button variant="plate" icon="undo" onPress={() => setDraft({ ...emptyFilters })} fullWidth>
         {triageAppLabels.listFiltersReset}
       </Button>
-    </AppSheet>
+    </ScreenSheet>
   );
 }
 

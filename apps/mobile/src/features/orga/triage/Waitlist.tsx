@@ -242,18 +242,18 @@ export function Waitlist({ eventId, onChanged }: { eventId: string; onChanged: (
               >
                 {triageAppLabels.waitlistMoveDown}
               </Button>
-              <Button
-                variant="plate"
-                icon="check"
-                loading={busy === row.id}
-                disabled={busy !== null}
-                onPress={() => void keep(row)}
-                style={styles.grow}
-                testID="waitlist-keep"
-              >
-                {triageAppLabels.waitlistKeep}
-              </Button>
             </View>
+            <Button
+              variant="plate"
+              icon="check"
+              loading={busy === row.id}
+              disabled={busy !== null}
+              onPress={() => void keep(row)}
+              fullWidth
+              testID="waitlist-keep"
+            >
+              {triageAppLabels.waitlistKeep}
+            </Button>
           </Plate>
         );
       })}

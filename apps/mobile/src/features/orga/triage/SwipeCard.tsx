@@ -10,7 +10,7 @@
 import { duration, easings, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type TriageDecision, triageAppLabels } from "@orasso/shared";
 import { type MutableRefObject, type ReactNode, useEffect, useMemo, useRef } from "react";
-import { PanResponder, StyleSheet, View } from "react-native";
+import { PanResponder, Platform, StyleSheet, View, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 
 import {
@@ -33,6 +33,9 @@ export type SwipeControl = {
   /** Refus : la feuille des motifs s'ouvre (la carte reste, rien n'est armé avant la confirmation). */
   refuse: () => void;
 };
+
+// Navigateur (recette) : pas de sélection de texte ni de défilement de la page pendant le glissement.
+const webGuard = (Platform.OS === "web" ? { userSelect: "none", touchAction: "none" } : {}) as ViewStyle;
 
 const SPRING = { damping: 18, stiffness: 220, mass: 0.9 } as const;
 
@@ -154,7 +157,7 @@ export function SwipeCard({
         width.value = e.nativeEvent.layout.width;
       }}
     >
-      <Animated.View style={[styles.fill, cardStyle]} {...responder.panHandlers} testID={testID}>
+      <Animated.View style={[styles.fill, webGuard, cardStyle]} {...responder.panHandlers} testID={testID}>
         {children}
         <View pointerEvents="none" style={styles.tags}>
           <Animated.View

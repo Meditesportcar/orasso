@@ -6,8 +6,8 @@ import { type RefusalReason, refusalReasonLabels, refusalReasons, triageAppLabel
 import { useEffect, useState } from "react";
 
 import { type DecisionExtra, refusalProblem } from "@/lib/triage";
-import { AppSheet } from "@/ui/AppSheet";
 import { Notice } from "@/ui/Notice";
+import { ScreenSheet } from "./ScreenSheet";
 
 export function RefusalSheet({
   visible,
@@ -50,7 +50,7 @@ export function RefusalSheet({
   }
 
   return (
-    <AppSheet visible={visible} onClose={onClose} accessibilityLabel={title}>
+    <ScreenSheet visible={visible} onClose={onClose} accessibilityLabel={title}>
       <Text variant="title" color={t.color.ink}>
         {title}
       </Text>
@@ -82,6 +82,6 @@ export function RefusalSheet({
       <Button variant="plate" icon="close" onPress={onClose} fullWidth>
         {triageAppLabels.refusalCancel}
       </Button>
-    </AppSheet>
+    </ScreenSheet>
   );
 }

@@ -163,7 +163,7 @@ export function FactRows({ item, full = false }: { item: ApplicationForTriage; f
         </Row>
       ) : null}
       {item.companions > 0 ? (
-        <Row label={triageAppLabels.applicant}>{triageAppLabels.companions(item.companions)}</Row>
+        <Row label={triageAppLabels.companionsRow}>{triageAppLabels.companions(item.companions)}</Row>
       ) : null}
       {item.message ? <Row label={triageAppLabels.message}>{item.message}</Row> : null}
       {full ? <Row label={triageAppLabels.appliedAt}>{formatDayHour(item.createdAt)}</Row> : null}
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   body: { padding: space3, gap: space2, flexShrink: 1 },
   rows: { gap: space1 },
   row: { flexDirection: "row", gap: space2, alignItems: "flex-start" },
-  rowLabel: { width: 76 },
+  rowLabel: { width: 92 },
   rowValue: { flex: 1 },
   alertStrip: { flexDirection: "row", alignItems: "center", gap: space1, borderRadius: radiusSm },
 });

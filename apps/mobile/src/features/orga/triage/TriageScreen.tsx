@@ -3,7 +3,7 @@
 // le canal `event:{id}:triage`) et, dessous, la file par glissement, la liste d'attente ou le mode liste. Toutes les
 // règles (capacité, liste d'attente, délais, verrouillage) restent dans l'API : l'écran n'affiche que ce qu'elle répond.
 import { Button, Chip, ChipRow, Counters, Ground, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { orgaLabels, triageAppLabels } from "@orasso/shared";
+import { triageAppLabels } from "@orasso/shared";
 import { useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -14,13 +14,12 @@ import { useSession } from "@/lib/session";
 import { COUNTER_ACTIVE, counterCells, triageEvents } from "@/lib/triage";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
-import { AppSheet } from "@/ui/AppSheet";
 import { JournalSheet } from "@/ui/JournalSheet";
-import { Muted } from "@/ui/Muted";
 import { TopBar } from "@/ui/TopBar";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 import { Deck } from "./Deck";
 import { ListMode } from "./ListMode";
+import { ScreenSheet } from "./ScreenSheet";
 import { Waitlist } from "./Waitlist";
 
 const { space2, space3, space4 } = tokens.spacing;
@@ -129,7 +128,13 @@ export function TriageScreen() {
                 </Chip>
               ))}
             </ChipRow>
-            <Counters items={counterCells(counters.data, triageAppLabels)} active={COUNTER_ACTIVE} style={undefined} />
+            <View testID="triage-counters">
+              <Counters
+                items={counterCells(counters.data, triageAppLabels)}
+                active={COUNTER_ACTIVE}
+                style={undefined}
+              />
+            </View>
             <View style={styles.fill} testID={`triage-${segment}`}>
               {segment === "vehicles" ? (
                 <Deck
@@ -158,7 +163,7 @@ export function TriageScreen() {
         )}
       </View>
 
-      <AppSheet visible={picker} onClose={() => setPicker(false)} accessibilityLabel={triageAppLabels.eventPicker}>
+      <ScreenSheet visible={picker} onClose={() => setPicker(false)} accessibilityLabel={triageAppLabels.eventPicker}>
         <Text variant="title" color={t.color.ink}>
           {triageAppLabels.eventPicker}
         </Text>
@@ -177,8 +182,7 @@ export function TriageScreen() {
             {e.title}
           </Button>
         ))}
-        <Muted variant="caption">{orgaLabels.eventsGroupUpcoming}</Muted>
-      </AppSheet>
+      </ScreenSheet>
       <JournalSheet visible={journal} onClose={() => setJournal(false)} />
     </Ground>
   );
@@ -186,5 +190,5 @@ export function TriageScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  body: { flex: 1, paddingHorizontal: space4, paddingTop: space3, gap: space2 },
+  body: { flex: 1, paddingHorizontal: space4, paddingTop: space3, paddingBottom: space4, gap: space2 },
 });

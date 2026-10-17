@@ -6,8 +6,8 @@ import { Chip, ChipRow, Plate, Text, useTheme } from "@orasso/design-system/nati
 import { type ApplicationForTriage, triageAppLabels } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
-import { AppSheet } from "@/ui/AppSheet";
 import { FactRows, PhotoCarousel, photosOf, titleOf } from "./CandidateCard";
+import { ScreenSheet } from "./ScreenSheet";
 
 function Fact({ label, value }: { label: string; value: string | number | null | undefined }) {
   const { t } = useTheme();
@@ -29,7 +29,7 @@ export function FullSheet({ item, onClose }: { item: ApplicationForTriage | null
   const v = item?.vehicle ?? null;
   const p = item?.provider ?? null;
   return (
-    <AppSheet
+    <ScreenSheet
       visible={item !== null}
       onClose={onClose}
       accessibilityLabel={triageAppLabels.fullSheetTitle}
@@ -97,7 +97,7 @@ export function FullSheet({ item, onClose }: { item: ApplicationForTriage | null
           </Plate>
         </>
       ) : null}
-    </AppSheet>
+    </ScreenSheet>
   );
 }
 

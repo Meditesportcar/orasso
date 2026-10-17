@@ -2,8 +2,7 @@
 // ou changée ensuite depuis la liste. Les zones viennent de l'événement (`EventOrganizer.zones`).
 import { Button, Text, useTheme } from "@orasso/design-system/native";
 import { type EventZone, triageAppLabels } from "@orasso/shared";
-
-import { AppSheet } from "@/ui/AppSheet";
+import { ScreenSheet } from "./ScreenSheet";
 
 export function ZoneSheet({
   visible,
@@ -20,7 +19,7 @@ export function ZoneSheet({
 }) {
   const { t } = useTheme();
   return (
-    <AppSheet visible={visible} onClose={onClose} accessibilityLabel={triageAppLabels.zoneTitle}>
+    <ScreenSheet visible={visible} onClose={onClose} accessibilityLabel={triageAppLabels.zoneTitle}>
       <Text variant="title" color={t.color.ink}>
         {triageAppLabels.zoneTitle}
       </Text>
@@ -42,6 +41,6 @@ export function ZoneSheet({
       <Button variant="plate" icon="close" onPress={() => onPick(null)} fullWidth>
         {triageAppLabels.zoneNone}
       </Button>
-    </AppSheet>
+    </ScreenSheet>
   );
 }

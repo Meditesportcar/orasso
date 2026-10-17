@@ -298,11 +298,12 @@ export function Deck({
       {armedShown.map((armed) => (
         <Plate key={armed.item.id} kind="note" style={styles.armed} testID="triage-armed">
           <View style={styles.armedText}>
-            <Text variant="bodyStrong" color={t.color.plateInk}>
+            <Text
+              variant="bodyStrong"
+              color={t.color.plateInk}
+              accessibilityLabel={`${triageAppLabels.armed(decisionTag[armed.decision], armed.item.applicant.pseudo)}. ${titleOf(armed.item)}`}
+            >
               {triageAppLabels.armed(decisionTag[armed.decision], armed.item.applicant.pseudo)}
-            </Text>
-            <Text variant="caption" color={t.color.plateMuted}>
-              {titleOf(armed.item)}
             </Text>
           </View>
           <Button
@@ -389,9 +390,11 @@ export function Deck({
           {triageAppLabels.skip}
         </Button>
       </View>
-      <Muted variant="caption" style={styles.hint}>
-        {reducedMotion ? triageAppLabels.swipeHintReduced : triageAppLabels.swipeHint}
-      </Muted>
+      {hasArmed ? null : (
+        <Muted variant="caption" style={styles.hint}>
+          {reducedMotion ? triageAppLabels.swipeHintReduced : triageAppLabels.swipeHint}
+        </Muted>
+      )}
 
       <RefusalSheet
         visible={refusing}
