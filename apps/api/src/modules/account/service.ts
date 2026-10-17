@@ -59,6 +59,7 @@ import { anonymizeCommunicationForDeletedAccount } from "../communication/anonym
 import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
 import { invitationsService } from "../invitations/service";
 import { anonymizeMessagingForDeletedAccount } from "../messaging/anonymize";
+import { anonymizeModerationForDeletedAccount } from "../moderation/anonymize";
 import { pointsService } from "../points/service";
 import { profilesRepo } from "../profiles/repo";
 import { accountQrShortId } from "../profiles/service";
@@ -407,6 +408,8 @@ export const accountService = {
       photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId)));
       photoKeys.push(...(await anonymizeMessagingForDeletedAccount(tx, userId)));
       await anonymizeCommunicationForDeletedAccount(tx, userId);
+      // Modération (lot 32) : signalements et sanctions conservés un an (docs/01) ; contestation en cours close.
+      await anonymizeModerationForDeletedAccount(tx, userId);
       await invitationsService.anonymizeForDeletedAccount(tx, userId, oldEmail);
       await tx.delete(structureFollows).where(eq(structureFollows.userId, userId));
       await tx.delete(proFollows).where(eq(proFollows.userId, userId));

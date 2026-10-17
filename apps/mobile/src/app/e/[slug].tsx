@@ -34,6 +34,7 @@ import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { ContactOrganizerButton } from "@/features/boite/MessageButton";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { ApplySheet } from "@/features/provider/ApplySheet";
+import { ReportButton } from "@/features/ReportSheet";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
 import { breakTitle, formatDay, formatDayHour, formatHour } from "@/lib/format";
@@ -288,6 +289,7 @@ export default function EventPage() {
                   Média officiel
                 </Chip>
               ) : null}
+              {status === "in" ? <ReportButton look="link" onPlate type="provider" id={p.id} /> : null}
             </View>
           ))}
         </Plate>
@@ -307,12 +309,13 @@ export default function EventPage() {
         </>
       ) : null}
       {e.description ? <Info label="À propos">{e.description}</Info> : null}
-      {feed.data ? <EventFeed items={feed.data.items} /> : null}
+      {feed.data ? <EventFeed items={feed.data.items} reportable={status === "in"} /> : null}
       {e.instructions ? <Info label="Consignes de l'organisateur">{e.instructions}</Info> : null}
       {/* Contacter l'organisateur (lot 18) : toujours possible pour une personne connectée. */}
       {status === "in" ? <ContactOrganizerButton structureId={e.structure.id} /> : null}
+      {status === "in" ? <ReportButton look="link" type="event" id={e.id} /> : null}
       {reviews.data && (reviews.data.count > 0 || new Date(e.endsAt).getTime() <= Date.now()) ? (
-        <Reviews data={reviews.data} />
+        <Reviews data={reviews.data} reportable={status === "in"} />
       ) : null}
       <ApplySheet
         eventTitle={applying ? e.title : null}
@@ -335,7 +338,7 @@ function posterStatus(e: EventPublic, retained: boolean) {
 }
 
 /** Avis des participants pointés : moyenne à partir du minimum d'avis, réponse publique de l'organisateur. */
-function Reviews({ data }: { data: EventReviews }) {
+function Reviews({ data, reportable }: { data: EventReviews; reportable: boolean }) {
   const { t } = useTheme();
   const c = t.color;
   const average = data.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
@@ -373,6 +376,7 @@ function Reviews({ data }: { data: EventReviews }) {
               Réponse de l'organisateur : {r.reply.text}
             </Text>
           ) : null}
+          {reportable ? <ReportButton look="link" onPlate type="review" id={r.id} /> : null}
         </View>
       ))}
     </Plate>

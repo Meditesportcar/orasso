@@ -5,12 +5,14 @@ import {
   type MessagePage,
   type MessageView,
   messagingLabels,
+  moderationLabels,
   systemMessageText,
   type UploadResult,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PersonAvatar } from "../components/People";
+import { ReportDialog } from "../components/ReportDialog";
 import { apiFetch } from "../lib/api.client";
 import { apiOrThrow, requireMe } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
@@ -249,7 +251,7 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
                 )}
               <div className={`s-bubble${mine ? " s-bubble--mine" : ""}${m.deleted ? " s-bubble--deleted" : ""}`}>
                 {m.deleted ? (
-                  <em>{messagingLabels.deleted}</em>
+                  <em>{m.moderated ? moderationLabels.messageRemoved : messagingLabels.deleted}</em>
                 ) : m.image ? (
                   <a href={m.image.url} target="_blank" rel="noopener" aria-label={messagingLabels.openImage}>
                     <img
@@ -271,6 +273,10 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
                   <button type="button" className="s-linkbutton o-t-caption" onClick={() => void remove(m)}>
                     {messagingLabels.deleteMessage}
                   </button>
+                )}
+                {/* Signaler (lot 32) : les messages des autres ; la copie des messages voisins est faite par l'API. */}
+                {m.sender && m.sender.userId !== me.userId && !m.deleted && (
+                  <ReportDialog look="link" targetType="message" targetId={m.id} />
                 )}
               </span>
               {lastReadMine?.id === m.id && (

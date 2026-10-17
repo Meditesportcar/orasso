@@ -4,6 +4,7 @@ import {
   departments as allDepartments,
   type Category,
   gradeLabels,
+  moderationLabels,
   mutableTypesByFamily,
   type NotificationFamily,
   notificationFamilies,
@@ -313,6 +314,10 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         <p className="s-muted">Double authentification, clés d'accès, appareils connectés.</p>
         <Button href="/app/securite" variant="secondary" icon="eye">
           Ouvrir la sécurité
+        </Button>
+        {/* Lot 32 : sanctions de la modération et contestation. */}
+        <Button href="/app/sanctions" variant="secondary" icon="list" data-testid="my-sanctions-link">
+          {moderationLabels.mySanctions}
         </Button>
       </section>
 

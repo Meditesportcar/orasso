@@ -37,7 +37,9 @@ export type JobName =
   // staff des événements.
   | "messaging.group-send"
   | "messaging.group-sweep"
-  | "messaging.staff-chats-sweep";
+  | "messaging.staff-chats-sweep"
+  // Lot 32 : conservation des signalements et sanctions (un an), quotidienne.
+  | "moderation.purge";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

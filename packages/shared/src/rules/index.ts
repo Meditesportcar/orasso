@@ -6,6 +6,7 @@ export * from "./invitations";
 export * from "./lock";
 export * from "./messaging";
 export * from "./misc";
+export * from "./moderation";
 export * from "./notifications";
 export * from "./points";
 export * from "./pro";

@@ -1,11 +1,13 @@
-// Photos d'un véhicule en plein écran (lot 31) : on glisse d'une photo à l'autre, ✕ ferme.
+// Photos d'un véhicule en plein écran (lot 31) : on glisse d'une photo à l'autre, ✕ ferme. `reportable` (lot 32,
+// véhicule d'un autre) : « Signaler » la photo affichée (la visionneuse se ferme, la feuille s'ouvre à la racine).
 
-import { Button, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
-import type { VehiclePhoto } from "@orasso/shared";
+import { Button, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { moderationLabels, type VehiclePhoto } from "@orasso/shared";
 import { useEffect, useState } from "react";
-import { FlatList, Modal, StyleSheet, useWindowDimensions, View } from "react-native";
+import { FlatList, Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { openReport } from "@/features/ReportSheet";
 import { mediaSource } from "@/lib/media";
 
 const { space3 } = tokens.spacing;
@@ -14,8 +16,10 @@ export function PhotoViewer({
   photos,
   start,
   onClose,
+  reportable = false,
 }: {
   photos: VehiclePhoto[];
+  reportable?: boolean;
   /** Index de la photo à ouvrir ; null = fermé. */
   start: number | null;
   onClose: () => void;
@@ -57,6 +61,24 @@ export function PhotoViewer({
           </Text>
           <Button variant="close" label="Fermer la photo" onPhoto onPress={onClose} />
         </View>
+        {reportable && start !== null && photos[index] ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={moderationLabels.reportTitle("cette photo")}
+            onPress={() => {
+              const id = photos[index]?.id;
+              onClose();
+              if (id) openReport({ type: "photo", id });
+            }}
+            style={[styles.report, { bottom: insets.bottom + space3 }]}
+            testID="photo-report"
+          >
+            <Icon name="flag" size={18} color={t.color.ink} />
+            <Text variant="meta" color={t.color.ink}>
+              {moderationLabels.report}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </Modal>
   );
@@ -64,6 +86,14 @@ export function PhotoViewer({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  report: {
+    position: "absolute",
+    left: space3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing.space2,
+    minHeight: tokens.spacing.touch,
+  },
   bar: {
     position: "absolute",
     left: space3,

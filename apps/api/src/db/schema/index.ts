@@ -10,6 +10,7 @@ export * from "./events";
 export * from "./field";
 export * from "./invitations";
 export * from "./messaging";
+export * from "./moderation";
 export * from "./notifications";
 export * from "./points";
 export * from "./profiles";

@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Alert, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { CrewLogo } from "@/features/crews/CrewLogo";
+import { ReportButton } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
 import { pickAvatar } from "@/lib/avatar";
 import { errorMessage } from "@/lib/http";
@@ -345,6 +346,8 @@ export default function CrewScreen() {
           {crewLabels.leave}
         </Button>
       ) : null}
+      {/* Signaler (lot 32) : un crew dont on n'est pas le chef. */}
+      {!leader && !v.archived ? <ReportButton look="link" type="crew" id={v.id} /> : null}
     </FlowScreen>
   );
 }

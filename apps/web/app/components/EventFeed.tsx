@@ -5,6 +5,7 @@ import { type AnnouncementView, announcementKindLabels, communicationLabels } fr
 import type { ReactNode } from "react";
 
 import { formatDateTime } from "../lib/format";
+import { ReportDialog } from "./ReportDialog";
 import "../styles/communication.css";
 
 export function FeedItem({ item, actions }: { item: AnnouncementView; actions?: ReactNode }) {
@@ -37,8 +38,8 @@ export function FeedItem({ item, actions }: { item: AnnouncementView; actions?: 
   );
 }
 
-/** Section « Fil de l'événement » de la page publique (`#fil`). */
-export function EventFeed({ items }: { items: AnnouncementView[] }) {
+/** Section « Fil de l'événement » de la page publique (`#fil`). `connected` : « Signaler » sous chaque annonce (lot 32). */
+export function EventFeed({ items, connected = false }: { items: AnnouncementView[]; connected?: boolean }) {
   return (
     <section className="s-section" id="fil" aria-labelledby="fil-titre" data-testid="event-feed">
       <h2 className="s-h2" id="fil-titre">
@@ -49,7 +50,15 @@ export function EventFeed({ items }: { items: AnnouncementView[] }) {
       ) : (
         <ul className="comm__feed">
           {items.map((item) => (
-            <FeedItem key={item.id} item={item} />
+            <FeedItem
+              key={item.id}
+              item={item}
+              actions={
+                connected && (item.kind === "announcement" || item.kind === "instructions") ? (
+                  <ReportDialog look="link" targetType="announcement" targetId={item.id} />
+                ) : undefined
+              }
+            />
           ))}
         </ul>
       )}

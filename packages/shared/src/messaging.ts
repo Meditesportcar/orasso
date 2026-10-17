@@ -42,4 +42,6 @@ export const acceptedUploadPurposes = [
   "message",
   "announcement",
   "crew_logo",
+  // Lot 32 : capture jointe à un signalement (privée, rattachée par `POST /reports`, effacée avec le signalement).
+  "report",
 ] as const satisfies readonly UploadPurpose[];

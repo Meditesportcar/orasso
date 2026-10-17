@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
+import { ReportButton } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
 import { errorMessage, request } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
@@ -263,6 +264,8 @@ export default function ProPage() {
           ))}
         </>
       ) : null}
+      {/* Signaler (lot 32) : la fiche d'un autre, connecté. */}
+      {status === "in" && !p.isOwner ? <ReportButton look="link" type="pro" id={p.id} /> : null}
     </FlowScreen>
   );
 }

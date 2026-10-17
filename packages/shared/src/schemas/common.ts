@@ -31,6 +31,11 @@ export const errorCodes = [
   "conversation_closed",
   // Lot 20 : communication de l'organisateur.
   "follower_quota_exceeded",
+  // Lot 32 : modération.
+  "suspended",
+  "banned",
+  "already_reported",
+  "already_handled",
   // Lot 25 : événement privé sur invitation.
   "invite_only",
   "invitation_required",

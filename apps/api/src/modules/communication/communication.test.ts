@@ -16,6 +16,7 @@ import {
   resetDb,
   seedReference,
   signUp,
+  suspendByModeration,
   type TestUser,
   useClock,
 } from "../../../test/helpers";
@@ -395,10 +396,8 @@ describe("messages groupés", () => {
       TestUser,
     ];
     await accountService.anonymize(deleted.id, null, { confirm: true });
-    await db
-      .update(profiles)
-      .set({ suspendedUntil: new Date(clock.now.getTime() + 7 * DAY) })
-      .where(eq(profiles.userId, suspended.id));
+    // Lot 32 : suspension par la vraie route de la modération.
+    await suspendByModeration(suspended, "suspension_7d");
     await db.insert(structureBans).values({ structureId: s.id, userId: banned.id });
     await db
       .update(profiles)
