@@ -66,6 +66,11 @@ export const iconShapes = {
   eyeOff: [p("M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"), c(12, 12, 3), p("M4 4l16 16")],
   // Signaler (lot 32, ajout daté dans docs/design-system/README.md) : drapeau, même grille, même trait.
   flag: [p("M5 21V4"), p("M5 4h11l-2 4 2 4H5")],
+  // Accueil (lot 30, ajout daté dans docs/design-system/README.md) : station-service, lavage (goutte), monter, descendre.
+  fuel: [r(4, 3, 10, 18, 2), p("M7 8h4M14 9h2.5a1.5 1.5 0 011.5 1.5V16a1.5 1.5 0 003 0V8l-3-3"), p("M3 21h12")],
+  wash: [p("M12 3s6 6.4 6 11a6 6 0 01-12 0c0-4.6 6-11 6-11z"), p("M9.5 15a2.5 2.5 0 002.5 2.5")],
+  up: [p("M6 15l6-6 6 6")],
+  down: [p("M6 9l6 6 6-6")],
   // Météo (lot 28, ajout daté dans docs/design-system/README.md) : même grille, même trait, aucune couleur propre.
   weatherClear: [
     c(12, 12, 4),
