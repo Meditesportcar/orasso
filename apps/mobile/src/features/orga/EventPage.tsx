@@ -1,7 +1,8 @@
 // Casquette Organisateur, page d'un événement (lot 22, ARCHITECTURE-SUITE § 7.2) : compteurs de candidatures en direct
 // (canal `triage`), bandeau et bascule Maintenu / Incertain avec confirmation, annulation (confirmation forte), consignes
-// (écrire, envoyer), annonces du fil (avec photo, « prévenir »), invitations, bilan et remerciement (lot 27), et renvoi
-// vers le site pour créer et modifier. Rien ne se crée ni ne se modifie ici : docs/02 garde l'assistant sur le site.
+// (écrire, envoyer), annonces du fil (avec photo, « prévenir »), invitations, bilan et remerciement (lot 27).
+// Lot 35b (D20, tout se gère depuis l'appli) : « Modifier » ouvre l'assistant de l'appli, « Publier », « Dupliquer » et
+// « Créer la série » (récurrence) passent par une confirmation, comme la page de l'événement du site.
 import {
   Button,
   Chip,
@@ -17,6 +18,8 @@ import {
 import {
   afterEventLabels,
   communicationLabels,
+  describeRecurrence,
+  eventEditorLabels as EL,
   type EventCounters,
   eventOutlookLabels,
   eventStatusLabels,
@@ -26,16 +29,14 @@ import {
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
-import { siteUrl } from "@/api";
 import { FeedEntry } from "@/features/communication/EventFeed";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
-import { cancelConfirmed, orgaSitePath, otherOutlook, remainingText, structureSlugOf } from "@/lib/orga";
+import { cancelConfirmed, otherOutlook, remainingText } from "@/lib/orga";
 import { useChannel } from "@/lib/realtime";
-import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { Muted } from "@/ui/Muted";
@@ -44,26 +45,40 @@ import { SectionTitle, TabScreen } from "@/ui/Screens";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { NewAnnouncementSheet } from "./NewAnnouncementSheet";
 import { OrgaFailure, useOrga } from "./OrgaGate";
+import { RecurrenceSheet } from "./RecurrenceSheet";
 
 const { space1, space2, space3 } = tokens.spacing;
 
-type Sheet = "outlook" | "cancel" | "announcement" | "removeEntry" | null;
+type Sheet = "outlook" | "cancel" | "announcement" | "removeEntry" | "publish" | "duplicate" | "recurrence" | null;
 
-export function EventPage({ eventId }: { eventId: string }) {
+export function EventPage({
+  eventId,
+  done = null,
+  warning = null,
+}: {
+  eventId: string;
+  /** Retour de l'assistant (lot 35b) : `cree` ou `modifie`. */
+  done?: string | null;
+  /** Avertissement de l'assistant (affiche ou zone non enregistrée). */
+  warning?: string | null;
+}) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
   const focused = useIsFocused();
   const { structureId, structureName } = useOrga();
-  const { me } = useSession();
   const at = useNow(60_000);
   const event = useApi(() => api.orgEvent(eventId), [eventId]);
   const feed = useApi(() => api.orgAnnouncements(eventId), [eventId]);
+  const structure = useApi(() => api.orgStructure(structureId), [structureId]);
   const [counters, setCounters] = useState<EventCounters | null>(null);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(() =>
+    done === "cree" ? EL.created : done === "modifie" ? EL.saved : null,
+  );
+  const [failure, setFailure] = useState<unknown>(null);
   const [typed, setTyped] = useState("");
   const [motif, setMotif] = useState("");
   const [instructions, setInstructions] = useState<string | null>(null);
@@ -80,8 +95,7 @@ export function EventPage({ eventId }: { eventId: string }) {
 
   // Un événement d'une autre structure (même compte, autre casquette) ne s'ouvre pas sous celle-ci.
   const foreign = e ? e.structure.id !== structureId : false;
-  const slug = structureSlugOf(me?.memberships, structureId);
-  const openSite = (tail: string) => slug && void Linking.openURL(siteUrl(orgaSitePath(slug, tail)));
+  const verified = structure.data?.verified ?? true;
   const reloadAll = async () => {
     await Promise.all([event.reload(), feed.reload()]);
   };
@@ -96,6 +110,7 @@ export function EventPage({ eventId }: { eventId: string }) {
   async function run(action: () => Promise<unknown>, done?: string) {
     setBusy(true);
     setError(null);
+    setFailure(null);
     try {
       await action();
       await reloadAll();
@@ -103,6 +118,24 @@ export function EventPage({ eventId }: { eventId: string }) {
       closeSheet();
     } catch (err) {
       setError(errorMessage(err));
+      setFailure(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Dupliquer : la copie (brouillon) s'ouvre dans l'assistant, comme sur le site. */
+  async function duplicate() {
+    setBusy(true);
+    setError(null);
+    setFailure(null);
+    try {
+      const copy = await api.duplicateEvent(eventId);
+      closeSheet();
+      router.push({ pathname: "/evenement/[id]/modifier", params: { id: copy.id, copie: "1" } });
+    } catch (err) {
+      setError(errorMessage(err));
+      setFailure(err);
     } finally {
       setBusy(false);
     }
@@ -191,6 +224,43 @@ export function EventPage({ eventId }: { eventId: string }) {
             onConfirm={() => removing && void run(() => api.deleteAnnouncement(eventId, removing))}
             onClose={closeSheet}
           />
+          <ConfirmSheet
+            visible={sheet === "publish"}
+            title={EL.publishTitle}
+            body={EL.publishBody}
+            confirmLabel={EL.publish}
+            confirmIcon="check"
+            busy={busy}
+            error={error}
+            onConfirm={() => void run(() => api.publishEvent(eventId), EL.published)}
+            onClose={closeSheet}
+          />
+          <ConfirmSheet
+            visible={sheet === "duplicate"}
+            title={EL.duplicateTitle}
+            body={EL.duplicateBody}
+            confirmLabel={EL.duplicateConfirm}
+            confirmIcon="add"
+            busy={busy}
+            error={error}
+            onConfirm={() => void duplicate()}
+            onClose={closeSheet}
+          />
+          {e ? (
+            <RecurrenceSheet
+              visible={sheet === "recurrence"}
+              event={e}
+              busy={busy}
+              error={error}
+              onConfirm={(rule) =>
+                void run(async () => {
+                  const series = await api.createRecurrence(eventId, rule);
+                  setNotice(EL.recurrenceDone(series.length));
+                })
+              }
+              onClose={closeSheet}
+            />
+          ) : null}
           <NewAnnouncementSheet
             eventId={eventId}
             visible={sheet === "announcement"}
@@ -210,6 +280,8 @@ export function EventPage({ eventId }: { eventId: string }) {
       <OrgaFailure error={event.error} />
       {foreign ? <Notice tone="error">{orgaLabels.foreignEvent}</Notice> : null}
       {notice ? <Notice>{notice}</Notice> : null}
+      {warning ? <Notice tone="error">{warning}</Notice> : null}
+      {sheet === null && failure ? <OrgaFailure error={failure} /> : null}
 
       {e && !foreign ? (
         <>
@@ -232,7 +304,31 @@ export function EventPage({ eventId }: { eventId: string }) {
             {e.status === "cancelled" ? <StatusBadge status="cancelled" onPlate /> : null}
           </Plate>
 
-          {e.status === "draft" ? <Notice>{orgaLabels.draftNotice}</Notice> : null}
+          {e.status === "draft" ? (
+            <>
+              <Notice>{EL.draftNotice}</Notice>
+              {!verified ? (
+                <Plate kind="note" style={styles.block} testID="orga-publish-blocked">
+                  <Text variant="body" color={c.plateInk}>
+                    {EL.publishBlocked}
+                  </Text>
+                  <Button variant="plate" icon="check" onPress={() => router.push("/ma-structure")} fullWidth>
+                    {EL.publishBlockedLink}
+                  </Button>
+                </Plate>
+              ) : null}
+              <Button
+                variant="primary"
+                icon="check"
+                disabled={!verified}
+                onPress={() => setSheet("publish")}
+                fullWidth
+                testID="orga-publish"
+              >
+                {EL.publish}
+              </Button>
+            </>
+          ) : null}
 
           {e.status === "published" && outlook === "uncertain" ? (
             <Plate kind="note" style={styles.block} testID="orga-outlook-banner">
@@ -371,6 +467,40 @@ export function EventPage({ eventId }: { eventId: string }) {
             </>
           ) : null}
 
+          {e.status !== "cancelled" && !e.parentEventId && !e.recurrenceRule ? (
+            <>
+              <SectionTitle>{EL.recurrenceTitle}</SectionTitle>
+              <Plate style={styles.block} testID="orga-recurrence">
+                <Text variant="body" color={c.plateMuted}>
+                  {EL.recurrenceIntro}
+                </Text>
+                <Button variant="plate" icon="calendar" onPress={() => setSheet("recurrence")} fullWidth>
+                  {EL.recurrenceCreate}
+                </Button>
+              </Plate>
+            </>
+          ) : null}
+          {e.recurrenceRule ? (
+            <>
+              <SectionTitle>{EL.recurrenceTitle}</SectionTitle>
+              <Plate style={styles.block}>
+                <Text variant="body" color={c.plateInk}>
+                  {`${describeRecurrence(e.recurrenceRule)}.`}
+                </Text>
+              </Plate>
+            </>
+          ) : null}
+          {e.vendorTypes.length > 0 ? (
+            <>
+              <SectionTitle>{EL.vendorsExpected}</SectionTitle>
+              <Plate style={styles.block} testID="orga-vendor-types">
+                <Text variant="body" color={c.plateInk}>
+                  {e.vendorTypes.join(" · ")}
+                </Text>
+              </Plate>
+            </>
+          ) : null}
+
           <View style={styles.buttons}>
             {/* Tri par glissement (lot 23), seulement s'il y a des candidatures à trier. */}
             {e.status === "published" && counters && counters.pending > 0 ? (
@@ -405,16 +535,31 @@ export function EventPage({ eventId }: { eventId: string }) {
             >
               {afterEventLabels.reportTitle} · {afterEventLabels.thanksTitle}
             </Button>
-            <Button
-              variant="plate"
-              icon="export"
-              disabled={!slug}
-              onPress={() => openSite(`/e/${eventId}/modifier`)}
-              fullWidth
-              testID="orga-edit-on-site"
-            >
-              {orgaLabels.eventsEditOnSite}
+            {e.status !== "cancelled" ? (
+              <Button
+                variant="plate"
+                icon="incident"
+                onPress={() => router.push(`/evenement/${eventId}/modifier`)}
+                fullWidth
+                testID="orga-edit"
+              >
+                {EL.edit}
+              </Button>
+            ) : null}
+            <Button variant="plate" icon="add" onPress={() => setSheet("duplicate")} fullWidth testID="orga-duplicate">
+              {EL.duplicate}
             </Button>
+            {e.status === "published" ? (
+              <Button
+                variant="plate"
+                icon="share"
+                onPress={() => router.push(`/e/${e.slug}`)}
+                fullWidth
+                testID="orga-public-page"
+              >
+                {EL.publicPage}
+              </Button>
+            ) : null}
             {upcoming ? (
               <Button
                 variant="plate"

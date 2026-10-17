@@ -1,20 +1,18 @@
 // Casquette Organisateur, bilan d'un événement (lot 27, docs/02 : page événement côté organisateur > bilan) : les
 // compteurs du bilan automatique (retenus, présents, absents, taux) et « Remercier les présents » (un message dans la
 // Boîte de chaque présent, avec son lien d'avis, une seule fois). Lot 35a (D20) : l'export des participants (motif
-// obligatoire, tracé, CSV partagé) et l'accès aux notes internes. L'édition suivante reste sur le site (lot 35b).
+// obligatoire, tracé, CSV partagé) et l'accès aux notes internes. Lot 35b : « Édition suivante » duplique l'événement
+// (confirmation) et ouvre la copie dans l'assistant de l'appli, comme le bilan du site.
 
 import { Button, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventReportView, formatDayDate, afterEventLabels as L, orgaManageLabels as M } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Linking, StyleSheet, View } from "react-native";
-import { siteUrl } from "@/api";
+import { StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
 import { formatDayHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
-import { orgaSitePath, structureSlugOf } from "@/lib/orga";
-import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -32,10 +30,9 @@ export function Bilan({ eventId }: { eventId: string }) {
   const c = t.color;
   const router = useRouter();
   const { structureId } = useOrga();
-  const { me } = useSession();
   const event = useApi(() => api.orgEvent(eventId), [eventId]);
   const view = useApi<EventReportView>(() => api.eventReport(eventId), [eventId]);
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<"thanks" | "next" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -44,7 +41,6 @@ export function Bilan({ eventId }: { eventId: string }) {
   const e = event.data;
   // Un événement d'une autre structure (même compte, autre casquette) ne s'ouvre pas sous celle-ci.
   const foreign = e ? e.structure.id !== structureId : false;
-  const slug = structureSlugOf(me?.memberships, structureId);
   const close = () => (router.canGoBack() ? router.back() : router.replace(`/evenement/${eventId}`));
   const r = view.data?.report ?? null;
   const d = r?.data;
@@ -56,11 +52,27 @@ export function Bilan({ eventId }: { eventId: string }) {
     setError(null);
     try {
       await api.sendThanks(eventId);
-      setConfirming(false);
+      setConfirming(null);
       setNotice(L.thanksDone);
       await view.reload();
     } catch (err) {
       setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Édition suivante : la copie (brouillon) s'ouvre dans l'assistant pour en régler les dates. */
+  async function nextEdition() {
+    setBusy(true);
+    setError(null);
+    try {
+      const copy = await api.duplicateEvent(eventId);
+      setConfirming(null);
+      router.push({ pathname: "/evenement/[id]/modifier", params: { id: copy.id, copie: "1" } });
+    } catch (err) {
+      setError(errorMessage(err));
+      setFailure(err);
     } finally {
       setBusy(false);
     }
@@ -75,20 +87,36 @@ export function Bilan({ eventId }: { eventId: string }) {
         await Promise.all([event.reload(), view.reload()]);
       }}
       overlays={
-        <ConfirmSheet
-          visible={confirming}
-          title={L.thanksTitle}
-          body={thanks ? L.thanksConfirm(thanks.recipients) : ""}
-          confirmLabel={L.thanksSend}
-          confirmIcon="share"
-          busy={busy}
-          error={error}
-          onConfirm={() => void send()}
-          onClose={() => {
-            setConfirming(false);
-            setError(null);
-          }}
-        />
+        <>
+          <ConfirmSheet
+            visible={confirming === "next"}
+            title={L.nextTitle}
+            body={L.nextIntro}
+            confirmLabel={L.nextDuplicate}
+            confirmIcon="add"
+            busy={busy}
+            error={error}
+            onConfirm={() => void nextEdition()}
+            onClose={() => {
+              setConfirming(null);
+              setError(null);
+            }}
+          />
+          <ConfirmSheet
+            visible={confirming === "thanks"}
+            title={L.thanksTitle}
+            body={thanks ? L.thanksConfirm(thanks.recipients) : ""}
+            confirmLabel={L.thanksSend}
+            confirmIcon="share"
+            busy={busy}
+            error={error}
+            onConfirm={() => void send()}
+            onClose={() => {
+              setConfirming(null);
+              setError(null);
+            }}
+          />
+        </>
       }
     >
       <OrgaFailure error={failure ?? event.error ?? view.error} />
@@ -175,7 +203,7 @@ export function Bilan({ eventId }: { eventId: string }) {
               variant="primary"
               icon="share"
               disabled={!canThank}
-              onPress={() => setConfirming(true)}
+              onPress={() => setConfirming("thanks")}
               fullWidth
               testID="orga-thanks-send"
             >
@@ -196,18 +224,26 @@ export function Bilan({ eventId }: { eventId: string }) {
             >
               {M.notesBilanLink}
             </Button>
+          </View>
+
+          <SectionTitle>{L.nextTitle}</SectionTitle>
+          <Plate style={styles.block} testID="orga-next-edition">
+            <Text variant="body" color={c.plateInk}>
+              {L.nextIntro}
+            </Text>
             <Button
               variant="plate"
-              icon="export"
-              disabled={!slug}
-              onPress={() => slug && void Linking.openURL(siteUrl(orgaSitePath(slug, `/e/${eventId}/apres`)))}
+              icon="add"
+              onPress={() => setConfirming("next")}
               fullWidth
-              testID="orga-report-on-site"
+              testID="orga-next-duplicate"
             >
-              {L.nextTitle}
+              {L.nextDuplicate}
             </Button>
-            <Muted variant="caption">{M.nextOnSite}</Muted>
-          </View>
+            <Text variant="caption" color={c.plateMuted}>
+              {L.nextInviteHint}
+            </Text>
+          </Plate>
         </>
       ) : null}
     </FlowScreen>
