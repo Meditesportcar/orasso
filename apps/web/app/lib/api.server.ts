@@ -116,9 +116,16 @@ async function withAssistedMembership(request: Request, me: Me): Promise<Me> {
   if (me.profile.platformRole !== "super_admin") return me;
   const slug = /^\/orga\/([^/]+)/.exec(new URL(request.url).pathname)?.[1];
   if (!slug || me.memberships.some((m) => m.structureSlug === slug && m.status === "active")) return me;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(slug);
+  } catch {
+    // Adresse mal encodée (« %E0 ») : page introuvable, pas une erreur du serveur.
+    throw new Response("Structure introuvable.", { status: 404 });
+  }
   const res = await api<{ id: string; slug: string; name: string }>(
     request,
-    `/structures/by-slug/${encodeURIComponent(decodeURIComponent(slug))}`,
+    `/structures/by-slug/${encodeURIComponent(decoded)}`,
   );
   if (!res.ok) return me;
   return {

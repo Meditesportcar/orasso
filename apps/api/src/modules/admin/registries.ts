@@ -9,7 +9,7 @@ import { db } from "../../db/client";
 import { assistanceRequests, events, profiles, proProfiles, structureMembers, structures } from "../../db/schema";
 import { requirePlatformRole } from "../../lib/access";
 import { now } from "../../lib/deps";
-import { notFound } from "../../lib/errors";
+import { AppError, notFound } from "../../lib/errors";
 import { escapeLike } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
@@ -160,6 +160,13 @@ export const registriesService = {
   /** `POST /admin/pros/:id/verify {verified, note}` : badge « pro vérifié » posé ou retiré à la main, tracé. */
   async verifyPro(v: Viewer, id: string, verified: boolean, note: string) {
     await requirePlatformRole(v, "super_admin");
+    const owned = await db.query.proProfiles.findFirst({
+      where: eq(proProfiles.id, id),
+      columns: { ownerUserId: true },
+    });
+    if (owned?.ownerUserId === v.user.id) {
+      throw new AppError(409, "self_action", "Action impossible sur ta propre fiche pro.");
+    }
     return withTx(async (tx) => {
       const [p] = await tx
         .update(proProfiles)

@@ -85,6 +85,9 @@ if (corsOrigins.length) {
 }
 
 app.onError(errorResponse);
+// Lot 33 : méthode, chemin et adresse de la requête lisibles par les gardes (mode assistance, journal, inscriptions),
+// monté avant Better Auth pour que ses crochets le voient aussi.
+app.use("*", requestContextMiddleware);
 app.notFound((c) => errorResponse(notFound("Route inconnue"), c));
 
 app.get("/health", async (c) => {
@@ -147,8 +150,6 @@ app.use(
   }),
 );
 app.use("*", loadSession);
-// Lot 33 : méthode, chemin et adresse de la requête lisibles par les gardes (mode assistance, journal).
-app.use("*", requestContextMiddleware);
 
 app.route("/", accessRoutes);
 app.route("/", profilesRoutes);

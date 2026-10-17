@@ -10,6 +10,7 @@ import {
   adminSettingGroups,
   adminSettingLabels,
   adminTexts,
+  eventFormatLabels,
   type Grade,
   gradeLabels,
   grades,
@@ -43,6 +44,7 @@ const codeLabel: Record<ListKey, Record<string, string>> = {
   "lists.refusal_reasons": refusalReasonLabels,
   "lists.vendor_types": vendorTypeLabels,
   "lists.pro_activities": proActivityLabels,
+  "lists.event_formats": eventFormatLabels,
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -151,7 +153,7 @@ export default function AdminSettings({ loaderData, actionData }: Route.Componen
                 icon={on ? "close" : "check"}
                 loading={busy}
               >
-                {on ? "Désactiver" : "Activer"}
+                {on ? adminTexts.disable : adminTexts.enable}
               </Button>
               {error(key)}
             </Form>
@@ -187,7 +189,7 @@ export default function AdminSettings({ loaderData, actionData }: Route.Componen
                   disabled={locked && on}
                   loading={busy}
                 >
-                  {on ? "Désactiver" : "Activer"}
+                  {on ? adminTexts.disable : adminTexts.enable}
                 </Button>
                 {error(key)}
               </Form>

@@ -390,7 +390,18 @@ describe("newsletter", () => {
       insert into profiles (user_id, pseudo, newsletter_opt_in, account_qr_secret, account_qr_short_id, invite_token)
       select id, id, true, decode(md5(id), 'hex'), decode(substr(md5('s' || id), 1, 16), 'hex'), md5('i' || id) from u`);
     const draft = await req(admin, "POST", "/admin/newsletters", { subject: "Grand envoi", bodyMd: "Texte" });
-    await req(admin, "POST", `/admin/newsletters/${draft.json.id}/schedule`, { at: clock.now.toISOString() });
+    const aud = await req(admin, "GET", "/admin/newsletters/audience");
+    // Envoi immédiat confirmé avec le nombre de destinataires ; un nombre périmé est refusé.
+    expect(
+      (await req(admin, "POST", `/admin/newsletters/${draft.json.id}/send-now`, { confirmRecipients: 3 })).status,
+    ).toBe(409);
+    expect(
+      (
+        await req(admin, "POST", `/admin/newsletters/${draft.json.id}/send-now`, {
+          confirmRecipients: aud.json.recipients,
+        })
+      ).status,
+    ).toBe(200);
     expect(await newsletterService.runBatch(draft.json.id)).toBe(NEWSLETTER_BATCH_SIZE);
     // Budget du jour atteint au 3e e-mail du lot suivant : arrêt, réservations rendues.
     const real = mailModule.mail.send.bind(mailModule.mail);
@@ -406,6 +417,12 @@ describe("newsletter", () => {
       .from(newsletterDeliveries)
       .where(and(eq(newsletterDeliveries.newsletterId, draft.json.id), sql`sent_at is null`));
     expect(pendingRows?.n).toBe(0);
+    // Budget pris par d'autres e-mails : reprise après minuit, aucun passage à vide d'ici là.
+    expect(
+      (await db.query.newsletters.findFirst({ where: eq(newsletters.id, draft.json.id) }))?.resumeAfter,
+    ).not.toBeNull();
+    expect(await newsletterService.runDue()).toBe(0);
+    clock.advance(DAY);
     expect(await newsletterService.runBatch(draft.json.id)).toBe(3);
     expect(await newsletterService.runBatch(draft.json.id)).toBe(0);
     const [sent] = await db
@@ -436,9 +453,12 @@ describe("newsletter", () => {
     expect((await req(null, "GET", `/desinscription/${altered}`)).json.valid).toBe(false);
     // L'e-mail porte le lien et l'en-tête de désinscription.
     const { newsletterMail } = await import("./newsletter");
-    const content = newsletterMail("Objet", "Texte", "https://orasso.fr/desinscription/abc");
+    const content = newsletterMail("Objet", "Texte", {
+      page: "https://orasso.fr/desinscription/abc",
+      oneClick: "https://orasso.fr/api/desinscription/abc",
+    });
     expect(content.html).toContain("https://orasso.fr/desinscription/abc");
-    expect(content.headers?.["List-Unsubscribe"]).toBe("<https://orasso.fr/desinscription/abc>");
+    expect(content.headers?.["List-Unsubscribe"]).toBe("<https://orasso.fr/api/desinscription/abc>");
   });
 
   it("budget : le gabarit de la newsletter n'entame jamais la réserve de sécurité", () => {
@@ -469,6 +489,7 @@ describe("démarrage en production", () => {
     const missing = boot({});
     expect(missing.status).toBe(1);
     expect(missing.stderr).toContain("UNSUBSCRIBE_SECRET");
+    expect(boot({ UNSUBSCRIBE_SECRET: "change-me-secret-de-desinscription-32-caracteres" }).status).toBe(1);
     expect(boot({ UNSUBSCRIBE_SECRET: "un-secret-de-test-assez-long-0123456789" }).status).toBe(0);
   });
 });

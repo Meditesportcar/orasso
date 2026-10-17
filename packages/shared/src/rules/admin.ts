@@ -1,7 +1,7 @@
 // Administration (lot 33, ARCHITECTURE-SUITE § 16) : réglages de la plateforme (interrupteurs, barème des points et
 // seuils des grades, listes administrables), mode assistance (S41), newsletter. Fonctions pures, communes à l'API, au
 // site et à l'appli. Les valeurs par défaut sont les constantes déjà en vigueur : un réglage jamais touché ne change rien.
-import { type RefusalReason, refusalReasons } from "../enums";
+import { type EventFormat, eventFormats, type RefusalReason, refusalReasons } from "../enums";
 import { type Grade, grades } from "../grades";
 import { type VendorTypeCode, vendorTypeCodes } from "../provider";
 import { GRADE_THRESHOLDS } from "./misc";
@@ -22,6 +22,7 @@ export const adminSettingKeys = [
   "lists.refusal_reasons",
   "lists.vendor_types",
   "lists.pro_activities",
+  "lists.event_formats",
 ] as const;
 export type AdminSettingKey = (typeof adminSettingKeys)[number];
 
@@ -37,6 +38,7 @@ export type AdminSettingValues = {
   "lists.refusal_reasons": RefusalReason[];
   "lists.vendor_types": VendorTypeCode[];
   "lists.pro_activities": ProActivity[];
+  "lists.event_formats": EventFormat[];
 };
 
 export const adminSettingDefaults: AdminSettingValues = {
@@ -51,13 +53,14 @@ export const adminSettingDefaults: AdminSettingValues = {
   "lists.refusal_reasons": [...refusalReasons],
   "lists.vendor_types": [...vendorTypeCodes],
   "lists.pro_activities": [...proActivities],
+  "lists.event_formats": [...eventFormats],
 };
 
 /** Groupes de la page des réglages (ordre d'affichage). */
 export const adminSettingGroups: Record<"switches" | "points" | "lists", readonly AdminSettingKey[]> = {
   switches: ["signup.enabled", "sponsored.enabled", "providers.enabled"],
   points: ["points.participation", "points.staff", "points.referral", "points.malus", "grades.thresholds"],
-  lists: ["lists.refusal_reasons", "lists.vendor_types", "lists.pro_activities"],
+  lists: ["lists.refusal_reasons", "lists.vendor_types", "lists.pro_activities", "lists.event_formats"],
 };
 
 /** Barème en vigueur, lu par le règlement des points, le parrainage et le calcul des grades. */
@@ -105,6 +108,7 @@ export const adminListCodes = {
   "lists.refusal_reasons": refusalReasons,
   "lists.vendor_types": vendorTypeCodes,
   "lists.pro_activities": proActivities,
+  "lists.event_formats": eventFormats,
 } as const;
 
 /** Listes lues par le site et l'appli (`GET /settings/public`) ; repli sur les constantes si la lecture échoue. */
@@ -112,6 +116,7 @@ export type PublicSettings = {
   refusalReasons: RefusalReason[];
   vendorTypes: VendorTypeCode[];
   proActivities: ProActivity[];
+  eventFormats: EventFormat[];
   signupEnabled: boolean;
   providersEnabled: boolean;
   /** Malus en vigueur (négatif), pour l'avertissement du désistement après le verrouillage. */
@@ -122,6 +127,7 @@ export const defaultPublicSettings: PublicSettings = {
   refusalReasons: adminSettingDefaults["lists.refusal_reasons"],
   vendorTypes: adminSettingDefaults["lists.vendor_types"],
   proActivities: adminSettingDefaults["lists.pro_activities"],
+  eventFormats: adminSettingDefaults["lists.event_formats"],
   signupEnabled: true,
   providersEnabled: true,
   malusPoints: POINTS.malus,
@@ -153,3 +159,24 @@ export function assistanceActive(r: { status: string; createdAt: Date }, now: Da
 export const NEWSLETTER_BATCH_SIZE = 200;
 /** Un destinataire réservé mais jamais envoyé (arrêt brutal) est repris après ce délai. */
 export const NEWSLETTER_RETRY_MS = 10 * 60_000;
+/** Essais d'envoi par destinataire avant d'abandonner (échecs du service d'e-mail). */
+export const NEWSLETTER_MAX_ATTEMPTS = 3;
+/** Échecs de suite qui mettent l'envoi en pause (« Envoi interrompu : erreurs du service d'e-mail »). */
+export const NEWSLETTER_FAILURE_PAUSE = 20;
+/** Part du budget non réservé du jour que la newsletter peut prendre (le reste va aux e-mails des événements). */
+export const NEWSLETTER_BUDGET_SHARE = 0.5;
+
+/**
+ * E-mails de newsletter encore permis aujourd'hui : au plus `NEWSLETTER_BUDGET_SHARE` du budget non réservé, et jamais
+ * plus que ce qui reste de ce budget une fois comptés tous les envois du jour (les e-mails des événements passent avant).
+ */
+export function newsletterAllowance(o: {
+  budget: number;
+  reserve: number;
+  sentToday: number;
+  newsletterToday: number;
+}): number {
+  const open = Math.max(0, o.budget - o.reserve);
+  const cap = Math.floor(open * NEWSLETTER_BUDGET_SHARE);
+  return Math.max(0, Math.min(cap - o.newsletterToday, open - o.sentToday));
+}

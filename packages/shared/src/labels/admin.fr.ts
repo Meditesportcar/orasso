@@ -6,6 +6,11 @@ import type { AdminOverview, AssistanceCloseReason, AssistanceStatus, Newsletter
 /** Barre latérale de `/admin` (une entrée par page ; le modérateur ne voit que les signalements). */
 export const adminNavLabels = {
   overview: "Accueil",
+  reports: "Signalements",
+  sanctions: "Sanctions",
+  certifications: "Certifications",
+  transfers: "Transferts de plaque",
+  badges: "Badges des structures",
   verification: "Structures à vérifier",
   users: "Utilisateurs",
   structures: "Structures",
@@ -46,6 +51,7 @@ export const adminSettingLabels: Record<AdminSettingKey, string> = {
   "lists.refusal_reasons": "Motifs de refus proposés au tri",
   "lists.vendor_types": "Types de prestataires proposés",
   "lists.pro_activities": "Activités des pros proposées",
+  "lists.event_formats": "Formats proposés à la création d'un événement",
 };
 
 export const adminTexts = {
@@ -54,12 +60,14 @@ export const adminTexts = {
   ticketingTitle: "Billetterie",
   pointsTitle: "Points et grades",
   pointsWarning:
-    "Modifie les futurs calculs : les points déjà attribués ne changent pas. Le prochain règlement (J+2) applique le nouveau barème.",
+    "Modifie les futurs calculs : les points déjà attribués ne changent pas. Le prochain règlement (J+2) applique le nouveau barème ; un changement de seuils recalcule le grade de tous les comptes (en arrière-plan, sans notification).",
   listsTitle: "Listes",
   listsHint:
     "Coche ce qui est proposé et choisis l'ordre. Les éléments décochés restent valables pour ce qui a déjà été enregistré.",
   templatesTitle: "Modèles de messages Orasso",
   on: "activé",
+  enable: "Activer",
+  disable: "Désactiver",
   off: "désactivé",
   saved: "Réglage enregistré.",
   reasonLabel: "Motif (obligatoire, gardé au journal)",
@@ -103,6 +111,7 @@ export const newsletterStatusLabels: Record<NewsletterStatus, string> = {
   draft: "Brouillon",
   scheduled: "Planifiée",
   sending: "Envoi en cours",
+  paused: "En pause",
   sent: "Envoyée",
 };
 
@@ -118,6 +127,18 @@ export const newsletterTexts = {
   testPrefix: "[Test] ",
   recipients: (n: number) => `${n} destinataire${n > 1 ? "s" : ""} possible${n > 1 ? "s" : ""}`,
   markdownHelp: "Markdown : # titre, **gras**, *italique*, - liste, [lien](https://…)",
+  scheduleAt: "Date et heure d'envoi (à venir)",
+  sendNow: "Envoyer maintenant",
+  confirmSend: (n: number) => `Envoyer à ${n} personne${n > 1 ? "s" : ""}`,
+  confirmHint: "L'envoi part par lots dès la prochaine minute. Vérifie le test avant de confirmer.",
+  pause: "Mettre en pause",
+  resume: "Reprendre l'envoi",
+  pausedErrors: "Envoi interrompu : erreurs du service d'e-mail. Vérifie Brevo, puis reprends l'envoi.",
+  pausedAdmin: "Envoi en pause : aucun lot ne part tant qu'il n'est pas repris.",
+  resumeAfter:
+    "Plafond du jour atteint (la newsletter laisse passer les e-mails des événements) : reprise après minuit, heure de Paris.",
+  progress: (delivered: number, failed: number) =>
+    `${delivered} e-mail${delivered > 1 ? "s" : ""} parti${delivered > 1 ? "s" : ""}${failed ? ` · ${failed} en échec (réessayés)` : ""}.`,
 } as const;
 
 export const unsubscribeTexts = {

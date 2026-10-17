@@ -52,7 +52,11 @@ export const providersRoutes = new Hono<AppEnv>()
     await assertProvidersEnabled();
     return c.json(await providersService.upsert(v, await body(c, providerProfileSchema)));
   })
-  .post("/me/provider-profile/from-pro", async (c) => c.json(await providersService.fromPro(await requireUser(c)), 201))
+  .post("/me/provider-profile/from-pro", async (c) => {
+    const v = await requireUser(c);
+    await assertProvidersEnabled();
+    return c.json(await providersService.fromPro(v), 201);
+  })
   .post("/me/provider-profile/photos", async (c) => {
     const v = await requireUser(c);
     const form = await c.req.parseBody();

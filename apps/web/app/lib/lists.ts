@@ -2,6 +2,8 @@
 // partagées. Seuls les codes connus sont gardés (une réponse ancienne ou abîmée ne casse pas un écran).
 import {
   defaultPublicSettings,
+  type EventFormat,
+  eventFormats,
   knownCodes,
   type ProActivity,
   proActivities,
@@ -26,6 +28,11 @@ export function useRefusalReasons(): RefusalReason[] {
 /** Types de prestataires proposés (assistant d'événement, profil prestataire). */
 export function useVendorTypes(): VendorTypeCode[] {
   return knownCodes(useLists().vendorTypes, vendorTypeCodes);
+}
+
+/** Formats proposés à la création d'un événement. */
+export function useEventFormats(): EventFormat[] {
+  return knownCodes(useLists().eventFormats, eventFormats);
 }
 
 /** Activités proposées sur une fiche pro. */

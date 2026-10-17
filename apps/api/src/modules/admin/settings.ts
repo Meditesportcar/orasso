@@ -7,15 +7,18 @@ import {
   adminSettingDefaults,
   adminSettingKeys,
   adminSettingSchemas,
+  grades,
   type PublicSettings,
 } from "@orasso/shared";
 
+import { sql } from "drizzle-orm";
+
 import { db } from "../../db/client";
-import { platformSettings } from "../../db/schema";
+import { platformSettings, profiles } from "../../db/schema";
 import { requirePlatformRole } from "../../lib/access";
-import { now } from "../../lib/deps";
+import { deps, now } from "../../lib/deps";
 import type { Viewer } from "../../lib/session";
-import { settingsStore } from "../../lib/settings";
+import { getPointsConfig, settingsStore } from "../../lib/settings";
 import { withTx } from "../../lib/tx";
 import { parse } from "../../lib/validate";
 import { audit } from "./audit";
@@ -58,7 +61,31 @@ export const adminSettingsService = {
       });
     });
     settingsStore.invalidate();
+    // Nouveaux seuils : le grade de chaque compte est recalculé par une tâche (idempotente).
+    if (key === "grades.thresholds") await deps.jobs.send("points.regrade", {});
     return this.entries(v);
+  },
+
+  /**
+   * Tâche `points.regrade` : `profiles.grade` = `gradeFor(points_season, seuils en vigueur)` pour tous les comptes dont
+   * le grade a changé. Idempotente (une seconde passe ne change rien). Aucune notification (changement de règle, pas de
+   * points gagnés). Renvoie le nombre de comptes modifiés.
+   */
+  async regrade(): Promise<number> {
+    settingsStore.invalidate();
+    const { thresholds } = await getPointsConfig();
+    const ordered = [...grades].reverse();
+    const cases = sql.join(
+      ordered.map((g) => sql`when ${profiles.pointsSeason} >= ${thresholds[g]} then ${g}`),
+      sql` `,
+    );
+    const computed = sql`(case ${cases} else 'rodage' end)::grade`;
+    const res = await db
+      .update(profiles)
+      .set({ grade: computed })
+      .where(sql`${profiles.grade} <> ${computed}`)
+      .returning({ id: profiles.userId });
+    return res.length;
   },
 
   /** `GET /settings/public` (sans connexion) : listes proposées au site et à l'appli, interrupteurs utiles. */
@@ -68,6 +95,7 @@ export const adminSettingsService = {
       refusalReasons: values["lists.refusal_reasons"],
       vendorTypes: values["lists.vendor_types"],
       proActivities: values["lists.pro_activities"],
+      eventFormats: values["lists.event_formats"],
       signupEnabled: values["signup.enabled"],
       providersEnabled: values["providers.enabled"],
       malusPoints: values["points.malus"],

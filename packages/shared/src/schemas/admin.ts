@@ -1,7 +1,7 @@
 // Administration (lot 33, ARCHITECTURE-SUITE § 16) : entrées validées des routes `/admin/*` et types des réponses.
 import { z } from "zod";
 
-import { refusalReasons, vehicleTypes } from "../enums";
+import { eventFormats, refusalReasons, vehicleTypes } from "../enums";
 import { type Grade, grades } from "../grades";
 import { reportReasons, sanctionKinds } from "../moderation";
 import { vendorTypeCodes } from "../provider";
@@ -51,6 +51,7 @@ export const adminSettingSchemas: { [K in AdminSettingKey]: z.ZodType<AdminSetti
   "lists.refusal_reasons": codeList("lists.refusal_reasons", refusalReasons),
   "lists.vendor_types": codeList("lists.vendor_types", vendorTypeCodes),
   "lists.pro_activities": codeList("lists.pro_activities", proActivities),
+  "lists.event_formats": codeList("lists.event_formats", eventFormats),
 };
 
 export const adminSettingKeySchema = z.enum(adminSettingKeys);
@@ -298,7 +299,10 @@ export const adminAssistanceQuery = z.object({ status: z.enum(["open", "closed",
 
 // --- Newsletter -------------------------------------------------------------------------------------------------------
 
-export const newsletterStatuses = ["draft", "scheduled", "sending", "sent"] as const;
+export const newsletterStatuses = ["draft", "scheduled", "sending", "paused", "sent"] as const;
+/** Pourquoi un envoi est en pause : décision de l'équipe, ou erreurs répétées du service d'e-mail. */
+export const newsletterPauseReasons = ["admin", "errors"] as const;
+export type NewsletterPauseReason = (typeof newsletterPauseReasons)[number];
 export type NewsletterStatus = (typeof newsletterStatuses)[number];
 
 export const newsletterDraftSchema = z.object({
@@ -306,7 +310,10 @@ export const newsletterDraftSchema = z.object({
   bodyMd: z.string().trim().min(1, "Le message est vide").max(20_000),
 });
 
+/** Planifier : date future obligatoire (« Envoyer maintenant » est un geste distinct). */
 export const newsletterScheduleSchema = z.object({ at: isoDate });
+/** Envoyer maintenant : le nombre de destinataires affiché à la confirmation doit être celui du moment. */
+export const newsletterSendNowSchema = z.object({ confirmRecipients: z.number().int().min(0) });
 
 export type NewsletterView = {
   id: string;
@@ -316,8 +323,14 @@ export type NewsletterView = {
   scheduledAt: string | null;
   sentAt: string | null;
   recipientsCount: number;
-  /** Envois faits jusqu'ici (pendant l'envoi). */
+  /** Envois réussis jusqu'ici (pendant l'envoi). */
   delivered: number;
+  /** Envois en échec (le destinataire sera réessayé), et échecs de suite en cours. */
+  failed: number;
+  consecutiveFailures: number;
+  pauseReason: NewsletterPauseReason | null;
+  /** Plafond du jour atteint : l'envoi reprend après minuit (heure de Paris). */
+  resumeAfter: string | null;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;

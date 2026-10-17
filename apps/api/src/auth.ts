@@ -9,6 +9,8 @@ import { eq } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { env } from "./env";
+import { requestContext } from "./lib/request-context";
+import { settingsStore } from "./lib/settings";
 import { accountService } from "./modules/account/service";
 import { ensureProfile } from "./modules/profiles/service";
 import { securityAfter, securityBefore, trustedDeviceFactor } from "./modules/security/auth-hooks";
@@ -103,6 +105,18 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
+        // Lot 33 : interrupteur « inscriptions ouvertes » (e-mail, Google, Apple). L'inscription express du jour J passe
+        // par la route de l'accueil (autre chemin) et les scripts n'ont pas de requête : ils ne sont pas concernés.
+        before: async (user) => {
+          const req = requestContext.get();
+          if (req?.path.startsWith("/api/auth/") && !(await settingsStore.get("signup.enabled"))) {
+            throw new APIError("FORBIDDEN", {
+              message: "Les inscriptions sont momentanément fermées.",
+              code: "SIGNUP_CLOSED",
+            });
+          }
+          return { data: user };
+        },
         after: async (user) => {
           await ensureProfile(user);
         },

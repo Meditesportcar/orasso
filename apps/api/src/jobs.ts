@@ -5,6 +5,7 @@ import { deps, type JobName } from "./lib/deps";
 import { AppError } from "./lib/errors";
 import { assistanceService } from "./modules/admin/assistance";
 import { newsletterService } from "./modules/admin/newsletter";
+import { adminSettingsService } from "./modules/admin/settings";
 import { badgeService } from "./modules/after-event/badge";
 import { reportService } from "./modules/after-event/report";
 import { applicationsService } from "./modules/applications/service";
@@ -77,6 +78,7 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   // Lot 33 : demandes d'aide ouvertes depuis 7 jours closes (S41) ; un lot de newsletter par passage.
   "assistance.auto-close": () => assistanceService.autoClose(),
   "newsletter.send": () => newsletterService.runDue(),
+  "points.regrade": () => adminSettingsService.regrade(),
 };
 
 /**

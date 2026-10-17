@@ -8,7 +8,7 @@ import { and, asc, count, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { profiles, vehicleGenerations, vehicleMakes, vehicleModels, vehiclePhotos, vehicles } from "../../db/schema";
 import { requirePlatformRole } from "../../lib/access";
-import { conflict, notFound, validation } from "../../lib/errors";
+import { AppError, conflict, notFound, validation } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { slugify } from "../../lib/slug";
 import { storage } from "../../lib/storage";
@@ -21,6 +21,22 @@ const isUnique = (error: unknown) => {
   const e = error as { code?: string; cause?: { code?: string } };
   return (e.cause ?? e).code === "23505";
 };
+
+/**
+ * Suppression : un véhicule rattaché entre le comptage et la suppression (clé étrangère `restrict`, code 23503) donne un
+ * 409 et non une erreur interne.
+ */
+async function stillUsed<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    const e = error as { code?: string; cause?: { code?: string } };
+    if ((e.cause ?? e).code === "23503") {
+      throw conflict("conflict", "Des véhicules ou des réglages utilisent encore cet élément : rattache-les d'abord.");
+    }
+    throw error;
+  }
+}
 
 async function uniqueOr<T>(fn: () => Promise<T>, message: string): Promise<T> {
   try {
@@ -168,29 +184,45 @@ export const vehicleReferenceService = {
 
   async deleteMake(v: Viewer, id: string) {
     await requirePlatformRole(v, "super_admin");
-    await withTx(async (tx) => {
-      const make = await makeOrThrow(tx, id);
-      const [used] = await tx.select({ n: count() }).from(vehicles).where(eq(vehicles.makeId, id));
-      if ((used?.n ?? 0) > 0)
-        throw conflict("conflict", "Des véhicules utilisent cette marque : rattache-les d'abord.");
-      const models = await tx.select({ id: vehicleModels.id }).from(vehicleModels).where(eq(vehicleModels.makeId, id));
-      if (models.length) {
-        await tx.delete(vehicleGenerations).where(
-          inArray(
-            vehicleGenerations.modelId,
-            models.map((m) => m.id),
-          ),
-        );
-        await tx.delete(vehicleModels).where(eq(vehicleModels.makeId, id));
-      }
-      await tx.delete(vehicleMakes).where(eq(vehicleMakes.id, id));
-      await audit(tx, v, {
-        action: "reference.make_delete",
-        targetType: "vehicle_make",
-        targetId: id,
-        reason: make.name,
-      });
-    });
+    await stillUsed(() =>
+      withTx(async (tx) => {
+        const make = await makeOrThrow(tx, id);
+        const [used] = await tx.select({ n: count() }).from(vehicles).where(eq(vehicles.makeId, id));
+        if ((used?.n ?? 0) > 0)
+          throw conflict("conflict", "Des véhicules utilisent cette marque : rattache-les d'abord.");
+        // Lot 33 (relecture) : marque d'une liste blanche de catégorie ou d'un critère d'événement → refusée.
+        const listed = await tx.execute(sql`
+        select 1 from category_makes where make_id = ${id}
+        union all select 1 from events where jsonb_exists(coalesce(criteria->'makeIds', '[]'::jsonb), ${id})
+        limit 1`);
+        if (listed.rows.length) {
+          throw conflict(
+            "conflict",
+            "Cette marque figure dans une catégorie ou les critères d'un événement : retire-la d'abord.",
+          );
+        }
+        const models = await tx
+          .select({ id: vehicleModels.id })
+          .from(vehicleModels)
+          .where(eq(vehicleModels.makeId, id));
+        if (models.length) {
+          await tx.delete(vehicleGenerations).where(
+            inArray(
+              vehicleGenerations.modelId,
+              models.map((m) => m.id),
+            ),
+          );
+          await tx.delete(vehicleModels).where(eq(vehicleModels.makeId, id));
+        }
+        await tx.delete(vehicleMakes).where(eq(vehicleMakes.id, id));
+        await audit(tx, v, {
+          action: "reference.make_delete",
+          targetType: "vehicle_make",
+          targetId: id,
+          reason: make.name,
+        });
+      }),
+    );
   },
 
   async createModel(v: Viewer, input: { makeId: string; name: string; vehicleType: "car" | "moto" | "truck" }) {
@@ -247,19 +279,21 @@ export const vehicleReferenceService = {
 
   async deleteModel(v: Viewer, id: string) {
     await requirePlatformRole(v, "super_admin");
-    await withTx(async (tx) => {
-      const model = await modelOrThrow(tx, id);
-      const [used] = await tx.select({ n: count() }).from(vehicles).where(eq(vehicles.modelId, id));
-      if ((used?.n ?? 0) > 0) throw conflict("conflict", "Des véhicules utilisent ce modèle : rattache-les d'abord.");
-      await tx.delete(vehicleGenerations).where(eq(vehicleGenerations.modelId, id));
-      await tx.delete(vehicleModels).where(eq(vehicleModels.id, id));
-      await audit(tx, v, {
-        action: "reference.model_delete",
-        targetType: "vehicle_model",
-        targetId: id,
-        reason: model.name,
-      });
-    });
+    await stillUsed(() =>
+      withTx(async (tx) => {
+        const model = await modelOrThrow(tx, id);
+        const [used] = await tx.select({ n: count() }).from(vehicles).where(eq(vehicles.modelId, id));
+        if ((used?.n ?? 0) > 0) throw conflict("conflict", "Des véhicules utilisent ce modèle : rattache-les d'abord.");
+        await tx.delete(vehicleGenerations).where(eq(vehicleGenerations.modelId, id));
+        await tx.delete(vehicleModels).where(eq(vehicleModels.id, id));
+        await audit(tx, v, {
+          action: "reference.model_delete",
+          targetType: "vehicle_model",
+          targetId: id,
+          reason: model.name,
+        });
+      }),
+    );
   },
 
   async createGeneration(
@@ -320,20 +354,22 @@ export const vehicleReferenceService = {
 
   async deleteGeneration(v: Viewer, id: string) {
     await requirePlatformRole(v, "super_admin");
-    await withTx(async (tx) => {
-      const gen = await generationOrThrow(tx, id);
-      const [used] = await tx.select({ n: count() }).from(vehicles).where(eq(vehicles.generationId, id));
-      if ((used?.n ?? 0) > 0) {
-        throw conflict("conflict", "Des véhicules utilisent cette génération : rattache-les d'abord.");
-      }
-      await tx.delete(vehicleGenerations).where(eq(vehicleGenerations.id, id));
-      await audit(tx, v, {
-        action: "reference.generation_delete",
-        targetType: "vehicle_generation",
-        targetId: id,
-        reason: gen.name,
-      });
-    });
+    await stillUsed(() =>
+      withTx(async (tx) => {
+        const gen = await generationOrThrow(tx, id);
+        const [used] = await tx.select({ n: count() }).from(vehicles).where(eq(vehicles.generationId, id));
+        if ((used?.n ?? 0) > 0) {
+          throw conflict("conflict", "Des véhicules utilisent cette génération : rattache-les d'abord.");
+        }
+        await tx.delete(vehicleGenerations).where(eq(vehicleGenerations.id, id));
+        await audit(tx, v, {
+          action: "reference.generation_delete",
+          targetType: "vehicle_generation",
+          targetId: id,
+          reason: gen.name,
+        });
+      }),
+    );
   },
 
   /**
@@ -423,6 +459,9 @@ export const vehicleReferenceService = {
     return withTx(async (tx, after) => {
       const [current] = await tx.select().from(vehicles).where(eq(vehicles.id, vehicleId)).for("update");
       if (!current) throw notFound("Véhicule introuvable");
+      if (current.ownerId === v.user.id) {
+        throw new AppError(409, "self_action", "Action impossible sur ton propre véhicule.");
+      }
       const [model] = await tx.select().from(vehicleModels).where(eq(vehicleModels.id, input.modelId));
       if (!model) throw validation("Modèle inconnu");
       // Le type du véhicule suit le modèle choisi (sauf « Autre », qui accepte tous les types).
@@ -434,7 +473,16 @@ export const vehicleReferenceService = {
         : undefined;
       await tx
         .update(vehicles)
-        .set({ makeId: input.makeId, modelId: input.modelId, generationId: input.generationId, vehicleType })
+        .set({
+          makeId: input.makeId,
+          modelId: input.modelId,
+          generationId: input.generationId,
+          vehicleType,
+          // Marque ou modèle changés : ce n'est plus la fiche certifiée (relecture).
+          ...(current.certifiedAt && (current.makeId !== input.makeId || current.modelId !== input.modelId)
+            ? { certifiedAt: null, certifiedLostReason: "modified" as const }
+            : {}),
+        })
         .where(eq(vehicles.id, vehicleId));
       const label = [
         make?.isOther ? null : make?.name,
@@ -449,12 +497,18 @@ export const vehicleReferenceService = {
         targetId: vehicleId,
         reason: label || "Autre",
       });
-      await notificationsService.notify(tx, current.ownerId, "vehicle_reassigned", {
-        title: "Ton véhicule est dans la base Orasso",
-        body: `L'équipe Orasso a rattaché ton véhicule au référentiel : ${label || "Autre"}.`,
-        link: { label: "Voir mon véhicule", path: `/app/garage/${vehicleId}` },
-        data: { vehicleId },
+      const owner = await tx.query.profiles.findFirst({
+        where: eq(profiles.userId, current.ownerId),
+        columns: { deletedAt: true },
       });
+      // Un compte anonymisé n'est pas prévenu.
+      if (!owner?.deletedAt)
+        await notificationsService.notify(tx, current.ownerId, "vehicle_reassigned", {
+          title: "Ton véhicule est dans la base Orasso",
+          body: `L'équipe Orasso a rattaché ton véhicule au référentiel : ${label || "Autre"}.`,
+          link: { label: "Voir mon véhicule", path: `/app/garage/${vehicleId}` },
+          data: { vehicleId },
+        });
       after(() => notificationsService.kick());
       return { id: vehicleId, label };
     });

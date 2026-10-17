@@ -123,6 +123,24 @@ const ADMIN_ROUTES: [string, string, unknown?][] = [
   ["GET", "/admin/message-templates"],
   ["POST", "/admin/message-templates", { kind: "message", name: "Bienvenue", body: "Bonjour" }],
   ["DELETE", `/admin/message-templates/${UUID}`],
+  // Relecture : routes oubliées du balayage.
+  ["PATCH", `/admin/message-templates/${UUID}`, { name: "Bienvenue" }],
+  ["GET", `/admin/vehicle-reference/makes/${UUID}/models`],
+  ["GET", `/admin/vehicle-reference/models/${UUID}/generations`],
+  ["POST", "/admin/vehicle-reference/models", { makeId: UUID, name: "A110", vehicleType: "car" }],
+  ["PATCH", `/admin/vehicle-reference/models/${UUID}`, { name: "A110" }],
+  ["DELETE", `/admin/vehicle-reference/models/${UUID}`],
+  ["POST", "/admin/vehicle-reference/generations", { modelId: UUID, name: "Berlinette" }],
+  ["PATCH", `/admin/vehicle-reference/generations/${UUID}`, { name: "Berlinette" }],
+  ["DELETE", `/admin/vehicle-reference/generations/${UUID}`],
+  ["GET", `/admin/newsletters/${UUID}`],
+  ["PUT", `/admin/newsletters/${UUID}`, { subject: "Bonjour", bodyMd: "Texte" }],
+  ["DELETE", `/admin/newsletters/${UUID}`],
+  ["GET", "/admin/newsletters/audience"],
+  ["POST", `/admin/newsletters/${UUID}/unschedule`],
+  ["POST", `/admin/newsletters/${UUID}/pause`],
+  ["POST", `/admin/newsletters/${UUID}/resume`],
+  ["POST", `/admin/newsletters/${UUID}/send-now`, { confirmRecipients: 0 }],
 ];
 
 describe("droits de l'administration", () => {

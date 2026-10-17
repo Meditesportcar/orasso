@@ -42,12 +42,13 @@ async function load() {
 
 export const settingsStore = {
   async get<K extends AdminSettingKey>(key: K): Promise<AdminSettingValues[K]> {
-    return (await load()).values[key];
+    return structuredClone((await load()).values[key]);
   },
 
   async all(): Promise<{ values: AdminSettingValues; rows: Map<string, Row> }> {
     const c = await load();
-    return { values: c.values, rows: c.rows };
+    // Copies : un appelant qui modifie le résultat ne touche pas au cache (relecture).
+    return { values: structuredClone(c.values), rows: new Map(c.rows) };
   },
 
   /** Après une écriture (ou dans les tests) : la prochaine lecture repart de la base. */
@@ -58,5 +59,5 @@ export const settingsStore = {
 
 /** Barème des points et seuils des grades en vigueur (cache de 60 s, constantes partagées par défaut). */
 export async function getPointsConfig(): Promise<PointsConfig> {
-  return pointsConfigFrom((await load()).values);
+  return pointsConfigFrom(structuredClone((await load()).values));
 }

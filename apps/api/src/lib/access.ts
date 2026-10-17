@@ -86,17 +86,8 @@ export async function requireOrganizer(v: Viewer, structureId: string, ip?: stri
           "Mode assistance : lecture seule. La structure doit demander l'aide d'Orasso pour qu'on intervienne.",
         );
       }
-      await db.insert(adminAuditLog).values({
-        actorUserId: v.user.id,
-        action: "structure.assist",
-        targetType: "structure",
-        targetId: structureId,
-        structureId,
-        assistanceRequestId: open.id,
-        reason: `${req.method} ${req.path}`.slice(0, 300),
-        ip: ip ?? req.ip,
-        userAgent: req.userAgent,
-      });
+      // Une seule trace par requête, écrite après la réponse si l'écriture a réussi (`requestContextMiddleware`).
+      requestContext.noteAssist({ actorUserId: v.user.id, structureId, assistanceRequestId: open.id });
       return { role: "super_admin" };
     }
     await db.insert(adminAuditLog).values({

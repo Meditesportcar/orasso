@@ -256,7 +256,8 @@ export const pointsService = {
           withdrawnAfterLock: app.withdrawnAfterLock,
           checkedIn: Boolean(checkinId),
         });
-        if (!kind) continue;
+        // Lot 33 : barème à 0 → rien d'écrit, aucune notification « 0 point ».
+        if (!kind || (kind === "participation" ? cfg.participation : cfg.malus) === 0) continue;
         const entry = await award(tx, season, {
           userId: app.userId,
           kind,
@@ -288,7 +289,7 @@ export const pointsService = {
         );
       }
       for (const m of await staffService.members(event, tx)) {
-        if (m.presence !== "present") continue;
+        if (m.presence !== "present" || cfg.staff === 0) continue;
         const entry = await award(tx, season, { userId: m.userId, kind: "staff", points: cfg.staff, eventId });
         if (!entry) continue;
         users.add(m.userId);
@@ -572,6 +573,8 @@ export const pointsService = {
   /** `POST /admin/users/:id/points-adjust` : ajustement tracé au journal d'administration. */
   async adjust(v: Viewer, userId: string, points: number, note: string) {
     await requirePlatformRole(v, "super_admin");
+    // Lot 33 : jamais ses propres points.
+    if (userId === v.user.id) throw new AppError(409, "self_action", "Action impossible sur ton propre compte.");
     const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, userId) });
     if (!profile) throw notFound("Compte introuvable");
     return withTx(async (tx, after) => {
@@ -615,6 +618,8 @@ export const pointsService = {
         console.info(`Parrainage au-delà du plafond de la saison (${REFERRAL_SEASON_CAP}) : ${sponsorId}`);
         return null;
       }
+      // Lot 33 : barème à 0 → rien d'écrit, aucune notification « 0 point ».
+      if (cfg.referral === 0) return null;
       const entry = await award(tx, season, {
         userId: sponsorId,
         kind: "referral",

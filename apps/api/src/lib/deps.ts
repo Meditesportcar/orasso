@@ -50,7 +50,9 @@ export type JobName =
   | "structure.badge-sweep"
   // Lot 33 : demandes d'aide closes à 7 jours (chaque heure), envoi de la newsletter par lots (chaque minute).
   | "assistance.auto-close"
-  | "newsletter.send";
+  | "newsletter.send"
+  // Lot 33 : grades recalculés après un changement des seuils (mise en file à l'écriture du réglage).
+  | "points.regrade";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */
