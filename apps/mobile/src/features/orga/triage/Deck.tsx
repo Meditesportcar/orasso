@@ -415,7 +415,7 @@ export function Deck({
         }}
         onClose={() => setZoneOpen(false)}
       />
-      <FullSheet item={fullItem} onClose={() => setFullFor(null)} />
+      <FullSheet item={fullItem} eventId={eventId} onClose={() => setFullFor(null)} />
     </View>
   );
 }

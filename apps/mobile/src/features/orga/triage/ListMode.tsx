@@ -454,7 +454,7 @@ export function ListMode({
         onPick={(zone) => void assignZone(zone)}
         onClose={() => setZoneFor(null)}
       />
-      <FullSheet item={fullItem} onClose={() => setFullFor(null)} />
+      <FullSheet item={fullItem} eventId={eventId} onClose={() => setFullFor(null)} />
     </View>
   );
 }

@@ -1,8 +1,9 @@
 // Casquette Organisateur, bilan d'un événement (lot 27, docs/02 : page événement côté organisateur > bilan) : les
 // compteurs du bilan automatique (retenus, présents, absents, taux) et « Remercier les présents » (un message dans la
-// Boîte de chaque présent, avec son lien d'avis, une seule fois). L'export et l'édition suivante restent sur le site.
+// Boîte de chaque présent, avec son lien d'avis, une seule fois). Lot 35a (D20) : l'export des participants (motif
+// obligatoire, tracé, CSV partagé) et l'accès aux notes internes. L'édition suivante reste sur le site (lot 35b).
 import { Button, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type EventReportView, formatDayDate, afterEventLabels as L } from "@orasso/shared";
+import { type EventReportView, formatDayDate, afterEventLabels as L, orgaManageLabels as M } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
@@ -18,6 +19,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 import { ConfirmSheet } from "./ConfirmSheet";
+import { ExportPanel } from "./ExportPanel";
 import { OrgaFailure, useOrga } from "./OrgaGate";
 
 const { space2, space3 } = tokens.spacing;
@@ -36,6 +38,7 @@ export function Bilan({ eventId }: { eventId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [failure, setFailure] = useState<unknown>(null);
 
   const e = event.data;
   // Un événement d'une autre structure (même compte, autre casquette) ne s'ouvre pas sous celle-ci.
@@ -87,7 +90,7 @@ export function Bilan({ eventId }: { eventId: string }) {
         />
       }
     >
-      <OrgaFailure error={event.error ?? view.error} />
+      <OrgaFailure error={failure ?? event.error ?? view.error} />
       {foreign ? <Notice tone="error">Cet événement appartient à une autre structure.</Notice> : null}
       {notice ? <Notice>{notice}</Notice> : null}
 
@@ -179,7 +182,19 @@ export function Bilan({ eventId }: { eventId: string }) {
             </Button>
           </Plate>
 
+          <SectionTitle>{L.exportTitle}</SectionTitle>
+          <ExportPanel eventId={eventId} onTwoFactor={setFailure} />
+
           <View style={styles.buttons}>
+            <Button
+              variant="plate"
+              icon="incident"
+              onPress={() => router.push("/notes")}
+              fullWidth
+              testID="orga-report-notes"
+            >
+              {M.notesBilanLink}
+            </Button>
             <Button
               variant="plate"
               icon="export"
@@ -188,8 +203,9 @@ export function Bilan({ eventId }: { eventId: string }) {
               fullWidth
               testID="orga-report-on-site"
             >
-              {L.exportTitle} · {L.nextTitle}
+              {L.nextTitle}
             </Button>
+            <Muted variant="caption">{M.nextOnSite}</Muted>
           </View>
         </>
       ) : null}
