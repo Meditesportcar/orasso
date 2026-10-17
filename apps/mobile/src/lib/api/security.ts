@@ -16,6 +16,9 @@ async function sessionToken(path: string, body: unknown): Promise<string | null>
 
 export type TotpEnrollment = { totpURI: string; backupCodes: string[] };
 
+/** Une clé d'accès (`GET /api/auth/passkey/list-user-passkeys`, Better Auth). */
+export type PasskeyRow = { id: string; name?: string | null; createdAt: string; deviceType: string };
+
 export const securityApi = {
   /** Envoie le lien de réinitialisation (la suite se fait sur le site). La réponse est la même que l'adresse existe ou non. */
   requestPasswordReset: (email: string) =>
@@ -33,6 +36,11 @@ export const securityApi = {
   verifyTotp: (code: string) => sessionToken("/api/auth/two-factor/verify-totp", { code: code.replace(/\s+/g, "") }),
   /** Renvoie le nouveau jeton. */
   disableTwoFactor: (password: string) => sessionToken("/api/auth/two-factor/disable", { password }),
+  /** Clés d'accès (lot 35c) : liste, renommage, suppression. La création demande WebAuthn : elle reste sur le site. */
+  passkeys: () => request<PasskeyRow[]>("/api/auth/passkey/list-user-passkeys"),
+  renamePasskey: (id: string, name: string) =>
+    request<unknown>("/api/auth/passkey/update-passkey", { method: "POST", body: { id, name } }),
+  deletePasskey: (id: string) => request<unknown>("/api/auth/passkey/delete-passkey", { method: "POST", body: { id } }),
   /** Nouveaux codes de secours (les anciens ne servent plus). */
   regenerateBackupCodes: (password: string) =>
     request<{ backupCodes: string[] }>("/api/auth/two-factor/generate-backup-codes", {

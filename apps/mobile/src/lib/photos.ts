@@ -36,16 +36,23 @@ async function toJpeg(asset: { uri: string; width: number; height: number }): Pr
   return { uri: saved.uri, width: saved.width, height: saved.height };
 }
 
-/** Champ « photo » du formulaire d'envoi (`POST /api/me/vehicles/:id/photos`). */
-export async function photoForm(photo: PickedPhoto, index: number): Promise<FormData> {
+/**
+ * Champ « photo » du formulaire d'envoi (`POST /api/me/vehicles/:id/photos`) ; `field: "logo"` pour le logo d'un pro
+ * (`POST /api/pros/:id/logo`, lot 35c).
+ */
+export async function photoForm(
+  photo: PickedPhoto,
+  index: number,
+  field: "photo" | "logo" = "photo",
+): Promise<FormData> {
   const form = new FormData();
-  const name = `photo-${index + 1}.jpg`;
+  const name = `${field}-${index + 1}.jpg`;
   if (Platform.OS === "web") {
     const blob = await (await fetch(photo.uri)).blob();
-    form.append("photo", new File([blob], name, { type: "image/jpeg" }));
+    form.append(field, new File([blob], name, { type: "image/jpeg" }));
   } else {
     // React Native accepte un objet { uri, name, type } à la place d'un fichier.
-    form.append("photo", { uri: photo.uri, name, type: "image/jpeg" } as unknown as Blob);
+    form.append(field, { uri: photo.uri, name, type: "image/jpeg" } as unknown as Blob);
   }
   return form;
 }
