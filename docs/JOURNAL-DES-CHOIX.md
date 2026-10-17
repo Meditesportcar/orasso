@@ -1,6 +1,6 @@
 # Journal des choix
 
-Ce que les documents de conception ne tranchent pas et que Claude Code a choisi (la solution la plus simple et cohérente avec les docs), pour relecture par Damien. Les entrées s'ajoutent à la fin de chaque section ; on ne réécrit pas une entrée, on la corrige par une nouvelle.
+Ce que les documents de conception ne tranchent pas et que Claude Code a choisi (la solution la plus simple et cohérente avec les docs), pour relecture par Damien. Les entrées s'ajoutent à la fin de chaque section ; on ne réécrit pas une entrée, on la corrige par une nouvelle. **Toutes les questions ouvertes sont regroupées à la fin, dans « À revoir avec Damien — liste consolidée (lot 34) ».**
 
 ## Choix
 
@@ -1100,3 +1100,69 @@ Décision D20 de Damien : tout se gère depuis l'appli. Ce lot n'ajoute aucune r
 - **Problème** (relevé par Damien sur l'APK) : photo de profil, photos de véhicule, logo, affiche, justificatifs et photos du staff échouaient tous dans l'appli avec « Pas de connexion », sans qu'aucune requête n'atteigne le serveur. Expo SDK 57 remplace `fetch` par le sien (`expo/fetch`), qui refuse les parts `{ uri, name, type }` du `FormData` utilisées par l'appli (format de React Native) : l'envoi échoue dans le téléphone.
 - **Choix** : `EXPO_PUBLIC_USE_RN_FETCH=1` (interrupteur prévu par Expo) dans tous les profils de `apps/mobile/eas.json` et dans `apps/mobile/.env.example` : l'appli retrouve le `fetch` de React Native pour lequel elle a été écrite. Vérifié sur le Xiaomi (banc de test) : « Photo enregistrée ».
 - **Pourquoi pas l'autre voie** (fichiers `expo-file-system` dans le `FormData`) : 8 points d'envoi à réécrire, comportement à revalider partout ; l'interrupteur règle tout d'un coup. À reconsidérer si Expo retire l'interrupteur.
+
+### 17/10/2026 — Recette finale, corrections et parité (lot 34)
+- **Publications pro : suppression douce** (migration `0041_pro-posts-soft-delete`, une colonne `pro_posts.deleted_at`, aucun DROP). Supprimer masque la publication partout (fiche, abonnés, compteur public) mais la ligne reste et compte dans la limite du mois, comme le dit le site (« elle compte toujours dans la limite du mois »). La date de création d'une publication est prise à l'horloge de l'appli (`now()`), pour que le mois compté suive l'horloge simulée en développement. Fichiers : `apps/api/src/db/schema/pros.ts`, `modules/pros/service.ts`.
+- **`updated_at` reste à l'heure système** (`timestamps.updatedAt.$onUpdate(() => new Date())` inchangé). Raison : le curseur de synchronisation du mode staff (`modules/staff/service.ts`, `syncCursor`) compare `updated_at` à l'heure système par construction, et les lignes insérées gardent le `defaultNow()` de la base ; mettre l'horloge simulée dans les seules mises à jour rendrait `updated_at` non monotone (lignes modifiées « dans le futur », lignes neuves « dans le passé »). Recensement des comparaisons `created_at` / `updated_at` contre l'horloge : les délais qui comptent pour les parcours prennent déjà `now()` à l'écriture (venue en crew à confirmer, demande d'aide, invitations express, demandes de contact, messages groupés, délai de 24 h du staff depuis `c0d76b0`) ; les fenêtres anti-abus (24 h glissantes) comparent l'heure de la base à l'heure de la base et restent justes ; seule la limite mensuelle des publications pro était fausse avec l'horloge simulée : corrigée ci-dessus.
+- **Sélecteur natif de date et d'heure** (`@react-native-community/datetimepicker` 9.1.0, installé par `npx expo install`, plugin ajouté par l'installation dans `app.json`) dans l'assistant d'événement : un appui sur le champ ouvre la boîte du système (Android) ou la roue sous le champ (iOS, « Valider ») ; la valeur reste le texte « AAAA-MM-JJ » / « HH:MM » en heure de Paris. Le navigateur (recette web) garde la saisie au clavier (`datePicker.web.tsx`). Fichiers : `apps/mobile/src/features/orga/wizard/{datePicker,datePicker.web,fields,StepsWhat}.tsx`.
+- **Justificatifs en PDF** (`expo-document-picker` ~57.0.3) : un second bouton « Ajouter un PDF » à côté de la photo (Ma structure > vérification). Le serveur reconnaît déjà les PDF à leurs premiers octets. Fichiers : `apps/mobile/src/lib/structureFiles.ts`, `features/orga/structure/VerificationPanel.tsx`.
+- **Filtre « Jour » du mode liste du tri** dans l'appli (comme le site depuis le lot 26) : « Tous les jours », « Tout l'événement », puis chaque jour ; chaque ligne dit son jour. Fichiers : `apps/mobile/src/lib/triage.ts`, `features/orga/triage/{ListMode,TriageScreen}.tsx`.
+- **Affiche gardée dans le brouillon** de l'assistant : copiée dans le dossier de l'appli à côté du brouillon (le cache du sélecteur d'images peut être vidé), relue à la reprise ; dans le navigateur, gardée seulement si c'est une adresse `data:` de moins de 1,5 Mo. Copie disparue : le brouillon revient sans affiche. Fichiers : `apps/mobile/src/lib/{eventDraft,eventDraftStore}.ts`, `features/orga/wizard/EventWizard.tsx`.
+- **Parité D20, manques comblés** : (1) **créer sa fiche pro** depuis Moi > Mes casquettes (même formulaire que la modification, `POST /pros`, puis la casquette Pro s'ouvre) ; (2) **billets du public dans l'appli** : bloc « Billets visiteurs » sur la page d'un événement (réserver des billets gratuits, 1 à 4), écran « Mes billets » (QR à présenter, rendre un billet gratuit) et raccourci dans Accès. Un billet payant ne s'achète pas dans l'appli (règles des stores) : « Ouvrir la page sur le site ». Aucune route d'API nouvelle. Fichiers : `apps/mobile/src/{app/pro-nouvelle.tsx,app/billets.tsx,features/tickets/TicketsBlock.tsx,lib/api/tickets.ts,features/pro/FicheForm.tsx,features/casquettes/parts.tsx}`, `packages/shared/src/labels/{parity,tickets-app}.fr.ts`.
+- **Manques restants de la parité** (raisons écrites) : création d'une clé d'accès (module natif WebAuthn, hors APK de référence ; liste, renommage et suppression sont dans l'appli) ; achat d'un billet payant et abonnement pro (aucun paiement dans l'appli) ; affichage d'un justificatif PDF dans l'administration de l'appli (il s'ouvre sur le site) ; écrans de bannissement et de modification de modèle absents du site (l'appli les a : parité inverse, à décider).
+- **Système de design (grep du lot)** : aucun vert, aucune couleur en dur dans l'appli et le site ; les rayons en dur de l'appli (`borderRadius` 8 / 12 / 999) passent aux jetons `tokens.radius` ; le chiffre de la zone du placement (mode staff) perd sa taille en dur et prend la variante `number`. Restent hors jetons, par géométrie : rayons des pastilles rondes (moitié de leur hauteur) et la couleur `theme-color` de la balise `<meta>` du site.
+- **Recettes fiabilisées** : chaque recette prépare ce dont elle dépend au lieu de compter sur l'ordre de passage (parrain neuf, compte du seed vieilli pour l'alerte de nouvelle connexion, Tramontane remise suspendue, trois lignes en liste d'attente, emplacement sponsorisé tiré au sort par jour accepté, canal temps réel ouvert avant une offre, page hydratée avant un clic). Détail dans le relais (`JOURNAL.md`, lot 34).
+
+## À revoir avec Damien — liste consolidée (lot 34)
+
+Une seule liste, ordonnée, de tout ce que les lots 15 à 35d (et 34) ont laissé à décider. Rien ne bloque : la solution décrite est appliquée (D16). Les points antérieurs (A1 à A14, lots 02 à 14) restent dans leurs sections plus haut ; ceux qui sont réglés depuis sont signalés à la fin.
+
+**1. Décisions produit qui changent des règles (à trancher en premier)**
+1. **Points** : trois jours inscrits séparément rapportent +60, un « tout l'événement » présent trois jours +20 (lot 26) ; **points généraux ou par organisation** ; barème et seuils toujours provisoires (A6, C11, réglables par l'administration depuis le lot 33).
+2. **Règles de paiement des stores** (lot 35c) : Apple 3.1.1 et Google Play Billing ; Orasso ne vend rien dans l'appli (billets payants, abonnement pro, emplacements sponsorisés sur le site). Depuis le lot 34, les billets **gratuits** se réservent dans l'appli ; un billet payant renvoie à la page du site (billet d'un événement réel : à confirmer que ce lien est admis par les stores).
+3. **Export des données personnelles** (`GET /me/export`, JSON, lot 35c) : existence et contenu à valider.
+4. **Onglet « Staff » ou « Équipe »** de la casquette Organisateur (lot 35a) : renommer est un écart au système de design à dater.
+5. **Mode d'accès et places d'un jour modifiables après publication** (lot 26) : Damien (17/10) : laissé tel quel, à observer pendant les tests.
+6. **Plusieurs jours** (lot 26) : verrouillage unique au premier jour (AS6) ; malus d'une candidature d'un jour si la personne vient un autre jour ; places affichées = meilleur jour.
+7. **Rôle boutique (AS4, lot 24)** : contrôle des billets du public et compteur d'entrées visiteurs, appliqué sans confirmation ; le compteur n'additionne pas les billets contrôlés.
+8. **Modération (lot 32)** : seuils de suspension automatique S39 / S40 ; copie des 11 messages d'un message signalé (AS5, à écrire dans les CGU avec un juriste) ; un organisateur visé par des candidats refusés peut être suspendu automatiquement (AS8) ; un banni peut se réinscrire avec une autre adresse ; un suspendu peut se désister.
+9. **Météo (lot 28)** : fournisseur avant le 21/06/2027 (AS1 : Open-Meteo payant ou MET Norway, sans probabilité de pluie) ; seuils S33 (60 %, 5 mm, 60 km/h) ; pas de météo immédiate à la publication.
+10. **Lavage (Overpass, AS2, lots 30 et 34)** : le serveur public répondait encore 502 le 17/10 au soir (deux instances de secours en 500 et 504). Proposition : rafraîchissement de nuit (une tâche à 03:00 qui remplit le cache de 7 jours département par département) et une instance de secours dans `OVERPASS_URL` ; le widget disparaît sans erreur en attendant.
+11. **Après le 21/06/2027** : fiche de base pour tous les pros tant qu'aucun abonnement n'existe (lot 21) ; l'emplacement sponsorisé se coupe faute d'abonnement alors qu'il est payé à part (lot 30).
+12. **Critères « années » et « grades »** dans l'assistant (lot 35b) : absents du schéma et du site ; à ajouter si Damien les veut (règle nouvelle).
+
+**2. Organisateurs, staff, après l'événement**
+13. Ancien propriétaire d'une structure transférée : il reste co-organisateur (lot 27) ; option « le retirer » dans le transfert ?
+14. Export refusé à une structure suspendue (lot 27) : proposition d'autoriser l'export tracé, en lecture.
+15. Notes internes effacées avec le compte de la personne concernée ; export sans bannis ni prestataires ; consultation des coordonnées après J+7 tracée sans adresse IP (lot 27).
+16. Grâce de 30 jours après la levée d'une suspension ; un seul remerciement par événement, jamais après J+7 ; départements du bilan = premier département du profil (lot 27).
+17. Position de l'alerte du staff précise (environ 1 m, effacée à la clôture) ; photos de main courante gardées un an (AS9, juriste) ; demande de staff refusée sans notification (lot 24).
+18. Le staff simple n'a pas la casquette Organisateur ; annulation sans motif dans la notification ; Maintenu / Incertain sans texte libre (lot 22).
+19. Le site n'a ni écran de bannissement ni modification de modèle (l'appli les a, lot 35a) ; la discussion du staff reste dans Boîte > Staff.
+20. Tri par glissement : sensation du geste (seuil 40 %, 8°), photos au toucher, refus gris plutôt que rouge (lot 23).
+21. Récurrence sur la page de l'événement, pas dans l'assistant (comme le site, lot 35b).
+
+**3. Communication et messagerie**
+22. E-mail de l'annulation gardé (quota Brevo de 300 par jour) ; plus d'e-mail pour Maintenu / Incertain ; staff « pas là » exclu de la discussion ; fil sans commentaires, une photo par annonce ; pas de liste « qui n'a pas lu » (lot 20).
+23. Pas d'e-mail pour un message reçu (résumé quotidien possible) ; demande de contact acceptée sans notification à l'auteur ; amitié retirée = écriture coupée ; révocation WebSocket en 30 s ; structure suspendue injoignable (lot 18).
+24. Icône de l'appli en 1024 px à exporter pour les stores (lot 18).
+
+**4. Social, crews, invitations, découverte**
+25. Compte privé trouvable par pseudo ; organisateurs voient les coordonnées sur le profil ; demande croisée = acceptation, refus silencieux ; un ami voit tout ; coordonnées du tri sans fenêtre J+7 (écart hérité, lot 17).
+26. Crews : membres non confirmés invisibles au tri ; avant-première vérifiée sur le chef ; le chef voit le statut de chaque membre ; pas de transfert de chef (lot 19).
+27. Invitations : réservation de place 72 h non faite (A13) ; grade actuel pris en compte ; invitation refusée si un autre véhicule est déjà candidat ; « Refusée » visible de l'organisateur ; crew pendant l'avant-première des hauts grades (lot 25).
+28. Recherche : accents non neutralisés ; pros sans adresse hors du rayon ; pas de suggestions pendant la frappe ; tuiles OSM publiques à remplacer au-delà d'un usage modéré ; affinités sans plafond ; position arrondie à 11 km (lot 29).
+
+**5. Prestataires et pros**
+29. Un seul profil prestataire par compte ; accréditation « Média officiel » sans notification ; type « Autres » à texte exact ; QR de stand sans mode jour J ; candidature de prestataire possible dès la publication (lot 21).
+30. Chiffres provisoires : commission 5 %, 4 publications par mois (supprimées comptées depuis le lot 34), remise maximale 50 %, 12 photos (lot 14).
+
+**6. Compte, sécurité, administration**
+31. Comptes Google / Apple sans mot de passe : confirmation de la suppression à prévoir ; billets payés annulés sans remboursement à la suppression ; inscription express marquée vérifiée ; parrainage contournable (plafond 20) ; permissions Android héritées ; textes des e-mails de sécurité à relire (lot 15).
+32. Pastille « à traiter » de l'organisateur ; avatar sans feuille avec une seule casquette ; pas d'onglet central pour le Prestataire ; codes de secours sans bouton « Copier » ; rayon sans paliers nommés (lot 16).
+33. Administration : listes choisies et ordonnées sans ajout de code ; quota S18 par structure seulement ; un suspendu reçoit la newsletter ; anonymisation par l'équipe sans contestation propre ; survol par le site avec boutons visibles en lecture seule (lot 33).
+34. Administration dans l'appli : barre (Accueil · Signalements · Registres · Gestion, icône « Gestion » = `express`) ; modérateur limité aux signalements ; justificatifs PDF non affichés dans l'appli ; dates de newsletter et de sponsorisés au clavier (lot 35d).
+35. Case du système de design sans `aria-checked` sur le web (accessibilité, lot 35c).
+36. Simulation en ligne avec l'horloge simulée : dev.orasso.fr tourne en `NODE_ENV=production`, `DEV_CLOCK` y est refusée (lot 34a) ; il faut un signal distinct, ou faire la simulation sur le banc local.
+
+**Réglés depuis leur inscription** : saisie des dates au clavier (sélecteur natif, lot 34) ; justificatifs en photo seulement (PDF, lot 34) ; filtre « Jour » absent de l'appli (lot 34) ; affiche non gardée dans le brouillon (lot 34) ; suppression d'une publication pro qui libérait la place (suppression douce, lot 34) ; billets non réservables dans l'appli (lot 34) ; fiche pro à créer sur le site (lot 34) ; billetterie d'une structure suspendue (`PUT /events/:id/ticketing` en écriture d'organisateur, intégration `cd0768a`) ; édition suivante depuis l'appli (lot 35b).
