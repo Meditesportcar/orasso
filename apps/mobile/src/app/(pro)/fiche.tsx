@@ -1,22 +1,33 @@
-// Casquette Pro, Fiche : l'état de ma fiche (publiée ou non, badge « pro vérifié »), mes remises par grade, mes
-// partenaires et l'état de l'abonnement (« gratuit jusqu'au 21 juin 2027 »). Pas de prix ni de bouton de paiement dans
-// l'appli : la fiche et l'abonnement se gèrent sur le site Orasso (espace pro).
-import { Chip, ChipRow, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { gradeLabels, grades, proActivityLabels } from "@orasso/shared";
-import { StyleSheet, View } from "react-native";
+// Casquette Pro, Fiche : l'état de ma fiche et tout ce qui se règle (lot 35c, D20) : modification de la fiche, publication,
+// SIRET, remises par grade, logo et photos, organisateurs partenaires. L'abonnement et les emplacements sponsorisés se
+// consultent seulement : aucun prix ni bouton de paiement dans l'appli, la souscription se fait sur le site Orasso.
+import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { proAppLabels as L, proActivityLabels } from "@orasso/shared";
+import { useRouter } from "expo-router";
+import { StyleSheet } from "react-native";
 
+import {
+  DiscountsBlock,
+  MediaBlock,
+  PartnersBlock,
+  ProChips,
+  PublicationBlock,
+  SiretBlock,
+  SubscriptionBlock,
+} from "@/features/pro/ProBlocks";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
-import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { SectionTitle, TabScreen } from "@/ui/Screens";
+import { TabScreen } from "@/ui/Screens";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space2, space3 } = tokens.spacing;
 
 export default function ProFiche() {
   const { t } = useTheme();
+  const router = useRouter();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
+  const reload = () => myPro.reload();
   const where = pro
     ? [pro.addressLine, [pro.postalCode, pro.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")
     : "";
@@ -30,17 +41,14 @@ export default function ProFiche() {
     >
       {!pro ? (
         myPro.loading ? null : (
-          <Notice>Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso (menu Professionnels).</Notice>
+          <Notice>{L.noPro}</Notice>
         )
       ) : (
         <>
           {/* Copie en cache d'avant le lot 21 : pas de `visibility`. */}
           {pro.visibility?.banner ? <Notice>{pro.visibility.banner}</Notice> : null}
           <Plate style={styles.block}>
-            <ChipRow>
-              <Chip selected={pro.published}>{pro.published ? "Publiée" : "Brouillon"}</Chip>
-              {pro.verifiedAt ? <Chip selected>Pro vérifié</Chip> : <Chip>SIRET à vérifier</Chip>}
-            </ChipRow>
+            <ProChips pro={pro} />
             <Text variant="posterL" color={t.color.plateInk}>
               {pro.name}
             </Text>
@@ -57,44 +65,16 @@ export default function ProFiche() {
               {pro.followersCount} abonné{pro.followersCount > 1 ? "s" : ""}
             </Text>
           </Plate>
+          <Button variant="primary" icon="profile" onPress={() => router.push("/modifier")} fullWidth testID="pro-edit">
+            {L.editFiche}
+          </Button>
 
-          <SectionTitle>Remises par grade</SectionTitle>
-          <Plate style={styles.block}>
-            {grades.map((g) => (
-              <View key={g} style={styles.row}>
-                <Text variant="body" color={t.color.plateInk}>
-                  {gradeLabels[g]}
-                </Text>
-                <Text variant="bodyStrong" color={t.color.plateInk}>
-                  {pro.discounts[g] ? `−${pro.discounts[g]} %` : "—"}
-                </Text>
-              </View>
-            ))}
-          </Plate>
-
-          {pro.partners.length > 0 ? (
-            <>
-              <SectionTitle>Organisateurs partenaires</SectionTitle>
-              <ChipRow>
-                {pro.partners.map((s) => (
-                  <Chip key={s.slug}>{s.name}</Chip>
-                ))}
-              </ChipRow>
-            </>
-          ) : null}
-
-          <SectionTitle>Abonnement</SectionTitle>
-          <Plate style={styles.block}>
-            <Text variant="bodyStrong" color={t.color.plateInk} testID="pro-subscription">
-              {pro.subscription.label}
-            </Text>
-            <Text variant="caption" color={t.color.plateMuted}>
-              Aucun paiement dans l'appli. L'abonnement se gère sur le site Orasso, dans l'espace pro.
-            </Text>
-          </Plate>
-          <Muted variant="caption">
-            Pour modifier ta fiche, tes photos, tes remises ou ton SIRET, ouvre ton espace pro sur le site Orasso.
-          </Muted>
+          <PublicationBlock pro={pro} reload={reload} />
+          <SiretBlock pro={pro} reload={reload} />
+          <DiscountsBlock pro={pro} reload={reload} />
+          <MediaBlock pro={pro} reload={reload} />
+          <PartnersBlock pro={pro} reload={reload} />
+          <SubscriptionBlock pro={pro} />
         </>
       )}
     </TabScreen>
@@ -103,5 +83,4 @@ export default function ProFiche() {
 
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: space1 },
 });

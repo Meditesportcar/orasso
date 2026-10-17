@@ -222,6 +222,20 @@
   - Mode assistance : « Survoler l'espace » avec bandeau (lecture seule, puis intervention en cours) ; côté organisateur, « Demander l'aide d'Orasso », état et fermeture au bas de Ma structure. Lien profond des alertes de modération et des demandes d'aide (Journal et notification).
   - Tests : `apps/mobile/src/lib/{adminModel,clock,persona}.test.ts` ; recette `apps/web/e2e/appli-administration.spec.ts` (APP_URL).
 
+- **Parité de l'appli : billetterie, pro, compte, garage (lot 35c, D20, 17/10/2026)** : tout ce que le site permet se règle aussi dans l'appli. Choix : `docs/JOURNAL-DES-CHOIX.md` (lot 35c) ; état technique : `ARCHITECTURE.md` « État après le lot 35c ».
+  - Organisateur : page d'un événement → « Billetterie des visiteurs » (`/evenement/<id>/billetterie`) : ouverture, nom du billet, places, prix ; compte Stripe lu (le parcours s'ouvre dans le navigateur, l'état est relu au retour dans l'appli), connexion et déconnexion réservées au propriétaire.
+  - Pro (casquette Pro) : onglet Fiche (modifier la fiche, publication, SIRET, remises, logo, photos, partenaires, abonnement et emplacements sponsorisés **en consultation**, aucun paiement) ; onglet Publier (publications modifiées et supprimées).
+  - Moi : newsletter, export des données (fichier JSON), clés d'accès (liste, renommage, suppression ; la création reste sur le site).
+  - Garage : modifier le véhicule (plaque d'un autre membre = transfert lancé), message de certification, historique cliquable, suppression.
+  - API : `PATCH /pros/:id/posts/:postId`, `GET /me/export`. Aucune migration, aucune variable, aucune dépendance.
+  - Recette : `apps/web/e2e/appli-parite.spec.ts` (`APP_URL`, API lancée avec des variables Stripe factices) ; captures : `C:\Users\DELL\.claude\relais\orasso\lot-35c-captures\`.
+
+- **Parité appli : créer, modifier, dupliquer, publier un événement ; décision groupée ; invitations (lot 35b, 17/10/2026, décision D20)** — choix et emplacements : `docs/JOURNAL-DES-CHOIX.md` (lot 35b).
+  - Onglet **Événements** de la casquette Organisateur : « Créer un événement » ouvre l'assistant dans l'appli (mêmes étapes, champs, défauts et validations que le site, modèle commun `packages/shared/src/eventWizard.ts`) : une étape par écran, lieu par adresse ou par « Utiliser ma position », plusieurs jours, zones, critères, places, prestataires, affiche ; brouillon gardé sur le téléphone.
+  - Page de l'événement : Modifier (assistant prérempli), Publier, Dupliquer, Récurrence (avec confirmation), Page publique ; Bilan : Édition suivante. Invitations : véhicules proposés, édition passée (confirmation), liste et retrait.
+  - Décision groupée du mode liste du tri : déjà là (lot 23), vérifiée.
+  - Tests : `eventWizard.test.ts` (shared), `lib/eventDraft.test.ts`, `lib/api/eventEditor.test.ts` (appli) ; recette `apps/web/e2e/appli-evenements.spec.ts`.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
@@ -230,6 +244,8 @@
 
 - Lot 35a : aucune migration ni variable ; nouvel APK utile (écrans de l'appli), aucune dépendance native nouvelle. À essayer sur téléphone : accepter une demande de staff, partager le CSV d'un export (feuille de partage du système), choisir un logo et une photo de justificatif, lien d'invitation partagé. Damien relit les « À revoir » du lot 35a (étiquette « Staff » de l'onglet, justificatifs en photo seulement, bannissements et modification de modèle absents du site). Suite de la parité : lots 35b (événements), 35c (billetterie, pro, compte, garage).
 - Lot 35d : aucune migration, variable ni dépendance native ; nouvel APK utile. À essayer sur téléphone : photothèque (justificatif, image d'un emplacement), bandeau du survol avec encoche, lien profond d'une vraie notification poussée. Damien relit les « À revoir » du lot 35d.
+- Lot 35b : aucune migration ni variable ; nouvel APK utile (écrans de l'appli), aucune dépendance native nouvelle. À essayer sur téléphone : créer un événement de bout en bout (saisie des dates au clavier, « Utiliser ma position » et adresse inverse, affiche depuis la photothèque), quitter puis reprendre le brouillon. Damien relit les « À revoir » du lot 35b.
+- Lot 35a : aucune migration ni variable ; nouvel APK utile (écrans de l'appli), aucune dépendance native nouvelle. À essayer sur téléphone : accepter une demande de staff, partager le CSV d'un export (feuille de partage du système), choisir un logo et une photo de justificatif, lien d'invitation partagé. Damien relit les « À revoir » du lot 35a (étiquette « Staff » de l'onglet, justificatifs en photo seulement, bannissements et modification de modèle absents du site). Suite de la parité : lots 35b (événements), 35c (billetterie, pro, compte, garage), 35d (administration dans l'appli).
 - Lot 26 : déployer (migration `0038_multi-day` au démarrage, aucune variable nouvelle ; `pnpm db:seed` ajoute « Salon de printemps » à une base existante). Damien relit les « À revoir » du lot 26 (AS6 verrouillage au premier jour, malus d'une candidature d'un jour, places affichées = meilleur jour). À essayer sur téléphone : panneau « Inscrit pour un autre jour » au scan, filtre « Aujourd'hui », choix du jour à la candidature, sélecteur de jour du Direct.
 - Lot 33 : déployer (migration `0040_admin` au démarrage ; `UNSUBSCRIBE_SECRET` est ajouté de lui-même à `/etc/orasso/dev.env` par `deploy/remote-deploy.sh` s'il manque (jamais affiché ; l'API refuse de démarrer sans en production) ; `NEWSLETTER_FROM` facultative ; `pnpm db:seed` ajoute `Equipe_Orasso`, la newsletter en brouillon, la demande d'aide et la file « Autre » à une base existante). Première newsletter réelle : clé Brevo. Damien relit les « À revoir » du lot 33 (listes administrables sans ajout de code, quota S18 par structure).
 

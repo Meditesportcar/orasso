@@ -1,16 +1,22 @@
 // Casquette Organisateur, Événements (lot 22) : les événements de la structure par statut (brouillons, publiés à venir,
-// passés, annulés). Un appui ouvre la page de l'événement côté organisateur ; la création passe par le site (docs/02).
+// passés, annulés). Un appui ouvre la page de l'événement côté organisateur. Lot 35b (D20) : « Créer un événement »
+// ouvre l'assistant dans l'appli (`nouvel-evenement`), plus le site.
 import { Button, Chip, ChipRow, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type EventCard, eventFormatLabels, eventOutlookLabels, eventStatusLabels, orgaLabels } from "@orasso/shared";
+import {
+  type EventCard,
+  eventEditorLabels,
+  eventFormatLabels,
+  eventOutlookLabels,
+  eventStatusLabels,
+  orgaLabels,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { type ReactNode, useMemo } from "react";
-import { Linking, Pressable, StyleSheet } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 
-import { siteUrl } from "@/api";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
-import { groupEvents, orgaSitePath, structureSlugOf } from "@/lib/orga";
-import { useSession } from "@/lib/session";
+import { groupEvents } from "@/lib/orga";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { Muted } from "@/ui/Muted";
@@ -55,14 +61,12 @@ function EventRow({ event, onPress }: { event: EventCard; onPress: () => void })
 
 export function EventsScreen() {
   const router = useRouter();
-  const { me } = useSession();
   const { structureId, structureName } = useOrga();
   const at = useNow(60_000);
   const events = useApi(() => api.structureEvents(structureId), [structureId], {
     cacheKey: `orga-events-${structureId}`,
   });
   const groups = useMemo(() => groupEvents(events.data ?? [], at), [events.data, at]);
-  const slug = structureSlugOf(me?.memberships, structureId);
   const sections: [string, EventCard[]][] = [
     [orgaLabels.eventsGroupUpcoming, groups.upcoming],
     [orgaLabels.eventsGroupDraft, groups.drafts],
@@ -75,6 +79,15 @@ export function EventsScreen() {
     <TabScreen title={orgaLabels.eventsTitle} facts={structureName} onRefresh={events.reload}>
       <OrgaFailure error={events.error} />
       {events.offline ? <Notice>Hors ligne : dernière liste connue.</Notice> : null}
+      <Button
+        variant="primary"
+        icon="add"
+        onPress={() => router.push("/nouvel-evenement")}
+        fullWidth
+        testID="orga-create-event"
+      >
+        {eventEditorLabels.create}
+      </Button>
       {empty && !events.error ? (
         <Muted variant="body">{events.loading ? "Chargement…" : orgaLabels.eventsEmpty}</Muted>
       ) : null}
@@ -87,17 +100,6 @@ export function EventsScreen() {
           </Section>
         ),
       )}
-      <Muted variant="meta">{orgaLabels.eventsCreateHint}</Muted>
-      <Button
-        variant="primary"
-        icon="add"
-        disabled={!slug}
-        onPress={() => slug && void Linking.openURL(siteUrl(orgaSitePath(slug, "/nouvel-evenement")))}
-        fullWidth
-        testID="orga-create-on-site"
-      >
-        {orgaLabels.eventsCreateOnSite}
-      </Button>
     </TabScreen>
   );
 }

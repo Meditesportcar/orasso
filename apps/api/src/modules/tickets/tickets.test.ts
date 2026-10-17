@@ -118,6 +118,17 @@ describe("billets gratuits : interrupteurs", () => {
     expect((await call(fan, "GET", `/events/by-slug/${draft.slug}/tickets`)).status).toBe(404);
     expect((await call(fan, "PUT", `/events/${free.id}/ticketing`, { enabled: true, capacity: 1 })).status).toBe(403);
   });
+
+  it("structure suspendue : la billetterie ne se règle plus, elle reste lisible", async () => {
+    const e = await freeEvent();
+    await db.update(structures).set({ verification: "suspended" }).where(eq(structures.id, structure.id));
+    try {
+      expect((await setup(e.id)).status).toBe(403);
+      expect((await call(orga, "GET", `/events/${e.id}/ticketing`)).status).toBe(200);
+    } finally {
+      await db.update(structures).set({ verification: "verified" }).where(eq(structures.id, structure.id));
+    }
+  });
 });
 
 describe("billets gratuits : réservation", () => {

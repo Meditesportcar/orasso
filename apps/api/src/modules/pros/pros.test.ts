@@ -278,6 +278,39 @@ describe("publications et abonnés", () => {
     expect((await call(fan, "DELETE", `/pros/${pro.id}/follow`)).status).toBe(204);
     expect((await call(owner, "POST", `/pros/${pro.id}/follow`)).status).toBe(400);
   });
+
+  it("modifier une publication (lot 35c) : titre ou texte, au propriétaire seulement, le compteur ne bouge pas", async () => {
+    const pro = await createdPro();
+    await call(owner, "PUT", `/pros/${pro.id}/published`, { published: true });
+    const created = await call(owner, "POST", `/pros/${pro.id}/posts`, { title: "Promo", body: "-10 % cette semaine" });
+    const postId = created.json.id as string;
+
+    const edited = await call(owner, "PATCH", `/pros/${pro.id}/posts/${postId}`, { title: "Promo d'automne" });
+    expect(edited.status).toBe(200);
+    expect(edited.json).toMatchObject({
+      id: postId,
+      title: "Promo d'automne",
+      body: "-10 % cette semaine",
+      createdAt: created.json.createdAt,
+    });
+    const both = await call(owner, "PATCH", `/pros/${pro.id}/posts/${postId}`, { body: "-15 % jusqu'à samedi" });
+    expect(both.json).toMatchObject({ title: "Promo d'automne", body: "-15 % jusqu'à samedi" });
+    expect((await call(owner, "GET", "/me/pro")).json).toMatchObject({ postsUsed: 1, postsRemaining: 3 });
+
+    // Rien à modifier, texte trop court, publication inconnue, fiche d'un autre : refus.
+    expect((await call(owner, "PATCH", `/pros/${pro.id}/posts/${postId}`, {})).status).toBe(400);
+    expect((await call(owner, "PATCH", `/pros/${pro.id}/posts/${postId}`, { title: "A" })).status).toBe(400);
+    expect(
+      (
+        await call(owner, "PATCH", `/pros/${pro.id}/posts/${"00000000-0000-4000-8000-000000000000"}`, {
+          title: "Autre",
+        })
+      ).status,
+    ).toBe(404);
+    expect((await call(fan, "PATCH", `/pros/${pro.id}/posts/${postId}`, { title: "Piraté" })).status).toBe(403);
+    expect((await call(null, "PATCH", `/pros/${pro.id}/posts/${postId}`, { title: "Piraté" })).status).toBe(401);
+    expect((await call(owner, "GET", "/me/pro")).json.posts[0]).toMatchObject({ title: "Promo d'automne" });
+  });
 });
 
 describe("statistiques", () => {

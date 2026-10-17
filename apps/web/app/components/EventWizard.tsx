@@ -5,335 +5,50 @@
 import { Button, CheckboxField, Chip, ChipRow, SelectField, TextField } from "@orasso/design-system/web";
 import {
   type Category,
-  type DayAccess,
+  criteriaCountries,
   dayAccesses,
   dayAccessLabels,
   defaultEventRules,
-  type EventAdmission,
-  type EventFormat,
+  type EventDraft,
   type EventOrganizer,
-  type EventPublicAccess,
   eventAdmissionLabels,
   eventDaysLabels,
+  eventDaysPayload,
+  eventEditorLabels,
   eventFormatLabels,
+  eventPayload,
   eventPublicAccessLabels,
+  eventStepProblem,
+  eventStepSkipped,
+  eventWizardSteps,
+  firstEventProblem,
   type Grade,
   gradeLabels,
   grades,
+  highGradePreviewOptions,
   highGradesText,
+  initialEventDraft,
   invitationLabels,
+  lockOffsetOptions,
   ON_SITE_PAYMENT_LABEL,
+  previewHourOptions,
   shopLabels,
+  sortedDraftDays,
   type VehicleMake,
-  type VehicleType,
   vehicleTypeLabels,
   vehicleTypes,
   vendorTypeLabels,
+  withAddedDay,
+  withMultiDay,
+  zoneChanges,
 } from "@orasso/shared";
 import { useState } from "react";
 import { apiFetch } from "../lib/api.client";
 import { now as clockNow } from "../lib/clock";
-import { fromInput, toInput } from "../lib/datetime";
 import { useEventFormats, useVendorTypes } from "../lib/lists";
 import { FileField, TextAreaField } from "./Fields";
 
-type StepId =
-  | "format"
-  | "vehicules"
-  | "places"
-  | "prestataires"
-  | "public"
-  | "admission"
-  | "criteres"
-  | "avant-premiere"
-  | "reglement"
-  | "infos"
-  | "zones"
-  | "billetterie";
-
-const STEPS: { id: StepId; label: string }[] = [
-  { id: "format", label: "Format" },
-  { id: "vehicules", label: "Véhicules" },
-  { id: "places", label: "Places" },
-  { id: "prestataires", label: "Prestataires" },
-  { id: "public", label: "Public" },
-  { id: "admission", label: "Admission" },
-  { id: "criteres", label: "Critères" },
-  { id: "avant-premiere", label: "Avant-première" },
-  { id: "reglement", label: "Règlement" },
-  { id: "infos", label: "Infos" },
-  { id: "zones", label: "Zones" },
-  { id: "billetterie", label: "Billetterie" },
-];
-
-const COUNTRIES = [
-  ["FR", "France"],
-  ["DE", "Allemagne"],
-  ["IT", "Italie"],
-  ["GB", "Royaume-Uni"],
-  ["JP", "Japon"],
-  ["US", "États-Unis"],
-  ["SE", "Suède"],
-  ["ES", "Espagne"],
-] as const;
-
-type ZoneDraft = { id?: string; code: string; name: string; capacity: string };
-
-/** Un jour d'un événement sur plusieurs jours (lot 26) : date, heures de Paris, capacité facultative. */
-type DayDraft = { date: string; startTime: string; endTime: string; capacity: string };
-
-type Draft = {
-  format: EventFormat;
-  title: string;
-  description: string;
-  startsAt: string;
-  endsAt: string;
-  /** Lot 26 : événement sur plusieurs jours, ses jours et le mode d'accès. */
-  multiDay: boolean;
-  days: DayDraft[];
-  dayAccess: DayAccess;
-  addressLine: string;
-  postalCode: string;
-  city: string;
-  lat: number | null;
-  lng: number | null;
-  vehicleTypes: VehicleType[];
-  maxVehiclesPerUser: string;
-  unlimited: boolean;
-  capacity: string;
-  vendorTypes: string[];
-  /** Rôle boutique du staff activé pour cet événement (lot 24). */
-  shopEnabled: boolean;
-  publicAccess: EventPublicAccess;
-  externalTicketUrl: string;
-  /** Entrée payante hors Orasso : lien de billetterie ou paiement sur place (lot 21). */
-  paymentMode: "link" | "on_site";
-  admission: EventAdmission;
-  categoryIds: string[];
-  makeIds: string[];
-  countries: string[];
-  criteriaText: string;
-  registrationsOpenAt: string;
-  previewHours: string;
-  /** Hauts grades (lot 25) : priorité en liste d'attente, avant-première supplémentaire, seuil. */
-  highGradePriority: boolean;
-  highGradePreviewHours: string;
-  highGradeMin: Grade;
-  lockOffsetMinutes: string;
-  rulesText: string;
-  instructions: string;
-  zones: ZoneDraft[];
-};
-
-function initial(event?: EventOrganizer): Draft {
-  if (!event) {
-    return {
-      format: "gathering",
-      title: "",
-      description: "",
-      startsAt: "",
-      endsAt: "",
-      multiDay: false,
-      days: [],
-      dayAccess: "both",
-      addressLine: "",
-      postalCode: "",
-      city: "",
-      lat: null,
-      lng: null,
-      vehicleTypes: ["car"],
-      maxVehiclesPerUser: "1",
-      unlimited: true,
-      capacity: "",
-      vendorTypes: [],
-      shopEnabled: false,
-      publicAccess: "free",
-      externalTicketUrl: "",
-      paymentMode: "link",
-      admission: "filtered",
-      categoryIds: [],
-      makeIds: [],
-      countries: [],
-      criteriaText: "",
-      registrationsOpenAt: toInput(clockNow()),
-      previewHours: "24",
-      highGradePriority: false,
-      highGradePreviewHours: "0",
-      highGradeMin: "circuit",
-      lockOffsetMinutes: "120",
-      rulesText: defaultEventRules,
-      instructions: "",
-      zones: [],
-    };
-  }
-  return {
-    format: event.format,
-    title: event.title,
-    description: event.description ?? "",
-    startsAt: toInput(event.startsAt),
-    endsAt: toInput(event.endsAt),
-    multiDay: event.days.length > 1,
-    days: event.days.map((day) => ({
-      date: day.date,
-      startTime: toInput(day.startsAt).slice(11, 16),
-      endTime: toInput(day.endsAt).slice(11, 16),
-      capacity: day.capacity === null ? "" : String(day.capacity),
-    })),
-    dayAccess: event.days.length > 1 ? event.dayAccess : "both",
-    addressLine: event.addressLine ?? "",
-    postalCode: event.postalCode ?? "",
-    city: event.city ?? "",
-    lat: event.lat,
-    lng: event.lng,
-    vehicleTypes: event.admittedVehicleTypes,
-    maxVehiclesPerUser: String(event.maxVehiclesPerUser),
-    unlimited: event.capacity === null,
-    capacity: event.capacity === null ? "" : String(event.capacity),
-    vendorTypes: event.vendorTypes,
-    shopEnabled: event.shopEnabled,
-    publicAccess: event.publicAccess,
-    externalTicketUrl: event.externalTicketUrl ?? "",
-    paymentMode: event.publicAccess === "paid_external" && !event.externalTicketUrl ? "on_site" : "link",
-    admission: event.admission,
-    categoryIds: event.criteria?.categoryIds ?? [],
-    makeIds: event.criteria?.makeIds ?? [],
-    countries: event.criteria?.countries ?? [],
-    criteriaText: event.criteria?.text ?? "",
-    registrationsOpenAt: toInput(event.registrationsOpenAt),
-    previewHours: String(event.previewHours),
-    highGradePriority: event.highGradePriority,
-    highGradePreviewHours: String(event.highGradePreviewHours),
-    highGradeMin: event.highGradeMin,
-    lockOffsetMinutes: String(
-      event.lockAt ? Math.round((new Date(event.startsAt).getTime() - new Date(event.lockAt).getTime()) / 60_000) : 120,
-    ),
-    rulesText: event.rulesText ?? "",
-    instructions: event.instructions ?? "",
-    zones: event.zones.map((z) => ({
-      id: z.id,
-      code: z.code,
-      name: z.name,
-      capacity: z.capacity ? String(z.capacity) : "",
-    })),
-  };
-}
-
-function validate(step: StepId, d: Draft): string | null {
-  switch (step) {
-    case "format": {
-      if (d.title.trim().length < 3) return "Donne un titre d'au moins 3 caractères.";
-      if (d.multiDay) {
-        if (d.days.length < 2) return "Un événement sur plusieurs jours a au moins deux jours.";
-        if (d.days.some((x) => !x.date || !x.startTime || !x.endTime))
-          return "Indique la date et les horaires de chaque jour.";
-        if (new Set(d.days.map((x) => x.date)).size !== d.days.length) return "Deux jours ont la même date.";
-        if (d.days.some((x) => x.capacity !== "" && !(Number(x.capacity) > 0)))
-          return "Places d'un jour : un nombre supérieur à zéro, ou vide.";
-        return null;
-      }
-      const start = fromInput(d.startsAt);
-      const end = fromInput(d.endsAt);
-      if (!start || !end) return "Indique le début et la fin.";
-      if (new Date(end) <= new Date(start)) return "La fin doit suivre le début.";
-      return null;
-    }
-    case "vehicules":
-      return d.vehicleTypes.length === 0 ? "Coche au moins un type de véhicule." : null;
-    case "places":
-      return !d.unlimited && !(Number(d.capacity) > 0) ? "Indique un nombre de places supérieur à zéro." : null;
-    case "public":
-      return d.publicAccess === "paid_external" &&
-        d.paymentMode === "link" &&
-        !/^https?:\/\//i.test(d.externalTicketUrl)
-        ? "Indique l'adresse de ta billetterie (https://…)."
-        : null;
-    case "avant-premiere":
-      return fromInput(d.registrationsOpenAt) ? null : "Indique l'ouverture des inscriptions.";
-    case "zones": {
-      const codes = d.zones.map((z) => z.code.trim().toUpperCase());
-      if (d.zones.some((z) => !/^[A-Z0-9]{1,4}$/.test(z.code.trim().toUpperCase()) || !z.name.trim())) {
-        return "Chaque zone a un code de 1 à 4 lettres ou chiffres et un nom.";
-      }
-      return new Set(codes).size === codes.length ? null : "Deux zones ont le même code.";
-    }
-    default:
-      return null;
-  }
-}
-
-/** Jours triés (lot 26). */
-const sortedDays = (d: Draft) => [...d.days].sort((a, b) => a.date.localeCompare(b.date));
-
-/**
- * Dates envoyées avec l'événement. Plusieurs jours : à la création, les bornes approchées (le serveur les recalcule
- * exactement à l'enregistrement des jours) ; à la modification, rien (elles se règlent jour par jour).
- */
-function datesOf(d: Draft, editingMultiDay: boolean) {
-  if (!d.multiDay) return { startsAt: fromInput(d.startsAt), endsAt: fromInput(d.endsAt) };
-  if (editingMultiDay) return {};
-  const days = sortedDays(d);
-  const first = days[0];
-  const last = days[days.length - 1];
-  if (!first || !last) return {};
-  const startsAt = fromInput(`${first.date}T${first.startTime}`);
-  let endsAt = fromInput(`${last.date}T${last.endTime}`);
-  if (startsAt && endsAt && endsAt <= startsAt) endsAt = new Date(Date.parse(startsAt) + 3_600_000).toISOString();
-  return { startsAt, endsAt };
-}
-
-/** Corps de `PUT /events/:id/days` : liste vide pour un événement d'un jour. */
-function daysPayloadOf(d: Draft) {
-  return {
-    dayAccess: d.multiDay ? d.dayAccess : undefined,
-    days: d.multiDay
-      ? sortedDays(d).map((x) => ({
-          date: x.date,
-          startTime: x.startTime,
-          endTime: x.endTime,
-          capacity: Number(x.capacity) > 0 ? Number(x.capacity) : null,
-        }))
-      : [],
-  };
-}
-
-function payloadOf(d: Draft, editingMultiDay = false) {
-  return {
-    title: d.title.trim(),
-    description: d.description.trim() || null,
-    format: d.format,
-    ...datesOf(d, editingMultiDay),
-    addressLine: d.addressLine.trim() || null,
-    postalCode: d.postalCode.trim() || null,
-    city: d.city.trim() || null,
-    ...(d.lat !== null && d.lng !== null ? { lat: d.lat, lng: d.lng } : {}),
-    admittedVehicleTypes: d.vehicleTypes,
-    capacity: d.unlimited ? null : Number(d.capacity),
-    maxVehiclesPerUser: Math.max(1, Number(d.maxVehiclesPerUser) || 1),
-    admission: d.admission,
-    criteria:
-      d.admission === "filtered"
-        ? {
-            categoryIds: d.categoryIds,
-            makeIds: d.makeIds,
-            countries: d.countries,
-            text: d.criteriaText.trim() || null,
-          }
-        : null,
-    publicAccess: d.publicAccess,
-    externalTicketUrl:
-      d.publicAccess === "paid_external" && d.paymentMode === "link" ? d.externalTicketUrl.trim() : null,
-    registrationsOpenAt: fromInput(d.registrationsOpenAt),
-    previewHours: Number(d.previewHours),
-    highGradePriority: d.highGradePriority,
-    highGradePreviewHours: Number(d.highGradePreviewHours),
-    highGradeMin: d.highGradeMin,
-    lockOffsetMinutes: Number(d.lockOffsetMinutes),
-    rulesText: d.rulesText.trim() || null,
-    instructions: d.instructions.trim() || null,
-    vendorTypes: d.vendorTypes,
-    shopEnabled: d.shopEnabled,
-  };
-}
+const STEPS = eventWizardSteps.map((id) => ({ id, label: eventEditorLabels.steps[id] }));
 
 type Props = {
   structureId: string;
@@ -349,7 +64,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
   const [createdId, setCreatedId] = useState<string | null>(null);
   const targetId = event?.id ?? createdId;
   const editing = Boolean(event);
-  const [d, setD] = useState<Draft>(() => initial(event));
+  const [d, setD] = useState<EventDraft>(() => initialEventDraft(clockNow(), event));
   // Lot 33 : types de prestataires proposés par l'administration (repli sur les constantes partagées).
   const vendorTypeSuggestions: readonly string[] = useVendorTypes().map((c) => vendorTypeLabels[c]);
   // Formats proposés par l'administration ; celui d'un événement existant reste proposé.
@@ -363,19 +78,20 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
   const [poster, setPoster] = useState<File | null>(null);
   const step = STEPS[index] as (typeof STEPS)[number];
   const last = index === STEPS.length - 1;
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setD((prev) => ({ ...prev, [key]: value }));
+  const set = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => setD((prev) => ({ ...prev, [key]: value }));
   const toggle = <T extends string>(list: T[], value: T) =>
     list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
 
   function go(delta: 1 | -1) {
     if (delta === 1) {
-      const problem = validate(step.id, d);
+      const problem = eventStepProblem(step.id, d);
       if (problem) return setError(problem);
     }
     setError(null);
     let next = index + delta;
     // Pas de critères hors filtration.
-    if (STEPS[next]?.id === "criteres" && d.admission !== "filtered") next += delta;
+    const target = STEPS[next];
+    if (target && eventStepSkipped(target.id, d)) next += delta;
     setIndex(Math.min(Math.max(next, 0), STEPS.length - 1));
   }
 
@@ -404,20 +120,17 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
   }
 
   async function save() {
-    for (const s of STEPS) {
-      if (s.id === "criteres" && d.admission !== "filtered") continue;
-      const problem = validate(s.id, d);
-      if (problem) {
-        setIndex(STEPS.findIndex((x) => x.id === s.id));
-        return setError(problem);
-      }
+    const invalid = firstEventProblem(d);
+    if (invalid) {
+      setIndex(STEPS.findIndex((x) => x.id === invalid.step));
+      return setError(invalid.problem);
     }
     setBusy(true);
     setError(null);
     const wasMultiDay = (event?.days.length ?? 0) > 1;
     // Lot 26 : retour à un seul jour d'un événement qui en avait plusieurs : les jours d'abord (les dates suivent).
     if (editing && wasMultiDay && !d.multiDay) {
-      const back = await apiFetch(`/events/${targetId}/days`, { method: "PUT", json: daysPayloadOf(d) });
+      const back = await apiFetch(`/events/${targetId}/days`, { method: "PUT", json: eventDaysPayload(d) });
       if (!back.ok) {
         setBusy(false);
         return setError(back.error.message);
@@ -425,7 +138,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
     }
     // Plusieurs jours, événement existant : pas de dates dans le PATCH (les jours fixent les bornes, et une seule
     // notification « Événement modifié » part, celle des jours).
-    const body = payloadOf(d, Boolean(targetId) && d.multiDay);
+    const body = eventPayload(d, Boolean(targetId) && d.multiDay);
     const res = targetId
       ? await apiFetch<EventOrganizer>(`/events/${targetId}`, { method: "PATCH", json: body })
       : await apiFetch<EventOrganizer>(`/structures/${structureId}/events`, { method: "POST", json: body });
@@ -437,7 +150,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
     const saved = res.data;
     // Lot 26 : plusieurs jours (liste complète) ; les dates de l'événement deviennent les bornes.
     if (d.multiDay) {
-      const days = await apiFetch(`/events/${saved.id}/days`, { method: "PUT", json: daysPayloadOf(d) });
+      const days = await apiFetch(`/events/${saved.id}/days`, { method: "PUT", json: eventDaysPayload(d) });
       if (!days.ok) {
         if (!event) setCreatedId(saved.id);
         setBusy(false);
@@ -446,20 +159,12 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
       }
     }
     // Zones : création, modification, retrait par rapport à l'état enregistré.
-    const kept = new Set(d.zones.map((z) => z.id).filter(Boolean));
-    for (const z of event?.zones ?? []) {
-      if (!kept.has(z.id)) await apiFetch(`/events/${saved.id}/zones/${z.id}`, { method: "DELETE" });
+    const zones = zoneChanges(event?.zones ?? [], d.zones);
+    for (const id of zones.remove) await apiFetch(`/events/${saved.id}/zones/${id}`, { method: "DELETE" });
+    for (const z of zones.update) {
+      await apiFetch(`/events/${saved.id}/zones/${z.id}`, { method: "PATCH", json: z.zone });
     }
-    for (const [position, z] of d.zones.entries()) {
-      const zone = {
-        code: z.code.trim().toUpperCase(),
-        name: z.name.trim(),
-        capacity: Number(z.capacity) > 0 ? Number(z.capacity) : null,
-        position,
-      };
-      if (z.id) await apiFetch(`/events/${saved.id}/zones/${z.id}`, { method: "PATCH", json: zone });
-      else await apiFetch(`/events/${saved.id}/zones`, { method: "POST", json: zone });
-    }
+    for (const zone of zones.create) await apiFetch(`/events/${saved.id}/zones`, { method: "POST", json: zone });
     if (poster) {
       const form = new FormData();
       form.set("poster", poster);
@@ -516,24 +221,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
               checked={d.multiDay}
               onChange={(e) => {
                 const multiDay = e.currentTarget.checked;
-                setD((p) => {
-                  if (!multiDay || p.days.length >= 2) return { ...p, multiDay };
-                  // Deux premiers jours préremplis depuis le début saisi (le lendemain aux mêmes heures).
-                  const start = p.startsAt || toInput(clockNow());
-                  const date = start.slice(0, 10);
-                  const next = new Date(`${date}T12:00:00Z`);
-                  next.setUTCDate(next.getUTCDate() + 1);
-                  const startTime = start.slice(11, 16) || "09:00";
-                  const endTime = p.endsAt.slice(11, 16) || "18:00";
-                  return {
-                    ...p,
-                    multiDay,
-                    days: [
-                      { date, startTime, endTime, capacity: "" },
-                      { date: next.toISOString().slice(0, 10), startTime, endTime, capacity: "" },
-                    ],
-                  };
-                });
+                setD((p) => withMultiDay(p, multiDay, clockNow()));
               }}
             />
             {d.multiDay ? (
@@ -606,29 +294,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
                   </fieldset>
                 ))}
                 <div className="s-row">
-                  <Button
-                    variant="secondary"
-                    icon="add"
-                    onClick={() =>
-                      setD((p) => {
-                        const last = p.days[p.days.length - 1];
-                        const next = new Date(`${last?.date || clockNow().toISOString().slice(0, 10)}T12:00:00Z`);
-                        next.setUTCDate(next.getUTCDate() + 1);
-                        return {
-                          ...p,
-                          days: [
-                            ...p.days,
-                            {
-                              date: next.toISOString().slice(0, 10),
-                              startTime: last?.startTime ?? "09:00",
-                              endTime: last?.endTime ?? "18:00",
-                              capacity: "",
-                            },
-                          ],
-                        };
-                      })
-                    }
-                  >
+                  <Button variant="secondary" icon="add" onClick={() => setD((p) => withAddedDay(p, clockNow()))}>
                     {eventDaysLabels.addDay}
                   </Button>
                 </div>
@@ -899,7 +565,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
             <fieldset className="s-fieldset s-stack s-stack--tight">
               <legend className="o-t-label s-label">Origine</legend>
               <ChipRow className="s-chips-wrap">
-                {COUNTRIES.map(([code, label]) => (
+                {criteriaCountries.map(([code, label]) => (
                   <Chip
                     key={code}
                     selected={d.countries.includes(code)}
@@ -949,12 +615,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
               name="previewHours"
               value={d.previewHours}
               onChange={(e) => set("previewHours", e.currentTarget.value)}
-              options={[
-                { value: "0", label: "Aucune" },
-                { value: "24", label: "24 h avant (par défaut)" },
-                { value: "48", label: "48 h avant" },
-                { value: "72", label: "72 h avant" },
-              ]}
+              options={[...previewHourOptions]}
               help="Les abonnés de ta structure peuvent candidater avant l'ouverture publique."
             />
             <fieldset className="s-fieldset s-stack s-stack--tight" data-testid="wizard-high-grades">
@@ -971,12 +632,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
                 name="highGradePreviewHours"
                 value={d.highGradePreviewHours}
                 onChange={(e) => set("highGradePreviewHours", e.currentTarget.value)}
-                options={[
-                  { value: "0", label: "Aucune" },
-                  { value: "24", label: "24 h avant" },
-                  { value: "48", label: "48 h avant" },
-                  { value: "72", label: "72 h avant" },
-                ]}
+                options={[...highGradePreviewOptions]}
                 help={invitationLabels.highGradePreviewHint}
               />
               <SelectField
@@ -993,14 +649,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
               name="lockOffsetMinutes"
               value={d.lockOffsetMinutes}
               onChange={(e) => set("lockOffsetMinutes", e.currentTarget.value)}
-              options={[
-                { value: "0", label: "Au début de l'événement" },
-                { value: "60", label: "1 h avant" },
-                { value: "120", label: "2 h avant (par défaut)" },
-                { value: "180", label: "3 h avant" },
-                { value: "360", label: "6 h avant" },
-                { value: "1440", label: "24 h avant" },
-              ]}
+              options={[...lockOffsetOptions]}
               help="À ce moment, le staff synchronise la liste d'accès et les désistements deviennent des absences."
             />
           </>
@@ -1164,14 +813,14 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
   );
 }
 
-function Recap({ d }: { d: Draft }) {
+function Recap({ d }: { d: EventDraft }) {
   const rows: [string, string][] = [
     ["Format", eventFormatLabels[d.format]],
     ["Titre", d.title || "—"],
     d.multiDay
       ? [
           eventDaysLabels.days,
-          `${sortedDays(d)
+          `${sortedDraftDays(d)
             .map((x) => `${x.date} ${x.startTime}–${x.endTime}`)
             .join(", ")} · ${dayAccessLabels[d.dayAccess]}`,
         ]

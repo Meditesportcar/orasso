@@ -28,7 +28,7 @@ import { and, asc, count, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { adminAuditLog, events, orders, stripeConnectStates, structures, tickets, ticketTypes } from "../../db/schema";
 import { env } from "../../env";
-import { activeMembership, requireOrganizer, staffAccess } from "../../lib/access";
+import { activeMembership, requireOrganizer, requireOrganizerWrite, staffAccess } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -475,7 +475,8 @@ export const ticketsService = {
   /** `PUT /events/:id/ticketing` : active la billetterie de l'événement (deuxième interrupteur), places, prix. */
   async configure(v: Viewer, eventId: string, input: TicketingUpdate): Promise<EventTicketing> {
     const { e, s } = await eventWithStructure(eventId);
-    await requireOrganizer(v, e.structureId);
+    // Réglage de l'événement : refusé à une structure suspendue (lot 27, S31), comme l'affiche ou les zones.
+    await requireOrganizerWrite(v, e.structureId);
     if (e.publicAccess !== "free_reservation" && e.publicAccess !== "paid_orasso") {
       throw validation(
         "Choisis « Gratuite sur réservation » ou « Payante · billetterie Orasso » dans l'accès du public.",

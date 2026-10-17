@@ -13,6 +13,7 @@ import type {
   VehicleModel,
   VehiclePhoto,
   VehicleStatus,
+  VehicleUpdate,
 } from "@orasso/shared";
 
 import { request } from "../http";
@@ -29,6 +30,11 @@ export const garageApi = {
       method: "PATCH",
       body: { status, statusNote: statusNote ?? null },
     }),
+  /** Modification de la fiche (lot 35c) ; une plaque déjà prise par un autre membre ouvre une demande de transfert. */
+  updateVehicle: (id: string, body: VehicleUpdate) =>
+    request<VehicleFull>(`/api/me/vehicles/${id}`, { method: "PATCH", body }),
+  /** Suppression définitive (impossible si le véhicule a déjà participé à un événement : l'API répond 409). */
+  deleteVehicle: (id: string) => request<unknown>(`/api/me/vehicles/${id}`, { method: "DELETE" }),
   deleteVehiclePhoto: (vehicleId: string, photoId: string) =>
     request<unknown>(`/api/me/vehicles/${vehicleId}/photos/${photoId}`, { method: "DELETE" }),
   createVehicle: (body: VehicleCreate) => request<VehicleFull>("/api/me/vehicles", { method: "POST", body }),

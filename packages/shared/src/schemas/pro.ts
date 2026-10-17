@@ -85,6 +85,12 @@ export const proPostCreateSchema = z.object({
 });
 export type ProPostCreate = z.infer<typeof proPostCreateSchema>;
 
+/** Correction d'une publication (lot 35c) : mêmes limites que la création, au moins un des deux champs. */
+export const proPostUpdateSchema = proPostCreateSchema
+  .partial()
+  .refine((o) => o.title !== undefined || o.body !== undefined, "Rien à modifier");
+export type ProPostUpdate = z.infer<typeof proPostUpdateSchema>;
+
 export const proTrackSchema = z.object({ kind: z.enum(["view", "call", "route"]) });
 export type ProTrackKind = z.infer<typeof proTrackSchema>["kind"];
 

@@ -15,7 +15,7 @@ export async function pickOneImage(): Promise<PickedPhoto | null> {
 /** Formulaire d'envoi d'une image sous le champ donné, avec des champs texte en plus. */
 export async function imageForm(
   photo: PickedPhoto,
-  field: "logo" | "file" | "image",
+  field: "logo" | "file" | "poster" | "image",
   fileName: string,
   extra: Record<string, string> = {},
 ): Promise<FormData> {

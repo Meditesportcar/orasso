@@ -7,6 +7,7 @@ import { afterEventApi } from "./after-event";
 import { applicationsApi } from "./applications";
 import { communicationApi } from "./communication";
 import { crewsApi } from "./crews";
+import { eventEditorApi } from "./eventEditor";
 import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
 import { garageApi } from "./garage";
@@ -23,12 +24,14 @@ import { settingsApi } from "./settings";
 import { socialApi } from "./social";
 import { staffApi } from "./staff";
 import { structureApi } from "./structure";
+import { ticketingApi } from "./ticketing";
 import { triageApi } from "./triage";
 import { weatherApi } from "./weather";
 
 export type { NotificationItem } from "./account";
 export type { AdminSettings, NewsletterDraft, PlacementCreate, StructureRegistryRow } from "./admin";
 export { authApi } from "./auth";
+export type { GeocodeMatch } from "./eventEditor";
 export type { FieldAlert, FieldIncident } from "./orga";
 export type { StructureBan } from "./structure";
 export type { DecideBody, DecideManyResult, TriageListQuery } from "./triage";
@@ -59,4 +62,6 @@ export const api = {
   ...orgaApi,
   ...structureApi,
   ...triageApi,
+  ...ticketingApi,
+  ...eventEditorApi,
 };

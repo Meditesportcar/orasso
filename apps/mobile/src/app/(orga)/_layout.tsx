@@ -2,6 +2,7 @@
 // La barre vient de `tabSets.organizer` (lot 16). La page d'un événement (`evenement/[id]`, lot 22) est une route de ce
 // groupe masquée dans la barre. Lot 35a (D20) : l'onglet Staff est l'écran Équipe (demandes, membres, invitations) ; la
 // structure, les bannissements, les modèles et les notes internes sont des écrans masqués, ouverts depuis l'Équipe.
+// Lot 35b : l'assistant d'événement (`nouvel-evenement`, `evenement/[id]/modifier`), masqué lui aussi.
 import { tabSets } from "@orasso/design-system/native";
 import { Tabs } from "expo-router";
 import { useMemo } from "react";
@@ -38,11 +39,16 @@ export default function OrgaLayout() {
         <Tabs.Screen name="evenement/[id]/inviter" options={{ href: null }} />
         {/* Bilan et remerciement (lot 27), depuis la page d'un événement. */}
         <Tabs.Screen name="evenement/[id]/bilan" options={{ href: null }} />
+        {/* Lot 35b : créer un événement (onglet Événements) et le modifier (page de l'événement). */}
+        <Tabs.Screen name="nouvel-evenement" options={{ href: null }} />
+        <Tabs.Screen name="evenement/[id]/modifier" options={{ href: null }} />
         {/* Lot 35a : structure, bannissements, modèles de message, notes internes, depuis l'Équipe. */}
         <Tabs.Screen name="ma-structure" options={{ href: null }} />
         <Tabs.Screen name="bannis" options={{ href: null }} />
         <Tabs.Screen name="modeles" options={{ href: null }} />
         <Tabs.Screen name="notes" options={{ href: null }} />
+        {/* Billetterie des visiteurs (lot 35c), depuis la page d'un événement. */}
+        <Tabs.Screen name="evenement/[id]/billetterie" options={{ href: null }} />
       </PersonaTabs>
     </View>
   );

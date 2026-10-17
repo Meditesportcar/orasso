@@ -1,7 +1,18 @@
 // Page d'un de mes véhicules (lot 31, docs/02 « page véhicule ») : photos (plein écran), fiche avec poids et pays de la
 // marque, préparation, description, historique des événements, statut (feuille Vendu / Souvenir / Accidenté),
 // « Partager sur Instagram » et « Demander la certification ». La plaque n'est montrée qu'ici, à son propriétaire.
-import { Button, Chip, ChipRow, Icon, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  Button,
+  Chip,
+  ChipRow,
+  Icon,
+  Photo,
+  Plate,
+  Text,
+  TextField,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
 import {
   applicationStatusLabels,
   certificationConditions,
@@ -9,6 +20,7 @@ import {
   certificationMissingLabels,
   certificationStatusLabels,
   countryLabel,
+  garageAppLabels,
   plateTransferLabels,
   vehicleStatusLabels,
   vehicleTypeLabels,
@@ -17,7 +29,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { ArchiveSheet } from "@/features/vehicle/ArchiveSheet";
+import { EditSheet } from "@/features/vehicle/EditSheet";
 import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { ShareSheet } from "@/features/vehicle/ShareSheet";
 import { api } from "@/lib/api";
@@ -43,6 +57,13 @@ export default function VehiculeFiche() {
   const [viewer, setViewer] = useState<number | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  // Lot 35c : modifier la fiche, supprimer le véhicule.
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [certMessage, setCertMessage] = useState("");
   const v = vehicle.data;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/garage"));
@@ -114,6 +135,39 @@ export default function VehiculeFiche() {
               version={v.shareVersion}
               visible={shareOpen}
               onClose={() => setShareOpen(false)}
+            />
+            <EditSheet
+              vehicle={v}
+              certified={v.certified}
+              visible={editOpen}
+              onClose={() => setEditOpen(false)}
+              onSaved={async (message) => {
+                setNotice(message);
+                await vehicle.reload();
+              }}
+            />
+            <ConfirmSheet
+              visible={deleteOpen}
+              title={garageAppLabels.deleteTitle}
+              body={`${v.label} : ${garageAppLabels.deleteBody}`}
+              confirmLabel={garageAppLabels.delete}
+              confirmIcon="close"
+              danger
+              busy={deleting}
+              error={deleteError}
+              onConfirm={() => {
+                setDeleting(true);
+                setDeleteError(null);
+                api
+                  .deleteVehicle(v.id)
+                  .then(() => router.replace("/garage"))
+                  .catch((e) => setDeleteError(errorMessage(e)))
+                  .finally(() => setDeleting(false));
+              }}
+              onClose={() => {
+                setDeleteOpen(false);
+                setDeleteError(null);
+              }}
             />
           </>
         ) : null
@@ -199,6 +253,19 @@ export default function VehiculeFiche() {
               La plaque est visible par toi et par l'organisateur d'un événement où tu candidates.
             </Text>
           </Plate>
+          {notice ? <Notice>{notice}</Notice> : null}
+          <Button
+            variant="secondary"
+            icon="profile"
+            onPress={() => {
+              setNotice(null);
+              setEditOpen(true);
+            }}
+            fullWidth
+            testID="vehicle-edit-open"
+          >
+            {garageAppLabels.edit}
+          </Button>
           {v.preparation ? (
             <>
               <SectionTitle>Préparation</SectionTitle>
@@ -261,15 +328,30 @@ export default function VehiculeFiche() {
                   </Text>
                 ) : null}
                 {cert.eligible ? (
-                  <Button
-                    variant="primary"
-                    icon="check"
-                    loading={busy !== null}
-                    onPress={() => void run("Envoi de la demande…", () => api.requestCertification(v.id))}
-                    fullWidth
-                  >
-                    Demander la certification
-                  </Button>
+                  <>
+                    <TextField
+                      label="Message pour l'équipe (facultatif)"
+                      value={certMessage}
+                      onChangeText={setCertMessage}
+                      multiline
+                      maxLength={500}
+                      testID="certification-message"
+                    />
+                    <Button
+                      variant="primary"
+                      icon="check"
+                      loading={busy !== null}
+                      onPress={() =>
+                        void run("Envoi de la demande…", () =>
+                          api.requestCertification(v.id, certMessage.trim() || null),
+                        )
+                      }
+                      fullWidth
+                      testID="certification-request"
+                    >
+                      Demander la certification
+                    </Button>
+                  </>
                 ) : null}
               </>
             )}
@@ -283,18 +365,26 @@ export default function VehiculeFiche() {
           <SectionTitle>Historique</SectionTitle>
           {history.data && history.data.length > 0 ? (
             history.data.map((h) => (
-              <Plate key={h.applicationId} style={styles.history}>
-                <Text variant="bodyStrong" color={t.color.plateInk}>
-                  {h.eventTitle}
-                </Text>
-                <Text variant="meta" color={t.color.plateMuted}>
-                  {`${formatDay(h.startsAt)} · ${
-                    h.attended
-                      ? "Présent"
-                      : (applicationStatusLabels[h.status as keyof typeof applicationStatusLabels] ?? h.status)
-                  }`}
-                </Text>
-              </Plate>
+              <Pressable
+                key={h.applicationId}
+                accessibilityRole="link"
+                accessibilityLabel={h.eventTitle}
+                onPress={() => router.push(`/e/${h.eventSlug}`)}
+                testID="vehicle-history-row"
+              >
+                <Plate style={styles.history}>
+                  <Text variant="bodyStrong" color={t.color.plateInk}>
+                    {h.eventTitle}
+                  </Text>
+                  <Text variant="meta" color={t.color.plateMuted}>
+                    {`${formatDay(h.startsAt)} · ${
+                      h.attended
+                        ? "Présent"
+                        : (applicationStatusLabels[h.status as keyof typeof applicationStatusLabels] ?? h.status)
+                    }`}
+                  </Text>
+                </Plate>
+              </Pressable>
             ))
           ) : (
             <Muted variant="body">Ce véhicule n'a pas encore participé à un événement.</Muted>
@@ -317,6 +407,18 @@ export default function VehiculeFiche() {
             </Button>
           )}
           {archived && v.statusNote ? <Muted variant="meta">{v.statusNote}</Muted> : null}
+
+          <SectionTitle>{garageAppLabels.delete}</SectionTitle>
+          <Button
+            variant="plate"
+            tone="dashed"
+            icon="close"
+            onPress={() => setDeleteOpen(true)}
+            fullWidth
+            testID="vehicle-delete"
+          >
+            {garageAppLabels.delete}
+          </Button>
         </>
       )}
     </FlowScreen>
