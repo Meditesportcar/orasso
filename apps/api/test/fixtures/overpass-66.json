@@ -1,0 +1,159 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-10-17T04:33:26Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+    {
+      "type": "node",
+      "id": 2005034972,
+      "lat": 42.501514,
+      "lon": 2.7581603,
+      "tags": {
+        "amenity": "car_wash",
+        "automated": "yes",
+        "self_service": "yes"
+      }
+    },
+    {
+      "type": "node",
+      "id": 3323885849,
+      "lat": 42.6256755,
+      "lon": 2.430033,
+      "tags": {
+        "amenity": "car_wash",
+        "operator": "Super U"
+      }
+    },
+    {
+      "type": "node",
+      "id": 8280507319,
+      "lat": 42.6756693,
+      "lon": 2.635185,
+      "tags": {
+        "amenity": "car_wash",
+        "automated": "yes",
+        "operator": "SuperU",
+        "self_service": "yes"
+      }
+    },
+    {
+      "type": "way",
+      "id": 30437223,
+      "center": {
+        "lat": 42.6218189,
+        "lon": 2.4362676
+      },
+      "tags": {
+        "amenity": "car_wash",
+        "brand": "Intermarché",
+        "brand:wikidata": "Q3153200",
+        "building": "yes",
+        "disused": "yes",
+        "layer": "1",
+        "name": "Intermarché",
+        "operator": "Groupement des Mousquetaires",
+        "source": "cadastre-dgi-fr source : Direction Générale des Impôts - Cadastre ; mise à jour : 2009",
+        "wall": "no"
+      }
+    },
+    {
+      "type": "way",
+      "id": 78431009,
+      "center": {
+        "lat": 42.6262224,
+        "lon": 2.7671723
+      },
+      "tags": {
+        "amenity": "car_wash",
+        "building": "yes",
+        "name": "Lanceleau",
+        "opening_hours": "24/7",
+        "source": "cadastre-dgi-fr source : Direction Générale des Impôts - Cadastre. Mise à jour : 2010",
+        "wall": "no"
+      }
+    },
+    {
+      "type": "way",
+      "id": 80613251,
+      "center": {
+        "lat": 42.5565926,
+        "lon": 2.3842155
+      },
+      "tags": {
+        "amenity": "car_wash",
+        "automated": "no",
+        "building": "yes",
+        "operator": "Groupement des Mousquetaires",
+        "self_service": "only",
+        "source": "cadastre-dgi-fr source : Direction Générale des Impôts - Cadastre. Mise à jour : 2010",
+        "wall": "no"
+      }
+    },
+    {
+      "type": "way",
+      "id": 132968824,
+      "center": {
+        "lat": 42.689027,
+        "lon": 2.706745
+      },
+      "tags": {
+        "addr:city": "Millas",
+        "addr:postcode": "66170",
+        "addr:street": "Avenue Hermès",
+        "amenity": "car_wash",
+        "building": "yes",
+        "source": "cadastre-dgi-fr source : Direction Générale des Impôts - Cadastre. Mise à jour : 2011",
+        "wall": "no"
+      }
+    },
+    {
+      "type": "way",
+      "id": 191080760,
+      "center": {
+        "lat": 42.677041,
+        "lon": 2.6337045
+      },
+      "tags": {
+        "amenity": "car_wash",
+        "automated": "yes",
+        "building": "yes",
+        "self_service": "yes",
+        "source": "cadastre-dgi-fr source : Direction Générale des Impôts - Cadastre. Mise à jour : 2012",
+        "wall": "no"
+      }
+    },
+    {
+      "type": "way",
+      "id": 1185258781,
+      "center": {
+        "lat": 42.689104,
+        "lon": 2.7053749
+      },
+      "tags": {
+        "addr:housenumber": "2",
+        "addr:street": "Avenue Hermès",
+        "amenity": "car_wash",
+        "automated": "yes",
+        "brand": "La Laveuse",
+        "contact:facebook": "https://www.facebook.com/lalaveuse",
+        "contact:instagram": "https://www.instagram.com/lalaveuse/",
+        "contact:linkedin": "https://www.linkedin.com/company/la-laveuse/",
+        "description": "La Laveuse, c’est laver son véhicule de manière plus écologique, en le préservant grâce à du matériel neuf et moderne, dans tous les centres de lavage du réseau, avec le moyen de paiement que l’ont veut et sans contrainte de temps de lavage.",
+        "email": "contact@lalaveuse.fr",
+        "image": "https://lalaveuse.fr/wp-content/uploads/2024/04/station-centre-lavage-auto-millas-popup_webp.webp",
+        "name": "La Laveuse Millas",
+        "opening_hours": "24/7",
+        "operator": "La Laveuse",
+        "ref:FR:NAF": "45.20A",
+        "ref:FR:SIRET": "90955676300037",
+        "self_service": "yes",
+        "source": "INSEE - 2026-05",
+        "vacuum_cleaner": "yes",
+        "website": "https://lalaveuse.fr/"
+      }
+    }
+  ]
+}

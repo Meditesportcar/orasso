@@ -64,6 +64,18 @@ async function documentsOf(structureId: string) {
   });
 }
 
+/**
+ * Vérifiée : rien à refaire. Suspendue (badge échu ou décision de l'équipe, lot 27) : aucune démarche de l'organisateur
+ * ne la rétablit — sinon elle passerait en « en cours » et tous les gardes de la suspension s'ouvriraient. Seule
+ * l'équipe Orasso la rétablit (renouvellement ou levée), conformément à docs/01 (« l'équipe prend contact »).
+ */
+function assertCanEditVerification(s: { verification: string }) {
+  if (s.verification === "verified") throw conflict("conflict", "Structure déjà vérifiée");
+  if (s.verification === "suspended") {
+    throw conflict("conflict", "Structure suspendue : écris à l'équipe Orasso, elle la rétablit.");
+  }
+}
+
 export const verificationService = {
   /** `GET /structures/:id/verification` */
   async view(v: Viewer, id: string): Promise<StructureVerificationView> {
@@ -82,7 +94,7 @@ export const verificationService = {
       rna: s.rna,
       registryCheck: s.registryCheck,
       documents: docs.map(docOf),
-      canSubmit: can.ok && (s.verification === "unverified" || s.verification === "suspended"),
+      canSubmit: can.ok && s.verification === "unverified",
       submitBlockedReason: can.ok ? null : can.reason,
     };
   },
@@ -91,7 +103,7 @@ export const verificationService = {
   async check(v: Viewer, id: string, number: string) {
     await requireOrganizer(v, id);
     const s = await structureById(id);
-    if (s.verification === "verified") throw conflict("conflict", "Structure déjà vérifiée");
+    assertCanEditVerification(s);
     const parsed = parseRegistryNumber(number);
     if ("error" in parsed) throw validation(parsed.error, { fields: { number: parsed.error } });
     rateLimit("registryCheck", v.user.id);
@@ -117,7 +129,7 @@ export const verificationService = {
   async addDocument(v: Viewer, id: string, kind: VerificationDocumentKind, file: File) {
     await requireOrganizer(v, id);
     const s = await structureById(id);
-    if (s.verification === "verified") throw conflict("conflict", "Structure déjà vérifiée");
+    assertCanEditVerification(s);
     rateLimit("fileUpload", v.user.id);
     if (file.size === 0) throw validation("Fichier vide");
     if (file.size > MAX_DOCUMENT_BYTES) throw new AppError(413, "payload_too_large", "Fichier de 10 Mo au plus");
@@ -148,7 +160,18 @@ export const verificationService = {
   async removeDocument(v: Viewer, id: string, documentId: string) {
     await requireOrganizer(v, id);
     const s = await structureById(id);
-    if (s.verification === "verified") throw conflict("conflict", "Structure déjà vérifiée");
+    assertCanEditVerification(s);
+    // Un justificatif déposé par l'équipe Orasso (transfert de propriétaire, lot 27) ne s'efface pas côté organisateur.
+    const [existing] = await db
+      .select({ uploader: profiles.platformRole })
+      .from(structureVerificationDocuments)
+      .leftJoin(profiles, eq(profiles.userId, structureVerificationDocuments.uploadedBy))
+      .where(
+        and(eq(structureVerificationDocuments.id, documentId), eq(structureVerificationDocuments.structureId, id)),
+      );
+    if (existing?.uploader && existing.uploader !== "user") {
+      throw new AppError(403, "forbidden", "Ce justificatif a été déposé par l'équipe Orasso.");
+    }
     const [doc] = await db
       .delete(structureVerificationDocuments)
       .where(and(eq(structureVerificationDocuments.id, documentId), eq(structureVerificationDocuments.structureId, id)))
@@ -162,7 +185,7 @@ export const verificationService = {
     await requireOrganizer(v, id);
     const s = await structureById(id);
     if (s.verification === "pending") throw conflict("conflict", "Vérification déjà en cours");
-    if (s.verification === "verified") throw conflict("conflict", "Structure déjà vérifiée");
+    assertCanEditVerification(s);
     const docs = await documentsOf(id);
     const can = canSubmitVerification(
       s.registryCheck,

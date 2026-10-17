@@ -18,6 +18,7 @@ const adminSections: AdminSection[] = [
   { href: "/admin/transferts", label: "Transferts de plaque" },
   { href: "/admin/signalements", label: "Signalements", moderator: true },
   { href: "/admin/sanctions", label: "Sanctions" },
+  { href: "/admin/badges", label: "Badges des structures" },
 ];
 
 export async function loader({ request }: Route.LoaderArgs) {

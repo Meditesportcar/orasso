@@ -3,6 +3,8 @@ import { PgBoss } from "pg-boss";
 import { env } from "./env";
 import { deps, type JobName } from "./lib/deps";
 import { AppError } from "./lib/errors";
+import { badgeService } from "./modules/after-event/badge";
+import { reportService } from "./modules/after-event/report";
 import { applicationsService } from "./modules/applications/service";
 import { groupMessagesService } from "./modules/communication/group-messages";
 import { staffChatsService } from "./modules/communication/staff-chats";
@@ -11,6 +13,7 @@ import { highGradePreview } from "./modules/events/high-grade";
 import { eventJobs } from "./modules/events/jobs";
 import { nearbyService } from "./modules/events/nearby";
 import { fieldService } from "./modules/field/service";
+import { sponsoredService } from "./modules/home/sponsored";
 import { moderationService } from "./modules/moderation/service";
 import { notificationsService } from "./modules/notifications/service";
 import { pointsService } from "./modules/points/service";
@@ -63,6 +66,12 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "field.sweep": () => fieldService.sweep(),
   // Lot 32 : signalements et captures échus (un an après la décision), sanctions finies depuis un an.
   "moderation.purge": () => moderationService.purge(),
+  // Lot 30 : oubli quotidien des affichages sponsorisés de plus de deux jours.
+  "home.purge": () => sponsoredService.purgeSeen(),
+  // Lot 27 : bilan rafraîchi à J+8 (puis balayage horaire de secours), badges de structure (rappels, suspension).
+  "event.report-refresh": (d) => reportService.refresh(d.eventId ?? ""),
+  "event.report-sweep": () => reportService.sweep(),
+  "structure.badge-sweep": () => badgeService.sweep(),
 };
 
 /**
@@ -109,6 +118,10 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("messaging.staff-chats-sweep", "25 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("field.sweep", "50 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("moderation.purge", "50 4 * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("home.purge", "55 4 * * *", null, { tz: "Europe/Paris" });
+    // Lot 27 : badges de structure chaque jour à 09:00 ; bilans à rafraîchir (secours) chaque heure.
+    await boss.schedule("structure.badge-sweep", "0 9 * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("event.report-sweep", "35 * * * *", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {
     async send(name, data, startAfter) {

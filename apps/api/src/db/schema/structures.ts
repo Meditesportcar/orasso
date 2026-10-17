@@ -1,10 +1,12 @@
 // Structures (organisateurs), membres, abonnés, bannis (ARCHITECTURE.md § 1.2).
 import {
+  type BadgeReminders,
   followSources,
   memberStatuses,
   type RegistryCheck,
   structureKinds,
   structureRoles,
+  structureSuspensionReasons,
   structureVerifications,
   verificationDocumentKinds,
 } from "@orasso/shared";
@@ -31,6 +33,7 @@ import { timestamps, tstz } from "./common";
 
 export const structureKindEnum = pgEnum("structure_kind", structureKinds);
 export const structureVerificationEnum = pgEnum("structure_verification", structureVerifications);
+export const structureSuspensionEnum = pgEnum("structure_suspension", structureSuspensionReasons);
 export const structureRoleEnum = pgEnum("structure_role", structureRoles);
 export const memberStatusEnum = pgEnum("member_status", memberStatuses);
 export const followSourceEnum = pgEnum("follow_source", followSources);
@@ -67,6 +70,11 @@ export const structures = pgTable(
     verification: structureVerificationEnum("verification").notNull().default("unverified"),
     verifiedAt: tstz("verified_at"),
     badgeExpiresAt: tstz("badge_expires_at"),
+    /** Lot 27 : pourquoi la structure est suspendue (badge échu, ou décision de l'équipe) et depuis quand. */
+    suspendedReason: structureSuspensionEnum("suspended_reason"),
+    suspendedAt: tstz("suspended_at"),
+    /** Lot 27 : rappels d'échéance déjà envoyés (`{"30": "<ISO>", "7": …, "1": …}`), un par palier. */
+    badgeRemindedAt: jsonb("badge_reminded_at").$type<BadgeReminders>().notNull().default({}),
     inviteToken: text("invite_token").notNull().unique("structures_invite_token_key"),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     deletedAt: tstz("deleted_at"),

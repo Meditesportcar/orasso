@@ -11,6 +11,7 @@ import {
   triageDecisions,
 } from "../enums";
 import { type Grade, gradeSchema } from "../grades";
+import type { StructureNoteView } from "./afterEvent";
 import { optionalText, pageQuery } from "./common";
 import type { ApplicationCrewForTriage, ApplicationCrewInfo } from "./crews";
 import type { ProviderForTriage } from "./provider";
@@ -172,6 +173,11 @@ export type ApplicationForTriage = {
     absencesCount: number;
     /** Candidatures passées auprès de la même structure. */
     historyWithStructure: { accepted: number; refused: number; total: number };
+    /**
+     * Notes internes de la structure sur cette personne (lot 27, § 11.4) : organisateur seulement, jamais le staff de
+     * filtration ni la personne elle-même.
+     */
+    notes: StructureNoteView[];
   };
   filteringOpinions: { userId: string; pseudo: string; opinion: FilteringOpinion; note: string | null; at: string }[];
   alerts: ApplicationAlert[];

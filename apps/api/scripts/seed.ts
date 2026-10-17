@@ -13,6 +13,7 @@ import { db, pool } from "../src/db/client";
 import * as t from "../src/db/schema";
 import { storageDir } from "../src/lib/storage";
 import { notificationsService } from "../src/modules/notifications/service";
+import { seedAfterEvent } from "./seed/after-event";
 import { seedBase } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedCommunication } from "./seed/communication";
@@ -20,6 +21,7 @@ import { seedCrews } from "./seed/crews";
 import { seedDayJ } from "./seed/day-j";
 import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
+import { seedHome } from "./seed/home";
 import { seedInvitations } from "./seed/invitations";
 import { seedMessaging } from "./seed/messaging";
 import { seedModeration } from "./seed/moderation";
@@ -109,6 +111,10 @@ async function main() {
   await seedModeration(hash);
   // Lot 25 : événement privé « Soirée partenaires » et ses invitations ; hauts grades sur l'Expo Rivesaltes.
   await seedInvitations();
+  // Lot 30 : garage favori de Kenji, deux emplacements sponsorisés (dont un ciblé 66 + JDM), cache factice lavage et carburant.
+  await seedHome();
+  // Lot 27 : bilan de la Nocturne de rentrée, notes internes, badge qui expire dans 5 jours, structure suspendue.
+  await seedAfterEvent(hash);
   // Lot 26 : « Salon de printemps » sur trois jours (accès au choix, 100 places par jour), candidatures mixtes.
   await seedMultiDay();
 }

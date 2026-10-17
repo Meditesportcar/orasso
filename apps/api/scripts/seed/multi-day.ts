@@ -102,7 +102,7 @@ export async function seedMultiDay() {
         if (!app) continue;
         // Une sur deux retenue (la première de chacun), les autres attendent le tri.
         if (i === 0 && pseudo !== "Pilote_003") {
-          await applicationsService.decide(damien, event.id, app.id, { decision: "accept", sendReasons: true });
+          await applicationsService.decide(damien, event.id, app.id, { decision: "accept", sendReasons: true, note: null });
           accepted++;
         } else pending++;
       } catch (error) {

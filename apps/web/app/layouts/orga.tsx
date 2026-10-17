@@ -1,10 +1,17 @@
 import { Ground, Monogram, ThemeScope } from "@orasso/design-system/web";
-import type { StructurePublic } from "@orasso/shared";
+import {
+  afterEventLabels,
+  badgeDaysLeft,
+  type StructureOrganizer,
+  type StructurePublic,
+  type StructureSuspensionReason,
+} from "@orasso/shared";
 import { Form, Outlet, useLocation, useParams } from "react-router";
 
 import { TwoFactorNotice } from "../components/TwoFactorNotice";
-import { apiOrThrow, requireMe } from "../lib/api.server";
+import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import type { Route } from "./+types/orga";
+import "../styles/after-event.css";
 
 // Espace organisateur : Sable imposé (docs/03), barre latérale, réservé aux membres de la structure.
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -15,7 +22,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     request,
     `/structures/by-slug/${encodeURIComponent(params.structure)}`,
   );
+  // Lot 27 : badge qui expire (30 jours) ou structure suspendue → bandeau pour les organisateurs.
+  let badge:
+    | { kind: "expiring"; days: number }
+    | { kind: "suspended"; reason: StructureSuspensionReason | null }
+    | null = null;
+  if (membership.role !== "staff") {
+    const organizer = await api<StructureOrganizer>(request, `/structures/${structure.id}`);
+    if (organizer.ok) {
+      const o = organizer.data;
+      if (o.verification === "suspended") badge = { kind: "suspended", reason: o.suspendedReason };
+      else if (o.verification === "verified" && o.badgeExpiresAt) {
+        const days = badgeDaysLeft(new Date(o.badgeExpiresAt), new Date());
+        if (days <= 30) badge = { kind: "expiring", days };
+      }
+    }
+  }
   return {
+    badge,
     structure: { id: structure.id, slug: structure.slug, name: structure.name, logoUrl: structure.logoUrl },
     role: membership.role,
     canDecide: membership.role !== "staff" || membership.canDecide,
@@ -40,7 +64,7 @@ function SideLink({ href, children, on }: { href: string; children: string; on: 
 }
 
 export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
-  const { structure, isOrganizer, canCheckTickets, twoFactorHint, pseudo } = loaderData;
+  const { structure, isOrganizer, canCheckTickets, twoFactorHint, pseudo, badge } = loaderData;
   const { pathname } = useLocation();
   const { eventId } = useParams();
   const base = `/orga/${structure.slug}`;
@@ -74,6 +98,11 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
                 Jour J et après
               </SideLink>
             )}
+            {eventBase && isOrganizer && (
+              <SideLink href={`${eventBase}/apres`} on={pathname.startsWith(`${eventBase}/apres`)}>
+                {afterEventLabels.navLink}
+              </SideLink>
+            )}
             {eventBase && canCheckTickets && (
               <SideLink href={`${eventBase}/billets`} on={pathname.startsWith(`${eventBase}/billets`)}>
                 Billets
@@ -104,6 +133,26 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
           </nav>
           <main className="orga__content">
             <TwoFactorNotice hint={twoFactorHint} space="l'espace organisateur" />
+            {badge?.kind === "suspended" && (
+              <p className="s-notice s-notice--alert ae-banner" role="alert" data-testid="orga-suspended">
+                <span>
+                  {badge.reason === "badge_expired"
+                    ? afterEventLabels.badgeSuspendedExpired
+                    : badge.reason === "moderation"
+                      ? afterEventLabels.badgeSuspendedModeration
+                      : afterEventLabels.badgeSuspended}
+                </span>
+                <a href="mailto:contact@orasso.fr">{afterEventLabels.badgeContact}</a>
+              </p>
+            )}
+            {badge?.kind === "expiring" && (
+              <p className="s-notice ae-banner" role="status" data-testid="orga-badge-expiring">
+                <span>
+                  {afterEventLabels.badgeExpiring(badge.days)} {afterEventLabels.badgeExpiringHint}
+                </span>
+                <a href={`${base}/structure`}>Ouvrir la structure</a>
+              </p>
+            )}
             <Outlet />
           </main>
         </div>

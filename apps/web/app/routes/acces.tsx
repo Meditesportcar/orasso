@@ -2,6 +2,7 @@ import { Button, Chip, Plate, StatusBadge } from "@orasso/design-system/web";
 import {
   type AccessPass,
   type AnnouncementView,
+  afterEventLabels,
   applicationStatusLabels,
   type ContestStatus,
   communicationLabels,
@@ -22,7 +23,7 @@ import {
   refusalReasonLabels,
   type VehicleFull,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-router";
 
 import { Countdown } from "../components/Countdown";
@@ -39,6 +40,7 @@ import { invitationAction, isInvitationIntent, myActiveVehicles } from "../lib/i
 import { badgeFor } from "../lib/status";
 import { useChannel } from "../lib/useChannel";
 import type { Route } from "./+types/acces";
+import "../styles/after-event.css";
 
 export function meta() {
   return [{ title: "Accès · Orasso" }, { name: "robots", content: "noindex" }];
@@ -46,7 +48,9 @@ export function meta() {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  const past = url.searchParams.get("vue") === "passes";
+  // Lien d'avis d'un remerciement (lot 27, `/app/acces?avis=<candidature>`) : le carnet de route, sur cette candidature.
+  const avis = url.searchParams.get("avis");
+  const past = url.searchParams.get("vue") === "passes" || Boolean(avis);
   const applications = await apiOrThrow<MyApplication[]>(
     request,
     `/me/applications?scope=${past ? "past" : "upcoming"}`,
@@ -115,6 +119,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const invitations = invitationsRes?.ok ? invitationsRes.data : [];
   const vehicles: VehicleFull[] = invitations.some((i) => !i.vehicle) ? await myActiveVehicles(request) : [];
   return {
+    avis: avis ? { id: avis, found: applications.some((a) => a.id === avis) } : null,
     invitations,
     vehicles,
     past,
@@ -177,6 +182,7 @@ function ApplicationCard({
   rulesText,
   notes,
   past,
+  focused = false,
 }: {
   app: MyApplication;
   pass?: AccessPass;
@@ -184,8 +190,14 @@ function ApplicationCard({
   rulesText?: string | null;
   notes?: { instructions: AnnouncementView | null; announcement: AnnouncementView | null };
   past: boolean;
+  /** Ouverte par un lien d'avis : amenée à l'écran (lot 27). */
+  focused?: boolean;
 }) {
   const busy = useNavigation().state !== "idle";
+  const card = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focused) card.current?.scrollIntoView({ block: "start" });
+  }, [focused]);
   const badge = badgeFor(app);
   const confirmWithdraw = (e: React.FormEvent<HTMLFormElement>) => {
     const message =
@@ -196,7 +208,14 @@ function ApplicationCard({
   };
   const active = ["pending", "accepted", "waitlisted", "offered"].includes(app.status);
   return (
-    <article className="s-card acc" data-testid="application" data-status={app.status}>
+    <article
+      ref={card}
+      id={focused ? "avis" : undefined}
+      className="s-card acc"
+      data-testid="application"
+      data-status={app.status}
+      data-focused={focused ? "true" : undefined}
+    >
       <div className="acc__head">
         <div className="s-stack s-stack--tight">
           <div className="s-label o-t-label">{eventFormatLabels[app.event.format]}</div>
@@ -452,6 +471,7 @@ function ReviewBlock({ app, review, busy }: { app: MyApplication; review: MyRevi
 
 export default function Acces({ loaderData, actionData }: Route.ComponentProps) {
   const {
+    avis,
     past,
     applications,
     passes,
@@ -492,6 +512,11 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
       </div>
 
       {sent && <p className="s-notice s-notice--ok">Candidature envoyée. L'organisateur te répond ici.</p>}
+      {avis && !avis.found && (
+        <p className="s-notice s-notice--alert" role="alert" data-testid="avis-invalid">
+          {afterEventLabels.reviewLinkInvalid}
+        </p>
+      )}
       {!past && ticketCount > 0 && (
         <p className="s-notice" data-testid="tickets-link">
           Tu as {ticketCount} billet{ticketCount > 1 ? "s" : ""} de visiteur.{" "}
@@ -551,6 +576,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
             rulesText={rules[app.id]}
             notes={notes[app.id]}
             past={past}
+            focused={avis?.id === app.id}
           />
         ))
       )}

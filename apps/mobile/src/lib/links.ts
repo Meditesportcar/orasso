@@ -7,9 +7,14 @@ const APP_LINK = /^\/(e|u|v)\/[^/?#\s]+$/;
  */
 const INBOX_LINK = /^\/app\/boite(?:\/([0-9a-f-]{36}|demandes))?$/;
 
+/** Lien d'avis d'un remerciement (lot 27) : `/app/acces?avis=<candidature>` → la feuille d'avis de l'onglet Accès. */
+const REVIEW_LINK = /^\/app\/acces\?avis=([0-9a-f-]{36})$/;
+
 export function appLinkOf(value: unknown): string | null {
   if (typeof value !== "string") return null;
   if (APP_LINK.test(value)) return value;
+  const review = REVIEW_LINK.exec(value);
+  if (review) return `/(tabs)/acces?avis=${review[1]}`;
   const inbox = INBOX_LINK.exec(value);
   if (inbox) return inbox[1] && inbox[1] !== "demandes" ? `/boite/${inbox[1]}` : "/(tabs)/boite";
   return null;

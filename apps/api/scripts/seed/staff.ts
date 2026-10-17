@@ -5,6 +5,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { AppError } from "../../src/lib/errors";
 import type { AuthUser, Viewer } from "../../src/lib/session";
 import { staffRequestsService } from "../../src/modules/staff/requests";
 import { ticketsService } from "../../src/modules/tickets/service";
@@ -62,8 +63,16 @@ export async function seedStaff(hash: string) {
     for (const pseudo of ["Kenji_66", "Lea_11"]) {
       const v = await viewer(pseudo);
       if (!v) continue;
-      const mine = await ticketsService.reserve(v, salon.id, 2);
-      tickets += mine.length;
+      try {
+        const mine = await ticketsService.reserve(v, salon.id, 2);
+        tickets += mine.length;
+      } catch (e) {
+        // Base déjà ancienne : le Salon (créé « aujourd'hui » au premier seed) peut être terminé, la billetterie fermée.
+        // Le seed continue (les lots suivants en dépendent) sans billets.
+        if (!(e instanceof AppError) || e.status !== 409) throw e;
+        console.log(`Staff boutique : billets non créés (${e.message}).`);
+        break;
+      }
     }
   }
 

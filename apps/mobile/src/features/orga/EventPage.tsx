@@ -1,7 +1,7 @@
 // Casquette Organisateur, page d'un événement (lot 22, ARCHITECTURE-SUITE § 7.2) : compteurs de candidatures en direct
 // (canal `triage`), bandeau et bascule Maintenu / Incertain avec confirmation, annulation (confirmation forte), consignes
-// (écrire, envoyer), annonces du fil (avec photo, « prévenir »), invitations et bilan (« bientôt »), et renvoi vers le
-// site pour créer et modifier. Rien ne se crée ni ne se modifie ici : docs/02 garde l'assistant sur le site.
+// (écrire, envoyer), annonces du fil (avec photo, « prévenir »), invitations, bilan et remerciement (lot 27), et renvoi
+// vers le site pour créer et modifier. Rien ne se crée ni ne se modifie ici : docs/02 garde l'assistant sur le site.
 import {
   Button,
   Chip,
@@ -15,6 +15,7 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import {
+  afterEventLabels,
   communicationLabels,
   type EventCounters,
   eventOutlookLabels,
@@ -393,8 +394,16 @@ export function EventPage({ eventId }: { eventId: string }) {
             >
               {invitationLabels.invite}
             </Button>
-            <Button variant="plate" icon="list" disabled onPress={() => undefined} fullWidth>
-              {orgaLabels.reportSoon}
+            {/* Bilan et « Remercier les présents » (lot 27), une fois l'événement commencé. */}
+            <Button
+              variant="plate"
+              icon="list"
+              disabled={e.status !== "published"}
+              onPress={() => router.push(`/evenement/${eventId}/bilan`)}
+              fullWidth
+              testID="orga-report"
+            >
+              {afterEventLabels.reportTitle} · {afterEventLabels.thanksTitle}
             </Button>
             <Button
               variant="plate"

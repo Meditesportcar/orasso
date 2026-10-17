@@ -166,3 +166,17 @@ export function resolvePosition(
 export function coarsePosition(p: LatLng): LatLng {
   return { lat: Math.round(p.lat * 10) / 10, lng: Math.round(p.lng * 10) / 10 };
 }
+
+/** Département dont le centre est le plus proche d'une position (clé des caches d'une source externe, lot 30). */
+export function nearestDepartment(p: LatLng): string | null {
+  let best: string | null = null;
+  let bestKm = Number.POSITIVE_INFINITY;
+  for (const [code, centre] of Object.entries(departmentCentroids)) {
+    const km = distanceKm(p, centre);
+    if (km < bestKm) {
+      bestKm = km;
+      best = code;
+    }
+  }
+  return best;
+}

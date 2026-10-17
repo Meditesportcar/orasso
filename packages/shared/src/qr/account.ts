@@ -18,7 +18,7 @@ export function accountQrCounter(now: Date): number {
 }
 
 /** Compteur sur 8 octets grand-boutiste (RFC 4226). */
-function counterBytes(counter: number): Uint8Array {
+export function counterBytes(counter: number): Uint8Array {
   const out = new Uint8Array(8);
   const view = new DataView(out.buffer);
   view.setUint32(0, Math.floor(counter / 2 ** 32), false);
@@ -28,7 +28,14 @@ function counterBytes(counter: number): Uint8Array {
 
 /** HOTP (RFC 4226) tronqué à 8 chiffres. */
 export function hotp(secret: Uint8Array, counter: number, hmac: HmacSha1): string {
-  const h = hmac(secret, counterBytes(counter));
+  return hotpFromDigest(hmac(secret, counterBytes(counter)));
+}
+
+/**
+ * Code à partir du condensé HMAC-SHA1 déjà calculé : le navigateur n'a que WebCrypto, asynchrone ; il calcule le
+ * condensé de `counterBytes(c)` puis appelle ceci (même troncature que `hotp`, lot 30).
+ */
+export function hotpFromDigest(h: Uint8Array): string {
   const offset = (h[h.length - 1] ?? 0) & 0x0f;
   const bin =
     (((h[offset] ?? 0) & 0x7f) << 24) |

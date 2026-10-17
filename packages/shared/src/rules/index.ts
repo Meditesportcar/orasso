@@ -1,4 +1,5 @@
 export * from "./affinity";
+export * from "./afterEvent";
 export * from "./applicationTransitions";
 export * from "./crews";
 export * from "./eventDays";
@@ -16,6 +17,7 @@ export * from "./recurrence";
 export * from "./registrationWindow";
 export * from "./registry";
 export * from "./reviews";
+export * from "./sponsored";
 export * from "./templates";
 export * from "./ticketing";
 export * from "./time";

@@ -84,6 +84,19 @@ const schema = z.object({
   WEATHER_PROVIDER: z.enum(["open-meteo", "met-norway", "off"]).default("open-meteo"),
   /** `User-Agent` envoyé aux fournisseurs : obligatoire et identifiant pour MET Norway (nom de l'appli + contact). */
   WEATHER_USER_AGENT: z.string().default("Orasso/0.1 contact@orasso.fr"),
+  /**
+   * Sources de l'Accueil (lot 30) : lavage (Overpass / OpenStreetMap, service bénévole à usage raisonnable : un appel par
+   * département et par semaine) et prix des carburants (données ouvertes de l'État). `off` désactive la source ; le widget
+   * disparaît alors sans erreur. Instance propre ou autre URL : changer la valeur et redémarrer l'API.
+   */
+  OVERPASS_URL: z.string().default("https://overpass-api.de/api/interpreter"),
+  FUEL_API_URL: z
+    .string()
+    .default(
+      "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records",
+    ),
+  /** `User-Agent` envoyé à ces sources (nom de l'appli + contact, exigé par la politique d'usage d'Overpass). */
+  EXTERNAL_USER_AGENT: z.string().default("Orasso/0.1 contact@orasso.fr"),
 });
 
 /**

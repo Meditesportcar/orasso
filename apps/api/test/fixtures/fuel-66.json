@@ -1,0 +1,89 @@
+{
+  "total_count": 8,
+  "results": [
+    {
+      "adresse": "Grande Rocade",
+      "ville": "Prades",
+      "cp": "66500",
+      "geom": { "lon": 2.428, "lat": 42.625 },
+      "gazole_prix": 2.339,
+      "sp95_prix": null,
+      "sp98_prix": 2.289,
+      "e85_prix": 0.858,
+      "gazole_maj": "2026-10-16T07:27:43+00:00",
+      "sp95_maj": null,
+      "sp98_maj": "2026-10-16T07:27:44+00:00",
+      "e85_maj": "2026-10-07T07:33:31+00:00"
+    },
+    {
+      "adresse": "C.COMMERCIAL DU RIBERAL",
+      "ville": "Ille-sur-T\u00eat",
+      "cp": "66130",
+      "geom": { "lon": 2.635, "lat": 42.676 },
+      "gazole_prix": 2.32,
+      "sp95_prix": null,
+      "sp98_prix": 2.299,
+      "e85_prix": 0.856,
+      "gazole_maj": "2026-10-15T10:35:45+00:00",
+      "sp95_maj": null,
+      "sp98_maj": "2026-10-15T10:35:46+00:00",
+      "e85_maj": "2026-10-15T10:35:46+00:00"
+    },
+    {
+      "adresse": "Avenue Clemenceau",
+      "ville": "Corneilla-de-Conflent",
+      "cp": "66820",
+      "geom": { "lon": 2.384, "lat": 42.557 },
+      "gazole_prix": 2.329,
+      "sp95_prix": null,
+      "sp98_prix": 2.287,
+      "e85_prix": null,
+      "gazole_maj": "2026-10-09T08:00:11+00:00",
+      "sp95_maj": null,
+      "sp98_maj": "2026-10-09T08:00:12+00:00",
+      "e85_maj": null
+    },
+    {
+      "adresse": "Route de Prades",
+      "ville": "Millas",
+      "cp": "66170",
+      "geom": { "lon": 2.687, "lat": 42.693 },
+      "gazole_prix": 2.389,
+      "sp95_prix": null,
+      "sp98_prix": 2.299,
+      "e85_prix": 0.878,
+      "gazole_maj": "2026-10-15T07:22:47+00:00",
+      "sp95_maj": null,
+      "sp98_maj": "2026-10-15T07:22:48+00:00",
+      "e85_maj": "2026-10-15T07:22:47+00:00"
+    },
+    {
+      "adresse": "157 AVENUE JEAN JAURES",
+      "ville": "Millas",
+      "cp": "66170",
+      "geom": { "lon": 2.691, "lat": 42.692 },
+      "gazole_prix": 2.449,
+      "sp95_prix": 2.339,
+      "sp98_prix": 2.419,
+      "e85_prix": null,
+      "gazole_maj": "2026-10-16T06:12:11+00:00",
+      "sp95_maj": "2026-10-16T06:12:11+00:00",
+      "sp98_maj": "2026-10-16T06:12:11+00:00",
+      "e85_maj": null
+    },
+    {
+      "adresse": "chemin de Camalens av de la padrouze",
+      "ville": "Thuir",
+      "cp": "66300",
+      "geom": { "lon": 2.757, "lat": 42.64 },
+      "gazole_prix": 2.319,
+      "sp95_prix": null,
+      "sp98_prix": 2.299,
+      "e85_prix": 0.869,
+      "gazole_maj": "2026-10-15T10:42:17+00:00",
+      "sp95_maj": null,
+      "sp98_maj": "2026-10-15T10:42:18+00:00",
+      "e85_maj": "2026-10-15T10:42:17+00:00"
+    }
+  ]
+}

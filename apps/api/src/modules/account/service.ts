@@ -9,6 +9,7 @@ import {
   type AccountSettings,
   type AccountSettingsUpdate,
   defaultNotificationPrefs,
+  normalizeHomeWidgets,
   type PublicPreview,
   REFERRAL_WINDOW_MS,
 } from "@orasso/shared";
@@ -54,6 +55,7 @@ import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { dataDir, storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
+import { notesService } from "../after-event/notes";
 import { applicationsService } from "../applications/service";
 import { anonymizeCommunicationForDeletedAccount } from "../communication/anonymize";
 import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
@@ -217,7 +219,7 @@ export const accountService = {
       departments: p.departments,
       radiusKm: p.radiusKm,
       interests: await profilesRepo.interests(v.user.id),
-      homeWidgets: (p.homeWidgets as AccountSettings["homeWidgets"]) ?? null,
+      homeWidgets: p.homeWidgets ? normalizeHomeWidgets(p.homeWidgets) : null,
     };
   },
 
@@ -413,6 +415,8 @@ export const accountService = {
       // Modération (lot 32) : signalements et sanctions conservés un an (docs/01) ; contestation en cours close.
       await anonymizeModerationForDeletedAccount(tx, userId);
       await invitationsService.anonymizeForDeletedAccount(tx, userId, oldEmail);
+      // Après l'événement (lot 27) : notes internes sur la personne effacées, celles qu'elle a écrites perdent leur auteur.
+      await notesService.anonymizeForDeletedAccount(tx, userId);
       await tx.delete(structureFollows).where(eq(structureFollows.userId, userId));
       await tx.delete(proFollows).where(eq(proFollows.userId, userId));
       await tx

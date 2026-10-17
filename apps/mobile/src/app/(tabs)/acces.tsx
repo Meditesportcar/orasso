@@ -3,6 +3,7 @@
 
 import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  afterEventLabels,
   type ContestStatus,
   contestStatusLabels,
   invitationLabels,
@@ -13,8 +14,8 @@ import {
   staffPresenceLabels,
   staffRequestLabels,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { ContestSheet } from "@/features/ContestSheet";
@@ -62,6 +63,23 @@ export default function Acces() {
   const [withdrawing, setWithdrawing] = useState<MyApplication | null>(null);
   const [contesting, setContesting] = useState<{ applicationId: string; title: string } | null>(null);
   const [reviewing, setReviewing] = useState<ReviewTarget | null>(null);
+  // Lien d'avis d'un remerciement (lot 27, `orasso://acces?avis=<candidature>`) : ouvre la feuille d'avis, une seule fois.
+  const { avis } = useLocalSearchParams<{ avis?: string }>();
+  const [avisNotice, setAvisNotice] = useState<string | null>(null);
+  const avisHandled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!avis || avisHandled.current === avis || !past) return;
+    avisHandled.current = avis;
+    const app = past.find((a) => a.id === avis);
+    if (!app) return setAvisNotice(afterEventLabels.reviewLinkInvalid);
+    if (app.review?.canReview) {
+      setReviewing({ applicationId: app.id, title: app.event.title, deadline: app.review.deadline });
+    } else if (app.review?.given) {
+      setAvisNotice("Tu as déjà laissé ton avis, merci !");
+    } else {
+      setAvisNotice(afterEventLabels.reviewLinkInvalid);
+    }
+  }, [avis, past]);
   const [confirmingCrew, setConfirmingCrew] = useState<MyApplication | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +160,7 @@ export default function Acces() {
       ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {answered ? <Notice>{answered}</Notice> : null}
+      {avisNotice ? <Notice>{avisNotice}</Notice> : null}
 
       {invitations.data && invitations.data.length > 0 ? (
         <>
