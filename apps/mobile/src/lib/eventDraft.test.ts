@@ -7,6 +7,7 @@ vi.mock("./api", () => ({ api: {} }));
 
 import {
   appStepProblem,
+  datePart,
   draftWorthKeeping,
   firstAppProblem,
   joinDateTime,
@@ -16,6 +17,7 @@ import {
   progressOf,
   serializeDraft,
   siteStepOf,
+  timePart,
 } from "./eventDraft";
 import { type EventEditorApi, saveEvent } from "./eventSave";
 
@@ -70,6 +72,11 @@ describe("écrans de l'assistant", () => {
     expect(normalizeTime("25:00")).toBe("25:00");
     expect(joinDateTime("2026-11-08", "9h")).toBe("2026-11-08T09:00");
     expect(joinDateTime("", "")).toBe("");
+    // Saisie en cours : la date partielle ne déborde pas sur l'heure.
+    expect(joinDateTime("2026-1", "9", false)).toBe("2026-1T9");
+    expect(datePart("2026-1T9")).toBe("2026-1");
+    expect(timePart("2026-1T9")).toBe("9");
+    expect(timePart("")).toBe("");
     expect(appStepProblem("dates", draft({ startsAt: joinDateTime("2026-11-08", "25:00") }))).toMatch(
       /début et la fin/,
     );
