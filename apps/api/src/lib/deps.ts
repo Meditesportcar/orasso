@@ -38,6 +38,8 @@ export type JobName =
   | "messaging.group-send"
   | "messaging.group-sweep"
   | "messaging.staff-chats-sweep"
+  // Lot 24 : positions d'alerte et photos de la main courante à effacer (chaque heure).
+  | "field.sweep"
   // Lot 32 : conservation des signalements et sanctions (un an), quotidienne.
   | "moderation.purge"
   // Lot 27 : bilan rafraîchi à J+8 (et balayage horaire de secours), rappels et suspension des badges (quotidienne).

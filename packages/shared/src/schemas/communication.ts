@@ -149,6 +149,6 @@ export type OrganizerInboxSummary = {
   participantMessages: number;
   /** Discussions du staff avec un message non lu. */
   staffDiscussions: number;
-  /** Demandes pour devenir staff en attente (lot 24 : 0 ici). */
+  /** Demandes pour devenir staff en attente de réponse (lot 24). */
   staffRequests: number;
 };

@@ -1,9 +1,9 @@
 // Stockage local du mode staff (ARCHITECTURE.md § 4.2), base SQLite `orasso-staff.db` : événements synchronisés,
 // liste d'accès, clés de confiance, file des actions à envoyer, pointages locaux. Écrit contre une petite interface
 // (`SqlDb`, sous-ensemble d'expo-sqlite) : expo-sqlite dans l'appli, `node:sqlite` dans les tests.
-import type { AccessListEntry } from "@orasso/shared";
+import type { AccessListEntry, TicketListEntry } from "@orasso/shared";
 
-import type { LocalCheckin, PendingAction, StaffEventMeta } from "./model";
+import type { LocalCheckin, LocalTicketUse, PendingAction, StaffEventMeta } from "./model";
 import type { TrustedKey } from "./trust";
 
 type Param = string | number | null;
@@ -63,6 +63,19 @@ create table if not exists local_checkins (
   method text not null,
   action_id text not null,
   primary key (event_id, pass_id)
+);
+create table if not exists ticket_entries (
+  event_id text not null,
+  ticket_id text not null,
+  entry_json text not null,
+  primary key (event_id, ticket_id)
+);
+create table if not exists local_ticket_uses (
+  event_id text not null,
+  ticket_id text not null,
+  used_at text not null,
+  action_id text not null,
+  primary key (event_id, ticket_id)
 );
 `;
 
@@ -175,13 +188,50 @@ export class StaffStore {
     }));
   }
 
+  /** Billets du public de l'événement (rôle boutique, lot 24). */
+  async tickets(eventId: string): Promise<TicketListEntry[]> {
+    const rows = await this.serial(() =>
+      this.db.getAllAsync<{ entry_json: string }>("select entry_json from ticket_entries where event_id = ?", [
+        eventId,
+      ]),
+    );
+    return rows.map((r) => JSON.parse(r.entry_json) as TicketListEntry);
+  }
+
+  /** Billets acceptés sur cet appareil, pas encore confirmés par le serveur. */
+  async ticketUses(eventId: string): Promise<LocalTicketUse[]> {
+    const rows = await this.serial(() =>
+      this.db.getAllAsync<{ ticket_id: string; used_at: string; action_id: string }>(
+        "select ticket_id, used_at, action_id from local_ticket_uses where event_id = ?",
+        [eventId],
+      ),
+    );
+    return rows.map((r) => ({ ticketId: r.ticket_id, usedAt: r.used_at, actionId: r.action_id }));
+  }
+
   /**
    * Enregistre une synchro vérifiée et fusionnée : `full` remplace toute la liste de l'événement, sinon les entrées
-   * reçues sont écrasées par `passId`. Une liste d'un autre compte est remplacée entièrement.
+   * reçues sont écrasées par `passId`. Une liste d'un autre compte est remplacée entièrement. Billets du public
+   * (lot 24) : `tickets.replace` remplace tous ceux de l'événement (liste complète, ou boutique coupée), sinon les
+   * billets reçus sont écrasés par identifiant.
    */
-  saveSync(meta: StaffEventMeta, entries: readonly AccessListEntry[], full: boolean): Promise<void> {
+  saveSync(
+    meta: StaffEventMeta,
+    entries: readonly AccessListEntry[],
+    full: boolean,
+    tickets: { list: readonly TicketListEntry[]; replace: boolean } = { list: [], replace: full },
+  ): Promise<void> {
     return this.tx(async () => {
       if (full) await this.db.runAsync("delete from access_entries where event_id = ?", [meta.eventId]);
+      if (tickets.replace) await this.db.runAsync("delete from ticket_entries where event_id = ?", [meta.eventId]);
+      for (let i = 0; i < tickets.list.length; i += 100) {
+        const chunk = tickets.list.slice(i, i + 100);
+        await this.db.runAsync(
+          `insert into ticket_entries (event_id, ticket_id, entry_json) values ${chunk.map(() => "(?, ?, ?)").join(", ")}
+           on conflict (event_id, ticket_id) do update set entry_json = excluded.entry_json`,
+          chunk.flatMap((t) => [meta.eventId, t.ticketId, JSON.stringify(t)]),
+        );
+      }
       await this.db.runAsync(
         `insert into staff_events (event_id, user_id, meta_json, synced_at, ends_at) values (?, ?, ?, ?, ?)
          on conflict (event_id) do update set user_id = excluded.user_id, meta_json = excluded.meta_json,
@@ -249,8 +299,8 @@ export class StaffStore {
 
   // --- File des actions ---
 
-  /** Ajoute une action (et le pointage local qu'elle produit) d'un seul geste. */
-  addAction(action: PendingAction, checkin?: LocalCheckin | null): Promise<void> {
+  /** Ajoute une action (et le pointage ou l'usage de billet local qu'elle produit) d'un seul geste. */
+  addAction(action: PendingAction, checkin?: LocalCheckin | null, use?: LocalTicketUse | null): Promise<void> {
     return this.tx(async () => {
       await this.db.runAsync(
         `insert into pending_actions (id, event_id, event_title, user_id, kind, payload_json, created_at, attempts,
@@ -271,6 +321,13 @@ export class StaffStore {
         ],
       );
       if (checkin) await this.putCheckin(action.eventId, checkin);
+      if (use) {
+        await this.db.runAsync(
+          `insert into local_ticket_uses (event_id, ticket_id, used_at, action_id) values (?, ?, ?, ?)
+           on conflict (event_id, ticket_id) do nothing`,
+          [action.eventId, use.ticketId, use.usedAt, use.actionId],
+        );
+      }
     });
   }
 
@@ -307,6 +364,8 @@ export class StaffStore {
       id: string;
       result: Record<string, unknown>;
       checkin?: { passId: string; checkedInAt: string | null; actionId: string | null } | null;
+      /** Billet du public (lot 24) : heure d'usage retenue par le serveur, ou `null` pour retirer l'usage local. */
+      use?: { ticketId: string; usedAt: string | null; actionId: string } | null;
     }[],
     sentAt: Date,
   ): Promise<void> {
@@ -316,6 +375,21 @@ export class StaffStore {
           "update pending_actions set sent_at = ?, result_json = ?, last_error = null where id = ?",
           [sentAt.toISOString(), JSON.stringify(d.result), d.id],
         );
+        const u = d.use;
+        if (u) {
+          if (u.usedAt) {
+            await this.db.runAsync("update local_ticket_uses set used_at = ? where event_id = ? and ticket_id = ?", [
+              u.usedAt,
+              eventId,
+              u.ticketId,
+            ]);
+          } else {
+            await this.db.runAsync(
+              "delete from local_ticket_uses where event_id = ? and ticket_id = ? and action_id = ?",
+              [eventId, u.ticketId, u.actionId],
+            );
+          }
+        }
         const c = d.checkin;
         if (!c) continue;
         if (c.checkedInAt) {
@@ -352,6 +426,7 @@ export class StaffStore {
           [at.toISOString(), JSON.stringify(error), id],
         );
         await this.db.runAsync("delete from local_checkins where event_id = ? and action_id = ?", [eventId, id]);
+        await this.db.runAsync("delete from local_ticket_uses where event_id = ? and action_id = ?", [eventId, id]);
       }
     });
   }
@@ -370,6 +445,25 @@ export class StaffStore {
           [attempts, error.slice(0, 300), nextAttemptAt(attempts).toISOString(), id],
         );
       }
+    });
+  }
+
+  /**
+   * Alerte partie (ou refusée pour de bon) : la position qu'elle portait est effacée du téléphone. Elle n'a servi
+   * qu'à situer l'alerte ; elle n'est jamais gardée au-delà (lot 24).
+   */
+  scrubPosition(id: string): Promise<void> {
+    return this.serial(async () => {
+      const rows = await this.db.getAllAsync<{ payload_json: string }>(
+        "select payload_json from pending_actions where id = ?",
+        [id],
+      );
+      if (!rows[0]) return;
+      const payload = JSON.parse(rows[0].payload_json) as Record<string, unknown>;
+      if (!("lat" in payload) && !("lng" in payload)) return;
+      payload.lat = undefined;
+      payload.lng = undefined;
+      await this.db.runAsync("update pending_actions set payload_json = ? where id = ?", [JSON.stringify(payload), id]);
     });
   }
 
@@ -393,6 +487,8 @@ export class StaffStore {
     return this.tx(async () => {
       await this.db.runAsync("delete from access_entries where event_id = ?", [eventId]);
       await this.db.runAsync("delete from local_checkins where event_id = ?", [eventId]);
+      await this.db.runAsync("delete from ticket_entries where event_id = ?", [eventId]);
+      await this.db.runAsync("delete from local_ticket_uses where event_id = ?", [eventId]);
       await this.db.runAsync("delete from staff_events where event_id = ?", [eventId]);
       await this.db.runAsync("delete from pending_actions where event_id = ? and sent_at is not null", [eventId]);
     });
@@ -403,6 +499,8 @@ export class StaffStore {
     return this.tx(async () => {
       await this.db.runAsync("delete from access_entries", []);
       await this.db.runAsync("delete from local_checkins", []);
+      await this.db.runAsync("delete from ticket_entries", []);
+      await this.db.runAsync("delete from local_ticket_uses", []);
       await this.db.runAsync("delete from staff_events", []);
       await this.db.runAsync("delete from signing_keys", []);
       await this.db.runAsync("delete from pending_actions where sent_at is not null", []);

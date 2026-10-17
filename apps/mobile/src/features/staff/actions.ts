@@ -1,9 +1,11 @@
 // Gestes du staff (lecture, « accepter quand même », pointage) traduits en actions de la file. La décision est
 // prise en mémoire, sans attendre le disque : l'écran s'affiche d'abord, l'écriture suit.
-import type { AccessListEntry, ScanDecision } from "@orasso/shared";
+import type { AccessListEntry, ScanDecision, TicketScanDecision, VisitorDelta } from "@orasso/shared";
 
-import { checkedInAt, checkinAction, type StaffState, scanAction } from "@/lib/staff/model";
+import { checkedInAt, checkinAction, type StaffState, scanAction, ticketScanAction } from "@/lib/staff/model";
+import type { AlertPosition } from "@/lib/staff/position";
 import { newId, record, reportWriteError } from "@/lib/staff/runtime";
+import type { IncidentDraft } from "./IncidentSheet";
 
 /** Enregistre une lecture décidée (y compris refusée : elle compte au rapport). */
 export function recordScan(
@@ -18,6 +20,56 @@ export function recordScan(
   if (checkin && !state.local.has(checkin.passId)) state.local.set(checkin.passId, checkin);
   void record(state.meta.eventId, userId, "scan", item, checkin).catch(() =>
     reportWriteError(state.meta.eventId, checkin?.passId ?? null),
+  );
+}
+
+/**
+ * Enregistre la lecture d'un billet du public (rôle boutique) : l'usage local rend la lecture suivante « déjà utilisé »
+ * tout de suite, sur cet appareil, sans réseau ; le serveur arbitre à l'envoi.
+ */
+export function recordTicketScan(
+  state: StaffState,
+  userId: string,
+  decision: TicketScanDecision,
+  payload: string,
+): void {
+  const id = newId();
+  const { item, use } = ticketScanAction(decision, payload, id, new Date());
+  if (use && !state.ticketUses.has(use.ticketId)) state.ticketUses.set(use.ticketId, use);
+  // Rien à envoyer pour un QR qui n'est pas d'Orasso : il reste sur le téléphone.
+  if (!item) return;
+  const ticketId = decision.ticketId;
+  void record(state.meta.eventId, userId, "ticket_scan", { ...item, ticketId }, null, use).catch(() => {
+    if (use) state.ticketUses.delete(use.ticketId);
+    reportWriteError(state.meta.eventId, null);
+  });
+}
+
+/**
+ * Nouvel incident de la main courante : l'incident part en premier, sa photo (gardée sur le téléphone) en suit, rattachée
+ * par l'identifiant de l'incident. Sans réseau, les deux attendent et repartent dans cet ordre.
+ */
+export async function recordIncident(eventId: string, userId: string, draft: IncidentDraft): Promise<void> {
+  const incidentId = await record(eventId, userId, "incident", {
+    location: draft.location,
+    description: draft.description,
+    occurredAt: new Date().toISOString(),
+  });
+  if (draft.photoUri) await record(eventId, userId, "incident_photo", { incidentId, fileUri: draft.photoUri });
+}
+
+/** Alerte du staff, avec la position lue au toucher (ou rien si la permission est refusée). */
+export function recordAlert(eventId: string, userId: string, message: string, position: AlertPosition | null): void {
+  void record(eventId, userId, "alert", {
+    message: message || null,
+    ...(position ? { lat: position.lat, lng: position.lng } : {}),
+  });
+}
+
+/** Un toucher du compteur d'entrées des visiteurs (+1, +10, −1, −10) : enregistré tout de suite, envoyé au réseau. */
+export function recordVisitor(state: StaffState, userId: string, delta: VisitorDelta): void {
+  void record(state.meta.eventId, userId, "visitor", { delta, at: new Date().toISOString() }).catch(() =>
+    reportWriteError(state.meta.eventId, null),
   );
 }
 

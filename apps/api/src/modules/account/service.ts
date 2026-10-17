@@ -70,6 +70,7 @@ import { isSecondFactor } from "../security/passkey";
 import { securityService } from "../security/service";
 import { anonymizeSocialForDeletedAccount } from "../social/anonymize";
 import { socialProfile } from "../social/profile";
+import { anonymizeStaffForDeletedAccount } from "../staff/anonymize";
 import { anonymizeGarageForDeletedAccount } from "../vehicles/anonymize";
 
 type MailUser = { id: string; email: string; name: string };
@@ -409,6 +410,7 @@ export const accountService = {
       photoKeys.push(...(await anonymizeCrewsForDeletedAccount(tx, userId)));
       photoKeys.push(...(await anonymizeMessagingForDeletedAccount(tx, userId)));
       await anonymizeCommunicationForDeletedAccount(tx, userId);
+      await anonymizeStaffForDeletedAccount(tx, userId);
       // Modération (lot 32) : signalements et sanctions conservés un an (docs/01) ; contestation en cours close.
       await anonymizeModerationForDeletedAccount(tx, userId);
       await invitationsService.anonymizeForDeletedAccount(tx, userId, oldEmail);

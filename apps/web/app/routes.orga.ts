@@ -14,6 +14,8 @@ export default [
     // Lot 27 : après l'événement (bilan, remerciement, export tracé, édition suivante).
     route("e/:eventId/apres", "routes/orga-apres.tsx"),
     route("e/:eventId/billets", "routes/orga-billets.tsx"),
+    // Lot 24 : staff (membres, rôles, invitations, demandes, présences et relances).
+    route("staff", "routes/orga-staff.tsx"),
     // Lot 25 : invitations nominatives.
     route("e/:eventId/invitations", "routes/orga-invitations.tsx"),
     // Lot 20 : communication (consignes, annonces, messages groupés, modèles, messages des participants, staff).

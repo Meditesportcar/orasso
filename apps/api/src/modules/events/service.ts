@@ -162,6 +162,7 @@ function copyValues(e: EventRow) {
     rulesText: e.rulesText,
     instructions: e.instructions,
     vendorTypes: e.vendorTypes,
+    shopEnabled: e.shopEnabled,
   };
 }
 
@@ -217,6 +218,7 @@ export const eventsService = {
       lockedAt: e.lockedAt?.toISOString() ?? null,
       parentEventId: e.parentEventId,
       recurrenceRule: e.recurrenceRule ?? null,
+      shopEnabled: e.shopEnabled,
     };
   },
 

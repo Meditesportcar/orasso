@@ -1,7 +1,15 @@
 // Du résultat d'une lecture à l'écran ScanResult (OK + zone moutarde / déjà entré crème / refusé rouge), à la
 // vibration et à l'heure « 09:48 » des écrans du staff.
 import type { ScanResultProps } from "@orasso/design-system/native";
-import { type AccessListEntry, type ScanDecision, scanRefusalLabels, wallTime } from "@orasso/shared";
+import {
+  type AccessListEntry,
+  type ScanDecision,
+  scanRefusalLabels,
+  shopLabels,
+  type TicketScanDecision,
+  ticketRefusalLabels,
+  wallTime,
+} from "@orasso/shared";
 import * as Haptics from "expo-haptics";
 import { Platform } from "react-native";
 
@@ -36,6 +44,34 @@ export function resultOf(
     return { key, detectedAt, state: "duplicate", time: clock(decision.checkedInAt), ...entryView(decision.entry) };
   }
   return { key, detectedAt, state: "refused", reason: scanRefusalLabels[decision.reason] };
+}
+
+/**
+ * Un billet du public lu par la boutique : « Billet OK · Entrée » (moutarde), « Déjà utilisé » + l'heure (crème),
+ * ou la raison du refus (rouge). Jamais d'identité : le staff boutique n'a pas besoin du nom du visiteur.
+ */
+export function ticketResultOf(decision: TicketScanDecision, key: string, detectedAt?: number): ShownResult {
+  if (decision.decision === "ok") {
+    const type = decision.ticket?.typeLabel;
+    return {
+      key,
+      detectedAt,
+      state: "ok",
+      time: "à l'instant",
+      vehicle: type ? `${shopLabels.ticketOk} · ${type}` : shopLabels.ticketOk,
+      pseudo: decision.listed ? undefined : "à resynchroniser",
+    };
+  }
+  if (decision.decision === "already") {
+    return {
+      key,
+      detectedAt,
+      state: "duplicate",
+      time: decision.usedAt ? clock(decision.usedAt) : undefined,
+      vehicle: shopLabels.ticketAlready,
+    };
+  }
+  return { key, detectedAt, state: "refused", reason: ticketRefusalLabels[decision.reason] };
 }
 
 /** Pointé à la main (recherche, liste) : même écran que le scan OK, avec la zone à lire au conducteur. */

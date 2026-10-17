@@ -10,7 +10,10 @@ import {
 } from "../enums";
 import type { StaffRole, StructureRole } from "../roles";
 import { staffRoleSchema } from "../roles";
-import { optionalText } from "./common";
+import { optionalText, pageQuery } from "./common";
+
+/** `GET /structures?q=` : annuaire des structures vérifiées, avec une recherche par nom (« Devenir staff »). */
+export const structureListQuery = pageQuery.extend({ q: z.string().trim().max(60).optional() });
 
 const socialsSchema = z
   .object({

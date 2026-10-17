@@ -1,5 +1,5 @@
 {
-  "id": "4b3a1201-5735-4dd4-a6bd-aba6f92f32ea",
+  "id": "697e30f4-db51-400b-9619-4390087325f4",
   "prevId": "a2bda4f4-8b78-406a-b4a7-a0b3034a2283",
   "version": "7",
   "dialect": "postgresql",
@@ -2665,13 +2665,6 @@
           "notNull": true,
           "default": "'queued'"
         },
-        "thanks": {
-          "name": "thanks",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "recipients_count": {
           "name": "recipients_count",
           "type": "integer",
@@ -3591,6 +3584,13 @@
         },
         "tickets_enabled": {
           "name": "tickets_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "shop_enabled": {
+          "name": "shop_enabled",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -8515,442 +8515,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.event_reports": {
-      "name": "event_reports",
-      "schema": "",
-      "columns": {
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "generated_at": {
-          "name": "generated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "refreshed_at": {
-          "name": "refreshed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "data": {
-          "name": "data",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "event_reports_event_id_events_id_fk": {
-          "name": "event_reports_event_id_events_id_fk",
-          "tableFrom": "event_reports",
-          "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.participant_contact_views": {
-      "name": "participant_contact_views",
-      "schema": "",
-      "columns": {
-        "application_id": {
-          "name": "application_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "viewer_id": {
-          "name": "viewer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "day": {
-          "name": "day",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "participant_contact_views_application_id_applications_id_fk": {
-          "name": "participant_contact_views_application_id_applications_id_fk",
-          "tableFrom": "participant_contact_views",
-          "tableTo": "applications",
-          "columnsFrom": [
-            "application_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "participant_contact_views_viewer_id_user_id_fk": {
-          "name": "participant_contact_views_viewer_id_user_id_fk",
-          "tableFrom": "participant_contact_views",
-          "tableTo": "user",
-          "columnsFrom": [
-            "viewer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "participant_contact_views_pkey": {
-          "name": "participant_contact_views_pkey",
-          "columns": [
-            "application_id",
-            "viewer_id",
-            "day"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.participant_exports": {
-      "name": "participant_exports",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "structure_id": {
-          "name": "structure_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "row_count": {
-          "name": "row_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ip": {
-          "name": "ip",
-          "type": "inet",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "participant_exports_event_idx": {
-          "name": "participant_exports_event_idx",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "participant_exports_event_id_events_id_fk": {
-          "name": "participant_exports_event_id_events_id_fk",
-          "tableFrom": "participant_exports",
-          "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "participant_exports_structure_id_structures_id_fk": {
-          "name": "participant_exports_structure_id_structures_id_fk",
-          "tableFrom": "participant_exports",
-          "tableTo": "structures",
-          "columnsFrom": [
-            "structure_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "participant_exports_user_id_user_id_fk": {
-          "name": "participant_exports_user_id_user_id_fk",
-          "tableFrom": "participant_exports",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.structure_notes": {
-      "name": "structure_notes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "structure_id": {
-          "name": "structure_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject_user_id": {
-          "name": "subject_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "author_id": {
-          "name": "author_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "structure_notes_subject_idx": {
-          "name": "structure_notes_subject_idx",
-          "columns": [
-            {
-              "expression": "structure_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subject_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"structure_notes\".\"deleted_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "structure_notes_structure_created_idx": {
-          "name": "structure_notes_structure_created_idx",
-          "columns": [
-            {
-              "expression": "structure_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "structure_notes_structure_id_structures_id_fk": {
-          "name": "structure_notes_structure_id_structures_id_fk",
-          "tableFrom": "structure_notes",
-          "tableTo": "structures",
-          "columnsFrom": [
-            "structure_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "structure_notes_subject_user_id_user_id_fk": {
-          "name": "structure_notes_subject_user_id_user_id_fk",
-          "tableFrom": "structure_notes",
-          "tableTo": "user",
-          "columnsFrom": [
-            "subject_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "structure_notes_event_id_events_id_fk": {
-          "name": "structure_notes_event_id_events_id_fk",
-          "tableFrom": "structure_notes",
-          "tableTo": "events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "structure_notes_author_id_user_id_fk": {
-          "name": "structure_notes_author_id_user_id_fk",
-          "tableFrom": "structure_notes",
-          "tableTo": "user",
-          "columnsFrom": [
-            "author_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "structure_notes_body_check": {
-          "name": "structure_notes_body_check",
-          "value": "char_length(\"structure_notes\".\"body\") between 1 and 500"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.reviews": {
       "name": "reviews",
       "schema": "",
@@ -9671,6 +9235,314 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.ticket_scans": {
+      "name": "ticket_scans",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "staff_user_id": {
+          "name": "staff_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "local_decision": {
+          "name": "local_decision",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scanned_at": {
+          "name": "scanned_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "server_result": {
+          "name": "server_result",
+          "type": "ticket_scan_result",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ticket_scans_event_idx": {
+          "name": "ticket_scans_event_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "received_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ticket_scans_ticket_idx": {
+          "name": "ticket_scans_ticket_idx",
+          "columns": [
+            {
+              "expression": "ticket_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ticket_scans_event_id_events_id_fk": {
+          "name": "ticket_scans_event_id_events_id_fk",
+          "tableFrom": "ticket_scans",
+          "tableTo": "events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_scans_device_id_devices_id_fk": {
+          "name": "ticket_scans_device_id_devices_id_fk",
+          "tableFrom": "ticket_scans",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "ticket_scans_staff_user_id_user_id_fk": {
+          "name": "ticket_scans_staff_user_id_user_id_fk",
+          "tableFrom": "ticket_scans",
+          "tableTo": "user",
+          "columnsFrom": [
+            "staff_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "ticket_scans_ticket_id_tickets_id_fk": {
+          "name": "ticket_scans_ticket_id_tickets_id_fk",
+          "tableFrom": "ticket_scans",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.visitor_entries": {
+      "name": "visitor_entries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "staff_user_id": {
+          "name": "staff_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delta": {
+          "name": "delta",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "at": {
+          "name": "at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "visitor_entries_event_idx": {
+          "name": "visitor_entries_event_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "visitor_entries_event_id_events_id_fk": {
+          "name": "visitor_entries_event_id_events_id_fk",
+          "tableFrom": "visitor_entries",
+          "tableTo": "events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "visitor_entries_device_id_devices_id_fk": {
+          "name": "visitor_entries_device_id_devices_id_fk",
+          "tableFrom": "visitor_entries",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "visitor_entries_staff_user_id_user_id_fk": {
+          "name": "visitor_entries_staff_user_id_user_id_fk",
+          "tableFrom": "visitor_entries",
+          "tableTo": "user",
+          "columnsFrom": [
+            "staff_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "visitor_entries_delta_check": {
+          "name": "visitor_entries_delta_check",
+          "value": "\"visitor_entries\".\"delta\" in (-10, -1, 1, 10)"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.structure_bans": {
       "name": "structure_bans",
       "schema": "",
@@ -10297,26 +10169,6 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
-        },
-        "suspended_reason": {
-          "name": "suspended_reason",
-          "type": "structure_suspension",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "suspended_at": {
-          "name": "suspended_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "badge_reminded_at": {
-          "name": "badge_reminded_at",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
         },
         "invite_token": {
           "name": "invite_token",
@@ -10946,6 +10798,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "used_by_device_id": {
+          "name": "used_by_device_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "cancelled_at": {
           "name": "cancelled_at",
           "type": "timestamp with time zone",
@@ -11092,6 +10950,19 @@
           "tableTo": "user",
           "columnsFrom": [
             "used_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "tickets_used_by_device_id_devices_id_fk": {
+          "name": "tickets_used_by_device_id_devices_id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "used_by_device_id"
           ],
           "columnsTo": [
             "id"
@@ -12601,6 +12472,16 @@
         "absent"
       ]
     },
+    "public.ticket_scan_result": {
+      "name": "ticket_scan_result",
+      "schema": "public",
+      "values": [
+        "accepted",
+        "already",
+        "refused",
+        "rejected"
+      ]
+    },
     "public.follow_source": {
       "name": "follow_source",
       "schema": "public",
@@ -12638,14 +12519,6 @@
         "owner",
         "co_organizer",
         "staff"
-      ]
-    },
-    "public.structure_suspension": {
-      "name": "structure_suspension",
-      "schema": "public",
-      "values": [
-        "badge_expired",
-        "moderation"
       ]
     },
     "public.structure_verification": {

@@ -4,11 +4,15 @@ import type {
   CheckinResult,
   EventOrganizer,
   EventReviews,
+  IncidentView,
   LiveCounters,
   MalusContestView,
   MyStaffEvent,
+  StaffAlertView,
 } from "@orasso/shared";
+import { distanceFromEntryLabel, liveLabels } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import "../styles/staff.css";
 
 import { AfterEvent } from "../components/AfterEvent";
 import { apiFetch } from "../lib/api.client";
@@ -49,7 +53,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Après l'événement (organisateur) : avis et droit de réponse, contestations de malus.
   const reviews = organizer ? await api<EventReviews>(request, `/events/${eventId}/reviews`) : null;
   const contests = organizer ? await api<MalusContestView[]>(request, `/events/${eventId}/malus-contests`) : null;
+  // Terrain (lot 24) : alertes du staff avec leur position (tant qu'elles sont ouvertes) et main courante avec photo.
+  const alerts = organizer ? await api<StaffAlertView[]>(request, `/events/${eventId}/alerts`) : null;
+  const incidents = organizer ? await api<IncidentView[]>(request, `/events/${eventId}/incidents`) : null;
   return {
+    alerts: alerts?.ok ? alerts.data : [],
+    incidents: incidents?.ok ? incidents.data : [],
     event,
     organizer,
     items: list.ok ? list.data : [],
@@ -66,6 +75,8 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
   const { event, organizer, listError } = loaderData;
   const [items, setItems] = useState<CheckinListItem[]>(loaderData.items);
   const [live, setLive] = useState<LiveCounters | null>(loaderData.live);
+  const [alerts, setAlerts] = useState<StaffAlertView[]>(loaderData.alerts);
+  const [incidents, setIncidents] = useState<IncidentView[]>(loaderData.incidents);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -77,15 +88,27 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => setItems(loaderData.items), [loaderData.items]);
   useEffect(() => setLive(loaderData.live), [loaderData.live]);
+  useEffect(() => setAlerts(loaderData.alerts), [loaderData.alerts]);
+  useEffect(() => setIncidents(loaderData.incidents), [loaderData.incidents]);
 
   const refetch = useCallback(async () => {
     const res = await apiFetch<CheckinListItem[]>(`/events/${event.id}/checkins`);
     if (res.ok) setItems(res.data);
   }, [event.id]);
 
+  const refetchField = useCallback(async () => {
+    const [a, i] = await Promise.all([
+      apiFetch<StaffAlertView[]>(`/events/${event.id}/alerts`),
+      apiFetch<IncidentView[]>(`/events/${event.id}/incidents`),
+    ]);
+    if (a.ok) setAlerts(a.data);
+    if (i.ok) setIncidents(i.data);
+  }, [event.id]);
+
   // Direct : les compteurs arrivent par WebSocket, la liste se rafraîchit juste après (autres appareils du staff).
   useChannel(organizer ? `event:${event.id}:live` : null, (m) => {
     if (m.type === "live") setLive(m.payload as LiveCounters);
+    if (m.type === "alert" || m.type === "alert.resolved" || m.type === "incident") void refetchField();
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void refetch(), 400);
   });
@@ -171,6 +194,14 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
                     ]
                   : []),
                 { value: fmtCount(live.alertsOpen), label: "alertes" },
+                ...(live.visitors > 0 || live.tickets.sold > 0
+                  ? [
+                      { value: fmtCount(live.visitors), label: liveLabels.visitors.toLowerCase() },
+                      ...(live.tickets.sold > 0
+                        ? [{ value: `${live.tickets.used}/${live.tickets.sold}`, label: "billets contrôlés" }]
+                        : []),
+                    ]
+                  : []),
               ]
             : [
                 { value: arrived, label: "arrivés" },
@@ -189,6 +220,120 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
               </Chip>
             ))}
           </div>
+        </section>
+      )}
+
+      {organizer && live && live.byCategory.length > 0 && (
+        <section className="orga__panel s-stack" aria-label={liveLabels.byCategory} data-testid="live-by-category">
+          <h2 className="s-h2">{liveLabels.byCategory}</h2>
+          <ul className="livep__bars">
+            {live.byCategory.map((c) => (
+              <li key={c.categoryId} className="livep__bar" data-testid="live-category">
+                <span>{c.label}</span>
+                <strong className="o-t-number">
+                  {c.arrived} / {c.expected}
+                </strong>
+                <span className="livep__track" aria-hidden="true">
+                  <span
+                    className="livep__fill"
+                    style={{
+                      width: `${c.expected > 0 ? Math.min(100, Math.round((c.arrived / c.expected) * 100)) : 0}%`,
+                    }}
+                  />
+                </span>
+              </li>
+            ))}
+          </ul>
+          {live.providers.expected > 0 && (
+            <p data-testid="live-providers">
+              {liveLabels.providers} · <strong>{live.providers.arrived}</strong> / {live.providers.expected}
+            </p>
+          )}
+        </section>
+      )}
+
+      {organizer && (
+        <section className="orga__panel s-stack" aria-labelledby="alertes-titre" data-testid="field-alerts">
+          <h2 id="alertes-titre" className="s-h2">
+            Alertes du staff
+          </h2>
+          {alerts.length === 0 ? (
+            <p className="s-muted">Aucune alerte.</p>
+          ) : (
+            <ul className="livep__list">
+              {alerts.map((a) => (
+                <li
+                  key={a.id}
+                  className="livep__item"
+                  data-testid="field-alert"
+                  data-open={a.resolvedAt ? "no" : "yes"}
+                >
+                  <div className="s-row s-row--between">
+                    <strong>{a.pseudo ?? "Staff"}</strong>
+                    <Chip variant={a.resolvedAt ? undefined : "accent"}>
+                      {a.resolvedAt ? liveLabels.alertClosed : liveLabels.alertOpen}
+                    </Chip>
+                  </div>
+                  <p className="s-prewrap">{a.message ?? "Besoin d'aide"}</p>
+                  <div className="o-t-caption s-muted">
+                    {formatDateTime(a.createdAt)}
+                    {a.lat !== null && a.lng !== null ? (
+                      <>
+                        {" · "}
+                        {distanceFromEntryLabel(a.distanceM) ?? "position partagée"}
+                        {" · "}
+                        <a
+                          href={`https://www.openstreetmap.org/?mlat=${a.lat}&mlon=${a.lng}#map=19/${a.lat}/${a.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-testid="alert-map-link"
+                        >
+                          {liveLabels.alertPosition}
+                        </a>
+                      </>
+                    ) : a.resolvedAt ? null : (
+                      <>
+                        {" · "}
+                        {liveLabels.noPosition}
+                      </>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {organizer && (
+        <section className="orga__panel s-stack" aria-labelledby="courante-titre" data-testid="field-incidents">
+          <h2 id="courante-titre" className="s-h2">
+            Main courante
+          </h2>
+          {incidents.length === 0 ? (
+            <p className="s-muted">Aucun incident noté.</p>
+          ) : (
+            <ul className="livep__list">
+              {incidents.map((i) => (
+                <li key={i.id} className="livep__item" data-testid="field-incident">
+                  <div className="s-row s-row--between">
+                    <strong>{formatDateTime(i.occurredAt)}</strong>
+                    <span className="o-t-caption s-muted">{[i.location, i.reporter].filter(Boolean).join(" · ")}</span>
+                  </div>
+                  <p className="s-prewrap">{i.description}</p>
+                  {i.hasPhoto && (
+                    <img
+                      className="livep__photo"
+                      src={`/api/events/${event.id}/incidents/${i.id}/photo`}
+                      alt={`Pièce jointe de l'incident du ${formatDateTime(i.occurredAt)}`}
+                      loading="lazy"
+                      data-testid="incident-photo"
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 
