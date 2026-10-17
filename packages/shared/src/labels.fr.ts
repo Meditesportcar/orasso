@@ -19,6 +19,7 @@ export * from "./labels/messaging.fr";
 export * from "./labels/moderation.fr";
 export * from "./labels/notifications.fr";
 export * from "./labels/orga.fr";
+export * from "./labels/orga-manage.fr";
 export * from "./labels/points.fr";
 export * from "./labels/shop.fr";
 export * from "./labels/social.fr";
