@@ -16,7 +16,11 @@ const VIEWS = [
 ] as const;
 const THEMES = ["beton", "sable"] as const;
 
-async function context(browser: Browser, cookie: string, opts: { theme?: string; width?: number; height?: number } = {}) {
+async function context(
+  browser: Browser,
+  cookie: string,
+  opts: { theme?: string; width?: number; height?: number } = {},
+) {
   const ctx = await browser.newContext({ viewport: { width: opts.width ?? 1280, height: opts.height ?? 900 } });
   const url = new URL(WEB);
   const cookies = [{ name: "orasso-theme", value: opts.theme ?? "beton", url: WEB }];
@@ -32,7 +36,9 @@ async function context(browser: Browser, cookie: string, opts: { theme?: string;
 const parisDay = (n: number) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date(Date.now() + n * 86_400_000));
 
-test("plusieurs jours : assistant, page publique, candidature pour un jour, Accès, tri et jour J", async ({ browser }) => {
+test("plusieurs jours : assistant, page publique, candidature pour un jour, Accès, tri et jour J", async ({
+  browser,
+}) => {
   test.setTimeout(300_000);
   const damien = await login("damien@orasso.local");
   const title = `Salon E2E ${unique()}`;
@@ -63,11 +69,11 @@ test("plusieurs jours : assistant, page publique, candidature pour un jour, Acc�
   await o.getByRole("button", { name: "Enregistrer le brouillon" }).click();
   await o.waitForURL(/\/orga\/meditesportcar\/e\/[0-9a-f-]{36}/);
   const eventId = /\/e\/([0-9a-f-]{36})/.exec(o.url())?.[1] ?? "";
-  const saved = await apiCall<{ days: { id: string; date: string; capacity: number | null }[]; dayAccess: string; slug: string }>(
-    damien,
-    "GET",
-    `/events/${eventId}`,
-  );
+  const saved = await apiCall<{
+    days: { id: string; date: string; capacity: number | null }[];
+    dayAccess: string;
+    slug: string;
+  }>(damien, "GET", `/events/${eventId}`);
   expect(saved.data.days.map((d) => d.date)).toEqual([parisDay(10), parisDay(11), parisDay(12)]);
   expect(saved.data.days.map((d) => d.capacity)).toEqual([null, 2, null]);
   expect(saved.data.dayAccess).toBe("both");

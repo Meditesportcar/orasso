@@ -4,10 +4,10 @@
 import { Button, Counters, TextField } from "@orasso/design-system/web";
 import {
   type EventOrganizer,
-  eventDaysLabels,
-  formatDayDate,
   type EventReportView,
   EXPORT_REASON_MIN,
+  eventDaysLabels,
+  formatDayDate,
   afterEventLabels as L,
   renderTemplate,
   reviewLink,
