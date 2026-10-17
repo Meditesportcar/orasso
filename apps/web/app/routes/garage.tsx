@@ -1,5 +1,6 @@
 import { Button, Chip, Plate, TextField, VehicleCard } from "@orasso/design-system/web";
 import {
+  type AccountQrSecret,
   crewLabels,
   type MyCrew,
   type PlateTransferView,
@@ -10,11 +11,13 @@ import {
 } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
 
+import { AccountQr } from "../components/AccountQr";
 import { CrewLogo } from "../components/Crews";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime } from "../lib/format";
 import type { Route } from "./+types/garage";
 import "../styles/garage.css";
+import "../styles/home.css";
 
 export function meta() {
   return [{ title: "Garage · Orasso" }, { name: "robots", content: "noindex" }];
@@ -22,12 +25,19 @@ export function meta() {
 
 const ARCHIVED: Exclude<VehicleStatus, "active">[] = ["sold", "keepsake", "wrecked"];
 
+// La page porte le secret du QR de compte : ni le navigateur ni un relais ne la gardent.
+export function headers() {
+  return { "cache-control": "private, no-store" };
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
-  const [vehicles, transfers, crews] = await Promise.all([
+  const [vehicles, transfers, crews, qrSecret] = await Promise.all([
     apiOrThrow<VehicleFull[]>(request, "/me/vehicles"),
     api<{ incoming: PlateTransferView[]; outgoing: unknown[] }>(request, "/me/plate-transfers"),
     // En-tête : mes crews (lot 19, docs/02 « Garage »).
     api<MyCrew[]>(request, "/me/crews"),
+    // QR de compte (lot 30) : le secret sert au calcul du code dans le navigateur ; la page n'est jamais mise en cache.
+    api<AccountQrSecret>(request, "/me/account-qr-secret"),
   ]);
   const photoRefused = new URL(request.url).searchParams.get("photo") === "refusee";
   return {
@@ -35,6 +45,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     archived: vehicles.filter((v) => v.status !== "active"),
     incoming: transfers.ok ? transfers.data.incoming : [],
     crews: crews.ok ? crews.data : [],
+    qrSecret: qrSecret.ok ? qrSecret.data : null,
     photoRefused,
   };
 }
@@ -63,7 +74,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Garage({ loaderData, actionData }: Route.ComponentProps) {
-  const { vehicles, archived, incoming, crews, photoRefused } = loaderData;
+  const { vehicles, archived, incoming, crews, photoRefused, qrSecret } = loaderData;
   const busy = useNavigation().state !== "idle";
   return (
     <div className="s-stack">
@@ -84,6 +95,7 @@ export default function Garage({ loaderData, actionData }: Route.ComponentProps)
           {crews.length ? crewLabels.myCrews : crewLabels.createCrew}
         </a>
       </div>
+      {qrSecret && <AccountQr secret={qrSecret} />}
       {photoRefused && (
         <p className="s-notice s-notice--alert">
           Le véhicule est ajouté, mais la photo n'a pas été acceptée. Ajoutes-en une depuis sa fiche.
