@@ -1,13 +1,13 @@
-// Casquette Organisateur, Tri : tri par glissement des candidatures (lot 23). En attendant : écran d'attente (lot 22).
-import { orgaLabels } from "@orasso/shared";
+// Casquette Organisateur, Tri : tri par glissement des candidatures (lot 23, ARCHITECTURE-SUITE § 7.3).
+import { triageAppLabels } from "@orasso/shared";
 
 import { OrgaGate } from "@/features/orga/OrgaGate";
-import { Soon } from "@/ui/Soon";
+import { TriageScreen } from "@/features/orga/triage/TriageScreen";
 
 export default function Tri() {
   return (
-    <OrgaGate title="Tri">
-      <Soon title="Tri">{orgaLabels.sortSoonBody}</Soon>
+    <OrgaGate title={triageAppLabels.title}>
+      <TriageScreen />
     </OrgaGate>
   );
 }

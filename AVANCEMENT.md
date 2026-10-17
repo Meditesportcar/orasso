@@ -172,6 +172,11 @@
   - API : `POST /events/:id/staff/:userId/remind` (relance à la demande, 1 par heure), demandes de staff comptées dans la Boîte et la pastille de la casquette. Aucune migration.
   - Vérifié : voir l'entrée du lot 22 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-22-captures\`.
 
+- **Appli : tri par glissement (lot 23, 17/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 23) ; état technique : `ARCHITECTURE.md` « État après le lot 23 ».
+  - Onglet **Tri** de la casquette Organisateur : événement publié non passé, segments Véhicules / Prestataires / Attente / Liste, compteurs en direct (canal `triage`), carte plein écran (photos au toucher, nom du véhicule en entier, candidat, historique, crew, avis de filtration, plaque, alertes ; « Fiche » = fiche complète). Glissement droite = Retenir, gauche = Refuser (feuille des motifs d'abord), haut = Liste d'attente (seuil 40 %, retour élastique) ; boutons Refuser / Attente / Retenir équivalents ; décision armée 5 s avec « Annuler », puis `decide`. Liste d'attente réordonnable (poignée, Monter / Descendre), zone de la retenue, mode liste (filtres, sélection, décisions en masse). Réduction des animations : aucune translation, fondu de 120 ms.
+  - Aucune migration, aucune route d'API nouvelle, aucune dépendance native (geste par `PanResponder` + Reanimated, comme le curseur de rayon).
+  - Vérifié : voir l'entrée du lot 23 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-23-captures\`.
+
 - **Recherche et Explorer, seconde passe : crews (lot 29, 17/10/2026)** : les crews sont dans `GET /search` (source `modules/crews/search-source.ts`, réutilise la recherche du lot 19) et dans l'écran de recherche de l'appli ; le segment « Personnes et crews » (site et appli) n'a plus qu'un champ et un filtre de département pour les deux. Aucune migration.
 
 - **Staff côté site, rôle boutique, compléments du jour J (lot 24, 17/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 24) ; état technique et API staff : `ARCHITECTURE.md` « État après le lot 24 ».
@@ -187,6 +192,7 @@
 
 ## Prochaine étape
 
+- Lot 23 : aucune migration ni variable ; à essayer sur téléphone (APK de la vague, aucune dépendance native nouvelle) : sensation du glissement, lisibilité en plein soleil (Sable), photos au toucher, poignée de la liste d'attente.
 - Lot 24 : déployer (migration `0033_staff-shop` au démarrage, aucune variable nouvelle, tâche `field.sweep` planifiée par l'API ; `pnpm db:seed` ajoute la boutique au Salon Argelès d'une base existante). À essayer sur téléphone (APK de la vague, aucune dépendance native nouvelle) : tuile Boutique, scan d'un billet gratuit, compteur, alerte avec position, photo d'un incident. Lot 22 : l'onglet Staff de la casquette Organisateur consomme l'API staff décrite dans `ARCHITECTURE.md` (membres, demandes, invitations, présences, `POST /events/:id/staff/remind`, `staffRequests` du résumé de Boîte).
 - Lot 32 : déployer (migration `0034_moderation` au démarrage, à renuméroter à la fusion selon la règle B1 ; aucune variable nouvelle ; `pnpm db:seed` ajoute la modératrice et ses signalements à une base existante). Damien relit les seuils S39 / S40 et la copie des messages signalés (AS5) dans le journal des choix. Lot 33 : registres et réglages de l'administration (dont le compteur des signalements sur l'accueil de `/admin`).
 - Lot 25 : déployer (migration `0033_invitations` au démarrage, à renuméroter à la fusion si d'autres lots en ont généré, règle B1 ; aucune variable nouvelle ; `pnpm db:seed` ajoute « Soirée partenaires » à une base existante). Lot 22 : brancher le bouton « Inviter » de la page événement de la casquette Organisateur sur `/evenement/<id>/inviter`. Lot 27 : « Inviter les retenus » de l'édition suivante réutilise `POST /events/:id/invitations/from-event`. Essayer sur téléphone : feuille de réponse (choix du véhicule), écran Inviter.
