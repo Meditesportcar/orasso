@@ -81,14 +81,15 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
   });
   // Plusieurs jours (lot 26) : « Tout l'événement » et/ou un jour, selon le mode d'accès choisi par l'organisateur.
   const multiDay = event.days.length > 1;
-  const dayChoices: { id: string | null; label: string; full: boolean }[] = multiDay
+  const dayChoices: { id: string | null; label: string; full: boolean; mine: boolean }[] = multiDay
     ? [
         ...(event.dayAccess !== "per_day"
           ? [
               {
                 id: null,
                 label: eventDaysLabels.wholeEvent,
-                full: event.days.some((d) => d.remaining === 0) || takenDays.length > 0,
+                full: event.days.some((d) => d.remaining === 0),
+                mine: takenDays.length > 0,
               },
             ]
           : []),
@@ -96,15 +97,16 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
           ? event.days.map((d) => ({
               id: d.id as string | null,
               label: formatDayDate(d.date),
-              full: d.remaining === 0 || takenDays.includes(d.id),
+              full: d.remaining === 0,
+              mine: takenDays.includes(d.id),
             }))
           : []),
       ]
     : [];
   const [dayId, setDayId] = useState<string | null>(() => {
     if (!multiDay) return null;
-    const wanted = dayChoices.find((c) => c.id === preselectedDay && !c.full);
-    return (wanted ?? dayChoices.find((c) => !c.full) ?? dayChoices[0])?.id ?? null;
+    const wanted = dayChoices.find((c) => c.id === preselectedDay && !c.full && !c.mine);
+    return (wanted ?? dayChoices.find((c) => !c.full && !c.mine) ?? dayChoices[0])?.id ?? null;
   });
   const [rules, setRules] = useState(false);
   const [follow, setFollow] = useState(true);
@@ -184,7 +186,11 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
               <ChipRow className="s-chips-wrap">
                 {dayChoices.map((c) => (
                   <Chip key={c.id ?? "whole"} selected={dayId === c.id} onClick={() => setDayId(c.id)}>
-                    {c.full ? `${c.label} · ${eventDaysLabels.dayFull}` : c.label}
+                    {c.mine
+                      ? `${c.label} · ${eventDaysLabels.alreadyApplied}`
+                      : c.full
+                        ? `${c.label} · ${eventDaysLabels.dayFull}`
+                        : c.label}
                   </Chip>
                 ))}
               </ChipRow>

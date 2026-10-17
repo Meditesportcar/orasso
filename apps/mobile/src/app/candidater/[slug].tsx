@@ -78,7 +78,7 @@ export default function Candidater() {
   const taken = (e.myApplications ?? [])
     .filter((a) => ["pending", "accepted", "waitlisted", "offered"].includes(a.status))
     .map((a) => a.eventDayId);
-  const dayChoices: { id: string | null; label: string; full: boolean }[] =
+  const dayChoices: { id: string | null; label: string; full: boolean; mine: boolean }[] =
     e.days.length > 1
       ? [
           ...(e.dayAccess !== "per_day"
@@ -86,7 +86,8 @@ export default function Candidater() {
                 {
                   id: null,
                   label: eventDaysLabels.wholeEvent,
-                  full: e.days.some((d) => d.remaining === 0) || taken.length > 0,
+                  full: e.days.some((d) => d.remaining === 0),
+                  mine: taken.length > 0,
                 },
               ]
             : []),
@@ -94,7 +95,8 @@ export default function Candidater() {
             ? e.days.map((d) => ({
                 id: d.id as string | null,
                 label: formatDayDate(d.date),
-                full: d.remaining === 0 || taken.includes(d.id),
+                full: d.remaining === 0,
+                mine: taken.includes(d.id),
               }))
             : []),
         ]
@@ -102,8 +104,11 @@ export default function Candidater() {
   const dayId =
     dayChoice !== undefined
       ? dayChoice
-      : ((dayChoices.find((c) => c.id === jour && !c.full) ?? dayChoices.find((c) => !c.full) ?? dayChoices[0])?.id ??
-        null);
+      : ((
+          dayChoices.find((c) => c.id === jour && !c.full && !c.mine) ??
+          dayChoices.find((c) => !c.full && !c.mine) ??
+          dayChoices[0]
+        )?.id ?? null);
 
   const toggle = (id: string) =>
     setPicked((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : ids.length < limit ? [...ids, id] : ids));
@@ -192,7 +197,11 @@ export default function Candidater() {
               <ChipRow>
                 {dayChoices.map((c) => (
                   <Chip key={c.id ?? "whole"} selected={dayId === c.id} onPress={() => setDayChoice(c.id)}>
-                    {c.full ? `${c.label} · ${eventDaysLabels.dayFull}` : c.label}
+                    {c.mine
+                      ? `${c.label} · ${eventDaysLabels.alreadyApplied}`
+                      : c.full
+                        ? `${c.label} · ${eventDaysLabels.dayFull}`
+                        : c.label}
                   </Chip>
                 ))}
               </ChipRow>
