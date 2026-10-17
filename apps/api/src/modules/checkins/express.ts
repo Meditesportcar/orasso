@@ -3,8 +3,10 @@
 // candidature retenue, le QR et l'entrée, et connecte la session.
 import { randomBytes } from "node:crypto";
 import {
+  dayFor,
   type ExpressInvitePublic,
   type ExpressSignup,
+  isMultiDay,
   isStaffModeOpen,
   normalizePlate,
   vehicleCreateSchema,
@@ -33,6 +35,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
 import { accessService, passPayload } from "../access/service";
+import { daysRepo } from "../events/days";
 import { eventsRepo } from "../events/repo";
 import { staffService } from "../staff/service";
 import { checkReference } from "../vehicles/service";
@@ -180,12 +183,17 @@ export const expressService = {
         })
         .returning();
       if (!v) throw new Error("Véhicule non enregistré");
+      // Plusieurs jours (lot 26) : une inscription express sur place vaut pour le jour même quand l'accès se fait par
+      // jour (ou au choix) ; tout l'événement sinon, ou hors des jours déclarés.
+      const days = await daysRepo.list(event.id, tx);
+      const today = isMultiDay(days) && event.dayAccess !== "whole" ? dayFor(days, t, event.timezone) : null;
       const [app] = await tx
         .insert(applications)
         .values({
           eventId: event.id,
           userId: created.id,
           vehicleId: v.id,
+          eventDayId: today?.id ?? null,
           status: "accepted",
           source: "express",
           rulesAcceptedAt: t,

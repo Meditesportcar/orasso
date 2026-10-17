@@ -2,32 +2,51 @@
 // récurrence, publication, modification, statut Maintenu/Incertain, annulation, zones.
 import { randomBytes } from "node:crypto";
 import {
+  addDays,
+  calendarDaysBetween,
+  type DaysError,
   departmentFromPostalCode,
   duplicateDates,
   type EventCard,
   type EventCreate,
+  type EventDaysPut,
   type EventListQuery,
   type EventOrganizer,
   type EventOutlook,
   type EventPublic,
   type EventUpdate,
   eventOutlookLabels,
+  formatDayDate,
+  fromWallTime,
   isLocked,
+  isMultiDay,
+  localDate,
   lockAt,
   type Page,
   type RecurrenceRule,
   recurrenceOccurrences,
   registrationOpensAt,
+  resolveDays,
   staffRoles,
+  wallTime,
   type zoneCreateSchema,
   type zoneUpdateSchema,
 } from "@orasso/shared";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import sharp from "sharp";
 import type { z } from "zod";
 
 import { db } from "../../db/client";
-import { applications, events, eventZones, orders, structureFollows, structureMembers, tickets } from "../../db/schema";
+import {
+  applications,
+  eventDays,
+  events,
+  eventZones,
+  orders,
+  structureFollows,
+  structureMembers,
+  tickets,
+} from "../../db/schema";
 import { requireOrganizer, staffAccess } from "../../lib/access";
 import { deps, now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
@@ -47,6 +66,7 @@ import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
 import { card, type StructureRow } from "./card";
+import { dayInUse, daysRepo } from "./days";
 import { exploreEvents } from "./explore";
 import { scheduleEventJobs } from "./jobs";
 import { type EventRow, eventsRepo } from "./repo";
@@ -54,7 +74,11 @@ import { type EventRow, eventsRepo } from "./repo";
 async function publicView(e: EventRow, s: StructureRow, showInstructions: boolean): Promise<EventPublic> {
   const counters = await eventsRepo.counters(e);
   const t = now();
+  // Plusieurs jours (lot 26) : jours avec leurs places ; un événement d'un jour n'en a pas et reste `whole`.
+  const days = await daysRepo.serialize(e);
   return {
+    days,
+    dayAccess: days.length ? e.dayAccess : "whole",
     ...card(e, s, counters.remaining),
     description: e.description,
     addressLine: e.addressLine,
@@ -170,8 +194,45 @@ function copyValues(e: EventRow) {
     instructions: e.instructions,
     vendorTypes: e.vendorTypes,
     shopEnabled: e.shopEnabled,
+    dayAccess: e.dayAccess,
   };
 }
+
+/**
+ * Jours d'un événement recopiés sur sa copie ou une occurrence (lot 26), décalés comme les dates de l'événement. La date
+ * locale suit le nouvel instant de début (même jour de la semaine pour un décalage de semaines entières).
+ */
+async function copyDays(tx: Tx, from: EventRow, to: Pick<EventRow, "id" | "startsAt">) {
+  const days = await daysRepo.list(from.id, tx);
+  if (!isMultiDay(days)) return;
+  // Décalage en jours calendaires, heures murales gardées (changements d'heure compris).
+  const shift = calendarDaysBetween(from.startsAt, to.startsAt, from.timezone);
+  const move = (at: Date) => fromWallTime(addDays(wallTime(at, from.timezone), shift), from.timezone);
+  const rows = days.map((d) => {
+    const startsAt = move(d.startsAt);
+    return {
+      eventId: to.id,
+      dayDate: localDate(startsAt, from.timezone),
+      startsAt,
+      endsAt: move(d.endsAt),
+      capacity: d.capacity,
+    };
+  });
+  await tx.insert(eventDays).values(rows);
+  // Les dates de la copie restent les bornes de ses jours.
+  const first = rows[0];
+  const last = rows[rows.length - 1];
+  if (first && last) {
+    await tx.update(events).set({ startsAt: first.startsAt, endsAt: last.endsAt }).where(eq(events.id, to.id));
+  }
+}
+
+const daysErrors: Record<DaysError, string> = {
+  too_few: "Au moins deux jours (ou aucun : événement d'un jour)",
+  too_many: "Quatorze jours au plus",
+  duplicate_date: "Deux jours ont la même date",
+  overlap: "Deux jours se chevauchent",
+};
 
 export const eventsService = {
   /** `GET /events` : liste publique ; connecté, elle sait trier par affinités et par distance (lot 29, `explore.ts`). */
@@ -204,7 +265,7 @@ export const eventsService = {
       // Les candidatures de prestataire ont leur propre liste (`GET /me/provider-applications`, lot 21).
       myApplications: mine
         .filter((a) => a.kind === "vehicle")
-        .map((a) => ({ id: a.id, vehicleId: a.vehicleId, status: a.status })),
+        .map((a) => ({ id: a.id, vehicleId: a.vehicleId, status: a.status, eventDayId: a.eventDayId })),
       registrationOpensAtForMe: registrationOpensAt(e, { follower, grade: viewer.profile.grade }).toISOString(),
     };
   },
@@ -273,6 +334,12 @@ export const eventsService = {
     const startsAt = input.startsAt ?? e.startsAt;
     const endsAt = input.endsAt ?? e.endsAt;
     if (endsAt <= startsAt) throw validation("La fin doit suivre le début", { field: "endsAt" });
+    // Plusieurs jours (lot 26) : les dates de l'événement sont les bornes de ses jours, elles se règlent jour par jour.
+    const changesDates =
+      (input.startsAt && input.startsAt.getTime() !== e.startsAt.getTime()) ||
+      (input.endsAt && input.endsAt.getTime() !== e.endsAt.getTime());
+    const datesByDay = () =>
+      validation("Événement sur plusieurs jours : les dates se règlent jour par jour", { field: "days" });
     // Nouvelle adresse sans position : la position est recalculée (jamais bloquant).
     const touchesAddress = ["addressLine", "postalCode", "city"].some((k) => k in input);
     const located =
@@ -286,6 +353,7 @@ export const eventsService = {
         : {};
     const updated = await withTx(async (tx, after) => {
       const current = await eventsRepo.lockForUpdate(tx, id);
+      if (changesDates && isMultiDay(await daysRepo.list(id, tx))) throw datesByDay();
       const [row] = await tx
         .update(events)
         .set({ ...input, ...located, criteria: input.criteria === undefined ? undefined : (input.criteria ?? null) })
@@ -322,6 +390,92 @@ export const eventsService = {
       return row;
     });
     return this.getForOrganizer(v, updated.id);
+  },
+
+  /**
+   * `PUT /events/:id/days` (lot 26, § 10) : la liste complète des jours. Deux jours ou plus : les dates de l'événement
+   * deviennent les bornes (début du premier, fin du dernier) ; liste vide : retour à un événement d'un jour (dates
+   * inchangées, accès `whole`). Un jour est reconnu par sa date : horaires et capacité se modifient ; un jour qui a des
+   * candidatures (quel que soit leur statut) ne se retire pas. Après publication : inscrits prévenus si les jours
+   * changent, tâches replanifiées, places libérées offertes à la liste d'attente. Propriétaire ou co-organisateur
+   * (double authentification), structure non suspendue ; plus de changement une fois l'événement commencé.
+   */
+  async setDays(v: Viewer, id: string, input: EventDaysPut): Promise<EventOrganizer> {
+    // Écriture d'organisateur (lot 27) : structure suspendue en lecture seule.
+    const { e } = await organizerEventWrite(v, id);
+    if (e.status === "cancelled") throw conflict("conflict", "Événement annulé");
+    if (input.days.length === 1) throw validation(daysErrors.too_few, { field: "days" });
+    await withTx(async (tx, after) => {
+      const t = now();
+      const current = await eventsRepo.lockForUpdate(tx, id);
+      if (current.status === "cancelled") throw conflict("conflict", "Événement annulé");
+      if (current.status === "published" && t >= current.startsAt) {
+        throw new AppError(423, "locked", "L'événement a commencé : les jours ne se modifient plus");
+      }
+      let resolved: ReturnType<typeof resolveDays> | null = null;
+      if (input.days.length) {
+        resolved = resolveDays(input.days, current.timezone);
+        if (!resolved.ok) throw validation(daysErrors[resolved.error], { field: "days", reason: resolved.error });
+      }
+      const next = resolved?.ok ? resolved.days : [];
+      const existing = await daysRepo.list(id, tx);
+      const keep = new Set(next.map((d) => d.dayDate));
+      for (const old of existing.filter((d) => !keep.has(d.dayDate))) {
+        const [used] = await tx.select({ n: count() }).from(applications).where(eq(applications.eventDayId, old.id));
+        if ((used?.n ?? 0) > 0) throw dayInUse(formatDayDate(old.dayDate));
+        await tx.delete(eventDays).where(eq(eventDays.id, old.id));
+      }
+      const byDate = new Map(existing.map((d) => [d.dayDate, d]));
+      let daysChanged = existing.length !== next.length;
+      for (const d of next) {
+        const old = byDate.get(d.dayDate);
+        if (!old) {
+          daysChanged = true;
+          await tx.insert(eventDays).values({ eventId: id, ...d });
+        } else if (
+          old.startsAt.getTime() !== d.startsAt.getTime() ||
+          old.endsAt.getTime() !== d.endsAt.getTime() ||
+          old.capacity !== d.capacity
+        ) {
+          if (old.startsAt.getTime() !== d.startsAt.getTime() || old.endsAt.getTime() !== d.endsAt.getTime()) {
+            daysChanged = true;
+          }
+          await tx
+            .update(eventDays)
+            .set({ startsAt: d.startsAt, endsAt: d.endsAt, capacity: d.capacity })
+            .where(eq(eventDays.id, old.id));
+        }
+      }
+      const patch: Partial<typeof events.$inferInsert> = resolved?.ok
+        ? { startsAt: resolved.startsAt, endsAt: resolved.endsAt, dayAccess: input.dayAccess ?? current.dayAccess }
+        : { dayAccess: "whole" };
+      const [row] = await tx.update(events).set(patch).where(eq(events.id, id)).returning();
+      if (!row) throw notFound("Événement introuvable");
+      if (row.status !== "published") return;
+      const datesChanged =
+        row.startsAt.getTime() !== current.startsAt.getTime() || row.endsAt.getTime() !== current.endsAt.getTime();
+      if (daysChanged || datesChanged) {
+        const what = next.length
+          ? `jours : ${next.map((d) => formatDayDate(d.dayDate, { weekday: false })).join(", ")}`
+          : `nouvelle date : ${formatDateTime(row.startsAt)}`;
+        for (const userId of await eventsRepo.activeApplicantIds(id, tx, { awaitingMembers: true })) {
+          await notificationsService.notify(tx, userId, "event_updated", {
+            title: "Événement modifié",
+            body: `« ${row.title} » a changé (${what}).`,
+            eventId: id,
+            eventStartsAt: row.startsAt,
+            data: { eventId: id },
+            link: { label: "Voir l'événement", path: `/e/${row.slug}` },
+          });
+        }
+        after(() => scheduleEventJobs(row));
+      }
+      // Une capacité de jour augmentée (ou un jour ajouté) libère des places pour la liste d'attente.
+      await applicationsService.offerNext(tx, row, after);
+      after(() => realtime.publish(`event:${id}:access`, "access.changed", { applicationIds: [] }));
+      after(() => notificationsService.kick());
+    });
+    return this.getForOrganizer(v, id);
   },
 
   /** Publication : réservée aux structures vérifiées (docs/01). Abonnés prévenus ; tâches planifiées. */
@@ -450,6 +604,7 @@ export const eventsService = {
         })
         .returning();
       if (!copy) throw new Error("Duplication impossible");
+      await copyDays(tx, e, copy);
       const zones = await tx.select().from(eventZones).where(eq(eventZones.eventId, e.id));
       if (zones.length) {
         await tx.insert(eventZones).values(
@@ -502,6 +657,7 @@ export const eventsService = {
           })
           .returning();
         if (!copy) throw new Error("Occurrence non créée");
+        await copyDays(tx, e, copy);
         if (zones.length) {
           await tx.insert(eventZones).values(
             zones.map((z) => ({

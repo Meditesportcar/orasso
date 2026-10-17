@@ -3,6 +3,8 @@
 import type { ScanResultProps } from "@orasso/design-system/native";
 import {
   type AccessListEntry,
+  formatDayDate,
+  localDate,
   type ScanDecision,
   scanRefusalLabels,
   shopLabels,
@@ -41,7 +43,12 @@ export function resultOf(
   if (decision.decision === "ok")
     return { key, detectedAt, state: "ok", time: "à l'instant", ...entryView(decision.entry) };
   if (decision.decision === "already") {
-    return { key, detectedAt, state: "duplicate", time: clock(decision.checkedInAt), ...entryView(decision.entry) };
+    // Lot 26 (S29) : « tout l'événement » déjà entré un jour précédent → « le 14 mars · 09:48 », le staff laisse passer.
+    const earlier = localDate(new Date(decision.checkedInAt)) !== localDate(new Date());
+    const time = earlier
+      ? `le ${formatDayDate(localDate(new Date(decision.checkedInAt)), { weekday: false })} · ${clock(decision.checkedInAt)}`
+      : clock(decision.checkedInAt);
+    return { key, detectedAt, state: "duplicate", time, ...entryView(decision.entry) };
   }
   return { key, detectedAt, state: "refused", reason: scanRefusalLabels[decision.reason] };
 }

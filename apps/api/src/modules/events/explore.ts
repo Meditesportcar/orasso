@@ -21,6 +21,7 @@ import { distanceKmSql, roundKm, withinRadiusSql } from "../../lib/geo-sql";
 import type { Viewer } from "../../lib/session";
 import { containsPattern, searchTokens } from "../../lib/text-search";
 import { card } from "./card";
+import { daysRepo } from "./days";
 import type { EventRow } from "./repo";
 
 const safeOffset = (n: number): number => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
@@ -50,6 +51,19 @@ async function remainingMany(rows: EventRow[]): Promise<Map<string, number | nul
     .groupBy(applications.eventId);
   const byEvent = new Map(taken.map((t) => [t.eventId, t.n]));
   for (const e of capped) out.set(e.id, Math.max(0, (e.capacity as number) - (byEvent.get(e.id) ?? 0)));
+  return out;
+}
+
+/** Plusieurs jours (lot 26) : places du meilleur jour, à la place du calcul d'un événement d'un jour. */
+async function remainingWithDays(rows: EventRow[]): Promise<Map<string, number | null>> {
+  const out = await remainingMany(rows);
+  const multi = await daysRepo.manyMultiDay(rows.map((e) => e.id));
+  for (const e of rows) {
+    const m = multi.get(e.id);
+    if (!m) continue;
+    const remaining = daysRepo.remainingOf(e, m.days, m.taken);
+    if (remaining !== undefined) out.set(e.id, remaining === null ? null : Math.max(0, remaining));
+  }
   return out;
 }
 
@@ -131,7 +145,7 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
     .offset(offset);
 
   const page = rows.slice(0, q.limit);
-  const remaining = await remainingMany(page.map((r) => r.e));
+  const remaining = await remainingWithDays(page.map((r) => r.e));
   const items = page.map((r) => {
     const out = card(r.e, r.s, remaining.get(r.e.id) ?? null);
     const km = roundKm(r.dist);

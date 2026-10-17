@@ -34,7 +34,7 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "event.preview-open": (d) => eventJobs.previewOpen({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "event.high-grade-preview": (d) => highGradePreview.notify({ eventId: d.eventId ?? "", at: d.at ?? "" }),
   "event.reminder-week": (d) => eventJobs.reminderWeek({ eventId: d.eventId ?? "", at: d.at ?? "" }),
-  "event.reminder-eve": (d) => eventJobs.reminderEve({ eventId: d.eventId ?? "", at: d.at ?? "" }),
+  "event.reminder-eve": (d) => eventJobs.reminderEve({ eventId: d.eventId ?? "", at: d.at ?? "", dayId: d.dayId }),
   "notifications.deliver": () => notificationsService.deliverDue(),
   "waitlist.sweep": () => applicationsService.expireDueOffers(),
   "staff.remind": () => staffService.remindUnanswered(),
@@ -123,10 +123,18 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     await boss.schedule("structure.badge-sweep", "0 9 * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("event.report-sweep", "35 * * * *", null, { tz: "Europe/Paris" });
   }
+  const previous = deps.jobs;
   deps.jobs = {
     async send(name, data, startAfter) {
       await boss.send(name, data, startAfter ? { startAfter } : {});
     },
+  };
+  // Lot 26 (relecture) : une fois pg-boss arrêté (fin d'un bloc du seed, d'un script), la file précédente revient
+  // (en mémoire) : aucun `send` ne part vers un pg-boss arrêté (« Database not opened »).
+  const stop = boss.stop.bind(boss);
+  boss.stop = async (...args: Parameters<PgBoss["stop"]>) => {
+    deps.jobs = previous;
+    return stop(...args);
   };
   return boss;
 }

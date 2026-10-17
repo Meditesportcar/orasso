@@ -14,7 +14,7 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import { localScanDecisionLabels } from "@orasso/shared";
+import { eventDaysLabels, formatDayDate, localScanDecisionLabels, type ScanDecision } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
@@ -54,6 +54,10 @@ export default function Scan() {
   const [last, setLast] = useState<ShownResult | null>(null);
   const [unknown, setUnknown] = useState<{ passId: string; payload: string } | null>(null);
   const unknownRef = useRef<{ passId: string; payload: string } | null>(null);
+  // Lot 26 : QR valable un autre jour (événement sur plusieurs jours) : refusé, ou « Accepter quand même ».
+  type OtherDay = { decision: Extract<ScanDecision, { decision: "refused" }>; payload: string };
+  const [otherDay, setOtherDay] = useState<OtherDay | null>(null);
+  const otherDayRef = useRef<OtherDay | null>(null);
   const [sheet, setSheet] = useState<"search" | "express" | "incident" | "alert" | null>(null);
   const [lastMs, setLastMs] = useState<number | null>(null);
   // Caméra seulement quand l'écran est au premier plan (pas sous la liste empilée par-dessus).
@@ -69,6 +73,9 @@ export default function Scan() {
       const { state: s, userId: u } = latest.current;
       if (pending && s && u) recordScan(s, u, { decision: "unknown_pass", passId: pending.passId }, pending.payload);
       unknownRef.current = null;
+      const day = otherDayRef.current;
+      if (day && s && u) recordScan(s, u, day.decision, day.payload);
+      otherDayRef.current = null;
     },
     [],
   );
@@ -84,7 +91,21 @@ export default function Scan() {
       const detectedAt = performance.now();
       if (!state || !userId) return;
       if (!gate.current.accept(payload, Date.now())) return;
-      const decision = decideLocal(state, payload, trustedKeysNow() ?? new Map(), ed25519Verify);
+      const decision = decideLocal(state, payload, trustedKeysNow() ?? new Map(), ed25519Verify, new Date());
+      // Un panneau « autre jour » laissé sans réponse compte comme refusé.
+      const previousDay = otherDayRef.current;
+      if (previousDay) {
+        recordScan(state, userId, previousDay.decision, previousDay.payload);
+        otherDayRef.current = null;
+        setOtherDay(null);
+      }
+      if (decision.decision === "refused" && decision.reason === "other_day") {
+        otherDayRef.current = { decision, payload };
+        setOtherDay(otherDayRef.current);
+        playScanSound("refused");
+        vibrate("refused");
+        return;
+      }
       if (decision.decision === "unknown_pass") {
         // Un QR « absent de la liste » laissé sans réponse compte comme refusé.
         const previous = unknownRef.current;
@@ -150,6 +171,30 @@ export default function Scan() {
     setUnknown(null);
   };
 
+  const resolveOtherDay = (accept: boolean) => {
+    const pending = otherDayRef.current;
+    if (!pending || !state || !userId || !pending.decision.passId) return;
+    const entry = state.entries.get(pending.decision.passId);
+    if (accept) {
+      recordScan(
+        state,
+        userId,
+        { decision: "override", passId: pending.decision.passId, reason: "other_day" },
+        pending.payload,
+      );
+      show(
+        entry
+          ? pointedResult(entry, newId(), null)
+          : { key: newId(), state: "ok", time: localScanDecisionLabels.override },
+      );
+    } else {
+      recordScan(state, userId, pending.decision, pending.payload);
+      show(resultOf(pending.decision, newId()));
+    }
+    otherDayRef.current = null;
+    setOtherDay(null);
+  };
+
   const count = state ? counters(state) : null;
   const close = () => (router.canGoBack() ? router.back() : router.replace(`/staff/${id}`));
   const cameraOk = permission?.granted && Platform.OS !== "web";
@@ -203,7 +248,37 @@ export default function Scan() {
             </Button>
           </View>
         ) : null}
-        {unknown ? (
+        {otherDay ? (
+          <Plate style={styles.unknown} testID="scan-other-day">
+            <Text variant="bodyStrong" color={c.plateInk}>
+              {eventDaysLabels.otherDay}
+              {otherDay.decision.dayDate ? ` · ${formatDayDate(otherDay.decision.dayDate)}` : ""}
+            </Text>
+            {otherDay.decision.entry ? (
+              <Text variant="meta" color={c.plateMuted}>
+                {otherDay.decision.entry.pseudo}
+                {otherDay.decision.entry.vehicleLabel ? ` · ${otherDay.decision.entry.vehicleLabel}` : ""}
+              </Text>
+            ) : null}
+            <Text variant="meta" color={c.plateMuted}>
+              {eventDaysLabels.otherDayHint}
+            </Text>
+            <View style={styles.row}>
+              <Button
+                variant="plate"
+                tone="dashed"
+                icon="close"
+                onPress={() => resolveOtherDay(false)}
+                style={styles.flex}
+              >
+                Refuser
+              </Button>
+              <Button icon="check" onPress={() => resolveOtherDay(true)} style={styles.flex}>
+                Accepter quand même
+              </Button>
+            </View>
+          </Plate>
+        ) : unknown ? (
           <Plate style={styles.unknown}>
             <Text variant="bodyStrong" color={c.plateInk}>
               {localScanDecisionLabels.unknown_pass}

@@ -180,6 +180,53 @@ describe("décision de scan hors ligne (decideScan)", () => {
     });
     expect(decideScan("bonjour", ctx(entry()))).toMatchObject({ decision: "refused", reason: "unknown_qr" });
   });
+
+  describe("plusieurs jours (lot 26, règle 6 bis)", () => {
+    // 14/03/2027 10:00 et 15/03/2027 10:00, heure de Paris (UTC+1).
+    const day1 = new Date("2027-03-14T09:00:00.000Z");
+    const day2 = new Date("2027-03-15T09:00:00.000Z");
+    const at = (found: LocalAccessEntry, now: Date) => ({ ...ctx(found), now });
+
+    it("candidature d'un jour lue ce jour-là : OK", () => {
+      const d = decideScan(makePayload(), at(entry({ dayDate: "2027-03-15" }), day2));
+      expect(d).toMatchObject({ decision: "ok" });
+    });
+    it("candidature d'un jour lue un autre jour : « Autre jour », avec l'entrée pour accepter quand même", () => {
+      const d = decideScan(makePayload(), at(entry({ dayDate: "2027-03-15" }), day1));
+      expect(d).toMatchObject({
+        decision: "refused",
+        reason: "other_day",
+        dayDate: "2027-03-15",
+        entry: { pseudo: "Kenji_66" },
+      });
+    });
+    it("le jour se lit en heure de Paris (23:30 UTC le 14 = 00:30 le 15 à Paris)", () => {
+      const d = decideScan(makePayload(), at(entry({ dayDate: "2027-03-15" }), new Date("2027-03-14T23:30:00.000Z")));
+      expect(d).toMatchObject({ decision: "ok" });
+    });
+    it("tout l'événement : OK chaque jour, puis « déjà entré » les jours suivants (S29)", () => {
+      expect(decideScan(makePayload(), at(entry({ dayDate: null }), day1))).toMatchObject({ decision: "ok" });
+      const later = entry({ dayDate: null, checkedInAt: day1.toISOString() });
+      expect(decideScan(makePayload(), at(later, day2))).toMatchObject({ decision: "already" });
+    });
+    it("un pass révoqué reste « Désisté » avant le contrôle du jour", () => {
+      const d = decideScan(
+        makePayload(),
+        at(entry({ dayDate: "2027-03-15", status: "revoked", revokedReason: "withdrawn" }), day1),
+      );
+      expect(d).toMatchObject({ decision: "refused", reason: "withdrawn" });
+    });
+    it("accepté quand même aujourd'hui (entrée du jour) : « déjà entré », pas de nouveau panneau", () => {
+      const accepted = entry({ dayDate: "2027-03-15", checkedInAt: "2027-03-14T08:30:00.000Z" });
+      expect(decideScan(makePayload(), at(accepted, day1))).toMatchObject({ decision: "already" });
+      // Une entrée d'un autre jour que celui du scan ne compte pas : « autre jour ».
+      const earlier = entry({ dayDate: "2027-03-15", checkedInAt: "2027-03-13T08:30:00.000Z" });
+      expect(decideScan(makePayload(), at(earlier, day1))).toMatchObject({ reason: "other_day" });
+    });
+    it("sans heure fournie (ancien appel), aucun contrôle du jour", () => {
+      expect(decideScan(makePayload(), ctx(entry({ dayDate: "2027-03-15" })))).toMatchObject({ decision: "ok" });
+    });
+  });
 });
 
 describe("JSON canonique (signature de la liste d'accès)", () => {

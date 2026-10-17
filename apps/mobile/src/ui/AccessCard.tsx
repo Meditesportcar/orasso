@@ -2,7 +2,7 @@
 // accepter une place libérée) et, pour un refus, le motif envoyé par l'organisateur.
 
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { crewLabels, type MyApplication, refusalReasonLabels } from "@orasso/shared";
+import { crewLabels, formatDayDate, type MyApplication, refusalReasonLabels } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
 import { formatDayHour, formatDuration, formatHour, formatShortDate } from "@/lib/format";
@@ -67,7 +67,7 @@ export function AccessCard({
           <Text variant="label" color={offered ? c.accent : c.plateMuted}>
             {offered
               ? `Place libérée · accepte avant ${formatDuration(remaining)}`
-              : `${formatDayHour(app.event.startsAt)}${app.zone ? ` · Zone ${app.zone.code}` : ""}`}
+              : `${app.day ? `${formatDayDate(app.day.date)} · ${formatHour(app.day.startsAt)}` : formatDayHour(app.event.startsAt)}${app.zone ? ` · Zone ${app.zone.code}` : ""}`}
           </Text>
           <Text variant="posterM" color={c.plateInk} onPress={onOpen} accessibilityRole="link">
             {app.event.title}

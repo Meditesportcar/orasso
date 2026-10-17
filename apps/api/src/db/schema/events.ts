@@ -1,7 +1,14 @@
 // Événements, jours, zones (ARCHITECTURE.md § 1.4). Invitations nominatives : `invitations.ts` (lot 25).
 
 import type { RecurrenceRule } from "@orasso/shared";
-import { eventAdmissions, eventFormats, eventOutlooks, eventPublicAccesses, eventStatuses } from "@orasso/shared";
+import {
+  dayAccesses,
+  eventAdmissions,
+  eventFormats,
+  eventOutlooks,
+  eventPublicAccesses,
+  eventStatuses,
+} from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -30,6 +37,7 @@ export const eventAdmissionEnum = pgEnum("event_admission", eventAdmissions);
 export const eventPublicAccessEnum = pgEnum("event_public_access", eventPublicAccesses);
 export const eventStatusEnum = pgEnum("event_status", eventStatuses);
 export const eventOutlookEnum = pgEnum("event_outlook", eventOutlooks);
+export const dayAccessEnum = pgEnum("day_access", dayAccesses);
 
 export type EventCriteria = { categoryIds: string[]; makeIds: string[]; countries: string[]; text: string | null };
 
@@ -70,6 +78,8 @@ export const events = pgTable(
     ticketsEnabled: boolean("tickets_enabled").notNull().default(false),
     /** Rôle « boutique » activé pour cet événement (lot 24) : contrôle des billets du public, compteur d'entrées. */
     shopEnabled: boolean("shop_enabled").notNull().default(false),
+    /** Lot 26 (S27) : accès des participants d'un événement sur plusieurs jours ; `whole` pour un événement d'un jour. */
+    dayAccess: dayAccessEnum("day_access").notNull().default("whole"),
     status: eventStatusEnum("status").notNull().default("draft"),
     outlook: eventOutlookEnum("outlook").notNull().default("maintained"),
     registrationsOpenAt: tstz("registrations_open_at").notNull(),
@@ -113,7 +123,10 @@ export const events = pgTable(
   ],
 );
 
-/** [préparé] Événements sur plusieurs jours : une ligne par jour (non exposé en V1 du parcours). */
+/**
+ * Événements sur plusieurs jours (lot 26, ARCHITECTURE-SUITE § 10) : une ligne par jour, au moins deux. Aucune ligne
+ * = événement d'un jour (tous les événements d'avant le lot 26). `events.starts_at` / `ends_at` = bornes.
+ */
 export const eventDays = pgTable(
   "event_days",
   {
@@ -121,12 +134,19 @@ export const eventDays = pgTable(
     eventId: uuid("event_id")
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
-    dayDate: date("day_date").notNull(),
+    /** Date locale (fuseau de l'événement). */
+    dayDate: date("day_date", { mode: "string" }).notNull(),
     startsAt: tstz("starts_at").notNull(),
     endsAt: tstz("ends_at").notNull(),
+    /** Places ce jour ; `null` = la capacité de l'événement. */
+    capacity: integer("capacity"),
     ...timestamps,
   },
-  (t) => [unique("event_days_event_day_key").on(t.eventId, t.dayDate)],
+  (t) => [
+    unique("event_days_event_day_key").on(t.eventId, t.dayDate),
+    check("event_days_dates_check", sql`${t.endsAt} > ${t.startsAt}`),
+    check("event_days_capacity_check", sql`${t.capacity} is null or ${t.capacity} > 0`),
+  ],
 );
 
 export const eventZones = pgTable(

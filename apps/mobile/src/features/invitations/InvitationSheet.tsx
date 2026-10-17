@@ -1,7 +1,13 @@
 // Répondre à une invitation nominative (lot 25) : l'événement, le message de l'organisateur, le règlement, le véhicule
 // (imposé par l'invitation, ou à choisir parmi les véhicules admis avec au moins une photo), Accepter ou Refuser.
 import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { invitationLabels, type ReceivedInvitation, type VehicleFull } from "@orasso/shared";
+import {
+  eventDaysLabels,
+  formatDayDate,
+  invitationLabels,
+  type ReceivedInvitation,
+  type VehicleFull,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -39,12 +45,15 @@ export function InvitationSheet({
   const router = useRouter();
   const [vehicles, setVehicles] = useState<VehicleFull[] | null>(null);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
+  // Lot 26 : jour choisi d'un événement sur plusieurs jours (`undefined` = pas encore touché).
+  const [dayChoice, setDayChoice] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setError(null);
     setVehicleId(null);
+    setDayChoice(undefined);
     setVehicles(null);
     if (!invitation || invitation.vehicle) return;
     let alive = true;
@@ -65,6 +74,8 @@ export function InvitationSheet({
   const inv = invitation;
   const needsChoice = Boolean(inv && !inv.vehicle);
   const blocked = needsChoice && vehicles !== null && vehicles.length === 0;
+  const days = inv && (inv.event.days?.length ?? 0) > 1 && inv.event.dayAccess !== "whole" ? inv.event.days : [];
+  const dayId = dayChoice !== undefined ? dayChoice : inv?.event.dayAccess === "per_day" ? (days[0]?.id ?? null) : null;
 
   async function answer(kind: "accept" | "decline") {
     if (!inv) return;
@@ -75,7 +86,11 @@ export function InvitationSheet({
         await api.declineEventInvitation(inv.id);
         onDone(L.declined);
       } else {
-        const res = await api.acceptEventInvitation(inv.id, inv.vehicle ? undefined : (vehicleId ?? undefined));
+        const res = await api.acceptEventInvitation(
+          inv.id,
+          inv.vehicle ? undefined : (vehicleId ?? undefined),
+          days.length ? dayId : undefined,
+        );
         onDone(res.outcome === "accepted" ? L.accepted : L.waitlisted);
       }
     } catch (e) {
@@ -109,6 +124,25 @@ export function InvitationSheet({
                 {inv.message}
               </Text>
             </Plate>
+          ) : null}
+          {days.length ? (
+            <View style={styles.choices}>
+              <Text variant="label" color={t.color.inkMuted}>
+                {eventDaysLabels.chooseDay}
+              </Text>
+              <View style={styles.wrap}>
+                {inv.event.dayAccess === "both" ? (
+                  <Chip selected={dayId === null} onPress={() => setDayChoice(null)}>
+                    {eventDaysLabels.wholeEvent}
+                  </Chip>
+                ) : null}
+                {days.map((d) => (
+                  <Chip key={d.id} selected={dayId === d.id} onPress={() => setDayChoice(d.id)}>
+                    {formatDayDate(d.date)}
+                  </Chip>
+                ))}
+              </View>
+            </View>
           ) : null}
           {inv.vehicle ? (
             <Text variant="bodyStrong" color={t.color.ink}>

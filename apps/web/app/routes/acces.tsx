@@ -28,6 +28,7 @@ import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-ro
 
 import { Countdown } from "../components/Countdown";
 import { CrewConfirm } from "../components/Crews";
+import { dayLabel, hourOf } from "../components/EventDays";
 import { ReceivedInvitationCard } from "../components/Invitations";
 import { Qr } from "../components/Qr";
 import { Stars } from "../components/Stars";
@@ -226,6 +227,12 @@ function ApplicationCard({
             {app.event.city ? ` · ${app.event.city}` : ""}
           </div>
           {app.vehicle && <div className="o-never-truncate">{app.vehicle.label}</div>}
+          {/* Lot 26 : le jour choisi (événement sur plusieurs jours) ; le QR est valable ce jour-là. */}
+          {app.day && (
+            <div className="o-t-label" data-testid="application-day">
+              {dayLabel(app.day.date)} · {hourOf(app.day.startsAt)}–{hourOf(app.day.endsAt)}
+            </div>
+          )}
           {app.crew && (
             <a href={`/c/${app.crew.slug}`} className="o-t-caption" data-testid="application-crew">
               {crewLabels.crew} « {app.crew.name} »

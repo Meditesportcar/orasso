@@ -11,6 +11,7 @@ import {
   fromWallTime,
   isEventDay,
   isLocked,
+  isMultiDay,
   lockAt,
   type MyStaffEvent,
   type PassRevokedReason,
@@ -34,6 +35,7 @@ import {
   events,
   eventZones,
   profiles,
+  scanEvents,
   structureMembers,
   structures,
   user,
@@ -46,6 +48,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { signing } from "../../lib/signing";
 import { type Executor, withTx } from "../../lib/tx";
+import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { loadProviders } from "../providers/serializers";
@@ -315,7 +318,9 @@ export const staffService = {
     const access = await requireEventStaff(v, event);
     const t = now();
     assertStaffWindow(event, access);
-    const entries = await accessEntries(event, access);
+    const days = await daysRepo.list(event.id);
+    const multiDays = isMultiDay(days) ? days : [];
+    const entries = await accessEntries(event, access, new Map(multiDays.map((d) => [d.id, d.dayDate])));
     // Rôle boutique (lot 24) : billets du public, seulement si la boutique est activée pour cet événement. Un staff
     // sans ce rôle n'en reçoit jamais (le corps signé ne contient alors ni `tickets` ni `shopEnabled`).
     const withShop = event.shopEnabled && access.roles.includes("shop");
@@ -340,6 +345,13 @@ export const staffService = {
         isLocked: isLocked(event, t),
         plateSalt: event.plateSalt.toString("base64url"),
         zones: zones.map((z) => ({ id: z.id, code: z.code, name: z.name, capacity: z.capacity })),
+        // Plusieurs jours (lot 26) : les jours, pour le filtre « Aujourd'hui » et le jour affiché de chaque entrée.
+        days: multiDays.map((d) => ({
+          id: d.id,
+          date: d.dayDate,
+          startsAt: d.startsAt.toISOString(),
+          endsAt: d.endsAt.toISOString(),
+        })),
       },
       keys: (await signing.publicKeys()).map((k) => ({ kid: k.kid, publicKey: k.publicKey, retiredAt: k.retiredAt })),
       myRoles: access.roles,
@@ -415,7 +427,11 @@ export const staffService = {
 };
 
 /** Entrées de la liste d'accès, une par pass de l'événement. */
-async function accessEntries(event: EventRow, access: StaffAccess): Promise<AccessListEntry[]> {
+async function accessEntries(
+  event: EventRow,
+  access: StaffAccess,
+  dayDates: Map<string, string> = new Map(),
+): Promise<AccessListEntry[]> {
   const organizer = access.actor !== "staff";
   const withContact = organizer || access.roles.includes("super_staff");
   const rows = await db
@@ -432,6 +448,21 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
   const providers = await loadProviders(
     rows.flatMap((r) => (r.app.providerProfileId ? [r.app.providerProfileId] : [])),
   );
+  // Lot 26 : plusieurs jours, dernière lecture reçue par candidature (arrivés du jour d'un « tout l'événement »).
+  const lastSeen = new Map<string, Date>();
+  if (dayDates.size) {
+    const seen = await db
+      .select({ appId: scanEvents.applicationId, at: sql<Date>`max(${scanEvents.scannedAt})` })
+      .from(scanEvents)
+      .where(
+        and(
+          eq(scanEvents.eventId, event.id),
+          inArray(scanEvents.serverResult, ["accepted", "duplicate_same_device", "duplicate_other_device"]),
+        ),
+      )
+      .groupBy(scanEvents.applicationId);
+    for (const r of seen) if (r.appId && r.at) lastSeen.set(r.appId, new Date(r.at));
+  }
   const zoneIds = [...new Set(rows.flatMap((r) => (r.app.zoneId ? [r.app.zoneId] : [])))];
   const zones = new Map(
     (zoneIds.length ? await db.query.eventZones.findMany({ where: inArray(eventZones.id, zoneIds) }) : []).map((z) => [
@@ -444,7 +475,13 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
     const zone = app.zoneId ? zones.get(app.zoneId) : undefined;
     const plate = v?.plateNormalized && !v.unregistered ? v.plateNormalized : null;
     const valid = !pass.revokedAt;
-    const updatedAt = Math.max(pass.updatedAt.getTime(), app.updatedAt.getTime(), checkin?.updatedAt.getTime() ?? 0);
+    const seenAt = lastSeen.get(app.id) ?? null;
+    const updatedAt = Math.max(
+      pass.updatedAt.getTime(),
+      app.updatedAt.getTime(),
+      checkin?.updatedAt.getTime() ?? 0,
+      seenAt?.getTime() ?? 0,
+    );
     if (!valid) {
       // Pass révoqué : juste de quoi refuser le QR au scan (« Désisté », « Non admis »…), rien de plus en cache.
       return {
@@ -465,6 +502,7 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
         zoneName: null,
         checkedInAt: null,
         checkinMethod: null,
+        dayDate: null,
         updatedAt: new Date(updatedAt).toISOString(),
       } satisfies AccessListEntry;
     }
@@ -489,6 +527,9 @@ async function accessEntries(event: EventRow, access: StaffAccess): Promise<Acce
       zoneName: zone?.name ?? null,
       checkedInAt: checkin ? checkin.checkedInAt.toISOString() : null,
       checkinMethod: checkin ? (checkin.method as CheckinMethod) : null,
+      // Lot 26 : jour de la candidature (`null` = tout l'événement), lu au scan (« Autre jour »).
+      dayDate: app.eventDayId ? (dayDates.get(app.eventDayId) ?? null) : null,
+      ...(dayDates.size ? { lastSeenAt: seenAt?.toISOString() ?? null } : {}),
       updatedAt: new Date(updatedAt).toISOString(),
     };
     if (organizer) entry.plate = v?.plate ?? null;

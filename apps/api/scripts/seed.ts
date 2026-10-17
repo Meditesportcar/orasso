@@ -25,6 +25,7 @@ import { seedHome } from "./seed/home";
 import { seedInvitations } from "./seed/invitations";
 import { seedMessaging } from "./seed/messaging";
 import { seedModeration } from "./seed/moderation";
+import { seedMultiDay } from "./seed/multi-day";
 import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
@@ -114,6 +115,8 @@ async function main() {
   await seedHome();
   // Lot 27 : bilan de la Nocturne de rentrée, notes internes, badge qui expire dans 5 jours, structure suspendue.
   await seedAfterEvent(hash);
+  // Lot 26 : « Salon de printemps » sur trois jours (accès au choix, 100 places par jour), candidatures mixtes.
+  await seedMultiDay();
 }
 
 try {

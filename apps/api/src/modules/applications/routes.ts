@@ -1,5 +1,6 @@
 import {
   applicationCreateSchema,
+  dayQuerySchema,
   decideManySchema,
   decideSchema,
   filteringOpinionSchema,
@@ -61,7 +62,9 @@ export const applicationsRoutes = new Hono<AppEnv>()
     c.json(await applicationsQueries.crewFilters(await requireUser(c), uuidParam(c, "id"))),
   )
   .get("/events/:id/counters", async (c) =>
-    c.json(await applicationsQueries.counters(await requireUser(c), uuidParam(c, "id"))),
+    c.json(
+      await applicationsQueries.counters(await requireUser(c), uuidParam(c, "id"), query(c, dayQuerySchema).dayId),
+    ),
   )
   .post("/events/:id/applications/decide-many", async (c) => {
     const v = await requireUser(c);

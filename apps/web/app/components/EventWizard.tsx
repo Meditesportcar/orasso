@@ -4,12 +4,16 @@
 import { Button, CheckboxField, Chip, ChipRow, SelectField, TextField } from "@orasso/design-system/web";
 import {
   type Category,
+  type DayAccess,
+  dayAccesses,
+  dayAccessLabels,
   defaultEventRules,
   type EventAdmission,
   type EventFormat,
   type EventOrganizer,
   type EventPublicAccess,
   eventAdmissionLabels,
+  eventDaysLabels,
   eventFormatLabels,
   eventFormats,
   eventPublicAccessLabels,
@@ -74,12 +78,19 @@ const COUNTRIES = [
 
 type ZoneDraft = { id?: string; code: string; name: string; capacity: string };
 
+/** Un jour d'un événement sur plusieurs jours (lot 26) : date, heures de Paris, capacité facultative. */
+type DayDraft = { date: string; startTime: string; endTime: string; capacity: string };
+
 type Draft = {
   format: EventFormat;
   title: string;
   description: string;
   startsAt: string;
   endsAt: string;
+  /** Lot 26 : événement sur plusieurs jours, ses jours et le mode d'accès. */
+  multiDay: boolean;
+  days: DayDraft[];
+  dayAccess: DayAccess;
   addressLine: string;
   postalCode: string;
   city: string;
@@ -121,6 +132,9 @@ function initial(event?: EventOrganizer): Draft {
       description: "",
       startsAt: "",
       endsAt: "",
+      multiDay: false,
+      days: [],
+      dayAccess: "both",
       addressLine: "",
       postalCode: "",
       city: "",
@@ -157,6 +171,14 @@ function initial(event?: EventOrganizer): Draft {
     description: event.description ?? "",
     startsAt: toInput(event.startsAt),
     endsAt: toInput(event.endsAt),
+    multiDay: event.days.length > 1,
+    days: event.days.map((day) => ({
+      date: day.date,
+      startTime: toInput(day.startsAt).slice(11, 16),
+      endTime: toInput(day.endsAt).slice(11, 16),
+      capacity: day.capacity === null ? "" : String(day.capacity),
+    })),
+    dayAccess: event.days.length > 1 ? event.dayAccess : "both",
     addressLine: event.addressLine ?? "",
     postalCode: event.postalCode ?? "",
     city: event.city ?? "",
@@ -199,6 +221,15 @@ function validate(step: StepId, d: Draft): string | null {
   switch (step) {
     case "format": {
       if (d.title.trim().length < 3) return "Donne un titre d'au moins 3 caractères.";
+      if (d.multiDay) {
+        if (d.days.length < 2) return "Un événement sur plusieurs jours a au moins deux jours.";
+        if (d.days.some((x) => !x.date || !x.startTime || !x.endTime))
+          return "Indique la date et les horaires de chaque jour.";
+        if (new Set(d.days.map((x) => x.date)).size !== d.days.length) return "Deux jours ont la même date.";
+        if (d.days.some((x) => x.capacity !== "" && !(Number(x.capacity) > 0)))
+          return "Places d'un jour : un nombre supérieur à zéro, ou vide.";
+        return null;
+      }
       const start = fromInput(d.startsAt);
       const end = fromInput(d.endsAt);
       if (!start || !end) return "Indique le début et la fin.";
@@ -229,13 +260,47 @@ function validate(step: StepId, d: Draft): string | null {
   }
 }
 
-function payloadOf(d: Draft) {
+/** Jours triés (lot 26). */
+const sortedDays = (d: Draft) => [...d.days].sort((a, b) => a.date.localeCompare(b.date));
+
+/**
+ * Dates envoyées avec l'événement. Plusieurs jours : à la création, les bornes approchées (le serveur les recalcule
+ * exactement à l'enregistrement des jours) ; à la modification, rien (elles se règlent jour par jour).
+ */
+function datesOf(d: Draft, editingMultiDay: boolean) {
+  if (!d.multiDay) return { startsAt: fromInput(d.startsAt), endsAt: fromInput(d.endsAt) };
+  if (editingMultiDay) return {};
+  const days = sortedDays(d);
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (!first || !last) return {};
+  const startsAt = fromInput(`${first.date}T${first.startTime}`);
+  let endsAt = fromInput(`${last.date}T${last.endTime}`);
+  if (startsAt && endsAt && endsAt <= startsAt) endsAt = new Date(Date.parse(startsAt) + 3_600_000).toISOString();
+  return { startsAt, endsAt };
+}
+
+/** Corps de `PUT /events/:id/days` : liste vide pour un événement d'un jour. */
+function daysPayloadOf(d: Draft) {
+  return {
+    dayAccess: d.multiDay ? d.dayAccess : undefined,
+    days: d.multiDay
+      ? sortedDays(d).map((x) => ({
+          date: x.date,
+          startTime: x.startTime,
+          endTime: x.endTime,
+          capacity: Number(x.capacity) > 0 ? Number(x.capacity) : null,
+        }))
+      : [],
+  };
+}
+
+function payloadOf(d: Draft, editingMultiDay = false) {
   return {
     title: d.title.trim(),
     description: d.description.trim() || null,
     format: d.format,
-    startsAt: fromInput(d.startsAt),
-    endsAt: fromInput(d.endsAt),
+    ...datesOf(d, editingMultiDay),
     addressLine: d.addressLine.trim() || null,
     postalCode: d.postalCode.trim() || null,
     city: d.city.trim() || null,
@@ -279,6 +344,9 @@ type Props = {
 };
 
 export function EventWizard({ structureId, structureSlug, verified, categories, makes, event }: Props) {
+  // Lot 26 : un événement créé dont l'enregistrement des jours a échoué passe en modification (pas de second POST).
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const targetId = event?.id ?? createdId;
   const editing = Boolean(event);
   const [d, setD] = useState<Draft>(() => initial(event));
   const [index, setIndex] = useState(0);
@@ -340,9 +408,20 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
     }
     setBusy(true);
     setError(null);
-    const body = payloadOf(d);
-    const res = editing
-      ? await apiFetch<EventOrganizer>(`/events/${event?.id}`, { method: "PATCH", json: body })
+    const wasMultiDay = (event?.days.length ?? 0) > 1;
+    // Lot 26 : retour à un seul jour d'un événement qui en avait plusieurs : les jours d'abord (les dates suivent).
+    if (editing && wasMultiDay && !d.multiDay) {
+      const back = await apiFetch(`/events/${targetId}/days`, { method: "PUT", json: daysPayloadOf(d) });
+      if (!back.ok) {
+        setBusy(false);
+        return setError(back.error.message);
+      }
+    }
+    // Plusieurs jours, événement existant : pas de dates dans le PATCH (les jours fixent les bornes, et une seule
+    // notification « Événement modifié » part, celle des jours).
+    const body = payloadOf(d, Boolean(targetId) && d.multiDay);
+    const res = targetId
+      ? await apiFetch<EventOrganizer>(`/events/${targetId}`, { method: "PATCH", json: body })
       : await apiFetch<EventOrganizer>(`/structures/${structureId}/events`, { method: "POST", json: body });
     if (!res.ok) {
       setBusy(false);
@@ -350,6 +429,16 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
       return setError(fields ? `${res.error.message} : ${Object.values(fields).join(" ")}` : res.error.message);
     }
     const saved = res.data;
+    // Lot 26 : plusieurs jours (liste complète) ; les dates de l'événement deviennent les bornes.
+    if (d.multiDay) {
+      const days = await apiFetch(`/events/${saved.id}/days`, { method: "PUT", json: daysPayloadOf(d) });
+      if (!days.ok) {
+        if (!event) setCreatedId(saved.id);
+        setBusy(false);
+        setIndex(0);
+        return setError(days.error.message);
+      }
+    }
     // Zones : création, modification, retrait par rapport à l'état enregistré.
     const kept = new Set(d.zones.map((z) => z.id).filter(Boolean));
     for (const z of event?.zones ?? []) {
@@ -415,22 +504,157 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
               value={d.description}
               onChange={(e) => set("description", e.currentTarget.value)}
             />
-            <div className="s-two">
-              <TextField
-                label="Début"
-                name="startsAt"
-                type="datetime-local"
-                value={d.startsAt}
-                onChange={(e) => set("startsAt", e.currentTarget.value)}
-              />
-              <TextField
-                label="Fin"
-                name="endsAt"
-                type="datetime-local"
-                value={d.endsAt}
-                onChange={(e) => set("endsAt", e.currentTarget.value)}
-              />
-            </div>
+            <CheckboxField
+              label={eventDaysLabels.multiDay}
+              name="multiDay"
+              checked={d.multiDay}
+              onChange={(e) => {
+                const multiDay = e.currentTarget.checked;
+                setD((p) => {
+                  if (!multiDay || p.days.length >= 2) return { ...p, multiDay };
+                  // Deux premiers jours préremplis depuis le début saisi (le lendemain aux mêmes heures).
+                  const start = p.startsAt || toInput(new Date());
+                  const date = start.slice(0, 10);
+                  const next = new Date(`${date}T12:00:00Z`);
+                  next.setUTCDate(next.getUTCDate() + 1);
+                  const startTime = start.slice(11, 16) || "09:00";
+                  const endTime = p.endsAt.slice(11, 16) || "18:00";
+                  return {
+                    ...p,
+                    multiDay,
+                    days: [
+                      { date, startTime, endTime, capacity: "" },
+                      { date: next.toISOString().slice(0, 10), startTime, endTime, capacity: "" },
+                    ],
+                  };
+                });
+              }}
+            />
+            {d.multiDay ? (
+              <div className="s-stack s-stack--tight" data-testid="wizard-days">
+                {d.days.map((day, i) => (
+                  <fieldset key={`day-${i.toString()}`} className="s-fieldset s-stack s-stack--tight">
+                    <legend className="o-t-label s-label">
+                      {eventDaysLabels.day} {i + 1}
+                    </legend>
+                    <div className="s-two">
+                      <TextField
+                        label="Date"
+                        name={`day-${i}-date`}
+                        type="date"
+                        value={day.date}
+                        onChange={(e) => {
+                          const value = e.currentTarget.value;
+                          setD((p) => ({ ...p, days: p.days.map((x, j) => (j === i ? { ...x, date: value } : x)) }));
+                        }}
+                      />
+                      <TextField
+                        label="Début"
+                        name={`day-${i}-start`}
+                        type="time"
+                        value={day.startTime}
+                        onChange={(e) => {
+                          const value = e.currentTarget.value;
+                          setD((p) => ({
+                            ...p,
+                            days: p.days.map((x, j) => (j === i ? { ...x, startTime: value } : x)),
+                          }));
+                        }}
+                      />
+                      <TextField
+                        label="Fin"
+                        name={`day-${i}-end`}
+                        type="time"
+                        value={day.endTime}
+                        onChange={(e) => {
+                          const value = e.currentTarget.value;
+                          setD((p) => ({ ...p, days: p.days.map((x, j) => (j === i ? { ...x, endTime: value } : x)) }));
+                        }}
+                      />
+                      <TextField
+                        label={eventDaysLabels.dayCapacity}
+                        name={`day-${i}-capacity`}
+                        inputMode="numeric"
+                        value={day.capacity}
+                        placeholder={eventDaysLabels.dayCapacityHint}
+                        onChange={(e) => {
+                          const value = e.currentTarget.value;
+                          setD((p) => ({
+                            ...p,
+                            days: p.days.map((x, j) => (j === i ? { ...x, capacity: value } : x)),
+                          }));
+                        }}
+                      />
+                    </div>
+                    {d.days.length > 2 ? (
+                      <div className="s-row">
+                        <Button
+                          variant="secondary"
+                          icon="close"
+                          onClick={() => setD((p) => ({ ...p, days: p.days.filter((_, j) => j !== i) }))}
+                        >
+                          {eventDaysLabels.removeDay}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </fieldset>
+                ))}
+                <div className="s-row">
+                  <Button
+                    variant="secondary"
+                    icon="add"
+                    onClick={() =>
+                      setD((p) => {
+                        const last = p.days[p.days.length - 1];
+                        const next = new Date(`${last?.date || new Date().toISOString().slice(0, 10)}T12:00:00Z`);
+                        next.setUTCDate(next.getUTCDate() + 1);
+                        return {
+                          ...p,
+                          days: [
+                            ...p.days,
+                            {
+                              date: next.toISOString().slice(0, 10),
+                              startTime: last?.startTime ?? "09:00",
+                              endTime: last?.endTime ?? "18:00",
+                              capacity: "",
+                            },
+                          ],
+                        };
+                      })
+                    }
+                  >
+                    {eventDaysLabels.addDay}
+                  </Button>
+                </div>
+                <fieldset className="s-fieldset s-stack s-stack--tight">
+                  <legend className="o-t-label s-label">{eventDaysLabels.dayAccess}</legend>
+                  <ChipRow className="s-chips-wrap">
+                    {dayAccesses.map((a) => (
+                      <Chip key={a} selected={d.dayAccess === a} onClick={() => set("dayAccess", a)}>
+                        {dayAccessLabels[a]}
+                      </Chip>
+                    ))}
+                  </ChipRow>
+                </fieldset>
+              </div>
+            ) : (
+              <div className="s-two">
+                <TextField
+                  label="Début"
+                  name="startsAt"
+                  type="datetime-local"
+                  value={d.startsAt}
+                  onChange={(e) => set("startsAt", e.currentTarget.value)}
+                />
+                <TextField
+                  label="Fin"
+                  name="endsAt"
+                  type="datetime-local"
+                  value={d.endsAt}
+                  onChange={(e) => set("endsAt", e.currentTarget.value)}
+                />
+              </div>
+            )}
             <TextField
               label="Adresse"
               name="addressLine"
@@ -938,7 +1162,14 @@ function Recap({ d }: { d: Draft }) {
   const rows: [string, string][] = [
     ["Format", eventFormatLabels[d.format]],
     ["Titre", d.title || "—"],
-    ["Début", d.startsAt ? d.startsAt.replace("T", " ") : "—"],
+    d.multiDay
+      ? [
+          eventDaysLabels.days,
+          `${sortedDays(d)
+            .map((x) => `${x.date} ${x.startTime}–${x.endTime}`)
+            .join(", ")} · ${dayAccessLabels[d.dayAccess]}`,
+        ]
+      : ["Début", d.startsAt ? d.startsAt.replace("T", " ") : "—"],
     ["Adresse", [d.addressLine, d.postalCode, d.city].filter(Boolean).join(" ") || "—"],
     ["Véhicules", d.vehicleTypes.map((t) => vehicleTypeLabels[t]).join(", ")],
     ["Places", d.unlimited ? "Sans limite" : d.capacity],

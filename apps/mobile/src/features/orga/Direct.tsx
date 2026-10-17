@@ -3,7 +3,7 @@
 // scans. Compteurs en direct par le canal `event:{id}:live` (preuve de la double authentification de la session), et
 // rechargement toutes les 60 s au cas où le canal se coupe.
 import { Button, Chip, ChipRow, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type LiveCounters, orgaLabels } from "@orasso/shared";
+import { eventDaysLabels, formatDayDate, type LiveCounters, localDate, orgaLabels } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
@@ -75,7 +75,12 @@ function DirectEvent({
   const focused = useIsFocused();
   const eventId = current.event.id;
   const field = current.phase !== "next";
-  const live = useApi(() => api.liveCounters(eventId), [eventId], { refreshMs: 60_000 });
+  // Lot 26 : événement sur plusieurs jours, direct d'un jour (aujourd'hui d'office s'il fait partie des jours).
+  const detail = useApi(() => api.orgEvent(eventId), [eventId]);
+  const days = detail.data?.days ?? [];
+  const [dayId, setDayId] = useState<string | null | undefined>(undefined);
+  const shownDay = dayId === undefined ? (days.find((d) => d.date === localDate(new Date()))?.id ?? null) : dayId;
+  const live = useApi(() => api.liveCounters(eventId, shownDay), [eventId, shownDay], { refreshMs: 60_000 });
   const alerts = useApi(() => api.eventAlerts(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
   const incidents = useApi(() => api.eventIncidents(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
   const scans = useApi(() => api.scanReport(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
@@ -94,7 +99,9 @@ function DirectEvent({
   // Canal en direct, seulement tant que l'onglet est affiché : le changement de casquette ou d'onglet désabonne.
   useChannel(focused ? `event:${eventId}:live` : null, (event) => {
     if (event.type === "live") {
-      live.setData(event.payload as LiveCounters);
+      // Un jour choisi : la diffusion compte tous les jours, on relit le jour affiché.
+      if (shownDay) void live.reload();
+      else live.setData(event.payload as LiveCounters);
       // Un compteur bouge : le rapport des scans suit (au plus une fois toutes les 5 s).
       if (field && !scanTimer.current) {
         scanTimer.current = setTimeout(() => {
@@ -188,6 +195,19 @@ function DirectEvent({
           {current.event.city ? ` · ${current.event.city}` : ""}
         </Text>
       </Plate>
+
+      {days.length > 1 ? (
+        <ChipRow>
+          <Chip selected={shownDay === null} onPress={() => setDayId(null)}>
+            {eventDaysLabels.allDays}
+          </Chip>
+          {days.map((d) => (
+            <Chip key={d.id} selected={shownDay === d.id} onPress={() => setDayId(d.id)}>
+              {formatDayDate(d.date)}
+            </Chip>
+          ))}
+        </ChipRow>
+      ) : null}
 
       {l ? (
         <View style={styles.counters} testID="orga-direct-counters">

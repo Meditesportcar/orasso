@@ -4,6 +4,8 @@ import {
   afterEventLabels,
   applicationStatusLabels,
   crewLabels,
+  eventDaysLabels,
+  formatDayDate,
   type Page,
   type RefusalReason,
   refusalReasonLabels,
@@ -267,6 +269,12 @@ export function TriageFile({
             {current.applicant.absencesCount > 1 ? "s" : ""}
           </span>
         </div>
+        {current.day && (
+          <div className="tri__kv" data-testid="triage-day">
+            <span>{eventDaysLabels.day}</span>
+            <span>{formatDayDate(current.day.date)}</span>
+          </div>
+        )}
         <div className="tri__kv">
           <span>Avec nous</span>
           <span>

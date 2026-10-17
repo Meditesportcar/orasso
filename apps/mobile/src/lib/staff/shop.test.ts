@@ -67,6 +67,7 @@ function syncBody(over: Partial<Omit<StaffSync, "signature" | "signatureKid">> =
       isLocked: true,
       plateSalt: Buffer.from("0123456789abcdef").toString("base64url"),
       zones: [],
+      days: [],
     },
     keys: [],
     myRoles: ["shop" as const],
