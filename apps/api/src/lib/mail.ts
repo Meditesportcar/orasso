@@ -11,7 +11,17 @@ import { env } from "../env";
 import { now } from "./deps";
 import { dataDir } from "./storage";
 
-export type MailContent = { subject: string; html: string; text: string };
+/**
+ * `from` : expéditeur propre à cet e-mail (newsletter, lot 33), sinon `MAIL_FROM`. `headers` : en-têtes ajoutés par
+ * Brevo (ex. `List-Unsubscribe` de la newsletter).
+ */
+export type MailContent = {
+  subject: string;
+  html: string;
+  text: string;
+  from?: string;
+  headers?: Record<string, string>;
+};
 
 const escapeHtml = (s: string) =>
   s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
@@ -63,12 +73,13 @@ export function brevoPayload(
   config = { from: env.MAIL_FROM, replyTo: env.MAIL_REPLY_TO },
 ) {
   return {
-    sender: parseMailbox(config.from),
+    sender: parseMailbox(content.from ?? config.from),
     to: [{ email: to }],
     ...(config.replyTo ? { replyTo: parseMailbox(config.replyTo) } : {}),
     subject: content.subject,
     htmlContent: content.html,
     textContent: content.text,
+    ...(content.headers ? { headers: content.headers } : {}),
   };
 }
 
@@ -128,15 +139,20 @@ export function startOfBusinessDay(at: Date): Date {
   return fromWallTime({ year: w.year, month: w.month, day: w.day, hour: 0, minute: 0 }, BUSINESS_TIMEZONE);
 }
 
+export type MailOutcome = "sent" | "failed" | "skipped_quota";
+
 export const mail = {
-  /** `configured` : transport de la configuration ; paramètre pour les tests seulement. */
+  /**
+   * `configured` : transport de la configuration ; paramètre pour les tests seulement. Renvoie ce qui s'est passé
+   * (lot 33 : la newsletter s'arrête au premier `skipped_quota` et reprend le lendemain).
+   */
   async send(
     template: string,
     to: string,
     content: MailContent,
     payload: Record<string, unknown> = {},
     configured: "journal" | "brevo" = env.MAIL_TRANSPORT,
-  ) {
+  ): Promise<MailOutcome> {
     const transport = transportFor(to, configured);
     // Budget du jour (Brevo seulement) : compté et réservé sous un verrou, pour que deux envois simultanés ne le
     // dépassent pas. Au-delà, l'e-mail n'est pas envoyé (`skipped_quota`) : la notification reste au Journal.
@@ -176,16 +192,19 @@ export const mail = {
         .returning({ id: emailOutbox.id, status: emailOutbox.status });
       return inserted;
     });
-    if (!row || row.status === "skipped_quota") return;
+    if (!row) return "failed";
+    if (row.status === "skipped_quota") return "skipped_quota";
     try {
       if (transport === "brevo") await deliverBrevo(to, content);
       else await deliverJournal(row.id, to, content);
       await db.update(emailOutbox).set({ status: "sent", sentAt: now() }).where(eq(emailOutbox.id, row.id));
+      return "sent";
     } catch (error) {
       await db
         .update(emailOutbox)
         .set({ status: "failed", error: String(error) })
         .where(eq(emailOutbox.id, row.id));
+      return "failed";
     }
   },
 };

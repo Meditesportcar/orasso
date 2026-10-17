@@ -3,6 +3,8 @@ import { PgBoss } from "pg-boss";
 import { env } from "./env";
 import { deps, type JobName } from "./lib/deps";
 import { AppError } from "./lib/errors";
+import { assistanceService } from "./modules/admin/assistance";
+import { newsletterService } from "./modules/admin/newsletter";
 import { badgeService } from "./modules/after-event/badge";
 import { reportService } from "./modules/after-event/report";
 import { applicationsService } from "./modules/applications/service";
@@ -72,6 +74,9 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "event.report-refresh": (d) => reportService.refresh(d.eventId ?? ""),
   "event.report-sweep": () => reportService.sweep(),
   "structure.badge-sweep": () => badgeService.sweep(),
+  // Lot 33 : demandes d'aide ouvertes depuis 7 jours closes (S41) ; un lot de newsletter par passage.
+  "assistance.auto-close": () => assistanceService.autoClose(),
+  "newsletter.send": () => newsletterService.runDue(),
 };
 
 /**
@@ -122,6 +127,9 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     // Lot 27 : badges de structure chaque jour à 09:00 ; bilans à rafraîchir (secours) chaque heure.
     await boss.schedule("structure.badge-sweep", "0 9 * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("event.report-sweep", "35 * * * *", null, { tz: "Europe/Paris" });
+    // Lot 33 : clôture des demandes d'aide (chaque heure), newsletter par lots de 200 (chaque minute).
+    await boss.schedule("assistance.auto-close", "45 * * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("newsletter.send", "* * * * *", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {
     async send(name, data, startAfter) {

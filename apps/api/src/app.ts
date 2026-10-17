@@ -11,7 +11,9 @@ import { env } from "./env";
 import { hasSecondFactor } from "./lib/access";
 import { AppError, errorResponse, notFound } from "./lib/errors";
 import { realtime } from "./lib/realtime";
+import { requestContextMiddleware } from "./lib/request-context";
 import { type AppEnv, type AuthUser, loadSession } from "./lib/session";
+import { settingsStore } from "./lib/settings";
 import { storage } from "./lib/storage";
 import { accessRoutes } from "./modules/access/routes";
 import { accountRoutes } from "./modules/account/routes";
@@ -104,6 +106,14 @@ app.use(
     },
   }),
 );
+// Lot 33 : interrupteur « inscriptions ouvertes » de l'administration (l'inscription express du jour J n'est pas
+// concernée : elle ne passe pas par cette route).
+app.post("/auth/sign-up/email", async (_c, next) => {
+  if (!(await settingsStore.get("signup.enabled"))) {
+    throw new AppError(403, "signup_closed", "Les inscriptions sont momentanément fermées.");
+  }
+  await next();
+});
 // Garde unique des routes de Better Auth (session lue en cookie ou en jeton porteur) : `modules/security/auth-guard.ts`.
 app.on(
   ["GET", "POST"],
@@ -137,6 +147,8 @@ app.use(
   }),
 );
 app.use("*", loadSession);
+// Lot 33 : méthode, chemin et adresse de la requête lisibles par les gardes (mode assistance, journal).
+app.use("*", requestContextMiddleware);
 
 app.route("/", accessRoutes);
 app.route("/", profilesRoutes);

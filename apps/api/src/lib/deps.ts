@@ -47,7 +47,10 @@ export type JobName =
   // Lot 27 : bilan rafraîchi à J+8 (et balayage horaire de secours), rappels et suspension des badges (quotidienne).
   | "event.report-refresh"
   | "event.report-sweep"
-  | "structure.badge-sweep";
+  | "structure.badge-sweep"
+  // Lot 33 : demandes d'aide closes à 7 jours (chaque heure), envoi de la newsletter par lots (chaque minute).
+  | "assistance.auto-close"
+  | "newsletter.send";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

@@ -29,6 +29,7 @@ import { now } from "../../lib/deps";
 import { AppError, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
+import { settingsStore } from "../../lib/settings";
 import { storage } from "../../lib/storage";
 import { proOwnerActive } from "../pros/explore";
 import { parisDay } from "../pros/service";
@@ -66,6 +67,8 @@ export const sponsoredService = {
   async select(v: Viewer, interests: string[]): Promise<HomeSponsored | null> {
     const t = now();
     if (proVisibility(null, null, t).hidden.promotion) return null;
+    // Lot 33 : interrupteur de l'administration.
+    if (!(await settingsStore.get("sponsored.enabled"))) return null;
     const today = parisDay(t);
     const rows = await db
       .select({ placement: sponsoredPlacements, pro: proProfiles })

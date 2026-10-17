@@ -564,6 +564,8 @@ describe("garde de la clé Stripe", () => {
         STRIPE_SECRET_KEY: "",
         STRIPE_WEBHOOK_SECRET: "",
         STRIPE_CONNECT_CLIENT_ID: "",
+        // Lot 33 : secret des liens de désinscription, obligatoire en production.
+        UNSUBSCRIBE_SECRET: "secret-de-test-des-desinscriptions-0123456789",
         ...env,
       },
       encoding: "utf8",

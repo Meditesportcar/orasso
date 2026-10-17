@@ -27,8 +27,13 @@ describe("réglages de l'administration", () => {
     expect(adminSettingSchemas["points.participation"].safeParse(2.5).success).toBe(false);
     expect(adminSettingSchemas["signup.enabled"].safeParse("oui").success).toBe(false);
     expect(
-      adminSettingSchemas["grades.thresholds"].safeParse({ rodage: 0, route: 100, sport: 90, circuit: 400, legende: 800 })
-        .success,
+      adminSettingSchemas["grades.thresholds"].safeParse({
+        rodage: 0,
+        route: 100,
+        sport: 90,
+        circuit: 400,
+        legende: 800,
+      }).success,
     ).toBe(false);
     expect(adminSettingSchemas["lists.refusal_reasons"].safeParse(["full"]).success).toBe(false);
     expect(adminSettingSchemas["lists.refusal_reasons"].safeParse(["full", "other"]).success).toBe(true);

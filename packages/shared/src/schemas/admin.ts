@@ -107,7 +107,14 @@ export type AdminUserDetail = AdminUserRow & {
   structures: { id: string; slug: string; name: string; role: string; status: string }[];
   vehicles: { id: string; label: string; year: number | null; status: string; certified: boolean }[];
   points: { id: string; kind: string; points: number; at: string; note: string | null }[];
-  sanctions: { id: string; kind: string; reason: string; startsAt: string; endsAt: string | null; liftedAt: string | null }[];
+  sanctions: {
+    id: string;
+    kind: string;
+    reason: string;
+    startsAt: string;
+    endsAt: string | null;
+    liftedAt: string | null;
+  }[];
   reports: { emitted: number; received: number; recent: { id: string; reason: string; status: string; at: string }[] };
   devices: { id: string; platform: string; lastSeenAt: string | null; revoked: boolean }[];
   sessions: { id: string; device: string; createdAt: string; updatedAt: string }[];
@@ -183,7 +190,10 @@ export const vehicleModelCreateSchema = z.object({
   name: refName,
   vehicleType: z.enum(vehicleTypes),
 });
-export const vehicleModelUpdateSchema = z.object({ name: refName.optional(), vehicleType: z.enum(vehicleTypes).optional() });
+export const vehicleModelUpdateSchema = z.object({
+  name: refName.optional(),
+  vehicleType: z.enum(vehicleTypes).optional(),
+});
 
 const year = z.number().int().min(1886).max(2100);
 export const vehicleGenerationCreateSchema = z
