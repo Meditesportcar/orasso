@@ -380,6 +380,10 @@ export const structuresService = {
     // Lot 24 : unicité (une ligne par personne), file bornée, délai après un refus, invitation notifiée à son seul
     // destinataire. Une demande de staff en attente de cette personne est acceptée d'emblée (même geste).
     const promoted = await withTx(async (tx, after) => {
+      // Verrou d'abord, lecture de la ligne ensuite : deux invitations simultanées se suivent (la seconde voit la
+      // première et répond 409, jamais une violation d'unicité en 500) ; plafond et limite valent pour tous les chemins.
+      await staffRequestsService.lockStructure(tx, id);
+      rateLimit("staffInvite", v.user.id);
       const existing = await tx.query.structureMembers.findFirst({
         where: and(eq(structureMembers.structureId, id), eq(structureMembers.userId, target.userId)),
       });
@@ -409,7 +413,7 @@ export const structuresService = {
         });
         return true;
       }
-      if (existing?.status !== "requested") await staffRequestsService.beforeInvite(tx, v, id, existing);
+      await staffRequestsService.beforeInvite(tx, id, existing);
       const values = {
         role: input.role,
         staffRoles: input.staffRoles,
@@ -437,6 +441,14 @@ export const structuresService = {
   },
 
   async respondToInvitation(v: Viewer, structureId: string, accept: boolean) {
+    // Accepter n'est pas possible avec un compte suspendu, ni pour une structure suspendue (refuser reste possible).
+    if (accept) {
+      if (v.profile.suspendedUntil && v.profile.suspendedUntil > now()) {
+        throw forbidden("Ton compte est suspendu : tu ne peux pas rejoindre une structure pour l'instant.");
+      }
+      const s = await structureById(structureId).catch(() => null);
+      if (!s || s.verification === "suspended") throw forbidden("Cette structure est suspendue.");
+    }
     // Seul le destinataire répond (la ligne est cherchée par son identifiant de session), une seule fois.
     const [m] = await db
       .update(structureMembers)

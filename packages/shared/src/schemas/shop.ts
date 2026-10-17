@@ -70,7 +70,7 @@ export type TicketScanResultView = {
   /** `accepted` : première lecture, billet passé à « utilisé » ; `already` : déjà utilisé (ici ou ailleurs) ;
    *  `refused` : QR falsifié, autre événement, billet inconnu ou annulé ; `rejected` : boutique fermée / points réglés. */
   result: TicketScanServerResult;
-  reason?: TicketRefusal | "unknown" | "shop_disabled" | "settled";
+  reason?: TicketRefusal | "unknown" | "shop_disabled" | "settled" | "locked";
   /** Heure retenue d'utilisation du billet (la plus ancienne). */
   usedAt: string | null;
   ticketName: string | null;
@@ -96,7 +96,8 @@ export const visitorEntryBatchSchema = z.object({
 export type VisitorEntryBatch = z.infer<typeof visitorEntryBatchSchema>;
 
 export type VisitorEntriesResult = {
-  results: { id: string; applied: boolean }[];
+  /** `reason` : le toucher n’a pas été compté parce que la boutique est fermée (`shop_disabled`, `locked`, `settled`). */
+  results: { id: string; applied: boolean; reason?: "shop_disabled" | "settled" | "locked" }[];
   /** Total de l'événement après ces touchers (tous appareils, jamais négatif). */
   total: number;
 };

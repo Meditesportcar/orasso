@@ -19,6 +19,7 @@ import {
   type BatchItemWire,
   backoffMs,
   buildState,
+  carryOver,
   dueBatches,
   dueOfKind,
   ID_IN_PAYLOAD,
@@ -111,6 +112,10 @@ export async function openEvent(eventId: string, userId: string): Promise<StaffS
     await store.tickets(eventId),
     await store.ticketUses(eventId),
   );
+  // Un pointage ou un billet lu pendant cette relecture (écriture encore en file) n'est pas encore en base : on le
+  // reprend de l'état en mémoire (même compte), comme `doSync`, sinon il serait relu « OK » quelques secondes après.
+  // Fait en une seule passe synchrone juste avant de remplacer l'état.
+  carryOver(state, states.get(eventId), userId);
   states.set(eventId, state);
   emit();
   return state;
@@ -222,12 +227,7 @@ async function doSync(eventId: string, userId: string, full: boolean): Promise<S
       await store.ticketUses(eventId),
     );
     // Une lecture faite pendant la synchro (écriture encore en file) reste « déjà entré » en mémoire.
-    for (const [passId, local] of states.get(eventId)?.local ?? []) {
-      if (!fresh.local.has(passId)) fresh.local.set(passId, local);
-    }
-    for (const [ticketId, use] of states.get(eventId)?.ticketUses ?? []) {
-      if (!fresh.ticketUses.has(ticketId)) fresh.ticketUses.set(ticketId, use);
-    }
+    carryOver(fresh, states.get(eventId), userId);
     states.set(eventId, fresh);
     emit();
     return { ok: true, count: sync.entries.length };
@@ -305,8 +305,22 @@ export async function record(
   if (use && state && !state.ticketUses.has(use.ticketId)) state.ticketUses.set(use.ticketId, use);
   await store.addAction(action, checkin, use);
   emit();
-  void flush(userId);
+  // Billets et compteur : touchers en rafale à l'entrée, regroupés en un envoi toutes les 2 s ; le reste part tout de suite.
+  if (kind === "ticket_scan" || kind === "visitor") scheduleShopFlush(userId);
+  else void flush(userId);
   return id;
+}
+
+const SHOP_FLUSH_DELAY_MS = 2_000;
+let shopFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Un seul envoi groupé, 2 s après le premier geste de la rafale (les gestes suivants rejoignent le même lot). */
+function scheduleShopFlush(userId: string): void {
+  if (shopFlushTimer) return;
+  shopFlushTimer = setTimeout(() => {
+    shopFlushTimer = null;
+    void flush(userId).catch(() => undefined);
+  }, SHOP_FLUSH_DELAY_MS);
 }
 
 // --- Appareil du staff -----------------------------------------------------------------------------------------
@@ -449,10 +463,11 @@ async function sendShopBatch(
       if (missing.length) await store.markFailed(missing, "Sans réponse du serveur", later);
       const current = states.get(eventId);
       for (const { use } of effects) {
-        const local = use ? current?.ticketUses.get(use.ticketId) : undefined;
-        if (!use || !local || !current) continue;
-        if (use.usedAt) current.ticketUses.set(use.ticketId, { ...local, usedAt: use.usedAt });
-        else if (local.actionId === use.actionId) current.ticketUses.delete(use.ticketId);
+        if (!use || !current) continue;
+        const local = current.ticketUses.get(use.ticketId);
+        // Accepté ou déjà utilisé selon le serveur : le billet est utilisé, même si l'usage local manquait en mémoire.
+        if (use.usedAt) current.ticketUses.set(use.ticketId, { ...(local ?? use), usedAt: use.usedAt });
+        else if (local && local.actionId === use.actionId) current.ticketUses.delete(use.ticketId);
       }
     } else {
       const items: VisitorItemWire[] = batch.map((a) => ({
@@ -464,7 +479,10 @@ async function sendShopBatch(
       const known = new Set(res.results.map((r) => r.id));
       await store.markSent(
         eventId,
-        res.results.map((r) => ({ id: r.id, result: { applied: r.applied, total: res.total } })),
+        res.results.map((r) => ({
+          id: r.id,
+          result: { applied: r.applied, total: res.total, ...(r.reason ? { reason: r.reason } : {}) },
+        })),
         new Date(),
       );
       const missing = batch.filter((a) => !known.has(a.id)).map((a) => a.id);
@@ -475,7 +493,20 @@ async function sendShopBatch(
     if (e?.status === 401) return;
     if (e?.status === 400 && /appareil/i.test(e.message)) {
       await kvDel(deviceKey(userId));
-    } else if (e && (e.status === 400 || DEFINITIVE.has(e.status))) {
+    } else if (e?.status === 400) {
+      // Un élément illisible ne doit pas condamner les autres : lot refusé en bloc → chacun repart seul ; l'élément
+      // que l'API refuse seul sort de la file avec son erreur, SANS effacer l'usage local (dans le doute, le billet
+      // reste « déjà utilisé » sur ce téléphone).
+      if (batch.length > 1) {
+        for (const one of batch) await sendShopBatch(store, userId, kind, eventId, [one]);
+      } else {
+        const [only] = batch;
+        if (only) {
+          await store.markSent(eventId, [{ id: only.id, result: { error: e.message, status: e.status } }], new Date());
+        }
+      }
+      return;
+    } else if (e && DEFINITIVE.has(e.status)) {
       // Boutique fermée ou retirée, plus de rôle, événement fermé : rejouer ne changera rien. Les éléments sortent
       // de la file avec l'erreur (visible au rapport) ; les usages locaux qu'ils avaient créés disparaissent.
       await reject(store, eventId, batch, e);

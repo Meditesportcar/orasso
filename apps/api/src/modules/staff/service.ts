@@ -8,6 +8,7 @@ import {
   type CheckinMethod,
   type EventStaffMember,
   type EventStaffUpdate,
+  fromWallTime,
   isEventDay,
   isLocked,
   lockAt,
@@ -22,7 +23,7 @@ import {
   type VendorTypeCode,
   wallTime,
 } from "@orasso/shared";
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -168,16 +169,27 @@ async function remindPending(
   only?: string,
 ): Promise<number> {
   const t = now();
-  const pending = (await members(event)).filter((m) => {
-    if (only && m.userId !== only) return false;
-    if (m.presence !== "unknown") return false;
-    if (!m.lastRemindedAt) return true;
-    const last = wallTime(m.lastRemindedAt);
-    return last.year !== today.year || last.month !== today.month || last.day !== today.day;
-  });
-  if (!pending.length) return 0;
-  await withTx(async (tx, after) => {
-    for (const m of pending) {
+  const candidates = (await members(event)).filter((m) => (!only || m.userId === only) && m.presence === "unknown");
+  if (!candidates.length) return 0;
+  // Début du jour de Paris : une seule relance par jour et par personne.
+  const dayStart = fromWallTime({ ...today, hour: 0, minute: 0 });
+  return withTx(async (tx, after) => {
+    let sent = 0;
+    for (const m of candidates) {
+      // Écriture conditionnelle : seul celui dont la ligne est réellement mise à jour est notifié (double clic,
+      // tâche du matin et bouton en même temps = un seul envoi).
+      const [row] = await tx
+        .update(eventStaff)
+        .set({ reminderCount: sql`${eventStaff.reminderCount} + 1`, lastRemindedAt: t })
+        .where(
+          and(
+            eq(eventStaff.id, m.id),
+            eq(eventStaff.presence, "unknown"),
+            or(isNull(eventStaff.lastRemindedAt), lt(eventStaff.lastRemindedAt, dayStart)),
+          ),
+        )
+        .returning({ id: eventStaff.id });
+      if (!row) continue;
       await notificationsService.notify(tx, m.userId, "staff_presence_reminder", {
         title: "Seras-tu là ?",
         body: `« ${event.title} », ${formatDateTime(event.startsAt)} : dis à l'équipe si tu seras là.`,
@@ -186,14 +198,11 @@ async function remindPending(
         data: { eventId: event.id, screen: "staff" },
         link: { label: "Répondre", path: "/app/acces" },
       });
-      await tx
-        .update(eventStaff)
-        .set({ reminderCount: sql`${eventStaff.reminderCount} + 1`, lastRemindedAt: t })
-        .where(eq(eventStaff.id, m.id));
+      sent++;
     }
-    after(() => notificationsService.kick());
+    if (sent > 0) after(() => notificationsService.kick());
+    return sent;
   });
-  return pending.length;
 }
 
 export const staffService = {
@@ -380,7 +389,9 @@ export const staffService = {
     await requireOrganizer(v, event.structureId);
     if (event.status !== "published") throw notFound("Événement introuvable");
     const t = now();
-    if (t >= event.startsAt) throw lockedError("Les relances s'arrêtent au début de l'événement");
+    if (t >= event.startsAt || isEventDay(event.startsAt, t)) {
+      throw lockedError("Le jour J, le staff est sur place : plus de relance");
+    }
     if (userId && !(await members(event)).some((m) => m.userId === userId)) {
       throw notFound("Ce membre n'est pas dans le staff de l'événement");
     }

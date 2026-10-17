@@ -27,6 +27,7 @@ import {
   events,
   incidents,
   notifications,
+  profiles,
   staffAlerts,
   structureMembers,
   structures,
@@ -498,9 +499,15 @@ describe("rôle boutique : synchro et contrôle des billets", () => {
     await req(w.damien, "PATCH", `/events/${w.e.id}/staff/${w.lea.id}`, { roles: ["scan"] });
     expect((await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, body(dLea))).status).toBe(403);
     await req(w.damien, "PATCH", `/events/${w.e.id}/staff/${w.lea.id}`, { roles: null });
-    // Boutique désactivée : 409.
+    // Boutique désactivée : l'envoi n'est pas refusé en bloc, chaque lecture reçoit « rejected » et reste consignée.
     await db.update(events).set({ shopEnabled: false });
-    expect((await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, body(dLea))).status).toBe(409);
+    const off = await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, body(dLea));
+    expect(off.status).toBe(200);
+    expect(off.json.results[0]).toMatchObject({ result: "rejected", reason: "shop_disabled" });
+    expect(
+      (await db.select().from(ticketScans).where(eq(ticketScans.serverResult, "rejected"))).map((r) => r.reason),
+    ).toEqual(["shop_disabled"]);
+    expect((await db.select().from(tickets)).every((t) => t.status === "valid")).toBe(true);
     await db.update(events).set({ shopEnabled: true });
     expect((await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, body(dLea))).status).toBe(200);
     // Organisateur : accès d'office (2FA de session).
@@ -508,27 +515,51 @@ describe("rôle boutique : synchro et contrôle des billets", () => {
     expect((await req(w.damien, "POST", `/events/${w.e.id}/ticket-scans`, body(dDamien))).status).toBe(200);
   });
 
-  it("fenêtre : avant la veille, fermé ; après le règlement, fermé", async () => {
+  it("fenêtre : avant la veille et après le règlement, chaque lecture est rejetée avec sa raison", async () => {
     const w = await setup();
     const d = await device(w.lea.id);
+    const send = () =>
+      req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, { deviceId: d, items: [scanItem(w.payloads[0] as string)] });
     clock.set(new Date(w.e.startsAt.getTime() - 3 * DAY));
-    expect(
-      (
-        await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, {
-          deviceId: d,
-          items: [scanItem(w.payloads[0] as string)],
-        })
-      ).status,
-    ).toBe(423);
+    expect((await send()).json.results[0]).toMatchObject({ result: "rejected", reason: "locked" });
     clock.set(new Date(w.e.endsAt.getTime() + 4 * DAY));
+    expect((await send()).json.results[0]).toMatchObject({ result: "rejected", reason: "settled" });
+    expect((await db.select().from(tickets)).every((t) => t.status === "valid")).toBe(true);
+  });
+
+  it("identifiant déjà pris par un autre événement : rejeté, le billet n'est pas touché (jamais 500)", async () => {
+    const w = await setup();
+    clock.set(new Date(w.e.startsAt.getTime() - HOUR));
+    const d = await device(w.lea.id);
+    const e2 = await createEvent(w.s.id, {
+      title: "Autre",
+      startsAt: new Date(clock.now.getTime() + 3 * DAY),
+      shopEnabled: true,
+    });
+    const shared = randomUUID();
+    await db.insert(ticketScans).values({
+      id: shared,
+      eventId: e2.id,
+      staffUserId: w.lea.id,
+      localDecision: "ok",
+      scannedAt: clock.now,
+      receivedAt: clock.now,
+      serverResult: "refused",
+    });
+    const res = await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, {
+      deviceId: d,
+      items: [scanItem(w.payloads[0] as string, { id: shared })],
+    });
+    expect(res.status).toBe(200);
+    expect(res.json.results[0]).toMatchObject({ result: "rejected" });
     expect(
       (
-        await req(w.lea, "POST", `/events/${w.e.id}/ticket-scans`, {
-          deviceId: d,
-          items: [scanItem(w.payloads[0] as string)],
-        })
-      ).status,
-    ).toBe(423);
+        await db
+          .select()
+          .from(tickets)
+          .where(eq(tickets.id, w.ids[0] as string))
+      )[0]?.status,
+    ).toBe("valid");
   });
 });
 
@@ -792,8 +823,87 @@ describe("structure suspendue, relances, appartenances", () => {
     expect((await req(w.lea, "GET", `/events/${w.e.id}/staff/sync`)).status).toBe(200);
   });
 
+  it("invitations simultanées : la seconde répond 409, jamais 500 ; le plafond vaut aussi pour une demande promue en co-organisateur", async () => {
+    const w = await setup();
+    const nina = await signUp("Nina_Double");
+    const invite = () =>
+      req(w.damien, "POST", `/structures/${w.s.id}/members`, {
+        pseudo: nina.pseudo,
+        role: "staff",
+        staffRoles: [],
+        canDecide: false,
+      });
+    const [a, b] = await Promise.all([invite(), invite()]);
+    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    // Plafond atteint : même une personne qui a demandé ne passe pas en invitation de co-organisateur.
+    const crowd = [];
+    for (let i = 0; i < STAFF_PENDING_MAX; i++) crowd.push(await signUp(`Foule_${i}`));
+    for (const u of crowd) {
+      await db
+        .insert(structureMembers)
+        .values({ structureId: w.s.id, userId: u.id, role: "staff", status: "requested" });
+    }
+    const asked = crowd[0] as TestUser;
+    const res = await req(w.damien, "POST", `/structures/${w.s.id}/members`, {
+      pseudo: asked.pseudo,
+      role: "co_organizer",
+      staffRoles: [],
+      canDecide: false,
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("invitation : refusée à accepter par un compte suspendu ou pour une structure suspendue", async () => {
+    const w = await setup();
+    const nina = await signUp("Nina_Suspendue");
+    await req(w.damien, "POST", `/structures/${w.s.id}/members`, {
+      pseudo: nina.pseudo,
+      role: "staff",
+      staffRoles: [],
+      canDecide: false,
+    });
+    await db.update(structures).set({ verification: "suspended" }).where(eq(structures.id, w.s.id));
+    expect((await req(nina, "POST", `/me/memberships/${w.s.id}/accept`)).status).toBe(403);
+    await db.update(structures).set({ verification: "verified" }).where(eq(structures.id, w.s.id));
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(clock.now.getTime() + DAY) })
+      .where(eq(profiles.userId, nina.id));
+    expect((await req(nina, "POST", `/me/memberships/${w.s.id}/accept`)).status).toBe(403);
+    await db.update(profiles).set({ suspendedUntil: null }).where(eq(profiles.userId, nina.id));
+    expect((await req(nina, "POST", `/me/memberships/${w.s.id}/accept`)).status).toBe(204);
+  });
+
+  it("l'alerte : la position n'est lisible que de l'organisation, pas du staff", async () => {
+    const w = await setup();
+    clock.set(new Date(w.e.startsAt.getTime() + HOUR));
+    const sent = await req(w.lea, "POST", `/events/${w.e.id}/alerts`, {
+      clientId: randomUUID(),
+      message: "Aide",
+      lat: 42.5465,
+      lng: 3.0245,
+    });
+    const org = (await req(w.damien, "GET", `/events/${w.e.id}/alerts`)).json.find(
+      (x: { id: string }) => x.id === sent.json.id,
+    );
+    expect(org.lat).toBe(42.5465);
+    const staffView = (await req(w.theo, "GET", `/events/${w.e.id}/alerts`)).json.find(
+      (x: { id: string }) => x.id === sent.json.id,
+    );
+    expect(staffView).toMatchObject({ lat: null, lng: null, distanceM: null, message: "Aide" });
+  });
+
   it("« Relancer » : ceux qui n'ont pas répondu, une fois par jour, jamais après le début ; réservé à l'organisation", async () => {
     const w = await setup();
+    // Événement dans 4 jours : ni le jour J ni le début ne ferment encore les relances.
+    await db
+      .update(events)
+      .set({
+        startsAt: new Date(clock.now.getTime() + 4 * DAY),
+        endsAt: new Date(clock.now.getTime() + 4 * DAY + 8 * HOUR),
+      })
+      .where(eq(events.id, w.e.id));
+    w.e.startsAt = new Date(clock.now.getTime() + 4 * DAY);
     for (const mode of MODES) {
       const first = await req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, {}, mode);
       if (mode === "cookie") {
@@ -814,10 +924,37 @@ describe("structure suspendue, relances, appartenances", () => {
     const one = await req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, { userId: w.theo.id });
     expect(one.json.reminded).toBe(1);
     expect((await req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, { userId: "inconnu" })).status).toBe(404);
-    // Staff : pas de relance ; au début de l'événement : fermé.
+    // Staff : pas de relance ; le jour J et au début de l'événement : fermé.
     expect((await req(w.lea, "POST", `/events/${w.e.id}/staff/remind`, {})).status).toBe(403);
+    clock.set(new Date(w.e.startsAt.getTime() - 2 * HOUR));
+    expect((await req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, {})).status).toBe(423);
     clock.set(new Date(w.e.startsAt.getTime() + 1));
     expect((await req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, {})).status).toBe(423);
+  });
+
+  it("double clic et alias du lot 22 : une seule relance par jour, même route de fond", async () => {
+    const w = await setup();
+    await db
+      .update(events)
+      .set({
+        startsAt: new Date(clock.now.getTime() + 4 * DAY),
+        endsAt: new Date(clock.now.getTime() + 4 * DAY + 8 * HOUR),
+      })
+      .where(eq(events.id, w.e.id));
+    // Deux envois simultanés : une seule ligne mise à jour par personne, une seule notification.
+    const [a, b] = await Promise.all([
+      req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, { userId: w.lea.id }),
+      req(w.damien, "POST", `/events/${w.e.id}/staff/${w.lea.id}/remind`, undefined, "bearer"),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    await notificationsService.flush();
+    const notes = await db.select().from(notifications).where(eq(notifications.userId, w.lea.id));
+    expect(notes.filter((n) => n.type === "staff_presence_reminder")).toHaveLength(1);
+    // L'alias suit la règle du jour : relancé aujourd'hui → 409 ; le lendemain → 200 avec la forme du lot 22.
+    expect((await req(w.damien, "POST", `/events/${w.e.id}/staff/${w.lea.id}/remind`)).status).toBe(409);
+    clock.advance(DAY);
+    const next = await req(w.damien, "POST", `/events/${w.e.id}/staff/${w.lea.id}/remind`);
+    expect(next).toMatchObject({ status: 200, json: { reminded: true } });
   });
 
   it("GET /me : la demande de staff envoyée apparaît dans les appartenances (« requested »)", async () => {

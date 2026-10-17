@@ -19,6 +19,7 @@ import { ed25519Verify } from "./crypto";
 import {
   applyTicketResults,
   buildState,
+  carryOver,
   decideTicketLocal,
   dueOfKind,
   type LocalTicketUse,
@@ -377,5 +378,48 @@ describe("file hors ligne : billets et compteur (SQLite)", () => {
     await store.scrubPosition(uuid(990));
     const [after] = await store.actions("user-lea");
     expect(after?.payload).toEqual({ message: "Besoin d'aide" });
+  });
+});
+
+describe("relecture de l'événement pendant une lecture (openEvent)", () => {
+  it("reprend l'usage de billet et le pointage de véhicule pas encore écrits en base", () => {
+    const { merged, state: previous } = shopState();
+    // Lecture faite pendant la relecture du disque : en mémoire, pas encore en base.
+    previous.ticketUses.set(uuid(1), { ticketId: uuid(1), usedAt: "2026-10-17T09:10:00.000Z", actionId: uuid(900) });
+    previous.local.set(uuid(50), {
+      passId: uuid(50),
+      applicationId: uuid(1050),
+      checkedInAt: "2026-10-17T09:11:00.000Z",
+      method: "scan",
+      actionId: uuid(901),
+    });
+    const fresh = buildState(merged.meta, merged.entries, [], merged.tickets, []);
+    carryOver(fresh, previous, "user-lea");
+    expect(fresh.ticketUses.get(uuid(1))?.usedAt).toBe("2026-10-17T09:10:00.000Z");
+    expect(fresh.local.get(uuid(50))?.checkedInAt).toBe("2026-10-17T09:11:00.000Z");
+    // Le billet est donc bien « déjà utilisé » à la lecture suivante (et non relu « OK »).
+    expect(decideTicketLocal(fresh, ticketQr(uuid(1)), keys, ed25519Verify)).toMatchObject({ decision: "already" });
+    // Ce que le disque a déjà n'est pas écrasé ; un autre compte ne reprend rien.
+    const disk = buildState(merged.meta, merged.entries, [], merged.tickets, [
+      { ticketId: uuid(1), usedAt: "2026-10-17T08:00:00.000Z", actionId: uuid(902) },
+    ]);
+    carryOver(disk, previous, "user-lea");
+    expect(disk.ticketUses.get(uuid(1))?.usedAt).toBe("2026-10-17T08:00:00.000Z");
+    const other = buildState(merged.meta, merged.entries, [], merged.tickets, []);
+    carryOver(other, previous, "user-autre");
+    expect(other.ticketUses.size).toBe(0);
+    expect(other.local.size).toBe(0);
+  });
+
+  it("un toucher du compteur refusé pour boutique fermée ne compte pas", () => {
+    const a = action(
+      uuid(995),
+      "visitor",
+      { id: uuid(995), delta: 10, at: "2026-10-17T09:00:00.000Z" },
+      "2026-10-17T09:00:00.000Z",
+    );
+    a.sentAt = "2026-10-17T09:01:00.000Z";
+    a.result = { applied: false, total: 0, reason: "shop_disabled" };
+    expect(visitorTotals([a])).toEqual({ local: 0, pending: 0, server: null });
   });
 });

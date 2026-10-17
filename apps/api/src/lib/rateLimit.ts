@@ -69,6 +69,9 @@ export const rateRules = {
   crewWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   /** Staff (lot 24) : demandes pour rejoindre une structure, et invitations envoyées par une organisation. */
   staffRequest: { max: 10, windowMs: 86_400_000, message: "Trop de demandes de staff aujourd'hui : réessaie demain." },
+  /** Boutique (lot 24) : billets et compteur séparés, plafond cohérent avec une entrée chargée (lots groupés côté appli). */
+  shopScan: { max: 300, windowMs: 60_000, message: "Trop de lectures de billets : réessaie dans une minute." },
+  shopVisitor: { max: 300, windowMs: 60_000, message: "Trop de touchers du compteur : réessaie dans une minute." },
   staffInvite: { max: 30, windowMs: 86_400_000, message: "Trop d'invitations aujourd'hui : réessaie demain." },
 } satisfies Record<string, RateRule>;
 

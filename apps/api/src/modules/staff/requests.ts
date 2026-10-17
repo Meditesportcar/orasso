@@ -70,6 +70,9 @@ export function recentlyDeclined(row: Pick<MemberRow, "status" | "joinedAt" | "u
 }
 
 export const staffRequestsService = {
+  /** Verrou consultatif des demandes et invitations d'une structure (jusqu'à la fin de la transaction). */
+  lockStructure: lockStructureStaff,
+
   /** Demandes reçues, en attente de réponse (pastille de la Boîte de l'organisateur et de sa casquette). */
   async pendingRequests(structureId: string, ex: Executor = db): Promise<number> {
     const [row] = await ex
@@ -237,8 +240,7 @@ export const staffRequestsService = {
    * Avant d'inviter (`structuresService.invite`) : la file est bornée, une invitation refusée récemment n'est pas
    * renvoyée, 30 invitations par jour et par organisateur.
    */
-  async beforeInvite(tx: Tx, v: Viewer, structureId: string, existing: MemberRow | undefined): Promise<void> {
-    rateLimit("staffInvite", v.user.id);
+  async beforeInvite(tx: Tx, structureId: string, existing: MemberRow | undefined): Promise<void> {
     await lockStructureStaff(tx, structureId);
     if (existing && recentlyDeclined(existing)) {
       throw new AppError(409, "conflict", "Cette personne a refusé récemment : réessaie demain.");

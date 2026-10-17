@@ -137,7 +137,13 @@ export const fieldService = {
       };
       after(() => {
         realtime.publish(`event:${eventId}:live`, "alert", payload);
-        realtime.publish(`event:${eventId}:access`, "alert", payload);
+        // Canal « access » = tout le staff de l'événement : jamais la position (organisation seulement, canal « live »).
+        realtime.publish(`event:${eventId}:access`, "alert", {
+          id: row.id,
+          userId: v.user.id,
+          pseudo,
+          message: row.message,
+        });
         notificationsService.kick();
       });
       return row;
@@ -145,7 +151,9 @@ export const fieldService = {
   },
 
   async alerts(v: Viewer, eventId: string): Promise<StaffAlertView[]> {
-    const { event } = await fieldEvent(v, eventId);
+    const { event, access } = await fieldEvent(v, eventId);
+    // La position n'est lisible que de l'organisation ; le staff voit l'alerte, son message et son auteur.
+    const withPosition = access.actor !== "staff";
     const rows = await db
       .select({ a: staffAlerts, pseudo: profiles.pseudo })
       .from(staffAlerts)
@@ -155,9 +163,9 @@ export const fieldService = {
     return rows.map(({ a, pseudo }) => ({
       id: a.id,
       pseudo,
-      lat: a.lat,
-      lng: a.lng,
-      distanceM: distanceToEntry(event, a.lat, a.lng),
+      lat: withPosition ? a.lat : null,
+      lng: withPosition ? a.lng : null,
+      distanceM: withPosition ? distanceToEntry(event, a.lat, a.lng) : null,
       message: a.message,
       createdAt: a.createdAt.toISOString(),
       resolvedAt: a.resolvedAt?.toISOString() ?? null,

@@ -14,12 +14,12 @@ import {
   type VisitorEntryBatch,
   verifyTicketPayload,
 } from "@orasso/shared";
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql, TransactionRollbackError } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { devices, profiles, ticketScans, tickets, ticketTypes, visitorEntries } from "../../db/schema";
 import { now } from "../../lib/deps";
-import { AppError, notFound, validation } from "../../lib/errors";
+import { notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
@@ -52,13 +52,19 @@ async function shopEvent(v: Viewer, eventId: string) {
 }
 
 /** Boutique activée, événement publié, fenêtre du jour J ouverte et points pas encore réglés. */
-function assertShopOpen(event: EventRow) {
-  if (event.status !== "published") throw new AppError(423, "locked", "Événement non publié ou annulé");
-  if (!event.shopEnabled) throw new AppError(409, "conflict", "La boutique n'est pas activée pour cet événement.");
+type ClosedReason = "locked" | "shop_disabled" | "settled";
+
+/**
+ * Pourquoi la boutique est fermée, ou `null`. Les envois ne sont pas refusés en bloc (409 / 423) : chaque élément reçoit
+ * `rejected` avec sa raison et la lecture est consignée, pour garder l'historique des lectures faites hors ligne.
+ */
+function closedReason(event: EventRow): ClosedReason | null {
+  if (event.status !== "published") return "locked";
+  if (!event.shopEnabled) return "shop_disabled";
   const t = now();
-  if (t < staffModeOpensAt(event)) throw new AppError(423, "locked", "Boutique ouverte à partir de la veille");
-  if (t >= settleAt(event) || event.settledAt)
-    throw new AppError(423, "locked", "Points déjà réglés : boutique fermée");
+  if (t < staffModeOpensAt(event)) return "locked";
+  if (t >= settleAt(event) || event.settledAt) return "settled";
+  return null;
 }
 
 async function ownedDevice(v: Viewer, deviceId: string | null | undefined): Promise<string | null> {
@@ -148,8 +154,8 @@ export const shopService = {
    */
   async scanTickets(v: Viewer, eventId: string, batch: TicketScanBatch): Promise<{ results: TicketScanResultView[] }> {
     const event = await shopEvent(v, eventId);
-    assertShopOpen(event);
-    rateLimit("ticketCheck", v.user.id);
+    const closed = closedReason(event);
+    rateLimit("shopScan", v.user.id);
     const deviceId = await ownedDevice(v, batch.deviceId);
     const ids = batch.items.map((i) => i.id);
     if (new Set(ids).size !== ids.length) throw validation("Identifiants en double dans le lot");
@@ -174,25 +180,42 @@ export const shopService = {
           );
           continue;
         }
-        const verdict = await arbitrate(tx, event, v, deviceId, item, receivedAt, keys);
-        const [row] = await tx
-          .insert(ticketScans)
-          .values({
-            id: item.id,
-            eventId,
-            deviceId,
-            staffUserId: v.user.id,
-            ticketId: verdict.ticketId,
-            localDecision: item.decision,
-            reason: verdict.reason,
-            scannedAt: clampTime(item.scannedAt, receivedAt, event),
-            receivedAt,
-            serverResult: verdict.serverResult,
+        // Une lecture = un point de reprise : si l'identifiant est déjà pris ailleurs (autre événement, autre staff,
+        // course), l'arbitrage de ce billet est annulé avec lui et la réponse est `rejected`, jamais une erreur 500.
+        const done = await tx
+          .transaction(async (sp) => {
+            const verdict = closed
+              ? ({ ticketId: null, serverResult: "rejected", reason: closed } as const)
+              : await arbitrate(sp, event, v, deviceId, item, receivedAt, keys);
+            const [inserted] = await sp
+              .insert(ticketScans)
+              .values({
+                id: item.id,
+                eventId,
+                deviceId,
+                staffUserId: v.user.id,
+                ticketId: verdict.ticketId,
+                localDecision: item.decision,
+                reason: verdict.reason,
+                scannedAt: clampTime(item.scannedAt, receivedAt, event),
+                receivedAt,
+                serverResult: verdict.serverResult,
+              })
+              .onConflictDoNothing()
+              .returning();
+            if (!inserted) return sp.rollback();
+            return { row: inserted, verdict };
           })
-          .returning();
-        if (!row) throw new Error("Lecture non enregistrée");
-        if (verdict.serverResult === "accepted") accepted++;
-        out.push(await storedScan(tx, row));
+          .catch((error: unknown) => {
+            if (error instanceof TransactionRollbackError) return null;
+            throw error;
+          });
+        if (!done) {
+          out.push({ id: item.id, result: "rejected", usedAt: null, ticketName: null });
+          continue;
+        }
+        if (done.verdict.serverResult === "accepted") accepted++;
+        out.push(await storedScan(tx, done.row));
       }
       if (deviceId) await tx.update(devices).set({ lastSeenAt: receivedAt }).where(eq(devices.id, deviceId));
       if (accepted > 0) after(() => void publishLive(eventId));
@@ -207,8 +230,8 @@ export const shopService = {
    */
   async addVisitorEntries(v: Viewer, eventId: string, batch: VisitorEntryBatch): Promise<VisitorEntriesResult> {
     const event = await shopEvent(v, eventId);
-    assertShopOpen(event);
-    rateLimit("ticketCheck", v.user.id);
+    const closed = closedReason(event);
+    rateLimit("shopVisitor", v.user.id);
     const deviceId = await ownedDevice(v, batch.deviceId);
     const ids = batch.items.map((i) => i.id);
     if (new Set(ids).size !== ids.length) throw validation("Identifiants en double dans le lot");
@@ -218,6 +241,11 @@ export const shopService = {
       const out: VisitorEntriesResult["results"] = [];
       let applied = 0;
       for (const item of batch.items) {
+        // Boutique fermée : le toucher n'est pas compté, la réponse le dit par élément (jamais un refus en bloc).
+        if (closed) {
+          out.push({ id: item.id, applied: false, reason: closed });
+          continue;
+        }
         const [row] = await tx
           .insert(visitorEntries)
           .values({

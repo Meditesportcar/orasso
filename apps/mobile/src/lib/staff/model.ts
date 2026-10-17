@@ -160,6 +160,19 @@ export function buildState(
   };
 }
 
+/**
+ * Reprend dans `fresh` (état reconstruit depuis le disque) les pointages et usages de billets que `previous` (état en
+ * mémoire du même compte) a déjà et que le disque n'a pas encore : écritures de la file pas terminées au moment de la
+ * lecture. Sans effet pour un autre compte.
+ */
+export function carryOver(fresh: StaffState, previous: StaffState | undefined, userId: string): void {
+  if (!previous || previous.meta.userId !== userId || previous.meta.eventId !== fresh.meta.eventId) return;
+  for (const [passId, local] of previous.local) if (!fresh.local.has(passId)) fresh.local.set(passId, local);
+  for (const [ticketId, use] of previous.ticketUses) {
+    if (!fresh.ticketUses.has(ticketId)) fresh.ticketUses.set(ticketId, use);
+  }
+}
+
 // --- Synchro ---------------------------------------------------------------------------------------------------
 
 export type SyncMerge =
@@ -495,7 +508,7 @@ export function visitorTotals(actions: readonly PendingAction[]): {
   for (const a of actions) {
     if (a.kind !== "visitor") continue;
     // Refusé pour de bon par le serveur (boutique fermée, plus de rôle) : le toucher ne compte pas.
-    if (typeof a.result?.error === "string") continue;
+    if (typeof a.result?.error === "string" || typeof a.result?.reason === "string") continue;
     const delta = typeof a.payload.delta === "number" ? a.payload.delta : 0;
     local += delta;
     if (!a.sentAt) pending += delta;
