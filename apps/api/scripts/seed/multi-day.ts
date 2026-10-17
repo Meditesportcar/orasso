@@ -4,6 +4,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { startJobs } from "../../src/jobs";
 import type { AuthUser, Viewer } from "../../src/lib/session";
 import { applicationsService } from "../../src/modules/applications/service";
 import { eventsService } from "../../src/modules/events/service";
@@ -66,7 +67,17 @@ export async function seedMultiDay() {
   });
   // Les dates du calendrier (heure de Paris) des trois jours : J+30, J+31, J+32.
   const days = [30, 31, 32].map((n) => dateOf(new Date(parisAt(n, 12).getTime())));
-  const saved = await eventsService.setDays(damien, event.id, {
+  // Tâches planifiées (verrouillage, rappels par jour, règlement) comme une vraie modification : pg-boss sans traitement.
+  const boss = await startJobs({ work: false });
+  try {
+    await fill(damien, event.id, days);
+  } finally {
+    await boss.stop({ graceful: true });
+  }
+}
+
+async function fill(damien: Viewer, eventId: string, days: string[]) {
+  const saved = await eventsService.setDays(damien, eventId, {
     dayAccess: "both",
     days: days.map((date) => ({ date, startTime: "09:00", endTime: "18:00", capacity: 100 })),
   });
@@ -90,7 +101,7 @@ export async function seedMultiDay() {
     if (!v || !car) continue;
     for (const [i, eventDayId] of dayIds.entries()) {
       try {
-        const [app] = await applicationsService.apply(v, event.id, {
+        const [app] = await applicationsService.apply(v, eventId, {
           vehicleIds: [car],
           rulesAccepted: true,
           followStructure: false,
@@ -102,7 +113,7 @@ export async function seedMultiDay() {
         if (!app) continue;
         // Une sur deux retenue (la première de chacun), les autres attendent le tri.
         if (i === 0 && pseudo !== "Pilote_003") {
-          await applicationsService.decide(damien, event.id, app.id, {
+          await applicationsService.decide(damien, eventId, app.id, {
             decision: "accept",
             sendReasons: true,
             note: null,
