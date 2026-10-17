@@ -217,6 +217,14 @@
   - Une demande de staff (notification poussée ou Journal) ouvre l'écran Équipe de la bonne structure ; Boîte > Demandes renvoie à l'Équipe. Structure suspendue et double authentification manquante : message de l'API / écran existant, sans plantage.
   - Tests : `apps/mobile/src/lib/{teamModel,api/structure}.test.ts` (modèle, client d'API, lien profond) ; recette `apps/web/e2e/appli-structure-staff.spec.ts` (parcours de la fiche, rôles, suspension, justificatifs, deux thèmes, 390 px). Captures : `C:\Users\DELL\.claude\relais\orasso\lot-35a-captures\`.
 
+- **Parité de l'appli : billetterie, pro, compte, garage (lot 35c, D20, 17/10/2026)** : tout ce que le site permet se règle aussi dans l'appli. Choix : `docs/JOURNAL-DES-CHOIX.md` (lot 35c) ; état technique : `ARCHITECTURE.md` « État après le lot 35c ».
+  - Organisateur : page d'un événement → « Billetterie des visiteurs » (`/evenement/<id>/billetterie`) : ouverture, nom du billet, places, prix ; compte Stripe lu (le parcours s'ouvre dans le navigateur, l'état est relu au retour dans l'appli), connexion et déconnexion réservées au propriétaire.
+  - Pro (casquette Pro) : onglet Fiche (modifier la fiche, publication, SIRET, remises, logo, photos, partenaires, abonnement et emplacements sponsorisés **en consultation**, aucun paiement) ; onglet Publier (publications modifiées et supprimées).
+  - Moi : newsletter, export des données (fichier JSON), clés d'accès (liste, renommage, suppression ; la création reste sur le site).
+  - Garage : modifier le véhicule (plaque d'un autre membre = transfert lancé), message de certification, historique cliquable, suppression.
+  - API : `PATCH /pros/:id/posts/:postId`, `GET /me/export`. Aucune migration, aucune variable, aucune dépendance.
+  - Recette : `apps/web/e2e/appli-parite.spec.ts` (`APP_URL`, API lancée avec des variables Stripe factices) ; captures : `C:\Users\DELL\.claude\relais\orasso\lot-35c-captures\`.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).

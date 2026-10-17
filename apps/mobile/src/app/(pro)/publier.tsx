@@ -3,6 +3,7 @@ import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design
 import { useState } from "react";
 import { StyleSheet } from "react-native";
 
+import { Posts } from "@/features/pro/Posts";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { useApi } from "@/lib/useApi";
@@ -45,7 +46,10 @@ export default function ProPublier() {
           <Notice>Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso.</Notice>
         )
       ) : !pro.published ? (
-        <Notice>Publie ta fiche sur le site pour pouvoir écrire à tes abonnés.</Notice>
+        <>
+          <Notice>Publie d'abord ta fiche (onglet Fiche) pour pouvoir écrire à tes abonnés.</Notice>
+          <Posts pro={pro} reload={myPro.reload} />
+        </>
       ) : (
         <>
           <Plate style={styles.block}>
@@ -95,6 +99,7 @@ export default function ProPublier() {
             </>
           )}
           <Muted variant="caption">Les publications sont visibles par tes abonnés sur ta fiche.</Muted>
+          <Posts pro={pro} reload={myPro.reload} />
         </>
       )}
     </TabScreen>

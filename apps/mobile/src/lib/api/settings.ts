@@ -33,6 +33,8 @@ export const settingsApi = {
   /** Route du lot 24 (404 face à une API plus ancienne : l'appli renvoie alors vers la page de la structure du site). */
   requestStaff: (structureId: string, message?: string) =>
     request<unknown>(`/api/structures/${structureId}/staff-requests`, { method: "POST", body: { message } }),
+  /** Export de mes données personnelles (lot 35c), en JSON. */
+  exportMyData: () => request<unknown>("/api/me/export", { timeout: 60_000 }),
   deleteAccount: (body: Pick<AccountDelete, "password" | "totpCode">) =>
     request<unknown>("/api/me", { method: "DELETE", body }),
 };

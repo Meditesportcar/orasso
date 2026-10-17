@@ -38,6 +38,8 @@ export default function OrgaLayout() {
       <Tabs.Screen name="bannis" options={{ href: null }} />
       <Tabs.Screen name="modeles" options={{ href: null }} />
       <Tabs.Screen name="notes" options={{ href: null }} />
+      {/* Billetterie des visiteurs (lot 35c), depuis la page d'un événement. */}
+      <Tabs.Screen name="evenement/[id]/billetterie" options={{ href: null }} />
     </PersonaTabs>
   );
 }

@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
 import { JournalSheet } from "./JournalSheet";
+import { OverlayProvider, OverlaySlot } from "./Overlay";
 import { TopBar } from "./TopBar";
 
 const { space2, space3, space4, space6 } = tokens.spacing;
@@ -45,19 +46,22 @@ export function TabScreen({
     }, [refreshMe]),
   );
   return (
-    <Ground animated={!still} style={styles.fill}>
-      <TopBar
-        title={title}
-        facts={facts}
-        home={home}
-        onNotifications={() => setJournal(true)}
-        notificationsOn={journal}
-      />
-      <Body onRefresh={onRefresh}>{children}</Body>
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
-      {overlays}
-      <JournalSheet visible={journal} onClose={() => setJournal(false)} />
-    </Ground>
+    <OverlayProvider>
+      <Ground animated={!still} style={styles.fill}>
+        <TopBar
+          title={title}
+          facts={facts}
+          home={home}
+          onNotifications={() => setJournal(true)}
+          notificationsOn={journal}
+        />
+        <Body onRefresh={onRefresh}>{children}</Body>
+        {footer ? <View style={styles.footer}>{footer}</View> : null}
+        {overlays}
+        <OverlaySlot />
+        <JournalSheet visible={journal} onClose={() => setJournal(false)} />
+      </Ground>
+    </OverlayProvider>
   );
 }
 
@@ -75,12 +79,15 @@ export function FlowScreen({
 }: Common & { title: string; facts?: string; counter?: string; onClose: () => void }) {
   const insets = useSafeAreaInsets();
   return (
-    <Ground animated={!still} style={styles.fill}>
-      <AppBar kind="flow" title={title} facts={facts} counter={counter} onClose={onClose} safeTop={insets.top} />
-      <Body onRefresh={onRefresh}>{children}</Body>
-      {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
-      {overlays}
-    </Ground>
+    <OverlayProvider>
+      <Ground animated={!still} style={styles.fill}>
+        <AppBar kind="flow" title={title} facts={facts} counter={counter} onClose={onClose} safeTop={insets.top} />
+        <Body onRefresh={onRefresh}>{children}</Body>
+        {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
+        {overlays}
+        <OverlaySlot />
+      </Ground>
+    </OverlayProvider>
   );
 }
 

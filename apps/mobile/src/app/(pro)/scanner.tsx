@@ -71,7 +71,7 @@ export default function ProScanner() {
           ta fiche est publiée.
         </Notice>
       ) : !pro.published ? (
-        <Notice>Publie ta fiche sur le site pour ouvrir le lecteur : il est réservé aux fiches publiées.</Notice>
+        <Notice>Publie ta fiche (onglet Fiche) pour ouvrir le lecteur : il est réservé aux fiches publiées.</Notice>
       ) : (
         <>
           <View style={[styles.camera, { backgroundColor: t.color.night, borderRadius: tokens.radius.radiusLg }]}>
