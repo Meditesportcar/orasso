@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, type BrowserContext, expect, type Locator, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { apiCall, decideApi, login, SEED_PASSWORD } from "./helpers";
 
 // Appli dans le navigateur (lot 23) : tri par glissement de la casquette Organisateur. Damien trie la « Nocturne de
 // Canet » (seed : 27 à trier) à la souris : 5 décisions par glissement ou bouton (dont un refus motivé et une liste
@@ -95,6 +95,23 @@ test("tri par glissement : 5 décisions, annulation, liste d'attente, prestatair
   const nocturne = events.data.find((e) => e.title.includes("Nocturne de Canet"));
   expect(nocturne).toBeTruthy();
   const eventId = nocturne?.id ?? "";
+  // Liste d'attente d'au moins trois lignes (lot 34) : la Nocturne a des places libres, donc la moindre place libérée
+  // (désistement, offre échue) offre toute la liste d'attente du seed ; on en remet trois de côté avant le tri.
+  const waiting = await apiCall<{ items: { id: string }[] }>(
+    damien,
+    "GET",
+    `/events/${eventId}/applications?status=waitlisted&limit=10`,
+  );
+  if (waiting.data.items.length < 3) {
+    const pending = await apiCall<{ items: { id: string }[] }>(
+      damien,
+      "GET",
+      `/events/${eventId}/applications?status=pending&sort=created_at&limit=30`,
+    );
+    for (const a of pending.data.items.slice(-(3 - waiting.data.items.length))) {
+      await decideApi(damien, eventId, a.id, "waitlist");
+    }
+  }
   const before = await apiCounters(damien, eventId);
 
   const { ctx, page } = await openApp(browser, "beton");
@@ -317,3 +334,23 @@ test("tri : thème Sable", async ({ browser }) => {
 });
 
 export type { BrowserContext };
+
+test("mode liste : filtre « Jour » d'un événement sur plusieurs jours (lot 34)", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const { ctx, page } = await openApp(browser, "sable", "no-preference", "Salon de printemps");
+  await page.getByRole("button", { name: "Liste", exact: true }).click();
+  // La liste de l'événement choisi est la dernière montée (celle de l'événement par défaut reste derrière).
+  const list = page.getByTestId("triage-list").filter({ visible: true }).last();
+  await expect(list).toBeVisible({ timeout: 20_000 });
+  // Chaque ligne dit son jour (ou « Tout l'événement »).
+  await expect(list.getByTestId("triage-row-day").first()).toBeVisible({ timeout: 20_000 });
+  await list.getByTestId("triage-filters").click();
+  await page.getByRole("combobox", { name: "Jour" }).click();
+  await page.getByRole("menuitem", { name: "Tout l'événement" }).first().click();
+  await page.getByTestId("triage-filters-apply").click();
+  await expect(list.getByTestId("triage-filters")).toContainText("· 1");
+  const days = await list.getByTestId("triage-row-day").allTextContents();
+  for (const d of days) expect(d).toBe("Tout l'événement");
+  await page.screenshot({ path: `${DIR}/40-liste-filtre-jour-sable.png` });
+  await ctx.close();
+});

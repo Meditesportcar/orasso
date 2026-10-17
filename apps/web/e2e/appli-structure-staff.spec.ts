@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { apiCall, deliverNow, login, SEED_PASSWORD, samplePhoto } from "./helpers";
+import { apiCall, deliverNow, login, resuspendSeedStructure, SEED_PASSWORD, samplePhoto } from "./helpers";
 
 // Appli dans le navigateur (lot 35a, décision D20) : Équipe, structure, bannissements, modèles, export et notes. Parcours
 // de la fiche : une demande de staff arrive, l'organisateur l'accepte depuis l'appli, change le rôle de la personne, la
@@ -494,6 +494,21 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   await expect(a.page.getByText("Justificatif retiré.")).toBeVisible({ timeout: 20_000 });
   await expect(a.page.getByTestId("orga-verification-document")).toHaveCount(0);
 
+  // Justificatif en PDF (lot 34, sélecteur de document) : le serveur le reconnaît à ses premiers octets.
+  const pdfChooser = a.page.waitForEvent("filechooser");
+  await a.page.getByTestId("orga-verification-add-pdf").click();
+  (await pdfChooser).setFiles({
+    name: "statuts.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n", "latin1"),
+  });
+  await expect(a.page.getByText("Justificatif ajouté.").first()).toBeVisible({ timeout: 30_000 });
+  await expect(a.page.getByTestId("orga-verification-document")).toContainText("statuts.pdf");
+  await shot(a.page, "31b-justificatif-pdf-beton");
+  await a.page.getByTestId("orga-verification-document-remove").click();
+  await a.page.getByTestId("orga-confirm").click();
+  await expect(a.page.getByTestId("orga-verification-document")).toHaveCount(0, { timeout: 20_000 });
+
   // Logo : même sélecteur de fichier.
   const logoChooser = a.page.waitForEvent("filechooser");
   await a.page.getByTestId("orga-logo-change").click();
@@ -511,6 +526,8 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   await shot(canigou.page, "32-badge-echeance-sable");
   await canigou.ctx.close();
 
+  // Suspension du seed remise (lot 34) : la recette du site « après l'événement » la lève.
+  await resuspendSeedStructure();
   const tram = await openApp(browser, "pres_tramontane@orasso.local", "sable");
   await chooseOrganizer(tram.page, "Tramontane Auto Club");
   await tab(tram.page, "Staff").click();
