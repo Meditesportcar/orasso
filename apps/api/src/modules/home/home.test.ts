@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { PRO_PAID_FROM } from "@orasso/shared";
 import { eq } from "drizzle-orm";
+import sharp from "sharp";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -21,12 +22,14 @@ import {
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import {
+  adminAuditLog,
   applications,
   externalCache,
   proFollows,
   profileInterests,
   profiles,
   proProfiles,
+  sponsoredDailySeen,
   sponsoredDailyStats,
   sponsoredPlacements,
   structures,
@@ -36,6 +39,7 @@ import { fuelNear, fuelUrl, parseFuel } from "../../lib/external/fuel";
 import { parseOverpass, washNear } from "../../lib/external/overpass";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { homeService, nearestPlaces, pickNextAccess } from "./service";
+import { sponsoredService } from "./sponsored";
 
 afterAll(async () => {
   await pool.end();
@@ -132,10 +136,11 @@ describe("sources externes : lecture des réponses réelles", () => {
     expect(parseFuel(null)).toEqual([]);
   });
 
-  it("carburant : la requête utilise le filtre géographique du jeu de données (within_distance, 20 km)", () => {
-    const url = new URL(fuelUrl("https://exemple.test/records", 42.7, 2.9));
-    expect(url.searchParams.get("where")).toBe("within_distance(geom, geom'POINT(2.9 42.7)', 20km)");
-    expect(url.searchParams.get("limit")).toBe("10");
+  it("carburant : la requête charge tout le département (code_departement), par pages de 100", () => {
+    const url = new URL(fuelUrl("https://exemple.test/records", "66", 100));
+    expect(url.searchParams.get("where")).toBe('code_departement="66"');
+    expect(url.searchParams.get("limit")).toBe("100");
+    expect(url.searchParams.get("offset")).toBe("100");
   });
 
   it("les stations les plus proches de la position sont triées avec leur distance", () => {
@@ -322,8 +327,10 @@ describe("GET /me/home : agrégation", () => {
     expect(titles(far.json)).not.toContain("Privé");
     expect(titles(far.json)).not.toContain("Suspendue");
     expect(titles(far.json)).not.toContain("Passé");
-    // Le rayon est enregistré dans le profil : la requête suivante, sans paramètre, le garde.
-    expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, u.id) }))?.radiusKm).toBe(150);
+    // Une lecture n'écrit pas : le rayon ne s'enregistre que par PATCH /me/settings, et la lecture suivante le garde.
+    expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, u.id) }))?.radiusKm).toBe(50);
+    expect((await req(u, "GET", "/me/home")).json.nearby.radiusKm).toBe(50);
+    expect((await req(u, "PATCH", "/me/settings", { radiusKm: 150 })).status).toBe(200);
     expect((await req(u, "GET", "/me/home")).json.nearby.radiusKm).toBe(150);
     const wide = await req(u, "GET", "/me/home?radiusKm=300");
     expect(titles(wide.json)).toContain("Toulouse");
@@ -344,7 +351,7 @@ describe("GET /me/home : agrégation", () => {
     expect(toulouse.id).toBeTruthy();
   });
 
-  it("rayon hors bornes : 400 ; compte suspendu : le rayon sert à l'affichage mais n'est pas enregistré", async () => {
+  it("rayon hors bornes : 400 ; compte suspendu : le rayon sert à l'affichage, PATCH refusé", async () => {
     const u = await user("Rayon_Home");
     expect((await req(u, "GET", "/me/home?radiusKm=5")).status).toBe(400);
     expect((await req(u, "GET", "/me/home?radiusKm=301")).status).toBe(400);
@@ -357,6 +364,7 @@ describe("GET /me/home : agrégation", () => {
     expect(r.status).toBe(200);
     expect(r.json.nearby.radiusKm).toBe(200);
     expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, u.id) }))?.radiusKm).toBe(50);
+    expect((await req(u, "PATCH", "/me/settings", { radiusKm: 100 })).status).toBe(403);
   });
 
   it("position de l'appareil : arrondie par le serveur, jamais enregistrée, utilisée pour cet affichage seulement", async () => {
@@ -683,14 +691,22 @@ describe("emplacement sponsorisé", () => {
     expect(await seen()).toBeUndefined();
     expect([draft, paused, ended, future, past]).toHaveLength(5);
     const capped = await placement(pro.id, { dailyCap: 2 });
+    // Un affichage n'est compté qu'une fois par personne et par jour : recharger l'Accueil ne consomme pas le plafond.
+    for (let i = 0; i < 5; i++) expect(await seen()).toBe(capped.id);
+    const total = async () =>
+      (await db.query.sponsoredPlacements.findFirst({ where: eq(sponsoredPlacements.id, capped.id) }))?.impressions;
+    expect(await total()).toBe(1);
+    const u2 = await user("Per_Deux");
+    expect((await req(u2, "GET", "/me/home")).json.sponsored?.id).toBe(capped.id);
+    // Plafond de 2 atteint par deux personnes : une troisième ne voit plus rien aujourd'hui, les deux premières gardent le leur…
+    const u3 = await user("Per_Trois");
+    expect((await req(u3, "GET", "/me/home")).json.sponsored).toBeNull();
     expect(await seen()).toBe(capped.id);
-    expect(await seen()).toBe(capped.id);
-    // Plafond atteint aujourd'hui : plus montré aujourd'hui…
-    expect(await seen()).toBeUndefined();
-    // … mais le lendemain, oui.
+    expect(await total()).toBe(2);
+    // … le lendemain, oui.
     await db.delete(sponsoredPlacements).where(eq(sponsoredPlacements.id, future.id));
     clock.advance(DAY);
-    expect(await seen()).toBe(capped.id);
+    expect((await req(u3, "GET", "/me/home")).json.sponsored?.id).toBe(capped.id);
   });
 
   it("tirage pondéré et stable : le même emplacement toute la journée pour une personne", async () => {
@@ -734,10 +750,14 @@ describe("emplacement sponsorisé", () => {
       const p = await placement(pro.id);
       const ended = await placement(pro.id, { status: "ended" });
       const u = await user("Clic_Sponso");
+      // Sans affichage préalable à cette personne : refusé (l'emplacement n'a pas été choisi pour elle).
+      expect((await req(u, "POST", `/sponsored/${p.id}/click`, undefined, mode)).status).toBe(404);
+      await req(u, "GET", "/me/home", undefined, mode);
       expect((await req(u, "POST", `/sponsored/${p.id}/click`, undefined, mode)).status).toBe(204);
+      // Un seul clic compté par personne et par jour.
       expect((await req(u, "POST", `/sponsored/${p.id}/click`, undefined, mode)).status).toBe(204);
       const row = await db.query.sponsoredPlacements.findFirst({ where: eq(sponsoredPlacements.id, p.id) });
-      expect(row?.clicks).toBe(2);
+      expect(row?.clicks).toBe(1);
       expect((await req(u, "POST", `/sponsored/${ended.id}/click`, undefined, mode)).status).toBe(404);
       expect((await req(null, "POST", `/sponsored/${p.id}/click`)).status).toBe(401);
       expect((await req(u, "POST", "/sponsored/pas-un-uuid/click")).status).toBe(400);
@@ -748,6 +768,7 @@ describe("emplacement sponsorisé", () => {
     const { pro } = await withPro();
     const p = await placement(pro.id);
     const u = await user("Spam_Sponso");
+    await req(u, "GET", "/me/home");
     resetRateLimits();
     let last = 204;
     for (let i = 0; i < 61; i++) last = (await req(u, "POST", `/sponsored/${p.id}/click`)).status;
@@ -792,6 +813,161 @@ describe("emplacement sponsorisé", () => {
     expect((await req(admin, "GET", "/admin/sponsored-placements", undefined, "bearer")).json).toHaveLength(1);
     expect((await req(admin, "DELETE", `/admin/sponsored-placements/${id}`)).status).toBe(204);
     expect((await req(admin, "DELETE", `/admin/sponsored-placements/${id}`)).status).toBe(404);
+  });
+});
+
+describe("corrections de la relecture", () => {
+  const place = (lat: number, lng: number, name: string) => ({
+    type: "node",
+    id: Math.round(lat * 1e4 + lng * 1e3),
+    lat,
+    lon: lng,
+    tags: { amenity: "car_wash", name },
+  });
+
+  it("I1 : tout le département est en cache, une personne à Perpignan (33 km du centre) a ses stations", async () => {
+    // 40 lavages autour du centre du 66, un seul à Perpignan : un cache « 10 plus proches du centre » l'aurait perdu.
+    const around = Array.from({ length: 40 }, (_, i) => place(42.55 + i * 0.001, 2.4 + i * 0.001, `Centre ${i}`));
+    const fetched = sources({
+      wash: () => Response.json({ elements: [...around, place(42.699, 2.895, "Lavage Perpignan")] }),
+    });
+    const u = await user("Perpi_Home");
+    const r = await req(u, "GET", "/me/home?lat=42.699&lng=2.895");
+    expect(r.json.wash[0]).toMatchObject({ name: "Lavage Perpignan" });
+    expect(r.json.wash[0].distanceKm).toBeLessThan(5);
+    const cached = await db.query.externalCache.findFirst({ where: eq(externalCache.key, "wash:66") });
+    expect(((cached?.data ?? []) as unknown[]).length).toBe(41);
+    expect(fetched).toHaveBeenCalledTimes(2);
+  });
+
+  it("I1 : le carburant charge le département par pages jusqu'à la dernière", async () => {
+    const station = (i: number) => ({
+      adresse: `${i} rue`,
+      ville: "Perpignan",
+      cp: "66000",
+      geom: { lat: 42.6 + i * 0.0005, lon: 2.5 },
+      gazole_prix: 1.8,
+    });
+    const pages: string[] = [];
+    const fn = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input instanceof Request ? input.url : input));
+      if (!url.hostname.includes("economie")) return Response.json({ elements: [] });
+      const offset = Number(url.searchParams.get("offset"));
+      pages.push(String(offset));
+      const n = Math.max(0, Math.min(100, 230 - offset));
+      return Response.json({ results: Array.from({ length: n }, (_, i) => station(offset + i)) });
+    });
+    setExternalFetch(fn as unknown as typeof fetch);
+    const stations = await fuelNear("66");
+    expect(pages).toEqual(["0", "100", "200"]);
+    expect(stations).toHaveLength(230);
+  });
+
+  it("réponse externe trop volumineuse (> 2 Mo) : abandonnée, rien en cache", async () => {
+    const big = "x".repeat(3 * 1024 * 1024);
+    sources({ wash: () => new Response(JSON.stringify({ elements: [], pad: big })) });
+    expect(await washNear("66")).toEqual([]);
+    expect(await db.query.externalCache.findFirst({ where: eq(externalCache.key, "wash:66") })).toBeUndefined();
+  });
+
+  it("I2 : deux chargements simultanés du même compte comptent un seul affichage ; le plafond tient sous concurrence", async () => {
+    const owner = await signUp("Pro_Conc");
+    const pro = await createPro(owner.id);
+    const [pl] = await db
+      .insert(sponsoredPlacements)
+      .values({
+        proProfileId: pro.id,
+        title: "Offre",
+        body: "Texte",
+        linkUrl: "https://exemple.fr",
+        startsOn: "2026-10-01",
+        endsOn: "2026-10-31",
+        status: "active",
+        dailyCap: 3,
+      })
+      .returning();
+    const users = await Promise.all(["Co_1", "Co_2", "Co_3", "Co_4", "Co_5", "Co_6"].map((n) => user(n)));
+    const results = await Promise.all(users.map((u) => req(u, "GET", "/me/home")));
+    const shown = results.filter((r) => r.json.sponsored).length;
+    expect(shown).toBe(3);
+    const row = await db.query.sponsoredPlacements.findFirst({ where: eq(sponsoredPlacements.id, pl!.id) });
+    expect(row?.impressions).toBe(3);
+    const first = users[0] as TestUser;
+    await Promise.all([req(first, "GET", "/me/home"), req(first, "GET", "/me/home")]);
+    expect(
+      (await db.query.sponsoredPlacements.findFirst({ where: eq(sponsoredPlacements.id, pl!.id) }))?.impressions,
+    ).toBe(3);
+  });
+
+  it("I2 : la table « déjà montré » ne garde ni identifiant de compte, et se purge après deux jours", async () => {
+    const { pro } = await (async () => {
+      const owner = await signUp("Pro_Purge");
+      return { pro: await createPro(owner.id) };
+    })();
+    await db.insert(sponsoredPlacements).values({
+      proProfileId: pro.id,
+      title: "Offre",
+      body: "Texte",
+      linkUrl: "https://exemple.fr",
+      startsOn: "2026-10-01",
+      endsOn: "2026-10-31",
+      status: "active",
+    });
+    const u = await user("Purge_Home");
+    await req(u, "GET", "/me/home");
+    const rows = await db.select().from(sponsoredDailySeen);
+    expect(rows).toHaveLength(1);
+    expect(JSON.stringify(rows)).not.toContain(u.id);
+    expect(await sponsoredService.purgeSeen()).toBe(0);
+    clock.advance(3 * DAY);
+    expect(await sponsoredService.purgeSeen()).toBe(1);
+  });
+
+  it("mineur : PATCH vide refusé (400), image enregistrée dans le journal d'administration", async () => {
+    const { pro } = await (async () => {
+      const owner = await signUp("Pro_Admin");
+      return { pro: await createPro(owner.id) };
+    })();
+    const admin = await signUp("Admin_Img", { twoFactor: true, role: "super_admin" });
+    const created = await req(admin, "POST", "/admin/sponsored-placements", {
+      proProfileId: pro.id,
+      title: "Offre",
+      body: "Texte",
+      linkUrl: "https://exemple.fr",
+      startsOn: "2026-10-01",
+      endsOn: "2026-10-31",
+    });
+    const id = created.json.id as string;
+    expect((await req(admin, "PATCH", `/admin/sponsored-placements/${id}`, {})).status).toBe(400);
+    const png = await sharp({ create: { width: 20, height: 20, channels: 3, background: { r: 200, g: 160, b: 40 } } })
+      .png()
+      .toBuffer();
+    const form = new FormData();
+    form.append("image", new File([new Uint8Array(png)], "a.png", { type: "image/png" }));
+    const res = await app.request(`/api/admin/sponsored-placements/${id}/image`, {
+      method: "POST",
+      headers: { cookie: admin.cookie, origin: ORIGIN },
+      body: form,
+    });
+    expect(res.status).toBe(200);
+    const audit = await db.query.adminAuditLog.findMany({ where: eq(adminAuditLog.action, "sponsored.image") });
+    expect(audit).toHaveLength(1);
+  });
+
+  it("mineur : GET /me/settings rend les widgets normalisés ; DELETE favori limité", async () => {
+    const u = await user("Norm_Home");
+    await db
+      .update(profiles)
+      .set({ homeWidgets: { order: ["fuel"], hidden: ["wash"] } })
+      .where(eq(profiles.userId, u.id));
+    const r = await req(u, "GET", "/me/settings");
+    expect(r.json.homeWidgets.order[0]).toBe("next_access");
+    expect(r.json.homeWidgets.order).toHaveLength(8);
+    resetRateLimits();
+    let last = 204;
+    for (let i = 0; i < 61; i++)
+      last = (await req(u, "DELETE", "/pros/00000000-0000-4000-8000-000000000000/favorite")).status;
+    expect(last).toBe(429);
   });
 });
 

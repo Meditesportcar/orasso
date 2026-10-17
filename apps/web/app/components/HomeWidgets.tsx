@@ -19,7 +19,7 @@ import {
   proActivityLabels,
   weatherTexts,
 } from "@orasso/shared";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { Form } from "react-router";
 
 import { apiFetch } from "../lib/api.client";
@@ -65,15 +65,36 @@ export function PendingBlock({ items }: { items: MyApplication[] }) {
   );
 }
 
-/** Autour de moi : curseur de rayon (formulaire GET, envoyé au relâchement), « Utiliser ma position » facultatif. */
-export function NearbyBlock({ nearby, onDevice }: { nearby: NonNullable<HomeData["nearby"]>; onDevice: boolean }) {
+/** Autour de moi : curseur de rayon (formulaire envoyé au relâchement seulement), « Utiliser ma position » facultatif. */
+export function NearbyBlock({
+  nearby,
+  device,
+}: {
+  nearby: NonNullable<HomeData["nearby"]>;
+  /** Position de l'appareil utilisée pour cet affichage (arrondie), `null` : secteur du profil. */
+  device: { lat: number; lng: number } | null;
+}) {
+  const onDevice = device !== null;
+  const slider = useRef<HTMLInputElement>(null);
+  // Une requête par relâchement, pas une par cran : l'événement natif `change` de React est celui de `input`.
+  useEffect(() => {
+    const el = slider.current;
+    if (!el) return undefined;
+    const send = () => el.form?.requestSubmit();
+    el.addEventListener("change", send);
+    return () => el.removeEventListener("change", send);
+  }, []);
   return (
     <Block id="nearby" title={homeWidgetTitles.nearby}>
-      <Form method="get" id={RADIUS_FORM} className="hm-radius">
+      <Form method="post" id={RADIUS_FORM} className="hm-radius">
+        <input type="hidden" name="intent" value="radius" />
+        {device && <input type="hidden" name="lat" value={device.lat} />}
+        {device && <input type="hidden" name="lng" value={device.lng} />}
         <label className="o-t-meta" htmlFor="home-radius-input">
           {homeLabels.radius(nearby.radiusKm)}
         </label>
         <input
+          ref={slider}
           id="home-radius-input"
           name="rayon"
           type="range"
@@ -82,7 +103,6 @@ export function NearbyBlock({ nearby, onDevice }: { nearby: NonNullable<HomeData
           step={10}
           defaultValue={nearby.radiusKm}
           aria-label={homeLabels.radiusLabel}
-          onChange={(e) => e.currentTarget.form?.requestSubmit()}
           data-testid="home-radius"
         />
         <noscript>

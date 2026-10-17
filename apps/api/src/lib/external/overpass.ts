@@ -1,17 +1,10 @@
 // Stations de lavage (lot 30, S35) : Overpass / OpenStreetMap (`amenity=car_wash`), données © contributeurs OSM (ODbL,
 // attribution affichée dans le widget). Un appel par département et par semaine au plus (cache `wash:<département>`) :
 // l'instance publique est un service bénévole à usage raisonnable (AS2). Sans réseau ou désactivé : aucun résultat.
-import {
-  type CachedPlace,
-  departmentCentroids,
-  distanceKm,
-  homeLabels,
-  PLACES_CACHE_LIMIT,
-  WASH_SEARCH_KM,
-} from "@orasso/shared";
+import { type CachedPlace, departmentCentroids, distanceKm, homeLabels, PLACES_CACHE_LIMIT } from "@orasso/shared";
 
 import { env } from "../../env";
-import { cachedSource, externalRequest } from "./cache";
+import { cachedSource, externalRequest, readBoundedJson } from "./cache";
 
 export const WASH_TTL_MS = 7 * 24 * 3_600_000;
 const WASH_MAX_STALE_MS = 30 * 24 * 3_600_000;
@@ -35,8 +28,8 @@ function addressOf(tags: Record<string, string>): string | null {
 }
 
 /**
- * Lit la réponse d'Overpass : retire les lieux désaffectés, privés ou sans position, garde le plus proche du centre
- * (`from`) en premier et au plus `PLACES_CACHE_LIMIT` (exporté pour les tests).
+ * Lit la réponse d'Overpass : retire les lieux désaffectés, privés ou sans position, trie par distance au centre du département
+ * (`from`) et garde au plus `PLACES_CACHE_LIMIT` lieux (exporté pour les tests).
  */
 export function parseOverpass(json: unknown, from: { lat: number; lng: number }): CachedPlace[] {
   const elements = (json as { elements?: OverpassElement[] } | null)?.elements;
@@ -64,13 +57,12 @@ export function parseOverpass(json: unknown, from: { lat: number; lng: number })
     .map(({ km: _km, ...place }) => place);
 }
 
-/** Requête Overpass QL : points et bâtiments `amenity=car_wash` autour du centre, centre des bâtiments inclus. */
-export function overpassQuery(lat: number, lng: number): string {
-  const around = `around:${WASH_SEARCH_KM * 1000},${lat},${lng}`;
-  return `[out:json][timeout:20];(node["amenity"="car_wash"](${around});way["amenity"="car_wash"](${around}););out center tags 60;`;
+/** Requête Overpass QL : tout le département (zone ISO 3166-2), points et bâtiments `amenity=car_wash`, centre inclus. */
+export function overpassQuery(department: string): string {
+  return `[out:json][timeout:60];area["ISO3166-2"="FR-${department}"]->.a;(node["amenity"="car_wash"](area.a);way["amenity"="car_wash"](area.a););out center tags ${PLACES_CACHE_LIMIT};`;
 }
 
-/** Stations de lavage autour du centre d'un département (cache 7 jours), `[]` si la source ne répond pas. */
+/** Stations de lavage de tout un département (cache 7 jours), `[]` si la source ne répond pas. */
 export async function washNear(department: string): Promise<CachedPlace[]> {
   const centre = departmentCentroids[department];
   if (!centre) return [];
@@ -83,9 +75,9 @@ export async function washNear(department: string): Promise<CachedPlace[]> {
       const res = await externalRequest(env.OVERPASS_URL, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ data: overpassQuery(centre.lat, centre.lng) }),
+        body: new URLSearchParams({ data: overpassQuery(department) }),
       });
-      const json = await res.json();
+      const json = await readBoundedJson(res);
       // Réponse sans liste (service en surcharge, message d'erreur en 200) : un échec, pas une liste vide mise en cache.
       if (!Array.isArray((json as { elements?: unknown })?.elements)) return null;
       return parseOverpass(json, centre);

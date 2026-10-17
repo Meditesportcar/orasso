@@ -1,19 +1,19 @@
 // Prix des carburants (lot 30, S35) : données ouvertes « prix des carburants en France, flux instantané » de
 // data.economie.gouv.fr (licence ouverte, sans clé). Un appel par département et par heure au plus (cache
 // `fuel:<département>`). Sans réseau ou désactivé : aucun résultat, jamais d'erreur.
-// Vérifié le 17/10/2026 : le filtre géographique est `within_distance(geom, geom'POINT(lng lat)', 20km)` (et non
-// `distance(...)` écrit au départ dans l'architecture) ; pas de nom de station dans le jeu : adresse et ville seulement.
+// Tout le département est chargé (filtre `code_departement`, pagination de 100) : un filtre géographique autour du
+// centre manquerait les stations des villes éloignées du centre (Perpignan est à 33 km de celui du 66). Vérifié le
+// 17/10/2026 ; pas de nom de station dans le jeu : adresse et ville seulement.
 import {
   type CachedFuelStation,
   departmentCentroids,
-  FUEL_SEARCH_KM,
   type FuelPrices,
   homeLabels,
   PLACES_CACHE_LIMIT,
 } from "@orasso/shared";
 
 import { env } from "../../env";
-import { cachedSource, externalRequest } from "./cache";
+import { cachedSource, externalRequest, readBoundedJson } from "./cache";
 
 export const FUEL_TTL_MS = 3_600_000;
 /** Des prix vieux d'un jour ne sont plus servis. */
@@ -73,32 +73,41 @@ export function parseFuel(json: unknown): CachedFuelStation[] {
   return out.slice(0, PLACES_CACHE_LIMIT);
 }
 
-/** Adresse de requête du jeu de données (exportée pour les tests). */
-export function fuelUrl(base: string, lat: number, lng: number): string {
-  const point = `geom'POINT(${lng} ${lat})'`;
+/** Stations par page (maximum de l'API) et nombre de pages au plus : tout un département, jamais une boucle sans fin. */
+const PAGE = 100;
+const MAX_PAGES = 8;
+
+/** Adresse d'une page du département (exportée pour les tests) : filtre `code_departement`, rien d'autre. */
+export function fuelUrl(base: string, department: string, offset = 0): string {
   const params = new URLSearchParams({
-    where: `within_distance(geom, ${point}, ${FUEL_SEARCH_KM}km)`,
+    where: `code_departement="${department}"`,
     select: "adresse,ville,cp,geom,sp95_prix,sp98_prix,gazole_prix,e85_prix,sp95_maj,sp98_maj,gazole_maj,e85_maj",
-    order_by: `distance(geom, ${point})`,
-    limit: String(PLACES_CACHE_LIMIT),
+    order_by: "id",
+    limit: String(PAGE),
+    offset: String(offset),
   });
   return `${base}?${params}`;
 }
 
-/** Stations-service autour du centre d'un département (cache 1 heure), `[]` si la source ne répond pas. */
+/** Stations-service de tout un département (cache 1 heure), `[]` si la source ne répond pas. */
 export async function fuelNear(department: string): Promise<CachedFuelStation[]> {
-  const centre = departmentCentroids[department];
-  if (!centre) return [];
+  if (!departmentCentroids[department]) return [];
   const data = await cachedSource<CachedFuelStation[]>({
     key: `fuel:${department}`,
     ttlMs: FUEL_TTL_MS,
     enabled: env.FUEL_API_URL !== "off",
     maxStaleMs: FUEL_MAX_STALE_MS,
     load: async () => {
-      const res = await externalRequest(fuelUrl(env.FUEL_API_URL, centre.lat, centre.lng));
-      const json = await res.json();
-      if (!Array.isArray((json as { results?: unknown })?.results)) return null;
-      return parseFuel(json);
+      const all: unknown[] = [];
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const res = await externalRequest(fuelUrl(env.FUEL_API_URL, department, page * PAGE));
+        const json = await readBoundedJson(res);
+        const results = (json as { results?: unknown })?.results;
+        if (!Array.isArray(results)) return null;
+        all.push(...results);
+        if (results.length < PAGE) break;
+      }
+      return parseFuel({ results: all });
     },
   });
   return data ?? [];

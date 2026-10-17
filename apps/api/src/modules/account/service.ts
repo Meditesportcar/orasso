@@ -9,6 +9,7 @@ import {
   type AccountSettings,
   type AccountSettingsUpdate,
   defaultNotificationPrefs,
+  normalizeHomeWidgets,
   type PublicPreview,
   REFERRAL_WINDOW_MS,
 } from "@orasso/shared";
@@ -217,7 +218,7 @@ export const accountService = {
       departments: p.departments,
       radiusKm: p.radiusKm,
       interests: await profilesRepo.interests(v.user.id),
-      homeWidgets: (p.homeWidgets as AccountSettings["homeWidgets"]) ?? null,
+      homeWidgets: p.homeWidgets ? normalizeHomeWidgets(p.homeWidgets) : null,
     };
   },
 

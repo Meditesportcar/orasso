@@ -75,5 +75,12 @@ export const homeRoutes = new Hono<AppEnv>()
     rateLimit("fileUpload", v.user.id);
     const form = await c.req.parseBody();
     if (!(form.image instanceof File)) throw validation("Champ « image » attendu (fichier)");
-    return c.json(await sponsoredService.adminSetImage(v, uuidParam(c, "id"), form.image));
+    return c.json(
+      await sponsoredService.adminSetImage(
+        v,
+        uuidParam(c, "id"),
+        form.image,
+        clientIp(c.req.header("x-forwarded-for")),
+      ),
+    );
   });

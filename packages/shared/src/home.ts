@@ -75,11 +75,12 @@ export const HOME_RADIUS = { min: 10, max: 300, step: 10, default: 50 } as const
 export const HOME_NEARBY_LIMIT = 5;
 /** Stations affichées pour le lavage et le carburant. */
 export const HOME_PLACES_LIMIT = 3;
-/** Stations gardées en cache par département (la liste affichée est triée selon la position de la personne). */
-export const PLACES_CACHE_LIMIT = 10;
-/** Rayon de recherche des stations autour du centre du département (km). */
-export const WASH_SEARCH_KM = 25;
-export const FUEL_SEARCH_KM = 20;
+/**
+ * Stations gardées en cache par département (tout le département, pas un cercle autour de son centre : à Perpignan, à
+ * 33 km du centre des Pyrénées-Orientales, on ne trouverait sinon aucune station). Le tri par la position de la
+ * personne se fait à la réponse ; seules les `HOME_PLACES_LIMIT` plus proches sortent.
+ */
+export const PLACES_CACHE_LIMIT = 800;
 
 /**
  * Tarif d'un emplacement sponsorisé, à titre informatif (docs/01 : « tarif et fréquence restent à fixer »). Aucun

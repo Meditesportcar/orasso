@@ -14,7 +14,7 @@ import {
   visibleHomeWidgets,
 } from "@orasso/shared";
 import type { ReactNode } from "react";
-import { data, Form } from "react-router";
+import { data, Form, redirect } from "react-router";
 
 import {
   AgendaBlock,
@@ -61,7 +61,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     pseudo: me.profile.pseudo,
     grade: me.profile.grade,
     points: me.profile.pointsSeason,
-    onDevice: params.has("lat"),
+    device: lat !== undefined && lng !== undefined ? { lat, lng } : null,
     home: res.ok ? res.data : null,
     failed: !res.ok,
   };
@@ -69,6 +69,21 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
+  // Rayon : enregistré par `PATCH /me/settings` (une lecture n'écrit pas), puis la page est rechargée avec ce rayon (affiché
+  // même si l'enregistrement est refusé à un compte suspendu).
+  if (form.get("intent") === "radius") {
+    const km = Math.round(Number(form.get("rayon")));
+    if (!Number.isFinite(km) || km < 10 || km > 300) return data({ error: homeLabels.saveFailed }, { status: 400 });
+    await api(request, "/me/settings", { method: "PATCH", json: { radiusKm: km } });
+    const params = new URLSearchParams({ rayon: String(km) });
+    const lat = num(String(form.get("lat") ?? "") || null);
+    const lng = num(String(form.get("lng") ?? "") || null);
+    if (lat !== undefined && lng !== undefined) {
+      params.set("lat", String(lat));
+      params.set("lng", String(lng));
+    }
+    throw redirect(`/app?${params}`);
+  }
   let current: HomeWidgetsConfig = defaultHomeWidgets;
   try {
     current = normalizeHomeWidgets(JSON.parse(String(form.get("config") ?? "null")));
@@ -90,7 +105,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function AppHome({ loaderData, actionData }: Route.ComponentProps) {
-  const { pseudo, grade, points, onDevice, home, failed } = loaderData;
+  const { pseudo, grade, points, device, home, failed } = loaderData;
   const widgets = home?.widgets ?? defaultHomeWidgets;
   const next = home?.nextAccess ?? null;
   const nudge = home?.nudge ?? null;
@@ -99,7 +114,7 @@ export default function AppHome({ loaderData, actionData }: Route.ComponentProps
   const blocks: Record<string, ReactNode> = home
     ? {
         pending: <PendingBlock items={home.pendingStatuses} />,
-        nearby: home.nearby ? <NearbyBlock nearby={home.nearby} onDevice={onDevice} /> : null,
+        nearby: home.nearby ? <NearbyBlock nearby={home.nearby} device={device} /> : null,
         weather: <WeatherBlock weather={home.weather} />,
         agenda: <AgendaBlock items={home.agenda} />,
         favorite_garage: <GarageBlock garage={home.favoriteGarage} />,

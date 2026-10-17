@@ -77,7 +77,8 @@ export const sponsoredPlacementUpdateSchema = z
     priceCents: z.number().int().min(0).max(1_000_000),
     status: z.enum(placementStatuses),
   })
-  .partial();
+  .partial()
+  .refine((o) => Object.values(o).some((v) => v !== undefined), "Rien à modifier");
 export type SponsoredPlacementUpdate = z.infer<typeof sponsoredPlacementUpdateSchema>;
 
 /** Un emplacement vu par l'administration. */

@@ -1,7 +1,7 @@
 // Emplacement sponsorisé de l'Accueil (lot 30, ARCHITECTURE-SUITE § 13.3). Vendu directement à un pro de la plateforme,
 // créé par l'administration, même apparence que le reste avec la mention « Sponsorisé ». Aucune donnée personnelle n'est
 // transmise au pro : il n'a que des totaux (affichages, clics). Ciblage : départements du secteur et centres d'intérêt.
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import {
   type HomeSponsored,
   type PlacementTarget,
@@ -16,7 +16,14 @@ import { and, asc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
-import { adminAuditLog, proProfiles, sponsoredDailyStats, sponsoredPlacements } from "../../db/schema";
+import {
+  adminAuditLog,
+  proProfiles,
+  sponsoredDailySeen,
+  sponsoredDailyStats,
+  sponsoredPlacements,
+} from "../../db/schema";
+import { env } from "../../env";
 import { requirePlatformRole } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, notFound, validation } from "../../lib/errors";
@@ -27,6 +34,14 @@ import { proOwnerActive } from "../pros/explore";
 import { parisDay } from "../pros/service";
 
 type Row = typeof sponsoredPlacements.$inferSelect;
+
+/** Identifiant de la personne pour « déjà montré » : HMAC par emplacement et par jour, non réversible sans le secret. */
+function userHash(userId: string, placementId: string, day: string): string {
+  return createHmac("sha256", env.BETTER_AUTH_SECRET)
+    .update(`${userId}|${placementId}|${day}`)
+    .digest("hex")
+    .slice(0, 32);
+}
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -44,8 +59,9 @@ export const sponsoredService = {
   /**
    * Emplacement à montrer à cette personne, ou `null`. Candidats : actifs, dans leur période, pro publié dont le titulaire
    * est en règle, et fiche non réduite à la « fiche de base » (`proVisibility` : la mise en avant en fait partie, lot 21).
-   * Tirage pondéré avec une graine (personne + jour) : le même emplacement toute la journée, sans compter un affichage de
-   * plus à chaque rafraîchissement du tirage. L'affichage est compté à la sélection.
+   * Tirage pondéré avec une graine (personne + jour). Un affichage n'est compté qu'une fois par (emplacement, personne,
+   * jour) : un nouveau chargement de l'Accueil rend le même emplacement sans rien compter (table `sponsored_daily_seen`),
+   * et le plafond du jour est respecté de façon atomique au moment de compter.
    */
   async select(v: Viewer, interests: string[]): Promise<HomeSponsored | null> {
     const t = now();
@@ -66,31 +82,39 @@ export const sponsoredService = {
         ),
       );
     if (!rows.length) return null;
+    const ids = rows.map((r) => r.placement.id);
     const stats = await db
       .select({ id: sponsoredDailyStats.placementId, n: sponsoredDailyStats.impressions })
       .from(sponsoredDailyStats)
-      .where(
-        and(
-          eq(sponsoredDailyStats.day, today),
-          inArray(
-            sponsoredDailyStats.placementId,
-            rows.map((r) => r.placement.id),
-          ),
-        ),
-      );
+      .where(and(eq(sponsoredDailyStats.day, today), inArray(sponsoredDailyStats.placementId, ids)));
     const shownToday = new Map(stats.map((s) => [s.id, s.n]));
+    // Emplacements déjà montrés à cette personne aujourd'hui : on lui rend le même, sans le recompter.
+    const seen = await db
+      .select({ id: sponsoredDailySeen.placementId, hash: sponsoredDailySeen.userHash })
+      .from(sponsoredDailySeen)
+      .where(and(eq(sponsoredDailySeen.day, today), inArray(sponsoredDailySeen.placementId, ids)));
+    const seenIds = new Set(seen.filter((s) => s.hash === userHash(v.user.id, s.id, today)).map((s) => s.id));
     const candidates = rows.flatMap((r) => {
       const m = placementMatch(target(r.placement), {
         today,
         sector: v.profile.departments,
         interests,
-        impressionsToday: shownToday.get(r.placement.id) ?? 0,
+        // Déjà montré à cette personne : le plafond ne la concerne plus.
+        impressionsToday: seenIds.has(r.placement.id) ? 0 : (shownToday.get(r.placement.id) ?? 0),
       });
       return m.eligible ? [{ id: r.placement.id, weight: m.weight, row: r }] : [];
     });
-    const picked = pickWeighted(candidates, `${v.user.id}|${today}`);
+    const already = candidates.filter((c) => seenIds.has(c.id));
+    const picked = already.length
+      ? pickWeighted(already, `${v.user.id}|${today}`)
+      : pickWeighted(candidates, `${v.user.id}|${today}`);
     if (!picked) return null;
-    await this.count(picked.id, today, "impressions");
+    if (
+      !seenIds.has(picked.id) &&
+      !(await this.claimImpression(picked.id, v.user.id, today, picked.row.placement.dailyCap))
+    ) {
+      return null;
+    }
     const { placement, pro } = picked.row;
     return {
       id: placement.id,
@@ -102,29 +126,53 @@ export const sponsoredService = {
     };
   },
 
-  /** Compte un affichage ou un clic : total de l'emplacement et du jour (le plafond quotidien lit le second). */
-  async count(id: string, day: string, kind: "impressions" | "clicks"): Promise<void> {
-    const inc = { impressions: kind === "impressions" ? 1 : 0, clicks: kind === "clicks" ? 1 : 0 };
-    await db
-      .update(sponsoredPlacements)
-      .set({
-        impressions: sql`${sponsoredPlacements.impressions} + ${inc.impressions}`,
-        clicks: sql`${sponsoredPlacements.clicks} + ${inc.clicks}`,
-      })
-      .where(eq(sponsoredPlacements.id, id));
-    await db
-      .insert(sponsoredDailyStats)
-      .values({ placementId: id, day, ...inc })
-      .onConflictDoUpdate({
-        target: [sponsoredDailyStats.placementId, sponsoredDailyStats.day],
-        set: {
-          impressions: sql`${sponsoredDailyStats.impressions} + ${inc.impressions}`,
-          clicks: sql`${sponsoredDailyStats.clicks} + ${inc.clicks}`,
-        },
-      });
+  /**
+   * Compte l'affichage de cet emplacement pour cette personne aujourd'hui, une seule fois, sous le plafond du jour. Le
+   * plafond se vérifie dans l'instruction elle-même (incrément conditionnel) : deux chargements simultanés ne le dépassent
+   * pas. Renvoie faux si le plafond est atteint.
+   */
+  async claimImpression(id: string, userId: string, day: string, cap: number | null): Promise<boolean> {
+    return db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .insert(sponsoredDailySeen)
+        .values({ placementId: id, userHash: userHash(userId, id, day), day })
+        .onConflictDoNothing()
+        .returning({ id: sponsoredDailySeen.placementId });
+      if (!claimed) return true; // déjà compté (chargement simultané du même compte)
+      const [daily] = await tx
+        .insert(sponsoredDailyStats)
+        .values({ placementId: id, day, impressions: 1 })
+        .onConflictDoUpdate({
+          target: [sponsoredDailyStats.placementId, sponsoredDailyStats.day],
+          set: { impressions: sql`${sponsoredDailyStats.impressions} + 1` },
+          ...(cap === null ? {} : { setWhere: sql`${sponsoredDailyStats.impressions} < ${cap}` }),
+        })
+        .returning({ n: sponsoredDailyStats.impressions });
+      if (!daily) {
+        // Plafond atteint : l'affichage n'est pas compté, la personne n'en garde pas trace.
+        await tx
+          .delete(sponsoredDailySeen)
+          .where(
+            and(
+              eq(sponsoredDailySeen.placementId, id),
+              eq(sponsoredDailySeen.userHash, userHash(userId, id, day)),
+              eq(sponsoredDailySeen.day, day),
+            ),
+          );
+        return false;
+      }
+      await tx
+        .update(sponsoredPlacements)
+        .set({ impressions: sql`${sponsoredPlacements.impressions} + 1` })
+        .where(eq(sponsoredPlacements.id, id));
+      return true;
+    });
   },
 
-  /** `POST /sponsored/:id/click` : un clic compté, seulement pour un emplacement actuellement diffusé. */
+  /**
+   * `POST /sponsored/:id/click` : un clic compté par (emplacement, personne, jour), seulement pour un emplacement qui lui
+   * a été montré aujourd'hui (donc que `select` a choisi pour elle) et qui est encore diffusé. Un second clic est sans effet.
+   */
   async click(v: Viewer, id: string): Promise<void> {
     rateLimit("sponsoredClick", v.user.id);
     const today = parisDay(now());
@@ -132,7 +180,49 @@ export const sponsoredService = {
     if (p?.status !== "active" || today < p.startsOn || today > p.endsOn) {
       throw notFound("Emplacement introuvable");
     }
-    await this.count(id, today, "clicks");
+    const hash = userHash(v.user.id, id, today);
+    const seen = await db.query.sponsoredDailySeen.findFirst({
+      where: and(
+        eq(sponsoredDailySeen.placementId, id),
+        eq(sponsoredDailySeen.userHash, hash),
+        eq(sponsoredDailySeen.day, today),
+      ),
+    });
+    if (!seen) throw notFound("Emplacement introuvable");
+    const [first] = await db
+      .update(sponsoredDailySeen)
+      .set({ clicked: true })
+      .where(
+        and(
+          eq(sponsoredDailySeen.placementId, id),
+          eq(sponsoredDailySeen.userHash, hash),
+          eq(sponsoredDailySeen.day, today),
+          eq(sponsoredDailySeen.clicked, false),
+        ),
+      )
+      .returning({ id: sponsoredDailySeen.placementId });
+    if (!first) return;
+    await db
+      .update(sponsoredPlacements)
+      .set({ clicks: sql`${sponsoredPlacements.clicks} + 1` })
+      .where(eq(sponsoredPlacements.id, id));
+    await db
+      .insert(sponsoredDailyStats)
+      .values({ placementId: id, day: today, clicks: 1 })
+      .onConflictDoUpdate({
+        target: [sponsoredDailyStats.placementId, sponsoredDailyStats.day],
+        set: { clicks: sql`${sponsoredDailyStats.clicks} + 1` },
+      });
+  },
+
+  /** Tâche `home.purge` : les lignes « déjà montré » de plus de deux jours (elles ne servent qu'à la journée). */
+  async purgeSeen(): Promise<number> {
+    const cutoff = parisDay(new Date(now().getTime() - 2 * 86_400_000));
+    const rows = await db
+      .delete(sponsoredDailySeen)
+      .where(lte(sponsoredDailySeen.day, cutoff))
+      .returning({ id: sponsoredDailySeen.placementId });
+    return rows.length;
   },
 
   // --- Administration (routes seulement ; la page est au lot 33) -------------------------------------------------
@@ -222,7 +312,7 @@ export const sponsoredService = {
   },
 
   /** Image de l'emplacement : 1200 px au plus, WebP. */
-  async adminSetImage(v: Viewer, id: string, file: File): Promise<SponsoredPlacementAdmin> {
+  async adminSetImage(v: Viewer, id: string, file: File, ip: string | null): Promise<SponsoredPlacementAdmin> {
     await requirePlatformRole(v, "super_admin");
     const current = await db.query.sponsoredPlacements.findFirst({ where: eq(sponsoredPlacements.id, id) });
     if (!current) throw notFound("Emplacement introuvable");
@@ -246,6 +336,14 @@ export const sponsoredService = {
       .where(eq(sponsoredPlacements.id, id))
       .returning();
     if (current.imageKey) await storage.remove(current.imageKey);
+    await db.insert(adminAuditLog).values({
+      actorUserId: v.user.id,
+      action: "sponsored.image",
+      targetType: "sponsored_placement",
+      targetId: id,
+      reason: null,
+      ip,
+    });
     const pro = await db.query.proProfiles.findFirst({ where: eq(proProfiles.id, current.proProfileId) });
     return adminView(row ?? current, pro?.name ?? "");
   },

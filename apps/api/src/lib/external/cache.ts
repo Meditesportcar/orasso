@@ -23,11 +23,35 @@ export function externalEnabled(): boolean {
   return env.NODE_ENV !== "test" || fetchImpl !== null;
 }
 
-const TIMEOUT_MS = 8000;
+const TIMEOUT_MS = 20_000;
 /** Une requête d'utilisateur n'attend pas une source externe plus de 2,5 s (l'appel continue et remplit le cache). */
 export const EXTERNAL_BUDGET_MS = 2500;
 /** Après un échec, la source n'est pas réinterrogée avant ce délai (on sert l'ancien cache s'il existe). */
 const RETRY_AFTER_FAILURE_MS = 10 * 60_000;
+
+/** Taille maximale d'une réponse externe lue (2 Mo) : une source qui répond n'importe quoi ne remplit pas la mémoire. */
+export const MAX_EXTERNAL_BYTES = 2 * 1024 * 1024;
+
+/** JSON d'une réponse, lu par morceaux et abandonné au-delà de `MAX_EXTERNAL_BYTES`. */
+export async function readBoundedJson(res: Response, max = MAX_EXTERNAL_BYTES): Promise<unknown> {
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > max) throw new Error("réponse trop volumineuse");
+  const reader = res.body?.getReader();
+  if (!reader) return JSON.parse(await res.text());
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      throw new Error("réponse trop volumineuse");
+    }
+    chunks.push(value);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
 
 /** Appel HTTP identifié (`User-Agent`), borné dans le temps. */
 export async function externalRequest(url: string, init: RequestInit = {}): Promise<Response> {

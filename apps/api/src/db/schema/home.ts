@@ -2,7 +2,7 @@
 // sponsorisés. L'API n'appelle jamais une source externe pour répondre à un utilisateur sans passer par ce cache.
 import { placementStatuses } from "@orasso/shared";
 import { sql } from "drizzle-orm";
-import { date, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 
 import { timestamps, tstz } from "./common";
 import { proProfiles } from "./pros";
@@ -57,4 +57,24 @@ export const sponsoredDailyStats = pgTable(
     clicks: integer("clicks").notNull().default(0),
   },
   (t) => [primaryKey({ name: "sponsored_daily_stats_pkey", columns: [t.placementId, t.day] })],
+);
+
+/**
+ * Un affichage et un clic au plus par (emplacement, personne, jour) : l'identifiant de la personne y est un HMAC non
+ * réversible sans le secret du serveur, jamais l'identifiant du compte. Purgé à J+2 (tâche `home.purge`).
+ */
+export const sponsoredDailySeen = pgTable(
+  "sponsored_daily_seen",
+  {
+    placementId: uuid("placement_id")
+      .notNull()
+      .references(() => sponsoredPlacements.id, { onDelete: "cascade" }),
+    userHash: text("user_hash").notNull(),
+    day: date("day").notNull(),
+    clicked: boolean("clicked").notNull().default(false),
+  },
+  (t) => [
+    primaryKey({ name: "sponsored_daily_seen_pkey", columns: [t.placementId, t.userHash, t.day] }),
+    index("sponsored_daily_seen_day_idx").on(t.day),
+  ],
 );

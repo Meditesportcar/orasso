@@ -5,6 +5,14 @@ CREATE TABLE "external_cache" (
 	"data" jsonb NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "sponsored_daily_seen" (
+	"placement_id" uuid NOT NULL,
+	"user_hash" text NOT NULL,
+	"day" date NOT NULL,
+	"clicked" boolean DEFAULT false NOT NULL,
+	CONSTRAINT "sponsored_daily_seen_pkey" PRIMARY KEY("placement_id","user_hash","day")
+);
+--> statement-breakpoint
 CREATE TABLE "sponsored_daily_stats" (
 	"placement_id" uuid NOT NULL,
 	"day" date NOT NULL,
@@ -34,7 +42,9 @@ CREATE TABLE "sponsored_placements" (
 );
 --> statement-breakpoint
 ALTER TABLE "pro_follows" ADD COLUMN "favorite" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "sponsored_daily_seen" ADD CONSTRAINT "sponsored_daily_seen_placement_id_sponsored_placements_id_fk" FOREIGN KEY ("placement_id") REFERENCES "public"."sponsored_placements"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sponsored_daily_stats" ADD CONSTRAINT "sponsored_daily_stats_placement_id_sponsored_placements_id_fk" FOREIGN KEY ("placement_id") REFERENCES "public"."sponsored_placements"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sponsored_placements" ADD CONSTRAINT "sponsored_placements_pro_profile_id_pro_profiles_id_fk" FOREIGN KEY ("pro_profile_id") REFERENCES "public"."pro_profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "sponsored_daily_seen_day_idx" ON "sponsored_daily_seen" USING btree ("day");--> statement-breakpoint
 CREATE INDEX "sponsored_placements_status_idx" ON "sponsored_placements" USING btree ("status","starts_on","ends_on");--> statement-breakpoint
 CREATE UNIQUE INDEX "pro_follows_favorite_key" ON "pro_follows" USING btree ("user_id") WHERE "pro_follows"."favorite";

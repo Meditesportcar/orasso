@@ -74,12 +74,23 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   await expect(sponsored).toContainText("Polish avant saison");
 
   // Curseur de rayon : 150 km, enregistré dans le profil (la page se recharge avec ?rayon=150).
-  await page.getByTestId("home-radius").evaluate((el: HTMLInputElement) => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    setter?.call(el, "150");
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
+  // Glisser le curseur (beaucoup d'événements `input`) n'envoie rien : une seule requête, au relâchement (`change`).
+  const posts: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && new URL(r.url()).pathname === "/app") posts.push(r.url());
   });
+  await page.getByTestId("home-radius").evaluate(async (el: HTMLInputElement) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    for (let km = 20; km <= 150; km += 10) {
+      setter?.call(el, String(km));
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  });
+  await page.waitForTimeout(800);
+  expect(posts).toHaveLength(0);
+  await page
+    .getByTestId("home-radius")
+    .evaluate((el: HTMLInputElement) => el.dispatchEvent(new Event("change", { bubbles: true })));
   await expect(page).toHaveURL(/rayon=150/);
   await expect(page.getByTestId("widget-nearby")).toContainText("Rayon : 150 km");
   const near150 = await page.getByTestId("widget-nearby").getByTestId("nearby-event").count();
@@ -130,9 +141,16 @@ test("garage : QR de compte du site, lu et validé par un pro (lecteur du lot 14
   // Il est à usage unique par fenêtre : le même code rejoué est refusé.
   const replay = await apiCall<{ valid: boolean; reason?: string }>(pro, "POST", "/account-qr/verify", { payload });
   expect(replay.data).toMatchObject({ valid: false, reason: "replayed" });
-  // La page du secret n'est jamais mise en cache.
+  // La page du secret n'est jamais mise en cache et garde les en-têtes de sécurité de la racine (lot 12).
   const res = await page.request.get("/app/garage");
   expect(res.headers()["cache-control"]).toContain("no-store");
+  expect(res.headers()["x-frame-options"]).toBe("DENY");
+  expect(res.headers()["content-security-policy"]).toContain("frame-ancestors");
+  expect(res.headers()["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+  // Même contrôle sur d'autres pages du compte.
+  for (const path of ["/app", "/app/acces"]) {
+    expect((await page.request.get(path)).headers()["x-frame-options"], path).toBe("DENY");
+  }
 });
 
 test.describe("captures et audit du système de design", () => {

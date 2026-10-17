@@ -41,7 +41,9 @@ export type JobName =
   // Lot 24 : positions d'alerte et photos de la main courante à effacer (chaque heure).
   | "field.sweep"
   // Lot 32 : conservation des signalements et sanctions (un an), quotidienne.
-  | "moderation.purge";
+  | "moderation.purge"
+  // Lot 30 : lignes « emplacement déjà montré » de plus de deux jours, quotidienne.
+  | "home.purge";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

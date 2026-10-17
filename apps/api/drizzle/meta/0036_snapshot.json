@@ -1,5 +1,5 @@
 {
-  "id": "7e691f61-d9a4-485e-916c-38cbaab4579b",
+  "id": "337706db-b828-41dc-86c7-cbd7a534c771",
   "prevId": "697e30f4-db51-400b-9619-4390087325f4",
   "version": "7",
   "dialect": "postgresql",
@@ -4254,6 +4254,83 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sponsored_daily_seen": {
+      "name": "sponsored_daily_seen",
+      "schema": "",
+      "columns": {
+        "placement_id": {
+          "name": "placement_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_hash": {
+          "name": "user_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "clicked": {
+          "name": "clicked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {
+        "sponsored_daily_seen_day_idx": {
+          "name": "sponsored_daily_seen_day_idx",
+          "columns": [
+            {
+              "expression": "day",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "sponsored_daily_seen_placement_id_sponsored_placements_id_fk": {
+          "name": "sponsored_daily_seen_placement_id_sponsored_placements_id_fk",
+          "tableFrom": "sponsored_daily_seen",
+          "tableTo": "sponsored_placements",
+          "columnsFrom": [
+            "placement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "sponsored_daily_seen_pkey": {
+          "name": "sponsored_daily_seen_pkey",
+          "columns": [
+            "placement_id",
+            "user_hash",
+            "day"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

@@ -125,6 +125,9 @@ export default function Accueil() {
         nearby={data.nearby}
         position={position}
         onRadius={(km) => {
+          // Enregistré par `PATCH /me/settings` (une lecture n'écrit pas) ; refusé à un compte suspendu, le rayon sert alors
+          // à l'affichage seulement (paramètre de la lecture). Une requête par relâchement du curseur.
+          void api.updateSettings({ radiusKm: km }).catch(() => undefined);
           setRadius(km);
         }}
       />

@@ -71,16 +71,10 @@ export function nearestPlaces<T extends CachedPlace>(places: T[], from: LatLng, 
 export const homeService = {
   async get(v: Viewer, q: HomeQuery): Promise<HomeData> {
     rateLimit("homeRead", v.user.id);
-    const t = now();
-    const suspended = Boolean(v.profile.suspendedUntil && v.profile.suspendedUntil > t);
 
-    // Rayon : demandé (curseur) → enregistré dans le profil, sauf pour un compte suspendu (lecture seule : il sert à
-    // cet affichage seulement).
-    let radiusKm: number = v.profile.radiusKm;
-    if (q.radiusKm !== undefined && q.radiusKm !== radiusKm) {
-      radiusKm = q.radiusKm;
-      if (!suspended) await db.update(profiles).set({ radiusKm }).where(eq(profiles.userId, v.user.id));
-    }
+    // Rayon : celui du profil ; `?radiusKm=` ne sert qu'à cet affichage (une lecture n'écrit pas : le curseur enregistre par
+    // `PATCH /me/settings`, et un compte suspendu, en lecture seule, voit quand même le rayon qu'il règle).
+    let radiusKm: number = q.radiusKm ?? v.profile.radiusKm;
     radiusKm = Math.min(HOME_RADIUS.max, Math.max(HOME_RADIUS.min, radiusKm));
 
     const widgets = normalizeHomeWidgets(v.profile.homeWidgets);
@@ -280,6 +274,7 @@ export const homeService = {
 
   /** `DELETE /pros/:id/favorite` : ne retire que le marquage (le pro reste suivi). */
   async unsetFavorite(v: Viewer, proId: string): Promise<void> {
+    rateLimit("homeWrite", v.user.id);
     await db
       .update(proFollows)
       .set({ favorite: false })

@@ -26,9 +26,13 @@ export function meta() {
 const ARCHIVED: Exclude<VehicleStatus, "active">[] = ["sold", "keepsake", "wrecked"];
 
 // La page porte le secret du QR de compte : ni le navigateur ni un relais ne la gardent.
-export function headers() {
-  return { "cache-control": "private, no-store" };
-}
+// On part des en-têtes du parent (`root.tsx` : X-Frame-Options, frame-ancestors, Referrer-Policy du lot 12), sinon ils
+// seraient perdus pour cette page.
+export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
+  const h = new Headers(parentHeaders);
+  h.set("cache-control", "private, no-store");
+  return h;
+};
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [vehicles, transfers, crews, qrSecret] = await Promise.all([
