@@ -58,12 +58,16 @@ test("appli : Accueil complet, réorganisation enregistrée", async ({ browser }
     await page.getByTestId("open-reorder").click();
     await page.getByTestId("up-fuel").click();
     await expect
-      .poll(async () => (await apiCall<{ widgets: { order: string[] } }>(cookie, "GET", "/me/home")).data.widgets.order.indexOf("fuel"))
+      .poll(async () =>
+        (await apiCall<{ widgets: { order: string[] } }>(cookie, "GET", "/me/home")).data.widgets.order.indexOf("fuel"),
+      )
       .toBe(6);
     await page.getByTestId("toggle-wash").click();
     await shot(page, `02-reorganiser-${theme}`);
     await expect
-      .poll(async () => (await apiCall<{ widgets: { hidden: string[] } }>(cookie, "GET", "/me/home")).data.widgets.hidden)
+      .poll(
+        async () => (await apiCall<{ widgets: { hidden: string[] } }>(cookie, "GET", "/me/home")).data.widgets.hidden,
+      )
       .toEqual(["wash"]);
     await page.getByTestId("reorder-done").click();
     await page.reload();

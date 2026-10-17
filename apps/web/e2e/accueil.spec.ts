@@ -91,13 +91,11 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   await page.goto("/app");
   await page.getByTestId("reorder").locator("summary").click();
   await page.getByTestId("up-fuel").click();
-  await expect.poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.order.indexOf("fuel")).toBe(
-    6,
-  );
-  await page.getByTestId("toggle-wash").click();
   await expect
-    .poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.hidden)
-    .toEqual(["wash"]);
+    .poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.order.indexOf("fuel"))
+    .toBe(6);
+  await page.getByTestId("toggle-wash").click();
+  await expect.poll(async () => (await apiCall<Home>(cookie, "GET", "/me/home")).data.widgets.hidden).toEqual(["wash"]);
   await page.reload();
   expect(await shownOrder(page)).toEqual(["pending", "nearby", "weather", "agenda", "favorite_garage", "fuel"]);
   await expect(page.getByTestId("widget-wash")).toHaveCount(0);

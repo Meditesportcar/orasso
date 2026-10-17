@@ -442,14 +442,18 @@ describe("parrainage et inscription express", () => {
 });
 
 describe("réglages", () => {
-  it("widgets de l'accueil bornés", async () => {
+  it("widgets de l'accueil bornés (forme {order, hidden} du lot 30)", async () => {
     const u = await signUp("Widgets_01");
-    expect((await call(u, "PATCH", "/me/settings", { homeWidgets: [{ id: "meteo", visible: true }] })).status).toBe(
-      200,
-    );
-    const tooMany = Array.from({ length: 31 }, (_, i) => ({ id: `w${i}` }));
+    const ok = { order: ["weather", "fuel"], hidden: ["wash"] };
+    expect((await call(u, "PATCH", "/me/settings", { homeWidgets: ok })).status).toBe(200);
+    const tooMany = { order: Array.from({ length: 31 }, () => "weather"), hidden: [] };
     expect((await call(u, "PATCH", "/me/settings", { homeWidgets: tooMany })).status).toBe(400);
-    expect((await call(u, "PATCH", "/me/settings", { homeWidgets: [{ id: "x".repeat(200) }] })).status).toBe(400);
+    expect((await call(u, "PATCH", "/me/settings", { homeWidgets: [{ id: "meteo", visible: true }] })).status).toBe(
+      400,
+    );
+    expect(
+      (await call(u, "PATCH", "/me/settings", { homeWidgets: { order: ["x".repeat(200)], hidden: [] } })).status,
+    ).toBe(400);
   });
 });
 
