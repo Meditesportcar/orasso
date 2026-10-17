@@ -17,6 +17,7 @@ import {
   type ProPartner,
   type ProPartnerLink,
   type ProPostCreate,
+  type ProPostUpdate,
   type ProPostView,
   type ProPublic,
   type ProStats,
@@ -491,6 +492,22 @@ export const prosService = {
       return created;
     });
     if (!row) throw new Error("Publication non créée");
+    return postView(row);
+  },
+
+  /**
+   * `PATCH /pros/:id/posts/:postId` (lot 35c, appli) : corrige le titre ou le texte d'une publication. Elle garde sa date
+   * de création, donc son mois : le compteur ne bouge pas.
+   */
+  async updatePost(v: Viewer, id: string, postId: string, input: ProPostUpdate): Promise<ProPostView> {
+    rateLimit("proWrite", v.user.id);
+    await ownedPro(v, id);
+    const [row] = await db
+      .update(proPosts)
+      .set(input)
+      .where(and(eq(proPosts.id, postId), eq(proPosts.proId, id)))
+      .returning();
+    if (!row) throw notFound("Publication introuvable");
     return postView(row);
   },
 

@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body } from "../../lib/validate";
 import { securityService } from "../security/service";
+import { accountExportService } from "./export";
 import { accountService } from "./service";
 
 /** Adresse du client pour le journal d'administration (première de `x-forwarded-for`, posée par nginx). */
@@ -39,6 +40,10 @@ export const accountRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     await securityService.revokeSession(v.user.id, c.req.param("id"));
     return c.body(null, 204);
+  })
+  .get("/me/export", async (c) => {
+    c.header("cache-control", "no-store");
+    return c.json(await accountExportService.build(await requireUser(c)));
   })
   .get("/me/public-preview", async (c) => c.json(await accountService.publicPreview(await requireUser(c))))
   .delete("/me", async (c) => {

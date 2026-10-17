@@ -4,6 +4,7 @@ import {
   proListQuery,
   proPartnerRequestSchema,
   proPostCreateSchema,
+  proPostUpdateSchema,
   proPublishSchema,
   proTrackSchema,
   proUpdateSchema,
@@ -94,6 +95,12 @@ export const prosRoutes = new Hono<AppEnv>()
   .post("/pros/:id/posts", async (c) => {
     const v = await requireUser(c);
     return c.json(await prosService.createPost(v, uuidParam(c, "id"), await body(c, proPostCreateSchema)), 201);
+  })
+  .patch("/pros/:id/posts/:postId", async (c) => {
+    const v = await requireUser(c);
+    return c.json(
+      await prosService.updatePost(v, uuidParam(c, "id"), uuidParam(c, "postId"), await body(c, proPostUpdateSchema)),
+    );
   })
   .delete("/pros/:id/posts/:postId", async (c) => {
     await prosService.deletePost(await requireUser(c), uuidParam(c, "id"), uuidParam(c, "postId"));

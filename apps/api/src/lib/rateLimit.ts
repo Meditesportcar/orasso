@@ -48,6 +48,8 @@ export const rateRules = {
   /** Relance de l'e-mail de vérification (lot 15). */
   /** Suppression du compte : essais de mot de passe et de code (lot 15). */
   accountDelete: { max: 5, windowMs: 15 * 60_000, message: "Trop d'essais : réessaie dans un quart d'heure." },
+  /** Export des données personnelles (lot 35c) : chaque appel relit tout le compte. */
+  accountExport: { max: 5, windowMs: 3_600_000, message: "Trop d'exports : réessaie dans une heure." },
   /** Codes TOTP ou de secours vérifiés depuis une session déjà ouverte (le plugin ne les compte pas, lot 15). */
   twoFactorVerify: { max: 5, windowMs: 15 * 60_000, message: "Trop d'essais : réessaie dans un quart d'heure." },
   emailVerificationResend: { max: 3, windowMs: 3_600_000, message: "Trop de relances : réessaie dans une heure." },
