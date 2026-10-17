@@ -60,6 +60,10 @@ describe("export CSV", () => {
     expect(csvCell("ligne 1\nligne 2")).toBe('"ligne 1\nligne 2"');
     expect(csvCell('dit "oui"')).toBe('"dit ""oui"""');
     expect(csvLine(["Kenji", 3, null, "=1+1"])).toBe("Kenji;3;;'=1+1");
+    // Aussi après un séparateur à l'intérieur de la cellule.
+    expect(csvCell("a,=1+1")).toBe("a,'=1+1");
+    expect(csvCell("a;@SUM(A1)")).toBe('"a;\'@SUM(A1)"');
+    expect(csvCell("a, b")).toBe("a, b");
   });
   it("nom du fichier", () => {
     expect(exportFileName("nocturne-de-rentree-2026", "2026-10-17")).toBe(
@@ -97,8 +101,28 @@ describe("badge de structure", () => {
     expect(plan).toEqual({ action: "remind", day: 7, mark: [30, 7] });
   });
   it("suspension à l'échéance", () => {
-    expect(badgePlan(expires, expires, {})).toEqual({ action: "suspend" });
+    expect(badgePlan(expires, expires, { "1": "x" })).toEqual({ action: "suspend" });
     expect(badgePlan(expires, new Date(expires.getTime() + DAY), { "1": "x" })).toEqual({ action: "suspend" });
+  });
+  it("jamais de suspension sans le rappel de la veille : rappel tardif d'abord", () => {
+    expect(badgePlan(expires, new Date(expires.getTime() + DAY), {})).toEqual({
+      action: "remind",
+      day: 1,
+      mark: [30, 7, 1],
+      overdue: true,
+    });
+    expect(badgePlan(expires, new Date(expires.getTime() + DAY), { "30": "x", "7": "x" })).toMatchObject({
+      overdue: true,
+      mark: [1],
+    });
+  });
+  it("jours calendaires de Paris : la veille ne part pas le jour même", () => {
+    // Échéance le 31/01 à 20:00 Paris ; balayage du 31/01 à 09:00 : 0 jour, pas de rappel « demain ».
+    const evening = new Date("2027-01-31T19:00:00Z");
+    expect(badgeDaysLeft(evening, new Date("2027-01-31T08:00:00Z"))).toBe(0);
+    expect(badgePlan(evening, new Date("2027-01-31T08:00:00Z"), { "30": "x", "7": "x" })).toEqual({ action: "none" });
+    expect(badgeDaysLeft(evening, new Date("2027-01-30T08:00:00Z"))).toBe(1);
+    expect(badgePlan(evening, new Date("2027-01-30T08:00:00Z"), { "30": "x", "7": "x" })).toMatchObject({ day: 1 });
   });
   it("renouvellement : un an à partir de la plus tardive des deux dates", () => {
     const now = at("2026-12-20T09:00:00Z");

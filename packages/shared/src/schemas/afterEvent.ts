@@ -75,7 +75,7 @@ export type ThanksResult = { groupMessageId: string; recipientsCount: number; se
 
 // --- Export tracé ------------------------------------------------------------------------------------------------
 
-/** `GET /events/:id/participants/export?reason=` : motif obligatoire, tracé au journal d'administration. */
+/** `POST /events/:id/participants/export {reason}` : motif obligatoire, tracé au journal d'administration. */
 export const exportQuerySchema = z.object({
   reason: z
     .string()

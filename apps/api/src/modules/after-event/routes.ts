@@ -30,9 +30,11 @@ export const afterEventRoutes = new Hono<AppEnv>()
     const input = await body(c, thanksSchema);
     return c.json(await thanksService.send(v, uuidParam(c, "id"), input), 201);
   })
-  .get("/events/:id/participants/export", async (c) => {
+  // POST et non GET (relecture) : l'export écrit une trace, le motif (données personnelles possibles) ne doit pas
+  // voyager dans l'adresse (journaux du serveur) et un simple lien ne doit pas pouvoir le déclencher.
+  .post("/events/:id/participants/export", async (c) => {
     const v = await requireUser(c);
-    const input = query(c, exportQuerySchema);
+    const input = await body(c, exportQuerySchema);
     const out = await exportService.participants(v, uuidParam(c, "id"), input, {
       ip: clientIp((name) => c.req.header(name)),
       userAgent: c.req.header("user-agent") ?? null,

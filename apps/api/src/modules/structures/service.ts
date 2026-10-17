@@ -29,7 +29,13 @@ import {
   structures,
   user,
 } from "../../db/schema";
-import { activeMembership, type OrganizerAccess, requireOrganizer, requirePlatformRole } from "../../lib/access";
+import {
+  activeMembership,
+  type OrganizerAccess,
+  requireOrganizer,
+  requireOrganizerWrite,
+  requirePlatformRole,
+} from "../../lib/access";
 import { now } from "../../lib/deps";
 import { AppError, conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { addressQuery, geocode } from "../../lib/geocode";
@@ -210,7 +216,7 @@ export const structuresService = {
 
   /** Logo de la structure (carré, WebP 512 px). */
   async setLogo(v: Viewer, id: string, file: File): Promise<StructureOrganizer> {
-    const access = await requireOrganizer(v, id);
+    const access = await requireOrganizerWrite(v, id);
     rateLimit("fileUpload", v.user.id);
     if (file.size === 0) throw validation("Fichier vide");
     if (file.size > 8 * 1024 * 1024) throw new AppError(413, "payload_too_large", "Logo de 8 Mo au plus");
@@ -279,7 +285,7 @@ export const structuresService = {
   },
 
   async update(v: Viewer, id: string, input: StructureUpdate): Promise<StructureOrganizer> {
-    const access = await requireOrganizer(v, id);
+    const access = await requireOrganizerWrite(v, id);
     const current = await structureById(id);
     const { siret: _siret, rna: _rna, ...fields } = input;
     const addressChanged = ["addressLine", "postalCode", "city"].some(
@@ -363,7 +369,7 @@ export const structuresService = {
    * Le propriétaire gère les co-organisateurs ; propriétaire et co-organisateurs gèrent le staff.
    */
   async invite(v: Viewer, id: string, input: MemberInvite) {
-    const access = await requireOrganizer(v, id);
+    const access = await requireOrganizerWrite(v, id);
     if (input.role === "co_organizer" && access.role === "co_organizer") {
       throw forbidden("Seul le propriétaire nomme les co-organisateurs");
     }
@@ -470,7 +476,7 @@ export const structuresService = {
   },
 
   async updateMember(v: Viewer, id: string, userId: string, input: MemberUpdate) {
-    const access = await requireOrganizer(v, id);
+    const access = await requireOrganizerWrite(v, id);
     const m = await db.query.structureMembers.findFirst({
       where: and(eq(structureMembers.structureId, id), eq(structureMembers.userId, userId)),
     });
@@ -484,7 +490,7 @@ export const structuresService = {
   },
 
   async removeMember(v: Viewer, id: string, userId: string) {
-    const access = await requireOrganizer(v, id);
+    const access = await requireOrganizerWrite(v, id);
     const m = await db.query.structureMembers.findFirst({
       where: and(eq(structureMembers.structureId, id), eq(structureMembers.userId, userId)),
     });
@@ -513,7 +519,7 @@ export const structuresService = {
 
   /** Bannissement des événements de la structure (seule l'équipe Orasso bannit de la plateforme). */
   async ban(v: Viewer, id: string, pseudo: string, reason: string | null) {
-    await requireOrganizer(v, id);
+    await requireOrganizerWrite(v, id);
     const target = await profilesRepo.byPseudo(pseudo);
     if (!target) throw notFound("Profil introuvable");
     await db
@@ -523,7 +529,7 @@ export const structuresService = {
   },
 
   async unban(v: Viewer, id: string, userId: string) {
-    await requireOrganizer(v, id);
+    await requireOrganizerWrite(v, id);
     await db.delete(structureBans).where(and(eq(structureBans.structureId, id), eq(structureBans.userId, userId)));
   },
 

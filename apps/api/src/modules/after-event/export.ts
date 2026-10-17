@@ -67,7 +67,7 @@ const localDay = (d: Date) => localStamp(d).slice(0, 10);
 export type ParticipantsExport = { fileName: string; csv: string; rowCount: number };
 
 export const exportService = {
-  /** `GET /events/:id/participants/export?reason=` */
+  /** `POST /events/:id/participants/export {reason}` */
   async participants(
     v: Viewer,
     eventId: string,

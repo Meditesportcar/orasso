@@ -103,7 +103,14 @@ export const notesService = {
       .select({ id: applications.id })
       .from(applications)
       .innerJoin(events, eq(events.id, applications.eventId))
-      .where(and(eq(applications.userId, subject.userId), eq(events.structureId, s.id)))
+      .where(
+        and(
+          eq(applications.userId, subject.userId),
+          eq(events.structureId, s.id),
+          // Une venue en crew jamais confirmée n'est pas visible de l'organisation (même filtre que le tri).
+          sql`(${applications.crewApplicationId} is null or ${applications.memberConfirmedAt} is not null)`,
+        ),
+      )
       .limit(1);
     if (!known) throw notFound("Personne introuvable");
     if (input.eventId) {

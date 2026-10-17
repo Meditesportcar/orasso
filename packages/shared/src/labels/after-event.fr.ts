@@ -172,6 +172,8 @@ export const afterEventLabels = {
       : day === 7
         ? `Le badge de ta structure expire dans une semaine, le ${date}. Sans renouvellement, la structure sera suspendue.`
         : `Le badge de ta structure expire demain, le ${date}. Sans renouvellement, la structure sera suspendue.`,
+  badgeOverdueBody:
+    "Le badge de ta structure a expiré. Sans renouvellement par l'équipe Orasso, la structure sera suspendue demain ; rien n'est supprimé.",
   badgeSuspendedTitle: (name: string) => `${name} est suspendue`,
   badgeSuspendedBody:
     "Le badge n'a pas été renouvelé : la structure est suspendue. Rien n'est supprimé ; écris à l'équipe Orasso pour la rétablir.",

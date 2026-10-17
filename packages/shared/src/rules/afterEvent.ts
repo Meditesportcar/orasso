@@ -1,7 +1,7 @@
 // Après l'événement et badge de structure (lot 27, ARCHITECTURE-SUITE § 11) : règles pures. L'API les applique ; le
 // site et l'appli affichent le résultat sans le recalculer.
 import { SEGMENT_REACH_AFTER_END_MS } from "./templates";
-import { DAY } from "./time";
+import { DAY, wallTime } from "./time";
 
 // --- Bilan -------------------------------------------------------------------------------------------------------
 
@@ -77,7 +77,9 @@ export function exportFileName(slug: string, date: string): string {
 export function csvCell(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
-  const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  // En tête, et aussi après un `,` ou un `;` à l'intérieur de la cellule (certains tableurs coupent sur ces signes).
+  const lead = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  const text = lead.replace(/([,;])(?=[=+\-@\t\r])/g, "$1'");
   return /[";\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
@@ -104,29 +106,40 @@ export type BadgeReminders = Partial<Record<`${BadgeReminderDay}`, string>>;
 /** Délai de grâce quand l'équipe lève une suspension sans renouveler : le badge repart pour 30 jours. */
 export const BADGE_GRACE_DAYS = 30;
 
-/** Jours qui restent avant l'échéance, arrondis au jour supérieur (0 = aujourd'hui ou déjà passée). */
+const calendarDay = (d: Date) => {
+  const w = wallTime(d);
+  return Date.UTC(w.year, w.month - 1, w.day) / DAY;
+};
+
+/** Jours calendaires (heure de Paris) avant le jour de l'échéance : 0 = le jour même, ou déjà passée. */
 export function badgeDaysLeft(expiresAt: Date, now: Date): number {
-  return Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / DAY));
+  return Math.max(0, calendarDay(expiresAt) - calendarDay(now));
 }
 
 export type BadgePlan =
   | { action: "none" }
-  | { action: "remind"; day: BadgeReminderDay; mark: BadgeReminderDay[] }
+  | { action: "remind"; day: BadgeReminderDay; mark: BadgeReminderDay[]; overdue?: boolean }
   | { action: "suspend" };
 
 /**
  * Ce que la tâche quotidienne fait d'un badge : rien ; un rappel (le plus urgent des paliers franchis et pas encore
- * envoyés, tous les paliers franchis étant marqués pour qu'une tâche manquée n'envoie pas trois e-mails d'un coup) ;
- * la suspension, une fois l'échéance passée. Idempotent : rejouée, elle ne propose plus le palier marqué.
+ * envoyés, tous marqués pour qu'une tâche manquée n'envoie pas trois e-mails d'un coup) ; la suspension, une fois
+ * l'échéance passée. Jours calendaires de Paris : « la veille » part la veille, jamais le jour même. Jamais de
+ * suspension sans le rappel de la veille : une structure déjà échue qui ne l'a pas reçu (tâche manquée, déploiement)
+ * le reçoit d'abord (`overdue`) et n'est suspendue qu'au passage suivant. Idempotent.
  */
 export function badgePlan(expiresAt: Date, now: Date, reminded: BadgeReminders): BadgePlan {
-  if (expiresAt.getTime() <= now.getTime()) return { action: "suspend" };
+  if (expiresAt.getTime() <= now.getTime()) {
+    if (reminded["1"]) return { action: "suspend" };
+    return { action: "remind", day: 1, mark: [...BADGE_REMINDER_DAYS].filter((d) => !reminded[`${d}`]), overdue: true };
+  }
   const left = badgeDaysLeft(expiresAt, now);
-  const crossed = BADGE_REMINDER_DAYS.filter((d) => left <= d);
+  // Le jour de l'échéance, le palier « la veille » est passé : il n'est plus envoyé.
+  const crossed = BADGE_REMINDER_DAYS.filter((d) => left <= d && !(d === 1 && left === 0));
   const pending = crossed.filter((d) => !reminded[`${d}`]);
   if (!pending.length) return { action: "none" };
   const urgent = Math.min(...pending) as BadgeReminderDay;
-  return { action: "remind", day: urgent, mark: crossed.filter((d) => !reminded[`${d}`]) };
+  return { action: "remind", day: urgent, mark: pending };
 }
 
 /** Un renouvellement ajoute un an à partir de la plus tardive des deux dates (échéance, maintenant). */

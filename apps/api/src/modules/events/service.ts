@@ -99,6 +99,13 @@ async function organizerEvent(v: Viewer, id: string) {
   return { e, access };
 }
 
+/** Modification d'un événement (réglages, affiche, zones, récurrence) : refusée à une structure suspendue (lot 27). */
+async function organizerEventWrite(v: Viewer, id: string) {
+  const out = await organizerEvent(v, id);
+  await assertNotSuspended(out.e.structureId);
+  return out;
+}
+
 /** Structure suspendue (lot 27) : plus de création ni de publication d'événement ; tout reste lisible (S31). */
 const SUSPENDED_MESSAGE = "Structure suspendue : plus de création ni de publication d'événement.";
 async function assertNotSuspended(structureId: string) {
@@ -261,7 +268,7 @@ export const eventsService = {
    * tâches replanifiées ; une capacité augmentée libère des places pour la liste d'attente.
    */
   async update(v: Viewer, id: string, input: EventUpdate): Promise<EventOrganizer> {
-    const { e } = await organizerEvent(v, id);
+    const { e } = await organizerEventWrite(v, id);
     if (e.status === "cancelled") throw conflict("conflict", "Événement annulé");
     const startsAt = input.startsAt ?? e.startsAt;
     const endsAt = input.endsAt ?? e.endsAt;
@@ -465,7 +472,7 @@ export const eventsService = {
    * d'un coup en brouillons, rattachées à l'événement d'origine qui garde la règle. Une seule règle par série.
    */
   async createRecurrence(v: Viewer, id: string, rule: RecurrenceRule) {
-    const { e } = await organizerEvent(v, id);
+    const { e } = await organizerEventWrite(v, id);
     if (e.recurrenceRule) throw conflict("conflict", "Cet événement a déjà une récurrence");
     if (e.parentEventId) throw conflict("conflict", "La récurrence se crée depuis l'événement d'origine");
     const dates = recurrenceOccurrences(e.startsAt, e.endsAt, rule);
@@ -517,7 +524,7 @@ export const eventsService = {
 
   /** Affiche de l'événement (WebP, 1600 px de large au plus). */
   async setPoster(v: Viewer, id: string, file: File): Promise<EventOrganizer> {
-    await organizerEvent(v, id);
+    await organizerEventWrite(v, id);
     rateLimit("fileUpload", v.user.id);
     if (file.size === 0) throw validation("Fichier vide");
     if (file.size > 15 * 1024 * 1024) throw new AppError(413, "payload_too_large", "Affiche de 15 Mo au plus");
@@ -576,7 +583,7 @@ export const eventsService = {
   },
 
   async addZone(v: Viewer, id: string, input: z.output<typeof zoneCreateSchema>) {
-    await organizerEvent(v, id);
+    await organizerEventWrite(v, id);
     const [zone] = await db
       .insert(eventZones)
       .values({ ...input, eventId: id })
@@ -587,7 +594,7 @@ export const eventsService = {
   },
 
   async updateZone(v: Viewer, id: string, zoneId: string, input: z.output<typeof zoneUpdateSchema>) {
-    await organizerEvent(v, id);
+    await organizerEventWrite(v, id);
     const [zone] = await db
       .update(eventZones)
       .set(input)
@@ -598,7 +605,7 @@ export const eventsService = {
   },
 
   async removeZone(v: Viewer, id: string, zoneId: string) {
-    await organizerEvent(v, id);
+    await organizerEventWrite(v, id);
     await db.delete(eventZones).where(and(eq(eventZones.id, zoneId), eq(eventZones.eventId, id)));
   },
 

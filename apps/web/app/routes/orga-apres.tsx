@@ -312,12 +312,12 @@ function Export({ eventId }: { eventId: string }) {
     setError(null);
     setDone(false);
     try {
-      const res = await fetch(
-        `/api/events/${eventId}/participants/export?reason=${encodeURIComponent(reason.trim())}`,
-        {
-          credentials: "same-origin",
-        },
-      );
+      const res = await fetch(`/api/events/${eventId}/participants/export`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim() }),
+        credentials: "same-origin",
+      });
       if (!res.ok) {
         const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
         setError(payload?.error?.message ?? "Export impossible.");

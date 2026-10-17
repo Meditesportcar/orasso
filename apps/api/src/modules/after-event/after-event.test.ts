@@ -3,6 +3,7 @@
 // coordonnées tracée après J+7, notes internes (privées de la structure), badge (rappels, suspension, levée,
 // renouvellement, transfert de propriétaire), droits (2FA de session, super admin exclu, IDOR). Routes sensibles jouées
 // en cookie ET en jeton porteur ; heure simulée.
+import { randomUUID } from "node:crypto";
 import { fromWallTime } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -393,8 +394,9 @@ describe("remerciement", () => {
 });
 
 describe("export des participants", () => {
-  const path = (id: string, reason?: string) =>
-    `/events/${id}/participants/export${reason === undefined ? "" : `?reason=${encodeURIComponent(reason)}`}`;
+  // POST avec le motif dans le corps (relecture : jamais dans l'adresse).
+  const exportReq = (u: TestUser | null, id: string, reason?: string, mode: Mode = "cookie") =>
+    req(u, "POST", `/events/${id}/participants/export`, reason === undefined ? {} : { reason }, mode);
 
   for (const mode of MODES) {
     it(`motif obligatoire, journal, CSV marqué sans notes ni comptes supprimés (${mode})`, async () => {
@@ -409,11 +411,11 @@ describe("export des participants", () => {
       // Une cellule piégée : doit être neutralisée.
       await db.update(profiles).set({ firstName: '=HYPERLINK("http://x")' }).where(eq(profiles.userId, w.lea.u.id));
 
-      expect((await req(w.damien, "GET", path(w.e.id), undefined, mode)).status).toBe(400);
-      expect((await req(w.damien, "GET", path(w.e.id, "court"), undefined, mode)).status).toBe(400);
+      expect((await exportReq(w.damien, w.e.id, undefined, mode)).status).toBe(400);
+      expect((await exportReq(w.damien, w.e.id, "court", mode)).status).toBe(400);
       expect(await db.select().from(participantExports)).toHaveLength(0);
 
-      const res = await req(w.damien, "GET", path(w.e.id, "Demande de la gendarmerie du 12/10"), undefined, mode);
+      const res = await exportReq(w.damien, w.e.id, "Demande de la gendarmerie du 12/10", mode);
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("text/csv");
       expect(res.headers.get("content-disposition")).toMatch(
@@ -453,14 +455,14 @@ describe("export des participants", () => {
     const other = await signUp("Autre", { twoFactor: true });
     await createStructure(other.id);
     for (const who of [w.staff, w.kenji.u, other, admin]) {
-      expect((await req(who, "GET", path(w.e.id, "Un motif suffisant"))).status).toBe(403);
+      expect((await exportReq(who, w.e.id, "Un motif suffisant")).status).toBe(403);
     }
-    expect((await req(null, "GET", path(w.e.id, "Un motif suffisant"))).status).toBe(401);
+    expect((await exportReq(null, w.e.id, "Un motif suffisant")).status).toBe(401);
     expect(await db.select().from(participantExports)).toHaveLength(0);
     for (let i = 0; i < rateRules.participantsExport.max; i++) {
-      expect((await req(w.camille, "GET", path(w.e.id, "Un motif suffisant"))).status).toBe(200);
+      expect((await exportReq(w.camille, w.e.id, "Un motif suffisant")).status).toBe(200);
     }
-    expect((await req(w.camille, "GET", path(w.e.id, "Un motif suffisant"))).status).toBe(429);
+    expect((await exportReq(w.camille, w.e.id, "Un motif suffisant")).status).toBe(429);
     expect(await db.select().from(participantExports)).toHaveLength(rateRules.participantsExport.max);
   });
 });
@@ -648,6 +650,18 @@ describe("badge de structure", () => {
   }
 
   const structureOf = async (id: string) => (await db.select().from(structures).where(eq(structures.id, id)))[0]!;
+  /**
+   * Échéance passée au jour `day` : le premier balayage envoie le rappel tardif (jamais de suspension sans le rappel de
+   * la veille), le suivant, le lendemain, suspend.
+   */
+  async function suspendByExpiry(id: string, day: number) {
+    clock.set(D(day));
+    await badgeService.sweep();
+    expect((await structureOf(id)).verification).toBe("verified");
+    clock.set(D(day + 1));
+    await badgeService.sweep();
+    expect((await structureOf(id)).verification).toBe("suspended");
+  }
   const mailsOf = (template: string) => db.select().from(emailOutbox).where(eq(emailOutbox.template, template));
 
   it("un rappel par palier (1 mois, 1 semaine, la veille), une fois chacun, puis suspension réversible", async () => {
@@ -706,8 +720,7 @@ describe("badge de structure", () => {
     it(`structure suspendue : plus de création ni de publication, historique lisible (${mode})`, async () => {
       const b = await badgeWorld(5);
       const draft = await createEvent(b.s.id, { title: "Brouillon", status: "draft", startsAt: D(90) });
-      clock.set(D(6));
-      await badgeService.sweep();
+      await suspendByExpiry(b.s.id, 6);
       // Ses membres gardent la lecture de la structure suspendue ; le public ne la voit plus.
       expect((await req(b.damien, "GET", `/structures/by-slug/${b.s.slug}`, undefined, mode)).status).toBe(200);
       expect((await req(null, "GET", `/structures/by-slug/${b.s.slug}`, undefined, mode)).status).toBe(404);
@@ -747,9 +760,7 @@ describe("badge de structure", () => {
 
   it("la levée d'un badge échu laisse 30 jours de grâce (pas de re-suspension immédiate), rappels remis à zéro", async () => {
     const b = await badgeWorld(2);
-    clock.set(D(3));
-    await badgeService.sweep();
-    expect((await structureOf(b.s.id)).verification).toBe("suspended");
+    await suspendByExpiry(b.s.id, 3);
     expect(
       (await req(b.admin, "POST", `/admin/structures/${b.s.id}/lift`, { reason: "Retard de paiement réglé" })).status,
     ).toBe(200);
@@ -960,5 +971,160 @@ describe("lots précédents : le lien d'avis des messages groupés", () => {
     // Un message groupé ordinaire ne compte pas comme « remerciement envoyé ».
     expect((await db.select().from(events).where(eq(events.id, w.e.id)))[0]?.thanksSentAt).toBeNull();
     expect(await db.select().from(reviews)).toHaveLength(0);
+  });
+});
+
+describe("relecture du lot 27", () => {
+  async function suspendedWorld() {
+    const damien = await signUp("Damien", { twoFactor: true });
+    const s = await createStructure(damien.id);
+    const upcoming = await createEvent(s.id, { title: "À venir", startsAt: new Date(START.getTime() + 30 * DAY) });
+    await db
+      .update(structures)
+      .set({ verification: "suspended", suspendedReason: "badge_expired", suspendedAt: new Date() })
+      .where(eq(structures.id, s.id));
+    return { damien, s, upcoming };
+  }
+
+  for (const mode of MODES) {
+    it(`une structure suspendue ne se rétablit pas elle-même (${mode})`, async () => {
+      const { damien, s } = await suspendedWorld();
+      const view = await req(damien, "GET", `/structures/${s.id}/verification`, undefined, mode);
+      expect(view.status).toBe(200);
+      expect(view.json.canSubmit).toBe(false);
+      expect((await req(damien, "POST", `/structures/${s.id}/verification/submit`, undefined, mode)).status).toBe(409);
+      expect(
+        (await req(damien, "POST", `/structures/${s.id}/verification/check`, { number: "12345678901234" }, mode))
+          .status,
+      ).toBe(409);
+      expect(
+        (await req(damien, "DELETE", `/structures/${s.id}/verification/documents/${randomUUID()}`, undefined, mode))
+          .status,
+      ).toBe(409);
+      const form = new FormData();
+      form.append("kind", "statutes");
+      form.append(
+        "file",
+        new File([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d])], "s.pdf", { type: "application/pdf" }),
+      );
+      const up = await app.request(`/api/structures/${s.id}/verification/documents`, {
+        method: "POST",
+        headers: {
+          origin: ORIGIN,
+          ...(mode === "cookie" ? { cookie: damien.cookie } : { authorization: `Bearer ${bearerOf(damien.cookie)}` }),
+        },
+        body: form,
+      });
+      expect(up.status).toBe(409);
+      expect((await db.select().from(structures).where(eq(structures.id, s.id)))[0]?.verification).toBe("suspended");
+    });
+
+    it(`structure suspendue : écritures d'organisateur fermées, lecture, tri et jour J permis (${mode})`, async () => {
+      const { damien, s, upcoming } = await suspendedWorld();
+      const target = await signUp("Cible_66");
+      expect((await req(damien, "PATCH", `/structures/${s.id}`, { description: "x" }, mode)).status).toBe(403);
+      expect((await req(damien, "POST", `/structures/${s.id}/bans`, { pseudo: target.pseudo }, mode)).status).toBe(403);
+      expect(
+        (await req(damien, "POST", `/structures/${s.id}/members`, { pseudo: target.pseudo, role: "staff" }, mode))
+          .status,
+      ).toBe(403);
+      expect((await req(damien, "PATCH", `/events/${upcoming.id}`, { description: "x" }, mode)).status).toBe(403);
+      expect((await req(damien, "POST", `/events/${upcoming.id}/zones`, { code: "A", name: "A" }, mode)).status).toBe(
+        403,
+      );
+      // Permis (S31) : lecture, tri, compteurs, Maintenu / Incertain.
+      expect((await req(damien, "GET", `/structures/${s.id}`, undefined, mode)).status).toBe(200);
+      expect(
+        (await req(damien, "GET", `/events/${upcoming.id}/applications?kind=vehicle`, undefined, mode)).status,
+      ).toBe(200);
+      expect((await req(damien, "GET", `/events/${upcoming.id}/counters`, undefined, mode)).status).toBe(200);
+      expect(
+        (await req(damien, "PATCH", `/events/${upcoming.id}/outlook`, { outlook: "uncertain" }, mode)).status,
+      ).toBe(200);
+    });
+  }
+
+  it("l'export reste en POST : un lien (GET) ne le déclenche pas, le motif n'est jamais dans l'adresse", async () => {
+    const w = await setup();
+    await settle(w);
+    const get = await req(w.damien, "GET", `/events/${w.e.id}/participants/export?reason=Un%20motif%20suffisant`);
+    expect(get.status).toBe(404);
+    expect(await db.select().from(participantExports)).toHaveLength(0);
+  });
+
+  it("le super admin (vue organisateur) ne voit pas les notes internes au tri", async () => {
+    const w = await setup();
+    await req(w.damien, "POST", `/structures/${w.s.id}/notes`, { pseudo: w.kenji.u.pseudo, body: "Note privée" });
+    const admin = await signUp("Admin", { twoFactor: true, role: "super_admin" });
+    const adminView = await req(admin, "GET", `/events/${w.e.id}/applications?kind=vehicle&limit=50`);
+    expect(adminView.status).toBe(200);
+    expect(JSON.stringify(adminView.json)).not.toContain("Note privée");
+    const one = await req(admin, "GET", `/applications/${w.kenji.application.id}`);
+    expect(JSON.stringify(one.json)).not.toContain("Note privée");
+    const orgView = await req(w.damien, "GET", `/events/${w.e.id}/applications?kind=vehicle&limit=50`);
+    expect(JSON.stringify(orgView.json)).toContain("Note privée");
+  });
+
+  it("notes : une venue en crew jamais confirmée n'ouvre pas le droit d'écrire", async () => {
+    const w = await setup();
+    const ghost = await signUp("Fantome_66");
+    const vehicle = await createVehicle(ghost.id, w.ref);
+    await db.insert(applications).values({
+      eventId: w.e.id,
+      userId: ghost.id,
+      vehicleId: vehicle.id,
+      status: "awaiting_member",
+      crewApplicationId: randomUUID(),
+      followStructure: false,
+    });
+    expect(
+      (await req(w.damien, "POST", `/structures/${w.s.id}/notes`, { pseudo: ghost.pseudo, body: "x" })).status,
+    ).toBe(404);
+  });
+
+  it("transfert : un justificatif déposé par les organisateurs est refusé, celui de l'équipe ne s'efface pas côté organisateur", async () => {
+    const damien = await signUp("Damien", { twoFactor: true });
+    const s = await createStructure(damien.id, false);
+    const admin = await signUp("Admin", { twoFactor: true, role: "super_admin" });
+    const next = await signUp("NouveauPresident");
+    const doc = (uploadedBy: string, name: string) => ({
+      structureId: s.id,
+      kind: "other" as const,
+      storageKey: `private/${name}`,
+      fileName: name,
+      contentType: "application/pdf",
+      sizeBytes: 1,
+      uploadedBy,
+    });
+    const [own] = await db.insert(structureVerificationDocuments).values(doc(damien.id, "own.pdf")).returning();
+    const body = { pseudo: next.pseudo, reason: "Démission du président, PV du 12/10", documentId: own?.id };
+    expect((await req(admin, "POST", `/admin/structures/${s.id}/transfer-owner`, body)).status).toBe(400);
+    const [team] = await db.insert(structureVerificationDocuments).values(doc(admin.id, "team.pdf")).returning();
+    expect((await req(damien, "DELETE", `/structures/${s.id}/verification/documents/${team?.id}`)).status).toBe(403);
+    expect(
+      (await req(admin, "POST", `/admin/structures/${s.id}/transfer-owner`, { ...body, documentId: team?.id })).status,
+    ).toBe(200);
+  });
+
+  it("badge : jamais de suspension sans le rappel de la veille (rappel tardif d'abord) ; levée sans échéance : une échéance est posée", async () => {
+    const damien = await signUp("Damien", { twoFactor: true });
+    const s = await createStructure(damien.id);
+    const admin = await signUp("Admin", { twoFactor: true, role: "super_admin" });
+    await db
+      .update(structures)
+      .set({ badgeExpiresAt: new Date(START.getTime() - 2 * DAY) })
+      .where(eq(structures.id, s.id));
+    expect(await badgeService.sweep()).toEqual({ reminded: 1, suspended: 0 });
+    await notificationsService.flush();
+    expect((await db.select().from(structures).where(eq(structures.id, s.id)))[0]?.verification).toBe("verified");
+    expect(await notificationsOf(damien.id, "structure_badge_expiring")).toHaveLength(1);
+    clock.advance(DAY);
+    expect(await badgeService.sweep()).toEqual({ reminded: 0, suspended: 1 });
+    await db.update(structures).set({ badgeExpiresAt: null }).where(eq(structures.id, s.id));
+    expect((await req(admin, "POST", `/admin/structures/${s.id}/lift`, { reason: "Dossier complet" })).status).toBe(
+      200,
+    );
+    const after = (await db.select().from(structures).where(eq(structures.id, s.id)))[0];
+    expect(after?.badgeExpiresAt?.getTime()).toBe(clock.now.getTime() + 30 * DAY);
   });
 });

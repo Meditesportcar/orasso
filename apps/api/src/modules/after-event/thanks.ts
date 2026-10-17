@@ -2,6 +2,7 @@
 // le lien d'avis propre à chaque présent. Une seule fois par événement (`events.thanks_sent_at` posé dans la
 // transaction de l'envoi, écriture conditionnelle), après la fin et jusqu'à J+7 (fenêtre des avis). Chaque présent
 // reçoit le message dans sa Boîte (push) et une ligne du Journal ; aucun e-mail, donc rien qui entame le budget Brevo.
+import { createHash } from "node:crypto";
 import {
   afterEventLabels,
   ensureReviewLink,
@@ -27,6 +28,15 @@ import { groupMessagesService } from "../communication/group-messages";
 import { requireEventSpeaker } from "../communication/guards";
 import { segmentRecipients } from "../communication/segments";
 import type { EventRow } from "../events/repo";
+
+/** Identifiant d'idempotence du remerciement d'un événement : UUID v5 (SHA-1) de « thanks:<événement> ». */
+export function thanksClientId(eventId: string): string {
+  const h = createHash("sha1").update(`orasso-thanks:${eventId}`).digest();
+  h[6] = ((h[6] ?? 0) & 0x0f) | 0x50;
+  h[8] = ((h[8] ?? 0) & 0x3f) | 0x80;
+  const x = h.subarray(0, 16).toString("hex");
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`;
+}
 
 async function oraSsoTemplate() {
   const [t] = await db
@@ -108,7 +118,14 @@ export const thanksService = {
     const created = await groupMessagesService.create(
       v,
       s.id,
-      { clientId: e.id, eventId: e.id, segment: "checked_in", templateId, subject, body: ensureReviewLink(body) },
+      {
+        clientId: thanksClientId(e.id),
+        eventId: e.id,
+        segment: "checked_in",
+        templateId,
+        subject,
+        body: ensureReviewLink(body),
+      },
       { thanks: true },
     );
     const [row] = await db.select({ at: events.thanksSentAt }).from(events).where(eq(events.id, e.id));

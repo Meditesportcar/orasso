@@ -299,7 +299,12 @@ export const pointsService = {
       await tx.update(events).set({ settledAt: t }).where(eq(events.id, eventId));
       for (const userId of users) await recompute(tx, userId);
       // Lot 27 : bilan de l'événement, calculé sur les points qui viennent d'être écrits (même transaction).
-      await reportService.onSettled(tx, event, after);
+      // Dans un savepoint : une erreur du bilan ne doit jamais annuler les points et les malus (le balayage le recrée).
+      try {
+        await tx.transaction((sp) => reportService.onSettled(sp, event, after));
+      } catch (error) {
+        console.error("Bilan de l'événement non calculé (rattrapé par le balayage) :", error);
+      }
       after(() => notificationsService.kick());
       return true;
     });

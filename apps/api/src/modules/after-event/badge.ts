@@ -157,7 +157,7 @@ export const badgeService = {
           const date = s.badgeExpiresAt.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long" });
           await notificationsService.notifyMany(tx, organizers, "structure_badge_expiring", {
             title: afterEventLabels.badgeReminderTitle(s.name),
-            body: afterEventLabels.badgeReminderBody(plan.day, date),
+            body: plan.overdue ? afterEventLabels.badgeOverdueBody : afterEventLabels.badgeReminderBody(plan.day, date),
             data: { structureId: s.id, day: plan.day },
             link: { label: "Ouvrir ma structure", path: `/orga/${s.slug}/structure` },
           });
@@ -324,15 +324,16 @@ export const badgeService = {
       const s = await lockStructure(tx, id);
       if (s.verification !== "suspended") throw conflict("conflict", "Cette structure n'est pas suspendue.");
       const at = now();
-      const expiry = s.badgeExpiresAt ? gracedBadgeExpiry(s.badgeExpiresAt, at) : null;
-      const changed = expiry && s.badgeExpiresAt && expiry.getTime() !== s.badgeExpiresAt.getTime();
+      // Toujours une échéance (sans elle, le balayage ne reverrait jamais la structure) : au moins 30 jours de grâce.
+      const expiry = gracedBadgeExpiry(s.badgeExpiresAt, at);
+      const changed = expiry.getTime() !== s.badgeExpiresAt?.getTime();
       await tx
         .update(structures)
         .set({
           verification: "verified",
           suspendedReason: null,
           suspendedAt: null,
-          ...(expiry ? { badgeExpiresAt: expiry } : {}),
+          badgeExpiresAt: expiry,
           ...(changed ? { badgeRemindedAt: {} } : {}),
         })
         .where(eq(structures.id, id));
@@ -381,17 +382,23 @@ export const badgeService = {
     await requirePlatformRole(v, "super_admin");
     const result = await withTx(async (tx, after) => {
       const s = await lockStructure(tx, id);
+      // Le justificatif est un document « autre » de cette structure, déposé par l'équipe elle-même (jamais par les
+      // organisateurs, qui pourraient s'en fabriquer un).
       const [doc] = await tx
-        .select()
+        .select({ id: structureVerificationDocuments.id })
         .from(structureVerificationDocuments)
+        .innerJoin(profiles, eq(profiles.userId, structureVerificationDocuments.uploadedBy))
         .where(
           and(
             eq(structureVerificationDocuments.id, input.documentId),
             eq(structureVerificationDocuments.structureId, id),
             eq(structureVerificationDocuments.kind, "other"),
+            eq(profiles.platformRole, "super_admin"),
           ),
         );
-      if (!doc) throw validation("Le justificatif doit être un document « autre » de cette structure.");
+      if (!doc) {
+        throw validation("Le justificatif doit être un document « autre » de cette structure, déposé par l'équipe.");
+      }
       const [target] = await tx
         .select({ userId: profiles.userId, pseudo: profiles.pseudo, email: user.email })
         .from(profiles)
@@ -460,20 +467,25 @@ export const badgeService = {
     });
     const url = `${env.PUBLIC_URL}/orga/${result.s.slug}/structure`;
     const title = afterEventLabels.ownerChangedTitle(result.s.name);
-    if (result.current) {
+    // Le transfert est validé : un échec d'envoi ne remonte jamais en erreur à l'administrateur (journalisé seulement).
+    try {
+      if (result.current) {
+        await mail.send(
+          "structure_owner_changed",
+          result.current.email,
+          renderMail(title, [afterEventLabels.ownerChangedOld], { label: "Ouvrir la structure", url }),
+          { structureId: id },
+        );
+      }
       await mail.send(
         "structure_owner_changed",
-        result.current.email,
-        renderMail(title, [afterEventLabels.ownerChangedOld], { label: "Ouvrir la structure", url }),
+        result.target.email,
+        renderMail(title, [afterEventLabels.ownerChangedNew], { label: "Ouvrir la structure", url }),
         { structureId: id },
       );
+    } catch (error) {
+      console.error("E-mails du transfert de propriétaire :", error);
     }
-    await mail.send(
-      "structure_owner_changed",
-      result.target.email,
-      renderMail(title, [afterEventLabels.ownerChangedNew], { label: "Ouvrir la structure", url }),
-      { structureId: id },
-    );
     return this.detail(v, id);
   },
 };
