@@ -24,6 +24,7 @@ import { describe, expect, it } from "vitest";
 import { DEMO_PUBLIC_KEY, ed25519Verify, plateHashOf } from "./crypto";
 import {
   applyResults,
+  arrivedOn,
   backoffMs,
   buildState,
   checkinAction,
@@ -32,6 +33,7 @@ import {
   dueBatches,
   expectedOn,
   isPurgeDue,
+  markSeen,
   mergeSync,
   type PendingAction,
   quickPlateMatch,
@@ -431,6 +433,31 @@ describe("événement sur plusieurs jours", () => {
     const { checkin } = scanAction(first, p1, uuid(601), day1, s.entries.get(uuid(1)));
     if (checkin) s.local.set(checkin.passId, checkin);
     expect(decideLocal(s, p1, keys, ed25519Verify, day2)).toMatchObject({ decision: "already" });
+  });
+
+  it("arrivé du jour : un « tout l'événement » entré la veille est attendu, puis arrivé une fois lu aujourd'hui", () => {
+    const s = multi();
+    const whole = s.entries.get(uuid(1));
+    if (!whole) throw new Error("entrée");
+    s.entries.set(uuid(1), { ...whole, checkedInAt: "2026-10-15T08:00:00.000Z" });
+    const now = s.entries.get(uuid(1));
+    if (!now) throw new Error("entrée");
+    expect(arrivedOn(s, now, day1)).toBe(true);
+    expect(arrivedOn(s, now, day2)).toBe(false);
+    expect(counters(s, day2).arrived).toBe(0);
+    markSeen(s, uuid(1), day2);
+    expect(arrivedOn(s, now, day2)).toBe(true);
+    // Lecture reçue par le serveur depuis un autre appareil (`lastSeenAt` de la synchro).
+    s.seen?.clear();
+    s.entries.set(uuid(1), { ...now, lastSeenAt: "2026-10-16T07:30:00.000Z" });
+    expect(counters(s, day2).arrived).toBe(1);
+  });
+
+  it("pointage rapide par plaque : seulement les attendus du jour", () => {
+    const s = multi();
+    const plate2 = `${"AB2".padEnd(3, "0")}102CD`;
+    expect(quickPlateMatch(s, plate2, day1)).toMatchObject({ kind: "none" });
+    expect(quickPlateMatch(s, plate2, day2)).toMatchObject({ kind: "one" });
   });
 
   it("compteurs et filtre « Aujourd'hui » : tout l'événement et le jour même", () => {

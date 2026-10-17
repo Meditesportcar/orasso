@@ -162,6 +162,10 @@ export function decideScan(
     return { decision: "refused", reason: entry.revokedReason ?? "cancelled", passId: pass.passId };
   }
   if (entry.dayDate && ctx.now && localDate(ctx.now) !== entry.dayDate) {
+    // Déjà accepté quand même aujourd'hui : « déjà entré », le panneau ne se rouvre pas à chaque lecture.
+    if (entry.checkedInAt && localDate(new Date(entry.checkedInAt)) === localDate(ctx.now)) {
+      return { decision: "already", passId: pass.passId, entry, checkedInAt: entry.checkedInAt };
+    }
     return { decision: "refused", reason: "other_day", passId: pass.passId, entry, dayDate: entry.dayDate };
   }
   if (entry.checkedInAt) return { decision: "already", passId: pass.passId, entry, checkedInAt: entry.checkedInAt };

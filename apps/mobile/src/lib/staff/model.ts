@@ -134,6 +134,11 @@ export type StaffState = {
   /** Lot 24 : billets du public (rôle boutique seulement) et ceux que cet appareil a déjà acceptés. */
   tickets: Map<string, TicketListEntry>;
   ticketUses: Map<string, LocalTicketUse>;
+  /**
+   * Lot 26 : dernière lecture de chaque QR sur cet appareil (OK, déjà entré, accepté quand même), en mémoire : un
+   * « tout l'événement » lu aujourd'hui est arrivé aujourd'hui, même si son entrée date d'un jour précédent.
+   */
+  seen?: Map<string, string>;
 };
 
 /** Billet accepté sur cet appareil avant (ou en attendant) la confirmation du serveur (table `local_ticket_uses`). */
@@ -174,6 +179,27 @@ export function carryOver(fresh: StaffState, previous: StaffState | undefined, u
   for (const [ticketId, use] of previous.ticketUses) {
     if (!fresh.ticketUses.has(ticketId)) fresh.ticketUses.set(ticketId, use);
   }
+  if (previous.seen) fresh.seen = new Map([...(fresh.seen ?? []), ...previous.seen]);
+}
+
+/** Lot 26 : note qu'un QR a été lu (présence du jour d'un « tout l'événement »). */
+export function markSeen(state: StaffState, passId: string, at: Date): void {
+  if (!state.seen) state.seen = new Map();
+  state.seen.set(passId, at.toISOString());
+}
+
+/**
+ * Arrivé ce jour-là (même règle que le direct de l'API) : événement d'un jour ou candidature d'un jour = entrée
+ * enregistrée ; « tout l'événement » sur plusieurs jours = entrée, lecture reçue par le serveur (`lastSeenAt`) ou
+ * lecture sur cet appareil datées d'aujourd'hui (Paris).
+ */
+export function arrivedOn(state: StaffState, entry: AccessListEntry, now: Date): boolean {
+  const at = checkedInAt(state, entry);
+  if ((state.meta.days?.length ?? 0) < 2 || entry.dayDate) return Boolean(at);
+  const today = localDate(now);
+  return [at, entry.lastSeenAt ?? null, state.seen?.get(entry.passId) ?? null].some(
+    (x) => x !== null && localDate(new Date(x)) === today,
+  );
 }
 
 // --- Synchro ---------------------------------------------------------------------------------------------------
@@ -301,14 +327,16 @@ export function decideLocal(
 
 /** Ce que la lecture devient dans la file (`kind: scan`) et, si le véhicule entre, le pointage local. */
 export function scanAction(
-  decision: ScanDecision | { decision: "override" | "unknown_pass"; passId: string },
+  decision: ScanDecision | { decision: "override" | "unknown_pass"; passId: string; reason?: string },
   payload: string,
   id: string,
   now: Date,
   entry?: AccessListEntry,
 ): { item: ScanItemWire; checkin: LocalCheckin | null } {
   const passId = decision.passId;
-  const reason = decision.decision === "refused" ? decision.reason : null;
+  // Lot 26 : « Accepter quand même » un QR d'un autre jour garde la raison (`other_day`) pour le rapport.
+  const reason =
+    decision.decision === "refused" ? decision.reason : "reason" in decision ? (decision.reason ?? null) : null;
   const zoneCode = entry?.zoneCode ?? null;
   const item: ScanItemWire = {
     kind: "scan",
@@ -612,10 +640,11 @@ export type QuickMatch =
  * hachage ; sinon les 3 premiers caractères. Un seul pass valide → pointé directement ; plusieurs → choix ; aucun →
  * « Non reconnues ».
  */
-export function quickPlateMatch(state: StaffState, text: string): QuickMatch {
+export function quickPlateMatch(state: StaffState, text: string, now: Date = new Date()): QuickMatch {
   const plate = normalizePlate(text);
   if (plate.length < 3) return { kind: "none", typed: plate };
-  const valid = [...state.entries.values()].filter((e) => e.status === "valid");
+  // Lot 26 : sur plusieurs jours, seulement les attendus du jour (même véhicule inscrit un autre jour : pas pointé ici).
+  const valid = [...state.entries.values()].filter((e) => e.status === "valid" && expectedOn(state.meta, e, now));
   if (plate.length > 3) {
     const hash = plateHashOf(state.meta.plateSalt, plate);
     const exact = valid.filter((e) => e.plateHash === hash);
@@ -670,7 +699,7 @@ export function counters(
   for (const e of state.entries.values()) {
     if (e.status !== "valid" || !expectedOn(state.meta, e, now)) continue;
     expected++;
-    const inside = Boolean(checkedInAt(state, e));
+    const inside = arrivedOn(state, e, now);
     if (inside) arrived++;
     const z = zones.get(e.zoneCode) ?? {
       code: e.zoneCode,

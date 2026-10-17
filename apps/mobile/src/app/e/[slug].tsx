@@ -197,7 +197,7 @@ export default function EventPage() {
       ) : null}
       {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
       {mine.length > 0 &&
-      e.days.length > 1 &&
+      (e.days?.length ?? 0) > 1 &&
       e.dayAccess !== "whole" &&
       canApply &&
       !mine.some((a) => a.eventDayId === null) ? (
@@ -259,7 +259,7 @@ export default function EventPage() {
           </Text>
         </Plate>
       </Pressable>
-      {e.days.length > 1 ? (
+      {(e.days?.length ?? 0) > 1 ? (
         <Plate style={styles.info} testID="event-days">
           <Text variant="label" color={t.color.plateMuted}>
             {eventDaysLabels.days} · {dayAccessLabels[e.dayAccess]}

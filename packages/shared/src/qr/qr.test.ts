@@ -216,6 +216,13 @@ describe("décision de scan hors ligne (decideScan)", () => {
       );
       expect(d).toMatchObject({ decision: "refused", reason: "withdrawn" });
     });
+    it("accepté quand même aujourd'hui (entrée du jour) : « déjà entré », pas de nouveau panneau", () => {
+      const accepted = entry({ dayDate: "2027-03-15", checkedInAt: "2027-03-14T08:30:00.000Z" });
+      expect(decideScan(makePayload(), at(accepted, day1))).toMatchObject({ decision: "already" });
+      // Une entrée d'un autre jour que celui du scan ne compte pas : « autre jour ».
+      const earlier = entry({ dayDate: "2027-03-15", checkedInAt: "2027-03-13T08:30:00.000Z" });
+      expect(decideScan(makePayload(), at(earlier, day1))).toMatchObject({ reason: "other_day" });
+    });
     it("sans heure fournie (ancien appel), aucun contrôle du jour", () => {
       expect(decideScan(makePayload(), ctx(entry({ dayDate: "2027-03-15" })))).toMatchObject({ decision: "ok" });
     });

@@ -2,7 +2,7 @@
 // prise en mémoire, sans attendre le disque : l'écran s'affiche d'abord, l'écriture suit.
 import type { AccessListEntry, ScanDecision, TicketScanDecision, VisitorDelta } from "@orasso/shared";
 
-import { checkedInAt, checkinAction, type StaffState, scanAction, ticketScanAction } from "@/lib/staff/model";
+import { checkedInAt, checkinAction, markSeen, type StaffState, scanAction, ticketScanAction } from "@/lib/staff/model";
 import type { AlertPosition } from "@/lib/staff/position";
 import { newId, record, reportWriteError } from "@/lib/staff/runtime";
 import type { IncidentDraft } from "./IncidentSheet";
@@ -11,13 +11,16 @@ import type { IncidentDraft } from "./IncidentSheet";
 export function recordScan(
   state: StaffState,
   userId: string,
-  decision: ScanDecision | { decision: "override" | "unknown_pass"; passId: string },
+  decision: ScanDecision | { decision: "override" | "unknown_pass"; passId: string; reason?: string },
   payload: string,
 ): void {
   const entry = decision.passId ? state.entries.get(decision.passId) : undefined;
   const { item, checkin } = scanAction(decision, payload, newId(), new Date(), entry);
   // Pointage local tout de suite : une deuxième lecture du même QR, même sur un autre écran, est « déjà entré ».
   if (checkin && !state.local.has(checkin.passId)) state.local.set(checkin.passId, checkin);
+  // Lot 26 : présence du jour (« tout l'événement » déjà entré un jour précédent, lu aujourd'hui).
+  if (decision.passId && ["ok", "already", "override"].includes(decision.decision))
+    markSeen(state, decision.passId, new Date());
   void record(state.meta.eventId, userId, "scan", item, checkin).catch(() =>
     reportWriteError(state.meta.eventId, checkin?.passId ?? null),
   );

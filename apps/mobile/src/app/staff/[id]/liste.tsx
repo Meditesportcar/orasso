@@ -10,7 +10,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { pointEntry } from "@/features/staff/actions";
 import { clock } from "@/features/staff/result";
-import { checkedInAt, counters, expectedOn, quickPlateMatch, type StaffState, searchLocal } from "@/lib/staff/model";
+import {
+  arrivedOn,
+  checkedInAt,
+  counters,
+  expectedOn,
+  quickPlateMatch,
+  type StaffState,
+  searchLocal,
+} from "@/lib/staff/model";
 import { useStaffEvent } from "@/lib/staff/useStaff";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -58,8 +66,10 @@ export default function StaffList() {
       if (e.status !== "valid") return false;
       if (multiDay && today && !expectedOn(state.meta, e, new Date())) return false;
       const inside = Boolean(checkedInAt(state, e));
-      if (filter === "in") return inside;
-      if (filter === "out") return !inside;
+      // Lot 26 : « Arrivés » / « Attendus » du jour (un « tout l'événement » entré un jour précédent est attendu).
+      const arrived = arrivedOn(state, e, new Date());
+      if (filter === "in") return arrived;
+      if (filter === "out") return !arrived;
       if (filter === "noscan") return inside && methodOf(state, e) !== "scan";
       return true;
     });

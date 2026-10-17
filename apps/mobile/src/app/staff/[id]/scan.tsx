@@ -176,7 +176,12 @@ export default function Scan() {
     if (!pending || !state || !userId || !pending.decision.passId) return;
     const entry = state.entries.get(pending.decision.passId);
     if (accept) {
-      recordScan(state, userId, { decision: "override", passId: pending.decision.passId }, pending.payload);
+      recordScan(
+        state,
+        userId,
+        { decision: "override", passId: pending.decision.passId, reason: "other_day" },
+        pending.payload,
+      );
       show(
         entry
           ? pointedResult(entry, newId(), null)

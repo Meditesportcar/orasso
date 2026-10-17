@@ -79,14 +79,14 @@ export default function Candidater() {
     .filter((a) => ["pending", "accepted", "waitlisted", "offered"].includes(a.status))
     .map((a) => a.eventDayId);
   const dayChoices: { id: string | null; label: string; full: boolean; mine: boolean }[] =
-    e.days.length > 1
+    (e.days?.length ?? 0) > 1
       ? [
           ...(e.dayAccess !== "per_day"
             ? [
                 {
                   id: null,
                   label: eventDaysLabels.wholeEvent,
-                  full: e.days.some((d) => d.remaining === 0),
+                  full: (e.days ?? []).some((d) => d.remaining === 0),
                   mine: taken.length > 0,
                 },
               ]
@@ -125,7 +125,7 @@ export default function Candidater() {
         newsletterOptIn: newsletter,
         companions,
         message: message.trim() || null,
-        eventDayId: e.days.length > 1 ? dayId : undefined,
+        eventDayId: (e.days?.length ?? 0) > 1 ? dayId : undefined,
       });
       // Une admission sans sélection est une retenue d'office : annoncée ici, pas une deuxième fois ensuite.
       markAnnounced(apps.filter((a) => a.status === "accepted").map((a) => a.id));

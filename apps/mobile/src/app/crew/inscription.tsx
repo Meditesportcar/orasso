@@ -202,7 +202,7 @@ export default function CrewRegistration() {
             );
           })}
 
-          {e && e.days.length > 1 && e.dayAccess !== "whole" ? (
+          {e && (e.days?.length ?? 0) > 1 && e.dayAccess !== "whole" ? (
             <>
               <SectionTitle>{eventDaysLabels.chooseDay}</SectionTitle>
               <ChipRow>
@@ -266,7 +266,7 @@ export default function CrewRegistration() {
                   followStructure: follow,
                   message: null,
                   eventDayId:
-                    e.days.length > 1 && e.dayAccess !== "whole"
+                    (e.days?.length ?? 0) > 1 && e.dayAccess !== "whole"
                       ? dayChoice !== undefined
                         ? dayChoice
                         : e.dayAccess === "per_day"

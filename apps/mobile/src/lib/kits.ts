@@ -103,7 +103,7 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
     zone: app.zone,
     checkedInAt: app.checkedInAt,
     day: app.day ? { date: app.day.date, startsAt: app.day.startsAt, endsAt: app.day.endsAt } : null,
-    multiDay: event.days.length > 1,
+    multiDay: (event.days?.length ?? 0) > 1,
     event: {
       id: event.id,
       slug: event.slug,
