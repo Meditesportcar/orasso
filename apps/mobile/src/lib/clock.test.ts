@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   applyClockHeader,
+  clockAvailable,
   clockOffsetMs,
   now,
   nowMs,
@@ -74,6 +75,21 @@ describe("horloge centrale", () => {
     stop();
     applyClockHeader("0");
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("l'horloge est proposée dès que l'API envoie l'en-tête, même à 0 (lot 35d)", () => {
+    expect(clockAvailable()).toBe(false);
+    const listener = vi.fn();
+    const stop = subscribeClock(listener);
+    applyClockHeader("0");
+    expect(clockAvailable()).toBe(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+    applyClockHeader("0");
+    expect(listener).toHaveBeenCalledTimes(1);
+    applyClockHeader(null);
+    expect(clockAvailable()).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(2);
+    stop();
   });
 
   it("l'en-tête est celui de l'API", () => {

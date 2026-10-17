@@ -6,7 +6,9 @@
 import { tabSets } from "@orasso/design-system/native";
 import { Tabs } from "expo-router";
 import { useMemo } from "react";
+import { View } from "react-native";
 
+import { AssistanceBanner } from "@/features/admin/Assistance";
 import { usePersona } from "@/lib/persona";
 import { useTeamRequestsCount } from "@/lib/teamBadge";
 import { PersonaTabs } from "@/ui/PersonaTabs";
@@ -23,27 +25,31 @@ export default function OrgaLayout() {
     [requests],
   );
   return (
-    <PersonaTabs tabs={tabs} routes={routes} initialRouteName="direct">
-      <Tabs.Screen name="direct" />
-      <Tabs.Screen name="evenements" />
-      <Tabs.Screen name="tri" />
-      <Tabs.Screen name="boite" />
-      <Tabs.Screen name="staff" />
-      <Tabs.Screen name="evenement/[id]" options={{ href: null }} />
-      {/* Inviter (lot 25), depuis la page d'un événement. */}
-      <Tabs.Screen name="evenement/[id]/inviter" options={{ href: null }} />
-      {/* Bilan et remerciement (lot 27), depuis la page d'un événement. */}
-      <Tabs.Screen name="evenement/[id]/bilan" options={{ href: null }} />
-      {/* Lot 35b : créer un événement (onglet Événements) et le modifier (page de l'événement). */}
-      <Tabs.Screen name="nouvel-evenement" options={{ href: null }} />
-      <Tabs.Screen name="evenement/[id]/modifier" options={{ href: null }} />
-      {/* Lot 35a : structure, bannissements, modèles de message, notes internes, depuis l'Équipe. */}
-      <Tabs.Screen name="ma-structure" options={{ href: null }} />
-      <Tabs.Screen name="bannis" options={{ href: null }} />
-      <Tabs.Screen name="modeles" options={{ href: null }} />
-      <Tabs.Screen name="notes" options={{ href: null }} />
-      {/* Billetterie des visiteurs (lot 35c), depuis la page d'un événement. */}
-      <Tabs.Screen name="evenement/[id]/billetterie" options={{ href: null }} />
-    </PersonaTabs>
+    <View style={{ flex: 1 }}>
+      {/* Lot 35d : bandeau du mode assistance (un super admin survole l'espace de la structure). */}
+      <AssistanceBanner />
+      <PersonaTabs tabs={tabs} routes={routes} initialRouteName="direct">
+        <Tabs.Screen name="direct" />
+        <Tabs.Screen name="evenements" />
+        <Tabs.Screen name="tri" />
+        <Tabs.Screen name="boite" />
+        <Tabs.Screen name="staff" />
+        <Tabs.Screen name="evenement/[id]" options={{ href: null }} />
+        {/* Inviter (lot 25), depuis la page d'un événement. */}
+        <Tabs.Screen name="evenement/[id]/inviter" options={{ href: null }} />
+        {/* Bilan et remerciement (lot 27), depuis la page d'un événement. */}
+        <Tabs.Screen name="evenement/[id]/bilan" options={{ href: null }} />
+        {/* Lot 35b : créer un événement (onglet Événements) et le modifier (page de l'événement). */}
+        <Tabs.Screen name="nouvel-evenement" options={{ href: null }} />
+        <Tabs.Screen name="evenement/[id]/modifier" options={{ href: null }} />
+        {/* Lot 35a : structure, bannissements, modèles de message, notes internes, depuis l'Équipe. */}
+        <Tabs.Screen name="ma-structure" options={{ href: null }} />
+        <Tabs.Screen name="bannis" options={{ href: null }} />
+        <Tabs.Screen name="modeles" options={{ href: null }} />
+        <Tabs.Screen name="notes" options={{ href: null }} />
+        {/* Billetterie des visiteurs (lot 35c), depuis la page d'un événement. */}
+        <Tabs.Screen name="evenement/[id]/billetterie" options={{ href: null }} />
+      </PersonaTabs>
+    </View>
   );
 }

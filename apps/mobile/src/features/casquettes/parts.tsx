@@ -1,5 +1,6 @@
 // Morceaux communs à la feuille « Mes casquettes » (barre du haut) et à la section « Mes casquettes » de Moi.
 import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { adminAppLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
@@ -51,7 +52,7 @@ export function PersonaRows({ onPicked }: { onPicked?: () => void }) {
                   {fan ? (me?.profile.pseudo ?? entry.label) : entry.label}
                 </Text>
                 <Text variant="meta" color={t.color.plateMuted}>
-                  {personaKindLabels[entry.kind]}
+                  {entry.assisted ? adminAppLabels.assistanceBannerReadOnly : personaKindLabels[entry.kind]}
                 </Text>
               </View>
               {active ? (

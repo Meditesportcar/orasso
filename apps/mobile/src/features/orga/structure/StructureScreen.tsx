@@ -26,6 +26,7 @@ import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
+import { AssistancePanel } from "../../admin/Assistance";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 import { failWith } from "../team/fail";
 import { PartnersPanel } from "./PartnersPanel";
@@ -341,6 +342,9 @@ export function StructureScreen() {
           </Button>
         </>
       ) : null}
+
+      {/* Lot 35d : « Demander l'aide d'Orasso », l'état de la demande et sa clôture (mode assistance, S41). */}
+      <AssistancePanel structureId={structureId} />
     </FlowScreen>
   );
 }

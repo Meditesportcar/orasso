@@ -15,6 +15,7 @@ import { Platform, StyleSheet, View } from "react-native";
 
 import { ReportSheetHost } from "@/features/ReportSheet";
 import { StaffBackground } from "@/features/staff/StaffBackground";
+import { adminLinkOf } from "@/lib/adminModel";
 import { ApplicationsProvider } from "@/lib/applications";
 import { initClock } from "@/lib/clockStore";
 import { kvGet, kvSet } from "@/lib/kv";
@@ -95,6 +96,12 @@ function Shell() {
       const team = teamRequestTarget(response.notification.request.content.data);
       if (team) {
         choose({ kind: "organizer", structureId: team }, "/(orga)/staff");
+        return;
+      }
+      // Alerte de modération ou demande d'aide d'une structure (lot 35d) : l'écran de la casquette Administration.
+      const admin = adminLinkOf(response.notification.request.content.data?.link);
+      if (admin) {
+        choose({ kind: "admin" }, admin);
         return;
       }
       backToFan();

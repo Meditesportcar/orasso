@@ -34,8 +34,16 @@ export function setClockOffset(ms: number): boolean {
  */
 export function applyClockHeader(value: string | null | undefined) {
   heard = true;
-  setClockOffset(value == null ? 0 : Number(value));
+  const was = available;
+  available = value != null;
+  // Un seul rendu par réponse : le changement d'offset prévient déjà les abonnés.
+  const changed = setClockOffset(value == null ? 0 : Number(value));
+  if (!changed && was !== available) for (const listener of listeners) listener();
 }
+
+/** L'API propose l'horloge simulée (elle envoie l'en-tête, même à 0) : l'écran « Horloge » de l'administration existe (lot 35d). */
+let available = false;
+export const clockAvailable = () => available;
 
 /**
  * Au lancement, reprend le dernier décalage connu (gardé sur l'appareil) : le mode staff hors ligne reste à l'heure
@@ -49,6 +57,7 @@ export function restoreClockOffset(ms: number) {
 export function resetClockForTests() {
   offsetMs = 0;
   heard = false;
+  available = false;
 }
 
 export function subscribeClock(listener: () => void) {
@@ -61,4 +70,9 @@ export function subscribeClock(listener: () => void) {
 /** Décalage courant, avec rendu à chaque changement (bandeau « Horloge simulée »). */
 export function useClockOffset(): number {
   return useSyncExternalStore(subscribeClock, clockOffsetMs, clockOffsetMs);
+}
+
+/** L'horloge simulée est-elle proposée par l'API (lot 35d) ? */
+export function useClockAvailable(): boolean {
+  return useSyncExternalStore(subscribeClock, clockAvailable, clockAvailable);
 }
