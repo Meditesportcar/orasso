@@ -83,17 +83,17 @@ const remindedCount = async (userId: string) =>
   ).length;
 
 describe("relance à la demande du staff", () => {
-  it("relance un membre sans réponse (cookie et porteur), au plus une fois par heure", async () => {
+  it("relance un membre sans réponse (cookie et porteur), au plus une fois par jour (alias de la relance groupée)", async () => {
     const first = await req(orga, "POST", `/events/${eventId}/staff/${julie.id}/remind`);
     expect(first.status).toBe(200);
     expect(first.json).toEqual({ reminded: true });
     expect(await remindedCount(julie.id)).toBe(1);
 
     const again = await req(orga, "POST", `/events/${eventId}/staff/${julie.id}/remind`, "bearer");
-    expect(again.status).toBe(429);
+    expect(again.status).toBe(409);
     expect(await remindedCount(julie.id)).toBe(1);
 
-    clock.set(paris(10, 10, 13, 5));
+    clock.set(paris(10, 11, 9, 0));
     const later = await req(orga, "POST", `/events/${eventId}/staff/${julie.id}/remind`, "bearer");
     expect(later.status).toBe(200);
     expect(await remindedCount(julie.id)).toBe(2);
@@ -131,7 +131,7 @@ describe("relance à la demande du staff", () => {
 
     clock.set(paris(10, 17, 7));
     const dayOf = await req(orga, "POST", `/events/${eventId}/staff/${theo.id}/remind`, "bearer");
-    expect(dayOf.status).toBe(409);
+    expect(dayOf.status).toBe(423);
     expect(await remindedCount(theo.id)).toBe(0);
   });
 });

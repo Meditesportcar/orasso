@@ -124,6 +124,8 @@ export type InboxRequestCounts = {
   /** Lot 19 : demandes reçues par un chef de crew et invitations reçues ; venues en crew à confirmer. */
   crew: number;
   crewConfirmation: number;
+  /** Lot 24 : invitations à rejoindre une structure (staff ou co-organisateur) reçues et pas encore acceptées. */
+  staffInvitation: number;
   /** Lot 25 : invitations nominatives à un événement en attente de réponse. */
   eventInvitation: number;
 };

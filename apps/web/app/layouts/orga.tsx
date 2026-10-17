@@ -83,6 +83,11 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
               Communication
             </SideLink>
             {isOrganizer && (
+              <SideLink href={`${base}/staff`} on={pathname.startsWith(`${base}/staff`)}>
+                Staff
+              </SideLink>
+            )}
+            {isOrganizer && (
               <SideLink href={`${base}/structure`} on={pathname.startsWith(`${base}/structure`)}>
                 Structure
               </SideLink>

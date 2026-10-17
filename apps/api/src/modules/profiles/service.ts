@@ -84,7 +84,13 @@ export const profilesService = {
       })
       .from(structureMembers)
       .innerJoin(structures, eq(structures.id, structureMembers.structureId))
-      .where(and(eq(structureMembers.userId, v.user.id), inArray(structureMembers.status, ["active", "invited"])));
+      // `requested` (lot 24) : « demande de staff envoyée » dans l'onglet Accès, en attente de la réponse de l'organisateur.
+      .where(
+        and(
+          eq(structureMembers.userId, v.user.id),
+          inArray(structureMembers.status, ["active", "invited", "requested"]),
+        ),
+      );
     const pro = await db.query.proProfiles.findFirst({
       where: and(eq(proProfiles.ownerUserId, v.user.id), isNull(proProfiles.deletedAt)),
     });

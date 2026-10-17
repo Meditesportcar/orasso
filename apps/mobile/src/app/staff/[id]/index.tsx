@@ -6,6 +6,7 @@ import {
   communicationLabels,
   type MyStaffEvent,
   type StaffRole,
+  shopLabels,
   staffPresenceLabels,
   staffRoleLabels,
 } from "@orasso/shared";
@@ -13,13 +14,14 @@ import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-
 import { AlertSheet } from "@/features/staff/AlertSheet";
+import { recordAlert, recordIncident } from "@/features/staff/actions";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock } from "@/features/staff/result";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
-import { counters, serverReport } from "@/lib/staff/model";
+import { counters, serverReport, shopAccess, ticketDuplicates } from "@/lib/staff/model";
+import { askLocationConsent, type LocationConsent, locationConsent } from "@/lib/staff/position";
 import { flushNow, record, syncEvent, TRUST_MISSING } from "@/lib/staff/runtime";
 import { useStaffActions, useStaffEvent } from "@/lib/staff/useStaff";
 import { useApi } from "@/lib/useApi";
@@ -48,6 +50,15 @@ export default function StaffHome() {
   const [syncMessage, setSyncMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [presence, setPresence] = useState<MyStaffEvent["presence"] | null>(null);
   const [sheet, setSheet] = useState<"alert" | "incident" | null>(null);
+  // Position de l'alerte (lot 24) : demandée à l'ouverture du mode staff, après un texte qui dit à quoi elle sert.
+  const [consent, setConsent] = useState<LocationConsent | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void locationConsent().then((c) => alive && setConsent(c));
+    return () => {
+      alive = false;
+    };
+  }, []);
   const autoSynced = useRef(false);
   // Fermé à J+1 : la liste est purgée du téléphone (openEvent), on ne la redemande pas.
   const closed = mine ? !mine.staffModeOpen && new Date() >= new Date(mine.staffModeClosesAt) : false;
@@ -85,6 +96,9 @@ export default function StaffHome() {
   const roles = state?.meta.myRoles ?? mine?.roles ?? [];
   const canScan = roles.some((r) => SCANNERS.includes(r));
   const canPlace = roles.includes("placement") || roles.includes("super_staff");
+  // Boutique (lot 24) : rôle `shop` et boutique activée pour cet événement.
+  const canShop = state ? shopAccess(state.meta) === "ok" : false;
+  const ticketDupes = ticketDuplicates(actions);
   const currentPresence = presence ?? mine?.presence ?? "unknown";
   const title = state?.meta.title ?? mine?.event.title ?? "Mode staff";
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
@@ -106,16 +120,16 @@ export default function StaffHome() {
           <AlertSheet
             visible={sheet === "alert"}
             onClose={() => setSheet(null)}
-            onSend={(message) => {
-              if (userId) void record(id, userId, "alert", { message: message || null });
+            onSend={(message, position) => {
+              if (userId) recordAlert(id, userId, message, position);
               setSheet(null);
             }}
           />
           <IncidentSheet
             visible={sheet === "incident"}
             onClose={() => setSheet(null)}
-            onSave={(body) => {
-              if (userId) void record(id, userId, "incident", { ...body, occurredAt: new Date().toISOString() });
+            onSave={(draft) => {
+              if (userId) void recordIncident(id, userId, draft);
               setSheet(null);
             }}
           />
@@ -246,7 +260,51 @@ export default function StaffHome() {
               Main courante
             </Button>
           </View>
+          {canShop ? (
+            <Button
+              variant="rescue"
+              icon="entry"
+              onPress={() => router.push(`/staff/${id}/boutique`)}
+              fullWidth
+              testID="staff-shop-tile"
+            >
+              {shopLabels.tile}
+            </Button>
+          ) : null}
         </View>
+      ) : null}
+
+      {consent === "undetermined" ? (
+        <Plate style={styles.block} testID="staff-location-ask">
+          <Text variant="label" color={c.plateMuted}>
+            Position de l'alerte
+          </Text>
+          <Text variant="body" color={c.plateInk}>
+            Quand tu touches « Alerte », ta position peut partir avec elle pour que le staff te retrouve. Elle n'est lue
+            qu'à ce moment-là, jamais suivie, et effacée dès l'alerte close.
+          </Text>
+          <Button variant="plate" icon="place" onPress={() => void askLocationConsent().then(setConsent)} fullWidth>
+            Autoriser la position
+          </Button>
+        </Plate>
+      ) : consent === "denied" ? (
+        <Muted variant="meta">
+          Position refusée : l'alerte part sans position (réglage du téléphone pour l'autoriser).
+        </Muted>
+      ) : null}
+
+      {ticketDupes.length > 0 ? (
+        <>
+          <SectionTitle>Rapport · billets</SectionTitle>
+          <Plate style={styles.block}>
+            {ticketDupes.map((d) => (
+              <Text key={d.ticketId} variant="body" color={c.plateInk}>
+                Doublon · billet déjà utilisé à {d.usedAt ? clock(d.usedAt) : "—"} (autre téléphone)
+                {d.count > 1 ? ` · ×${d.count}` : ""}
+              </Text>
+            ))}
+          </Plate>
+        </>
       ) : null}
 
       {duplicates.length > 0 || refusedByServer.length > 0 || failed.length > 0 ? (

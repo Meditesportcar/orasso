@@ -174,12 +174,20 @@
 
 - **Recherche et Explorer, seconde passe : crews (lot 29, 17/10/2026)** : les crews sont dans `GET /search` (source `modules/crews/search-source.ts`, réutilise la recherche du lot 19) et dans l'écran de recherche de l'appli ; le segment « Personnes et crews » (site et appli) n'a plus qu'un champ et un filtre de département pour les deux. Aucune migration.
 
+- **Staff côté site, rôle boutique, compléments du jour J (lot 24, 17/10/2026)** — choix : `docs/JOURNAL-DES-CHOIX.md` (lot 24) ; état technique et API staff : `ARCHITECTURE.md` « État après le lot 24 ».
+  - Site : `/orga/:s/staff` (entrée « Staff », propriétaire et co-organisateurs) : demandes reçues (rôles donnés à l'acceptation), membres (rôles du staff, droit de trancher, retrait), invitations (pseudo ou e-mail), puis, par événement, présences, « jamais répondu », « Relancer », rôles ajustés, lien vers la discussion du staff. Bouton « Devenir staff » sur `/o/:slug`, invitations reçues dans Boîte > Demandes, case « Rôle boutique sur cet événement » dans l'assistant d'événement. `/orga/:s/e/:id/jour-j` : visiteurs, billets contrôlés, arrivés par catégorie, prestataires, alertes avec position (distance à l'entrée, lien carte) et main courante avec photo.
+  - Appli (mode staff) : tuile **Boutique** (rôle `shop`, boutique activée) : scan des billets du public hors ligne (« Billet OK · Entrée » / « Déjà utilisé » / « Refusé », anti-rejeu local, arbitrage par le serveur) et compteur d'entrées visiteurs (+1, +10, −1) ; alerte avec la position lue au toucher du bouton (permission « pendant l'utilisation » demandée à l'ouverture, refusable) ; main courante avec photo gardée sur le téléphone puis envoyée après l'incident ; Accès : « Demande de staff envoyée » ; Boîte > Demandes : invitations à rejoindre une structure.
+  - API : migration `0033_staff-shop`, `modules/staff/{shop,requests,anonymize}.ts`, tâche `field.sweep` (positions d'alerte et photos de main courante). Seed : boutique activée sur le Salon Argelès, Boutique_66 (rôle boutique), billets gratuits de Kenji et Léa, demande de staff de Pilote_001.
+  - **Contenu du rôle boutique appliqué tel que proposé (AS4)** : Damien confirme ou corrige après essai sur l'APK ; seule la tuile change.
+  - Vérifié : voir l'entrée du lot 24 dans le journal du relais. Captures : `C:\Users\DELL\.claude\relais\orasso\lot-24-captures\`.
+
 ## En cours
 
 - Rien dans ce dépôt : la suite est découpée en lots (relais du coordinateur).
 
 ## Prochaine étape
 
+- Lot 24 : déployer (migration `0033_staff-shop` au démarrage, aucune variable nouvelle, tâche `field.sweep` planifiée par l'API ; `pnpm db:seed` ajoute la boutique au Salon Argelès d'une base existante). À essayer sur téléphone (APK de la vague, aucune dépendance native nouvelle) : tuile Boutique, scan d'un billet gratuit, compteur, alerte avec position, photo d'un incident. Lot 22 : l'onglet Staff de la casquette Organisateur consomme l'API staff décrite dans `ARCHITECTURE.md` (membres, demandes, invitations, présences, `POST /events/:id/staff/remind`, `staffRequests` du résumé de Boîte).
 - Lot 32 : déployer (migration `0034_moderation` au démarrage, à renuméroter à la fusion selon la règle B1 ; aucune variable nouvelle ; `pnpm db:seed` ajoute la modératrice et ses signalements à une base existante). Damien relit les seuils S39 / S40 et la copie des messages signalés (AS5) dans le journal des choix. Lot 33 : registres et réglages de l'administration (dont le compteur des signalements sur l'accueil de `/admin`).
 - Lot 25 : déployer (migration `0033_invitations` au démarrage, à renuméroter à la fusion si d'autres lots en ont généré, règle B1 ; aucune variable nouvelle ; `pnpm db:seed` ajoute « Soirée partenaires » à une base existante). Lot 22 : brancher le bouton « Inviter » de la page événement de la casquette Organisateur sur `/evenement/<id>/inviter`. Lot 27 : « Inviter les retenus » de l'édition suivante réutilise `POST /events/:id/invitations/from-event`. Essayer sur téléphone : feuille de réponse (choix du véhicule), écran Inviter.
 

@@ -22,14 +22,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AlertSheet } from "@/features/staff/AlertSheet";
-import { pointEntry, recordScan } from "@/features/staff/actions";
+import { pointEntry, recordAlert, recordIncident, recordScan } from "@/features/staff/actions";
 import { ExpressSheet } from "@/features/staff/ExpressSheet";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock, pointedResult, resultOf, resultProps, type ShownResult, vibrate } from "@/features/staff/result";
 import { SearchSheet } from "@/features/staff/SearchSheet";
 import { ed25519Verify } from "@/lib/staff/crypto";
 import { counters, decideLocal, ScanGate } from "@/lib/staff/model";
-import { clearWriteError, getWriteError, newId, record, trustedKeysNow } from "@/lib/staff/runtime";
+import { clearWriteError, getWriteError, newId, trustedKeysNow } from "@/lib/staff/runtime";
 import { useStaffEvent } from "@/lib/staff/useStaff";
 
 const { space2, space3 } = tokens.spacing;
@@ -299,16 +299,16 @@ export default function Scan() {
       <IncidentSheet
         visible={sheet === "incident"}
         onClose={() => setSheet(null)}
-        onSave={(body) => {
-          if (userId) void record(id, userId, "incident", { ...body, occurredAt: new Date().toISOString() });
+        onSave={(draft) => {
+          if (userId) void recordIncident(id, userId, draft);
           setSheet(null);
         }}
       />
       <AlertSheet
         visible={sheet === "alert"}
         onClose={() => setSheet(null)}
-        onSend={(message) => {
-          if (userId) void record(id, userId, "alert", { message: message || null });
+        onSend={(message, position) => {
+          if (userId) recordAlert(id, userId, message, position);
           setSheet(null);
         }}
       />

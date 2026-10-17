@@ -49,6 +49,7 @@ import { type Tx, withTx } from "../../lib/tx";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { loadProviders } from "../providers/serializers";
 import { assertStaffWindow, staffService } from "../staff/service";
+import { shopService } from "../staff/shop";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
 
@@ -782,6 +783,9 @@ export const checkinsService = {
       staffExpected: staff.length,
       alertsOpen: alerts?.n ?? 0,
       providers: { expected: providerRows.length, arrived: providerRows.filter((r) => r.at).length },
+      // Lot 24 : compteur d'entrées des visiteurs (rôle boutique) et billets du public contrôlés.
+      visitors: await shopService.visitorTotal(eventId),
+      tickets: await shopService.ticketCounts(eventId),
     };
   },
 

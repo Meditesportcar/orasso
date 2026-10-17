@@ -10,6 +10,7 @@ import { crewRegistrationService } from "./modules/crews/registration";
 import { highGradePreview } from "./modules/events/high-grade";
 import { eventJobs } from "./modules/events/jobs";
 import { nearbyService } from "./modules/events/nearby";
+import { fieldService } from "./modules/field/service";
 import { moderationService } from "./modules/moderation/service";
 import { notificationsService } from "./modules/notifications/service";
 import { pointsService } from "./modules/points/service";
@@ -58,6 +59,8 @@ const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "messaging.group-send": (d) => groupMessagesService.sendBatch(d.groupMessageId ?? ""),
   "messaging.group-sweep": () => groupMessagesService.sweep(),
   "messaging.staff-chats-sweep": () => staffChatsService.sweep(),
+  // Lot 24 : position d'une alerte close ou vieille de 24 h effacée ; photos de main courante effacées un an après l'événement.
+  "field.sweep": () => fieldService.sweep(),
   // Lot 32 : signalements et captures échus (un an après la décision), sanctions finies depuis un an.
   "moderation.purge": () => moderationService.purge(),
 };
@@ -104,6 +107,7 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
     // Lot 20 : messages groupés arrêtés (chaque minute), discussions du staff à fermer ou purger (chaque heure).
     await boss.schedule("messaging.group-sweep", "* * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("messaging.staff-chats-sweep", "25 * * * *", null, { tz: "Europe/Paris" });
+    await boss.schedule("field.sweep", "50 * * * *", null, { tz: "Europe/Paris" });
     await boss.schedule("moderation.purge", "50 4 * * *", null, { tz: "Europe/Paris" });
   }
   deps.jobs = {

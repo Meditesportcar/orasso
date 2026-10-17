@@ -8,6 +8,7 @@ import {
   type CheckinMethod,
   type EventStaffMember,
   type EventStaffUpdate,
+  fromWallTime,
   isEventDay,
   isLocked,
   lockAt,
@@ -22,7 +23,7 @@ import {
   type VendorTypeCode,
   wallTime,
 } from "@orasso/shared";
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -50,6 +51,7 @@ import { notificationsService } from "../notifications/service";
 import { loadProviders } from "../providers/serializers";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
+import { shopService } from "./shop";
 
 export type EventStaffRow = typeof eventStaff.$inferSelect;
 
@@ -155,6 +157,52 @@ export function assertStaffWindow(event: EventRow, access: StaffAccess) {
   if (t < staffModeOpensAt(event) || t >= settleAt(event) || event.settledAt) {
     throw forbidden("Liste du staff : de la veille de l'événement jusqu'au règlement des points");
   }
+}
+
+/**
+ * Relance ceux qui n'ont pas répondu et pas été relancés aujourd'hui (heure de Paris) : notification et e-mail,
+ * compteur de relances. `only` : une seule personne.
+ */
+async function remindPending(
+  event: EventRow,
+  today: { year: number; month: number; day: number },
+  only?: string,
+): Promise<number> {
+  const t = now();
+  const candidates = (await members(event)).filter((m) => (!only || m.userId === only) && m.presence === "unknown");
+  if (!candidates.length) return 0;
+  // Début du jour de Paris : une seule relance par jour et par personne.
+  const dayStart = fromWallTime({ ...today, hour: 0, minute: 0 });
+  return withTx(async (tx, after) => {
+    let sent = 0;
+    for (const m of candidates) {
+      // Écriture conditionnelle : seul celui dont la ligne est réellement mise à jour est notifié (double clic,
+      // tâche du matin et bouton en même temps = un seul envoi).
+      const [row] = await tx
+        .update(eventStaff)
+        .set({ reminderCount: sql`${eventStaff.reminderCount} + 1`, lastRemindedAt: t })
+        .where(
+          and(
+            eq(eventStaff.id, m.id),
+            eq(eventStaff.presence, "unknown"),
+            or(isNull(eventStaff.lastRemindedAt), lt(eventStaff.lastRemindedAt, dayStart)),
+          ),
+        )
+        .returning({ id: eventStaff.id });
+      if (!row) continue;
+      await notificationsService.notify(tx, m.userId, "staff_presence_reminder", {
+        title: "Seras-tu là ?",
+        body: `« ${event.title} », ${formatDateTime(event.startsAt)} : dis à l'équipe si tu seras là.`,
+        eventId: event.id,
+        eventStartsAt: event.startsAt,
+        data: { eventId: event.id, screen: "staff" },
+        link: { label: "Répondre", path: "/app/acces" },
+      });
+      sent++;
+    }
+    if (sent > 0) after(() => notificationsService.kick());
+    return sent;
+  });
 }
 
 export const staffService = {
@@ -268,9 +316,15 @@ export const staffService = {
     const t = now();
     assertStaffWindow(event, access);
     const entries = await accessEntries(event, access);
+    // Rôle boutique (lot 24) : billets du public, seulement si la boutique est activée pour cet événement. Un staff
+    // sans ce rôle n'en reçoit jamais (le corps signé ne contient alors ni `tickets` ni `shopEnabled`).
+    const withShop = event.shopEnabled && access.roles.includes("shop");
+    const allTickets = withShop ? await shopService.ticketEntries(event) : [];
     // Delta : `>=` sur le curseur (au milliseconde près) ; une entrée renvoyée deux fois est simplement réécrite.
-    const delta = since ? entries.filter((e) => Date.parse(e.updatedAt) >= since.getTime()) : entries;
-    const cursor = syncCursor(entries);
+    const newer = <T extends { updatedAt: string }>(list: T[]) =>
+      since ? list.filter((e) => Date.parse(e.updatedAt) >= since.getTime()) : list;
+    const delta = newer(entries);
+    const cursor = syncCursor([...entries, ...allTickets]);
     const zones = await db.query.eventZones.findMany({
       where: eq(eventZones.eventId, eventId),
       orderBy: [asc(eventZones.position), asc(eventZones.code)],
@@ -291,6 +345,7 @@ export const staffService = {
       myRoles: access.roles,
       full: !since,
       entries: delta,
+      ...(withShop ? { tickets: newer(allTickets), shopEnabled: true } : {}),
       removedPassIds: [],
       cursor,
       generatedAt: t.toISOString(),
@@ -319,33 +374,28 @@ export const staffService = {
     let sent = 0;
     for (const event of upcoming) {
       if (isEventDay(event.startsAt, t)) continue;
-      const pending = (await members(event)).filter((m) => {
-        if (m.presence !== "unknown") return false;
-        if (!m.lastRemindedAt) return true;
-        const last = wallTime(m.lastRemindedAt);
-        return last.year !== today.year || last.month !== today.month || last.day !== today.day;
-      });
-      if (!pending.length) continue;
-      await withTx(async (tx, after) => {
-        for (const m of pending) {
-          await notificationsService.notify(tx, m.userId, "staff_presence_reminder", {
-            title: "Seras-tu là ?",
-            body: `« ${event.title} », ${formatDateTime(event.startsAt)} : dis à l'équipe si tu seras là.`,
-            eventId: event.id,
-            eventStartsAt: event.startsAt,
-            data: { eventId: event.id, screen: "staff" },
-            link: { label: "Répondre", path: "/app/acces" },
-          });
-          await tx
-            .update(eventStaff)
-            .set({ reminderCount: sql`${eventStaff.reminderCount} + 1`, lastRemindedAt: t })
-            .where(eq(eventStaff.id, m.id));
-          sent++;
-        }
-        after(() => notificationsService.kick());
-      });
+      sent += await remindPending(event, today);
     }
     return sent;
+  },
+
+  /**
+   * « Relancer » depuis le site (lot 24) : l'organisation relance tout de suite ceux qui n'ont pas dit s'ils seraient
+   * là (ou une seule personne). Même règle que la relance du matin : une par jour et par personne, arrêt au début de
+   * l'événement. Rend le nombre de personnes relancées.
+   */
+  async remind(v: Viewer, eventId: string, userId?: string): Promise<{ reminded: number }> {
+    const event = await eventsRepo.byId(eventId);
+    await requireOrganizer(v, event.structureId);
+    if (event.status !== "published") throw notFound("Événement introuvable");
+    const t = now();
+    if (t >= event.startsAt || isEventDay(event.startsAt, t)) {
+      throw lockedError("Le jour J, le staff est sur place : plus de relance");
+    }
+    if (userId && !(await members(event)).some((m) => m.userId === userId)) {
+      throw notFound("Ce membre n'est pas dans le staff de l'événement");
+    }
+    return { reminded: await remindPending(event, wallTime(t), userId) };
   },
 
   /** Rappel de synchronisation au verrouillage, au staff présent ou qui n'a pas répondu (§ 2.3). */

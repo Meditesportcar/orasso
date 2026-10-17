@@ -57,6 +57,8 @@ const eventFields = z.object({
   instructions: optionalText(2000),
   /** Types de prestataires attendus (cases à cocher et « + »), sans candidature en V1. */
   vendorTypes: z.array(z.string().trim().min(1).max(40)).max(16),
+  /** Rôle « boutique » du staff activé pour cet événement (lot 24). */
+  shopEnabled: z.boolean(),
 });
 
 const datesRule = (v: { startsAt?: Date; endsAt?: Date }, ctx: z.RefinementCtx) => {
@@ -78,6 +80,7 @@ export const eventCreateSchema = eventFields
     highGradePreviewHours: eventFields.shape.highGradePreviewHours.default(0),
     highGradeMin: eventFields.shape.highGradeMin.default("circuit"),
     vendorTypes: eventFields.shape.vendorTypes.default([]),
+    shopEnabled: eventFields.shape.shopEnabled.default(false),
   })
   .superRefine(datesRule);
 export type EventCreate = z.infer<typeof eventCreateSchema>;
@@ -217,4 +220,6 @@ export type EventOrganizer = EventPublic & {
   /** Duplication ou occurrence d'une série : l'événement d'origine. */
   parentEventId: string | null;
   recurrenceRule: RecurrenceRule | null;
+  /** Rôle « boutique » activé (lot 24). */
+  shopEnabled: boolean;
 };

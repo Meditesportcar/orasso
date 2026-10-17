@@ -12,8 +12,12 @@ import {
 } from "../enums";
 import type { Grade } from "../grades";
 import { localScanDecisions, type PassRevokedReason } from "../qr/pass";
+import type { LocalTicket } from "../qr/ticket";
 import { type StaffRole, staffRoleSchema } from "../roles";
 import { isoDate, optionalText } from "./common";
+
+/** Billet de la liste du rôle boutique (lot 24) : `LocalTicket` + date de modification (curseur de synchro). */
+export type TicketListEntry = LocalTicket & { updatedAt: string };
 
 // --- Pass et clés ---------------------------------------------------------------------------------------------
 
@@ -150,6 +154,13 @@ export type StaffSync = {
   /** Synchro complète (`false` = delta depuis `since`). */
   full: boolean;
   entries: AccessListEntry[];
+  /**
+   * Rôle boutique (lot 24) : billets du public, complets ou modifiés depuis `since`. Présent seulement pour un staff
+   * qui a le rôle `shop` sur un événement dont la boutique est activée ; absent sinon (le corps signé ne change pas).
+   */
+  tickets?: TicketListEntry[];
+  /** La boutique est activée pour cet événement (la tuile « Boutique » en dépend). Absent = non. */
+  shopEnabled?: boolean;
   /** Toujours vide en V1 : un pass n'est jamais supprimé, il est révoqué (entrée `revoked`). */
   removedPassIds: string[];
   /** À renvoyer en `since` : horodatage de la dernière modification incluse. */
@@ -289,6 +300,10 @@ export type LiveCounters = {
   alertsOpen: number;
   /** Prestataires retenus : attendus / arrivés (jamais comptés dans les véhicules ni dans la capacité). */
   providers: { expected: number; arrived: number };
+  /** Lot 24 : visiteurs comptés à l'entrée (compteur de la boutique, total de tous les appareils, jamais négatif). */
+  visitors: number;
+  /** Lot 24 : billets du public vendus ou réservés (valides ou utilisés) et déjà contrôlés. */
+  tickets: { sold: number; used: number };
 };
 
 export const expressInviteSchema = z.object({ email: z.email().max(200) });

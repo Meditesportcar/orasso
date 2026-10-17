@@ -14,17 +14,25 @@ import { staffStore } from "./db";
 import {
   type ActionKind,
   applyResults,
+  applyTicketResults,
   BATCH_KINDS,
   type BatchItemWire,
   backoffMs,
   buildState,
+  carryOver,
   dueBatches,
+  dueOfKind,
+  ID_IN_PAYLOAD,
   isPurgeDue,
   type LocalCheckin,
+  type LocalTicketUse,
   mergeSync,
   type PendingAction,
   type StaffState,
+  type TicketScanWire,
+  type VisitorItemWire,
 } from "./model";
+import { deleteLocalPhoto, incidentPhotoForm } from "./photo";
 import {
   hasTrustAnchor,
   keyMap,
@@ -97,7 +105,17 @@ export async function openEvent(eventId: string, userId: string): Promise<StaffS
     emit();
     return null;
   }
-  const state = buildState(meta, await store.entries(eventId), await store.localCheckins(eventId));
+  const state = buildState(
+    meta,
+    await store.entries(eventId),
+    await store.localCheckins(eventId),
+    await store.tickets(eventId),
+    await store.ticketUses(eventId),
+  );
+  // Un pointage ou un billet lu pendant cette relecture (écriture encore en file) n'est pas encore en base : on le
+  // reprend de l'état en mémoire (même compte), comme `doSync`, sinon il serait relu « OK » quelques secondes après.
+  // Fait en une seule passe synchrone juste avant de remplacer l'état.
+  carryOver(state, states.get(eventId), userId);
   states.set(eventId, state);
   emit();
   return state;
@@ -188,19 +206,28 @@ async function doSync(eventId: string, userId: string, full: boolean): Promise<S
       return { ok: false, message: "Mode staff fermé depuis J+1 : la liste n'est plus gardée sur le téléphone." };
     }
     const merged = mergeSync(
-      previous ? { meta: previous, entries: await store.entries(eventId) } : null,
+      previous
+        ? { meta: previous, entries: await store.entries(eventId), tickets: await store.tickets(eventId) }
+        : null,
       sync,
       userId,
       new Date(),
     );
     if (!merged.ok && merged.reason === "needs_full") return doSync(eventId, userId, true);
     if (!merged.ok) return { ok: false, message: "Liste plus ancienne que celle du téléphone : ignorée." };
-    await store.saveSync(merged.meta, merged.full ? merged.entries : sync.entries, merged.full);
-    const fresh = buildState(merged.meta, merged.entries, await store.localCheckins(eventId));
+    await store.saveSync(merged.meta, merged.full ? merged.entries : sync.entries, merged.full, {
+      list: merged.full ? merged.tickets : (sync.tickets ?? []),
+      replace: merged.full,
+    });
+    const fresh = buildState(
+      merged.meta,
+      merged.entries,
+      await store.localCheckins(eventId),
+      merged.tickets,
+      await store.ticketUses(eventId),
+    );
     // Une lecture faite pendant la synchro (écriture encore en file) reste « déjà entré » en mémoire.
-    for (const [passId, local] of states.get(eventId)?.local ?? []) {
-      if (!fresh.local.has(passId)) fresh.local.set(passId, local);
-    }
+    carryOver(fresh, states.get(eventId), userId);
     states.set(eventId, fresh);
     emit();
     return { ok: true, count: sync.entries.length };
@@ -254,6 +281,7 @@ export async function record(
   kind: ActionKind,
   payload: Record<string, unknown> & { id?: string },
   checkin?: LocalCheckin | null,
+  use?: LocalTicketUse | null,
 ): Promise<string> {
   const store = await staffStore();
   const id = payload.id ?? newId();
@@ -265,7 +293,7 @@ export async function record(
     eventTitle: state?.meta.title ?? "",
     userId,
     kind,
-    payload: { ...payload, ...(BATCH_KINDS.includes(kind) ? { id } : {}) },
+    payload: { ...payload, ...(ID_IN_PAYLOAD.includes(kind) ? { id } : {}) },
     createdAt: now,
     attempts: 0,
     lastError: null,
@@ -274,10 +302,25 @@ export async function record(
     result: null,
   };
   if (checkin && state && !state.local.has(checkin.passId)) state.local.set(checkin.passId, checkin);
-  await store.addAction(action, checkin);
+  if (use && state && !state.ticketUses.has(use.ticketId)) state.ticketUses.set(use.ticketId, use);
+  await store.addAction(action, checkin, use);
   emit();
-  void flush(userId);
+  // Billets et compteur : touchers en rafale à l'entrée, regroupés en un envoi toutes les 2 s ; le reste part tout de suite.
+  if (kind === "ticket_scan" || kind === "visitor") scheduleShopFlush(userId);
+  else void flush(userId);
   return id;
+}
+
+const SHOP_FLUSH_DELAY_MS = 2_000;
+let shopFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Un seul envoi groupé, 2 s après le premier geste de la rafale (les gestes suivants rejoignent le même lot). */
+function scheduleShopFlush(userId: string): void {
+  if (shopFlushTimer) return;
+  shopFlushTimer = setTimeout(() => {
+    shopFlushTimer = null;
+    void flush(userId).catch(() => undefined);
+  }, SHOP_FLUSH_DELAY_MS);
 }
 
 // --- Appareil du staff -----------------------------------------------------------------------------------------
@@ -362,11 +405,119 @@ async function doFlush(userId: string) {
       );
     }
   }
+  // Rôle boutique (lot 24) : billets du public lus et touchers du compteur, un lot par événement.
+  for (const kind of ["ticket_scan", "visitor"] as const) {
+    for (const [eventId, batch] of dueOfKind(unsent, kind, now)) {
+      await sendShopBatch(store, userId, kind, eventId, batch);
+    }
+  }
+  const waitingIncidents = new Set(unsent.filter((a) => a.kind === "incident").map((a) => a.id));
   for (const action of unsent) {
-    if (BATCH_KINDS.includes(action.kind) || Date.parse(action.nextAttemptAt) > now.getTime()) continue;
-    await sendOther(store, action);
+    if (BATCH_KINDS.includes(action.kind) || SHOP_KINDS.includes(action.kind)) continue;
+    if (Date.parse(action.nextAttemptAt) > now.getTime()) continue;
+    // La photo suit son incident : tant que l'incident n'est pas parti, elle attend.
+    if (action.kind === "incident_photo" && waitingIncidents.has(String(action.payload.incidentId))) continue;
+    const sent = await sendOther(store, action);
+    if (sent && action.kind === "incident") waitingIncidents.delete(action.id);
   }
   emit();
+}
+
+const SHOP_KINDS: readonly ActionKind[] = ["ticket_scan", "visitor"];
+
+/** Lot de billets ou de touchers du compteur : mêmes règles d'erreur que les lots de scans (jamais perdus). */
+async function sendShopBatch(
+  store: Store,
+  userId: string,
+  kind: "ticket_scan" | "visitor",
+  eventId: string,
+  batch: PendingAction[],
+) {
+  let device: string;
+  try {
+    device = await deviceId(userId);
+  } catch (error) {
+    await store.markFailed(
+      batch.map((a) => a.id),
+      error instanceof ApiRequestError ? error.message : "Appareil non enregistré",
+      later,
+    );
+    return;
+  }
+  try {
+    if (kind === "ticket_scan") {
+      const items: TicketScanWire[] = batch.map((a) => ({
+        id: a.id,
+        rawPayload: String(a.payload.rawPayload),
+        decision: a.payload.decision as TicketScanWire["decision"],
+        reason: (a.payload.reason as string | null) ?? null,
+        scannedAt: String(a.payload.scannedAt),
+      }));
+      const { results } = await api.sendTicketScans(eventId, { deviceId: device, items });
+      const { effects, missing } = applyTicketResults(batch, results);
+      await store.markSent(
+        eventId,
+        effects.map((e) => ({ id: e.id, result: { ...e.result }, use: e.use })),
+        new Date(),
+      );
+      if (missing.length) await store.markFailed(missing, "Sans réponse du serveur", later);
+      const current = states.get(eventId);
+      for (const { use } of effects) {
+        if (!use || !current) continue;
+        const local = current.ticketUses.get(use.ticketId);
+        // Accepté ou déjà utilisé selon le serveur : le billet est utilisé, même si l'usage local manquait en mémoire.
+        if (use.usedAt) current.ticketUses.set(use.ticketId, { ...(local ?? use), usedAt: use.usedAt });
+        else if (local && local.actionId === use.actionId) current.ticketUses.delete(use.ticketId);
+      }
+    } else {
+      const items: VisitorItemWire[] = batch.map((a) => ({
+        id: a.id,
+        delta: a.payload.delta as VisitorItemWire["delta"],
+        at: String(a.payload.at),
+      }));
+      const res = await api.sendVisitorEntries(eventId, { deviceId: device, items });
+      const known = new Set(res.results.map((r) => r.id));
+      await store.markSent(
+        eventId,
+        res.results.map((r) => ({
+          id: r.id,
+          result: { applied: r.applied, total: res.total, ...(r.reason ? { reason: r.reason } : {}) },
+        })),
+        new Date(),
+      );
+      const missing = batch.filter((a) => !known.has(a.id)).map((a) => a.id);
+      if (missing.length) await store.markFailed(missing, "Sans réponse du serveur", later);
+    }
+  } catch (error) {
+    const e = error instanceof ApiRequestError ? error : null;
+    if (e?.status === 401) return;
+    if (e?.status === 400 && /appareil/i.test(e.message)) {
+      await kvDel(deviceKey(userId));
+    } else if (e?.status === 400) {
+      // Un élément illisible ne doit pas condamner les autres : lot refusé en bloc → chacun repart seul ; l'élément
+      // que l'API refuse seul sort de la file avec son erreur, SANS effacer l'usage local (dans le doute, le billet
+      // reste « déjà utilisé » sur ce téléphone).
+      if (batch.length > 1) {
+        for (const one of batch) await sendShopBatch(store, userId, kind, eventId, [one]);
+      } else {
+        const [only] = batch;
+        if (only) {
+          await store.markSent(eventId, [{ id: only.id, result: { error: e.message, status: e.status } }], new Date());
+        }
+      }
+      return;
+    } else if (e && DEFINITIVE.has(e.status)) {
+      // Boutique fermée ou retirée, plus de rôle, événement fermé : rejouer ne changera rien. Les éléments sortent
+      // de la file avec l'erreur (visible au rapport) ; les usages locaux qu'ils avaient créés disparaissent.
+      await reject(store, eventId, batch, e);
+      return;
+    }
+    await store.markFailed(
+      batch.map((a) => a.id),
+      e?.isNetwork ? "Pas de réseau" : (e?.message ?? "Erreur d'envoi"),
+      later,
+    );
+  }
 }
 
 /** Un lot `POST /events/:id/scans` (idempotent) et sa réponse : file et pointages locaux alignés sur le serveur. */
@@ -398,6 +549,7 @@ async function reject(store: Store, eventId: string, actions: PendingAction[], e
   const state = states.get(eventId);
   if (state) {
     for (const [passId, local] of state.local) if (ids.includes(local.actionId)) state.local.delete(passId);
+    for (const [ticketId, use] of state.ticketUses) if (ids.includes(use.actionId)) state.ticketUses.delete(ticketId);
   }
 }
 
@@ -426,7 +578,7 @@ async function sendOneByOne(store: Store, userId: string, eventId: string, devic
 /** Présence, inscription express, incident, alerte : une requête chacune (incident et alerte idempotents). */
 type Store = Awaited<ReturnType<typeof staffStore>>;
 
-async function sendOther(store: Store, action: PendingAction) {
+async function sendOther(store: Store, action: PendingAction): Promise<boolean> {
   const p = action.payload;
   try {
     let result: Record<string, unknown> = { ok: true };
@@ -440,23 +592,40 @@ async function sendOther(store: Store, action: PendingAction) {
         description: String(p.description),
       });
     } else if (action.kind === "alert") {
-      await api.staffAlert(action.eventId, { clientId: action.id, message: (p.message as string | null) ?? null });
+      // La position (lue au toucher du bouton) part avec l'alerte ; l'API la gère le temps de l'alerte seulement.
+      await api.staffAlert(action.eventId, {
+        clientId: action.id,
+        message: (p.message as string | null) ?? null,
+        lat: typeof p.lat === "number" ? p.lat : null,
+        lng: typeof p.lng === "number" ? p.lng : null,
+      });
+    } else if (action.kind === "incident_photo") {
+      // Photo prise sur le terrain, gardée sur le téléphone jusqu'ici : envoyée, rattachée à l'incident, puis effacée.
+      const uploaded = await api.uploadIncidentPhoto(await incidentPhotoForm(String(p.fileUri)));
+      await api.attachIncidentPhoto(action.eventId, String(p.incidentId), uploaded.key);
+      await deleteLocalPhoto(String(p.fileUri));
     }
     await store.markSent(action.eventId, [{ id: action.id, result }], new Date());
+    if (action.kind === "alert") await store.scrubPosition(action.id);
+    return true;
   } catch (error) {
     const e = error instanceof ApiRequestError ? error : null;
-    if (e?.status === 401) return;
+    if (e?.status === 401) return false;
     const definitive = e && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429;
     if (definitive) {
-      // Refus définitif (e-mail invalide, fenêtre fermée…) : l'action sort de la file, l'erreur reste visible.
+      // Refus définitif (e-mail invalide, fenêtre fermée, photo déjà posée…) : l'action sort de la file, l'erreur
+      // reste visible.
+      if (action.kind === "incident_photo") await deleteLocalPhoto(String(p.fileUri));
       await store.markSent(
         action.eventId,
         [{ id: action.id, result: { error: e.message, status: e.status } }],
         new Date(),
       );
-    } else {
-      await store.markFailed([action.id], e?.isNetwork ? "Pas de réseau" : (e?.message ?? "Erreur d'envoi"), later);
+      if (action.kind === "alert") await store.scrubPosition(action.id);
+      return true;
     }
+    await store.markFailed([action.id], e?.isNetwork ? "Pas de réseau" : (e?.message ?? "Erreur d'envoi"), later);
+    return false;
   }
 }
 
