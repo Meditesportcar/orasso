@@ -5,6 +5,7 @@
 // sans réservation de place (A13).
 import { randomBytes } from "node:crypto";
 import {
+  EMAIL_INVITATIONS_PER_DAY_TOTAL,
   EMAIL_INVITATIONS_PER_STRUCTURE_PER_DAY,
   INVITATIONS_PER_STRUCTURE_PER_DAY,
   type InvitationAccept,
@@ -24,11 +25,12 @@ import {
   type OrganizerInvitation,
   type ReceivedInvitation,
 } from "@orasso/shared";
-import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
   applications,
+  emailOutbox,
   eventInvitations,
   events,
   notifications,
@@ -71,11 +73,22 @@ const isUniqueViolation = (error: unknown) => {
 const lockedError = () => new AppError(423, "locked", "Inscriptions verrouillées : l'invitation n'est plus valable");
 const emailOf = (v: Viewer) => v.user.email?.toLowerCase() ?? "";
 
-/** L'invitation est-elle destinée à cette personne (à son compte, ou à l'adresse e-mail de son compte) ? */
-function isRecipient(inv: Pick<InvitationRow, "userId" | "email">, v: Viewer): boolean {
-  if (inv.userId) return inv.userId === v.user.id;
+/** L'adresse de l'invitation est-elle celle du compte (sans tenir compte de la casse) ? */
+function sameEmail(inv: Pick<InvitationRow, "email">, v: Viewer): boolean {
   return Boolean(inv.email && emailOf(v) && inv.email.toLowerCase() === emailOf(v));
 }
+
+/**
+ * L'invitation est-elle destinée à cette personne ? À son compte, ou à l'adresse e-mail de son compte **confirmée**
+ * (relecture du lot 25, docs/01 : une adresse non confirmée ne prouve rien ; le lien reçu, lui, prouve l'accès à la
+ * boîte : voir `claim`).
+ */
+function isRecipient(inv: Pick<InvitationRow, "userId" | "email">, v: Viewer): boolean {
+  if (inv.userId) return inv.userId === v.user.id;
+  return Boolean(v.user.emailVerified) && sameEmail(inv, v);
+}
+
+const isSuspended = (v: Viewer) => Boolean(v.profile.suspendedUntil && v.profile.suspendedUntil > now());
 
 function brief(e: EventRow, s: StructureRow): InvitationEventBrief {
   return {
@@ -159,9 +172,15 @@ async function createInTx(
   targets: Target[],
   message: string | null,
   sourceEventId: string | null,
+  /** Vrai (« Inviter les retenus ») : au-delà de la limite du jour, on invite jusqu'à la limite au lieu de tout refuser. */
+  partial = false,
 ): Promise<InvitationCreateResult> {
   const t = now();
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invitations:structure:${s.id}`}))`);
+  // Invitations par e-mail : un plafond pour tout Orasso (budget Brevo commun), compté sous un verrou unique.
+  if (targets.some((x) => x.kind === "email")) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('invitations:emails'))`);
+  }
   const skipped: InvitationCreateResult["skipped"] = [];
   const skip = (target: string, reason: InvitationSkipReason) => skipped.push({ target, reason });
 
@@ -177,12 +196,23 @@ async function createInTx(
       : [],
   );
   const existing = await tx
-    .select({ userId: eventInvitations.userId, email: eventInvitations.email, status: eventInvitations.status })
+    .select({
+      userId: eventInvitations.userId,
+      email: eventInvitations.email,
+      status: eventInvitations.status,
+      createdAt: eventInvitations.createdAt,
+    })
     .from(eventInvitations)
     .where(eq(eventInvitations.eventId, e.id));
-  const invitedUsers = new Set(existing.flatMap((r) => (r.userId && r.status !== "expired" ? [r.userId] : [])));
+  const since = new Date(t.getTime() - DAY_MS);
+  const ACTIVE = ["pending", "accepted", "declined"];
+  const invitedUsers = new Set(existing.flatMap((r) => (r.userId && ACTIVE.includes(r.status) ? [r.userId] : [])));
   const invitedEmails = new Set(
     existing.flatMap((r) => (!r.userId && r.email && r.status === "pending" ? [r.email.toLowerCase()] : [])),
+  );
+  // Garde de 24 h par adresse et par événement, même après un retrait (pas d'e-mails répétés à la même boîte).
+  const recentEmails = new Set(
+    existing.flatMap((r) => (r.email && r.createdAt >= since ? [r.email.toLowerCase()] : [])),
   );
   const recent = new Set(
     userIds.length
@@ -206,6 +236,7 @@ async function createInTx(
   for (const target of targets) {
     if (target.kind === "email") {
       if (invitedEmails.has(target.email)) skip(target.label, "already_invited");
+      else if (recentEmails.has(target.email)) skip(target.label, "recent");
       else {
         invitedEmails.add(target.email);
         accepted.push(target);
@@ -222,17 +253,36 @@ async function createInTx(
     }
   }
 
-  // Limites en base, sur 24 h glissantes, pour toute la structure (tous ses événements et organisateurs).
-  const since = new Date(t.getTime() - DAY_MS);
+  // Limites en base, sur 24 h glissantes, pour toute la structure (tous ses événements et organisateurs). Les lignes ne
+  // sont jamais supprimées (un retrait passe à `withdrawn`) et une invitation par e-mail garde son adresse une fois
+  // rattachée : retirer puis renvoyer, ou faire accepter, ne libère rien.
   const [today] = await tx
     .select({
       n: count(),
-      emails: sql<number>`count(*) filter (where ${eventInvitations.userId} is null)::int`,
+      emails: sql<number>`count(*) filter (where ${eventInvitations.email} is not null)::int`,
     })
     .from(eventInvitations)
     .innerJoin(events, eq(events.id, eventInvitations.eventId))
     .where(and(eq(events.structureId, s.id), gte(eventInvitations.createdAt, since)));
+  if (partial) {
+    const room = Math.max(0, INVITATIONS_PER_STRUCTURE_PER_DAY - (today?.n ?? 0));
+    for (const x of accepted.splice(room)) skip(x.label, "quota");
+  }
   const emailCount = accepted.filter((x) => x.kind === "email").length;
+  if (emailCount > 0) {
+    const [all] = await tx
+      .select({ n: count() })
+      .from(eventInvitations)
+      .where(and(isNotNull(eventInvitations.email), gte(eventInvitations.createdAt, since)));
+    if ((all?.n ?? 0) + emailCount > EMAIL_INVITATIONS_PER_DAY_TOTAL) {
+      throw new AppError(
+        429,
+        "rate_limited",
+        "Trop d'invitations par e-mail aujourd'hui sur Orasso : réessaie demain, ou invite les personnes par leur pseudo.",
+        { retryAfter: 86_400 },
+      );
+    }
+  }
   if ((today?.n ?? 0) + accepted.length > INVITATIONS_PER_STRUCTURE_PER_DAY) {
     throw new AppError(
       429,
@@ -265,7 +315,8 @@ async function createInTx(
         createdBy: v.user.id,
         message,
         sourceEventId,
-        sentAt: t,
+        // Personne : notifiée tout de suite ; adresse e-mail : posé quand l'e-mail est réellement parti.
+        sentAt: x.kind === "email" ? null : t,
         createdAt: t,
         updatedAt: t,
       })),
@@ -296,6 +347,15 @@ async function createInTx(
         ),
         { eventId: e.id, invitationId: row.id },
       );
+      const [out] = await db
+        .select({ status: emailOutbox.status })
+        .from(emailOutbox)
+        .where(sql`${emailOutbox.payload} ->> 'invitationId' = ${row.id}`)
+        .orderBy(desc(emailOutbox.createdAt))
+        .limit(1);
+      if (out && out.status !== "skipped_quota" && out.status !== "failed") {
+        await db.update(eventInvitations).set({ sentAt: now() }).where(eq(eventInvitations.id, row.id));
+      }
     }
   });
   publishInbox(
@@ -403,7 +463,13 @@ export const invitationsService = {
     const vehicleIds = [...new Set(input.vehicleIds)];
     if (vehicleIds.length) {
       const rows = await db
-        .select({ id: vehicles.id, ownerId: vehicles.ownerId, status: vehicles.status, deletedAt: profiles.deletedAt })
+        .select({
+          id: vehicles.id,
+          ownerId: vehicles.ownerId,
+          status: vehicles.status,
+          deletedAt: profiles.deletedAt,
+          suspendedUntil: profiles.suspendedUntil,
+        })
         .from(vehicles)
         .innerJoin(profiles, eq(profiles.userId, vehicles.ownerId))
         .where(inArray(vehicles.id, vehicleIds));
@@ -411,8 +477,9 @@ export const invitationsService = {
       for (const id of vehicleIds) {
         const row = rows.find((r) => r.id === id);
         const label = labels.get(id) ?? id;
-        if (row?.status !== "active" || row.deletedAt) skippedBefore.push({ target: label, reason: "unknown" });
-        else targets.push({ kind: "vehicle", label, userId: row.ownerId, vehicleId: id });
+        if (row?.status !== "active" || row.deletedAt || (row.suspendedUntil && row.suspendedUntil > t)) {
+          skippedBefore.push({ target: label, reason: "unknown" });
+        } else targets.push({ kind: "vehicle", label, userId: row.ownerId, vehicleId: id });
       }
     }
     for (const email of [...new Set(input.emails.map((x) => x.trim().toLowerCase()))]) {
@@ -447,6 +514,7 @@ export const invitationsService = {
           eq(applications.kind, "vehicle"),
           eq(applications.status, "accepted"),
           isNull(profiles.deletedAt),
+          or(isNull(profiles.suspendedUntil), lt(profiles.suspendedUntil, now())),
         ),
       )
       .orderBy(asc(applications.decidedAt), asc(applications.createdAt));
@@ -466,7 +534,7 @@ export const invitationsService = {
     return withTx(async (tx, after) => {
       const e = await eventsRepo.lockForUpdate(tx, eventId);
       assertInvitable(e);
-      return createInTx(tx, after, v, e, s, targets, input.message ?? null, source.id);
+      return createInTx(tx, after, v, e, s, targets, input.message ?? null, source.id, true);
     });
   },
 
@@ -481,6 +549,22 @@ export const invitationsService = {
       .orderBy(desc(eventInvitations.createdAt), desc(eventInvitations.id))
       .limit(500);
     const labels = await vehicleLabels(rows.flatMap((r) => (r.i.vehicleId ? [r.i.vehicleId] : [])));
+    const mailIds = rows.flatMap((r) => (r.i.email && !r.i.sentAt ? [r.i.id] : []));
+    const skippedMails = new Set(
+      mailIds.length
+        ? (
+            await db
+              .select({ id: sql<string>`${emailOutbox.payload} ->> 'invitationId'` })
+              .from(emailOutbox)
+              .where(
+                and(
+                  eq(emailOutbox.status, "skipped_quota"),
+                  inArray(sql`${emailOutbox.payload} ->> 'invitationId'`, mailIds),
+                ),
+              )
+          ).map((m) => m.id)
+        : [],
+    );
     const appIds = rows.flatMap((r) => (r.i.acceptedApplicationId ? [r.i.acceptedApplicationId] : []));
     const apps = appIds.length
       ? await db
@@ -501,6 +585,7 @@ export const invitationsService = {
         message: i.message,
         createdAt: i.createdAt.toISOString(),
         sentAt: i.sentAt?.toISOString() ?? null,
+        mailSkipped: skippedMails.has(i.id),
         declinedAt: i.declinedAt?.toISOString() ?? null,
         sourceEventId: i.sourceEventId,
         application: app ? { id: app.id, status: app.status } : null,
@@ -519,7 +604,7 @@ export const invitationsService = {
         .for("update");
       if (!row) throw notFound("Invitation introuvable");
       if (row.status !== "pending") throw conflict("conflict", "Seule une invitation en attente se retire");
-      await tx.delete(eventInvitations).where(eq(eventInvitations.id, row.id));
+      await tx.update(eventInvitations).set({ status: "withdrawn" }).where(eq(eventInvitations.id, row.id));
       await closeNotification(tx, [row.id]);
       publishInbox(after, [row.userId]);
     });
@@ -597,10 +682,12 @@ export const invitationsService = {
       .where(
         and(
           eq(eventInvitations.status, "pending"),
-          or(
-            eq(eventInvitations.userId, v.user.id),
-            and(isNull(eventInvitations.userId), sql`lower(${eventInvitations.email}) = ${emailOf(v) || "\u0000"}`),
-          ),
+          v.user.emailVerified && emailOf(v)
+            ? or(
+                eq(eventInvitations.userId, v.user.id),
+                and(isNull(eventInvitations.userId), sql`lower(${eventInvitations.email}) = ${emailOf(v)}`),
+              )
+            : eq(eventInvitations.userId, v.user.id),
           eq(events.status, "published"),
           gt(events.endsAt, t),
         ),
@@ -623,7 +710,11 @@ export const invitationsService = {
           eq(eventInvitations.status, "pending"),
           or(
             eq(eventInvitations.userId, userId),
-            and(isNull(eventInvitations.userId), sql`lower(${eventInvitations.email}) = lower(${user.email})`),
+            and(
+              isNull(eventInvitations.userId),
+              eq(user.emailVerified, true),
+              sql`lower(${eventInvitations.email}) = lower(${user.email})`,
+            ),
           ),
           eq(events.status, "published"),
           sql`${events.startsAt} - make_interval(mins => ${events.lockOffsetMinutes}) > ${now()}`,
@@ -639,6 +730,7 @@ export const invitationsService = {
    * y en a un), type admis, au moins une photo, sans transfert de plaque en cours.
    */
   async accept(v: Viewer, invitationId: string, input: InvitationAccept): Promise<InvitationAcceptResult> {
+    if (isSuspended(v)) throw forbidden("Ton compte est suspendu : lecture seule.");
     const found = await findInvitation(invitationId);
     // Une invitation qui n'est pas à moi n'existe pas pour moi (pas d'énumération).
     if (!isRecipient(found, v)) throw notFound("Invitation introuvable");
@@ -717,16 +809,29 @@ export const invitationsService = {
       const [inv] = await tx.select().from(eventInvitations).where(eq(eventInvitations.id, invitationId)).for("update");
       if (!inv || !isRecipient(inv, v)) throw notFound("Invitation introuvable");
       if (inv.status !== "pending") throw conflict("conflict", "Cette invitation a déjà reçu une réponse");
-      try {
-        await tx
-          .update(eventInvitations)
-          .set({ status: "declined", declinedAt: now(), userId: inv.userId ?? v.user.id })
-          .where(eq(eventInvitations.id, inv.id));
-      } catch (error) {
-        if (!isUniqueViolation(error)) throw error;
-        // Adresse e-mail alors que j'ai déjà une invitation à mon compte pour cet événement : celle-ci disparaît.
-        await tx.update(eventInvitations).set({ status: "expired" }).where(eq(eventInvitations.id, inv.id));
-      }
+      // Invitation par e-mail alors que j'en ai déjà une à mon compte pour cet événement : celle-ci disparaît (vérifié
+      // avant l'écriture : une violation d'unicité avorterait la transaction).
+      const [mineAlready] = inv.userId
+        ? []
+        : await tx
+            .select({ id: eventInvitations.id })
+            .from(eventInvitations)
+            .where(
+              and(
+                eq(eventInvitations.eventId, inv.eventId),
+                eq(eventInvitations.userId, v.user.id),
+                inArray(eventInvitations.status, ["pending", "accepted", "declined"]),
+              ),
+            )
+            .limit(1);
+      await tx
+        .update(eventInvitations)
+        .set(
+          mineAlready
+            ? { status: "expired" }
+            : { status: "declined", declinedAt: now(), userId: inv.userId ?? v.user.id },
+        )
+        .where(eq(eventInvitations.id, inv.id));
       await closeNotification(tx, [inv.id]);
       publishInbox(after, [v.user.id]);
     });
@@ -740,9 +845,12 @@ export const invitationsService = {
     if (e.status === "draft") throw notFound(L.linkUnknown);
     const s = await structureOf(e.structureId);
     const labels = inv.vehicleId ? await vehicleLabels([inv.vehicleId]) : new Map<string, string>();
-    const mine = Boolean(viewer && isRecipient(inv, viewer));
+    const mine = Boolean(viewer && (isRecipient(inv, viewer) || (!inv.userId && sameEmail(inv, viewer))));
+    const status = displayStatus(inv, e, now());
+    // Le lien d'une invitation retirée, refusée, acceptée ou expirée ne montre plus l'événement (sauf à son destinataire).
+    if (status !== "pending" && !mine) throw notFound(L.linkGone);
     return {
-      status: displayStatus(inv, e, now()),
+      status,
       event: brief(e, s),
       invitedBy: s.name,
       vehicle: inv.vehicleId ? { id: inv.vehicleId, label: labels.get(inv.vehicleId) ?? "Véhicule" } : null,
@@ -756,12 +864,30 @@ export const invitationsService = {
    * adresse (après connexion ou inscription par le lien). Une autre adresse : 403.
    */
   async claim(token: string, v: Viewer): Promise<ReceivedInvitation> {
+    let verifiedNow = false;
     const result = await withTx(async (tx) => {
       const [inv] = await tx.select().from(eventInvitations).where(eq(eventInvitations.token, token)).for("update");
       if (!inv) throw notFound(L.linkUnknown);
-      if (!isRecipient(inv, v)) throw forbidden(L.linkNotMine);
+      // Le lien reçu prouve l'accès à la boîte : une adresse identique non confirmée est confirmée ici.
+      if (!(isRecipient(inv, v) || (!inv.userId && sameEmail(inv, v)))) throw forbidden(L.linkNotMine);
       if (inv.userId) return inv;
       if (inv.status !== "pending") return inv;
+      if (!v.user.emailVerified) {
+        await tx.update(user).set({ emailVerified: true }).where(eq(user.id, v.user.id));
+        verifiedNow = true;
+      }
+      const [already] = await tx
+        .select({ id: eventInvitations.id })
+        .from(eventInvitations)
+        .where(
+          and(
+            eq(eventInvitations.eventId, inv.eventId),
+            eq(eventInvitations.userId, v.user.id),
+            inArray(eventInvitations.status, ["pending", "accepted", "declined"]),
+          ),
+        )
+        .limit(1);
+      if (already) throw conflict("conflict", "Tu as déjà une invitation pour cet événement : ouvre-la depuis Accès");
       try {
         const [row] = await tx
           .update(eventInvitations)
@@ -774,6 +900,11 @@ export const invitationsService = {
         throw conflict("conflict", "Tu as déjà une invitation pour cet événement : ouvre-la depuis Accès");
       }
     });
+    // Confirmation par le lien : les mêmes suites qu'une confirmation par l'e-mail de Better Auth (parrainage).
+    if (verifiedNow) {
+      const { accountService } = await import("../account/service");
+      await accountService.onEmailVerified(v.user.id).catch(() => undefined);
+    }
     const [view] = await receivedView([result]);
     if (!view) throw notFound(L.linkUnknown);
     return view;
@@ -804,5 +935,10 @@ export const invitationsService = {
       .update(eventInvitations)
       .set({ createdBy: null, message: null })
       .where(eq(eventInvitations.createdBy, userId));
+    // Lien reçu inutilisable (et sans rapport avec la personne) : jeton renouvelé.
+    await tx
+      .update(eventInvitations)
+      .set({ token: sql`md5(random()::text || ${eventInvitations.id}::text) || md5(clock_timestamp()::text)` })
+      .where(eq(eventInvitations.userId, userId));
   },
 };

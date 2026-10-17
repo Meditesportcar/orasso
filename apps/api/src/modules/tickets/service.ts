@@ -262,6 +262,8 @@ export const ticketsService = {
     const orderId = await withTx(async (tx) => {
       await lockTickets(tx, eventId);
       const e = await eventsRepo.byId(eventId, tx);
+      // Événement privé sur invitation (lot 25) : mêmes ayants droit que sa page.
+      await assertCanSeeEvent(e, v, tx);
       const s = await tx.query.structures.findFirst({ where: eq(structures.id, e.structureId) });
       if (e.publicAccess !== "free_reservation") throw validation("Cet événement n'a pas de billets gratuits.");
       const { type, remaining, block } = await blockOf(tx, e, s ?? { stripeAccountId: null });
@@ -314,6 +316,7 @@ export const ticketsService = {
     const reserved = await withTx(async (tx) => {
       await lockTickets(tx, eventId);
       const e = await eventsRepo.byId(eventId, tx);
+      await assertCanSeeEvent(e, v, tx);
       const s = await tx.query.structures.findFirst({ where: eq(structures.id, e.structureId) });
       if (e.publicAccess !== "paid_orasso" || !s)
         throw validation("Cet événement n'a pas de billetterie payante Orasso.");

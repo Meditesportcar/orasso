@@ -8,6 +8,12 @@ export const INVITATIONS_PER_REQUEST = 50;
 export const INVITATIONS_PER_STRUCTURE_PER_DAY = 300;
 /** Dont adresses e-mail sans compte (chaque adresse reçoit un e-mail : budget Brevo de tout Orasso). */
 export const EMAIL_INVITATIONS_PER_STRUCTURE_PER_DAY = 50;
+/**
+ * Invitations par e-mail pour **tout Orasso** sur 24 h glissantes (relecture du lot 25) : un tiers du budget Brevo
+ * courant (250 / jour hors e-mails réservés au compte, lot 20), pour qu'une ou deux structures ne coupent pas les e-mails
+ * de tout le monde.
+ */
+export const EMAIL_INVITATIONS_PER_DAY_TOTAL = 100;
 /** Message de l'organisateur joint à l'invitation. */
 export const INVITATION_MESSAGE_MAX = 500;
 

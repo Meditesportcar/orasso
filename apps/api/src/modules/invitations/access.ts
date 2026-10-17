@@ -1,7 +1,8 @@
 // Événement privé sur invitation (lot 25, ARCHITECTURE-SUITE § 9.1) : qui peut le voir. Ayants droit : membre actif
-// de la structure (organisateurs et staff), staff de l'événement, personne qui y a une candidature, invité (invitation
-// en attente ou acceptée, à son compte ou à l'adresse e-mail de son compte). Tous les autres : `403 invite_only`, sans
-// rien de l'événement.
+// de la structure (organisateurs et staff), staff de l'événement, personne qui y a une candidature active, invité
+// (invitation en attente, à son compte ou à l'adresse **confirmée** de son compte). Tous les autres :
+// `403 invite_only`, sans rien de l'événement.
+import { activeApplicationStatuses } from "@orasso/shared";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -43,18 +44,28 @@ export async function canSeeEvent(e: PrivateEvent, viewer: Viewer | null, ex: Ex
   const [mine] = await ex
     .select({ id: applications.id })
     .from(applications)
-    .where(and(eq(applications.eventId, e.id), eq(applications.userId, userId)))
+    .where(
+      and(
+        eq(applications.eventId, e.id),
+        eq(applications.userId, userId),
+        inArray(applications.status, [...activeApplicationStatuses]),
+      ),
+    )
     .limit(1);
   if (mine) return true;
-  const email = viewer.user.email?.toLowerCase() ?? "";
+  // Adresse non confirmée : elle ne prouve rien (relecture du lot 25) ; le lien reçu passe par `claim`.
+  const email = viewer.user.emailVerified ? (viewer.user.email?.toLowerCase() ?? "") : "";
   const [invited] = await ex
     .select({ id: eventInvitations.id })
     .from(eventInvitations)
     .where(
       and(
         eq(eventInvitations.eventId, e.id),
-        inArray(eventInvitations.status, ["pending", "accepted"]),
-        sql`(${eventInvitations.userId} = ${userId} or (${eventInvitations.userId} is null and lower(${eventInvitations.email}) = ${email}))`,
+        // Acceptée : l'accès passe par la candidature créée (active seulement, ci-dessus).
+        eq(eventInvitations.status, "pending"),
+        email
+          ? sql`(${eventInvitations.userId} = ${userId} or (${eventInvitations.userId} is null and lower(${eventInvitations.email}) = ${email}))`
+          : eq(eventInvitations.userId, userId),
       ),
     )
     .limit(1);

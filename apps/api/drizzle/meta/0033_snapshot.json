@@ -1,5 +1,5 @@
 {
-  "id": "ae48cea7-85f9-49e7-97a2-54cbe909a123",
+  "id": "2a57d931-5e06-4338-821d-987ae1a1cafb",
   "prevId": "259451c6-eb9e-4a8a-99e0-a57124e6cc4b",
   "version": "7",
   "dialect": "postgresql",
@@ -11374,7 +11374,8 @@
         "pending",
         "accepted",
         "declined",
-        "expired"
+        "expired",
+        "withdrawn"
       ]
     },
     "public.contact_status": {

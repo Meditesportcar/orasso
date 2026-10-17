@@ -537,6 +537,20 @@ Code : `apps/web/app/` (routes, `layouts/`, `components/`, `lib/`, `styles/site.
 - **Anonymisation** (`invitationsService.anonymizeForDeletedAccount`, un appel dans `account/service.ts`, qui remplace les deux lignes d'avant) : invitations reçues en attente → expirées, adresse effacée (y compris les invitations par e-mail à l'ancienne adresse) ; invitations envoyées → auteur et message effacés.
 - **Seed** (`scripts/seed/invitations.ts`, par les vrais services) : « Soirée partenaires » (MéditeSportCar, privée, 25 places) ; Kenji_66 invité avec sa voiture et retenu, Nina_34 en attente, une adresse sans compte ; priorité et avant-première de 48 h des hauts grades (Circuit et Légende) sur « Expo Rivesaltes ».
 
+- **Corrections de la relecture (lot 25)** :
+  - **Adresse confirmée exigée** : une invitation par e-mail n'est visible (Accès, Boîte, page de l'événement privé) et utilisable qu'avec une adresse **confirmée** (docs/01 : une invitation compte une fois l'e-mail confirmé). Le lien reçu prouve l'accès à la boîte : `claim` avec le jeton confirme l'adresse du compte de même adresse (`emailVerified = true`, puis les mêmes suites qu'une confirmation, dont le parrainage) et rattache l'invitation.
+  - **Quotas d'e-mails** : un retrait ne supprime plus la ligne (nouveau statut « Retirée », `withdrawn`, migration `0033` régénérée) et une invitation par e-mail garde son adresse une fois rattachée : on compte `email is not null` sur 24 h. Garde de 24 h par événement et par adresse, même après un retrait. Plafond de **100 invitations par e-mail par 24 h pour tout Orasso** (`EMAIL_INVITATIONS_PER_DAY_TOTAL`, un tiers des 250 e-mails courants du budget Brevo du lot 20), sous un verrou consultatif unique, en plus des 50 par structure.
+  - **Refus d'une invitation par e-mail alors qu'une autre est déjà au compte** : vérifié avant l'écriture (une violation d'unicité avortait la transaction, réponse 500) ; celle par e-mail passe « Expirée ».
+  - **Lien** : une invitation retirée, refusée, acceptée ou expirée ne montre plus l'événement à qui n'en est pas le destinataire (404) ; jeton renouvelé à l'anonymisation du destinataire.
+  - **Ayants droit d'un événement privé** : candidature **active** seulement ; une invitation acceptée donne l'accès par sa candidature (refusée ou désistée : plus d'accès) ; invitation en attente. Billets (`reserve`, `checkout`) et options d'inscription en crew passent par la même garde (403).
+  - **`sent_at`** posé quand l'e-mail est réellement parti (transport journal ou Brevo) ; l'organisateur voit « E-mail non envoyé (limite du jour) » si le budget Brevo du jour était atteint (`skipped_quota`).
+  - **« Inviter les retenus »** au-delà de la limite du jour : envoi partiel jusqu'à la limite, les autres rendus avec la raison « limite du jour atteinte ».
+  - Comptes suspendus exclus des cibles par véhicule et des retenus d'une édition ; un compte suspendu ne peut pas accepter.
+  - **Avant-premières** : la notification des hauts grades et celle des abonnés partagent un verrou par événement : jamais deux fois la même personne, même avec une tâche rejouée.
+  - **Envoi des e-mails d'invitation** : il reste dans la requête de l'organisateur, après la validation (au plus 50 par envoi, transport journal ou Brevo rapide) ; le passer par une tâche pg-boss n'apportait rien de net à ce volume.
+  - **Tête de liste d'attente (S25) et hauts grades** : un invité qui accepte un événement complet passe au rang 1. Avec la priorité activée, un haut grade qui entre ensuite se place après la dernière candidature de haut grade : il reste derrière un invité de haut grade, mais passe devant un invité de grade inférieur. Choix : la priorité des hauts grades s'applique à chaque entrée, sans exception pour un invité ; l'organisateur peut toujours réordonner.
+  - Page `/e/:slug` d'un événement privé : écran rendu par la page elle-même (réponse 403), plus d'`ErrorBoundary` propre ; les autres erreurs passent par la page d'erreur commune du site.
+
 ## À revoir avec Damien
 
 ### Communication de l'organisateur (lot 20)

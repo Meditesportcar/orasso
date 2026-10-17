@@ -28,6 +28,7 @@ import {
   notifications,
   profiles,
   structureFollows,
+  user,
   vehicles,
 } from "../../db/schema";
 import { accountService } from "../account/service";
@@ -309,9 +310,12 @@ describe("lien par e-mail", () => {
       // Inscription avec la même adresse (casse différente) : rattachée.
       const sarah = await signUp("Sarah");
       await db.execute(sql`update "user" set email = 'sarah@exemple.test' where id = ${sarah.id}`);
-      expect((await req(sarah, "GET", `/events/by-slug/${e.slug}`, undefined, mode)).status).toBe(200);
+      // Adresse pas encore confirmée : rien (relecture) ; le lien reçu la confirme et rattache l'invitation.
+      expect((await req(sarah, "GET", `/events/by-slug/${e.slug}`, undefined, mode)).status).toBe(403);
       const claimed = await req(sarah, "POST", `/invitation-evenement/${row!.token}/claim`, undefined, mode);
       expect(claimed.status).toBe(200);
+      expect((await db.query.user.findFirst({ where: eq(user.id, sarah.id) }))?.emailVerified).toBe(true);
+      expect((await req(sarah, "GET", `/events/by-slug/${e.slug}`, undefined, mode)).status).toBe(200);
       expect(claimed.json.status).toBe("pending");
       const car = await createVehicle(sarah.id, ref);
       const ok = await req(sarah, "POST", `/event-invitations/${claimed.json.id}/accept`, { vehicleId: car.id }, mode);
@@ -709,11 +713,170 @@ describe("critère de fin", () => {
       .where(and(eq(eventInvitations.eventId, e.id), eq(eventInvitations.email, "nouvelle@exemple.test")));
     const nouvelle = await signUp("Nouvelle");
     await db.execute(sql`update "user" set email = 'nouvelle@exemple.test' where id = ${nouvelle.id}`);
-    expect((await req(nouvelle, "GET", "/me/event-invitations")).json).toHaveLength(1);
+    expect((await req(nouvelle, "GET", "/me/event-invitations")).json).toHaveLength(0);
     const claimed = await req(nouvelle, "POST", `/invitation-evenement/${byEmail!.token}/claim`);
+    expect((await req(nouvelle, "GET", "/me/event-invitations")).json).toHaveLength(1);
     const v = await createVehicle(nouvelle.id, ref);
     expect(
       (await req(nouvelle, "POST", `/event-invitations/${claimed.json.id}/accept`, { vehicleId: v.id })).json.outcome,
     ).toBe("accepted");
+  });
+});
+
+describe("corrections de la relecture", () => {
+  const verify = (u: TestUser) => db.update(user).set({ emailVerified: true }).where(eq(user.id, u.id));
+
+  for (const mode of MODES) {
+    it(`adresse non confirmée : invitation par e-mail invisible et inutilisable, sauf par le lien (${mode})`, async () => {
+      const { damien, e } = await setup({ admission: "invite_only" });
+      const jean = await signUp("Jean");
+      const car = await createVehicle(jean.id, ref);
+      expect(
+        (await req(damien, "POST", `/events/${e.id}/invitations`, { emails: [jean.email] }, mode)).json.created,
+      ).toBe(1);
+      const [row] = await db.select().from(eventInvitations).where(eq(eventInvitations.eventId, e.id));
+      expect((await req(jean, "GET", "/me/event-invitations", undefined, mode)).json).toHaveLength(0);
+      expect((await req(jean, "GET", "/me/inbox/summary", undefined, mode)).json.requests.eventInvitation).toBe(0);
+      expect((await req(jean, "GET", `/events/by-slug/${e.slug}`, undefined, mode)).status).toBe(403);
+      expect(
+        (await req(jean, "POST", `/event-invitations/${row!.id}/accept`, { vehicleId: car.id }, mode)).status,
+      ).toBe(404);
+      expect((await req(jean, "POST", `/event-invitations/${row!.id}/decline`, undefined, mode)).status).toBe(404);
+      // Adresse confirmée : visible.
+      await verify(jean);
+      expect((await req(jean, "GET", "/me/event-invitations", undefined, mode)).json).toHaveLength(1);
+      expect((await req(jean, "GET", `/events/by-slug/${e.slug}`, undefined, mode)).status).toBe(200);
+    });
+  }
+
+  it("quotas d'e-mails : un retrait ne libère rien, garde de 24 h par adresse, plafond pour tout Orasso", async () => {
+    const { damien, s, e } = await setup();
+    await req(damien, "POST", `/events/${e.id}/invitations`, { emails: ["x@exemple.test"] });
+    const [row] = await db.select().from(eventInvitations).where(eq(eventInvitations.eventId, e.id));
+    expect((await req(damien, "DELETE", `/events/${e.id}/invitations/${row!.id}`)).status).toBe(204);
+    expect((await db.query.eventInvitations.findFirst({ where: eq(eventInvitations.id, row!.id) }))?.status).toBe(
+      "withdrawn",
+    );
+    const again = await req(damien, "POST", `/events/${e.id}/invitations`, { emails: ["x@exemple.test"] });
+    expect(again.json.skipped).toEqual([{ target: "x@exemple.test", reason: "recent" }]);
+    // Plafond de tout Orasso : 100 invitations par e-mail en 24 h (une autre structure les a déjà).
+    const other = await signUp("Autre", { twoFactor: true });
+    const os = await createStructure(other.id);
+    const oe = await createEvent(os.id, { startsAt: paris(10, 25, 18), endsAt: paris(10, 25, 22) });
+    await db.insert(eventInvitations).values(
+      Array.from({ length: 99 }, (_, i) => ({
+        eventId: oe.id,
+        email: `glob${i}@exemple.test`,
+        token: `jeton-global-${i}-${"y".repeat(12)}`,
+        createdAt: clock.now,
+      })),
+    );
+    expect(s.id).not.toBe(os.id);
+    const res = await req(damien, "POST", `/events/${e.id}/invitations`, { emails: ["z@exemple.test"] });
+    expect(res.status).toBe(429);
+    // Une invitation par e-mail rattachée puis acceptée compte toujours.
+    clock.advance(25 * 3_600_000);
+    expect(
+      (await req(damien, "POST", `/events/${e.id}/invitations`, { emails: ["z@exemple.test"] })).json.created,
+    ).toBe(1);
+  });
+
+  it("invité par pseudo et par e-mail : refuser l'invitation par e-mail répond 204 (plus de 500)", async () => {
+    const { damien, e } = await setup();
+    const kenji = await signUp("Kenji");
+    await verify(kenji);
+    await req(damien, "POST", `/events/${e.id}/invitations`, { pseudos: ["Kenji"], emails: [kenji.email] });
+    const byMail = await db.query.eventInvitations.findFirst({
+      where: and(eq(eventInvitations.eventId, e.id), eq(eventInvitations.email, kenji.email.toLowerCase())),
+    });
+    const res = await req(kenji, "POST", `/event-invitations/${byMail!.id}/decline`);
+    expect(res.status).toBe(204);
+    expect((await db.query.eventInvitations.findFirst({ where: eq(eventInvitations.id, byMail!.id) }))?.status).toBe(
+      "expired",
+    );
+    expect((await invitationOf(e.id, kenji.id))?.status).toBe("pending");
+  });
+
+  it("« Inviter les retenus » au-delà de la limite : envoi partiel, le reste signalé", async () => {
+    const { damien, s, e } = await setup();
+    const past = await createEvent(s.id, { startsAt: paris(9, 1, 10), endsAt: paris(9, 1, 18) });
+    for (const name of ["Un", "Deux", "Trois"]) {
+      const u = await signUp(name);
+      const car = await createVehicle(u.id, ref);
+      await db.insert(applications).values({
+        eventId: past.id,
+        userId: u.id,
+        vehicleId: car.id,
+        status: "accepted",
+        rulesAcceptedAt: paris(8, 1, 10),
+        followStructure: false,
+      });
+    }
+    const other = await createEvent(s.id, { startsAt: paris(10, 25, 18), endsAt: paris(10, 25, 22) });
+    await db.insert(eventInvitations).values(
+      Array.from({ length: INVITATIONS_PER_STRUCTURE_PER_DAY - 1 }, (_, i) => ({
+        eventId: other.id,
+        email: null,
+        userId: damien.id,
+        token: `jeton-quota-${i}-${"z".repeat(12)}`,
+        status: "expired" as const,
+        createdAt: clock.now,
+      })),
+    );
+    const res = await req(damien, "POST", `/events/${e.id}/invitations/from-event`, { sourceEventId: past.id });
+    expect(res.status).toBe(201);
+    expect(res.json.created).toBe(1);
+    expect(res.json.skipped.map((x: { reason: string }) => x.reason)).toEqual(["quota", "quota"]);
+  });
+
+  it("billets et inscription en crew d'un événement privé : 403 pour un non-invité ; lien retiré : rien", async () => {
+    const { damien, e } = await setup({ admission: "invite_only", publicAccess: "free_reservation" });
+    const intrus = await signUp("Intrus");
+    expect((await req(intrus, "POST", `/events/${e.id}/tickets/reserve`, { quantity: 1 })).status).toBe(403);
+    expect((await req(intrus, "POST", `/events/${e.id}/tickets/checkout`, { quantity: 1 })).status).toBe(403);
+    const crew = await req(intrus, "POST", "/crews", { name: "Crew privé test", department: "66" });
+    expect((await req(intrus, "GET", `/events/${e.id}/crew-applications/options?crewId=${crew.json.id}`)).status).toBe(
+      403,
+    );
+    await req(damien, "POST", `/events/${e.id}/invitations`, { emails: ["lien@exemple.test"] });
+    const [row] = await db.select().from(eventInvitations).where(eq(eventInvitations.eventId, e.id));
+    expect((await req(null, "GET", `/invitation-evenement/${row!.token}`)).status).toBe(200);
+    // E-mail parti (transport journal) : `sent_at` posé après l'envoi.
+    expect(
+      (await db.query.eventInvitations.findFirst({ where: eq(eventInvitations.id, row!.id) }))?.sentAt,
+    ).not.toBeNull();
+    await req(damien, "DELETE", `/events/${e.id}/invitations/${row!.id}`);
+    expect((await req(null, "GET", `/invitation-evenement/${row!.token}`)).status).toBe(404);
+  });
+
+  it("candidature refusée : plus d'accès à la page de l'événement privé", async () => {
+    const { damien, e } = await setup({ admission: "invite_only" });
+    const kenji = await signUp("Kenji");
+    const car = await createVehicle(kenji.id, ref);
+    await req(damien, "POST", `/events/${e.id}/invitations`, { vehicleIds: [car.id] });
+    const inv = await invitationOf(e.id, kenji.id);
+    const ok = await req(kenji, "POST", `/event-invitations/${inv!.id}/accept`, {});
+    expect(
+      (
+        await req(damien, "POST", `/events/${e.id}/applications/${ok.json.applicationId}/decide`, {
+          decision: "refuse",
+          reasons: ["full"],
+        })
+      ).status,
+    ).toBe(200);
+    expect((await req(kenji, "GET", `/events/by-slug/${e.slug}`)).status).toBe(403);
+  });
+
+  it("compte suspendu : ne peut pas accepter", async () => {
+    const { damien, e } = await setup();
+    const kenji = await signUp("Kenji");
+    const car = await createVehicle(kenji.id, ref);
+    await req(damien, "POST", `/events/${e.id}/invitations`, { vehicleIds: [car.id] });
+    const inv = await invitationOf(e.id, kenji.id);
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: paris(12, 1, 10) })
+      .where(eq(profiles.userId, kenji.id));
+    expect((await req(kenji, "POST", `/event-invitations/${inv!.id}/accept`, {})).status).toBe(403);
   });
 });

@@ -75,7 +75,8 @@ export type EventStatus = (typeof eventStatuses)[number];
 export const eventOutlooks = ["maintained", "uncertain"] as const;
 export type EventOutlook = (typeof eventOutlooks)[number];
 
-export const invitationStatuses = ["pending", "accepted", "declined", "expired"] as const;
+/** `withdrawn` (lot 25, relecture) : retirée par l'organisateur ; la ligne reste (quotas, garde de 24 h). */
+export const invitationStatuses = ["pending", "accepted", "declined", "expired", "withdrawn"] as const;
 export type InvitationStatus = (typeof invitationStatuses)[number];
 
 export const applicationKinds = ["vehicle", "provider"] as const;

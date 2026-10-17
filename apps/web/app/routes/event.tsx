@@ -21,7 +21,7 @@ import {
   type TicketOffer,
   vehicleTypeLabels,
 } from "@orasso/shared";
-import { data, Form, isRouteErrorResponse, redirect, useNavigation } from "react-router";
+import { data, Form, redirect, useNavigation } from "react-router";
 
 import { EventFeed } from "../components/EventFeed";
 import { EventMap } from "../components/EventMap";
@@ -42,7 +42,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const found = await api<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
   // Événement privé sur invitation (lot 25) : rien de l'événement pour qui n'est pas invité, écran dédié.
   if (!found.ok && found.error.code === "invite_only") {
-    throw data({ privateEvent: true, connected: Boolean(await getMe(request)) }, { status: 403 });
+    return data({ privateEvent: true as const, connected: Boolean(await getMe(request)) }, { status: 403 });
   }
   const event = found.ok
     ? found.data
@@ -85,6 +85,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [{ title: "Événement introuvable · Orasso" }];
+  if ("privateEvent" in loaderData) {
+    return [{ title: `${invitationLabels.privateEvent} · Orasso` }, { name: "robots", content: "noindex, nofollow" }];
+  }
   const { event, origin } = loaderData;
   const where = [event.city, event.department].filter(Boolean).join(" ");
   const description = `${eventFormatLabels[event.format]} · ${formatWhen(event.startsAt, event.endsAt)}${where ? ` · ${where}` : ""} · ${event.structure.name}`;
@@ -294,7 +297,45 @@ function ReviewsSection({ reviews }: { reviews: EventReviews }) {
   );
 }
 
-export default function EventPage({ loaderData, actionData }: Route.ComponentProps) {
+type EventData = Exclude<Route.ComponentProps["loaderData"], { privateEvent: true }>;
+
+/** Événement privé sur invitation (lot 25) : écran sans rien de l'événement pour qui n'est pas invité. */
+function PrivateEvent({ connected }: { connected: boolean }) {
+  return (
+    <div className="ev-private" data-testid="private-event">
+      <div className="s-card s-stack">
+        <span className="s-row">
+          <Icon name="eyeOff" size={24} />
+          <span className="s-label o-t-label">{invitationLabels.privateBadge}</span>
+        </span>
+        <h1 className="s-title s-title--xl">{invitationLabels.privateEvent}</h1>
+        <p className="s-muted">{invitationLabels.privateEventHint}</p>
+        {connected ? (
+          <Button variant="primary" icon="entry" href="/app/acces">
+            {invitationLabels.openAccess}
+          </Button>
+        ) : (
+          <Button variant="primary" icon="profile" href="/connexion?retour=%2Fapp%2Facces">
+            {invitationLabels.linkSignIn}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function EventRoute({ loaderData, actionData }: Route.ComponentProps) {
+  if ("privateEvent" in loaderData) return <PrivateEvent connected={loaderData.connected} />;
+  return <EventPage loaderData={loaderData} actionData={actionData} />;
+}
+
+function EventPage({
+  loaderData,
+  actionData,
+}: {
+  loaderData: EventData;
+  actionData: Route.ComponentProps["actionData"];
+}) {
   const {
     event,
     structure,
@@ -642,46 +683,5 @@ export default function EventPage({ loaderData, actionData }: Route.ComponentPro
         )}
       </aside>
     </div>
-  );
-}
-
-/** Événement privé sur invitation (lot 25) : écran sans rien de l'événement ; autres erreurs comme le reste du site. */
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  if (isRouteErrorResponse(error) && error.status === 403 && error.data?.privateEvent) {
-    const connected = Boolean(error.data.connected);
-    return (
-      <main className="ev-private s-plated" data-testid="private-event">
-        <div className="s-card s-stack">
-          <span className="s-row">
-            <Icon name="eyeOff" size={24} />
-            <span className="s-label o-t-label">{invitationLabels.privateBadge}</span>
-          </span>
-          <h1 className="s-title s-title--xl">{invitationLabels.privateEvent}</h1>
-          <p className="s-muted">{invitationLabels.privateEventHint}</p>
-          {connected ? (
-            <Button variant="primary" icon="entry" href="/app/acces">
-              {invitationLabels.openAccess}
-            </Button>
-          ) : (
-            <Button variant="primary" icon="profile" href="/connexion?retour=%2Fapp%2Facces">
-              {invitationLabels.linkSignIn}
-            </Button>
-          )}
-        </div>
-      </main>
-    );
-  }
-  const status = isRouteErrorResponse(error) ? error.status : 500;
-  return (
-    <main className="ev-private">
-      <h1>{status === 404 ? "404" : "Erreur"}</h1>
-      <p>
-        {status === 404
-          ? "Cette page n'existe pas."
-          : isRouteErrorResponse(error)
-            ? error.statusText || "Une erreur inattendue est survenue."
-            : "Une erreur inattendue est survenue."}
-      </p>
-    </main>
   );
 }

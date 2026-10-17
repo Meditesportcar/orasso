@@ -10,6 +10,7 @@ export const invitationStatusLabels: Record<InvitationStatus, string> = {
   accepted: "Acceptée",
   declined: "Refusée",
   expired: "Expirée",
+  withdrawn: "Retirée",
 };
 
 export const invitationSkipLabels: Record<InvitationSkipReason, string> = {
@@ -18,6 +19,7 @@ export const invitationSkipLabels: Record<InvitationSkipReason, string> = {
   recent: "déjà invité dans les dernières 24 h",
   banned: "banni de la structure",
   self: "toi-même",
+  quota: "limite du jour atteinte",
 };
 
 /** « Circuit et Légende » : les grades concernés à partir du seuil. */
@@ -93,6 +95,8 @@ export const invitationLabels = {
   sentList: "Invitations envoyées",
   sentEmpty: "Aucune invitation pour l'instant.",
   remove: "Retirer",
+  mailSkipped: "E-mail non envoyé (limite du jour)",
+  mailPending: "E-mail en cours d'envoi",
   created: (n: number) => (n === 1 ? "1 invitation envoyée" : `${n} invitations envoyées`),
   skipped: (n: number) => (n === 1 ? "1 cible ignorée" : `${n} cibles ignorées`),
   targetEmail: "Adresse e-mail",

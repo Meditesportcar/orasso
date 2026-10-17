@@ -5,10 +5,9 @@
 import { distanceKm, grades, profilePosition, registrationOpensAt } from "@orasso/shared";
 import { and, inArray, isNull, sql } from "drizzle-orm";
 
-import { db } from "../../db/client";
 import { notifications, profiles, structureBans } from "../../db/schema";
 import { now } from "../../lib/deps";
-import { withTx } from "../../lib/tx";
+import { type Tx, withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
 import { type EventRow, eventsRepo } from "./repo";
 
@@ -16,6 +15,11 @@ const sameInstant = (a: Date, iso: unknown) =>
   typeof iso === "string" && Math.abs(a.getTime() - Date.parse(iso)) < 60_000;
 
 /** Instant de l'avant-première des hauts grades, ou `null` si l'organisateur ne l'a pas activée. */
+/** Verrou des notifications d'avant-première d'un événement (hauts grades et abonnés). */
+export async function lockPreview(tx: Tx, eventId: string) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`preview:${eventId}`}))`);
+}
+
 export function highGradePreviewAt(e: EventRow): Date | null {
   if (e.highGradePreviewHours <= 0) return null;
   return registrationOpensAt(e, { follower: false, grade: e.highGradeMin });
@@ -30,23 +34,26 @@ export const highGradePreview = {
     if (!at || !sameInstant(at, data.at) || e.startsAt <= now() || e.lat === null || e.lng === null) return 0;
     const position = { lat: e.lat, lng: e.lng };
     const eligible = grades.slice(grades.indexOf(e.highGradeMin));
-    const candidates = await db
-      .select({ userId: profiles.userId, departments: profiles.departments, radiusKm: profiles.radiusKm })
-      .from(profiles)
-      .where(
-        and(
-          inArray(profiles.grade, eligible),
-          isNull(profiles.deletedAt),
-          sql`not exists (select 1 from ${structureBans} b where b.user_id = ${profiles.userId} and b.structure_id = ${e.structureId})`,
-          sql`not exists (select 1 from ${notifications} n where n.user_id = ${profiles.userId} and n.type = 'preview_open' and n.event_id = ${e.id})`,
-        ),
-      );
-    const targets = candidates.filter((c) => {
-      const home = profilePosition(c.departments);
-      return home !== null && distanceKm(home, position) <= c.radiusKm;
-    });
-    if (!targets.length) return 0;
-    await withTx(async (tx, after) => {
+    // Sous un verrou par événement partagé avec l'avant-première des abonnés : deux passages simultanés (tâche rejouée,
+    // abonnés au même instant) ne notifient jamais deux fois la même personne.
+    return withTx(async (tx, after) => {
+      await lockPreview(tx, e.id);
+      const candidates = await tx
+        .select({ userId: profiles.userId, departments: profiles.departments, radiusKm: profiles.radiusKm })
+        .from(profiles)
+        .where(
+          and(
+            inArray(profiles.grade, eligible),
+            isNull(profiles.deletedAt),
+            sql`not exists (select 1 from ${structureBans} b where b.user_id = ${profiles.userId} and b.structure_id = ${e.structureId})`,
+            sql`not exists (select 1 from ${notifications} n where n.user_id = ${profiles.userId} and n.type = 'preview_open' and n.event_id = ${e.id})`,
+          ),
+        );
+      const targets = candidates.filter((c) => {
+        const home = profilePosition(c.departments);
+        return home !== null && distanceKm(home, position) <= c.radiusKm;
+      });
+      if (!targets.length) return 0;
       await notificationsService.notifyMany(
         tx,
         targets.map((t) => t.userId),
@@ -60,7 +67,7 @@ export const highGradePreview = {
         },
       );
       after(() => notificationsService.kick());
+      return targets.length;
     });
-    return targets.length;
   },
 };

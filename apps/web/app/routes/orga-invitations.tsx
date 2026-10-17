@@ -261,6 +261,11 @@ export default function OrgaInvitations({ loaderData, actionData, params }: Rout
                     {i.application && (
                       <div className="o-t-caption s-muted">{applicationStatusLabels[i.application.status]}</div>
                     )}
+                    {i.mailSkipped && (
+                      <div className="o-t-caption s-muted" data-testid="invitation-mail-skipped">
+                        {L.mailSkipped}
+                      </div>
+                    )}
                   </td>
                   <td className="o-t-caption">{formatDateTime(i.createdAt)}</td>
                   <td>

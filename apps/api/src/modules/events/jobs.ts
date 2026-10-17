@@ -11,7 +11,7 @@ import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
 import { weatherService } from "../weather/service";
-import { highGradePreviewAt } from "./high-grade";
+import { highGradePreviewAt, lockPreview } from "./high-grade";
 import { type EventRow, eventsRepo } from "./repo";
 
 const DAY = 86_400_000;
@@ -68,17 +68,18 @@ export const eventJobs = {
     const e = await eventsRepo.byId(data.eventId).catch(() => null);
     if (e?.status !== "published" || !sameInstant(registrationOpensAt(e, true), data.at)) return false;
     if (e.admission === "invite_only") return false;
-    // Abonnés déjà prévenus par l'avant-première des hauts grades (lot 25) : pas deux fois.
-    const followers = await db
-      .select({ userId: structureFollows.userId })
-      .from(structureFollows)
-      .where(
-        and(
-          eq(structureFollows.structureId, e.structureId),
-          sql`not exists (select 1 from ${notifications} n where n.user_id = ${structureFollows.userId} and n.type = 'preview_open' and n.event_id = ${e.id})`,
-        ),
-      );
     await withTx(async (tx, after) => {
+      // Abonnés déjà prévenus par l'avant-première des hauts grades (lot 25) : pas deux fois (même verrou).
+      await lockPreview(tx, e.id);
+      const followers = await tx
+        .select({ userId: structureFollows.userId })
+        .from(structureFollows)
+        .where(
+          and(
+            eq(structureFollows.structureId, e.structureId),
+            sql`not exists (select 1 from ${notifications} n where n.user_id = ${structureFollows.userId} and n.type = 'preview_open' and n.event_id = ${e.id})`,
+          ),
+        );
       for (const f of followers) {
         await notificationsService.notify(tx, f.userId, "preview_open", {
           title: "Inscriptions en avant-première",

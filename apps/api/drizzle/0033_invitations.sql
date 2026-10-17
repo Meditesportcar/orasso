@@ -1,3 +1,4 @@
+ALTER TYPE "public"."invitation_status" ADD VALUE 'withdrawn';--> statement-breakpoint
 ALTER TABLE "event_invitations" ADD COLUMN "message" text;--> statement-breakpoint
 ALTER TABLE "event_invitations" ADD COLUMN "source_event_id" uuid;--> statement-breakpoint
 ALTER TABLE "event_invitations" ADD COLUMN "accepted_application_id" uuid;--> statement-breakpoint

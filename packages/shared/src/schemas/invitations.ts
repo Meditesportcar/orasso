@@ -38,7 +38,7 @@ export type InvitationAccept = z.infer<typeof invitationAcceptSchema>;
 export type InvitationTargetKind = "user" | "vehicle" | "email";
 
 /** Raison d'une cible non invitée (réponse de création, sans rien révéler d'un compte). */
-export type InvitationSkipReason = "unknown" | "already_invited" | "recent" | "banned" | "self";
+export type InvitationSkipReason = "unknown" | "already_invited" | "recent" | "banned" | "self" | "quota";
 
 export type InvitationCreateResult = {
   created: number;
@@ -99,6 +99,8 @@ export type OrganizerInvitation = {
   message: string | null;
   createdAt: string;
   sentAt: string | null;
+  /** Invitation par e-mail : l'e-mail n'est pas parti (budget du jour atteint). */
+  mailSkipped: boolean;
   declinedAt: string | null;
   sourceEventId: string | null;
   application: { id: string; status: ApplicationStatus } | null;
