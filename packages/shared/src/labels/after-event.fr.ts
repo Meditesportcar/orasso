@@ -37,7 +37,8 @@ export const afterEventLabels = {
   scansValue: (total: number, duplicates: number, overrides: number) =>
     `${total} lectures · ${duplicates} doublons · ${overrides} acceptés quand même`,
   points: "Points attribués",
-  pointsValue: (participations: number, malus: number) => `${participations} participations · ${malus} malus`,
+  pointsValue: (participations: number, malus: number) =>
+    `${participations} ${participations > 1 ? "participations" : "participation"} · ${malus} malus`,
   none: "Aucune donnée.",
   count: (n: number) => (n > 1 ? `${n} véhicules` : `${n} véhicule`),
 

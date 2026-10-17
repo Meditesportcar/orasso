@@ -708,6 +708,9 @@ describe("badge de structure", () => {
       const draft = await createEvent(b.s.id, { title: "Brouillon", status: "draft", startsAt: D(90) });
       clock.set(D(6));
       await badgeService.sweep();
+      // Ses membres gardent la lecture de la structure suspendue ; le public ne la voit plus.
+      expect((await req(b.damien, "GET", `/structures/by-slug/${b.s.slug}`, undefined, mode)).status).toBe(200);
+      expect((await req(null, "GET", `/structures/by-slug/${b.s.slug}`, undefined, mode)).status).toBe(404);
       const create = await req(
         b.damien,
         "POST",

@@ -192,7 +192,7 @@ export const reportService = {
   async refresh(eventId: string): Promise<boolean> {
     return withTx(async (tx) => {
       const event = await eventsRepo.byId(eventId, tx).catch(() => null);
-      if (!event || event.status !== "published" || !event.settledAt) return false;
+      if (event?.status !== "published" || !event.settledAt) return false;
       if (now() < reportRefreshAt(event)) return false;
       const [current] = await tx.select().from(eventReports).where(eq(eventReports.eventId, eventId)).for("update");
       if (current?.refreshedAt) return false;

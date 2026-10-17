@@ -13,6 +13,7 @@ import { db, pool } from "../src/db/client";
 import * as t from "../src/db/schema";
 import { storageDir } from "../src/lib/storage";
 import { notificationsService } from "../src/modules/notifications/service";
+import { seedAfterEvent } from "./seed/after-event";
 import { seedBase } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedCommunication } from "./seed/communication";
@@ -105,6 +106,8 @@ async function main() {
   await seedModeration(hash);
   // Lot 25 : événement privé « Soirée partenaires » et ses invitations ; hauts grades sur l'Expo Rivesaltes.
   await seedInvitations();
+  // Lot 27 : bilan de la Nocturne de rentrée, notes internes, badge qui expire dans 5 jours, structure suspendue.
+  await seedAfterEvent(hash);
 }
 
 try {

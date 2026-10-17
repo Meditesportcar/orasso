@@ -199,6 +199,7 @@ export default function OrgaCandidatures({ loaderData }: Route.ComponentProps) {
         </div>
         <ProviderTriage
           eventId={event.id}
+          structureId={isOrganizer ? event.structureId : undefined}
           items={providers}
           canDecide={canDecide}
           canAccreditMedia={isOrganizer}

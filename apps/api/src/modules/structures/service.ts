@@ -225,9 +225,9 @@ export const structuresService = {
     const s = await db.query.structures.findFirst({
       where: and(eq(structures.slug, slug), isNull(structures.deletedAt)),
     });
-    if (!s || s.verification === "suspended") throw notFound("Structure introuvable");
-    // Structure pas (encore) vérifiée (en attente, refusée) : visible de ses membres seulement, comme ses événements, qui
-    // ne sont jamais listés.
+    if (!s) throw notFound("Structure introuvable");
+    // Structure pas (encore) vérifiée (en attente, refusée) ou suspendue : visible de ses membres seulement, comme ses
+    // événements, qui ne sont jamais listés (lot 27 : un membre garde la lecture de sa structure suspendue, S31).
     if (s.verification !== "verified" && !(viewer && (await activeMembership(viewer.user.id, s.id)))) {
       throw notFound("Structure introuvable");
     }
