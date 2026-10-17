@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   departmentSchema,
   type StructureKind,
+  type StructureSuspensionReason,
   type StructureVerification,
   structureKinds,
   type VerificationDocumentKind,
@@ -181,6 +182,8 @@ export type StructureOrganizer = StructurePublic & {
   verification: StructureVerification;
   verifiedAt: string | null;
   badgeExpiresAt: string | null;
+  /** Lot 27 : suspendue, et pourquoi (badge échu, ou décision de l'équipe). */
+  suspendedReason: StructureSuspensionReason | null;
   siret: string | null;
   rna: string | null;
   inviteToken: string;

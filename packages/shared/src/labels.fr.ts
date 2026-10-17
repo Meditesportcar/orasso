@@ -7,6 +7,7 @@
  */
 
 export * from "./labels/account.fr";
+export * from "./labels/after-event.fr";
 export * from "./labels/communication.fr";
 export * from "./labels/crews.fr";
 export * from "./labels/events.fr";

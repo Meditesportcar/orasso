@@ -1,6 +1,12 @@
 import { z } from "zod";
 
 import { accountEmailAlwaysTypes, accountNotificationTypes } from "./notifications/account";
+import {
+  afterEventEmailAlwaysTypes,
+  afterEventJournalOnlyTypes,
+  afterEventNoEmailTypes,
+  afterEventNotificationTypes,
+} from "./notifications/after-event";
 import { applicationNotificationTypes } from "./notifications/application";
 import {
   communicationJournalOnlyTypes,
@@ -19,9 +25,17 @@ import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/s
 import { weatherNotificationTypes } from "./notifications/weather";
 
 /** Types sans e-mail de repli (push et Journal seulement), un tableau par domaine. */
-export const pushOnlyNotificationTypes: readonly string[] = [...messagingPushOnly, ...communicationNoEmailTypes];
+export const pushOnlyNotificationTypes: readonly string[] = [
+  ...messagingPushOnly,
+  ...communicationNoEmailTypes,
+  ...afterEventNoEmailTypes,
+];
 /** Actualités du Journal : ni push ni e-mail, livrées tout de suite (un tableau par domaine). */
-export const journalOnlyNotificationTypes: readonly string[] = [...socialJournalOnly, ...communicationJournalOnlyTypes];
+export const journalOnlyNotificationTypes: readonly string[] = [
+  ...socialJournalOnly,
+  ...communicationJournalOnlyTypes,
+  ...afterEventJournalOnlyTypes,
+];
 
 /**
  * Énumérations métier (valeurs anglaises, identiques aux enums PostgreSQL). Libellés : `labels.fr.ts`.
@@ -40,6 +54,10 @@ export type StructureKind = (typeof structureKinds)[number];
 
 export const structureVerifications = ["unverified", "pending", "verified", "suspended"] as const;
 export type StructureVerification = (typeof structureVerifications)[number];
+
+/** Pourquoi une structure est suspendue (lot 27) : badge non renouvelé, ou décision de l'équipe. */
+export const structureSuspensionReasons = ["badge_expired", "moderation"] as const;
+export type StructureSuspensionReason = (typeof structureSuspensionReasons)[number];
 
 /** Justificatifs de la vérification d'une structure (lot 13) ; la pièce d'identité est supprimée à la validation. */
 export const verificationDocumentKinds = ["statutes", "receipt", "kbis", "identity", "other"] as const;
@@ -131,6 +149,7 @@ export const notificationTypes = {
   ...communicationNotificationTypes,
   ...moderationNotificationTypes,
   ...invitationNotificationTypes,
+  ...afterEventNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 
@@ -140,6 +159,7 @@ export const emailAlwaysTypes: readonly NotificationType[] = [
   ...staffEmailAlwaysTypes,
   ...accountEmailAlwaysTypes,
   ...moderationEmailAlwaysTypes,
+  ...afterEventEmailAlwaysTypes,
 ];
 
 /** Préférences de notification : un interrupteur par famille (docs/01 « Notifications »). */
