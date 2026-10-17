@@ -52,7 +52,13 @@ test("plusieurs jours : assistant, page publique, candidature pour un jour, Acc�
   const o = await orgaCtx.newPage();
   await o.goto("/orga/meditesportcar/nouvel-evenement");
   await o.waitForLoadState("networkidle");
-  await o.getByRole("button", { name: "Salon", exact: true }).click();
+  // Page hydratée avant de continuer : un clic trop tôt ne change pas le format et la case « Plusieurs jours » cochée
+  // n'ouvre pas les jours (vu le 18/10 après minuit). On reclique jusqu'à ce que « Salon » soit vraiment choisi.
+  const salon = o.getByRole("button", { name: "Salon", exact: true });
+  await expect(async () => {
+    await salon.click();
+    await expect(salon).toHaveAttribute("aria-pressed", "true", { timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
   await o.getByLabel("Titre").fill(title);
   await o.getByLabel("Plusieurs jours").check({ force: true });
   const days = o.getByTestId("wizard-days");
