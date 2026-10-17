@@ -120,6 +120,9 @@ const ADMIN_ROUTES: [string, string, unknown?][] = [
   ["POST", "/admin/newsletters", { subject: "Bonjour", bodyMd: "Texte" }],
   ["POST", `/admin/newsletters/${UUID}/schedule`, { at: "2026-10-18T10:00:00+02:00" }],
   ["POST", `/admin/newsletters/${UUID}/test`],
+  ["GET", "/admin/message-templates"],
+  ["POST", "/admin/message-templates", { kind: "message", name: "Bienvenue", body: "Bonjour" }],
+  ["DELETE", `/admin/message-templates/${UUID}`],
 ];
 
 describe("droits de l'administration", () => {

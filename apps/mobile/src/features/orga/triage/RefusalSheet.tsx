@@ -2,9 +2,10 @@
 // obligatoire pour « Autre », case « Envoyer les motifs au candidat ». Elle s'ouvre au glissement à gauche (ou au bouton
 // Refuser) AVANT d'armer la décision : annuler la feuille ne refuse rien. Utilisée aussi par le mode liste.
 import { Button, CheckboxField, Text, TextField, useTheme } from "@orasso/design-system/native";
-import { type RefusalReason, refusalReasonLabels, refusalReasons, triageAppLabels } from "@orasso/shared";
+import { type RefusalReason, refusalReasonLabels, triageAppLabels } from "@orasso/shared";
 import { useEffect, useState } from "react";
 
+import { useRefusalReasons } from "@/lib/lists";
 import { type DecisionExtra, refusalProblem } from "@/lib/triage";
 import { Notice } from "@/ui/Notice";
 import { ScreenSheet } from "./ScreenSheet";
@@ -25,6 +26,8 @@ export function RefusalSheet({
   onClose: () => void;
 }) {
   const { t } = useTheme();
+  // Lot 33 : motifs proposés par l'administration (repli sur les constantes partagées).
+  const refusalReasons = useRefusalReasons();
   const [reasons, setReasons] = useState<RefusalReason[]>([]);
   const [note, setNote] = useState("");
   const [send, setSend] = useState(true);

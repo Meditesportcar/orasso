@@ -1,6 +1,8 @@
 import { Ground, Monogram, ThemeScope } from "@orasso/design-system/web";
 import {
+  type AssistanceState,
   afterEventLabels,
+  assistanceTexts,
   badgeDaysLeft,
   type StructureOrganizer,
   type StructurePublic,
@@ -10,7 +12,9 @@ import { Form, Outlet, useLocation, useParams } from "react-router";
 
 import { TwoFactorNotice } from "../components/TwoFactorNotice";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { formatDay } from "../lib/format";
 import type { Route } from "./+types/orga";
+import "../styles/admin.css";
 import "../styles/after-event.css";
 
 // Espace organisateur : Sable imposé (docs/03), barre latérale, réservé aux membres de la structure.
@@ -38,8 +42,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       }
     }
   }
+  // Lot 33 (S41) : super admin en survol → bandeau « lecture seule » ou « intervention en cours (demande du …) ».
+  let assistance: { mode: "read_only" | "intervention"; since: string | null } | null = null;
+  if (membership.assisted) {
+    const state = await api<AssistanceState>(request, `/structures/${structure.id}/assistance`);
+    assistance = {
+      mode: state.ok && state.data.mode === "intervention" ? "intervention" : "read_only",
+      since: state.ok ? (state.data.current?.createdAt ?? null) : null,
+    };
+  }
   return {
     badge,
+    assistance,
     structure: { id: structure.id, slug: structure.slug, name: structure.name, logoUrl: structure.logoUrl },
     role: membership.role,
     canDecide: membership.role !== "staff" || membership.canDecide,
@@ -64,7 +78,7 @@ function SideLink({ href, children, on }: { href: string; children: string; on: 
 }
 
 export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
-  const { structure, isOrganizer, canCheckTickets, twoFactorHint, pseudo, badge } = loaderData;
+  const { structure, isOrganizer, canCheckTickets, twoFactorHint, pseudo, badge, assistance } = loaderData;
   const { pathname } = useLocation();
   const { eventId } = useParams();
   const base = `/orga/${structure.slug}`;
@@ -133,6 +147,26 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
           </nav>
           <main className="orga__content">
             <TwoFactorNotice hint={twoFactorHint} space="l'espace organisateur" />
+            {assistance && (
+              <p
+                className={
+                  assistance.mode === "intervention" ? "s-notice adm-assist" : "s-notice s-notice--alert adm-assist"
+                }
+                role="status"
+                data-testid="orga-assistance"
+                data-mode={assistance.mode}
+              >
+                <span>
+                  <strong>
+                    {assistance.mode === "intervention" && assistance.since
+                      ? assistanceTexts.intervention(formatDay(assistance.since))
+                      : assistanceTexts.readOnly}
+                  </strong>{" "}
+                  {assistance.mode === "intervention" ? assistanceTexts.interventionHint : assistanceTexts.readOnlyHint}
+                </span>
+                <a href={`/admin/structures/${structure.id}`}>Fiche dans l'administration</a>
+              </p>
+            )}
             {badge?.kind === "suspended" && (
               <p className="s-notice s-notice--alert ae-banner" role="alert" data-testid="orga-suspended">
                 <span>

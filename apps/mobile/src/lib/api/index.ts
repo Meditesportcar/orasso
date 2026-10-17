@@ -11,6 +11,7 @@ import { explorerApi } from "./explorer";
 import { garageApi } from "./garage";
 import { homeApi } from "./home";
 import { invitationsApi } from "./invitations";
+import { listsApi } from "./lists";
 import { messagingApi } from "./messaging";
 import { moderationApi } from "./moderation";
 import { orgaApi } from "./orga";
@@ -30,6 +31,7 @@ export type { DecideBody, DecideManyResult, TriageListQuery } from "./triage";
 
 export const api = {
   ...accountApi,
+  ...listsApi,
   ...prosApi,
   ...providersApi,
   ...garageApi,

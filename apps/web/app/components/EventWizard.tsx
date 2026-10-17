@@ -24,12 +24,13 @@ import {
   type VehicleType,
   vehicleTypeLabels,
   vehicleTypes,
-  vendorTypeSuggestions,
+  vendorTypeLabels,
 } from "@orasso/shared";
 import { useState } from "react";
 
 import { apiFetch } from "../lib/api.client";
 import { fromInput, toInput } from "../lib/datetime";
+import { useVendorTypes } from "../lib/lists";
 import { FileField, TextAreaField } from "./Fields";
 
 type StepId =
@@ -281,6 +282,8 @@ type Props = {
 export function EventWizard({ structureId, structureSlug, verified, categories, makes, event }: Props) {
   const editing = Boolean(event);
   const [d, setD] = useState<Draft>(() => initial(event));
+  // Lot 33 : types de prestataires proposés par l'administration (repli sur les constantes partagées).
+  const vendorTypeSuggestions: readonly string[] = useVendorTypes().map((c) => vendorTypeLabels[c]);
   const [index, setIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

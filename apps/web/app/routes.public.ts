@@ -33,6 +33,8 @@ export default [
     route("reinitialisation", "routes/reinitialisation.tsx"),
     route("verification-email", "routes/verification-email.tsx"),
     route("ami/:jeton", "routes/ami.tsx"),
+    // Désinscription de la newsletter, lien signé sans connexion (lot 33).
+    route("desinscription/:token", "routes/desinscription.tsx"),
     route("inscription", "routes/inscription.tsx"),
     route("conditions", "routes/legal.tsx", { id: "legal-conditions" }),
     route("confidentialite", "routes/legal.tsx", { id: "legal-confidentialite" }),

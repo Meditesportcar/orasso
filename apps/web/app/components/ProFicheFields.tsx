@@ -1,10 +1,14 @@
 // Champs de la fiche pro, partagés par la création (`/app/pro/nouvelle`) et la modification (`/pro/<slug>`).
 import { CheckboxField, TextField } from "@orasso/design-system/web";
-import { type ProOwner, proActivities, proActivityLabels, weekdayLabels, weekdays } from "@orasso/shared";
+import { type ProOwner, proActivityLabels, weekdayLabels, weekdays } from "@orasso/shared";
 
+import { useProActivities } from "../lib/lists";
 import { TextAreaField } from "./Fields";
 
 export function ProFicheFields({ pro }: { pro?: ProOwner }) {
+  // Lot 33 : activités proposées par l'administration ; celles déjà choisies restent affichées.
+  const offered = useProActivities();
+  const proActivities = [...offered, ...(pro?.activities ?? []).filter((a) => !offered.includes(a))];
   return (
     <>
       <TextField label="Nom de l'activité" name="name" defaultValue={pro?.name ?? ""} required />

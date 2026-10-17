@@ -1,24 +1,38 @@
-import { Ground, Monogram, ThemeScope } from "@orasso/design-system/web";
-import { Outlet, redirect, useLocation } from "react-router";
+import { Ground, Monogram } from "@orasso/design-system/web";
+import { type AdminOverview, adminNavLabels as N } from "@orasso/shared";
+import { Form, Outlet, redirect, useLocation } from "react-router";
 
+import { ThemeSwitch } from "../components/SiteChrome";
 import { TwoFactorNotice } from "../components/TwoFactorNotice";
 import { requireModeration } from "../lib/admin.server";
+import { api } from "../lib/api.server";
 import type { Route } from "./+types/admin";
+import "../styles/admin.css";
 
-// Administration (super admin seulement), Sable imposé comme les autres outils de gestion. Une page = une route
-// enfant (`routes.admin.ts`) et une ligne dans `adminSections` (lot 15, anti-conflits). Le compteur de chaque entrée
-// (files à traiter) viendra avec les chantiers concernés.
-// Lot 32 : le modérateur entre aussi, mais ne voit que la file des signalements (docs/02) ; chaque autre page reste
-// gardée par `requireSuperAdmin` dans son propre loader.
-type AdminSection = { href: string; label: string; count?: number; moderator?: boolean };
+// Administration (lot 33) : barre latérale de toutes les pages, compteur des files (accueil `GET /admin/overview`),
+// thème de l'utilisateur (Béton, Sable ou automatique, comme le reste du compte ; la barre porte le sélecteur). Une page
+// = une route enfant (`routes.admin.ts`) et une ligne dans `adminSections`. Le modérateur ne voit que la file des
+// signalements (docs/02) ; chaque autre page reste gardée par `requireSuperAdmin` dans son propre loader.
+type AdminSection = { href: string; label: string; count?: keyof AdminOverview; moderator?: boolean };
 
 const adminSections: AdminSection[] = [
-  { href: "/admin", label: "Structures à vérifier" },
-  { href: "/admin/certifications", label: "Certifications" },
-  { href: "/admin/transferts", label: "Transferts de plaque" },
-  { href: "/admin/signalements", label: "Signalements", moderator: true },
-  { href: "/admin/sanctions", label: "Sanctions" },
-  { href: "/admin/badges", label: "Badges des structures" },
+  { href: "/admin", label: N.overview },
+  { href: "/admin/verification", label: N.verification, count: "structuresPending" },
+  { href: "/admin/signalements", label: "Signalements", count: "reportsPending", moderator: true },
+  { href: "/admin/sanctions", label: "Sanctions", count: "sanctionsContested" },
+  { href: "/admin/certifications", label: "Certifications", count: "certificationsPending" },
+  { href: "/admin/transferts", label: "Transferts de plaque", count: "plateTransfersArbitrated" },
+  { href: "/admin/contestations", label: N.contests, count: "malusContestsEscalated" },
+  { href: "/admin/assistance", label: N.assistance, count: "assistanceOpen" },
+  { href: "/admin/utilisateurs", label: N.users },
+  { href: "/admin/structures", label: N.structures },
+  { href: "/admin/badges", label: "Badges des structures", count: "badgesExpiring" },
+  { href: "/admin/pros", label: N.pros, count: "prosToVerify" },
+  { href: "/admin/vehicules", label: N.vehicles, count: "otherVehicles" },
+  { href: "/admin/journal", label: N.audit },
+  { href: "/admin/reglages", label: N.settings },
+  { href: "/admin/newsletter", label: N.newsletter, count: "newslettersScheduled" },
+  { href: "/admin/sponsorises", label: N.sponsored },
 ];
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -26,7 +40,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   const moderator = me.profile.platformRole === "moderator";
   const path = new URL(request.url).pathname.replace(/\/+$/, "");
   if (moderator && path !== "/admin/signalements") throw redirect("/admin/signalements");
-  return { pseudo: me.profile.pseudo, twoFactorHint: me.twoFactorHint, moderator };
+  // Compteurs de la barre (super admin) : facultatifs, la page s'affiche sans eux.
+  const overview = moderator ? null : await api<AdminOverview>(request, "/admin/overview");
+  return {
+    pseudo: me.profile.pseudo,
+    twoFactorHint: me.twoFactorHint,
+    moderator,
+    counts: overview?.ok ? overview.data : null,
+  };
 }
 
 export function meta() {
@@ -34,47 +55,54 @@ export function meta() {
 }
 
 export default function AdminLayout({ loaderData }: Route.ComponentProps) {
-  const { pseudo, twoFactorHint, moderator } = loaderData;
+  const { pseudo, twoFactorHint, moderator, counts } = loaderData;
   const { pathname } = useLocation();
   return (
-    <ThemeScope theme="sable">
-      <Ground variant="site" fixed>
-        <div className="orga">
-          <nav className="orga__side" aria-label="Administration">
-            <div className="orga__brand">
-              <Monogram size={32} />
-            </div>
-            <div className="orga__who">
-              <span className="o-t-label">{moderator ? "Modération" : "Administration"}</span>
-            </div>
-            {adminSections
-              .filter((s) => !moderator || s.moderator)
-              .map((s) => {
-                const on =
-                  s.href === "/admin" ? pathname === "/admin" || pathname === "/admin/" : pathname.startsWith(s.href);
-                return (
-                  <a
-                    key={s.href}
-                    className={on ? "orga__link is-on" : "orga__link"}
-                    href={s.href}
-                    aria-current={on ? "page" : undefined}
-                  >
-                    {s.label}
-                    {s.count ? ` · ${s.count}` : ""}
-                  </a>
-                );
-              })}
-            <div className="orga__spacer" />
-            <a className="orga__link" href="/app/acces">
-              Mon compte · {pseudo}
-            </a>
-          </nav>
-          <main className="orga__content">
-            <TwoFactorNotice hint={twoFactorHint} space="l'administration" />
-            <Outlet />
-          </main>
-        </div>
-      </Ground>
-    </ThemeScope>
+    <Ground variant="site" fixed>
+      <div className="orga">
+        <nav className="orga__side" aria-label="Administration">
+          <div className="orga__brand">
+            <Monogram size={32} />
+          </div>
+          <div className="orga__who">
+            <span className="o-t-label">{moderator ? "Modération" : "Administration"}</span>
+          </div>
+          {adminSections
+            .filter((s) => !moderator || s.moderator)
+            .map((s) => {
+              const on =
+                s.href === "/admin" ? pathname === "/admin" || pathname === "/admin/" : pathname.startsWith(s.href);
+              const n = s.count && counts ? counts[s.count] : 0;
+              return (
+                <a
+                  key={s.href}
+                  className={on ? "orga__link is-on" : "orga__link"}
+                  href={s.href}
+                  aria-current={on ? "page" : undefined}
+                >
+                  {s.label}
+                  {n ? ` · ${n}` : ""}
+                </a>
+              );
+            })}
+          <div className="orga__spacer" />
+          <div className="orga__theme">
+            <ThemeSwitch />
+          </div>
+          <a className="orga__link" href="/app/acces">
+            Mon compte · {pseudo}
+          </a>
+          <Form method="post" action="/deconnexion">
+            <button type="submit" className="orga__link s-linkbutton">
+              Déconnexion
+            </button>
+          </Form>
+        </nav>
+        <main className="orga__content">
+          <TwoFactorNotice hint={twoFactorHint} space="l'administration" />
+          <Outlet />
+        </main>
+      </div>
+    </Ground>
   );
 }

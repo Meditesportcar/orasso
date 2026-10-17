@@ -13,6 +13,8 @@ import {
   assistanceRequestCreateSchema,
   newsletterDraftSchema,
   newsletterScheduleSchema,
+  templateCreateSchema,
+  templateUpdateSchema,
   vehicleGenerationCreateSchema,
   vehicleGenerationUpdateSchema,
   vehicleMakeCreateSchema,
@@ -34,6 +36,7 @@ import { newsletterService } from "./newsletter";
 import { overviewService } from "./overview";
 import { registriesService } from "./registries";
 import { adminSettingsService } from "./settings";
+import { orassoTemplatesService } from "./templates";
 import { adminUsersService } from "./users";
 import { vehicleReferenceService } from "./vehicle-reference";
 
@@ -178,6 +181,21 @@ export const adminRoutes = new Hono<AppEnv>()
   .post("/admin/assistance-requests/:id/close", async (c) =>
     c.json(await assistanceService.adminClose(await requireUser(c), uuidParam(c, "id"))),
   )
+
+  // --- Modèles de messages d'Orasso -----------------------------------------------------------------------------------
+  .get("/admin/message-templates", async (c) => c.json(await orassoTemplatesService.list(await requireUser(c))))
+  .post("/admin/message-templates", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await orassoTemplatesService.create(v, await body(c, templateCreateSchema)), 201);
+  })
+  .patch("/admin/message-templates/:id", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await orassoTemplatesService.update(v, uuidParam(c, "id"), await body(c, templateUpdateSchema)));
+  })
+  .delete("/admin/message-templates/:id", async (c) => {
+    await orassoTemplatesService.remove(await requireUser(c), uuidParam(c, "id"));
+    return c.body(null, 204);
+  })
 
   // --- Listes et interrupteurs publics --------------------------------------------------------------------------------
   .get("/settings/public", async (c) => {

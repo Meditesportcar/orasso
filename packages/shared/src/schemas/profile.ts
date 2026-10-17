@@ -52,6 +52,8 @@ export type Membership = {
   staffRoles: StaffRole[];
   canDecide: boolean;
   status: "invited" | "requested" | "active" | "removed";
+  /** Lot 33 : survol d'un super admin non membre (mode assistance, site seulement ; jamais renvoyé par l'API). */
+  assisted?: boolean;
 };
 
 /** Les casquettes de l'appli (lot 16) : le passionné, une structure, la fiche pro, le profil prestataire. */

@@ -103,7 +103,13 @@ export async function seedAdmin(hash: string) {
     .select({ model: t.vehicleModels, make: t.vehicleMakes })
     .from(t.vehicleModels)
     .innerJoin(t.vehicleMakes, eq(t.vehicleMakes.id, t.vehicleModels.makeId))
-    .where(and(eq(t.vehicleModels.isOther, false), eq(t.vehicleMakes.isOther, false), eq(t.vehicleModels.vehicleType, "car")))
+    .where(
+      and(
+        eq(t.vehicleModels.isOther, false),
+        eq(t.vehicleMakes.isOther, false),
+        eq(t.vehicleModels.vehicleType, "car"),
+      ),
+    )
     .limit(1);
   const genOther = known[0]
     ? await db.query.vehicleGenerations.findFirst({

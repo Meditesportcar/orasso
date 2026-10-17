@@ -12,6 +12,7 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { publicSettings } from "./lib/lists.server";
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
@@ -30,8 +31,9 @@ export const headers: Route.HeadersFunction = () => ({
 });
 
 // La préférence de thème est un cookie : le serveur écrit le bon `data-theme` dans le HTML, sans flash.
-export function loader({ request }: Route.LoaderArgs) {
-  return { themePreference: readThemeCookie(request.headers.get("cookie")) };
+// Lot 33 : listes administrables (motifs de refus, types de prestataires, activités), cache de 60 s (`lib/lists`).
+export async function loader({ request }: Route.LoaderArgs) {
+  return { themePreference: readThemeCookie(request.headers.get("cookie")), lists: await publicSettings(request) };
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {

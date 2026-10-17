@@ -25,6 +25,7 @@ import { data, Form, useNavigation } from "react-router";
 import { FileField, TextAreaField } from "../components/Fields";
 import { api, requireMe } from "../lib/api.server";
 import { formatWhen } from "../lib/format";
+import { useVendorTypes } from "../lib/lists";
 import { badgeFor } from "../lib/status";
 import "../styles/providers.css";
 import type { Route } from "./+types/prestataire";
@@ -170,6 +171,9 @@ export default function Prestataire({ loaderData, actionData }: Route.ComponentP
   const busy = useNavigation().state !== "idle";
   const apps = [...upcoming].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status));
   const feedback = actionData as { ok?: string; error?: string } | undefined;
+  // Lot 33 : types proposés par l'administration ; le type déjà choisi reste dans la liste.
+  const offeredTypes = useVendorTypes();
+  const selectableTypes = providerSelectableTypes.filter((t) => offeredTypes.includes(t) || t === profile?.type);
 
   return (
     <div className="s-narrow s-stack" data-testid="provider-space">
@@ -206,7 +210,7 @@ export default function Prestataire({ loaderData, actionData }: Route.ComponentP
                 label="Mon activité"
                 name="type"
                 defaultValue={profile?.type ?? "food_truck"}
-                options={providerSelectableTypes.map((t) => ({ value: t, label: vendorTypeLabels[t] }))}
+                options={selectableTypes.map((t) => ({ value: t, label: vendorTypeLabels[t] }))}
               />
               <TextField
                 label="Précise ton activité (si « Autres »)"

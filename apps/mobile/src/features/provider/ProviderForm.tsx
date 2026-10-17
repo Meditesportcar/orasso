@@ -7,6 +7,7 @@ import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { useVendorTypes } from "@/lib/lists";
 import { Notice } from "@/ui/Notice";
 
 const { space3 } = tokens.spacing;
@@ -32,6 +33,9 @@ export function ProviderForm({
   const { t } = useTheme();
   const stand = profile?.type === "stand";
   const [type, setType] = useState(profile?.type ?? "food_truck");
+  // Lot 33 : types proposés par l'administration ; le type déjà choisi reste dans la liste.
+  const offered = useVendorTypes();
+  const selectable = providerSelectableTypes.filter((c) => offered.includes(c) || c === profile?.type);
   const [customType, setCustomType] = useState(profile?.customType ?? "");
   const [name, setName] = useState(profile?.name ?? "");
   const [description, setDescription] = useState(profile?.description ?? "");
@@ -86,7 +90,7 @@ export function ProviderForm({
             Mon activité
           </Text>
           <ChipRow>
-            {providerSelectableTypes.map((code) => (
+            {selectable.map((code) => (
               <Chip key={code} selected={type === code} onPress={() => setType(code)}>
                 {vendorTypeLabels[code]}
               </Chip>

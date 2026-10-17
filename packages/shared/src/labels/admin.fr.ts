@@ -83,6 +83,22 @@ export const adminTexts = {
   overviewEmpty: "Rien à traiter.",
 } as const;
 
+/** Emplacements sponsorisés (routes du lot 30, page du lot 33). */
+export const placementStatusLabels: Record<"draft" | "active" | "paused" | "ended", string> = {
+  draft: "Brouillon",
+  active: "Actif",
+  paused: "En pause",
+  ended: "Terminé",
+};
+
+/** Contrôle automatique du SIRET d'une fiche pro (lot 14). */
+export const registryStatusLabels: Record<"matched" | "closed" | "not_found" | "unavailable", string> = {
+  matched: "SIRET trouvé",
+  closed: "Établissement fermé",
+  not_found: "SIRET introuvable",
+  unavailable: "Registre indisponible",
+};
+
 export const newsletterStatusLabels: Record<NewsletterStatus, string> = {
   draft: "Brouillon",
   scheduled: "Planifiée",

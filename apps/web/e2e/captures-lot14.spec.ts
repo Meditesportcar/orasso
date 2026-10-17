@@ -125,7 +125,7 @@ test("captures des pros, des billets et des réglages", async ({ browser }) => {
       await shot(orga, theme, view.id, "18-orga-controle-billets");
       await orga.goto("/orga/meditesportcar/structure");
       await shot(orga, theme, view.id, "19-orga-structure-stripe-partenaires");
-      await orga.goto("/admin");
+      await orga.goto("/admin/reglages");
       await shot(orga, theme, view.id, "20-admin-reglages");
       await orga.context().close();
     }

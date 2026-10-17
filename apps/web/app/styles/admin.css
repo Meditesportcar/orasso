@@ -1,0 +1,175 @@
+/* Administration (lot 33) : tuiles des files, tableaux des registres, base véhicules, réglages, newsletter, bandeau du
+   mode assistance. Jetons du système de design seulement ; l'administration suit le thème de l'utilisateur. */
+
+.orga__theme {
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+/* ---------- Accueil : une tuile par file ---------- */
+.adm-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-3);
+}
+.adm-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+  border: 1.5px solid transparent;
+}
+.orga__content a.adm-tile {
+  color: var(--ink);
+}
+.adm-tile:focus-visible,
+.adm-tile:hover {
+  border-color: var(--line);
+}
+.adm-tile__count {
+  font-variant-numeric: tabular-nums;
+}
+.adm-tile--empty .adm-tile__count {
+  opacity: 0.5;
+}
+
+/* ---------- Registres ---------- */
+.adm-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.adm-table th,
+.adm-table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.adm-table th {
+  font-weight: 800;
+}
+.adm-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.adm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-4);
+}
+.adm-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+.adm-search > :first-child {
+  flex: 1 1 16rem;
+}
+.adm-kv {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+}
+.adm-kv dt {
+  font-weight: 700;
+}
+.adm-kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Base véhicules ---------- */
+.adm-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-4);
+}
+.adm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.adm-list a {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+}
+.adm-list a[aria-current="true"] {
+  background: var(--plate);
+  color: var(--plate-ink);
+  font-weight: 800;
+}
+.adm-other {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  gap: var(--space-3);
+  align-items: start;
+}
+.adm-other__photo {
+  width: 6rem;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--plate);
+}
+
+/* ---------- Réglages ---------- */
+.adm-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.adm-codes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.adm-codes__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.adm-codes__row input[type="number"] {
+  width: 5rem;
+}
+
+/* ---------- Newsletter ---------- */
+.adm-preview {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1.5px dashed var(--line);
+  overflow-wrap: anywhere;
+}
+.adm-preview h1,
+.adm-preview h2,
+.adm-preview h3 {
+  margin: 0 0 var(--space-2);
+}
+
+/* ---------- Mode assistance (espace organisateur) ---------- */
+.adm-assist {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-tile {
+    transition: opacity var(--timing-fast) var(--ease-linear);
+  }
+}
