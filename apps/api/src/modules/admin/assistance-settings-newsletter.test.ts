@@ -401,9 +401,10 @@ describe("newsletter", () => {
     expect((await db.query.profiles.findFirst({ where: eq(profiles.userId, fan.id) }))?.newsletterOptIn).toBe(false);
     const forged = `${token.split(".")[0]}.${"A".repeat(32)}`;
     expect((await req(null, "POST", `/desinscription/${forged}`)).status).toBe(404);
-    expect((await req(null, "GET", `/desinscription/${unsubscribeToken(orga.id).replace(/.$/, "x")}`)).json.valid).toBe(
-      false,
-    );
+    // Dernier caractère de la signature changé (toujours différent de l'original).
+    const real = unsubscribeToken(orga.id);
+    const altered = `${real.slice(0, -1)}${real.endsWith("x") ? "y" : "x"}`;
+    expect((await req(null, "GET", `/desinscription/${altered}`)).json.valid).toBe(false);
     // L'e-mail porte le lien et l'en-tête de désinscription.
     const { newsletterMail } = await import("./newsletter");
     const content = newsletterMail("Objet", "Texte", "https://orasso.fr/desinscription/abc");
