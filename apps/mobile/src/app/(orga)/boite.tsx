@@ -1,10 +1,13 @@
-// Casquette Organisateur, Boîte : messages des participants, messages groupés, discussions du staff (lots 18 et 20).
-import { Soon } from "@/ui/Soon";
+// Casquette Organisateur, Boîte : messages des participants, messages groupés, discussions du staff, demandes (lot 22).
+import { orgaLabels } from "@orasso/shared";
+
+import { InboxScreen } from "@/features/orga/Inbox";
+import { OrgaGate } from "@/features/orga/OrgaGate";
 
 export default function Boite() {
   return (
-    <Soon title="Boîte">
-      Les messages de tes participants, tes messages groupés et les discussions de ton staff arrivent ici.
-    </Soon>
+    <OrgaGate title={orgaLabels.inboxTitle}>
+      <InboxScreen />
+    </OrgaGate>
   );
 }

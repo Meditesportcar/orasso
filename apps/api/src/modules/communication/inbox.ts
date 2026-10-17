@@ -8,16 +8,33 @@ import {
   messagePreview,
   type OrganizerInboxSummary,
 } from "@orasso/shared";
-import { and, desc, eq, isNotNull, lt, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { conversations } from "../../db/schema";
+import { conversations, structureMembers } from "../../db/schema";
 import { decodeCursor, encodeCursor } from "../../lib/pagination";
 import type { Viewer } from "../../lib/session";
 import { isMySide, lastMessageOf, resolveAccess, unreadCountOf } from "../messaging/core";
 import { unreadConversationCount } from "../messaging/inbox";
+import { registerOrganizerBadge } from "../profiles/personas";
 import { requireStructureReader } from "./guards";
 import { staffChatsService } from "./staff-chats";
+
+/** Demandes pour devenir staff en attente (lot 22 : lues ici, traitées sur le site ; l'acceptation est au lot 24). */
+export async function requestedStaffCount(structureId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(structureMembers)
+    .where(and(eq(structureMembers.structureId, structureId), eq(structureMembers.status, "requested")));
+  return row?.n ?? 0;
+}
+
+// Pastille de la casquette Organisateur (lot 22) : discussions du staff avec du non lu et demandes de staff à traiter,
+// en plus des candidatures à trier et des messages des participants (déjà comptés ailleurs).
+registerOrganizerBadge(
+  async (structureId, v) =>
+    (await staffChatsService.unreadFor(v, structureId)) + (await requestedStaffCount(structureId)),
+);
 
 export const organizerInboxService = {
   /** `GET /structures/:id/inbox/summary`. */
@@ -26,8 +43,7 @@ export const organizerInboxService = {
     return {
       participantMessages: await unreadConversationCount(v.user.id, { includeStructure: true, structureId }),
       staffDiscussions: await staffChatsService.unreadFor(v, structureId),
-      // Demandes pour devenir staff : lot 24.
-      staffRequests: 0,
+      staffRequests: await requestedStaffCount(structureId),
     };
   },
 

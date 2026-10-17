@@ -1,6 +1,6 @@
-// Casquette Organisateur (docs/02, ARCHITECTURE-SUITE § 7.2) : Direct · Événements · Tri (au centre) · Boîte · Staff.
-// Squelette du lot 16 : la barre vient de `tabSets.organizer` et chaque onglet affiche « Bientôt ». Le lot 22 remplace
-// les écrans, le lot 23 le Tri ; ce fichier ne change pas.
+// Casquette Organisateur (docs/02, ARCHITECTURE-SUITE § 7.1 et § 7.2) : Direct · Événements · Tri (au centre) · Boîte · Staff.
+// La barre vient de `tabSets.organizer` (lot 16). La page d'un événement (`evenement/[id]`, lot 22) est une route de ce
+// groupe masquée dans la barre.
 import { tabSets } from "@orasso/design-system/native";
 import { Tabs } from "expo-router";
 
@@ -17,6 +17,9 @@ export default function OrgaLayout() {
       <Tabs.Screen name="tri" />
       <Tabs.Screen name="boite" />
       <Tabs.Screen name="staff" />
+      <Tabs.Screen name="evenement/[id]" options={{ href: null }} />
+      {/* Inviter (lot 25), depuis la page d'un événement. */}
+      <Tabs.Screen name="evenement/[id]/inviter" options={{ href: null }} />
     </PersonaTabs>
   );
 }
