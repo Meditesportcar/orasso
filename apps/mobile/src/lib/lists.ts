@@ -1,6 +1,8 @@
 // Listes administrables (lot 33) côté appli : réponse de `GET /settings/public` gardée dans le trousseau (visible hors
 // ligne), sinon les constantes partagées. Seuls les codes connus de cette version de l'appli sont gardés.
 import {
+  type EventFormat,
+  eventFormats,
   knownCodes,
   POINTS,
   type RefusalReason,
@@ -30,4 +32,9 @@ export function useMalusPoints(): number {
 /** Types de prestataires proposés au profil prestataire. */
 export function useVendorTypes(): VendorTypeCode[] {
   return knownCodes(usePublicSettings()?.vendorTypes, vendorTypeCodes);
+}
+
+/** Formats proposés à la création d'un événement (assistant de l'appli, lot 35b ; même liste que le site). */
+export function useEventFormats(): EventFormat[] {
+  return knownCodes(usePublicSettings()?.eventFormats, eventFormats);
 }

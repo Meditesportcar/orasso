@@ -2,6 +2,7 @@ export * from "./application";
 export * from "./communication";
 export * from "./devClock";
 export * from "./enums";
+export * from "./eventWizard";
 export * from "./garage";
 export * from "./geo";
 export * from "./grades";

@@ -6,6 +6,7 @@ import { afterEventApi } from "./after-event";
 import { applicationsApi } from "./applications";
 import { communicationApi } from "./communication";
 import { crewsApi } from "./crews";
+import { eventEditorApi } from "./eventEditor";
 import { eventsApi } from "./events";
 import { explorerApi } from "./explorer";
 import { garageApi } from "./garage";
@@ -28,6 +29,7 @@ import { weatherApi } from "./weather";
 
 export type { NotificationItem } from "./account";
 export { authApi } from "./auth";
+export type { GeocodeMatch } from "./eventEditor";
 export type { FieldAlert, FieldIncident } from "./orga";
 export type { StructureBan } from "./structure";
 export type { DecideBody, DecideManyResult, TriageListQuery } from "./triage";
@@ -58,4 +60,5 @@ export const api = {
   ...structureApi,
   ...triageApi,
   ...ticketingApi,
+  ...eventEditorApi,
 };
