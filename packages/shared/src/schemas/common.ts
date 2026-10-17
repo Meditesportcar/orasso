@@ -39,6 +39,11 @@ export const errorCodes = [
   // Lot 25 : événement privé sur invitation.
   "invite_only",
   "invitation_required",
+  // Lot 33 : administration (mode assistance, interrupteurs, actions sur soi-même).
+  "assistance_required",
+  "signup_closed",
+  "providers_disabled",
+  "self_action",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

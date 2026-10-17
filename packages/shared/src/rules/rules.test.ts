@@ -141,7 +141,7 @@ describe("heures calmes", () => {
 
 describe("divers", () => {
   it("grades", () => {
-    expect([0, 99, 100, 340, 400, 799, 800].map(gradeFor)).toEqual([
+    expect([0, 99, 100, 340, 400, 799, 800].map((p) => gradeFor(p))).toEqual([
       "rodage",
       "rodage",
       "route",

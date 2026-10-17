@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { accountEmailAlwaysTypes, accountNotificationTypes } from "./notifications/account";
+import { adminEmailAlwaysTypes, adminNotificationTypes } from "./notifications/admin";
 import {
   afterEventEmailAlwaysTypes,
   afterEventJournalOnlyTypes,
@@ -150,6 +151,7 @@ export const notificationTypes = {
   ...moderationNotificationTypes,
   ...invitationNotificationTypes,
   ...afterEventNotificationTypes,
+  ...adminNotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 
@@ -160,6 +162,7 @@ export const emailAlwaysTypes: readonly NotificationType[] = [
   ...accountEmailAlwaysTypes,
   ...moderationEmailAlwaysTypes,
   ...afterEventEmailAlwaysTypes,
+  ...adminEmailAlwaysTypes,
 ];
 
 /** Préférences de notification : un interrupteur par famille (docs/01 « Notifications »). */

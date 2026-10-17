@@ -1,0 +1,140 @@
+import type { AdminSettingKey } from "../rules/admin";
+import type { AdminOverview, AssistanceCloseReason, AssistanceStatus, NewsletterStatus } from "../schemas/admin";
+
+// Administration (lot 33) : accueil et files, registres, mode assistance, réglages, newsletter, désinscription.
+
+/** Barre latérale de `/admin` (une entrée par page ; le modérateur ne voit que les signalements). */
+export const adminNavLabels = {
+  overview: "Accueil",
+  verification: "Structures à vérifier",
+  users: "Utilisateurs",
+  structures: "Structures",
+  pros: "Pros",
+  vehicles: "Base véhicules",
+  audit: "Journal des accès",
+  assistance: "Assistance",
+  contests: "Contestations de malus",
+  settings: "Réglages",
+  newsletter: "Newsletter",
+  sponsored: "Sponsorisés",
+} as const;
+
+/** Tuiles de l'accueil : une file, son compteur, sa page. */
+export const adminOverviewTiles: { key: keyof AdminOverview; label: string; href: string }[] = [
+  { key: "structuresPending", label: "Structures à vérifier", href: "/admin/verification" },
+  { key: "badgesExpiring", label: "Badges à renouveler", href: "/admin/badges" },
+  { key: "prosToVerify", label: "Pros à vérifier", href: "/admin/pros" },
+  { key: "reportsPending", label: "Signalements", href: "/admin/signalements" },
+  { key: "certificationsPending", label: "Certifications", href: "/admin/certifications" },
+  { key: "plateTransfersArbitrated", label: "Transferts de plaque", href: "/admin/transferts" },
+  { key: "otherVehicles", label: "Véhicules « Autre »", href: "/admin/vehicules" },
+  { key: "malusContestsEscalated", label: "Contestations de malus", href: "/admin/contestations" },
+  { key: "sanctionsContested", label: "Contestations de sanction", href: "/admin/sanctions" },
+  { key: "assistanceOpen", label: "Demandes d'aide", href: "/admin/assistance" },
+  { key: "newslettersScheduled", label: "Newsletters planifiées", href: "/admin/newsletter" },
+];
+
+export const adminSettingLabels: Record<AdminSettingKey, string> = {
+  "signup.enabled": "Inscriptions ouvertes",
+  "sponsored.enabled": "Emplacements sponsorisés sur l'Accueil",
+  "providers.enabled": "Candidatures des prestataires",
+  "points.participation": "Présent à un événement",
+  "points.staff": "Staff présent",
+  "points.referral": "Parrainage confirmé",
+  "points.malus": "Absent sans désistement (malus)",
+  "grades.thresholds": "Seuils des grades",
+  "lists.refusal_reasons": "Motifs de refus proposés au tri",
+  "lists.vendor_types": "Types de prestataires proposés",
+  "lists.pro_activities": "Activités des pros proposées",
+};
+
+export const adminTexts = {
+  settingsTitle: "Réglages",
+  switchesTitle: "Interrupteurs",
+  ticketingTitle: "Billetterie",
+  pointsTitle: "Points et grades",
+  pointsWarning:
+    "Modifie les futurs calculs : les points déjà attribués ne changent pas. Le prochain règlement (J+2) applique le nouveau barème.",
+  listsTitle: "Listes",
+  listsHint:
+    "Coche ce qui est proposé et choisis l'ordre. Les éléments décochés restent valables pour ce qui a déjà été enregistré.",
+  templatesTitle: "Modèles de messages Orasso",
+  on: "activé",
+  off: "désactivé",
+  saved: "Réglage enregistré.",
+  reasonLabel: "Motif (obligatoire, gardé au journal)",
+  selfForbidden: "Action impossible sur ton propre compte.",
+  userSearch: "Pseudo ou adresse e-mail",
+  noResult: "Aucun résultat.",
+  resetTwoFactor: "Réinitialiser la double authentification",
+  resetTwoFactorHint:
+    "Retire l'application d'authentification et les clés d'accès, déconnecte tous les appareils et prévient la personne par e-mail. Elle devra reconfigurer sa double authentification.",
+  anonymize: "Anonymiser le compte",
+  anonymizeHint:
+    "Efface pseudo, adresse, coordonnées, véhicules et photos, comme une suppression demandée par la personne. Irréversible.",
+  sanction: "Sanctionner",
+  adjustPoints: "Ajuster les points",
+  overview: "Toutes les files de l'administration et ce qui attend.",
+  otherQueue: "File « Autre »",
+  otherQueueHint:
+    "Véhicules enregistrés avec « Autre » : crée la marque, le modèle ou la génération manquant, puis rattache chaque véhicule. Le propriétaire est prévenu.",
+  reassign: "Rattacher ce véhicule",
+  audit: "Journal des accès",
+  overviewEmpty: "Rien à traiter.",
+} as const;
+
+export const newsletterStatusLabels: Record<NewsletterStatus, string> = {
+  draft: "Brouillon",
+  scheduled: "Planifiée",
+  sending: "Envoi en cours",
+  sent: "Envoyée",
+};
+
+export const newsletterTexts = {
+  title: "Newsletter",
+  hint: "Envoyée seulement aux personnes qui l'ont acceptée et dont l'adresse est confirmée. Chaque e-mail porte un lien de désinscription.",
+  preview: "Aperçu",
+  test: "M'envoyer un test",
+  schedule: "Planifier l'envoi",
+  save: "Enregistrer le brouillon",
+  footer: "Tu reçois cet e-mail parce que tu as accepté la newsletter Orasso.",
+  unsubscribeLink: "Se désinscrire de la newsletter",
+  testPrefix: "[Test] ",
+  recipients: (n: number) => `${n} destinataire${n > 1 ? "s" : ""} possible${n > 1 ? "s" : ""}`,
+  markdownHelp: "Markdown : # titre, **gras**, *italique*, - liste, [lien](https://…)",
+} as const;
+
+export const unsubscribeTexts = {
+  title: "Newsletter Orasso",
+  confirm: "Se désinscrire",
+  ask: "Tu ne recevras plus la newsletter d'Orasso. Les e-mails liés à ton compte et à tes événements continuent.",
+  done: "C'est fait : tu ne recevras plus la newsletter. Tu peux la réactiver depuis les réglages de ton compte.",
+  invalid: "Ce lien de désinscription n'est pas valable.",
+} as const;
+
+export const assistanceStatusLabels: Record<AssistanceStatus, string> = {
+  open: "Ouverte",
+  closed: "Close",
+};
+
+export const assistanceCloseReasonLabels: Record<AssistanceCloseReason, string> = {
+  organizer: "Close par la structure",
+  admin: "Close par l'équipe Orasso",
+  expired: "Close automatiquement (7 jours)",
+};
+
+export const assistanceTexts = {
+  readOnly: "Mode assistance · lecture seule",
+  readOnlyHint: "Tu survoles l'espace de cette structure. Pour intervenir, la structure doit demander l'aide d'Orasso.",
+  intervention: (date: string) => `Intervention en cours (demande du ${date})`,
+  interventionHint: "Chaque modification est tracée au journal avec la demande de la structure.",
+  ask: "Demander l'aide d'Orasso",
+  askHint:
+    "L'équipe Orasso peut alors intervenir dans ton espace pendant 7 jours au plus. Chaque intervention est tracée et tu peux fermer la demande à tout moment.",
+  messageLabel: "Ce dont tu as besoin",
+  close: "Fermer la demande",
+  current: "Demande d'aide en cours",
+  history: "Demandes précédentes",
+  survey: "Survoler l'espace",
+  denied: "Mode assistance : lecture seule. La structure doit demander l'aide d'Orasso pour qu'on intervienne.",
+} as const;
