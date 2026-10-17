@@ -1095,3 +1095,8 @@ Décision D20 de Damien : tout se gère depuis l'appli. Ce lot n'ajoute aucune r
 - **Export des données** : existence et contenu à valider.
 - **Case du système de design** : sur le web elle n'expose pas `aria-checked` (accessibilité) ; à corriger dans `packages/design-system`.
 - **Billetterie d'une structure suspendue** : `PUT /events/:id/ticketing` n'est pas refusé (`requireOrganizer`, pas la version « écriture »). À confirmer.
+
+### 17/10/2026 — Envoi de fichiers depuis l'appli : fetch de React Native
+- **Problème** (relevé par Damien sur l'APK) : photo de profil, photos de véhicule, logo, affiche, justificatifs et photos du staff échouaient tous dans l'appli avec « Pas de connexion », sans qu'aucune requête n'atteigne le serveur. Expo SDK 57 remplace `fetch` par le sien (`expo/fetch`), qui refuse les parts `{ uri, name, type }` du `FormData` utilisées par l'appli (format de React Native) : l'envoi échoue dans le téléphone.
+- **Choix** : `EXPO_PUBLIC_USE_RN_FETCH=1` (interrupteur prévu par Expo) dans tous les profils de `apps/mobile/eas.json` et dans `apps/mobile/.env.example` : l'appli retrouve le `fetch` de React Native pour lequel elle a été écrite. Vérifié sur le Xiaomi (banc de test) : « Photo enregistrée ».
+- **Pourquoi pas l'autre voie** (fichiers `expo-file-system` dans le `FormData`) : 8 points d'envoi à réécrire, comportement à revalider partout ; l'interrupteur règle tout d'un coup. À reconsidérer si Expo retire l'interrupteur.

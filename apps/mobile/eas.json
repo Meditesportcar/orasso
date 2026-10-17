@@ -16,7 +16,8 @@
         "simulator": true
       },
       "env": {
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_USE_RN_FETCH": "1"
       }
     },
     "preview": {
@@ -29,7 +30,8 @@
         "EXPO_PUBLIC_API_URL": "https://dev.orasso.fr",
         "EXPO_PUBLIC_QR_TRUSTED_KEYS": "[{\"kid\":1,\"publicKey\":\"m2FceWYTZw1CBjcfytn1FPL49U6RqVzBVkyfgC9jqjA\"}]",
         "EXPO_PUBLIC_SHOW_FATAL": "1",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_USE_RN_FETCH": "1"
       }
     },
     "preview-simulator": {
@@ -42,7 +44,8 @@
         "EXPO_PUBLIC_API_URL": "https://dev.orasso.fr",
         "EXPO_PUBLIC_QR_TRUSTED_KEYS": "[{\"kid\":1,\"publicKey\":\"m2FceWYTZw1CBjcfytn1FPL49U6RqVzBVkyfgC9jqjA\"}]",
         "EXPO_PUBLIC_SHOW_FATAL": "1",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_PUBLIC_USE_RN_FETCH": "1"
       }
     }
   }
