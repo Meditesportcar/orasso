@@ -1,5 +1,5 @@
 {
-  "id": "c0921107-a4df-418c-8448-e64e9239ade3",
+  "id": "018b3ead-4fc4-4775-bc82-99d30a705e9f",
   "prevId": "ea09048c-87b4-4048-b033-e6c436d69af0",
   "version": "7",
   "dialect": "postgresql",
@@ -630,6 +630,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "failed_at": {
+          "name": "failed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -737,6 +750,26 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "consecutive_failures": {
+          "name": "consecutive_failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "pause_reason": {
+          "name": "pause_reason",
+          "type": "newsletter_pause_reason",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resume_after": {
+          "name": "resume_after",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_by": {
           "name": "created_by",
@@ -13317,6 +13350,14 @@
         "closed"
       ]
     },
+    "public.newsletter_pause_reason": {
+      "name": "newsletter_pause_reason",
+      "schema": "public",
+      "values": [
+        "admin",
+        "errors"
+      ]
+    },
     "public.newsletter_status": {
       "name": "newsletter_status",
       "schema": "public",
@@ -13324,6 +13365,7 @@
         "draft",
         "scheduled",
         "sending",
+        "paused",
         "sent"
       ]
     },

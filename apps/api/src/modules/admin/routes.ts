@@ -13,6 +13,7 @@ import {
   assistanceRequestCreateSchema,
   newsletterDraftSchema,
   newsletterScheduleSchema,
+  newsletterSendNowSchema,
   templateCreateSchema,
   templateUpdateSchema,
   vehicleGenerationCreateSchema,
@@ -229,6 +230,17 @@ export const adminRoutes = new Hono<AppEnv>()
     const { at } = await body(c, newsletterScheduleSchema);
     return c.json(await newsletterService.schedule(v, uuidParam(c, "id"), at));
   })
+  .post("/admin/newsletters/:id/send-now", async (c) => {
+    const v = await requireUser(c);
+    const { confirmRecipients } = await body(c, newsletterSendNowSchema);
+    return c.json(await newsletterService.sendNow(v, uuidParam(c, "id"), confirmRecipients));
+  })
+  .post("/admin/newsletters/:id/pause", async (c) =>
+    c.json(await newsletterService.pause(await requireUser(c), uuidParam(c, "id"))),
+  )
+  .post("/admin/newsletters/:id/resume", async (c) =>
+    c.json(await newsletterService.resume(await requireUser(c), uuidParam(c, "id"))),
+  )
   .post("/admin/newsletters/:id/unschedule", async (c) =>
     c.json(await newsletterService.unschedule(await requireUser(c), uuidParam(c, "id"))),
   )

@@ -194,8 +194,13 @@ test("administration : accueil, 2FA, base véhicules, mode assistance, barème, 
         mailsSince(startedAt, `[Test] Nouvelles d'Orasso ${s}`).length,
     )
     .toBeGreaterThan(0);
-  await pageD.getByTestId("newsletter-editor").getByRole("button", { name: "Planifier l'envoi" }).click();
-  await expect(pageD.getByTestId("newsletter-done")).toContainText("planifié");
+  // « Planifier » exige une date future ; « Envoyer maintenant » demande de confirmer le nombre de destinataires.
+  await pageD.getByTestId("newsletter-editor").getByRole("button", { name: "Envoyer maintenant" }).click();
+  await pageD
+    .getByTestId("newsletter-confirm")
+    .getByRole("button", { name: /^Envoyer à \d+ personne/ })
+    .click();
+  await expect(pageD.getByTestId("newsletter-done")).toContainText("Envoi lancé");
   const id = new URL(pageD.url()).searchParams.get("id");
   // La tâche `newsletter.send` passe chaque minute.
   await expect

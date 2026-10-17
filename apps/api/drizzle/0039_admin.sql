@@ -1,6 +1,7 @@
 CREATE TYPE "public"."assistance_close_reason" AS ENUM('organizer', 'admin', 'expired');--> statement-breakpoint
 CREATE TYPE "public"."assistance_status" AS ENUM('open', 'closed');--> statement-breakpoint
-CREATE TYPE "public"."newsletter_status" AS ENUM('draft', 'scheduled', 'sending', 'sent');--> statement-breakpoint
+CREATE TYPE "public"."newsletter_pause_reason" AS ENUM('admin', 'errors');--> statement-breakpoint
+CREATE TYPE "public"."newsletter_status" AS ENUM('draft', 'scheduled', 'sending', 'paused', 'sent');--> statement-breakpoint
 CREATE TABLE "assistance_requests" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"structure_id" uuid NOT NULL,
@@ -18,6 +19,8 @@ CREATE TABLE "newsletter_deliveries" (
 	"newsletter_id" uuid NOT NULL,
 	"user_id" text NOT NULL,
 	"sent_at" timestamp with time zone,
+	"failed_at" timestamp with time zone,
+	"attempts" smallint DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "newsletter_deliveries_pkey" PRIMARY KEY("newsletter_id","user_id")
@@ -31,6 +34,9 @@ CREATE TABLE "newsletters" (
 	"scheduled_at" timestamp with time zone,
 	"sent_at" timestamp with time zone,
 	"recipients_count" integer DEFAULT 0 NOT NULL,
+	"consecutive_failures" integer DEFAULT 0 NOT NULL,
+	"pause_reason" "newsletter_pause_reason",
+	"resume_after" timestamp with time zone,
 	"created_by" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL

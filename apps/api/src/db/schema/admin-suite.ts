@@ -1,9 +1,9 @@
 // Administration (lot 33, ARCHITECTURE-SUITE § 16) : demandes d'aide du mode assistance (S41) et newsletter.
 // Les réglages restent dans `platform_settings` (lot 14, clé → valeur JSON) ; le lien de désinscription est signé
 // (HMAC de l'identifiant du compte) : aucune colonne de jeton.
-import { assistanceCloseReasons, assistanceStatuses, newsletterStatuses } from "@orasso/shared";
+import { assistanceCloseReasons, assistanceStatuses, newsletterPauseReasons, newsletterStatuses } from "@orasso/shared";
 import { sql } from "drizzle-orm";
-import { index, integer, pgEnum, pgTable, primaryKey, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, integer, pgEnum, pgTable, primaryKey, smallint, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 import { timestamps, tstz } from "./common";
@@ -12,6 +12,7 @@ import { structures } from "./structures";
 export const assistanceStatusEnum = pgEnum("assistance_status", assistanceStatuses);
 export const assistanceCloseReasonEnum = pgEnum("assistance_close_reason", assistanceCloseReasons);
 export const newsletterStatusEnum = pgEnum("newsletter_status", newsletterStatuses);
+export const newsletterPauseReasonEnum = pgEnum("newsletter_pause_reason", newsletterPauseReasons);
 
 /**
  * Demande d'aide d'une structure : tant qu'elle est ouverte (7 jours au plus), un super admin peut écrire dans
@@ -49,6 +50,11 @@ export const newsletters = pgTable(
     scheduledAt: tstz("scheduled_at"),
     sentAt: tstz("sent_at"),
     recipientsCount: integer("recipients_count").notNull().default(0),
+    /** Échecs d'envoi de suite (remis à zéro au premier succès) ; au-delà du seuil, l'envoi se met en pause. */
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+    pauseReason: newsletterPauseReasonEnum("pause_reason"),
+    /** Plafond du jour atteint : pas de nouveau lot avant cette date (minuit, heure de Paris). */
+    resumeAfter: tstz("resume_after"),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     ...timestamps,
   },
@@ -69,6 +75,9 @@ export const newsletterDeliveries = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     sentAt: tstz("sent_at"),
+    /** Dernier échec d'envoi (le destinataire reste à servir) et nombre d'essais. */
+    failedAt: tstz("failed_at"),
+    attempts: smallint("attempts").notNull().default(0),
     ...timestamps,
   },
   (t) => [primaryKey({ name: "newsletter_deliveries_pkey", columns: [t.newsletterId, t.userId] })],

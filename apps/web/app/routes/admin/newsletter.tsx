@@ -1,6 +1,7 @@
 // Administration (lot 33) : newsletter Orasso. Rédaction en Markdown réduit avec aperçu, envoi d'un test à soi-même,
-// planification, historique. L'envoi part par lots aux seules personnes qui l'ont acceptée (adresse confirmée), avec un
-// lien de désinscription dans chaque e-mail.
+// planification à une date à venir, ou « Envoyer maintenant » confirmé avec le nombre de destinataires, pause et
+// reprise, historique. L'envoi part par lots aux seules personnes qui l'ont acceptée (adresse confirmée), avec un lien
+// de désinscription dans chaque e-mail.
 import { Button, Chip, TextField } from "@orasso/design-system/web";
 import {
   markdownToHtml,
@@ -15,7 +16,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { TextAreaField } from "../../components/Fields";
 import { requireSuperAdmin } from "../../lib/admin.server";
 import { api, apiOrThrow } from "../../lib/api.server";
-import { fromInput, toInput } from "../../lib/datetime";
+import { fromInput } from "../../lib/datetime";
 import { formatDateTime } from "../../lib/format";
 import type { Route } from "./+types/newsletter";
 
@@ -32,7 +33,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   ]);
   const id = url.searchParams.get("id");
   const current = id ? (list.find((n) => n.id === id) ?? null) : null;
-  return { list, audience, current, done: url.searchParams.get("fait") };
+  return {
+    list,
+    audience,
+    current,
+    done: url.searchParams.get("fait"),
+    confirm: url.searchParams.get("confirmer") === "1",
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -44,6 +51,7 @@ export async function action({ request }: Route.ActionArgs) {
   const draft = { subject: text("subject"), bodyMd: String(form.get("bodyMd") ?? "") };
   const fail = (res: { status: number; error: { message: string } }) =>
     data({ error: res.error.message }, { status: res.status });
+  const saveDraft = () => api(request, `/admin/newsletters/${id}`, { method: "PUT", json: draft });
   if (intent === "save") {
     const res = id
       ? await api<NewsletterView>(request, `/admin/newsletters/${id}`, { method: "PUT", json: draft })
@@ -52,20 +60,34 @@ export async function action({ request }: Route.ActionArgs) {
   }
   if (!id) return data({ error: "Enregistre d'abord le brouillon." }, { status: 400 });
   if (intent === "test") {
-    const saved = await api(request, `/admin/newsletters/${id}`, { method: "PUT", json: draft });
+    const saved = await saveDraft();
     if (!saved.ok) return fail(saved);
     const res = await api(request, `/admin/newsletters/${id}/test`, { method: "POST" });
     return res.ok ? redirect(`/admin/newsletter?id=${id}&fait=test`) : fail(res);
   }
   if (intent === "schedule") {
-    const at = fromInput(text("at")) ?? new Date().toISOString();
-    const saved = await api(request, `/admin/newsletters/${id}`, { method: "PUT", json: draft });
+    const at = fromInput(text("at"));
+    if (!at) return data({ error: "Choisis la date et l'heure de l'envoi." }, { status: 400 });
+    const saved = await saveDraft();
     if (!saved.ok) return fail(saved);
     const res = await api(request, `/admin/newsletters/${id}/schedule`, { method: "POST", json: { at } });
     return res.ok ? redirect(`/admin/newsletter?id=${id}&fait=planifiee`) : fail(res);
   }
-  if (intent === "unschedule") {
-    const res = await api(request, `/admin/newsletters/${id}/unschedule`, { method: "POST" });
+  if (intent === "send-now-ask") {
+    const saved = await saveDraft();
+    if (!saved.ok) return fail(saved);
+    return redirect(`/admin/newsletter?id=${id}&confirmer=1`);
+  }
+  if (intent === "send-now") {
+    const res = await api(request, `/admin/newsletters/${id}/send-now`, {
+      method: "POST",
+      json: { confirmRecipients: Number(text("recipients")) },
+    });
+    return res.ok ? redirect(`/admin/newsletter?id=${id}&fait=envoi`) : fail(res);
+  }
+  const simple: Record<string, string> = { pause: "pause", resume: "resume", unschedule: "unschedule" };
+  if (simple[intent]) {
+    const res = await api(request, `/admin/newsletters/${id}/${simple[intent]}`, { method: "POST" });
     return res.ok ? redirect(`/admin/newsletter?id=${id}`) : fail(res);
   }
   if (intent === "delete") {
@@ -79,13 +101,15 @@ const DONE: Record<string, string> = {
   enregistree: "Brouillon enregistré.",
   test: "Test envoyé à ton adresse.",
   planifiee: "Envoi planifié : il part par lots à l'heure choisie.",
+  envoi: "Envoi lancé : il part par lots dès la prochaine minute.",
 };
 
 export default function AdminNewsletter({ loaderData, actionData }: Route.ComponentProps) {
-  const { list, audience, current, done } = loaderData;
+  const { list, audience, current, done, confirm } = loaderData;
   const busy = useNavigation().state !== "idle";
   const [body, setBody] = useState(current?.bodyMd ?? "");
   const editable = !current || current.status === "draft" || current.status === "scheduled";
+  const running = current && (current.status === "sending" || current.status === "scheduled");
   return (
     <>
       <div className="orga__head">
@@ -108,13 +132,37 @@ export default function AdminNewsletter({ loaderData, actionData }: Route.Compon
           {actionData.error}
         </p>
       )}
+      {current?.status === "paused" && (
+        <p className="s-notice s-notice--alert" role="status" data-testid="newsletter-paused">
+          {current.pauseReason === "errors" ? newsletterTexts.pausedErrors : newsletterTexts.pausedAdmin}
+        </p>
+      )}
+      {current?.resumeAfter && (
+        <p className="s-notice" role="status" data-testid="newsletter-resume-after">
+          {newsletterTexts.resumeAfter}
+        </p>
+      )}
+
+      {current && confirm && editable && (
+        <Form method="post" className="orga__panel s-stack" data-testid="newsletter-confirm">
+          <input type="hidden" name="id" value={current.id} />
+          <input type="hidden" name="recipients" value={audience.recipients} />
+          <p>{newsletterTexts.confirmHint}</p>
+          <div className="s-row">
+            <Button type="submit" name="intent" value="send-now" icon="inbox" loading={busy}>
+              {newsletterTexts.confirmSend(audience.recipients)}
+            </Button>
+            <a href={`/admin/newsletter?id=${current.id}`}>Annuler</a>
+          </div>
+        </Form>
+      )}
 
       <Form method="post" className="orga__panel s-stack" data-testid="newsletter-editor" key={current?.id ?? "new"}>
         <input type="hidden" name="id" value={current?.id ?? ""} />
         {current && (
           <div className="s-row">
             <Chip>{newsletterStatusLabels[current.status]}</Chip>
-            {current.scheduledAt && (
+            {current.scheduledAt && current.status === "scheduled" && (
               <span className="o-t-caption">Planifiée le {formatDateTime(current.scheduledAt)}</span>
             )}
           </div>
@@ -141,47 +189,59 @@ export default function AdminNewsletter({ loaderData, actionData }: Route.Compon
           />
         </div>
         {editable && (
-          <>
-            <div className="s-row">
-              <Button type="submit" name="intent" value="save" variant="secondary" icon="check" loading={busy}>
-                {newsletterTexts.save}
-              </Button>
-              {current && (
-                <Button type="submit" name="intent" value="test" variant="secondary" icon="inbox" loading={busy}>
-                  {newsletterTexts.test}
-                </Button>
-              )}
-            </div>
+          <div className="s-row">
+            <Button type="submit" name="intent" value="save" variant="secondary" icon="check" loading={busy}>
+              {newsletterTexts.save}
+            </Button>
             {current && (
-              <div className="adm-search">
-                <TextField
-                  label="Envoi le"
-                  name="at"
-                  type="datetime-local"
-                  defaultValue={toInput(current.scheduledAt ?? new Date())}
-                />
-                <Button type="submit" name="intent" value="schedule" icon="calendar" loading={busy}>
-                  {newsletterTexts.schedule}
-                </Button>
-                {current.status === "scheduled" && (
-                  <Button type="submit" name="intent" value="unschedule" variant="secondary" icon="undo" loading={busy}>
-                    Revenir au brouillon
-                  </Button>
-                )}
-                {current.status === "draft" && (
-                  <Button type="submit" name="intent" value="delete" variant="secondary" icon="close" loading={busy}>
-                    Supprimer le brouillon
-                  </Button>
-                )}
-              </div>
+              <Button type="submit" name="intent" value="test" variant="secondary" icon="inbox" loading={busy}>
+                {newsletterTexts.test}
+              </Button>
             )}
-          </>
+            {current && (
+              <Button type="submit" name="intent" value="send-now-ask" variant="secondary" icon="next" loading={busy}>
+                {newsletterTexts.sendNow}
+              </Button>
+            )}
+          </div>
+        )}
+        {current && editable && (
+          <div className="adm-search">
+            <TextField label={newsletterTexts.scheduleAt} name="at" type="datetime-local" />
+            <Button type="submit" name="intent" value="schedule" variant="secondary" icon="calendar" loading={busy}>
+              {newsletterTexts.schedule}
+            </Button>
+            {current.status === "scheduled" && (
+              <Button type="submit" name="intent" value="unschedule" variant="secondary" icon="undo" loading={busy}>
+                Revenir au brouillon
+              </Button>
+            )}
+            {current.status === "draft" && (
+              <Button type="submit" name="intent" value="delete" variant="secondary" icon="close" loading={busy}>
+                Supprimer le brouillon
+              </Button>
+            )}
+          </div>
+        )}
+        {current && (running || current.status === "paused") && (
+          <div className="s-row">
+            {running && (
+              <Button type="submit" name="intent" value="pause" variant="secondary" icon="wait" loading={busy}>
+                {newsletterTexts.pause}
+              </Button>
+            )}
+            {current.status === "paused" && (
+              <Button type="submit" name="intent" value="resume" variant="secondary" icon="next" loading={busy}>
+                {newsletterTexts.resume}
+              </Button>
+            )}
+          </div>
         )}
         {current && !editable && (
           <p className="o-t-caption" data-testid="newsletter-progress">
             {current.status === "sent"
               ? `Envoyée le ${formatDateTime(current.sentAt ?? current.updatedAt)} à ${current.recipientsCount} personnes.`
-              : `Envoi en cours : ${current.delivered} e-mails partis.`}
+              : newsletterTexts.progress(current.delivered, current.failed)}
           </p>
         )}
       </Form>

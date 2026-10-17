@@ -28,3 +28,11 @@ export function verifyUnsubscribeToken(token: string): string | null {
 export function unsubscribeUrl(userId: string): string {
   return `${env.PUBLIC_URL}/desinscription/${unsubscribeToken(userId)}`;
 }
+
+/**
+ * Désinscription en un clic des messageries (`List-Unsubscribe-Post`) : POST direct sur l'API, sans session ni
+ * authentification basique du site de test.
+ */
+export function unsubscribeOneClickUrl(userId: string): string {
+  return `${env.PUBLIC_URL}/api/desinscription/${unsubscribeToken(userId)}`;
+}
