@@ -267,6 +267,13 @@
       "when": 1792223094705,
       "tag": "0037_after-event",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1792225726149,
+      "tag": "0038_admin",
+      "breakpoints": true
     }
   ]
 }
