@@ -59,6 +59,8 @@ test("place libérée à accepter et liste d'attente triable", async ({ browser 
   await loginInBrowser(pageR, `${third.pseudo.toLowerCase()}@e2e.orasso.test`);
   await expect(pageR.getByTestId("application").first()).toHaveAttribute("data-status", "waitlisted");
   await expect(pageR.getByTestId("application").first()).toContainText("Liste d'attente");
+  // L'offre arrive par le canal temps réel : il doit être ouvert avant le désistement (cause de l'intermittence).
+  await expect(pageR.getByTestId("acces")).toHaveAttribute("data-live", "on");
 
   const fanP = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const pageP = await fanP.newPage();

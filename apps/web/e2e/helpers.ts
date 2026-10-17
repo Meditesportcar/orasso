@@ -48,6 +48,9 @@ export async function loginInBrowser(page: Page, email: string, password = SEED_
   await page.getByLabel("Mot de passe", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Se connecter", exact: true }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/connexion"));
+  // La redirection après connexion est une navigation du routeur (pas de nouvel événement « load ») : attendre que ses
+  // données soient chargées, sinon un `page.goto` aussitôt après est interrompu (ERR_ABORTED, lot 34).
+  await page.waitForLoadState("networkidle");
 }
 
 /** J+2 simulé : recule les dates de l'événement puis règle les points (script de l'API, développement seulement). */

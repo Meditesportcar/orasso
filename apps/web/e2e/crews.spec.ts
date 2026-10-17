@@ -75,6 +75,8 @@ test("crews : création, demande acceptée, discussion, inscription en crew, con
   await pageK.goto("/app/boite/demandes");
   const request = pageK.getByTestId("request-crew-request");
   await expect(request).toContainText(lea);
+  // Page hydratée avant le clic (lot 34) : un clic trop tôt partait en envoi classique et la carte restait affichée.
+  await pageK.waitForLoadState("networkidle");
   await request.getByRole("button", { name: "Accepter" }).click();
   await expect(pageK.getByTestId("request-crew-request")).toHaveCount(0);
 
