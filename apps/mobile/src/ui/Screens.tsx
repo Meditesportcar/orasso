@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
 import { JournalSheet } from "./JournalSheet";
+import { KeyboardSafe } from "./KeyboardSafe";
 import { OverlayProvider, OverlaySlot } from "./Overlay";
 import { TopBar } from "./TopBar";
 
@@ -55,8 +56,10 @@ export function TabScreen({
           onNotifications={() => setJournal(true)}
           notificationsOn={journal}
         />
-        <Body onRefresh={onRefresh}>{children}</Body>
-        {footer ? <View style={styles.footer}>{footer}</View> : null}
+        <KeyboardSafe style={styles.fill}>
+          <Body onRefresh={onRefresh}>{children}</Body>
+          {footer ? <View style={styles.footer}>{footer}</View> : null}
+        </KeyboardSafe>
         {overlays}
         <OverlaySlot />
         <JournalSheet visible={journal} onClose={() => setJournal(false)} />
@@ -82,8 +85,10 @@ export function FlowScreen({
     <OverlayProvider>
       <Ground animated={!still} style={styles.fill}>
         <AppBar kind="flow" title={title} facts={facts} counter={counter} onClose={onClose} safeTop={insets.top} />
-        <Body onRefresh={onRefresh}>{children}</Body>
-        {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
+        <KeyboardSafe style={styles.fill}>
+          <Body onRefresh={onRefresh}>{children}</Body>
+          {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
+        </KeyboardSafe>
         {overlays}
         <OverlaySlot />
       </Ground>

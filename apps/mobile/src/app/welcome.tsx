@@ -3,10 +3,11 @@
 import { Button, Ground, Logo, PosterCard, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AuthForm } from "@/features/AuthForm";
 import { kvSet } from "@/lib/kv";
+import { KeyboardSafe } from "@/ui/KeyboardSafe";
 import { Muted } from "@/ui/Muted";
 
 const { space2, space3, space4 } = tokens.spacing;
@@ -45,7 +46,7 @@ export default function Welcome() {
 
   return (
     <Ground animated style={styles.fill}>
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardSafe style={styles.fill}>
         <ScrollView
           contentContainerStyle={[
             styles.content,
@@ -97,7 +98,7 @@ export default function Welcome() {
             </Muted>
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafe>
     </Ground>
   );
 }

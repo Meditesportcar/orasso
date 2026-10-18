@@ -459,7 +459,7 @@ export default function DesignSystemDemo() {
               <TextField
                 label="Plaque d'immatriculation"
                 defaultValue="AB-123-CD"
-                help="Jamais publique. Visible par l'organisateur seulement."
+                help="Jamais publique. Visible par l'équipe organisatrice seulement."
               />
               <TextField
                 label="E-mail"

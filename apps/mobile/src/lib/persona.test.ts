@@ -187,7 +187,7 @@ describe("réglages du compte", () => {
 describe("sécurité du compte", () => {
   it("contrôle le changement de mot de passe", () => {
     expect(passwordFormError("", "nouveau-123", "nouveau-123")).toMatch(/actuel/);
-    expect(passwordFormError("ancien-123", "court", "court")).toMatch(/8 caractères/);
+    expect(passwordFormError("ancien-123", "court", "court")).toMatch(/10 caractères/);
     expect(passwordFormError("ancien-123", "ancien-123", "ancien-123")).toMatch(/différent/);
     expect(passwordFormError("ancien-123", "nouveau-123", "autre-chose-1")).toMatch(/pas identiques/);
     expect(passwordFormError("ancien-123", "nouveau-123", "nouveau-123")).toBeNull();

@@ -30,7 +30,7 @@ import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 import { mediaSource } from "@/lib/media";
-import { photoForm, pickPhotos } from "@/lib/photos";
+import { CROP_SQUARE, photoForm, pickPhotos } from "@/lib/photos";
 import { type DiscountTexts, discountsBody, discountTexts, partnerChoices, siretDigits } from "@/lib/proForm";
 import { useApi } from "@/lib/useApi";
 import { useRun } from "@/lib/useRun";
@@ -38,6 +38,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Feedback } from "@/ui/Feedback";
 import { Muted } from "@/ui/Muted";
 import { Overlay } from "@/ui/Overlay";
+import { PhotoGrid } from "@/ui/PhotoGrid";
 import { SectionTitle } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -292,7 +293,7 @@ export function MediaBlock({ pro, reload }: BlockProps) {
     run(
       "logo",
       async () => {
-        const [picked] = await pickPhotos(1);
+        const [picked] = await pickPhotos(1, CROP_SQUARE);
         if (!picked) return;
         await api.uploadProLogo(pro.id, await photoForm(picked, 0, "logo"));
         await reload();
@@ -334,31 +335,25 @@ export function MediaBlock({ pro, reload }: BlockProps) {
 
       <SectionTitle>{`${L.photosTitle} · ${pro.photos.length} / ${PRO_MAX_PHOTOS}`}</SectionTitle>
       {pro.photos.length > 0 ? (
-        <View style={styles.photos} testID="pro-photos">
-          {pro.photos.map((p, i) => (
-            <View key={p.id}>
-              <Photo source={mediaSource(p.url)} style={styles.photo} accessibilityLabel={`Réalisation ${i + 1}`} />
-              <View style={styles.remove}>
-                <Button
-                  variant="close"
-                  label={L.photoRemove}
-                  onPhoto
-                  disabled={busy !== null}
-                  onPress={() =>
-                    void run(
-                      "remove",
-                      async () => {
-                        await api.removeProPhoto(pro.id, p.id);
-                        await reload();
-                      },
-                      L.photoRemoved,
-                    )
-                  }
-                />
-              </View>
-            </View>
-          ))}
-        </View>
+        // Lot 36 : retrait par la croix visible puis une confirmation.
+        <PhotoGrid
+          photos={pro.photos.map((p, i) => ({ key: p.id, source: mediaSource(p.url), label: `Réalisation ${i + 1}` }))}
+          onRemove={(i) => {
+            const p = pro.photos[i];
+            if (!p) return;
+            return run(
+              "remove",
+              async () => {
+                await api.removeProPhoto(pro.id, p.id);
+                await reload();
+              },
+              L.photoRemoved,
+            );
+          }}
+          disabled={busy !== null}
+          tileStyle={styles.photo}
+          testID="pro-photos"
+        />
       ) : null}
       {pro.photos.length < PRO_MAX_PHOTOS ? (
         <Button
@@ -549,9 +544,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: space1 },
   logoRow: { flexDirection: "row", alignItems: "center", gap: space3 },
   logo: { width: 72, height: 72, borderRadius: tokens.radius.radiusSm },
-  photos: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   photo: { width: 160, height: 120, borderRadius: tokens.radius.radiusSm },
-  remove: { position: "absolute", top: space1, right: space1 },
   partner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
   partnerName: { flex: 1, gap: 2 },
 });

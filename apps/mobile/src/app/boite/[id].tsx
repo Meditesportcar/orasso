@@ -13,17 +13,7 @@ import {
 } from "@orasso/shared";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import {
-  AppState,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { AppState, FlatList, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PrivateImage } from "@/features/boite/PrivateImage";
@@ -35,6 +25,7 @@ import { pickPhotos } from "@/lib/photos";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
+import { KeyboardSafe } from "@/ui/KeyboardSafe";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 
@@ -350,7 +341,7 @@ export function ConversationScreen({
         onClose={close}
         safeTop={insets.top}
       />
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardSafe style={styles.fill}>
         {header ? <View style={styles.pad}>{header}</View> : null}
         {loadError ? (
           <View style={styles.pad}>
@@ -409,7 +400,7 @@ export function ConversationScreen({
             </>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardSafe>
 
       <AppSheet visible={menu !== null} onClose={() => setMenu(null)} accessibilityLabel="Options du message">
         {menu && menu.sender?.userId === myId && !menu.deleted ? (

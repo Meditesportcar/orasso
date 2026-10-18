@@ -78,7 +78,7 @@ export default function StructurePage() {
       await api.requestStaff(s.id);
       setNote({
         tone: "info",
-        text: `Demande envoyée à ${s.name}. Tu seras prévenu quand l'organisateur aura répondu.`,
+        text: `Demande envoyée à ${s.name}. Tu seras prévenu quand l'équipe organisatrice aura répondu.`,
       });
     } catch (e) {
       if (e instanceof ApiRequestError && (e.status === 404 || e.status === 405)) {

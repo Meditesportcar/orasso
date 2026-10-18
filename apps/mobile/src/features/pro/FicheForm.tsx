@@ -8,6 +8,7 @@ import {
   type ProCreate,
   proActivities,
   proActivityLabels,
+  proAddressLabels,
   weekdayLabels,
   weekdays,
 } from "@orasso/shared";
@@ -16,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
 
 import { api } from "@/lib/api";
+import { errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
 import { emptyProForm, formOfPro, type ProFicheForm, proBody, socialNetworks, toggleActivity } from "@/lib/proForm";
 import { useSession } from "@/lib/session";
@@ -27,6 +29,40 @@ import { Notice } from "@/ui/Notice";
 import { SectionTitle, TabScreen } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
+
+/**
+ * Lot 36 : vérification de l'adresse par le géocodeur, comme pour une structure ou un événement. L'API géocode aussi à
+ * l'enregistrement ; le bouton dit tout de suite si l'adresse sera placée sur la carte.
+ */
+function AddressCheck({ query, located }: { query: string; located: boolean }) {
+  const [status, setStatus] = useState<string | null>(located ? null : proAddressLabels.notLocated);
+  const [busy, setBusy] = useState(false);
+  async function check() {
+    if (query.trim().length < 3) return setStatus(proAddressLabels.tooShort);
+    setBusy(true);
+    setStatus(proAddressLabels.searching);
+    try {
+      const { match } = await api.geocode(query);
+      setStatus(match ? proAddressLabels.found(match.label) : proAddressLabels.notFound);
+    } catch (e) {
+      setStatus(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <Button variant="plate" icon="place" loading={busy} onPress={() => void check()} testID="pro-address-check">
+        {proAddressLabels.check}
+      </Button>
+      {status ? (
+        <Muted variant="caption" testID="pro-address-status">
+          {status}
+        </Muted>
+      ) : null}
+    </>
+  );
+}
 
 export function FicheForm({ create = false }: { create?: boolean } = {}) {
   const router = useRouter();
@@ -133,6 +169,10 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
               maxLength={10}
             />
             <TextField label={L.city} value={form.city} onChangeText={(city) => edit({ city })} maxLength={80} />
+            <AddressCheck
+              query={[form.addressLine, form.postalCode, form.city].filter(Boolean).join(" ")}
+              located={!pro?.city || pro.lat !== null}
+            />
             <TextField
               label={L.zone}
               help={L.zoneHelp}

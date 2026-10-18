@@ -108,12 +108,12 @@ export default function Candidatures() {
             ) : null}
             {app.status === "pending" ? (
               <Text variant="body" color={t.color.plateMuted}>
-                Réponse de l'organisateur à venir.
+                Réponse de l'équipe organisatrice à venir.
               </Text>
             ) : null}
             {app.status === "waitlisted" ? (
               <Text variant="body" color={t.color.plateMuted}>
-                En liste d'attente : l'organisateur te recontacte s'il y a de la place pour toi.
+                En liste d'attente : l'équipe organisatrice te recontacte s'il y a de la place pour toi.
               </Text>
             ) : null}
             {app.refusalNote ? (

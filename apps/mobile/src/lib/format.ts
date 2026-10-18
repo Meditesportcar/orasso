@@ -34,6 +34,16 @@ export function formatDayHour(iso: string | Date, timeZone = BUSINESS_TIMEZONE):
   return `${formatDay(iso, timeZone)} · ${formatHour(iso, timeZone)}`;
 }
 
+/**
+ * « Sam 17 oct · 15 h 12 », avec l'année quand elle n'est pas celle en cours : « Sam 16 oct 2027 · 15 h 12 » (lot 36,
+ * une copie d'événement ouvrait ses candidatures l'année suivante et se lisait comme « aujourd'hui »).
+ */
+export function formatDayHourYear(iso: string | Date, now: Date = new Date(), timeZone = BUSINESS_TIMEZONE): string {
+  const w = wallTime(new Date(iso), timeZone);
+  if (w.year === wallTime(now, timeZone).year) return formatDayHour(iso, timeZone);
+  return `${formatDay(iso, timeZone)} ${w.year} · ${formatHour(iso, timeZone)}`;
+}
+
 /** « 17 oct à 14 h 05 », pour un horodatage de cache. */
 export function formatStamp(iso: string | Date, timeZone = BUSINESS_TIMEZONE): string {
   return `${formatShortDate(iso, timeZone)} à ${formatHour(iso, timeZone)}`;

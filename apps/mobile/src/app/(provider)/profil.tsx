@@ -1,10 +1,9 @@
 // Casquette Prestataire, Profil (lot 21) : type, nom, présentation, photos, contact, Instagram, portfolio, départements.
 // Il faut au moins une photo (ou, pour un photographe, un Instagram ou un portfolio) pour candidater.
-import { Button, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Text, useTheme } from "@orasso/design-system/native";
 import type { ProviderProfileView } from "@orasso/shared";
 import { PROVIDER_MAX_PHOTOS } from "@orasso/shared";
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
 
 import { ProviderForm } from "@/features/provider/ProviderForm";
 import { api } from "@/lib/api";
@@ -15,9 +14,8 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { PhotoGrid } from "@/ui/PhotoGrid";
 import { SectionTitle, TabScreen } from "@/ui/Screens";
-
-const { space2 } = tokens.spacing;
 
 export default function Profil() {
   const { t } = useTheme();
@@ -80,21 +78,23 @@ export default function Profil() {
                 Photos · {p.photos.length} / {PROVIDER_MAX_PHOTOS}
               </SectionTitle>
               <Text variant="body" color={t.color.inkMuted}>
-                Montre ton activité, ton stand ou ton travail. Touche une photo pour la retirer.
+                Montre ton activité, ton stand ou ton travail.
               </Text>
+              {/* Lot 36 : retrait par la croix visible puis une confirmation (plus au simple toucher). */}
               {p.photos.length > 0 ? (
-                <View style={styles.photos}>
-                  {p.photos.map((photo, i) => (
-                    <Pressable
-                      key={photo.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Retirer la photo ${i + 1}`}
-                      onPress={() => !busy && void removePhoto(photo.id)}
-                    >
-                      <Photo source={mediaSource(photo.url)} style={styles.photo} />
-                    </Pressable>
-                  ))}
-                </View>
+                <PhotoGrid
+                  photos={p.photos.map((photo, i) => ({
+                    key: photo.id,
+                    source: mediaSource(photo.url),
+                    label: `Photo ${i + 1}`,
+                  }))}
+                  onRemove={(i) => {
+                    const photo = p.photos[i];
+                    return photo ? removePhoto(photo.id) : undefined;
+                  }}
+                  disabled={busy}
+                  testID="provider-photos"
+                />
               ) : null}
               {error ? <Notice tone="error">{error}</Notice> : null}
               {p.photos.length < PROVIDER_MAX_PHOTOS ? (
@@ -116,8 +116,3 @@ export default function Profil() {
     </TabScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  photos: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  photo: { width: 92, height: 70, borderRadius: tokens.radius.radiusSm },
-});

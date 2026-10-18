@@ -28,7 +28,10 @@ type Common = {
   onTwoFactor: (error: unknown) => void;
 };
 
-/** Accepter une demande pour devenir staff : on choisit les rôles tout de suite (modifiables ensuite). */
+/**
+ * Accepter une demande pour devenir staff. Lot 36 (retour de Damien) : l'acceptation fait seulement entrer la personne
+ * dans l'équipe ; ses rôles se donnent ensuite pour chaque événement (équipe de l'événement).
+ */
 export function AcceptSheet({
   structureId,
   member,
@@ -37,16 +40,12 @@ export function AcceptSheet({
   onTwoFactor,
 }: Common & { member: StructureMember | null }) {
   const { t } = useTheme();
-  const [roles, setRoles] = useState<StaffRole[]>([]);
-  const [canDecide, setCanDecide] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Remis à zéro à chaque demande ouverte (l'identifiant), pas à chaque rechargement de la liste.
   const id = member?.userId ?? null;
   useEffect(() => {
     if (id === null) return;
-    setRoles([]);
-    setCanDecide(false);
     setError(null);
   }, [id]);
 
@@ -55,7 +54,7 @@ export function AcceptSheet({
     setBusy(true);
     setError(null);
     try {
-      await api.acceptStaffRequest(structureId, member.userId, { staffRoles: roles, canDecide });
+      await api.acceptStaffRequest(structureId, member.userId);
       onDone(L.requestAcceptDone);
     } catch (e) {
       failWith(e, setError, onTwoFactor);
@@ -75,13 +74,9 @@ export function AcceptSheet({
           <Text variant="title" color={t.color.ink}>
             {L.requestAcceptTitle(member.pseudo)}
           </Text>
-          <RolePicker
-            roles={roles}
-            canDecide={canDecide}
-            onRoles={setRoles}
-            onCanDecide={setCanDecide}
-            disabled={busy}
-          />
+          <Text variant="body" color={t.color.ink}>
+            {L.requestAcceptHint}
+          </Text>
           {error ? <Notice tone="error">{error}</Notice> : null}
           <Button
             variant="secondary"

@@ -11,6 +11,7 @@ import { siteUrl } from "@/api";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { isTwoFactorError } from "@/lib/orga";
+import { CROP_SQUARE } from "@/lib/photos";
 import { addDepartment, normalizeDepartment } from "@/lib/settingsPatch";
 import { imageForm, pickOneImage } from "@/lib/structureFiles";
 import {
@@ -114,7 +115,7 @@ export function StructureScreen() {
     setBusy("logo");
     setNotice(null);
     try {
-      const photo = await pickOneImage();
+      const photo = await pickOneImage(CROP_SQUARE);
       if (!photo) return;
       await api.uploadLogo(structureId, await imageForm(photo, "logo", "logo.jpg"));
       setError(null);

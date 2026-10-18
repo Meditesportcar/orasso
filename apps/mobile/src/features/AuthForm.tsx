@@ -2,7 +2,7 @@
 // masqués ici tant que leurs identifiants n'existent pas (PLAN, H6) : aucun bouton qui ne marcherait pas.
 
 import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { pseudoSchema } from "@orasso/shared";
+import { PASSWORD_MIN_LENGTH, passwordHint, pseudoSchema } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -82,7 +82,9 @@ export function AuthForm({
         ? "3 à 24 caractères : lettres, chiffres, « _ » ou « . »."
         : undefined;
   const ready =
-    email.includes("@") && password.length >= 8 && (!signup || pseudoState === "free" || pseudoState === "idle");
+    email.includes("@") &&
+    password.length >= PASSWORD_MIN_LENGTH &&
+    (!signup || pseudoState === "free" || pseudoState === "idle");
 
   async function done() {
     await kvSet("onboarded", "1");
@@ -151,7 +153,7 @@ export function AuthForm({
         revealable
         autoCapitalize="none"
         autoComplete={signup ? "new-password" : "current-password"}
-        help={signup ? "8 caractères au moins." : undefined}
+        help={signup ? passwordHint : undefined}
         onSubmitEditing={() => ready && !busy && void submit()}
       />
       {error ? (

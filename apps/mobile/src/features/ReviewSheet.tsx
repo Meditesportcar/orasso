@@ -34,7 +34,7 @@ export function ReviewSheet({
             Ton avis · {target.title}
           </Text>
           <Text variant="body" color={t.color.inkMuted}>
-            Affiché avec ton pseudo sur la page de l'événement ; l'organisateur a un droit de réponse. Jusqu'au{" "}
+            Affiché avec ton pseudo sur la page de l'événement ; l'équipe organisatrice a un droit de réponse. Jusqu'au{" "}
             {formatDayHour(target.deadline)}.
           </Text>
           <ChipRow>

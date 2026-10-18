@@ -1,18 +1,7 @@
 // Page d'un de mes véhicules (lot 31, docs/02 « page véhicule ») : photos (plein écran), fiche avec poids et pays de la
 // marque, préparation, description, historique des événements, statut (feuille Vendu / Souvenir / Accidenté),
 // « Partager sur Instagram » et « Demander la certification ». La plaque n'est montrée qu'ici, à son propriétaire.
-import {
-  Button,
-  Chip,
-  ChipRow,
-  Icon,
-  Photo,
-  Plate,
-  Text,
-  TextField,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
+import { Button, Chip, ChipRow, Icon, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   applicationStatusLabels,
   certificationConditions,
@@ -21,6 +10,7 @@ import {
   certificationStatusLabels,
   countryLabel,
   garageAppLabels,
+  photoLabels,
   plateTransferLabels,
   vehicleStatusLabels,
   vehicleTypeLabels,
@@ -38,10 +28,11 @@ import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
-import { MAX_PHOTOS, photoForm, pickPhotos } from "@/lib/photos";
+import { CROP_VEHICLE, MAX_PHOTOS, photoForm, pickPhotos } from "@/lib/photos";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { PhotoGrid, UploadProgress } from "@/ui/PhotoGrid";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -53,6 +44,7 @@ export default function VehiculeFiche() {
   const vehicle = useApi(() => api.vehicle(id), [id]);
   const history = useApi(() => api.vehicleHistory(id), [id]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [upload, setUpload] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewer, setViewer] = useState<number | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -81,14 +73,22 @@ export default function VehiculeFiche() {
     }
   }
 
+  // Lot 36 : une photo à la fois, recadrée au format de la carte (4:3), avec l'avancement de l'envoi.
   const add = () =>
-    run("Envoi des photos…", async () => {
+    run(photoLabels.uploadingOne, async () => {
       if (!v) return;
-      const picked = await pickPhotos(MAX_PHOTOS - v.photos.length);
+      const picked = await pickPhotos(MAX_PHOTOS - v.photos.length, CROP_VEHICLE);
       for (let i = 0; i < picked.length; i++) {
-        setBusy(`Envoi de la photo ${i + 1} sur ${picked.length}…`);
+        setUpload({ current: i + 1, total: picked.length });
         await api.uploadVehiclePhoto(v.id, await photoForm(picked[i] as (typeof picked)[number], i));
       }
+    }).finally(() => setUpload(null));
+  const makeCover = (index: number) =>
+    run(photoLabels.cover, async () => {
+      if (!v) return;
+      const ids = v.photos.map((p) => p.id);
+      const [chosen] = ids.splice(index, 1);
+      if (chosen) await api.reorderVehiclePhotos(v.id, [chosen, ...ids]);
     });
 
   const cert = v?.certification;
@@ -203,36 +203,31 @@ export default function VehiculeFiche() {
           {v.photos.length === 0 ? (
             <Notice>Ajoute au moins une photo : il en faut une pour candidater à un événement.</Notice>
           ) : (
-            <View style={styles.photos}>
-              {v.photos.map((p, i) => (
-                <View key={p.id}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Photo ${i + 1} en plein écran`}
-                    onPress={() => setViewer(i)}
-                  >
-                    <Photo source={mediaSource(p.url)} style={styles.photo} />
-                  </Pressable>
-                  <View style={styles.remove}>
-                    <Button
-                      variant="close"
-                      label="Retirer cette photo"
-                      onPhoto
-                      disabled={busy !== null}
-                      onPress={() => void run("Suppression…", () => api.deleteVehiclePhoto(v.id, p.id))}
-                    />
-                  </View>
-                </View>
-              ))}
-            </View>
+            <PhotoGrid
+              photos={v.photos.map((p, i) => ({
+                key: p.id,
+                source: mediaSource(p.url),
+                label: `Photo ${i + 1} en plein écran`,
+              }))}
+              onOpen={setViewer}
+              onRemove={(i) => {
+                const p = v.photos[i];
+                return p ? run("Suppression…", () => api.deleteVehiclePhoto(v.id, p.id)) : undefined;
+              }}
+              onCover={makeCover}
+              disabled={busy !== null}
+              testID="vehicle-photos"
+            />
           )}
+          {v.photos.length > 1 ? <Muted variant="caption">{photoLabels.coverHint}</Muted> : null}
+          {upload ? <UploadProgress current={upload.current} total={upload.total} /> : null}
           <Muted variant="body">Évite de montrer la plaque : tes photos sont visibles de tous les inscrits.</Muted>
           {v.photos.length < MAX_PHOTOS ? (
             <Button variant="secondary" icon="add" loading={busy !== null} onPress={() => void add()} fullWidth>
               Ajouter des photos
             </Button>
           ) : null}
-          {busy ? <Muted variant="meta">{busy}</Muted> : null}
+          {busy && !upload ? <Muted variant="meta">{busy}</Muted> : null}
           {error ? <Notice tone="error">{error}</Notice> : null}
 
           <SectionTitle>Fiche</SectionTitle>
@@ -250,7 +245,7 @@ export default function VehiculeFiche() {
                 </View>
               ))}
             <Text variant="caption" color={t.color.plateMuted}>
-              La plaque est visible par toi et par l'organisateur d'un événement où tu candidates.
+              La plaque est visible par toi et par l'équipe organisatrice d'un événement où tu candidates.
             </Text>
           </Plate>
           {notice ? <Notice>{notice}</Notice> : null}
@@ -426,9 +421,6 @@ export default function VehiculeFiche() {
 }
 
 const styles = StyleSheet.create({
-  photos: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  photo: { width: 160, height: 120, borderRadius: tokens.radius.radiusSm },
-  remove: { position: "absolute", top: space1, right: space1 },
   plate: { gap: space2, padding: space3 },
   fact: { flexDirection: "row", justifyContent: "space-between", gap: space3 },
   factValue: { flex: 1, textAlign: "right" },

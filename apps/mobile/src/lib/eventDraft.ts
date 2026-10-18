@@ -7,6 +7,7 @@ import {
   appWizardSteps,
   type EventDraft,
   type EventWizardStep,
+  eventAddressProblem,
   eventDatesProblem,
   eventStepProblem,
   eventStepSkipped,
@@ -22,7 +23,7 @@ export function siteStepOf(step: AppWizardStep): EventWizardStep {
 export function appStepProblem(step: AppWizardStep, d: EventDraft): string | null {
   if (step === "format") return eventTitleProblem(d);
   if (step === "dates") return eventDatesProblem(d);
-  if (step === "lieu") return null;
+  if (step === "lieu") return eventAddressProblem(d);
   return eventStepProblem(step, d);
 }
 

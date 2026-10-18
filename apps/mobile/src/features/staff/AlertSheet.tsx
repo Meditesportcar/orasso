@@ -26,8 +26,8 @@ export function AlertSheet({
         Alerte au staff
       </Text>
       <Text variant="body" color={t.color.ink}>
-        Tout le staff présent et l'organisateur sont prévenus aussitôt, avec ta position si tu l'as autorisée. Sans
-        réseau, l'alerte part dès qu'il revient.
+        Tout le staff présent et l'équipe organisatrice sont prévenus aussitôt, avec ta position si tu l'as autorisée.
+        Sans réseau, l'alerte part dès qu'il revient.
       </Text>
       <TextField
         label="Ce qui se passe (facultatif)"

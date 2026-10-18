@@ -109,7 +109,7 @@ export default function Boutique() {
         }
         counter={tickets.length > 0 ? `${checked} / ${tickets.length}` : undefined}
         onClose={close}
-        closeLabel="Quitter la boutique"
+        closeLabel="Quitter l'entrée visiteurs"
         safeTop={insets.top}
       />
 

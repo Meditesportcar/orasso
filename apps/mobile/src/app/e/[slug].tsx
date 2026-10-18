@@ -28,7 +28,11 @@ import {
   invitationLabels,
   previewSummary,
   publicAccessText,
+  registrationBlock,
+  registrationBlockText,
+  registrationFullText,
   type VendorTypeCode,
+  wizardEndLabels,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
@@ -41,7 +45,7 @@ import { TicketsBlock } from "@/features/tickets/TicketsBlock";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
-import { breakTitle, formatDay, formatDayHour, formatHour } from "@/lib/format";
+import { breakTitle, formatDay, formatDayHour, formatDayHourYear, formatHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";
@@ -114,12 +118,10 @@ export default function EventPage() {
   const cancelled = e.status === "cancelled";
   // Événement privé (lot 25) : pas de candidature libre, l'invitation se répond dans Accès.
   const inviteOnly = e.admission === "invite_only";
-  const canApply =
-    !inviteOnly &&
-    !cancelled &&
-    !e.isLocked &&
-    !notYetOpen &&
-    (e.remaining === null || e.remaining > 0 || e.admission !== "open");
+  // Lot 36 : la raison d'un blocage, la même que sur le site ; complet ne bloque plus (liste d'attente, comme le site).
+  const block = registrationBlock(e, nowMs());
+  const canApply = !inviteOnly && !cancelled && !e.isLocked && !notYetOpen && e.status !== "draft";
+  const full = canApply && e.admission === "open" && e.remaining !== null && e.remaining <= 0;
   const preview = previewSummary(e);
   const wanted = (e.criteria?.categoryIds ?? [])
     .map((id) => categories.data?.find((c) => c.id === id)?.label)
@@ -155,6 +157,11 @@ export default function EventPage() {
 
   return (
     <FlowScreen title={eventFormatLabels[e.format]} onClose={close} onRefresh={event.reload}>
+      {e.status === "draft" ? (
+        <Notice tone="error" testID="draft-preview">
+          {wizardEndLabels.previewBanner}
+        </Notice>
+      ) : null}
       <PosterCard
         label={`${eventFormatLabels[e.format]} · ${e.structure.name}`}
         title={breakTitle(e.title)}
@@ -191,10 +198,12 @@ export default function EventPage() {
         <Notice tone="error">Cet événement est annulé.</Notice>
       ) : inviteOnly ? (
         <Notice>{invitationLabels.invitationRequired}</Notice>
-      ) : e.isLocked ? (
-        <Notice>Les inscriptions sont verrouillées.</Notice>
-      ) : notYetOpen ? (
-        <Notice>Les candidatures ouvrent le {formatDayHour(opensAt)}.</Notice>
+      ) : block && (block.code === "locked" || block.code === "preview" || block.code === "not_open") ? (
+        <Notice testID="registration-reason">
+          {registrationBlockText(block, (iso) => formatDayHourYear(iso, new Date(nowMs())))}
+        </Notice>
+      ) : full ? (
+        <Notice>{registrationFullText}</Notice>
       ) : null}
       {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
       {mine.length > 0 &&
@@ -332,7 +341,7 @@ export default function EventPage() {
           {providerError ? <Notice tone="error">{providerError}</Notice> : null}
           {providerSent ? (
             <Notice>
-              Candidature envoyée : l'organisateur te répondra dans l'onglet Candidatures de ta casquette.
+              Candidature envoyée : l'équipe organisatrice te répondra dans l'onglet Candidatures de ta casquette.
             </Notice>
           ) : (
             <Button variant="secondary" icon="add" next onPress={() => void openProviderApply()} fullWidth>
@@ -343,7 +352,7 @@ export default function EventPage() {
       ) : null}
       {e.description ? <Info label="À propos">{e.description}</Info> : null}
       {feed.data ? <EventFeed items={feed.data.items} reportable={status === "in"} /> : null}
-      {e.instructions ? <Info label="Consignes de l'organisateur">{e.instructions}</Info> : null}
+      {e.instructions ? <Info label="Consignes de l'équipe organisatrice">{e.instructions}</Info> : null}
       {/* Contacter l'organisateur (lot 18) : toujours possible pour une personne connectée. */}
       {status === "in" ? <ContactOrganizerButton structureId={e.structure.id} /> : null}
       {status === "in" ? <ReportButton look="link" type="event" id={e.id} /> : null}
@@ -406,7 +415,7 @@ function Reviews({ data, reportable }: { data: EventReviews; reportable: boolean
           </Text>
           {r.reply ? (
             <Text variant="meta" color={c.plateMuted}>
-              Réponse de l'organisateur : {r.reply.text}
+              Réponse de l'équipe organisatrice : {r.reply.text}
             </Text>
           ) : null}
           {reportable ? <ReportButton look="link" onPlate type="review" id={r.id} /> : null}

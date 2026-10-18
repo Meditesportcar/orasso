@@ -155,7 +155,7 @@ async function refreshKeys(store: Store): Promise<SyncOutcome | null> {
   if (!update.ok) {
     return {
       ok: false,
-      message: `La clé de signature ${update.kid} a changé côté serveur : synchro refusée. Préviens l'organisateur.`,
+      message: `La clé de signature ${update.kid} a changé côté serveur : synchro refusée. Préviens l'équipe organisatrice.`,
     };
   }
   if (update.revoked.length) await store.addRevokedKeys(update.revoked);

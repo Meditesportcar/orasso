@@ -244,7 +244,7 @@ export default function CrewRegistration() {
           </Plate>
           <CheckboxField label={crewLabels.registerCrewRules} checked={rules} onChange={setRules} />
           <CheckboxField
-            label="Suivre l'organisateur (nouveaux événements, avant-premières)"
+            label="Suivre l'organisation (nouveaux événements, avant-premières)"
             checked={follow}
             onChange={setFollow}
           />

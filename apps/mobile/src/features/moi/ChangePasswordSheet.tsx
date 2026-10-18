@@ -1,6 +1,7 @@
 // Moi > Sécurité : changer le mot de passe. Les autres appareils sont déconnectés par l'API et une alerte part par
 // e-mail (§ 1.1) ; cet appareil reste connecté.
 import { Button, Text, TextField, useTheme } from "@orasso/design-system/native";
+import { passwordHint } from "@orasso/shared";
 import { useState } from "react";
 
 import { api } from "@/lib/api";
@@ -80,7 +81,7 @@ export function ChangePasswordSheet({ visible, onClose }: { visible: boolean; on
             revealable
             autoCapitalize="none"
             autoComplete="new-password"
-            help="8 caractères au moins."
+            help={passwordHint}
           />
           <TextField
             label="Nouveau mot de passe, encore une fois"

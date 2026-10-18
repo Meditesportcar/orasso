@@ -29,6 +29,8 @@ const draft = (over: Partial<EventDraft> = {}): EventDraft => ({
   title: "Rasso du port",
   startsAt: "2026-11-08T09:00",
   endsAt: "2026-11-08T13:00",
+  addressLine: "Quai du port",
+  city: "Port-Vendres",
   ...over,
 });
 
@@ -43,6 +45,9 @@ describe("écrans de l'assistant", () => {
     expect(appStepProblem("format", draft({ startsAt: "" }))).toBeNull();
     expect(appStepProblem("dates", draft({ startsAt: "" }))).toMatch(/début et la fin/);
     expect(appStepProblem("lieu", draft())).toBeNull();
+    // Lot 36 : adresse et ville obligatoires.
+    expect(appStepProblem("lieu", draft({ addressLine: "" }))).toMatch(/adresse/);
+    expect(appStepProblem("lieu", draft({ city: " " }))).toMatch(/ville/);
     expect(appStepProblem("places", draft({ unlimited: false, capacity: "" }))).toMatch(/places/);
   });
 

@@ -27,6 +27,7 @@ import {
   orgaLabels,
   ticketingAppLabels,
   triageAppLabels,
+  wizardEndLabels,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -58,7 +59,7 @@ export function EventPage({
   warning = null,
 }: {
   eventId: string;
-  /** Retour de l'assistant (lot 35b) : `cree` ou `modifie`. */
+  /** Retour de l'assistant (lot 35b) : `cree`, `modifie` ou `publie` (lot 36). */
   done?: string | null;
   /** Avertissement de l'assistant (affiche ou zone non enregistrée). */
   warning?: string | null;
@@ -77,7 +78,13 @@ export function EventPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(() =>
-    done === "cree" ? EL.created : done === "modifie" ? EL.saved : null,
+    done === "cree"
+      ? EL.created
+      : done === "modifie"
+        ? EL.saved
+        : done === "publie"
+          ? wizardEndLabels.publishedDone
+          : null,
   );
   const [failure, setFailure] = useState<unknown>(null);
   const [typed, setTyped] = useState("");
