@@ -75,7 +75,14 @@ test("écrans nouveaux du lot 34, deux thèmes à 390 px", async ({ browser }) =
     // Justificatif en PDF : une structure neuve, non vérifiée.
     const email = `capt34-${unique()}@orasso.test`;
     expect(
-      (await apiCall(null, "POST", "/auth/sign-up/email", { email, password: SEED_PASSWORD, name: "Capt 34" })).status,
+      (
+        await apiCall(null, "POST", "/auth/sign-up/email", {
+          email,
+          password: SEED_PASSWORD,
+          name: "Capt 34",
+          termsAccepted: true,
+        })
+      ).status,
     ).toBe(200);
     const cookie = await login(email);
     const name = `Club ${unique()}`.slice(0, 40);

@@ -291,7 +291,7 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   await expect(g.getByText("10 caractères au moins.")).toBeVisible();
   await expect(g.getByText("Les deux mots de passe sont différents.")).toBeVisible();
   // Lot 36 : conditions générales obligatoires, refusées par le serveur sans la case.
-  await expect(form.getByTestId("express-terms-error")).toBeVisible();
+  await expect(form.getByTestId("terms-error")).toBeVisible();
   const strong = "mot-de-passe-express-2026";
   await form.getByLabel("Mot de passe", { exact: true }).fill(strong);
   await form.getByLabel("Mot de passe, encore une fois").fill(strong);
@@ -346,6 +346,7 @@ test("lien d'invitation : le compte créé suit l'équipe organisatrice", async 
   await page.getByLabel("Pseudo").fill(`Fan_${s}`);
   await page.getByLabel("E-mail").fill(`fan_${s}@e2e.orasso.test`);
   await page.getByLabel("Mot de passe", { exact: true }).fill("mot-de-passe-fan-2026");
+  await page.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
   await page.getByRole("button", { name: "Créer mon compte et suivre" }).click();
   await page.waitForURL("**/o/meditesportcar");
   await expect(page.getByRole("button", { name: "Tu suis cette structure" })).toBeVisible();

@@ -47,6 +47,7 @@ async function signUpInBrowser(page: Page, pseudo: string, email: string, passwo
   await page.getByLabel("Pseudo").fill(pseudo);
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(password);
+  await page.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
   await page.getByRole("button", { name: "Créer mon compte" }).click();
   await page.waitForURL((u) => u.pathname === "/app");
 }

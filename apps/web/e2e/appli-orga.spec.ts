@@ -216,6 +216,7 @@ test("créer une structure depuis Mes casquettes, sans casquette organisateur au
     email,
     password: SEED_PASSWORD,
     name: "Orga Test",
+    termsAccepted: true,
   });
   expect(signUp.status).toBe(200);
   const ctx: BrowserContext = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: APP });

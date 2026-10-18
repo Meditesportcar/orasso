@@ -459,6 +459,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
     email,
     password: SEED_PASSWORD,
     name: "Orga 35a",
+    termsAccepted: true,
   });
   expect(signUp.status).toBe(200);
   const cookie = await login(email);
