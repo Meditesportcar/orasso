@@ -17,16 +17,17 @@
   - captures des écrans nouveaux (Béton et Sable, 390 px) : `docs/recette/suite/appli/` ;
   - « À revoir avec Damien » regroupé en une liste ordonnée à la fin de `docs/JOURNAL-DES-CHOIX.md`.
 
+- **Corrections des retours de Damien après l'APK de référence (lot 36, branche `lot-36-corrections-retours`, 18/10/2026)** : adresse obligatoire ; fin de l'assistant Publier / Garder en brouillon / Aperçu (aperçu public d'un brouillon pour l'équipe) ; saisie de l'assistant jamais perdue ; champ en saisie au-dessus du clavier (bord à bord) ; champs longs extensibles avec compteur ; photos recadrées, retrait confirmé, couverture au choix, avancement de l'envoi ; Android App Links (`/.well-known/assetlinks.json`, écran `verification-email` dans l'appli ; iOS préparé, inactif) ; inscription express sans QR à la fin, page `/appli` et e-mail « Installe l'appli » ; case conditions générales obligatoire et tracée partout (express, site, appli ; migration `0042_terms-accepted`) ; mot de passe de 10 caractères partout ; « l'équipe organisatrice » ; raison d'une inscription impossible ; copie d'événement (année affichée, ouverture qui suit le début) ; rôle « Entrée visiteurs » ; staff accepté sans rôle ; badge pro jamais sans SIRET contrôlé ; adresse pro vérifiée ; photos de réalisations dans l'appli ; « Survoler l'espace » réparé ; météo explicite ; fond au thème (bande blanche Android). Détail : `docs/JOURNAL-DES-CHOIX.md` (lot 36), `ARCHITECTURE.md` (« État après le lot 36 »).
+
 ## En cours
 
-- Rien dans ce dépôt. La branche `lot-34-recette-finale` attend la fusion du coordinateur.
+- La branche `lot-36-corrections-retours` attend la fusion du coordinateur.
 
 ## Prochaine étape
 
-1. **Coordinateur** : relire et fusionner `lot-34-recette-finale` dans `main`, puis déployer sur dev.orasso.fr (migration `0041_pro-posts-soft-delete` appliquée au démarrage de l'API ; aucune variable nouvelle ; `UNSUBSCRIBE_SECRET` déjà posé par `deploy/remote-deploy.sh`).
-2. **APK de référence obligatoire** : deux dépendances natives nouvelles (`@react-native-community/datetimepicker` 9.1.0 et son plugin dans `app.json`, `expo-document-picker` ~57.0.3). Build `preview` (EAS) depuis la branche fusionnée, dépôt sur le Drive `gdrive:Orasso APK`, installation sur le téléphone de Damien.
-3. **Damien** : essai des parcours sur son téléphone, dans l'ordre de la liste de contrôle du lot 34 (relais, `JOURNAL.md`) ; puis lecture de la liste « À revoir avec Damien — liste consolidée (lot 34) » (en tête : points +60 / +20 et points généraux ou par organisation, règles de paiement des stores, export des données, onglet « Staff » ou « Équipe »).
-4. Ensuite (notes de Damien, `PLAN-SUITE.md`) : simulation complète à deux sur le banc local avec l'horloge simulée, puis test réel avec des volontaires sur un petit rassemblement MéditeSportCar.
+1. **Coordinateur** : relire et fusionner `lot-36-corrections-retours` dans `main` ; déployer (migration `0042_terms-accepted` appliquée au démarrage de l'API ; variables facultatives `APP_ANDROID_URL`, `ANDROID_CERT_SHA256`, `APPLE_TEAM_ID` ; **nginx** : appliquer `location /.well-known/` sans mot de passe de `deploy/nginx/dev.orasso.fr.conf`, sinon Android ne vérifie pas les liens) ; vérifier `https://dev.orasso.fr/.well-known/assetlinks.json` (200, sans mot de passe).
+2. **APK à reconstruire** : aucune dépendance native nouvelle, mais la configuration native change (`intentFilters` avec `autoVerify`, `backgroundColor` dans `app.json`). Sur le téléphone : clavier (mot de passe de la suppression du compte, règlement), recadrage des photos, bande blanche en bas, lien de vérification d'un e-mail qui ouvre l'appli.
+3. **Damien** : relire « À revoir avec Damien » (points 37 à 41 ajoutés au lot 36) ; la direction artistique v2 se prépare à part.
 
 ## Lancer le projet sur ce PC (Windows)
 
