@@ -1,5 +1,5 @@
 import { Button, Plate, TextField } from "@orasso/design-system/web";
-import { pseudoSchema, type StructurePublic, structureKindLabels } from "@orasso/shared";
+import { passwordHint, pseudoSchema, type StructurePublic, structureKindLabels } from "@orasso/shared";
 import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
@@ -102,7 +102,7 @@ export default function Invitation({ loaderData, actionData }: Route.ComponentPr
               type="password"
               autoComplete="new-password"
               revealable
-              help="8 caractères au moins"
+              help={passwordHint}
               error={errors.password}
               required
             />

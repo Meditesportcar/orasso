@@ -34,7 +34,7 @@ async function shot(page: Page, theme: string, view: string, name: string) {
   audits[`${name}-${theme}-${view}`] = await auditPage(page);
 }
 
-test("un food truck candidate, l'organisateur le retient, il apparaît sur la page de l'événement", async ({
+test("un food truck candidate, l'équipe organisatrice le retient, il apparaît sur la page de l'événement", async ({
   browser,
   page,
 }) => {

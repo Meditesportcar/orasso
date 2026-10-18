@@ -407,7 +407,7 @@ function ReviewBlock({ app, review, busy }: { app: MyApplication; review: MyRevi
         <p className="s-muted s-prewrap">{review.given.comment}</p>
         {review.given.reply && (
           <p className="s-reply s-prewrap">
-            <span className="s-label o-t-label">Réponse de l'organisateur</span> {review.given.reply}
+            <span className="s-label o-t-label">Réponse de l'équipe organisatrice</span> {review.given.reply}
           </p>
         )}
       </div>
@@ -426,7 +426,7 @@ function ReviewBlock({ app, review, busy }: { app: MyApplication; review: MyRevi
       <input type="hidden" name="rating" value={rating || ""} />
       <div className="s-label o-t-label">Ton avis · {app.event.title}</div>
       <p className="o-t-caption s-muted">
-        Affiché avec ton pseudo sur la page de l'événement ; l'organisateur a un droit de réponse. Jusqu'au{" "}
+        Affiché avec ton pseudo sur la page de l'événement ; l'équipe organisatrice a un droit de réponse. Jusqu'au{" "}
         {formatDateTime(review.deadline)}.
       </p>
       <fieldset className="s-row s-fieldset">

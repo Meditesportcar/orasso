@@ -268,7 +268,7 @@ export default function CrewInscription({ loaderData, actionData }: Route.Compon
           <CheckboxField
             name="follow"
             defaultChecked
-            label="Suivre l'organisateur (nouveaux événements, avant-premières)"
+            label="Suivre l'organisation (nouveaux événements, avant-premières)"
           />
           <Button
             type="submit"

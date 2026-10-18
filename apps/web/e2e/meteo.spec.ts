@@ -18,7 +18,7 @@ async function nocturne(cookie: string) {
   return full.data;
 }
 
-test("météo : page événement, bandeau « Incertain » de l'organisateur, carte d'accès, passage en Incertain", async ({
+test("météo : page événement, bandeau « Incertain » de l'équipe organisatrice, carte d'accès, passage en Incertain", async ({
   page,
 }) => {
   const damien = await login("damien@orasso.local");

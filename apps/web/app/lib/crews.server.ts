@@ -76,7 +76,7 @@ export async function crewAction(request: Request, form: FormData) {
         method: "POST",
         json: { rulesAccepted: true, followStructure: form.get("follow") === "on" },
       });
-      ok = "Venue confirmée : ta candidature part à l'organisateur.";
+      ok = "Venue confirmée : ta candidature part à l'équipe organisatrice.";
       break;
     case "crew_not_coming":
       res = await api(request, `/applications/${applicationId}/decline-crew`, { method: "POST" });

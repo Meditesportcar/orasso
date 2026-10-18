@@ -1,4 +1,5 @@
 import { Button, TextField } from "@orasso/design-system/web";
+import { PASSWORD_MIN_LENGTH, passwordHint } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { api } from "../lib/api.server";
@@ -20,7 +21,7 @@ export async function action({ request }: Route.ActionArgs) {
   const token = String(form.get("token") ?? "");
   const password = String(form.get("password") ?? "");
   const confirm = String(form.get("confirm") ?? "");
-  if (password.length < 8) return data({ error: null, password: "8 caractères au moins.", confirm: null }, 400);
+  if (password.length < PASSWORD_MIN_LENGTH) return data({ error: null, password: passwordHint, confirm: null }, 400);
   if (password !== confirm) return data({ error: null, password: null, confirm: "Les deux saisies diffèrent." }, 400);
   const res = await api(request, "/auth/reset-password", { method: "POST", json: { token, newPassword: password } });
   if (!res.ok) {
@@ -58,7 +59,7 @@ export default function Reinitialisation({ loaderData, actionData }: Route.Compo
           type="password"
           autoComplete="new-password"
           revealable
-          help="8 caractères au moins"
+          help={passwordHint}
           error={actionData?.password}
           required
         />

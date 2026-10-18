@@ -72,7 +72,7 @@ export function CrewConfirm({
         <CheckboxField
           name="follow"
           defaultChecked
-          label="Suivre l'organisateur (nouveaux événements, avant-premières)"
+          label="Suivre l'organisation (nouveaux événements, avant-premières)"
         />
         <Button
           type="submit"

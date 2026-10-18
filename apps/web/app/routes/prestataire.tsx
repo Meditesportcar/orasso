@@ -117,7 +117,7 @@ export async function action({ request }: Route.ActionArgs) {
       json: { rulesAccepted: true, message: text(form, "message") || null },
     });
     if (!res.ok) return data({ error: res.error.message }, { status: res.status });
-    return data({ ok: "Candidature envoyée : l'organisateur te répondra." });
+    return data({ ok: "Candidature envoyée : l'équipe organisatrice te répondra." });
   }
   if (intent === "withdraw") {
     const res = await api(request, `/applications/${encodeURIComponent(text(form, "applicationId"))}/withdraw`, {
@@ -331,7 +331,7 @@ export default function Prestataire({ loaderData, actionData }: Route.ComponentP
                   <Form method="post" className="s-form">
                     <input type="hidden" name="intent" value="apply" />
                     <input type="hidden" name="eventId" value={e.id} />
-                    <TextField label="Un mot pour l'organisateur (facultatif)" name="message" maxLength={300} />
+                    <TextField label="Un mot pour l'équipe organisatrice (facultatif)" name="message" maxLength={300} />
                     <CheckboxField name="rulesAccepted" label="J'ai lu et j'accepte le règlement de l'événement" />
                     <div>
                       <Button type="submit" variant="secondary" icon="next" disabled={Boolean(profile.issue)}>

@@ -144,7 +144,7 @@ test("recette du parcours n° 1 : cinq passionnés, deux staffs, avis", async ({
   await loginInBrowser(page, charlie.email, SEED_PASSWORD, "/app/acces?vue=passes");
   const charlieCard = page.getByTestId("application").first();
   await expect(charlieCard.getByTestId("review-form")).toHaveCount(0);
-  await charlieCard.getByLabel(/Contester ce malus/).fill("Panne sur la route, j'ai prévenu l'organisateur.");
+  await charlieCard.getByLabel(/Contester ce malus/).fill("Panne sur la route, j'ai prévenu l'équipe organisatrice.");
   await charlieCard.getByRole("button", { name: "Contester le malus" }).click();
   await expect(charlieCard.getByText("Contesté")).toBeVisible();
   await page.context().clearCookies();

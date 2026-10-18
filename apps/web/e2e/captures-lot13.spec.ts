@@ -245,10 +245,11 @@ test("captures du site public, de la structure et de la création d'événement"
       await form
         .getByLabel("Photo du véhicule")
         .setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: poster });
+      await form.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
       await shot(g, theme, view.id, "08b-express-rempli");
       await form.getByRole("button", { name: "M'inscrire" }).click();
       await expect(g.getByTestId("express-done")).toBeVisible({ timeout: 30_000 });
-      await shot(g, theme, view.id, "09-express-qr");
+      await shot(g, theme, view.id, "09-express-inscrit");
       await g.context().close();
     }
   }

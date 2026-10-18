@@ -28,10 +28,13 @@ export type RegistrationState =
   | { kind: "open" }
   | { kind: "not_open"; opensAt: string }
   | { kind: "locked" }
-  | { kind: "cancelled" };
+  | { kind: "cancelled" }
+  /** Lot 36 : aperçu d'un brouillon par l'équipe organisatrice. */
+  | { kind: "draft" };
 
 export function registrationState(event: EventPublic, nowMs: number): RegistrationState {
   if (event.status === "cancelled") return { kind: "cancelled" };
+  if (event.status === "draft") return { kind: "draft" };
   if (event.isLocked) return { kind: "locked" };
   const opensAt = event.registrationOpensAtForMe ?? event.registrationsOpenAt;
   if (new Date(opensAt).getTime() > nowMs) return { kind: "not_open", opensAt };

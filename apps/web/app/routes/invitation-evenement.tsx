@@ -7,6 +7,7 @@ import {
   type InvitationLinkView,
   invitationLabels,
   invitationStatusLabels,
+  passwordHint,
   pseudoSchema,
   type ReceivedInvitation,
 } from "@orasso/shared";
@@ -156,7 +157,7 @@ export default function InvitationEvenement({ loaderData, actionData }: Route.Co
               type="password"
               autoComplete="new-password"
               revealable
-              help="8 caractères au moins"
+              help={passwordHint}
               error={errors.password}
               required
             />

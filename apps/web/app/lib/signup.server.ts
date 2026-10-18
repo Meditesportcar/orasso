@@ -1,5 +1,5 @@
 // Création de compte par e-mail (Better Auth), commune à `/inscription` et `/invitation/:jeton`.
-import { pseudoSchema } from "@orasso/shared";
+import { PASSWORD_MIN_LENGTH, passwordHint, pseudoSchema } from "@orasso/shared";
 
 import { api, cookieFrom, withCookies } from "./api.server";
 import { applyInviteAfterSignup } from "./invite.server";
@@ -24,7 +24,7 @@ export async function signUpFromForm(request: Request, form: FormData): Promise<
     if (free.ok && !free.data.available) errors.pseudo = "Ce pseudo est déjà pris.";
   }
   if (!/^\S+@\S+\.\S+$/.test(email)) errors.email = "Cette adresse e-mail n'est pas valide.";
-  if (password.length < 8) errors.password = "8 caractères au moins.";
+  if (password.length < PASSWORD_MIN_LENGTH) errors.password = passwordHint;
   const values = { pseudo, email };
   if (Object.keys(errors).length) return { ok: false, errors, status: 400, values };
 

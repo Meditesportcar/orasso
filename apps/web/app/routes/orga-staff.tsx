@@ -95,7 +95,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (intent === "accept" || intent === "decline") {
     const res = await api(request, `/structures/${id}/members/${userId}/${intent}`, {
       method: "POST",
-      json: { staffRoles: rolesOf(form), canDecide: form.get("canDecide") === "on" },
+      // Lot 36 : accepter fait entrer dans l'équipe, sans rôle ; les rôles se donnent pour chaque événement.
+      json: {},
     });
     if (!res.ok) return fail("requests", res);
     return data({
@@ -106,7 +107,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (intent === "update-member") {
     const res = await api(request, `/structures/${id}/members/${userId}`, {
       method: "PATCH",
-      json: { staffRoles: rolesOf(form), canDecide: form.get("canDecide") === "on" },
+      // Lot 36 : accepter fait entrer dans l'équipe, sans rôle ; les rôles se donnent pour chaque événement.
+      json: {},
     });
     if (!res.ok) return fail(`member-${text("userId")}`, res);
     return data({ section: `member-${text("userId")}`, ok: "Rôles enregistrés." } satisfies Result);
@@ -193,7 +195,8 @@ export default function OrgaStaff({ loaderData, actionData }: Route.ComponentPro
             Demandes reçues · {requests.length}
           </h2>
           <p className="s-muted">
-            Ces personnes demandent à rejoindre ton staff. Choisis leurs rôles, puis accepte ; ils restent modifiables.
+            Ces personnes demandent à rejoindre ton équipe. Accepter les fait entrer dans l'équipe : leurs rôles se
+            donnent ensuite pour chaque événement.
           </p>
           {message("requests")}
           {requests.map((m) => (
@@ -204,8 +207,6 @@ export default function OrgaStaff({ loaderData, actionData }: Route.ComponentPro
                   <strong>{m.pseudo}</strong>
                   <Chip>{staffRequestLabels.pending}</Chip>
                 </div>
-                <RoleBoxes selected={[]} prefix={`req-${m.userId}`} />
-                <CheckboxField label="Peut aider à trancher (filtration)" name="canDecide" />
                 <div className="staffp__actions">
                   <Button type="submit" name="intent" value="accept" variant="secondary" icon="check" loading={busy}>
                     Accepter

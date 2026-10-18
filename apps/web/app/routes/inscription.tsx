@@ -1,5 +1,5 @@
 import { Button, TextField } from "@orasso/design-system/web";
-import { pseudoSchema } from "@orasso/shared";
+import { passwordHint, pseudoSchema } from "@orasso/shared";
 import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { apiFetch } from "../lib/api.client";
@@ -72,7 +72,7 @@ export default function Inscription({ loaderData, actionData }: Route.ComponentP
           type="password"
           autoComplete="new-password"
           revealable
-          help="8 caractères au moins"
+          help={passwordHint}
           error={errors.password}
           required
         />

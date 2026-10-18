@@ -439,7 +439,7 @@ export function TriageFile({
         )}
         <p className="o-t-caption s-kbd-hint">
           Décision envoyée immédiatement au candidat. Suivant chargé sans clic. Espace passe sans décider.
-          {!canDecide && " Tu peux donner ton avis, la décision revient à l'organisateur."}
+          {!canDecide && " Tu peux donner ton avis, la décision revient à l'équipe organisatrice."}
         </p>
       </div>
     </div>

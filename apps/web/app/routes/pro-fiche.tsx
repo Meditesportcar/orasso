@@ -125,7 +125,7 @@ export async function action({ request }: Route.ActionArgs) {
       json: { structureSlug: text("structureSlug") },
     });
     if (!res.ok) return fail("partners", res.error.message, res.status);
-    return ok("partners", "Demande envoyée : l'organisateur doit l'accepter.");
+    return ok("partners", "Demande envoyée : l'équipe organisatrice doit l'accepter.");
   }
 
   if (intent === "partner-remove") {

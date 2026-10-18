@@ -443,7 +443,7 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
         .click();
       await page.getByTestId("pro-partner-propose").click();
       await expect(page.getByTestId("pro-partners-notice")).toHaveText(
-        "Demande envoyée : l'organisateur doit l'accepter.",
+        "Demande envoyée : l'équipe organisatrice doit l'accepter.",
         {
           timeout: 20_000,
         },
