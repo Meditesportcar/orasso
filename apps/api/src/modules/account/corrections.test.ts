@@ -14,8 +14,9 @@ import {
   type TestUser,
   useClock,
 } from "../../../test/helpers";
+import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { devices, emailOutbox, events, proProfiles } from "../../db/schema";
+import { devices, emailOutbox, events, profiles, proProfiles } from "../../db/schema";
 import { setGeocodeFetch } from "../../lib/geocode";
 import { setRegistryFetch } from "../../lib/registry";
 import { APP_INSTALL_DELAY_MS, accountService } from "./service";
@@ -44,6 +45,33 @@ const appMails = (userId: string) =>
     .from(emailOutbox)
     .where(and(eq(emailOutbox.template, "app_install")))
     .then((rows) => rows.filter((r) => (r.payload as { userId?: string }).userId === userId));
+
+describe("conditions générales à l'inscription (point 5, étendu à l'inscription ordinaire)", () => {
+  const signUpBody = (email: string, extra: Record<string, unknown> = {}) => ({
+    method: "POST",
+    headers: { "content-type": "application/json", origin: process.env.PUBLIC_URL ?? "http://localhost:5173" },
+    body: JSON.stringify({ email, password: "motdepasse-test-123", name: "Nouveau_36", ...extra }),
+  });
+
+  it("case obligatoire, tracée sur le profil", async () => {
+    const refused = await app.request("/api/auth/sign-up/email", signUpBody("cgu@orasso.test"));
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { error: { message: string } }).error.message).toMatch(/conditions générales/);
+    const ok = await app.request("/api/auth/sign-up/email", signUpBody("cgu@orasso.test", { termsAccepted: true }));
+    expect(ok.status).toBe(200);
+    const { user: u } = (await ok.json()) as { user: { id: string } };
+    const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, u.id) });
+    expect(profile?.termsAcceptedAt).toBeInstanceOf(Date);
+  });
+
+  it("mot de passe de 9 caractères refusé à l'inscription", async () => {
+    const res = await app.request(
+      "/api/auth/sign-up/email",
+      signUpBody("court@orasso.test", { password: "123456789", termsAccepted: true }),
+    );
+    expect(res.status).toBe(400);
+  });
+});
 
 describe("e-mail « Installe l'appli » (point 5)", () => {
   it("planifié une heure après la confirmation de l'adresse, envoyé une seule fois", async () => {

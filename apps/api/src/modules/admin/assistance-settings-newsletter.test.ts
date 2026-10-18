@@ -316,7 +316,12 @@ describe("réglages", () => {
     const closed = await app.request("/api/auth/sign-up/email", {
       method: "POST",
       headers: { "content-type": "application/json", origin: ORIGIN },
-      body: JSON.stringify({ email: "nouveau@orasso.test", password: "motdepasse-test-123", name: "Nouveau_1" }),
+      body: JSON.stringify({
+        email: "nouveau@orasso.test",
+        password: "motdepasse-test-123",
+        name: "Nouveau_1",
+        termsAccepted: true,
+      }),
     });
     expect(closed.status).toBe(403);
     expect(((await closed.json()) as { error: { code: string } }).error.code).toBe("signup_closed");

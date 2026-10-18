@@ -6,6 +6,7 @@ import {
   eventStepProblem,
   initialEventDraft,
   toWallInput,
+  withCopyOpening,
   withShiftedStart,
 } from "../eventWizard";
 import { registrationBlockText } from "../labels/corrections.fr";
@@ -128,5 +129,22 @@ describe("assistant d'événement", () => {
     expect(moved.startsAt).toBe("2026-11-07T09:00");
     expect(moved.registrationsOpenAt).toBe("2026-10-17T15:12");
     expect(toWallInput(new Date("2026-10-17T13:12:00Z"))).toBe("2026-10-17T15:12");
+  });
+
+  it("copie passée à plusieurs jours : l'ouverture garde le délai de l'original, jamais avant maintenant", () => {
+    const lead = 7 * 86_400_000;
+    const multi = {
+      ...draft(),
+      multiDay: true,
+      days: [
+        { date: "2027-01-10", startTime: "09:00", endTime: "18:00", capacity: "" },
+        { date: "2027-01-09", startTime: "09:00", endTime: "18:00", capacity: "" },
+      ],
+      registrationsOpenAt: "2027-10-16T15:12",
+    };
+    expect(withCopyOpening(multi, lead, NOW).registrationsOpenAt).toBe("2027-01-02T09:00");
+    expect(withCopyOpening({ ...draft(), startsAt: "2026-10-20T09:00" }, lead, NOW).registrationsOpenAt).toBe(
+      toWallInput(NOW),
+    );
   });
 });

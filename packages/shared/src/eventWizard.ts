@@ -262,6 +262,23 @@ export function withShiftedStart(d: EventDraft, startsAt: string): EventDraft {
   return { ...d, startsAt, registrationsOpenAt: toWallInput(shifted) };
 }
 
+/** Début effectif du brouillon (premier jour d'un événement sur plusieurs jours), en ISO, ou `null`. */
+export function draftStart(d: EventDraft): string | null {
+  const first = d.multiDay ? sortedDraftDays(d)[0] : undefined;
+  return first ? fromWallInput(`${first.date}T${first.startTime}`) : fromWallInput(d.startsAt);
+}
+
+/**
+ * Copie d'un événement (lot 36) : l'ouverture des candidatures garde le délai de l'original (`leadMs` avant le
+ * début), quel que soit le début choisi (un jour ou plusieurs), jamais avant `now`.
+ */
+export function withCopyOpening(d: EventDraft, leadMs: number, now: Date): EventDraft {
+  const start = draftStart(d);
+  if (!start) return d;
+  const opens = toWallInput(new Date(Math.max(now.getTime(), new Date(start).getTime() - leadMs)));
+  return opens === d.registrationsOpenAt ? d : { ...d, registrationsOpenAt: opens };
+}
+
 /** Le problème qui empêche de quitter une étape, ou `null`. Mêmes règles sur le site et dans l'appli. */
 export function eventStepProblem(step: EventWizardStep, d: EventDraft): string | null {
   switch (step) {

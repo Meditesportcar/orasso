@@ -78,7 +78,7 @@ export async function signUp(pseudo: string, opts: { twoFactor?: boolean; role?:
   const res = await app.request("/api/auth/sign-up/email", {
     method: "POST",
     headers: { "content-type": "application/json", origin: ORIGIN },
-    body: JSON.stringify({ email, password: "motdepasse-test-123", name: pseudo }),
+    body: JSON.stringify({ email, password: "motdepasse-test-123", name: pseudo, termsAccepted: true }),
   });
   if (res.status !== 200) throw new Error(`Inscription ${res.status} : ${await res.text()}`);
   const cookie = res.headers

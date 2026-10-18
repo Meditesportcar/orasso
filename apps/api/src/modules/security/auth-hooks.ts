@@ -3,6 +3,11 @@
 // facteurs, envoie les alertes et révoque les autres sessions quand un facteur change.
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
+import { eq } from "drizzle-orm";
+
+import { db } from "../../db/client";
+import { profiles } from "../../db/schema";
+import { now } from "../../lib/deps";
 
 import { PASSKEY_SIGN_IN_PATH, TOTP_VERIFY_PATHS, USER_VERIFICATION_REQUIRED_MESSAGE, userVerified } from "./passkey";
 import { securityService } from "./service";
@@ -46,6 +51,14 @@ export async function securityBefore(ctx: Ctx) {
 export async function securityAfter(ctx: Ctx) {
   if (!succeeded(ctx)) return;
   const returned = ctx.context.returned as { user?: { id?: string; twoFactorEnabled?: boolean | null } } | undefined;
+  // Lot 36 : inscription par e-mail, conditions générales acceptées (case obligatoire, contrôlée par la route) : tracé.
+  if (ctx.path === "/sign-up/email") {
+    const accepted = (ctx.body as { termsAccepted?: unknown } | undefined)?.termsAccepted === true;
+    if (accepted && returned?.user?.id) {
+      await db.update(profiles).set({ termsAcceptedAt: now() }).where(eq(profiles.userId, returned.user.id));
+    }
+    return;
+  }
   // Alerte « mot de passe changé » (la réinitialisation passe par `onPasswordReset`).
   if (ctx.path === "/change-password") {
     if (returned?.user?.id) await securityService.onPasswordChanged(returned.user.id);

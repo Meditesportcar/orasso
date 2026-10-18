@@ -1,4 +1,4 @@
-import { CLOCK_OFFSET_HEADER } from "@orasso/shared";
+import { CLOCK_OFFSET_HEADER, expressLabels } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -117,9 +117,20 @@ app.use(
 );
 // Lot 33 : interrupteur « inscriptions ouvertes » de l'administration (l'inscription express du jour J n'est pas
 // concernée : elle ne passe pas par cette route).
-app.post("/auth/sign-up/email", async (_c, next) => {
+app.post("/auth/sign-up/email", async (c, next) => {
   if (!(await settingsStore.get("signup.enabled"))) {
     throw new AppError(403, "signup_closed", "Les inscriptions sont momentanément fermées.");
+  }
+  // Lot 36 : conditions générales acceptées, case obligatoire (site et appli) ; la date est posée sur le profil après
+  // la création du compte (`securityAfter`). L'inscription express a sa propre case (route de l'accueil).
+  const body = (await c.req.raw
+    .clone()
+    .json()
+    .catch(() => null)) as { termsAccepted?: unknown } | null;
+  if (body?.termsAccepted !== true) {
+    throw new AppError(400, "validation_error", expressLabels.termsRequired, {
+      fields: { termsAccepted: expressLabels.termsRequired },
+    });
   }
   await next();
 });
