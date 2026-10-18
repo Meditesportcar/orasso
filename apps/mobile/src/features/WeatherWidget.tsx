@@ -12,7 +12,7 @@ export type WeatherWidgetProps = {
   summary: WeatherSummary;
   /** « Météo : Open-Meteo » : toujours affichée. */
   attribution: string;
-  /** Titre de la plaque (défaut : « Météo à l'approche »). */
+  /** Titre de la plaque (défaut : « Météo prévue sur place le jour J »). */
   title?: string;
 };
 

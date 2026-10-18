@@ -23,6 +23,7 @@ import {
   type StructurePublic,
   type TicketOffer,
   vehicleTypeLabels,
+  weatherTexts,
   wizardEndLabels,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
@@ -528,7 +529,7 @@ function EventPage({
         )}
 
         {weather && !ended && (
-          <section className="s-section" id="meteo" aria-label="Météo à l'approche" data-testid="event-weather">
+          <section className="s-section" id="meteo" aria-label={weatherTexts.upcomingTitle} data-testid="event-weather">
             <Weather weather={weather} />
           </section>
         )}
