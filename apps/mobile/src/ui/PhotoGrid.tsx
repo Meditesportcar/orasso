@@ -37,31 +37,35 @@ export function PhotoGrid({
 }) {
   const [removing, setRemoving] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const size = tileStyle ? { ...styles.photo, ...tileStyle } : styles.photo;
   return (
     <>
       <View style={styles.grid} testID={testID}>
         {photos.map((p, i) => (
-          <View key={p.key} style={styles.tile}>
-            <Pressable
-              accessibilityRole={onOpen ? "button" : "image"}
-              accessibilityLabel={p.label ?? `Photo ${i + 1}`}
-              disabled={!onOpen}
-              onPress={() => onOpen?.(i)}
-            >
-              <Photo source={p.source} style={tileStyle ? { ...styles.photo, ...tileStyle } : styles.photo} />
-            </Pressable>
-            {onRemove ? (
-              <View style={styles.remove}>
-                <Button
-                  variant="close"
-                  label={photoLabels.remove}
-                  onPhoto
-                  disabled={disabled}
-                  onPress={() => setRemoving(i)}
-                  testID="photo-remove"
-                />
-              </View>
-            ) : null}
+          <View key={p.key} style={[styles.tile, { width: size.width }]}>
+            {/* La croix est posée sur la photo elle-même (et non sur la case, plus large que la photo). */}
+            <View>
+              <Pressable
+                accessibilityRole={onOpen ? "button" : "image"}
+                accessibilityLabel={p.label ?? `Photo ${i + 1}`}
+                disabled={!onOpen}
+                onPress={() => onOpen?.(i)}
+              >
+                <Photo source={p.source} style={size} />
+              </Pressable>
+              {onRemove ? (
+                <View style={styles.remove}>
+                  <Button
+                    variant="close"
+                    label={photoLabels.remove}
+                    onPhoto
+                    disabled={disabled}
+                    onPress={() => setRemoving(i)}
+                    testID="photo-remove"
+                  />
+                </View>
+              ) : null}
+            </View>
             {onCover ? (
               i === 0 ? (
                 <Chip variant="accent">{photoLabels.cover}</Chip>
@@ -71,6 +75,7 @@ export function PhotoGrid({
                   icon="up"
                   disabled={disabled}
                   onPress={() => void onCover(i)}
+                  fullWidth
                   testID="photo-cover"
                 >
                   {photoLabels.makeCover}

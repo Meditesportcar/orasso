@@ -2,6 +2,7 @@ import { Button, TextField } from "@orasso/design-system/web";
 import { passwordHint, pseudoSchema } from "@orasso/shared";
 import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
+import { TermsField } from "../components/Fields";
 import { apiFetch } from "../lib/api.client";
 import { getMe, safeReturn, withCookies } from "../lib/api.server";
 import { type SignupErrors, signUpFromForm } from "../lib/signup.server";
@@ -76,6 +77,7 @@ export default function Inscription({ loaderData, actionData }: Route.ComponentP
           error={errors.password}
           required
         />
+        <TermsField error={errors.terms} />
         {errors.form && (
           <p className="s-error" role="alert">
             {errors.form}

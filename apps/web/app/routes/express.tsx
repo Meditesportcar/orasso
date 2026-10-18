@@ -15,6 +15,7 @@ import {
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { data, Form, useNavigation } from "react-router";
+import { TermsField } from "../components/Fields";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, cookieFrom, withCookies } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
@@ -310,17 +311,7 @@ export default function Express({ loaderData, actionData }: Route.ComponentProps
           </div>
         </Plate>
         {/* Lot 36 : conditions générales, case obligatoire et tracée (`profiles.terms_accepted_at`). */}
-        <CheckboxField name="terms" label={expressLabels.terms} defaultChecked={values?.terms} />
-        <p className="o-t-caption s-muted">
-          <a href="/conditions" target="_blank" rel="noopener">
-            {expressLabels.termsLink}
-          </a>
-        </p>
-        {errors.terms && (
-          <p className="s-error" role="alert" data-testid="express-terms-error">
-            {errors.terms}
-          </p>
-        )}
+        <TermsField error={errors.terms} defaultChecked={values?.terms} />
         {errors.form && (
           <p className="s-error" role="alert">
             {errors.form}

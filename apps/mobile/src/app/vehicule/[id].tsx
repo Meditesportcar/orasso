@@ -224,7 +224,7 @@ export default function VehiculeFiche() {
           <Muted variant="body">Évite de montrer la plaque : tes photos sont visibles de tous les inscrits.</Muted>
           {v.photos.length < MAX_PHOTOS ? (
             <Button variant="secondary" icon="add" loading={busy !== null} onPress={() => void add()} fullWidth>
-              Ajouter des photos
+              {photoLabels.addOne}
             </Button>
           ) : null}
           {busy && !upload ? <Muted variant="meta">{busy}</Muted> : null}

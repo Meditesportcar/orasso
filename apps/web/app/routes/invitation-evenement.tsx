@@ -14,6 +14,7 @@ import {
 import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { TermsField } from "../components/Fields";
 import { ReceivedInvitationCard } from "../components/Invitations";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, getMe, withCookies } from "../lib/api.server";
@@ -161,6 +162,7 @@ export default function InvitationEvenement({ loaderData, actionData }: Route.Co
               error={errors.password}
               required
             />
+            <TermsField error={errors.terms} />
             {errors.form && (
               <p className="s-error" role="alert">
                 {errors.form}

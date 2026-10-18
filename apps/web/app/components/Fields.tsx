@@ -1,5 +1,7 @@
 // Deux champs du site qui complètent le système de design : zone de texte et envoi de fichier, avec la même
 // étiquette, la même aide et le même message d'erreur que `TextField` (classes `o-field*` du système de design).
+import { CheckboxField } from "@orasso/design-system/web";
+import { expressLabels } from "@orasso/shared";
 import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 import { useId } from "react";
 
@@ -62,6 +64,28 @@ export function FileField({
           {error}
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * Lot 36 : case « conditions générales », obligatoire et tracée, la même pour l'inscription, les invitations et
+ * l'inscription express. Le serveur refuse sans elle (message sous la case).
+ */
+export function TermsField({ error, defaultChecked }: { error?: string; defaultChecked?: boolean }) {
+  return (
+    <div className="s-stack s-stack--tight" data-testid="terms-field">
+      <CheckboxField name="terms" label={expressLabels.terms} defaultChecked={defaultChecked} />
+      <p className="o-t-caption s-muted">
+        <a href="/conditions" target="_blank" rel="noopener">
+          {expressLabels.termsLink}
+        </a>
+      </p>
+      {error ? (
+        <p className="s-error" role="alert" data-testid="terms-error">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

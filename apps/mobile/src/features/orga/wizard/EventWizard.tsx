@@ -9,6 +9,7 @@ import { Button, tokens, useTheme } from "@orasso/design-system/native";
 import {
   appWizardSteps,
   type CategoryOption,
+  draftStart,
   type EventDraft,
   type EventFormat,
   type EventOrganizer,
@@ -16,7 +17,7 @@ import {
   eventEditorLabels as L,
   type VehicleMake,
   vendorTypeLabels,
-  withShiftedStart,
+  withCopyOpening,
   wizardEndLabels,
 } from "@orasso/shared";
 import { useNavigation, useRouter } from "expo-router";
@@ -154,14 +155,18 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
   const isCopy = Boolean(event?.parentEventId) && event?.status === "draft";
   // Brouillon (création ou modification) : Publier, Garder en brouillon, Aperçu ; un événement publié s'enregistre.
   const isDraft = !event || event.status === "draft";
-  const set = useCallback(
-    <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
-      setDraft((prev) =>
-        key === "startsAt" && isCopy ? withShiftedStart(prev, value as string) : { ...prev, [key]: value },
-      );
-    },
-    [isCopy],
-  );
+  const set = useCallback(<K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  }, []);
+  // Quand le début d'une copie change (un jour ou plusieurs), l'ouverture garde le délai de l'original.
+  const copyLead = isCopy && event ? Date.parse(event.startsAt) - Date.parse(event.registrationsOpenAt) : null;
+  const start = draftStart(d);
+  const lastStart = useRef(start);
+  useEffect(() => {
+    if (copyLead === null || start === lastStart.current) return;
+    lastStart.current = start;
+    setDraft((prev) => withCopyOpening(prev, copyLead, now()));
+  }, [copyLead, start]);
   const setD = useCallback((update: (prev: EventDraft) => EventDraft) => setDraft(update), []);
 
   const step = appWizardSteps[index] ?? "format";

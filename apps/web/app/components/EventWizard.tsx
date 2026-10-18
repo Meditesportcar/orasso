@@ -9,6 +9,7 @@ import {
   dayAccesses,
   dayAccessLabels,
   defaultEventRules,
+  draftStart,
   type EventDraft,
   type EventOrganizer,
   eventAdmissionLabels,
@@ -39,8 +40,8 @@ import {
   vehicleTypes,
   vendorTypeLabels,
   withAddedDay,
+  withCopyOpening,
   withMultiDay,
-  withShiftedStart,
   wizardEndLabels,
   zoneChanges,
 } from "@orasso/shared";
@@ -85,8 +86,16 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
   const set = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => setD((prev) => ({ ...prev, [key]: value }));
   // Lot 36 : copie d'un événement (duplication) encore en brouillon : l'ouverture des candidatures suit le début.
   const isCopy = Boolean(event?.parentEventId) && event?.status === "draft";
-  const setStartsAt = (value: string) =>
-    setD((prev) => (isCopy ? withShiftedStart(prev, value) : { ...prev, startsAt: value }));
+  const setStartsAt = (value: string) => set("startsAt", value);
+  // Quand le début d'une copie change (un jour ou plusieurs), l'ouverture garde le délai de l'original.
+  const copyLead = isCopy && event ? Date.parse(event.startsAt) - Date.parse(event.registrationsOpenAt) : null;
+  const start = draftStart(d);
+  const lastStart = useRef(start);
+  useEffect(() => {
+    if (copyLead === null || start === lastStart.current) return;
+    lastStart.current = start;
+    setD((prev) => withCopyOpening(prev, copyLead, clockNow()));
+  }, [copyLead, start]);
   // Brouillon : trois choix en fin d'assistant (Publier, Garder en brouillon, Aperçu) ; un événement publié s'enregistre.
   const isDraft = !event || event.status === "draft";
 

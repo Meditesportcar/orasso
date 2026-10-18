@@ -63,7 +63,8 @@ export const authApi = {
   async signUp(email: string, password: string, pseudo: string): Promise<string> {
     const { data, headers } = await requestWithHeaders("/api/auth/sign-up/email", {
       method: "POST",
-      body: { email, password, name: pseudo },
+      // Lot 36 : la case des conditions générales est cochée (le formulaire ne part pas sans elle) ; l'API la trace.
+      body: { email, password, name: pseudo, termsAccepted: true },
     });
     return tokenOf(headers, data);
   },
