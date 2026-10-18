@@ -241,7 +241,10 @@ export const crewRegistrationService = {
         });
         const check = canApply(event, Boolean(follow), t);
         if (!check.ok) {
-          if (check.reason === "locked") throw applicationsService.lockedError("Inscriptions verrouillées");
+          if (check.reason === "locked")
+            throw applicationsService.lockedError(
+              "Inscriptions closes : à l'approche du début, la liste d'accès est figée",
+            );
           if (check.reason === "not_open") {
             throw conflict("conflict", "Inscriptions pas encore ouvertes", {
               opensAt: registrationOpensAt(event, Boolean(follow)).toISOString(),
@@ -463,7 +466,10 @@ export const crewRegistrationService = {
       if (app.userId !== v.user.id) throw notFound("Candidature introuvable");
       if (app.status !== "awaiting_member") throw invalidTransition(app.status, "pending");
       if (event.status !== "published") throw conflict("conflict", "Événement annulé");
-      if (isLocked(event, t)) throw applicationsService.lockedError("Inscriptions verrouillées");
+      if (isLocked(event, t))
+        throw applicationsService.lockedError(
+          "Inscriptions closes : à l'approche du début, la liste d'accès est figée",
+        );
       if (t >= crewConfirmDeadline(app.createdAt, lockAt(event))) {
         throw conflict("offer_expired", "Le délai de confirmation est dépassé");
       }

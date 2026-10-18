@@ -203,7 +203,7 @@ describe("mode assistance", () => {
     ).toBe(201);
   });
 
-  it("IDOR : l'organisateur d'une autre structure ne voit, ne demande ni ne ferme rien", async () => {
+  it("IDOR : l'équipe organisatrice d'une autre structure ne voit, ne demande ni ne ferme rien", async () => {
     const other = await signUp("Autre_Orga", { twoFactor: true });
     await createStructure(other.id);
     const ask = await req(orga, "POST", `/structures/${structureId}/assistance-requests`, {

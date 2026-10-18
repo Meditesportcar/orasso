@@ -50,6 +50,8 @@ export const profiles = pgTable(
     radiusKm: smallint("radius_km").notNull().default(50),
     platformRole: platformRoleEnum("platform_role").notNull().default("user"),
     newsletterOptIn: boolean("newsletter_opt_in").notNull().default(false),
+    /** Conditions générales acceptées (lot 36) : case obligatoire de l'inscription express, horodatée. */
+    termsAcceptedAt: tstz("terms_accepted_at"),
     notificationPrefs: jsonb("notification_prefs")
       .$type<NotificationPrefs>()
       .notNull()

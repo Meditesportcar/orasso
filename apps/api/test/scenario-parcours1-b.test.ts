@@ -78,6 +78,7 @@ describe("parcours n° 1, seconde moitié", () => {
     await addMember(structure.id, theo.id, "staff", ["scan"]);
     const created = await call(damien, "POST", `/structures/${structure.id}/events`, {
       title: "Salon Argelès",
+      addressLine: "1 quai du Port",
       format: "show",
       startsAt: paris(10, 17, 10).toISOString(),
       endsAt: paris(10, 17, 18).toISOString(),

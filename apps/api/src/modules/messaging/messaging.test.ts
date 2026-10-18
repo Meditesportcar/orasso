@@ -357,7 +357,7 @@ describe("demandes de contact", () => {
 });
 
 describe("organisateurs toujours joignables", () => {
-  it("une personne contacte la structure, l'organisateur répond ; accès refusé aux autres", async () => {
+  it("une personne contacte la structure, l'équipe organisatrice répond ; accès refusé aux autres", async () => {
     const damien = await signUp("Damien", { twoFactor: true });
     const sarahNo2fa = await signUp("Sarah");
     const kenji = await signUp("Kenji");
@@ -406,7 +406,7 @@ describe("organisateurs toujours joignables", () => {
     expect(await realtime.canSubscribe(sarahNo2fa.id, `conversation:${id}`, { secondFactor: "totp" })).toBe(false);
   });
 
-  it("S10 : l'organisateur écrit le premier à un abonné, pas à un inconnu", async () => {
+  it("S10 : l'équipe organisatrice écrit le premier à un abonné, pas à un inconnu", async () => {
     const damien = await signUp("Damien", { twoFactor: true });
     const fan = await signUp("Fan");
     const inconnu = await signUp("Inconnu");

@@ -1,4 +1,5 @@
 import { passkey } from "@better-auth/passkey";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@orasso/shared";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
@@ -44,6 +45,9 @@ export const auth = betterAuth({
   // demandée à l'inscription mais non bloquante (S1).
   emailAndPassword: {
     enabled: true,
+    // Lot 36 : même longueur minimale partout (site, appli, inscription express), une seule constante partagée.
+    minPasswordLength: PASSWORD_MIN_LENGTH,
+    maxPasswordLength: PASSWORD_MAX_LENGTH,
     requireEmailVerification: false,
     resetPasswordTokenExpiresIn: 3600,
     revokeSessionsOnPasswordReset: true,

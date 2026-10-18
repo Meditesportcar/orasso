@@ -286,13 +286,19 @@ export const prosService = {
     rateLimit("proWrite", v.user.id);
     const current = await ownedPro(v, id);
     const addressChanged = ["addressLine", "postalCode", "city", "department", "lat", "lng"].some((k) => k in input);
-    const located = addressChanged ? await locate({ ...current, ...input }) : {};
+    // Lot 36 : une adresse changée sans position fournie est géocodée à nouveau (avant, l'ancienne position restait).
+    const moved = addressChanged && !("lat" in input) && !("lng" in input);
+    const located = addressChanged
+      ? await locate({ ...current, ...input, ...(moved ? { lat: null, lng: null } : {}) })
+      : {};
     const [p] = await db
       .update(proProfiles)
       // Le badge « Pro vérifié » certifie un nom : un nouveau nom demande un nouveau contrôle du SIRET.
       .set({
         ...input,
         ...located,
+        // Adresse introuvable : plus de position (la fiche ne pointe plus vers l'ancienne adresse sur la carte).
+        ...(moved ? { lat: located.lat ?? null, lng: located.lng ?? null } : {}),
         ...(input.name !== undefined && input.name !== current.name ? { verifiedAt: null } : {}),
       })
       .where(eq(proProfiles.id, id))

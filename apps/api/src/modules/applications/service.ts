@@ -368,7 +368,7 @@ async function lockEventThenApplication(tx: Tx, applicationId: string) {
 async function deciderAccess(v: Viewer, event: EventRow): Promise<StaffAccess> {
   const access = await staffAccess(v, event.structureId, ["filtering"], event.id);
   if (!access) throw forbidden("Réservé à l'organisation");
-  if (!access.canDecide) throw forbidden("Ce rôle donne un avis, la décision revient à l'organisateur");
+  if (!access.canDecide) throw forbidden("Ce rôle donne un avis, la décision revient à l'équipe organisatrice");
   return access;
 }
 
@@ -473,9 +473,13 @@ export const applicationsService = {
         const applicant = { follower: Boolean(follow), grade: v.profile.grade };
         const check = canApply(event, applicant, t);
         if (!check.ok) {
-          if (check.reason === "locked") throw lockedError("Inscriptions verrouillées");
+          if (check.reason === "locked") {
+            throw lockedError(
+              "Inscriptions closes : à l'approche du début, la liste d'accès est figée pour le staff de l'entrée",
+            );
+          }
           if (check.reason === "not_open") {
-            throw conflict("conflict", "Inscriptions pas encore ouvertes", {
+            throw conflict("conflict", "Les candidatures ne sont pas encore ouvertes pour toi", {
               opensAt: registrationOpensAt(event, applicant).toISOString(),
             });
           }

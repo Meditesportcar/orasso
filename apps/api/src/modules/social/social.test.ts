@@ -164,7 +164,7 @@ describe("audience d'un profil", () => {
     expect(preview.json).toMatchObject({ audience: "public_limited", bio: null, departments: null });
   });
 
-  it("l'organisateur d'un événement où la personne a candidaté voit ses coordonnées, personne d'autre", async () => {
+  it("l'équipe organisatrice d'un événement où la personne a candidaté voit ses coordonnées, personne d'autre", async () => {
     const orga = await signUp("Orga_66", { twoFactor: true });
     const other = await person("Autre_O");
     const k = await person("Kenji_66", { visibility: "private" });

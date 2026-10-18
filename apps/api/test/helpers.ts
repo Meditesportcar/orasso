@@ -226,6 +226,9 @@ export async function createEvent(structureId: string, overrides: Partial<typeof
       structureId,
       slug: `evenement-${randomBytes(4).toString("hex")}`,
       title: "Rassemblement de test",
+      // Lot 36 : adresse obligatoire (publication refusée sans elle).
+      addressLine: "1 quai du Port",
+      city: "Canet-en-Roussillon",
       format: "gathering",
       startsAt,
       endsAt: new Date(startsAt.getTime() + 4 * 3_600_000),

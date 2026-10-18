@@ -254,7 +254,7 @@ describe("contestation d'un malus", () => {
     await pointsService.settleEvent(eventId);
   });
 
-  it("dans le délai, une seule fois ; l'organisateur accepte : malus annulé, présence pointée", async () => {
+  it("dans le délai, une seule fois ; l'équipe organisatrice accepte : malus annulé, présence pointée", async () => {
     clock.set(new Date(SETTLE.getTime() + 6 * 24 * HOUR));
     const res = await call(p.absent.u, "POST", `/applications/${p.absent.applicationId}/malus-contest`, {
       message: "Crevaison sur la D81, prévenu par téléphone.",
@@ -285,7 +285,7 @@ describe("contestation d'un malus", () => {
     ).toBe(409);
   });
 
-  it("hors délai : refusée ; refus de l'organisateur : malus maintenu", async () => {
+  it("hors délai : refusée ; refus de l'équipe organisatrice : malus maintenu", async () => {
     clock.set(new Date(SETTLE.getTime() + 7 * 24 * HOUR + 1000));
     const late = await call(p.absent.u, "POST", `/applications/${p.absent.applicationId}/malus-contest`, {
       message: "Trop tard",

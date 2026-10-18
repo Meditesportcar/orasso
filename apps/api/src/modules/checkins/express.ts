@@ -166,7 +166,7 @@ export const expressService = {
       // L'e-mail de vérification part à l'inscription (lot 15) ; un compte express ne compte jamais pour le parrainage.
       await tx
         .update(profiles)
-        .set({ firstName: input.firstName, lastName: input.lastName })
+        .set({ firstName: input.firstName, lastName: input.lastName, termsAcceptedAt: t })
         .where(eq(profiles.userId, created.id));
       const [v] = await tx
         .insert(vehicles)

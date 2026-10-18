@@ -869,7 +869,7 @@ describe("inscription en crew", () => {
     }
   });
 
-  it("annonce de l'organisateur (lot 20) : jamais aux membres qui n'ont pas confirmé ; modification : oui", async () => {
+  it("annonce de l'équipe organisatrice (lot 20) : jamais aux membres qui n'ont pas confirmé ; modification : oui", async () => {
     const s = await setup();
     await req(
       s.kenji,

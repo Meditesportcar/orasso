@@ -3,6 +3,7 @@ import { PgBoss } from "pg-boss";
 import { env } from "./env";
 import { deps, type JobName } from "./lib/deps";
 import { AppError } from "./lib/errors";
+import { accountService } from "./modules/account/service";
 import { assistanceService } from "./modules/admin/assistance";
 import { newsletterService } from "./modules/admin/newsletter";
 import { adminSettingsService } from "./modules/admin/settings";
@@ -79,6 +80,8 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "assistance.auto-close": () => assistanceService.autoClose(),
   "newsletter.send": () => newsletterService.runDue(),
   "points.regrade": () => adminSettingsService.regrade(),
+  // Lot 36 : invitation à installer l'appli (le service revérifie : appli jamais ouverte, e-mail jamais envoyé).
+  "account.app-install": (d) => accountService.sendAppInstallReminder(d.userId ?? ""),
 };
 
 /**

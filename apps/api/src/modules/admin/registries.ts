@@ -1,16 +1,17 @@
 // Registres des structures et des pros (lot 33, docs/02 « registres : structures, pros avec mode assistance »).
 // Les actions sur une structure (vérifier, renouveler, suspendre, transférer) restent celles des lots 13 et 27 ; ici :
 // la liste complète avec recherche, le quota des messages groupés (S18, réglable par l'admin), la liste des pros et
-// leur vérification à la main (SIRET non trouvé automatiquement), tracée.
-import type { AdminProRow, ProActivity } from "@orasso/shared";
+// leur vérification à la main, tracée, jamais sans SIRET trouvé et actif dans le registre public (lot 36).
+import { type AdminProRow, type ProActivity, proVerifyTexts, type RegistryCheck } from "@orasso/shared";
 import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { assistanceRequests, events, profiles, proProfiles, structureMembers, structures } from "../../db/schema";
 import { requirePlatformRole } from "../../lib/access";
 import { now } from "../../lib/deps";
-import { AppError, notFound } from "../../lib/errors";
+import { AppError, conflict, notFound } from "../../lib/errors";
 import { escapeLike } from "../../lib/pagination";
+import { lookupRegistry } from "../../lib/registry";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
 import { audit } from "./audit";
@@ -157,20 +158,31 @@ export const registriesService = {
     }));
   },
 
-  /** `POST /admin/pros/:id/verify {verified, note}` : badge « pro vérifié » posé ou retiré à la main, tracé. */
+  /**
+   * `POST /admin/pros/:id/verify {verified, note}` : badge « pro vérifié » posé ou retiré à la main, tracé. Lot 36 :
+   * le badge n'est jamais posé sans SIRET contrôlé (le chemin par lequel un pro avait été validé sans SIRET) : la fiche
+   * doit avoir un SIRET, revérifié ici dans le registre public (établissement trouvé et actif).
+   */
   async verifyPro(v: Viewer, id: string, verified: boolean, note: string) {
     await requirePlatformRole(v, "super_admin");
     const owned = await db.query.proProfiles.findFirst({
       where: eq(proProfiles.id, id),
-      columns: { ownerUserId: true },
+      columns: { ownerUserId: true, siret: true },
     });
     if (owned?.ownerUserId === v.user.id) {
       throw new AppError(409, "self_action", "Action impossible sur ta propre fiche pro.");
     }
+    let check: RegistryCheck | null = null;
+    if (verified && owned) {
+      if (!owned.siret) throw conflict("siret_missing", proVerifyTexts.noSiret);
+      check = await lookupRegistry("siret", owned.siret);
+      if (check.status === "unavailable") throw new AppError(503, "registry_unavailable", proVerifyTexts.registryDown);
+      if (check.status !== "matched") throw conflict("siret_not_matched", proVerifyTexts.notMatched);
+    }
     return withTx(async (tx) => {
       const [p] = await tx
         .update(proProfiles)
-        .set({ verifiedAt: verified ? now() : null })
+        .set({ verifiedAt: verified ? now() : null, ...(check ? { registryCheck: check } : {}) })
         .where(and(eq(proProfiles.id, id), isNull(proProfiles.deletedAt)))
         .returning({ id: proProfiles.id, verifiedAt: proProfiles.verifiedAt });
       if (!p) throw notFound("Fiche pro introuvable");

@@ -360,7 +360,7 @@ describe("statistiques", () => {
 });
 
 describe("partenaires des organisateurs", () => {
-  it("le pro propose, l'organisateur accepte : le partenaire apparaît sur la fiche et la page de la structure", async () => {
+  it("le pro propose, l'équipe organisatrice accepte : le partenaire apparaît sur la fiche et la page de la structure", async () => {
     const orga = await signUp("Orga_66", { twoFactor: true });
     const structure = await createStructure(orga.id);
     const pro = await createdPro();

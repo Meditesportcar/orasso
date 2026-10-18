@@ -146,7 +146,7 @@ describe("avis après l'événement", () => {
     expect((await call(null, "GET", `/events/by-slug/${slug}/reviews`)).status).toBe(404);
   });
 
-  it("droit de réponse public de l'organisateur ; ni le staff, ni une autre structure, ni l'auteur", async () => {
+  it("droit de réponse public de l'équipe organisatrice ; ni le staff, ni une autre structure, ni l'auteur", async () => {
     clock.set(paris(10, 18, 9));
     const created = (await review("a", 1, "Trop d'attente à l'entrée.")).json;
     const body = { reply: "Merci, on ouvre une deuxième file l'an prochain." };
