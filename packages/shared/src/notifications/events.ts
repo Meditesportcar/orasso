@@ -21,7 +21,7 @@ export const eventNotificationLabels: Record<keyof typeof eventNotificationTypes
   event_updated: "Événement modifié",
   event_cancelled: "Événement annulé",
   event_outlook_changed: "Maintenu ou incertain",
-  event_instructions: "Consignes de l'organisateur",
+  event_instructions: "Consignes de l'équipe organisatrice",
   event_reminder_eve: "Rappel la veille",
   event_reminder_week: "Rappel une semaine avant",
   preview_open: "Avant-première ouverte",

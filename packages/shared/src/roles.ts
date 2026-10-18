@@ -32,7 +32,7 @@ export type StaffRole = z.infer<typeof staffRoleSchema>;
 
 export const staffRoleLabels: Record<StaffRole, string> = {
   scan: "Scan accueil",
-  shop: "Boutique",
+  shop: "Entrée visiteurs",
   placement: "Placement",
   control: "Contrôle",
   filtering: "Filtration",

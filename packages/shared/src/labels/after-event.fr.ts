@@ -156,7 +156,7 @@ export const afterEventLabels = {
   reviewLinkInvalid: "Ce lien d'avis n'est plus valable.",
   reviewLinkNotYours: "Ce lien d'avis ne t'appartient pas.",
   thanksJournalTitle: (event: string) => `Merci d'être venu à « ${event} »`,
-  thanksJournalBody: "Ton avis aide l'organisateur à faire mieux la prochaine fois.",
+  thanksJournalBody: "Ton avis aide l'équipe organisatrice à faire mieux la prochaine fois.",
   thanksJournalAction: "Donner mon avis",
 
   // Notifications.

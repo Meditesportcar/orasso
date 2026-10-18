@@ -26,6 +26,8 @@ function filled(over: Partial<EventDraft> = {}): EventDraft {
     title: "Rasso du port",
     startsAt: "2026-11-08T09:00",
     endsAt: "2026-11-08T13:00",
+    addressLine: "Quai du port",
+    city: "Port-Vendres",
     ...over,
   };
 }

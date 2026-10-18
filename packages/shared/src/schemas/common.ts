@@ -46,6 +46,10 @@ export const errorCodes = [
   "self_action",
   // Lot 26 : événements sur plusieurs jours (jour qui a des candidatures, retrait refusé).
   "day_in_use",
+  // Lot 36 : badge « pro vérifié » jamais sans SIRET trouvé et actif dans le registre public.
+  "siret_missing",
+  "siret_not_matched",
+  "registry_unavailable",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

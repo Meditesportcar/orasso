@@ -29,7 +29,7 @@ export const messagingLabels = {
   openImage: "Agrandir la photo",
   closeImage: "Fermer la photo",
   imageTooLarge: "Photo trop lourde (15 Mo au plus).",
-  contactOrganizer: "Contacter l'organisateur",
+  contactOrganizer: "Contacter l'équipe organisatrice",
   structureSuspended: "Cette structure est suspendue.",
   contactRequest: "Demande de contact",
   contactRequestHint:

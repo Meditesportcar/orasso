@@ -11,8 +11,8 @@ export const ticketRefusalLabels: Record<TicketRefusal, string> = {
 };
 
 export const shopLabels = {
-  tile: "Boutique",
-  title: "Boutique · billets et entrées",
+  tile: "Entrée visiteurs",
+  title: "Entrée visiteurs · billets et compteur",
   scanTitle: "Contrôle des billets",
   scanHint: "Vise le QR du billet du visiteur",
   ticketOk: "Billet OK",
@@ -24,18 +24,18 @@ export const shopLabels = {
   visitorsServer: "Total de l'événement",
   ticketsChecked: "Billets contrôlés",
   noList: "Les billets ne sont pas encore sur ce téléphone : synchronise avec du réseau.",
-  disabled: "La boutique n'est pas activée pour cet événement.",
-  noRole: "Tu n'as pas le rôle boutique sur cet événement.",
+  disabled: "Le rôle « Entrée visiteurs » n'est pas activé pour cet événement.",
+  noRole: "Tu n'as pas le rôle « Entrée visiteurs » sur cet événement.",
   /** Réglage de l'assistant d'événement. */
-  wizardCheckbox: "Rôle boutique sur cet événement",
+  wizardCheckbox: "Rôle « Entrée visiteurs » sur cet événement",
   wizardHint:
-    "Active la tuile « Boutique » du mode staff : contrôle des billets du public et compteur d'entrées visiteurs.",
+    "Active la tuile « Entrée visiteurs » du mode staff : contrôle des billets du public et compteur des arrivées de visiteurs.",
 } as const;
 
 export const staffRequestLabels = {
   becomeStaff: "Devenir staff",
   sent: "Demande de staff envoyée",
-  pending: "Demande en attente de réponse de l'organisateur",
+  pending: "Demande en attente de réponse de l'équipe organisatrice",
   invited: "Invitation reçue",
   accepted: "Demande acceptée",
   alreadyMember: "Tu fais déjà partie de cette structure.",

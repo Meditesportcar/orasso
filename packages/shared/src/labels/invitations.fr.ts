@@ -48,7 +48,7 @@ export const invitationLabels = {
   privateEventHint: "Seuls les invités voient cet événement. Si tu as reçu une invitation, ouvre-la depuis Accès.",
   privateBadge: "Sur invitation",
   invitationRequired:
-    "Cet événement est sur invitation : seule une invitation de l'organisateur permet d'y participer.",
+    "Cet événement est sur invitation : seule une invitation de l'équipe organisatrice permet d'y participer.",
   // Invitations reçues (Accès, Boîte > Demandes).
   received: "Invitations reçues",
   receivedEmpty: "Aucune invitation en attente.",
