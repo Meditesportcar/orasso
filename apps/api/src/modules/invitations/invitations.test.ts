@@ -234,7 +234,7 @@ describe("événement complet (S25) et liste d'attente", () => {
 
 describe("refus, retrait, expiration", () => {
   for (const mode of MODES) {
-    it(`refus : statut visible par l'organisateur, plus de nouvelle invitation (${mode})`, async () => {
+    it(`refus : statut visible par l'équipe organisatrice, plus de nouvelle invitation (${mode})`, async () => {
       const { damien, e } = await setup();
       const kenji = await signUp("Kenji");
       await req(damien, "POST", `/events/${e.id}/invitations`, { pseudos: ["Kenji"] }, mode);

@@ -11,6 +11,7 @@ export * from "./labels/admin.fr";
 export * from "./labels/adminApp.fr";
 export * from "./labels/after-event.fr";
 export * from "./labels/communication.fr";
+export * from "./labels/corrections.fr";
 export * from "./labels/crews.fr";
 export * from "./labels/devClock.fr";
 export * from "./labels/event-editor.fr";

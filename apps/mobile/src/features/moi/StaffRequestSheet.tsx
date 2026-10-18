@@ -33,7 +33,7 @@ export function StaffRequestSheet({ visible, onClose }: { visible: boolean; onCl
       setOutcome({
         slug: structure.slug,
         tone: "ok",
-        text: `Demande envoyée à ${structure.name}. Tu seras prévenu quand l'organisateur aura répondu.`,
+        text: `Demande envoyée à ${structure.name}. Tu seras prévenu quand l'équipe organisatrice aura répondu.`,
       });
     } catch (e) {
       if (e instanceof ApiRequestError && (e.status === 404 || e.status === 405)) {
@@ -58,7 +58,8 @@ export function StaffRequestSheet({ visible, onClose }: { visible: boolean; onCl
         Devenir staff
       </Text>
       <Text variant="body" color={t.color.ink}>
-        Cherche l'association ou le club dont tu veux rejoindre l'équipe : l'organisateur reçoit ta demande et décide.
+        Cherche l'association ou le club dont tu veux rejoindre l'équipe : l'équipe organisatrice reçoit ta demande et
+        décide.
       </Text>
       <TextField label="Nom de la structure" value={query} onChangeText={setQuery} autoCorrect={false} />
       {list.loading ? (

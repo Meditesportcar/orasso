@@ -203,7 +203,7 @@ describe("mode assistance", () => {
     ).toBe(201);
   });
 
-  it("IDOR : l'organisateur d'une autre structure ne voit, ne demande ni ne ferme rien", async () => {
+  it("IDOR : l'équipe organisatrice d'une autre structure ne voit, ne demande ni ne ferme rien", async () => {
     const other = await signUp("Autre_Orga", { twoFactor: true });
     await createStructure(other.id);
     const ask = await req(orga, "POST", `/structures/${structureId}/assistance-requests`, {
@@ -316,7 +316,12 @@ describe("réglages", () => {
     const closed = await app.request("/api/auth/sign-up/email", {
       method: "POST",
       headers: { "content-type": "application/json", origin: ORIGIN },
-      body: JSON.stringify({ email: "nouveau@orasso.test", password: "motdepasse-test-123", name: "Nouveau_1" }),
+      body: JSON.stringify({
+        email: "nouveau@orasso.test",
+        password: "motdepasse-test-123",
+        name: "Nouveau_1",
+        termsAccepted: true,
+      }),
     });
     expect(closed.status).toBe(403);
     expect(((await closed.json()) as { error: { code: string } }).error.code).toBe("signup_closed");

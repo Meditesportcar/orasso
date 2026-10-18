@@ -9,6 +9,7 @@ import { Button, tokens, useTheme } from "@orasso/design-system/native";
 import {
   appWizardSteps,
   type CategoryOption,
+  draftStart,
   type EventDraft,
   type EventFormat,
   type EventOrganizer,
@@ -16,8 +17,10 @@ import {
   eventEditorLabels as L,
   type VehicleMake,
   vendorTypeLabels,
+  withCopyOpening,
+  wizardEndLabels,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -27,6 +30,7 @@ import { appStepProblem, draftWorthKeeping, moveStep, progressOf, type StoredDra
 import { clearEventDraft, keepEventDraftPoster, loadEventDraft, saveEventDraft } from "@/lib/eventDraftStore";
 import { saveEvent } from "@/lib/eventSave";
 import { formatStamp } from "@/lib/format";
+import { errorMessage } from "@/lib/http";
 import { useEventFormats, useVendorTypes } from "@/lib/lists";
 import type { PickedPhoto } from "@/lib/photos";
 import { imageForm } from "@/lib/structureFiles";
@@ -79,6 +83,10 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
   const [loaded, setLoaded] = useState(editing);
   const [resumed, setResumed] = useState<StoredDraft | null>(null);
   const pristine = useRef(JSON.stringify(d));
+  // Garde avant de quitter (lot 36) : enregistrement réussi, sortie confirmée, action de navigation retenue.
+  const saved = useRef(false);
+  const leaving = useRef(false);
+  const pendingLeave = useRef<(() => void) | null>(null);
 
   const structure = useApi(() => api.orgStructure(structureId), [structureId]);
   const refs = useApi<{ categories: CategoryOption[]; makes: VehicleMake[] }>(
@@ -143,9 +151,22 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
   );
   useEffect(() => () => pending.current?.(), []);
 
+  // Lot 36 : copie d'un événement encore en brouillon : l'ouverture des candidatures suit le début.
+  const isCopy = Boolean(event?.parentEventId) && event?.status === "draft";
+  // Brouillon (création ou modification) : Publier, Garder en brouillon, Aperçu ; un événement publié s'enregistre.
+  const isDraft = !event || event.status === "draft";
   const set = useCallback(<K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
+  // Quand le début d'une copie change (un jour ou plusieurs), l'ouverture garde le délai de l'original.
+  const copyLead = isCopy && event ? Date.parse(event.startsAt) - Date.parse(event.registrationsOpenAt) : null;
+  const start = draftStart(d);
+  const lastStart = useRef(start);
+  useEffect(() => {
+    if (copyLead === null || start === lastStart.current) return;
+    lastStart.current = start;
+    setDraft((prev) => withCopyOpening(prev, copyLead, now()));
+  }, [copyLead, start]);
   const setD = useCallback((update: (prev: EventDraft) => EventDraft) => setDraft(update), []);
 
   const step = appWizardSteps[index] ?? "format";
@@ -161,10 +182,28 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
   const vendorTypes = useVendorTypes();
   const vendorSuggestions = useMemo(() => vendorTypes.map((c) => vendorTypeLabels[c]), [vendorTypes]);
 
-  const leave = () =>
-    router.canGoBack() ? router.back() : router.replace(event ? `/evenement/${event.id}` : "/evenements");
+  const leave = () => {
+    leaving.current = true;
+    const pendingAction = pendingLeave.current;
+    pendingLeave.current = null;
+    if (pendingAction) return pendingAction();
+    return router.canGoBack() ? router.back() : router.replace(event ? `/evenement/${event.id}` : "/evenements");
+  };
   const dirty = JSON.stringify(d) !== pristine.current;
   const close = () => (dirty || (!editing && draftWorthKeeping(d)) ? setQuitting(true) : leave());
+
+  // Lot 36 : une modification non enregistrée n'est plus perdue en quittant l'écran par un autre chemin (retour Android,
+  // geste, lien) : la même confirmation que « Fermer ». (Une création est déjà gardée sur le téléphone.)
+  const navigation = useNavigation();
+  useEffect(() => {
+    if (!editing || !dirty) return;
+    return navigation.addListener("beforeRemove", (e) => {
+      if (leaving.current || saved.current) return;
+      e.preventDefault();
+      pendingLeave.current = () => navigation.dispatch(e.data.action);
+      setQuitting(true);
+    });
+  }, [navigation, editing, dirty]);
 
   function go(delta: 1 | -1) {
     if (delta === 1) {
@@ -190,7 +229,11 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     setError(null);
   }
 
-  async function save() {
+  /**
+   * Lot 36 : fin de l'assistant d'un brouillon, trois choix. `draft` : enregistrer et garder en brouillon ;
+   * `publish` : enregistrer puis publier ; `preview` : enregistrer puis ouvrir la page publique en lecture.
+   */
+  async function save(mode: "draft" | "publish" | "preview" = "draft") {
     setBusy(true);
     setError(null);
     try {
@@ -207,13 +250,24 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
         await clearEventDraft(structureId);
       }
       pristine.current = JSON.stringify(d);
+      saved.current = true;
+      const warnings = [...res.warnings];
+      let fait = editing ? "modifie" : "cree";
+      if (mode === "preview") {
+        router.replace({ pathname: "/e/[slug]", params: { slug: res.event.slug } });
+        return;
+      }
+      if (mode === "publish") {
+        try {
+          await api.publishEvent(res.event.id);
+          fait = "publie";
+        } catch (e) {
+          warnings.push(errorMessage(e));
+        }
+      }
       router.replace({
         pathname: "/evenement/[id]",
-        params: {
-          id: res.event.id,
-          fait: editing ? "modifie" : "cree",
-          ...(res.warnings.length ? { avert: res.warnings.join(" ") } : {}),
-        },
+        params: { id: res.event.id, fait, ...(warnings.length ? { avert: warnings.join(" ") } : {}) },
       });
     } finally {
       setBusy(false);
@@ -269,7 +323,37 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
                 {L.cancel}
               </Button>
             )}
-            {last ? (
+            {last && isDraft ? (
+              <>
+                <Button
+                  variant="secondary"
+                  icon="eye"
+                  disabled={busy || !loaded}
+                  onPress={() => void save("preview")}
+                  testID="wizard-preview"
+                >
+                  {wizardEndLabels.preview}
+                </Button>
+                <Button
+                  variant="secondary"
+                  icon="calendar"
+                  disabled={busy || !loaded}
+                  onPress={() => void save("draft")}
+                  testID="wizard-save"
+                >
+                  {wizardEndLabels.keepDraft}
+                </Button>
+                <Button
+                  icon="check"
+                  loading={busy}
+                  disabled={busy || !loaded || !(structure.data?.verified ?? false)}
+                  onPress={() => void save("publish")}
+                  testID="wizard-publish"
+                >
+                  {wizardEndLabels.publish}
+                </Button>
+              </>
+            ) : last ? (
               <Button
                 icon="check"
                 loading={busy}
@@ -277,7 +361,7 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
                 onPress={() => void save()}
                 testID="wizard-save"
               >
-                {editing ? L.saveChanges : L.saveDraft}
+                {L.saveChanges}
               </Button>
             ) : (
               <Button icon="next" disabled={!loaded} onPress={() => go(1)} style={styles.grow} testID="wizard-next">
@@ -299,7 +383,10 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
             setQuitting(false);
             leave();
           }}
-          onClose={() => setQuitting(false)}
+          onClose={() => {
+            pendingLeave.current = null;
+            setQuitting(false);
+          }}
         />
       }
     >
@@ -318,6 +405,7 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
       <Screen {...ctx} />
       {typeof error === "string" ? <Notice tone="error">{error}</Notice> : <OrgaFailure error={error} />}
       {!editing && step === "format" && !resumed ? <Muted variant="caption">{L.draftKept}</Muted> : null}
+      {isCopy && step === "dates" ? <Notice testID="wizard-copy">{wizardEndLabels.copyNotice}</Notice> : null}
     </FlowScreen>
   );
 }

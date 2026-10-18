@@ -28,8 +28,8 @@ export function ContestSheet({
             Contester le malus
           </Text>
           <Text variant="body" color={t.color.inkMuted}>
-            {target.title} · explique à l'organisateur pourquoi ce malus est une erreur (présent sans scan, empêchement
-            signalé…). Il répond sous 7 jours, puis l'équipe Orasso tranche.
+            {target.title} · explique à l'équipe organisatrice pourquoi ce malus est une erreur (présent sans scan,
+            empêchement signalé…). Il répond sous 7 jours, puis l'équipe Orasso tranche.
           </Text>
           <TextField
             label="Ton message"

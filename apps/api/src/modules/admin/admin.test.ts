@@ -145,7 +145,7 @@ const ADMIN_ROUTES: [string, string, unknown?][] = [
 
 describe("droits de l'administration", () => {
   for (const mode of MODES) {
-    it(`toutes les routes refusées au passionné, à l'organisateur, au modérateur, et sans second facteur (${mode})`, async () => {
+    it(`toutes les routes refusées au passionné, à l'équipe organisatrice, au modérateur, et sans second facteur (${mode})`, async () => {
       const noFactor = await signUp("Admin_Sans_Code", { role: "super_admin" });
       for (const [method, path, body] of ADMIN_ROUTES) {
         expect((await req(null, method, path, body, mode)).status, `${method} ${path} anonyme`).toBe(401);

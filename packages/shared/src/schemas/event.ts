@@ -17,6 +17,7 @@ import {
   vehicleTypes,
 } from "../enums";
 import { type Grade, grades } from "../grades";
+import { eventAddressRequired } from "../labels/corrections.fr";
 import type { Affinity } from "../rules/affinity";
 import { type EventDayInput, MAX_EVENT_DAYS } from "../rules/eventDays";
 import { RECURRENCE_MAX_COUNT, type RecurrenceRule } from "../rules/recurrence";
@@ -35,9 +36,10 @@ const eventFields = z.object({
   format: z.enum(eventFormats),
   startsAt: isoDate,
   endsAt: isoDate,
-  addressLine: optionalText(200),
+  /** Adresse obligatoire (lot 36) : un événement se tient quelque part ; la ville aussi (carte, météo, Explorer). */
+  addressLine: z.string().trim().min(1, eventAddressRequired).max(200),
   postalCode: optionalText(10),
-  city: optionalText(80),
+  city: z.string().trim().min(1, eventAddressRequired).max(80),
   department: departmentSchema.nullish(),
   lat: z.number().min(-90).max(90).nullish(),
   lng: z.number().min(-180).max(180).nullish(),

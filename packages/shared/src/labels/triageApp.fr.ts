@@ -53,7 +53,7 @@ export const triageAppLabels = {
   elsewhere: "Déjà traitée ailleurs (site ou autre organisateur) : la file est rechargée.",
   locked: "Inscriptions verrouillées : un refus ne se corrige plus.",
   decideFailed: (who: string, message: string) => `${who} : décision non enregistrée. ${message}`,
-  readOnly: "Ce rôle donne un avis sur le site : la décision revient à l'organisateur.",
+  readOnly: "Ce rôle donne un avis sur le site : la décision revient à l'équipe organisatrice.",
 
   // Motifs de refus.
   refusalTitle: "Motif du refus",

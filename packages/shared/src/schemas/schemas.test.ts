@@ -22,6 +22,8 @@ describe("schémas de mise à jour", () => {
       admittedVehicleTypes: ["car"],
       admission: "open",
       registrationsOpenAt: "2026-06-01T10:00:00Z",
+      addressLine: "Quai du port",
+      city: "Canet-en-Roussillon",
     });
     expect(e).toMatchObject({
       capacity: null,

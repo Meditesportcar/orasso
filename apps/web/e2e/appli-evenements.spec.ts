@@ -334,6 +334,7 @@ test("décision groupée de 3 candidatures, puis invitations depuis un événeme
     format: "exhibition",
     startsAt: "2027-02-14T09:00:00.000Z",
     endsAt: "2027-02-14T17:00:00.000Z",
+    addressLine: "Parc des expositions",
     city: "Perpignan",
     postalCode: "66000",
     admittedVehicleTypes: ["car"],
@@ -416,6 +417,9 @@ test("thème Sable, structure suspendue et passionné sans accès", async ({ bro
   await v(page, "wizard-end-time").fill("12:00");
   await next(page);
   await shot(page, "33-assistant-lieu-sable");
+  // Lot 36 : adresse et ville obligatoires.
+  await v(page, "wizard-address").fill("Plage du Racou");
+  await v(page, "wizard-city").fill("Argelès-sur-Mer");
   for (const label of ["Véhicules", "Places", "Prestataires", "Public", "Admission", "Critères"]) {
     await next(page);
     await stepIs(page, label);
@@ -470,6 +474,10 @@ test("thème Sable, structure suspendue et passionné sans accès", async ({ bro
   await v(tram.page, "wizard-start-time").fill("09:00");
   await v(tram.page, "wizard-end-date").fill("2027-01-17");
   await v(tram.page, "wizard-end-time").fill("12:00");
+  await next(tram.page);
+  // Lot 36 : adresse et ville obligatoires.
+  await v(tram.page, "wizard-address").fill("Place de la Loge");
+  await v(tram.page, "wizard-city").fill("Perpignan");
   for (let i = 0; i < 14; i++) {
     if (await v(tram.page, "wizard-save").count()) break;
     await next(tram.page);

@@ -25,6 +25,9 @@ export const orgaManageLabels = {
   requestDecline: "Refuser",
   requestAcceptTitle: (pseudo: string) => `Accepter ${pseudo}`,
   requestAcceptDone: "Demande acceptée.",
+  /** Lot 36 : accepter fait entrer dans l'équipe, sans rôle. */
+  requestAcceptHint:
+    "Cette personne entre dans ton équipe. Ses rôles (scan, entrée visiteurs, placement…) se donnent ensuite pour chaque événement.",
   requestDeclineTitle: (pseudo: string) => `Refuser ${pseudo}`,
   requestDeclineBody:
     "La personne est prévenue que sa demande est refusée. Elle ne pourra pas redemander avant demain.",

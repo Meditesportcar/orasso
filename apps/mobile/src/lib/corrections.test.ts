@@ -1,0 +1,41 @@
+// Lot 36 : heure de Paris avec l'année quand elle diffère (copie d'événement), liens du site réécrits pour l'appli.
+import { describe, expect, it } from "vitest";
+
+import { redirectSystemPath } from "../app/+native-intent";
+import { formatDayHour, formatDayHourYear } from "./format";
+import { passwordFormError } from "./passwordForm";
+
+describe("dates", () => {
+  const now = new Date("2026-10-18T14:50:00Z");
+
+  it("heure de Paris, quel que soit le fuseau de l'appareil", () => {
+    expect(formatDayHour("2026-10-17T13:12:00Z")).toBe("Sam 17 oct · 15 h 12");
+  });
+
+  it("l'année s'affiche quand elle n'est pas l'année en cours", () => {
+    expect(formatDayHourYear("2026-10-17T13:12:00Z", now)).toBe("Sam 17 oct · 15 h 12");
+    expect(formatDayHourYear("2027-10-16T13:12:00Z", now)).toBe("Sam 16 oct 2027 · 15 h 12");
+  });
+});
+
+describe("liens du site ouverts dans l'appli", () => {
+  it("candidater et inscription en crew réécrits, le reste inchangé", () => {
+    expect(redirectSystemPath({ path: "https://dev.orasso.fr/e/nocturne-2026/candidater", initial: true })).toBe(
+      "/candidater/nocturne-2026",
+    );
+    expect(redirectSystemPath({ path: "/e/nocturne-2026/crew", initial: false })).toBe(
+      "/crew/inscription?event=nocturne-2026",
+    );
+    expect(redirectSystemPath({ path: "/e/nocturne-2026", initial: true })).toBe("/e/nocturne-2026");
+    expect(redirectSystemPath({ path: "/verification-email?token=abc", initial: true })).toBe(
+      "/verification-email?token=abc",
+    );
+  });
+});
+
+describe("mot de passe", () => {
+  it("10 caractères au moins, comme partout", () => {
+    expect(passwordFormError("ancien-mot-de-passe", "123456789", "123456789")).toMatch(/10 caractères/);
+    expect(passwordFormError("ancien-mot-de-passe", "1234567890", "1234567890")).toBeNull();
+  });
+});

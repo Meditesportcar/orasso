@@ -8,13 +8,14 @@ import {
   type AccountDelete,
   type AccountSettings,
   type AccountSettingsUpdate,
+  appInstallLabels,
   defaultNotificationPrefs,
   normalizeHomeWidgets,
   type PublicPreview,
   REFERRAL_WINDOW_MS,
 } from "@orasso/shared";
 import { symmetricDecrypt } from "better-auth/crypto";
-import { and, eq, gt, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -48,9 +49,10 @@ import {
   vehicles,
   verification,
 } from "../../db/schema";
-import { now } from "../../lib/deps";
+import { env } from "../../env";
+import { deps, now } from "../../lib/deps";
 import { AppError, conflict, notFound, validation } from "../../lib/errors";
-import { mail } from "../../lib/mail";
+import { mail, renderMail } from "../../lib/mail";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { dataDir, storage } from "../../lib/storage";
@@ -143,7 +145,37 @@ async function removeJournalMails(ids: string[]) {
   }
 }
 
+/** Délai entre la confirmation de l'adresse et l'e-mail « Installe l'appli » (lot 36). */
+export const APP_INSTALL_DELAY_MS = 60 * 60 * 1000;
+
 export const accountService = {
+  /**
+   * `account.app-install` (lot 36) : e-mail « Installe l'appli » à un compte qui n'a jamais ouvert l'appli sur un
+   * téléphone (aucun appareil Android ou iOS enregistré : l'appli enregistre le sien à chaque lancement connecté), une
+   * seule fois par compte. Renvoie `true` si l'e-mail est parti.
+   */
+  async sendAppInstallReminder(userId: string): Promise<boolean> {
+    const u = await db.query.user.findFirst({ where: eq(user.id, userId) });
+    const profile = u ? await profilesRepo.byUserId(userId) : null;
+    if (!u || !profile || profile.deletedAt) return false;
+    const phone = await db.query.devices.findFirst({
+      where: and(eq(devices.userId, userId), inArray(devices.platform, ["android", "ios"])),
+      columns: { id: true },
+    });
+    if (phone) return false;
+    const sent = await db.query.emailOutbox.findFirst({
+      where: and(eq(emailOutbox.template, "app_install"), sql`${emailOutbox.payload}->>'userId' = ${userId}`),
+      columns: { id: true },
+    });
+    if (sent) return false;
+    const L = appInstallLabels;
+    const content = renderMail(L.mailSubject, [L.mailIntro(profile.pseudo), L.mailBody], {
+      label: L.mailButton,
+      url: `${env.PUBLIC_URL}/appli`,
+    });
+    return (await mail.send("app_install", u.email, content, { userId })) === "sent";
+  },
+
   async sendPasswordReset(u: MailUser, url: string) {
     const profile = await profilesRepo.byUserId(u.id);
     if (profile?.deletedAt) return;
@@ -161,6 +193,8 @@ export const accountService = {
 
   /** Crochet après vérification de l'e-mail : parrainage confirmé (§ 1.3), jamais pour un compte express. */
   async onEmailVerified(userId: string) {
+    // Lot 36 : une heure plus tard, « Installe l'appli » si l'appli n'a jamais été ouverte (le service revérifie).
+    await deps.jobs.send("account.app-install", { userId }, new Date(now().getTime() + APP_INSTALL_DELAY_MS));
     const profile = await profilesRepo.byUserId(userId);
     if (!profile?.invitedByUserId || profile.deletedAt) return null;
     const u = await db.query.user.findFirst({ where: eq(user.id, userId), columns: { email: true } });

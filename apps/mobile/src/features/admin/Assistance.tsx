@@ -40,7 +40,10 @@ export function SurveyButton({ structure }: { structure: AssistedStructure }) {
       <Button variant="plate" icon="eye" onPress={() => setAsk(true)} fullWidth testID="admin-survey">
         {assistanceTexts.survey}
       </Button>
+      {/* Lot 36 : déclarée dans une carte de la liste, la feuille s'ouvre dans son propre Modal (plein écran) : avant,
+          elle remplissait la carte, contenu coupé et rien de sélectionnable. */}
       <ConfirmSheet
+        modal
         visible={ask}
         title={L.assistanceSurveyTitle}
         body={L.assistanceSurveyBody}

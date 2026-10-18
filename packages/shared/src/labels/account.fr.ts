@@ -31,7 +31,7 @@ export const authErrorLabels: Record<string, string> = {
   USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: "Un compte existe déjà avec cet e-mail.",
   INVALID_EMAIL: "Cette adresse e-mail n'est pas valide.",
   INVALID_PASSWORD: "Mot de passe incorrect.",
-  PASSWORD_TOO_SHORT: "Le mot de passe est trop court (8 caractères au moins).",
+  PASSWORD_TOO_SHORT: "Le mot de passe est trop court (10 caractères au moins).",
   PASSWORD_TOO_LONG: "Le mot de passe est trop long.",
   EMAIL_NOT_VERIFIED: "Vérifie ton adresse e-mail avant de te connecter.",
   INVALID_CODE: "Code incorrect. Réessaie avec le code affiché maintenant.",
@@ -54,7 +54,7 @@ export const authErrorFallback = "La connexion n'a pas abouti. Réessaie.";
 
 /** Ce qui vaut dans les deux cas (docs/01). */
 export const profileVisibilityAlways =
-  "Dans tous les cas : l'organisateur voit tout de ses inscrits et de ses abonnés, les profils sont réservés aux utilisateurs connectés, et ta plaque n'est jamais publique.";
+  "Dans tous les cas : l'équipe organisatrice voit tout de ses inscrits et de ses abonnés, les profils sont réservés aux utilisateurs connectés, et ta plaque n'est jamais publique.";
 
 /** Compte protégé par une clé d'accès seulement, connecté dans l'appli par mot de passe (lot 16) : l'action se fait sur le site. */
 export const passkeyOnlyMessage =

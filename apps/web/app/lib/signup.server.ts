@@ -1,10 +1,10 @@
 // Création de compte par e-mail (Better Auth), commune à `/inscription` et `/invitation/:jeton`.
-import { pseudoSchema } from "@orasso/shared";
+import { expressLabels, PASSWORD_MIN_LENGTH, passwordHint, pseudoSchema } from "@orasso/shared";
 
 import { api, cookieFrom, withCookies } from "./api.server";
 import { applyInviteAfterSignup } from "./invite.server";
 
-export type SignupErrors = { pseudo?: string; email?: string; password?: string; form?: string };
+export type SignupErrors = { pseudo?: string; email?: string; password?: string; terms?: string; form?: string };
 
 export type SignupResult =
   | { ok: true; headers: Headers; cookie: string }
@@ -24,11 +24,16 @@ export async function signUpFromForm(request: Request, form: FormData): Promise<
     if (free.ok && !free.data.available) errors.pseudo = "Ce pseudo est déjà pris.";
   }
   if (!/^\S+@\S+\.\S+$/.test(email)) errors.email = "Cette adresse e-mail n'est pas valide.";
-  if (password.length < 8) errors.password = "8 caractères au moins.";
+  if (password.length < PASSWORD_MIN_LENGTH) errors.password = passwordHint;
+  // Lot 36 : conditions générales, case obligatoire (tracée par l'API sur le profil).
+  if (form.get("terms") !== "on") errors.terms = expressLabels.termsRequired;
   const values = { pseudo, email };
   if (Object.keys(errors).length) return { ok: false, errors, status: 400, values };
 
-  const res = await api(request, "/auth/sign-up/email", { method: "POST", json: { email, password, name: pseudo } });
+  const res = await api(request, "/auth/sign-up/email", {
+    method: "POST",
+    json: { email, password, name: pseudo, termsAccepted: true },
+  });
   if (!res.ok) {
     const message = String(res.error.message ?? "");
     const taken = res.status === 422 || /exist|already/i.test(message);

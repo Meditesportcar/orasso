@@ -3,10 +3,19 @@
 // d'office pour l'événement en cours) et affiche le QR d'inscription dans le navigateur.
 
 import { Button, CheckboxField, Icon, Plate, SelectField, TextField } from "@orasso/design-system/web";
-import type { ExpressInvitePublic, VehicleFull, VehicleGeneration, VehicleMake, VehicleModel } from "@orasso/shared";
+import {
+  type ExpressInvitePublic,
+  expressLabels,
+  PASSWORD_MIN_LENGTH,
+  passwordHint,
+  type VehicleFull,
+  type VehicleGeneration,
+  type VehicleMake,
+  type VehicleModel,
+} from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { data, Form, useNavigation } from "react-router";
-import { Qr } from "../components/Qr";
+import { TermsField } from "../components/Fields";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, cookieFrom, withCookies } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
@@ -29,11 +38,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 type Errors = Partial<
   Record<
-    "pseudo" | "password" | "password2" | "firstName" | "lastName" | "plate" | "makeId" | "modelId" | "form",
+    "pseudo" | "password" | "password2" | "firstName" | "lastName" | "plate" | "makeId" | "modelId" | "terms" | "form",
     string
   >
 >;
-type Done = { passPayload: string; photoSent: boolean };
+type Done = { photoSent: boolean };
 
 export async function action({ request, params }: Route.ActionArgs) {
   const form = await request.formData();
@@ -51,7 +60,9 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (free.ok && !free.data.available) errors.pseudo = "Ce pseudo est déjà pris.";
   }
   const password = String(form.get("password") ?? "");
-  if (password.length < 10) errors.password = "10 caractères au moins.";
+  if (password.length < PASSWORD_MIN_LENGTH) errors.password = passwordHint;
+  const terms = form.get("terms") === "on";
+  if (!terms) errors.terms = expressLabels.termsRequired;
   if (password !== String(form.get("password2") ?? "")) errors.password2 = "Les deux mots de passe sont différents.";
   if (!text("firstName")) errors.firstName = "Indique ton prénom.";
   if (!text("lastName")) errors.lastName = "Indique ton nom.";
@@ -64,6 +75,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     lastName: text("lastName"),
     plate: text("plate"),
     unregistered,
+    terms,
   };
   if (Object.keys(errors).length) return data({ errors, values }, { status: 400 });
 
@@ -82,6 +94,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         makeId: text("makeId"),
         modelId: text("modelId"),
         generationId: text("generationId") || null,
+        termsAccepted: true,
       },
     },
   );
@@ -103,7 +116,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         .ok;
     }
   }
-  const done: Done = { passPayload: res.data.passPayload, photoSent };
+  const done: Done = { photoSent };
   return data({ done }, { headers: withCookies(res.headers) });
 }
 
@@ -140,22 +153,19 @@ export default function Express({ loaderData, actionData }: Route.ComponentProps
     return (
       <div className="s-narrow s-stack" data-testid="express-done">
         <div className="o-t-label s-label">Inscription express</div>
-        <h1 className="s-title">Tu es inscrit</h1>
-        <p className="s-lead">
-          Ton véhicule est accepté pour « {invite.event.title} ». Montre ce QR à l'entrée : tu le retrouveras dans «
-          Accès ».
+        {/* Lot 36 : l'entrée est déjà validée (pointée « express ») : pas de QR à montrer, l'invitation à l'appli. */}
+        <h1 className="s-title">{expressLabels.doneTitle}</h1>
+        <p className="s-lead" data-testid="express-entry-ok">
+          {expressLabels.doneBody(invite.event.title)}
         </p>
-        <div className="acc__qr" data-testid="express-qr">
-          <Qr payload={done.passPayload} label={`QR d'inscription pour ${invite.event.title}`} />
-        </div>
-        {!done.photoSent && (
-          <p className="s-notice">
-            La photo n'a pas pu être envoyée : ajoute-la depuis ton garage, elle sera visible de l'organisateur.
-          </p>
-        )}
-        <Button variant="primary" icon="qr" href="/app/acces" fullWidth>
-          Voir mon accès
-        </Button>
+        {!done.photoSent && <p className="s-notice">{expressLabels.photoFailed}</p>}
+        <Plate as="section" className="s-stack" aria-label={expressLabels.appTitle} data-testid="express-app">
+          <h2 className="o-t-label">{expressLabels.appTitle}</h2>
+          <p className="o-t-body">{expressLabels.appBody}</p>
+          <Button variant="primary" icon="export" href="/appli" fullWidth>
+            {expressLabels.appButton}
+          </Button>
+        </Plate>
       </div>
     );
   }
@@ -207,7 +217,7 @@ export default function Express({ loaderData, actionData }: Route.ComponentProps
           type="password"
           autoComplete="new-password"
           revealable
-          help="10 caractères au moins"
+          help={passwordHint}
           error={errors.password}
           tall
           required
@@ -281,7 +291,7 @@ export default function Express({ loaderData, actionData }: Route.ComponentProps
             name="plate"
             autoCapitalize="characters"
             defaultValue={values?.plate}
-            help="Visible de l'organisateur seulement."
+            help="Visible par l'équipe organisatrice seulement."
             error={errors.plate}
             disabled={unregistered}
             tall
@@ -300,6 +310,8 @@ export default function Express({ loaderData, actionData }: Route.ComponentProps
             <span className="o-field__help o-t-caption">Prends-la sur place avec ton téléphone.</span>
           </div>
         </Plate>
+        {/* Lot 36 : conditions générales, case obligatoire et tracée (`profiles.terms_accepted_at`). */}
+        <TermsField error={errors.terms} defaultChecked={values?.terms} />
         {errors.form && (
           <p className="s-error" role="alert">
             {errors.form}

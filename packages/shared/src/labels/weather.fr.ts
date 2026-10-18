@@ -16,7 +16,7 @@ export const weatherCodeLabels: Record<WeatherCode, string> = {
 };
 
 export const weatherTexts = {
-  upcomingTitle: "Météo à l'approche",
+  upcomingTitle: "Météo prévue sur place le jour J",
   todayTitle: "Météo du jour",
   rain: "Pluie",
   wind: "Vent",

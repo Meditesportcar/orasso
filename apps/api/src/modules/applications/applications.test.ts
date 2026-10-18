@@ -92,7 +92,7 @@ const statusOf = async (id: string) =>
   (await db.query.applications.findFirst({ where: eq(applications.id, id) }))?.status;
 
 describe("candidater", () => {
-  it("une candidature « En attente » par véhicule ; suivi de l'organisateur ; transition journalisée", async () => {
+  it("une candidature « En attente » par véhicule ; suivi de l'équipe organisatrice ; transition journalisée", async () => {
     const e = await event({ maxVehiclesPerUser: 2 });
     const p = await participant("Kenji_66", 2);
     const created = await applicationsService.apply(p.v, e.id, {
@@ -125,7 +125,7 @@ describe("candidater", () => {
     expect((await db.query.applications.findFirst({ where: eq(applications.userId, b.u.id) }))?.status).toBe("offered");
   });
 
-  it("« Suivre l'organisateur » décochée : pas de suivi", async () => {
+  it("« Suivre l'organisation » décochée : pas de suivi", async () => {
     const e = await event();
     const p = await participant("Lea_11");
     await applicationsService.apply(p.v, e.id, { ...form([p.vehicles[0]!.id]), followStructure: false });
@@ -445,7 +445,7 @@ describe("liste d'attente automatique", () => {
     expect(await statusOf(apps[3]!.id)).toBe("offered");
   });
 
-  it("deux places libérées → deux offres ; ordre réordonné par l'organisateur", async () => {
+  it("deux places libérées → deux offres ; ordre réordonné par l'équipe organisatrice", async () => {
     const { e, ps, apps } = await full();
     const reorder = await call(orga, "PUT", `/events/${e.id}/waitlist/order`, {
       applicationIds: [apps[4]!.id, apps[3]!.id, apps[2]!.id],
@@ -590,7 +590,7 @@ describe("heures calmes", () => {
 });
 
 describe("droits", () => {
-  it("le tri est réservé à l'organisation ; 2FA obligatoire pour l'organisateur", async () => {
+  it("le tri est réservé à l'organisation ; 2FA obligatoire pour l'équipe organisatrice", async () => {
     const e = await event();
     const p = await participant("Intrus_01");
     expect((await call(p.u, "GET", `/events/${e.id}/applications`)).status).toBe(403);
@@ -602,7 +602,7 @@ describe("droits", () => {
     expect((await call(sans2fa, "GET", "/me")).json.twoFactorRequired).toBe(true);
   });
 
-  it("plaque visible de l'organisateur seulement ; staff de filtration sans plaque ni coordonnées", async () => {
+  it("plaque visible par l'équipe organisatrice seulement ; staff de filtration sans plaque ni coordonnées", async () => {
     const e = await event();
     const p = await participant("Plaque_01");
     const app = await applyAs(p, e.id);
@@ -652,7 +652,7 @@ describe("droits", () => {
     }
   });
 
-  it("abonnés : visibles de l'organisateur seulement ; un non-abonné n'y figure pas", async () => {
+  it("abonnés : visibles de l'équipe organisatrice seulement ; un non-abonné n'y figure pas", async () => {
     const abonne = await participant("Fan_01");
     const autre = await participant("Inconnu_02");
     await call(abonne.u, "POST", `/structures/${structureId}/follow`);
@@ -668,6 +668,8 @@ describe("droits", () => {
     const s = (await call(other, "POST", "/structures", { kind: "club", name: "Club neuf", departments: ["66"] })).json;
     const created = await call(other, "POST", `/structures/${s.id}/events`, {
       title: "Premier rasso",
+      addressLine: "1 quai du Port",
+      city: "Canet-en-Roussillon",
       format: "gathering",
       startsAt: paris(7, 4, 18).toISOString(),
       endsAt: paris(7, 4, 22).toISOString(),

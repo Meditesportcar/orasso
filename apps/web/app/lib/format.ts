@@ -29,6 +29,25 @@ export const formatDayShort = (iso: string) => dayShortFmt.format(new Date(iso))
 export const formatTime = hhmm;
 export const formatDateTime = (iso: string) => dateTimeFmt.format(new Date(iso));
 
+const yearFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, year: "numeric" });
+const dateTimeYearFmt = new Intl.DateTimeFormat("fr-FR", {
+  timeZone: TZ,
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/**
+ * Date et heure de Paris, avec l'année quand elle n'est pas l'année en cours (lot 36 : « les candidatures ouvrent le
+ * 17 oct. à 15:12 » lu pour aujourd'hui alors qu'il s'agissait de l'an prochain, sur une copie d'événement).
+ */
+export function formatDateTimeYear(iso: string, nowMs = Date.now()): string {
+  const sameYear = yearFmt.format(new Date(iso)) === yearFmt.format(new Date(nowMs));
+  return (sameYear ? dateTimeFmt : dateTimeYearFmt).format(new Date(iso));
+}
+
 /** « sam. 17 oct. 2026 · 19 h – 23 h ». */
 export function formatWhen(startsAt: string, endsAt: string): string {
   return `${formatDay(startsAt)} · ${hhmm(startsAt)} – ${hhmm(endsAt)}`;

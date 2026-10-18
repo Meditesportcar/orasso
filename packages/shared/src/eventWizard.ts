@@ -7,6 +7,7 @@
 // « AAAA-MM-JJTHH:MM » (la valeur d'un `<input type="datetime-local">`), sans fuseau.
 import type { DayAccess, EventAdmission, EventFormat, EventPublicAccess, VehicleType } from "./enums";
 import type { Grade } from "./grades";
+import { eventAddressRequired } from "./labels/corrections.fr";
 import { defaultEventRules } from "./labels/events.fr";
 import { fromWallTime, wallTime } from "./rules/time";
 import type { EventOrganizer, EventZone } from "./schemas/event";
@@ -231,11 +232,58 @@ export function eventDatesProblem(d: EventDraft): string | null {
   return null;
 }
 
+/** Adresse obligatoire (lot 36) : adresse et ville. */
+export function eventAddressProblem(d: Pick<EventDraft, "addressLine" | "city">): string | null {
+  return d.addressLine.trim() && d.city.trim() ? null : eventAddressRequired;
+}
+
+/** L'ouverture des candidatures précède le début (sinon personne ne pourrait candidater). */
+export function eventOpeningProblem(d: EventDraft): string | null {
+  const opens = fromWallInput(d.registrationsOpenAt);
+  if (!opens) return "Indique l'ouverture des inscriptions.";
+  const first = d.multiDay ? sortedDraftDays(d)[0] : undefined;
+  const start = first ? fromWallInput(`${first.date}T${first.startTime}`) : fromWallInput(d.startsAt);
+  if (start && new Date(opens) >= new Date(start)) {
+    return "L'ouverture des candidatures doit précéder le début de l'événement.";
+  }
+  return null;
+}
+
+/**
+ * Copie d'un événement (duplication, lot 36) : quand on change le début, l'ouverture des candidatures se décale
+ * d'autant, pour garder le même délai qu'à l'événement d'origine (au lieu de rester à la date reprise de l'original).
+ */
+export function withShiftedStart(d: EventDraft, startsAt: string): EventDraft {
+  const before = fromWallInput(d.startsAt);
+  const after = fromWallInput(startsAt);
+  const opens = fromWallInput(d.registrationsOpenAt);
+  if (!before || !after || !opens) return { ...d, startsAt };
+  const shifted = new Date(new Date(opens).getTime() + (new Date(after).getTime() - new Date(before).getTime()));
+  return { ...d, startsAt, registrationsOpenAt: toWallInput(shifted) };
+}
+
+/** Début effectif du brouillon (premier jour d'un événement sur plusieurs jours), en ISO, ou `null`. */
+export function draftStart(d: EventDraft): string | null {
+  const first = d.multiDay ? sortedDraftDays(d)[0] : undefined;
+  return first ? fromWallInput(`${first.date}T${first.startTime}`) : fromWallInput(d.startsAt);
+}
+
+/**
+ * Copie d'un événement (lot 36) : l'ouverture des candidatures garde le délai de l'original (`leadMs` avant le
+ * début), quel que soit le début choisi (un jour ou plusieurs), jamais avant `now`.
+ */
+export function withCopyOpening(d: EventDraft, leadMs: number, now: Date): EventDraft {
+  const start = draftStart(d);
+  if (!start) return d;
+  const opens = toWallInput(new Date(Math.max(now.getTime(), new Date(start).getTime() - leadMs)));
+  return opens === d.registrationsOpenAt ? d : { ...d, registrationsOpenAt: opens };
+}
+
 /** Le problème qui empêche de quitter une étape, ou `null`. Mêmes règles sur le site et dans l'appli. */
 export function eventStepProblem(step: EventWizardStep, d: EventDraft): string | null {
   switch (step) {
     case "format":
-      return eventTitleProblem(d) ?? eventDatesProblem(d);
+      return eventTitleProblem(d) ?? eventDatesProblem(d) ?? eventAddressProblem(d);
     case "vehicules":
       return d.vehicleTypes.length === 0 ? "Coche au moins un type de véhicule." : null;
     case "places":
@@ -247,7 +295,7 @@ export function eventStepProblem(step: EventWizardStep, d: EventDraft): string |
         ? "Indique l'adresse de ta billetterie (https://…)."
         : null;
     case "avant-premiere":
-      return fromWallInput(d.registrationsOpenAt) ? null : "Indique l'ouverture des inscriptions.";
+      return eventOpeningProblem(d);
     case "zones": {
       const codes = d.zones.map((z) => z.code.trim().toUpperCase());
       if (d.zones.some((z) => !/^[A-Z0-9]{1,4}$/.test(z.code.trim().toUpperCase()) || !z.name.trim())) {

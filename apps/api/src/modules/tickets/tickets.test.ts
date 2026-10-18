@@ -67,7 +67,7 @@ const check = (u: TestUser, eventId: string, payload: string) =>
   call(u, "POST", `/events/${eventId}/tickets/check`, { payload });
 
 describe("billets gratuits : interrupteurs", () => {
-  it("fermée tant que l'organisateur n'a pas activé l'événement ; le public voit pourquoi", async () => {
+  it("fermée tant que l'équipe organisatrice n'a pas activé l'événement ; le public voit pourquoi", async () => {
     const e = await freeEvent();
     const before = await call(fan, "GET", `/events/by-slug/${e.slug}/tickets`);
     expect(before.json.offer).toMatchObject({ kind: "free", block: "event_off", testMode: false });
@@ -311,7 +311,7 @@ const callback = (query: string, u: TestUser | null) =>
   app.request(`/api/stripe/connect/callback?${query}`, { headers: u ? { cookie: u.cookie } : {} });
 
 describe("billets payants : Stripe Connect en mode test (simulé)", () => {
-  it("connexion du compte de l'organisateur : seul le propriétaire, identifiant du compte uniquement", async () => {
+  it("connexion du compte de l'équipe organisatrice : seul le propriétaire, identifiant du compte uniquement", async () => {
     setStripeConfig(TEST_KEYS);
     const calls = fakeStripe();
     const co = await signUp("Co_Orga", { twoFactor: true });
@@ -335,7 +335,7 @@ describe("billets payants : Stripe Connect en mode test (simulé)", () => {
     expect(JSON.stringify(state.json)).not.toContain("acct_TEST123456");
   });
 
-  it("state inconnu, expiré, compte réel, refus de l'organisateur : rien n'est enregistré", async () => {
+  it("state inconnu, expiré, compte réel, refus de l'équipe organisatrice : rien n'est enregistré", async () => {
     setStripeConfig(TEST_KEYS);
     fakeStripe({ livemode: true });
     const forged = await callback("code=ac_1&state=truc.faux", orga);
@@ -373,7 +373,7 @@ describe("billets payants : Stripe Connect en mode test (simulé)", () => {
     return e;
   }
 
-  it("paiement d'un billet : session sur le compte connecté, commission de la plateforme, jamais de clé de l'organisateur", async () => {
+  it("paiement d'un billet : session sur le compte connecté, commission de la plateforme, jamais de clé de l'équipe organisatrice", async () => {
     setStripeConfig(TEST_KEYS);
     const calls = fakeStripe();
     await connectStripe();

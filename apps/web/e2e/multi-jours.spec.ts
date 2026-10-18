@@ -72,11 +72,12 @@ test("plusieurs jours : assistant, page publique, candidature pour un jour, Acc�
   }
   await days.getByLabel("Places ce jour (facultatif)").nth(1).fill("2");
   await o.getByRole("button", { name: "Au choix : tout l'événement ou un jour" }).click();
+  await o.getByLabel("Adresse", { exact: true }).fill("Parc des expositions");
   await o.getByLabel("Ville").fill("Perpignan");
   await o.getByLabel("Code postal").fill("66000");
   for (let i = 0; i < 11; i++) await o.getByRole("button", { name: "Suivant" }).click();
   await expect(o.getByTestId("wizard-step")).toContainText("Billetterie");
-  await o.getByRole("button", { name: "Enregistrer le brouillon" }).click();
+  await o.getByRole("button", { name: "Garder en brouillon" }).click();
   await o.waitForURL(/\/orga\/meditesportcar\/e\/[0-9a-f-]{36}/);
   const eventId = /\/e\/([0-9a-f-]{36})/.exec(o.url())?.[1] ?? "";
   const saved = await apiCall<{

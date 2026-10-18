@@ -10,15 +10,22 @@ const MAX_SIDE = 2048;
 
 export type PickedPhoto = { uri: string; width: number; height: number };
 
-/** Ouvre la photothèque (plusieurs choix) ; liste vide si l'accès est refusé ou le choix annulé. */
-export async function pickPhotos(limit: number): Promise<PickedPhoto[]> {
+/** Cadres de recadrage (lot 36) : photo de véhicule (carte 4:3), logo (carré). */
+export const CROP_VEHICLE: [number, number] = [4, 3];
+export const CROP_SQUARE: [number, number] = [1, 1];
+
+/**
+ * Ouvre la photothèque ; liste vide si l'accès est refusé ou le choix annulé. Sans `crop` : plusieurs choix, sans
+ * recadrage. Avec `crop` (lot 36) : une photo à la fois, recadrée dans le cadre donné par l'éditeur du système (le
+ * recadrage n'existe pas en sélection multiple).
+ */
+export async function pickPhotos(limit: number, crop?: [number, number]): Promise<PickedPhoto[]> {
   if (limit <= 0) return [];
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ["images"],
-    allowsMultipleSelection: true,
-    selectionLimit: limit,
-    quality: 1,
-  });
+  const result = await ImagePicker.launchImageLibraryAsync(
+    crop
+      ? { mediaTypes: ["images"], allowsEditing: true, aspect: crop, quality: 1 }
+      : { mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: limit, quality: 1 },
+  );
   if (result.canceled) return [];
   const converted: PickedPhoto[] = [];
   for (const asset of result.assets.slice(0, limit)) converted.push(await toJpeg(asset));

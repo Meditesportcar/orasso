@@ -96,12 +96,12 @@ export const crewLabels = {
   // Confirmation de venue (Accès, Boîte > Demandes).
   confirmTitle: (crew: string) => `Ton crew « ${crew} » t'a inscrit`,
   confirmBody: (leader: string | null, vehicle: string | null) =>
-    `${leader ?? "Le chef"} t'a inscrit${vehicle ? ` avec ${vehicle}` : ""}. Rien n'est envoyé à l'organisateur sans ta confirmation.`,
+    `${leader ?? "Le chef"} t'a inscrit${vehicle ? ` avec ${vehicle}` : ""}. Rien n'est envoyé à l'équipe organisatrice sans ta confirmation.`,
   confirmBefore: (when: string) => `À confirmer avant ${when}`,
   confirmVenue: "Confirmer ma venue",
   notComing: "Je ne viens pas",
   confirmRules: "J'ai lu le règlement de l'événement",
-  confirmedToast: "Venue confirmée : ta candidature part à l'organisateur.",
+  confirmedToast: "Venue confirmée : ta candidature part à l'équipe organisatrice.",
   declinedToast: "C'est noté : tu n'es pas inscrit.",
   crewConfirmations: "Venues en crew à confirmer",
   crewRequests: "Crews",

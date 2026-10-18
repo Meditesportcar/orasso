@@ -1,12 +1,13 @@
 // Création de compte et connexion par e-mail + mot de passe. Google et Apple sont prévus par l'API mais restent
 // masqués ici tant que leurs identifiants n'existent pas (PLAN, H6) : aucun bouton qui ne marcherait pas.
 
-import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { pseudoSchema } from "@orasso/shared";
+import { Button, CheckboxField, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { expressLabels, PASSWORD_MIN_LENGTH, passwordHint, pseudoSchema } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Linking, StyleSheet, View } from "react-native";
 
+import { siteUrl } from "@/api";
 import { authApi } from "@/lib/api";
 import { authErrorMessage } from "@/lib/http";
 import { kvSet } from "@/lib/kv";
@@ -36,6 +37,8 @@ export function AuthForm({
   const router = useRouter();
   const [pseudo, setPseudo] = useState("");
   const [email, setEmail] = useState("");
+  // Lot 36 : conditions générales, case obligatoire à l'inscription (tracée par l'API).
+  const [terms, setTerms] = useState(false);
   const [password, setPassword] = useState("");
   const [pseudoState, setPseudoState] = useState<PseudoState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +85,9 @@ export function AuthForm({
         ? "3 à 24 caractères : lettres, chiffres, « _ » ou « . »."
         : undefined;
   const ready =
-    email.includes("@") && password.length >= 8 && (!signup || pseudoState === "free" || pseudoState === "idle");
+    email.includes("@") &&
+    password.length >= PASSWORD_MIN_LENGTH &&
+    (!signup || ((pseudoState === "free" || pseudoState === "idle") && terms));
 
   async function done() {
     await kvSet("onboarded", "1");
@@ -151,9 +156,21 @@ export function AuthForm({
         revealable
         autoCapitalize="none"
         autoComplete={signup ? "new-password" : "current-password"}
-        help={signup ? "8 caractères au moins." : undefined}
+        help={signup ? passwordHint : undefined}
         onSubmitEditing={() => ready && !busy && void submit()}
       />
+      {signup ? (
+        <>
+          <CheckboxField label={expressLabels.terms} checked={terms} onChange={setTerms} />
+          <Button
+            variant="plate"
+            icon="next"
+            onPress={() => void Linking.openURL(siteUrl("/conditions")).catch(() => undefined)}
+          >
+            {expressLabels.termsLink}
+          </Button>
+        </>
+      ) : null}
       {error ? (
         <Text variant="caption" color={t.color.winText} accessibilityRole="alert">
           {error}

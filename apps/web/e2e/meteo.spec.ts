@@ -18,7 +18,7 @@ async function nocturne(cookie: string) {
   return full.data;
 }
 
-test("météo : page événement, bandeau « Incertain » de l'organisateur, carte d'accès, passage en Incertain", async ({
+test("météo : page événement, bandeau « Incertain » de l'équipe organisatrice, carte d'accès, passage en Incertain", async ({
   page,
 }) => {
   const damien = await login("damien@orasso.local");
@@ -28,7 +28,7 @@ test("météo : page événement, bandeau « Incertain » de l'organisateur, car
     await apiCall(damien, "PATCH", `/events/${start.id}/outlook`, { outlook: "maintained" });
   }
 
-  // Public : « Météo à l'approche » avec l'attribution.
+  // Public : « Météo prévue sur place le jour J » (lot 36) avec l'attribution.
   const api = await apiCall<{ attribution: string; summary: { code: string } } | null>(
     null,
     "GET",
@@ -38,7 +38,7 @@ test("météo : page événement, bandeau « Incertain » de l'organisateur, car
   await page.goto(`/e/${NOCTURNE}`);
   const block = page.getByTestId("event-weather");
   await expect(block).toBeVisible();
-  await expect(block.getByText("Météo à l'approche")).toBeVisible();
+  await expect(block.getByText("Météo prévue sur place le jour J")).toBeVisible();
   await expect(block.getByTestId("weather-attribution")).toHaveText("Météo : Open-Meteo");
   await expect(block.getByTestId("weather-details")).toContainText("Pluie 75 %");
 

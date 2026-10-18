@@ -35,22 +35,27 @@ test("devenir staff : demande, acceptation avec le rôle boutique, présences et
   const requests = orga.getByTestId("staff-requests");
   await expect(requests).toContainText(pseudo);
   const row = requests.getByTestId("staff-request").filter({ hasText: pseudo });
-  await row.getByLabel("Boutique").check();
+  // Lot 36 : accepter fait entrer dans l'équipe, sans rôle (plus de cases de rôles sur la demande).
+  await expect(row.getByLabel("Entrée visiteurs")).toHaveCount(0);
   await orga.screenshot({ path: `${DIR}/02-staff-demandes-sable.png` });
   await row.getByRole("button", { name: "Accepter" }).click();
 
-  // Membre actif avec le rôle boutique.
+  // Membre actif, sans rôle : les rôles se donnent ensuite (ici le rôle par défaut « Entrée visiteurs »).
   const member = orga.getByTestId("staff-members").getByTestId("staff-member").filter({ hasText: pseudo });
   await expect(member).toBeVisible({ timeout: 60_000 });
-  await expect(member.getByLabel("Boutique")).toBeChecked();
+  await expect(member.getByLabel("Entrée visiteurs")).not.toBeChecked();
   await expect(member.getByLabel("Scan accueil")).not.toBeChecked();
   const admin = await login("damien@orasso.local");
-  const members = await apiCall<{ pseudo: string; status: string; staffRoles: string[] }[]>(
+  const sid = await structureId(admin);
+  const members = await apiCall<{ userId: string; pseudo: string; status: string; staffRoles: string[] }[]>(
     admin,
     "GET",
-    `/structures/${await structureId(admin)}/members`,
+    `/structures/${sid}/members`,
   );
-  expect(members.data.find((m) => m.pseudo === pseudo)).toMatchObject({ status: "active", staffRoles: ["shop"] });
+  const joined = members.data.find((m) => m.pseudo === pseudo);
+  expect(joined).toMatchObject({ status: "active", staffRoles: [] });
+  await apiCall(admin, "PATCH", `/structures/${sid}/members/${joined?.userId}`, { staffRoles: ["shop"] });
+  await orga.reload();
   await orga.screenshot({ path: `${DIR}/03-staff-membres-sable.png` });
 
   // Par événement : présences, « jamais répondu » et relance.
@@ -67,7 +72,7 @@ test("devenir staff : demande, acceptation avec le rôle boutique, présences et
   await orga.screenshot({ path: `${DIR}/04-staff-presences-sable.png`, fullPage: true });
   // Le rôle boutique s'ajuste pour l'événement seulement.
   const eventMember = salon.getByTestId("staff-event-member").filter({ hasText: pseudo });
-  await expect(eventMember.getByLabel("Boutique")).toBeChecked();
+  await expect(eventMember.getByLabel("Entrée visiteurs")).toBeChecked();
   await eventMember.getByLabel("Scan accueil").check();
   await eventMember.getByRole("button", { name: "Enregistrer pour l'événement" }).click();
   await expect(salon.getByTestId("staff-event-member").filter({ hasText: pseudo })).toContainText(
@@ -79,7 +84,7 @@ test("devenir staff : demande, acceptation avec le rôle boutique, présences et
   const guest = await signUpApi(invited);
   await orga.goto("/orga/meditesportcar/staff");
   await orga.getByTestId("staff-invite-form").getByLabel("Pseudo ou e-mail du compte").fill(invited);
-  await orga.getByTestId("staff-invite-form").getByLabel("Boutique").check();
+  await orga.getByTestId("staff-invite-form").getByLabel("Entrée visiteurs").check();
   await orga.getByRole("button", { name: "Envoyer l'invitation" }).click();
   await expect(orga.getByTestId("staff-invite-form")).toContainText("Invitation envoyée");
   await expect(orga.getByTestId("staff-invited")).toContainText(invited);

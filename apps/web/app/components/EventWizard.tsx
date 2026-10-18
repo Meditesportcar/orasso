@@ -9,6 +9,7 @@ import {
   dayAccesses,
   dayAccessLabels,
   defaultEventRules,
+  draftStart,
   type EventDraft,
   type EventOrganizer,
   eventAdmissionLabels,
@@ -39,12 +40,16 @@ import {
   vehicleTypes,
   vendorTypeLabels,
   withAddedDay,
+  withCopyOpening,
   withMultiDay,
+  wizardEndLabels,
   zoneChanges,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useBlocker } from "react-router";
 import { apiFetch } from "../lib/api.client";
 import { now as clockNow } from "../lib/clock";
+import { formatDateTime } from "../lib/format";
 import { useEventFormats, useVendorTypes } from "../lib/lists";
 import { FileField, TextAreaField } from "./Fields";
 
@@ -79,6 +84,78 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
   const step = STEPS[index] as (typeof STEPS)[number];
   const last = index === STEPS.length - 1;
   const set = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => setD((prev) => ({ ...prev, [key]: value }));
+  // Lot 36 : copie d'un événement (duplication) encore en brouillon : l'ouverture des candidatures suit le début.
+  const isCopy = Boolean(event?.parentEventId) && event?.status === "draft";
+  const setStartsAt = (value: string) => set("startsAt", value);
+  // Quand le début d'une copie change (un jour ou plusieurs), l'ouverture garde le délai de l'original.
+  const copyLead = isCopy && event ? Date.parse(event.startsAt) - Date.parse(event.registrationsOpenAt) : null;
+  const start = draftStart(d);
+  const lastStart = useRef(start);
+  useEffect(() => {
+    if (copyLead === null || start === lastStart.current) return;
+    lastStart.current = start;
+    setD((prev) => withCopyOpening(prev, copyLead, clockNow()));
+  }, [copyLead, start]);
+  // Brouillon : trois choix en fin d'assistant (Publier, Garder en brouillon, Aperçu) ; un événement publié s'enregistre.
+  const isDraft = !event || event.status === "draft";
+
+  // Lot 36 : la saisie est gardée dans le navigateur (aucun lien ne la fait perdre) et une garde demande avant de
+  // quitter l'assistant avec une saisie non enregistrée. Effacée après un enregistrement réussi.
+  const storageKey = `orasso-wizard:${structureId}:${event?.id ?? "new"}`;
+  const pristine = useRef(JSON.stringify(d));
+  const [restored, setRestored] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  // Enregistré : la page part (rechargement complet) sans demander de confirmation.
+  const leaving = useRef(false);
+  const dirty = JSON.stringify(d) !== pristine.current;
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) return;
+      const stored = JSON.parse(raw) as { draft: EventDraft; index: number; savedAt: string };
+      if (JSON.stringify(stored.draft) === pristine.current) return;
+      setD(stored.draft);
+      setIndex(Math.min(Math.max(stored.index, 0), STEPS.length - 1));
+      setRestored(stored.savedAt);
+    } catch {
+      // Stockage indisponible (navigation privée) : l'assistant marche sans.
+    }
+  }, [storageKey]);
+  useEffect(() => {
+    if (!dirty || saving) return;
+    const timer = setTimeout(() => {
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify({ draft: d, index, savedAt: new Date().toISOString() }));
+      } catch {
+        // Stockage plein ou refusé : sans conséquence.
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [d, index, dirty, saving, storageKey]);
+  useEffect(() => {
+    if (!dirty || saving) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!leaving.current) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, saving]);
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) => dirty && !saving && currentLocation.pathname !== nextLocation.pathname,
+  );
+  const forgetLocal = () => {
+    try {
+      window.localStorage.removeItem(storageKey);
+    } catch {
+      // Rien à faire.
+    }
+  };
+  const discardLocal = () => {
+    forgetLocal();
+    setD(JSON.parse(pristine.current) as EventDraft);
+    setIndex(0);
+    setRestored(null);
+  };
   const toggle = <T extends string>(list: T[], value: T) =>
     list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
 
@@ -119,7 +196,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
     setAddress(`Trouvée : ${match.label}`);
   }
 
-  async function save() {
+  async function save(mode: "draft" | "publish" | "preview" = "draft") {
     const invalid = firstEventProblem(d);
     if (invalid) {
       setIndex(STEPS.findIndex((x) => x.id === invalid.step));
@@ -170,6 +247,18 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
       form.set("poster", poster);
       await fetch(`/api/events/${saved.id}/poster`, { method: "POST", body: form, credentials: "same-origin" });
     }
+    leaving.current = true;
+    setSaving(true);
+    forgetLocal();
+    if (mode === "preview") return window.location.assign(`/e/${saved.slug}?apercu=1`);
+    if (mode === "publish") {
+      const published = await apiFetch(`/events/${saved.id}/publish`, { method: "POST" });
+      return window.location.assign(
+        published.ok
+          ? `/orga/${structureSlug}/e/${saved.id}?publie=1`
+          : `/orga/${structureSlug}/e/${saved.id}?erreur=${encodeURIComponent(published.error.message)}`,
+      );
+    }
     window.location.assign(`/orga/${structureSlug}/e/${saved.id}${editing ? "" : "?creee=1"}`);
   }
 
@@ -185,6 +274,36 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
           Étape {index + 1} sur {STEPS.length} · {step.label}
         </div>
       </div>
+
+      {restored && (
+        <div className="s-notice s-stack s-stack--tight" role="status" data-testid="wizard-restored">
+          <span>{wizardEndLabels.resumeLocal(formatDateTime(restored))}</span>
+          <div className="s-row">
+            <Button variant="secondary" icon="undo" onClick={discardLocal}>
+              {wizardEndLabels.resumeLocalDiscard}
+            </Button>
+          </div>
+        </div>
+      )}
+      {isCopy && index === 0 && (
+        <p className="s-notice" data-testid="wizard-copy">
+          {wizardEndLabels.copyNotice}
+        </p>
+      )}
+      {blocker.state === "blocked" && (
+        <div className="s-notice s-notice--alert s-stack s-stack--tight" role="alertdialog" data-testid="wizard-leave">
+          <strong>{wizardEndLabels.leaveTitle}</strong>
+          <span>{wizardEndLabels.leaveBodyKept}</span>
+          <div className="s-row">
+            <Button variant="secondary" icon="back" onClick={() => blocker.proceed()}>
+              {wizardEndLabels.leaveConfirm}
+            </Button>
+            <Button variant="secondary" icon="check" onClick={() => blocker.reset()}>
+              {wizardEndLabels.leaveKeep}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <section className="orga__panel s-stack" aria-labelledby="step-title">
         <h2 id="step-title" className="s-h2">
@@ -316,7 +435,7 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
                   name="startsAt"
                   type="datetime-local"
                   value={d.startsAt}
-                  onChange={(e) => set("startsAt", e.currentTarget.value)}
+                  onChange={(e) => setStartsAt(e.currentTarget.value)}
                 />
                 <TextField
                   label="Fin"
@@ -798,9 +917,27 @@ export function EventWizard({ structureId, structureSlug, verified, categories, 
               Annuler
             </Button>
           )}
-          {last ? (
-            <Button icon="check" onClick={save} loading={busy}>
-              {editing ? "Enregistrer les modifications" : "Enregistrer le brouillon"}
+          {last && isDraft ? (
+            <>
+              <Button
+                icon="check"
+                onClick={() => save("publish")}
+                loading={busy}
+                disabled={!verified}
+                data-testid="wizard-publish"
+              >
+                {wizardEndLabels.publish}
+              </Button>
+              <Button variant="secondary" icon="calendar" onClick={() => save("draft")} data-testid="wizard-keep-draft">
+                {wizardEndLabels.keepDraft}
+              </Button>
+              <Button variant="secondary" icon="eye" onClick={() => save("preview")} data-testid="wizard-preview">
+                {wizardEndLabels.preview}
+              </Button>
+            </>
+          ) : last ? (
+            <Button icon="check" onClick={() => save()} loading={busy}>
+              Enregistrer les modifications
             </Button>
           ) : (
             <Button icon="next" onClick={() => go(1)}>

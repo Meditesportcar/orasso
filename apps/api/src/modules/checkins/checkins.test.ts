@@ -29,7 +29,17 @@ import {
   viewerOf,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { accessPasses, checkins, devices, emailOutbox, eventStaff, notifications, scanEvents } from "../../db/schema";
+import {
+  accessPasses,
+  checkins,
+  devices,
+  emailOutbox,
+  eventStaff,
+  expressInvites,
+  notifications,
+  profiles,
+  scanEvents,
+} from "../../db/schema";
 import type { Viewer } from "../../lib/session";
 import { ed25519Verify } from "../../lib/signing";
 import { applicationsService } from "../applications/service";
@@ -292,7 +302,7 @@ describe("pointage manuel et par plaque", () => {
     expect(found.text).not.toContain(kenji.plate.replaceAll("-", ""));
   });
 
-  it("direct de l'organisateur : arrivés / attendus, staff présent", async () => {
+  it("direct de l'équipe organisatrice : arrivés / attendus, staff présent", async () => {
     await checkinsService.receiveBatch(julieV, eventId, {
       deviceId: julieDevice,
       items: [scan(people[0]!.passId, paris(10, 17, 9))],
@@ -441,7 +451,7 @@ describe("synchronisation du staff", () => {
     expect(reminders.map((n) => n.userId)).toEqual([julie.id]); // Théo a dit « pas là »
   });
 
-  it("rôles ajustés pour l'événement par l'organisateur", async () => {
+  it("rôles ajustés pour l'événement par l'équipe organisatrice", async () => {
     expect((await call(theo, "GET", `/events/${eventId}/applications`)).status).toBe(403);
     const patched = await call(orga, "PATCH", `/events/${eventId}/staff/${theo.id}`, { roles: ["scan", "filtering"] });
     expect(patched.status).toBe(200);
@@ -483,7 +493,7 @@ describe("inscription express", () => {
       used: false,
       email: "nouveau@exemple.fr",
     });
-    const res = await call(null, "POST", `/express/${token}`, {
+    const body = {
       pseudo: "Nouveau_66",
       password: "motdepasse-express-1",
       firstName: "Paul",
@@ -491,11 +501,20 @@ describe("inscription express", () => {
       plate: "EX-123-PR",
       makeId: ref!.makeId,
       modelId: ref!.id,
-    });
+    };
+    // Lot 36 : conditions générales obligatoires ; mot de passe de 10 caractères au moins.
+    expect((await call(null, "POST", `/express/${token}`, body)).status).toBe(400);
+    expect(
+      (await call(null, "POST", `/express/${token}`, { ...body, password: "court-123", termsAccepted: true })).status,
+    ).toBe(400);
+    const res = await call(null, "POST", `/express/${token}`, { ...body, termsAccepted: true });
     expect(res.status).toBe(201);
     expect(res.json.passPayload).toMatch(/^OR1/);
     const entry = await db.query.checkins.findFirst({ where: eq(checkins.applicationId, res.json.applicationId) });
     expect(entry).toMatchObject({ method: "express", staffUserId: julie.id });
+    const created = await db.query.expressInvites.findFirst({ where: eq(expressInvites.email, "nouveau@exemple.fr") });
+    const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, created?.userId ?? "") });
+    expect(profile?.termsAcceptedAt).toBeInstanceOf(Date);
     // Lien à usage unique.
     const reuse = await call(null, "POST", `/express/${token}`, {
       pseudo: "Autre_66",
@@ -505,6 +524,7 @@ describe("inscription express", () => {
       unregistered: true,
       makeId: ref!.makeId,
       modelId: ref!.id,
+      termsAccepted: true,
     });
     expect(reuse.status).toBe(409);
     expect((await call(null, "GET", `/express/${token}`)).json.used).toBe(true);

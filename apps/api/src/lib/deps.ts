@@ -52,7 +52,9 @@ export type JobName =
   | "assistance.auto-close"
   | "newsletter.send"
   // Lot 33 : grades recalculés après un changement des seuils (mise en file à l'écriture du réglage).
-  | "points.regrade";
+  | "points.regrade"
+  // Lot 36 : e-mail « Installe l'appli » une heure après la confirmation de l'adresse, si l'appli n'a jamais été ouverte.
+  | "account.app-install";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

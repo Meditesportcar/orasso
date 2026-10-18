@@ -228,7 +228,7 @@ describe("candidature", () => {
     expect(after.json[0].myApplication).toMatchObject({ status: "pending" });
   });
 
-  it("un type libre est accepté si l'organisateur a coché « Autres » ou saisi le même texte", async () => {
+  it("un type libre est accepté si l'équipe organisatrice a coché « Autres » ou saisi le même texte", async () => {
     const gina = await signUp("Gina_Glace");
     await readyProvider(gina, { type: "other", customType: "Glacier" });
     await createEvent(structureId, {
@@ -502,6 +502,8 @@ describe("paiement sur place", () => {
   it("un événement payant sans billetterie est sérialisé sans adresse (paid_external, externalTicketUrl null)", async () => {
     const res = await call(orga, "POST", `/structures/${structureId}/events`, {
       title: "Course de côte",
+      addressLine: "1 quai du Port",
+      city: "Canet-en-Roussillon",
       format: "gathering",
       startsAt: paris(11, 20, 9).toISOString(),
       endsAt: paris(11, 20, 18).toISOString(),

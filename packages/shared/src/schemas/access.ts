@@ -11,9 +11,11 @@ import {
   type VehicleType,
 } from "../enums";
 import type { Grade } from "../grades";
+import { expressLabels } from "../labels/corrections.fr";
 import { localScanDecisions, type PassRevokedReason } from "../qr/pass";
 import type { LocalTicket } from "../qr/ticket";
 import { type StaffRole, staffRoleSchema } from "../roles";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../rules/password";
 import { isoDate, optionalText } from "./common";
 
 /** Billet de la liste du rôle boutique (lot 24) : `LocalTicket` + date de modification (curseur de synchro). */
@@ -347,7 +349,7 @@ export const expressSignupSchema = z
       .string()
       .trim()
       .regex(/^[A-Za-z0-9_.]{3,24}$/),
-    password: z.string().min(10).max(128),
+    password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
     firstName: z.string().trim().min(1).max(60),
     lastName: z.string().trim().min(1).max(60),
     plate: optionalText(20),
@@ -355,6 +357,8 @@ export const expressSignupSchema = z
     makeId: z.uuid(),
     modelId: z.uuid(),
     generationId: z.uuid().nullish(),
+    /** Conditions générales acceptées (lot 36) : case obligatoire, tracée dans `profiles.terms_accepted_at`. */
+    termsAccepted: z.literal(true, { error: expressLabels.termsRequired }),
   })
   .refine((v) => v.unregistered || Boolean(v.plate), { path: ["plate"], message: "Plaque obligatoire" });
 export type ExpressSignup = z.infer<typeof expressSignupSchema>;

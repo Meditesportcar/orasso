@@ -136,7 +136,7 @@ export const proAppLabels = {
   partnerRemove: "Retirer",
   partnerRemoveTitle: "Retirer ce partenariat ?",
   partnerRemoveBody: "Ta fiche n'apparaîtra plus sur la page de cet organisateur, ni la sienne sur la tienne.",
-  partnerSent: "Demande envoyée : l'organisateur doit l'accepter.",
+  partnerSent: "Demande envoyée : l'équipe organisatrice doit l'accepter.",
   partnerRemoved: "Partenariat retiré.",
   // Abonnement et emplacements sponsorisés : consultation seulement.
   subscriptionTitle: "Abonnement",
@@ -204,7 +204,7 @@ export const garageAppLabels = {
   description: "Description",
   plate: "Plaque",
   plateHelp:
-    "Visible par l'organisateur seulement. Déjà prise par un autre membre ? Il sera prévenu et pourra confirmer le transfert.",
+    "Visible par l'équipe organisatrice seulement. Déjà prise par un autre membre ? Il sera prévenu et pourra confirmer le transfert.",
   plateLocked: "La plaque est en attente de transfert : elle ne peut pas être modifiée pour le moment.",
   unregistered: "Véhicule non immatriculé",
   categories: "Catégories",

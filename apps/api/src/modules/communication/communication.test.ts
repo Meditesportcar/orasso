@@ -223,12 +223,15 @@ describe("fil de l'événement et consignes", () => {
     let feed = await req(null, "GET", `/events/by-slug/${e.slug}/announcements`);
     expect(feed.json.items.map((i: { body: string }) => i.body)).toEqual([
       "Événement Maintenu : il a bien lieu.",
-      "Événement passé en Incertain : l'organisateur confirmera.",
+      "Événement passé en Incertain : l'équipe organisatrice confirmera.",
     ]);
     expect(await notificationsOf(kenji.id, "event_outlook_changed")).toHaveLength(2);
     expect((await req(damien, "POST", `/events/${e.id}/cancel`)).status).toBe(200);
     feed = await req(null, "GET", `/events/by-slug/${e.slug}/announcements`);
-    expect(feed.json.items[0]).toMatchObject({ kind: "status_change", body: "Événement annulé par l'organisateur." });
+    expect(feed.json.items[0]).toMatchObject({
+      kind: "status_change",
+      body: "Événement annulé par l'équipe organisatrice.",
+    });
   });
 
   it("modération : épingler, supprimer (photo effacée) ; photo d'annonce réservée aux organisateurs", async () => {
@@ -522,7 +525,7 @@ describe("modèles", () => {
 
 describe("discussions du staff", () => {
   for (const mode of MODES) {
-    it(`événement : le staff écrit à J−1, refusé après J+1 ; l'organisateur lit à J+6, pas à J+8 (${mode})`, async () => {
+    it(`événement : le staff écrit à J−1, refusé après J+1 ; l'équipe organisatrice lit à J+6, pas à J+8 (${mode})`, async () => {
       const { damien, s, e } = await setup();
       const staff = await signUp("Staffeur");
       await addMember(s.id, staff.id, "staff", ["scan"]);

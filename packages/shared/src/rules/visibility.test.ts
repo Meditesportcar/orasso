@@ -26,7 +26,7 @@ describe("audience d'un profil", () => {
     expect(profileAudience({ ...base, isSelf: true, visibility: "private" })).toBe("self");
   });
 
-  it("l'organisateur voit tout et seul voit les coordonnées (même s'il est ami)", () => {
+  it("l'équipe organisatrice voit tout et seul voit les coordonnées (même s'il est ami)", () => {
     expect(profileAudience({ ...base, isOrganizer: true, isFriend: true, visibility: "private" })).toBe("organizer");
     for (const audience of ["self", "friend", "public_full", "public_limited"] as const) {
       expect(profileFields(audience).contact).toBe(false);

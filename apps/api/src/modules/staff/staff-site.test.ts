@@ -152,7 +152,7 @@ beforeEach(async () => {
 });
 
 describe("devenir staff : demande, réponse, délais", () => {
-  it("demande → requested → acceptée avec des rôles → staff actif ; notifications et compteurs", async () => {
+  it("demande → requested → acceptée sans rôle (lot 36, rôles par événement) → staff actif ; notifications et compteurs", async () => {
     const w = await setup();
     const nina = await signUp("Nina_Candidate");
     for (const mode of MODES) {
@@ -187,15 +187,16 @@ describe("devenir staff : demande, réponse, délais", () => {
       (await req(otherOwner, "POST", `/structures/${otherStructure.id}/members/${nina.id}/accept`, {})).status,
     ).toBe(404);
 
+    // Une ancienne version de l'appli envoie encore des rôles : ils sont ignorés.
     const accept = await req(w.damien, "POST", `/structures/${w.s.id}/members/${nina.id}/accept`, {
       staffRoles: ["scan", "placement"],
-      canDecide: false,
+      canDecide: true,
     });
     expect(accept.status).toBe(204);
     const row = await db.query.structureMembers.findFirst({
       where: and(eq(structureMembers.structureId, w.s.id), eq(structureMembers.userId, nina.id)),
     });
-    expect(row).toMatchObject({ status: "active", role: "staff", staffRoles: ["scan", "placement"], canDecide: false });
+    expect(row).toMatchObject({ status: "active", role: "staff", staffRoles: [], canDecide: false });
     await notificationsService.flush();
     const mine = await db.select().from(notifications).where(eq(notifications.userId, nina.id));
     expect(mine.map((n) => n.type)).toContain("staff_request_accepted");

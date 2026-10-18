@@ -65,7 +65,7 @@ export const staffRoutes = new Hono<AppEnv>()
   })
   .post("/structures/:id/members/:userId/accept", async (c) => {
     const v = await requireUser(c);
-    // Corps facultatif : sans rôles donnés, la personne entre sans rôle et l'organisateur les ajuste ensuite.
+    // Lot 36 : la personne entre dans l'équipe sans rôle (corps ancien accepté et ignoré) ; rôles par événement ensuite.
     const input = parse(staffRequestAcceptSchema, await c.req.json().catch(() => ({})));
     await staffRequestsService.accept(v, uuidParam(c, "id"), userIdParam(c.req.param("userId")), input);
     return c.body(null, 204);

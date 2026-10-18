@@ -283,7 +283,7 @@ export default function JourJ() {
       {kit.event.instructions ? (
         <Plate style={styles.block}>
           <Text variant="label" color={c.plateMuted}>
-            Consignes de l'organisateur
+            Consignes de l'équipe organisatrice
           </Text>
           <Text variant="body" color={c.plateInk}>
             {kit.event.instructions}

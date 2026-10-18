@@ -78,7 +78,7 @@ export async function signUp(pseudo: string, opts: { twoFactor?: boolean; role?:
   const res = await app.request("/api/auth/sign-up/email", {
     method: "POST",
     headers: { "content-type": "application/json", origin: ORIGIN },
-    body: JSON.stringify({ email, password: "motdepasse-test-123", name: pseudo }),
+    body: JSON.stringify({ email, password: "motdepasse-test-123", name: pseudo, termsAccepted: true }),
   });
   if (res.status !== 200) throw new Error(`Inscription ${res.status} : ${await res.text()}`);
   const cookie = res.headers
@@ -226,6 +226,9 @@ export async function createEvent(structureId: string, overrides: Partial<typeof
       structureId,
       slug: `evenement-${randomBytes(4).toString("hex")}`,
       title: "Rassemblement de test",
+      // Lot 36 : adresse obligatoire (publication refusée sans elle).
+      addressLine: "1 quai du Port",
+      city: "Canet-en-Roussillon",
       format: "gathering",
       startsAt,
       endsAt: new Date(startsAt.getTime() + 4 * 3_600_000),

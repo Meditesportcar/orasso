@@ -3,11 +3,12 @@
 import { Ground, Logo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AuthForm } from "@/features/AuthForm";
 import { ForgotPasswordSheet } from "@/features/ForgotPasswordSheet";
+import { KeyboardSafe } from "@/ui/KeyboardSafe";
 import { Muted } from "@/ui/Muted";
 
 const { space3, space4 } = tokens.spacing;
@@ -23,7 +24,7 @@ export default function Auth() {
 
   return (
     <Ground animated style={styles.fill}>
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardSafe style={styles.fill}>
         <ScrollView
           contentContainerStyle={[
             styles.content,
@@ -49,7 +50,7 @@ export default function Auth() {
             />
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafe>
       <ForgotPasswordSheet visible={forgot} onClose={() => setForgot(false)} />
     </Ground>
   );

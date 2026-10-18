@@ -187,7 +187,12 @@ export async function createEvent(
 }
 
 export async function signUpApi(pseudo: string, email = `${pseudo.toLowerCase()}@e2e.orasso.test`): Promise<Cookie> {
-  const res = await apiCall(null, "POST", "/auth/sign-up/email", { email, password: SEED_PASSWORD, name: pseudo });
+  const res = await apiCall(null, "POST", "/auth/sign-up/email", {
+    email,
+    password: SEED_PASSWORD,
+    name: pseudo,
+    termsAccepted: true,
+  });
   if (res.status !== 200 || !res.cookie) throw new Error(`Inscription ${pseudo} : ${res.status}`);
   return res.cookie;
 }

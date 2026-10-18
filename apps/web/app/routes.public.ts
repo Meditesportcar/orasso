@@ -8,6 +8,9 @@ export default [
   // Référencement (lot 13) : plan du site et robots.txt.
   route("sitemap.xml", "routes/sitemap.ts"),
   route("robots.txt", "routes/robots.ts"),
+  // Liens de l'appli (lot 36) : Android App Links, Universal Links iOS (préparés, inactifs sans APPLE_TEAM_ID).
+  route(".well-known/assetlinks.json", "routes/assetlinks.ts"),
+  route(".well-known/apple-app-site-association", "routes/apple-app-site-association.ts"),
 
   // Pages publiques : en-tête avec le logo, pied « Propulsé par Orasso ».
   layout("layouts/public.tsx", [
@@ -36,6 +39,8 @@ export default [
     // Désinscription de la newsletter, lien signé sans connexion (lot 33).
     route("desinscription/:token", "routes/desinscription.tsx"),
     route("inscription", "routes/inscription.tsx"),
+    // L'appli (lot 36) : fin de l'inscription express, e-mail « Installe l'appli ».
+    route("appli", "routes/appli.tsx"),
     route("conditions", "routes/legal.tsx", { id: "legal-conditions" }),
     route("confidentialite", "routes/legal.tsx", { id: "legal-confidentialite" }),
     route("mentions-legales", "routes/legal.tsx", { id: "legal-mentions" }),

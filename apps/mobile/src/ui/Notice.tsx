@@ -4,10 +4,18 @@ import type { ReactNode } from "react";
 
 import { plateText } from "./plateText";
 
-export function Notice({ children, tone = "info" }: { children: ReactNode; tone?: "info" | "error" }) {
+export function Notice({
+  children,
+  tone = "info",
+  testID,
+}: {
+  children: ReactNode;
+  tone?: "info" | "error";
+  testID?: string;
+}) {
   const { t } = useTheme();
   return (
-    <Plate kind="note" accessibilityRole={tone === "error" ? "alert" : undefined}>
+    <Plate kind="note" accessibilityRole={tone === "error" ? "alert" : undefined} testID={testID}>
       <Text variant="body" color={tone === "error" ? plateText.alert : t.color.plateInk}>
         {children}
       </Text>

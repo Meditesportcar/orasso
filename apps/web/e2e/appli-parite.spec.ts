@@ -432,6 +432,10 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
       await expect(page.getByTestId("pro-media-notice")).toHaveText("Photo ajoutée.", { timeout: 30_000 });
       expect((await apiCall<{ photos: unknown[] }>(cookie, "GET", "/me/pro")).data.photos).toHaveLength(1);
       await page.getByRole("button", { name: "Retirer cette photo" }).first().click();
+      // Lot 36 : le retrait passe par une confirmation.
+      await expect(page.getByText("Retirer cette photo ?").filter({ visible: true }).first()).toBeVisible();
+      await shot(page, "pro-retrait-photo-confirmation", theme);
+      await page.getByTestId("orga-confirm").filter({ visible: true }).click();
       await expect(page.getByTestId("pro-media-notice")).toHaveText("Photo retirée.", { timeout: 20_000 });
       expect((await apiCall<{ photos: unknown[] }>(cookie, "GET", "/me/pro")).data.photos).toHaveLength(0);
 
@@ -443,7 +447,7 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
         .click();
       await page.getByTestId("pro-partner-propose").click();
       await expect(page.getByTestId("pro-partners-notice")).toHaveText(
-        "Demande envoyée : l'organisateur doit l'accepter.",
+        "Demande envoyée : l'équipe organisatrice doit l'accepter.",
         {
           timeout: 20_000,
         },

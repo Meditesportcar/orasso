@@ -102,7 +102,7 @@ async function organizerSetup() {
 }
 
 describe("structure suspendue (I2) et push côté structure (I3)", () => {
-  it("push sans contenu pour l'organisateur, avec contenu pour la personne", async () => {
+  it("push sans contenu pour l'équipe organisatrice, avec contenu pour la personne", async () => {
     const { damien, kenji, id } = await organizerSetup();
     expect((await send(kenji, id, "Mon numéro de plaque est AB-123-CD")).status).toBe(201);
     const [toDamien] = await db

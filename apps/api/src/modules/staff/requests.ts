@@ -173,8 +173,12 @@ export const staffRequestsService = {
     return { status: "requested" };
   },
 
-  /** `POST /structures/:id/members/:userId/accept` : l'organisation accepte une demande (rôles donnés d'emblée). */
-  async accept(v: Viewer, structureId: string, userId: string, input: StaffRequestAccept): Promise<void> {
+  /**
+   * `POST /structures/:id/members/:userId/accept` : l'organisation accepte une demande. Lot 36 (retour de Damien) :
+   * l'acceptation fait seulement entrer la personne dans l'équipe, sans rôle ; les rôles se donnent événement par
+   * événement (`PATCH /events/:id/staff/:userId`). Les rôles envoyés par une ancienne version de l'appli sont ignorés.
+   */
+  async accept(v: Viewer, structureId: string, userId: string, _input?: StaffRequestAccept): Promise<void> {
     await requireOrganizer(v, structureId);
     const structure = await structureById(structureId);
     // Structure suspendue : plus de recrutement (ses événements publiés continuent avec le staff déjà en place).
@@ -185,8 +189,8 @@ export const staffRequestsService = {
         .update(structureMembers)
         .set({
           status: "active",
-          staffRoles: input.staffRoles,
-          canDecide: input.canDecide,
+          staffRoles: [],
+          canDecide: false,
           joinedAt: now(),
           invitedBy: v.user.id,
         })
@@ -202,7 +206,7 @@ export const staffRequestsService = {
       if (!row) throw notFound("Demande introuvable");
       await notificationsService.notify(tx, userId, "staff_request_accepted", {
         title: "Demande de staff acceptée",
-        body: `« ${structure.name} » t'a accepté dans son staff. Ton accès et tes rôles sont dans l'onglet Accès.`,
+        body: `« ${structure.name} » t'a accepté dans son équipe. Tes rôles te sont donnés pour chaque événement, dans l'onglet Accès.`,
         data: { structureId, screen: "acces" },
         link: { label: "Ouvrir mon accès", path: "/app/acces" },
       });

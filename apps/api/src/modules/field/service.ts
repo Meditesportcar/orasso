@@ -95,6 +95,8 @@ export const fieldService = {
           lng: position.lng,
           message: input.message,
           clientId: input.clientId ?? null,
+          // Horloge de l'appli (horloge simulée comprise) : la position s'efface 24 h après, à la même horloge.
+          createdAt: now(),
         })
         .onConflictDoNothing()
         .returning();

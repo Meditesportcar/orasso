@@ -468,7 +468,7 @@ describe("export des participants", () => {
 });
 
 describe("coordonnées après J+7", () => {
-  it("tracées une fois par fiche et par jour, seulement après J+7 et pour l'organisateur", async () => {
+  it("tracées une fois par fiche et par jour, seulement après J+7 et pour l'équipe organisatrice", async () => {
     const w = await setup();
     await settle(w);
     const list = () => req(w.damien, "GET", `/events/${w.e.id}/applications?kind=vehicle&limit=50`);
@@ -730,6 +730,8 @@ describe("badge de structure", () => {
         `/structures/${b.s.id}/events`,
         {
           title: "Nouveau",
+          addressLine: "1 quai du Port",
+          city: "Canet-en-Roussillon",
           format: "gathering",
           startsAt: D(100).toISOString(),
           endsAt: new Date(D(100).getTime() + 4 * HOUR).toISOString(),

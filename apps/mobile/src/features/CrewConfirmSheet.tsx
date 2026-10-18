@@ -67,7 +67,7 @@ export function CrewConfirmSheet({
           </Plate>
           <CheckboxField label={crewLabels.confirmRules} checked={accepted} onChange={setAccepted} />
           <CheckboxField
-            label="Suivre l'organisateur (nouveaux événements, avant-premières)"
+            label="Suivre l'organisation (nouveaux événements, avant-premières)"
             checked={follow}
             onChange={setFollow}
           />

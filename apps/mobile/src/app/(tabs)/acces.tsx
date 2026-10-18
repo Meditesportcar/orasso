@@ -235,7 +235,7 @@ export default function Acces() {
         .filter((m) => m.role === "staff" && m.status === "requested")
         .map((m) => (
           <Notice key={m.structureId}>
-            {staffRequestLabels.sent} · {m.structureName} : tu seras prévenu quand l'organisateur aura répondu.
+            {staffRequestLabels.sent} · {m.structureName} : tu seras prévenu quand l'équipe organisatrice aura répondu.
           </Notice>
         ))}
       {orphans.map(([eventId, u]) => (
@@ -328,7 +328,7 @@ function LogLine({
             </View>
             {app.review.given.reply ? (
               <Text variant="meta" color={c.plateMuted}>
-                Réponse de l'organisateur : {app.review.given.reply}
+                Réponse de l'équipe organisatrice : {app.review.given.reply}
               </Text>
             ) : null}
           </View>

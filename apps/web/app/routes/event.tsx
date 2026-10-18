@@ -17,9 +17,14 @@ import {
   type MyTicket,
   previewSummary,
   publicAccessText,
+  registrationBlock,
+  registrationBlockText,
+  registrationFullText,
   type StructurePublic,
   type TicketOffer,
   vehicleTypeLabels,
+  weatherTexts,
+  wizardEndLabels,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 import { dayLabel, EventDays } from "../components/EventDays";
@@ -32,7 +37,7 @@ import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, getMe, loginUrl, originOf } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
-import { formatDateTime, formatPrice, formatWhen } from "../lib/format";
+import { formatDateTime, formatDateTimeYear, formatPrice, formatWhen } from "../lib/format";
 import { messageAction } from "../lib/messaging.server";
 import { badgeFor, registrationState } from "../lib/status";
 import "../styles/invitations.css";
@@ -82,6 +87,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     connected: Boolean(me),
     origin: originOf(request),
     state: registrationState(event, nowMs()),
+    block: registrationBlock(event, nowMs()),
   };
 }
 
@@ -287,7 +293,7 @@ function ReviewsSection({ reviews, connected }: { reviews: EventReviews; connect
               <p className="s-prewrap">{r.comment}</p>
               {r.reply && (
                 <p className="s-reply s-prewrap">
-                  <span className="s-label o-t-label">Réponse de l'organisateur</span> {r.reply.text}
+                  <span className="s-label o-t-label">Réponse de l'équipe organisatrice</span> {r.reply.text}
                 </p>
               )}
               <span className="o-t-caption s-muted">{formatDateTime(r.createdAt)}</span>
@@ -346,6 +352,7 @@ function EventPage({
     connected,
     origin,
     state,
+    block,
     reviews,
     weather,
     feed,
@@ -377,14 +384,21 @@ function EventPage({
       : state.kind === "open"
         ? "Inscriptions ouvertes"
         : state.kind === "not_open"
-          ? `Ouverture le ${formatDateTime(state.opensAt)}`
+          ? `Ouverture le ${formatDateTimeYear(state.opensAt, nowMs())}`
           : state.kind === "locked"
             ? "Inscriptions closes"
-            : "Annulé";
+            : state.kind === "draft"
+              ? "Brouillon"
+              : "Annulé";
 
   return (
     <div className="ev">
       <div className="ev__main s-plated">
+        {event.status === "draft" && (
+          <p className="s-notice s-notice--alert" role="status" data-testid="draft-preview">
+            {wizardEndLabels.previewBanner}
+          </p>
+        )}
         <Reveal>
           <section className="ev__hero" aria-labelledby="ev-title">
             {event.posterUrl && <img className="ev__hero-photo" src={event.posterUrl} alt="" />}
@@ -515,7 +529,7 @@ function EventPage({
         )}
 
         {weather && !ended && (
-          <section className="s-section" id="meteo" aria-label="Météo à l'approche" data-testid="event-weather">
+          <section className="s-section" id="meteo" aria-label={weatherTexts.upcomingTitle} data-testid="event-weather">
             <Weather weather={weather} />
           </section>
         )}
@@ -523,7 +537,7 @@ function EventPage({
         <section className="s-section">
           <h2 className="s-h2">Accès et adresse</h2>
           {event.lat != null && event.lng != null && <EventMap lat={event.lat} lng={event.lng} label={place} />}
-          <p className="s-muted">{place || "Adresse communiquée par l'organisateur."}</p>
+          <p className="s-muted">{place || "Adresse communiquée par l'équipe organisatrice."}</p>
         </section>
 
         {reviews && (ended || reviews.count > 0) && <ReviewsSection reviews={reviews} connected={connected} />}
@@ -636,11 +650,14 @@ function EventPage({
               Candidater avec un véhicule
             </Button>
           )}
-          {state.kind === "not_open" && (
-            <p className="o-t-caption s-muted">Les inscriptions ouvrent le {formatDateTime(state.opensAt)}.</p>
+          {/* Lot 36 : la raison du blocage, la même que dans l'appli (H-2, avant-première, ouverture…). */}
+          {block && (block.code === "locked" || block.code === "preview" || block.code === "not_open") && (
+            <p className="o-t-caption s-muted" data-testid="registration-reason">
+              {registrationBlockText(block, (iso) => formatDateTimeYear(iso, nowMs()))}
+            </p>
           )}
-          {state.kind === "locked" && !ended && (
-            <p className="o-t-caption s-muted">Les inscriptions sont closes (verrouillage).</p>
+          {!block && event.admission === "open" && event.remaining !== null && event.remaining <= 0 && (
+            <p className="o-t-caption s-muted">{registrationFullText}</p>
           )}
 
           {connected ? (

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { ReportButton } from "@/features/ReportSheet";
+import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { api } from "@/lib/api";
 import { errorMessage, request } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
@@ -15,6 +16,7 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { PhotoGrid } from "@/ui/PhotoGrid";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -28,6 +30,7 @@ export default function ProPage() {
   const p = pro.data;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<number | null>(null);
   const viewed = useRef<string | null>(null);
 
   // Une vue comptée par fiche et par ouverture (jamais celle du pro : l'API l'ignore).
@@ -86,7 +89,18 @@ export default function ProPage() {
   const hours = weekdays.filter((d) => p.hours[d]);
   const hasPosition = p.lat !== null && p.lng !== null;
   return (
-    <FlowScreen title={p.name} onClose={close} onRefresh={pro.reload}>
+    <FlowScreen
+      title={p.name}
+      onClose={close}
+      onRefresh={pro.reload}
+      overlays={
+        <PhotoViewer
+          photos={p.photos.map((x, i) => ({ id: x.id, url: x.url, position: i + 1, width: 4, height: 3 }))}
+          start={viewer}
+          onClose={() => setViewer(null)}
+        />
+      }
+    >
       <Plate style={styles.head} testID="pro-head" accessibilityLabel={`Pro ${p.name}`}>
         <View style={styles.headRow}>
           <Photo
@@ -179,6 +193,22 @@ export default function ProPage() {
           ) : null}
         </View>
       </View>
+
+      {/* Lot 36 : les photos de réalisations, comme sur le site (elles n'étaient montrées qu'au pro). */}
+      {p.photos.length > 0 ? (
+        <>
+          <SectionTitle>Réalisations</SectionTitle>
+          <PhotoGrid
+            photos={p.photos.map((x, i) => ({
+              key: x.id,
+              source: mediaSource(x.url),
+              label: `Réalisation ${i + 1} en plein écran`,
+            }))}
+            onOpen={setViewer}
+            testID="pro-public-photos"
+          />
+        </>
+      ) : null}
 
       {discounts.length > 0 ? (
         <>

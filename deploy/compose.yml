@@ -78,6 +78,10 @@ services:
       # Erreurs du rendu serveur vers GlitchTip (lot 15) : vide = désactivé.
       VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-dev}
+      # Lot 36 : page /appli (lien Google Play) et liens de l'appli (/.well-known/…) ; vides = valeurs par défaut.
+      APP_ANDROID_URL: ${APP_ANDROID_URL:-}
+      ANDROID_CERT_SHA256: ${ANDROID_CERT_SHA256:-}
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
       SENTRY_RELEASE: ${ORASSO_TAG}
       # Horloge simulée (lot 34a) : le site la connaît par la même variable que l'API (vide = rien n'existe côté site).
       DEV_CLOCK: ${DEV_CLOCK:-}

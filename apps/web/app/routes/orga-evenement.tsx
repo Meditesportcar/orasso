@@ -356,6 +356,11 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
           {verified ? "Publie-le quand il est prêt." : "Fais vérifier ta structure pour pouvoir le publier."}
         </p>
       )}
+      {search.get("erreur") && (
+        <p className="s-error" role="alert" data-testid="publish-error">
+          {search.get("erreur")}
+        </p>
+      )}
       {justPublished && (
         <p className="s-notice s-notice--ok" role="status" data-testid="published-note">
           Événement publié : il est visible sur <a href="/evenements">la liste des événements</a>.

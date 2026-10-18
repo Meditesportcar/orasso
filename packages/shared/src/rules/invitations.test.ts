@@ -26,7 +26,7 @@ describe("hauts grades : liste d'attente (§ 9.2)", () => {
     expect(waitlistInsertRank(rodages, "sport", on)).toBe(4);
     expect(waitlistInsertRank(rodages, "circuit", on)).toBe(1);
   });
-  it("après le dernier haut grade, même déplacé par l'organisateur", () => {
+  it("après le dernier haut grade, même déplacé par l'équipe organisatrice", () => {
     const entries = [
       { rank: 1, grade: "rodage" as const },
       { rank: 2, grade: "circuit" as const },

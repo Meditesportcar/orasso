@@ -169,23 +169,24 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   await expect(page.getByTestId("team-request").filter({ hasText: pseudo })).toBeVisible({ timeout: 30_000 });
   await expect(page).toHaveURL(/\/staff/);
 
-  // --- 2. L'organisateur l'accepte depuis l'appli, avec un rôle -----------------------------------------------
+  // --- 2. L'organisateur l'accepte depuis l'appli : entrée dans l'équipe sans rôle (lot 36) -------------------
   await request.getByTestId("team-request-accept").click();
-  await page.getByRole("checkbox", { name: "Scan accueil" }).click();
+  await expect(page.getByRole("checkbox", { name: "Scan accueil" })).toHaveCount(0);
   await shot(page, "02-accepter-feuille-beton");
   await page.getByTestId("team-accept-confirm").click();
   await expect(page.getByText("Demande acceptée.")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("team-request").filter({ hasText: pseudo })).toHaveCount(0);
   let added = (await members()).find((m) => m.pseudo === pseudo);
   expect(added?.status).toBe("active");
-  expect(added?.staffRoles).toEqual(["scan"]);
+  expect(added?.staffRoles).toEqual([]);
   const row = page.getByTestId("team-member").filter({ hasText: pseudo });
   await expect(row).toBeVisible();
   await shot(page, "03-equipe-membres-beton");
 
-  // --- 3. Il change le rôle de la personne --------------------------------------------------------------------
+  // --- 3. Il donne des rôles à la personne ----------------------------------------------------------------------
   await row.getByTestId("team-member-manage").click();
-  await page.getByRole("checkbox", { name: "Boutique" }).click();
+  await page.getByRole("checkbox", { name: "Scan accueil" }).click();
+  await page.getByRole("checkbox", { name: "Entrée visiteurs" }).click();
   await shot(page, "04-gerer-membre-beton");
   await page.getByTestId("team-member-save").click();
   await expect(page.getByText("Rôles enregistrés.")).toBeVisible({ timeout: 20_000 });
@@ -458,6 +459,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
     email,
     password: SEED_PASSWORD,
     name: "Orga 35a",
+    termsAccepted: true,
   });
   expect(signUp.status).toBe(200);
   const cookie = await login(email);

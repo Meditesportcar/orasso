@@ -141,7 +141,8 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
     <div className="s-narrow s-stack">
       <h1 className="s-title">Ajouter un véhicule</h1>
       <p className="s-lead">
-        L'essentiel pour candidater : le véhicule, sa plaque (visible par l'organisateur seulement) et une photo.
+        L'essentiel pour candidater : le véhicule, sa plaque (visible par l'équipe organisatrice seulement) et une
+        photo.
       </p>
       <Form method="post" encType="multipart/form-data" className="s-form">
         {retour && <input type="hidden" name="retour" value={retour} />}

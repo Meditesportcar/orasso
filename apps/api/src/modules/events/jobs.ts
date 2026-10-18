@@ -108,7 +108,7 @@ export const eventJobs = {
       for (const f of followers) {
         await notificationsService.notify(tx, f.userId, "preview_open", {
           title: "Inscriptions en avant-première",
-          body: `Tu suis l'organisateur : les inscriptions à « ${e.title} » sont ouvertes pour toi avant tout le monde.`,
+          body: `Tu suis cette organisation : les inscriptions à « ${e.title} » sont ouvertes pour toi avant tout le monde.`,
           eventId: e.id,
           data: { eventId: e.id },
           link: { label: "Candidater", path: `/e/${e.slug}` },

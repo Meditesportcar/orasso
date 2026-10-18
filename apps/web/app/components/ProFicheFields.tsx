@@ -1,9 +1,39 @@
 // Champs de la fiche pro, partagés par la création (`/app/pro/nouvelle`) et la modification (`/pro/<slug>`).
-import { CheckboxField, TextField } from "@orasso/design-system/web";
-import { type ProOwner, proActivityLabels, weekdayLabels, weekdays } from "@orasso/shared";
+import { Button, CheckboxField, TextField } from "@orasso/design-system/web";
+import { type ProOwner, proActivityLabels, proAddressLabels, weekdayLabels, weekdays } from "@orasso/shared";
+import { type MouseEvent, useState } from "react";
 
+import { apiFetch } from "../lib/api.client";
 import { useProActivities } from "../lib/lists";
 import { TextAreaField } from "./Fields";
+
+/**
+ * Lot 36 : vérification de l'adresse par le géocodeur (comme une structure ou un événement). L'API géocode aussi à
+ * l'enregistrement ; ce bouton dit tout de suite si l'adresse sera placée sur la carte.
+ */
+function AddressCheck({ located }: { located: boolean }) {
+  const [status, setStatus] = useState<string | null>(located ? null : proAddressLabels.notLocated);
+  async function check(e: MouseEvent<HTMLButtonElement>) {
+    const form = e.currentTarget.form;
+    const field = (name: string) => String(form ? (new FormData(form).get(name) ?? "") : "").trim();
+    const query = [field("addressLine"), field("postalCode"), field("city")].filter(Boolean).join(" ");
+    if (query.length < 3) return setStatus(proAddressLabels.tooShort);
+    setStatus(proAddressLabels.searching);
+    const res = await apiFetch<{ match: { label: string } | null }>(`/geocode?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return setStatus(res.error.message);
+    setStatus(res.data.match ? proAddressLabels.found(res.data.match.label) : proAddressLabels.notFound);
+  }
+  return (
+    <div className="s-row">
+      <Button type="button" variant="secondary" icon="place" onClick={check}>
+        {proAddressLabels.check}
+      </Button>
+      <span className="o-t-caption s-muted" role="status" data-testid="pro-address-status">
+        {status}
+      </span>
+    </div>
+  );
+}
 
 export function ProFicheFields({ pro }: { pro?: ProOwner }) {
   // Lot 33 : activités proposées par l'administration ; celles déjà choisies restent affichées.
@@ -34,6 +64,7 @@ export function ProFicheFields({ pro }: { pro?: ProOwner }) {
           <TextField label="Code postal" name="postalCode" defaultValue={pro?.postalCode ?? ""} />
           <TextField label="Ville" name="city" defaultValue={pro?.city ?? ""} />
         </div>
+        <AddressCheck located={!pro?.city || pro.lat !== null} />
         <TextField
           label="Zone d'intervention"
           name="interventionDepartments"

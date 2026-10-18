@@ -196,7 +196,7 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
               </ChipRow>
               {dayChoices.find((c) => c.id === dayId)?.full ? (
                 <p className="o-t-caption s-muted">
-                  Complet : ta candidature passera par la liste d'attente si l'organisateur le décide.
+                  Complet : ta candidature passera par la liste d'attente si l'équipe organisatrice le décide.
                 </p>
               ) : null}
             </fieldset>
@@ -240,7 +240,8 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
                 })}
               </div>
               <p className="o-t-caption s-muted">
-                {selected.length} véhicule{selected.length > 1 ? "s" : ""} · plaque visible par l'organisateur seulement
+                {selected.length} véhicule{selected.length > 1 ? "s" : ""} · plaque visible par l'équipe organisatrice
+                seulement
               </p>
               <Button variant="secondary" icon="add" href={`/app/garage/nouveau?retour=${encodeURIComponent(here)}`}>
                 Ajouter un autre véhicule

@@ -35,9 +35,9 @@ export const templateKindLabels: Record<TemplateKind, string> = {
 
 /** Texte de l'entrée automatique du fil quand le statut change (Maintenu / Incertain / Annulé). */
 export function statusChangeText(status: EventOutlook | "cancelled"): string {
-  if (status === "cancelled") return "Événement annulé par l'organisateur.";
+  if (status === "cancelled") return "Événement annulé par l'équipe organisatrice.";
   return status === "uncertain"
-    ? "Événement passé en Incertain : l'organisateur confirmera."
+    ? "Événement passé en Incertain : l'équipe organisatrice confirmera."
     : "Événement Maintenu : il a bien lieu.";
 }
 
@@ -49,7 +49,7 @@ export const communicationLabels = {
   tabParticipants: "Messages des participants",
   tabStaff: "Discussions du staff",
   feed: "Fil de l'événement",
-  feedEmpty: "Pas encore d'annonce de l'organisateur.",
+  feedEmpty: "Pas encore d'annonce de l'équipe organisatrice.",
   feedPinned: "Épinglée",
   pin: "Épingler",
   unpin: "Désépingler",
@@ -106,7 +106,7 @@ export const communicationLabels = {
   staffPermanentHint: "Toute l'équipe de la structure : organisateurs et staff recruté.",
   staffByEvent: "Discussions par événement",
   staffByEventHint:
-    "Réservées au staff de l'événement. Fermées à J+1 (plus de nouveaux messages), lisibles par l'organisateur jusqu'à J+7.",
+    "Réservées au staff de l'événement. Fermées à J+1 (plus de nouveaux messages), lisibles par l'équipe organisatrice jusqu'à J+7.",
   staffOpen: "Ouverte",
   staffClosed: (closed: string, readable: string) => `Fermée le ${closed} · lisible jusqu'au ${readable}`,
   staffClosesAt: (date: string) => `Fermera le ${date}`,

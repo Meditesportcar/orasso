@@ -54,7 +54,7 @@ export function ApplySheet({
         {eventTitle}
       </Text>
       <TextField
-        label="Un mot pour l'organisateur (facultatif)"
+        label="Un mot pour l'équipe organisatrice (facultatif)"
         value={message}
         onChangeText={setMessage}
         maxLength={300}

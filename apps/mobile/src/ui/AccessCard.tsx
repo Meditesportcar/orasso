@@ -52,7 +52,7 @@ export function AccessCard({
     details.push(`désistement sans pénalité jusqu'au ${formatShortDate(app.withdrawDeadline)}`);
   }
   if (app.checkedInAt) details.push(`entrée enregistrée à ${formatHour(app.checkedInAt)}`);
-  if (app.status === "pending") details.push("réponse de l'organisateur à venir");
+  if (app.status === "pending") details.push("réponse de l'équipe organisatrice à venir");
   if (app.status === "waitlisted") details.push("tu seras prévenu si une place se libère");
   if (app.status === "refused") {
     const reasons = (app.refusalReasons ?? []).map((r) => refusalReasonLabels[r]).join(", ");

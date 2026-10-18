@@ -6,7 +6,6 @@ import {
   CheckboxField,
   Chip,
   ChipRow,
-  Photo,
   Plate,
   SelectField,
   type SelectOption,
@@ -18,6 +17,7 @@ import {
 import {
   archiveStatusChoices,
   OTHER_LABEL,
+  photoLabels,
   type VehicleStatus,
   type VehicleType,
   vehicleTypeLabels,
@@ -25,13 +25,14 @@ import {
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
-import { MAX_PHOTOS, type PickedPhoto, photoForm, pickPhotos } from "@/lib/photos";
+import { CROP_VEHICLE, MAX_PHOTOS, type PickedPhoto, photoForm, pickPhotos } from "@/lib/photos";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
+import { PhotoGrid, UploadProgress } from "@/ui/PhotoGrid";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
@@ -60,7 +61,7 @@ export default function NouveauVehicule() {
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Si l'envoi des photos échoue après la création, on reprend sans recréer le véhicule.
   const [created, setCreated] = useState<{ id: string; uploaded: number; pending: boolean } | null>(null);
@@ -111,7 +112,7 @@ export default function NouveauVehicule() {
 
   async function addPhotos() {
     try {
-      const picked = await pickPhotos(MAX_PHOTOS - photos.length);
+      const picked = await pickPhotos(MAX_PHOTOS - photos.length, CROP_VEHICLE);
       setPhotos((all) => [...all, ...picked].slice(0, MAX_PHOTOS));
     } catch (e) {
       setError(errorMessage(e));
@@ -145,7 +146,7 @@ export default function NouveauVehicule() {
         setCreated(target);
       }
       for (let i = target.uploaded; i < photos.length; i++) {
-        setProgress(`Envoi de la photo ${i + 1} sur ${photos.length}…`);
+        setProgress({ current: i + 1, total: photos.length });
         await api.uploadVehiclePhoto(target.id, await photoForm(photos[i] as PickedPhoto, i));
         target = { ...target, uploaded: i + 1 };
         setCreated(target);
@@ -272,7 +273,7 @@ export default function NouveauVehicule() {
           placeholder="AB-123-CD"
           help={
             active
-              ? "Visible par l'organisateur seulement, jamais par les autres inscrits. Déjà prise par un autre membre ? Il sera prévenu et pourra confirmer le transfert."
+              ? "Visible par l'équipe organisatrice seulement, jamais par les autres inscrits. Déjà prise par un autre membre ? Il sera prévenu et pourra confirmer le transfert."
               : "Facultative pour un véhicule archivé. Jamais visible des autres inscrits."
           }
         />
@@ -310,19 +311,16 @@ export default function NouveauVehicule() {
         Évite de montrer la plaque : tes photos sont visibles de tous les inscrits. La première est la photo de ta
         carte. Il en faut au moins une pour candidater.
       </Muted>
+      {/* Lot 36 : croix visible et confirmation pour retirer, couverture au choix, recadrage à l'ajout. */}
       {photos.length > 0 ? (
-        <View style={styles.photos}>
-          {photos.map((p, i) => (
-            <Pressable
-              key={p.uri}
-              accessibilityRole="button"
-              accessibilityLabel={`Retirer la photo ${i + 1}`}
-              onPress={() => !busy && setPhotos((all) => all.filter((x) => x.uri !== p.uri))}
-            >
-              <Photo source={{ uri: p.uri }} style={styles.photo} />
-            </Pressable>
-          ))}
-        </View>
+        <PhotoGrid
+          photos={photos.map((p, i) => ({ key: p.uri, source: { uri: p.uri }, label: `Photo ${i + 1}` }))}
+          onRemove={(i) => setPhotos((all) => all.filter((_, j) => j !== i))}
+          onCover={(i) => setPhotos((all) => [...all.slice(i, i + 1), ...all.filter((_, j) => j !== i)])}
+          disabled={busy || created !== null}
+          tileStyle={styles.photo}
+          testID="new-vehicle-photos"
+        />
       ) : null}
       {photos.length < MAX_PHOTOS ? (
         <Button
@@ -332,10 +330,10 @@ export default function NouveauVehicule() {
           onPress={() => void addPhotos()}
           fullWidth
         >
-          Ajouter des photos
+          {photoLabels.addOne}
         </Button>
       ) : null}
-      {progress ? <Muted variant="meta">{progress}</Muted> : null}
+      {progress ? <UploadProgress current={progress.current} total={progress.total} /> : null}
     </FlowScreen>
   );
 }
@@ -344,7 +342,6 @@ const styles = StyleSheet.create({
   plate: { gap: space3, padding: space3 },
   two: { flexDirection: "row", gap: space2 },
   half: { flex: 1 },
-  photos: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   photo: { width: 92, height: 70, borderRadius: tokens.radius.radiusSm },
   category: { flexDirection: "row", alignItems: "center", gap: space2, flexWrap: "wrap" },
   categoryOff: { opacity: 0.55 },

@@ -6,9 +6,9 @@ import { Platform } from "react-native";
 
 import { type PickedPhoto, pickPhotos } from "./photos";
 
-/** Ouvre la photothèque pour une seule image ; `null` si l'accès est refusé ou le choix annulé. */
-export async function pickOneImage(): Promise<PickedPhoto | null> {
-  const [photo] = await pickPhotos(1);
+/** Une seule image (`crop` : recadrée dans ce cadre, lot 36) ; `null` si l'accès est refusé ou le choix annulé. */
+export async function pickOneImage(crop?: [number, number]): Promise<PickedPhoto | null> {
+  const [photo] = await pickPhotos(1, crop);
   return photo ?? null;
 }
 

@@ -7,10 +7,20 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import * as Notifications from "expo-notifications";
-import { Stack, useGlobalSearchParams, useRootNavigationState, useRouter, useSegments } from "expo-router";
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider as NavigationThemeProvider,
+  Stack,
+  useGlobalSearchParams,
+  useRootNavigationState,
+  useRouter,
+  useSegments,
+} from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef, useState } from "react";
+import * as SystemUI from "expo-system-ui";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
 import { ReportSheetHost } from "@/features/ReportSheet";
@@ -36,17 +46,30 @@ void SplashScreen.preventAutoHideAsync();
  * Écrans ouverts sans compte : premier lancement, connexion, page d'un événement (lien partagé), d'une structure ou d'un
  * pro (pages publiques du site, lot 29), recette du design.
  */
-const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "o", "p", "ami", "_ds"]);
+const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "o", "p", "ami", "_ds", "verification-email"]);
 
 // Le thème (Béton par défaut, Sable, auto) et les polices Archivo sont posés une fois, à la racine.
 function Shell() {
-  const { theme } = useTheme();
+  const { theme, t } = useTheme();
   const { status, me } = useSession();
   const { persona, backToFan, choose } = usePersona();
   const router = useRouter();
   const segments = useSegments();
   const navigation = useRootNavigationState();
   const [opening, setOpening] = useState(true);
+
+  // Lot 36 (bande blanche en bas d'écran sur Android, bord à bord) : sous les écrans, la navigation peignait son fond
+  // par défaut (blanc) — zone de la barre d'onglets au-dessus du métal, ses coins arrondis, et tout écran qui ne
+  // couvre pas la barre système. Le fond suit maintenant le thème partout : vue racine du système (expo-system-ui),
+  // thème de la navigation (fond et cartes) et conteneur racine.
+  const ground = t.color.ground;
+  const navigationTheme = useMemo(() => {
+    const base = theme === "sable" ? DefaultTheme : DarkTheme;
+    return { ...base, colors: { ...base.colors, background: ground, card: ground, border: ground } };
+  }, [theme, ground]);
+  useEffect(() => {
+    if (Platform.OS !== "web") void SystemUI.setBackgroundColorAsync(ground).catch(() => undefined);
+  }, [ground]);
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -114,12 +137,16 @@ function Shell() {
   }, [router, backToFan, choose]);
 
   return (
-    <View style={styles.fill}>
+    <View style={[styles.fill, { backgroundColor: ground }]}>
       <StatusBar style={theme === "sable" ? "dark" : "light"} />
       {/* Lot 34a : bandeau de l'horloge simulée (rien hors développement). */}
       <ClockBanner />
       {/* Les écrans attendent la lecture de la session : sans jeton, leurs premières requêtes partiraient anonymes. */}
-      {status === "loading" ? null : <Stack screenOptions={{ headerShown: false, animation: "none" }} />}
+      <NavigationThemeProvider value={navigationTheme}>
+        {status === "loading" ? null : (
+          <Stack screenOptions={{ headerShown: false, animation: "none", contentStyle: { backgroundColor: ground } }} />
+        )}
+      </NavigationThemeProvider>
       <AnnouncementSheet />
       {/* Lot 32 : feuille « Signaler », une pour toute l'appli. */}
       {status === "in" ? <ReportSheetHost /> : null}

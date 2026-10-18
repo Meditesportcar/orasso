@@ -334,7 +334,7 @@ export async function seedBase(hash: string) {
     previewHours: 24,
     lockOffsetMinutes: 120,
     rulesText:
-      "Règlement type Orasso : respect du lieu et des riverains, aucun rodéo, aucun burn, l'organisateur peut exclure.",
+      "Règlement type Orasso : respect du lieu et des riverains, aucun rodéo, aucun burn, l'équipe organisatrice peut exclure.",
     instructions:
       "Musique coupée à 22 h, respectez le voisinage.\nDéparts au pas, aucun burn, exclusion immédiate.\nTravaux sur la D81 : prévoyez 10 min de plus.",
   });

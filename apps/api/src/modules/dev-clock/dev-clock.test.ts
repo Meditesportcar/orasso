@@ -83,7 +83,7 @@ async function signUpBearer(pseudo: string, opts: { twoFactor: boolean; role: "s
   const res = await app.request("/api/auth/sign-up/email", {
     method: "POST",
     headers: { "content-type": "application/json", origin: ORIGIN },
-    body: JSON.stringify({ email, password: "motdepasse-test-123", name: pseudo }),
+    body: JSON.stringify({ email, password: "motdepasse-test-123", name: pseudo, termsAccepted: true }),
   });
   expect(res.status).toBe(200);
   const token = res.headers.get("set-auth-token");

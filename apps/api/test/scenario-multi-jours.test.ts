@@ -55,6 +55,7 @@ describe("événement sur plusieurs jours (lot 26)", () => {
     await addMember(structure.id, julie.id, "staff", ["scan"]);
     const created = await call(damien, "POST", `/structures/${structure.id}/events`, {
       title: "Salon de printemps",
+      addressLine: "1 quai du Port",
       format: "show",
       startsAt: paris(3, 14, 9).toISOString(),
       endsAt: paris(3, 14, 18).toISOString(),
@@ -342,6 +343,8 @@ describe("événement sur plusieurs jours (lot 26)", () => {
     const structure = await createStructure(damien.id);
     const created = await call(damien, "POST", `/structures/${structure.id}/events`, {
       title: "Salon des plaques",
+      addressLine: "1 quai du Port",
+      city: "Canet-en-Roussillon",
       format: "show",
       startsAt: paris(4, 10, 9).toISOString(),
       endsAt: paris(4, 10, 18).toISOString(),

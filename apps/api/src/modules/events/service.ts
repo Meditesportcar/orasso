@@ -15,6 +15,7 @@ import {
   type EventOutlook,
   type EventPublic,
   type EventUpdate,
+  eventAddressRequired,
   eventOutlookLabels,
   formatDayDate,
   fromWallTime,
@@ -246,7 +247,11 @@ export const eventsService = {
    */
   async getPublic(slug: string, viewer: Viewer | null): Promise<EventPublic> {
     const e = await db.query.events.findFirst({ where: eq(events.slug, slug) });
-    if (!e || e.status === "draft") throw notFound("Événement introuvable");
+    if (!e) throw notFound("Événement introuvable");
+    // Lot 36 : « Aperçu » d'un brouillon, pour l'équipe de la structure seulement (organisateurs et staff).
+    if (e.status === "draft" && !(viewer && (await isMember(e.structureId, viewer.user.id)))) {
+      throw notFound("Événement introuvable");
+    }
     const s = await structureById(e.structureId);
     const mine = viewer
       ? await db.query.applications.findMany({
@@ -485,6 +490,10 @@ export const eventsService = {
     if (s.verification === "suspended") throw forbidden(SUSPENDED_MESSAGE);
     if (s.verification !== "verified") throw forbidden("Publication réservée aux structures vérifiées");
     if (e.status !== "draft") throw conflict("conflict", "Déjà publié ou annulé");
+    // Lot 36 : un brouillon créé avant l'adresse obligatoire ne se publie pas sans elle.
+    if (!e.addressLine?.trim() || !e.city?.trim()) {
+      throw validation(eventAddressRequired, { fields: { addressLine: eventAddressRequired } });
+    }
     await withTx(async (tx, after) => {
       const [row] = await tx
         .update(events)
@@ -564,7 +573,7 @@ export const eventsService = {
       for (const userId of new Set([...cancelled.map((a) => a.userId), ...cancelledTickets.map((t) => t.userId)])) {
         await notificationsService.notify(tx, userId, "event_cancelled", {
           title: "Événement annulé",
-          body: `« ${row.title} » (${formatDateTime(row.startsAt)}) est annulé par ${by === "orasso" ? "l'équipe Orasso" : "l'organisateur"}.`,
+          body: `« ${row.title} » (${formatDateTime(row.startsAt)}) est annulé par ${by === "orasso" ? "l'équipe Orasso" : "l'équipe organisatrice"}.`,
           eventId: id,
           eventStartsAt: row.startsAt,
           data: { eventId: id },
@@ -715,7 +724,7 @@ export const eventsService = {
         await announcementsService.recordStatusChange(tx, id, outlook, v.user.id);
         const body =
           outlook === "uncertain"
-            ? `« ${e.title} » passe en « ${eventOutlookLabels.uncertain} » : l'organisateur confirmera.`
+            ? `« ${e.title} » passe en « ${eventOutlookLabels.uncertain} » : l'équipe organisatrice confirmera.`
             : `« ${e.title} » est « ${eventOutlookLabels.maintained} ».`;
         for (const userId of await eventsRepo.activeApplicantIds(id, tx, { awaitingMembers: true })) {
           await notificationsService.notify(tx, userId, "event_outlook_changed", {

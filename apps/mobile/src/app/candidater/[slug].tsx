@@ -318,7 +318,7 @@ export default function Candidater() {
                 </Button>
               </View>
               <TextField
-                label="Un mot pour l'organisateur (facultatif)"
+                label="Un mot pour l'équipe organisatrice (facultatif)"
                 value={message}
                 onChangeText={setMessage}
                 maxLength={120}
@@ -341,7 +341,7 @@ export default function Candidater() {
             <Line
               k="Plaque"
               v={chosen.map((v) => v.plate ?? "non immatriculé").join("\n")}
-              hint="visible par l'organisateur seulement"
+              hint="visible par l'équipe organisatrice seulement"
             />
             <Line
               k="Avec toi"
@@ -349,7 +349,7 @@ export default function Candidater() {
             />
             <Line
               k="Réponse"
-              v={e.admission === "open" ? "Retenue d'office" : "Par l'organisateur · tu seras notifié"}
+              v={e.admission === "open" ? "Retenue d'office" : "Par l'équipe organisatrice · tu seras notifié"}
               last
             />
           </Plate>
@@ -360,7 +360,7 @@ export default function Candidater() {
           />
           <CheckboxField label="Recevoir la newsletter d'Orasso." checked={newsletter} onChange={setNewsletter} />
           <Muted variant="caption">
-            Ta candidature n'est visible que de l'organisateur. Tu peux te désister depuis l'onglet Accès.
+            Ta candidature n'est visible que de l'équipe organisatrice. Tu peux te désister depuis l'onglet Accès.
           </Muted>
         </>
       ) : null}

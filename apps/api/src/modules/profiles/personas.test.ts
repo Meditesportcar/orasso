@@ -64,7 +64,7 @@ describe("casquettes dans GET /me", () => {
     expect(json.personas).toHaveLength(1);
   });
 
-  it("la fiche pro est une casquette ; la pastille de l'organisateur compte les candidatures en attente", async () => {
+  it("la fiche pro est une casquette ; la pastille de l'équipe organisatrice compte les candidatures en attente", async () => {
     const owner = await signUp("Patron");
     const fan = await signUp("Candidat");
     const ref = await seedReference();

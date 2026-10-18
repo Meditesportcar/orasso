@@ -165,7 +165,7 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
 
   await expect(step).toContainText("Billetterie");
   await expect(owner.getByTestId("wizard-recap")).toContainText(eventTitle);
-  await owner.getByRole("button", { name: "Enregistrer le brouillon" }).click();
+  await owner.getByRole("button", { name: "Garder en brouillon" }).click();
   await owner.waitForURL(/\/orga\/[^/]+\/e\/[0-9a-f-]{36}/);
   const eventId = new URL(owner.url()).pathname.split("/")[4] ?? "";
   await expect(owner.getByTestId("event-title")).toHaveText(eventTitle);
@@ -290,21 +290,25 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   await form.getByRole("button", { name: "M'inscrire" }).click();
   await expect(g.getByText("10 caractères au moins.")).toBeVisible();
   await expect(g.getByText("Les deux mots de passe sont différents.")).toBeVisible();
+  // Lot 36 : conditions générales obligatoires, refusées par le serveur sans la case.
+  await expect(form.getByTestId("terms-error")).toBeVisible();
   const strong = "mot-de-passe-express-2026";
   await form.getByLabel("Mot de passe", { exact: true }).fill(strong);
   await form.getByLabel("Mot de passe, encore une fois").fill(strong);
+  await form.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
   await form
     .getByLabel("Photo du véhicule")
     .setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: POSTER });
   await form.getByRole("button", { name: "M'inscrire" }).click();
   const done = g.getByTestId("express-done");
   await expect(done).toBeVisible({ timeout: 30_000 });
-  const qr = done.getByTestId("express-qr").locator("svg");
-  await expect(qr).toBeVisible();
-  await expect(qr).toHaveAttribute("data-qr-version", "6");
+  // Lot 36 : l'entrée est validée, pas de QR ; l'invitation à télécharger l'appli.
+  await expect(done.getByTestId("express-entry-ok")).toBeVisible();
+  await expect(done.getByTestId("express-app")).toBeVisible();
+  await expect(done.locator("svg[data-qr-version]")).toHaveCount(0);
   expect(done).not.toContainText("La photo n'a pas pu être envoyée");
   // Le compte est connecté : l'accès est retenu, avec son QR, et le véhicule a sa photo.
-  await g.getByRole("link", { name: "Voir mon accès" }).click();
+  await g.goto("/app/acces");
   await expect(g.getByTestId("application").first()).toHaveAttribute("data-status", "accepted");
   await expect(g.getByTestId("pass-qr")).toBeVisible();
   const guest = await login(guestEmail, strong);
@@ -327,7 +331,7 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   await ownerCtx.close();
 });
 
-test("lien d'invitation : le compte créé suit l'organisateur", async ({ page }) => {
+test("lien d'invitation : le compte créé suit l'équipe organisatrice", async ({ page }) => {
   const organizer = await login("damien@orasso.local");
   const me = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(organizer, "GET", "/me");
   const structureId = me.data.memberships.find((m) => m.structureSlug === "meditesportcar")?.structureId;
@@ -342,6 +346,7 @@ test("lien d'invitation : le compte créé suit l'organisateur", async ({ page }
   await page.getByLabel("Pseudo").fill(`Fan_${s}`);
   await page.getByLabel("E-mail").fill(`fan_${s}@e2e.orasso.test`);
   await page.getByLabel("Mot de passe", { exact: true }).fill("mot-de-passe-fan-2026");
+  await page.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
   await page.getByRole("button", { name: "Créer mon compte et suivre" }).click();
   await page.waitForURL("**/o/meditesportcar");
   await expect(page.getByRole("button", { name: "Tu suis cette structure" })).toBeVisible();

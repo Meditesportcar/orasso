@@ -94,6 +94,12 @@ export function TextField({
   const [revealed, setRevealed] = useState(false);
   const isPassword = Boolean(secureTextEntry);
   const border = error ? c.winText : focused ? c.accentText : f.line;
+  // Lot 36 : un champ long (règlement, description, consignes, bio…) s'étend avec le texte, jusqu'à une hauteur maximale
+  // puis défile ; avec une longueur maximale, un compteur discret sous le champ.
+  const multiline = Boolean(input.multiline);
+  const length = typeof input.value === "string" ? input.value.length : null;
+  const counter =
+    multiline && input.maxLength !== undefined && length !== null ? `${length} / ${input.maxLength}` : null;
   return (
     <FieldShell label={label} help={help} error={error} style={style}>
       <View style={styles.control}>
@@ -113,8 +119,10 @@ export function TextField({
           style={[
             styles.input,
             textStyles.body,
+            multiline
+              ? [styles.multiline, { minHeight: tall ? MULTILINE_MIN + 8 : MULTILINE_MIN }]
+              : { height: tall ? 56 : spacing.touch },
             {
-              height: tall ? 56 : spacing.touch,
               color: f.ink,
               backgroundColor: f.background,
               borderColor: border,
@@ -137,9 +145,18 @@ export function TextField({
           </Pressable>
         )}
       </View>
+      {counter ? (
+        <Text variant="caption" color={f.muted} style={styles.counter} accessibilityLabel={`${counter} caractères`}>
+          {counter}
+        </Text>
+      ) : null}
     </FieldShell>
   );
 }
+
+/** Hauteur de départ d'un champ long (2,5 fois la cible tactile), qui s'étend avec le texte jusqu'au maximum. */
+const MULTILINE_MIN = spacing.touch * 2.5;
+const MULTILINE_MAX = spacing.touch * 6;
 
 export type SelectOption = { value: string; label: string };
 
@@ -271,6 +288,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.radiusMd,
   },
   noOutline: { outlineStyle: "none" } as unknown as TextStyle,
+  multiline: { maxHeight: MULTILINE_MAX, paddingVertical: 12, textAlignVertical: "top" },
+  counter: { alignSelf: "flex-end" },
   reveal: {
     position: "absolute",
     top: 0,
