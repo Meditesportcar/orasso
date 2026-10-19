@@ -86,14 +86,15 @@ function TabEntry({
   /** Barre v2 : libellés à la largeur normale d'Archivo pour que les plus longs tiennent (journal, lot 38). */
   compact?: boolean;
 }) {
-  const { t, theme } = useTheme();
+  const { t } = useTheme();
   const c = t.color;
   const emboss = textShadowOf(t.shadow.embossBar);
   let ink = active ? c.barInk : c.barMuted;
   let center: ViewStyle | null = null;
   if (tab.center) {
-    // DA v2 : le O sur une pastille nuit bordée de moutarde, dans les deux thèmes ; v1 : moutarde (Béton), nuit (Sable).
-    const night = tab.o || theme === "sable";
+    // DA v2 : le O sur une pastille nuit bordée de moutarde ; v1 (Accès, Tri, Scanner) : pastille moutarde. La barre étant
+    // nuit dans les deux thèmes, la variante Sable (pastille nuit) disparaît.
+    const night = Boolean(tab.o);
     ink = night ? c.accent : c.accentInk;
     center = {
       marginTop: -TAB_OVERHANG,
