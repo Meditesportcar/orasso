@@ -1,4 +1,4 @@
-/* TabBar : cinq onglets sur métal brossé. Voir docs/design-system/components/TabBar. */
+/* TabBar : cinq onglets sur la barre (nuit dans les deux thèmes depuis la DA v2). Voir docs/design-system/components/TabBar. */
 
 .o-tabbar {
   position: relative;
@@ -70,6 +70,17 @@
 [data-theme="sable"] .o-tabbar__tab.is-center {
   background: var(--night);
   color: var(--accent);
+}
+/* DA v2 : l'onglet du milieu porte le O (voiture garée) sur une pastille nuit bordée de moutarde, dans les deux thèmes. */
+.o-tabbar__tab.is-center.is-o,
+[data-theme="sable"] .o-tabbar__tab.is-center.is-o {
+  border: 2px solid var(--accent);
+  background: var(--night);
+  color: var(--accent);
+}
+.o-tabbar__o {
+  display: inline-flex;
+  transform: skewX(calc(var(--skew-tab) * -1));
 }
 .o-tabbar__center-label {
   display: block;

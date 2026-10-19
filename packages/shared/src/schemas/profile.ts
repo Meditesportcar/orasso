@@ -56,9 +56,23 @@ export type Membership = {
   assisted?: boolean;
 };
 
-/** Les casquettes de l'appli (lot 16) : le passionné, une structure, la fiche pro, le profil prestataire. */
-export const personaKinds = ["fan", "organizer", "pro", "provider"] as const;
+/**
+ * Les profils de l'appli (lot 16, six depuis la DA v2, lot 38) : le passionné exposant (`fan`, avec un véhicule), le
+ * visiteur (sans véhicule), une structure, la fiche pro, le profil prestataire, le profil média. L'API ne renvoie
+ * encore que `fan`, `organizer`, `pro` et `provider` : le lot 40 branche `visitor`, le lot 45 `media`.
+ */
+export const personaKinds = ["fan", "visitor", "organizer", "pro", "provider", "media"] as const;
 export type PersonaKind = (typeof personaKinds)[number];
+
+/** Nom de chaque profil (prototype DA v2, `s-profil`). */
+export const personaKindLabels: Record<PersonaKind, string> = {
+  fan: "Exposant",
+  visitor: "Visiteur",
+  organizer: "Organisateur",
+  pro: "Pro",
+  provider: "Prestataire",
+  media: "Média",
+};
 
 /**
  * Une casquette du compte (`GET /me` → `personas`). `id` = identifiant de la structure, de la fiche pro ou du profil

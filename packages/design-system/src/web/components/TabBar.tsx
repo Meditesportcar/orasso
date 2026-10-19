@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { IconName } from "../../icons";
 import { type TabSetName, tabSets } from "../../labels";
+import { Monogram } from "./Brand";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
 import { Brush } from "./Textures";
@@ -9,16 +10,20 @@ export type TabItem = {
   id: string;
   label: string;
   icon: IconName;
-  /** L'onglet du milieu : pastille inclinée en néon (Accès pour le passionné et le pro, Tri pour l'organisateur). */
+  /** L'onglet du milieu : pastille inclinée en néon (Accueil, ou Direct pour l'organisateur ; v1 : Accès, Tri). */
   center?: boolean;
+  /** DA v2 : l'onglet du milieu porte le O (la voiture garée ; animé par le lot 39 via `centerSlot`). */
+  o?: boolean;
   /** Pastille de notification moutarde de 8 px sur l'icône (la Boîte). */
   dot?: boolean;
   href?: string;
 };
 
 export type TabBarProps = {
-  /** La casquette : choisit les cinq onglets du README. Ignoré si `tabs` est fourni. */
+  /** Le profil : choisit les cinq onglets (DA v2). Ignoré si `tabs` est fourni. */
   set?: TabSetName;
+  /** Contenu du O de l'onglet central (lot 39 : le O vivant) ; par défaut le monogramme, voiture garée. */
+  centerSlot?: ReactNode;
   tabs?: readonly TabItem[];
   /** Identifiant de l'onglet actif. */
   active: string;
@@ -27,8 +32,16 @@ export type TabBarProps = {
   "aria-label"?: string;
 };
 
-function TabContent({ tab, active }: { tab: TabItem; active: boolean }): ReactNode {
+function TabContent({ tab, active, centerSlot }: { tab: TabItem; active: boolean; centerSlot?: ReactNode }): ReactNode {
   const icon = <Icon name={tab.icon} size={22} strokeWidth={1.8} filled={active && !tab.center} />;
+  if (tab.center && tab.o) {
+    return (
+      <>
+        <span className="o-tabbar__o">{centerSlot ?? <Monogram size={30} tone="dark" alt="" />}</span>
+        <span className="o-tabbar__center-label">{tab.label}</span>
+      </>
+    );
+  }
   if (tab.center) {
     return (
       <>
@@ -48,9 +61,24 @@ function TabContent({ tab, active }: { tab: TabItem; active: boolean }): ReactNo
   );
 }
 
-function TabEntry({ tab, active, onSelect }: { tab: TabItem; active: boolean; onSelect?: (id: string) => void }) {
-  const cls = cx("o-tabbar__tab o-t-tab", tab.center && "is-center", active && "is-active");
-  const content = <TabContent tab={tab} active={active} />;
+function TabEntry({
+  tab,
+  active,
+  onSelect,
+  centerSlot,
+}: {
+  tab: TabItem;
+  active: boolean;
+  onSelect?: (id: string) => void;
+  centerSlot?: ReactNode;
+}) {
+  const cls = cx(
+    "o-tabbar__tab o-t-tab",
+    tab.center && "is-center",
+    tab.center && tab.o && "is-o",
+    active && "is-active",
+  );
+  const content = <TabContent tab={tab} active={active} centerSlot={centerSlot} />;
   if (tab.href) {
     return (
       <a className={cls} href={tab.href} aria-current={active ? "page" : undefined}>
@@ -66,12 +94,14 @@ function TabEntry({ tab, active, onSelect }: { tab: TabItem; active: boolean; on
 }
 
 /**
- * Cinq onglets sur du métal brossé, avec l'Accès (ou le Tri) au milieu comme une pastille d'affiche. Le mode
- * staff et le mode jour J n'ont pas de barre d'onglets : on en sort par la pastille ✕ de l'en-tête.
+ * Cinq onglets sur la barre nuit, avec le O au milieu (Accueil, ou Direct pour l'organisateur) comme une pastille
+ * d'affiche inclinée : le seul néon de la barre. Le mode staff et le mode jour J n'ont pas de barre d'onglets : on en
+ * sort par la pastille ✕ de l'en-tête.
  */
 export function TabBar({
-  set = "fan",
+  set = "exhibitor",
   tabs,
+  centerSlot,
   active,
   onSelect,
   className,
@@ -93,7 +123,7 @@ export function TabBar({
         <Brush />
       </div>
       {items.map((tab) => (
-        <TabEntry key={tab.id} tab={tab} active={tab.id === active} onSelect={onSelect} />
+        <TabEntry key={tab.id} tab={tab} active={tab.id === active} onSelect={onSelect} centerSlot={centerSlot} />
       ))}
     </nav>
   );

@@ -1,4 +1,4 @@
-import { AppBarAction, Ground, Icon, TabBar, type TabItem, tabSets } from "@orasso/design-system/web";
+import { AppBarAction, Ground, Icon, legacyTabSets, TabBar, type TabItem } from "@orasso/design-system/web";
 import {
   explorerLabels,
   moderationLabels,
@@ -55,7 +55,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       revalidator.revalidate();
     }
   });
-  const tabs: TabItem[] = tabSets.fan.map((tab) => ({
+  const tabs: TabItem[] = legacyTabSets.fan.map((tab) => ({
     ...tab,
     href: HREFS[tab.id],
     dot: tab.id === "inbox" && loaderData.unreadInbox > 0,

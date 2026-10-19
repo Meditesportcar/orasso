@@ -14,7 +14,9 @@ export type GradientStop = {
 
 export type ParsedGradient =
   | { kind: "linear"; angle: number; stops: GradientStop[]; repeating: boolean }
-  | { kind: "radial"; rx: number; ry: number; cx: number; cy: number; stops: GradientStop[] };
+  | { kind: "radial"; rx: number; ry: number; cx: number; cy: number; stops: GradientStop[] }
+  /** `none` : couche éteinte (surcouche v2 : halo et reflet du Sable). */
+  | { kind: "none" };
 
 /** Découpe sur les virgules qui ne sont pas dans une parenthèse. */
 export function splitTopLevel(text: string): string[] {
@@ -96,6 +98,7 @@ function parseStops(parts: string[]): GradientStop[] {
 }
 
 export function parseGradient(css: string): ParsedGradient {
+  if (css.trim() === "none") return { kind: "none" };
   const open = css.indexOf("(");
   const name = css.slice(0, open).trim();
   const parts = splitTopLevel(css.slice(open + 1, css.lastIndexOf(")")));
