@@ -124,13 +124,24 @@ export function publicView(p: ProviderWith): ProviderPublic {
   };
 }
 
-/** Organisateur : coordonnées comprises ; staff de filtration : sans téléphone ni e-mail. */
-export function triageView(p: ProviderWith, accreditedMedia: boolean, withContact: boolean): ProviderForTriage {
+/**
+ * Organisateur : coordonnées comprises ; staff de filtration : sans téléphone ni e-mail. Lot 46 : mission,
+ * emplacement et avis de la candidature (`providerTriageExtras`).
+ */
+export function triageView(
+  p: ProviderWith,
+  accreditedMedia: boolean,
+  withContact: boolean,
+  extras?: Pick<ProviderForTriage, "need" | "spot" | "review">,
+): ProviderForTriage {
   return {
     ...publicView(p),
     phone: withContact ? p.phone : null,
     email: withContact ? p.email : null,
     accreditedMedia,
+    need: extras?.need ?? null,
+    spot: extras?.spot ?? null,
+    review: extras?.review ?? null,
   };
 }
 

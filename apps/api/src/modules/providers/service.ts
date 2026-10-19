@@ -42,7 +42,6 @@ import {
   proProfiles,
   providerPhotos,
   providerProfiles,
-  providerReviews,
   structureBans,
   structureMembers,
   structures,
@@ -57,7 +56,7 @@ import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
-import { filledByNeed, needView, reviewsOf } from "./needs";
+import { filledByNeed, needView, reviewsByApplication, reviewsOf } from "./needs";
 import {
   loadProvider,
   loadProviders,
@@ -586,12 +585,10 @@ export const providersService = {
     const needRows = needIds.length ? await db.select().from(eventNeeds).where(inArray(eventNeeds.id, needIds)) : [];
     const filled = await filledByNeed(needIds);
     const needOf = new Map(needRows.map((n) => [n.id, n]));
-    const reviewRows = await db.select().from(providerReviews).where(inArray(providerReviews.applicationId, appIds));
-    const reviewOf = new Map(reviewRows.filter((r) => !r.hiddenAt).map((r) => [r.applicationId, r]));
+    const reviewOf = await reviewsByApplication(appIds);
     return rows.map(({ a, e }) => {
       const need = a.needId ? needOf.get(a.needId) : undefined;
       const accepted = a.status === "accepted";
-      const review = reviewOf.get(a.id);
       return {
         ...applicationBase(a, e, t, rankOf, enteredAt),
         need: need ? needView(need, filled.get(need.id) ?? 0) : null,
@@ -599,9 +596,7 @@ export const providersService = {
         installAt: need?.installAt?.toISOString() ?? null,
         power: (need?.power as ProviderPower | undefined) ?? null,
         instructions: accepted ? e.instructions : null,
-        review: review
-          ? { rating: review.rating, comment: review.comment, createdAt: review.createdAt.toISOString() }
-          : null,
+        review: reviewOf.get(a.id) ?? null,
       };
     });
   },
