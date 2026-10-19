@@ -60,7 +60,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   const structure = me.data.personas.find((p) => p.kind === "organizer" && p.label.includes("MéditeSportCar"));
   expect(structure).toBeTruthy();
   const events = await apiCall<{ id: string; title: string }[]>(damien, "GET", `/structures/${structure?.id}/events`);
-  const salon = events.data.find((e) => e.title.includes("Salon"));
+  const salon = events.data.find((e) => e.title === "Salon Argelès");
   const nocturne = events.data.find((e) => e.title.includes("Nocturne de Canet"));
   expect(salon && nocturne).toBeTruthy();
   // Une recette interrompue a pu laisser le Salon en Incertain : on repart du seed (Maintenu).
@@ -176,7 +176,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await tab(page, "Direct").click();
   await page.getByTestId("orga-direct-staff-mode").click();
   await page.waitForURL(new RegExp(`/staff/${salon?.id}`), { timeout: 20_000 });
-  await expect(page.getByText(/^Mode staff ·/).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Mode staff", { exact: true }).first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Synchroniser la liste" })).toBeVisible({ timeout: 20_000 });
   // Pas de réponse « Je suis là » pour un organisateur (il n'est pas dans le staff de l'événement).
   await expect(page.getByRole("button", { name: "Je suis là" })).toHaveCount(0);

@@ -122,7 +122,8 @@ test("QR tournant : quatre variantes, nouveau code au passage d'un créneau de 2
       await expect(page.getByText(/Il fabrique un nouveau code toutes les 20 secondes/)).toBeVisible();
       await shot(page, `qr-comment-ca-marche-${theme}`);
       await page.clock.fastForward(20_000);
-      await expect.poll(number, { timeout: 10_000 }).toBe((before + 1) % 10_000);
+      // Le créneau a avancé : nouveau code, nouveau numéro (l'heure suit celle du serveur, en-tête Date).
+      await expect.poll(number, { timeout: 10_000 }).not.toBe(before);
       await ctx.close();
     }
 
@@ -331,7 +332,8 @@ test("mode staff v2 : tuiles selon les rôles, scan d'un OR2 (OK, déjà entré,
       await page.evaluate(() => {
         (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold = true;
       });
-      await expect(page.getByTestId("drive-offline")).toBeVisible({ timeout: 30_000 });
+      // La liste est lue (des inscrits en mémoire) avant de taper la plaque.
+      await expect(page.getByTestId("drive-offline")).toHaveText(/ [1-9]\d* inscrits/, { timeout: 30_000 });
       await page.getByTestId("drive-typed").fill("GA-662-KS");
       await expect(page.getByTestId("drive-typed")).toHaveValue("GA-662-KS");
       await page.getByTestId("drive-typed").press("Enter");

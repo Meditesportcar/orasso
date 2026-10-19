@@ -194,6 +194,11 @@ export default function StaffHome() {
             <Text variant="caption" color={c.plateMuted}>
               {state ? L.inMemory(inMemory) : L.syncFirst}
             </Text>
+            {pending.length > 0 ? (
+              <Text variant="caption" color={c.plateInk} testID="staff-pending">
+                {`${pending.length} envoi${pending.length > 1 ? "s" : ""} en attente : ils partent au retour du réseau`}
+              </Text>
+            ) : null}
           </View>
         </View>
         {syncMessage ? (
