@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { loginInBrowser, MOBILE, setTheme } from "./helpers";
+import { loginInBrowser, MOBILE, setTheme, signUpApi, unique } from "./helpers";
 
 // Lot 38 : socle de la DA v2 côté site — recette /_ds (section v2) dans les deux thèmes avec l'audit (contour sur photo
 // et sur fond), grands titres sur une ligne à 390 et 360 px, thème jamais imposé dans les espaces organisateur et pro,
@@ -55,11 +55,11 @@ test("/_ds section v2 : deux thèmes, audit sans défaut, captures à 390 px", a
   }
 });
 
-test("grands titres : une ligne à 390 et 360 px, l'étiquette passe dessous à 360 px", async ({ browser }) => {
-  for (const width of [390, 360]) {
+test("grands titres : une ligne à 390, 360 et 320 px, l'étiquette passe dessous à 360 px", async ({ browser }) => {
+  for (const width of [390, 360, 320]) {
     const { ctx, page } = await phone(browser, "beton", { width, height: 844 });
     await page.goto("/_ds?only=v2&theme=beton");
-    for (const frame of [390, 360]) {
+    for (const frame of [390, 360, 320]) {
       const titles = page.locator(`[data-frame="${frame}"] .o-bigtitle`);
       await expect(titles).toHaveCount(9);
       const rows = await titles.evaluateAll((els) =>
@@ -79,7 +79,7 @@ test("grands titres : une ligne à 390 et 360 px, l'étiquette passe dessous à 
       for (const row of rows) {
         expect(row.fits, `${row.text} tient dans ${frame} px`).toBe(true);
         expect(row.oneLine, `${row.text} sur une ligne à ${frame} px`).toBe(true);
-        if (frame === 360) expect(row.labelBelow, `${row.text} : étiquette dessous à 360 px`).toBe(true);
+        if (frame <= 360) expect(row.labelBelow, `${row.text} : étiquette dessous à 360 px`).toBe(true);
       }
       if (frame === 390) expect(rows.some((row) => !row.labelBelow)).toBe(true);
     }
@@ -121,4 +121,72 @@ test("thème Automatique : Béton à minuit, Sable à midi (heure de Paris)", as
     await expect(page.locator("html")).toHaveAttribute("data-theme", expected);
     await ctx.close();
   }
+});
+
+test("thème Automatique le jour : jamais de passage par Béton entre le script d'init et l'hydratation", async ({
+  browser,
+}) => {
+  const { ctx, page } = await phone(browser, "auto");
+  await page.clock.install({ time: new Date("2026-10-19T12:00:00+02:00") });
+  // Chaque écriture de data-theme sur <html> est relevée, depuis le tout début du chargement.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __themes: (string | null)[] };
+    w.__themes = [];
+    new MutationObserver((records) => {
+      for (const r of records) {
+        if (r.target === document.documentElement) w.__themes.push(document.documentElement.getAttribute("data-theme"));
+      }
+    }).observe(document, { subtree: true, attributes: true, attributeFilter: ["data-theme"] });
+  });
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  await page.clock.runFor(2_000);
+  const themes = await page.evaluate(() => (window as unknown as { __themes: (string | null)[] }).__themes);
+  expect(themes.length).toBeGreaterThan(0);
+  expect(themes, "valeurs successives de data-theme").toEqual(themes.map(() => "sable"));
+  expect(await htmlTheme(page)).toBe("sable");
+  await ctx.close();
+});
+
+test("Sable, barre nuit : ✕ d'une barre de flux et choix du thème lisibles ; compteurs de la page événement", async ({
+  browser,
+}) => {
+  const { ctx, page } = await phone(browser, "sable");
+  const barInk = async () =>
+    page.evaluate(() => {
+      const probe = document.createElement("i");
+      probe.style.color = "var(--bar-ink)";
+      document.body.append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    });
+  // Page événement publique (compteurs dans la plaque) et choix du thème du pied de page.
+  await page.goto("/e/expo-rivesaltes-2026");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "sable");
+  const ink = await barInk();
+  const chips = page.locator("footer[data-bar] .o-chip");
+  await expect(chips).toHaveCount(3);
+  for (const chip of await chips.all()) {
+    const color = await chip.evaluate((el) => getComputedStyle(el).color);
+    const selected = await chip.evaluate((el) => el.classList.contains("is-selected"));
+    if (!selected) expect(color).toBe(ink);
+  }
+  await page.screenshot({ path: `${DIR}/evenement-public-sable.png`, fullPage: true });
+  // Barre de flux de la candidature : le ✕ prend l'encre de barre.
+  // Un compte neuf (aucune candidature) : la candidature s'ouvre sur sa première étape.
+  const pseudo = `Lot38_${unique()}`;
+  await signUpApi(pseudo);
+  await loginInBrowser(
+    page,
+    `${pseudo.toLowerCase()}@e2e.orasso.test`,
+    undefined,
+    "/e/expo-rivesaltes-2026/candidater",
+  );
+  await page.goto("/e/expo-rivesaltes-2026/candidater");
+  const close = page.locator(".o-appbar .o-button--close");
+  await expect(close).toBeVisible();
+  expect(await close.evaluate((el) => getComputedStyle(el).color)).toBe(ink);
+  await page.screenshot({ path: `${DIR}/candidater-barre-flux-sable.png` });
+  await ctx.close();
 });

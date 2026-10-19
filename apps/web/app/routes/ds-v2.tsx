@@ -99,10 +99,10 @@ export function V2Content({ theme }: { theme: ThemeId }) {
         <AppBar kind="flow" title="Candidater" />
       </div>
 
-      <h3 className="o-t-label ds-v2-h3">Grands titres sur une ligne (390 et 360 px)</h3>
+      <h3 className="o-t-label ds-v2-h3">Grands titres sur une ligne (390, 360 et 320 px)</h3>
       <div className="ds-scroll-x">
         <div className="ds-v2-titles">
-          {([390, 360] as const).map((width) => (
+          {([390, 360, 320] as const).map((width) => (
             <div key={width} className="ds-v2-frame" style={{ width }} data-frame={width}>
               <span className="o-t-label ds-v2-frame__size">{width} px</span>
               {BIG_TITLES.map(([title, label]) => (

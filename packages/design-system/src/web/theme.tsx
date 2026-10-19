@@ -14,6 +14,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
 } from "react";
@@ -54,10 +55,19 @@ export function departmentPosition(code: string | null | undefined): LatLng {
   return (code && departmentCentroids[code]) || SOLAR_FALLBACK;
 }
 
+/** useLayoutEffect dans le navigateur, useEffect au rendu serveur (où il ne s'exécute pas, sans avertissement). */
+const useIsomorphicLayoutEffect = typeof document === "undefined" ? useEffect : useLayoutEffect;
+
 function readCookie(cookieHeader: string, name: string): string | null {
   for (const part of cookieHeader.split(";")) {
     const [key, ...rest] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(rest.join("="));
+    if (key !== name) continue;
+    try {
+      return decodeURIComponent(rest.join("="));
+    } catch {
+      // Valeur mal encodée (%E0…) : ignorée plutôt qu'une erreur 500.
+      return null;
+    }
   }
   return null;
 }
@@ -131,15 +141,16 @@ export function ThemeProvider({
 }) {
   const [preference, setPreferenceState] = useState<ThemePreference>(initialPreference);
   const [department, setDepartmentState] = useState<string | null>(null);
-  // null au rendu serveur et à l'hydratation : « auto » vaut Béton jusqu'au premier effet.
+  // null au rendu serveur et à l'hydratation : « auto » n'est pas encore résolu (le script d'init a posé le thème).
   const [time, setTime] = useState<number | null>(null);
   const auto = preference === "auto";
 
-  // Après l'hydratation : lire le département du cookie, puis suivre l'heure (60 s, retour sur l'onglet).
-  useEffect(() => {
+  // Dès l'hydratation, avant la première peinture : lire le département du cookie et l'heure, pour que « auto »
+  // retombe sur le thème déjà posé par le script d'init (pas d'aller-retour Sable → Béton → Sable).
+  useIsomorphicLayoutEffect(() => {
     setDepartmentState(readCookie(document.cookie, DEPT_COOKIE));
   }, []);
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!auto) return;
     setTime(Date.now());
     const timer = setInterval(() => setTime(Date.now()), SOLAR_REFRESH_MS);
@@ -157,9 +168,11 @@ export function ThemeProvider({
   const theme: ThemeId =
     auto && time === null ? "beton" : resolveTheme(preference, { now: new Date(time ?? 0), lat, lng });
 
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
+  const resolved = !(auto && time === null);
+  useIsomorphicLayoutEffect(() => {
+    // « auto » pas encore résolu : on ne touche pas à l'attribut posé par le script d'init.
+    if (resolved) document.documentElement.setAttribute("data-theme", theme);
+  }, [theme, resolved]);
 
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next);

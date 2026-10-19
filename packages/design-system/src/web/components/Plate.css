@@ -22,7 +22,7 @@
 /* Un champ de saisie dans une plaque est en graphite clair, texte poster, dans les deux thèmes. */
 .o-plate input,
 .o-plate select {
-  background: var(--surface-raised);
+  background: var(--plate-field);
   color: var(--plate-ink);
 }
 /* Les champs et cases dans une plaque lisent leurs couleurs dans les jetons plate-*. */

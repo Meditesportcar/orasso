@@ -4,7 +4,7 @@
 // derrière le texte dans la couleur du fond, plus un halo. Les copies sont masquées à l'accessibilité.
 // Portée limitée : photo et fond animé. La règle « pas de contour ni de néon sur un texte » reste valable ailleurs.
 
-import { StyleSheet, type TextStyle, View } from "react-native";
+import { StyleSheet, type TextStyle, View, type ViewStyle } from "react-native";
 import { Text, type TextProps } from "./text";
 import { textStyles } from "./textStyles";
 import { useTheme } from "./theme";
@@ -14,6 +14,8 @@ export type OutlinedTextProps = TextProps & {
   on: "ground" | "photo" | "surface";
   /** Épaisseur du trait en px ; par défaut min(0,24 em, 6 px) comme sur le site. */
   width?: number;
+  /** Style du conteneur (placement : `alignSelf: "center"`, marges…) ; le texte prend sa largeur. */
+  containerStyle?: ViewStyle;
 };
 
 /** Les huit directions, à un demi-trait (le trait CSS est centré sur le contour : la moitié dépasse). */
@@ -33,7 +35,16 @@ export function outlineWidth(fontSize: number): number {
   return Math.min(fontSize * 0.24, 6);
 }
 
-export function OutlinedText({ on, width, variant, color, style, children, ...rest }: OutlinedTextProps) {
+export function OutlinedText({
+  on,
+  width,
+  containerStyle,
+  variant,
+  color,
+  style,
+  children,
+  ...rest
+}: OutlinedTextProps) {
   const { t } = useTheme();
   const outline = on === "photo" ? t.color.night : on === "surface" ? t.color.surface : t.color.ground;
   const flat = StyleSheet.flatten(style) as TextStyle | undefined;
@@ -45,15 +56,15 @@ export function OutlinedText({ on, width, variant, color, style, children, ...re
     textShadowRadius: Math.round(fontSize * 0.45),
   };
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, containerStyle]}>
       {DIRECTIONS.map(([dx, dy]) => (
         <Text
           key={`${dx}${dy}`}
-          {...rest}
+          // Les copies ne reprennent que l'apparence (style, nombre de lignes) : ni appui, ni nom accessible, ni identifiant.
           variant={variant}
           color={outline}
+          numberOfLines={rest.numberOfLines}
           style={[style, styles.copy, { left: dx * half, right: -dx * half, top: dy * half }, halo]}
-          testID={undefined}
           aria-hidden
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
@@ -69,6 +80,6 @@ export function OutlinedText({ on, width, variant, color, style, children, ...re
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: "relative", alignSelf: "flex-start" },
+  wrap: { position: "relative" },
   copy: { position: "absolute" },
 });

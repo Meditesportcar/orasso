@@ -81,6 +81,8 @@ describe("thème", () => {
     expect(readThemeCookie(null)).toBe("beton");
     expect(readThemeCookie("a=b; orasso-theme=sable")).toBe("sable");
     expect(readThemeCookie("orasso-theme=violet")).toBe("beton");
+    // Un cookie mal encodé ne fait pas d'erreur (rendu serveur).
+    expect(readThemeCookie("orasso-theme=%E0")).toBe("beton");
     expect(resolveTheme("auto", { now: new Date("2026-10-19T12:00:00+02:00"), ...perpignan })).toBe("sable");
     expect(resolveTheme("auto", { now: new Date("2026-10-19T23:59:00+02:00"), ...perpignan })).toBe("beton");
     expect(resolveTheme("sable", { now: new Date("2026-10-19T23:59:00+02:00"), ...perpignan })).toBe("sable");

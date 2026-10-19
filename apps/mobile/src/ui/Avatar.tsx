@@ -9,7 +9,7 @@ export function Avatar({ url, pseudo, size = 26 }: { url?: string | null; pseudo
   const source = mediaSource(url);
   return (
     <View
-      style={[styles.round, { width: size, height: size, backgroundColor: t.color.surfaceRaised }]}
+      style={[styles.round, { width: size, height: size, backgroundColor: t.color.plateField }]}
       accessibilityElementsHidden
     >
       {source ? (

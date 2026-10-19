@@ -182,7 +182,7 @@ export function AppBar({
           on={inboxOn}
           count={inboxOn ? undefined : inboxCount}
         />
-        {onClose ? <Button variant="close" label={closeLabel} onPress={onClose} /> : null}
+        {onClose ? <Button variant="close" label={closeLabel} onPress={onClose} onBar /> : null}
       </View>
     );
   }
@@ -242,7 +242,7 @@ export function AppBar({
           ) : null}
         </>
       )}
-      {kind === "flow" && <Button variant="close" label={closeLabel} onPress={onClose} />}
+      {kind === "flow" && <Button variant="close" label={closeLabel} onPress={onClose} onBar />}
     </View>
   );
 }
