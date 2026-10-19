@@ -134,14 +134,16 @@ function buildAttempt(random: () => number, w: number, h: number): BattlePath {
     if (c < corners - 1 && random() < 0.45) run(between(10, 40), 0);
     if (c >= 1 && !inside(-10)) break;
   }
-  // La grande courbe de glisse : un rayon qui s'ouvre (170 à 300 px au départ) jusqu'à sortir de l'écran.
+  // La grande courbe de glisse : un rayon qui s'ouvre (170 à 300 px au départ) jusqu'à sortir de l'écran, plafonné
+  // (finalRadiusCap) : la courbe reste franche, et un cercle de ce rayon ne tient pas dans l'écran, donc elle sort.
   const finalFrom = xs.length;
   const startRadius = between(170, 300);
+  const cap = finalRadiusCap(w, h);
   const side = random() < 0.5 ? 1 : -1;
   let travelled = 0;
   guard = 0;
-  while (inside(OUTSIDE + 10) && guard++ < 4000) {
-    advance(side / (startRadius + SPIRAL * travelled));
+  while (inside(OUTSIDE + 10) && guard++ < 6000) {
+    advance(side / Math.min(cap, startRadius + SPIRAL * travelled));
     travelled += STEP;
   }
   // La dérive suit la courbure avec l'inertie de la caisse : le nez vers l'intérieur du virage.
@@ -160,15 +162,47 @@ function buildAttempt(random: () => number, w: number, h: number): BattlePath {
  * jusqu'à sortir. Déterministe par `seed`. Si la courbe finale est trop courte (la meute est sortie pendant un virage),
  * on reprend avec une graine dérivée : la règle « pas de ligne droite sur les 20 derniers % » tient toujours.
  */
-export function battlePath(seed: number, w: number, h: number): BattlePath {
-  let best: BattlePath | null = null;
-  for (let attempt = 0; attempt < 24; attempt++) {
+export function battlePath(seed: number, w: number, h: number, attempts = 24): BattlePath {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const path = buildAttempt(seededRandom(seed + attempt * 0x9e3779b1), w, h);
-    const share = (path.xs.length - path.finalFrom) / path.xs.length;
-    if (share >= FINAL_SHARE) return path;
-    if (!best || share > (best.xs.length - best.finalFrom) / best.xs.length) best = path;
+    if (isSafeBattle(path, w, h)) return path;
   }
-  return best as BattlePath;
+  return safeBattlePath(w, h);
+}
+
+/**
+ * Rayon maximal de la courbe finale : au moins le grand côté de l'écran (600 px au minimum). Un cercle de ce rayon ne
+ * tient pas dans l'écran : la meute finit toujours par sortir, en courbe.
+ */
+export function finalRadiusCap(w: number, h: number): number {
+  return Math.max(600, w, h);
+}
+
+/** Les règles de Damien tiennent : entrée et sortie hors écran, courbe finale (jamais droite) sur les 20 derniers %. */
+export function isSafeBattle(path: BattlePath, w: number, h: number): boolean {
+  const n = path.xs.length;
+  const out = (i: number, m: number) => {
+    const x = path.xs[i] ?? 0;
+    const y = path.ys[i] ?? 0;
+    return x < -m || x > w + m || y < -m || y > h + m;
+  };
+  if ((n - path.finalFrom) / n < FINAL_SHARE) return false;
+  if (!out(0, 10) || !out(n - 1, 30)) return false;
+  const minK = 1 / finalRadiusCap(w, h) - 1e-9;
+  for (let i = Math.floor(n * 0.8); i < n; i++) if (Math.abs(path.ks[i] ?? 0) < minK) return false;
+  return true;
+}
+
+/**
+ * Repli sûr si aucune tentative ne tient les règles : une meute écrite à la main (entrée par la gauche, deux virages
+ * gauche-droite de 100 px, grande courbe finale) déroulée par le même tracé. Testée sur téléphone, tablette et bureau.
+ */
+export function safeBattlePath(w: number, h: number): BattlePath {
+  // Suite des tirages de buildAttempt : bord gauche, à mi-hauteur, cap droit, 45 px droits, 2 virages de 100 px sur
+  // 1,5 rad (sans bout droit, sens alterné), courbe finale de 235 px qui tourne vers le haut.
+  const script = [0.1, 0.5, 0.5, 0.5, 0, 0.5, 0.5, 0.99, 0.1, 0.5, 0.5, 0.5, 0.9];
+  let i = 0;
+  return buildAttempt(() => script[i++ % script.length] ?? 0.5, w, h);
 }
 
 /** Signe de la courbure à la fraction `t` (0 → 1) de la trajectoire : 1 virage à droite, −1 à gauche, 0 droit. */

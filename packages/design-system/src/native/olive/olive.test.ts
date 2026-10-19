@@ -8,8 +8,11 @@ import {
   battlePathD,
   curvatureSign,
   driftOrbit,
+  finalRadiusCap,
+  isSafeBattle,
   orbitPathD,
   poseAt,
+  safeBattlePath,
   slipSamples,
   tandem,
 } from "./path";
@@ -121,6 +124,41 @@ describe("battlePath : la meute du fond", () => {
     const p = battlePath(7, W, H);
     expect(curvatureSign(p, 0)).toBe(0);
     expect(Math.abs(curvatureSign(p, 0.99))).toBe(1);
+  });
+});
+
+describe("battlePath : téléphone, tablette, bureau ; rayon plafonné ; repli sûr", () => {
+  const SIZES = [
+    [390, 844],
+    [768, 1024],
+    [1440, 900],
+  ] as const;
+  const out = (w: number, h: number, x: number, y: number, m: number) => x < -m || x > w + m || y < -m || y > h + m;
+
+  it("sur chaque taille : entrée et sortie hors écran, courbe franche (rayon plafonné) sur les 20 derniers %", () => {
+    for (const [w, h] of SIZES) {
+      const cap = finalRadiusCap(w, h);
+      expect(cap).toBeGreaterThanOrEqual(Math.max(w, h));
+      for (const seed of SEEDS.slice(0, 200)) {
+        const p = battlePath(seed, w, h);
+        const n = p.xs.length;
+        expect(out(w, h, p.xs[0] ?? 0, p.ys[0] ?? 0, 10), `${w}×${h} seed ${seed} : entrée`).toBe(true);
+        expect(out(w, h, p.xs[n - 1] ?? 0, p.ys[n - 1] ?? 0, 30), `${w}×${h} seed ${seed} : sortie`).toBe(true);
+        const tail = p.ks.slice(Math.floor(n * 0.8));
+        const weakest = Math.min(...tail.map((k) => Math.abs(k)));
+        expect(weakest, `${w}×${h} seed ${seed} : courbure minimale`).toBeGreaterThanOrEqual(1 / cap - 1e-9);
+        expect(isSafeBattle(p, w, h)).toBe(true);
+      }
+    }
+  });
+
+  it("aucune tentative retenue : le repli écrit à la main tient les règles sur les trois tailles", () => {
+    for (const [w, h] of SIZES) {
+      const safe = safeBattlePath(w, h);
+      expect(isSafeBattle(safe, w, h), `${w}×${h}`).toBe(true);
+      // battlePath sans tentative renvoie le repli, jamais une trajectoire sous le seuil.
+      expect(battlePath(1, w, h, 0).xs).toEqual(safe.xs);
+    }
   });
 });
 
