@@ -193,6 +193,8 @@ async function decideContest(
               note: `Contestation acceptée${input.note ? ` : ${input.note}` : ""}`,
             })
             .onConflictDoNothing();
+          // Lot 49 : la présence reconnue donne son tampon (le règlement est déjà passé).
+          await passportService.stampCheckin(tx, { applicationId: app.id, eventId: app.eventId, at: event.startsAt });
         }
       }
     }

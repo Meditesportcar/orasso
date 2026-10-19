@@ -266,6 +266,17 @@ describe("passeport : tampons", () => {
   });
 });
 
+describe("passeport : contestation", () => {
+  it("malus contesté puis accepté avec entrée : le tampon de participation arrive après le règlement", async () => {
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    expect(await stampsOf(p.marc.u.id)).toHaveLength(0);
+    const contest = await pointsService.contest(p.marc.v, p.marc.applicationId, "J'étais là, le QR ne passait pas.");
+    await pointsService.decide(orgaV, contest.id, { decision: "accept", note: null, checkin: true });
+    expect((await stampsOf(p.marc.u.id)).map((s) => s.kind)).toEqual(["participation"]);
+  });
+});
+
 describe("prix du public", () => {
   it("qui peut voter : pointé, billet, staff présent ; une voix modifiable ; pas pour soi ; fenêtre", async () => {
     clock.set(paris(10, 17, 18, 30));
