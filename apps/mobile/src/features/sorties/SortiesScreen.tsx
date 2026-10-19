@@ -50,6 +50,7 @@ import { TabScreen } from "@/ui/Screens";
 import { ApplicationStatusTag, StatusTag } from "@/ui/StatusTag";
 import {
   arrivalPhrase,
+  liveApplications,
   type SortiesSegment,
   staffUpcoming,
   ticketsPast,
@@ -143,15 +144,19 @@ export function SortiesScreen() {
     }
   }
 
-  const firstAccepted = upcoming?.find((a) => a.status === "accepted" && !a.checkedInAt)?.id;
+  const live = liveApplications(upcoming);
+  // Un seul bouton principal par écran : la place libérée d'abord (elle expire), sinon le QR de la première place retenue,
+  // sinon le premier billet.
+  const offerId = live.find((a) => a.status === "offered")?.id;
+  const firstAccepted = offerId ? undefined : live.find((a) => a.status === "accepted" && !a.checkedInAt)?.id;
   const history = (past ?? []).filter((a) => a.status === "accepted" || a.withdrawnAfterLock);
   const upcomingTickets = ticketsUpcoming(tickets.data ?? [], now);
   const pastTickets = ticketsPast(tickets.data ?? [], now);
   const staffItems = staffUpcoming(staff.data ?? [], now);
   const showStaff = persona.kind === "fan";
-  const countUpcoming = (upcoming?.length ?? 0) + upcomingTickets.length;
+  const countUpcoming = live.length + upcomingTickets.length;
   const countPast = history.length + pastTickets.length;
-  const canWithdrawAny = (upcoming ?? []).some((a) => ["pending", "waitlisted", "accepted"].includes(a.status));
+  const canWithdrawAny = live.some((a) => ["pending", "waitlisted", "accepted"].includes(a.status));
 
   // Rang au prix du public des sorties pointées récentes (calculé par le récap ; rien avant J+1 10 h).
   const [ranks, setRanks] = useState<Record<string, { rank: number; of: number } | null>>({});
@@ -271,13 +276,14 @@ export function SortiesScreen() {
             </>
           ) : null}
 
-          {(upcoming ?? []).map((app) => (
+          {live.map((app) => (
             <ApplicationTicket
               key={app.id}
               app={app}
               now={now}
               busy={busyId === app.id}
               primary={app.id === firstAccepted}
+              primaryOffer={app.id === offerId}
               onOpen={() => router.push(`/e/${app.event.slug}`)}
               onJourJ={() => router.push(`/jour-j/${app.id}`)}
               onWithdraw={() => setWithdrawing(app)}
@@ -293,7 +299,7 @@ export function SortiesScreen() {
               key={x.id}
               ticket={x}
               now={now}
-              primary={!firstAccepted && i === 0}
+              primary={!offerId && !firstAccepted && i === 0}
               onOpen={() => router.push(`/e/${x.event.slug}`)}
               onShow={() => router.push("/billets")}
               onGiveBack={() => setGiving(x)}
@@ -395,6 +401,7 @@ function ApplicationTicket({
   now,
   busy,
   primary,
+  primaryOffer,
   onOpen,
   onJourJ,
   onWithdraw,
@@ -408,6 +415,8 @@ function ApplicationTicket({
   busy?: boolean;
   /** Seul bouton principal de l'écran : « Mon QR » de la première place retenue. */
   primary?: boolean;
+  /** La place libérée à accepter porte le bouton principal de l'écran (elle expire). */
+  primaryOffer?: boolean;
   onOpen: () => void;
   onJourJ: () => void;
   onWithdraw: () => void;
@@ -431,7 +440,7 @@ function ApplicationTicket({
     if (app.crew) detail.push(`${crewLabels.crew} « ${app.crew.name} »`);
   }
   if (app.status === "pending") {
-    detail.unshift(sortiesLabels.pendingLine(organizer, formatDay(app.withdrawDeadline).toLowerCase()));
+    detail.unshift(sortiesLabels.pendingLine(organizer));
   }
   if (app.status === "waitlisted") detail.unshift(waitlistPhrase);
   if (awaiting && app.crew?.confirmBefore) {
@@ -485,7 +494,7 @@ function ApplicationTicket({
       ) : null}
       {offered ? (
         <>
-          <Button variant="primary" icon="check" loading={busy} onPress={onAccept} fullWidth>
+          <Button variant={primaryOffer ? "primary" : "plate"} icon="check" loading={busy} onPress={onAccept} fullWidth>
             J'accepte la place
           </Button>
           <Button variant="plate" tone="dashed" icon="close" disabled={busy} onPress={onDecline} fullWidth>
@@ -565,11 +574,13 @@ function StaffTicket({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const present = item.presence === "present";
   const roles = item.roles.map((r) => staffRoleLabels[r]).join(" · ");
   const notes = [sortiesLabels.staffRoleGiven(item.structure.name)];
   if (!item.staffModeOpen) notes.push(sortiesLabels.staffModeOpensEve(formatDayHour(item.staffModeOpensAt)));
   if (unsent > 0) notes.push(sortiesLabels.staffUnsent(unsent));
+  if (failed) notes.push(failed);
   return (
     <Ticket
       testID="ticket-staff"
@@ -586,9 +597,13 @@ function StaffTicket({
         loading={busy}
         onPress={async () => {
           setBusy(true);
+          setFailed(null);
           try {
             await api.setPresence(item.event.id, !present);
             onChanged();
+          } catch (e) {
+            // Hors ligne : la présence reste comme avant, et on le dit.
+            setFailed(`Présence non enregistrée : ${errorMessage(e)}`);
           } finally {
             setBusy(false);
           }

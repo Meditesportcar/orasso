@@ -6,7 +6,7 @@ import type { HomeData, HomeWidgetsConfig, PersonaKind, RecapView } from "@orass
 import { request } from "../http";
 import { qs } from "./qs";
 
-export type HomeQuery = { radiusKm?: number; lat?: number; lng?: number; persona?: PersonaKind };
+export type HomeQuery = { radiusKm?: number; lat?: number; lng?: number; persona?: PersonaKind; light?: "1" };
 
 export const homeApi = {
   homeData: (query: HomeQuery = {}) => request<HomeData>(`/api/me/home${qs(query)}`),

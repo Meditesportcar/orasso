@@ -69,9 +69,9 @@ export async function auditApp(page: Page, theme: "beton" | "sable" = "beton"): 
   const shadows = tokens.shadow[theme];
   return page.evaluate(
     ({ primary, neons }) => {
-      const visible = (el: Element) => {
+      // Les onglets voisins restent montés (hors de l'écran, ou masqués) : seul ce qui se voit compte.
+      const shown = (el: Element) => {
         const r = el.getBoundingClientRect();
-        // Les onglets voisins restent montés (hors de l'écran, ou masqués) : seul ce qui se voit compte.
         const onScreen = r.right > 0 && r.left < window.innerWidth;
         return (
           r.width > 0 &&
@@ -80,6 +80,8 @@ export async function auditApp(page: Page, theme: "beton" | "sable" = "beton"): 
           el.checkVisibility({ opacityProperty: true, visibilityProperty: true })
         );
       };
+      // Un onglet voisin sous l'actif est marqué aria-hidden : il ne compte pas (les copies de contour non plus, voir plus bas).
+      const visible = (el: Element) => shown(el) && !el.closest('[aria-hidden="true"]');
       const resolve = (value: string) => {
         const probe = document.createElement("div");
         probe.style.boxShadow = value;
@@ -122,7 +124,7 @@ export async function auditApp(page: Page, theme: "beton" | "sable" = "beton"): 
       const counts = new Map<string, number>();
       if (art) {
         for (const el of art.querySelectorAll("*")) {
-          if (el.closest('[data-testid="home-hero-date"]') || el.closest("svg") || !visible(el)) continue;
+          if (el.closest('[data-testid="home-hero-date"]') || el.closest("svg") || !shown(el)) continue;
           const own = [...el.childNodes]
             .filter((n) => n.nodeType === Node.TEXT_NODE)
             .map((n) => (n.textContent ?? "").trim())

@@ -31,7 +31,7 @@ import {
   SponsoredCard,
 } from "@/features/home/HomeWidgets";
 import { ReorderSheet } from "@/features/home/ReorderSheet";
-import { arrivalPhrase } from "@/features/sorties/model";
+import { arrivalPhrase, liveApplications, ticketsUpcoming } from "@/features/sorties/model";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { dayCountdown, formatDay, formatHour } from "@/lib/format";
@@ -42,7 +42,7 @@ import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
-import { ApplicationStatusTag, StatusTag } from "@/ui/StatusTag";
+import { ApplicationStatusTag } from "@/ui/StatusTag";
 import { Greeting, HeroCard, MiniTile, NoteTile, SectionHead, TutoTile, WeatherBlock } from "./parts";
 import { todayLine } from "./today";
 
@@ -76,13 +76,24 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
   const widgets: HomeWidgetsConfig = data?.widgets ?? defaultHomeWidgets;
 
+  const live = liveApplications(upcoming);
+  const myTickets = useApi(() => api.myTickets(), [], { cacheKey: "tickets-home" });
   // Exposant : la place retenue d'abord, sinon la candidature en cours (copie du téléphone si l'API n'a pas répondu).
   const localNext: MyApplication | undefined =
-    upcoming?.find((a) => a.status === "accepted") ??
-    upcoming?.find((a) => a.status === "pending" || a.status === "waitlisted" || a.status === "offered");
+    live.find((a) => a.status === "accepted") ??
+    live.find((a) => a.status === "pending" || a.status === "waitlisted" || a.status === "offered");
   const next = exhibitor ? (data?.nextAccess ?? localNext ?? null) : null;
   const ticket = exhibitor ? null : (data?.nextTicket ?? null);
-  const others = (upcoming ?? []).filter((a) => a.id !== next?.id).slice(0, 3);
+  // « Tes autres sorties » : candidatures vivantes et billets du public, sans celle de la carte.
+  const otherTickets = ticketsUpcoming(myTickets.data ?? [], now).filter((x) => x.id !== ticket?.id);
+  const others = [
+    ...live
+      .filter((a) => a.id !== next?.id)
+      .map((a) => ({ key: a.id, kind: "app" as const, app: a, startsAt: a.event.startsAt })),
+    ...otherTickets.map((x) => ({ key: x.id, kind: "ticket" as const, ticket: x, startsAt: x.event.startsAt })),
+  ]
+    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+    .slice(0, 3);
   const nudge: HomeNudgeKind | null = data?.nudge ?? null;
   const nudgeLeadsScreen = !next && !ticket && exhibitor && nudge === "add_vehicle";
   const profile = me?.profile;
@@ -156,8 +167,12 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       title={ticket.event.title}
       tags={
         <>
-          <StatusTag status="retained" />
-          <Chip surface="plate">Billet</Chip>
+          <Chip surface="plate" selected>
+            Billet
+          </Chip>
+          <Chip surface="plate">
+            {ticket.priceCents == null ? "Entrée public · gratuite" : "Entrée public · payante"}
+          </Chip>
         </>
       }
       organizer={ticket.organizer}
@@ -192,16 +207,27 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
             link={homeProfileLabels.seeAll}
             onLink={() => goTab("sorties")}
           />
-          {others.map((a) => (
-            <MiniTile
-              key={a.id}
-              testID="home-other-outing"
-              tag={<ApplicationStatusTag app={a} />}
-              title={a.event.title}
-              caption={`${formatDay(a.event.startsAt)}${a.status === "waitlisted" ? " · si une place se libère" : ""}`}
-              onPress={() => goTab("sorties")}
-            />
-          ))}
+          {others.map((o) =>
+            o.kind === "app" ? (
+              <MiniTile
+                key={o.key}
+                testID="home-other-outing"
+                tag={<ApplicationStatusTag app={o.app} />}
+                title={o.app.event.title}
+                caption={`${formatDay(o.app.event.startsAt)}${o.app.status === "waitlisted" ? " · si une place se libère" : ""}`}
+                onPress={() => goTab("sorties")}
+              />
+            ) : (
+              <MiniTile
+                key={o.key}
+                testID="home-other-outing"
+                tag={<Chip surface="plate">Billet</Chip>}
+                title={o.ticket.event.title}
+                caption={`${formatDay(o.ticket.event.startsAt)} · ${o.ticket.priceCents == null ? "entrée libre, réservée" : "entrée réservée"}`}
+                onPress={() => goTab("sorties")}
+              />
+            ),
+          )}
         </>
       ) : null,
     nearby: data?.nearby ? (

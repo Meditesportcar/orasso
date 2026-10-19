@@ -6,6 +6,7 @@ import {
   arrivalPhrase,
   barDay,
   inFloatingWindow,
+  liveApplications,
   nextAccessOf,
   staffAccesses,
   ticketAccesses,
@@ -54,13 +55,43 @@ describe("créneau d'arrivée", () => {
   });
 });
 
-describe("fenêtre de l'accès flottant : de J-7 à J+1", () => {
-  it("J-8 : non ; J-7 : oui ; le jour même : oui ; 20 h après le début : oui ; J+2 : non", () => {
-    expect(inFloatingWindow(at(8), NOW)).toBe(false);
-    expect(inFloatingWindow(at(7), NOW)).toBe(true);
-    expect(inFloatingWindow(at(0, 1), NOW)).toBe(true);
-    expect(inFloatingWindow(at(-1, 4), NOW)).toBe(true);
-    expect(inFloatingWindow(at(-2), NOW)).toBe(false);
+describe("fenêtre de l'accès flottant : jours calendaires, de J-7 au lendemain de la fin", () => {
+  const win = (startsAt: string, endsAt: string, now: string) => inFloatingWindow(startsAt, endsAt, new Date(now));
+
+  it("J-7 dès le matin, même pour un événement du soir ; J-8 non", () => {
+    // Événement le 25/10 à 19 h (Paris) ; le 18/10 à 8 h (Paris) il reste plus de sept jours en durée, mais c'est J-7.
+    expect(win("2026-10-25T17:00:00Z", "2026-10-25T21:00:00Z", "2026-10-18T06:00:00Z")).toBe(true);
+    expect(win("2026-10-25T17:00:00Z", "2026-10-25T21:00:00Z", "2026-10-17T22:00:00Z")).toBe(true);
+    // 17/10 à 22 h 30 (Paris) : encore J-8 ; minuit passé, J-7.
+    expect(win("2026-10-25T17:00:00Z", "2026-10-25T21:00:00Z", "2026-10-17T20:30:00Z")).toBe(false);
+  });
+
+  it("un événement de plusieurs jours reste tant qu'il dure, puis un jour de plus", () => {
+    const start = "2026-10-14T08:00:00Z";
+    const end = "2026-10-20T20:00:00Z";
+    expect(win(start, end, "2026-10-18T10:00:00Z")).toBe(true);
+    expect(win(start, end, "2026-10-21T10:00:00Z")).toBe(true);
+    expect(win(start, end, "2026-10-22T10:00:00Z")).toBe(false);
+  });
+
+  it("un événement d'un jour : encore là le lendemain, plus le surlendemain", () => {
+    const start = "2026-10-17T17:00:00Z";
+    const end = "2026-10-17T21:00:00Z";
+    expect(win(start, end, "2026-10-18T10:00:00Z")).toBe(true);
+    expect(win(start, end, "2026-10-19T10:00:00Z")).toBe(false);
+  });
+
+  it("mission et accréditation portent le vrai `endsAt`", () => {
+    const item = (kind: "mission" | "accreditation") => ({
+      key: kind,
+      kind,
+      startsAt: at(-1),
+      endsAt: at(1),
+      title: kind,
+      href: "/",
+    });
+    expect(nextAccessOf([item("mission")], NOW)?.kind).toBe("mission");
+    expect(nextAccessOf([item("accreditation")], NOW)?.kind).toBe("accreditation");
   });
 
   it("prend l'accès le plus proche, toutes sortes confondues", () => {
@@ -111,5 +142,15 @@ describe("barDay", () => {
     expect(barDay("2026-10-24T21:30:00Z")).toBe("Sam. 24");
     // 22 h 30 UTC = 0 h 30 à Paris le lendemain (heure d'été jusqu'au 25 octobre 2026).
     expect(barDay("2026-10-24T22:30:00Z")).toBe("Dim. 25");
+  });
+});
+
+describe("candidatures vivantes", () => {
+  it("ni refusées, ni retirées, ni expirées, ni annulées", () => {
+    const list = ["pending", "accepted", "refused", "withdrawn", "expired", "cancelled", "awaiting_member"].map(
+      (s, i) => app(`x${i}`, 3, s as MyApplication["status"]),
+    );
+    expect(liveApplications(list).map((a) => a.status)).toEqual(["pending", "accepted", "awaiting_member"]);
+    expect(liveApplications(null)).toEqual([]);
   });
 });

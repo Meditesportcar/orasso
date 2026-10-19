@@ -29,6 +29,11 @@ export function arrivalPhrase(slot: ArrivalSlot | null | undefined): string | nu
 /** « Si une place se libère, tu as 24 h pour l'accepter » : les délais réels (24 h, 3 h la veille, 2 h le jour J). */
 export const waitlistPhrase = `Si une place se libère, tu as ${OFFER_DELAY_DEFAULT / HOUR} h pour l'accepter (${OFFER_DELAY_EVE / HOUR} h la veille, ${OFFER_DELAY_DAY / HOUR} h le jour J).`;
 
+/** Candidatures encore vivantes : refusées, retirées, expirées ou annulées ne sont plus des sorties. */
+export const LIVE_STATUSES = ["pending", "waitlisted", "offered", "accepted", "awaiting_member"] as const;
+export const liveApplications = (items: readonly MyApplication[] | null | undefined) =>
+  (items ?? []).filter((a) => (LIVE_STATUSES as readonly string[]).includes(a.status));
+
 export type SortiesSegment = "upcoming" | "staff" | "past";
 
 /** Une mission staff est « à venir » tant que l'événement n'est pas fini. */
@@ -45,7 +50,7 @@ export const ticketsPast = (items: readonly MyTicket[], now: Date) =>
 
 // --- Accès flottant ------------------------------------------------------------------------------------------------
 
-/** La barre flotte de J-7 (inclus) à J+1 : le jour d'après, l'accès a rendu service. */
+/** La barre flotte de J-7 (inclus) au lendemain de la fin de l'événement. */
 export const FLOATING_BEFORE_DAYS = 7;
 export const FLOATING_AFTER_DAYS = 1;
 
@@ -61,18 +66,22 @@ export type AccessItem = {
   href: string;
 };
 
-/** Vrai si un événement qui commence à `startsAt` est dans la fenêtre de la barre flottante. */
-export function inFloatingWindow(startsAt: string | Date, now: Date): boolean {
-  const start = new Date(startsAt).getTime();
-  const delta = start - now.getTime();
-  return delta <= FLOATING_BEFORE_DAYS * DAY && delta >= -FLOATING_AFTER_DAYS * DAY;
+/**
+ * Vrai si l'accès est dans la fenêtre de la barre : en jours calendaires (Europe/Paris), de J-7 dès 0 h jusqu'au lendemain
+ * de la fin de l'événement (un événement de plusieurs jours reste là tant qu'il dure).
+ */
+export function inFloatingWindow(startsAt: string | Date, endsAt: string | Date, now: Date): boolean {
+  return (
+    calendarDaysBetween(now, new Date(startsAt)) <= FLOATING_BEFORE_DAYS &&
+    calendarDaysBetween(new Date(endsAt), now) <= FLOATING_AFTER_DAYS
+  );
 }
 
 /** L'accès le plus proche dans la fenêtre (le plus tôt d'abord ; à égalité : candidature, billet, staff…). */
 export function nextAccessOf(items: readonly AccessItem[], now: Date): AccessItem | null {
   const order: AccessKind[] = ["application", "accreditation", "mission", "ticket", "staff"];
   const live = items
-    .filter((i) => inFloatingWindow(i.startsAt, now) && new Date(i.endsAt).getTime() > now.getTime() - DAY)
+    .filter((i) => inFloatingWindow(i.startsAt, i.endsAt, now))
     .sort(
       (a, b) =>
         new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() ||

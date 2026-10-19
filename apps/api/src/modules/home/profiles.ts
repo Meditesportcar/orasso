@@ -104,6 +104,7 @@ export async function nextTicketOf(v: Viewer): Promise<HomeNextTicket | null> {
   return {
     id: next.id,
     name: next.name,
+    priceCents: next.priceCents,
     event: {
       slug: next.event.slug,
       title: next.event.title,
@@ -259,6 +260,7 @@ export async function providerBlock(v: Viewer): Promise<HomeProvider | null> {
         slug: best.e.slug,
         title: best.e.title,
         startsAt: best.e.startsAt.toISOString(),
+        endsAt: best.e.endsAt.toISOString(),
         city: best.e.city,
       },
       trade: best.need?.trade ?? profile.type ?? null,
@@ -329,6 +331,7 @@ export async function mediaBlock(v: Viewer): Promise<HomeMedia | null> {
         slug: best.e.slug,
         title: best.e.title,
         startsAt: best.e.startsAt.toISOString(),
+        endsAt: best.e.endsAt.toISOString(),
         city: best.e.city,
       },
       formats: best.a.mediaFormats ?? [],

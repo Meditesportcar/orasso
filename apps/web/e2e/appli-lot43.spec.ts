@@ -71,6 +71,13 @@ async function choose(page: Page, kind: "pro" | "provider" | "media") {
   await page.waitForURL(/\/accueil/, { timeout: 60_000 });
 }
 
+/** Fait défiler la zone qui défile de l'écran (la plus haute) jusqu'en bas. */
+async function scrollToBottom(page: Page) {
+  // Molette sur l'écran : la zone qui défile suit, comme au doigt.
+  await page.mouse.move(195, 420);
+  for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 2500);
+}
+
 async function shot(page: Page, name: string) {
   await page.waitForTimeout(900);
   await page.screenshot({ path: `${DIR}/${name}.png` });
@@ -78,6 +85,8 @@ async function shot(page: Page, name: string) {
 
 /** Règles du système de design à l'écran : un seul néon, un seul bouton principal, pas de vert, pas de défilement horizontal. */
 async function checkRules(page: Page, theme: Theme) {
+  // Le temps que l'écran précédent finisse de se retirer (transition entre onglets).
+  await page.waitForTimeout(1200);
   const audit = await auditApp(page, theme);
   expect(audit.primaryButtons, `un seul bouton principal : ${audit.primaryLabels.join(" | ")}`).toBeLessThanOrEqual(1);
   expect(audit.neon, `un seul néon hors barres : ${audit.neonLabels.join(" | ")}`).toBeLessThanOrEqual(1);
@@ -104,13 +113,13 @@ test("Sorties de Kenji : trois segments, un ticket par statut (deux thèmes)", a
     await expect(segments.getByText(/^Staff · \d+$/)).toBeVisible();
     await expect(segments.getByText(/^Passées · \d+$/)).toBeVisible();
 
-    // À venir : retenue (Mon QR), en attente (Réponse de … avant …), liste d'attente (délai), place libérée.
+    // À venir : retenue (Mon QR), en attente (« En attente de la réponse de … »), liste d'attente (délai), place libérée.
     const tickets = page.getByTestId("ticket-application");
     await expect(tickets.first()).toBeVisible({ timeout: 30_000 });
     expect(await tickets.count()).toBeGreaterThanOrEqual(5);
     await expect(page.getByText("Retenue", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("ticket-qr").first()).toContainText("Mon QR");
-    await expect(page.getByText(/^Réponse de .+ avant /).first()).toBeVisible();
+    await expect(page.getByText(/^En attente de la réponse de /).first()).toBeVisible();
     await expect(page.getByText(/Si une place se libère, tu as 24 h pour l'accepter/).first()).toBeVisible();
     await expect(page.getByText("J'accepte la place", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Retirer", exact: true }).first()).toBeVisible();
@@ -120,9 +129,9 @@ test("Sorties de Kenji : trois segments, un ticket par statut (deux thèmes)", a
       page.getByText("Empêché ? Retire-toi depuis le ticket : ta place part à la liste d'attente."),
     ).toBeVisible();
     await shot(page, `sorties-a-venir-${theme}`);
-    // Un seul bouton principal : celui de la première place retenue (la place libérée à accepter en est un autre :
-    // l'audit tolère les deux seulement si elles ne se voient pas ensemble ; on regarde la partie haute de l'écran).
-    await page.getByText(/^À venir · \d+$/).scrollIntoViewIfNeeded();
+    // Un seul bouton principal : la place libérée à accepter (elle expire) ; « Mon QR » et « Mon billet » passent en second.
+    await checkRules(page, theme);
+    await expect(page.getByTestId("ticket-qr").first()).toBeVisible();
 
     // Staff : la mission, « Je serai là », le rôle donné par la structure.
     await segments.getByText(/^Staff · \d+$/).click();
@@ -130,12 +139,14 @@ test("Sorties de Kenji : trois segments, un ticket par statut (deux thèmes)", a
     await expect(page.getByText(/^Rôle donné par .+ pour cet événement$/).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Je serai là" }).first()).toBeVisible();
     await expect(page.getByText(/Le mode staff s'ouvre la veille/).first()).toBeVisible();
+    await checkRules(page, theme);
     await shot(page, `sorties-staff-${theme}`);
 
     // Passées : pointé, points, avis.
     await segments.getByText(/^Passées · \d+$/).click();
     await expect(page.getByTestId("ticket-past").first()).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(/^Pointé/).first()).toBeVisible();
+    await checkRules(page, theme);
     await shot(page, `sorties-passees-${theme}`);
 
     expect(
@@ -248,11 +259,7 @@ for (const home of HOMES) {
       await checkRules(page, theme);
       await shot(page, `accueil-${home.kind}-${theme}`);
       // Bas de l'écran.
-      await page.getByTestId("home-greeting").evaluate((el) => {
-        let node: HTMLElement | null = el as HTMLElement;
-        while (node && node.scrollHeight <= node.clientHeight + 1) node = node.parentElement;
-        node?.scrollTo(0, node.scrollHeight);
-      });
+      await scrollToBottom(page);
       await shot(page, `accueil-${home.kind}-bas-${theme}`);
       expect(
         errors.filter((e) => !/favicon|WebSocket|ws:\/\/|DevTools|Sentry|expo-notifications|push|401/i.test(e)),
@@ -314,9 +321,14 @@ test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, 
   // À J-9 : rien ne flotte.
   const { ctx, page } = await open(browser, "beton");
   await signIn(page, far.email);
+  const proof = { Explorer: "Explorer", Garage: "Mon garage", Sorties: "Mes sorties" } as const;
   for (const tab of ["Explorer", "Garage", "Sorties"] as const) {
     await page.getByRole("tab", { name: tab, exact: true }).click();
-    await page.waitForTimeout(1500);
+    // D'abord la preuve que l'écran et ses données sont là, ensuite l'absence de la barre.
+    await expect(page.getByRole("heading", { name: proof[tab], exact: true })).toBeVisible({ timeout: 60_000 });
+    if (tab === "Sorties")
+      await expect(page.getByTestId("ticket-application").first()).toBeVisible({ timeout: 60_000 });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
     await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
   }
   await ctx.close();

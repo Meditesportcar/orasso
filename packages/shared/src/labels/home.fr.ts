@@ -100,7 +100,7 @@ const ordinal = (n: number) => (n === 1 ? "1er" : `${n}e`);
 
 export const sortiesLabels = {
   theTeam: "l'équipe organisatrice",
-  pendingLine: (who: string, date: string) => `Réponse de ${who} avant ${date}`,
+  pendingLine: (who: string) => `En attente de la réponse de ${who}`,
   offerLead: (left: string) => `Place libérée · accepte avant ${left}`,
   offerNote: "Un retenu s'est désisté. Si tu ne réponds pas à temps, la place passe au suivant.",
   myQr: "Mon QR",

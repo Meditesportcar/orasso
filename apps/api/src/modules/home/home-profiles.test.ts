@@ -31,6 +31,8 @@ import {
   proFollows,
   profiles,
   providerProfiles,
+  sponsoredDailySeen,
+  sponsoredPlacements,
   ticketTypes,
 } from "../../db/schema";
 import { resetRateLimits } from "../../lib/rateLimit";
@@ -79,6 +81,33 @@ describe("GET /me/home?persona= : le profil de l'accueil", () => {
     expect((await home(u, "pro")).profile).toBe("pro");
     expect((await home(u, "provider")).profile).toBe("provider");
     expect((await home(u, "media")).profile).toBe("media");
+  });
+});
+
+describe("accueil des autres profils : aucune impression sponsorisée, aucune source externe", () => {
+  it("un pro, un prestataire, un média ou une lecture légère ne comptent rien ; l'exposant compte", async () => {
+    const owner = await signUp("Pro_Sponso");
+    const pro = await createPro(owner.id);
+    await db.insert(sponsoredPlacements).values({
+      proProfileId: pro.id,
+      title: "Offre",
+      body: "Texte",
+      linkUrl: "https://exemple.fr",
+      startsOn: "2026-10-01",
+      endsOn: "2026-10-31",
+      status: "active",
+    });
+    const u = await signUp("Fan_Sponso");
+    for (const persona of ["pro", "provider", "media"]) {
+      const r = await home(u, persona);
+      expect(r.sponsored).toBeNull();
+      expect(r.nearby).toBeNull();
+      expect(r.wash).toEqual([]);
+    }
+    expect((await home(u, "fan&light=1")).sponsored).toBeNull();
+    expect(await db.select().from(sponsoredDailySeen)).toHaveLength(0);
+    expect((await home(u, "fan")).sponsored).not.toBeNull();
+    expect(await db.select().from(sponsoredDailySeen)).toHaveLength(1);
   });
 });
 
@@ -157,7 +186,12 @@ describe("visiteur : le prochain billet", () => {
 
 describe("pro : remises, vues, événements proches, passionnés, scans", () => {
   it("compte la semaine, les clients retenus, les passionnés du département et les favoris", async () => {
-    const { ref, structure } = await fixture();
+    const { ref, orga, structure } = await fixture();
+    // L'organisateur du test n'est pas du département de la fiche (les inscriptions du test prennent le 66 par défaut).
+    await db
+      .update(profiles)
+      .set({ departments: ["11"] })
+      .where(eq(profiles.userId, orga.id));
     const owner = await signUp("Pro_Accueil");
     const pro = await createPro(owner.id, { lat: 42.7, lng: 2.9, department: "66" });
     // Remises : trois cette semaine, une trop ancienne.
@@ -216,7 +250,7 @@ describe("pro : remises, vues, événements proches, passionnés, scans", () => 
     expect(r.discountsThisWeek).toBe(3);
     expect(r.profileViews).toBe(42);
     expect(r.favoritedBy).toBe(1);
-    // Passionnés du département 66, hors le propriétaire (qui n'a pas de département) : A, B, C.
+    // Passionnés du département 66, hors le propriétaire de la fiche : A, B, C.
     expect(r.fansNearby).toBe(3);
     expect(r.nearbyEventsWithClients).toHaveLength(1);
     expect(r.nearbyEventsWithClients[0]).toMatchObject({ event: { title: "Proche de l'atelier" }, clientsGoing: 2 });

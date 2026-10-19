@@ -234,6 +234,21 @@ export const weatherService = {
     return `Météo : ${describeWeather(found.summary)} (${name})`;
   },
 
+  /** Météo du jour J d'un événement donné (accueil du prestataire : l'événement de sa mission), `null` si elle n'est pas encore visible. */
+  async dayJForEvent(eventId: string): Promise<MyWeather | null> {
+    const e = await db.query.events.findFirst({ where: eq(events.id, eventId) });
+    if (!e || e.status !== "published" || !weatherVisible(e, now())) return null;
+    const found = await this.stored(e);
+    if (!found) return null;
+    return {
+      kind: "event",
+      event: { id: e.id, slug: e.slug, title: e.title, startsAt: e.startsAt.toISOString() },
+      provider: found.row.provider,
+      attribution: weatherAttributions[found.row.provider],
+      summary: found.summary,
+    };
+  },
+
   /** `GET /me/weather` : prochain événement accepté (≤ 7 jours) ; sinon météo du jour au centre du 1er département. */
   async mine(v: Viewer): Promise<MyWeather | null> {
     const t = now();

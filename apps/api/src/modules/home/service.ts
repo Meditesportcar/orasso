@@ -83,16 +83,20 @@ export const homeService = {
     const shown = new Set<HomeWidgetId>(visibleHomeWidgets(widgets));
     const located = resolvePosition({ lat: q.lat, lng: q.lng }, v.profile.departments);
 
+    // Lot 43 : l'accueil du profil demandé (`?persona=`, la casquette active de l'appli).
+    const profile = homeProfileOf(q.persona);
+    // Seuls l'exposant et le visiteur ont les blocs réglables (autour de moi, météo, lavage, carburant, garage favori,
+    // incitation, emplacement sponsorisé) ; `light` = la lecture de l'accès flottant : les blocs du profil seulement.
+    const full = (profile === "exhibitor" || profile === "visitor") && !q.light;
+    if (!full) shown.clear();
+
     const upcomingPromise = applicationsQueries.mine(v, "upcoming");
     const interestsPromise = db
       .select({ id: profileInterests.categoryId })
       .from(profileInterests)
       .where(eq(profileInterests.userId, v.user.id));
 
-    // Lot 43 : l'accueil du profil demandé (`?persona=`, la casquette active de l'appli).
-    const profile = homeProfileOf(q.persona);
-
-    const [upcoming, interests, nearby, weather, favoriteGarage, wash, fuel, nudge] = await Promise.all([
+    const [upcoming, interests, nearby, weatherMine, favoriteGarage, wash, fuel, nudge] = await Promise.all([
       upcomingPromise,
       interestsPromise,
       shown.has("nearby") ? this.nearby(v, q, radiusKm, located, upcomingPromise) : Promise.resolve(null),
@@ -105,13 +109,15 @@ export const homeService = {
       shown.has("favorite_garage") ? this.favoriteGarage(v) : Promise.resolve(null),
       shown.has("wash") ? this.wash(v, located) : Promise.resolve([] as NearbyPlace[]),
       shown.has("fuel") ? this.fuel(v, located) : Promise.resolve([] as FuelStation[]),
-      this.nudge(v),
+      full ? this.nudge(v) : Promise.resolve(null),
     ]);
     // L'emplacement sponsorisé n'est compté (affichage) que s'il est vraiment renvoyé.
-    const sponsored = await sponsoredService.select(
-      v,
-      interests.map((i) => i.id),
-    );
+    const sponsored = full
+      ? await sponsoredService.select(
+          v,
+          interests.map((i) => i.id),
+        )
+      : null;
 
     const [nextAccess, nextTicket, pro, provider, media, stamps] = await Promise.all([
       profile === "exhibitor" ? enrichNextAccess(pickNextAccess(upcoming)) : Promise.resolve(null),
@@ -121,6 +127,15 @@ export const homeService = {
       profile === "media" ? mediaBlock(v) : Promise.resolve(null),
       profile === "exhibitor" || profile === "visitor" ? stampsThisSeason(v) : Promise.resolve(null),
     ]);
+
+    // Prestataire : la météo du jour J de l'événement de sa mission (pas celle d'une autre candidature).
+    const weather =
+      profile === "provider" && !q.light && provider?.nextMission
+        ? await withinBudget(
+            weatherService.dayJForEvent(provider.nextMission.event.id).catch(() => null),
+            null,
+          )
+        : weatherMine;
 
     return {
       profile,

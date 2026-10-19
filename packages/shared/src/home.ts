@@ -170,6 +170,8 @@ export type HomeNextAccess = MyApplication & {
 export type HomeNextTicket = {
   id: string;
   name: string;
+  /** Prix unitaire en centimes, `null` = gratuit. */
+  priceCents: number | null;
   event: { slug: string; title: string; startsAt: string; endsAt: string; city: string | null };
   arrival: ArrivalSlot | null;
   organizer: HomeOrganizer | null;
@@ -202,7 +204,7 @@ export type HomePro = {
 export type HomeProviderMission = {
   applicationId: string;
   status: "accepted" | "pending" | "waitlisted" | "offered";
-  event: { id: string; slug: string; title: string; startsAt: string; city: string | null };
+  event: { id: string; slug: string; title: string; startsAt: string; endsAt: string; city: string | null };
   trade: string | null;
   spotLabel: string | null;
   installAt: string | null;
@@ -229,7 +231,7 @@ export type HomeProvider = {
 export type HomeMediaReport = {
   applicationId: string;
   status: "accepted" | "pending" | "waitlisted" | "offered";
-  event: { id: string; slug: string; title: string; startsAt: string; city: string | null };
+  event: { id: string; slug: string; title: string; startsAt: string; endsAt: string; city: string | null };
   formats: string[];
   briefing: { zones: string | null; instructions: string | null; contact: string | null } | null;
   organizer: HomeOrganizer | null;

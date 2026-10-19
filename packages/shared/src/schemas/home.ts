@@ -34,6 +34,8 @@ export const homeQuerySchema = z
     lng: z.coerce.number().min(-180).max(180).optional(),
     /** Lot 43 : la casquette dont on veut l'accueil (la casquette active de l'appli). */
     persona: z.enum(personaKinds).optional(),
+    /** Lot 43 : `1` = les blocs du profil seulement (lecture de l'accès flottant : ni sources externes ni sponsorisé). */
+    light: z.enum(["1"]).optional(),
   })
   .refine((q) => (q.lat === undefined) === (q.lng === undefined), "lat et lng vont ensemble");
 export type HomeQuery = z.infer<typeof homeQuerySchema>;

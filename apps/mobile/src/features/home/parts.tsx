@@ -14,8 +14,8 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import { type HomeOrganizer, homeProfileLabels, homeWidgetTitles, type MyWeather, weatherTexts } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { type ReactNode, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { barDay } from "@/features/sorties/model";
@@ -27,6 +27,7 @@ import { Muted } from "@/ui/Muted";
 import { SectionTitle } from "@/ui/Screens";
 
 const { space1, space2, space3, space4 } = tokens.spacing;
+const { radiusSm } = tokens.radius;
 
 /** « Dimanche 18 octobre · Perpignan » : date du jour et ville (ou structure) de la salutation. */
 export function Greeting({ line, name }: { line: string; name: string }) {
@@ -320,7 +321,7 @@ export function BigPair({ items }: { items: { value: number; label: string }[] }
           <Text variant="label" color={c.plateMuted}>
             {i.label}
           </Text>
-          <Text variant="numberNarrow" color={c.plateInk} style={styles.bigNumber}>
+          <Text variant="numberNarrow" color={c.plateInk}>
             {i.value.toLocaleString("fr-FR")}
           </Text>
         </View>
@@ -329,14 +330,30 @@ export function BigPair({ items }: { items: { value: number; label: string }[] }
   );
 }
 
-/** Tuile « Découvre ce qu'il y a de nouveau » : une fois par profil et par appareil (`kv tuto:<profil>` absent). */
+/** lot 42 : passe à `true` quand la route `tuto/[profil]` existe ; tant qu'elle manque, la tuile est masquée. */
+export const TUTO_ROUTE_READY = false;
+
+/**
+ * Tuile « Découvre ce qu'il y a de nouveau » : une fois par profil et par appareil (`kv tuto:<profil>` absent). Le kv
+ * n'est posé qu'au retour du tuto : le quitter sans le voir ne le grille pas.
+ */
 export function TutoTile({ profile }: { profile: string }) {
   const router = useRouter();
   const [show, setShow] = useState(false);
+  const opened = useRef(false);
   useEffect(() => {
-    void kvGet(`tuto:${profile}`).then((v) => setShow(v === null));
+    if (TUTO_ROUTE_READY) void kvGet(`tuto:${profile}`).then((v) => setShow(v === null));
   }, [profile]);
-  if (!show) return null;
+  // Retour sur l'accueil après le tuto : il est vu.
+  useFocusEffect(
+    useCallback(() => {
+      if (!opened.current) return;
+      opened.current = false;
+      void kvSet(`tuto:${profile}`, "1");
+      setShow(false);
+    }, [profile]),
+  );
+  if (!TUTO_ROUTE_READY || !show) return null;
   return (
     <NoteTile
       label="Nouveau"
@@ -344,8 +361,7 @@ export function TutoTile({ profile }: { profile: string }) {
       icon="live"
       testID="home-tuto"
       onPress={() => {
-        void kvSet(`tuto:${profile}`, "1");
-        setShow(false);
+        opened.current = true;
         router.push(`/tuto/${profile}` as never);
       }}
     />
@@ -395,7 +411,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: space1,
     paddingHorizontal: space3,
-    borderRadius: 8,
+    borderRadius: radiusSm,
     transform: [{ rotate: "-4deg" }],
   },
   dateDay: { lineHeight: 26 },
@@ -406,7 +422,7 @@ const styles = StyleSheet.create({
   orgLogo: {
     width: 40,
     height: 40,
-    borderRadius: 8,
+    borderRadius: radiusSm,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -425,6 +441,5 @@ const styles = StyleSheet.create({
   rowDate: { width: 52 },
   noteTile: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3 },
   pair: { flexDirection: "row", gap: space3, padding: space4 },
-  bigNumber: { fontSize: 44, lineHeight: 48 },
   quiet: { gap: space2, padding: space3 },
 });

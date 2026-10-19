@@ -69,7 +69,7 @@ export function ProHome() {
 
           <SectionHead title={homeProfileLabels.fansNearbyTitle} />
           <Plate style={styles.fans} testID="home-fans">
-            <Text variant="numberNarrow" color={t.color.plateInk} style={styles.fansNumber}>
+            <Text variant="numberNarrow" color={t.color.plateInk}>
               {pro.fansNearby.toLocaleString("fr-FR")}
             </Text>
             <View style={styles.fansText}>
@@ -116,6 +116,5 @@ export function ProHome() {
 
 const styles = StyleSheet.create({
   fans: { flexDirection: "row", alignItems: "center", gap: space4, padding: space4 },
-  fansNumber: { fontSize: 44, lineHeight: 48 },
   fansText: { flex: 1, gap: space2 },
 });

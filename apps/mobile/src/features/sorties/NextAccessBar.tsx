@@ -10,7 +10,7 @@
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { nextAccessBarLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -21,6 +21,7 @@ import { useNow } from "@/lib/useNow";
 import { type AccessItem, applicationAccesses, barDay, nextAccessOf, staffAccesses, ticketAccesses } from "./model";
 
 const { space2, space3 } = tokens.spacing;
+const { radiusMd } = tokens.radius;
 
 const KINDS = new Set(["fan", "visitor", "provider", "media"]);
 
@@ -30,6 +31,7 @@ type Extra = { tickets: Parameters<typeof ticketAccesses>[0]; staff: Parameters<
 function useExtraAccesses(kind: string, routeKey: string | undefined, now: Date): AccessItem[] {
   const [extra, setExtra] = useState<Extra>({ tickets: null, staff: null });
   const [role, setRole] = useState<AccessItem | null>(null);
+  const lastRole = useRef(0);
   const load = useCallback(async () => {
     if (kind === "fan" || kind === "visitor") {
       const [tickets, staff] = await Promise.all([
@@ -38,7 +40,12 @@ function useExtraAccesses(kind: string, routeKey: string | undefined, now: Date)
       ]);
       setExtra({ tickets, staff });
     } else {
-      const home = await api.homeData({ persona: kind === "provider" ? "provider" : "media" }).catch(() => null);
+      // Lecture légère : les blocs du profil seulement (ni sources externes ni sponsorisé), et au plus une par minute.
+      if (Date.now() - lastRole.current < 60_000) return;
+      lastRole.current = Date.now();
+      const home = await api
+        .homeData({ persona: kind === "provider" ? "provider" : "media", light: "1" })
+        .catch(() => null);
       const item = home?.provider?.nextMission ?? home?.media?.nextReport ?? null;
       setRole(
         item && item.status === "accepted"
@@ -46,7 +53,7 @@ function useExtraAccesses(kind: string, routeKey: string | undefined, now: Date)
               key: `${kind}-${item.applicationId}`,
               kind: kind === "provider" ? "mission" : "accreditation",
               startsAt: item.event.startsAt,
-              endsAt: item.event.startsAt,
+              endsAt: item.event.endsAt,
               title: item.event.title,
               // Le ticket du prestataire et le badge presse vivent dans leurs onglets (lots 54 et 55).
               href: kind === "provider" ? "/candidatures" : "/presse",
@@ -112,7 +119,7 @@ const styles = StyleSheet.create({
     gap: space2,
     minHeight: 44,
     paddingHorizontal: space3,
-    borderRadius: 12,
+    borderRadius: radiusMd,
     borderWidth: 1.5,
   },
   line: { flex: 1 },
