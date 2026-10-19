@@ -1,11 +1,12 @@
 // Mes billets (lot 34, parité D20 ; docs/02 : les billets vivent dans « Accès », à côté des candidatures) : le QR de
 // chaque billet à présenter à l'entrée, rendre un billet gratuit. Mêmes règles et mêmes phrases que `/app/billets`.
+// Lot 48 : le QR sur la carte du jour J v2 (prototype `s-qr`, variante visiteur « Entrée · Public »), statique.
 import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { ticketAppLabels as L, type MyTicket } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-
+import { QrPoster } from "@/features/jour-j/QrPoster";
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { formatPrice } from "@/features/tickets/TicketsBlock";
 import { api } from "@/lib/api";
@@ -14,7 +15,6 @@ import { errorMessage } from "@/lib/http";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { QrCode } from "@/ui/QrCode";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -50,8 +50,13 @@ function Ticket({ ticket, onGiveBack }: { ticket: MyTicket; onGiveBack: () => vo
           {used ? L.used : L.valid}
         </Chip>
       </View>
-      <View style={styles.qr} testID="ticket-qr">
-        <QrCode value={ticket.payload} size={232} label={L.qrLabel(e.title)} />
+      <View testID="ticket-qr">
+        <QrPoster
+          holder={{ label: "Entrée", value: "Public", rightLabel: "Billet", lines: [ticket.name] }}
+          value={ticket.payload}
+          size={232}
+          label={L.qrLabel(e.title)}
+        />
       </View>
       <Text variant="caption" color={t.color.plateMuted} style={styles.center}>
         {used ? L.entryRecorded : L.showAtEntry}
@@ -126,6 +131,5 @@ const styles = StyleSheet.create({
   ticket: { gap: space2, padding: space3 },
   head: { flexDirection: "row", gap: space3, alignItems: "flex-start" },
   grow: { flex: 1, gap: space1 },
-  qr: { alignItems: "center", paddingVertical: space2 },
   center: { textAlign: "center" },
 });

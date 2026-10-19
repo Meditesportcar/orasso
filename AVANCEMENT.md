@@ -27,6 +27,8 @@
 
 - **Lot 43 — Sorties en tickets, Accueil par profil, accès flottant (branche `lot-43-sorties-accueil`, vague 4)** : `GET /me/home?persona=` (profil et blocs de l'exposant, du visiteur, du pro, du prestataire, du média ; aucune migration) ; Sorties en tickets à souche de date (segments À venir / Staff / Passées, Mon QR, Retirer, liste d'attente, place libérée, Mon billet, mission staff, passées avec points, avis et prix du public) ; Accueil par profil (carte du prochain événement à affiche générée, compte à rebours en contour, organisateur validé, arrivée, Mon accès / Mon billet, Maps, Waze, Sur la carte ; accueils du pro, du prestataire et du média) ; accès flottant de J-7 à J+1 au-dessus de la barre d'onglets ; le pro et le prestataire s'ouvrent désormais sur leur Accueil. Recette `apps/web/e2e/appli-lot43.spec.ts`.
 
+- **Lot 48 — jour J v2 (branche `lot-48-jour-j-v2`, vague 4)** : QR d'accès tournant `OR2` (nouveau code signé toutes les 20 s avec un secret par pass, vérifié hors ligne par le staff, anneau et n° du code, captures bloquées sur l'écran, en-tête par profil : zone, emplacement, badge presse, billet) ; mode staff v2 (synchro, rôle, « Je suis là », tuiles selon les rôles, entrés par zone, Alerte / Main courante / Discussion en bas, thème au choix) ; accueil drive (la caméra lit la plaque avec ML Kit sur l'appareil, hachage, liste en mémoire, pointage `drive`) ; migration `0049_rotating-qr` ; dépendances natives `expo-screen-capture` et `@react-native-ml-kit/text-recognition` (APK au lot 58). Recette `apps/web/e2e/appli-lot48.spec.ts`.
+
 ## En cours
 
 - Branche `lot-51-garage-floutage` poussée, en attente de fusion (après 47 et 49 : migration `0045_plate-blur` à régénérer, règle B1).
@@ -42,6 +44,8 @@
 - La branche `lot-43-sorties-accueil` (vague 4) attend la relecture et la fusion du coordinateur (fichiers partagés : `ui/PersonaTabs.tsx`, `lib/personaModel.ts` (`landingOf`), `packages/shared` (`home.ts`, `labels/home.fr.ts`), `seed.ts` ; la tuile « Découvre ce qu'il y a de nouveau » mène à `tuto/[profil]` du lot 42).
 
 - Lot 41 (branche `lot-41-arrivee`, depuis `main` `7d4fd86`) en attente de la fusion du coordinateur : migration `0045_arrivee` à régénérer selon l'ordre des fusions (règle B1) ; fichiers partagés : `apps/mobile/src/app/_layout.tsx`, `apps/api/src/app.ts`, `modules/security/auth-hooks.ts`, `packages/shared` (labels, schémas), `apps/web/e2e/helpers.ts`.
+
+- Vague 4 : la branche `lot-48-jour-j-v2` attend la relecture et la fusion du coordinateur (migration `0049_rotating-qr`, parent `0048_plate-blur`, règle B1 ; fichiers partagés : `modules/staff/service.ts`, `modules/checkins/service.ts`, `shared/enums.ts`, `shared/schemas/access.ts`, `apps/mobile/package.json`).
 
 ## Prochaine étape
 

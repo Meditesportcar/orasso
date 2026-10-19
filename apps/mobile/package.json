@@ -40,6 +40,7 @@
     "expo-network": "~57.0.2",
     "expo-notifications": "~57.0.23",
     "expo-router": "~57.0.28",
+    "expo-screen-capture": "~57.0.4",
     "expo-secure-store": "~57.0.4",
     "expo-sharing": "~57.0.23",
     "expo-splash-screen": "~57.0.10",

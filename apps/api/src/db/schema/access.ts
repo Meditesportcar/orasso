@@ -45,6 +45,8 @@ export const accessPasses = pgTable(
       .notNull()
       .references(() => signingKeys.kid, { onDelete: "restrict" }),
     signature: bytea("signature").notNull(),
+    /** Lot 48 : secret du code tournant OR2 (32 octets) ; pass antérieurs : généré au premier kit ou à la synchro. */
+    otpSecret: bytea("otp_secret"),
     issuedAt: tstz("issued_at").notNull(),
     revokedAt: tstz("revoked_at"),
     revokedReason: passRevokedReasonEnum("revoked_reason"),

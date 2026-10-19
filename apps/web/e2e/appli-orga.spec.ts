@@ -60,7 +60,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   const structure = me.data.personas.find((p) => p.kind === "organizer" && p.label.includes("MéditeSportCar"));
   expect(structure).toBeTruthy();
   const events = await apiCall<{ id: string; title: string }[]>(damien, "GET", `/structures/${structure?.id}/events`);
-  const salon = events.data.find((e) => e.title.includes("Salon"));
+  const salon = events.data.find((e) => e.title === "Salon Argelès");
   const nocturne = events.data.find((e) => e.title.includes("Nocturne de Canet"));
   expect(salon && nocturne).toBeTruthy();
   // Une recette interrompue a pu laisser le Salon en Incertain : on repart du seed (Maintenu).
@@ -98,8 +98,8 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   const b = await openApp(browser, "julie@orasso.local", "sable");
   await b.page.goto(`/staff/${salon?.id}`);
   await b.page.getByRole("button", { name: "Synchroniser la liste" }).click();
-  await expect(b.page.getByRole("button", { name: "Ouvrir le scan" })).toBeVisible({ timeout: 30_000 });
-  await b.page.getByRole("button", { name: "Ouvrir le scan" }).click();
+  await expect(b.page.getByTestId("staff-tile-scan")).toBeVisible({ timeout: 30_000 });
+  await b.page.getByTestId("staff-tile-scan").click();
   await b.page.waitForTimeout(1500);
   await b.page.evaluate((p) => {
     (globalThis as unknown as { __orassoScan: (x: string) => void }).__orassoScan(p);
@@ -176,7 +176,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await tab(page, "Direct").click();
   await page.getByTestId("orga-direct-staff-mode").click();
   await page.waitForURL(new RegExp(`/staff/${salon?.id}`), { timeout: 20_000 });
-  await expect(page.getByText(/^Mode staff ·/).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Mode staff", { exact: true }).first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Synchroniser la liste" })).toBeVisible({ timeout: 20_000 });
   // Pas de réponse « Je suis là » pour un organisateur (il n'est pas dans le staff de l'événement).
   await expect(page.getByRole("button", { name: "Je suis là" })).toHaveCount(0);

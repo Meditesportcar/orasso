@@ -11,7 +11,7 @@ import { api } from "../api";
 import { now as clockNow, nowMs } from "../clock";
 import { ApiRequestError, errorMessage, getSessionToken } from "../http";
 import { kvDel, kvGet, kvSet } from "../kv";
-import { staffStore } from "./db";
+import { staffStore, staffStoreOpened } from "./db";
 import {
   type ActionKind,
   applyResults,
@@ -48,6 +48,14 @@ import {
 export const policy = trustPolicy(apiUrl(""), process.env.EXPO_PUBLIC_QR_TRUSTED_KEYS);
 
 export const newId = () => randomUUID();
+
+/**
+ * Recette web (lot 48, point hérité du lot 40) : la base SQLite n'est ouverte qu'à l'entrée du mode staff ; tant
+ * qu'elle ne l'est pas, l'envoi en arrière-plan, la purge et la file vue par Sorties n'y touchent pas (sinon chaque
+ * rechargement de page retrouvait le fichier encore tenu par la page d'avant : « cannot create file »). Sur le
+ * téléphone, rien ne change.
+ */
+const webIdle = () => Platform.OS === "web" && !staffStoreOpened();
 
 /** Build vers une API en ligne sans clé épinglée : aucune liste ni aucun QR ne peut être vérifié. */
 export const TRUST_MISSING = hasTrustAnchor(policy)
@@ -247,7 +255,7 @@ async function doSync(eventId: string, userId: string, full: boolean): Promise<S
  * l'appli en V1 : les ré-acceptations, révocations et entrées des collègues arrivent ainsi toutes les minutes).
  */
 export async function refreshOpenEvents(userId: string): Promise<void> {
-  if (!getSessionToken()) return;
+  if (!getSessionToken() || webIdle()) return;
   const store = await staffStore();
   for (const meta of await store.metas()) {
     if (meta.userId !== userId || isPurgeDue(meta, clockNow())) continue;
@@ -355,6 +363,7 @@ export function flush(userId: string): Promise<void> {
 
 /** Retour du réseau ou « Envoyer maintenant » : tout repart sans attendre le délai. */
 export async function flushNow(userId: string): Promise<void> {
+  if (webIdle()) return;
   await (await staffStore()).retryNow(userId, clockNow());
   await flush(userId);
 }
@@ -362,7 +371,7 @@ export async function flushNow(userId: string): Promise<void> {
 const later = (attempts: number) => new Date(nowMs() + backoffMs(attempts));
 
 async function doFlush(userId: string) {
-  if (!getSessionToken()) return;
+  if (!getSessionToken() || webIdle()) return;
   const store = await staffStore();
   const unsent = await store.actions(userId, { unsentOnly: true });
   if (!unsent.length) return;
@@ -634,6 +643,7 @@ async function sendOther(store: Store, action: PendingAction): Promise<boolean> 
 
 /** Fermeture à J+1 : tout ce qui concerne l'événement disparaît du téléphone, sauf les actions pas encore envoyées. */
 export async function purgeExpired(): Promise<void> {
+  if (webIdle()) return;
   const store = await staffStore();
   let changed = false;
   for (const meta of await store.metas()) {
@@ -659,5 +669,6 @@ export async function purgeAllStaff(): Promise<void> {
 }
 
 export async function actionsOf(userId: string, eventId?: string): Promise<PendingAction[]> {
+  if (webIdle()) return [];
   return (await staffStore()).actions(userId, { eventId });
 }

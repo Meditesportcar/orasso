@@ -29,6 +29,11 @@ export const structureRoleLabels: Record<StructureRole, string> = {
 export const staffRoles = ["scan", "shop", "placement", "control", "filtering", "super_staff"] as const;
 export const staffRoleSchema = z.enum(staffRoles);
 export type StaffRole = z.infer<typeof staffRoleSchema>;
+/**
+ * Rôles qui pointent les entrées (scan, pointage manuel ou par plaque, accueil drive) et reçoivent les secrets des codes
+ * tournants (relecture du lot 48) ; l'organisateur a tous les rôles.
+ */
+export const checkinStaffRoles: readonly StaffRole[] = ["scan", "control", "super_staff"];
 
 export const staffRoleLabels: Record<StaffRole, string> = {
   scan: "Scan accueil",

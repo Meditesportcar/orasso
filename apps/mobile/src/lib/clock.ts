@@ -76,3 +76,66 @@ export function useClockOffset(): number {
 export function useClockAvailable(): boolean {
   return useSyncExternalStore(subscribeClock, clockAvailable, clockAvailable);
 }
+
+// --- Décalage avec l'heure du serveur (relecture du lot 48) ----------------------------------------------------
+// Le code tournant OR2 n'admet qu'un créneau de 20 s d'écart : un téléphone réglé avec une minute d'avance verrait
+// chaque code refusé. L'heure du serveur est mesurée par l'en-tête `Date` de chaque réponse de l'API (à la seconde),
+// au milieu de l'aller-retour ; on garde la médiane des 7 dernières mesures, conservée sur l'appareil (clockStore.ts).
+// `serverNow()` = heure de l'appareil + ce décalage (+ l'horloge simulée en développement) : c'est l'heure du code
+// tournant (participant) et de sa vérification (staff).
+
+const SAMPLES = 7;
+/** Une mesure dont l'aller-retour dépasse 5 s n'est pas fiable. */
+const MAX_ROUND_TRIP_MS = 5_000;
+let skewMs = 0;
+let skewAt: number | null = null;
+const samples: number[] = [];
+
+const median = (list: number[]) => {
+  const sorted = [...list].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+};
+
+/**
+ * Lit l'en-tête `Date` d'une réponse de l'API. `sentAt` / `receivedAt` : heure de l'appareil (`Date.now()`) à l'envoi
+ * et à la réception. Renvoie `true` si la mesure a été retenue.
+ */
+export function applyDateHeader(value: string | null | undefined, sentAt: number, receivedAt: number): boolean {
+  if (!value || receivedAt - sentAt > MAX_ROUND_TRIP_MS || receivedAt < sentAt) return false;
+  const server = Date.parse(value);
+  if (!Number.isFinite(server)) return false;
+  // L'en-tête est tronqué à la seconde : le milieu de la seconde, comparé au milieu de l'aller-retour.
+  samples.push(server + 500 - (sentAt + receivedAt) / 2);
+  if (samples.length > SAMPLES) samples.shift();
+  const next = Math.round(median(samples));
+  skewAt = receivedAt;
+  skewMs = next;
+  // Toujours prévenir : l'heure de la mesure est gardée sur l'appareil (bandeau « ouvre l'appli avec du réseau »).
+  for (const listener of listeners) listener();
+  return true;
+}
+
+/** Décalage mesuré avec le serveur (ms ; positif : le téléphone retarde). */
+export const serverSkewMs = () => skewMs;
+/** Heure (de l'appareil) de la dernière mesure ; `null` si aucune depuis l'installation. */
+export const serverSkewAt = () => skewAt;
+
+/** Heure du serveur estimée, en millisecondes. */
+export const serverNowMs = () => nowMs() + skewMs;
+/** Heure du serveur estimée : celle du code tournant et de sa vérification hors ligne. */
+export const serverNow = () => new Date(serverNowMs());
+
+/** Au lancement, reprend la dernière mesure gardée sur l'appareil (hors ligne), tant qu'aucune réponse n'en donne. */
+export function restoreServerSkew(ms: number, at: number | null) {
+  if (samples.length || !Number.isFinite(ms)) return;
+  skewMs = Math.trunc(ms);
+  skewAt = at;
+  for (const listener of listeners) listener();
+}
+
+/** Remet l'état d'origine (tests). */
+export function resetServerSkewForTests() {
+  skewMs = 0;
+  skewAt = null;
+  samples.length = 0;
+}

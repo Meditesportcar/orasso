@@ -6,6 +6,7 @@ import {
   staffRoles as ALL_STAFF_ROLES,
   accessListSigningText,
   type CheckinMethod,
+  checkinStaffRoles,
   type EventStaffMember,
   type EventStaffUpdate,
   fromWallTime,
@@ -50,6 +51,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { signing } from "../../lib/signing";
 import { type Executor, withTx } from "../../lib/tx";
+import { ensureOtpSecrets } from "../access/service";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
@@ -451,6 +453,15 @@ async function accessEntries(
     .leftJoin(checkins, eq(checkins.applicationId, applications.id))
     .where(eq(accessPasses.eventId, event.id))
     .orderBy(asc(profiles.pseudo), asc(accessPasses.issuedAt));
+  // Lot 48 : secret du code tournant OR2 de chaque pass valide (généré ici pour un pass antérieur au lot 48), envoyé
+  // seulement aux rôles qui pointent et à l'organisateur (relecture : qui détient le secret peut fabriquer le code).
+  const withSecrets = organizer || access.roles.some((r) => checkinStaffRoles.includes(r));
+  const otpSecrets = withSecrets
+    ? await ensureOtpSecrets(
+        db,
+        rows.map((r) => r.pass),
+      )
+    : new Map<string, Buffer>();
   const vehicleIds = [...new Set(rows.flatMap((r) => (r.app.vehicleId ? [r.app.vehicleId] : [])))];
   const vehicles = new Map((await vehiclesRepo.findFullByIds(vehicleIds)).map((x) => [x.id, x]));
   const providers = await loadProviders(
@@ -496,6 +507,8 @@ async function accessEntries(
       app.updatedAt.getTime(),
       checkin?.updatedAt.getTime() ?? 0,
       seenAt?.getTime() ?? 0,
+      // Secret OR2 généré à l'instant : l'entrée part aussi dans une synchro différentielle.
+      !pass.otpSecret && otpSecrets.has(pass.id) ? Date.now() : 0,
     );
     if (!valid) {
       // Pass révoqué : juste de quoi refuser le QR au scan (« Désisté », « Non admis »…), rien de plus en cache.
@@ -547,6 +560,7 @@ async function accessEntries(
       categories: v ? v.categories.map((c) => c.category.slug) : [],
       plateHint: plate ? plate.slice(0, 3) : null,
       plateHash: plate ? plateHash(event.plateSalt, plate) : null,
+      otpSecret: otpSecrets.get(pass.id)?.toString("base64url") ?? null,
       zoneCode: zone?.code ?? null,
       zoneName: zone?.name ?? null,
       checkedInAt: checkin ? checkin.checkedInAt.toISOString() : null,
