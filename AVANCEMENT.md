@@ -13,8 +13,11 @@
 - **Chantier DA v2 ouvert (19/10/2026)** : prototype v2 (version 41) validé par Damien (lot 37) ; 21 lots (38 à 58) planifiés en huit vagues (`PLAN-DA-V2.md` du relais).
 - **Lot 38 — socle v2 (branche `lot-38-socle-v2`, vague 1)** : jetons v2 par surcouche (`packages/design-system/tokens.v2.json`, fusionnée par `scripts/merge-tokens.mjs` ; `tokens.json` inchangé) et huit écarts datés dans le README du système de design ; contour couleur du fond (`OutlinedText`, `Outlined`, `.o-onbg`/`.o-onphoto`) ; barre du haut v2 (`AppBar kind="tab"` : logotype partout, casquette, Recherche, Boîte) et `BigTitle` sur une ligne ; six barres d'onglets (`tabSets.exhibitor/visitor/pro/provider/media/organizer`, le O au centre ; `fan` alias déprécié) et huit pictogrammes ; `personaKinds` à six profils ; thème au choix, jamais imposé, avec « Automatique » solaire (`shared/rules/solar.ts`) sur le site et dans l'appli ; espaces organisateur et pro du site au thème choisi ; recettes `/_ds` (site et appli) avec une section v2 ; audit e2e `unoutlinedOnPhoto`, `setTheme`, `MOBILE`, `e2e/lot38.spec.ts`. Aucun écran refait : l'appli et le site gardent leurs barres v1 (`legacyTabSets`) jusqu'au lot 40.
 
+- **Lot 45 — API du profil média et de l'accréditation presse (branche `lot-45-api-media`, vague 2)** : profil média, accréditation = candidature `kind = media` décidée par le tri (badge presse = pass, notifications `accreditation_*`), réglages presse de l'organisateur, contenus (publiables si accrédité), mise en avant, vues, agenda, Explorer national (`region`, `accreditationOpen`, temps de route), carte de presse privée vérifiée par l'administration ; migration `0043_media` ; seed Léo / « Sud Cars ». Aucun écran (lots 55 et 57).
+
 ## En cours
 
+- La branche `lot-45-api-media` attend la relecture et la fusion du coordinateur (migration `0043_media` à régénérer à la fusion si un autre lot de la vague en ajoute une, règle B1).
 - La branche `lot-38-socle-v2` attend la relecture et la fusion du coordinateur. Point à confirmer par Damien : H2 (thème jamais imposé, contraire à `docs/03` l. 10) — le retrait du Sable imposé aux espaces orga et pro du site est dans un commit isolé, facile à annuler.
 
 ## Prochaine étape
