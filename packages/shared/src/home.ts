@@ -1,5 +1,6 @@
 // Accueil complet (lot 30, ARCHITECTURE-SUITE § 13.3) : widgets réglables, suggestions autour de moi, lavage et carburant
 // les plus proches, garage favori, emplacement sponsorisé. Types et réglages partagés entre l'API, le site et l'appli.
+import type { ArrivalSlot } from "./rules/arrival";
 import type { MyApplication } from "./schemas/application";
 import type { EventCard } from "./schemas/event";
 import type { ProCard } from "./schemas/pro";
@@ -125,8 +126,122 @@ export type HomeSponsored = {
   pro: { slug: string; name: string; logoUrl: string | null };
 };
 
+// --- Accueil par profil (lot 43, prototype DA v2 `s-home`) ----------------------------------------------------------
+
+/**
+ * Le profil dont l'accueil est demandé (`?persona=` de `GET /me/home`, casquette active de l'appli) : l'exposant (`fan`),
+ * le visiteur, le pro, le prestataire, le média. L'organisateur et l'administrateur n'ont pas cet accueil (Direct, lot
+ * 52) : ils reçoivent celui de l'exposant, sans blocs de profil.
+ */
+export const homeProfiles = ["exhibitor", "visitor", "pro", "provider", "media"] as const;
+export type HomeProfile = (typeof homeProfiles)[number];
+
+/** Casquette → accueil. Sans casquette (ancien client, site) : l'accueil de l'exposant. */
+export function homeProfileOf(persona: string | undefined): HomeProfile {
+  switch (persona) {
+    case "visitor":
+      return "visitor";
+    case "pro":
+      return "pro";
+    case "provider":
+      return "provider";
+    case "media":
+      return "media";
+    default:
+      return "exhibitor";
+  }
+}
+
+/** Structure organisatrice telle que l'accueil l'affiche : logo, nom, pastille « Structure validée ». */
+export type HomeOrganizer = { name: string; logoUrl: string | null; verified: boolean };
+
+/** Le prochain accès de l'exposant : la candidature, plus l'arrivée, l'organisateur et l'affiche de l'événement. */
+export type HomeNextAccess = MyApplication & {
+  arrival: ArrivalSlot | null;
+  organizer: HomeOrganizer | null;
+  posterUrl: string | null;
+};
+
+/** Visiteur : son prochain billet valable, avec le créneau d'arrivée du public. */
+export type HomeNextTicket = {
+  id: string;
+  name: string;
+  event: { slug: string; title: string; startsAt: string; endsAt: string; city: string | null };
+  arrival: ArrivalSlot | null;
+  organizer: HomeOrganizer | null;
+  posterUrl: string | null;
+};
+
+export type HomeProScan = { grade: string; percent: number; usedAt: string };
+export type HomeProEvent = {
+  event: Pick<EventCard, "id" | "slug" | "title" | "startsAt" | "city" | "posterUrl">;
+  /** Mes abonnés qui y sont retenus (« N de tes clients y vont »). */
+  clientsGoing: number;
+};
+
+/** Pro : remises et vues de la semaine, événements proches, passionnés du coin, derniers scans. */
+export type HomePro = {
+  slug: string;
+  name: string;
+  discountsThisWeek: number;
+  profileViews: number;
+  nearbyEventsWithClients: HomeProEvent[];
+  /** Passionnés inscrits dans le département de la fiche (la position des personnes n'est jamais gardée). */
+  fansNearby: number;
+  /** Personnes qui t'ont mis en garage favori. */
+  favoritedBy: number;
+  lastScans: HomeProScan[];
+};
+
+/** Prestataire : sa prochaine mission (emplacement, arrivée, message de l'organisateur) et les missions proches. */
+export type HomeProviderMission = {
+  applicationId: string;
+  status: "accepted" | "pending" | "waitlisted" | "offered";
+  event: { id: string; slug: string; title: string; startsAt: string; city: string | null };
+  trade: string | null;
+  spotLabel: string | null;
+  installAt: string | null;
+  /** Message de l'organisateur (note d'emplacement). */
+  organizerMessage: string | null;
+  organizer: HomeOrganizer | null;
+  posterUrl: string | null;
+};
+export type HomeNearbyMission = {
+  slug: string;
+  title: string;
+  startsAt: string;
+  city: string | null;
+  distanceKm: number | null;
+  structureName: string;
+};
+export type HomeProvider = {
+  nextMission: HomeProviderMission | null;
+  nearbyMissions: HomeNearbyMission[];
+};
+
+/** Média : son prochain reportage (accrédité ou en attente), son badge, les consignes, à couvrir, ses contenus. */
+export type HomeMediaReport = {
+  applicationId: string;
+  status: "accepted" | "pending" | "waitlisted" | "offered";
+  event: { id: string; slug: string; title: string; startsAt: string; city: string | null };
+  formats: string[];
+  briefing: { zones: string | null; instructions: string | null; contact: string | null } | null;
+  organizer: HomeOrganizer | null;
+  posterUrl: string | null;
+};
+export type HomeMedia = {
+  name: string;
+  logoUrl: string | null;
+  nextReport: HomeMediaReport | null;
+  /** Événements gardés dans « Mon agenda », à venir. */
+  toCover: { slug: string; title: string; startsAt: string; city: string | null }[];
+  contents: { id: string; title: string; eventTitle: string; views: number }[];
+};
+
 export type HomeData = {
-  nextAccess: MyApplication | null;
+  /** Lot 43 : le profil de cet accueil (`?persona=`). */
+  profile: HomeProfile;
+  nextAccess: HomeNextAccess | null;
   pendingStatuses: MyApplication[];
   nearby: { radiusKm: number; source: "device" | "sector" | null; events: EventCard[] } | null;
   weather: MyWeather | null;
@@ -139,4 +254,11 @@ export type HomeData = {
   nudge: HomeNudgeKind | null;
   sponsored: HomeSponsored | null;
   widgets: HomeWidgetsConfig;
+  /** Lot 43 : blocs propres au profil (`null` pour les autres profils, ou tant que la donnée n'existe pas). */
+  nextTicket: HomeNextTicket | null;
+  pro: HomePro | null;
+  provider: HomeProvider | null;
+  media: HomeMedia | null;
+  /** Lot 49 : tampons de la saison dans le passeport. */
+  stampsThisSeason: number | null;
 };

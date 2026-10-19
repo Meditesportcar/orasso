@@ -21,6 +21,7 @@ import {
   type HomeWidgetId,
   type HomeWidgetsConfig,
   homeNudgeOrder,
+  homeProfileOf,
   type LatLng,
   type MyApplication,
   type NearbyPlace,
@@ -47,6 +48,7 @@ import { applicationsQueries } from "../applications/queries";
 import { exploreEvents } from "../events/explore";
 import { proOwnerActive } from "../pros/explore";
 import { weatherService } from "../weather/service";
+import { enrichNextAccess, mediaBlock, nextTicketOf, proBlock, providerBlock, stampsThisSeason } from "./profiles";
 import { sponsoredService } from "./sponsored";
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -87,6 +89,9 @@ export const homeService = {
       .from(profileInterests)
       .where(eq(profileInterests.userId, v.user.id));
 
+    // Lot 43 : l'accueil du profil demandé (`?persona=`, la casquette active de l'appli).
+    const profile = homeProfileOf(q.persona);
+
     const [upcoming, interests, nearby, weather, favoriteGarage, wash, fuel, nudge] = await Promise.all([
       upcomingPromise,
       interestsPromise,
@@ -108,8 +113,23 @@ export const homeService = {
       interests.map((i) => i.id),
     );
 
+    const [nextAccess, nextTicket, pro, provider, media, stamps] = await Promise.all([
+      profile === "exhibitor" ? enrichNextAccess(pickNextAccess(upcoming)) : Promise.resolve(null),
+      profile === "visitor" ? nextTicketOf(v) : Promise.resolve(null),
+      profile === "pro" ? proBlock(v) : Promise.resolve(null),
+      profile === "provider" ? providerBlock(v) : Promise.resolve(null),
+      profile === "media" ? mediaBlock(v) : Promise.resolve(null),
+      profile === "exhibitor" || profile === "visitor" ? stampsThisSeason(v) : Promise.resolve(null),
+    ]);
+
     return {
-      nextAccess: pickNextAccess(upcoming),
+      profile,
+      nextAccess,
+      nextTicket,
+      pro,
+      provider,
+      media,
+      stampsThisSeason: stamps,
       pendingStatuses: upcoming.filter((a) => ["pending", "waitlisted", "offered"].includes(a.status)),
       nearby,
       weather,

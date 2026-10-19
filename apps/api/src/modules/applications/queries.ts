@@ -41,6 +41,7 @@ import type { Viewer } from "../../lib/session";
 import { contactViews } from "../after-event/contact-views";
 import { notesService } from "../after-event/notes";
 import { crewsForApplications, crewsForTriage, eventCrewFilters } from "../crews/application-info";
+import { arrivalsOf } from "../events/arrivals";
 import { type DayRow, daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { pointsService } from "../points/service";
@@ -165,6 +166,7 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
           : null,
         review: myReviews.get(r.id) ?? null,
         crew: crewInfo(r, e),
+        arrival: arrivalsOf(e).exhibitors,
       },
     ];
   });
