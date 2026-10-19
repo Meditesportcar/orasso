@@ -1,3 +1,4 @@
+export { type DepartmentChoice, departmentChoices, departmentLabel } from "./choices";
 export {
   type FranceDepartment,
   franceDepartmentByCode,

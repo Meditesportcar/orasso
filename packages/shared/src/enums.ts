@@ -199,6 +199,8 @@ export const departments = [
   "974",
   "976",
 ] as const;
+/** Nombre maximal de départements choisis (secteur d'un profil). */
+export const MAX_DEPARTMENTS = 20;
 export const departmentSchema = z.string().refine((d) => (departments as readonly string[]).includes(d), {
   message: "Département inconnu",
 });

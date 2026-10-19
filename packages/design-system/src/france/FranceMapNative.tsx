@@ -1,4 +1,5 @@
-// FranceMap (natif) : carte des départements, sélection multiple (lot 41). Repos : `map-land-2` ; choisi : `accent` ;
+// FranceMap (natif) : carte des départements, sélection multiple (lot 41). Décorative pour le lecteur d'écran : le chemin
+// accessible est la liste (`DepartmentChecklist`). Repos : `map-land-2` ; choisi : `accent` ;
 // favori : bordé `ink`. La carte ne bouge pas (pas de zoom ni de recherche : v16). Données et licence : departments.ts.
 
 import { memo } from "react";
@@ -15,15 +16,13 @@ export type FranceMapProps = {
   favorite?: string | null;
   onToggle: (code: string) => void;
   style?: ViewStyle;
-  /** Nom lu par les lecteurs d'écran. */
-  accessibilityLabel?: string;
 };
 
 /** Le favori est dessiné en dernier pour que son bord passe par-dessus ses voisins. */
 const orderedFor = (favorite?: string | null) =>
   [...franceDepartments].sort((a, b) => Number(a.code === favorite) - Number(b.code === favorite));
 
-function FranceMapBase({ selected, favorite, onToggle, style, accessibilityLabel }: FranceMapProps) {
+function FranceMapBase({ selected, favorite, onToggle, style }: FranceMapProps) {
   const { t } = useTheme();
   const c = t.color;
   const chosen = new Set(selected);
@@ -38,19 +37,18 @@ function FranceMapBase({ selected, favorite, onToggle, style, accessibilityLabel
   // DOM ne connaît pas (erreurs React en développement) ; un <svg> du DOM, plus simple, fait le même dessin.
   if (Platform.OS === "web") {
     return (
-      <View style={[styles.box, style]}>
-        {/* biome-ignore lint/a11y/useSemanticElements: un fieldset ne s'applique pas à un svg ; groupe de boutons */}
+      <View style={[styles.box, style]} aria-hidden>
+        {/* biome-ignore lint/a11y/noSvgWithoutTitle: carte décorative, la liste est le chemin accessible */}
         <svg
           viewBox={franceMapViewBox}
           width="100%"
-          role="group"
-          aria-label={accessibilityLabel}
+          focusable="false"
           style={{ display: "block", aspectRatio: `${franceMapSize.width} / ${franceMapSize.height}` }}
         >
           {ordered.map((d) => {
             const p = paint(d.code);
             return (
-              // biome-ignore lint/a11y/useSemanticElements: un tracé SVG ne peut pas être un button
+              // biome-ignore lint/a11y/noStaticElementInteractions: tracé décoratif, la liste des départements est le chemin accessible
               <path
                 key={d.code}
                 d={d.d}
@@ -59,18 +57,9 @@ function FranceMapBase({ selected, favorite, onToggle, style, accessibilityLabel
                 strokeWidth={p.strokeWidth}
                 strokeLinejoin="round"
                 style={{ cursor: "pointer" }}
-                role="button"
-                tabIndex={0}
-                aria-pressed={chosen.has(d.code)}
-                aria-label={`${d.code} ${d.name}`}
+                tabIndex={-1}
                 data-testid={`dept-${d.code}`}
                 onClick={() => onToggle(d.code)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onToggle(d.code);
-                  }
-                }}
               />
             );
           })}
@@ -80,7 +69,7 @@ function FranceMapBase({ selected, favorite, onToggle, style, accessibilityLabel
   }
 
   return (
-    <View style={[styles.box, style]} accessibilityLabel={accessibilityLabel}>
+    <View style={[styles.box, style]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Svg width="100%" viewBox={franceMapViewBox} style={{ aspectRatio: franceMapSize.width / franceMapSize.height }}>
         <G>
           {ordered.map((d) => (
@@ -91,7 +80,6 @@ function FranceMapBase({ selected, favorite, onToggle, style, accessibilityLabel
               strokeLinejoin="round"
               onPress={() => onToggle(d.code)}
               testID={`dept-${d.code}`}
-              accessibilityLabel={`${d.code} ${d.name}${chosen.has(d.code) ? ", choisi" : ""}`}
             />
           ))}
         </G>

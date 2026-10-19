@@ -2,12 +2,14 @@ import { z } from "zod";
 import {
   departmentSchema,
   devicePlatforms,
+  MAX_DEPARTMENTS,
   type MainProfile,
   mainProfiles,
   type notificationFamilies,
   profileVisibilities,
 } from "../enums";
 import type { Grade } from "../grades";
+import { arriveeLabels } from "../labels/arrivee.fr";
 import type { SuspensionInfo } from "../moderation";
 import type { PlatformRole, StaffRole, StructureRole } from "../roles";
 import { optionalText } from "./common";
@@ -24,7 +26,7 @@ export const profileUpdateSchema = z
     bio: optionalText(500),
     visibility: z.enum(profileVisibilities),
     mainProfile: z.enum(mainProfiles),
-    departments: z.array(departmentSchema).max(20),
+    departments: z.array(departmentSchema).max(MAX_DEPARTMENTS, arriveeLabels.errors.tooMany),
     radiusKm: z.number().int().min(5).max(500),
     interests: z.array(z.uuid()).max(30),
     notificationPrefs: z.object({

@@ -2,6 +2,7 @@
 // le site (« @orasso/design-system/web »). À brancher une fois à la racine de l'appli :
 //   <ThemeProvider> … </ThemeProvider>   et   useOrassoFonts() avant d'afficher l'interface.
 export * from "../france";
+export { DepartmentChecklist, type DepartmentChecklistProps } from "../france/DepartmentChecklistNative";
 export { FranceMap, FranceMapCredit, type FranceMapProps } from "../france/FranceMapNative";
 export * from "../icons";
 export * from "../labels";

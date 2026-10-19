@@ -41,17 +41,19 @@ export const arriveeLabels = {
     lastName: "Nom",
     privacyTitle: "Ton nom et ton prénom sont privés",
     privacyShared: "Ils ne s'affichent jamais sur ton profil.",
-    privacyEnd: "L'équipe Orasso aussi, pour la sécurité.",
+    privacyEnd: "L'équipe Orasso aussi.",
     submit: "Voir comment ça marche",
     email: "E-mail",
     password: "Mot de passe",
   },
   credit: "Carte : Victor Cazanave, CC BY 4.0",
+  list: { open: "Choisir dans une liste", close: "Masquer la liste", label: "Liste des départements" },
   errors: {
     mainProfile: "Choisis ton profil.",
     departments: "Choisis au moins un département.",
     firstName: "Ton prénom est obligatoire.",
     lastName: "Ton nom est obligatoire.",
+    tooMany: "Tu peux choisir 20 départements au plus.",
   },
 } as const;
 
@@ -95,12 +97,57 @@ export const pseudoHint: Record<MainProfile, string> = {
   media: "C'est lui qu'on voit sur ton profil ; tes demandes portent le nom de ton média.",
 };
 
-/** Qui peut voir le nom et le prénom, selon le profil (début de la note « privés »). */
+/**
+ * Qui peut voir le nom et le prénom, selon le profil (milieu de la note « privés »). Conforme à docs/01 (l'organisateur
+ * voit les inscrits à ses événements et les abonnés de sa structure, pour la sécurité) : jamais « seulement en cas de
+ * souci ». Un profil sans événement à rejoindre (pro, organisateur) garde la phrase sur ce que montre sa fiche.
+ */
+const seenByOrganizers =
+  "Les équipes organisatrices des événements où tu t'inscris et des structures que tu suis peuvent les voir, pour la sécurité.";
 export const namePrivacy: Record<MainProfile, string> = {
-  exhibitor: "Seule l'équipe organisatrice d'un événement où tu vas peut les voir, et seulement en cas de souci.",
-  visitor: "Seule l'équipe organisatrice d'un événement où tu vas peut les voir, et seulement en cas de souci.",
-  pro: "Ta fiche montre le nom de ton atelier, jamais le tien.",
-  organizer: "Tes événements montrent le nom de ta structure, jamais le tien.",
-  provider: "Seule l'équipe organisatrice d'un événement où tu interviens peut les voir, et seulement en cas de souci.",
-  media: "Seule l'équipe organisatrice d'un événement où tu interviens peut les voir, et seulement en cas de souci.",
+  exhibitor: seenByOrganizers,
+  visitor: seenByOrganizers,
+  pro: `Ta fiche montre le nom de ton atelier, jamais le tien. ${seenByOrganizers}`,
+  organizer: `Tes événements montrent le nom de ta structure, jamais le tien. ${seenByOrganizers}`,
+  provider:
+    "Les équipes organisatrices des événements où tu interviens et des structures que tu suis peuvent les voir, pour la sécurité.",
+  media:
+    "Les équipes organisatrices des événements où tu interviens et des structures que tu suis peuvent les voir, pour la sécurité.",
 };
+
+/** Les départements d'outre-mer : absents de la carte, présents dans la liste. */
+export const overseasDepartmentNames: Record<string, string> = {
+  "971": "Guadeloupe",
+  "972": "Martinique",
+  "973": "Guyane",
+  "974": "La Réunion",
+  "976": "Mayotte",
+};
+
+/** Après l'arrivée : créer sa casquette (ou ajouter sa voiture) ; « Plus tard » laisse la barre de base. */
+export const pendingLabels = {
+  kicker: "Termine ta fiche",
+  later: "Plus tard",
+  pro: {
+    title: "Crée ta fiche pro",
+    caption: "Les passionnés du coin te trouvent, tes remises s'affichent.",
+    cta: "Créer ma fiche pro",
+  },
+  organizer: {
+    title: "Crée ta structure",
+    caption: "Asso, club ou circuit : pour organiser des événements.",
+    cta: "Créer ma structure",
+  },
+  provider: {
+    title: "Crée ton profil prestataire",
+    caption: "Pour candidater aux missions des événements.",
+    cta: "Créer mon profil",
+  },
+  media: { title: "Ton profil média", caption: "Sa création arrive bientôt : tu le retrouveras ici.", cta: "" },
+  vehicle: {
+    title: "Ajoute ta voiture",
+    caption: "Tu en as besoin pour candidater. Sans véhicule, tu as la barre du visiteur.",
+    cta: "Ajouter ma voiture",
+  },
+  barNote: "Dès que c'est fait, ta barre d'onglets s'affiche.",
+} as const;

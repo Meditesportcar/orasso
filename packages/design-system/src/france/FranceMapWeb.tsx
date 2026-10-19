@@ -1,5 +1,5 @@
-// FranceMap (web) : SVG inline, mêmes props que la version native (lot 41). Les tracés sont des boutons (clavier :
-// Entrée ou Espace). Données et licence : departments.ts.
+// FranceMap (web) : SVG inline, mêmes props que la version native (lot 41). La carte est décorative pour le lecteur d'écran
+// et ne prend pas le focus clavier : le chemin accessible est la liste des départements (`DepartmentChecklist`).
 
 import { memo } from "react";
 import { cx } from "../web/components/cx";
@@ -12,46 +12,32 @@ export type FranceMapProps = {
   favorite?: string | null;
   onToggle: (code: string) => void;
   className?: string;
-  /** Nom lu par les lecteurs d'écran. */
-  label?: string;
 };
 
-function FranceMapBase({ selected, favorite, onToggle, className, label = "Carte des départements" }: FranceMapProps) {
+function FranceMapBase({ selected, favorite, onToggle, className }: FranceMapProps) {
   const chosen = new Set(selected);
   // Le favori est dessiné en dernier pour que son bord passe par-dessus ses voisins.
   const ordered = [...franceDepartments].sort((a, b) => Number(a.code === favorite) - Number(b.code === favorite));
   return (
-    // biome-ignore lint/a11y/useSemanticElements: un fieldset ne s'applique pas à un svg ; groupe de boutons
+    // biome-ignore lint/a11y/noSvgWithoutTitle: carte décorative, la liste est le chemin accessible
     <svg
       className={cx("o-france", className)}
       viewBox={franceMapViewBox}
-      role="group"
-      aria-label={label}
+      aria-hidden="true"
+      focusable="false"
       data-testid="france-map"
     >
-      {ordered.map((d) => {
-        const on = chosen.has(d.code);
-        return (
-          // biome-ignore lint/a11y/useSemanticElements: un tracé SVG ne peut pas être un button
-          <path
-            key={d.code}
-            d={d.d}
-            className={cx("o-france__dept", on && "is-selected", d.code === favorite && "is-favorite")}
-            role="button"
-            tabIndex={0}
-            aria-pressed={on}
-            aria-label={`${d.code} ${d.name}`}
-            data-testid={`dept-${d.code}`}
-            onClick={() => onToggle(d.code)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onToggle(d.code);
-              }
-            }}
-          />
-        );
-      })}
+      {ordered.map((d) => (
+        // biome-ignore lint/a11y/noStaticElementInteractions: tracé décoratif, la liste des départements est le chemin accessible
+        <path
+          key={d.code}
+          d={d.d}
+          className={cx("o-france__dept", chosen.has(d.code) && "is-selected", d.code === favorite && "is-favorite")}
+          tabIndex={-1}
+          data-testid={`dept-${d.code}`}
+          onClick={() => onToggle(d.code)}
+        />
+      ))}
     </svg>
   );
 }

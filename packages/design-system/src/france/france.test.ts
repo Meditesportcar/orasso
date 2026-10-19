@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { departments } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
+import { departmentChoices, departmentLabel } from "./choices";
 import { franceDepartmentByCode, franceDepartments, franceMapCredit, franceMapViewBox } from "./departments";
 
 describe("carte de France (lot 41)", () => {
@@ -39,5 +40,12 @@ describe("carte de France (lot 41)", () => {
         new RegExp(["jsdeli", "vr"].join(""), "i"),
       );
     }
+  });
+
+  it("la liste a les 101 départements, outre-mer compris, les mêmes codes que l'API", () => {
+    expect(departmentChoices).toHaveLength(101);
+    expect(new Set(departmentChoices.map((d) => d.code))).toEqual(new Set(departments));
+    expect(departmentLabel({ code: "66", name: "Pyrénées-Orientales" })).toBe("66 · Pyrénées-Orientales");
+    expect(departmentChoices.at(-1)).toEqual({ code: "976", name: "Mayotte" });
   });
 });

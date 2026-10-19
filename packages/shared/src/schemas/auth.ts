@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { departmentSchema, mainProfiles } from "../enums";
+import { departmentSchema, MAX_DEPARTMENTS, mainProfiles } from "../enums";
 import { arriveeLabels } from "../labels/arrivee.fr";
 import { expressLabels } from "../labels/corrections.fr";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../rules/password";
@@ -15,7 +15,10 @@ export const signUpSchema = z.object({
   password: z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH),
   name: pseudoSchema,
   mainProfile: z.enum(mainProfiles, { error: arriveeLabels.errors.mainProfile }),
-  departments: z.array(departmentSchema).min(1, arriveeLabels.errors.departments).max(20),
+  departments: z
+    .array(departmentSchema)
+    .min(1, arriveeLabels.errors.departments)
+    .max(MAX_DEPARTMENTS, arriveeLabels.errors.tooMany),
   firstName: z.string().trim().min(1, arriveeLabels.errors.firstName).max(60),
   lastName: z.string().trim().min(1, arriveeLabels.errors.lastName).max(60),
   /** Conditions générales acceptées (lot 36) : case obligatoire, tracée dans `profiles.terms_accepted_at`. */
