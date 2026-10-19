@@ -92,6 +92,9 @@ export const applications = pgTable(
     needId: uuid("need_id").references(() => eventNeeds.id, { onDelete: "set null" }),
     spotLabel: text("spot_label"),
     spotNote: text("spot_note"),
+    /** Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (quand) et la note du candidat (« J'arriverai vers… »). */
+    arrivalSeenAt: tstz("arrival_seen_at"),
+    arrivalNote: text("arrival_note"),
     ...timestamps,
   },
   (t) => [
@@ -131,6 +134,7 @@ export const applications = pgTable(
     index("applications_need_idx").on(t.needId).where(sql`${t.needId} is not null`),
     check("applications_spot_label_check", sql`${t.spotLabel} is null or char_length(${t.spotLabel}) <= 12`),
     check("applications_spot_note_check", sql`${t.spotNote} is null or char_length(${t.spotNote}) <= 200`),
+    check("applications_arrival_note_check", sql`${t.arrivalNote} is null or char_length(${t.arrivalNote}) <= 200`),
   ],
 );
 
