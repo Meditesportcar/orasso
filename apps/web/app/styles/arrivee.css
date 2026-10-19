@@ -24,10 +24,24 @@
   text-align: left;
   cursor: pointer;
 }
-.arr-tile[aria-pressed="true"] {
+.arr-tile:has(.arr-tile__input:checked) {
   border: 2px solid var(--accent-text);
 }
+.arr-tile:has(.arr-tile__input:focus-visible) {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.arr-tile__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
 .arr-tile__tick {
+  visibility: hidden;
   position: absolute;
   top: var(--space-1);
   right: var(--space-1);
@@ -38,6 +52,9 @@
   border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--accent-ink);
+}
+.arr-tile:has(.arr-tile__input:checked) .arr-tile__tick {
+  visibility: visible;
 }
 .arr-tile__sub {
   color: var(--ink-muted);

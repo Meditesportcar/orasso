@@ -3,6 +3,7 @@ import {
   arriveeLabels,
   departmentSchema,
   expressLabels,
+  MAX_DEPARTMENTS,
   type MainProfile,
   mainProfiles,
   PASSWORD_MIN_LENGTH,
@@ -46,9 +47,13 @@ export async function signUpFromForm(request: Request, form: FormData): Promise<
   const email = String(form.get("email") ?? "").trim();
   const password = String(form.get("password") ?? "");
   const mainProfile = String(form.get("mainProfile") ?? "");
-  const departments = [...new Set(form.getAll("department").map((d) => String(d)))].filter(
+  // Les cases cochées font foi ; `departmentOrder` (posé par le JavaScript de la page) donne l'ordre du choix, le premier est le
+  // favori. Sans JavaScript : l'ordre de la liste.
+  const boxes = [...new Set(form.getAll("department").map((d) => String(d)))].filter(
     (d) => departmentSchema.safeParse(d).success,
   );
+  const order = String(form.get("departmentOrder") ?? "").split(",");
+  const departments = [...order.filter((d) => boxes.includes(d)), ...boxes.filter((d) => !order.includes(d))];
   const firstName = String(form.get("firstName") ?? "").trim();
   const lastName = String(form.get("lastName") ?? "").trim();
   const errors: SignupErrors = {};
@@ -65,6 +70,7 @@ export async function signUpFromForm(request: Request, form: FormData): Promise<
   if (form.get("terms") !== "on") errors.terms = expressLabels.termsRequired;
   if (!(mainProfiles as readonly string[]).includes(mainProfile)) errors.mainProfile = arriveeLabels.errors.mainProfile;
   if (departments.length === 0) errors.departments = arriveeLabels.errors.departments;
+  else if (departments.length > MAX_DEPARTMENTS) errors.departments = arriveeLabels.errors.tooMany;
   if (!firstName || firstName.length > 60) errors.firstName = arriveeLabels.errors.firstName;
   if (!lastName || lastName.length > 60) errors.lastName = arriveeLabels.errors.lastName;
   const values: SignupValues = { pseudo, email, mainProfile, departments, firstName, lastName };

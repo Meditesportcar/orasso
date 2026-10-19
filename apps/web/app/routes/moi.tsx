@@ -2,8 +2,10 @@ import { Button, CheckboxField, Chip, Icon, TextField } from "@orasso/design-sys
 import {
   type AccountSettings,
   departments as allDepartments,
+  arriveeLabels,
   type Category,
   gradeLabels,
+  MAX_DEPARTMENTS,
   moderationLabels,
   mutableTypesByFamily,
   type NotificationFamily,
@@ -62,6 +64,9 @@ export async function action({ request }: Route.ActionArgs) {
     const unknown = depts.filter((d) => !(allDepartments as readonly string[]).includes(d));
     if (unknown.length) {
       return data({ scope: "settings", error: `Département inconnu : ${unknown.join(", ")}` }, { status: 400 });
+    }
+    if (new Set(depts).size > MAX_DEPARTMENTS) {
+      return data({ scope: "settings", error: arriveeLabels.errors.tooMany }, { status: 400 });
     }
     const prefs = Object.fromEntries(
       (["application", "event", "social", "grade"] as const).map((f) => [f, form.get(`fam_${f}`) === "on"]),

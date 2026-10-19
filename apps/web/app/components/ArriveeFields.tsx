@@ -1,12 +1,15 @@
 // Inscription ordinaire du site (lot 41) : les trois blocs du flux d'arrivée de l'appli, dans le même formulaire — le profil
-// (six tuiles), les départements (carte de France, crédit CC BY 4.0) et le prénom et le nom (obligatoires, privés).
-// Les valeurs partent en champs cachés (`mainProfile`, `department` répété, dans l'ordre : le premier est le favori).
-import { Chip, FranceMap, FranceMapCredit, Icon, TextField } from "@orasso/design-system/web";
+// (six tuiles), les départements (carte de France, crédit CC BY 4.0, liste des 101 départements) et le prénom et le nom
+// (obligatoires, privés). Tout est de vrais champs de formulaire : l'inscription marche sans JavaScript (tuiles = boutons
+// radio, liste = cases à cocher). Avec JavaScript, la carte et la liste se suivent et gardent l'ordre du choix
+// (`departmentOrder`) : le premier département est le favori.
+import { Chip, DepartmentChecklist, FranceMap, FranceMapCredit, Icon, TextField } from "@orasso/design-system/web";
 import {
   arriveeLabels,
   departmentFirstTag,
   departmentHint,
   departmentWhy,
+  MAX_DEPARTMENTS,
   type MainProfile,
   mainProfiles,
   mainProfileTiles,
@@ -42,8 +45,15 @@ export function ArriveeFields({
     : "exhibitor";
   const [profile, setProfile] = useState<MainProfile>(initial);
   const [departments, setDepartments] = useState<string[]>(values?.departments ?? []);
-  const toggle = (code: string) =>
+  const [limit, setLimit] = useState(false);
+  const toggle = (code: string) => {
+    if (!departments.includes(code) && departments.length >= MAX_DEPARTMENTS) {
+      setLimit(true);
+      return;
+    }
+    setLimit(false);
     setDepartments((list) => (list.includes(code) ? list.filter((c) => c !== code) : [...list, code]));
+  };
   const [first, ...others] = departments;
 
   return (
@@ -51,26 +61,24 @@ export function ArriveeFields({
       <fieldset className="s-stack s-stack--tight" style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="o-t-poster-m">{arriveeLabels.profile.title}</legend>
         <p className="o-t-caption s-muted">{arriveeLabels.profile.text}</p>
-        <input type="hidden" name="mainProfile" value={profile} />
         <div className="arr-profile">
           {mainProfiles.map((p) => (
-            <button
-              key={p}
-              type="button"
-              aria-pressed={profile === p}
-              className="arr-tile"
-              data-testid={`profile-${p}`}
-              onClick={() => setProfile(p)}
-            >
-              {profile === p ? (
-                <span className="arr-tile__tick">
-                  <Icon name="check" size={12} strokeWidth={2.4} />
-                </span>
-              ) : null}
+            <label key={p} className="arr-tile" data-testid={`profile-${p}`}>
+              <input
+                type="radio"
+                name="mainProfile"
+                value={p}
+                className="arr-tile__input"
+                checked={profile === p}
+                onChange={() => setProfile(p)}
+              />
+              <span className="arr-tile__tick">
+                <Icon name="check" size={12} strokeWidth={2.4} />
+              </span>
               <Icon name={tileIcon[p]} size={26} strokeWidth={1.8} />
               <b className="o-t-body-strong">{mainProfileTiles[p].title}</b>
               <span className="o-t-caption arr-tile__sub">{mainProfileTiles[p].subtitle}</span>
-            </button>
+            </label>
           ))}
         </div>
         {errors?.mainProfile ? (
@@ -87,16 +95,8 @@ export function ArriveeFields({
         <p className="o-t-caption s-muted" data-testid="dept-why">
           {departmentWhy[profile]}
         </p>
-        {departments.map((code) => (
-          <input key={code} type="hidden" name="department" value={code} />
-        ))}
         <div className="arr-dept__map">
-          <FranceMap
-            selected={departments}
-            favorite={first ?? null}
-            onToggle={toggle}
-            label={arriveeLabels.department.mapLabel}
-          />
+          <FranceMap selected={departments} favorite={first ?? null} onToggle={toggle} />
           <FranceMapCredit />
         </div>
         <div className="arr-dept__chips" aria-live="polite" data-testid="dept-summary">
@@ -109,10 +109,16 @@ export function ArriveeFields({
             <span className="o-t-caption s-muted">{arriveeLabels.department.empty}</span>
           )}
         </div>
+        <DepartmentChecklist selected={departments} onToggle={toggle} summary={arriveeLabels.list.open} />
         <p
           className="o-t-caption s-muted"
           data-testid="dept-hint"
         >{`${departmentHint[profile]} ${arriveeLabels.department.hint}`}</p>
+        {limit ? (
+          <p className="s-error" role="alert" data-testid="dept-limit">
+            {arriveeLabels.errors.tooMany}
+          </p>
+        ) : null}
         {errors?.departments ? (
           <p className="s-error" role="alert">
             {errors.departments}
@@ -161,7 +167,7 @@ export function ArriveeFields({
 const parseDepartments = (text: string) => [
   ...new Set(
     text
-      .split(/[s,;]+/)
+      .split(/[\s,;]+/)
       .map((d) => d.trim().toUpperCase())
       .filter(Boolean),
   ),
@@ -173,29 +179,35 @@ const parseDepartments = (text: string) => [
  */
 export function DepartmentsField({ initial }: { initial: string[] }) {
   const [text, setText] = useState(initial.join(", "));
+  const [limit, setLimit] = useState(false);
   const list = parseDepartments(text);
-  const toggle = (code: string) =>
-    setText((t) => {
-      const current = parseDepartments(t);
-      return (current.includes(code) ? current.filter((c) => c !== code) : [...current, code]).join(", ");
-    });
+  const toggle = (code: string) => {
+    const current = parseDepartments(text);
+    if (!current.includes(code) && current.length >= MAX_DEPARTMENTS) {
+      setLimit(true);
+      return;
+    }
+    setLimit(false);
+    setText((current.includes(code) ? current.filter((c) => c !== code) : [...current, code]).join(", "));
+  };
   return (
     <div className="arr-dept">
       <div className="arr-dept__map">
-        <FranceMap
-          selected={list}
-          favorite={list[0] ?? null}
-          onToggle={toggle}
-          label={arriveeLabels.department.mapLabel}
-        />
+        <FranceMap selected={list} favorite={list[0] ?? null} onToggle={toggle} />
         <FranceMapCredit />
       </div>
+      <DepartmentChecklist selected={list} onToggle={toggle} name="departmentBox" summary={arriveeLabels.list.open} />
+      {limit ? (
+        <p className="s-error" role="alert">
+          {arriveeLabels.errors.tooMany}
+        </p>
+      ) : null}
       <TextField
         label="Départements"
         name="departments"
         value={text}
         onChange={(e) => setText(e.currentTarget.value)}
-        help="Touche la carte, ou saisis les numéros séparés par des virgules (ex. 66, 11, 974). Le premier sert à mesurer la distance."
+        help="Touche la carte, choisis dans la liste ou saisis les numéros séparés par des virgules (ex. 66, 11, 974). Le premier sert à mesurer la distance."
       />
     </div>
   );
