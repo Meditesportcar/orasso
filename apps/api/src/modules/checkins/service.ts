@@ -148,8 +148,14 @@ async function recordEntry(
       })
       .returning();
     if (!row) throw new Error("Entrée non enregistrée");
-    // Lot 49 : tampon de participation (publié à l'écran par `announce`, après validation).
-    await passportService.stampCheckin(tx, { applicationId: row.applicationId, eventId: row.eventId, at: input.at });
+    // Lot 49 : tampon de participation à l'heure de l'entrée (point de reprise : jamais d'échec du pointage), publié à
+    // l'écran par `announce` après validation.
+    await passportService.stampCheckin(tx, {
+      applicationId: row.applicationId,
+      eventId: row.eventId,
+      at: input.at,
+      announce: true,
+    });
     return { checkin: row, created: true, rewritten: false };
   }
   if (input.method === "scan" && input.scanId && input.at < existing.checkedInAt) {

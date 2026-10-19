@@ -194,7 +194,7 @@ async function decideContest(
             })
             .onConflictDoNothing();
           // Lot 49 : la présence reconnue donne son tampon (le règlement est déjà passé).
-          await passportService.stampCheckin(tx, { applicationId: app.id, eventId: app.eventId, at: event.startsAt });
+          await passportService.lateEntry(tx, { applicationId: app.id, eventId: app.eventId, at: event.startsAt });
         }
       }
     }
@@ -309,7 +309,8 @@ export const pointsService = {
       // passeport (rattrapage des tampons ordinaires, rares : première sortie, 10e événement, pleine lune, prix du public).
       const winner = await audiencePrizeService.settle(tx, event, (entry) => award(tx, season, entry));
       if (winner?.awarded) users.add(winner.userId);
-      await passportService.onSettled(tx, event, winner);
+      // Point de reprise, comme le bilan : une erreur des tampons n'annule jamais les points.
+      await passportService.safely(tx, "règlement", (sp) => passportService.onSettled(sp, event, winner));
       await tx.update(events).set({ settledAt: t }).where(eq(events.id, eventId));
       for (const userId of users) await recompute(tx, userId);
       // Lot 27 : bilan de l'événement, calculé sur les points qui viennent d'être écrits (même transaction).

@@ -4,7 +4,7 @@
 // Idempotent : un seul tampon par personne, événement et genre (contrainte unique).
 import {
   baseStampKinds,
-  fromWallTime,
+  inStaffPresenceWindow,
   isFullMoon,
   isRare,
   type PassportStamp,
@@ -19,18 +19,18 @@ import {
   stampSeed,
   stampSentence,
   stampShape,
-  wallTime,
 } from "@orasso/shared";
-import { and, asc, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { applications, checkins, eventStaff, events, passportStamps, seasons, tickets } from "../../db/schema";
+import { applications, checkins, events, passportStamps, seasons, tickets } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
-import type { Executor } from "../../lib/tx";
+import type { Executor, Tx } from "../../lib/tx";
 import type { EventRow } from "../events/repo";
 import { notificationsService } from "../notifications/service";
+import { participationsBefore, verifiedStaffIds } from "./presence";
 
 type StampRow = typeof passportStamps.$inferSelect;
 type StampEvent = Pick<EventRow, "id" | "slug" | "title" | "format" | "startsAt" | "city" | "department">;
@@ -123,14 +123,34 @@ async function stamp(
   return serialize(row, event);
 }
 
-/** Jour J : du début de la journée (heure de l'événement) où il commence jusqu'à sa fin. */
-function isEventDay(event: Pick<EventRow, "startsAt" | "endsAt" | "timezone">, t: Date): boolean {
-  const dayStart = fromWallTime({ ...wallTime(event.startsAt, event.timezone), hour: 0, minute: 0 }, event.timezone);
-  return t >= dayStart && t <= event.endsAt;
+/**
+ * Le tampon ne fait jamais échouer un pointage, un contrôle de billet ni le règlement (relecture) : il est posé dans
+ * un point de reprise ; une erreur est journalisée et le règlement de J+2 rattrape.
+ */
+async function safely<T>(ex: Executor, what: string, fn: (sp: Executor) => Promise<T>): Promise<T | null> {
+  try {
+    return await (ex as Tx).transaction((sp) => fn(sp));
+  } catch (error) {
+    console.error(`Tampon du passeport non posé (${what}, rattrapé au règlement) :`, error);
+    return null;
+  }
+}
+
+/** Tampons de participation tout juste posés, en attente de publication après validation (`announce`). */
+const freshCheckinStamps = new Map<string, { userId: string; stamp: PassportStamp }>();
+const FRESH_MAX = 5_000;
+
+/** Rares d'une personne pour un événement : première sortie, 10e événement, pleine lune (historique réel). */
+async function evaluateRares(ex: Executor, event: StampEvent, userId: string) {
+  const earlier = await participationsBefore(ex, userId, event.startsAt);
+  if (earlier === 0) await stamp(ex, userId, event, "first_outing");
+  if (earlier === 9) await stamp(ex, userId, event, "tenth_event");
+  if (isFullMoon(event.startsAt)) await stamp(ex, userId, event, "full_moon");
 }
 
 export const passportService = {
   stamp,
+  safely,
 
   /** Le tampon tombe à l'écran : canal `user:{id}`, événement `passport.stamped` (après validation). */
   publish(userId: string, s: PassportStamp) {
@@ -139,31 +159,56 @@ export const passportService = {
 
   /**
    * Pointage d'une candidature (scan, liste, plaque, drive, express) : tampon de participation au titulaire d'une
-   * candidature de véhicule. Renvoie le tampon posé, `null` s'il existait.
+   * candidature de véhicule, à l'heure de l'entrée. Renvoie le tampon posé, `null` s'il existait (ou en cas d'erreur,
+   * journalisée sans faire échouer le pointage). `announce` : publié par `announce` après validation.
    */
-  async stampCheckin(ex: Executor, input: { applicationId: string; eventId: string; at?: Date }) {
-    const app = await ex.query.applications.findFirst({ where: eq(applications.id, input.applicationId) });
-    if (app?.kind !== "vehicle") return null;
-    const event = await stampEvent(ex, input.eventId);
-    if (!event) return null;
-    const s = await stamp(ex, app.userId, event, "participation", { applicationId: app.id, at: input.at });
-    return s ? { userId: app.userId, stamp: s } : null;
+  async stampCheckin(ex: Executor, input: { applicationId: string; eventId: string; at?: Date; announce?: boolean }) {
+    const done = await safely(ex, "pointage", async (sp) => {
+      const app = await sp.query.applications.findFirst({ where: eq(applications.id, input.applicationId) });
+      if (app?.kind !== "vehicle") return null;
+      const event = await stampEvent(sp, input.eventId);
+      if (!event) return null;
+      const s = await stamp(sp, app.userId, event, "participation", { applicationId: app.id, at: input.at });
+      return s ? { userId: app.userId, stamp: s } : null;
+    });
+    if (done && input.announce) {
+      if (freshCheckinStamps.size >= FRESH_MAX) freshCheckinStamps.clear();
+      freshCheckinStamps.set(input.applicationId, done);
+    }
+    return done;
   },
 
   /** Billet du public accepté à l'entrée : tampon de visite à son titulaire. */
   async stampVisit(ex: Executor, ticketId: string) {
-    const ticket = await ex.query.tickets.findFirst({ where: eq(tickets.id, ticketId) });
-    if (!ticket) return null;
-    const event = await stampEvent(ex, ticket.eventId);
-    if (!event) return null;
-    const s = await stamp(ex, ticket.userId, event, "visit", { ticketId: ticket.id });
-    return s ? { userId: ticket.userId, stamp: s } : null;
+    return safely(ex, "billet", async (sp) => {
+      const ticket = await sp.query.tickets.findFirst({ where: eq(tickets.id, ticketId) });
+      if (!ticket) return null;
+      const event = await stampEvent(sp, ticket.eventId);
+      if (!event) return null;
+      const s = await stamp(sp, ticket.userId, event, "visit", { ticketId: ticket.id });
+      return s ? { userId: ticket.userId, stamp: s } : null;
+    });
   },
 
-  /** « Je suis là » du staff : tampon le jour J seulement (avant, il viendra au règlement si la présence tient). */
-  async stampStaffPresence(event: EventRow, userId: string) {
-    if (!isEventDay(event, now())) return null;
-    const s = await stamp(db, userId, event, "staff");
+  /**
+   * Présence du staff (« Je suis là / pas là », ou corrigée par l'organisateur) : tampon si « là » est posé dans la
+   * fenêtre du jour J (3 h avant le début jusqu'à la fin) ; « pas là » retire le tampon staff.
+   */
+  async onStaffPresence(event: EventRow, userId: string, present: boolean) {
+    if (!present) {
+      await db
+        .delete(passportStamps)
+        .where(
+          and(
+            eq(passportStamps.eventId, event.id),
+            eq(passportStamps.userId, userId),
+            eq(passportStamps.kind, "staff"),
+          ),
+        );
+      return null;
+    }
+    if (!inStaffPresenceWindow(event, now())) return null;
+    const s = await safely(db, "staff", (sp) => stamp(sp, userId, event, "staff"));
     if (s) {
       passportService.publish(userId, s);
       void notificationsService.kick();
@@ -171,25 +216,39 @@ export const passportService = {
     return s;
   },
 
-  /** Après un lot de pointages validé : publie les tampons de participation de ces candidatures. */
+  /** Après un lot de pointages validé : publie les tampons de participation **tout juste posés** de ces candidatures. */
   async announce(eventId: string, applicationIds: readonly string[]) {
-    if (!applicationIds.length) return;
-    const event = await stampEvent(db, eventId);
-    if (!event) return;
-    const rows = await db.query.passportStamps.findMany({
-      where: and(
-        eq(passportStamps.eventId, eventId),
-        eq(passportStamps.kind, "participation"),
-        inArray(passportStamps.applicationId, [...applicationIds]),
-      ),
+    const fresh = applicationIds.flatMap((id) => {
+      const f = freshCheckinStamps.get(id);
+      freshCheckinStamps.delete(id);
+      return f ? [f] : [];
     });
-    for (const r of rows) passportService.publish(r.userId, serialize(r, event));
-    if (rows.length) void notificationsService.kick();
+    if (!fresh.length) return;
+    // Seulement ceux qui existent après validation (une transaction annulée n'a rien posé).
+    const kept = new Set(
+      (
+        await db
+          .select({ id: passportStamps.id })
+          .from(passportStamps)
+          .where(
+            and(
+              eq(passportStamps.eventId, eventId),
+              inArray(
+                passportStamps.id,
+                fresh.map((f) => f.stamp.id),
+              ),
+            ),
+          )
+      ).map((r) => r.id),
+    );
+    for (const f of fresh) if (kept.has(f.stamp.id)) passportService.publish(f.userId, f.stamp);
+    void notificationsService.kick();
   },
 
   /**
-   * Règlement de J+2 (dans sa transaction) : rattrapage des tampons ordinaires (pointés, billets scannés, staff
-   * présent), puis les rares. Rejoué, il ne pose rien de plus.
+   * Règlement de J+2 (dans sa transaction ; l'appelant le met dans un point de reprise) : rattrapage des tampons
+   * ordinaires (pointés, billets contrôlés, staff présent vérifiable ; un tampon staff sans trace du jour J est
+   * retiré), puis les rares, calculés sur la participation réelle. Rejoué, il ne pose rien de plus.
    */
   async onSettled(ex: Executor, event: EventRow, winner: { userId: string; applicationId: string } | null) {
     const entered = await ex
@@ -197,43 +256,43 @@ export const passportService = {
       .from(checkins)
       .innerJoin(applications, eq(applications.id, checkins.applicationId))
       .where(and(eq(checkins.eventId, event.id), eq(applications.kind, "vehicle")));
-    for (const e of entered) await stamp(ex, e.userId, event, "participation", { applicationId: e.applicationId });
+    for (const e of entered) {
+      await stamp(ex, e.userId, event, "participation", { applicationId: e.applicationId, at: e.at });
+    }
     const visitors = await ex
-      .select({ id: tickets.id, userId: tickets.userId })
+      .select({ id: tickets.id, userId: tickets.userId, at: tickets.usedAt })
       .from(tickets)
       .where(and(eq(tickets.eventId, event.id), isNotNull(tickets.usedAt)));
-    for (const t of visitors) await stamp(ex, t.userId, event, "visit", { ticketId: t.id });
-    const staff = await ex
-      .select({ userId: eventStaff.userId })
-      .from(eventStaff)
-      .where(and(eq(eventStaff.eventId, event.id), eq(eventStaff.presence, "present")));
-    for (const m of staff) await stamp(ex, m.userId, event, "staff");
+    for (const t of visitors) await stamp(ex, t.userId, event, "visit", { ticketId: t.id, at: t.at ?? undefined });
+    const staff = await verifiedStaffIds(ex, event.id);
+    await ex
+      .delete(passportStamps)
+      .where(
+        and(
+          eq(passportStamps.eventId, event.id),
+          eq(passportStamps.kind, "staff"),
+          staff.size ? notInArray(passportStamps.userId, [...staff]) : undefined,
+        ),
+      );
+    for (const userId of staff) await stamp(ex, userId, event, "staff");
 
     // Rares : toutes les personnes qui ont un tampon ordinaire de cet événement.
     const holders = await ex
       .selectDistinct({ userId: passportStamps.userId })
       .from(passportStamps)
       .where(and(eq(passportStamps.eventId, event.id), inArray(passportStamps.kind, [...baseStampKinds])));
-    const fullMoon = isFullMoon(event.startsAt);
-    for (const { userId } of holders) {
-      // Événements où la personne était, commencés avant celui-ci (toutes saisons).
-      const [before] = await ex
-        .select({ n: sql<number>`count(distinct ${passportStamps.eventId})::int` })
-        .from(passportStamps)
-        .innerJoin(events, eq(events.id, passportStamps.eventId))
-        .where(
-          and(
-            eq(passportStamps.userId, userId),
-            inArray(passportStamps.kind, [...baseStampKinds]),
-            lt(events.startsAt, event.startsAt),
-          ),
-        );
-      const earlier = before?.n ?? 0;
-      if (earlier === 0) await stamp(ex, userId, event, "first_outing");
-      if (earlier === 9) await stamp(ex, userId, event, "tenth_event");
-      if (fullMoon) await stamp(ex, userId, event, "full_moon");
-    }
+    for (const { userId } of holders) await evaluateRares(ex, event, userId);
     if (winner) await stamp(ex, winner.userId, event, "audience_prize", { applicationId: winner.applicationId });
+  },
+
+  /** Entrée reconnue après le règlement (contestation acceptée) : tampon de participation et rares de l'événement. */
+  async lateEntry(ex: Executor, input: { applicationId: string; eventId: string; at: Date }) {
+    await passportService.stampCheckin(ex, input);
+    await safely(ex, "contestation", async (sp) => {
+      const app = await sp.query.applications.findFirst({ where: eq(applications.id, input.applicationId) });
+      const event = await stampEvent(sp, input.eventId);
+      if (app?.kind === "vehicle" && event) await evaluateRares(sp, event, app.userId);
+    });
   },
 
   /** Tampons d'une personne pour un événement (récap). */

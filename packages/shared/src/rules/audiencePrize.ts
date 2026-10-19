@@ -12,13 +12,30 @@ export const AUDIENCE_PRIZE_MIN_VOTES = 3;
 /** Résultats gardés au règlement : les dix premiers. */
 export const AUDIENCE_PRIZE_RESULTS_KEPT = 10;
 
+/**
+ * Staff présent « vérifiable » (relecture du lot 49, docs/01 « actions vérifiables ») : une trace du jour J, « Je suis
+ * là » posé dans cette fenêtre ou une action enregistrée sur l'événement (pointage, scan de billet, incident, alerte),
+ * de 3 h avant le début jusqu'à la fin. Une réponse « je serai là » la veille ne suffit pas.
+ */
+export const STAFF_PRESENCE_LEAD_MS = 3 * 3_600_000;
+
+export function staffPresenceWindow(event: { startsAt: Date; endsAt: Date }): { from: Date; to: Date } {
+  return { from: new Date(event.startsAt.getTime() - STAFF_PRESENCE_LEAD_MS), to: event.endsAt };
+}
+
+export function inStaffPresenceWindow(event: { startsAt: Date; endsAt: Date }, at: Date | null | undefined): boolean {
+  if (!at) return false;
+  const w = staffPresenceWindow(event);
+  return at >= w.from && at <= w.to;
+}
+
 /** Ce qui fait d'une personne un votant (une seule de ces preuves suffit). */
 export type AudienceVoter = {
   /** Entrée d'un de ses véhicules (pointage du staff : scan, liste, plaque, drive, express). */
   checkedInAt: Date | null;
   /** Billet du public contrôlé à l'entrée. */
   ticketScannedAt: Date | null;
-  /** Membre du staff de l'événement, présence confirmée. */
+  /** Membre du staff de l'événement, présence vérifiable (`staffPresenceWindow`). */
   staffPresent: boolean;
 };
 
