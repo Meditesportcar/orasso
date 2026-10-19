@@ -248,10 +248,17 @@ export const eventListQuerySchema = pageQuery.extend({
   /**
    * Ordre (lot 29, Explorer) : `date` (défaut), `affinity` (organisateurs suivis, centres d'intérêt, proximité : S34,
    * connecté), `distance` (à la position envoyée ou au secteur du profil). Sans position connue, retombe sur la date.
+   * Lot 44 : l'Explorer v2 de l'appli demande `distance` par défaut, `affinity` en option (« Mes affinités ») ; le
+   * défaut de l'API reste `date` pour les autres listes (site, page d'une structure, recherche).
    */
   sort: z.enum(eventSorts).default("date"),
   /** Lot 45 (Explorer du média) : seulement les événements dont l'accréditation presse est ouverte. */
   accreditationOpen: z
+    .enum(["1", "true", "0", "false"])
+    .transform((v) => v === "1" || v === "true")
+    .optional(),
+  /** Lot 44 (Explorer, « Selon mes goûts ») : seulement les structures que je suis (connecté ; ignoré sans compte). */
+  followed: z
     .enum(["1", "true", "0", "false"])
     .transform((v) => v === "1" || v === "true")
     .optional(),
