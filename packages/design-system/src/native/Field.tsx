@@ -42,7 +42,8 @@ function useFieldColors() {
     ink: inPlate ? c.plateInk : c.ink,
     muted: inPlate ? c.plateMuted : c.inkMuted,
     faint: c.inkFaint,
-    background: inPlate ? c.surfaceRaised : c.surfaceField,
+    // Dans une plaque : graphite clair sous l'encre crème (plate-field, surcouche v2 ; surface-raised est clair en Sable).
+    background: inPlate ? c.plateField : c.surfaceField,
     line: inPlate ? c.plateLine : c.line,
   };
 }

@@ -54,6 +54,7 @@ export const tokens = {
       "brandCredit": "rgba(233,184,36,0.7)",
       "brandCreditLight": "#8a6200",
       "surfaceField": "#1e2025",
+      "plateField": "#363941",
       "mapLand": "#1f2227",
       "mapLand2": "#262a30",
       "mapSea": "#0f1216",
@@ -110,6 +111,7 @@ export const tokens = {
       "brandCredit": "rgba(233,184,36,0.7)",
       "brandCreditLight": "#8a6200",
       "surfaceField": "#fffaf0",
+      "plateField": "#363941",
       "mapLand": "#e6dcc4",
       "mapLand2": "#dbcfb2",
       "mapSea": "#aebbbd",
@@ -744,6 +746,16 @@ export const tokensV2Overlay = [
       "sable": "feTurbulence type=fractalNoise baseFrequency=\"0.012 0.9\" numOctaves=3 stitchTiles=stitch"
     },
     "why": "brossage de la barre nuit, comme en Béton"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "plate-field",
+    "value": {
+      "beton": "#363941",
+      "sable": "#363941"
+    },
+    "why": "champ et fond graphite clair dans une plaque, sous plate-ink (ancienne valeur de surface-raised, devenue claire en Sable)"
   },
   {
     "kind": "added",

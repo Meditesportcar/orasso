@@ -127,6 +127,11 @@
   "added": {
     "color": [
       {
+        "name": "plate-field",
+        "value": { "beton": "#363941", "sable": "#363941" },
+        "usage": "champ et fond graphite clair dans une plaque, sous plate-ink (ancienne valeur de surface-raised, devenue claire en Sable)"
+      },
+      {
         "name": "map-land",
         "value": { "beton": "#1f2227", "sable": "#e6dcc4" },
         "usage": "terre de la carte (style de carte Orasso, lot 44)"

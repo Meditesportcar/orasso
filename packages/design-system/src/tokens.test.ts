@@ -187,6 +187,15 @@ describe("surcouche DA v2 (tokens.v2.json, lot 38)", () => {
     expect(tokens.color.sable.inkMuted).toBe("#4f493f");
   });
 
+  it("plate-field : graphite clair sous l'encre crème d'une plaque, dans les deux thèmes", () => {
+    for (const theme of THEME_IDS) {
+      expect(tokens.color[theme].plateField).toBe("#363941");
+      expect(block(`[data-theme="${theme}"]`)).toContain("--plate-field: #363941;");
+    }
+    // surface-raised est devenu clair en Sable : il ne peut plus porter plate-ink.
+    expect(tokens.color.sable.surfaceRaised).not.toBe(tokens.color.sable.plateField);
+  });
+
   it("number-narrow : le style number à 62,5 % de largeur", () => {
     const { fontStretch, ...narrow } = tokens.type.numberNarrow;
     const { fontStretch: base, ...number } = tokens.type.number;

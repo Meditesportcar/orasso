@@ -9,7 +9,7 @@ export function CrewLogo({ url, name, size = 40 }: { url: string | null; name: s
   const source = mediaSource(url);
   return (
     <View
-      style={[styles.square, { width: size, height: size, backgroundColor: t.color.surfaceRaised }]}
+      style={[styles.square, { width: size, height: size, backgroundColor: t.color.plateField }]}
       accessibilityElementsHidden
     >
       {source ? (
