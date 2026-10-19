@@ -11,6 +11,7 @@ export * from "./garage";
 export * from "./home";
 export * from "./invitations";
 export * from "./media";
+export * from "./passport";
 export * from "./messaging";
 export * from "./moderation";
 export * from "./pro";

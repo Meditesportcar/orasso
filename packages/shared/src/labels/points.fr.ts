@@ -11,6 +11,7 @@ export const pointKindLabels: Record<PointKind, string> = {
   malus_reversal: "Malus annulé",
   season_carryover: "Report de la saison précédente",
   admin_adjustment: "Ajustement par l'équipe Orasso",
+  audience_prize: "Prix du public",
 };
 
 export const contestStatusLabels: Record<ContestStatus, string> = {
