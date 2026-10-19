@@ -1,12 +1,12 @@
-// Casquettes du compte (lot 16, ARCHITECTURE-SUITE § 7.1) : le passionné (toujours en premier), les structures dont on
-// est propriétaire ou co-organisateur (actif), la fiche pro, puis ce que les autres domaines ajoutent (le profil
+// Casquettes du compte (lot 16, ARCHITECTURE-SUITE § 7.1) : le passionné exposant ou le visiteur (toujours en premier,
+// lot 40), les structures dont on est propriétaire ou co-organisateur (actif), la fiche pro, puis ce que les autres domaines ajoutent (le profil
 // prestataire du lot 21 déclare sa source ici avec `registerPersonaSource`). `badge` = « quelque chose à traiter »,
 // calculé domaine par domaine ; 0 tant qu'aucun domaine n'a de quoi le remplir.
 import type { PersonaEntry } from "@orasso/shared";
 import { and, count, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { applications, events, proProfiles, structureMembers, structures } from "../../db/schema";
+import { applications, events, proProfiles, structureMembers, structures, vehicles } from "../../db/schema";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 
@@ -71,14 +71,27 @@ export const registerPersonaSource = (source: PersonaSource) => {
   sources.push(source);
 };
 
-export async function personasOf(v: Viewer): Promise<PersonaEntry[]> {
-  const fan: PersonaEntry = {
-    kind: "fan",
-    id: "fan",
-    label: "Passionné",
+/**
+ * Première casquette (DA v2, lot 40, ARCHITECTURE-DA-V2 § 4.1, V5) : `fan` (« Passionné · exposant ») dès qu'un
+ * véhicule est actif, sinon `visitor` (« Visiteur ») ; jamais les deux. Ajouter un véhicule suffit à devenir exposant
+ * (le client relit `GET /me`) ; archiver le dernier rend visiteur.
+ */
+async function firstPersona(v: Viewer): Promise<PersonaEntry> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(vehicles)
+    .where(and(eq(vehicles.ownerId, v.user.id), eq(vehicles.status, "active")));
+  const exhibitor = (row?.n ?? 0) > 0;
+  return {
+    kind: exhibitor ? "fan" : "visitor",
+    id: exhibitor ? "fan" : "visitor",
+    label: exhibitor ? "Passionné · exposant" : "Visiteur",
     logoUrl: storage.url(v.profile.avatarKey),
     badge: 0,
   };
-  const others = await Promise.all(sources.map((source) => source(v)));
-  return [fan, ...others.flat()];
+}
+
+export async function personasOf(v: Viewer): Promise<PersonaEntry[]> {
+  const [first, others] = await Promise.all([firstPersona(v), Promise.all(sources.map((source) => source(v)))]);
+  return [first, ...others.flat()];
 }

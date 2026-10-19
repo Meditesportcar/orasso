@@ -446,7 +446,7 @@ describe("stand d'un pro", () => {
 
     const me = await call(pro, "GET", "/me");
     const kinds = me.json.personas.map((p: { kind: string }) => p.kind);
-    expect(kinds).toEqual(["fan", "pro", "provider"]);
+    expect(kinds).toEqual(["visitor", "pro", "provider"]);
 
     // Un compte sans fiche pro ne peut pas.
     expect((await call(lea, "POST", "/me/provider-profile/from-pro")).status).toBe(403);
