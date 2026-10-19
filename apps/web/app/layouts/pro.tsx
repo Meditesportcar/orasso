@@ -1,4 +1,4 @@
-import { Ground, Monogram, ThemeScope } from "@orasso/design-system/web";
+import { Ground, Monogram } from "@orasso/design-system/web";
 import { proVisibility } from "@orasso/shared";
 import { Form, Outlet, redirect, useLocation } from "react-router";
 import { requireMe } from "../lib/api.server";
@@ -32,51 +32,50 @@ export default function ProLayout({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
   const base = `/pro/${pro.slug}`;
   return (
-    <ThemeScope theme="sable">
-      <Ground variant="site" fixed>
-        <div className="orga">
-          <nav className="orga__side" aria-label="Espace pro" data-bar>
-            <div className="orga__brand">
-              <Monogram size={32} />
-            </div>
-            <div className="orga__who">
-              <span className="o-t-label">{pro.name}</span>
-            </div>
-            <SideLink href={base} on={pathname === base}>
-              Fiche
-            </SideLink>
-            <SideLink href={`${base}/publications`} on={pathname.startsWith(`${base}/publications`)}>
-              Publications
-            </SideLink>
-            <SideLink href={`${base}/statistiques`} on={pathname.startsWith(`${base}/statistiques`)}>
-              Statistiques
-            </SideLink>
-            <SideLink href={`${base}/abonnement`} on={pathname.startsWith(`${base}/abonnement`)}>
-              Abonnement
-            </SideLink>
-            <a className="orga__link" href={`/p/${pro.slug}`}>
-              Ma fiche publique
-            </a>
-            <div className="orga__spacer" />
-            <a className="orga__link" href="/app/acces">
-              Mon compte · {pseudo}
-            </a>
-            <Form method="post" action="/deconnexion">
-              <button type="submit" className="orga__link s-linkbutton">
-                Déconnexion
-              </button>
-            </Form>
-          </nav>
-          <main className="orga__content">
-            {banner && (
-              <p className="s-notice" role="status" data-testid="basic-sheet-banner">
-                {banner}
-              </p>
-            )}
-            <Outlet />
-          </main>
-        </div>
-      </Ground>
-    </ThemeScope>
+    // Lot 38 (DA v2, H2) : le thème n'est plus imposé (Sable) ; il suit le choix de l'utilisateur, Béton par défaut.
+    <Ground variant="site" fixed>
+      <div className="orga">
+        <nav className="orga__side" aria-label="Espace pro" data-bar>
+          <div className="orga__brand">
+            <Monogram size={32} />
+          </div>
+          <div className="orga__who">
+            <span className="o-t-label">{pro.name}</span>
+          </div>
+          <SideLink href={base} on={pathname === base}>
+            Fiche
+          </SideLink>
+          <SideLink href={`${base}/publications`} on={pathname.startsWith(`${base}/publications`)}>
+            Publications
+          </SideLink>
+          <SideLink href={`${base}/statistiques`} on={pathname.startsWith(`${base}/statistiques`)}>
+            Statistiques
+          </SideLink>
+          <SideLink href={`${base}/abonnement`} on={pathname.startsWith(`${base}/abonnement`)}>
+            Abonnement
+          </SideLink>
+          <a className="orga__link" href={`/p/${pro.slug}`}>
+            Ma fiche publique
+          </a>
+          <div className="orga__spacer" />
+          <a className="orga__link" href="/app/acces">
+            Mon compte · {pseudo}
+          </a>
+          <Form method="post" action="/deconnexion">
+            <button type="submit" className="orga__link s-linkbutton">
+              Déconnexion
+            </button>
+          </Form>
+        </nav>
+        <main className="orga__content">
+          {banner && (
+            <p className="s-notice" role="status" data-testid="basic-sheet-banner">
+              {banner}
+            </p>
+          )}
+          <Outlet />
+        </main>
+      </div>
+    </Ground>
   );
 }
