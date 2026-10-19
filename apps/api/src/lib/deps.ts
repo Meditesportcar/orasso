@@ -56,7 +56,9 @@ export type JobName =
   // Lot 36 : e-mail « Installe l'appli » une heure après la confirmation de l'adresse, si l'appli n'a jamais été ouverte.
   | "account.app-install"
   // Lot 47 : rendu de l'affiche générée d'un événement, repris en cas d'échec (une tâche en file par événement).
-  | "event.poster-render";
+  | "event.poster-render"
+  // Lot 49 : récap de l'événement le lendemain de la fin, à 10 h.
+  | "event.recap";
 
 /** Options d'une tâche (pg-boss) : une seule en file par clé, reprises en cas d'échec. */
 export type JobOptions = { singletonKey?: string; retryLimit?: number; retryDelay?: number; retryBackoff?: boolean };

@@ -46,6 +46,7 @@ import { type Tx, withTx } from "../../lib/tx";
 import { eventsRepo } from "../events/repo";
 import { assertCanSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
+import { passportService } from "../passport/service";
 import { settingsService } from "./settings";
 
 const CONNECT_STATE_MS = 15 * 60_000;
@@ -641,6 +642,9 @@ export const ticketsService = {
         usedAt: again?.usedAt?.toISOString() ?? now().toISOString(),
       };
     }
+    // Lot 49 : tampon de visite au titulaire du billet, à son écran.
+    const visit = await passportService.stampVisit(db, updated.id);
+    if (visit) passportService.publish(visit.userId, visit.stamp);
     return { result: "ok", pseudo, ticketName: row.type.name, usedAt: updated.usedAt?.toISOString() ?? "" };
   },
 

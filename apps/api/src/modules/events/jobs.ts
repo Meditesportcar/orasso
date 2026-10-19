@@ -10,6 +10,7 @@ import { formatDateTime } from "../../lib/format";
 import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
+import { recapReadyAt } from "../recap/service";
 import { weatherService } from "../weather/service";
 import { daysRepo } from "./days";
 import { highGradePreviewAt, lockPreview } from "./high-grade";
@@ -36,6 +37,8 @@ export async function scheduleEventJobs(e: EventRow) {
     ["event.reminder-eve", reminderEveAt(e)],
     // Points et malus à J+2 (lot 06).
     ["event.settle", settleAt(e)],
+    // Récap le lendemain de la fin à 10 h (lot 49), replanifié avec les dates.
+    ["event.recap", recapReadyAt(e)],
   ];
   if (e.previewHours > 0) plan.push(["event.preview-open", registrationOpensAt(e, true)]);
   // Avant-première des hauts grades (lot 25, § 9.2).
@@ -44,7 +47,9 @@ export async function scheduleEventJobs(e: EventRow) {
   for (const [name, at] of plan) {
     // Verrouillage et règlement toujours planifiés (même passés : la tâche agit aussitôt, une seule fois).
     const always = name === "event.lock" || name === "event.settle";
-    if (always || at > t) await deps.jobs.send(name, { eventId: e.id, at: at.toISOString() }, at);
+    // Récap (lot 49) : une seule tâche en file par événement et par instant prévu.
+    const opts = name === "event.recap" ? { singletonKey: `recap:${e.id}:${at.toISOString()}` } : undefined;
+    if (always || at > t) await deps.jobs.send(name, { eventId: e.id, at: at.toISOString() }, at, opts);
   }
   // Plusieurs jours (lot 26, § 10) : un rappel la veille de chaque jour suivant, pour les candidatures de ce jour (celles
   // de tout l'événement et du premier jour ont le rappel de la veille du premier jour, ci-dessus). Verrouillage unique au

@@ -47,6 +47,7 @@ export const adminSettingLabels: Record<AdminSettingKey, string> = {
   "points.staff": "Staff présent",
   "points.referral": "Parrainage confirmé",
   "points.malus": "Absent sans désistement (malus)",
+  "points.audience_prize": "Prix du public (gagnant)",
   "grades.thresholds": "Seuils des grades",
   "lists.refusal_reasons": "Motifs de refus proposés au tri",
   "lists.vendor_types": "Types de prestataires proposés",

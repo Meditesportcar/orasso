@@ -56,6 +56,11 @@ export const errorCodes = [
   "accreditation_deadline_passed",
   // Lot 47 : case « J'ai vu » de l'horaire d'arrivée des exposants non cochée.
   "arrival_not_seen",
+  // Lot 49 : prix du public.
+  "vote_closed",
+  "vote_not_open",
+  "not_checked_in",
+  "own_vehicle",
 ] as const;
 
 /** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */

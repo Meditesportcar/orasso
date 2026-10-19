@@ -47,6 +47,7 @@ export const adminSettingSchemas: { [K in AdminSettingKey]: z.ZodType<AdminSetti
   "points.staff": points(0, 500),
   "points.referral": points(0, 500),
   "points.malus": points(-500, 0),
+  "points.audience_prize": points(0, 500),
   "grades.thresholds": thresholdsSchema as unknown as z.ZodType<Record<Grade, number>>,
   "lists.refusal_reasons": codeList("lists.refusal_reasons", refusalReasons),
   "lists.vendor_types": codeList("lists.vendor_types", vendorTypeCodes),

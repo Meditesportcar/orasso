@@ -16,6 +16,7 @@ export * from "./media";
 export * from "./messaging";
 export * from "./moderation";
 export * from "./notifications";
+export * from "./passport";
 export * from "./points";
 export * from "./profiles";
 export * from "./pros";

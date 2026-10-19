@@ -26,6 +26,7 @@ import type { Viewer } from "../../lib/session";
 import { ed25519Verify, signing } from "../../lib/signing";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { type EventRow, eventsRepo } from "../events/repo";
+import { passportService } from "../passport/service";
 import { staffService } from "./service";
 
 /** Le rôle qui donne accès à la boutique (les organisateurs l'ont d'office, `staffAccess`). */
@@ -215,6 +216,12 @@ export const shopService = {
           continue;
         }
         if (done.verdict.serverResult === "accepted") accepted++;
+        // Lot 49 : tampon de visite au titulaire du billet, publié à son écran après validation.
+        const visit =
+          done.verdict.serverResult === "accepted" && done.row.ticketId
+            ? await passportService.stampVisit(tx, done.row.ticketId)
+            : null;
+        if (visit) after(() => passportService.publish(visit.userId, visit.stamp));
         out.push(await storedScan(tx, done.row));
       }
       if (deviceId) await tx.update(devices).set({ lastSeenAt: receivedAt }).where(eq(devices.id, deviceId));

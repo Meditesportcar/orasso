@@ -53,6 +53,7 @@ import { type Executor, withTx } from "../../lib/tx";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
+import { passportService } from "../passport/service";
 import { loadProviders } from "../providers/serializers";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
@@ -238,6 +239,9 @@ export const staffService = {
       })
       .where(eq(eventStaff.id, current.id));
     if (input.presence !== undefined) await publishLive(eventId);
+    // Lot 49 : présence corrigée par l'organisateur → tampon « staff » posé (jour J) ou retiré.
+    if (input.presence !== undefined)
+      await passportService.onStaffPresence(event, userId, input.presence === "present");
     const updated = (await members(event)).find((m) => m.userId === userId);
     if (!updated) throw notFound("Membre introuvable");
     return mapMember(updated);
@@ -255,6 +259,8 @@ export const staffService = {
     await db.update(eventStaff).set({ presence, presenceUpdatedAt: now() }).where(eq(eventStaff.id, mine.id));
     realtime.publish(`event:${eventId}:access`, "staff.presence", { userId: v.user.id, presence });
     await publishLive(eventId);
+    // Lot 49 : tampon « staff » si « là » est posé le jour J (3 h avant le début à la fin), retiré si « pas là ».
+    await passportService.onStaffPresence(event, v.user.id, present);
     return { presence };
   },
 

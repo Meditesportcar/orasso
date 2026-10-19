@@ -37,6 +37,7 @@ import { withTx } from "../../lib/tx";
 import { accessService, passPayload } from "../access/service";
 import { daysRepo } from "../events/days";
 import { eventsRepo } from "../events/repo";
+import { passportService } from "../passport/service";
 import { staffService } from "../staff/service";
 import { checkReference } from "../vehicles/service";
 
@@ -225,6 +226,8 @@ export const expressService = {
         .update(expressInvites)
         .set({ usedAt: t, userId: created.id, applicationId: app.id })
         .where(eq(expressInvites.id, invite.id));
+      // Lot 49 : tampon de participation, comme tout pointage.
+      await passportService.stampCheckin(tx, { applicationId: app.id, eventId: event.id, at: t });
       after(() => realtime.publish(`event:${event.id}:access`, "access.changed", { applicationIds: [app.id] }));
       return { applicationId: app.id, pass };
     });

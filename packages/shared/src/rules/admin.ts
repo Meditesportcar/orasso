@@ -4,6 +4,7 @@
 import { type EventFormat, eventFormats, type RefusalReason, refusalReasons } from "../enums";
 import { type Grade, grades } from "../grades";
 import { type VendorTypeCode, vendorTypeCodes } from "../provider";
+import { AUDIENCE_PRIZE_POINTS_DEFAULT } from "./audiencePrize";
 import { GRADE_THRESHOLDS } from "./misc";
 import { POINTS } from "./points";
 import { type ProActivity, proActivities } from "./pro";
@@ -18,6 +19,8 @@ export const adminSettingKeys = [
   "points.staff",
   "points.referral",
   "points.malus",
+  // Lot 49 : prix du public (H6, valeur « en discussion » dans docs/01).
+  "points.audience_prize",
   "grades.thresholds",
   "lists.refusal_reasons",
   "lists.vendor_types",
@@ -34,6 +37,7 @@ export type AdminSettingValues = {
   "points.staff": number;
   "points.referral": number;
   "points.malus": number;
+  "points.audience_prize": number;
   "grades.thresholds": Record<Grade, number>;
   "lists.refusal_reasons": RefusalReason[];
   "lists.vendor_types": VendorTypeCode[];
@@ -49,6 +53,7 @@ export const adminSettingDefaults: AdminSettingValues = {
   "points.staff": POINTS.staff,
   "points.referral": POINTS.referral,
   "points.malus": POINTS.malus,
+  "points.audience_prize": AUDIENCE_PRIZE_POINTS_DEFAULT,
   "grades.thresholds": { ...GRADE_THRESHOLDS },
   "lists.refusal_reasons": [...refusalReasons],
   "lists.vendor_types": [...vendorTypeCodes],
@@ -59,7 +64,14 @@ export const adminSettingDefaults: AdminSettingValues = {
 /** Groupes de la page des réglages (ordre d'affichage). */
 export const adminSettingGroups: Record<"switches" | "points" | "lists", readonly AdminSettingKey[]> = {
   switches: ["signup.enabled", "sponsored.enabled", "providers.enabled"],
-  points: ["points.participation", "points.staff", "points.referral", "points.malus", "grades.thresholds"],
+  points: [
+    "points.participation",
+    "points.staff",
+    "points.referral",
+    "points.malus",
+    "points.audience_prize",
+    "grades.thresholds",
+  ],
   lists: ["lists.refusal_reasons", "lists.vendor_types", "lists.pro_activities", "lists.event_formats"],
 };
 

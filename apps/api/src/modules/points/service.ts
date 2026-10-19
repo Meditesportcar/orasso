@@ -43,8 +43,10 @@ import type { Viewer } from "../../lib/session";
 import { getPointsConfig } from "../../lib/settings";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { reportService } from "../after-event/report";
+import { audiencePrizeService } from "../audience-prize/service";
 import { eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
+import { passportService } from "../passport/service";
 import { staffService } from "../staff/service";
 
 type SeasonRow = typeof seasons.$inferSelect;
@@ -191,6 +193,8 @@ async function decideContest(
               note: `Contestation acceptée${input.note ? ` : ${input.note}` : ""}`,
             })
             .onConflictDoNothing();
+          // Lot 49 : la présence reconnue donne son tampon (le règlement est déjà passé).
+          await passportService.lateEntry(tx, { applicationId: app.id, eventId: app.eventId, at: event.startsAt });
         }
       }
     }
@@ -301,6 +305,12 @@ export const pointsService = {
           link: pointsLink,
         });
       }
+      // Lot 49 : prix du public (résultats ; au gagnant : points, compteur du véhicule, notification), puis tampons du
+      // passeport (rattrapage des tampons ordinaires, rares : première sortie, 10e événement, pleine lune, prix du public).
+      const winner = await audiencePrizeService.settle(tx, event, (entry) => award(tx, season, entry));
+      if (winner?.awarded) users.add(winner.userId);
+      // Point de reprise, comme le bilan : une erreur des tampons n'annule jamais les points.
+      await passportService.safely(tx, "règlement", (sp) => passportService.onSettled(sp, event, winner));
       await tx.update(events).set({ settledAt: t }).where(eq(events.id, eventId));
       for (const userId of users) await recompute(tx, userId);
       // Lot 27 : bilan de l'événement, calculé sur les points qui viennent d'être écrits (même transaction).

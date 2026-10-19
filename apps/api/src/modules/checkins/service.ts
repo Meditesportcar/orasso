@@ -51,6 +51,7 @@ import { ed25519Verify, signing } from "../../lib/signing";
 import { type Tx, withTx } from "../../lib/tx";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
+import { passportService } from "../passport/service";
 import { loadProviders } from "../providers/serializers";
 import { assertStaffWindow, staffService } from "../staff/service";
 import { shopService } from "../staff/shop";
@@ -147,6 +148,14 @@ async function recordEntry(
       })
       .returning();
     if (!row) throw new Error("Entrée non enregistrée");
+    // Lot 49 : tampon de participation à l'heure de l'entrée (point de reprise : jamais d'échec du pointage), publié à
+    // l'écran par `announce` après validation.
+    await passportService.stampCheckin(tx, {
+      applicationId: row.applicationId,
+      eventId: row.eventId,
+      at: input.at,
+      announce: true,
+    });
     return { checkin: row, created: true, rewritten: false };
   }
   if (input.method === "scan" && input.scanId && input.at < existing.checkedInAt) {
@@ -347,6 +356,7 @@ function announce(after: (cb: () => unknown) => void, eventId: string, applicati
   after(async () => {
     realtime.publish(`event:${eventId}:access`, "access.changed", { applicationIds });
     realtime.publish(`event:${eventId}:live`, "live", await checkinsService.liveCounters(eventId));
+    await passportService.announce(eventId, applicationIds);
   });
 }
 

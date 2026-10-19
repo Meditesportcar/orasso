@@ -22,6 +22,8 @@ import { accountQrRoutes } from "./modules/account-qr/routes";
 import { adminRoutes } from "./modules/admin/routes";
 import { afterEventRoutes } from "./modules/after-event/routes";
 import { applicationsRoutes } from "./modules/applications/routes";
+import { audiencePrizeRoutes } from "./modules/audience-prize/routes";
+import { audiencePrizeService } from "./modules/audience-prize/service";
 import { checkinsRoutes } from "./modules/checkins/routes";
 import { communicationRoutes } from "./modules/communication/routes";
 import { crewsRoutes } from "./modules/crews/routes";
@@ -36,11 +38,13 @@ import { mediaRoutes } from "./modules/media/routes";
 import { messagingRoutes } from "./modules/messaging/routes";
 import { moderationRoutes } from "./modules/moderation/routes";
 import { notificationsRoutes } from "./modules/notifications/routes";
+import { passportRoutes } from "./modules/passport/routes";
 import { pointsRoutes } from "./modules/points/routes";
 import { profilesRepo } from "./modules/profiles/repo";
 import { profilesRoutes } from "./modules/profiles/routes";
 import { prosRoutes } from "./modules/pros/routes";
 import { providersRoutes } from "./modules/providers/routes";
+import { recapRoutes } from "./modules/recap/routes";
 import { reviewsRoutes } from "./modules/reviews/routes";
 import { searchRoutes } from "./modules/search/routes";
 import { authGuard, type SessionLike } from "./modules/security/auth-guard";
@@ -203,10 +207,16 @@ app.route("/", moderationRoutes);
 app.route("/", homeRoutes);
 app.route("/", afterEventRoutes);
 app.route("/", devClockRoutes);
+// Lot 49 : passeport, prix du public, récap.
+app.route("/", passportRoutes);
+app.route("/", audiencePrizeRoutes);
+app.route("/", recapRoutes);
 
 // Abonnements WebSocket aux canaux d'un événement : mêmes droits que les routes, avec la preuve de second facteur de la
 // session qui a ouvert la connexion (sans elle, les organisateurs perdaient le tri en direct depuis le lot 15).
 realtime.setAuthorizer(async (userId, channel, ctx) => {
+  // Lot 49 : classement du prix du public en direct, ouvert à toute personne connectée.
+  if (channel.endsWith(":votes")) return audiencePrizeService.canSubscribe(userId, channel);
   const u = await db.query.user.findFirst({ where: eq(user.id, userId) });
   const profile = await profilesRepo.byUserId(userId);
   if (!u || !profile) return false;

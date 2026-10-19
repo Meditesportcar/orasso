@@ -97,6 +97,8 @@ export const rateRules = {
   mediaWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
   /** Vues d'un contenu média : par visiteur et par contenu, comme le compteur de la fiche pro. */
   mediaView: { max: 30, windowMs: 3_600_000, message: "Trop d'actions sur ce contenu." },
+  /** Prix du public (lot 49) : une voix modifiable, pas un bouton qu'on martèle. */
+  audienceVote: { max: 20, windowMs: 60_000, message: "Trop de votes : réessaie dans une minute." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

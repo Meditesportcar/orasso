@@ -13,6 +13,7 @@ export * from "./invitations";
 export * from "./media";
 export * from "./messaging";
 export * from "./moderation";
+export * from "./passport";
 export * from "./pro";
 export * from "./profile";
 export * from "./provider";

@@ -117,6 +117,8 @@ export const vehicles = pgTable(
       onDelete: "set null",
     }),
     archivedAt: tstz("archived_at"),
+    /** Prix du public gagnés (lot 49) : compteur lu par la carte à partager. */
+    audiencePrizes: integer("audience_prizes").notNull().default(0),
     ...timestamps,
   },
   (t) => [

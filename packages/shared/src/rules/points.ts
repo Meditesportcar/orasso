@@ -26,6 +26,8 @@ export const pointKinds = [
   "malus_reversal",
   "season_carryover",
   "admin_adjustment",
+  // Lot 49 : prix du public, au gagnant, au règlement de J+2.
+  "audience_prize",
 ] as const;
 export type PointKind = (typeof pointKinds)[number];
 
