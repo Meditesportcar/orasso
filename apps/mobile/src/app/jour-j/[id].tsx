@@ -39,7 +39,7 @@ import { FlowScreen } from "@/ui/Screens";
 const { space2, space3, space4 } = tokens.spacing;
 
 const TITLE = "Jour J";
-const FACTS = "Hors ligne : tout est déjà sur ton téléphone";
+const FACTS = "Hors ligne OK";
 /** Sans nouvelles du serveur depuis 24 h, l'heure du téléphone n'a pas été recoupée : le code risque d'être refusé. */
 const STALE_MS = 24 * 3600_000;
 
@@ -267,7 +267,7 @@ export default function JourJ() {
             label="QR d'accès à présenter à l'entrée"
           />
           {me ? (
-            <Muted variant="meta" style={styles.center}>
+            <Muted variant="caption" style={styles.center}>
               {gradeLabels[me.profile.grade]} · luminosité au maximum, présente le code à travers le pare-brise
             </Muted>
           ) : null}

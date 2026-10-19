@@ -28,7 +28,7 @@ export function CaptureNote() {
   return (
     <View style={styles.lock} testID="qr-capture-note">
       <Icon name="eyeOff" size={22} color={t.color.ink} />
-      <Text variant="meta" color={t.color.ink} style={styles.grow}>
+      <Text variant="caption" color={t.color.ink} style={styles.grow}>
         Captures et enregistrement d'écran bloqués sur cet écran. Une photo du code est périmée en 20 secondes.
       </Text>
     </View>
@@ -101,7 +101,7 @@ export function GpsRow({ destination, onMap }: { destination: Destination; onMap
   return (
     <View style={styles.row}>
       <Button
-        variant="plate"
+        variant="rescue"
         icon="place"
         onPress={() => void Linking.openURL(mapsUrl(destination))}
         style={styles.grow}
@@ -109,14 +109,14 @@ export function GpsRow({ destination, onMap }: { destination: Destination; onMap
         Maps
       </Button>
       <Button
-        variant="plate"
+        variant="rescue"
         icon="place"
         onPress={() => void Linking.openURL(wazeUrl(destination))}
         style={styles.grow}
       >
         Waze
       </Button>
-      <Button variant="plate" icon="explore" onPress={onMap} style={styles.grow}>
+      <Button variant="rescue" icon="explore" onPress={onMap} style={styles.grow}>
         Sur la carte
       </Button>
     </View>

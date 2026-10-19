@@ -158,7 +158,7 @@ export default function StaffHome() {
             variant="rescue"
             icon="incident"
             onPress={() => setSheet("incident")}
-            style={styles.grow2}
+            style={styles.flex}
             testID="staff-logbook"
           >
             {L.logbook}
@@ -396,7 +396,6 @@ const styles = StyleSheet.create({
   tiles: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   row: { flexDirection: "row", gap: space2 },
   flex: { flex: 1 },
-  grow2: { flex: 2 },
   syncRow: { flexDirection: "row", alignItems: "center", gap: space2 },
   dot: { width: 10, height: 10, borderRadius: 5 },
   roleRow: { flexDirection: "row", alignItems: "center", gap: space3 },

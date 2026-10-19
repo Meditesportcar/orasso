@@ -51,11 +51,11 @@ test("mode staff hors ligne : synchro, scan sans réseau, file envoyée au retou
   await page.waitForURL(/accueil/, { timeout: 30_000 });
   await page.goto(`/staff/${salon?.id}`);
   await page.getByRole("button", { name: "Synchroniser la liste" }).click();
-  await expect(page.getByRole("button", { name: "Ouvrir le scan" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("staff-tile-scan")).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${DIR}/10-staff-entree-synchro-sable.png` });
 
-  await page.getByRole("button", { name: "Ouvrir le scan" }).click();
+  await page.getByTestId("staff-tile-scan").click();
   await page.waitForTimeout(1500);
   await ctx.setOffline(true);
   await page.evaluate((p) => {

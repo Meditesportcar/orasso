@@ -98,8 +98,8 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   const b = await openApp(browser, "julie@orasso.local", "sable");
   await b.page.goto(`/staff/${salon?.id}`);
   await b.page.getByRole("button", { name: "Synchroniser la liste" }).click();
-  await expect(b.page.getByRole("button", { name: "Ouvrir le scan" })).toBeVisible({ timeout: 30_000 });
-  await b.page.getByRole("button", { name: "Ouvrir le scan" }).click();
+  await expect(b.page.getByTestId("staff-tile-scan")).toBeVisible({ timeout: 30_000 });
+  await b.page.getByTestId("staff-tile-scan").click();
   await b.page.waitForTimeout(1500);
   await b.page.evaluate((p) => {
     (globalThis as unknown as { __orassoScan: (x: string) => void }).__orassoScan(p);

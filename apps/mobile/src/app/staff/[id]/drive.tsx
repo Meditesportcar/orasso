@@ -145,9 +145,7 @@ export default function Drive() {
       <AppBar
         kind="flow"
         title={L.title}
-        facts={
-          state ? `${state.meta.title} · liste à jour ${clock(state.meta.syncedAt)}` : "Liste absente : synchronise"
-        }
+        facts={state ? `Liste à jour ${clock(state.meta.syncedAt)} · hors ligne OK` : "Liste absente : synchronise"}
         counter={count ? `${count.arrived} entrés` : undefined}
         onClose={close}
         closeLabel="Quitter l'accueil drive"
