@@ -10,6 +10,7 @@ import { formatDateTime } from "../../lib/format";
 import { withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
+import { recapReadyAt } from "../recap/service";
 import { weatherService } from "../weather/service";
 import { daysRepo } from "./days";
 import { highGradePreviewAt, lockPreview } from "./high-grade";
@@ -36,6 +37,8 @@ export async function scheduleEventJobs(e: EventRow) {
     ["event.reminder-eve", reminderEveAt(e)],
     // Points et malus à J+2 (lot 06).
     ["event.settle", settleAt(e)],
+    // Récap le lendemain de la fin à 10 h (lot 49), replanifié avec les dates.
+    ["event.recap", recapReadyAt(e)],
   ];
   if (e.previewHours > 0) plan.push(["event.preview-open", registrationOpensAt(e, true)]);
   // Avant-première des hauts grades (lot 25, § 9.2).

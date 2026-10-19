@@ -4,8 +4,8 @@
 import { type EventFormat, eventFormats, type RefusalReason, refusalReasons } from "../enums";
 import { type Grade, grades } from "../grades";
 import { type VendorTypeCode, vendorTypeCodes } from "../provider";
-import { GRADE_THRESHOLDS } from "./misc";
 import { AUDIENCE_PRIZE_POINTS_DEFAULT } from "./audiencePrize";
+import { GRADE_THRESHOLDS } from "./misc";
 import { POINTS } from "./points";
 import { type ProActivity, proActivities } from "./pro";
 import { DAY } from "./time";

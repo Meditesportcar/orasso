@@ -21,6 +21,7 @@ import { sponsoredService } from "./modules/home/sponsored";
 import { moderationService } from "./modules/moderation/service";
 import { notificationsService } from "./modules/notifications/service";
 import { pointsService } from "./modules/points/service";
+import { recapService } from "./modules/recap/service";
 import { securityService } from "./modules/security/service";
 import { staffService } from "./modules/staff/service";
 import { uploadsService } from "./modules/uploads/service";
@@ -82,6 +83,8 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "points.regrade": () => adminSettingsService.regrade(),
   // Lot 36 : invitation à installer l'appli (le service revérifie : appli jamais ouverte, e-mail jamais envoyé).
   "account.app-install": (d) => accountService.sendAppInstallReminder(d.userId ?? ""),
+  // Lot 49 : « Ton récap est arrivé » aux pointés et billets scannés (le service revérifie l'instant prévu).
+  "event.recap": (d) => recapService.notifyReady({ eventId: d.eventId ?? "", at: d.at ?? "" }),
 };
 
 /**

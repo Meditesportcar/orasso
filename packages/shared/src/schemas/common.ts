@@ -54,6 +54,11 @@ export const errorCodes = [
   "accreditation_closed",
   "press_quota_reached",
   "accreditation_deadline_passed",
+  // Lot 49 : prix du public.
+  "vote_closed",
+  "vote_not_open",
+  "not_checked_in",
+  "own_vehicle",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

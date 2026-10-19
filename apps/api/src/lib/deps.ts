@@ -54,7 +54,9 @@ export type JobName =
   // Lot 33 : grades recalculés après un changement des seuils (mise en file à l'écriture du réglage).
   | "points.regrade"
   // Lot 36 : e-mail « Installe l'appli » une heure après la confirmation de l'adresse, si l'appli n'a jamais été ouverte.
-  | "account.app-install";
+  | "account.app-install"
+  // Lot 49 : récap de l'événement le lendemain de la fin, à 10 h.
+  | "event.recap";
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */

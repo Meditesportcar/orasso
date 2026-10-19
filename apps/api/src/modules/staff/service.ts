@@ -53,6 +53,7 @@ import { type Executor, withTx } from "../../lib/tx";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
+import { passportService } from "../passport/service";
 import { loadProviders } from "../providers/serializers";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleLabel } from "../vehicles/serializers";
@@ -255,6 +256,8 @@ export const staffService = {
     await db.update(eventStaff).set({ presence, presenceUpdatedAt: now() }).where(eq(eventStaff.id, mine.id));
     realtime.publish(`event:${eventId}:access`, "staff.presence", { userId: v.user.id, presence });
     await publishLive(eventId);
+    // Lot 49 : tampon « staff » au passeport, si la présence est confirmée le jour J (sinon au règlement).
+    if (present) await passportService.stampStaffPresence(event, v.user.id);
     return { presence };
   },
 

@@ -16,8 +16,12 @@ export const stampKinds = [
 export type StampKind = (typeof stampKinds)[number];
 
 /** Les rares, en dorure : première sortie, 10e événement, nuit de pleine lune, prix du public. */
-export const rareStampKinds = ["first_outing", "tenth_event", "full_moon", "audience_prize"] as const satisfies
-  readonly StampKind[];
+export const rareStampKinds = [
+  "first_outing",
+  "tenth_event",
+  "full_moon",
+  "audience_prize",
+] as const satisfies readonly StampKind[];
 /** Les tampons d'une présence (un par événement et par façon d'y être venu). */
 export const baseStampKinds = ["participation", "visit", "staff"] as const satisfies readonly StampKind[];
 
@@ -55,9 +59,7 @@ export type StampInk = (typeof STAMP_INK_DEPARTMENTS)[number] | "default";
 
 /** Encre d'un tampon : le département de l'événement s'il a la sienne, sinon `default`. */
 export function stampInk(department: string | null | undefined): StampInk {
-  return (STAMP_INK_DEPARTMENTS as readonly string[]).includes(department ?? "")
-    ? (department as StampInk)
-    : "default";
+  return (STAMP_INK_DEPARTMENTS as readonly string[]).includes(department ?? "") ? (department as StampInk) : "default";
 }
 
 /** Nom du jeton de couleur de l'encre (`stamp-ink-66`, `stamp-ink-default`). */

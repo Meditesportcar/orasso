@@ -21,11 +21,7 @@ import { invitationNotificationTypes } from "./notifications/invitations";
 import { mediaNotificationTypes } from "./notifications/media";
 import { messagingNotificationTypes, pushOnlyNotificationTypes as messagingPushOnly } from "./notifications/messaging";
 import { moderationEmailAlwaysTypes, moderationNotificationTypes } from "./notifications/moderation";
-import {
-  passportJournalOnlyTypes,
-  passportNoEmailTypes,
-  passportNotificationTypes,
-} from "./notifications/passport";
+import { passportJournalOnlyTypes, passportNoEmailTypes, passportNotificationTypes } from "./notifications/passport";
 import { pointsNotificationTypes } from "./notifications/points";
 import { providersV2NotificationTypes } from "./notifications/providers-v2";
 import { journalOnlyNotificationTypes as socialJournalOnly, socialNotificationTypes } from "./notifications/social";

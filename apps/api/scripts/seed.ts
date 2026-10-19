@@ -29,6 +29,7 @@ import { seedMessaging } from "./seed/messaging";
 import { seedMissions } from "./seed/missions";
 import { seedModeration } from "./seed/moderation";
 import { seedMultiDay } from "./seed/multi-day";
+import { seedPassport } from "./seed/passport";
 import { seedPros } from "./seed/pros";
 import { seedProviders } from "./seed/providers";
 import { seedSecurity } from "./seed/security";
@@ -126,6 +127,8 @@ async function main() {
   await seedMedia(hash);
   // Lot 46 : La Brasa (Sofia_66), besoins sur 4 événements, emplacement B2 sur la Nocturne, 2 avis d'organisateur.
   await seedMissions(hash);
+  // Lot 49 : 9 tampons pour Kenji (1 rare), prix du public de Béziers Night (64 votants, Kenji 4e), résultats.
+  await seedPassport();
 }
 
 try {
