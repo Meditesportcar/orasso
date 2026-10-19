@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { PlateFrame } from "../components/PlateFrame";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, safeReturn } from "../lib/api.server";
 import type { Route } from "./+types/garage-nouveau";
@@ -77,6 +78,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (!hasPhoto) return redirect(`/app/garage/${created.data.id}`);
   const upload = new FormData();
   upload.set("photo", photo as File);
+  // Lot 51 : cadres de plaque posés à la main, floutés par l'API avant le stockage (définitif).
+  if (text("plateRects")) upload.set("plateRects", text("plateRects"));
   const sent = await api(request, `/me/vehicles/${created.data.id}/photos`, { method: "POST", body: upload });
   if (!sent.ok) {
     // Le véhicule existe : on reste sur la fiche avec le message, la photo se rajoute depuis le garage.
@@ -102,6 +105,9 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const [year, setYear] = useState("");
   const [status, setStatus] = useState("active");
   const [categories, setCategories] = useState<CategoryOption[]>([]);
+  // Lot 51 : aperçu de la photo choisie, pour poser le cadre de la plaque.
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  useEffect(() => () => (photoUrl ? URL.revokeObjectURL(photoUrl) : undefined), [photoUrl]);
   const active = status === "active";
 
   useEffect(() => {
@@ -248,10 +254,20 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
           name="photo"
           type="file"
           accept="image/jpeg,image/png,image/webp"
-          help="Une photo de ton véhicule, de face ou de trois quarts."
+          help="Une photo de ton véhicule, de face ou de trois quarts. Tu floutes la plaque juste en dessous."
           error={errors.photo}
           required={active}
+          onChange={(e) => {
+            const file = e.currentTarget.files?.[0];
+            setPhotoUrl(file ? URL.createObjectURL(file) : null);
+          }}
         />
+        {photoUrl ? (
+          <section className="s-stack s-stack--tight" aria-label="Flouter la plaque">
+            <div className="o-t-label">Flouter la plaque</div>
+            <PlateFrame key={photoUrl} src={photoUrl} alt="Photo choisie" initial={[]} testId="new-plate-frame" />
+          </section>
+        ) : null}
         {errors.form && (
           <p className="s-error" role="alert">
             {errors.form}

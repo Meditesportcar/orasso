@@ -2,12 +2,10 @@
 // détection sont montrés ; à la main, chaque cadre se déplace et s'agrandit par son coin (PanResponder, comme le curseur :
 // même geste au téléphone et dans le navigateur ; position suivie par Reanimated pendant le geste, posée au lâcher).
 import { Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
-import type { PlateRect } from "@orasso/shared";
+import { movePlateFrame, type PlateRect, resizePlateFrame } from "@orasso/shared";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type ImageSourcePropType, PanResponder, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-
-import { moveRect, resizeRect } from "./frame";
 
 const { space2 } = tokens.spacing;
 const HANDLE = 22;
@@ -111,7 +109,9 @@ function FrameBox({
         const { w: W, h: H } = latest.current.box;
         if (!W || !H) return;
         const next =
-          kind === "move" ? moveRect(start.current, g.dx / W, g.dy / H) : resizeRect(start.current, g.dx / W, g.dy / H);
+          kind === "move"
+            ? movePlateFrame(start.current, g.dx / W, g.dy / H)
+            : resizePlateFrame(start.current, g.dx / W, g.dy / H);
         current.current = next;
         x.value = next.x;
         y.value = next.y;

@@ -114,13 +114,13 @@ type Named = { id: string; name: string; isOther: boolean };
 /** Sans accent ni casse : « citroen » trouve « Citroën ». */
 export const fold = (s: string): string => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
-/** Liste filtrée par la recherche, triée, « Autre » toujours en dernier (et toujours présent). */
-export function filterRows<T extends Named>(rows: readonly T[], search: string): T[] {
+/** Liste filtrée par la recherche, triée par nom (les générations gardent l'ordre des années), « Autre » en dernier. */
+export function filterRows<T extends Named>(rows: readonly T[], search: string, byName = true): T[] {
   const q = fold(search);
   const words = q.split(/\s+/).filter(Boolean);
   return [...rows]
     .filter((r) => r.isOther || words.length === 0 || words.some((w) => fold(r.name).includes(w)))
-    .sort((a, b) => Number(a.isOther) - Number(b.isOther) || a.name.localeCompare(b.name, "fr"));
+    .sort((a, b) => Number(a.isOther) - Number(b.isOther) || (byName ? a.name.localeCompare(b.name, "fr") : 0));
 }
 
 /** Modèles du type choisi (le modèle « Autre » vaut pour tous les types). */

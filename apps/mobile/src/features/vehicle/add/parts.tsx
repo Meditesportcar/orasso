@@ -41,7 +41,8 @@ export function ChoiceRow({
   return (
     <Pressable
       accessibilityRole="radio"
-      accessibilityState={{ selected }}
+      accessibilityState={{ checked: selected }}
+      aria-checked={selected}
       accessibilityLabel={detail ? `${title}, ${detail}` : title}
       onPress={onPress}
       testID={testID}
@@ -93,6 +94,7 @@ export function GridButton({
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked: selected, disabled }}
+      aria-checked={selected}
       accessibilityLabel={reason ? `${label}, ${reason}` : label}
       disabled={disabled}
       onPress={onPress}

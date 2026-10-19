@@ -1,7 +1,7 @@
 // Les quatre premières étapes de l'ajout de véhicule (lot 51, prototype `s-vadd`) : marque › modèle › génération dans
 // la liste Orasso (« Autre » sans saisie libre), fiche technique, catégories (origine déduite, styles grisés avec la
 // raison), photos (une à huit, étoile = couverture, croix confirmée, pastille « Plaque floutée »).
-import { Button, Chip, ChipRow, Photo, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Chip, ChipRow, Icon, Photo, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type CategoryOption,
   vehicleWizardLabels as L,
@@ -81,7 +81,7 @@ export function StepIdentity({
             },
             selected: false,
           }))
-        : filterRows(generations, search).map((g) => ({
+        : filterRows(generations, search, false).map((g) => ({
             id: g.id,
             title: g.isOther ? L.other : g.name,
             detail: g.isOther ? L.otherHint : generationYears(g),
@@ -277,9 +277,7 @@ export function StepCategories({
             </Text>
             <Muted variant="caption">{L.deducedFrom(make?.name ?? "")}</Muted>
           </View>
-          <Chip variant="accent" selected>
-            {L.deducedFrom(make?.name ?? "")}
-          </Chip>
+          <Icon name="check" size={20} color={t.color.accentText} />
         </View>
       ))}
       <Muted variant="label">{L.styles}</Muted>

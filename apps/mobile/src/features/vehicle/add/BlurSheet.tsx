@@ -3,8 +3,10 @@
 // l'API floute définitivement (V9) et la page se recharge avec la pastille « Plaque floutée ».
 import { Button, Text, useTheme } from "@orasso/design-system/native";
 import {
+  DEFAULT_PLATE_FRAME,
   vehicleWizardLabels as L,
   MAX_PLATE_RECTS,
+  nextPlateFrame,
   type PlateRect,
   type VehicleFull,
   type VehiclePhoto,
@@ -15,7 +17,6 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { AppSheet } from "@/ui/AppSheet";
-import { DEFAULT_FRAME, nextFrame } from "./frame";
 import { PhotoBadge, PlateFrameEditor } from "./PlateFrameEditor";
 
 export function BlurSheet({
@@ -31,13 +32,13 @@ export function BlurSheet({
   onDone: (vehicle: VehicleFull) => Promise<unknown>;
 }) {
   const { t } = useTheme();
-  const [rects, setRects] = useState<PlateRect[]>([DEFAULT_FRAME]);
+  const [rects, setRects] = useState<PlateRect[]>([DEFAULT_PLATE_FRAME]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (photo) {
-      setRects([DEFAULT_FRAME]);
+      setRects([DEFAULT_PLATE_FRAME]);
       setError(null);
     }
   }, [photo]);
@@ -85,7 +86,7 @@ export function BlurSheet({
         variant="secondary"
         icon="add"
         disabled={rects.length >= MAX_PLATE_RECTS || busy}
-        onPress={() => setRects((r) => [...r, nextFrame(r)])}
+        onPress={() => setRects((r) => [...r, nextPlateFrame(r)])}
         fullWidth
       >
         {L.addFrame}

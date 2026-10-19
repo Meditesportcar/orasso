@@ -19,10 +19,12 @@ import {
   type VehicleHistoryItem,
   vehicleStatusLabels,
   vehicleTypeLabels,
+  vehicleWizardLabels,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { FileField, TextAreaField } from "../components/Fields";
+import { PlateFrame } from "../components/PlateFrame";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime, formatDay } from "../lib/format";
 import type { Route } from "./+types/garage-vehicule";
@@ -94,6 +96,23 @@ export async function action({ request, params }: Route.ActionArgs) {
     const upload = new FormData();
     upload.set("photo", photo);
     const res = await api(request, `${base}/photos`, { method: "POST", body: upload });
+    return res.ok ? data({ error: null, done: "photo" }) : fail(res);
+  }
+  // Lot 51 : floutage à la main d'une photo déjà en ligne (définitif, l'API refuse un cadre hors de l'image).
+  if (intent === "photo-blur") {
+    let rects: unknown;
+    try {
+      rects = JSON.parse(text("plateRects") || "[]");
+    } catch {
+      rects = [];
+    }
+    if (!Array.isArray(rects) || rects.length === 0) {
+      return data({ error: "Place le cadre sur la plaque.", done: null }, { status: 400 });
+    }
+    const res = await api(request, `${base}/photos/${encodeURIComponent(text("photoId"))}/blur`, {
+      method: "POST",
+      json: { rects },
+    });
     return res.ok ? data({ error: null, done: "photo" }) : fail(res);
   }
   if (intent === "photo-remove") {
@@ -189,6 +208,29 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
                   Retirer
                 </Button>
               </Form>
+              {p.plateBlurred ? (
+                <span className="g-photo-blurred" data-testid="photo-plate-blurred">
+                  <Chip variant="accent">{vehicleWizardLabels.plateBlurred}</Chip>
+                </span>
+              ) : (
+                <details className="g-blur" data-testid="photo-blur">
+                  <summary className="o-t-label">{vehicleWizardLabels.blurAction}</summary>
+                  <Form method="post" className="s-stack s-stack--tight">
+                    <input type="hidden" name="photoId" value={p.id} />
+                    <PlateFrame src={p.url} alt={`${v.label}, vue ${i + 1}`} testId="site-plate-editor" />
+                    <Button
+                      type="submit"
+                      name="intent"
+                      value="photo-blur"
+                      variant="secondary"
+                      icon="check"
+                      loading={busy}
+                    >
+                      {vehicleWizardLabels.blurConfirm}
+                    </Button>
+                  </Form>
+                </details>
+              )}
             </li>
           ))}
         </ul>

@@ -15,6 +15,7 @@ export * from "./missions";
 export * from "./moderation";
 export * from "./notifications";
 export * from "./password";
+export * from "./plateFrame";
 export * from "./points";
 export * from "./pro";
 export * from "./quietHours";

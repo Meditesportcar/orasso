@@ -3,13 +3,12 @@
 // privé, facultatif pour un ancien véhicule. Le flou est appliqué par l'API à l'envoi et il est définitif : la personne
 // voit chaque cadre avant d'envoyer (garde de l'irréversibilité, H3).
 import { Button, CheckboxField, Chip, ChipRow, TextField, tokens } from "@orasso/design-system/native";
-import { archiveStatusChoices, vehicleWizardLabels as L, MAX_PLATE_RECTS } from "@orasso/shared";
+import { archiveStatusChoices, vehicleWizardLabels as L, MAX_PLATE_RECTS, nextPlateFrame } from "@orasso/shared";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
 import { Muted } from "@/ui/Muted";
-import { nextFrame } from "./frame";
 import { type BlurMode, blurredCount, type Draft, type DraftPhoto } from "./model";
 import { PhotoBadge, PlateFrameEditor } from "./PlateFrameEditor";
 import { ChoiceRow, StepHead, StepNote } from "./parts";
@@ -89,12 +88,13 @@ export function StepPlate({
             />
           </View>
           {manual ? (
-            <View style={styles.row}>
+            <View style={styles.stack}>
               <Button
                 variant="secondary"
                 icon="add"
                 disabled={photo.rects.length >= MAX_PLATE_RECTS}
-                onPress={() => onRects(i, [...photo.rects, nextFrame(photo.rects)])}
+                onPress={() => onRects(i, [...photo.rects, nextPlateFrame(photo.rects)])}
+                fullWidth
                 testID="plate-frame-add"
               >
                 {L.addFrame}
@@ -104,6 +104,7 @@ export function StepPlate({
                   variant="plate"
                   icon="close"
                   onPress={() => onRects(i, photo.rects.slice(0, -1))}
+                  fullWidth
                   testID="plate-frame-remove"
                 >
                   {L.removeFrame}
@@ -156,4 +157,5 @@ export function StepPlate({
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: space2 },
   grow: { flex: 1, textAlign: "center" },
+  stack: { gap: space2 },
 });
