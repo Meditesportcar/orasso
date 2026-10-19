@@ -11,7 +11,11 @@ import { loginInBrowser, MOBILE, setTheme } from "./helpers";
 const DIR = process.env.LOT38_CAPTURES ?? "C:/Users/DELL/.claude/relais/orasso/lot-38-captures/site";
 mkdirSync(DIR, { recursive: true });
 
-async function phone(browser: Browser, theme: "beton" | "sable" | "auto" | null, viewport = MOBILE) {
+async function phone(
+  browser: Browser,
+  theme: "beton" | "sable" | "auto" | null,
+  viewport: { width: number; height: number } = MOBILE,
+) {
   const ctx = await browser.newContext({ viewport });
   const page = await ctx.newPage();
   if (theme) await setTheme(page, theme);
