@@ -76,7 +76,7 @@ export function ProfilScreen() {
           size={72}
         />
         <View style={styles.headText}>
-          <Text variant="posterM" color={t.color.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+          <Text variant="posterM" color={t.color.ink}>
             {profile?.pseudo ?? ""}
           </Text>
           <View style={styles.headTags}>
@@ -88,17 +88,17 @@ export function ProfilScreen() {
               </Text>
             ) : null}
           </View>
-          {persona.kind === "pro" ? (
-            <Button variant="secondary" icon="plate" onPress={() => router.navigate("/(pro)/fiche")}>
-              Ma fiche
-            </Button>
-          ) : (
-            <Button variant="secondary" icon="qr" onPress={() => setSheet("qr")} testID="profil-account-qr">
-              Mon QR de compte
-            </Button>
-          )}
         </View>
       </View>
+      {persona.kind === "pro" ? (
+        <Button variant="secondary" icon="plate" onPress={() => router.navigate("/(pro)/fiche")} fullWidth>
+          Ma fiche
+        </Button>
+      ) : (
+        <Button variant="secondary" icon="qr" onPress={() => setSheet("qr")} fullWidth testID="profil-account-qr">
+          Mon QR de compte
+        </Button>
+      )}
 
       {base && profile ? (
         <SeasonCard points={profile.pointsSeason} grade={gradeLabels[profile.grade]} data={points.data ?? null} />

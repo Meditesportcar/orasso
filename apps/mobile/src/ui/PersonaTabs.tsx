@@ -5,7 +5,7 @@
 import { TabBar, type TabItem, tabSets } from "@orasso/design-system/native";
 import { Tabs } from "expo-router";
 import { type ComponentProps, type ReactNode, useCallback, useMemo, useRef } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { neighbourRoute } from "@/features/nav/swipe";
@@ -73,7 +73,11 @@ export function PersonaTabs({
   const { panHandlers, control } = useTabSwipe(onSwipe);
   return (
     <TabSwipeContext.Provider value={control}>
-      <View style={styles.fill} {...panHandlers} testID="persona-tabs">
+      <View
+        style={[styles.fill, Platform.OS === "web" ? styles.noSelect : null]}
+        {...panHandlers}
+        testID="persona-tabs"
+      >
         <Tabs
           initialRouteName={initialRouteName}
           backBehavior={backBehavior}
@@ -119,4 +123,8 @@ export function PersonaTabSet({
   );
 }
 
-const styles = StyleSheet.create({ fill: { flex: 1 } });
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  // Version web (recette) : glisser à la souris sélectionnerait le texte, et une sélection interrompt le geste.
+  noSelect: { userSelect: "none" },
+});

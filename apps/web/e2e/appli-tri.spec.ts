@@ -46,7 +46,7 @@ async function openApp(
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
   await page.getByRole("button", { name: "Me connecter" }).click();
   await page.waitForURL(/accueil/, { timeout: 30_000 });
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
   await page.getByTestId("casquette-organizer").filter({ hasText: "MéditeSportCar" }).click();
   await page.waitForURL(/\/direct/, { timeout: 20_000 });
   await page.getByRole("tab", { name: "Tri", exact: true }).click();

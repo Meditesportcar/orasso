@@ -1,7 +1,7 @@
 // Gabarits d'écran : le fond vivant, l'en-tête (AppBar) et la zone qui défile. Les zones de sécurité (encoche, barre de
 // gestes) sont passées à l'en-tête et à la barre d'onglets, comme le demande le README du système de design.
 import { AppBar, BigTitle, Button, Ground, tokens, useTheme } from "@orasso/design-system/native";
-import { useFocusEffect, usePathname, useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SwipeEntry } from "@/features/nav/SwipeEntry";
 import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
+import { useInInbox } from "./InboxScope";
 import { JournalSheet } from "./JournalSheet";
 import { KeyboardSafe } from "./KeyboardSafe";
 import { OverlayProvider, OverlaySlot } from "./Overlay";
@@ -46,7 +47,7 @@ export function TabScreen({
 }: Common & { title?: string; facts?: string; home?: boolean }) {
   const { refreshMe, me } = useSession();
   const router = useRouter();
-  const inInbox = usePathname().startsWith("/boite");
+  const inInbox = useInInbox();
   const [journal, setJournal] = useState(false);
   // Compteurs de la Boîte et du garage, casquettes (un véhicule ajouté fait passer de visiteur à exposant) à jour à
   // chaque retour sur un onglet.
@@ -76,7 +77,7 @@ export function TabScreen({
                   onPress={() => setJournal(true)}
                   testID="inbox-journal"
                 >
-                  {unread > 0 ? `Notifications · ${unread} non lue${unread > 1 ? "s" : ""}` : "Notifications"}
+                  {unread > 0 ? `Notifications · ${unread}` : "Notifications"}
                 </Button>
               ) : null}
               {children}

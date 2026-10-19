@@ -14,9 +14,19 @@ import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
+import { InboxScope } from "@/ui/InboxScope";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
+
+/** La Boîte (lot 40 : hors de la barre d'onglets, ouverte par la barre du haut ; notifications en tête). */
+export default function Boite() {
+  return (
+    <InboxScope>
+      <BoiteScreen />
+    </InboxScope>
+  );
+}
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -65,7 +75,7 @@ function ConversationRow({ c, onPress }: { c: ConversationSummary; onPress: () =
   );
 }
 
-export default function Boite() {
+function BoiteScreen() {
   const router = useRouter();
   const { me, refreshMe } = useSession();
   const [segment, setSegment] = useState<"messages" | "requests">("messages");

@@ -153,10 +153,17 @@ async function openApp(browser: Browser, email: string, theme: Theme): Promise<{
 }
 
 async function chooseCasquette(page: Page, kind: "organizer" | "pro", name?: string) {
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
   const entry = page.getByTestId(`casquette-${kind}`);
   await (name ? entry.filter({ hasText: name }) : entry).first().click();
-  await page.waitForURL(kind === "organizer" ? /\/direct/ : /\/scanner/, { timeout: 20_000 });
+  if (kind === "organizer") {
+    await page.waitForURL(/\/direct/, { timeout: 20_000 });
+    return;
+  }
+  // Lot 40 : la casquette Pro s'ouvre sur l'Accueil (au centre) ; le Scanner est le premier onglet.
+  await page.waitForURL(/\/accueil/, { timeout: 20_000 });
+  await page.getByRole("tab", { name: "Scanner" }).click();
+  await page.waitForURL(/\/scanner/, { timeout: 20_000 });
 }
 
 async function db<T>(work: (client: pg.Client) => Promise<T>): Promise<T> {
@@ -324,7 +331,8 @@ test("pro : créer sa fiche depuis Mes casquettes (lot 34)", async ({ browser })
   const pseudo = `FicheApp_${unique()}`.slice(0, 24);
   await signUpApi(pseudo);
   const { ctx, page } = await openApp(browser, `${pseudo.toLowerCase()}@e2e.orasso.test`, "sable");
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
+  await page.getByTestId("profil-create").click(); // Un seul bouton « Créer », puis la feuille.
   await page.getByTestId("casquette-create-pro").click();
   await page.waitForURL(/pro-nouvelle/, { timeout: 20_000 });
   await expect(page.getByTestId("pro-form")).toBeVisible({ timeout: 30_000 });

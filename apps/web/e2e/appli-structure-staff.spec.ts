@@ -35,7 +35,7 @@ async function openApp(browser: import("@playwright/test").Browser, email: strin
 }
 
 async function chooseOrganizer(page: Page, name: string) {
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
   await page.getByTestId("casquette-organizer").filter({ hasText: name }).click();
   await page.waitForURL(/\/direct/, { timeout: 20_000 });
 }
@@ -154,7 +154,7 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   await expect(page.getByTestId("orga-direct-event")).toBeVisible({ timeout: 30_000 });
 
   // Le point de l'onglet Staff : une demande attend.
-  await tab(page, "Staff").click();
+  await tab(page, "Équipe").click();
   const request = page.getByTestId("team-request").filter({ hasText: pseudo });
   await expect(request).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/Demandes reçues · \d+/)).toBeVisible();
@@ -164,10 +164,11 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   deliverNow("damien@orasso.local");
   await tab(page, "Direct").click();
   await expect(page.getByTestId("orga-direct-event")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Journal" }).click();
+  await page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
+  await page.getByTestId("inbox-journal").click();
   await page.getByTestId("journal-item").filter({ hasText: "Demande pour rejoindre le staff" }).first().click();
   await expect(page.getByTestId("team-request").filter({ hasText: pseudo })).toBeVisible({ timeout: 30_000 });
-  await expect(page).toHaveURL(/\/staff/);
+  await expect(page).toHaveURL(/\/equipe/);
 
   // --- 2. L'organisateur l'accepte depuis l'appli : entrée dans l'équipe sans rôle (lot 36) -------------------
   await request.getByTestId("team-request-accept").click();
@@ -328,7 +329,7 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   // --- Structure (fiche, logo, vérification, badge, partenaires), bannissements : parcours de lecture et d'écriture -
   const s = await openApp(browser, "damien@orasso.local", "beton");
   await chooseOrganizer(s.page, "MéditeSportCar");
-  await go(s.page, "/ma-structure");
+  await go(s.page, "/structure");
   await expect(s.page.getByTestId("orga-verification")).toBeVisible({ timeout: 30_000 });
   await expect(s.page.getByTestId("orga-structure-name")).toBeVisible();
   await shot(s.page, "12-structure-beton");
@@ -372,20 +373,20 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   const fan = await openApp(browser, "kenji@orasso.local", "beton");
   await go(fan.page, "/staff");
   await fan.page.waitForURL(/accueil/, { timeout: 20_000 });
-  await go(fan.page, "/ma-structure");
+  await go(fan.page, "/structure");
   await fan.page.waitForURL(/accueil/, { timeout: 20_000 });
   await fan.ctx.close();
 
   // --- Les mêmes écrans dans le thème Sable --------------------------------------------------------------------
   const b = await openApp(browser, "damien@orasso.local", "sable");
   await chooseOrganizer(b.page, "MéditeSportCar");
-  await tab(b.page, "Staff").click();
+  await tab(b.page, "Équipe").click();
   await expect(b.page.getByTestId("team-member").first()).toBeVisible({ timeout: 30_000 });
   await shot(b.page, "20-equipe-sable");
   await b.page.getByTestId("team-invite").click();
   await shot(b.page, "21-inviter-sable");
   await b.page.keyboard.press("Escape");
-  await go(b.page, "/ma-structure");
+  await go(b.page, "/structure");
   await expect(b.page.getByTestId("orga-verification")).toBeVisible({ timeout: 30_000 });
   await shot(b.page, "22-structure-sable");
   await go(b.page, "/modeles");
@@ -432,7 +433,7 @@ test("une demande de staff refusée disparaît de l'Équipe et le compteur retom
   expect(pseudo).not.toBe("");
   const a = await openApp(browser, "damien@orasso.local", "beton");
   await chooseOrganizer(a.page, "MéditeSportCar");
-  await tab(a.page, "Staff").click();
+  await tab(a.page, "Équipe").click();
   const request = a.page.getByTestId("team-request").filter({ hasText: pseudo });
   await expect(request).toBeVisible({ timeout: 30_000 });
   await request.getByTestId("team-request-decline").click();
@@ -473,7 +474,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
 
   const a = await openApp(browser, email, "beton");
   await chooseOrganizer(a.page, name);
-  await go(a.page, "/ma-structure");
+  await go(a.page, "/structure");
   await expect(a.page.getByTestId("orga-verification")).toBeVisible({ timeout: 30_000 });
   await expect(a.page.getByTestId("orga-verification-number")).toBeVisible();
   await shot(a.page, "30-structure-non-verifiee-beton");
@@ -523,7 +524,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   // Badge qui expire dans 5 jours : l'écran le dit. Structure suspendue : lecture seule, message de l'API à l'écriture.
   const canigou = await openApp(browser, "pres_canigou@orasso.local", "sable");
   await chooseOrganizer(canigou.page, "Écurie du Canigou");
-  await go(canigou.page, "/ma-structure");
+  await go(canigou.page, "/structure");
   await expect(canigou.page.getByTestId("orga-verification")).toContainText(/expire dans/, { timeout: 30_000 });
   await shot(canigou.page, "32-badge-echeance-sable");
   await canigou.ctx.close();
@@ -532,7 +533,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   await resuspendSeedStructure();
   const tram = await openApp(browser, "pres_tramontane@orasso.local", "sable");
   await chooseOrganizer(tram.page, "Tramontane Auto Club");
-  await tab(tram.page, "Staff").click();
+  await tab(tram.page, "Équipe").click();
   await expect(tram.page.getByText("Structure suspendue", { exact: false }).first()).toBeVisible({ timeout: 30_000 });
   await tram.page.getByTestId("team-invite").click();
   await tram.page.getByTestId("team-invite-who").fill("Kenji_66");
@@ -543,7 +544,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   });
   await shot(tram.page, "33-structure-suspendue-ecriture-refusee-sable");
   await tram.page.keyboard.press("Escape");
-  await go(tram.page, "/ma-structure");
+  await go(tram.page, "/structure");
   await expect(tram.page.getByTestId("orga-badge-suspended")).toBeVisible({ timeout: 30_000 });
   await shot(tram.page, "34-structure-suspendue-sable");
   await tram.ctx.close();

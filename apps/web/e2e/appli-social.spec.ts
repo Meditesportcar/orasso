@@ -125,11 +125,12 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     await expect(page.getByText(alpha).first()).toBeVisible({ timeout: 30_000 });
     await shot(page, `08-mes-amis-${theme}`);
     await page.goto("/moi");
-    await expect(page.getByTestId("moi-amis")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("reglage-amis")).toBeVisible({ timeout: 30_000 });
     // Heures calmes (la nuit) : la notification serait reportée à 08:00 ; livrée tout de suite pour la recette.
     deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
-    await page.goto("/accueil");
-    await page.getByLabel("Journal").first().click();
+    // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
+    await page.goto("/boite");
+    await page.getByTestId("inbox-journal").click();
     await expect(page.getByTestId("journal-item").filter({ hasText: "a accepté" }).first()).toBeVisible({
       timeout: 30_000,
     });
