@@ -1,10 +1,11 @@
 // Accueil drive (lot 48, prototype `s-drive`) : les plaques candidates d'une photo (lib/plates/recognize.ts) sont
 // hachées avec le sel de l'événement et cherchées dans la liste du téléphone, sans réseau ; aucune plaque en clair ne
-// sort de la mémoire. Une lecture n'est retenue que si elle désigne une seule voiture, ou si la même plaque est lue deux
-// fois de suite. Pur : testé par Vitest (drive.test.ts).
+// sort de la mémoire. Deux lectures identiques de suite, la plaque la plus proche, le choix du staff si deux plaques de
+// participants sont lisibles (relecture du lot 48). Pur : testé par Vitest (drive.test.ts).
 import type { AccessListEntry } from "@orasso/shared";
 
 import { now as clockNow } from "../clock";
+import type { PlateGroup } from "../plates/recognize";
 import { plateHashOf } from "./crypto";
 import { checkedInAt, expectedOn, type StaffState } from "./model";
 
@@ -34,7 +35,9 @@ export type DriveOutcome =
   | { kind: "ok"; entry: AccessListEntry }
   | { kind: "already"; entry: AccessListEntry; checkedInAt: string }
   | { kind: "refused"; entry: AccessListEntry; reason: "revoked" | "other_day" }
-  | { kind: "unknown" };
+  | { kind: "unknown" }
+  /** Deux plaques de participants lisibles sur la même photo : le staff choisit, rien n'est pointé d'office. */
+  | { kind: "choose"; entries: AccessListEntry[] };
 
 /** Ce que devient une voiture reconnue : entre, déjà entrée, ou refusée (désistée, autre jour). */
 export function driveOutcome(state: StaffState, entry: AccessListEntry, now: Date = clockNow()): DriveOutcome {
@@ -44,10 +47,18 @@ export function driveOutcome(state: StaffState, entry: AccessListEntry, now: Dat
   return at ? { kind: "already", entry, checkedInAt: at } : { kind: "ok", entry };
 }
 
+/** Plusieurs entrées pour la même plaque (même véhicule inscrit deux jours) : celle attendue aujourd'hui. */
+function preferred(state: StaffState, matches: DriveMatch[], now: Date): AccessListEntry | undefined {
+  return (matches.find((m) => m.entry.status === "valid" && expectedOn(state.meta, m.entry, now)) ?? matches[0])?.entry;
+}
+
 /**
- * Confirmation des lectures successives de la caméra : une lecture qui désigne une seule voiture est retenue tout de
- * suite ; sinon il faut lire deux fois de suite la même plaque de tête (une plaque absente de la liste → `unknown`).
- * Plusieurs voitures pour la même plaque (même véhicule inscrit deux fois) : la première attendue aujourd'hui.
+ * Confirmation des lectures successives de la caméra (relecture du lot 48) : rien n'est pointé sur une seule photo.
+ * - Les plaques arrivent de la plus proche à la plus lointaine (`plateGroups`) : on retient la plus proche qui désigne
+ *   un participant (sinon la plus proche tout court).
+ * - Il faut **deux lectures identiques de suite** (même voiture, ou même plaque inconnue) pour conclure.
+ * - Deux plaques de participants différents sur la même photo : le staff choisit (`choose`).
+ * Une saisie au clavier (`confirmed`) suffit seule. Cadence : une photo toutes les 900 ms, donc 2 s par voiture.
  */
 export class DriveGate {
   private last: string | null = null;
@@ -56,22 +67,32 @@ export class DriveGate {
     this.last = null;
   }
 
-  /** `confirmed` : saisie au clavier (recette web, « Plaque ou pseudo ») : une seule lecture suffit. */
-  feed(state: StaffState, plates: readonly string[], now: Date = clockNow(), confirmed = false): DriveOutcome | null {
-    if (!plates.length) return null;
-    const head = plates[0] as string;
-    const matches = driveLookup(state, plates);
-    const repeated = this.last === head;
-    this.last = head;
-    if (matches.length === 1 || (matches.length > 1 && (repeated || confirmed))) {
-      this.last = null;
-      const today = matches.find((m) => expectedOn(state.meta, m.entry, now) && m.entry.status === "valid");
-      return driveOutcome(state, (today ?? matches[0])?.entry as AccessListEntry, now);
+  feed(
+    state: StaffState,
+    groups: readonly PlateGroup[],
+    now: Date = clockNow(),
+    confirmed = false,
+  ): DriveOutcome | null {
+    if (!groups.length) return null;
+    const matched = groups.map((g) => ({ group: g, matches: driveLookup(state, g.plates) }));
+    const participants = matched.filter((m) => m.matches.length > 0);
+    const distinct = new Map<string, AccessListEntry>();
+    for (const p of participants) {
+      const entry = preferred(state, p.matches, now);
+      if (entry) distinct.set(entry.passId, entry);
     }
-    if (matches.length === 0 && (repeated || confirmed)) {
+    if (distinct.size > 1) {
       this.last = null;
-      return { kind: "unknown" };
+      return { kind: "choose", entries: [...distinct.values()] };
     }
-    return null;
+    const target = participants[0];
+    const entry = target ? preferred(state, target.matches, now) : undefined;
+    const key = entry ? `pass:${entry.passId}` : `plate:${groups[0]?.plates[0] ?? ""}`;
+    if (!confirmed && this.last !== key) {
+      this.last = key;
+      return null;
+    }
+    this.last = null;
+    return entry ? driveOutcome(state, entry, now) : { kind: "unknown" };
   }
 }

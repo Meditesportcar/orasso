@@ -131,12 +131,26 @@ describe("decideScan avec un code tournant OR2", () => {
   });
 
   it("périmé après 61 s : refusé « Code périmé »", () => {
-    expect(decideScan(code, ctx(entry(), at(61)))).toEqual({ decision: "refused", reason: "expired", passId: PASS_ID });
+    expect(decideScan(code, ctx(entry(), at(61)))).toMatchObject({
+      decision: "refused",
+      reason: "expired",
+      passId: PASS_ID,
+    });
   });
 
-  it("pass inconnu ou liste sans secret : refusé « Clé inconnue », jamais « accepter quand même »", () => {
-    expect(decideScan(code, ctx(undefined))).toEqual({ decision: "refused", reason: "unknown_key", passId: PASS_ID });
-    expect(decideScan(code, ctx(entry({ otpSecret: null })))).toMatchObject({ reason: "unknown_key" });
+  it("périmé au MAC valide : l'écart avec l'heure du staff est rendu (téléphone en avance ou en retard)", () => {
+    // Code fabriqué par un téléphone en avance de 2 min, lu à l'heure juste.
+    const ahead = rotatingCodeAt(SECRET, 4242, PASS_ID, at(120));
+    expect(decideScan(ahead, ctx(entry()))).toMatchObject({ reason: "expired", offsetSeconds: 120 });
+    expect(decideScan(code, ctx(entry(), at(125)))).toMatchObject({ reason: "expired", offsetSeconds: -120 });
+  });
+
+  it("pass inconnu ou liste sans secret : « absent de la liste » non vérifié (recours du super staff)", () => {
+    expect(decideScan(code, ctx(undefined))).toEqual({ decision: "unknown_pass", passId: PASS_ID, unverified: true });
+    expect(decideScan(code, ctx(entry({ otpSecret: null })))).toMatchObject({
+      decision: "unknown_pass",
+      unverified: true,
+    });
   });
 
   it("pass révoqué : refusé avec son motif", () => {
@@ -152,12 +166,14 @@ describe("decideScan avec un code tournant OR2", () => {
     expect(decideScan(code, { ...ctx(entry()), now: undefined })).toMatchObject({ reason: "unknown_qr" });
   });
 
-  it("l'OR1 reste accepté à côté de l'OR2", () => {
+  it("l'OR1 n'est accepté qu'avec `acceptLegacy` (jusqu'au lot 58)", () => {
     const { privateKey, publicKey } = generateKeyPairSync("ed25519");
     const raw = new Uint8Array(publicKey.export({ format: "der", type: "spki" }).subarray(-32));
     const message = encodePassMessage({ kid: 1, eventNo: 4242, passId: PASS_ID });
     const or1 = encodePassPayload(message, new Uint8Array(sign(null, message, privateKey)));
-    const decision = decideScan(or1, { ...ctx(entry()), keys: new Map([[1, raw]]), verify: () => true });
-    expect(decision).toMatchObject({ decision: "ok", passId: PASS_ID });
+    const legacy = { ...ctx(entry()), keys: new Map([[1, raw]]), verify: () => true };
+    expect(decideScan(or1, { ...legacy, acceptLegacy: true })).toMatchObject({ decision: "ok", passId: PASS_ID });
+    // Sans `acceptLegacy` (après le lot 58) : refusé « Ancien QR ».
+    expect(decideScan(or1, legacy)).toEqual({ decision: "refused", reason: "legacy_qr", passId: null });
   });
 });

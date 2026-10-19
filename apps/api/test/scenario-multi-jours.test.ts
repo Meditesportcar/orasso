@@ -232,7 +232,14 @@ describe("événement sur plusieurs jours (lot 26)", () => {
       sync.entries.map((e: LocalAccessEntry) => [e.passId, e] as const),
     );
     const scan = (payload: string, now: Date, list = entries) =>
-      decideScan(payload, { eventNo: sync.event.eventNo, keys, verify, findEntry: (id) => list.get(id), now });
+      decideScan(payload, {
+        eventNo: sync.event.eventNo,
+        keys,
+        verify,
+        findEntry: (id) => list.get(id),
+        now,
+        acceptLegacy: true,
+      });
     const dPayload = await payloadOf(D);
     const aPayload = await payloadOf(A);
     expect(scan(dPayload, paris(3, 14, 10))).toMatchObject({

@@ -25,7 +25,7 @@ import { WeatherWidget } from "@/features/WeatherWidget";
 import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
-import { nowMs } from "@/lib/clock";
+import { serverSkewAt } from "@/lib/clock";
 import { formatDay, formatDayHour, formatDuration, formatHour, formatStamp } from "@/lib/format";
 import { jourJOpensAt, jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, loadOtpSecret, refreshKit } from "@/lib/kits";
@@ -166,7 +166,9 @@ export default function JourJ() {
   const place = [kit.event.addressLine, [kit.event.postalCode, kit.event.city].filter(Boolean).join(" ")]
     .filter(Boolean)
     .join(", ");
-  const stale = nowMs() - Date.parse(kit.savedAt) > STALE_MS;
+  // Dernière mesure de l'heure du serveur (en-tête `Date`, relecture du lot 48) : jamais, ou il y a plus de 24 h.
+  const skewAt = serverSkewAt();
+  const stale = skewAt === null || Date.now() - skewAt > STALE_MS;
   // Kit d'avant le lot 48 pas encore rafraîchi (pas de secret) : l'ancien QR statique, toujours accepté par le staff
   // jusqu'au lot 58, plutôt que rien à présenter à l'entrée.
   const qrValue = rotating.code ?? kit.pass.payload;

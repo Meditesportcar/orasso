@@ -23,6 +23,7 @@ import {
   formatDayDate,
   localScanDecisionLabels,
   type ScanDecision,
+  unverifiedScanLabels,
 } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
@@ -36,7 +37,7 @@ import { ExpressSheet } from "@/features/staff/ExpressSheet";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock, pointedResult, resultOf, resultProps, type ShownResult, vibrate } from "@/features/staff/result";
 import { SearchSheet } from "@/features/staff/SearchSheet";
-import { now as clockNow } from "@/lib/clock";
+import { serverNow } from "@/lib/clock";
 import { ed25519Verify } from "@/lib/staff/crypto";
 import { counters, decideLocal, ScanGate } from "@/lib/staff/model";
 import { clearWriteError, getWriteError, newId, trustedKeysNow } from "@/lib/staff/runtime";
@@ -58,12 +59,15 @@ export default function Scan() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId, state } = useStaffEvent(id);
+  const superStaff = state?.meta.myRoles.includes("super_staff") ?? false;
   const [permission, requestPermission] = useCameraPermissions();
   const gate = useRef(new ScanGate(3_000));
   const [result, setResult] = useState<ShownResult | null>(null);
   const [last, setLast] = useState<ShownResult | null>(null);
-  const [unknown, setUnknown] = useState<{ passId: string; payload: string } | null>(null);
-  const unknownRef = useRef<{ passId: string; payload: string } | null>(null);
+  // `unverified` (relecture du lot 48) : code tournant d'un pass absent de la liste, impossible à vérifier hors ligne.
+  type Unknown = { passId: string; payload: string; unverified?: boolean };
+  const [unknown, setUnknown] = useState<Unknown | null>(null);
+  const unknownRef = useRef<Unknown | null>(null);
   // Lot 26 : QR valable un autre jour (événement sur plusieurs jours) : refusé, ou « Accepter quand même ».
   type OtherDay = { decision: Extract<ScanDecision, { decision: "refused" }>; payload: string };
   const [otherDay, setOtherDay] = useState<OtherDay | null>(null);
@@ -101,7 +105,7 @@ export default function Scan() {
       const detectedAt = performance.now();
       if (!state || !userId) return;
       if (!gate.current.accept(payload, Date.now())) return;
-      const decision = decideLocal(state, payload, trustedKeysNow() ?? new Map(), ed25519Verify, clockNow());
+      const decision = decideLocal(state, payload, trustedKeysNow() ?? new Map(), ed25519Verify, serverNow());
       // Un panneau « autre jour » laissé sans réponse compte comme refusé.
       const previousDay = otherDayRef.current;
       if (previousDay) {
@@ -116,12 +120,18 @@ export default function Scan() {
         vibrate("refused");
         return;
       }
+      if (decision.decision === "unknown_pass" && decision.unverified && !superStaff) {
+        // Code tournant non vérifiable : seul le super staff peut l'accepter quand même ; les autres le refusent.
+        recordScan(state, userId, decision, payload);
+        show({ key: newId(), state: "refused", reason: unverifiedScanLabels.refused, detectedAt });
+        return;
+      }
       if (decision.decision === "unknown_pass") {
         // Un QR « absent de la liste » laissé sans réponse compte comme refusé.
         const previous = unknownRef.current;
         if (previous)
           recordScan(state, userId, { decision: "unknown_pass", passId: previous.passId }, previous.payload);
-        unknownRef.current = { passId: decision.passId, payload };
+        unknownRef.current = { passId: decision.passId, payload, unverified: decision.unverified };
         setUnknown(unknownRef.current);
         playScanSound("refused");
         vibrate("refused");
@@ -130,7 +140,7 @@ export default function Scan() {
       recordScan(state, userId, decision, payload);
       show(resultOf(decision, newId(), detectedAt));
     },
-    [state, userId, show],
+    [state, userId, show, superStaff],
   );
 
   // Temps entre la détection et le premier rendu du résultat (image suivante).
@@ -169,7 +179,12 @@ export default function Scan() {
     recordScan(
       state,
       userId,
-      { decision: accept ? "override" : "unknown_pass", passId: unknown.passId },
+      {
+        decision: accept ? "override" : "unknown_pass",
+        passId: unknown.passId,
+        // Entrée non vérifiée (code tournant sans secret) : le serveur la rapproche à la synchro.
+        ...(accept && unknown.unverified ? { reason: "unverified_otp" } : {}),
+      },
       unknown.payload,
     );
     show(
@@ -302,12 +317,14 @@ export default function Scan() {
             </View>
           </Plate>
         ) : unknown ? (
-          <Plate style={styles.unknown}>
+          <Plate style={styles.unknown} testID="scan-unknown">
             <Text variant="bodyStrong" color={c.plateInk}>
-              {localScanDecisionLabels.unknown_pass}
+              {unknown.unverified ? unverifiedScanLabels.title : localScanDecisionLabels.unknown_pass}
             </Text>
             <Text variant="meta" color={c.plateMuted}>
-              QR signé d'Orasso, absent de la liste du téléphone (inscription express d'un collègue ?).
+              {unknown.unverified
+                ? unverifiedScanLabels.superStaff
+                : "QR signé d'Orasso, absent de la liste du téléphone (inscription express d'un collègue ?)."}
             </Text>
             <View style={styles.row}>
               <Button

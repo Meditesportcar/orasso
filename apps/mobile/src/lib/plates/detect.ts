@@ -6,54 +6,13 @@
 import type { PlateRect } from "@orasso/shared";
 
 import { recognizeText, type TextFrame, type TextLineResult } from "./mlkit";
+import { normalizePlateText, plateReadings } from "./recognize";
 
 /** Agrandissement du rectangle détecté : la plaque entière, bords compris, est floutée. */
 export const PLATE_GROW = 0.15;
 
-/** Lettres et chiffres que la lecture confond le plus souvent (photo de biais, reflets). */
-const AS_DIGIT: Record<string, string> = {
-  O: "0",
-  Q: "0",
-  D: "0",
-  I: "1",
-  L: "1",
-  Z: "2",
-  S: "5",
-  G: "6",
-  B: "8",
-  T: "7",
-};
-const AS_LETTER: Record<string, string> = { "0": "O", "1": "I", "2": "Z", "5": "S", "6": "G", "8": "B", "7": "T" };
-
-/** Majuscules, lettres et chiffres seulement (« ga-662 ks » → « GA662KS »). */
-export const normalizePlateText = (text: string): string =>
-  text
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
-
-/** Le caractère convient-il à la classe (L lettre, D chiffre), confusions tolérées ? */
-function fits(ch: string, cls: "L" | "D"): boolean {
-  if (cls === "D") return /[0-9]/.test(ch) || ch in AS_DIGIT;
-  return /[A-Z]/.test(ch) || ch in AS_LETTER;
-}
-
-function fitsShape(s: string, shape: string): boolean {
-  if (s.length !== shape.length) return false;
-  for (let i = 0; i < s.length; i++) if (!fits(s[i] as string, shape[i] as "L" | "D")) return false;
-  // Au moins un vrai chiffre et une vraie lettre : « OOOOOOO » ou « 8888888 » ne sont pas des plaques.
-  return /[0-9]/.test(s) && /[A-Z]/.test(s);
-}
-
-/** Formes FNI : 1 à 4 chiffres, 1 à 3 lettres, département sur 2 chiffres (ou 3 outre-mer), 2A / 2B pour la Corse. */
-const FNI_SHAPES: string[] = [];
-for (let d = 1; d <= 4; d++) {
-  for (let l = 1; l <= 3; l++) {
-    for (const dept of ["DD", "DDD", "DL"]) FNI_SHAPES.push(`${"D".repeat(d)}${"L".repeat(l)}${dept}`);
-  }
-}
-const SIV_SHAPE = "LLDDDLL";
+// Analyseur des formes SIV / FNI : celui de `recognize.ts`, partagé avec l'accueil drive (lecture large ici).
+export { normalizePlateText };
 
 /**
  * Le texte normalisé ressemble-t-il à une plaque ? SIV (7 caractères) ou FNI (5 à 10), confusions tolérées. Le « F »
@@ -68,8 +27,7 @@ export function looksLikePlate(raw: string): boolean {
     if (c.length === 9 || c.length === 10) candidates.add(c.slice(0, 7)); // « GA662KS66 », « GA662KS974 »
   }
   for (const c of candidates) {
-    if (fitsShape(c, SIV_SHAPE)) return true;
-    if (c.length >= 5 && FNI_SHAPES.some((shape) => fitsShape(c, shape))) return true;
+    if (plateReadings(c, "wide").length > 0) return true;
   }
   return false;
 }

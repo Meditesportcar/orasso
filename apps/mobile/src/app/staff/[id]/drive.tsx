@@ -5,8 +5,18 @@
 // plaque en clair stockée ni envoyée. Issues de secours en bas : plaque ou pseudo, express, sans scan.
 // Web (recette) : la plaque se tape au clavier à la place de la caméra.
 
-import { AppBar, Button, Ground, ScanResult, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { driveLabels as L, scanRefusalLabels } from "@orasso/shared";
+import {
+  AppBar,
+  Button,
+  Ground,
+  Plate,
+  ScanResult,
+  Text,
+  TextField,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
+import { type AccessListEntry, driveLabels as L, scanRefusalLabels } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
@@ -17,10 +27,10 @@ import { pointEntry } from "@/features/staff/actions";
 import { ExpressSheet } from "@/features/staff/ExpressSheet";
 import { clock, pointedResult, resultProps, type ShownResult, vibrate } from "@/features/staff/result";
 import { SearchSheet } from "@/features/staff/SearchSheet";
-import { now as clockNow } from "@/lib/clock";
+import { serverNow } from "@/lib/clock";
 import { recognizeText } from "@/lib/plates/mlkit";
-import { extractPlates } from "@/lib/plates/recognize";
-import { DriveGate, type DriveOutcome } from "@/lib/staff/drive";
+import { type PlateGroup, plateGroups } from "@/lib/plates/recognize";
+import { DriveGate, type DriveOutcome, driveOutcome } from "@/lib/staff/drive";
 import { counters } from "@/lib/staff/model";
 import { deleteLocalPhoto } from "@/lib/staff/photo";
 import { newId } from "@/lib/staff/runtime";
@@ -55,6 +65,8 @@ export default function Drive() {
   const [last, setLast] = useState<ShownResult | null>(null);
   const [sheet, setSheet] = useState<"search" | "express" | null>(null);
   const [typed, setTyped] = useState("");
+  // Deux plaques de participants sur la même photo : le staff choisit (relecture du lot 48).
+  const [choice, setChoice] = useState<AccessListEntry[] | null>(null);
 
   const show = useCallback((r: ShownResult) => {
     setResult(r);
@@ -79,6 +91,8 @@ export default function Drive() {
               ? scanRefusalLabels[outcome.entry.revokedReason]
               : L.revoked;
         show({ key: newId(), state: "refused", reason, pseudo: outcome.entry.pseudo });
+      } else if (outcome.kind === "choose") {
+        setChoice(outcome.entries);
       } else {
         show({ key: newId(), state: "refused", reason: L.unknown });
       }
@@ -86,12 +100,13 @@ export default function Drive() {
     [state, userId, show],
   );
 
-  /** Plaques candidates d'une lecture (caméra, ou clavier : `confirmed`). */
+  /** Plaques d'une lecture, de la plus proche à la plus lointaine (caméra, ou clavier : `confirmed`). */
   const onPlates = useCallback(
-    (plates: string[], confirmed: boolean) => {
+    (groups: PlateGroup[], confirmed: boolean) => {
       if (!state || paused) return;
-      if (plates[0]) setRead(shown(plates[0]));
-      const outcome = gate.current.feed(state, plates, clockNow(), confirmed);
+      const head = groups[0]?.plates[0];
+      if (head) setRead(shown(head));
+      const outcome = gate.current.feed(state, groups, serverNow(), confirmed);
       if (outcome) settle(outcome);
     },
     [state, paused, settle],
@@ -117,8 +132,7 @@ export default function Drive() {
         uri = photo?.uri;
         // Lecture ML Kit du lot 51 (lib/plates/mlkit) : une ligne lue par ligne de texte, jamais deux lignes assemblées.
         const lines = uri ? await recognizeText(uri) : null;
-        const text = lines ? lines.map((l) => l.text).join("\n") : null;
-        if (alive && text) onPlates(extractPlates(text), false);
+        if (alive && lines) onPlates(plateGroups(lines), false);
       } catch {
         // Photo manquée (caméra occupée) : la suivante part dans 900 ms.
       } finally {
@@ -134,6 +148,7 @@ export default function Drive() {
 
   const next = () => {
     gate.current.reset();
+    setChoice(null);
     setRead(null);
     setLast(null);
     setPaused(false);
@@ -186,7 +201,28 @@ export default function Drive() {
             </Button>
           </View>
         ) : null}
-        {last ? (
+        {choice ? (
+          <Plate style={styles.choice} testID="drive-choice">
+            <Text variant="bodyStrong" color={c.plateInk}>
+              {L.choose}
+            </Text>
+            {choice.map((entry) => (
+              <Button
+                key={entry.passId}
+                variant="plate"
+                icon="vehicle"
+                fullWidth
+                onPress={() => {
+                  if (!state) return;
+                  setChoice(null);
+                  settle(driveOutcome(state, entry, serverNow()));
+                }}
+              >
+                {[entry.vehicleLabel, entry.pseudo].filter(Boolean).join(" · ")}
+              </Button>
+            ))}
+          </Plate>
+        ) : last ? (
           <View style={styles.lastCard}>
             <ScanResult {...resultProps(last)} settled animated={false} sound={false} />
           </View>
@@ -203,7 +239,7 @@ export default function Drive() {
             autoCorrect={false}
             onSubmitEditing={(e) => {
               // Le texte de l'évènement : l'état `typed` peut ne pas être encore à jour à la validation.
-              onPlates(extractPlates(e.nativeEvent.text ?? typed), true);
+              onPlates(plateGroups([{ text: e.nativeEvent.text ?? typed }]), true);
               setTyped("");
             }}
             testID="drive-typed"
@@ -288,6 +324,7 @@ const styles = StyleSheet.create({
   center: { textAlign: "center" },
   permission: { position: "absolute", top: space3, left: space3, right: space3 },
   lastCard: { margin: space2 },
+  choice: { margin: space2, gap: space2, padding: space3 },
   typed: { paddingHorizontal: space3, paddingTop: space2 },
   actions: { gap: space2, paddingHorizontal: space3, paddingTop: space3 },
   row: { flexDirection: "row", gap: space2 },

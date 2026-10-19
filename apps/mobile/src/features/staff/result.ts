@@ -4,6 +4,7 @@
 import type { ScanResultProps } from "@orasso/design-system/native";
 import {
   type AccessListEntry,
+  expiredScanLabel,
   formatDayDate,
   localDate,
   type ScanDecision,
@@ -52,7 +53,12 @@ export function resultOf(
       : clock(decision.checkedInAt);
     return { key, detectedAt, state: "duplicate", time, ...entryView(decision.entry) };
   }
-  return { key, detectedAt, state: "refused", reason: scanRefusalLabels[decision.reason] };
+  // Relecture du lot 48 : code tournant périmé au MAC valide → l'écart d'horloge et le pointage à la main.
+  const reason =
+    decision.reason === "expired" && decision.offsetSeconds !== undefined
+      ? expiredScanLabel(decision.offsetSeconds)
+      : scanRefusalLabels[decision.reason];
+  return { key, detectedAt, state: "refused", reason };
 }
 
 /**

@@ -42,6 +42,7 @@ const ACCEPT: Decide = { decision: "accept", sendReasons: true, note: null };
 
 let clock: ReturnType<typeof useClock>;
 let orga: TestUser;
+let structureId: string;
 let theo: TestUser;
 let theoV: Viewer;
 let eventId: string;
@@ -53,7 +54,7 @@ beforeEach(async () => {
   const ref = await seedReference();
   orga = await signUp("Damien_66", { twoFactor: true });
   const orgaV = await viewerOf(orga);
-  const structureId = (await createStructure(orga.id)).id;
+  structureId = (await createStructure(orga.id)).id;
   theo = await signUp("Theo_66");
   await addMember(structureId, theo.id, "staff", ["scan"]);
   theoV = await viewerOf(theo);
@@ -202,5 +203,62 @@ describe("accueil drive", () => {
     expect(row?.method).toBe("drive");
     const report = (await call(orga, "GET", `/events/${eventId}/scan-report`)).json;
     expect(report.totals.byMethod.drive).toBe(2);
+  });
+});
+
+describe("secrets et pointage réservés aux rôles qui pointent (relecture du lot 48)", () => {
+  it("staff scan : secret reçu ; staff placement : pas de secret, pointage refusé", async () => {
+    const scan = (await call(theo, "GET", `/events/${eventId}/staff/sync`)).json;
+    for (const e of scan.entries) expect(e.otpSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    const ines = await signUp("Ines_66");
+    await addMember(structureId, ines.id, "staff", ["placement"]);
+    const sync = await call(ines, "GET", `/events/${eventId}/staff/sync`);
+    expect(sync.status).toBe(200);
+    for (const e of sync.json.entries) expect(e.otpSecret ?? null).toBeNull();
+    const delta = await call(
+      ines,
+      "GET",
+      `/events/${eventId}/staff/sync?since=${encodeURIComponent("2020-01-01T00:00:00Z")}`,
+    );
+    for (const e of delta.json.entries) expect(e.otpSecret ?? null).toBeNull();
+
+    const manual = await call(ines, "POST", `/events/${eventId}/checkins`, {
+      applicationId: people[0]!.applicationId,
+      method: "manual",
+    });
+    expect(manual.status).toBe(403);
+    const [d] = await db.insert(devices).values({ userId: ines.id, platform: "android", name: "Pixel" }).returning();
+    const batch = await call(ines, "POST", `/events/${eventId}/scans`, {
+      deviceId: d!.id,
+      items: [
+        {
+          kind: "manual",
+          id: randomUUID(),
+          applicationId: people[0]!.applicationId,
+          note: null,
+          scannedAt: paris(10, 17, 9, 29),
+        },
+      ],
+    });
+    expect(batch.status).toBe(403);
+    const plates = await call(ines, "POST", `/events/${eventId}/checkins/by-plates`, { plates: ["AA-001-ZZ"] });
+    expect(plates.status).toBe(403);
+    // L'organisateur garde tout.
+    const orgaSync = (await call(orga, "GET", `/events/${eventId}/staff/sync`)).json;
+    for (const e of orgaSync.entries) expect(e.otpSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
+  it("première synchro : les secrets manquants posés en une requête, sans écraser un secret existant", async () => {
+    const kenji = people[0]!;
+    const kept = (await call(kenji.u, "GET", `/applications/${kenji.applicationId}/pass`)).json.otpSecret;
+    await db
+      .update(accessPasses)
+      .set({ otpSecret: null })
+      .where(eq(accessPasses.applicationId, people[1]!.applicationId));
+    const sync = (await call(theo, "GET", `/events/${eventId}/staff/sync`)).json;
+    const secrets = sync.entries.map((e: { otpSecret: string }) => e.otpSecret);
+    expect(new Set(secrets).size).toBe(2);
+    expect(secrets).toContain(kept);
   });
 });

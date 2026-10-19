@@ -3,7 +3,13 @@
 // tous dans le jeu alphanumérique du QR (version 6, correction M).
 import { localDate } from "../rules/eventDays";
 import { base32Decode, base32Encode, base64UrlDecode, bytesToUuid, concatBytes, uuidToBytes } from "./bytes";
-import { decodeRotatingPayload, ROTATING_PREFIX, verifyRotatingCode } from "./rotating";
+import {
+  decodeRotatingPayload,
+  ROTATING_PREFIX,
+  ROTATING_STEP_SECONDS,
+  rotatingSlot,
+  verifyRotatingCode,
+} from "./rotating";
 
 export const PASS_PREFIX = "OR1";
 export const PASS_VERSION = 1;
@@ -126,6 +132,7 @@ export type ScanRefusal =
   | "unknown_key"
   | "forged"
   | "expired"
+  | "legacy_qr"
   | "other_event"
   | "other_day"
   | PassRevokedReason;
@@ -138,8 +145,21 @@ export type ScanDecision =
       /** « Autre jour » (lot 26) : l'entrée et son jour, pour « Accepter quand même ». */
       entry?: LocalAccessEntry;
       dayDate?: string;
+      /**
+       * Code tournant périmé au MAC valide (relecture du lot 48) : écart du code avec l'heure du staff, en secondes
+       * (positif : le téléphone du participant est en avance). Sert à dire « téléphone en avance de 2 min ».
+       */
+      offsetSeconds?: number;
     }
-  | { decision: "unknown_pass"; passId: string }
+  | {
+      decision: "unknown_pass";
+      passId: string;
+      /**
+       * Relecture du lot 48 : code tournant d'un pass absent de la liste (ou d'une liste sans secret) : impossible à
+       * vérifier hors ligne. « Accepter quand même » est réservé au super staff et enregistré comme entrée non vérifiée.
+       */
+      unverified?: true;
+    }
   | { decision: "already"; passId: string; entry: LocalAccessEntry; checkedInAt: string }
   | { decision: "ok"; passId: string; entry: LocalAccessEntry };
 
@@ -162,9 +182,17 @@ export function decideScan(
      * Lot 48 : heure de vérification du code tournant `OR2` (sans elle, un `OR2` est refusé « QR inconnu »).
      */
     now?: Date;
+    /**
+     * Ancien QR statique `OR1` accepté (relecture du lot 48). Activé par l'appli du staff jusqu'au lot 58 (19/10/2026 :
+     * le lot 58 le coupe, avec le retrait de l'`OR1` du kit) ; absent ou faux : `OR1` refusé « Ancien QR ».
+     */
+    acceptLegacy?: boolean;
   },
 ): ScanDecision {
   if (payload.trim().startsWith(ROTATING_PREFIX)) return decideRotating(payload, ctx);
+  if (!ctx.acceptLegacy && payload.trim().startsWith(PASS_PREFIX)) {
+    return { decision: "refused", reason: "legacy_qr", passId: null };
+  }
   const check = verifyPassPayload(payload, ctx.keys, ctx.verify);
   if (!check.ok) {
     const reason = ({ malformed: "unknown_qr", unknown_key: "unknown_key", bad_signature: "forged" } as const)[
@@ -181,8 +209,8 @@ export function decideScan(
 
 /**
  * Code tournant `OR2` : pass cherché dans la liste par son identifiant, MAC vérifié avec son secret, créneau à ±1.
- * Un pass absent de la liste (ou sans secret) ne peut pas être vérifié : refusé « Clé inconnue : synchronise », sans
- * « Accepter quand même » (rien ne prouve que le code vient d'Orasso).
+ * Un pass absent de la liste (ou sans secret) ne peut pas être vérifié : `unknown_pass` non vérifié (le super staff
+ * peut l'accepter quand même, entrée rapprochée par le serveur à la synchro). Périmé : l'écart est rendu.
  */
 function decideRotating(
   payload: string,
@@ -197,11 +225,14 @@ function decideRotating(
     return { decision: "refused", reason: entry.revokedReason ?? "cancelled", passId: code.passId };
   }
   const secret = entry?.otpSecret ? base64UrlDecode(entry.otpSecret) : null;
-  if (!entry || !secret) return { decision: "refused", reason: "unknown_key", passId: code.passId };
+  if (!entry || !secret) return { decision: "unknown_pass", passId: code.passId, unverified: true };
   const check = verifyRotatingCode(payload, secret, ctx.now);
   if (!check.ok) {
-    const reason = check.reason === "expired" ? "expired" : check.reason === "bad_mac" ? "forged" : "unknown_qr";
-    return { decision: "refused", reason, passId: code.passId };
+    if (check.reason === "expired") {
+      const offsetSeconds = (code.slot - rotatingSlot(ctx.now)) * ROTATING_STEP_SECONDS;
+      return { decision: "refused", reason: "expired", passId: code.passId, offsetSeconds };
+    }
+    return { decision: "refused", reason: check.reason === "bad_mac" ? "forged" : "unknown_qr", passId: code.passId };
   }
   return decideEntry(code.passId, entry, ctx.now);
 }

@@ -1,4 +1,5 @@
-// Code tournant `OR2` du jour J (lot 48, prototype `s-qr`) : recalculé chaque seconde à l'heure d'Orasso (lib/clock.ts),
+// Code tournant `OR2` du jour J (lot 48, prototype `s-qr`) : recalculé chaque seconde à l'heure du serveur estimée
+// (`serverNow`, lib/clock.ts : décalage mesuré par l'en-tête `Date` de l'API),
 // le QR ne se redessine qu'au changement de créneau (toutes les 20 s). Tout se passe sur le téléphone, sans réseau.
 import {
   base64UrlDecode,
@@ -10,7 +11,7 @@ import {
 } from "@orasso/shared";
 import { useEffect, useMemo, useState } from "react";
 
-import { nowMs } from "@/lib/clock";
+import { serverNowMs } from "@/lib/clock";
 
 export type RotatingCode = {
   /** Charge utile du QR ; `null` sans secret (kit d'avant le lot 48 pas encore rafraîchi). */
@@ -23,7 +24,7 @@ export type RotatingCode = {
 };
 
 export function useRotatingCode(secret: string | null, eventNo: number | undefined, passId: string): RotatingCode {
-  const [at, setAt] = useState(nowMs);
+  const [at, setAt] = useState(serverNowMs);
   useEffect(() => {
     const timer = setInterval(() => setAt(nowMs()), 1000);
     return () => clearInterval(timer);

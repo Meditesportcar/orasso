@@ -21,7 +21,7 @@ import {
   type TicketScanResultView,
   type VisitorDelta,
 } from "@orasso/shared";
-import { now as clockNow } from "../clock";
+import { now as clockNow, serverNow } from "../clock";
 
 import { plateHashOf } from "./crypto";
 
@@ -300,13 +300,15 @@ export function decideLocal(
   keys: ReadonlyMap<number, Uint8Array>,
   verify: Ed25519Verify,
   /** Lot 26 : heure du scan (règle « Autre jour » d'un événement sur plusieurs jours). */
-  now: Date = clockNow(),
+  now: Date = serverNow(),
 ): ScanDecision {
   return decideScan(payload, {
     eventNo: state.meta.eventNo,
     keys,
     verify,
     now,
+    // Ancien QR statique `OR1` accepté jusqu'au lot 58 (relecture du lot 48, 19/10/2026) : le lot 58 met `false`.
+    acceptLegacy: true,
     findEntry: (passId) => {
       const entry = state.entries.get(passId);
       if (entry) return { ...entry, checkedInAt: checkedInAt(state, entry) };
@@ -338,8 +340,15 @@ export function scanAction(
 ): { item: ScanItemWire; checkin: LocalCheckin | null } {
   const passId = decision.passId;
   // Lot 26 : « Accepter quand même » un QR d'un autre jour garde la raison (`other_day`) pour le rapport.
+  // Relecture du lot 48 : code tournant non vérifiable (pass absent de la liste) → `unverified_otp` au rapport.
   const reason =
-    decision.decision === "refused" ? decision.reason : "reason" in decision ? (decision.reason ?? null) : null;
+    decision.decision === "refused"
+      ? decision.reason
+      : "reason" in decision
+        ? (decision.reason ?? null)
+        : "unverified" in decision && decision.unverified
+          ? "unverified_otp"
+          : null;
   const zoneCode = entry?.zoneCode ?? null;
   const item: ScanItemWire = {
     kind: "scan",

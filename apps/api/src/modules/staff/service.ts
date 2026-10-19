@@ -6,6 +6,7 @@ import {
   staffRoles as ALL_STAFF_ROLES,
   accessListSigningText,
   type CheckinMethod,
+  checkinStaffRoles,
   type EventStaffMember,
   type EventStaffUpdate,
   fromWallTime,
@@ -452,11 +453,15 @@ async function accessEntries(
     .leftJoin(checkins, eq(checkins.applicationId, applications.id))
     .where(eq(accessPasses.eventId, event.id))
     .orderBy(asc(profiles.pseudo), asc(accessPasses.issuedAt));
-  // Lot 48 : secret du code tournant OR2 de chaque pass valide (généré ici pour un pass antérieur au lot 48).
-  const otpSecrets = await ensureOtpSecrets(
-    db,
-    rows.map((r) => r.pass),
-  );
+  // Lot 48 : secret du code tournant OR2 de chaque pass valide (généré ici pour un pass antérieur au lot 48), envoyé
+  // seulement aux rôles qui pointent et à l'organisateur (relecture : qui détient le secret peut fabriquer le code).
+  const withSecrets = organizer || access.roles.some((r) => checkinStaffRoles.includes(r));
+  const otpSecrets = withSecrets
+    ? await ensureOtpSecrets(
+        db,
+        rows.map((r) => r.pass),
+      )
+    : new Map<string, Buffer>();
   const vehicleIds = [...new Set(rows.flatMap((r) => (r.app.vehicleId ? [r.app.vehicleId] : [])))];
   const vehicles = new Map((await vehiclesRepo.findFullByIds(vehicleIds)).map((x) => [x.id, x]));
   const providers = await loadProviders(

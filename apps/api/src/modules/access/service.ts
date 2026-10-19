@@ -12,7 +12,7 @@ import {
   type PassRevokedReason,
   ROTATING_SECRET_LENGTH,
 } from "@orasso/shared";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { accessPasses, applications, events, mediaProfiles, signingKeys, tickets } from "../../db/schema";
@@ -46,13 +46,16 @@ export async function ensureOtpSecrets(
     if (p.otpSecret) secrets.set(p.id, p.otpSecret);
     else if (!p.revokedAt) missing.push(p.id);
   }
-  for (const id of missing) {
-    await ex
-      .update(accessPasses)
-      .set({ otpSecret: newOtpSecret() })
-      .where(and(eq(accessPasses.id, id), isNull(accessPasses.otpSecret)));
-  }
   if (missing.length) {
+    // Une seule requête, un secret distinct par ligne ; jamais d'écrasement d'un secret posé entre-temps.
+    const values = sql.join(
+      missing.map((id) => sql`(${id}::uuid, ${newOtpSecret()}::bytea)`),
+      sql`, `,
+    );
+    await ex.execute(sql`
+      update access_passes p set otp_secret = v.secret, updated_at = now()
+      from (values ${values}) as v(id, secret)
+      where p.id = v.id and p.otp_secret is null`);
     const rows = await ex
       .select({ id: accessPasses.id, otpSecret: accessPasses.otpSecret })
       .from(accessPasses)

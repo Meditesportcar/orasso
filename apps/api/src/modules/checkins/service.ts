@@ -4,6 +4,7 @@ import {
   type CheckinListItem,
   type CheckinMethod,
   type CheckinResult,
+  checkinStaffRoles,
   dayFor,
   isMultiDay,
   type LiveCounters,
@@ -16,6 +17,7 @@ import {
   type ScanBatchResult,
   type ScanReport,
   type ScanServerResult,
+  type StaffRole,
   settleAt,
   staffModeOpensAt,
   type VendorTypeCode,
@@ -440,10 +442,10 @@ async function assertEventDay(eventId: string, dayId: string | undefined) {
   if (!(await daysRepo.list(eventId)).some((d) => d.id === dayId)) throw notFound("Jour introuvable");
 }
 
-async function staffEvent(v: Viewer, eventId: string) {
+async function staffEvent(v: Viewer, eventId: string, roles?: readonly StaffRole[]) {
   const event = await eventsRepo.byId(eventId);
   if (event.status === "draft") throw notFound("Événement introuvable");
-  const access = await staffService.requireEventStaff(v, event);
+  const access = await staffService.requireEventStaff(v, event, roles);
   return { event, access };
 }
 
@@ -453,7 +455,7 @@ export const checkinsService = {
    * son état sans rien écrire. Chaque lecture est attribuée à l'appareil et au staff qui l'envoie.
    */
   async receiveBatch(v: Viewer, eventId: string, batch: ScanBatch): Promise<{ results: ScanBatchResult[] }> {
-    const { event } = await staffEvent(v, eventId);
+    const { event } = await staffEvent(v, eventId, checkinStaffRoles);
     const device = await db.query.devices.findFirst({ where: eq(devices.id, batch.deviceId) });
     if (!device || device.userId !== v.user.id || device.revokedAt) {
       throw validation("Appareil inconnu : enregistre-le d'abord (/me/devices)");
@@ -529,7 +531,7 @@ export const checkinsService = {
     eventId: string,
     input: { applicationId: string; method: "manual" | "plate" | "drive"; note: string | null },
   ): Promise<CheckinResult> {
-    const { event } = await staffEvent(v, eventId);
+    const { event } = await staffEvent(v, eventId, checkinStaffRoles);
     assertWritable(event);
     const created = await withTx(async (tx, after) => {
       await lockEventCheckins(tx, eventId);
@@ -559,7 +561,7 @@ export const checkinsService = {
    * aux véhicules des retenus. Les plaques sans correspondance sont renvoyées telles quelles.
    */
   async byPlates(v: Viewer, eventId: string, plates: string[]) {
-    const { event } = await staffEvent(v, eventId);
+    const { event } = await staffEvent(v, eventId, checkinStaffRoles);
     assertWritable(event);
     const wanted = new Map<string, string>();
     for (const p of plates) {

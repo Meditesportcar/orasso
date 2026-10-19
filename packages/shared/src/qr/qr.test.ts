@@ -152,6 +152,7 @@ describe("décision de scan hors ligne (decideScan)", () => {
     keys,
     verify: nodeVerify,
     findEntry: (id: string) => (found && id === found.passId ? found : undefined),
+    acceptLegacy: true,
   });
 
   it("OK avec la zone", () => {
