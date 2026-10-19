@@ -63,6 +63,8 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   const salon = events.data.find((e) => e.title.includes("Salon"));
   const nocturne = events.data.find((e) => e.title.includes("Nocturne de Canet"));
   expect(salon && nocturne).toBeTruthy();
+  // Une recette interrompue a pu laisser le Salon en Incertain : on repart du seed (Maintenu).
+  await apiCall(damien, "PATCH", `/events/${salon?.id}/outlook`, { outlook: "maintained" });
 
   // Un pilote retenu et pas encore entré : son QR, lu comme le ferait son téléphone.
   const list = await apiCall<{ applicationId: string; pseudo: string; checkedInAt: string | null }[]>(
@@ -162,7 +164,10 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   const remind = page.locator('[data-testid="orga-staff-remind"]:not([disabled])');
   if ((await remind.count()) > 0) {
     await remind.first().click();
-    await expect(page.getByText("Relance envoyée.")).toBeVisible({ timeout: 20_000 });
+    // Recette rejouée le même jour : l'API refuse une seconde relance (le bouton reste allumé côté appli).
+    await expect(
+      page.getByText("Relance envoyée.").or(page.getByText(/déjà été relancée aujourd'hui/)),
+    ).toBeVisible({ timeout: 20_000 });
   } else {
     expect(await page.getByTestId("orga-staff-remind").count()).toBeGreaterThan(0);
   }
