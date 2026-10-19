@@ -24,8 +24,11 @@ for (const theme of ["beton", "sable"] as const) {
       await expect(page.getByTestId(`profile-${key}`), key).toBeVisible();
     }
     await expect(page.getByTestId("profile-exhibitor")).toHaveAttribute("aria-pressed", "true");
-    await page.getByTestId("profile-pro").click();
-    await expect(page.getByTestId("profile-pro")).toHaveAttribute("aria-pressed", "true");
+    // Le site se réhydrate après le premier affichage : on retouche jusqu'à ce que le clic compte.
+    await expect(async () => {
+      await page.getByTestId("profile-pro").click();
+      await expect(page.getByTestId("profile-pro")).toHaveAttribute("aria-pressed", "true", { timeout: 1_500 });
+    }).toPass({ timeout: 30_000 });
 
     // Carte : 66 puis 11, textes du pro.
     await expect(page.getByTestId("dept-why")).toHaveText(
