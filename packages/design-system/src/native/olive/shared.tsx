@@ -17,6 +17,7 @@ import { brandArt } from "../brandArt";
 import { withAlpha } from "../color";
 import { duration, easings, park } from "../motionHooks";
 import { useTheme } from "../theme";
+import { useOliveScreenActive } from "./activity";
 import { AnimatedCar } from "./brandCar";
 
 const { carTop } = brandArt;
@@ -31,6 +32,19 @@ export const STAGE_COMPACT = 200;
 export const ORBIT = { radius: 92, squash: 0.78 } as const;
 /** Longueur de la voiture vue de dessus autour du O, en unités du monogramme. */
 export const CAR_UNITS = 36;
+/**
+ * Petites tailles (bouton, 24 px) : la voiture fait presque la moitié du O (8 px à 24 px) pour que le mouvement se
+ * voie, et elle prend l'encre du O (la moutarde disparaîtrait sur un bouton moutarde).
+ */
+export const CAR_UNITS_COMPACT = 64;
+/** En dessous de cette taille (px), l'indicateur passe en version compacte. */
+export const COMPACT_MAX = 32;
+/** L'anneau de progression de l'envoi, entre le O (135 × 104) et le drift (92 × 72 de rayon). */
+export const RING = { rx: 80, ry: 64 } as const;
+/** Périmètre approché d'une ellipse (Ramanujan), pour les pointillés de l'anneau. */
+export function ellipsePerimeter(rx: number, ry: number): number {
+  return Math.PI * (3 * (rx + ry) - Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));
+}
 const [monoX, monoY, monoW] = brandArt.viewBox;
 /** Centre du O dans le viewBox du monogramme. */
 export const O_CENTER = { x: monoX + monoW / 2, y: monoY + monoW / 2 } as const;
@@ -97,6 +111,16 @@ export function useAppActive(): boolean {
     return () => subscription.remove();
   }, []);
   return active;
+}
+
+/**
+ * Le O vivant et le fond peuvent bouger : appli au premier plan et écran affiché (OliveActivityProvider, alimenté par
+ * l'appli avec useIsFocused). Utilisé par chaque variante en plus de leur prop `paused`.
+ */
+export function useOliveActive(): boolean {
+  const app = useAppActive();
+  const screen = useOliveScreenActive();
+  return app && screen;
 }
 
 /**

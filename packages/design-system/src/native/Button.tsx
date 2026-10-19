@@ -6,8 +6,8 @@ import Animated from "react-native-reanimated";
 import type { IconName } from "../icons";
 import { withAlpha } from "./color";
 import { Icon } from "./Icon";
-import { Loader } from "./Loader";
 import { usePressScale } from "./motionHooks";
+import { OLoader } from "./olive/OLoader";
 import { Text } from "./text";
 import { radius, spacing, useTheme } from "./theme";
 
@@ -197,7 +197,7 @@ export function Button(props: ButtonProps) {
       ) : (
         <>
           {loading ? (
-            <Loader size={24} tone={variant === "primary" ? "light" : "dark"} />
+            <OLoader size={24} ink={ink} label={null} />
           ) : (
             icon && <Icon name={icon} size={iconSize(variant, layout)} color={ink} />
           )}

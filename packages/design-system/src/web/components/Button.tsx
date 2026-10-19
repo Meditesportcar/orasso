@@ -1,8 +1,8 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import type { IconName } from "../../icons";
-import { Loader } from "./Brand";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
+import { OLoader } from "./Olive";
 
 type DomProps = Omit<HTMLAttributes<HTMLElement>, "className" | "children"> & {
   type?: "button" | "submit" | "reset";
@@ -104,7 +104,12 @@ export function Button(props: ButtonProps) {
       <>
         {shortcut && <kbd className="o-button__key">{shortcut}</kbd>}
         {loading ? (
-          <Loader size={24} tone={variant === "primary" ? "light" : "dark"} />
+          <OLoader
+            size={24}
+            tone={variant === "primary" ? "light" : "dark"}
+            label={null}
+            className="o-button__loader"
+          />
         ) : (
           icon && <Icon name={icon} size={iconSize(variant, layout)} />
         )}

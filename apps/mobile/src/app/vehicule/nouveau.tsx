@@ -32,7 +32,7 @@ import { errorMessage } from "@/lib/http";
 import { CROP_VEHICLE, MAX_PHOTOS, type PickedPhoto, photoForm, pickPhotos } from "@/lib/photos";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
-import { PhotoGrid, UploadProgress } from "@/ui/PhotoGrid";
+import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@/ui/PhotoGrid";
 import { FlowScreen } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
@@ -61,7 +61,7 @@ export default function NouveauVehicule() {
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Si l'envoi des photos échoue après la création, on reprend sans recréer le véhicule.
   const [created, setCreated] = useState<{ id: string; uploaded: number; pending: boolean } | null>(null);
@@ -150,6 +150,11 @@ export default function NouveauVehicule() {
         await api.uploadVehiclePhoto(target.id, await photoForm(photos[i] as PickedPhoto, i));
         target = { ...target, uploaded: i + 1 };
         setCreated(target);
+      }
+      // Lot 39 : l'anneau se ferme et la voiture se gare dans le O avant de quitter l'écran.
+      if (photos.length > 0) {
+        setProgress({ current: photos.length, total: photos.length, done: true });
+        await waitUploadParked();
       }
       // Plaque d'un autre membre : le véhicule existe en attente de transfert ; sa page l'explique.
       if (target.pending) router.replace(`/vehicule/${target.id}`);
@@ -333,7 +338,7 @@ export default function NouveauVehicule() {
           {photoLabels.addOne}
         </Button>
       ) : null}
-      {progress ? <UploadProgress current={progress.current} total={progress.total} /> : null}
+      {progress ? <UploadProgress {...progress} /> : null}
     </FlowScreen>
   );
 }

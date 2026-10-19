@@ -32,7 +32,7 @@ import { CROP_VEHICLE, MAX_PHOTOS, photoForm, pickPhotos } from "@/lib/photos";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { PhotoGrid, UploadProgress } from "@/ui/PhotoGrid";
+import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@/ui/PhotoGrid";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -44,7 +44,7 @@ export default function VehiculeFiche() {
   const vehicle = useApi(() => api.vehicle(id), [id]);
   const history = useApi(() => api.vehicleHistory(id), [id]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [upload, setUpload] = useState<{ current: number; total: number } | null>(null);
+  const [upload, setUpload] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewer, setViewer] = useState<number | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -81,6 +81,11 @@ export default function VehiculeFiche() {
       for (let i = 0; i < picked.length; i++) {
         setUpload({ current: i + 1, total: picked.length });
         await api.uploadVehiclePhoto(v.id, await photoForm(picked[i] as (typeof picked)[number], i));
+      }
+      // Lot 39 : l'anneau se ferme et la voiture se gare dans le O avant que l'indicateur disparaisse.
+      if (picked.length > 0) {
+        setUpload({ current: picked.length, total: picked.length, done: true });
+        await waitUploadParked();
       }
     }).finally(() => setUpload(null));
   const makeCover = (index: number) =>
@@ -220,7 +225,7 @@ export default function VehiculeFiche() {
             />
           )}
           {v.photos.length > 1 ? <Muted variant="caption">{photoLabels.coverHint}</Muted> : null}
-          {upload ? <UploadProgress current={upload.current} total={upload.total} /> : null}
+          {upload ? <UploadProgress {...upload} /> : null}
           <Muted variant="body">Évite de montrer la plaque : tes photos sont visibles de tous les inscrits.</Muted>
           {v.photos.length < MAX_PHOTOS ? (
             <Button variant="secondary" icon="add" loading={busy !== null} onPress={() => void add()} fullWidth>

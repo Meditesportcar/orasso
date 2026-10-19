@@ -1,109 +1,49 @@
-// L'envoi (lot 39) : SendProgress, la voiture vue de dessus avance sur la route au rythme de l'envoi et se gare dans le
-// O à 100 % (remplace UploadProgress de l'appli) ; SendBurst, une candidature envoyée : un tour de drift, la voiture se
-// gare, le O s'allume (pic de néon, un seul à la fois). Réduction des animations : pas de trajet, fondu de 120 ms.
+// L'envoi (lot 39) : SendProgress, décision de Damien (prototype v39, 19/10) : pendant l'envoi, la voiture vue de
+// dessus drifte autour du O (trace de fumée), un anneau moutarde autour du O se remplit avec le pourcentage, puis à
+// 100 % la voiture se gare dans le O (remplace UploadProgress de l'appli). SendBurst, une candidature envoyée : un tour
+// de drift, la voiture se gare, le O s'allume (pic de néon, un seul à la fois). Réduction des animations : pas de
+// drift, l'anneau suit le pourcentage, fondu de 120 ms.
 
 import { useEffect, useRef, useState } from "react";
-import { type LayoutChangeEvent, StyleSheet, View } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { olive } from "../../motion";
-import { duration, easings } from "../motionHooks";
+import { duration } from "../motionHooks";
 import { useNeonPulse } from "../neon";
 import { useTheme } from "../theme";
-import { CAR_OUT_LEFT } from "./brandCar";
 import { OLoader } from "./OLoader";
-import { CarTop, carBox, fadeIn, OMark, parkCar } from "./shared";
-
-/** Hauteur de la piste, en px ; le O au bout fait la même taille. */
-const TRACK = 56;
-const CAR = 30;
 
 export type SendProgressProps = {
-  /** Avancement de l'envoi, 0 → 1. À 1, la voiture se gare dans le O. */
+  /** Avancement de l'envoi, 0 → 1. À 1, l'anneau se ferme puis la voiture se gare dans le O. */
   progress: number;
   /** Appelé quand la voiture est garée. */
   onParked?: () => void;
+  /** Côté de l'indicateur, en px. */
+  size?: number;
 };
 
-export function SendProgress({ progress, onParked }: SendProgressProps) {
-  const { t, reducedMotion } = useTheme();
-  const [road, setRoad] = useState(0);
+export function SendProgress({ progress, onParked, size = 96 }: SendProgressProps) {
+  const { reducedMotion } = useTheme();
   const p = Math.max(0, Math.min(1, progress));
-  const complete = p >= 1;
-  const value = useSharedValue(reducedMotion ? p : 0);
-  const offset = useSharedValue(complete ? 0 : CAR_OUT_LEFT);
-  const carOpacity = useSharedValue(complete ? 0 : 1);
-  const fade = useSharedValue(1);
-  const parked = useRef(onParked);
-  parked.current = onParked;
-
+  const [complete, setComplete] = useState(p >= 1);
   useEffect(() => {
-    if (reducedMotion) {
-      value.value = p;
+    if (p < 1) {
+      setComplete(false);
       return;
     }
-    value.value = withTiming(p, { duration: duration.base, easing: easings.out });
-  }, [p, reducedMotion, value]);
-
-  useEffect(() => {
-    if (!complete) {
-      offset.value = CAR_OUT_LEFT;
-      carOpacity.value = 1;
-      return;
-    }
-    if (reducedMotion) {
-      offset.value = 0;
-      carOpacity.value = 0;
-      fadeIn(fade);
-      const timer = setTimeout(() => parked.current?.(), duration.fast);
-      return () => clearTimeout(timer);
-    }
-    const timers = [
-      setTimeout(() => {
-        carOpacity.value = withTiming(0, { duration: duration.fast, easing: easings.linear });
-        parkCar(offset, CAR_OUT_LEFT);
-      }, duration.base),
-      setTimeout(() => parked.current?.(), duration.base + olive.park),
-    ];
-    return () => {
-      for (const timer of timers) clearTimeout(timer);
-    };
-  }, [complete, reducedMotion, offset, carOpacity, fade]);
-
-  const box = carBox(CAR);
-  const doneStyle = useAnimatedStyle(() => {
-    "worklet";
-    return { width: value.value * road };
-  });
-  const carStyle = useAnimatedStyle(() => {
-    "worklet";
-    return { opacity: carOpacity.value, transform: [{ translateX: value.value * road - box.width / 2 }] };
-  });
-  const fadeStyle = useAnimatedStyle(() => {
-    "worklet";
-    return { opacity: fade.value };
-  });
-
+    // L'anneau finit de se remplir (`base`) avant que la voiture se gare.
+    const timer = setTimeout(() => setComplete(true), reducedMotion ? 0 : duration.base);
+    return () => clearTimeout(timer);
+  }, [p, reducedMotion]);
   return (
-    <Animated.View
+    <View
       accessible
       accessibilityRole="progressbar"
+      accessibilityLabel="Envoi en cours"
       accessibilityValue={{ min: 0, max: 100, now: Math.round(p * 100) }}
-      style={[styles.row, fadeStyle]}
     >
-      <View style={styles.track} onLayout={(e: LayoutChangeEvent) => setRoad(e.nativeEvent.layout.width)}>
-        <View style={[styles.road, styles.full, { backgroundColor: t.color.line }]} />
-        <Animated.View style={[styles.road, { backgroundColor: t.color.accent }, doneStyle]} />
-        {!reducedMotion && (
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.car, { width: box.width, height: box.height, top: (TRACK - box.height) / 2 }, carStyle]}
-          >
-            <CarTop length={CAR} color={t.color.accent} smoke={0.6} />
-          </Animated.View>
-        )}
-      </View>
-      <OMark size={TRACK} offset={offset} />
-    </Animated.View>
+      <OLoader size={size} progress={p} done={complete} onParked={onParked} label={null} />
+    </View>
   );
 }
 
@@ -122,6 +62,13 @@ export function SendBurst({ onDone, size = 120, playKey }: SendBurstProps) {
   const { style: glow, fire } = useNeonPulse();
   const finish = useRef(onDone);
   finish.current = onDone;
+  const lit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (lit.current) clearTimeout(lit.current);
+    },
+    [],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `playKey` rejoue l'envoi (recette)
   useEffect(() => {
@@ -148,7 +95,8 @@ export function SendBurst({ onDone, size = 120, playKey }: SendBurstProps) {
         label="Candidature envoyée"
         onParked={() => {
           fire();
-          setTimeout(() => finish.current?.(), duration.poster);
+          if (lit.current) clearTimeout(lit.current);
+          lit.current = setTimeout(() => finish.current?.(), duration.poster);
         }}
       />
     </View>
@@ -156,11 +104,6 @@ export function SendBurst({ onDone, size = 120, playKey }: SendBurstProps) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: 8, height: TRACK },
-  track: { flex: 1, height: TRACK, justifyContent: "center" },
-  road: { position: "absolute", left: 0, height: 4, borderRadius: 2 },
-  full: { right: 0 },
-  car: { position: "absolute", left: 0 },
   burst: { alignItems: "center", justifyContent: "center" },
   glow: { position: "absolute" },
 });
