@@ -22,6 +22,7 @@ export {
 export { Ground, type GroundProps } from "./components/Ground";
 export { Icon, type IconProps } from "./components/Icon";
 export { Cascade, Park, Reveal, ScreenTransition, type ScreenTransitionProps, TabPanel } from "./components/Motion";
+export { Outlined, type OutlinedProps } from "./components/Outlined";
 export { Plate, type PlateProps } from "./components/Plate";
 export { PosterCard, type PosterCardProps, type PosterStatus } from "./components/PosterCard";
 export { ScanResult, type ScanResultProps } from "./components/ScanResult";

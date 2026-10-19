@@ -1,0 +1,20 @@
+/* Contour couleur du fond d'un texte posé sur le fond animé ou sur une photo (écart 1 de la DA v2, 19/10/2026 :
+   docs/design-system/README.md, « Ce qui a changé depuis le gel »). Les propriétés sont héritées : la classe posée
+   sur un conteneur (ou l'attribut data-onbg) couvre tous ses textes. Portée limitée à ces deux cas. */
+
+.o-onbg,
+[data-onbg] {
+  -webkit-text-stroke: min(0.24em, 6px) var(--ground);
+  paint-order: stroke fill;
+  text-shadow: 0 0 0.45em var(--ground);
+}
+.o-onphoto {
+  -webkit-text-stroke: min(0.24em, 6px) var(--night);
+  paint-order: stroke fill;
+  text-shadow: 0 0 0.45em var(--night);
+}
+/* Un texte posé sur une carte ou une surface, à l'intérieur d'une zone contournée, n'en a pas besoin. */
+.o-onbg-off {
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
