@@ -1,0 +1,165 @@
+{
+  "version": "2",
+  "basedOn": "docs/design-system/tokens.json v3.3",
+  "date": "2026-10-19",
+  "note": "Surcouche DA v2 (lot 38, ARCHITECTURE-DA-V2 § 1) : valeurs relevées dans le prototype validé par Damien le 19/10/2026 (version 41). Une valeur ici remplace celle de tokens.json, thème par thème ; « added » ajoute des jetons absents de la base. Écarts datés dans docs/design-system/README.md, section « Ce qui a changé depuis le gel ». À fusionner dans un tokens.json v4 au re-gel, avec l'accord de Damien (H1).",
+  "color": {
+    "tokens": [
+      {
+        "name": "ground",
+        "value": { "beton": "#17191e", "sable": "#e8dfca" },
+        "why": "Sable papier clair (fond uni, v10) ; Béton plus profond (prototype --bg)"
+      },
+      {
+        "name": "ground-center",
+        "value": { "beton": "#101216", "sable": "#ddd2b8" },
+        "why": "vignette du fond (prototype --bg-2) ; plus d'ombre graphite dans le coin en Sable"
+      },
+      {
+        "name": "ground-deep",
+        "value": { "beton": "#050608", "sable": "#c9bc9b" },
+        "why": "bord de la vignette (prototype --bg-deep) ; Sable sans graphite"
+      },
+      {
+        "name": "surface",
+        "value": { "beton": "#262930", "sable": "#f7f1e3" },
+        "why": "cartes claires en Sable : la plaque graphite devient facultative (prototype --card)"
+      },
+      {
+        "name": "surface-raised",
+        "value": { "beton": "#30333b", "sable": "#efe6d1" },
+        "why": "carte surélevée (prototype --card-2)"
+      },
+      {
+        "name": "surface-field",
+        "value": { "beton": "#1e2025", "sable": "#fffaf0" },
+        "why": "champ de saisie (prototype --field ; dérivé du générateur remplacé)"
+      },
+      {
+        "name": "ink-muted",
+        "value": { "beton": "#aaa397", "sable": "#4f493f" },
+        "why": "lisibilité Sable, contraste 4,5:1 (audit v40)"
+      },
+      {
+        "name": "ink-faint",
+        "value": { "beton": "#7a7468", "sable": "#655d50" },
+        "why": "lisibilité Sable (audit v40)"
+      },
+      {
+        "name": "accent-text",
+        "value": { "sable": "#654800" },
+        "why": "moutarde lisible sur papier clair (audit v40)"
+      },
+      {
+        "name": "win",
+        "value": { "sable": "#b42b24" },
+        "why": "rouge plus sombre sur papier clair (audit v40)"
+      },
+      {
+        "name": "bar",
+        "value": { "sable": "#131417" },
+        "why": "barre nuit en Sable (au lieu du métal sable brossé)"
+      },
+      {
+        "name": "bar-ink",
+        "value": { "sable": "#f3ebdd" },
+        "why": "encre crème sur la barre nuit"
+      },
+      {
+        "name": "bar-muted",
+        "value": { "beton": "#8f897d", "sable": "#a39b8b" },
+        "why": "onglets inactifs (prototype --bar-muted)"
+      }
+    ]
+  },
+  "shadow": {
+    "tokens": [
+      {
+        "name": "emboss-bar",
+        "value": { "sable": "none" },
+        "why": "pas de gaufrage clair sur la barre nuit"
+      }
+    ]
+  },
+  "ground-fx": {
+    "tokens": [
+      {
+        "name": "halo",
+        "value": { "sable": "none" },
+        "why": "Sable en fond uni, sans ombre graphite (v10)"
+      },
+      {
+        "name": "reflet",
+        "value": { "sable": "none" },
+        "why": "Sable en fond uni (v10)"
+      },
+      {
+        "name": "vignette",
+        "value": {
+          "beton": "radial-gradient(ellipse 130% 90% at 55% 25%, #17191e 0, #101216 62%, #050608 125%)",
+          "sable": "radial-gradient(ellipse 130% 90% at 55% 25%, #e8dfca 0, #ddd2b8 62%, #c9bc9b 125%)"
+        },
+        "why": "vignette du prototype (ground → ground-center → ground-deep)"
+      }
+    ]
+  },
+  "bar-fx": {
+    "tokens": [
+      {
+        "name": "bar-gradient",
+        "value": { "sable": "linear-gradient(180deg, #1c1d22 0%, #131417 55%, #0b0c0e 100%)" },
+        "why": "barre nuit en Sable"
+      },
+      {
+        "name": "bar-brush",
+        "value": { "sable": "feColorMatrix chaud (0.95, 0.92, 0.85) α 0.5 · opacity 0.6 · mix-blend-mode screen" },
+        "why": "brossage de la barre nuit, comme en Béton"
+      },
+      {
+        "name": "bar-brush-filter",
+        "value": {
+          "sable": "feTurbulence type=fractalNoise baseFrequency=\"0.012 0.9\" numOctaves=3 stitchTiles=stitch"
+        },
+        "why": "brossage de la barre nuit, comme en Béton"
+      }
+    ]
+  },
+  "added": {
+    "color": [
+      {
+        "name": "map-land",
+        "value": { "beton": "#1f2227", "sable": "#e6dcc4" },
+        "usage": "terre de la carte (style de carte Orasso, lot 44)"
+      },
+      {
+        "name": "map-land-2",
+        "value": { "beton": "#262a30", "sable": "#dbcfb2" },
+        "usage": "terre secondaire de la carte (parcs, zones)"
+      },
+      { "name": "map-sea", "value": { "beton": "#0f1216", "sable": "#aebbbd" }, "usage": "mer et eau de la carte" },
+      { "name": "map-road", "value": { "beton": "#f3ebdd", "sable": "#2a2723" }, "usage": "routes de la carte" },
+      {
+        "name": "map-label",
+        "value": { "beton": "#c9c1b2", "sable": "#3d3830" },
+        "usage": "noms de lieux de la carte"
+      }
+    ],
+    "stamp-ink": [
+      { "department": "66", "value": { "beton": "#ff6a5f", "sable": "#c8322b" } },
+      { "department": "34", "value": { "beton": "#b48ce6", "sable": "#6b3fa0" } },
+      { "department": "31", "value": { "beton": "#f3ebdd", "sable": "#131417" } },
+      { "department": "11", "value": { "beton": "#7fa6ff", "sable": "#2f5fb8" } }
+    ],
+    "stamp-ink-default": "win",
+    "type": [
+      {
+        "group": "Texte",
+        "basedOn": "number",
+        "name": "number-narrow",
+        "fontStretch": "62.5%",
+        "sample": "116",
+        "usage": "Chiffres des cartes véhicule, compteurs, souches de date : Archivo à 62,5 % de largeur (v2)."
+      }
+    ]
+  }
+}

@@ -1,17 +1,18 @@
-// Générateur de jetons : lit docs/design-system/tokens.json (seule source) et écrit
+// Générateur de jetons : lit docs/design-system/tokens.json (base gelée) fusionné avec la surcouche DA v2
+// tokens.v2.json (lot 38, scripts/merge-tokens.mjs) et écrit
 //   src/tokens.ts            objets typés des deux thèmes (web et natif)
 //   src/web/tokens.css       variables CSS sous [data-theme="beton"] / [data-theme="sable"]
 //   src/web/typography.css   classes des styles de texte (.o-t-<nom>)
 // Lancé par `pnpm build`, `pnpm test` (pretest) et `pnpm generate`. Les sorties sont versionnées.
-// Le test src/tokens.test.ts vérifie que chaque jeton du JSON est dans les deux sorties.
+// Le test src/tokens.test.ts vérifie que chaque jeton fusionné est dans les deux sorties.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadMergedTokens } from "./merge-tokens.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const source = resolve(root, "../../docs/design-system/tokens.json");
-const json = JSON.parse(readFileSync(source, "utf8"));
+const { json, changes, base } = loadMergedTokens();
 
 const THEMES = json.color.themes.map((t) => t.id); // ["beton", "sable"]
 
@@ -34,9 +35,12 @@ const groundFxRaw = themed(json["ground-fx"].tokens.filter((tk) => tk.name !== "
 const barFxRaw = themed(json["bar-fx"].tokens);
 
 // Dérivé (usage de surface-raised) : sur une surface sable du site, le champ est #e8e2d3 ; dans une plaque, c'est
-// surface-raised (graphite clair). Béton : la valeur de surface-raised dans les deux cas.
-color.beton["surface-field"] = color.beton["surface-raised"];
-color.sable["surface-field"] = "#e8e2d3";
+// surface-raised (graphite clair). Béton : la valeur de surface-raised dans les deux cas. Depuis le lot 38, la
+// surcouche v2 donne la valeur (prototype --field) : ce dérivé ne sert que si elle la retire.
+if (!color.beton["surface-field"]) {
+  color.beton["surface-field"] = color.beton["surface-raised"];
+  color.sable["surface-field"] = "#e8e2d3";
+}
 
 const spacing = Object.fromEntries(json.spacing.tokens.map((tk) => [tk.name, px(tk.value)]));
 const radius = Object.fromEntries(json.radius.tokens.map((tk) => [tk.name, px(tk.value)]));
@@ -56,6 +60,8 @@ const typeStyles = Object.fromEntries(
         fontWeight: s.fontWeight,
         fontStyle: s.fontStyle ?? "normal",
         letterSpacing: s.letterSpacing ? px(s.letterSpacing) : 0, // en em
+        // Largeur imposée par le style (surcouche v2 : number-narrow à 62,5 %) ; null = selon le groupe.
+        fontStretch: s.fontStretch ?? null,
         sample: s.sample,
       },
     ]),
@@ -160,8 +166,8 @@ const tokens = {
   type: keyed(typeStyles),
 };
 
-const ts = `// Fichier généré par scripts/generate-tokens.mjs d'après docs/design-system/tokens.json. Ne pas modifier à la main.
-// Jetons du système de design Orasso (v${json.version}, gelé le 15/10/2026), communs au site et à l'appli.
+const ts = `// Fichier généré par scripts/generate-tokens.mjs d'après docs/design-system/tokens.json + tokens.v2.json. Ne pas modifier à la main.
+// Jetons du système de design Orasso (v${base.version}, gelé le 15/10/2026, surcouche DA v${json.overlay.version} du ${json.overlay.date}), communs au site et à l'appli.
 
 export const THEME_IDS = ${JSON.stringify(THEMES)} as const;
 export type ThemeId = (typeof THEME_IDS)[number];
@@ -171,6 +177,9 @@ export const tokens = ${JSON.stringify(tokens, null, 2)} as const;
 export type Tokens = typeof tokens;
 export type ColorTokenName = keyof Tokens["color"]["beton"];
 export type TypeStyleName = keyof Tokens["type"];
+
+/** Écarts de la surcouche DA v2 au système gelé (tokens.v2.json), avec leur raison : affichés par /ds et /_ds. */
+export const tokensV2Overlay = ${JSON.stringify(changes, null, 2)} as const;
 `;
 writeFileSync(resolve(root, "src/tokens.ts"), ts);
 
@@ -211,7 +220,7 @@ for (const [n, s] of Object.entries(typeStyles)) {
 }
 
 const css = [
-  "/* Fichier généré par scripts/generate-tokens.mjs d'après docs/design-system/tokens.json. Ne pas modifier à la main. */",
+  "/* Fichier généré par scripts/generate-tokens.mjs d'après docs/design-system/tokens.json + tokens.v2.json. Ne pas modifier à la main. */",
   cssBlock(":root", rootLines),
   ...THEMES.map((t) => cssBlock(`[data-theme="${t}"]`, themeLines(t))),
 ].join("\n");
@@ -233,7 +242,8 @@ const typeCss = Object.keys(typeStyles)
     if (STRETCHED.has(n)) lines.push("  font-stretch: var(--stretch-wide);");
     if (NARROW.has(n)) lines.push("  font-stretch: var(--stretch-narrow);");
     if (UPPERCASE.has(n)) lines.push("  text-transform: uppercase;");
-    if (n === "number") lines.push("  font-variant-numeric: tabular-nums;");
+    if (typeStyles[n].fontStretch) lines.push(`  font-stretch: ${typeStyles[n].fontStretch};`);
+    if (n === "number" || n === "number-narrow") lines.push("  font-variant-numeric: tabular-nums;");
     return `.o-t-${n} {\n${lines.join("\n")}\n}\n`;
   })
   .join("\n");

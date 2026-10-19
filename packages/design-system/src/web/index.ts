@@ -3,7 +3,7 @@
 export * from "../icons";
 export * from "../labels";
 export * from "../motion";
-export { THEME_IDS, type ThemeId, tokens } from "../tokens";
+export { THEME_IDS, type ThemeId, tokens, tokensV2Overlay } from "../tokens";
 export { AppBar, AppBarAction, type AppBarProps } from "./components/AppBar";
 export { type BrandTone, Credit, FloatingMark, Loader, Logo, Monogram, PoweredBy } from "./components/Brand";
 export { Button, type ButtonProps } from "./components/Button";

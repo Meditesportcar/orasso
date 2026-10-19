@@ -21,6 +21,9 @@ const widthOf: Record<TypeStyleName, FontWidth> = {
   bodyStrong: "normal",
   caption: "normal",
   number: "normal",
+  // Surcouche v2 : Archivo à 62,5 % (web : font-stretch). Natif : pas encore d'instance statique à 62,5 % ; la plus
+  // étroite embarquée (78,4 %) en attendant (scripts/generate-native-fonts.py, consigné au journal des choix, lot 38).
+  numberNarrow: "narrow",
 };
 
 const uppercased = new Set<TypeStyleName>([
@@ -49,7 +52,7 @@ export function textStyle(name: TypeStyleName): TextStyle {
     letterSpacing: spec.letterSpacing * spec.fontSize,
   };
   if (uppercased.has(name)) style.textTransform = "uppercase";
-  if (name === "number") style.fontVariant = ["tabular-nums"];
+  if (name === "number" || name === "numberNarrow") style.fontVariant = ["tabular-nums"];
   return style;
 }
 
