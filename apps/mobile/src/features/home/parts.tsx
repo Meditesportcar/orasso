@@ -330,8 +330,8 @@ export function BigPair({ items }: { items: { value: number; label: string }[] }
   );
 }
 
-/** lot 42 : passe à `true` quand la route `tuto/[profil]` existe ; tant qu'elle manque, la tuile est masquée. */
-export const TUTO_ROUTE_READY = false;
+/** lot 42 : la route `tuto/[profile]` existe (`true`) ; `false` masquerait la tuile. */
+export const TUTO_ROUTE_READY = true;
 
 /**
  * Tuile « Découvre ce qu'il y a de nouveau » : une fois par profil et par appareil (`kv tuto:<profil>` absent). Le kv

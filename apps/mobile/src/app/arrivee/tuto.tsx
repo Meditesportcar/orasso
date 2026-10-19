@@ -1,36 +1,22 @@
-// Tuto d'arrivée : écran de transition jusqu'au lot 42, qui le remplace par un tuto par profil (`features/tuto/`).
-// Le compte est déjà créé ; « C'est parti » mène à `arrivee/casquette` (créer sa casquette ou « Plus tard »), qui ouvre ensuite l'onglet central du profil. Le lot 42 garde cette sortie.
-import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Tuto d'arrivée (lot 42) : le tuto du profil choisi, joué une fois le compte créé. « Passer » et « C'est parti » mènent à
+// `arrivee/casquette` (créer sa casquette ou « Plus tard », lot 41), qui ouvre ensuite l'onglet central du profil.
 import { useRouter } from "expo-router";
-import { StyleSheet } from "react-native";
-import { ArriveeScreen } from "@/features/arrivee/ArriveeScreen";
 
-const { space2 } = tokens.spacing;
+import { useArrivee } from "@/features/arrivee/model";
+import { tutoSeenKey } from "@/features/tuto/model";
+import { TutoScreen } from "@/features/tuto/TutoScreen";
+import { kvSet } from "@/lib/kv";
+import { useSession } from "@/lib/session";
 
 export default function ArriveeTuto() {
-  const { t } = useTheme();
   const router = useRouter();
-  // Le profil choisi mène à sa barre : l'écran suivant propose de créer la casquette (ou redirige s'il n'y a rien à faire).
-  const go = () => router.replace("/arrivee/casquette");
-  return (
-    <ArriveeScreen
-      step={2}
-      footer={
-        <Button variant="primary" icon="next" fullWidth onPress={go}>
-          C'est parti
-        </Button>
-      }
-    >
-      <Plate kind="note" style={styles.plate}>
-        <Text variant="posterM" color={t.color.plateInk}>
-          Bientôt
-        </Text>
-        <Text variant="body" color={t.color.plateMuted}>
-          Le tuto de ton profil arrive. En attendant, ton compte est prêt.
-        </Text>
-      </Plate>
-    </ArriveeScreen>
-  );
+  const { profile: chosen } = useArrivee();
+  const { me } = useSession();
+  // Le profil enregistré fait foi ; le choix de l'arrivée sert tant que le compte se charge.
+  const profile = me?.profile.mainProfile ?? chosen ?? "visitor";
+  const done = () => {
+    void kvSet(tutoSeenKey(profile), "1");
+    router.replace("/arrivee/casquette");
+  };
+  return <TutoScreen profile={profile} onDone={done} />;
 }
-
-const styles = StyleSheet.create({ plate: { gap: space2 } });
