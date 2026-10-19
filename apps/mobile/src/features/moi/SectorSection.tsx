@@ -1,9 +1,20 @@
-// Moi, secteur : départements (le premier sert à mesurer la distance), rayon des notifications (10 à 300 km) et
+// Moi, secteur : départements sur la carte de France (lot 41 ; le premier sert à mesurer la distance, il est bordé d'encre), rayon des notifications (10 à 300 km) et
 // centres d'intérêt (les catégories du référentiel). Chaque changement est enregistré tout de suite.
-import { Button, Chip, ChipRow, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  Button,
+  Chip,
+  ChipRow,
+  FranceMap,
+  FranceMapCredit,
+  Plate,
+  Text,
+  TextField,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
-
+import { toggleDepartment } from "@/features/arrivee/model";
 import { api } from "@/lib/api";
 import { addDepartment, normalizeDepartment } from "@/lib/settingsPatch";
 import { useApi } from "@/lib/useApi";
@@ -40,6 +51,13 @@ export function SectorSection({ settings, save }: Pick<SettingsApi, "settings" |
         <Text variant="label" color={t.color.plateMuted}>
           Départements
         </Text>
+        <FranceMap
+          selected={settings?.departments ?? []}
+          favorite={settings?.departments[0] ?? null}
+          onToggle={(c) => settings && void save({ departments: toggleDepartment(settings.departments, c) })}
+          accessibilityLabel="Carte des départements : touche pour choisir"
+        />
+        <FranceMapCredit onPlate />
         {settings && settings.departments.length > 0 ? (
           <ChipRow>
             {settings.departments.map((d) => (
@@ -70,7 +88,7 @@ export function SectorSection({ settings, save }: Pick<SettingsApi, "settings" |
           autoCorrect={false}
           maxLength={3}
           onSubmitEditing={add}
-          help="Le premier de la liste sert à mesurer la distance. Touche un département pour le retirer."
+          help="Touche la carte pour ajouter ou retirer un département ; le premier sert à mesurer la distance. Pour l'outre-mer, saisis son numéro."
           error={codeError}
         />
         <Button variant="plate" icon="add" disabled={!settings || code.trim() === ""} onPress={add} fullWidth>
