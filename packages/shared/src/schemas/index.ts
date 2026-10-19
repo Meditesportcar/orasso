@@ -3,6 +3,7 @@ export * from "./account";
 export * from "./admin";
 export * from "./afterEvent";
 export * from "./application";
+export * from "./auth";
 export * from "./common";
 export * from "./communication";
 export * from "./crews";

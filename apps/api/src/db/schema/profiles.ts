@@ -4,6 +4,7 @@ import {
   defaultNotificationPrefs,
   devicePlatforms,
   grades,
+  mainProfiles,
   type NotificationPrefs,
   platformRoles,
   profileVisibilities,
@@ -31,6 +32,7 @@ export const profileVisibilityEnum = pgEnum("profile_visibility", profileVisibil
 export const gradeEnum = pgEnum("grade", grades);
 export const devicePlatformEnum = pgEnum("device_platform", devicePlatforms);
 export const categoryMakeModeEnum = pgEnum("category_make_mode", categoryMakeModes);
+export const mainProfileEnum = pgEnum("main_profile_enum", mainProfiles);
 
 /** Tout ce qui est métier sur un compte (1 pour 1 avec `user`, table de Better Auth). */
 export const profiles = pgTable(
@@ -48,6 +50,8 @@ export const profiles = pgTable(
     visibility: profileVisibilityEnum("visibility").notNull().default("public"),
     departments: text("departments").array().notNull().default(sql`'{}'::text[]`),
     radiusKm: smallint("radius_km").notNull().default(50),
+    /** Lot 41 : profil choisi à l'arrivée (textes et tuto, pas les casquettes) ; null pour les comptes antérieurs. */
+    mainProfile: mainProfileEnum("main_profile"),
     platformRole: platformRoleEnum("platform_role").notNull().default("user"),
     newsletterOptIn: boolean("newsletter_opt_in").notNull().default(false),
     /** Conditions générales acceptées (lot 36) : case obligatoire de l'inscription express, horodatée. */

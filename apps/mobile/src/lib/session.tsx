@@ -21,7 +21,7 @@ type SessionValue = {
   /** `"two_factor"` : le compte a la double authentification, il faut le code (`verifyTwoFactor`). */
   signIn: (email: string, password: string) => Promise<"in" | "two_factor">;
   verifyTwoFactor: (code: string, opts: { backup: boolean; trustDevice: boolean }) => Promise<void>;
-  signUp: (email: string, password: string, pseudo: string) => Promise<void>;
+  signUp: (input: Parameters<typeof authApi.signUp>[0]) => Promise<void>;
   signOut: () => Promise<void>;
   /** Recharge `/api/me` (compteurs, grade, points). */
   refreshMe: () => Promise<Me | null>;
@@ -117,7 +117,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         pendingTwoFactor.current = null;
         await open(token);
       },
-      signUp: async (email, password, pseudo) => open(await authApi.signUp(email, password, pseudo)),
+      signUp: async (input) => open(await authApi.signUp(input)),
       signOut: async () => {
         try {
           await authApi.signOut();

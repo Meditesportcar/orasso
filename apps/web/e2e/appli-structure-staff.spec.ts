@@ -1,6 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
-import { apiCall, deliverNow, login, resuspendSeedStructure, SEED_PASSWORD, samplePhoto } from "./helpers";
+import {
+  apiCall,
+  deliverNow,
+  login,
+  resuspendSeedStructure,
+  SEED_PASSWORD,
+  SIGNUP_EXTRAS,
+  samplePhoto,
+} from "./helpers";
 
 // Appli dans le navigateur (lot 35a, décision D20) : Équipe, structure, bannissements, modèles, export et notes. Parcours
 // de la fiche : une demande de staff arrive, l'organisateur l'accepte depuis l'appli, change le rôle de la personne, la
@@ -461,6 +469,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
     password: SEED_PASSWORD,
     name: "Orga 35a",
     termsAccepted: true,
+    ...SIGNUP_EXTRAS,
   });
   expect(signUp.status).toBe(200);
   const cookie = await login(email);

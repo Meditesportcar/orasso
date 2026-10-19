@@ -4,6 +4,7 @@ import {
   apiCall,
   createEvent,
   decideApi,
+  fillArrivee,
   login,
   loginInBrowser,
   randomPlate,
@@ -46,6 +47,7 @@ test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   await page.getByLabel("Pseudo").fill(pseudo);
   await page.getByLabel("E-mail").fill(`${pseudo.toLowerCase()}@e2e.orasso.test`);
   await page.getByLabel("Mot de passe", { exact: true }).fill(SEED_PASSWORD);
+  await fillArrivee(page);
   await page.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
   await page.getByRole("button", { name: "Créer mon compte" }).click();
   await page.waitForURL(`**/e/${event.slug}/candidater`);

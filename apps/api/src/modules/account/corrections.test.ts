@@ -11,6 +11,7 @@ import {
   createStructure,
   resetDb,
   signUp,
+  signUpExtras,
   type TestUser,
   useClock,
 } from "../../../test/helpers";
@@ -50,7 +51,7 @@ describe("conditions générales à l'inscription (point 5, étendu à l'inscrip
   const signUpBody = (email: string, extra: Record<string, unknown> = {}) => ({
     method: "POST",
     headers: { "content-type": "application/json", origin: process.env.PUBLIC_URL ?? "http://localhost:5173" },
-    body: JSON.stringify({ email, password: "motdepasse-test-123", name: "Nouveau_36", ...extra }),
+    body: JSON.stringify({ email, password: "motdepasse-test-123", name: "Nouveau_36", ...signUpExtras, ...extra }),
   });
 
   it("case obligatoire, tracée sur le profil", async () => {
@@ -70,6 +71,72 @@ describe("conditions générales à l'inscription (point 5, étendu à l'inscrip
       signUpBody("court@orasso.test", { password: "123456789", termsAccepted: true }),
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe("inscription ordinaire : profil, départements, nom et prénom obligatoires (lot 41)", () => {
+  const post = (extra: Record<string, unknown>, drop: string[] = []) => {
+    const body: Record<string, unknown> = {
+      email: `arrivee-${Math.random().toString(36).slice(2, 8)}@orasso.test`,
+      password: "motdepasse-test-123",
+      name: "Arrivee_41",
+      termsAccepted: true,
+      ...signUpExtras,
+      ...extra,
+    };
+    for (const k of drop) delete body[k];
+    return app.request("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: process.env.PUBLIC_URL ?? "http://localhost:5173" },
+      body: JSON.stringify(body),
+    });
+  };
+
+  it("sans prénom ou sans nom : 400 avec le champ en cause", async () => {
+    for (const field of ["firstName", "lastName"]) {
+      const res = await post({}, [field]);
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: { details?: { fields?: Record<string, string> } } };
+      expect(Object.keys(json.error.details?.fields ?? {})).toContain(field);
+    }
+    expect((await post({ firstName: "   " })).status).toBe(400);
+  });
+
+  it("sans profil choisi, sans département ou avec un département inconnu : 400", async () => {
+    expect((await post({}, ["mainProfile"])).status).toBe(400);
+    expect((await post({ mainProfile: "dieu" })).status).toBe(400);
+    expect((await post({ departments: [] })).status).toBe(400);
+    expect((await post({ departments: ["99"] })).status).toBe(400);
+  });
+
+  it("pose profil, départements (le premier = favori), prénom et nom sur le profil", async () => {
+    const res = await post({
+      mainProfile: "media",
+      departments: ["66", "11"],
+      firstName: " Julien ",
+      lastName: "Martí",
+    });
+    expect(res.status).toBe(200);
+    const { user: u } = (await res.json()) as { user: { id: string } };
+    const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, u.id) });
+    expect(profile?.mainProfile).toBe("media");
+    expect(profile?.departments).toEqual(["66", "11"]);
+    expect(profile?.firstName).toBe("Julien");
+    expect(profile?.lastName).toBe("Martí");
+  });
+
+  it("PATCH /me/profile accepte mainProfile et GET /me l'expose (null pour un compte antérieur)", async () => {
+    const u = await signUp("Ancien_41");
+    await db.update(profiles).set({ mainProfile: null }).where(eq(profiles.userId, u.id));
+    expect(
+      ((await call(u, "GET", "/me")).json as { profile: { mainProfile: string | null } }).profile.mainProfile,
+    ).toBeNull();
+    const patched = await call(u, "PATCH", "/me/profile", { mainProfile: "organizer", departments: ["34"] });
+    expect(patched.status).toBe(200);
+    const me = (await call(u, "GET", "/me")).json as { profile: { mainProfile: string | null; departments: string[] } };
+    expect(me.profile.mainProfile).toBe("organizer");
+    expect(me.profile.departments).toEqual(["34"]);
+    expect((await call(u, "PATCH", "/me/profile", { mainProfile: "autre" })).status).toBe(400);
   });
 });
 

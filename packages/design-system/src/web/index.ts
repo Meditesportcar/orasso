@@ -1,5 +1,8 @@
 // Système de design Orasso, version web (React, rendu serveur). Importer aussi la feuille de style une fois :
 //   import "@orasso/design-system/web/styles.css";
+export * from "../france";
+export { DepartmentChecklist, type DepartmentChecklistProps } from "../france/DepartmentChecklistWeb";
+export { FranceMap, FranceMapCredit, type FranceMapProps } from "../france/FranceMapWeb";
 export * from "../icons";
 export * from "../labels";
 export * from "../motion";
