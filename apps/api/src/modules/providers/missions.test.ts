@@ -10,13 +10,24 @@ import {
   call,
   createEvent,
   createStructure,
+  createVehicle,
   resetDb,
+  seedReference,
   signUp,
   type TestUser,
   useClock,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { applications, events, notifications, providerPhotos, providerReviews, ticketTypes } from "../../db/schema";
+import {
+  applications,
+  assistanceRequests,
+  events,
+  notifications,
+  providerPhotos,
+  providerReviews,
+  structures,
+  ticketTypes,
+} from "../../db/schema";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
 
@@ -314,8 +325,9 @@ describe("avis des organisateurs", () => {
       rating: 5,
       structureName: "Club de test",
       eventTitle: "Nocturne de Canet",
-      authorName: "Damien_66",
     });
+    // La vue publique ne nomme jamais l'auteur : l'avis engage la structure.
+    expect(ok.json.authorName).toBeUndefined();
     expect(await notifsOf(sofia.id, "provider_review_received")).toHaveLength(1);
     const dup = await call(orga, "POST", `/events/${nocturneId}/applications/${appId}/provider-review`, review);
     expect(dup.status).toBe(409);
@@ -343,6 +355,8 @@ describe("avis des organisateurs", () => {
     expect(vitrine.json.reviews).toMatchObject({ average: 4.5, count: 2 });
     const mine = await call(sofia, "GET", "/me/provider-applications?scope=past");
     expect(mine.json.map((a: { review: { rating: number } | null }) => a.review?.rating)).toEqual([4, 5]);
+    expect(mine.json[1].review.authorName).toBe("Damien_66");
+    expect(summary.json.latest[0].authorName).toBeUndefined();
 
     // Un avis retiré par la modération ne compte plus.
     await db.update(providerReviews).set({ hiddenAt: new Date() }).where(eq(providerReviews.rating, 4));
@@ -359,10 +373,14 @@ describe("avis des organisateurs", () => {
     clock.set(paris(10, 19, 10));
     const ok = await call(coOrga, "POST", `/events/${nocturneId}/applications/${appId}/provider-review`, { rating: 5 });
     expect(ok.status).toBe(201);
-    expect(ok.json.authorName).toBe("Sarah_66");
+    expect((await call(sofia, "GET", "/me/provider-applications?scope=past")).json[0].review.authorName).toBe(
+      "Sarah_66",
+    );
     await accountService.anonymize(coOrga.id, null);
     const summary = await call(sofia, "GET", `/providers/${sofiaProviderId}/reviews`);
-    expect(summary.json).toMatchObject({ count: 1, latest: [{ rating: 5, authorName: "Compte supprimé" }] });
+    expect(summary.json).toMatchObject({ count: 1, latest: [{ rating: 5, structureName: "Club de test" }] });
+    const mine = await call(sofia, "GET", "/me/provider-applications?scope=past");
+    expect(mine.json[0].review).toMatchObject({ rating: 5, authorName: "Compte supprimé" });
   });
 });
 
@@ -415,5 +433,164 @@ describe("vitrine", () => {
       reviews: { count: 0, average: null },
     });
     expect(pub.json.phone).toBeUndefined();
+  });
+});
+
+// --- Corrections de la relecture (lot 46) --------------------------------------------------------------------------
+
+describe("droits : structure suspendue, assistance, auto-évaluation, staff", () => {
+  beforeEach(async () => {
+    await db.update(events).set({ vendorTypes: ["Food truck"] });
+  });
+
+  it("structure suspendue : besoins en lecture seule ; l'emplacement reste permis (comme le tri)", async () => {
+    const need = await addNeed(nocturneId);
+    const appId = await acceptedOn(sofia, nocturneId, need.id);
+    await db.update(structures).set({ verification: "suspended" }).where(eq(structures.id, structureId));
+    expect((await call(orga, "GET", `/events/${nocturneId}/needs`)).status).toBe(200);
+    expect((await call(orga, "POST", `/events/${nocturneId}/needs`, { trade: "barber" })).status).toBe(403);
+    expect((await call(orga, "PATCH", `/events/${nocturneId}/needs/${need.id}`, { quantity: 2 })).status).toBe(403);
+    expect((await call(orga, "DELETE", `/events/${nocturneId}/needs/${need.id}`)).status).toBe(403);
+    expect(
+      (await call(orga, "PATCH", `/events/${nocturneId}/applications/${appId}/spot`, { spotLabel: "B2" })).status,
+    ).toBe(200);
+  });
+
+  it("super admin en assistance : jamais d'avis au nom de la structure (403)", async () => {
+    const appId = await acceptedOn(sofia, nocturneId);
+    clock.set(paris(10, 18, 10));
+    const admin = await signUp("Admin_Orasso", { twoFactor: true, role: "super_admin" });
+    await db
+      .insert(assistanceRequests)
+      .values({ structureId, requestedBy: orga.id, message: "Aide", createdAt: clock.now });
+    const res = await call(admin, "POST", `/events/${nocturneId}/applications/${appId}/provider-review`, { rating: 5 });
+    expect(res.status).toBe(403);
+    expect(res.json.error.message).toMatch(/organisateur de la structure/);
+  });
+
+  it("événement annulé : pas d'avis (409 event_cancelled)", async () => {
+    const appId = await acceptedOn(sofia, nocturneId);
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.id, nocturneId));
+    clock.set(paris(10, 18, 10));
+    const res = await call(orga, "POST", `/events/${nocturneId}/applications/${appId}/provider-review`, { rating: 5 });
+    expect(res.status).toBe(409);
+    expect(res.json.error.details).toMatchObject({ reason: "event_cancelled" });
+  });
+
+  it("auto-évaluation : prestataire membre de la structure organisatrice → 403, pour lui comme pour le propriétaire", async () => {
+    const sarah = await signUp("Sarah_66", { twoFactor: true });
+    await addMember(structureId, sarah.id, "co_organizer");
+    await readyProvider(sarah, { name: "Chez Sarah" });
+    const appId = await acceptedOn(sarah, nocturneId);
+    clock.set(paris(10, 18, 10));
+    const byHerself = await call(sarah, "POST", `/events/${nocturneId}/applications/${appId}/provider-review`, {
+      rating: 5,
+    });
+    expect(byHerself.status).toBe(403);
+    const byOwner = await call(orga, "POST", `/events/${nocturneId}/applications/${appId}/provider-review`, {
+      rating: 5,
+    });
+    expect(byOwner.status).toBe(403);
+    expect(byOwner.json.error.message).toMatch(/propre structure/);
+    expect(await db.query.providerReviews.findMany()).toEqual([]);
+  });
+
+  it("le staff de l'événement lit les besoins, ne les modifie pas ; un inconnu ne les lit pas", async () => {
+    const need = await addNeed(nocturneId);
+    const julie = await signUp("Julie_Staff");
+    await addMember(structureId, julie.id, "staff", ["scan"]);
+    const list = await call(julie, "GET", `/events/${nocturneId}/needs`);
+    expect(list.status).toBe(200);
+    expect(list.json[0].id).toBe(need.id);
+    expect((await call(julie, "POST", `/events/${nocturneId}/needs`, { trade: "barber" })).status).toBe(403);
+    const shop = await signUp("Max_Boutique");
+    await addMember(structureId, shop.id, "staff", ["shop"]);
+    expect((await call(shop, "GET", `/events/${nocturneId}/needs`)).status).toBe(403);
+  });
+});
+
+describe("emplacement : garde-fous", () => {
+  beforeEach(async () => {
+    await db.update(events).set({ vendorTypes: ["Food truck"] });
+  });
+
+  it("404 pour une candidature d'un autre événement ou de véhicule ; 409 après la fin ou si annulé ; une seule notification par changement", async () => {
+    const appId = await acceptedOn(sofia, nocturneId);
+    const spot = { spotLabel: "B2", spotNote: null };
+    expect((await call(orga, "PATCH", `/events/${rivesaltesId}/applications/${appId}/spot`, spot)).status).toBe(404);
+
+    const ref = await seedReference();
+    const kenji = await signUp("Kenji_66");
+    const car = await createVehicle(kenji.id, ref);
+    const [vApp] = await db
+      .insert(applications)
+      .values({
+        eventId: nocturneId,
+        userId: kenji.id,
+        kind: "vehicle",
+        vehicleId: car.id,
+        status: "accepted",
+        rulesAcceptedAt: clock.now,
+        followStructure: false,
+      })
+      .returning();
+    expect((await call(orga, "PATCH", `/events/${nocturneId}/applications/${vApp?.id}/spot`, spot)).status).toBe(404);
+
+    expect((await call(orga, "PATCH", `/events/${nocturneId}/applications/${appId}/spot`, spot)).status).toBe(200);
+    expect((await call(orga, "PATCH", `/events/${nocturneId}/applications/${appId}/spot`, spot)).status).toBe(200);
+    expect(await notifsOf(sofia.id, "provider_spot_assigned")).toHaveLength(1);
+    const moved = { spotLabel: "B2", spotNote: "Côté quai" };
+    expect((await call(orga, "PATCH", `/events/${nocturneId}/applications/${appId}/spot`, moved)).status).toBe(200);
+    expect(await notifsOf(sofia.id, "provider_spot_assigned")).toHaveLength(2);
+
+    clock.set(paris(10, 18, 10));
+    expect((await call(orga, "PATCH", `/events/${nocturneId}/applications/${appId}/spot`, spot)).status).toBe(409);
+    clock.set(paris(10, 12, 10));
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.id, nocturneId));
+    expect((await call(orga, "PATCH", `/events/${nocturneId}/applications/${appId}/spot`, spot)).status).toBe(409);
+  });
+});
+
+describe("vue de l'organisation après rechargement", () => {
+  it("le tri montre mission, emplacement et avis ; les besoins listent leurs retenus", async () => {
+    const need = await addNeed(nocturneId, { quantity: 2 });
+    const appId = await acceptedOn(sofia, nocturneId, need.id);
+    const lea = await signUp("Lea_Truck");
+    await readyProvider(lea, { name: "La Caravane" });
+    const pendingLea = await applyTo(lea, nocturneId, need.id);
+    await call(orga, "PATCH", `/events/${nocturneId}/applications/${appId}/spot`, {
+      spotLabel: "B2",
+      spotNote: "Près de l'entrée",
+    });
+
+    const triage = await call(orga, "GET", `/events/${nocturneId}/applications?kind=provider&status=accepted`);
+    const card = triage.json.items.find((i: { id: string }) => i.id === appId);
+    expect(card.provider).toMatchObject({
+      need: { id: need.id, trade: "food_truck", tradeLabel: "Food truck" },
+      spot: { label: "B2", note: "Près de l'entrée" },
+      review: null,
+    });
+
+    const needs = await call(orga, "GET", `/events/${nocturneId}/needs`);
+    expect(needs.json[0]).toMatchObject({ filled: 1, remaining: 1 });
+    expect(needs.json[0].retained).toEqual([
+      {
+        applicationId: appId,
+        providerId: sofiaProviderId,
+        providerName: "La Brasa",
+        spot: { label: "B2", note: "Près de l'entrée" },
+        reviewed: false,
+      },
+    ]);
+    expect(needs.json[0].retained.map((r: { applicationId: string }) => r.applicationId)).not.toContain(
+      pendingLea.json.id,
+    );
+
+    clock.set(paris(10, 18, 10));
+    await call(orga, "POST", `/events/${nocturneId}/applications/${appId}/provider-review`, { rating: 4 });
+    const after = await call(orga, "GET", `/events/${nocturneId}/needs`);
+    expect(after.json[0].retained[0].reviewed).toBe(true);
+    const one = await call(orga, "GET", `/applications/${appId}`);
+    expect(one.json.provider.review).toMatchObject({ rating: 4 });
   });
 });

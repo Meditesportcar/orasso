@@ -5,8 +5,10 @@ import {
   type ApplicationStatus,
   activeApplicationStatuses,
   arrivalHourLabel,
+  boundingBox,
   departmentCentroids,
   distanceKm,
+  type EventNeedForOrganizer,
   type EventNeedInput,
   type EventNeedPublic,
   type EventNeedUpdate,
@@ -29,23 +31,23 @@ import {
   providerReviewIssue,
   providerReviewTexts,
   providerSpotTexts,
+  type StaffRole,
   type VendorTypeCode,
   vendorTypeLabels,
 } from "@orasso/shared";
-import { and, asc, desc, eq, gt, inArray, max, ne } from "drizzle-orm";
+import { and, asc, between, desc, eq, gt, inArray, isNull, max, ne, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
   applications,
   eventNeeds,
   events,
-  profiles,
   providerProfiles,
   providerReviews,
   structures,
   ticketTypes,
 } from "../../db/schema";
-import { requireOrganizer, requireOrganizerWrite } from "../../lib/access";
+import { activeMembership, requireOrganizer, requireOrganizerWrite, staffAccess } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
@@ -54,10 +56,26 @@ import type { Viewer } from "../../lib/session";
 import { type Tx, withTx } from "../../lib/tx";
 import { eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
-import { filledByNeed, type NeedRow, needView, needViewsOfEvent, reviewsOf, reviewView } from "./needs";
+import {
+  filledByNeed,
+  type NeedRow,
+  needView,
+  needViewsForOrganizer,
+  needViewsOfEvent,
+  reviewsOf,
+  reviewView,
+} from "./needs";
 import { providerOfUser } from "./service";
 
 const ACTIVE = activeApplicationStatuses as readonly ApplicationStatus[];
+/** Lecture des besoins : l'organisation et le staff de l'événement (jour J et filtration). */
+const NEEDS_READ_ROLES = [
+  "scan",
+  "placement",
+  "control",
+  "filtering",
+  "super_staff",
+] as const satisfies readonly StaffRole[];
 
 const isUniqueViolation = (error: unknown) => {
   const e = error as { code?: string; cause?: { code?: string } };
@@ -125,11 +143,16 @@ async function expectedVisitors(eventIds: string[]): Promise<Map<string, number 
 export const missionsService = {
   // --- Besoins de l'organisateur ---------------------------------------------------------------------------------
 
-  /** `GET /events/:id/needs` (organisateurs) : les besoins, places comblées comprises. */
-  async listNeeds(v: Viewer, eventId: string): Promise<EventNeedView[]> {
+  /**
+   * `GET /events/:id/needs` (organisation) : les besoins, places comblées et prestataires retenus (emplacement, avis
+   * donné). Lecture permise au staff de l'événement (rôles du jour J et de filtration) ; l'écriture reste à
+   * l'organisation.
+   */
+  async listNeeds(v: Viewer, eventId: string): Promise<EventNeedForOrganizer[]> {
     const event = await eventsRepo.byId(eventId);
-    await requireOrganizer(v, event.structureId);
-    return needViewsOfEvent(eventId);
+    const access = await staffAccess(v, event.structureId, NEEDS_READ_ROLES, eventId);
+    if (!access) throw forbidden("Réservé à l'organisation de l'événement");
+    return needViewsForOrganizer(eventId);
   },
 
   /** `POST /events/:id/needs` : « cherche 1 food truck, électricité fournie ». */
@@ -227,6 +250,12 @@ export const missionsService = {
     const center = from ? departmentCentroids[from] : undefined;
     if (!from || !center) return { trade, radiusKm, from: null, items: [] };
     const t = now();
+    // Préfiltre en base, avant la limite : coordonnées dans la boîte qui contient le cercle, ou, sans coordonnées, un
+    // département dont le centre est dans le rayon. La distance exacte est vérifiée ensuite.
+    const box = boundingBox(center, radiusKm);
+    const nearDepartments = Object.entries(departmentCentroids)
+      .filter(([, c]) => distanceKm(center, c) <= radiusKm)
+      .map(([code]) => code);
     const rows = await db
       .select({ need: eventNeeds, e: events, structureName: structures.name })
       .from(eventNeeds)
@@ -238,6 +267,10 @@ export const missionsService = {
           eq(events.status, "published"),
           gt(events.endsAt, t),
           ne(events.admission, "invite_only"),
+          or(
+            and(between(events.lat, box.minLat, box.maxLat), between(events.lng, box.minLng, box.maxLng)),
+            nearDepartments.length ? and(isNull(events.lat), inArray(events.department, nearDepartments)) : undefined,
+          ),
         ),
       )
       .orderBy(asc(events.startsAt), asc(eventNeeds.position))
@@ -301,22 +334,28 @@ export const missionsService = {
   /**
    * `PATCH /events/:id/applications/:appId/spot` : emplacement (« B2 ») et note d'un prestataire retenu. Le prestataire
    * est prévenu (`provider_spot_assigned`) avec l'emplacement, l'arrivée et l'électricité de sa mission, puis les
-   * consignes de l'événement s'il y en a.
+   * consignes de l'événement s'il y en a — seulement quand l'emplacement ou sa note change. Ni sur un événement annulé
+   * ni après sa fin. Permis à une structure suspendue (comme le tri et l'accueil des événements publiés).
    */
   async setSpot(v: Viewer, eventId: string, applicationId: string, input: ProviderSpotInput) {
+    rateLimit("proWrite", v.user.id);
     const event = await eventsRepo.byId(eventId);
     await requireOrganizer(v, event.structureId);
     return withTx(async (tx, after) => {
       const locked = await eventsRepo.lockForUpdate(tx, eventId);
+      if (locked.status === "cancelled") throw conflict("conflict", "Événement annulé");
+      if (locked.endsAt <= now()) throw conflict("conflict", "Événement terminé : l'emplacement ne change plus");
       const app = await providerApplicationOf(tx, eventId, applicationId);
       if (app.status !== "accepted") throw conflict("conflict", "L'emplacement se donne à un prestataire retenu");
+      const changed = app.spotLabel !== input.spotLabel || app.spotNote !== input.spotNote;
       const [row] = await tx
         .update(applications)
         .set({ spotLabel: input.spotLabel, spotNote: input.spotNote })
         .where(eq(applications.id, app.id))
         .returning();
       if (!row) throw notFound("Candidature introuvable");
-      if (row.spotLabel) {
+      const notify = changed && Boolean(row.spotLabel);
+      if (notify && row.spotLabel) {
         const need = app.needId
           ? (await tx.select().from(eventNeeds).where(eq(eventNeeds.id, app.needId)))[0]
           : undefined;
@@ -340,7 +379,7 @@ export const missionsService = {
         const payload = { applicationId: row.id, eventId, status: row.status };
         realtime.publish(`event:${eventId}:triage`, "application.changed", payload);
         realtime.publish(`user:${row.userId}`, "application.changed", payload);
-        if (row.spotLabel) notificationsService.kick();
+        if (notify) notificationsService.kick();
       });
       return { applicationId: row.id, spotLabel: row.spotLabel, spotNote: row.spotNote };
     });
@@ -351,7 +390,8 @@ export const missionsService = {
   /**
    * `POST /events/:id/applications/:appId/provider-review` : un avis par candidature retenue, de 1 à 5, entre la fin de
    * l'événement et 30 jours après (V10), par un propriétaire ou co-organisateur de la structure (jamais le super
-   * admin en assistance : l'avis engage la structure).
+   * admin en assistance : l'avis engage la structure). Jamais d'auto-évaluation : refusé (403) si le prestataire est
+   * lui-même propriétaire ou co-organisateur de la structure, ou s'il est l'auteur.
    */
   async review(v: Viewer, eventId: string, applicationId: string, input: ProviderReviewInput) {
     rateLimit("proWrite", v.user.id);
@@ -362,6 +402,11 @@ export const missionsService = {
       const created = await withTx(async (tx, after) => {
         const locked = await eventsRepo.lockForUpdate(tx, eventId);
         const app = await providerApplicationOf(tx, eventId, applicationId);
+        if (app.userId === v.user.id) throw forbidden(providerReviewTexts.selfReview);
+        const member = await activeMembership(app.userId, locked.structureId);
+        if (member && (member.role === "owner" || member.role === "co_organizer")) {
+          throw forbidden(providerReviewTexts.selfReview);
+        }
         const issue = providerReviewIssue(app, locked, now());
         if (issue) throw conflict("conflict", reviewIssueMessages[issue], { reason: issue });
         const [row] = await tx
@@ -397,13 +442,10 @@ export const missionsService = {
           structureName: structures.name,
           eventTitle: events.title,
           eventEndsAt: events.endsAt,
-          pseudo: profiles.pseudo,
-          authorDeletedAt: profiles.deletedAt,
         })
         .from(providerReviews)
         .innerJoin(structures, eq(structures.id, providerReviews.structureId))
         .innerJoin(events, eq(events.id, providerReviews.eventId))
-        .leftJoin(profiles, eq(profiles.userId, providerReviews.authorId))
         .where(eq(providerReviews.id, created.id));
       return reviewView(full as Parameters<typeof reviewView>[0]) satisfies ProviderReviewView;
     } catch (error) {
