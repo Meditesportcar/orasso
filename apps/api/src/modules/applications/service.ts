@@ -49,6 +49,7 @@ import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { expirePendingInvitations } from "../invitations/expire";
 import { notifyMediaDecision } from "../media/notify";
+import { assertPressQuota } from "../media/quota";
 import { notificationsService } from "../notifications/service";
 import { socialJournal } from "../social/journal";
 import { staffService } from "../staff/service";
@@ -394,6 +395,8 @@ async function decideInTx(
   if (!canTransition(app.status, to, actor.kind)) throw invalidTransition(app.status, to);
   // Lot 45 : une accréditation presse se retient ou se refuse (pas de liste d'attente pour la presse).
   if (app.kind === "media" && to === "waitlisted") throw validation(mediaLabels.noWaitlist);
+  // Lot 45 : le quota presse tient aussi à la décision (accréditations données, sous le verrou de l'événement).
+  if (app.kind === "media" && to === "accepted") await assertPressQuota(tx, eventId);
   if (app.status === "refused" && isLocked(event, t)) {
     throw lockedError("Inscriptions verrouillées : un refus ne se corrige plus");
   }
