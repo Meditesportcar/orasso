@@ -3,6 +3,7 @@ import { passwordHint, pseudoSchema, type StructurePublic, structureKindLabels }
 import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { ArriveeFields } from "../components/ArriveeFields";
 import { TermsField } from "../components/Fields";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, getMe, loginUrl, withCookies } from "../lib/api.server";
@@ -78,16 +79,18 @@ export default function Invitation({ loaderData, actionData }: Route.ComponentPr
         <>
           <Form method="post" className="s-form">
             <input type="hidden" name="intent" value="signup" />
-            <TextField
-              label="Pseudo"
-              name="pseudo"
-              autoComplete="username"
-              defaultValue={actionData?.values.pseudo}
-              help="3 à 24 caractères : lettres, chiffres, « _ » ou « . »"
-              error={errors.pseudo ?? pseudoHint}
-              onBlur={(e) => checkPseudo(e.currentTarget.value)}
-              required
-            />
+            <ArriveeFields values={actionData?.values} errors={errors}>
+              <TextField
+                label="Pseudo"
+                name="pseudo"
+                autoComplete="username"
+                defaultValue={actionData?.values.pseudo}
+                help="3 à 24 caractères : lettres, chiffres, « _ » ou « . »"
+                error={errors.pseudo ?? pseudoHint}
+                onBlur={(e) => checkPseudo(e.currentTarget.value)}
+                required
+              />
+            </ArriveeFields>
             <TextField
               label="E-mail"
               name="email"

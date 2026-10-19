@@ -1,0 +1,83 @@
+/* Inscription (lot 41) : choix du profil, carte des départements, nom et prénom privés. Jetons seulement. */
+
+.arr-profile {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+@media (max-width: 480px) {
+  .arr-profile {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.arr-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2) var(--space-2);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.arr-tile[aria-pressed="true"] {
+  border: 2px solid var(--accent-text);
+}
+.arr-tile__tick {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.arr-tile__sub {
+  color: var(--ink-muted);
+}
+.arr-tiles-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.arr-dept {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.arr-dept__map {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+}
+.arr-dept__chips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.arr-names {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+@media (max-width: 480px) {
+  .arr-names {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.arr-privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--ink-muted);
+}
+.arr-privacy b {
+  color: var(--ink);
+}
