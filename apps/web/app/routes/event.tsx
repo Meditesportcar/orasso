@@ -536,7 +536,9 @@ function EventPage({
 
         <section className="s-section">
           <h2 className="s-h2">Accès et adresse</h2>
-          {event.lat != null && event.lng != null && <EventMap lat={event.lat} lng={event.lng} label={place} />}
+          {event.lat != null && event.lng != null && (
+            <EventMap lat={event.lat} lng={event.lng} label={place} startsAt={event.startsAt} />
+          )}
           <p className="s-muted">{place || "Adresse communiquée par l'équipe organisatrice."}</p>
         </section>
 
