@@ -7,7 +7,7 @@
 // horizontales et la carte prennent le geste avant lui (le répondeur le plus profond est servi d'abord) ; un écran peut
 // aussi le couper tant qu'il est affiché (`useTabSwipeDisabled`).
 import { useFocusEffect } from "expo-router";
-import { createContext, type MutableRefObject, useCallback, useContext, useMemo, useRef } from "react";
+import { createContext, type MutableRefObject, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { PanResponder, type PanResponderInstance, useWindowDimensions } from "react-native";
 
 import { shouldCaptureSwipe, swipeDirection } from "./swipe";
@@ -69,6 +69,18 @@ export function useTabSwipe(onSwipe: (direction: 1 | -1) => void): {
   );
 
   return { panHandlers: responder.panHandlers, control };
+}
+
+/**
+ * Coupe le glissement tant que `active` est vrai (feuille ouverte). Sans navigation requise : sans `PersonaTabs`
+ * au-dessus (feuille de la racine), ne fait rien.
+ */
+export function useTabSwipeDisabledWhile(active: boolean) {
+  const control = useContext(TabSwipeContext);
+  useEffect(() => {
+    if (!control || !active) return undefined;
+    return control.disable();
+  }, [control, active]);
 }
 
 /** Coupe le glissement entre onglets tant que l'écran est affiché (carte, carrousel horizontal). */

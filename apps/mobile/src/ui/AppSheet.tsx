@@ -6,6 +6,8 @@ import { useRef } from "react";
 import { ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useTabSwipeDisabledWhile } from "@/features/nav/useTabSwipe";
+
 import { useKeyboardOverlap } from "./KeyboardSafe";
 
 const { space2, space3 } = tokens.spacing;
@@ -16,6 +18,8 @@ export function AppSheet({ children, from = "bottom", maxHeight = 0.8, ...rest }
   const ref = useRef<View>(null);
   const keyboard = useKeyboardOverlap(ref);
   const bottom = from === "bottom" ? Math.max(insets.bottom, keyboard) : 0;
+  // Lot 40 : feuille ouverte, pas de glissement vers l'onglet voisin.
+  useTabSwipeDisabledWhile(rest.visible);
   return (
     <Sheet from={from} {...rest}>
       <View ref={ref} style={{ paddingTop: from === "top" ? insets.top : 0, paddingBottom: bottom }}>

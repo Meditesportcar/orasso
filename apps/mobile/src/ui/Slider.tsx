@@ -45,6 +45,8 @@ export function Slider({
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      // Lot 40 : le curseur garde le geste ; le glissement entre onglets ne le lui prend pas.
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => move(e.nativeEvent.locationX),
       onPanResponderMove: (e) => move(e.nativeEvent.locationX),
       onPanResponderRelease: () => onCommit(latest.current),

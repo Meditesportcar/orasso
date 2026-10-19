@@ -39,6 +39,8 @@ export function neighbourRoute(
 ): string | null {
   const id = current ? routes[current] : undefined;
   if (!id) return null;
+  // Une page masquée (assistant, modifier, inviter, pages d'administration…) ne glisse pas : seuls les onglets le font.
+  if (Object.keys(routes).find((name) => routes[name] === id) !== current) return null;
   const next = tabIds[tabIds.indexOf(id) + direction];
   if (!next || tabIds.indexOf(id) < 0) return null;
   return Object.keys(routes).find((name) => routes[name] === next) ?? null;

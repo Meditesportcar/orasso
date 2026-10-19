@@ -102,7 +102,7 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(tabHref("admin", "profil")).toBeNull();
   });
 
-  it("onglet voisin pour le glissement, rien au bord ; une page masquée glisse depuis son onglet", () => {
+  it("onglet voisin pour le glissement, rien au bord ; une page masquée ne glisse pas", () => {
     const ids = (kind: keyof typeof personaTabs) => Object.values(personaTabs[kind]);
     const fanRoutes = personaTabs.fan as Record<string, string>;
     expect(neighbourRoute(ids("fan"), fanRoutes, "accueil", 1)).toBe("garage");
@@ -110,7 +110,8 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(neighbourRoute(ids("fan"), fanRoutes, "explorer", -1)).toBeNull();
     expect(neighbourRoute(ids("fan"), fanRoutes, "profil", 1)).toBeNull();
     const proRoutes = { ...personaTabs.pro, modifier: "card" } as Record<string, string>;
-    expect(neighbourRoute(ids("pro"), proRoutes, "modifier", 1)).toBe("accueil");
+    expect(neighbourRoute(ids("pro"), proRoutes, "modifier", 1)).toBeNull();
+    expect(neighbourRoute(ids("pro"), proRoutes, "fiche", 1)).toBe("accueil");
     expect(neighbourRoute(ids("pro"), proRoutes, "inconnue", 1)).toBeNull();
   });
 
