@@ -86,7 +86,7 @@ export function pointEntry(
   state: StaffState,
   userId: string,
   entry: AccessListEntry,
-  kind: "manual" | "plate",
+  kind: "manual" | "plate" | "drive",
   note?: string,
 ): string | null {
   const already = checkedInAt(state, entry);

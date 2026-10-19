@@ -1,15 +1,16 @@
-// Mode staff, écran d'entrée (docs/02 « Mode staff (détail) », prototype « Mode staff · accueil ») : l'événement,
-// l'état de la synchro, mon rôle, « je suis là », les tuiles selon mes rôles, la file d'envoi et les doublons
-// rapportés par le serveur. Tout s'affiche sans réseau depuis la liste du téléphone.
+// Mode staff, écran d'entrée (docs/02 « Mode staff (détail) », prototype DA v2 `s-staff`, lot 48) : synchro et liste
+// en mémoire en tête, mon rôle donné par la structure et « Je suis là », grandes tuiles selon mes rôles (Scanner, Liste,
+// Placement, Contrôle des billets), entrés par zone, et toujours en bas : Alerte, Main courante, Discussion. Tout
+// s'affiche sans réseau depuis la liste du téléphone. Thème au choix de l'utilisateur (D25b), fond immobile.
 
-import { Button, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { BigTitle, Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   communicationLabels,
+  staffHomeLabels as L,
   type MyStaffEvent,
   type StaffRole,
-  shopLabels,
-  staffPresenceLabels,
   staffRoleLabels,
+  wallTime,
 } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -19,6 +20,7 @@ import { AlertSheet } from "@/features/staff/AlertSheet";
 import { recordAlert, recordIncident } from "@/features/staff/actions";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock } from "@/features/staff/result";
+import { StaffTile } from "@/features/staff/StaffTile";
 import { api } from "@/lib/api";
 import { now as clockNow } from "@/lib/clock";
 import { formatDayHour } from "@/lib/format";
@@ -34,6 +36,12 @@ import { FlowScreen, SectionTitle } from "@/ui/Screens";
 const { space2, space3 } = tokens.spacing;
 
 const SCANNERS: StaffRole[] = ["scan", "control", "super_staff"];
+
+/** « 8 h 12 » (heure de Paris), comme le prototype. */
+function hourFr(iso: string): string {
+  const w = wallTime(new Date(iso));
+  return `${w.hour} h ${String(w.minute).padStart(2, "0")}`;
+}
 
 export default function StaffHome() {
   const { t } = useTheme();
@@ -95,14 +103,16 @@ export default function StaffHome() {
   const { duplicates, refused: refusedByServer } = serverReport(actions);
   const failed = actions.filter((a) => a.result && typeof a.result.error === "string");
   const count = state ? counters(state) : null;
+  const inMemory = state ? [...state.entries.values()].filter((e) => e.status === "valid").length : 0;
   const roles = state?.meta.myRoles ?? mine?.roles ?? [];
   const canScan = roles.some((r) => SCANNERS.includes(r));
   const canPlace = roles.includes("placement") || roles.includes("super_staff");
-  // Boutique (lot 24) : rôle `shop` et boutique activée pour cet événement.
+  // Contrôle des billets (lot 24, renommé au lot 48) : rôle `shop` et boutique activée pour cet événement.
   const canShop = state ? shopAccess(state.meta) === "ok" : false;
   const ticketDupes = ticketDuplicates(actions);
   const currentPresence = presence ?? mine?.presence ?? "unknown";
-  const title = state?.meta.title ?? mine?.event.title ?? "Mode staff";
+  const title = state?.meta.title ?? mine?.event.title ?? L.title;
+  const startsAt = state?.meta.startsAt ?? mine?.event.startsAt ?? null;
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
   const pseudoOf = (passId: unknown, applicationId: unknown) => {
     if (!state) return null;
@@ -110,11 +120,12 @@ export default function StaffHome() {
     const pass = typeof applicationId === "string" ? state.byApplication.get(applicationId) : undefined;
     return byPass?.pseudo ?? (pass ? state.entries.get(pass)?.pseudo : null) ?? null;
   };
+  const zones = (count?.zones ?? []).filter((z) => z.expected > 0);
 
   return (
     <FlowScreen
-      title={title}
-      facts={`Mode staff · ${roles.map((r) => staffRoleLabels[r]).join(" · ") || "staff"}`}
+      title={L.title}
+      facts={startsAt ? formatDayHour(startsAt) : undefined}
       onClose={close}
       still
       overlays={
@@ -138,143 +149,177 @@ export default function StaffHome() {
         </>
       }
       footer={
-        // Toujours accessibles en bas (docs/02) : l'alerte et, à côté, la discussion du staff (lot 20, en ligne).
+        // Toujours en bas (docs/02, prototype) : l'alerte, la main courante et la discussion du staff (lot 20, en ligne).
         <View style={styles.row}>
-          <Button variant="alert" icon="alert" onPress={() => setSheet("alert")} style={styles.tile}>
-            Alerte
+          <Button variant="alert" icon="alert" onPress={() => setSheet("alert")} style={styles.flex}>
+            {L.alert}
+          </Button>
+          <Button
+            variant="rescue"
+            icon="incident"
+            onPress={() => setSheet("incident")}
+            style={styles.grow2}
+            testID="staff-logbook"
+          >
+            {L.logbook}
           </Button>
           <Button
             variant="rescue"
             icon="chat"
             onPress={() => router.push(`/staff/${id}/discussion`)}
-            style={styles.tile}
+            style={styles.flex}
             testID="staff-discussion"
+            accessibilityLabel={communicationLabels.staffDiscussion}
           >
-            {communicationLabels.staffDiscussion}
+            {L.discussion}
           </Button>
         </View>
       }
     >
+      <BigTitle title={title} />
+
       {error ? <Notice tone="error">{error}</Notice> : null}
       {TRUST_MISSING ? <Notice tone="error">{TRUST_MISSING}</Notice> : null}
       {closed ? (
         <Notice>Mode staff fermé depuis J+1 : la liste et les coordonnées ont été effacées de ce téléphone.</Notice>
       ) : null}
 
-      <Plate style={styles.block}>
-        <Text variant="label" color={c.plateMuted}>
-          {mine ? `${formatDayHour(mine.event.startsAt)} · ${mine.structure.name}` : "Ton poste"}
-        </Text>
-        <Text variant="bodyStrong" color={c.plateInk}>
-          {state
-            ? "Hors ligne OK : la liste est sur ton téléphone."
-            : state === null
-              ? "La liste n'est pas encore sur ce téléphone : synchronise avec du réseau avant l'ouverture des portes."
-              : "Lecture de la liste…"}
-        </Text>
-        {count ? (
-          <Counters
-            items={[
-              { value: count.arrived, label: "Arrivés" },
-              { value: count.expected - count.arrived, label: "Attendus" },
-              { value: pending.length, label: "À envoyer" },
-            ]}
-            active={pending.length > 0 ? 2 : undefined}
-          />
-        ) : null}
-      </Plate>
-
-      {/* Un organisateur qui ouvre le mode staff n'est pas dans la liste « Où je suis staff » : pas de réponse de présence (lot 22). */}
-      {organizerView ? null : (
-        <Plate style={styles.block}>
-          <Text variant="label" color={c.plateMuted}>
-            Présence
-          </Text>
-          <Text variant="bodyStrong" color={c.plateInk}>
-            {currentPresence === "present"
-              ? "Je suis là"
-              : currentPresence === "absent"
-                ? "Pas là"
-                : staffPresenceLabels.unknown}
-          </Text>
-          <Button
-            variant="plate"
-            icon={currentPresence === "present" ? "close" : "check"}
-            onPress={() => {
-              if (!userId) return;
-              const next = currentPresence !== "present";
-              setPresence(next ? "present" : "absent");
-              void record(id, userId, "presence", { present: next });
-            }}
-            fullWidth
-          >
-            {currentPresence === "present" ? "Pas là" : "Je suis là"}
-          </Button>
-        </Plate>
-      )}
-
-      <Plate style={styles.block}>
-        <Text variant="label" color={c.plateMuted}>
-          Synchro
-        </Text>
-        <Text variant="bodyStrong" color={c.plateInk}>
-          {state
-            ? `Liste à jour ${clock(state.meta.syncedAt)}${state.meta.isLocked ? "" : " · liste non verrouillée"} · ${pending.length} envoi${pending.length > 1 ? "s" : ""} en attente`
-            : "Jamais synchronisée sur ce téléphone"}
-        </Text>
+      <Plate style={styles.block} testID="staff-sync">
+        <View style={styles.syncRow}>
+          <View style={[styles.dot, { backgroundColor: state ? c.accent : c.plateMuted }]} />
+          <View style={styles.flex}>
+            <Text variant="bodyStrong" color={c.plateInk}>
+              {state ? L.synced(hourFr(state.meta.syncedAt)) : state === null ? L.neverSynced : "Lecture de la liste…"}
+            </Text>
+            <Text variant="caption" color={c.plateMuted}>
+              {state ? L.inMemory(inMemory) : L.syncFirst}
+            </Text>
+          </View>
+        </View>
         {syncMessage ? (
           <Text variant="body" color={syncMessage.error ? c.plateInk : c.plateMuted}>
             {syncMessage.error ? `Attention : ${syncMessage.text}` : syncMessage.text}
           </Text>
         ) : null}
-        <Button variant="plate" icon="list" loading={syncing} onPress={() => void sync(true)} fullWidth>
-          Synchroniser la liste
-        </Button>
-        {pending.length > 0 ? (
-          <Button variant="plate" icon="export" onPress={() => userId && void flushNow(userId)} fullWidth>
-            Envoyer maintenant
+        <View style={styles.row}>
+          <Button variant="plate" icon="list" loading={syncing} onPress={() => void sync(true)} style={styles.flex}>
+            Synchroniser la liste
           </Button>
-        ) : null}
+          {pending.length > 0 ? (
+            <Button variant="plate" icon="export" onPress={() => userId && void flushNow(userId)} style={styles.flex}>
+              {`Envoyer · ${pending.length}`}
+            </Button>
+          ) : null}
+        </View>
+      </Plate>
+
+      <Plate style={styles.block} testID="staff-role">
+        <View style={styles.roleRow}>
+          <View style={styles.flex}>
+            <Text variant="label" color={c.plateMuted}>
+              {L.role}
+            </Text>
+            <Text variant="bodyStrong" color={c.plateInk}>
+              {roles.map((r) => staffRoleLabels[r]).join(" · ") || "Staff"}
+            </Text>
+            {mine ? (
+              <Text variant="caption" color={c.plateMuted}>
+                {L.givenBy(mine.structure.name)}
+              </Text>
+            ) : null}
+          </View>
+          {/* Un organisateur qui ouvre le mode staff n'est pas dans « Où je suis staff » : pas de présence (lot 22). */}
+          {organizerView ? null : (
+            <Button
+              variant="plate"
+              icon={currentPresence === "present" ? "check" : "close"}
+              tone={currentPresence === "present" ? "default" : "dashed"}
+              onPress={() => {
+                if (!userId) return;
+                const next = currentPresence !== "present";
+                setPresence(next ? "present" : "absent");
+                void record(id, userId, "presence", { present: next });
+              }}
+              testID="staff-presence"
+            >
+              {currentPresence === "present" ? L.here : currentPresence === "absent" ? L.notHere : L.here}
+            </Button>
+          )}
+        </View>
       </Plate>
 
       {state ? (
         <View style={styles.tiles}>
           {canScan ? (
-            <Button icon="qr" onPress={() => router.push(`/staff/${id}/scan`)} next fullWidth>
-              Ouvrir le scan
-            </Button>
+            <StaffTile
+              big
+              icon="qr"
+              title={L.scanner}
+              hint={L.scannerHint}
+              onPress={() => router.push(`/staff/${id}/scan`)}
+              testID="staff-tile-scan"
+            />
           ) : null}
-          <View style={styles.row}>
-            <Button variant="rescue" icon="list" onPress={() => router.push(`/staff/${id}/liste`)} style={styles.tile}>
-              Liste
-            </Button>
-            {canPlace ? (
-              <Button
-                variant="rescue"
-                icon="place"
-                onPress={() => router.push(`/staff/${id}/placement`)}
-                style={styles.tile}
-              >
-                Placement
-              </Button>
-            ) : null}
-            <Button variant="rescue" icon="incident" onPress={() => setSheet("incident")} style={styles.tile}>
-              Main courante
-            </Button>
-          </View>
+          <StaffTile
+            icon="list"
+            title={L.list}
+            hint={L.listHint(inMemory)}
+            onPress={() => router.push(`/staff/${id}/liste`)}
+            testID="staff-tile-list"
+          />
+          {canPlace ? (
+            <StaffTile
+              icon="place"
+              title={L.placement}
+              hint={L.placementHint}
+              onPress={() => router.push(`/staff/${id}/placement`)}
+              testID="staff-tile-placement"
+            />
+          ) : null}
           {canShop ? (
-            <Button
-              variant="rescue"
-              icon="entry"
+            <StaffTile
+              icon="ticket"
+              title={L.tickets}
+              hint={L.ticketsHint}
               onPress={() => router.push(`/staff/${id}/boutique`)}
-              fullWidth
               testID="staff-shop-tile"
-            >
-              {shopLabels.tile}
-            </Button>
+            />
           ) : null}
         </View>
       ) : null}
+
+      {count ? (
+        <Plate style={styles.block} testID="staff-counters">
+          <View style={styles.between}>
+            <Text variant="label" color={c.plateMuted}>
+              {L.entered}
+            </Text>
+            <Text variant="caption" color={c.plateMuted}>
+              {L.enteredOf(count.arrived, count.expected)}
+            </Text>
+          </View>
+          {zones.map((z) => (
+            <View key={z.code ?? "none"} style={styles.zoneRow}>
+              <Text variant="bodyStrong" color={c.plateInk} style={styles.zoneName}>
+                {z.name}
+              </Text>
+              <View style={[styles.bar, { backgroundColor: c.plateLine }]}>
+                <View
+                  style={[
+                    styles.barFill,
+                    { backgroundColor: c.plateInk, width: `${Math.round((100 * z.arrived) / z.expected)}%` },
+                  ]}
+                />
+              </View>
+              <Text variant="caption" color={c.plateMuted}>
+                {z.arrived}/{z.expected}
+              </Text>
+            </View>
+          ))}
+        </Plate>
+      ) : null}
+
+      <Muted variant="caption">{L.closesNote}</Muted>
 
       {consent === "undetermined" ? (
         <Plate style={styles.block} testID="staff-location-ask">
@@ -348,7 +393,16 @@ export default function StaffHome() {
 
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
-  tiles: { gap: space2 },
+  tiles: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   row: { flexDirection: "row", gap: space2 },
-  tile: { flex: 1 },
+  flex: { flex: 1 },
+  grow2: { flex: 2 },
+  syncRow: { flexDirection: "row", alignItems: "center", gap: space2 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  roleRow: { flexDirection: "row", alignItems: "center", gap: space3 },
+  between: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  zoneRow: { flexDirection: "row", alignItems: "center", gap: space2 },
+  zoneName: { minWidth: 88 },
+  bar: { flex: 1, height: 8, borderRadius: 4, overflow: "hidden" },
+  barFill: { height: "100%", borderRadius: 4 },
 });

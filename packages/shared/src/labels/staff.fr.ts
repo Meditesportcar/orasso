@@ -40,3 +40,51 @@ export const staffPresenceLabels: Record<StaffPresence, string> = {
   present: "Je suis là",
   absent: "Pas là",
 };
+
+/** Mode staff v2, écran d'entrée (lot 48, prototype DA v2 `s-staff`, validé par Damien le 19/10/2026). */
+export const staffHomeLabels = {
+  title: "Mode staff",
+  synced: (hour: string) => `Synchronisé à ${hour}`,
+  inMemory: (n: number) => `${n} inscrit${n > 1 ? "s" : ""} en mémoire : le scan marche sans réseau`,
+  neverSynced: "Pas encore synchronisé",
+  syncFirst: "Synchronise avec du réseau avant l'ouverture des portes : la liste restera sur ton téléphone.",
+  role: "Ton rôle",
+  givenBy: (structure: string) => `Donné par ${structure} pour cet événement`,
+  here: "Je suis là",
+  notHere: "Pas là",
+  scanner: "Scanner",
+  scannerHint: "Caméra continue · résultat en 1 s",
+  list: "Liste",
+  listHint: (n: number) => `${n} inscrit${n > 1 ? "s" : ""} · pointage manuel`,
+  placement: "Placement",
+  placementHint: "Attendus et arrivés par zone",
+  tickets: "Contrôle des billets",
+  ticketsHint: "Public · compteur d'entrées",
+  entered: "Entrés",
+  enteredOf: (arrived: number, expected: number) => `${arrived} sur ${expected}`,
+  closesNote: "Le mode staff se referme seul à J+1. Les scans faits hors ligne partent au retour du réseau.",
+  alert: "Alerte",
+  logbook: "Main courante",
+  discussion: "Discussion",
+} as const;
+
+/** Accueil drive (lot 48, prototype DA v2 `s-drive`, idée retenue n° 1). */
+export const driveLabels = {
+  title: "Accueil drive",
+  tile: "Accueil drive",
+  tileHint: "La caméra lit la plaque, sans réseau",
+  offline: (n: number, entered: number) =>
+    `Hors ligne · ${n} inscrit${n > 1 ? "s" : ""} en mémoire · ${entered} entrés`,
+  aim: "Caméra ouverte · vise la plaque avant",
+  reading: "Lecture de la plaque…",
+  noCamera: "Pas de caméra dans le navigateur : tape la plaque",
+  noOcr: "Lecture de plaque absente de cette version : tape la plaque",
+  typed: "Plaque lue (recette)",
+  next: "Voiture suivante",
+  unknown: "Plaque absente de la liste : plaque ou pseudo",
+  revoked: "Désisté ou non admis",
+  otherDay: "Inscrit pour un autre jour",
+  searchOrPseudo: "Plaque ou pseudo",
+  express: "Express",
+  noScan: "Sans scan",
+} as const;

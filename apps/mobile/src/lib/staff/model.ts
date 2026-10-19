@@ -58,7 +58,7 @@ export type StaffEventMeta = {
   serverOffsetMs?: number;
 };
 
-export type LocalCheckinMethod = "scan" | "override" | "manual" | "plate";
+export type LocalCheckinMethod = "scan" | "override" | "manual" | "plate" | "drive";
 
 /** Entrée enregistrée sur l'appareil avant (ou en attendant) la confirmation du serveur (table `local_checkins`). */
 export type LocalCheckin = {
@@ -81,7 +81,7 @@ export type ScanItemWire = {
   scannedAt: string;
 };
 export type CheckinItemWire = {
-  kind: "manual" | "plate";
+  kind: "manual" | "plate" | "drive";
   id: string;
   applicationId: string;
   note: string | null;
@@ -98,6 +98,7 @@ export type ActionKind =
   | "scan"
   | "manual"
   | "plate"
+  | "drive"
   | "presence"
   | "express"
   | "incident"
@@ -105,7 +106,7 @@ export type ActionKind =
   | "ticket_scan"
   | "visitor"
   | "incident_photo";
-export const BATCH_KINDS: readonly ActionKind[] = ["scan", "manual", "plate"];
+export const BATCH_KINDS: readonly ActionKind[] = ["scan", "manual", "plate", "drive"];
 /** Les actions dont l'identifiant (clé d'idempotence côté serveur) voyage aussi dans le corps. */
 export const ID_IN_PAYLOAD: readonly ActionKind[] = [...BATCH_KINDS, "ticket_scan", "visitor"];
 
@@ -366,10 +367,10 @@ export function scanAction(
   return { item, checkin };
 }
 
-/** Pointage « Pointer » (liste, recherche) ou rapide par plaque, fait sur l'appareil. */
+/** Pointage « Pointer » (liste, recherche), rapide par plaque ou par l'accueil drive (lot 48), fait sur l'appareil. */
 export function checkinAction(
   entry: AccessListEntry,
-  kind: "manual" | "plate",
+  kind: "manual" | "plate" | "drive",
   id: string,
   now: Date,
   note?: string,

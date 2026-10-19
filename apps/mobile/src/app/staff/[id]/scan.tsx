@@ -2,6 +2,8 @@
 // deux véhicules. Chaque QR est vérifié sur le téléphone (signature Ed25519, liste locale) puis le résultat couvre
 // l'écran 1 s, coloré, sonore et vibrant (OK + zone moutarde / déjà entré crème / refusé rouge), et la caméra revient
 // seule. Boutons toujours visibles en bas : plaque ou pseudo, express, sans scan, liste, incident, alerte.
+// Lot 48 : le code tournant OR2 (secret de la liste, heure d'Orasso) et l'ancien QR OR1 passent tous deux par
+// `decideLocal` ; un code périmé est refusé « Code périmé : demande à la personne de rafraîchir son écran ».
 
 import {
   AppBar,
@@ -15,7 +17,13 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import { eventDaysLabels, formatDayDate, localScanDecisionLabels, type ScanDecision } from "@orasso/shared";
+import {
+  driveLabels,
+  eventDaysLabels,
+  formatDayDate,
+  localScanDecisionLabels,
+  type ScanDecision,
+} from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
@@ -213,6 +221,19 @@ export default function Scan() {
         closeLabel="Quitter le scan"
         safeTop={insets.top}
       />
+
+      {/* Lot 48 : l'accueil drive (la caméra lit la plaque) en tête de l'écran de scan. */}
+      <View style={styles.driveTile}>
+        <Button
+          variant="rescue"
+          icon="vehicle"
+          onPress={() => router.push(`/staff/${id}/drive`)}
+          fullWidth
+          testID="scan-drive-tile"
+        >
+          {driveLabels.tile}
+        </Button>
+      </View>
 
       <View style={[styles.camera, { backgroundColor: c.night, borderRadius: tokens.radius.radiusLg }]}>
         {cameraOk && focused ? (
@@ -429,6 +450,7 @@ const styles = StyleSheet.create({
   permission: { position: "absolute", top: space3, left: space3, right: space3 },
   unknown: { margin: space2, gap: space2, padding: space3 },
   lastCard: { margin: space2 },
+  driveTile: { paddingHorizontal: space3, paddingTop: space2 },
   dev: { flexDirection: "row", paddingHorizontal: space3, paddingTop: space2 },
   actions: { gap: space2, paddingHorizontal: space3, paddingTop: space3 },
   row: { flexDirection: "row", gap: space2 },
