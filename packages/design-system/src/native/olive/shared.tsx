@@ -1,11 +1,10 @@
 // Briques communes du O vivant natif (lot 39) : la voiture vue de dessus peinte aux jetons, l'horloge image par image
 // (un seul useFrameCallback par variante, arrêté hors focus et en arrière-plan), le O et sa voiture garée.
 
-import { type ReactNode, useEffect, useId, useState } from "react";
+import { type ComponentProps, type ReactNode, useEffect, useId, useState } from "react";
 import { AppState, StyleSheet, View } from "react-native";
 import Animated, {
   type SharedValue,
-  type useAnimatedStyle,
   useFrameCallback,
   useSharedValue,
   withSequence,
@@ -31,7 +30,7 @@ export const STAGE_COMPACT = 200;
 /** Le drift autour du O : rayon horizontal et écrasement vertical (prototype : 92 × 72). */
 export const ORBIT = { radius: 92, squash: 0.78 } as const;
 /** Longueur de la voiture vue de dessus autour du O, en unités du monogramme. */
-export const CAR_UNITS = 30;
+export const CAR_UNITS = 36;
 const [monoX, monoY, monoW] = brandArt.viewBox;
 /** Centre du O dans le viewBox du monogramme. */
 export const O_CENTER = { x: monoX + monoW / 2, y: monoY + monoW / 2 } as const;
@@ -173,7 +172,8 @@ export function OrbitCar({
   stagePx: number;
   length: number;
   color?: string;
-  style: ReturnType<typeof useAnimatedStyle>;
+  /** Style animé (useAnimatedStyle) qui porte la pose. */
+  style: ComponentProps<typeof Animated.View>["style"];
 }) {
   const box = carBox(length);
   return (

@@ -106,6 +106,10 @@
 .o-opening__cars {
   transition: opacity var(--timing-fast) linear;
 }
+/* La chasse prend l'encre du logo : elle se détache sur tout fond (affiche, Béton, Sable). */
+.o-opening .o-car--chase {
+  --car-body: currentColor;
+}
 .o-opening.is-park .o-opening__cars {
   opacity: 0;
 }

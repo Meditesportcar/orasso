@@ -8,7 +8,7 @@ import { StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 import { olive } from "../../motion";
-import { LogoLetters, oTransform, useTone } from "../Brand";
+import { type BrandTone, LogoLetters, oTransform, useTone } from "../Brand";
 import { brandArt } from "../brandArt";
 import { Ground } from "../Ground";
 import { duration, easings } from "../motionHooks";
@@ -36,12 +36,19 @@ export type OpeningBattleProps = {
   playKey?: unknown;
   /** Rendu sans le fond (aperçu dans une carte de la recette). */
   bare?: boolean;
+  /** Version du logo : selon le thème par défaut ; `light` (O noir) sur une affiche crème, `dark` sur la nuit. */
+  tone?: BrandTone;
 };
 
 /** La battle et le logo, sans le fond. */
-export function OpeningBattleLogo({ onDone, logoWidth = 260, playKey }: Omit<OpeningBattleProps, "bare">) {
+export function OpeningBattleLogo({
+  onDone,
+  logoWidth = 260,
+  playKey,
+  tone = "auto",
+}: Omit<OpeningBattleProps, "bare">) {
   const { t, reducedMotion } = useTheme();
-  const version = useTone("auto");
+  const version = useTone(tone);
   const active = useAppActive();
   const id = `ob${useId().replaceAll(":", "")}`;
   const width = logoWidth;
@@ -149,7 +156,7 @@ export function OpeningBattleLogo({ onDone, logoWidth = 260, playKey }: Omit<Ope
             { width: stagePx, height: stagePx, left: (width - stagePx) / 2, top: (boxH - stagePx) / 2 },
           ]}
         >
-          <OrbitCar stagePx={stagePx} length={CAR_UNITS * kz} color={t.color.poster} style={chaseStyle} />
+          <OrbitCar stagePx={stagePx} length={CAR_UNITS * kz} color={brandArt.ink[version]} style={chaseStyle} />
           <OrbitCar stagePx={stagePx} length={CAR_UNITS * kz} color={t.color.accent} style={leadStyle} />
         </View>
       )}
@@ -158,11 +165,11 @@ export function OpeningBattleLogo({ onDone, logoWidth = 260, playKey }: Omit<Ope
 }
 
 /** L'écran d'ouverture : la battle en tandem sur le fond immobile, puis le logo composé. Une fois par lancement. */
-export function OpeningBattle({ onDone, logoWidth, playKey, bare = false }: OpeningBattleProps) {
-  const logo = <OpeningBattleLogo onDone={onDone} logoWidth={logoWidth} playKey={playKey} />;
+export function OpeningBattle({ onDone, logoWidth, playKey, bare = false, tone }: OpeningBattleProps) {
+  const logo = <OpeningBattleLogo onDone={onDone} logoWidth={logoWidth} playKey={playKey} tone={tone} />;
   if (bare) return <View style={styles.center}>{logo}</View>;
   return (
-    <Ground variant="battle" still>
+    <Ground variant="battle" still testID="opening-battle">
       <View style={styles.center}>{logo}</View>
     </Ground>
   );

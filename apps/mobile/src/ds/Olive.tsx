@@ -39,7 +39,7 @@ function Card({
 }) {
   return (
     <View testID={testID} style={[styles.card, { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard }]}>
-      <View style={[styles.stage, { backgroundColor: t.color.surfaceSunken }]}>{stage}</View>
+      <View style={[styles.stage, { backgroundColor: t.color.surfaceRaised }]}>{stage}</View>
       <View style={styles.body}>
         <Text variant="bodyStrong" color={t.color.ink}>
           {title}
@@ -66,13 +66,15 @@ function PullDemo({ t, playKey }: { t: ThemeTokens; playKey: number }) {
       title="Tirer pour actualiser"
       text="Le O descend, la voiture drifte le temps de recharger."
       stage={
-        <PullToRefresh state={refresh}>
-          <ScrollView onScroll={refresh.onScroll} scrollEventThrottle={16} contentContainerStyle={styles.list}>
-            {[0, 1, 2, 3].map((i) => (
-              <View key={i} style={[styles.row, { backgroundColor: t.color.surface }]} />
-            ))}
-          </ScrollView>
-        </PullToRefresh>
+        <View style={styles.pullBox}>
+          <PullToRefresh state={refresh}>
+            <ScrollView onScroll={refresh.onScroll} scrollEventThrottle={16} contentContainerStyle={styles.list}>
+              {[0, 1, 2, 3].map((i) => (
+                <View key={i} style={[styles.row, { backgroundColor: t.color.surface }]} />
+              ))}
+            </ScrollView>
+          </PullToRefresh>
+        </View>
       }
     >
       <Button variant="secondary" icon="undo" onPress={refresh.trigger}>
@@ -139,7 +141,7 @@ export function OliveContent({ t }: { t: ThemeTokens }) {
 
       <View testID="olive-hero" style={[styles.hero, { backgroundColor: t.color.poster }]}>
         <View style={styles.heroStage}>
-          <OpeningBattle bare logoWidth={240} playKey={`${all}-${hero}`} />
+          <OpeningBattle bare logoWidth={240} tone={t.id === "beton" ? "light" : "dark"} playKey={`${all}-${hero}`} />
         </View>
         <Text variant="label" color={t.color.posterMuted}>
           Lancement de l'appli
@@ -243,12 +245,13 @@ const styles = StyleSheet.create({
   hero: { borderRadius: 24, padding: 14, gap: 4, overflow: "hidden" },
   heroStage: { height: 230, alignItems: "center", justifyContent: "center" },
   card: { borderRadius: 18, overflow: "hidden" },
-  stage: { height: 150, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  stage: { minHeight: 150, paddingVertical: 8, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   body: { padding: 12, gap: 4 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   list: { padding: 12, gap: 6 },
   row: { height: 26, borderRadius: 8, width: 300 },
   road: { width: "100%", paddingHorizontal: 12 },
+  pullBox: { height: 150, alignSelf: "stretch" },
   tabStage: { width: "100%", paddingHorizontal: 10 },
   phone: { height: 360, borderRadius: 30, overflow: "hidden", marginHorizontal: -16 },
 });

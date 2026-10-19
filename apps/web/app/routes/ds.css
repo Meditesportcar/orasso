@@ -366,7 +366,7 @@
 }
 .ds-olive-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
 }
 .ds-olive-card {
@@ -384,9 +384,10 @@
   position: relative;
   display: grid;
   place-items: center;
-  height: 150px;
+  min-height: 150px;
+  padding: var(--space-2) 0;
   overflow: hidden;
-  background: var(--surface-sunken);
+  background: var(--surface-raised);
 }
 .ds-olive-body {
   display: grid;
