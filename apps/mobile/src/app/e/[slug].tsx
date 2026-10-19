@@ -1,55 +1,50 @@
-// Page d'un événement (lien partagé ou depuis Explorer) : la carte affiche, les compteurs, l'admission, le public, le
-// règlement. Ouverte sans compte ; « Candidater » demande de se connecter puis revient exactement ici.
+// Fiche événement v2 (lot 44, prototype DA v2 `s-event`, validé par Damien le 19/10/2026 ; lien partagé ou depuis
+// Explorer) : l'affiche générée en vedette, les chips, la description, l'organisateur, Quand / Où (carte stylée) /
+// Exposants / Public, les créneaux d'arrivée en deux plaques, l'affiche perso de l'organisateur, le règlement, la météo
+// du jour J, les prestataires présents, puis l'action principale selon le profil ; fermé, la raison et quoi faire.
+// Ouverte sans compte ; « Candidater » demande de se connecter puis revient exactement ici. Découpée en
+// `features/event/*`.
 
+import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
-  Button,
-  Chip,
-  ChipRow,
-  Counters,
-  Plate,
-  PosterCard,
-  Text,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
-import {
-  applicationStatusLabels,
   crewLabels,
   dayAccessLabels,
-  type EventPublic,
-  type EventReviews,
   eventAcceptsVendorType,
   eventAdmissionLabels,
   eventDaysLabels,
   eventFormatLabels,
-  eventOutlookLabels,
   formatDayDate,
-  instagramHandle,
   invitationLabels,
+  eventPageLabels as L,
   previewSummary,
-  publicAccessText,
   registrationBlock,
-  registrationBlockText,
-  registrationFullText,
   type VendorTypeCode,
   wizardEndLabels,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { type ReactNode, useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { useState } from "react";
+import { StyleSheet } from "react-native";
 import { ContactOrganizerButton } from "@/features/boite/MessageButton";
 import { EventFeed } from "@/features/communication/EventFeed";
+import { ArrivalSlots } from "@/features/event/ArrivalSlots";
+import { eventAction, type ProfileKind } from "@/features/event/action";
+import { CustomPoster } from "@/features/event/CustomPoster";
+import { Info, ProvidersPresent, Reviews } from "@/features/event/EventExtras";
+import { EventFactsGrid, EventTitle, OrganizerRow } from "@/features/event/EventFacts";
+import { EventGatePlate } from "@/features/event/EventGate";
+import { EventHero } from "@/features/event/EventHero";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { ReportButton } from "@/features/ReportSheet";
 import { TicketsBlock } from "@/features/tickets/TicketsBlock";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
-import { breakTitle, formatDay, formatDayHour, formatDayHourYear, formatHour } from "@/lib/format";
+import { formatHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
-import { mediaSource } from "@/lib/media";
+import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
@@ -62,15 +57,22 @@ export default function EventPage() {
   const router = useRouter();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { status, me, refreshMe } = useSession();
+  const { persona } = usePersona();
   const event = useApi(() => api.eventBySlug(slug), [slug, status], { enabled: status !== "loading" });
-  const categories = useApi(() => api.categories(), [], { cacheKey: "ref.categories", enabled: status === "in" });
+  const e = event.data;
   const reviews = useApi(() => api.eventReviews(slug), [slug, status], { enabled: status !== "loading" });
-  // Météo à l'approche (lot 28) : seulement dans les 7 jours avant l'événement ; jamais bloquante.
+  // Météo du jour J (lot 28) : seulement dans les 7 jours avant l'événement ; jamais bloquante.
   const weather = useApi(() => api.eventWeather(slug), [slug], { enabled: status !== "loading" });
   // Fil de l'événement (lot 20) : public, enrichi pour les retenus (consignes, annonces réservées).
   const feed = useApi(() => api.eventAnnouncements(slug), [slug, status], { enabled: status !== "loading" });
-  const e = event.data;
   const providers = useApi(() => api.eventProviders(slug), [slug, status], { enabled: status !== "loading" });
+  const structure = useApi(() => api.structureBySlug(e?.structure.slug ?? ""), [e?.structure.slug, status], {
+    enabled: Boolean(e) && status !== "loading",
+  });
+  const offer = useApi(() => api.ticketOffer(slug), [slug, status], { enabled: status !== "loading" });
+  const kind: ProfileKind = status !== "in" ? "guest" : persona.kind;
+  // Le véhicule « de couverture » : le premier du garage actif (« Candidater avec ma Supra »).
+  const vehicles = useApi(() => api.vehicles(), [status], { enabled: status === "in" && kind === "fan" });
   const hasPro = me?.personas?.some((p) => p.kind === "pro") ?? false;
   const hasProvider = me?.personas?.some((p) => p.kind === "provider") ?? false;
   const providerProfile = useApi(async () => (await api.providerProfile()).profile, [status, hasPro, hasProvider], {
@@ -82,6 +84,9 @@ export default function EventPage() {
   const [applying, setApplying] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerSent, setProviderSent] = useState(false);
+  const [booking, setBooking] = useState(false);
+  const [following, setFollowing] = useState(false);
+  const [followError, setFollowError] = useState<string | null>(null);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
 
@@ -116,16 +121,13 @@ export default function EventPage() {
   const opensAt = new Date(e.registrationOpensAtForMe ?? e.registrationsOpenAt);
   const notYetOpen = nowMs() < opensAt.getTime();
   const cancelled = e.status === "cancelled";
-  // Événement privé (lot 25) : pas de candidature libre, l'invitation se répond dans Accès.
+  // Événement privé (lot 25) : pas de candidature libre, l'invitation se répond dans Sorties.
   const inviteOnly = e.admission === "invite_only";
   // Lot 36 : la raison d'un blocage, la même que sur le site ; complet ne bloque plus (liste d'attente, comme le site).
   const block = registrationBlock(e, nowMs());
   const canApply = !inviteOnly && !cancelled && !e.isLocked && !notYetOpen && e.status !== "draft";
   const full = canApply && e.admission === "open" && e.remaining !== null && e.remaining <= 0;
   const preview = previewSummary(e);
-  const wanted = (e.criteria?.categoryIds ?? [])
-    .map((id) => categories.data?.find((c) => c.id === id)?.label)
-    .filter((l): l is string => Boolean(l));
 
   // Prestataires (lot 21) : un prestataire candidate avec son profil ; un pro, avec le stand de sa fiche pro.
   const profileData = providerProfile.data;
@@ -135,6 +137,21 @@ export default function EventPage() {
     : hasPro && eventAcceptsVendorType(e.vendorTypes, "stand");
   const showProviderApply =
     status === "in" && (hasPro || hasProvider) && providerOpen && e.admission !== "invite_only" && providerAccepted;
+
+  const ownStructure = persona.kind === "organizer" && persona.structureId === e.structure.id;
+  const { action, gate } = eventAction({
+    kind,
+    ownStructure,
+    hasApplication: mine.length > 0,
+    canApply,
+    full,
+    block,
+    hasTicketOffer: Boolean(offer.data?.offer),
+    providerCanApply: showProviderApply && !providerSent,
+    cancelled,
+  });
+  const isFollowing = following || Boolean(structure.data?.isFollowing);
+  const cover = (vehicles.data ?? []).find((v) => v.status === "active");
 
   async function openProviderApply() {
     setProviderError(null);
@@ -150,61 +167,105 @@ export default function EventPage() {
     }
   }
 
+  async function toggleFollow() {
+    if (!e) return;
+    if (status !== "in") {
+      router.push({ pathname: "/auth", params: { mode: "signup", next: `/e/${e.slug}` } });
+      return;
+    }
+    setFollowError(null);
+    setFollowing(true);
+    try {
+      if (structure.data?.isFollowing) {
+        await api.unfollowStructure(e.structure.id);
+        setFollowing(false);
+      } else await api.followStructure(e.structure.id);
+      await structure.reload();
+    } catch (error) {
+      setFollowing(false);
+      setFollowError(errorMessage(error));
+    }
+  }
+
   const apply = () =>
     status === "in"
       ? router.push(`/candidater/${e.slug}`)
       : router.push({ pathname: "/auth", params: { mode: "signup", next: `/candidater/${e.slug}` } });
 
+  const primary =
+    action === "triage"
+      ? {
+          label: L.triage,
+          icon: "list" as const,
+          onPress: () => router.push({ pathname: "/tri", params: { event: e.id } }),
+        }
+      : action === "apply"
+        ? { label: cover ? L.applyWith(cover.modelName) : L.applyNoVehicle, icon: "add" as const, onPress: apply }
+        : action === "applyGuest"
+          ? { label: L.applyNoVehicle, icon: "add" as const, onPress: apply }
+          : action === "myApplication"
+            ? { label: L.myApplication, icon: "qr" as const, onPress: () => router.navigate("/sorties") }
+            : action === "book"
+              ? { label: L.bookEntry, icon: "ticket" as const, onPress: () => setBooking(true) }
+              : action === "providerApply"
+                ? {
+                    label: profileData ? "Candidater comme prestataire" : "Candidater pour un stand",
+                    icon: "add" as const,
+                    onPress: () => void openProviderApply(),
+                  }
+                : action === "followOrganizer"
+                  ? {
+                      label: isFollowing ? L.followingOrganizer : L.followOrganizer,
+                      icon: isFollowing ? ("check" as const) : ("add" as const),
+                      onPress: () => void toggleFollow(),
+                    }
+                  : null;
+
+  const footer = gate ? (
+    <EventGatePlate
+      gate={gate}
+      event={e}
+      block={block}
+      following={isFollowing}
+      busy={following && !structure.data?.isFollowing}
+      onWaitlist={apply}
+      onFollow={() => void toggleFollow()}
+    />
+  ) : primary ? (
+    <Button variant="primary" icon={primary.icon} next onPress={primary.onPress} fullWidth testID="event-primary">
+      {primary.label}
+    </Button>
+  ) : null;
+
   return (
-    <FlowScreen title={eventFormatLabels[e.format]} onClose={close} onRefresh={event.reload}>
+    <FlowScreen title={eventFormatLabels[e.format]} onClose={close} onRefresh={event.reload} footer={footer}>
       {e.status === "draft" ? (
         <Notice tone="error" testID="draft-preview">
           {wizardEndLabels.previewBanner}
         </Notice>
       ) : null}
-      <PosterCard
-        label={`${eventFormatLabels[e.format]} · ${e.structure.name}`}
-        title={breakTitle(e.title)}
-        facts={`${formatDay(e.startsAt)} · ${formatHour(e.startsAt)} – ${formatHour(e.endsAt)}${e.city ? ` · ${e.city}` : ""}`}
-        photo={{
-          source: mediaSource(e.posterUrl),
-          placeholder: `linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`,
-        }}
-        status={posterStatus(
-          e,
-          mine.some((a) => a.status === "accepted"),
-        )}
-        action={
-          mine.length > 0
-            ? { label: "Voir mes accès", icon: "qr", next: true, onPress: () => router.navigate("/acces") }
-            : canApply
-              ? { label: "Candidater avec un véhicule", icon: "add", next: true, onPress: apply }
-              : inviteOnly && !cancelled
-                ? {
-                    label: invitationLabels.openAccess,
-                    icon: "entry",
-                    next: true,
-                    onPress: () => router.navigate("/acces"),
-                  }
-                : undefined
-        }
-      />
-
+      <EventHero event={e} />
+      <EventTitle event={e} />
       {mine.length > 0 ? (
         <Notice>
-          Tu as candidaté : {mine.map((a) => applicationStatusLabels[a.status].toLowerCase()).join(", ")}.
+          Tu as candidaté : {mine.length > 1 ? `${mine.length} candidatures` : "ta candidature est dans Sorties"}.
         </Notice>
       ) : cancelled ? (
         <Notice tone="error">Cet événement est annulé.</Notice>
       ) : inviteOnly ? (
         <Notice>{invitationLabels.invitationRequired}</Notice>
-      ) : block && (block.code === "locked" || block.code === "preview" || block.code === "not_open") ? (
-        <Notice testID="registration-reason">
-          {registrationBlockText(block, (iso) => formatDayHourYear(iso, new Date(nowMs())))}
-        </Notice>
-      ) : full ? (
-        <Notice>{registrationFullText}</Notice>
       ) : null}
+      <OrganizerRow
+        event={e}
+        structure={structure.data ?? null}
+        busy={following && !structure.data?.isFollowing}
+        onFollow={() => void toggleFollow()}
+      />
+      {followError ? <Notice tone="error">{followError}</Notice> : null}
+      <EventFactsGrid event={e} />
+      <ArrivalSlots arrivals={e.arrivals} />
+      {e.customPosterUrl ? <CustomPoster url={e.customPosterUrl} structureName={e.structure.name} /> : null}
+
       {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
       {mine.length > 0 &&
       (e.days?.length ?? 0) > 1 &&
@@ -227,48 +288,6 @@ export default function EventPage() {
         </Button>
       ) : null}
 
-      <Counters
-        items={[
-          { value: e.remaining ?? "∞", label: "places" },
-          { value: e.acceptedCount, label: "retenus" },
-          { value: eventOutlookLabels[e.outlook], label: "statut" },
-        ]}
-        active={0}
-      />
-
-      {weather.data ? <WeatherWidget summary={weather.data.summary} attribution={weather.data.attribution} /> : null}
-
-      {wanted.length > 0 ? (
-        <Plate style={styles.info}>
-          <Text variant="label" color={t.color.plateMuted}>
-            Recherché
-          </Text>
-          <ChipRow>
-            {wanted.map((label) => (
-              <Chip key={label} variant="accent" surface="plate">
-                {label}
-              </Chip>
-            ))}
-          </ChipRow>
-        </Plate>
-      ) : null}
-
-      {/* Page de l'organisateur (lot 29) : fiche, événements, suivre, devenir staff. */}
-      <Pressable
-        accessibilityRole="link"
-        accessibilityLabel={`Organisateur : ${e.structure.name}`}
-        onPress={() => router.push(`/o/${e.structure.slug}`)}
-        testID="event-organizer"
-      >
-        <Plate style={styles.info}>
-          <Text variant="label" color={t.color.plateMuted}>
-            Organisateur
-          </Text>
-          <Text variant="bodyStrong" color={t.color.plateInk}>
-            {e.structure.name}
-          </Text>
-        </Plate>
-      </Pressable>
       {(e.days?.length ?? 0) > 1 ? (
         <Plate style={styles.info} testID="event-days">
           <Text variant="label" color={t.color.plateMuted}>
@@ -286,57 +305,21 @@ export default function EventPage() {
           ))}
         </Plate>
       ) : null}
-      <Info label="Quand et où">
-        {formatDayHour(e.startsAt)} → {formatDayHour(e.endsAt)}
-        {e.addressLine || e.city
-          ? `\n${[e.addressLine, [e.postalCode, e.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")}`
-          : ""}
-      </Info>
       <Info label="Admission">
         {eventAdmissionLabels[e.admission]}
         {e.maxVehiclesPerUser > 1 ? ` · ${e.maxVehiclesPerUser} véhicules par personne au plus` : ""}
         {preview ? `\n${preview}` : ""}
       </Info>
-      <Info label="Public">{publicAccessText(e.publicAccess, e.externalTicketUrl)}</Info>
+      {e.rulesText ? <Info label={L.rules}>{e.rulesText}</Info> : null}
+      {weather.data ? <WeatherWidget summary={weather.data.summary} attribution={weather.data.attribution} /> : null}
       {/* Lot 34 (parité D20) : billets du public réservés dans l'appli, comme sur la page du site. */}
       {!cancelled ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
       {e.vendorTypes.length > 0 ? <Info label="Prestataires attendus">{e.vendorTypes.join(" · ")}</Info> : null}
       {providers.data && providers.data.length > 0 ? (
-        <Plate style={styles.info} testID="providers-present">
-          <Text variant="label" color={t.color.plateMuted}>
-            Prestataires présents
-          </Text>
-          {providers.data.map((p) => (
-            <View key={p.id} style={styles.provider} testID="provider-present">
-              <View style={styles.providerText}>
-                <Text variant="bodyStrong" color={t.color.plateInk}>
-                  {p.name}
-                </Text>
-                <Text variant="meta" color={t.color.plateMuted}>
-                  {p.typeLabel}
-                </Text>
-                {p.instagram ? (
-                  <Text
-                    variant="meta"
-                    color={t.color.plateInk}
-                    accessibilityRole="link"
-                    onPress={() => void Linking.openURL(p.instagram as string)}
-                  >
-                    {instagramHandle(p.instagram) ?? "Instagram"}
-                  </Text>
-                ) : null}
-              </View>
-              {p.accreditedMedia ? (
-                <Chip surface="plate" variant="accent">
-                  Média officiel
-                </Chip>
-              ) : null}
-              {status === "in" ? <ReportButton look="link" onPlate type="provider" id={p.id} /> : null}
-            </View>
-          ))}
-        </Plate>
+        <ProvidersPresent providers={providers.data} reportable={status === "in"} />
       ) : null}
-      {showProviderApply ? (
+      {/* lot 55 : contenus média mis en avant sur l'événement (zone réservée, `s-event`) et action « Mon accréditation ». */}
+      {showProviderApply && action !== "providerApply" ? (
         <>
           {providerError ? <Notice tone="error">{providerError}</Notice> : null}
           {providerSent ? (
@@ -350,7 +333,7 @@ export default function EventPage() {
           )}
         </>
       ) : null}
-      {e.description ? <Info label="À propos">{e.description}</Info> : null}
+      {action === "providerApply" && providerError ? <Notice tone="error">{providerError}</Notice> : null}
       {feed.data ? <EventFeed items={feed.data.items} reportable={status === "in"} /> : null}
       {e.instructions ? <Info label="Consignes de l'équipe organisatrice">{e.instructions}</Info> : null}
       {/* Contacter l'organisateur (lot 18) : toujours possible pour une personne connectée. */}
@@ -369,80 +352,16 @@ export default function EventPage() {
           void refreshMe();
         }}
       />
+      <AppSheet visible={booking} onClose={() => setBooking(false)} accessibilityLabel={L.bookEntry}>
+        <Text variant="title" color={t.color.ink}>
+          {L.bookEntry}
+        </Text>
+        {booking ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
+      </AppSheet>
     </FlowScreen>
-  );
-}
-
-function posterStatus(e: EventPublic, retained: boolean) {
-  if (e.status === "cancelled") return "cancelled" as const;
-  if (e.outlook === "uncertain") return "uncertain" as const;
-  return retained ? ("retained" as const) : ("pending" as const);
-}
-
-/** Avis des participants pointés : moyenne à partir du minimum d'avis, réponse publique de l'organisateur. */
-function Reviews({ data, reportable }: { data: EventReviews; reportable: boolean }) {
-  const { t } = useTheme();
-  const c = t.color;
-  const average = data.average?.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
-  return (
-    <Plate style={styles.info}>
-      <Text variant="label" color={c.plateMuted}>
-        Avis des participants
-      </Text>
-      <Text variant="body" color={c.plateInk}>
-        {data.count === 0
-          ? "Pas encore d'avis. Seuls les participants pointés à l'entrée peuvent noter, pendant la semaine qui suit."
-          : average
-            ? `${average} / 3 · ${data.count} avis`
-            : `${data.count} avis · la moyenne s'affiche à partir de ${data.minForAverage} avis.`}
-      </Text>
-      {data.items.map((r) => (
-        <View key={r.id} style={[styles.review, { borderTopColor: c.plateLine }]}>
-          <View style={styles.reviewHead}>
-            <Text variant="bodyStrong" color={c.plateInk}>
-              {r.pseudo}
-            </Text>
-            <Text
-              variant="bodyStrong"
-              color={c.accent}
-              accessibilityLabel={`${r.rating} étoile${r.rating > 1 ? "s" : ""} sur 3`}
-            >
-              {"★".repeat(r.rating)}
-            </Text>
-          </View>
-          <Text variant="body" color={c.plateInk}>
-            {r.comment}
-          </Text>
-          {r.reply ? (
-            <Text variant="meta" color={c.plateMuted}>
-              Réponse de l'équipe organisatrice : {r.reply.text}
-            </Text>
-          ) : null}
-          {reportable ? <ReportButton look="link" onPlate type="review" id={r.id} /> : null}
-        </View>
-      ))}
-    </Plate>
-  );
-}
-
-function Info({ label, children }: { label: string; children: ReactNode }) {
-  const { t } = useTheme();
-  return (
-    <Plate style={styles.info}>
-      <Text variant="label" color={t.color.plateMuted}>
-        {label}
-      </Text>
-      <Text variant="body" color={t.color.plateInk}>
-        {children}
-      </Text>
-    </Plate>
   );
 }
 
 const styles = StyleSheet.create({
   info: { gap: space1, padding: space3 },
-  review: { gap: space1, paddingTop: space3, marginTop: space1, borderTopWidth: 1 },
-  provider: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space3 },
-  providerText: { flex: 1, gap: space1 },
-  reviewHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space3 },
 });
