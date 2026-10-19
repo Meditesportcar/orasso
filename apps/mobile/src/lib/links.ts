@@ -19,7 +19,7 @@ export function appLinkOf(value: unknown): string | null {
   const review = REVIEW_LINK.exec(value);
   if (review) return `/acces?avis=${review[1]}`;
   const inbox = INBOX_LINK.exec(value);
-  if (inbox) return inbox[1] && inbox[1] !== "demandes" ? `/boite/${inbox[1]}` : "/boite";
+  if (inbox) return inbox[1] === "demandes" ? "/boite?segment=demandes" : inbox[1] ? `/boite/${inbox[1]}` : "/boite";
   return null;
 }
 

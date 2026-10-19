@@ -25,7 +25,7 @@ describe("temps réel de l'appli", () => {
   it("liens des notifications de la Boîte vers les écrans de l'appli", () => {
     const id = "8f8e2f0a-1c1c-4c4c-8a8a-0123456789ab";
     expect(appLinkOf(`/app/boite/${id}`)).toBe(`/boite/${id}`);
-    expect(appLinkOf("/app/boite/demandes")).toBe("/boite");
+    expect(appLinkOf("/app/boite/demandes")).toBe("/boite?segment=demandes");
     expect(appLinkOf("/app/boite")).toBe("/boite");
     expect(appLinkOf("/app/boite/../acces")).toBeNull();
     expect(appLinkOf("/u/Kenji_66")).toBe("/u/Kenji_66");

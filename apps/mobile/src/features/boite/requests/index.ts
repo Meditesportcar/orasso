@@ -9,10 +9,15 @@ import { CrewRequests } from "./crew";
 import { CrewConfirmations } from "./crewConfirmation";
 import { EventInvitations } from "./eventInvitation";
 import { FriendRequests } from "./friend";
+import { PlateTransferRequests } from "./plateTransfer";
 import { StaffInvitations } from "./staffInvitation";
 import type { RequestSectionProps } from "./types";
 
-export type RequestSection = { kind: keyof InboxRequestCounts; Section: ComponentType<RequestSectionProps> };
+/** `plateTransfer` (lot 40) : pas de compteur dans `GET /inbox/summary`, la carte se charge seule. */
+export type RequestSection = {
+  kind: keyof InboxRequestCounts | "plateTransfer";
+  Section: ComponentType<RequestSectionProps>;
+};
 
 export const requestSections: RequestSection[] = [
   { kind: "friend", Section: FriendRequests },
@@ -21,6 +26,7 @@ export const requestSections: RequestSection[] = [
   { kind: "crew", Section: CrewRequests },
   { kind: "staffInvitation", Section: StaffInvitations },
   { kind: "eventInvitation", Section: EventInvitations },
+  { kind: "plateTransfer", Section: PlateTransferRequests },
 ];
 
 export type { RequestSectionProps } from "./types";

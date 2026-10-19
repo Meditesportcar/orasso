@@ -36,7 +36,7 @@ describe("liens du site ouverts dans l'appli", () => {
     expect(redirectSystemPath({ path: "https://orasso.fr/app/acces?avis=abc", initial: true })).toBe("/acces?avis=abc");
     expect(redirectSystemPath({ path: "/app/sorties", initial: false })).toBe("/acces");
     expect(redirectSystemPath({ path: "/app/boite", initial: true })).toBe("/boite");
-    expect(redirectSystemPath({ path: "/app/boite/demandes", initial: true })).toBe("/boite");
+    expect(redirectSystemPath({ path: "/app/boite/demandes", initial: true })).toBe("/boite?segment=demandes");
     const id = "0b9f6c1e-2c3d-4e5f-8a9b-0c1d2e3f4a5b";
     expect(redirectSystemPath({ path: `/app/boite/${id}`, initial: true })).toBe(`/boite/${id}`);
     expect(redirectSystemPath({ path: "/app/moi", initial: true })).toBe("/moi");
