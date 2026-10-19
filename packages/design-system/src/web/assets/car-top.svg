@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-64 -32 128 64" width="128" height="64">
+<!-- Généré par scripts/generate-native-brand.mjs (section car-top). Ne pas modifier. La voiture du O vivant vue de dessus,
+     64 × 28 unités, nez à droite. Couleurs par variables CSS (repli currentColor) : --car-body, --car-glass, --car-light,
+     --car-brake, --car-wheel, --car-smoke. Le site dessine la même géométrie en ligne (web/components/Olive.tsx). -->
+<g id="car-top">
+<g id="smoke" fill="var(--car-smoke, currentColor)"><circle cx="-36" cy="0" r="5" opacity="0.12"/><circle cx="-43" cy="0" r="7" opacity="0.08"/><circle cx="-52" cy="0" r="9" opacity="0.04"/></g>
+<g id="wheels" fill="var(--car-wheel, currentColor)"><rect x="-23" y="-14.5" width="10" height="4" rx="1.5"/><rect x="-23" y="10.5" width="10" height="4" rx="1.5"/><g id="front-wheels"><rect x="13" y="-14.5" width="10" height="4" rx="1.5" transform="rotate(0 18 -12.5)"/><rect x="13" y="10.5" width="10" height="4" rx="1.5" transform="rotate(0 18 12.5)"/></g></g>
+<path id="body" d="M-21 -12H21A9 9 0 0 1 30 -3V3A9 9 0 0 1 21 12H-21A9 9 0 0 1 -30 3V-3A9 9 0 0 1 -21 -12Z" fill="var(--car-body, currentColor)"/>
+<path id="glass" d="M6 -9H12A3 3 0 0 1 15 -6V6A3 3 0 0 1 12 9H6A3 3 0 0 1 3 6V-6A3 3 0 0 1 6 -9ZM-19.5 -8H-16.5A2.5 2.5 0 0 1 -14 -5.5V5.5A2.5 2.5 0 0 1 -16.5 8H-19.5A2.5 2.5 0 0 1 -22 5.5V-5.5A2.5 2.5 0 0 1 -19.5 -8Z" fill="var(--car-glass, currentColor)"/>
+<g id="headlights" fill="var(--car-light, currentColor)"><rect x="26.5" y="-9.5" width="2.5" height="5" rx="1"/><rect x="26.5" y="4.5" width="2.5" height="5" rx="1"/></g>
+<g id="brake-lights" fill="var(--car-brake, currentColor)"><rect x="-30.6" y="-9.5" width="2.4" height="6" rx="1"/><rect x="-30.6" y="3.5" width="2.4" height="6" rx="1"/></g>
+</g>
+</svg>
