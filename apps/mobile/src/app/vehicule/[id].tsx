@@ -12,8 +12,10 @@ import {
   garageAppLabels,
   photoLabels,
   plateTransferLabels,
+  type VehiclePhoto,
   vehicleStatusLabels,
   vehicleTypeLabels,
+  vehicleWizardLabels,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
@@ -21,6 +23,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { ArchiveSheet } from "@/features/vehicle/ArchiveSheet";
+import { BlurSheet } from "@/features/vehicle/add/BlurSheet";
 import { EditSheet } from "@/features/vehicle/EditSheet";
 import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { ShareSheet } from "@/features/vehicle/ShareSheet";
@@ -56,6 +59,8 @@ export default function VehiculeFiche() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [certMessage, setCertMessage] = useState("");
+  // Lot 51 : floutage de la plaque d'une photo déjà en ligne (définitif).
+  const [blurring, setBlurring] = useState<VehiclePhoto | null>(null);
   const v = vehicle.data;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/garage"));
@@ -126,6 +131,15 @@ export default function VehiculeFiche() {
         v ? (
           <>
             <PhotoViewer photos={v.photos} start={viewer} onClose={() => setViewer(null)} />
+            <BlurSheet
+              vehicleId={v.id}
+              photo={blurring}
+              onClose={() => setBlurring(null)}
+              onDone={async () => {
+                setNotice(vehicleWizardLabels.blurDone);
+                await vehicle.reload();
+              }}
+            />
             <ArchiveSheet
               visible={archiveOpen}
               onClose={() => setArchiveOpen(false)}
@@ -226,7 +240,21 @@ export default function VehiculeFiche() {
           )}
           {v.photos.length > 1 ? <Muted variant="caption">{photoLabels.coverHint}</Muted> : null}
           {upload ? <UploadProgress {...upload} /> : null}
-          <Muted variant="body">Évite de montrer la plaque : tes photos sont visibles de tous les inscrits.</Muted>
+          {/* Lot 51 : chaque photo dit si sa plaque est floutée ; sinon, le cadre se pose à la main. */}
+          {v.photos.length > 0 ? (
+            <ChipRow>
+              {v.photos.map((p, i) => (
+                <Chip
+                  key={p.id}
+                  selected={p.plateBlurred}
+                  onPress={() => setBlurring(p)}
+                  accessibilityLabel={`Photo ${i + 1} : ${p.plateBlurred ? vehicleWizardLabels.plateBlurred : vehicleWizardLabels.blurAction}`}
+                >
+                  {`${i + 1} · ${p.plateBlurred ? vehicleWizardLabels.plateBlurred : vehicleWizardLabels.blurAction}`}
+                </Chip>
+              ))}
+            </ChipRow>
+          ) : null}
           {v.photos.length < MAX_PHOTOS ? (
             <Button variant="secondary" icon="add" loading={busy !== null} onPress={() => void add()} fullWidth>
               {photoLabels.addOne}
@@ -265,6 +293,16 @@ export default function VehiculeFiche() {
             testID="vehicle-edit-open"
           >
             {garageAppLabels.edit}
+          </Button>
+          {/* Lot 51 : les cinq étapes de l'ajout, préremplies (marque, fiche, catégories, photos, plaque). */}
+          <Button
+            variant="plate"
+            icon="list"
+            onPress={() => router.push(`/vehicule/${v.id}/modifier`)}
+            fullWidth
+            testID="vehicle-wizard-open"
+          >
+            {vehicleWizardLabels.editVehicle}
           </Button>
           {v.preparation ? (
             <>
