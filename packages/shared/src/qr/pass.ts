@@ -101,7 +101,7 @@ export type LocalAccessEntry = {
   pseudo: string;
   vehicleLabel: string | null;
   /** Prestataire (lot 21) : « Prestataire · Food truck » à l'écran de scan. Absent = véhicule. */
-  kind?: "vehicle" | "provider";
+  kind?: "vehicle" | "provider" | "media";
   providerType?: string | null;
   providerName?: string | null;
   /**

@@ -85,6 +85,14 @@ export const rateRules = {
   shopScan: { max: 300, windowMs: 60_000, message: "Trop de lectures de billets : réessaie dans une minute." },
   shopVisitor: { max: 300, windowMs: 60_000, message: "Trop de touchers du compteur : réessaie dans une minute." },
   staffInvite: { max: 30, windowMs: 86_400_000, message: "Trop d'invitations aujourd'hui : réessaie demain." },
+  /** Média (lot 45) : demandes d'accréditation, contenus publiés, écritures du profil. */
+  mediaAccreditation: {
+    max: 10,
+    windowMs: 86_400_000,
+    message: "Trop de demandes d'accréditation aujourd'hui : réessaie demain.",
+  },
+  mediaContent: { max: 20, windowMs: 86_400_000, message: "Trop de contenus publiés aujourd'hui : réessaie demain." },
+  mediaWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

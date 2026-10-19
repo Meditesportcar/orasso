@@ -180,3 +180,56 @@ export function nearestDepartment(p: LatLng): string | null {
   }
   return best;
 }
+
+// --- Régions (lot 45, Explorer national du média `s-agenda`) -------------------------------------------------------
+
+/** Les 13 régions métropolitaines et leurs départements (filtre `region` de `GET /events`). */
+export const regions = [
+  {
+    code: "ARA",
+    name: "Auvergne-Rhône-Alpes",
+    departments: ["01", "03", "07", "15", "26", "38", "42", "43", "63", "69", "73", "74"],
+  },
+  { code: "BFC", name: "Bourgogne-Franche-Comté", departments: ["21", "25", "39", "58", "70", "71", "89", "90"] },
+  { code: "BRE", name: "Bretagne", departments: ["22", "29", "35", "56"] },
+  { code: "CVL", name: "Centre-Val de Loire", departments: ["18", "28", "36", "37", "41", "45"] },
+  { code: "COR", name: "Corse", departments: ["2A", "2B"] },
+  { code: "GES", name: "Grand Est", departments: ["08", "10", "51", "52", "54", "55", "57", "67", "68", "88"] },
+  { code: "HDF", name: "Hauts-de-France", departments: ["02", "59", "60", "62", "80"] },
+  { code: "IDF", name: "Île-de-France", departments: ["75", "77", "78", "91", "92", "93", "94", "95"] },
+  { code: "NOR", name: "Normandie", departments: ["14", "27", "50", "61", "76"] },
+  {
+    code: "NAQ",
+    name: "Nouvelle-Aquitaine",
+    departments: ["16", "17", "19", "23", "24", "33", "40", "47", "64", "79", "86", "87"],
+  },
+  {
+    code: "OCC",
+    name: "Occitanie",
+    departments: ["09", "11", "12", "30", "31", "32", "34", "46", "48", "65", "66", "81", "82"],
+  },
+  { code: "PDL", name: "Pays de la Loire", departments: ["44", "49", "53", "72", "85"] },
+  { code: "PAC", name: "Provence-Alpes-Côte d'Azur", departments: ["04", "05", "06", "13", "83", "84"] },
+] as const satisfies readonly { code: string; name: string; departments: readonly string[] }[];
+
+export type RegionCode = (typeof regions)[number]["code"];
+export const regionCodes = regions.map((r) => r.code) as [RegionCode, ...RegionCode[]];
+
+/** Départements d'une région (vide si le code est inconnu). */
+export function regionDepartments(code: string): readonly string[] {
+  return regions.find((r) => r.code === code)?.departments ?? [];
+}
+
+/** Vitesse moyenne retenue pour le « temps de route » estimé (à vol d'oiseau, routes comprises). */
+export const TRAVEL_SPEED_KMH = 70;
+
+/**
+ * « 3 h de route » (`s-agenda`) : distance à vol d'oiseau du centre du premier département de secteur jusqu'au lieu,
+ * à 70 km/h, arrondie au quart d'heure. `null` sans secteur ni position du lieu.
+ */
+export function travelMinutes(fromDepartments: readonly string[], to: LatLng | null): number | null {
+  const from = profilePosition(fromDepartments);
+  if (!from || !to) return null;
+  const minutes = (distanceKm(from, to) / TRAVEL_SPEED_KMH) * 60;
+  return Math.round(minutes / 15) * 15;
+}

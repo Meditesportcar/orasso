@@ -33,6 +33,8 @@ const SIZE: Record<UploadPurpose, number> = {
   report: 1600,
   provider_photo: 1600,
   announcement: 1600,
+  media_logo: 512,
+  media_content: 1600,
 };
 const FOLDER: Record<UploadPurpose, string> = {
   message: "messages",
@@ -41,6 +43,8 @@ const FOLDER: Record<UploadPurpose, string> = {
   report: "reports",
   provider_photo: "provider-photos",
   announcement: "announcements",
+  media_logo: "media-logos",
+  media_content: "media-contents",
 };
 
 export const isPrivatePurpose = (purpose: UploadPurpose) => privateUploadPurposes.includes(purpose);
@@ -53,7 +57,7 @@ async function toWebp(input: Buffer, purpose: UploadPurpose) {
     const side = SIZE[purpose];
     return await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS })
       .rotate()
-      .resize(side, side, { fit: purpose === "crew_logo" ? "cover" : "inside", withoutEnlargement: true })
+      .resize(side, side, { fit: purpose === "crew_logo" || purpose === "media_logo" ? "cover" : "inside", withoutEnlargement: true })
       .webp({ quality: 80 })
       .toBuffer({ resolveWithObject: true });
   } catch {
