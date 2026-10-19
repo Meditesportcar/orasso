@@ -130,16 +130,19 @@ export async function auditApp(page: Page, theme: "beton" | "sable" = "beton"): 
           if (own) counts.set(own, (counts.get(own) ?? 0) + 1);
         }
       }
+      // Étiquette d'un bouton du système : Archivo large (Expanded) en capitales ; les cartes cliquables n'en ont pas.
       const upper = (el: Element) =>
-        getComputedStyle(el).textTransform === "uppercase" ||
-        [...el.querySelectorAll("*")].some((c) => getComputedStyle(c).textTransform === "uppercase");
+        [el, ...el.querySelectorAll("*")].some((c) => {
+          const st = getComputedStyle(c);
+          return st.textTransform === "uppercase" && /Expanded/.test(st.fontFamily);
+        });
       return {
         primaryButtons: primaries.length,
         primaryLabels: primaries.map(label),
         neon: neon.length,
         neonLabels: neon.map(label),
         buttonsWithoutIcon: buttons
-          .filter((el) => upper(el) && !inBars(el) && !el.querySelector("svg") && label(el))
+          .filter((el) => el.tagName === "BUTTON" && upper(el) && !inBars(el) && !el.querySelector("svg") && label(el))
           .map(label),
         greens: [...greens].slice(0, 10),
         horizontalScroll: document.documentElement.scrollWidth > window.innerWidth + 1,

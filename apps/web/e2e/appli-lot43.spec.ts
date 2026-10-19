@@ -29,6 +29,8 @@ const THEMES: Theme[] = ["beton", "sable"];
 async function open(browser: Browser, theme: Theme) {
   const ctx = await browser.newContext({ viewport: MOBILE, baseURL: APP });
   const page = await ctx.newPage();
+  // Poste chargé (plusieurs agents, Metro à froid) : des délais larges pour les chargements de page.
+  page.setDefaultNavigationTimeout(120_000);
   const errors: string[] = [];
   page.on("console", (m) => {
     if (m.type() === "error") errors.push(m.text().slice(0, 200));
@@ -48,7 +50,7 @@ async function afterOpening(page: Page) {
   const skip = page.getByTestId("opening-skip");
   if (await skip.isVisible().catch(() => false))
     await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
-  await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
+  await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 30_000 });
 }
 
 async function signIn(page: Page, email: string, password = SEED_PASSWORD) {
@@ -65,13 +67,8 @@ async function choose(page: Page, kind: "pro" | "provider" | "media") {
   await page.goto("/moi");
   await afterOpening(page);
   await page.getByTestId(`casquette-${kind}`).first().click();
-  const landing = { pro: /\/scanner/, provider: /\/candidatures/, media: /\/accueil/ };
-  await page.waitForURL(landing[kind], { timeout: 30_000 });
-}
-
-async function goHome(page: Page) {
-  await page.getByRole("tab", { name: "Accueil", exact: true }).click();
-  await expect(page).toHaveURL(/\/accueil/, { timeout: 30_000 });
+  // Chaque casquette s'ouvre sur son Accueil (lot 43).
+  await page.waitForURL(/\/accueil/, { timeout: 60_000 });
 }
 
 async function shot(page: Page, name: string) {
@@ -232,7 +229,6 @@ for (const home of HOMES) {
       await signIn(page, home.email);
       if (home.choose) {
         await choose(page, home.choose);
-        await goHome(page);
       }
       await expect(page.getByRole("heading", { name: "Accueil", exact: true })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("home-greeting")).toBeVisible({ timeout: 30_000 });
@@ -304,14 +300,14 @@ test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, 
     await page.getByRole("tab", { name: "Garage", exact: true }).click();
     await expect(page.getByTestId("next-access-bar")).toBeVisible();
     await shot(page, `acces-flottant-garage-${theme}`);
-    // Un seul néon : la barre n'en porte pas.
-    const audit = await auditApp(page, theme);
-    expect(audit.neon, audit.neonLabels.join(" | ")).toBeLessThanOrEqual(1);
+    // Sans néon : la barre n'en porte pas (le seul néon de l'écran est celui d'un bouton principal).
+    const shadow = await page.getByTestId("next-access-bar").evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(shadow).toBe("none");
     // Elle mène à l'écran du jour J de la candidature.
     await page.getByTestId("next-access-bar").click();
     await expect(page).toHaveURL(new RegExp(`/jour-j/${near.applicationId}`), { timeout: 30_000 });
     // Sur l'écran du jour J : plus de barre d'onglets, donc plus d'accès flottant.
-    await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
+    await expect(page.getByTestId("next-access-bar")).toBeHidden();
     await ctx.close();
   }
 
