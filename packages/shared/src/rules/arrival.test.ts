@@ -67,6 +67,20 @@ describe("validateArrivals", () => {
     expect(check({ exhibitors: { from: "16:00", to: "18:00", strict: true, note: null }, public: null })).toBeNull();
   });
 
+  it("accepte un créneau qui passe minuit, refuse plus de 12 h", () => {
+    const late = { startsAt: endsAt, endsAt: new Date(endsAt.getTime() + 4 * 3_600_000) };
+    const slot = (from: string, to: string | null) => ({ from, to, strict: true, note: null });
+    expect(validateArrivals({ ...late, arrivals: { exhibitors: slot("23:30", "00:30"), public: null } })).toBeNull();
+    expect(
+      validateArrivals({ ...late, arrivals: { exhibitors: slot("23:30", null), public: slot("00:15", null) } }),
+    ).toBeNull();
+    expect(validateArrivals({ ...late, arrivals: { exhibitors: slot("23:30", "12:00"), public: null } })).toBe(
+      "exhibitors_order",
+    );
+    // Arrivée à 00:30 pour un début à 23 h 30 : le lendemain.
+    expect(arrivalInstant("00:30", endsAt)?.getTime()).toBe(endsAt.getTime() + 3_600_000);
+  });
+
   it("refuse une note de plus de 200 caractères", () => {
     expect(check({ ...nocturne, public: { ...nocturne.public!, note: "x".repeat(201) } })).toBe("note_too_long");
   });

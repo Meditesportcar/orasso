@@ -11,6 +11,9 @@ export const arrivalTexts = {
   advised: "Recommandé",
   strictHint: "Strict : utile pour les gros événements. Les retards doivent prévenir.",
   seen: "J'ai vu",
+  /** Case de la candidature (site et appli). */
+  seenLabel: "J'ai vu le créneau d'arrivée.",
+  noteLabel: "Une note pour l'équipe (facultatif)",
   notePlaceholder: "J'arriverai vers 19 h 30 à cause du travail",
   /** Suffixe du libellé : « (strict) » ou « (conseillé) ». */
   strictSuffix: "strict",

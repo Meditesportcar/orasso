@@ -1,8 +1,9 @@
 import { z } from "zod";
 import type { ApplicationStatus } from "../application";
 import type { DayAccess, EventFormat, EventStatus, InvitationStatus, VehicleType } from "../enums";
+import type { ArrivalSlot } from "../rules/arrival";
 import { INVITATION_MESSAGE_MAX, INVITATIONS_PER_REQUEST } from "../rules/invitations";
-import { optionalText } from "./common";
+import { arrivalAnswerFields, optionalText } from "./common";
 
 // Invitations nominatives et événement privé (lot 25, ARCHITECTURE-SUITE § 9.1).
 
@@ -36,6 +37,8 @@ export const invitationAcceptSchema = z.object({
   vehicleId: z.uuid().optional(),
   /** Lot 26 : jour choisi par l'invité d'un événement sur plusieurs jours (mêmes règles qu'une candidature). */
   eventDayId: z.uuid().nullish(),
+  /** Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (obligatoire s'il existe) et la note de l'invité. */
+  ...arrivalAnswerFields,
 });
 export type InvitationAccept = z.infer<typeof invitationAcceptSchema>;
 
@@ -71,6 +74,8 @@ export type InvitationEventBrief = {
   /** Lot 26 : jours d'un événement sur plusieurs jours (vide = un jour) et mode d'accès (choix à l'acceptation). */
   days: { id: string; date: string }[];
   dayAccess: DayAccess;
+  /** Lot 47 : créneau d'arrivée des exposants (« J'ai vu » à l'acceptation), `null` sans créneau. */
+  arrivalExhibitors: ArrivalSlot | null;
 };
 
 /** Invitation reçue (Accès > Invitations reçues, Boîte > Demandes). */
