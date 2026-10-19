@@ -68,8 +68,25 @@ export default function ProFiche() {
               {pro.followersCount} abonné{pro.followersCount > 1 ? "s" : ""}
             </Text>
           </Plate>
-          <Button variant="primary" icon="profile" onPress={() => router.push("/modifier")} fullWidth testID="pro-edit">
+          <Button
+            variant="primary"
+            icon="profile"
+            onPress={() => router.push("/(pro)/modifier")}
+            fullWidth
+            testID="pro-edit"
+          >
             {L.editFiche}
+          </Button>
+          {/* Lot 40 : Publier n'est plus un onglet (barre v2) ; on y arrive depuis Ma fiche. */}
+          <Button
+            variant="plate"
+            icon="add"
+            next
+            onPress={() => router.push("/(pro)/publier")}
+            fullWidth
+            testID="pro-new-post"
+          >
+            Publier une actualité
           </Button>
 
           <PublicationBlock pro={pro} reload={reload} />
