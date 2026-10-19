@@ -82,7 +82,12 @@ test("écrans touchés par le lot 36, deux thèmes à 390 px", async ({ browser 
   for (const theme of THEMES) {
     // Inscription : case des conditions générales, le bouton reste inactif sans elle.
     const anon = await context(browser, theme);
+    // Depuis le lot 41, l'inscription est le flux d'arrivée : profil, département, puis « Qui es-tu ? » avec la case.
     await anon.page.goto("/auth?mode=signup");
+    await anon.page.waitForURL(/arrivee\/profil/, { timeout: 30_000 });
+    await anon.page.getByRole("button", { name: "Continuer" }).click();
+    await anon.page.getByTestId("dept-66").click();
+    await anon.page.getByRole("button", { name: "Continuer" }).click();
     await expect(anon.page.getByText("J'accepte les conditions générales d'utilisation d'Orasso").first()).toBeVisible({
       timeout: 30_000,
     });

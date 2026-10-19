@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
-import { apiCall, createEvent, login, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { apiCall, createEvent, login, SEED_PASSWORD, SIGNUP_EXTRAS, signUpApi, unique } from "./helpers";
 
 // Captures des écrans nouveaux du lot 34 dans l'appli (navigateur, 390 px, Béton et Sable) et contrôle du système de
 // design dans le DOM (pas de vert, rien de tronqué, pas de défilement horizontal) : billets du public (bloc de la page
@@ -81,6 +81,7 @@ test("écrans nouveaux du lot 34, deux thèmes à 390 px", async ({ browser }) =
           password: SEED_PASSWORD,
           name: "Capt 34",
           termsAccepted: true,
+          ...SIGNUP_EXTRAS,
         })
       ).status,
     ).toBe(200);

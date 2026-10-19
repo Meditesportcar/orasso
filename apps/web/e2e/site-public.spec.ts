@@ -1,6 +1,16 @@
 import { expect, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { apiCall, login, loginInBrowser, randomPlate, SEED_PASSWORD, samplePhoto, signUpApi, unique } from "./helpers";
+import {
+  apiCall,
+  fillArrivee,
+  login,
+  loginInBrowser,
+  randomPlate,
+  SEED_PASSWORD,
+  samplePhoto,
+  signUpApi,
+  unique,
+} from "./helpers";
 
 // Lot 13 : site public, structure, création d'événement par étapes, inscription express.
 // Le test principal suit le critère de fin : créer une structure → la vérifier (admin) → créer un Rassemblement par
@@ -346,6 +356,7 @@ test("lien d'invitation : le compte créé suit l'équipe organisatrice", async 
   await page.getByLabel("Pseudo").fill(`Fan_${s}`);
   await page.getByLabel("E-mail").fill(`fan_${s}@e2e.orasso.test`);
   await page.getByLabel("Mot de passe", { exact: true }).fill("mot-de-passe-fan-2026");
+  await fillArrivee(page);
   await page.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
   await page.getByRole("button", { name: "Créer mon compte et suivre" }).click();
   await page.waitForURL("**/o/meditesportcar");

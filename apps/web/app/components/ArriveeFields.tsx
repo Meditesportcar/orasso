@@ -157,3 +157,46 @@ export function ArriveeFields({
     </>
   );
 }
+
+const parseDepartments = (text: string) => [
+  ...new Set(
+    text
+      .split(/[s,;]+/)
+      .map((d) => d.trim().toUpperCase())
+      .filter(Boolean),
+  ),
+];
+
+/**
+ * Mon secteur (/app/moi) : la carte de France et le champ de numéros restent synchronisés (l'outre-mer, absent de la
+ * carte, se saisit par son numéro). Le premier département est le favori.
+ */
+export function DepartmentsField({ initial }: { initial: string[] }) {
+  const [text, setText] = useState(initial.join(", "));
+  const list = parseDepartments(text);
+  const toggle = (code: string) =>
+    setText((t) => {
+      const current = parseDepartments(t);
+      return (current.includes(code) ? current.filter((c) => c !== code) : [...current, code]).join(", ");
+    });
+  return (
+    <div className="arr-dept">
+      <div className="arr-dept__map">
+        <FranceMap
+          selected={list}
+          favorite={list[0] ?? null}
+          onToggle={toggle}
+          label={arriveeLabels.department.mapLabel}
+        />
+        <FranceMapCredit />
+      </div>
+      <TextField
+        label="Départements"
+        name="departments"
+        value={text}
+        onChange={(e) => setText(e.currentTarget.value)}
+        help="Touche la carte, ou saisis les numéros séparés par des virgules (ex. 66, 11, 974). Le premier sert à mesurer la distance."
+      />
+    </div>
+  );
+}

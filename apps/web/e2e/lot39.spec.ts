@@ -186,7 +186,7 @@ test.describe("appli dans le navigateur", () => {
         warnings.push(msg.text());
     });
     page.on("pageerror", (err) => warnings.push(err.message));
-    await page.goto(`${APP}/welcome`);
+    await page.goto(`${APP}/arrivee/profil`);
     const opening = page.getByTestId("opening-battle");
     await expect(opening).toBeVisible({ timeout: 20_000 });
     await page.waitForTimeout(900);
@@ -195,11 +195,11 @@ test.describe("appli dans le navigateur", () => {
     await page.screenshot({ path: `${APPLI}/apres-ouverture-beton.png` });
 
     // Animations réduites : le logo composé apparaît en fondu et l'appli suit presque aussitôt.
-    await page.goto(`${APP}/welcome?reduce=1`);
+    await page.goto(`${APP}/arrivee/profil?reduce=1`);
     await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 2_500 });
 
     // Un toucher n'importe où passe l'ouverture : le staff qui relance l'appli n'attend pas 3 s.
-    await page.goto(`${APP}/welcome`);
+    await page.goto(`${APP}/arrivee/profil`);
     await expect(page.getByTestId("opening-skip")).toBeVisible({ timeout: 20_000 });
     await page.waitForTimeout(400);
     const tapped = Date.now();

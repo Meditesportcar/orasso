@@ -18,6 +18,7 @@ import {
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { DepartmentsField } from "../components/ArriveeFields";
 import { TextAreaField } from "../components/Fields";
 import { api, apiOrThrow, requireMe, withCookies } from "../lib/api.server";
 import type { Route } from "./+types/moi";
@@ -260,12 +261,7 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           <h2 id="secteur-titre" className="s-h2">
             Secteur et centres d'intérêt
           </h2>
-          <TextField
-            label="Départements"
-            name="departments"
-            defaultValue={settings.departments.join(", ")}
-            help="Numéros séparés par des virgules (ex. 66, 11). Le premier sert à mesurer la distance."
-          />
+          <DepartmentsField initial={settings.departments} />
           <label className="o-field">
             <span className="o-field__label o-t-label">Rayon des notifications</span>
             <input
