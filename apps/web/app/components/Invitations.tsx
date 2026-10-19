@@ -10,6 +10,7 @@ import {
 import { Form } from "react-router";
 
 import { formatDateTime, formatWhen } from "../lib/format";
+import { ArrivalSeen } from "./ArrivalSeen";
 import "../styles/invitations.css";
 
 // Invitation nominative reçue (lot 25) : carte de l'événement, message de l'organisateur, véhicule imposé ou à choisir,
@@ -95,6 +96,7 @@ export function ReceivedInvitationCard({
             ]}
           />
         )}
+        <ArrivalSeen slot={inv.event.arrivalExhibitors ?? null} />
         <Button
           type="submit"
           name="intent"

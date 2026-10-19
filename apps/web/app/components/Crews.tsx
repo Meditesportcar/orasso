@@ -1,8 +1,8 @@
 import { Button, CheckboxField, Chip } from "@orasso/design-system/web";
-import { type ApplicationCrewInfo, type CrewCard, crewLabels } from "@orasso/shared";
+import { type ApplicationCrewInfo, type ArrivalSlot, type CrewCard, crewLabels } from "@orasso/shared";
 import { Form } from "react-router";
-
 import { formatDateTime } from "../lib/format";
+import { ArrivalSeen } from "./ArrivalSeen";
 import "../styles/crews.css";
 
 // Éléments des crews du site (lot 19) : logo, ligne de crew, carte de confirmation de venue.
@@ -44,12 +44,15 @@ export function CrewConfirm({
   crew,
   vehicleLabel,
   rulesText,
+  arrivalSlot,
   busy,
 }: {
   applicationId: string;
   crew: ApplicationCrewInfo;
   vehicleLabel: string | null;
   rulesText: string | null;
+  /** Lot 47 : créneau d'arrivée des exposants (case « J'ai vu »). */
+  arrivalSlot?: ArrivalSlot | null;
   busy: boolean;
 }) {
   return (
@@ -69,6 +72,7 @@ export function CrewConfirm({
           </div>
         </details>
         <CheckboxField name="rules" required label={crewLabels.confirmRules} />
+        <ArrivalSeen slot={arrivalSlot ?? null} />
         <CheckboxField
           name="follow"
           defaultChecked

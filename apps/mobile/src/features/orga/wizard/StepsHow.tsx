@@ -111,7 +111,7 @@ export function RulesStep({ d, set }: StepContext) {
 
 export function InfoStep({ d, set, event, poster, setPoster }: StepContext) {
   const [picking, setPicking] = useState(false);
-  const current = poster ? { uri: poster.uri } : mediaSource(event?.posterUrl);
+  const current = poster ? { uri: poster.uri } : mediaSource(event?.customPosterUrl);
   return (
     <>
       <TextField
@@ -142,7 +142,7 @@ export function InfoStep({ d, set, event, poster, setPoster }: StepContext) {
           }}
           testID="wizard-poster-pick"
         >
-          {event?.posterUrl || poster ? L.posterReplace : L.posterPick}
+          {event?.customPosterUrl || poster ? L.posterReplace : L.posterPick}
         </Button>
         {poster ? (
           <Button variant="plate" icon="close" onPress={() => setPoster(null)}>

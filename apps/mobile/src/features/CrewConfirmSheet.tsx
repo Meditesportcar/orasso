@@ -1,9 +1,10 @@
 // Confirmer ma venue en crew (lot 19) : le règlement de l'événement, la case « J'ai lu le règlement », « Suivre
 // l'organisateur » cochée d'office. Rien n'est envoyé à l'organisateur sans cette confirmation (docs/01).
 import { Button, CheckboxField, Plate, Text, useTheme } from "@orasso/design-system/native";
-import { crewLabels, type MyApplication } from "@orasso/shared";
+import { type ArrivalSlot, crewLabels, type MyApplication } from "@orasso/shared";
 import { useEffect, useState } from "react";
 
+import { ArrivalSeen, arrivalBody } from "@/features/arrival/ArrivalSeen";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
@@ -20,6 +21,10 @@ export function CrewConfirmSheet({
 }) {
   const { t } = useTheme();
   const [rules, setRules] = useState<string | null>(null);
+  // Lot 47 : créneau d'arrivée des exposants, case « J'ai vu » et note.
+  const [slot, setSlot] = useState<ArrivalSlot | null>(null);
+  const [arrivalSeen, setArrivalSeen] = useState(false);
+  const [arrivalNote, setArrivalNote] = useState("");
   const [accepted, setAccepted] = useState(false);
   const [follow, setFollow] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -30,11 +35,18 @@ export function CrewConfirmSheet({
     setFollow(true);
     setError(null);
     setRules(null);
+    setSlot(null);
+    setArrivalSeen(false);
+    setArrivalNote("");
     if (!app) return;
     let alive = true;
     api
       .eventBySlug(app.event.slug)
-      .then((e) => alive && setRules(e.rulesText))
+      .then((e) => {
+        if (!alive) return;
+        setRules(e.rulesText);
+        setSlot(e.arrivals?.exhibitors ?? null);
+      })
       .catch(() => undefined);
     return () => {
       alive = false;
@@ -66,6 +78,13 @@ export function CrewConfirmSheet({
             </Text>
           </Plate>
           <CheckboxField label={crewLabels.confirmRules} checked={accepted} onChange={setAccepted} />
+          <ArrivalSeen
+            slot={slot}
+            seen={arrivalSeen}
+            onSeen={setArrivalSeen}
+            note={arrivalNote}
+            onNote={setArrivalNote}
+          />
           <CheckboxField
             label="Suivre l'organisation (nouveaux événements, avant-premières)"
             checked={follow}
@@ -79,14 +98,14 @@ export function CrewConfirmSheet({
           <Button
             icon="check"
             loading={busy}
-            disabled={!accepted}
+            disabled={!accepted || (slot !== null && !arrivalSeen)}
             fullWidth
             testID="crew-confirm"
             onPress={async () => {
               setBusy(true);
               setError(null);
               try {
-                await api.confirmCrewVenue(app.id, follow);
+                await api.confirmCrewVenue(app.id, follow, arrivalBody(slot, arrivalSeen, arrivalNote));
                 onDone();
               } catch (e) {
                 setError(errorMessage(e));
