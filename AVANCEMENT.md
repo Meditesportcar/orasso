@@ -13,8 +13,11 @@
 - **Chantier DA v2 ouvert (19/10/2026)** : prototype v2 (version 41) validé par Damien (lot 37) ; 21 lots (38 à 58) planifiés en huit vagues (`PLAN-DA-V2.md` du relais).
 - **Lot 38 — socle v2 (branche `lot-38-socle-v2`, vague 1)** : jetons v2 par surcouche (`packages/design-system/tokens.v2.json`, fusionnée par `scripts/merge-tokens.mjs` ; `tokens.json` inchangé) et huit écarts datés dans le README du système de design ; contour couleur du fond (`OutlinedText`, `Outlined`, `.o-onbg`/`.o-onphoto`) ; barre du haut v2 (`AppBar kind="tab"` : logotype partout, casquette, Recherche, Boîte) et `BigTitle` sur une ligne ; six barres d'onglets (`tabSets.exhibitor/visitor/pro/provider/media/organizer`, le O au centre ; `fan` alias déprécié) et huit pictogrammes ; `personaKinds` à six profils ; thème au choix, jamais imposé, avec « Automatique » solaire (`shared/rules/solar.ts`) sur le site et dans l'appli ; espaces organisateur et pro du site au thème choisi ; recettes `/_ds` (site et appli) avec une section v2 ; audit e2e `unoutlinedOnPhoto`, `setTheme`, `MOBILE`, `e2e/lot38.spec.ts`. Aucun écran refait : l'appli et le site gardent leurs barres v1 (`legacyTabSets`) jusqu'au lot 40.
 
+- **Lot 46 — API des prestataires v2 (branche `lot-46-api-prestataires-v2`, vague 2)** : missions = besoins de l'organisateur (`/events/:id/needs`), `GET /missions` par métier et rayon du plus proche au plus loin, candidature sur une mission (`needId`), emplacement attribué (`/spot`, notification avec arrivée, électricité et consignes), avis des organisateurs sur un prestataire retenu (1 à 5, 30 jours, public sur la vitrine), vitrine (métiers, menu « une ligne par plat » lu par `parseMenuLines`, besoins sur place, rayon) ; migration `0043_missions` ; seed Sofia_66 / « La Brasa ». Aucun écran (lots 54 et 57).
+
 ## En cours
 
+- La branche `lot-46-api-prestataires-v2` attend la relecture et la fusion du coordinateur (après le lot 45 : `schema/applications.ts`, migration à régénérer, règle B1).
 - La branche `lot-38-socle-v2` attend la relecture et la fusion du coordinateur. Point à confirmer par Damien : H2 (thème jamais imposé, contraire à `docs/03` l. 10) — le retrait du Sable imposé aux espaces orga et pro du site est dans un commit isolé, facile à annuler.
 
 ## Prochaine étape
