@@ -45,12 +45,14 @@ import { type ReactNode, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { OliveContent } from "./Olive";
 import { V2Content } from "./V2";
 
 const themes: ThemeId[] = ["beton", "sable"];
 
 const sections = [
   "v2",
+  "olive",
   "ground",
   "brand",
   "icons",
@@ -232,6 +234,14 @@ export default function DesignSystemDemo() {
           note="Surcouche de jetons et raisons, contour sur photo et sur fond, barre du haut v2, grands titres sur une ligne, barres des six profils."
         >
           {(theme) => <V2Content t={theme} />}
+        </Section>
+
+        <Section
+          id="olive"
+          title="Le O vivant (lot 39)"
+          note="La voiture du logo devient l'indicateur d'Orasso : drift continu pendant un chargement, garée dans le O quand c'est fini. Huit variantes et le fond animé « battle »."
+        >
+          {(theme) => <OliveContent t={theme} />}
         </Section>
 
         <Section

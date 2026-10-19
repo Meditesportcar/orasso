@@ -221,7 +221,8 @@ export function battleDuration(path: BattlePath, cars: readonly PackCar[], speed
 export function battlePathD(path: BattlePath): string {
   const r = (n: number) => Math.round(n * 10) / 10;
   const parts: string[] = [];
-  for (let i = 0; i < path.xs.length; i += 3) parts.push(`${i === 0 ? "M" : "L"}${r(path.xs[i] ?? 0)} ${r(path.ys[i] ?? 0)}`);
+  for (let i = 0; i < path.xs.length; i += 3)
+    parts.push(`${i === 0 ? "M" : "L"}${r(path.xs[i] ?? 0)} ${r(path.ys[i] ?? 0)}`);
   const last = path.xs.length - 1;
   if (last % 3 !== 0) parts.push(`L${r(path.xs[last] ?? 0)} ${r(path.ys[last] ?? 0)}`);
   return parts.join("");

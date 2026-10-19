@@ -39,7 +39,15 @@ const ms = (n: number) => `${Math.round(n)}ms`;
 const useSvgId = (prefix: string) => `${prefix}${useId().replaceAll(":", "")}`;
 
 /** La voiture vue de dessus (64 × 28, nez vers +x), peinte par Olive.css aux jetons (caisse : --car-body). */
-export function CarTopArt({ steer = 0, spoiler = false, className }: { steer?: number; spoiler?: boolean; className?: string }) {
+export function CarTopArt({
+  steer = 0,
+  spoiler = false,
+  className,
+}: {
+  steer?: number;
+  spoiler?: boolean;
+  className?: string;
+}) {
   const rect = (r: { x: number; y: number; width: number; height: number; rx: number }, key?: string) => (
     <rect key={key} x={r.x} y={r.y} width={r.width} height={r.height} rx={r.rx} />
   );
@@ -186,9 +194,7 @@ export function OLoader({
   return (
     <span
       className={cx("o-olive", toneClass(tone), `is-${phase}`, className)}
-      role={label ? "progressbar" : undefined}
-      aria-label={label ?? undefined}
-      aria-hidden={label ? undefined : true}
+      {...(label ? { role: "progressbar", "aria-label": label } : { "aria-hidden": true })}
       style={{ width: size, height: size }}
     >
       <svg
@@ -229,7 +235,15 @@ function Letters({ id }: { id: string }) {
   return (
     <>
       {brandArt.letters.slice(0, -1).map((letter, i) => (
-        <mask key={letter.dx} id={`${id}m${i}`} maskUnits="userSpaceOnUse" x={-20} y={-20} width={logoW + 40} height={140}>
+        <mask
+          key={letter.dx}
+          id={`${id}m${i}`}
+          maskUnits="userSpaceOnUse"
+          x={-20}
+          y={-20}
+          width={logoW + 40}
+          height={140}
+        >
           <rect x={-20} y={-20} width={logoW + 40} height={140} fill="white" />
           <path
             transform={`translate(${letter.dx} 0)`}
@@ -301,7 +315,11 @@ export function OpeningBattle({ onDone, logoWidth = 320, playKey, className }: O
         <Letters id={id} />
         <OArt id={id} />
         {!reduced && (phase === "battle" || phase === "park") && (
-          <g key={String(playKey ?? "")} className="o-opening__cars" transform={`translate(${O_CENTER.x} ${O_CENTER.y})`}>
+          <g
+            key={String(playKey ?? "")}
+            className="o-opening__cars"
+            transform={`translate(${O_CENTER.x} ${O_CENTER.y})`}
+          >
             <OrbitCar ahead={0} extra={8} lead={false} />
             <OrbitCar ahead={olive.tandemGap} />
           </g>
@@ -477,7 +495,7 @@ export function StampDrop({ ink, shape = "round", seed = 1, size = 96, onDone, p
         } as CSSProperties
       }
     >
-      <svg viewBox="-30 -50 200 200" width={size} height={size} focusable="false">
+      <svg viewBox="-30 -50 200 200" width={size} height={size} aria-hidden="true" focusable="false">
         <g className="o-stamp-drop__bleed">{art}</g>
         <g>{art}</g>
       </svg>
@@ -492,6 +510,7 @@ export function CenterTabO({ active, size = 30, tone = "dark" }: CenterTabOProps
   const id = useSvgId("ct");
   const first = useRef(true);
   const [moved, setMoved] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chaque changement d'onglet (pas le premier rendu) anime
   useEffect(() => {
     if (first.current) {
       first.current = false;
@@ -587,10 +606,13 @@ export function BattleLayer({ still = false }: { still?: boolean }) {
       const speed = between(random, battle.speed);
       key++;
       setPack({ key, path, d: battlePathD(path), cars, speed, w: box.width, h: box.height });
-      timer = setTimeout(() => {
-        setPack(null);
-        timer = setTimeout(spawn, between(random, battle.gap));
-      }, battleDuration(path, cars, speed));
+      timer = setTimeout(
+        () => {
+          setPack(null);
+          timer = setTimeout(spawn, between(random, battle.gap));
+        },
+        battleDuration(path, cars, speed),
+      );
     };
     timer = setTimeout(spawn, battle.firstDelay);
     return () => {
@@ -613,6 +635,7 @@ export function BattleLayer({ still = false }: { still?: boolean }) {
           width={pack.w}
           height={pack.h}
           viewBox={`0 0 ${pack.w} ${pack.h}`}
+          aria-hidden="true"
           focusable="false"
         >
           {pack.cars.map((car, i) => (

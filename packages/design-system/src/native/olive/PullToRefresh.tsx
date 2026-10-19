@@ -126,5 +126,13 @@ export function PullToRefresh({ state, children, paused }: PullToRefreshProps) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  zone: { position: "absolute", left: 0, right: 0, top: 0, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  zone: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
 });

@@ -1,5 +1,5 @@
 import {
-  OpeningScreen,
+  OpeningBattle,
   parseThemePreference,
   type ThemePreference,
   ThemeProvider,
@@ -157,9 +157,10 @@ function Shell() {
       {/* Lot 32 : feuille « Signaler », une pour toute l'appli. */}
       {status === "in" ? <ReportSheetHost /> : null}
       {status === "in" ? <StaffBackground /> : null}
+      {/* Lot 39 (V12) : la battle en tandem de 3 s à chaque lancement (fondu de 120 ms si animations réduites). */}
       {opening ? (
         <View style={StyleSheet.absoluteFill}>
-          <OpeningScreen onDone={() => setOpening(false)} />
+          <OpeningBattle onDone={() => setOpening(false)} />
         </View>
       ) : null}
     </View>

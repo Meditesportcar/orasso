@@ -14,10 +14,7 @@ describe("composants natifs : aucune valeur en dur", () => {
   // Les composants et le mouvement : pas de couleur ni de durée écrite à la main (tout vient des jetons).
   // Hors contrôle : les fichiers de données ou de calcul (jetons, géométrie de marque, lecture de dégradés, bruit).
   // Lot 39 : le dossier du O vivant (olive/) est contrôlé aussi, sauf la géométrie pure (path.ts).
-  const files = [
-    ...readdirSync(dir),
-    ...readdirSync(resolve(dir, "olive")).map((f) => `olive/${f}`),
-  ].filter(
+  const files = [...readdirSync(dir), ...readdirSync(resolve(dir, "olive")).map((f) => `olive/${f}`)].filter(
     (f) =>
       /\.(tsx|ts)$/.test(f) && !/(\.test|brandArt|gradientCss|noise|fontFamily|textStyles|color|olive\/path)\./.test(f),
   );

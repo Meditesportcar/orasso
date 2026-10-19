@@ -64,7 +64,8 @@ export function StampDrop({ ink, shape = "round", seed = 1, size = 96, onDone, p
     "worklet";
     const p = progress.value;
     // Chute jusqu'à l'impact (échelle 1,8 → 0,94), puis la page rend un peu (0,94 → 1).
-    const scale = p < IMPACT ? DROP_SCALE + (0.94 - DROP_SCALE) * (p / IMPACT) : 0.94 + 0.06 * ((p - IMPACT) / (1 - IMPACT));
+    const scale =
+      p < IMPACT ? DROP_SCALE + (0.94 - DROP_SCALE) * (p / IMPACT) : 0.94 + 0.06 * ((p - IMPACT) / (1 - IMPACT));
     const angle = REST_ANGLE + jitter + DROP_ANGLE * (1 - p);
     return {
       opacity: fade.value * Math.min(1, p / IMPACT),

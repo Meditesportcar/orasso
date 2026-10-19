@@ -3,6 +3,7 @@
 export * from "../icons";
 export * from "../labels";
 export * from "../motion";
+export { GroundQuiet, useGroundQuiet, useIsGroundQuiet } from "../native/olive/quiet";
 export { THEME_IDS, type ThemeId, tokens, tokensV2Overlay } from "../tokens";
 export { AppBar, AppBarAction, type AppBarPersona, type AppBarProps } from "./components/AppBar";
 export { BigTitle, type BigTitleProps } from "./components/BigTitle";
@@ -42,7 +43,6 @@ export {
   type StampDropProps,
   type StampShape,
 } from "./components/Olive";
-export { GroundQuiet, useGroundQuiet, useIsGroundQuiet } from "../native/olive/quiet";
 export { Outlined, type OutlinedProps } from "./components/Outlined";
 export { Plate, type PlateProps } from "./components/Plate";
 export { PosterCard, type PosterCardProps, type PosterStatus } from "./components/PosterCard";

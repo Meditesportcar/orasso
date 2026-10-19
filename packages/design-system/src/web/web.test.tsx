@@ -3,6 +3,17 @@ import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { battle, bezier, curve, duration, olive, park, shake } from "../motion";
+import { brandArt } from "../native/brandArt";
+import {
+  CarTopArt,
+  CenterTabO,
+  EmptyState,
+  OLoader,
+  OpeningBattle,
+  SendBurst,
+  SendProgress,
+  StampDrop,
+} from "./components/Olive";
 import {
   AppBar,
   BigTitle,
@@ -28,17 +39,6 @@ import {
   VehicleCard,
   VehicleThumb,
 } from "./index";
-import { brandArt } from "../native/brandArt";
-import {
-  CarTopArt,
-  CenterTabO,
-  EmptyState,
-  OLoader,
-  OpeningBattle,
-  SendBurst,
-  SendProgress,
-  StampDrop,
-} from "./components/Olive";
 import { departmentPosition, readThemeCookie, resolveTheme, serverTheme, themeInitScript } from "./theme";
 
 const componentsDir = resolve(import.meta.dirname, "components");
@@ -316,7 +316,13 @@ describe("rendu serveur des composants", () => {
     // Le dessin de la voiture vue de dessus : même géométrie que le fichier du site (généré par le même script).
     const svg = readFileSync(resolve(import.meta.dirname, "assets/car-top.svg"), "utf8");
     expect(svg).toContain(brandArt.carTop.body);
-    expect(html(<svg aria-hidden="true"><CarTopArt /></svg>)).toContain(brandArt.carTop.body);
+    expect(
+      html(
+        <svg aria-hidden="true">
+          <CarTopArt />
+        </svg>,
+      ),
+    ).toContain(brandArt.carTop.body);
   });
 
   it("Ground, Logo, Monogram, Cover", () => {

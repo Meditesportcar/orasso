@@ -332,3 +332,112 @@
   gap: var(--space-5);
   width: 390px;
 }
+
+/* Le O vivant (lot 39) : les huit variantes du prototype s-olive. */
+.ds-olive {
+  max-width: 390px;
+}
+.ds-olive-hero {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  padding: 14px 14px 16px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--poster);
+  color: var(--poster-ink);
+}
+.ds-olive-hero__stage {
+  display: grid;
+  place-items: center;
+  justify-self: stretch;
+  height: 230px;
+}
+.ds-olive-hero__stage .o-opening {
+  color: var(--poster-ink);
+}
+.ds-olive-hero__label,
+.ds-olive-hero__text {
+  margin: 0;
+  color: var(--poster-muted);
+}
+.ds-olive-hero__title {
+  margin: 0;
+}
+.ds-olive-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ds-olive-card {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.ds-olive-card--wide {
+  grid-column: 1 / -1;
+}
+.ds-olive-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 150px;
+  overflow: hidden;
+  background: var(--surface-sunken);
+}
+.ds-olive-body {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px 12px;
+}
+.ds-olive-body .o-t-caption {
+  color: var(--ink-muted);
+}
+.ds-olive-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.ds-olive-road,
+.ds-olive-tab {
+  width: 100%;
+  padding: 0 10px;
+}
+.ds-olive-pull {
+  position: absolute;
+  inset: 0;
+}
+.ds-olive-pull__o {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  height: 76px;
+}
+.ds-olive-pull__list {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  left: 12px;
+  display: grid;
+  gap: 6px;
+  transition: transform var(--timing-base) var(--ease-park);
+}
+.ds-olive-pull.is-pulled .ds-olive-pull__list {
+  transform: translateY(70px);
+}
+.ds-olive-pull__list i {
+  display: block;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+.ds-olive-ground {
+  height: 360px;
+}

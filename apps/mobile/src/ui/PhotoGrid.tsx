@@ -1,9 +1,9 @@
 // Grille de photos (lot 36, retours de Damien) : véhicule, réalisations d'un pro, profil prestataire.
 //  - retirer une photo passe par la croix visible sur la photo, puis une confirmation (plus de retrait au simple toucher) ;
 //  - la première photo est la couverture (carte du véhicule) ; « En couverture » sous une autre la fait passer en tête ;
-//  - pendant un envoi, `UploadProgress` dit « photo 2 sur 4 » avec une barre et l'indicateur du kit (la voiture qui se
-//    gare, jamais une roue qui tourne).
-import { Button, Chip, Loader, Photo, tokens, useTheme } from "@orasso/design-system/native";
+//  - pendant un envoi, `UploadProgress` dit « photo 2 sur 4 » avec le O vivant (lot 39 : la voiture avance sur la route
+//    et se gare dans le O, jamais une roue qui tourne).
+import { Button, Chip, Photo, SendProgress, tokens } from "@orasso/design-system/native";
 import { photoLabels } from "@orasso/shared";
 import { useState } from "react";
 import { type ImageSourcePropType, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
@@ -109,30 +109,18 @@ export function PhotoGrid({
   );
 }
 
-/** Envoi en cours : « Envoi de la photo 2 sur 4… », une barre par photo, l'indicateur du kit. */
+/**
+ * Envoi en cours : « Envoi de la photo 2 sur 4… » et le O vivant (lot 39) : la voiture avance sur la route au rythme de
+ * l'envoi (la photo en cours compte pour moitié) et se gare dans le O à 100 %.
+ */
 export function UploadProgress({ current, total }: { current: number; total: number }) {
-  const { t } = useTheme();
   if (total <= 0) return null;
   return (
-    <View
-      style={styles.progress}
-      accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: total, now: current }}
-    >
-      <View style={styles.progressHead}>
-        <Loader size={24} />
-        <Muted variant="meta" accessibilityLiveRegion="polite">
-          {total === 1 ? photoLabels.uploadingOne : photoLabels.uploading(current, total)}
-        </Muted>
-      </View>
-      <View style={styles.segments}>
-        {Array.from({ length: total }, (_, i) => (
-          <View
-            key={`u${i.toString()}`}
-            style={[styles.segment, { backgroundColor: i < current ? t.color.accent : t.color.line }]}
-          />
-        ))}
-      </View>
+    <View style={styles.progress}>
+      <Muted variant="meta" accessibilityLiveRegion="polite">
+        {total === 1 ? photoLabels.uploadingOne : photoLabels.uploading(current, total)}
+      </Muted>
+      <SendProgress progress={Math.max(0, current - 0.5) / total} />
     </View>
   );
 }
@@ -143,7 +131,4 @@ const styles = StyleSheet.create({
   photo: { width: 160, height: 120, borderRadius: tokens.radius.radiusSm },
   remove: { position: "absolute", top: space1, right: space1 },
   progress: { gap: space1 },
-  progressHead: { flexDirection: "row", alignItems: "center", gap: space2 },
-  segments: { flexDirection: "row", gap: space1 },
-  segment: { flex: 1, height: 4 },
 });

@@ -5,7 +5,7 @@ import { type ReactNode, useEffect, useId, useState } from "react";
 import { AppState, StyleSheet, View } from "react-native";
 import Animated, {
   type SharedValue,
-  useAnimatedStyle,
+  type useAnimatedStyle,
   useFrameCallback,
   useSharedValue,
   withSequence,
@@ -67,14 +67,7 @@ export function CarTop({
     <Svg width={width} height={height} viewBox={carTop.viewBox.join(" ")} pointerEvents="none">
       {smoke > 0 &&
         carTop.smoke.map((s) => (
-          <Circle
-            key={s.cx}
-            cx={s.cx}
-            cy={s.cy}
-            r={s.r}
-            fill={c.ink}
-            opacity={Math.min(1, smoke) * 0.12 * s.opacity}
-          />
+          <Circle key={s.cx} cx={s.cx} cy={s.cy} r={s.r} fill={c.ink} opacity={Math.min(1, smoke) * 0.12 * s.opacity} />
         ))}
       {carTop.rearWheels.map((w) => rect(w, c.night, `r${w.cy}`))}
       {carTop.frontWheels.map((w) => (

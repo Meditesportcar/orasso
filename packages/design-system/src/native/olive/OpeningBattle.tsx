@@ -142,10 +142,13 @@ export function OpeningBattleLogo({ onDone, logoWidth = 260, playKey }: Omit<Ope
         </View>
       </Animated.View>
       {!reducedMotion && (
-        <View pointerEvents="none" style={[
+        <View
+          pointerEvents="none"
+          style={[
             styles.stage,
             { width: stagePx, height: stagePx, left: (width - stagePx) / 2, top: (boxH - stagePx) / 2 },
-          ]}>
+          ]}
+        >
           <OrbitCar stagePx={stagePx} length={CAR_UNITS * kz} color={t.color.poster} style={chaseStyle} />
           <OrbitCar stagePx={stagePx} length={CAR_UNITS * kz} color={t.color.accent} style={leadStyle} />
         </View>

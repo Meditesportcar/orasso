@@ -120,11 +120,7 @@ export function Ground({
   const { t } = useTheme();
   return (
     <View style={[styles.root, { backgroundColor: t.color.ground }, style]} {...rest}>
-      {variant === "battle" ? (
-        <BattleFx still={still} paused={paused} />
-      ) : (
-        <Fx variant={variant} animated={animated} />
-      )}
+      {variant === "battle" ? <BattleFx still={still} paused={paused} /> : <Fx variant={variant} animated={animated} />}
       <View style={styles.content}>{children}</View>
     </View>
   );

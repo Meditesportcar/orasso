@@ -166,7 +166,9 @@ describe("worklets : les fonctions du fil graphique sont marquées", () => {
     const offenders: string[] = [];
     for (const file of files) {
       const text = readFileSync(resolve(dir, file), "utf8");
-      for (const m of text.matchAll(/use(AnimatedStyle|AnimatedProps|FrameCallback)\(\s*\(([^)]*)\)\s*=>\s*\{\s*([^\n]*)/g)) {
+      for (const m of text.matchAll(
+        /use(AnimatedStyle|AnimatedProps|FrameCallback)\(\s*\(([^)]*)\)\s*=>\s*\{\s*([^\n]*)/g,
+      )) {
         if (!m[3]?.startsWith('"worklet"')) offenders.push(`${file} : ${m[0].slice(0, 60)}`);
       }
       // Pas de forme abrégée « () => ({ … }) » : elle ne peut pas porter la directive.

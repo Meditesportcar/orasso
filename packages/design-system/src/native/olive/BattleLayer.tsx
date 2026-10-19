@@ -75,11 +75,14 @@ export function BattleLayer({ running }: { running: boolean }) {
       clock.value = 0;
       pack.value = { ...path, cars, speed };
       setLive(true);
-      timer = setTimeout(() => {
-        setLive(false);
-        pack.value = null;
-        timer = setTimeout(spawn, between(random, battle.gap));
-      }, battleDuration(path, cars, speed));
+      timer = setTimeout(
+        () => {
+          setLive(false);
+          pack.value = null;
+          timer = setTimeout(spawn, between(random, battle.gap));
+        },
+        battleDuration(path, cars, speed),
+      );
     };
     timer = setTimeout(spawn, battle.firstDelay);
     return () => {
@@ -95,9 +98,15 @@ export function BattleLayer({ running }: { running: boolean }) {
   };
   const colors = [t.color.accent, t.color.poster, t.color.accent];
   return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: battle.opacity[theme] }]} onLayout={onLayout}>
+    <View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { opacity: battle.opacity[theme] }]}
+      onLayout={onLayout}
+    >
       {running &&
-        colors.map((color, i) => <BattleCar key={color + String(i)} index={i} pack={pack} clock={clock} color={color} />)}
+        colors.map((color, i) => (
+          <BattleCar key={color + String(i)} index={i} pack={pack} clock={clock} color={color} />
+        ))}
     </View>
   );
 }
