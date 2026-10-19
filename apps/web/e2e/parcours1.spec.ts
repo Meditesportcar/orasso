@@ -80,12 +80,12 @@ test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   const secondApp = await applyApi(second, event.id, await addVehicleApi(second, secondPlate));
   await decideApi(organizer, event.id, secondApp, "accept");
 
-  // --- 5. Organisateur : tri au clavier (Sable imposé) ---
+  // --- 5. Organisateur : tri au clavier (thème au choix de l'utilisateur depuis le lot 38, Béton par défaut) ---
   const orga = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const orgaPage = await orga.newPage();
   await loginInBrowser(orgaPage, "damien@orasso.local", SEED_PASSWORD, "/app/acces");
   await orgaPage.goto(`/orga/meditesportcar/e/${event.id}/candidatures`);
-  await expect(orgaPage.locator('[data-theme="sable"]').first()).toBeVisible();
+  await expect(orgaPage.locator("html")).toHaveAttribute("data-theme", "beton");
   const tri = orgaPage.getByTestId("triage-card");
   await expect(tri).toBeVisible();
   await expect(orgaPage.getByTestId("triage-pseudo")).toContainText(pseudo);
