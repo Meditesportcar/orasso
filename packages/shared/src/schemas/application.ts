@@ -11,6 +11,7 @@ import {
   triageDecisions,
 } from "../enums";
 import { type Grade, gradeSchema } from "../grades";
+import type { ArrivalSlot } from "../rules/arrival";
 import type { StructureNoteView } from "./afterEvent";
 import { arrivalAnswerFields, optionalText, pageQuery } from "./common";
 import type { ApplicationCrewForTriage, ApplicationCrewInfo } from "./crews";
@@ -131,6 +132,10 @@ export type MyApplication = {
   review: MyReview | null;
   /** Inscription en crew (lot 19) : le crew, et la venue à confirmer. */
   crew: ApplicationCrewInfo | null;
+  /** Lot 43 : créneau d'arrivée des exposants de l'événement (lot 47) ; absent d'une copie gardée avant le lot 43. */
+  arrival?: ArrivalSlot | null;
+  /** Lot 43 : la structure organisatrice (logo, nom, validée) ; absente d'une copie gardée avant le lot 43. */
+  organizer?: { name: string; logoUrl: string | null; verified: boolean } | null;
 };
 
 /** Jour d'une candidature (lot 26) : identifiant, date locale `AAAA-MM-JJ`, horaires. */

@@ -95,9 +95,9 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(homeOf({ kind: "organizer", structureId: "s-1" })).toBe("/(orga)/direct");
   });
 
-  it("on ouvre une casquette sur un onglet rempli tant que son Accueil est « Bientôt »", () => {
-    expect(landingOf({ kind: "pro", proProfileId: "p-1" })).toBe("/(pro)/scanner");
-    expect(landingOf({ kind: "provider" })).toBe("/(provider)/candidatures");
+  it("on ouvre une casquette sur son Accueil (lot 43 : le pro et le prestataire ont le leur)", () => {
+    expect(landingOf({ kind: "pro", proProfileId: "p-1" })).toBe("/(pro)/accueil");
+    expect(landingOf({ kind: "provider" })).toBe("/(provider)/accueil");
     expect(landingOf(VISITOR)).toBe("/(visitor)/accueil");
     expect(landingOf({ kind: "organizer", structureId: "s-1" })).toBe("/(orga)/direct");
   });
@@ -107,7 +107,7 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(misplacedTarget(FAN, ["(visitor)", "passeport"])).toBe("/(tabs)/profil");
     expect(misplacedTarget(VISITOR, ["(tabs)", "explorer"])).toBe("/(visitor)/explorer");
     expect(misplacedTarget(VISITOR, ["(tabs)", "garage"])).toBe("/(visitor)/profil");
-    expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(orga)", "tri"])).toBe("/(pro)/scanner");
+    expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(orga)", "tri"])).toBe("/(pro)/accueil");
     // `/explorer` résolu dans le groupe média, `/accueil` dans celui du pro : l'onglet de la casquette active.
     expect(misplacedTarget(VISITOR, ["(media)", "explorer"])).toBe("/(visitor)/explorer");
     expect(misplacedTarget(FAN, ["(pro)", "accueil"])).toBe("/(tabs)/accueil");

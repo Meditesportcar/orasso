@@ -160,7 +160,9 @@ async function chooseCasquette(page: Page, kind: "organizer" | "pro", name?: str
     await page.waitForURL(/\/direct/, { timeout: 20_000 });
     return;
   }
-  // Lot 40 : la casquette Pro s'ouvre sur le Scanner tant que son Accueil est « Bientôt » (lot 43).
+  // Lot 43 : la casquette Pro s'ouvre sur son Accueil ; le Scanner est un onglet de sa barre.
+  await page.waitForURL(/\/accueil/, { timeout: 20_000 });
+  await page.getByRole("tab", { name: "Scanner" }).click();
   await page.waitForURL(/\/scanner/, { timeout: 20_000 });
 }
 
@@ -317,9 +319,9 @@ test("billets du public : réserver dans l'appli, QR dans Mes billets, rendre un
   await expect(page.getByTestId("ticket")).toHaveCount(1);
   const mine = await apiCall<{ status: string }[]>(fan, "GET", "/me/tickets");
   expect(mine.data.filter((t) => t.status === "valid")).toHaveLength(1);
-  // Accès : un raccourci vers Mes billets.
+  // Sorties (lot 43) : le billet est un ticket, avec « Mon billet ».
   await page.goto("/acces");
-  await expect(page.getByTestId("my-tickets")).toContainText("Mes billets · 1", { timeout: 30_000 });
+  await expect(page.getByTestId("my-tickets")).toContainText("Mon billet", { timeout: 30_000 });
   await ctx.close();
 });
 

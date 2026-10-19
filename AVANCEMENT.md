@@ -25,6 +25,8 @@
 
 - **Lot 51 — garage v2, ajout de véhicule en cinq étapes, floutage de plaque (branche `lot-51-garage-floutage`, vague 3)** : la carte se construit en haut ; marque › modèle › génération de la liste Orasso (« Autre » sans saisie libre), fiche technique, catégories (origine déduite de la marque, styles grisés avec la raison), photos, plaque floutée (Automatique par ML Kit sur le téléphone, ou cadre à la main), numéro privé, ancien véhicule ; modification par les mêmes étapes ; garage v2 en grandes cartes ; flou appliqué par l'API, définitif (migration `0045_plate-blur`) ; site : floutage à la main à l'ajout et sur la page du véhicule. Dépendance native ML Kit : APK v2 au lot 58. Recettes `appli-lot51.spec.ts`, `lot51.spec.ts`.
 
+- **Lot 43 — Sorties en tickets, Accueil par profil, accès flottant (branche `lot-43-sorties-accueil`, vague 4)** : `GET /me/home?persona=` (profil et blocs de l'exposant, du visiteur, du pro, du prestataire, du média ; aucune migration) ; Sorties en tickets à souche de date (segments À venir / Staff / Passées, Mon QR, Retirer, liste d'attente, place libérée, Mon billet, mission staff, passées avec points, avis et prix du public) ; Accueil par profil (carte du prochain événement à affiche générée, compte à rebours en contour, organisateur validé, arrivée, Mon accès / Mon billet, Maps, Waze, Sur la carte ; accueils du pro, du prestataire et du média) ; accès flottant de J-7 à J+1 au-dessus de la barre d'onglets ; le pro et le prestataire s'ouvrent désormais sur leur Accueil. Recette `apps/web/e2e/appli-lot43.spec.ts`.
+
 ## En cours
 
 - Branche `lot-51-garage-floutage` poussée, en attente de fusion (après 47 et 49 : migration `0045_plate-blur` à régénérer, règle B1).
@@ -36,6 +38,8 @@
 
 - Vague 2 : la branche `lot-39-o-vivant` attend la relecture et la fusion du coordinateur (lots 40, 45, 46 en parallèle).
 - Vague 3 : la branche `lot-49-api-passeport-vote-recap` attend la relecture et la fusion du coordinateur (migration `0045_passport`, parent `0044_missions`, à régénérer si le lot 47 en ajoute une avant elle, règle B1 ; elle étend `point_kind` par `ADD VALUE`, jamais utilisé dans la même migration). Les pages Réglages de l'administration (site et appli) n'affichent pas encore `points.audience_prize` (API prête).
+
+- La branche `lot-43-sorties-accueil` (vague 4) attend la relecture et la fusion du coordinateur (fichiers partagés : `ui/PersonaTabs.tsx`, `lib/personaModel.ts` (`landingOf`), `packages/shared` (`home.ts`, `labels/home.fr.ts`), `seed.ts` ; la tuile « Découvre ce qu'il y a de nouveau » mène à `tuto/[profil]` du lot 42).
 
 - Lot 41 (branche `lot-41-arrivee`, depuis `main` `7d4fd86`) en attente de la fusion du coordinateur : migration `0045_arrivee` à régénérer selon l'ordre des fusions (règle B1) ; fichiers partagés : `apps/mobile/src/app/_layout.tsx`, `apps/api/src/app.ts`, `modules/security/auth-hooks.ts`, `packages/shared` (labels, schémas), `apps/web/e2e/helpers.ts`.
 

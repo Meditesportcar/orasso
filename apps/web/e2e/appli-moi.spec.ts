@@ -340,6 +340,9 @@ test("Casquettes : feuille Mes casquettes, bascule vers (orga) et (pro), appui l
   await signIn(page, "garage@orasso.local");
   await page.goto("/moi");
   await page.getByTestId("casquette-pro").click();
+  // Lot 43 : la casquette Pro s'ouvre sur son Accueil ; le Scanner est un onglet de sa barre.
+  await page.waitForURL(/accueil/, { timeout: 15_000 });
+  await page.getByRole("tab", { name: "Scanner" }).click();
   await page.waitForURL(/scanner/, { timeout: 15_000 });
   await expect(page.getByRole("tab", { name: "Scanner" })).toBeVisible();
   await shot(page, "13-casquette-pro-sable");

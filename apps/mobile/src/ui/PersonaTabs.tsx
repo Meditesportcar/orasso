@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { neighbourRoute } from "@/features/nav/swipe";
 import { TabSwipeContext, useTabSwipe } from "@/features/nav/useTabSwipe";
+import { NextAccessBar } from "@/features/sorties/NextAccessBar";
 import { personaTabSets, personaTabs } from "@/lib/personaModel";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
@@ -32,15 +33,19 @@ function PersonaTabBar({
   // Le glissement a besoin de l'onglet courant et de la navigation du groupe : la barre les lui prête.
   navigator.current = { current, navigate: (route) => navigation.navigate(route) };
   return (
-    <TabBar
-      tabs={tabs}
-      active={(current ? routes[current] : undefined) ?? tabs[0]?.id ?? ""}
-      safeBottom={insets.bottom}
-      onSelect={(id) => {
-        const route = Object.keys(routes).find((name) => routes[name] === id);
-        if (route) navigation.navigate(route);
-      }}
-    />
+    <View>
+      {/* Lot 43 : l'accès flottant, au-dessus de la barre dès J-7 (toutes les casquettes qui ont un accès). */}
+      <NextAccessBar routeKey={current} />
+      <TabBar
+        tabs={tabs}
+        active={(current ? routes[current] : undefined) ?? tabs[0]?.id ?? ""}
+        safeBottom={insets.bottom}
+        onSelect={(id) => {
+          const route = Object.keys(routes).find((name) => routes[name] === id);
+          if (route) navigation.navigate(route);
+        }}
+      />
+    </View>
   );
 }
 

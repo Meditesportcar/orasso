@@ -23,6 +23,7 @@ import { seedDayJ } from "./seed/day-j";
 import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
 import { seedHome } from "./seed/home";
+import { seedHomeProfiles } from "./seed/home-profiles";
 import { seedInvitations } from "./seed/invitations";
 import { seedMedia } from "./seed/media";
 import { seedMessaging } from "./seed/messaging";
@@ -132,6 +133,8 @@ async function main() {
   await seedPassport();
   // Lot 47 : créneaux d'arrivée de la Nocturne, notes d'arrivée, affiches générées de tous les événements (en dernier).
   await seedPosters();
+  // Lot 43 : billet de Paul (visiteur), remises, vues et abonnés du garage du port pour l'Accueil par profil.
+  await seedHomeProfiles();
 }
 
 try {

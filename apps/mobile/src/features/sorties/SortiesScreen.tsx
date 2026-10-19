@@ -1,19 +1,26 @@
-// Sorties (ex-Accès ; lot 40 : contenu déplacé tel quel, le lot 43 le passe en tickets, prototype `s-sorties`) : ta
-// place aux événements. À venir (une carte par candidature avec son statut, place libérée à accepter, désistement),
-// Où je suis staff, Passés (carnet de route : pointage en attente, points, contestation d'un malus).
+// Sorties (ex-Accès ; lot 40 : contenu déplacé tel quel, lot 43 : tickets, prototype `s-sorties`) : ta place aux
+// événements, sous forme de tickets dont la souche porte la date. Trois segments : « À venir » (candidatures, billets du
+// public, invitations reçues), « Staff » (missions de l'exposant : « Je serai là », mode staff), « Passées » (carnet de
+// route : pointage, points, avis, malus). Les candidatures sont lues dans le cache du téléphone (lisibles hors ligne).
 
-import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Chip, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   afterEventLabels,
   type ContestStatus,
   contestStatusLabels,
+  crewLabels,
   invitationLabels,
   type MyApplication,
   type MyStaffEvent,
+  type MyTicket,
   POINTS_PENDING_LABEL,
   type ReceivedInvitation,
+  refusalReasonLabels,
+  seasonYear,
+  sortiesLabels,
   staffPresenceLabels,
   staffRequestLabels,
+  staffRoleLabels,
   ticketAppLabels,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -24,37 +31,52 @@ import { ContestSheet } from "@/features/ContestSheet";
 import { CrewConfirmSheet } from "@/features/CrewConfirmSheet";
 import { InvitationSheet } from "@/features/invitations/InvitationSheet";
 import { InvitationCard } from "@/features/invitations/ReceivedInvitations";
+import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { ReviewSheet, type ReviewTarget } from "@/features/ReviewSheet";
+import { formatPrice } from "@/features/tickets/TicketsBlock";
 import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
-import { formatDayHour, formatShortDate } from "@/lib/format";
+import { dayCountdown, formatDay, formatDayHour, formatDuration, formatShortDate } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { useStaffActions } from "@/lib/staff/useStaff";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
-import { AccessCard } from "@/ui/AccessCard";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { plateText } from "@/ui/plateText";
-import { SectionTitle, TabScreen } from "@/ui/Screens";
+import { TabScreen } from "@/ui/Screens";
+import { ApplicationStatusTag, StatusTag } from "@/ui/StatusTag";
+import {
+  arrivalPhrase,
+  liveApplications,
+  type SortiesSegment,
+  staffUpcoming,
+  ticketsPast,
+  ticketsUpcoming,
+  waitlistPhrase,
+} from "./model";
+import { Ticket } from "./Ticket";
 
-const { space2, space3 } = tokens.spacing;
+const { space2 } = tokens.spacing;
+
+const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`.replace("-", "−"));
+const starsLabel = (n: number) => `${n} étoile${n > 1 ? "s" : ""} sur 3`;
+const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function SortiesScreen() {
   const { t } = useTheme();
   const router = useRouter();
-  const { goTab } = usePersona();
+  const { goTab, persona } = usePersona();
   const now = useNow();
   const { upcoming, past, loading, offline, reload } = useApplications();
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
   // Invitations nominatives reçues (lot 25, docs/02 « Accès »).
   const invitations = useApi(() => api.myEventInvitations(), []);
-  // Billets du public (lot 34) : un accès vers « Mes billets » quand on en a.
+  // Billets du public (lot 34).
   const tickets = useApi(() => api.myTickets(), []);
-  const validTickets = (tickets.data ?? []).filter((x) => x.status === "valid").length;
+  const [segment, setSegment] = useState<SortiesSegment>("upcoming");
   const [answering, setAnswering] = useState<ReceivedInvitation | null>(null);
   const [answered, setAnswered] = useState<string | null>(null);
   const { me } = useSession();
@@ -68,6 +90,9 @@ export function SortiesScreen() {
   }
   const orphans = [...unsentBy.entries()].filter(([eventId]) => !staff.data?.some((s) => s.event.id === eventId));
   const [withdrawing, setWithdrawing] = useState<MyApplication | null>(null);
+  const [giving, setGiving] = useState<MyTicket | null>(null);
+  const [givingBusy, setGivingBusy] = useState(false);
+  const [givingError, setGivingError] = useState<string | null>(null);
   const [contesting, setContesting] = useState<{ applicationId: string; title: string } | null>(null);
   const [reviewing, setReviewing] = useState<ReviewTarget | null>(null);
   // Lien d'avis d'un remerciement (lot 27, `orasso://acces?avis=<candidature>`) : ouvre la feuille d'avis, une seule fois.
@@ -104,14 +129,53 @@ export function SortiesScreen() {
     }
   }
 
-  const firstAccepted = upcoming?.find((a) => a.status === "accepted")?.id;
+  async function giveBack() {
+    if (!giving) return;
+    setGivingBusy(true);
+    setGivingError(null);
+    try {
+      await api.returnTicket(giving.id);
+      setGiving(null);
+      await tickets.reload();
+    } catch (e) {
+      setGivingError(errorMessage(e));
+    } finally {
+      setGivingBusy(false);
+    }
+  }
+
+  const live = liveApplications(upcoming);
+  // Un seul bouton principal par écran : la place libérée d'abord (elle expire), sinon le QR de la première place retenue,
+  // sinon le premier billet.
+  const offerId = live.find((a) => a.status === "offered")?.id;
+  const firstAccepted = offerId ? undefined : live.find((a) => a.status === "accepted" && !a.checkedInAt)?.id;
   const history = (past ?? []).filter((a) => a.status === "accepted" || a.withdrawnAfterLock);
+  const upcomingTickets = ticketsUpcoming(tickets.data ?? [], now);
+  const pastTickets = ticketsPast(tickets.data ?? [], now);
+  const staffItems = staffUpcoming(staff.data ?? [], now);
+  const showStaff = persona.kind === "fan";
+  const countUpcoming = live.length + upcomingTickets.length;
+  const countPast = history.length + pastTickets.length;
+  const canWithdrawAny = live.some((a) => ["pending", "waitlisted", "accepted"].includes(a.status));
+
+  // Rang au prix du public des sorties pointées récentes (calculé par le récap ; rien avant J+1 10 h).
+  const [ranks, setRanks] = useState<Record<string, { rank: number; of: number } | null>>({});
+  // `history` est recalculé à chaque rendu : `asked` limite chaque événement à une seule requête.
+  const asked = useRef(new Set<string>());
+  useEffect(() => {
+    const recent = history.filter((a) => a.checkedInAt && !asked.current.has(a.event.id)).slice(0, 3);
+    for (const a of recent) {
+      asked.current.add(a.event.id);
+      void api.eventAudienceRank(a.event.id).then((r) => setRanks((prev) => ({ ...prev, [a.event.id]: r })));
+    }
+  }, [history]);
 
   return (
     <TabScreen
       title="Mes sorties"
+      facts={`Saison ${seasonYear(now)}`}
       onRefresh={async () => {
-        await Promise.all([reload(), staff.reload(), invitations.reload()]);
+        await Promise.all([reload(), staff.reload(), invitations.reload(), tickets.reload()]);
       }}
       overlays={
         <>
@@ -159,6 +223,17 @@ export function SortiesScreen() {
               void reload();
             }}
           />
+          <ConfirmSheet
+            visible={giving !== null}
+            title={ticketAppLabels.giveBackTitle}
+            body={ticketAppLabels.giveBackBody}
+            confirmLabel={ticketAppLabels.giveBack}
+            confirmIcon="undo"
+            busy={givingBusy}
+            error={givingError}
+            onConfirm={() => void giveBack()}
+            onClose={() => setGiving(null)}
+          />
         </>
       }
     >
@@ -169,62 +244,93 @@ export function SortiesScreen() {
       {answered ? <Notice>{answered}</Notice> : null}
       {avisNotice ? <Notice>{avisNotice}</Notice> : null}
 
-      {invitations.data && invitations.data.length > 0 ? (
+      <View style={styles.segments} testID="sorties-segments">
+        <Chip selected={segment === "upcoming"} onPress={() => setSegment("upcoming")}>
+          {`À venir · ${countUpcoming}`}
+        </Chip>
+        {showStaff ? (
+          <Chip selected={segment === "staff"} onPress={() => setSegment("staff")}>
+            {`Staff · ${staffItems.length}`}
+          </Chip>
+        ) : null}
+        <Chip selected={segment === "past"} onPress={() => setSegment("past")}>
+          {`Passées · ${countPast}`}
+        </Chip>
+      </View>
+
+      {segment === "upcoming" ? (
         <>
-          <SectionTitle>{invitationLabels.received}</SectionTitle>
-          {invitations.data.map((inv) => (
-            <InvitationCard
-              key={inv.id}
-              inv={inv}
-              onAnswer={() => setAnswering(inv)}
-              onOpenEvent={() => router.push(`/e/${inv.event.slug}`)}
+          {invitations.data && invitations.data.length > 0 ? (
+            <>
+              <Text variant="label" color={t.color.ink}>
+                {invitationLabels.received}
+              </Text>
+              {invitations.data.map((inv) => (
+                <InvitationCard
+                  key={inv.id}
+                  inv={inv}
+                  onAnswer={() => setAnswering(inv)}
+                  onOpenEvent={() => router.push(`/e/${inv.event.slug}`)}
+                />
+              ))}
+            </>
+          ) : null}
+
+          {live.map((app) => (
+            <ApplicationTicket
+              key={app.id}
+              app={app}
+              now={now}
+              busy={busyId === app.id}
+              primary={app.id === firstAccepted}
+              primaryOffer={app.id === offerId}
+              onOpen={() => router.push(`/e/${app.event.slug}`)}
+              onJourJ={() => router.push(`/jour-j/${app.id}`)}
+              onWithdraw={() => setWithdrawing(app)}
+              onAccept={() => void run(app, () => api.acceptOffer(app.id))}
+              onDecline={() => void run(app, () => api.declineOffer(app.id))}
+              onConfirmCrew={() => setConfirmingCrew(app)}
+              onDeclineCrew={() => void run(app, () => api.declineCrewVenue(app.id))}
             />
           ))}
+
+          {upcomingTickets.map((x, i) => (
+            <TicketOfPublic
+              key={x.id}
+              ticket={x}
+              now={now}
+              primary={!offerId && !firstAccepted && i === 0}
+              onOpen={() => router.push(`/e/${x.event.slug}`)}
+              onShow={() => router.push("/billets")}
+              onGiveBack={() => setGiving(x)}
+            />
+          ))}
+
+          {countUpcoming === 0 && loading ? (
+            <Muted variant="body">Chargement…</Muted>
+          ) : countUpcoming === 0 && !(invitations.data && invitations.data.length > 0) ? (
+            <EmptyState
+              title={sortiesLabels.emptyUpcomingTitle}
+              text={sortiesLabels.emptyUpcomingText}
+              action={
+                <Button variant="primary" icon="explore" onPress={() => goTab("explorer")} fullWidth>
+                  Explorer les événements
+                </Button>
+              }
+            />
+          ) : null}
+
+          {canWithdrawAny ? <Muted variant="body">{sortiesLabels.withdrawHelp}</Muted> : null}
+          {upcomingTickets.some((x) => x.priceCents == null) ? (
+            <Muted variant="body">{sortiesLabels.giveBackHelp}</Muted>
+          ) : null}
         </>
       ) : null}
 
-      <SectionTitle>À venir</SectionTitle>
-      {validTickets > 0 ? (
-        <Button variant="plate" icon="qr" onPress={() => router.push("/billets")} fullWidth testID="my-tickets">
-          {ticketAppLabels.accessLink(validTickets)}
-        </Button>
-      ) : null}
-      {upcoming && upcoming.length > 0 ? (
-        upcoming.map((app) => (
-          <AccessCard
-            key={app.id}
-            app={app}
-            now={now}
-            busy={busyId === app.id}
-            primary={app.id === firstAccepted}
-            onOpen={() => router.push(`/e/${app.event.slug}`)}
-            onJourJ={() => router.push(`/jour-j/${app.id}`)}
-            onWithdraw={() => setWithdrawing(app)}
-            onAccept={() => void run(app, () => api.acceptOffer(app.id))}
-            onDecline={() => void run(app, () => api.declineOffer(app.id))}
-            onConfirmCrew={() => setConfirmingCrew(app)}
-            onDeclineCrew={() => void run(app, () => api.declineCrewVenue(app.id))}
-          />
-        ))
-      ) : loading ? (
-        <Muted variant="body">Chargement…</Muted>
-      ) : (
-        <Plate kind="note" style={styles.empty}>
-          <Text variant="body" color={t.color.plateInk}>
-            Aucune candidature en cours. Trouve un événement et candidate avec l'un de tes véhicules : ta carte d'accès
-            apparaîtra ici.
-          </Text>
-          <Button variant="plate" icon="explore" onPress={() => goTab("explorer")} fullWidth>
-            Explorer les événements
-          </Button>
-        </Plate>
-      )}
-
-      {staff.data && staff.data.length > 0 ? (
+      {segment === "staff" ? (
         <>
-          <SectionTitle>Où je suis staff</SectionTitle>
-          {staff.data.map((s) => (
-            <StaffCard
+          {staffItems.map((s) => (
+            <StaffTicket
               key={s.event.id}
               item={s}
               unsent={unsentBy.get(s.event.id)?.count ?? 0}
@@ -232,129 +338,231 @@ export function SortiesScreen() {
               onChanged={() => void staff.reload()}
             />
           ))}
+          {(me?.memberships ?? [])
+            .filter((m) => m.role === "staff" && m.status === "requested")
+            .map((m) => (
+              <Notice key={m.structureId}>
+                {staffRequestLabels.sent} · {m.structureName} : tu seras prévenu quand l'équipe organisatrice aura
+                répondu.
+              </Notice>
+            ))}
+          {orphans.map(([eventId, u]) => (
+            <Notice key={eventId}>
+              {u.count} envoi{u.count > 1 ? "s" : ""} du staff à faire · {u.title || "événement terminé"} : ils
+              partiront au retour du réseau.
+            </Notice>
+          ))}
+          {staffItems.length === 0 ? (
+            <EmptyState title={sortiesLabels.emptyStaffTitle} text={sortiesLabels.emptyStaffText} />
+          ) : null}
         </>
       ) : null}
-      {(me?.memberships ?? [])
-        .filter((m) => m.role === "staff" && m.status === "requested")
-        .map((m) => (
-          <Notice key={m.structureId}>
-            {staffRequestLabels.sent} · {m.structureName} : tu seras prévenu quand l'équipe organisatrice aura répondu.
-          </Notice>
-        ))}
-      {orphans.map(([eventId, u]) => (
-        <Notice key={eventId}>
-          {u.count} envoi{u.count > 1 ? "s" : ""} du staff à faire · {u.title || "événement terminé"} : ils partiront au
-          retour du réseau.
-        </Notice>
-      ))}
 
-      <SectionTitle>Passés · carnet de route</SectionTitle>
-      {history.length > 0 ? (
-        <Plate style={styles.log}>
-          {history.map((app, i) => (
-            <LogLine
+      {segment === "past" ? (
+        <>
+          {history.map((app) => (
+            <PastTicket
               key={app.id}
               app={app}
-              last={i === history.length - 1}
+              now={now}
+              rank={ranks[app.event.id] ?? null}
               onContest={() => setContesting({ applicationId: app.id, title: app.event.title })}
               onReview={() =>
                 app.review &&
                 setReviewing({ applicationId: app.id, title: app.event.title, deadline: app.review.deadline })
               }
+              onOpen={() => router.push(`/e/${app.event.slug}`)}
             />
           ))}
-        </Plate>
-      ) : (
-        <Muted variant="body">
-          Ton carnet de route se remplira après ton premier événement : présence, points, avis.
-        </Muted>
-      )}
+          {pastTickets.map((x) => (
+            <Ticket
+              key={x.id}
+              testID="ticket-past-public"
+              dim
+              date={x.event.startsAt}
+              badge={<Chip surface="plate">{x.status === "used" ? "Entrée enregistrée" : "Terminé"}</Chip>}
+              title={x.event.title}
+              detail={sortiesLabels.publicTicketLine(x.name)}
+              onPressTitle={() => router.push(`/e/${x.event.slug}`)}
+            />
+          ))}
+          {countPast === 0 ? (
+            <EmptyState title={sortiesLabels.emptyPastTitle} text={sortiesLabels.emptyPastText} />
+          ) : null}
+        </>
+      ) : null}
     </TabScreen>
   );
 }
 
-/** Une ligne du carnet de route. */
-function LogLine({
+/** Une candidature à venir : statut, créneau d'arrivée, et ce qu'on peut en faire. */
+function ApplicationTicket({
   app,
-  last,
-  onContest,
-  onReview,
+  now,
+  busy,
+  primary,
+  primaryOffer,
+  onOpen,
+  onJourJ,
+  onWithdraw,
+  onAccept,
+  onDecline,
+  onConfirmCrew,
+  onDeclineCrew,
 }: {
   app: MyApplication;
-  last: boolean;
-  onContest: () => void;
-  onReview: () => void;
+  now: Date;
+  busy?: boolean;
+  /** Seul bouton principal de l'écran : « Mon QR » de la première place retenue. */
+  primary?: boolean;
+  /** La place libérée à accepter porte le bouton principal de l'écran (elle expire). */
+  primaryOffer?: boolean;
+  onOpen: () => void;
+  onJourJ: () => void;
+  onWithdraw: () => void;
+  onAccept: () => void;
+  onDecline: () => void;
+  onConfirmCrew: () => void;
+  onDeclineCrew: () => void;
 }) {
-  const { t } = useTheme();
-  const c = t.color;
-  let result: string;
-  let resultColor = c.plateInk;
-  // Le carnet est une plaque graphite : couleurs de texte faites pour le graphite (`plateText`).
-  if (app.event.status === "cancelled") result = "événement annulé";
-  else if (app.checkedInAt) result = app.points !== null ? `présent · ${signed(app.points)} pts` : "présent";
-  else if (app.pointsPending) {
-    result = POINTS_PENDING_LABEL.toLowerCase();
-    resultColor = plateText.accent;
-  } else if (app.withdrawnAfterLock || app.malus) {
-    result = app.points !== null ? `absent · ${signed(app.points)} pts` : "absent";
-    resultColor = plateText.alert;
-  } else result = "terminé";
-  const contest = app.malus;
+  const offered = app.status === "offered";
+  const awaiting = app.status === "awaiting_member";
+  const remaining = app.offerExpiresAt ? new Date(app.offerExpiresAt).getTime() - now.getTime() : 0;
+  const organizer = app.organizer?.name ?? sortiesLabels.theTeam;
+  const detail: string[] = [];
+  if (app.status === "accepted") {
+    if (app.zone) detail.push(`Zone ${app.zone.code}`);
+    const arrival = arrivalPhrase(app.arrival);
+    if (arrival) detail.push(arrival);
+    if (app.vehicle) detail.push(app.vehicle.label);
+  } else {
+    if (app.vehicle) detail.push(app.vehicle.label);
+    if (app.crew) detail.push(`${crewLabels.crew} « ${app.crew.name} »`);
+  }
+  if (app.status === "pending") {
+    detail.unshift(sortiesLabels.pendingLine(organizer));
+  }
+  if (app.status === "waitlisted") detail.unshift(waitlistPhrase);
+  if (awaiting && app.crew?.confirmBefore) {
+    detail.push(crewLabels.confirmBefore(formatShortDate(app.crew.confirmBefore)).toLowerCase());
+  }
+  if (app.status === "refused") {
+    const reasons = (app.refusalReasons ?? []).map((r) => refusalReasonLabels[r]).join(", ");
+    if (reasons) detail.push(`Motif : ${reasons.toLowerCase()}`);
+  }
+  if (app.checkedInAt) detail.push(sortiesLabels.enteredAt(formatDayHour(app.checkedInAt)));
+  const notes: string[] = [];
+  if (app.status === "accepted" && !app.checkedInAt) {
+    notes.push(sortiesLabels.withdrawBefore(formatShortDate(app.withdrawDeadline)));
+  }
+  if (app.refusalNote) notes.push(`« ${app.refusalNote} »`);
+  if (offered) notes.push(sortiesLabels.offerNote);
+  if (awaiting && app.crew) notes.push(crewLabels.confirmBody(app.crew.leaderPseudo, null));
+  const canWithdraw = app.status === "pending" || app.status === "waitlisted" || app.status === "accepted";
+  const lead = offered
+    ? sortiesLabels.offerLead(formatDuration(remaining))
+    : app.status === "accepted"
+      ? dayCountdown(app.event.startsAt, now)
+      : undefined;
   return (
-    <View style={[styles.line, !last && { borderBottomWidth: 1, borderBottomColor: c.plateLine }]}>
-      <Text variant="meta" color={c.plateMuted} style={styles.lineDate}>
-        {formatShortDate(app.event.startsAt)}
-      </Text>
-      <View style={styles.lineBody}>
-        <Text variant="bodyStrong" color={c.plateInk}>
-          {app.event.title}
-        </Text>
-        <Text variant="body" color={resultColor}>
-          {result}
-        </Text>
-        {contest?.contestStatus ? (
-          <View style={styles.contestChip}>
-            <Chip surface="plate">{contestStatusLabels[contest.contestStatus as ContestStatus] ?? "Contesté"}</Chip>
-          </View>
-        ) : contest?.canContest ? (
-          <Button variant="plate" icon="chat" onPress={onContest} fullWidth>
-            Contester le malus
+    <Ticket
+      testID="ticket-application"
+      date={app.day?.startsAt ?? app.event.startsAt}
+      badge={<ApplicationStatusTag app={app} />}
+      lead={lead}
+      title={app.event.title}
+      detail={detail.length ? upperFirst(detail.join(" · ")) : undefined}
+      notes={notes}
+      onPressTitle={onOpen}
+    >
+      {awaiting ? (
+        <>
+          <Button
+            variant="plate"
+            icon="check"
+            disabled={busy}
+            onPress={onConfirmCrew}
+            fullWidth
+            testID="crew-confirm-open"
+          >
+            {crewLabels.confirmVenue}
           </Button>
-        ) : null}
-        {app.review?.given ? (
-          <View style={styles.review}>
-            <View style={styles.reviewHead}>
-              <Chip surface="plate">Avis donné</Chip>
-              <Text variant="bodyStrong" color={c.accent} accessibilityLabel={starsLabel(app.review.given.rating)}>
-                {"★".repeat(app.review.given.rating)}
-              </Text>
-            </View>
-            {app.review.given.reply ? (
-              <Text variant="meta" color={c.plateMuted}>
-                Réponse de l'équipe organisatrice : {app.review.given.reply}
-              </Text>
-            ) : null}
-          </View>
-        ) : app.review?.canReview ? (
-          <>
-            <Text variant="meta" color={c.plateMuted}>
-              Ton avis · jusqu'au {formatDayHour(app.review.deadline)} · affiché avec ton pseudo
-            </Text>
-            <Button variant="plate" icon="chat" onPress={onReview} fullWidth>
-              Laisser un avis
-            </Button>
-          </>
-        ) : null}
-      </View>
-    </View>
+          <Button variant="plate" tone="dashed" icon="close" loading={busy} onPress={onDeclineCrew} fullWidth>
+            {crewLabels.notComing}
+          </Button>
+        </>
+      ) : null}
+      {offered ? (
+        <>
+          <Button variant={primaryOffer ? "primary" : "plate"} icon="check" loading={busy} onPress={onAccept} fullWidth>
+            J'accepte la place
+          </Button>
+          <Button variant="plate" tone="dashed" icon="close" disabled={busy} onPress={onDecline} fullWidth>
+            Laisser
+          </Button>
+        </>
+      ) : null}
+      {app.status === "accepted" && !app.checkedInAt ? (
+        <Button variant={primary ? "primary" : "plate"} icon="qr" next onPress={onJourJ} fullWidth testID="ticket-qr">
+          {sortiesLabels.myQr}
+        </Button>
+      ) : null}
+      {canWithdraw && !app.checkedInAt ? (
+        <Button variant="plate" tone="dashed" icon="close" disabled={busy} onPress={onWithdraw} fullWidth>
+          {sortiesLabels.withdraw}
+        </Button>
+      ) : null}
+    </Ticket>
   );
 }
 
-const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`.replace("-", "−"));
-const starsLabel = (n: number) => `${n} étoile${n > 1 ? "s" : ""} sur 3`;
+/** Un billet du public : « Mon billet », et le rendre s'il est gratuit. */
+function TicketOfPublic({
+  ticket,
+  now,
+  primary,
+  onOpen,
+  onShow,
+  onGiveBack,
+}: {
+  ticket: MyTicket;
+  now: Date;
+  primary: boolean;
+  onOpen: () => void;
+  onShow: () => void;
+  onGiveBack: () => void;
+}) {
+  const detail = [
+    ticket.name,
+    ticket.priceCents == null ? "gratuit" : formatPrice(ticket.priceCents),
+    ticket.event.city,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <Ticket
+      testID="ticket-public"
+      date={ticket.event.startsAt}
+      badge={<Chip surface="plate">Billet</Chip>}
+      lead={dayCountdown(ticket.event.startsAt, now)}
+      title={ticket.event.title}
+      detail={upperFirst(detail)}
+      onPressTitle={onOpen}
+    >
+      <Button variant={primary ? "primary" : "plate"} icon="ticket" next onPress={onShow} fullWidth testID="my-tickets">
+        {sortiesLabels.myTicket}
+      </Button>
+      {ticket.priceCents == null ? (
+        <Button variant="plate" tone="dashed" icon="undo" onPress={onGiveBack} fullWidth testID="ticket-give-back">
+          {ticketAppLabels.giveBack}
+        </Button>
+      ) : null}
+    </Ticket>
+  );
+}
 
-/** « Où je suis staff » : l'événement, mon rôle, « je suis là / pas là » et l'entrée du mode staff (veille → J+1). */
-function StaffCard({
+/** Une mission staff : le rôle, « Je serai là », l'entrée du mode staff (veille → J+1). */
+function StaffTicket({
   item,
   unsent,
   onOpen,
@@ -365,63 +573,142 @@ function StaffCard({
   onOpen: () => void;
   onChanged: () => void;
 }) {
-  const { t } = useTheme();
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const present = item.presence === "present";
+  const roles = item.roles.map((r) => staffRoleLabels[r]).join(" · ");
+  const notes = [sortiesLabels.staffRoleGiven(item.structure.name)];
+  if (!item.staffModeOpen) notes.push(sortiesLabels.staffModeOpensEve(formatDayHour(item.staffModeOpensAt)));
+  if (unsent > 0) notes.push(sortiesLabels.staffUnsent(unsent));
+  if (failed) notes.push(failed);
   return (
-    <Plate style={styles.staff}>
-      <Text variant="label" color={t.color.plateMuted}>
-        {formatDayHour(item.event.startsAt)} · {item.structure.name}
-      </Text>
-      <Text variant="posterM" color={t.color.plateInk}>
-        {item.event.title}
-      </Text>
-      <Text variant="body" color={t.color.plateMuted}>
-        {staffPresenceLabels[item.presence]}
-      </Text>
+    <Ticket
+      testID="ticket-staff"
+      date={item.event.startsAt}
+      badge={<Chip surface="plate">{roles || "Staff"}</Chip>}
+      lead={staffPresenceLabels[item.presence]}
+      title={item.event.title}
+      detail={`${formatDayHour(item.event.startsAt)} · ${item.structure.name}`}
+      notes={notes}
+    >
       <Button
         variant="plate"
         icon={present ? "close" : "check"}
         loading={busy}
         onPress={async () => {
           setBusy(true);
+          setFailed(null);
           try {
             await api.setPresence(item.event.id, !present);
             onChanged();
+          } catch (e) {
+            // Hors ligne : la présence reste comme avant, et on le dit.
+            setFailed(`Présence non enregistrée : ${errorMessage(e)}`);
           } finally {
             setBusy(false);
           }
         }}
         fullWidth
       >
-        {present ? "Pas là" : "Je suis là"}
+        {present ? "Pas là" : sortiesLabels.willBeThere}
       </Button>
       {item.staffModeOpen ? (
         <Button variant="plate" icon="qr" onPress={onOpen} next fullWidth>
           Mode staff
         </Button>
-      ) : (
-        <Text variant="meta" color={t.color.plateMuted}>
-          Mode staff à partir du {formatDayHour(item.staffModeOpensAt)} : synchronise la liste ce jour-là.
-        </Text>
-      )}
-      {unsent > 0 ? (
-        <Text variant="meta" color={t.color.plateInk}>
-          {unsent} envoi{unsent > 1 ? "s" : ""} en attente : ils partiront au retour du réseau.
+      ) : null}
+    </Ticket>
+  );
+}
+
+/** Une sortie passée : pointage, points, avis, malus, prix du public. */
+function PastTicket({
+  app,
+  now,
+  rank,
+  onContest,
+  onReview,
+  onOpen,
+}: {
+  app: MyApplication;
+  now: Date;
+  rank: { rank: number; of: number } | null;
+  onContest: () => void;
+  onReview: () => void;
+  onOpen: () => void;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  let result: string;
+  let badge: "onsite" | "cancelled" | null = null;
+  let chip: string | null = null;
+  // Le carnet est une plaque graphite : couleurs de texte faites pour le graphite (`plateText`).
+  if (app.event.status === "cancelled") {
+    result = "Événement annulé";
+    badge = "cancelled";
+  } else if (app.checkedInAt) {
+    result = app.points !== null ? `Pointé · ${signed(app.points)} pts` : "Pointé";
+    badge = "onsite";
+  } else if (app.pointsPending) {
+    result = POINTS_PENDING_LABEL;
+    chip = "Pointage en attente";
+  } else if (app.withdrawnAfterLock || app.malus) {
+    result = app.points !== null ? `Absent · ${signed(app.points)} pts` : "Absent";
+    chip = "Absent";
+  } else {
+    result = "Terminé";
+    chip = "Terminé";
+  }
+  const contest = app.malus;
+  const notes: string[] = [];
+  if (app.review?.canReview) {
+    notes.push(sortiesLabels.reviewUntil(formatShortDate(app.review.deadline)));
+  }
+  if (rank) notes.push(sortiesLabels.audienceRank(rank.rank, rank.of));
+  return (
+    <Ticket
+      testID="ticket-past"
+      dim
+      date={app.event.startsAt}
+      badge={badge ? <StatusTag status={badge} /> : <Chip surface="plate">{chip}</Chip>}
+      title={app.event.title}
+      detail={result}
+      notes={notes}
+      onPressTitle={onOpen}
+    >
+      {contest?.contestStatus ? (
+        <View style={styles.chipLine}>
+          <Chip surface="plate">{contestStatusLabels[contest.contestStatus as ContestStatus] ?? "Contesté"}</Chip>
+        </View>
+      ) : contest?.canContest ? (
+        <Button variant="plate" icon="chat" onPress={onContest} fullWidth>
+          Contester le malus
+        </Button>
+      ) : null}
+      {app.review?.given ? (
+        <View style={styles.chipLine}>
+          <Chip surface="plate">Avis donné</Chip>
+          <Text variant="bodyStrong" color={c.accent} accessibilityLabel={starsLabel(app.review.given.rating)}>
+            {"★".repeat(app.review.given.rating)}
+          </Text>
+        </View>
+      ) : app.review?.canReview ? (
+        <Button variant="plate" icon="chat" onPress={onReview} fullWidth>
+          Laisser un avis
+        </Button>
+      ) : null}
+      {app.review?.given?.reply ? (
+        <Text variant="meta" color={c.plateMuted} style={styles.reply}>
+          Réponse de l'équipe organisatrice : {app.review.given.reply}
         </Text>
       ) : null}
-    </Plate>
+      {/* lot 50 : « Voir le récap » (route recap/[id]) vient ici. */}
+    </Ticket>
   );
 }
 
 const styles = StyleSheet.create({
-  empty: { gap: space3 },
-  log: { paddingVertical: 4 },
-  line: { flexDirection: "row", alignItems: "flex-start", gap: space2, paddingVertical: space3 },
-  lineDate: { width: 52 },
-  lineBody: { flex: 1, gap: space2 },
-  contestChip: { alignItems: "flex-start" },
-  review: { gap: space2 },
-  reviewHead: { flexDirection: "row", alignItems: "center", gap: space2 },
-  staff: { gap: space2, padding: space3 },
+  segments: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  chipLine: { flexDirection: "row", alignItems: "center", gap: space2 },
+  reply: { textTransform: "none" },
 });

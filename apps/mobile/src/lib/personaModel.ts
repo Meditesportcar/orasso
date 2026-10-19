@@ -93,13 +93,10 @@ export function homeOf(persona: Persona): (typeof personaHomes)[AppPersonaKind] 
 }
 
 /**
- * Où ouvrir une casquette (lancement, changement de casquette sans destination) : son Accueil, sauf tant qu'il est
- * « Bientôt » (lot 43) — le Scanner pour le pro, les Candidatures pour le prestataire. Le logotype mène toujours à
- * l'Accueil (`homeOf`).
+ * Où ouvrir une casquette (lancement, changement de casquette sans destination) : son Accueil (le pro et le prestataire
+ * ont le leur depuis le lot 43 ; avant, le Scanner et les Candidatures). Le logotype mène aussi à l'Accueil (`homeOf`).
  */
 export function landingOf(persona: Persona): string {
-  if (persona.kind === "pro") return "/(pro)/scanner";
-  if (persona.kind === "provider") return "/(provider)/candidatures";
   return homeOf(persona);
 }
 
