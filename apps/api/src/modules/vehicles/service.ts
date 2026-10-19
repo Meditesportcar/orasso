@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import {
   normalizePlate,
+  type PlateRect,
   type ShareFormat,
   type VehicleCreate,
   type VehicleDetail,
@@ -33,6 +34,7 @@ import { notificationsService } from "../notifications/service";
 import { socialJournal } from "../social/journal";
 import { checkCategories } from "./categories";
 import { certificationService } from "./certification";
+import { blurPlateRegions, MAX_INPUT_PIXELS, removeOrRetry } from "./photos-blur";
 import { plateTransferService } from "./plate-transfer";
 import { type VehicleRow, vehiclesRepo } from "./repo";
 import { vehicleFull, vehiclePublic } from "./serializers";
@@ -373,8 +375,11 @@ export const vehiclesService = {
     for (const p of photos) await storage.remove(p.storageKey);
   },
 
-  /** Photo recompressée à l'arrivée : 2048 px au plus, WebP, orientation EXIF appliquée, métadonnées retirées. */
-  async addPhoto(v: Viewer, id: string, file: File): Promise<VehicleFull> {
+  /**
+   * Photo recompressée à l'arrivée : 2048 px au plus, WebP, orientation EXIF appliquée, métadonnées retirées.
+   * `plateRects` (lot 51) : plaque floutée avant le stockage, l'original n'est jamais écrit (V9).
+   */
+  async addPhoto(v: Viewer, id: string, file: File, plateRects?: PlateRect[]): Promise<VehicleFull> {
     await ownVehicle(v, id);
     if (file.size > MAX_PHOTO_BYTES) throw new AppError(413, "payload_too_large", "Photo trop lourde (15 Mo au plus)");
     if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -382,7 +387,7 @@ export const vehiclesService = {
     }
     let output: { data: Buffer; info: { width: number; height: number; size: number } };
     try {
-      output = await sharp(Buffer.from(await file.arrayBuffer()))
+      output = await sharp(Buffer.from(await file.arrayBuffer()), { limitInputPixels: MAX_INPUT_PIXELS })
         .rotate()
         .resize(PHOTO_MAX_SIDE, PHOTO_MAX_SIDE, { fit: "inside", withoutEnlargement: true })
         .webp({ quality: 80 })
@@ -390,6 +395,7 @@ export const vehiclesService = {
     } catch {
       throw new AppError(415, "unsupported_media_type", "Image illisible (HEIC : convertir en JPEG côté appli)");
     }
+    if (plateRects?.length) output = await blurPlateRegions(output.data, plateRects);
     const key = `vehicles/${id}/${randomBytes(8).toString("hex")}.webp`;
     await storage.put(key, output.data);
     try {
@@ -409,12 +415,14 @@ export const vehiclesService = {
           width: output.info.width,
           height: output.info.height,
           bytes: output.info.size,
+          plateRects: plateRects?.length ? plateRects : null,
+          plateBlurred: Boolean(plateRects?.length),
         });
         // Une photo ajoutée ou retirée fait perdre la certification (S38).
         await certificationService.afterChange(tx, after, id, certifiedBefore);
       });
     } catch (error) {
-      await storage.remove(key);
+      await removeOrRetry(key);
       throw error;
     }
     return full(id);

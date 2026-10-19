@@ -1,6 +1,7 @@
 // Crochets de Better Auth pour la sécurité du compte (lot 15, corrections des relectures). La double authentification
 // est prouvée par la session : ce module pose la preuve (`session.second_factor`), protège l'ajout et le retrait des
 // facteurs, envoie les alertes et révoque les autres sessions quand un facteur change.
+import { signUpRequiredSchema } from "@orasso/shared";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { eq } from "drizzle-orm";
@@ -52,10 +53,21 @@ export async function securityAfter(ctx: Ctx) {
   if (!succeeded(ctx)) return;
   const returned = ctx.context.returned as { user?: { id?: string; twoFactorEnabled?: boolean | null } } | undefined;
   // Lot 36 : inscription par e-mail, conditions générales acceptées (case obligatoire, contrôlée par la route) : tracé.
+  // Lot 41 : profil choisi, départements (le premier est le favori), prénom et nom (privés) posés sur le profil ; la
+  // route a déjà validé le corps (`signUpRequiredSchema`).
   if (ctx.path === "/sign-up/email") {
-    const accepted = (ctx.body as { termsAccepted?: unknown } | undefined)?.termsAccepted === true;
-    if (accepted && returned?.user?.id) {
-      await db.update(profiles).set({ termsAcceptedAt: now() }).where(eq(profiles.userId, returned.user.id));
+    const parsed = signUpRequiredSchema.safeParse(ctx.body ?? {});
+    if (parsed.success && returned?.user?.id) {
+      await db
+        .update(profiles)
+        .set({
+          termsAcceptedAt: now(),
+          mainProfile: parsed.data.mainProfile,
+          departments: [...new Set(parsed.data.departments)],
+          firstName: parsed.data.firstName,
+          lastName: parsed.data.lastName,
+        })
+        .where(eq(profiles.userId, returned.user.id));
     }
     return;
   }

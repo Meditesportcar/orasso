@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import pg from "pg";
-import { apiCall, login, loginInBrowser, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { apiCall, fillArrivee, login, loginInBrowser, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 
 // Lot 15 : compte et sécurité de bout en bout, avec le transport d'e-mails « journal » (fichiers `.data/mail`).
 // Prérequis : API et site lancés sur la base locale avec le seed.
@@ -47,6 +47,7 @@ async function signUpInBrowser(page: Page, pseudo: string, email: string, passwo
   await page.getByLabel("Pseudo").fill(pseudo);
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(password);
+  await fillArrivee(page);
   await page.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
   await page.getByRole("button", { name: "Créer mon compte" }).click();
   await page.waitForURL((u) => u.pathname === "/app");

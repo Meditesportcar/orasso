@@ -1,7 +1,7 @@
-// Connexion (ou création de compte) d'un utilisateur qui a déjà vu le premier lancement, ou qui arrive d'un lien
-// partagé : après la connexion, retour exactement là où il était (`next`).
+// Connexion d'un utilisateur qui a déjà vu le premier lancement, ou qui arrive d'un lien partagé : après la
+// connexion, retour exactement là où il était (`next`). La création de compte est le flux d'arrivée (lot 41).
 import { Ground, Logo, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { useLocalSearchParams } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,9 +18,12 @@ export default function Auth() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ mode?: string; next?: string }>();
   const [forgot, setForgot] = useState(false);
-  const [mode, setMode] = useState<"signin" | "signup">(params.mode === "signup" ? "signup" : "signin");
+  const router = useRouter();
   // Seuls les chemins internes sont acceptés comme destination.
   const next = params.next?.startsWith("/") ? params.next : undefined;
+  const toArrivee = () => router.replace({ pathname: "/arrivee/profil", params: next ? { next } : {} });
+  if (params.mode === "signup")
+    return <Redirect href={{ pathname: "/arrivee/profil", params: next ? { next } : {} }} />;
 
   return (
     <Ground animated style={styles.fill}>
@@ -35,19 +38,10 @@ export default function Auth() {
           <Logo width={160} />
           <View style={styles.middle}>
             <Text variant="posterL" color={t.color.ink}>
-              {mode === "signin" ? "Content de te revoir" : "On y va ?"}
+              Content de te revoir
             </Text>
-            <Muted variant="body">
-              {mode === "signin"
-                ? "Connecte-toi pour retrouver ton garage et tes accès."
-                : "Un pseudo, un e-mail. Les véhicules, tu les ajouteras au moment de candidater."}
-            </Muted>
-            <AuthForm
-              mode={mode}
-              next={next}
-              onSwitchMode={() => setMode(mode === "signin" ? "signup" : "signin")}
-              onForgotPassword={() => setForgot(true)}
-            />
+            <Muted variant="body">Connecte-toi pour retrouver ton garage et tes accès.</Muted>
+            <AuthForm next={next} onSwitchMode={toArrivee} onForgotPassword={() => setForgot(true)} />
           </View>
         </ScrollView>
       </KeyboardSafe>

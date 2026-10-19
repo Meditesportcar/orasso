@@ -60,7 +60,36 @@ export type VehicleUpdate = z.infer<typeof vehicleUpdateSchema>;
 
 export const photoOrderSchema = z.object({ photoIds: z.array(z.uuid()).min(1).max(8) });
 
-export type VehiclePhoto = { id: string; position: number; url: string; width: number; height: number };
+/**
+ * Floutage de plaque (lot 51) : rectangles normalisés 0–1 par rapport à la photo telle qu'elle est stockée (après
+ * recadrage et orientation), 4 au plus par photo. Un rectangle qui sort de l'image est refusé (400).
+ */
+export const MAX_PLATE_RECTS = 4;
+const PLATE_EPSILON = 1e-6;
+export const plateRectSchema = z
+  .object({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    w: z.number().min(0.01).max(1),
+    h: z.number().min(0.01).max(1),
+  })
+  .refine((r) => r.x + r.w <= 1 + PLATE_EPSILON && r.y + r.h <= 1 + PLATE_EPSILON, {
+    message: "Le cadre de la plaque sort de la photo",
+  });
+export type PlateRect = z.infer<typeof plateRectSchema>;
+export const plateRectsSchema = z.array(plateRectSchema).min(1).max(MAX_PLATE_RECTS);
+export const photoBlurSchema = z.object({ rects: plateRectsSchema });
+export type PhotoBlur = z.infer<typeof photoBlurSchema>;
+
+export type VehiclePhoto = {
+  id: string;
+  position: number;
+  url: string;
+  width: number;
+  height: number;
+  /** Une plaque a été floutée sur cette photo (pastille « Plaque floutée »). */
+  plateBlurred: boolean;
+};
 export type CategoryRef = { id: string; slug: string; label: string };
 
 /** Fiche visible des autres utilisateurs connectés : jamais de plaque. */

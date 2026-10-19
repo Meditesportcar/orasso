@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { apiCall, login, SEED_PASSWORD, SIGNUP_EXTRAS } from "./helpers";
 
 // Appli dans le navigateur (lot 22) : casquette Organisateur. Damien bascule vers MéditeSportCar : le Direct du « Salon
 // Argelès » monte en direct quand Julie (mode staff, autre onglet) scanne un QR ; page événement (Incertain → bandeau et
@@ -225,6 +225,7 @@ test("créer une structure depuis Mes casquettes, sans casquette organisateur au
     password: SEED_PASSWORD,
     name: "Orga Test",
     termsAccepted: true,
+    ...SIGNUP_EXTRAS,
   });
   expect(signUp.status).toBe(200);
   const ctx: BrowserContext = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: APP });

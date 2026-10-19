@@ -15,6 +15,7 @@ import {
   resetDb,
   seedReference,
   signUp,
+  signUpExtras,
   type TestUser,
   useClock,
   viewerOf,
@@ -427,7 +428,13 @@ describe("parrainage et inscription express", () => {
     const res = await app.request("/api/auth/sign-up/email", {
       method: "POST",
       headers: { "content-type": "application/json", origin: ORIGIN },
-      body: JSON.stringify({ email, password: "motdepasse-test-123", name: "Express_01", termsAccepted: true }),
+      body: JSON.stringify({
+        email,
+        password: "motdepasse-test-123",
+        name: "Express_01",
+        termsAccepted: true,
+        ...signUpExtras,
+      }),
     });
     expect(res.status).toBe(200);
     expect(await lastMail(email, "email_verification")).toBeTruthy();

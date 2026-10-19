@@ -95,7 +95,14 @@ export default function ProPage() {
       onRefresh={pro.reload}
       overlays={
         <PhotoViewer
-          photos={p.photos.map((x, i) => ({ id: x.id, url: x.url, position: i + 1, width: 4, height: 3 }))}
+          photos={p.photos.map((x, i) => ({
+            id: x.id,
+            url: x.url,
+            position: i + 1,
+            width: 4,
+            height: 3,
+            plateBlurred: false,
+          }))}
           start={viewer}
           onClose={() => setViewer(null)}
         />

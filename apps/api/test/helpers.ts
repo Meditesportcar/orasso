@@ -70,6 +70,14 @@ export function useClock(start: Date) {
 
 const ORIGIN = process.env.PUBLIC_URL ?? "http://localhost:5173";
 
+/** Champs d'inscription obligatoires depuis le lot 41 (profil choisi, département, prénom et nom privés). */
+export const signUpExtras = {
+  mainProfile: "exhibitor",
+  departments: ["66"],
+  firstName: "Test",
+  lastName: "Compte",
+} as const;
+
 export type TestUser = { id: string; pseudo: string; email: string; cookie: string };
 
 /** Inscription par Better Auth (le profil est créé par le crochet d'inscription), session en cookie. */
@@ -78,7 +86,13 @@ export async function signUp(pseudo: string, opts: { twoFactor?: boolean; role?:
   const res = await app.request("/api/auth/sign-up/email", {
     method: "POST",
     headers: { "content-type": "application/json", origin: ORIGIN },
-    body: JSON.stringify({ email, password: "motdepasse-test-123", name: pseudo, termsAccepted: true }),
+    body: JSON.stringify({
+      email,
+      password: "motdepasse-test-123",
+      name: pseudo,
+      termsAccepted: true,
+      ...signUpExtras,
+    }),
   });
   if (res.status !== 200) throw new Error(`Inscription ${res.status} : ${await res.text()}`);
   const cookie = res.headers

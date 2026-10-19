@@ -2,6 +2,8 @@
 // Better Auth garde l'étape « code » dans un cookie signé (`two_factor`) et l'appareil de confiance dans un autre
 // (`trust_device`). L'appli les reprend des en-têtes `set-cookie` et les renvoie en `cookie` (téléphone) ; dans un
 // navigateur (recette web), c'est le navigateur qui les garde (`credentials: include`).
+import type { MainProfile } from "@orasso/shared";
+
 import { request, requestWithHeaders } from "../http";
 import { kvDel, kvGet, kvSet } from "../kv";
 import { pickCookie } from "./cookies";
@@ -59,12 +61,32 @@ export const authApi = {
     if (trust) await kvSet(TRUST_KEY, trust);
     return tokenOf(headers, data);
   },
-  /** Inscription : le pseudo est le champ `name` de Better Auth. */
-  async signUp(email: string, password: string, pseudo: string): Promise<string> {
+  /**
+   * Inscription ordinaire (lot 41) : le pseudo est le champ `name` de Better Auth ; profil choisi, départements (le
+   * premier est le favori), prénom et nom (privés) sont obligatoires.
+   */
+  async signUp(input: {
+    email: string;
+    password: string;
+    pseudo: string;
+    mainProfile: MainProfile;
+    departments: string[];
+    firstName: string;
+    lastName: string;
+  }): Promise<string> {
     const { data, headers } = await requestWithHeaders("/api/auth/sign-up/email", {
       method: "POST",
       // Lot 36 : la case des conditions générales est cochée (le formulaire ne part pas sans elle) ; l'API la trace.
-      body: { email, password, name: pseudo, termsAccepted: true },
+      body: {
+        email: input.email,
+        password: input.password,
+        name: input.pseudo,
+        mainProfile: input.mainProfile,
+        departments: input.departments,
+        firstName: input.firstName.trim(),
+        lastName: input.lastName.trim(),
+        termsAccepted: true,
+      },
     });
     return tokenOf(headers, data);
   },

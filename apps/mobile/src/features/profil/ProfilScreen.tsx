@@ -8,8 +8,8 @@ import { gradeLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-
 import { AccountQrSheet } from "@/features/AccountQrSheet";
+import { PendingCard } from "@/features/arrivee/PendingCard";
 import { EmailBanner } from "@/features/moi/EmailBanner";
 import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
 import { api } from "@/lib/api";
@@ -69,6 +69,7 @@ export function ProfilScreen() {
       }
     >
       <EmailBanner />
+      <PendingCard where="profil" />
 
       {/* En-tête : avatar, pseudo, grade, département ; QR de compte (ou Ma fiche pour le pro). */}
       <View style={styles.head} testID="profil-head">
