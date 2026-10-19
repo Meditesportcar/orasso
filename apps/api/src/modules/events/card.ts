@@ -23,7 +23,8 @@ export function card(
     department: e.department,
     lat: e.lat,
     lng: e.lng,
-    posterUrl: storage.url(e.posterKey),
+    // Lot 47 : la vignette est l'affiche générée (Post 4:5) ; l'affiche perso reste sur la fiche (`customPosterUrl`).
+    posterUrl: storage.url(e.posterPostKey),
     status: e.status,
     outlook: e.outlook,
     structure: { id: s.id, slug: s.slug, name: s.name, logoUrl: storage.url(s.logoKey) },

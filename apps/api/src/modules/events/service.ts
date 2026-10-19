@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto";
 import {
   addDays,
+  BUSINESS_TIMEZONE,
   calendarDaysBetween,
   type DaysError,
   departmentFromPostalCode,
@@ -24,6 +25,7 @@ import {
   localDate,
   lockAt,
   type Page,
+  type PosterSettings,
   type RecurrenceRule,
   recurrenceOccurrences,
   registrationOpensAt,
@@ -66,10 +68,12 @@ import { assertCanSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
+import { arrivalColumns, arrivalsOf, assertArrivals } from "./arrivals";
 import { card, type StructureRow } from "./card";
 import { dayInUse, daysRepo } from "./days";
 import { exploreEvents } from "./explore";
 import { scheduleEventJobs } from "./jobs";
+import { posterColumns, posterService, posterSettingsOf, samePoster } from "./poster/service";
 import { type EventRow, eventsRepo } from "./repo";
 
 async function publicView(e: EventRow, s: StructureRow, showInstructions: boolean): Promise<EventPublic> {
@@ -77,11 +81,18 @@ async function publicView(e: EventRow, s: StructureRow, showInstructions: boolea
   const t = now();
   // Plusieurs jours (lot 26) : jours avec leurs places ; un événement d'un jour n'en a pas et reste `whole`.
   const days = await daysRepo.serialize(e);
+  const postUrl = storage.url(e.posterPostKey);
+  const storyUrl = storage.url(e.posterStoryKey);
+  const style = posterSettingsOf(e)?.style;
   return {
     days,
     dayAccess: days.length ? e.dayAccess : "whole",
     ...card(e, s, counters.remaining),
     description: e.description,
+    // Lot 47 : créneaux d'arrivée, affiche générée (Post et Story), affiche perso de l'organisateur.
+    arrivals: arrivalsOf(e),
+    poster: postUrl && storyUrl && style ? { postUrl, storyUrl, style } : null,
+    customPosterUrl: storage.url(e.posterKey),
     addressLine: e.addressLine,
     postalCode: e.postalCode,
     timezone: e.timezone,
@@ -196,6 +207,9 @@ function copyValues(e: EventRow) {
     vendorTypes: e.vendorTypes,
     shopEnabled: e.shopEnabled,
     dayAccess: e.dayAccess,
+    // Lot 47 : créneaux d'arrivée et réglages de l'affiche générée (les rendus sont refaits avec la nouvelle date).
+    ...arrivalColumns(arrivalsOf(e)),
+    ...posterColumns(posterSettingsOf(e)),
   };
 }
 
@@ -282,6 +296,7 @@ export const eventsService = {
       where: eq(eventZones.eventId, id),
       orderBy: [asc(eventZones.position), asc(eventZones.code)],
     });
+    const settings = posterSettingsOf(e);
     return {
       ...(await publicView(e, s, true)),
       zones: zones.map((z) => ({ id: z.id, code: z.code, name: z.name, capacity: z.capacity, position: z.position })),
@@ -292,6 +307,7 @@ export const eventsService = {
       parentEventId: e.parentEventId,
       recurrenceRule: e.recurrenceRule ?? null,
       shopEnabled: e.shopEnabled,
+      posterSettings: settings ? { ...settings, photoUrl: storage.url(settings.photoKey) } : null,
     };
   },
 
@@ -309,23 +325,35 @@ export const eventsService = {
   async create(v: Viewer, structureId: string, input: EventCreate): Promise<EventOrganizer> {
     await requireOrganizer(v, structureId);
     await assertNotSuspended(structureId);
+    const { arrivals, poster, ...fields } = input;
     const year = input.startsAt.getUTCFullYear();
+    const timezone = BUSINESS_TIMEZONE;
+    // Lot 47 : créneaux d'arrivée contrôlés avec les dates.
+    assertArrivals(arrivals, input.startsAt, input.endsAt, timezone);
     const slug = await uniqueSlug(`${input.title} ${year}`, (s) => eventsRepo.slugTaken(s));
     const located = await locate(input);
-    const [e] = await db
-      .insert(events)
-      .values({
-        ...input,
-        ...located,
-        criteria: input.criteria ?? null,
-        slug,
-        structureId,
-        plateSalt: randomBytes(16),
-        status: "draft",
-        createdBy: v.user.id,
-      })
-      .returning();
-    if (!e) throw new Error("Création de l'événement impossible");
+    const e = await withTx(async (tx) => {
+      if (poster) await posterService.acceptPhoto(tx, v, null, poster.photoKey);
+      const [row] = await tx
+        .insert(events)
+        .values({
+          ...fields,
+          ...located,
+          ...arrivalColumns(arrivals ?? null),
+          ...posterColumns(poster ?? null),
+          criteria: input.criteria ?? null,
+          slug,
+          structureId,
+          plateSalt: randomBytes(16),
+          status: "draft",
+          createdBy: v.user.id,
+        })
+        .returning();
+      if (!row) throw new Error("Création de l'événement impossible");
+      return row;
+    });
+    // Lot 47 : affiche générée rendue après l'enregistrement (hors transaction : le rendu prend une seconde).
+    if (poster) await posterService.regenerate(e);
     return this.getForOrganizer(v, e.id);
   },
 
@@ -336,9 +364,14 @@ export const eventsService = {
   async update(v: Viewer, id: string, input: EventUpdate): Promise<EventOrganizer> {
     const { e } = await organizerEventWrite(v, id);
     if (e.status === "cancelled") throw conflict("conflict", "Événement annulé");
+    const { arrivals, poster: posterInput, ...fields } = input;
+    // L'assistant renvoie l'affiche telle qu'il l'a reçue : mêmes réglages = pas de nouveau rendu.
+    const poster = samePoster(posterInput, posterSettingsOf(e)) ? undefined : posterInput;
     const startsAt = input.startsAt ?? e.startsAt;
     const endsAt = input.endsAt ?? e.endsAt;
     if (endsAt <= startsAt) throw validation("La fin doit suivre le début", { field: "endsAt" });
+    // Lot 47 : les créneaux (nouveaux ou en place) restent cohérents avec les dates.
+    assertArrivals(arrivals !== undefined ? arrivals : arrivalsOf(e), startsAt, endsAt, e.timezone);
     // Plusieurs jours (lot 26) : les dates de l'événement sont les bornes de ses jours, elles se règlent jour par jour.
     const changesDates =
       (input.startsAt && input.startsAt.getTime() !== e.startsAt.getTime()) ||
@@ -356,12 +389,21 @@ export const eventsService = {
             department: "postalCode" in input ? (input.department ?? null) : e.department,
           })
         : {};
+    let before: EventRow = e;
     const updated = await withTx(async (tx, after) => {
       const current = await eventsRepo.lockForUpdate(tx, id);
+      before = current;
       if (changesDates && isMultiDay(await daysRepo.list(id, tx))) throw datesByDay();
+      if (poster) await posterService.acceptPhoto(tx, v, current.posterPhotoKey, poster.photoKey);
       const [row] = await tx
         .update(events)
-        .set({ ...input, ...located, criteria: input.criteria === undefined ? undefined : (input.criteria ?? null) })
+        .set({
+          ...fields,
+          ...located,
+          ...(arrivals !== undefined ? arrivalColumns(arrivals) : {}),
+          ...(poster !== undefined ? posterColumns(poster) : {}),
+          criteria: input.criteria === undefined ? undefined : (input.criteria ?? null),
+        })
         .where(eq(events.id, id))
         .returning();
       if (!row) throw notFound("Événement introuvable");
@@ -394,6 +436,18 @@ export const eventsService = {
       after(() => notificationsService.kick());
       return row;
     });
+    // Lot 47 : affiche générée rendue après l'enregistrement ; régénérée d'elle-même si la date ou le lieu change.
+    if (poster) {
+      await posterService.regenerate(updated);
+      await posterService.removeRenders(before);
+    } else if (poster === null) {
+      await posterService.removeRenders(before);
+    } else if (
+      posterSettingsOf(updated) &&
+      (updated.startsAt.getTime() !== before.startsAt.getTime() || updated.city !== before.city)
+    ) {
+      await posterService.regenerate(updated);
+    }
     return this.getForOrganizer(v, updated.id);
   },
 
@@ -480,6 +534,11 @@ export const eventsService = {
       after(() => realtime.publish(`event:${id}:access`, "access.changed", { applicationIds: [] }));
       after(() => notificationsService.kick());
     });
+    // Lot 47 : le premier jour change la date de l'affiche générée.
+    const fresh = await eventsRepo.byId(id);
+    if (posterSettingsOf(fresh) && fresh.startsAt.getTime() !== e.startsAt.getTime()) {
+      await posterService.regenerate(fresh);
+    }
     return this.getForOrganizer(v, id);
   },
 
@@ -628,6 +687,8 @@ export const eventsService = {
       }
       return copy.id;
     });
+    // Lot 47 : l'affiche générée de la copie est rendue avec sa nouvelle date.
+    await posterService.regenerate(await eventsRepo.byId(copyId));
     return this.getForOrganizer(v, copyId);
   },
 
@@ -683,7 +744,9 @@ export const eventsService = {
       return out;
     });
     const s = await structureById(e.structureId);
-    const rows = await Promise.all(ids.map((x) => eventsRepo.byId(x)));
+    const rows: EventRow[] = [];
+    // Lot 47 : chaque occurrence a son affiche, à sa date (rendues l'une après l'autre).
+    for (const x of ids) rows.push(await posterService.regenerate(await eventsRepo.byId(x)));
     return rows.map((r) => card(r, s, r.capacity));
   },
 
@@ -708,6 +771,33 @@ export const eventsService = {
     await db.update(events).set({ posterKey: key }).where(eq(events.id, id));
     // L'ancienne affiche peut servir à une copie : elle reste sur le disque (pas de ramasse-miettes en V1).
     return this.getForOrganizer(v, id);
+  },
+
+  /**
+   * `POST /events/:id/poster/generate` (lot 47) : enregistre photo, style et titre de l'affiche générée et rend les deux
+   * formats (Post et Story). Organisateur, structure non suspendue.
+   */
+  async generatePoster(v: Viewer, id: string, settings: PosterSettings): Promise<EventOrganizer> {
+    const { e } = await organizerEventWrite(v, id);
+    if (e.status === "cancelled") throw conflict("conflict", "Événement annulé");
+    const row = await withTx(async (tx) => {
+      const current = await eventsRepo.lockForUpdate(tx, id);
+      await posterService.acceptPhoto(tx, v, current.posterPhotoKey, settings.photoKey);
+      const [updated] = await tx.update(events).set(posterColumns(settings)).where(eq(events.id, id)).returning();
+      if (!updated) throw notFound("Événement introuvable");
+      return { updated, current };
+    });
+    await posterService.regenerate(row.updated);
+    await posterService.removeRenders(row.current);
+    return this.getForOrganizer(v, id);
+  },
+
+  /** `GET /events/:id/poster/story` (lot 47) : la Story 9:16 à télécharger pour Instagram (organisateur). */
+  async posterStory(v: Viewer, id: string): Promise<{ data: Buffer; filename: string }> {
+    const { e } = await organizerEvent(v, id);
+    const data = e.posterStoryKey ? await storage.get(e.posterStoryKey) : null;
+    if (!data) throw notFound("Pas encore d'affiche générée");
+    return { data, filename: `affiche-${e.slug}-story.png` };
   },
 
   /** Bandeau Maintenu / Incertain, envoyé à tous les inscrits (docs/01, bloc 4). */

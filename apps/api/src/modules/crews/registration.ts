@@ -41,6 +41,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { type ApplicationRow, applicationsService } from "../applications/service";
+import { arrivalAnswer } from "../events/arrivals";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { assertCanSeeEvent } from "../invitations/access";
@@ -334,6 +335,11 @@ export const crewRegistrationService = {
           .limit(1);
         const crewApplicationId = existing?.id ?? randomUUID();
         const deadline = crewConfirmDeadline(t, lockAt(event));
+        // Lot 47 : la case « J'ai vu » (horaire des exposants) vaut pour le chef s'il vient ; chaque membre la coche
+        // à sa confirmation.
+        const leaderArrival = input.members.some((m) => m.userId === v.user.id)
+          ? arrivalAnswer(event, input, t)
+          : { arrivalSeenAt: null, arrivalNote: null };
         const created: ApplicationRow[] = [];
         for (const m of input.members) {
           const isLeader = m.userId === v.user.id;
@@ -352,6 +358,7 @@ export const crewRegistrationService = {
               source: "crew",
               crewId: crew.id,
               crewApplicationId,
+              ...(isLeader ? leaderArrival : {}),
               // L'échéance de confirmation (72 h) part de cette date : horloge des services.
               createdAt: t,
             })
@@ -493,6 +500,8 @@ export const crewRegistrationService = {
       if (vehicle && vehicle.ownerId !== app.userId) throw conflict("conflict", crewErrors.vehicleNotOwned);
       const block = vehicle ? vehicleBlock(vehicle, event) : "Véhicule introuvable";
       if (block) throw validation(`${vehicle ? vehicleLabel(vehicle) : "Véhicule"} : ${block.toLowerCase()}`);
+      // Lot 47 : chaque membre coche « J'ai vu » l'horaire d'arrivée des exposants à sa confirmation.
+      const arrival = arrivalAnswer(event, input, t);
       let row = await applicationsService.transition(
         tx,
         app,
@@ -504,6 +513,7 @@ export const crewRegistrationService = {
           followStructure: input.followStructure,
           companions: input.companions,
           message: input.message,
+          ...arrival,
         },
         "crew.confirm",
       );
