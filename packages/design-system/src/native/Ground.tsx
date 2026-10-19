@@ -94,9 +94,10 @@ function BattleFx({ still, paused }: { still: boolean; paused: boolean }) {
   return (
     <View pointerEvents="none" style={styles.fx}>
       <GradientFill css={fx.vignette} />
-      <GradientFill css={fx.reflet} />
+      <GradientFill css={fx.battleRim} />
       <Animated.View style={[StyleSheet.absoluteFill, styles.haloOrigin, haloStyle]}>
-        <GradientFill css={fx.halo} />
+        <GradientFill css={fx.battleSpill} />
+        <GradientFill css={fx.battleLamp} />
       </Animated.View>
       <Grain />
       <BattleLayer running={moving && !quiet} />

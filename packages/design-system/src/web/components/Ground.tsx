@@ -38,8 +38,8 @@ export function Ground({
       {variant === "battle" ? (
         <div className="o-ground__fx" aria-hidden="true">
           <div className="o-ground__layer o-ground__vignette" />
-          <div className="o-ground__layer o-ground__reflet" />
-          <div className={cx("o-ground__layer o-ground__halo", !still && "o-anim-ambient-breath")} />
+          <div className="o-ground__layer o-ground__rim" />
+          <div className={cx("o-ground__layer o-ground__lamp", !still && "o-anim-ambient-breath")} />
           <Grain />
           <BattleLayer still={still} />
         </div>
