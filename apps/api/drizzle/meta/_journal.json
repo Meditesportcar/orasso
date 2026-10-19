@@ -330,6 +330,13 @@
       "when": 1792426050184,
       "tag": "0046_passport",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1792433593506,
+      "tag": "0047_rotating-qr",
+      "breakpoints": true
     }
   ]
 }

@@ -326,7 +326,7 @@ async function applyCheckinItem(
   event: EventRow,
   v: Viewer,
   deviceId: string,
-  item: Extract<ScanBatchItem, { kind: "manual" | "plate" }>,
+  item: Extract<ScanBatchItem, { kind: "manual" | "plate" | "drive" }>,
   receivedAt: Date,
 ): Promise<ScanBatchResult> {
   const admitted = await admittedApplication(tx, event.id, item.applicationId);
@@ -527,7 +527,7 @@ export const checkinsService = {
   async create(
     v: Viewer,
     eventId: string,
-    input: { applicationId: string; method: "manual" | "plate"; note: string | null },
+    input: { applicationId: string; method: "manual" | "plate" | "drive"; note: string | null },
   ): Promise<CheckinResult> {
     const { event } = await staffEvent(v, eventId);
     assertWritable(event);
@@ -724,7 +724,7 @@ export const checkinsService = {
       return row?.pseudo ?? null;
     };
     const isDup = (r: ScanServerResult) => r === "duplicate_same_device" || r === "duplicate_other_device";
-    const byMethod = { scan: 0, manual: 0, plate: 0, express: 0 } satisfies Record<CheckinMethod, number>;
+    const byMethod = { scan: 0, manual: 0, plate: 0, express: 0, drive: 0 } satisfies Record<CheckinMethod, number>;
     for (const c of entries) byMethod[c.method]++;
     const devicesMap = new Map<string, ScanReport["byDevice"][number]>();
     for (const { s, deviceName, staffPseudo } of scans) {

@@ -1,12 +1,21 @@
 // QR d'inscription (ARCHITECTURE.md § 3.1) : émis quand une candidature est retenue, révoqué (jamais supprimé) quand
 // elle ne l'est plus. Pas de nouveau QR après un scan : un pass n'est remplacé que si la candidature, révoquée, est
 // retenue de nouveau (correction de l'organisateur) ; l'ancien garde son motif. `replaced` : pass valide remplacé (clé révoquée).
-import { randomUUID } from "node:crypto";
-import { encodePassMessage, encodePassPayload, encodeTicketMessage, type PassRevokedReason } from "@orasso/shared";
-import { and, desc, eq, isNull } from "drizzle-orm";
+// Lot 48 : chaque pass porte un secret (32 octets) pour le code tournant OR2 ; il part dans le kit du titulaire et dans
+// la synchro du staff (vérification hors ligne), jamais ailleurs.
+import { randomBytes, randomUUID } from "node:crypto";
+import {
+  type AccessPass,
+  encodePassMessage,
+  encodePassPayload,
+  encodeTicketMessage,
+  type PassRevokedReason,
+  ROTATING_SECRET_LENGTH,
+} from "@orasso/shared";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { accessPasses, applications, events, signingKeys, tickets } from "../../db/schema";
+import { accessPasses, applications, events, mediaProfiles, signingKeys, tickets } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import { realtime } from "../../lib/realtime";
@@ -19,6 +28,38 @@ export type PassRow = typeof accessPasses.$inferSelect;
 /** Charge utile du QR (recalculée : le message est déterminé par kid, event_no et id). */
 export function passPayload(pass: Pick<PassRow, "id" | "kid" | "signature">, eventNo: number): string {
   return encodePassPayload(encodePassMessage({ kid: pass.kid, eventNo, passId: pass.id }), pass.signature);
+}
+
+const newOtpSecret = () => randomBytes(ROTATING_SECRET_LENGTH);
+
+/**
+ * Secrets OR2 des pass valides qui n'en ont pas (pass émis avant le lot 48) : générés à la première demande du kit ou de
+ * la synchro, sans écraser un secret posé entre-temps (`where otp_secret is null`). Rend le secret de chaque pass.
+ */
+export async function ensureOtpSecrets(
+  ex: Executor,
+  passes: readonly Pick<PassRow, "id" | "otpSecret" | "revokedAt">[],
+): Promise<Map<string, Buffer>> {
+  const secrets = new Map<string, Buffer>();
+  const missing: string[] = [];
+  for (const p of passes) {
+    if (p.otpSecret) secrets.set(p.id, p.otpSecret);
+    else if (!p.revokedAt) missing.push(p.id);
+  }
+  for (const id of missing) {
+    await ex
+      .update(accessPasses)
+      .set({ otpSecret: newOtpSecret() })
+      .where(and(eq(accessPasses.id, id), isNull(accessPasses.otpSecret)));
+  }
+  if (missing.length) {
+    const rows = await ex
+      .select({ id: accessPasses.id, otpSecret: accessPasses.otpSecret })
+      .from(accessPasses)
+      .where(inArray(accessPasses.id, missing));
+    for (const r of rows) if (r.otpSecret) secrets.set(r.id, r.otpSecret);
+  }
+  return secrets;
 }
 
 async function validPass(ex: Executor, applicationId: string) {
@@ -43,7 +84,16 @@ export const accessService = {
     // (réémission après la révocation d'une clé).
     const [row] = await tx
       .insert(accessPasses)
-      .values({ id, applicationId: app.id, eventId: app.eventId, userId: app.userId, kid, signature, issuedAt: now() })
+      .values({
+        id,
+        applicationId: app.id,
+        eventId: app.eventId,
+        userId: app.userId,
+        kid,
+        signature,
+        otpSecret: newOtpSecret(),
+        issuedAt: now(),
+      })
       .onConflictDoNothing()
       .returning();
     // Émission concurrente (deux lectures simultanées) : on garde celle qui est passée.
@@ -108,7 +158,7 @@ export const accessService = {
    * QR d'une candidature pour son titulaire (`GET /applications/:id/pass`), affiché dans l'appli et sur `/app/acces`.
    * Une candidature retenue sans pass (données antérieures au lot 06) en reçoit un à la lecture.
    */
-  async mine(v: Viewer, applicationId: string) {
+  async mine(v: Viewer, applicationId: string): Promise<AccessPass> {
     const app = await db.query.applications.findFirst({ where: eq(applications.id, applicationId) });
     if (!app || app.userId !== v.user.id) throw notFound("Candidature introuvable");
     const event = await db.query.events.findFirst({ where: eq(events.id, app.eventId) });
@@ -118,6 +168,13 @@ export const accessService = {
     if (!pass) throw notFound("Pas de QR pour cette candidature");
     if (pass.revokedAt && app.status === "accepted") pass = await withTx((tx) => this.issue(tx, app));
     const valid = !pass.revokedAt;
+    const secret = valid ? (await ensureOtpSecrets(db, [pass])).get(pass.id) : undefined;
+    const media = app.mediaProfileId
+      ? await db.query.mediaProfiles.findFirst({
+          where: eq(mediaProfiles.id, app.mediaProfileId),
+          columns: { name: true },
+        })
+      : undefined;
     return {
       applicationId: app.id,
       eventId: event.id,
@@ -128,6 +185,10 @@ export const accessService = {
       issuedAt: pass.issuedAt.toISOString(),
       revokedAt: pass.revokedAt?.toISOString() ?? null,
       revokedReason: pass.revokedReason,
+      otpSecret: secret ? secret.toString("base64url") : null,
+      kind: app.kind,
+      spotLabel: app.spotLabel ?? null,
+      mediaName: media?.name ?? null,
     };
   },
 };
