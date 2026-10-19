@@ -32,7 +32,7 @@ export function ProsSegment({
   const { t } = useTheme();
   const [filters, setFilters] = useState(emptyProFilters);
   const [sheet, setSheet] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
   const sort = position.status === "on" || dept ? "distance" : "name";
   const ready = position.status !== "checking" && position.status !== "asking";
 
@@ -44,7 +44,7 @@ export function ProsSegment({
   );
   const items = list.items ?? [];
   const pins = useMemo(() => proPins(list.items ?? []), [list.items]);
-  const picked = items.find((p) => p.slug === selected);
+  const picked = items.filter((p) => selected.includes(p.slug));
   const count = activeFilters(filters);
   const line = position.status === "on" ? L.prosOn : dept ? L.prosAround(dept) : L.prosByName;
 
@@ -75,9 +75,19 @@ export function ProsSegment({
       {list.items?.length === 0 ? <EmptyState title={L.emptyTitle} text={L.prosEmptyText} /> : null}
 
       {view === "map" && list.items ? (
-        <ExplorerMap pins={pins} me={position.position} selectedId={selected} onSelect={(p) => setSelected(p.id)}>
-          {picked ? (
-            <ProRow pro={picked} />
+        <ExplorerMap
+          pins={pins}
+          me={position.position}
+          selectedId={selected.length === 1 ? selected[0] : null}
+          onSelect={(p) => setSelected([p.id])}
+          onSelectGroup={(group) => setSelected(group.map((p) => p.id))}
+        >
+          {picked.length > 0 ? (
+            <View style={styles.picked}>
+              {picked.map((p) => (
+                <ProRow key={p.slug} pro={p} />
+              ))}
+            </View>
           ) : (
             <Text variant="caption" color={t.color.inkMuted}>
               {pins.length > 0 ? L.mapProHint : explorerLabels.mapNoPosition}
@@ -107,4 +117,5 @@ const styles = StyleSheet.create({
   sortline: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
   sortText: { flex: 1 },
   loading: { alignItems: "center", paddingVertical: space2 },
+  picked: { gap: space2 },
 });

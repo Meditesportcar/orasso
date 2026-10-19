@@ -43,7 +43,7 @@ export function EventsSegment({
 }) {
   const { t } = useTheme();
   const router = useRouter();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
   const ready = position.status !== "checking" && position.status !== "asking";
   const list = usePaged(
     (cursor) => api.exploreEvents(eventQuery(q, filters, position.position, view, new Date(nowMs()), cursor)),
@@ -53,7 +53,7 @@ export function EventsSegment({
   );
   const items = list.items ?? [];
   const pins = useMemo(() => eventPins(list.items ?? []), [list.items]);
-  const picked: EventCard | undefined = items.find((e) => e.id === selected);
+  const picked: EventCard[] = items.filter((e) => selected.includes(e.id));
   const open = (e: EventCard) => router.push(`/e/${e.slug}`);
 
   return (
@@ -78,9 +78,19 @@ export function EventsSegment({
       {list.items?.length === 0 ? <EmptyState title={L.emptyTitle} text={L.emptyText} /> : null}
 
       {view === "map" && list.items ? (
-        <ExplorerMap pins={pins} me={position.position} selectedId={selected} onSelect={(p) => setSelected(p.id)}>
-          {picked ? (
-            <EventCardV2 event={picked} onPress={() => open(picked)} />
+        <ExplorerMap
+          pins={pins}
+          me={position.position}
+          selectedId={selected.length === 1 ? selected[0] : null}
+          onSelect={(p) => setSelected([p.id])}
+          onSelectGroup={(group) => setSelected(group.map((p) => p.id))}
+        >
+          {picked.length > 0 ? (
+            <View style={styles.picked} testID="map-picked">
+              {picked.map((e) => (
+                <EventCardV2 key={e.id} event={e} onPress={() => open(e)} />
+              ))}
+            </View>
           ) : (
             <Text variant="caption" color={t.color.inkMuted}>
               {pins.length > 0 ? L.mapHint : explorerLabels.mapNoPosition}
@@ -112,4 +122,5 @@ const styles = StyleSheet.create({
   sortline: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
   sortText: { flex: 1 },
   loading: { alignItems: "center", paddingVertical: space2 },
+  picked: { gap: space2 },
 });

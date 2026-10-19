@@ -73,7 +73,9 @@ export function ExplorerScreen() {
             </Chip>
           ) : null}
         </ChipRow>
-        {segment === "evenements" && filtersOpen ? <FiltersPanel value={filters} onChange={setFilters} /> : null}
+        {segment === "evenements" && filtersOpen ? (
+          <FiltersPanel value={filters} onChange={setFilters} signedIn={Boolean(me)} />
+        ) : null}
       </View>
       {position.status === "ask" && segment !== "personnes" ? <AskPosition position={position} dept={dept} /> : null}
       {segment === "evenements" ? (
@@ -124,7 +126,9 @@ function SearchLine({
       />
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={on ? L.gpsOnA11y : denied ? L.gpsOffA11y : L.gpsAskA11y}
+        accessibilityLabel={
+          on ? L.gpsOnA11y : denied ? (position.blocked ? L.gpsBlockedA11y : L.gpsOffA11y) : L.gpsAskA11y
+        }
         onPress={() => (on ? position.clear() : void position.request())}
         style={[styles.gps, { borderColor: denied ? c.winText : on ? c.accent : c.line }]}
         testID="gps-button"
@@ -166,7 +170,16 @@ function AskPosition({ position, dept }: { position: ExplorerPosition; dept: str
 }
 
 /** Filtres repliés (prototype : sous les segments) : Format, Quand, Selon mes goûts. */
-function FiltersPanel({ value, onChange }: { value: EventFilters; onChange: (next: EventFilters) => void }) {
+// « Selon mes goûts » suppose un compte (affinités, structures suivies) : masqué sans compte.
+function FiltersPanel({
+  value,
+  onChange,
+  signedIn,
+}: {
+  value: EventFilters;
+  onChange: (next: EventFilters) => void;
+  signedIn: boolean;
+}) {
   const set = <K extends keyof EventFilters>(key: K, v: EventFilters[K]) => onChange({ ...value, [key]: v });
   return (
     <View style={styles.filters} testID="explorer-filters">
@@ -187,14 +200,16 @@ function FiltersPanel({ value, onChange }: { value: EventFilters; onChange: (nex
           </Chip>
         ))}
       </Group>
-      <Group label={L.groupTaste}>
-        <Chip selected={value.affinity} onPress={() => set("affinity", !value.affinity)}>
-          {L.tasteAffinity}
-        </Chip>
-        <Chip selected={value.followed} onPress={() => set("followed", !value.followed)}>
-          {L.tasteFollowed}
-        </Chip>
-      </Group>
+      {signedIn ? (
+        <Group label={L.groupTaste}>
+          <Chip selected={value.affinity} onPress={() => set("affinity", !value.affinity)}>
+            {L.tasteAffinity}
+          </Chip>
+          <Chip selected={value.followed} onPress={() => set("followed", !value.followed)}>
+            {L.tasteFollowed}
+          </Chip>
+        </Group>
+      ) : null}
     </View>
   );
 }
@@ -223,7 +238,7 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.radiusPill,
     borderWidth: 1.5,
   },
-  input: { flex: 1, minHeight: 44, fontSize: 15 },
+  input: { flex: 1, minHeight: 44, fontSize: tokens.type.body.fontSize },
   gps: {
     flexDirection: "row",
     alignItems: "center",

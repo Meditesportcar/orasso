@@ -32,7 +32,12 @@ export function EventGatePlate({
   const c = t.color;
   const when = (iso: string) => formatDayHourYear(iso, new Date(nowMs()));
   const opensAt = block && "opensAt" in block ? block.opensAt : event.registrationsOpenAt;
-  const title = gate === "soon" ? L.soonTitle(when(event.registrationOpensAtForMe ?? opensAt)) : L.closedTitle;
+  const title =
+    gate === "soon"
+      ? L.soonTitle(when(event.registrationOpensAtForMe ?? opensAt))
+      : gate === "ended"
+        ? L.endedTitle
+        : L.closedTitle;
   const text =
     gate === "full"
       ? L.closedFull(event.capacity)
@@ -44,10 +49,10 @@ export function EventGatePlate({
   return (
     <View
       style={[styles.box, { backgroundColor: c.surfaceRaised, borderColor: c.line }]}
-      testID={gate === "soon" ? "event-soon" : "event-closed"}
+      testID={gate === "soon" ? "event-soon" : gate === "ended" ? "event-ended" : "event-closed"}
     >
       <View style={[styles.icon, { backgroundColor: c.ink }]}>
-        <Icon name={gate === "soon" ? "wait" : "close"} size={20} color={c.ground} />
+        <Icon name={gate === "soon" ? "wait" : gate === "ended" ? "flag" : "close"} size={20} color={c.ground} />
       </View>
       <View style={styles.body}>
         <Text variant="bodyStrong" color={c.ink}>
@@ -79,6 +84,6 @@ export function EventGatePlate({
 
 const styles = StyleSheet.create({
   box: { flexDirection: "row", gap: space3, padding: space3, borderRadius: tokens.radius.radiusMd, borderWidth: 1.5 },
-  icon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  icon: { width: 40, height: 40, borderRadius: tokens.radius.radiusMd, alignItems: "center", justifyContent: "center" },
   body: { flex: 1, gap: space1, alignItems: "flex-start" },
 });

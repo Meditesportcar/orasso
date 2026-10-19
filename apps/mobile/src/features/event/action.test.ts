@@ -45,5 +45,16 @@ describe("action principale de la fiche selon le profil (lot 44)", () => {
       eventAction({ ...base, canApply: false, block: { code: "not_open", opensAt: "2026-10-21T16:00:00Z" } }).gate,
     ).toBe("soon");
     expect(eventAction({ ...base, cancelled: true })).toEqual({ action: null, gate: null });
+    // Terminé : la raison, aucune action, quel que soit le profil (sauf le tri de l'organisateur).
+    const ended = { ...base, canApply: false, block: { code: "ended" as const } };
+    expect(eventAction(ended)).toEqual({ action: null, gate: "ended" });
+    expect(eventAction({ ...ended, kind: "visitor" }).gate).toBe("ended");
+    expect(eventAction({ ...ended, kind: "organizer", ownStructure: true }).action).toBe("triage");
+  });
+
+  it("prestataire qui a déjà candidaté : « Voir ma candidature »", () => {
+    expect(eventAction({ ...base, kind: "provider", providerApplied: true, providerCanApply: true }).action).toBe(
+      "myProviderApplication",
+    );
   });
 });

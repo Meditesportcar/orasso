@@ -6,6 +6,10 @@ import { Pressable, Text, View } from "react-native";
 import { withAlpha } from "../native/color";
 import { archivoFamily } from "../native/fontFamily";
 import { radius, useTheme } from "../native/theme";
+import { tokens } from "../tokens";
+
+/** Rayon de l'étiquette de carte (3 px, prototype `s-map`) : hors jetons, écart daté dans le README (lot 44). */
+const MAP_TAG_RADIUS = 3;
 
 const narrow = archivoFamily("narrow", 800, false);
 /** Zone de toucher minimale (44 px, README). */
@@ -38,13 +42,15 @@ export function EventPin({
       <View
         style={{
           backgroundColor: bg,
-          borderRadius: 3,
+          borderRadius: MAP_TAG_RADIUS,
           paddingHorizontal: 7,
           paddingVertical: 4,
-          transform: [{ skewX: "-10deg" }],
+          transform: [{ skewX: tokens.geometry.skew }],
         }}
       >
-        <Text style={{ fontFamily: narrow, fontSize: 11, letterSpacing: 0.5, color: ink }}>{label}</Text>
+        <Text style={{ fontFamily: narrow, fontSize: tokens.type.label.fontSize, letterSpacing: 0.5, color: ink }}>
+          {label}
+        </Text>
       </View>
       <View
         style={{
@@ -91,7 +97,9 @@ export function ClusterPin({
           justifyContent: "center",
         }}
       >
-        <Text style={{ fontFamily: narrow, fontSize: 13, color: t.color.mapLand }}>{count}</Text>
+        <Text style={{ fontFamily: narrow, fontSize: tokens.type.caption.fontSize, color: t.color.mapLand }}>
+          {count}
+        </Text>
       </View>
     </Pressable>
   );
@@ -119,7 +127,14 @@ export function ProPin({ label, onPress, accessibilityLabel, testID = "map-pin" 
           backgroundColor: t.color.night,
         }}
       >
-        <Text style={{ fontFamily: narrow, fontSize: 11, letterSpacing: 0.5, color: t.color.nightInk }}>
+        <Text
+          style={{
+            fontFamily: narrow,
+            fontSize: tokens.type.label.fontSize,
+            letterSpacing: 0.5,
+            color: t.color.nightInk,
+          }}
+        >
           {label.toUpperCase()}
         </Text>
       </View>

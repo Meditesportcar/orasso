@@ -64,6 +64,6 @@ const styles = StyleSheet.create({
   wrap: { gap: space2 },
   row: { flexDirection: "row", gap: space2 },
   slot: { flex: 1, gap: space1, padding: space3, borderRadius: tokens.radius.radiusMd },
-  time: { fontSize: 28, lineHeight: 30 },
+  time: { fontSize: tokens.type.posterL.fontSize, lineHeight: tokens.type.posterL.lineHeight },
   tag: { alignSelf: "flex-start" },
 });

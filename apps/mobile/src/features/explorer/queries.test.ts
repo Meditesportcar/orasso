@@ -7,6 +7,7 @@ import {
   emptyProFilters,
   eventQuery,
   proQuery,
+  shouldAsk,
   whenRange,
 } from "./queries";
 
@@ -71,5 +72,14 @@ describe("réglages de l'Explorer v2 → API", () => {
     expect(activeFilters(emptyEventFilters)).toBe(0);
     expect(activeFilters({ ...emptyEventFilters, format: "show", followed: true })).toBe(2);
     expect(activeFilters({ ...emptyProFilters, activity: "parts" })).toBe(1);
+  });
+});
+
+describe("position : « Plus tard » retenu", () => {
+  it("ne redemande qu'après sept jours", () => {
+    const day = 86_400_000;
+    expect(shouldAsk(null, NOW.getTime())).toBe(true);
+    expect(shouldAsk(NOW.getTime() - 2 * day, NOW.getTime())).toBe(false);
+    expect(shouldAsk(NOW.getTime() - 7 * day, NOW.getTime())).toBe(true);
   });
 });

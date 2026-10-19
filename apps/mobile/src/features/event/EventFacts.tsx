@@ -176,7 +176,7 @@ export function EventFactsGrid({ event }: { event: EventPublic }) {
         </Pressable>
         <Fact icon="vehicle" label={L.exhibitors} testID="event-seats">
           {event.remaining !== null && event.capacity !== null ? (
-            <Text variant="numberNarrow" color={c.plateInk} style={styles.big}>
+            <Text variant="numberNarrow" color={c.plateInk}>
               {event.remaining}
               <Text variant="meta" color={c.plateMuted}>
                 /{event.capacity}
@@ -214,7 +214,13 @@ const styles = StyleSheet.create({
   titleBlock: { gap: space2 },
   org: { flexDirection: "row", alignItems: "center", gap: space2, padding: space2 },
   orgLink: { flex: 1, flexDirection: "row", alignItems: "center", gap: space2 },
-  orgLogo: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  orgLogo: {
+    width: 44,
+    height: 44,
+    borderRadius: tokens.radius.radiusMd,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   orgText: { flex: 1, gap: space1 },
   orgMeta: { flexDirection: "row", alignItems: "center", gap: space2, flexWrap: "wrap" },
   factsWrap: { gap: space2 },
@@ -223,5 +229,4 @@ const styles = StyleSheet.create({
   factPress: { flexBasis: "47%", flexGrow: 1 },
   factInside: { flexBasis: "auto", flexGrow: 1 },
   factLabel: { flexDirection: "row", alignItems: "center", gap: space1 },
-  big: { fontSize: 34, lineHeight: 36 },
 });

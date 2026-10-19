@@ -7,6 +7,7 @@ import { type EventCard, eventFormatLabels, explorerV2Labels as L, wallTime } fr
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
+import { cardPoster } from "./poster";
 
 const { space1, space2, space3 } = tokens.spacing;
 const DAYS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."];
@@ -70,8 +71,8 @@ export function EventCardV2({ event, big = false, onPress }: { event: EventCard;
   const stub = stubOf(event.startsAt);
   const seats = seatsOf(event);
   const km = event.distanceKm;
-  const poster = event.posterUrl ? (
-    <Photo source={mediaSource(event.posterUrl)} cut={big ? "none" : "poster"} style={StyleSheet.absoluteFill} />
+  const poster = cardPoster(event) ? (
+    <Photo source={mediaSource(cardPoster(event))} cut={big ? "none" : "poster"} style={StyleSheet.absoluteFill} />
   ) : (
     <MinimalPoster event={event} big={big} />
   );
@@ -195,18 +196,18 @@ const styles = StyleSheet.create({
     borderRightWidth: 1.5,
     borderStyle: "dashed",
   },
-  stubDate: { fontSize: 38, lineHeight: 38 },
+  stubDate: { fontSize: tokens.type.posterXl.fontSize, lineHeight: tokens.type.posterXl.fontSize },
   stubHour: { marginTop: space1 },
   main: { flex: 1, gap: space1, minWidth: 0 },
   top: { flexDirection: "row", alignItems: "center", gap: space2, flexWrap: "wrap" },
   org: { flexDirection: "row", alignItems: "center", gap: space2 },
   orgName: { flexShrink: 1 },
-  logo: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center" },
+  logo: { width: 24, height: 24, borderRadius: tokens.radius.radiusSm, alignItems: "center", justifyContent: "center" },
   place: { flexDirection: "row", alignItems: "center", gap: space1 },
   placeText: { flexShrink: 1 },
   seats: { gap: space1, marginTop: "auto" },
-  gauge: { height: 5, borderRadius: 3, overflow: "hidden" },
-  gaugeFill: { height: 5, borderRadius: 3 },
+  gauge: { height: 5, borderRadius: tokens.radius.radiusPill, overflow: "hidden" },
+  gaugeFill: { height: 5, borderRadius: tokens.radius.radiusPill },
   poster: { width: 84, minHeight: 118, borderRadius: tokens.radius.radiusSm, overflow: "hidden" },
   posterBig: { height: 220, overflow: "hidden" },
   minimal: { flex: 1, padding: space2, gap: space1, justifyContent: "space-between" },

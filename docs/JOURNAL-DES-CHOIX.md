@@ -1349,11 +1349,19 @@ Source : fonctions **validées par Damien dans le prototype DA v2, 19/10/2026** 
 - **Case « J'ai vu le créneau d'arrivée »** : déjà posée par le lot 47 à la candidature ; vérifiée par la recette (bouton grisé sans la case, API 400).
 - **Appli dans un navigateur** : la carte est rendue par MapLibre GL JS (`ExplorerMap.web.tsx`, mêmes style et marqueurs) au lieu du message « disponible sur téléphone » ; Metro ne servant pas le fil de travail de MapLibre, la recette web le charge depuis jsDelivr (même version). Le natif n'est pas concerné.
 
+- **Corrections de la relecture (20/10, décision D27 : tout corrigé maintenant)** :
+  - **Repli décidé par le TileJSON** (`src/map/probe.ts`) : avant de choisir le style, l'appli et le site demandent le TileJSON d'OpenFreeMap (délai 3 s, résultat gardé pour la session) ; échec, réponse sans tuiles ou délai → raster d'emblée. `onDidFailLoadingMap` (natif) ne couvrait que l'échec du style. Sur le web, en cours de route, seule une erreur de la source elle-même ou **5 tuiles en échec d'affilée** font basculer : une tuile isolée (4G faible) est ignorée. Le rendu natif réel reste à voir sur l'APK v2 (lot 58).
+  - **Vignettes** : nouveau champ `EventCard.generatedPosterUrl` (affiche générée seule) ; les cartes de l'appli dessinent « Minimal » sans lui, la fiche ne met en vedette que `poster.postUrl` (plus jamais l'affiche perso, qui reste dans « Affiche de l'organisateur ») ; le site garde `posterUrl` (repli sur l'affiche perso) jusqu'au lot 56.
+  - **Lieux confondus** (un circuit, plusieurs dates ; écart < 0,0005°, ou zoom 16 atteint) : toucher la pastille ouvre la liste de leurs événements (appli : cartes sous la carte ; site : bulle avec les liens) au lieu de zoomer sans fin.
+  - **Glyphes** : seulement depuis `EXPO_PUBLIC_SITE_URL` (l'API ne les sert pas) ; vide → police d'OpenFreeMap. Variable ajoutée aux profils EAS (`https://dev.orasso.fr`) et documentée (`apps/mobile/.env.example`, `AVANCEMENT.md`).
+  - **Position** : « Plus tard » retenu sur l'appareil (date seulement, jamais la position) ; la carte n'est reproposée qu'après 7 jours ou d'un geste sur l'icône ; refus définitif → l'icône ouvre les réglages du téléphone. **Texte rendu exact** : la position arrondie à 10 km part dans l'adresse de la requête (choix gardé : pas de changement d'API) et peut rester un temps dans les journaux techniques du serveur ; Orasso ne l'enregistre pas.
+  - « Selon mes goûts » masqué sans compte ; événement terminé → « Événement terminé » et la raison, sans bouton ; prestataire ayant déjà candidaté → « Voir ma candidature » (→ Candidatures) ; pictogrammes `send` (Candidater) et `cards` (Trier) ajoutés au jeu Icons (écart daté dans le README) ; rayons et tailles des cartes et marqueurs pris des jetons, sauf le rayon de 3 px de l'étiquette de carte (écart daté) ; `*.pbf binary` ; la carte de la fiche du site n'est plus `role="img"` (elle contient des boutons) mais une région nommée.
+
 #### À revoir avec Damien (lot 44)
 - OpenFreeMap (H5) : service gratuit sans engagement (AS-V3) ; le repli raster garantit une carte.
 - Autoroutes en moutarde (« La Catalane ») ; département favori non mis en valeur sur la carte.
 - « Suivre l'événement » et « Me prévenir » du prototype remplacés par le suivi de l'organisateur (pas d'API) ; le texte « Ta position ne quitte jamais ton téléphone » corrigé.
-- `EventCard.posterUrl` retombe encore sur l'affiche perso côté API (lot 47) : l'appli dessine le gabarit « Minimal » seulement sans aucune affiche ; à passer à « générée seulement » avec le site (lot 56).
+- Le site garde `EventCard.posterUrl` (repli sur l'affiche perso, lot 47) jusqu'au lot 56 ; l'appli lit `generatedPosterUrl` et dessine le gabarit « Minimal » sans affiche générée.
 - Rendu de la carte native (MapLibre natif, hachures en PNG `data:`) à vérifier sur l'APK v2 (lot 58).
 
 ### 2026-10-19 — Arrivée : choix du profil, département sur la carte de France, nom et prénom obligatoires (lot 41)

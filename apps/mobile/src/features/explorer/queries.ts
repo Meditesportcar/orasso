@@ -114,3 +114,11 @@ export function activeFilters(filters: EventFilters | ProFilters): number {
   }
   return Object.values(filters).filter((v) => v !== "" && v !== null).length;
 }
+
+/** « Plus tard » (position) : on ne propose à nouveau la carte qu'après ce nombre de jours. */
+export const ASK_AGAIN_DAYS = 7;
+
+/** La carte « Activer / Plus tard » se montre-t-elle encore, vu la date du dernier « Plus tard » ? */
+export function shouldAsk(laterAtMs: number | null, now: number): boolean {
+  return laterAtMs === null || now - laterAtMs >= ASK_AGAIN_DAYS * 86_400_000;
+}

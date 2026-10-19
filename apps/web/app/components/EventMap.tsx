@@ -19,7 +19,7 @@ export function EventMap({
   startsAt?: string;
   draggablePin?: boolean;
 }) {
-  const container = useRef<HTMLDivElement>(null);
+  const container = useRef<HTMLElement>(null);
   const failed = useOrassoMap(
     container,
     { center: [lng, lat], zoom: 14 },
@@ -33,5 +33,6 @@ export function EventMap({
   );
 
   if (failed) return <p className="s-muted">La carte n'a pas pu se charger.</p>;
-  return <div ref={container} className="ev__map" role="img" aria-label={`Carte : ${label}`} data-testid="event-map" />;
+  // Une région nommée (pas `role="img"` : le cadre contient des boutons, les marqueurs).
+  return <section ref={container} className="ev__map" aria-label={`Carte : ${label}`} data-testid="event-map" />;
 }

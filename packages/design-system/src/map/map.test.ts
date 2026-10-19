@@ -5,7 +5,15 @@ import { describe, expect, it } from "vitest";
 
 import { THEME_IDS, tokens } from "../tokens";
 import { HATCH_SIZE, hatchImage, hatchPngDataUri } from "./hatch";
-import { clusterPins, pinDateLabel } from "./pins";
+import { clusterPins, isStacked, pinDateLabel } from "./pins";
+import {
+  chooseMapStyle,
+  probedVectorTiles,
+  probeVectorTiles,
+  resetMapProbe,
+  shouldFallBack,
+  TILE_FAILURES_FOR_FALLBACK,
+} from "./probe";
 import {
   MAP_FALLBACK_FONTSTACK,
   MAP_FONTSTACK,
@@ -98,6 +106,53 @@ describe("style de carte Orasso (lot 44)", () => {
     expect(clusterPins(pts, 5)[0]?.id).toBe("group:canet");
     expect(clusterPins(pts, 7).map((g) => g.items.length)).toEqual([2, 1]);
     expect(clusterPins(pts, 10).map((g) => g.id)).toEqual(["canet", "perpignan", "narbonne"]);
+  });
+});
+
+describe("repli décidé par le TileJSON (relecture du lot 44)", () => {
+  const okJson = async () => ({ ok: true, json: async () => ({ tiles: ["https://t/{z}/{x}/{y}.pbf"] }) });
+  it("TileJSON lisible → style Orasso ; échec, réponse sans tuiles ou délai → raster ; résultat gardé", async () => {
+    resetMapProbe();
+    expect(await probeVectorTiles("https://a.test/planet", okJson)).toBe(true);
+    expect(probedVectorTiles("https://a.test/planet")).toBe(true);
+    let calls = 0;
+    const failing = async () => {
+      calls += 1;
+      throw new Error("réseau");
+    };
+    expect(await probeVectorTiles("https://b.test/planet", failing)).toBe(false);
+    expect(await probeVectorTiles("https://b.test/planet", failing)).toBe(false);
+    expect(calls).toBe(1);
+    expect(await probeVectorTiles("https://c.test/planet", async () => ({ ok: false, json: async () => ({}) }))).toBe(
+      false,
+    );
+    expect(await probeVectorTiles("https://d.test/planet", async () => ({ ok: true, json: async () => ({}) }))).toBe(
+      false,
+    );
+    const never = () => new Promise<never>(() => undefined);
+    expect(await probeVectorTiles("https://e.test/planet", never, 30)).toBe(false);
+    expect(chooseMapStyle("beton", {}, true).name).toBe("orasso-beton");
+    expect(chooseMapStyle("sable", {}, false).name).toBe("orasso-sable-raster");
+  });
+
+  it("une tuile isolée ne fait pas basculer ; la source elle-même, ou des tuiles d'affilée, oui", () => {
+    expect(shouldFallBack({ tile: {} }, 1)).toBe(false);
+    expect(shouldFallBack({ tile: {} }, TILE_FAILURES_FOR_FALLBACK)).toBe(true);
+    expect(shouldFallBack({}, 0)).toBe(true);
+  });
+});
+
+describe("pastilles de lieux confondus", () => {
+  const circuit = [
+    { id: "a", lat: 42.70001, lng: 2.89 },
+    { id: "b", lat: 42.70002, lng: 2.89001 },
+  ];
+  it("même lieu ou zoom maximal : la pastille ouvre la liste au lieu de zoomer", () => {
+    expect(isStacked({ items: circuit }, 8)).toBe(true);
+    expect(isStacked({ items: [circuit[0] as (typeof circuit)[0], { id: "c", lat: 42.8, lng: 2.9 }] }, 8)).toBe(false);
+    expect(isStacked({ items: [circuit[0] as (typeof circuit)[0], { id: "c", lat: 42.8, lng: 2.9 }] }, 16)).toBe(true);
+    expect(isStacked({ items: [circuit[0] as (typeof circuit)[0]] }, 18)).toBe(false);
+    expect(clusterPins(circuit, 20)).toHaveLength(1);
   });
 });
 

@@ -86,9 +86,12 @@ export function viewFor(pins: readonly Pick<MapPin, "lat" | "lng">[]): MapView {
 /** Clé qui change quand les épingles changent : la carte repart alors de la vue qui convient. */
 export const pinsKey = (pins: readonly Pick<MapPin, "id">[]): string => pins.map((p) => p.id).join("|");
 
-/** Origine du site qui sert les glyphes Archivo étroit : `EXPO_PUBLIC_SITE_URL`, sinon l'API (même hôte en ligne). */
+/**
+ * Origine du site qui sert les glyphes Archivo étroit : `EXPO_PUBLIC_SITE_URL` seulement (l'API ne les sert pas) ;
+ * vide : glyphes et police d'OpenFreeMap (Noto Sans), pour que les noms s'affichent quand même.
+ */
 export function mapGlyphsOrigin(): string | null {
-  const raw = process.env.EXPO_PUBLIC_SITE_URL || process.env.EXPO_PUBLIC_API_URL || "";
+  const raw = process.env.EXPO_PUBLIC_SITE_URL || "";
   return raw ? raw.replace(/\/+$/, "") : null;
 }
 
@@ -102,6 +105,8 @@ export type ExplorerMapProps = {
   me?: LatLng | null;
   selectedId?: string | null;
   onSelect: (pin: MapPin) => void;
+  /** Pastille de lieux confondus (un circuit, plusieurs dates) : la liste de ses épingles. */
+  onSelectGroup?: (pins: MapPin[]) => void;
   /** Aperçu sous la carte (la carte de l'événement touché). */
   children?: ReactNode;
 };

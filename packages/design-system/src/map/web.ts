@@ -7,7 +7,8 @@ import type { Map as MapLibreMap, Marker } from "maplibre-gl";
 
 import { type ThemeId, tokens } from "../tokens";
 import { hatchImage } from "./hatch";
-import { clusterPins, type MapPoint } from "./pins";
+import { clusterPins, GROUP_MAX_ZOOM, isStacked, type MapPoint } from "./pins";
+import { chooseMapStyle, probedVectorTiles, probeVectorTiles, shouldFallBack } from "./probe";
 import { MAP_SOURCE_ID, type MapStyleOptions, mapFallbackRaster, mapStyle } from "./style";
 
 type MapLibre = typeof import("maplibre-gl");
@@ -29,10 +30,12 @@ export type OrassoMap = {
 /** Crée la carte dans `container`. Le crédit des tuiles est affiché par le contrôle d'attribution (replié). */
 export function createOrassoMap(maplibre: MapLibre, container: HTMLElement, options: OrassoMapOptions): OrassoMap {
   let theme = options.theme;
-  let fell = false;
+  // Déjà su dans la session que les tuiles vectorielles ne répondent pas : raster d'emblée.
+  let fell = probedVectorTiles(options.tilesUrl) === false;
+  let tileFailures = 0;
   const map = new maplibre.Map({
     container,
-    style: mapStyle(theme, options),
+    style: chooseMapStyle(theme, options, !fell),
     center: options.center ?? [2.35, 46.6],
     zoom: options.zoom ?? 4.6,
     // Pas de rotation ni d'inclinaison (prototype `s-map`) : on se déplace et on zoome, c'est tout.
@@ -53,12 +56,24 @@ export function createOrassoMap(maplibre: MapLibre, container: HTMLElement, opti
     if (!id.startsWith("hatch-") || map.hasImage(id)) return;
     map.addImage(id, hatchImage(id === "hatch-sable" ? "sable" : "beton"), { pixelRatio: 1 });
   });
-  // Repli : la source vectorielle échoue (service absent, adresse fausse) → tuiles raster OpenStreetMap.
-  map.on("error", (e: { sourceId?: string; error?: { message?: string } }) => {
-    if (fell || e.sourceId !== MAP_SOURCE_ID) return;
+  const fallBack = (why: string) => {
+    if (fell) return;
     fell = true;
-    console.warn(`[carte] tuiles vectorielles indisponibles (${e.error?.message ?? "erreur"}) : repli raster OSM`);
+    console.warn(`[carte] tuiles vectorielles indisponibles (${why}) : repli raster OSM`);
     map.setStyle(mapFallbackRaster(theme), { diff: false });
+  };
+  // Repli décidé d'abord par la demande du TileJSON (délai 3 s, gardée pour la session).
+  if (!fell) void probeVectorTiles(options.tilesUrl).then((ok) => ok || fallBack("TileJSON sans réponse"));
+  // Puis, en cours de route : erreur de la source elle-même, ou plusieurs tuiles d'affilée ; une tuile isolée (4G
+  // faible) ne fait pas basculer toute la visite.
+  map.on("data", (e) => {
+    const d = e as unknown as { sourceId?: string; tile?: unknown };
+    if (d.sourceId === MAP_SOURCE_ID && d.tile) tileFailures = 0;
+  });
+  map.on("error", (e: { sourceId?: string; tile?: unknown; error?: { message?: string } }) => {
+    if (fell || e.sourceId !== MAP_SOURCE_ID) return;
+    if (e.tile) tileFailures += 1;
+    if (shouldFallBack(e, tileFailures)) fallBack(e.error?.message ?? "erreur");
   });
   return {
     map,
@@ -85,6 +100,11 @@ export type PinOptions = {
   onSelect?: (pin: WebPin) => void;
   /** Bulle facultative ouverte au toucher (le site y met le lien vers la page). */
   popupFor?: (pin: WebPin) => HTMLElement | null;
+  /**
+   * Toucher une pastille de lieux confondus (ou au zoom maximal) : la liste de ses lieux. Absent : une bulle avec les
+   * `popupFor` de chacun.
+   */
+  onGroup?: (pins: WebPin[]) => void;
 };
 
 function eventElement(pin: WebPin, hot: boolean): HTMLElement {
@@ -150,16 +170,29 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
     for (const group of clusterPins(others, zoom)) {
       const first = group.items[0] as WebPin;
       let el: HTMLElement;
+      let groupPopup: import("maplibre-gl").Popup | null = null;
       if (group.items.length > 1) {
         el = clusterElement(group.items.length);
-        el.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          map.easeTo({ center: [group.lng, group.lat], zoom: Math.min(map.getZoom() + 2, 16) });
+        const items = group.items as WebPin[];
+        const stacked = isStacked(group, map.getZoom());
+        el.addEventListener("click", () => {
+          if (!stacked) {
+            map.easeTo({ center: [group.lng, group.lat], zoom: Math.min(map.getZoom() + 2, GROUP_MAX_ZOOM) });
+          } else if (options.onGroup) options.onGroup(items);
         });
+        if (stacked && !options.onGroup && options.popupFor) {
+          const list = document.createElement("div");
+          list.className = "o-mappin-list";
+          list.dataset.testid = "map-group-list";
+          for (const item of items) {
+            const entry = options.popupFor(item);
+            if (entry) list.append(entry);
+          }
+          groupPopup = new maplibre.Popup({ offset: 18, closeButton: false }).setDOMContent(list);
+        }
       } else {
         el = first.kind === "pro" ? proElement(first) : eventElement(first, first.id === selected);
-        el.addEventListener("click", (ev) => {
-          ev.stopPropagation();
+        el.addEventListener("click", () => {
           selected = first.id;
           options.onSelect?.(first);
           for (const node of el.parentElement?.querySelectorAll(".o-mappin--event.is-hot") ?? []) {
@@ -170,6 +203,7 @@ export function placePins(maplibre: MapLibre, map: MapLibreMap, initial: WebPin[
       }
       const marker = new maplibre.Marker({ element: el, anchor: "bottom" }).setLngLat([group.lng, group.lat]);
       const popup = group.items.length === 1 ? options.popupFor?.(first) : null;
+      if (groupPopup) marker.setPopup(groupPopup);
       if (popup) marker.setPopup(new maplibre.Popup({ offset: 18, closeButton: false }).setDOMContent(popup));
       markers.push(marker.addTo(map));
     }
@@ -215,6 +249,9 @@ export function mapCssVars(theme: ThemeId): Record<string, string> {
     "--radius-pill": `${tokens.radius.radiusPill}px`,
     "--font-narrow": "Archivo-Narrow-Bold, Archivo, sans-serif",
     "--stretch-narrow": "normal",
+    "--type-label-size": `${tokens.type.label.fontSize}px`,
+    "--type-caption-size": `${tokens.type.caption.fontSize}px`,
+    "--skew": tokens.geometry.skew,
   };
 }
 

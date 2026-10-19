@@ -6,10 +6,12 @@ import type { EventPublic } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
 import { MinimalPoster } from "@/features/explorer/EventCardV2";
+import { heroPoster } from "@/features/explorer/poster";
 import { mediaSource } from "@/lib/media";
 
 export function EventHero({ event }: { event: EventPublic }) {
-  const url = event.poster?.postUrl ?? event.posterUrl;
+  // Seulement l'affiche générée : l'affiche perso de l'organisateur reste dans le détail (`CustomPoster`).
+  const url = heroPoster(event);
   return (
     <View style={styles.hero} testID="event-hero">
       {url ? (

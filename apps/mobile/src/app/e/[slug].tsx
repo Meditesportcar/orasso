@@ -70,6 +70,10 @@ export default function EventPage() {
     enabled: Boolean(e) && status !== "loading",
   });
   const offer = useApi(() => api.ticketOffer(slug), [slug, status], { enabled: status !== "loading" });
+  // Prestataire (lot 21) : a-t-il déjà candidaté ? Alors « Voir ma candidature », comme le prototype.
+  const providerApps = useApi(() => api.providerApplications("upcoming"), [status, persona.kind], {
+    enabled: status === "in" && persona.kind === "provider",
+  });
   const kind: ProfileKind = status !== "in" ? "guest" : persona.kind;
   // Le véhicule « de couverture » : le premier du garage actif (« Candidater avec ma Supra »).
   const vehicles = useApi(() => api.vehicles(), [status], { enabled: status === "in" && kind === "fan" });
@@ -147,6 +151,7 @@ export default function EventPage() {
     full,
     block,
     hasTicketOffer: Boolean(offer.data?.offer),
+    providerApplied: providerSent || (providerApps.data ?? []).some((a) => a.event.id === e.id),
     providerCanApply: showProviderApply && !providerSent,
     cancelled,
   });
@@ -196,30 +201,32 @@ export default function EventPage() {
     action === "triage"
       ? {
           label: L.triage,
-          icon: "list" as const,
+          icon: "cards" as const,
           onPress: () => router.push({ pathname: "/tri", params: { event: e.id } }),
         }
       : action === "apply"
-        ? { label: cover ? L.applyWith(cover.modelName) : L.applyNoVehicle, icon: "add" as const, onPress: apply }
+        ? { label: cover ? L.applyWith(cover.modelName) : L.applyNoVehicle, icon: "send" as const, onPress: apply }
         : action === "applyGuest"
-          ? { label: L.applyNoVehicle, icon: "add" as const, onPress: apply }
+          ? { label: L.applyNoVehicle, icon: "send" as const, onPress: apply }
           : action === "myApplication"
             ? { label: L.myApplication, icon: "qr" as const, onPress: () => router.navigate("/sorties") }
-            : action === "book"
-              ? { label: L.bookEntry, icon: "ticket" as const, onPress: () => setBooking(true) }
-              : action === "providerApply"
-                ? {
-                    label: profileData ? "Candidater comme prestataire" : "Candidater pour un stand",
-                    icon: "add" as const,
-                    onPress: () => void openProviderApply(),
-                  }
-                : action === "followOrganizer"
+            : action === "myProviderApplication"
+              ? { label: L.myApplication, icon: "briefcase" as const, onPress: () => router.navigate("/candidatures") }
+              : action === "book"
+                ? { label: L.bookEntry, icon: "ticket" as const, onPress: () => setBooking(true) }
+                : action === "providerApply"
                   ? {
-                      label: isFollowing ? L.followingOrganizer : L.followOrganizer,
-                      icon: isFollowing ? ("check" as const) : ("add" as const),
-                      onPress: () => void toggleFollow(),
+                      label: profileData ? "Candidater comme prestataire" : "Candidater pour un stand",
+                      icon: "add" as const,
+                      onPress: () => void openProviderApply(),
                     }
-                  : null;
+                  : action === "followOrganizer"
+                    ? {
+                        label: isFollowing ? L.followingOrganizer : L.followOrganizer,
+                        icon: isFollowing ? ("check" as const) : ("add" as const),
+                        onPress: () => void toggleFollow(),
+                      }
+                    : null;
 
   const footer = gate ? (
     <EventGatePlate

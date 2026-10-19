@@ -104,6 +104,7 @@ export const explorerV2Labels = {
   gpsOn: "Ma position",
   gpsOnA11y: "Position activée : touche pour ne plus l'utiliser",
   gpsOffA11y: "Position refusée : touche pour la redemander",
+  gpsBlockedA11y: "Position refusée : touche pour ouvrir les réglages du téléphone",
   gpsAskA11y: "Activer ma position",
   filters: "Filtres",
   map: "Carte",
@@ -120,7 +121,7 @@ export const explorerV2Labels = {
   askTitle: "Trie par distance depuis là où tu es",
   /** Texte de la demande ; `dept` : département favori (« 66 »), `null` sans département. */
   askText: (dept: string | null) =>
-    `${dept ? `Sinon, on part du ${dept}, ton département favori.` : "Sinon, on trie par date."} Ta position, arrondie à 10 km, sert seulement à trier : elle n'est jamais enregistrée.`,
+    `${dept ? `Sinon, on part du ${dept}, ton département favori.` : "Sinon, on trie par date."} Ta position, arrondie à 10 km, part avec la recherche pour trier : Orasso ne l'enregistre pas (elle peut rester un temps dans les journaux techniques du serveur).`,
   askEnable: "Activer",
   askLater: "Plus tard",
   /** Ligne d'ordre au-dessus de la liste. */
@@ -182,6 +183,7 @@ export const eventPageLabels = {
   myApplication: "Voir ma candidature",
   triage: "Trier les candidatures",
   closedTitle: "Inscriptions exposants fermées",
+  endedTitle: "Événement terminé",
   closedFull: (capacity: number | null) =>
     capacity === 1
       ? "La place est attribuée. La liste d'attente reste ouverte."

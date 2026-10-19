@@ -295,6 +295,11 @@ export type EventCard = {
    * alors un gabarit « Minimal » sans photo). L'affiche perso de l'organisateur est `customPosterUrl` (fiche).
    */
   posterUrl: string | null;
+  /**
+   * Lot 44 : l'affiche générée seule (Post 4:5), `null` sans affiche générée ; les cartes de l'appli dessinent alors le
+   * gabarit « Minimal », jamais l'affiche perso. Le site garde `posterUrl` jusqu'au lot 56.
+   */
+  generatedPosterUrl: string | null;
   status: EventStatus;
   outlook: EventOutlook;
   structure: { id: string; slug: string; name: string; logoUrl: string | null };

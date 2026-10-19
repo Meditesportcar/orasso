@@ -18,6 +18,25 @@ export type PinGroup<T extends MapPoint> = { id: string; lat: number; lng: numbe
 /** Rayon de regroupement, en pixels d'écran. */
 export const CLUSTER_RADIUS_PX = 44;
 
+/** Zoom au-delà duquel toucher une pastille n'a plus de sens : elle ouvre la liste de ses lieux. */
+export const GROUP_MAX_ZOOM = 16;
+/** Écart (en degrés, environ 50 m) sous lequel des points sont confondus (un circuit, plusieurs dates). */
+export const STACKED_DEGREES = 0.0005;
+
+/**
+ * La pastille regroupe-t-elle des points confondus (même lieu), ou est-on déjà au zoom maximal ? Alors la toucher
+ * ouvre la liste de ses lieux au lieu de zoomer (sinon ils resteraient injoignables).
+ */
+export function isStacked(group: { items: readonly MapPoint[] }, zoom: number, maxZoom = GROUP_MAX_ZOOM): boolean {
+  if (group.items.length < 2) return false;
+  if (zoom >= maxZoom) return true;
+  const lats = group.items.map((p) => p.lat);
+  const lngs = group.items.map((p) => p.lng);
+  return (
+    Math.max(...lats) - Math.min(...lats) < STACKED_DEGREES && Math.max(...lngs) - Math.min(...lngs) < STACKED_DEGREES
+  );
+}
+
 /** Position en pixels du monde (Web Mercator, tuiles de 512 comme MapLibre) à un zoom donné. */
 function worldPx(lat: number, lng: number, zoom: number): [number, number] {
   const size = 512 * 2 ** zoom;

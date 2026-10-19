@@ -200,6 +200,14 @@ test("fiche v2 : affiche, créneaux, actions selon le profil, fermé, pas encore
       await expect(page.getByTestId("event-soon")).toContainText("Candidatures dès");
       await shot(page, `fiche-pas-encore-ouverte-${theme}`);
     }
+    // Terminé : la raison, sans bouton principal.
+    const past = await apiCall<{ items: { slug: string }[] }>(null, "GET", "/events?scope=past&limit=1");
+    if (past.data.items[0]) {
+      await page.goto(`/e/${past.data.items[0].slug}`);
+      await expect(page.getByTestId("event-ended")).toContainText("Événement terminé", { timeout: 30_000 });
+      await expect(page.getByTestId("event-primary")).toHaveCount(0);
+      await shot(page, `fiche-terminee-${theme}`);
+    }
 
     if (theme === "beton") {
       // Candidature : « Continuer » reste grisé tant que la case du créneau n'est pas cochée.
@@ -257,4 +265,26 @@ test("fiche v2 : l'action principale suit le profil (visiteur, pro, organisateur
     await shot(page, `fiche-action-${c.name}-sable`);
     await ctx.close();
   }
+});
+
+test("carte : la pastille de lieux confondus ouvre la liste de leurs événements", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const orga = await login("damien@orasso.local");
+  const tag = `Circuit ${unique()}`;
+  await createEvent(orga, { title: `${tag} A` });
+  await createEvent(orga, { title: `${tag} B` });
+  const { ctx, page } = await open(browser, "sable");
+  await signIn(page, "kenji@orasso.local");
+  await page.goto("/explorer");
+  await afterOpening(page);
+  await page.getByText("Plus tard", { exact: true }).click({ timeout: 30_000 });
+  await page.getByTestId("events-q").fill(tag);
+  await expect(page.getByTestId("event-row")).toHaveCount(2, { timeout: 30_000 });
+  await page.getByText("Carte", { exact: true }).click();
+  const canvas = page.getByTestId("explorer-map-canvas");
+  await expect(canvas).toHaveAttribute("data-map-style", "orasso-sable", { timeout: 45_000 });
+  await canvas.getByTestId("map-cluster").click();
+  await expect(page.getByTestId("map-picked").getByTestId("event-row")).toHaveCount(2);
+  await shot(page, "explorer-carte-lieux-confondus-sable");
+  await ctx.close();
 });

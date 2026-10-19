@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { MOBILE, setTheme } from "./helpers";
+import { createEvent, login, MOBILE, setTheme, unique } from "./helpers";
 
 // Lot 44, côté site : les trois cartes (liste des événements, liste des pros, page d'un événement) au style Orasso,
 // qui suivent le thème (Béton, Sable) ; glyphes Archivo étroit servis par le site ; repli raster quand OpenFreeMap ne
@@ -66,11 +66,12 @@ test("les trois cartes du site suivent le thème, glyphes du site, marqueurs v2"
   }
 });
 
-test("repli : OpenFreeMap coupé → tuiles raster OpenStreetMap", async ({ browser }) => {
+test("repli : TileJSON d'OpenFreeMap coupé → tuiles raster OpenStreetMap", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE });
   const page = await ctx.newPage();
   await setTheme(page, "sable");
-  await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
+  // Seulement le TileJSON (la source) : c'est lui qui décide du repli.
+  await page.route("https://tiles.openfreemap.org/planet", (route) => route.abort());
   const warnings: string[] = [];
   page.on("console", (m) => {
     if (m.text().includes("[carte]")) warnings.push(m.text());
@@ -79,5 +80,47 @@ test("repli : OpenFreeMap coupé → tuiles raster OpenStreetMap", async ({ brow
   await mapReady(page, "events-map", "orasso-sable-raster");
   expect(warnings.join(" ")).toContain("repli raster OSM");
   await page.getByTestId("events-map").screenshot({ path: `${DIR}/carte-repli-raster-sable.png` });
+  await ctx.close();
+});
+
+test("une tuile isolée en échec ne fait pas basculer la carte sur le raster", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await setTheme(page, "beton");
+  let cut = 0;
+  await page.route(/tiles\.openfreemap\.org\/planet\/.+\.pbf/, (route) => {
+    if (cut === 0) {
+      cut += 1;
+      return route.abort();
+    }
+    return route.continue();
+  });
+  await page.goto("/evenements");
+  await mapReady(page, "events-map", "orasso-beton");
+  await expect.poll(() => cut, { timeout: 30_000 }).toBe(1);
+  await page.waitForTimeout(3000);
+  await expect(page.getByTestId("events-map")).toHaveAttribute("data-map-style", "orasso-beton");
+  await ctx.close();
+});
+
+test("lieux confondus (un circuit, plusieurs dates) : la pastille ouvre la liste de leurs événements", async ({
+  browser,
+}) => {
+  const orga = await login("damien@orasso.local");
+  const tag = `Circuit ${unique()}`;
+  const a = await createEvent(orga, { title: `${tag} A` });
+  const b = await createEvent(orga, { title: `${tag} B` });
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await setTheme(page, "beton");
+  await page.goto(`/evenements?q=${encodeURIComponent(tag)}`);
+  const map = await mapReady(page, "events-map", "orasso-beton");
+  await expect(map).toHaveAttribute("data-count", "2");
+  await map.getByTestId("map-cluster").click();
+  const list = page.getByTestId("map-group-list");
+  await expect(list).toBeVisible();
+  await expect(list.getByRole("link", { name: a.title })).toBeVisible();
+  await expect(list.getByRole("link", { name: b.title })).toBeVisible();
+  await map.screenshot({ path: `${DIR}/carte-lieux-confondus-beton.png` });
   await ctx.close();
 });

@@ -17,7 +17,7 @@ type MapLibre = typeof import("maplibre-gl");
 /** Vrai : la carte s'affiche aussi dans un navigateur. */
 export const mapSupported = true;
 
-export function ExplorerMap({ pins, me, onSelect, children }: ExplorerMapProps) {
+export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children }: ExplorerMapProps) {
   const { theme, t } = useTheme();
   const box = useRef<HTMLElement | null>(null);
   const handle = useRef<OrassoMap | null>(null);
@@ -26,6 +26,8 @@ export function ExplorerMap({ pins, me, onSelect, children }: ExplorerMapProps) 
   themeRef.current = theme;
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onGroupRef = useRef(onSelectGroup);
+  onGroupRef.current = onSelectGroup;
   const byId = useRef(new Map<string, MapPin>());
   const latest = useRef({ pins, me });
   latest.current = { pins, me };
@@ -62,6 +64,10 @@ export function ExplorerMap({ pins, me, onSelect, children }: ExplorerMapProps) 
         onSelect: (pin) => {
           const p = byId.current.get(pin.id);
           if (p) onSelectRef.current(p);
+        },
+        onGroup: (group) => {
+          const list = group.map((g) => byId.current.get(g.id)).filter((p): p is MapPin => Boolean(p));
+          onGroupRef.current?.(list);
         },
       });
     })().catch((e: unknown) => console.error("[carte] la carte n'a pas pu s'afficher", e));
