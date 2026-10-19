@@ -140,6 +140,12 @@
   border: 2px solid var(--ink);
   background: color-mix(in srgb, var(--night-ink) 22%, transparent);
 }
+/* Sur une barre (en-tête, barres du site) : la barre est nuit dans les deux thèmes (DA v2) ; encre de barre. */
+:is(.o-appbar, [data-bar]) .o-button--close:not(.o-button--on-photo) {
+  border: 1.5px solid var(--line);
+  background: transparent;
+  color: var(--bar-ink);
+}
 .o-button--close.o-button--on-photo {
   width: 36px;
   height: 36px;

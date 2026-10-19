@@ -1055,7 +1055,7 @@
   height: 96px;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: var(--surface-raised);
+  background: var(--plate-field);
   color: var(--plate-ink);
 }
 .so__logo img {
@@ -1126,6 +1126,10 @@
   [data-theme="sable"] .ev__aside .ev__counts,
   [data-theme="sable"] .ev__aside .ev__counts * {
     color: var(--plate-ink);
+  }
+  /* Lot 38 : surface-raised est clair en Sable ; dans la plaque graphite, les compteurs n'ont pas de fond propre. */
+  [data-theme="sable"] .ev__aside .ev__counts {
+    background: transparent;
   }
   [data-theme="sable"] .s-head {
     display: inline-block;
@@ -1626,11 +1630,12 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
-  color: var(--ink);
+  /* Lot 38 : l'en-tête est nuit dans les deux thèmes ; le champ graphite garde l'encre de barre. */
+  color: var(--bar-ink);
   font-family: inherit;
 }
 .s-search__input::placeholder {
-  color: var(--ink-muted);
+  color: var(--bar-muted);
 }
 .s-search__input:focus-visible,
 .s-search__submit:focus-visible {

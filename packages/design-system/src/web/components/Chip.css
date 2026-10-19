@@ -90,3 +90,14 @@ button.o-chip {
 .o-chip-row > * {
   scroll-snap-align: start;
 }
+
+/* Sur une barre du site (pied, menu latéral) : la barre est nuit dans les deux thèmes (DA v2, lot 38). */
+[data-bar] .o-chip {
+  border-color: var(--bar-muted);
+  background-image: linear-gradient(var(--bar-ink), var(--bar-ink));
+  color: var(--bar-ink);
+}
+[data-bar] .o-chip.is-selected {
+  border-color: var(--bar-ink);
+  color: var(--bar);
+}

@@ -33,7 +33,14 @@ export type ButtonProps =
   /** Secours du staff : 72 px (Plaque, Express, Sans scan) ou 56 px (Liste, Incident, Discussion). */
   | (Common & { variant: "rescue"; icon: IconName; height?: 56 | 72; dashed?: boolean })
   /** La pastille ✕ de 34 px, seule façon de quitter un écran de flux. `label` : nom accessible obligatoire. */
-  | (Common & { variant: "close"; label: string; onPhoto?: boolean; icon?: IconName });
+  | (Common & {
+      variant: "close";
+      label: string;
+      onPhoto?: boolean;
+      /** Posée sur une barre (en-tête) : encre de barre, contour `line` (la barre est nuit dans les deux thèmes, DA v2). */
+      onBar?: boolean;
+      icon?: IconName;
+    });
 
 type Loose = Common & {
   variant?: string;
@@ -42,6 +49,7 @@ type Loose = Common & {
   height?: number;
   dashed?: boolean;
   onPhoto?: boolean;
+  onBar?: boolean;
   label?: string;
 };
 
@@ -63,6 +71,7 @@ export function Button(props: ButtonProps) {
     height,
     dashed,
     onPhoto,
+    onBar,
     label,
     children,
     style,
@@ -138,11 +147,11 @@ export function Button(props: ButtonProps) {
             minHeight: 34,
             padding: 0,
             borderRadius: radius.radiusChip,
-            borderWidth: theme === "sable" ? 2 : 1.5,
-            borderColor: theme === "sable" ? c.ink : c.line,
-            backgroundColor: theme === "sable" ? withAlpha(c.nightInk, 0.22) : "transparent",
+            borderWidth: theme === "sable" && !onBar ? 2 : 1.5,
+            borderColor: theme === "sable" && !onBar ? c.ink : c.line,
+            backgroundColor: theme === "sable" && !onBar ? withAlpha(c.nightInk, 0.22) : "transparent",
           };
-      ink = onPhoto ? c.nightInk : c.ink;
+      ink = onPhoto ? c.nightInk : onBar ? c.barInk : c.ink;
       break;
   }
   if (layout === "column") {
