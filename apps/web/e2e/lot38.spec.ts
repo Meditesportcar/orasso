@@ -177,7 +177,12 @@ test("Sable, barre nuit : ✕ d'une barre de flux et choix du thème lisibles ; 
   // Un compte neuf (aucune candidature) : la candidature s'ouvre sur sa première étape.
   const pseudo = `Lot38_${unique()}`;
   await signUpApi(pseudo);
-  await loginInBrowser(page, `${pseudo.toLowerCase()}@e2e.orasso.test`, undefined, "/e/expo-rivesaltes-2026/candidater");
+  await loginInBrowser(
+    page,
+    `${pseudo.toLowerCase()}@e2e.orasso.test`,
+    undefined,
+    "/e/expo-rivesaltes-2026/candidater",
+  );
   await page.goto("/e/expo-rivesaltes-2026/candidater");
   const close = page.locator(".o-appbar .o-button--close");
   await expect(close).toBeVisible();
