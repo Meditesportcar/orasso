@@ -234,7 +234,8 @@
   min-height: 340px;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: var(--surface-raised);
+  /* Lot 38 : sans photo, le héros garde le graphite sous son texte crème (surface-raised est clair en Sable). */
+  background: var(--plate-field);
   box-shadow: var(--shadow-poster);
   display: flex;
   align-items: flex-end;
@@ -1119,7 +1120,9 @@
     color: var(--plate-muted);
   }
   [data-theme="sable"] .ev__aside .o-button--secondary,
-  [data-theme="sable"] .ev__aside .o-button--secondary .o-button__label {
+  [data-theme="sable"] .ev__aside .o-button--secondary .o-button__label,
+  [data-theme="sable"] .s-plated .o-button--secondary,
+  [data-theme="sable"] .s-plated .o-button--secondary .o-button__label {
     color: var(--plate-ink);
     border-color: var(--plate-chip);
   }
