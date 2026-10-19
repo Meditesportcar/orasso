@@ -53,6 +53,8 @@ import { storage } from "../../lib/storage";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { requireEventReader, requireEventSpeaker, type StructureRow } from "../communication/guards";
+import { arrivalsOf } from "../events/arrivals";
+import { eventPosterUrl } from "../events/card";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { inboxService } from "../messaging/inbox";
@@ -96,6 +98,8 @@ function brief(e: EventRow, s: StructureRow, days: { id: string; dayDate: string
     // Lot 26 : jours d'un événement sur plusieurs jours, pour choisir le sien à l'acceptation.
     days: days.length > 1 ? days.map((d) => ({ id: d.id, date: d.dayDate })) : [],
     dayAccess: days.length > 1 ? e.dayAccess : "whole",
+    // Lot 47 : créneau des exposants, pour la case « J'ai vu » de l'acceptation.
+    arrivalExhibitors: arrivalsOf(e).exhibitors,
     id: e.id,
     slug: e.slug,
     title: e.title,
@@ -103,7 +107,7 @@ function brief(e: EventRow, s: StructureRow, days: { id: string; dayDate: string
     startsAt: e.startsAt.toISOString(),
     endsAt: e.endsAt.toISOString(),
     city: e.city,
-    posterUrl: storage.url(e.posterKey),
+    posterUrl: eventPosterUrl(e),
     status: e.status,
     privateEvent: e.admission === "invite_only",
     lockAt: lockAt(e).toISOString(),
@@ -789,6 +793,9 @@ export const invitationsService = {
         vehicleId,
         // Plusieurs jours (lot 26) : le jour choisi par l'invité (validé comme une candidature).
         eventDayId: input.eventDayId,
+        // Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants, comme une candidature.
+        arrivalSeen: input.arrivalSeen,
+        arrivalNote: input.arrivalNote,
       });
       const [updated] = await tx
         .update(eventInvitations)

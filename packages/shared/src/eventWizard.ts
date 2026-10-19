@@ -7,10 +7,12 @@
 // « AAAA-MM-JJTHH:MM » (la valeur d'un `<input type="datetime-local">`), sans fuseau.
 import type { DayAccess, EventAdmission, EventFormat, EventPublicAccess, VehicleType } from "./enums";
 import type { Grade } from "./grades";
+import { arrivalProblems } from "./labels/arrival.fr";
 import { eventAddressRequired } from "./labels/corrections.fr";
 import { defaultEventRules } from "./labels/events.fr";
+import { type Arrivals, validateArrivals } from "./rules/arrival";
 import { fromWallTime, wallTime } from "./rules/time";
-import type { EventOrganizer, EventZone } from "./schemas/event";
+import type { EventOrganizer, EventZone, PosterSettings } from "./schemas/event";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -111,6 +113,13 @@ export type EventDraft = {
   rulesText: string;
   instructions: string;
   zones: ZoneDraft[];
+  /**
+   * Lot 47 : créneaux d'arrivée des exposants et du public (« HH:MM »). Facultatif : absent, rien n'est envoyé ; l'étape
+   * qui les saisit (« Les arrivées ») vient avec l'assistant à 8 temps (lot 53).
+   */
+  arrivals?: Arrivals;
+  /** Lot 47 : affiche générée (photo envoyée, style, titre de 34 caractères au plus). Facultatif comme `arrivals`. */
+  poster?: PosterSettings | null;
 };
 
 /** Brouillon neuf (valeurs par défaut des docs) ou prérempli depuis un événement existant (modification). */
@@ -204,7 +213,27 @@ export function initialEventDraft(now: Date, event?: EventOrganizer): EventDraft
       name: z.name,
       capacity: z.capacity ? String(z.capacity) : "",
     })),
+    arrivals: event.arrivals,
+    poster: event.posterSettings
+      ? {
+          photoKey: event.posterSettings.photoKey,
+          style: event.posterSettings.style,
+          title: event.posterSettings.title,
+        }
+      : null,
   };
+}
+
+/** Lot 47 : le problème des créneaux d'arrivée du brouillon (mêmes règles que l'API), ou `null`. */
+export function eventArrivalsProblem(d: EventDraft): string | null {
+  if (!d.arrivals) return null;
+  const startsAt = draftStart(d);
+  const days = sortedDraftDays(d);
+  const last = days[days.length - 1];
+  const endsAt = d.multiDay && last ? fromWallInput(`${last.date}T${last.endTime}`) : fromWallInput(d.endsAt);
+  if (!startsAt || !endsAt) return null;
+  const problem = validateArrivals({ arrivals: d.arrivals, startsAt: new Date(startsAt), endsAt: new Date(endsAt) });
+  return problem ? arrivalProblems[problem] : null;
 }
 
 /** Titre de l'événement (première étape). */
@@ -445,6 +474,9 @@ export function eventPayload(d: EventDraft, editingMultiDay = false) {
     instructions: d.instructions.trim() || null,
     vendorTypes: d.vendorTypes,
     shopEnabled: d.shopEnabled,
+    // Lot 47 : envoyés seulement quand le brouillon les porte (sinon l'API garde ce qui est enregistré).
+    ...(d.arrivals !== undefined ? { arrivals: d.arrivals } : {}),
+    ...(d.poster !== undefined ? { poster: d.poster } : {}),
   };
 }
 

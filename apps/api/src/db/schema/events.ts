@@ -23,6 +23,7 @@ import {
   pgTable,
   smallint,
   text,
+  time,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -105,6 +106,27 @@ export const events = pgTable(
     /** Remerciement envoyé aux présents (posé au lot 20, utilisé au lot 27). */
     thanksSentAt: tstz("thanks_sent_at"),
     createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    /**
+     * Lot 47 : créneaux d'arrivée des exposants (avec véhicule) et du public, heures murales du jour de début ; règles
+     * dans `shared/rules/arrival.ts`. `from` nul = pas de créneau.
+     */
+    arrivalExhibitorsFrom: time("arrival_exhibitors_from"),
+    arrivalExhibitorsTo: time("arrival_exhibitors_to"),
+    arrivalExhibitorsStrict: boolean("arrival_exhibitors_strict").notNull().default(false),
+    arrivalExhibitorsNote: text("arrival_exhibitors_note"),
+    arrivalPublicFrom: time("arrival_public_from"),
+    arrivalPublicTo: time("arrival_public_to"),
+    arrivalPublicStrict: boolean("arrival_public_strict").notNull().default(false),
+    arrivalPublicNote: text("arrival_public_note"),
+    /**
+     * Lot 47 : affiche générée (photo, style, titre) et ses deux rendus, Post 1080 × 1350 et Story 1080 × 1920.
+     * `poster_key` (plus haut) reste l'affiche perso envoyée par l'organisateur.
+     */
+    posterPhotoKey: text("poster_photo_key"),
+    posterStyle: text("poster_style"),
+    posterTitle: text("poster_title"),
+    posterPostKey: text("poster_post_key"),
+    posterStoryKey: text("poster_story_key"),
     ...timestamps,
   },
   (t) => [
@@ -120,6 +142,15 @@ export const events = pgTable(
     check("events_lock_offset_check", sql`${t.lockOffsetMinutes} between 0 and 1440`),
     check("events_max_vehicles_check", sql`${t.maxVehiclesPerUser} >= 1`),
     check("events_high_grade_preview_check", sql`${t.highGradePreviewHours} between 0 and 168`),
+    check(
+      "events_arrival_notes_check",
+      sql`coalesce(char_length(${t.arrivalExhibitorsNote}), 0) <= 200 and coalesce(char_length(${t.arrivalPublicNote}), 0) <= 200`,
+    ),
+    check("events_poster_title_check", sql`${t.posterTitle} is null or char_length(${t.posterTitle}) <= 34`),
+    check(
+      "events_poster_style_check",
+      sql`${t.posterStyle} is null or ${t.posterStyle} in ('neon', 'swiss', 'retro', 'jdm', 'ticket', 'mag', 'minimal', 'damier')`,
+    ),
   ],
 );
 

@@ -12,7 +12,7 @@ import {
   type CrewViewerState,
   MEMBERS_PER_CREW,
 } from "../rules/crews";
-import { optionalText, pageQuery } from "./common";
+import { arrivalAnswerFields, optionalText, pageQuery } from "./common";
 import { pseudoSchema } from "./profile";
 
 // Crews et inscription en crew (lot 19). Routes : ARCHITECTURE-SUITE § 4.3.
@@ -66,6 +66,8 @@ export const crewRegistrationSchema = z.object({
   message: optionalText(120),
   /** Lot 26 : jour choisi par le chef pour tout le crew (événement sur plusieurs jours) ; `null` = tout l'événement. */
   eventDayId: z.uuid().nullish(),
+  /** Lot 47 : la case « J'ai vu » et la note valent pour le chef ; chaque membre coche à sa confirmation. */
+  ...arrivalAnswerFields,
 });
 export type CrewRegistration = z.infer<typeof crewRegistrationSchema>;
 
@@ -75,6 +77,8 @@ export const crewConfirmSchema = z.object({
   followStructure: z.boolean().default(true),
   companions: z.number().int().min(0).max(9).default(0),
   message: optionalText(120),
+  /** Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (obligatoire s'il existe) et la note du membre. */
+  ...arrivalAnswerFields,
 });
 export type CrewConfirm = z.infer<typeof crewConfirmSchema>;
 

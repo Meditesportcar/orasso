@@ -34,6 +34,8 @@ export const uploadPurposes = [
   // Lot 45 : logo d'un média, photos d'une galerie de contenu média (publiques une fois rattachées).
   "media_logo",
   "media_content",
+  // Lot 47 : photo de l'affiche générée d'un événement (publique une fois rattachée).
+  "event_poster_photo",
 ] as const;
 export type UploadPurpose = (typeof uploadPurposes)[number];
 
@@ -59,4 +61,7 @@ export const acceptedUploadPurposes = [
   // Lot 45 : logo du profil média (`POST /me/media-profile/logo`), galerie d'un contenu (`POST /me/media-contents`).
   "media_logo",
   "media_content",
+  // Lot 47 : photo de l'affiche générée (`PATCH /events/:id`, `POST /events/:id/poster/generate`) ; l'aperçu
+  // (`POST /posters/preview`) la lit sans la rattacher.
+  "event_poster_photo",
 ] as const satisfies readonly UploadPurpose[];

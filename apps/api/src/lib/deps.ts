@@ -54,18 +54,26 @@ export type JobName =
   // Lot 33 : grades recalculés après un changement des seuils (mise en file à l'écriture du réglage).
   | "points.regrade"
   // Lot 36 : e-mail « Installe l'appli » une heure après la confirmation de l'adresse, si l'appli n'a jamais été ouverte.
-  | "account.app-install";
+  | "account.app-install"
+  // Lot 47 : rendu de l'affiche générée d'un événement, repris en cas d'échec (une tâche en file par événement).
+  | "event.poster-render";
+
+/** Options d'une tâche (pg-boss) : une seule en file par clé, reprises en cas d'échec. */
+export type JobOptions = { singletonKey?: string; retryLimit?: number; retryDelay?: number; retryBackoff?: boolean };
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */
-  send(name: JobName, data: Record<string, unknown>, startAfter?: Date): Promise<void>;
+  send(name: JobName, data: Record<string, unknown>, startAfter?: Date, options?: JobOptions): Promise<void>;
 }
 
 /** File qui garde les tâches en mémoire (tests, scripts sans pg-boss). */
 export class MemoryJobQueue implements JobQueue {
-  readonly jobs: { name: JobName; data: Record<string, unknown>; startAfter?: Date }[] = [];
-  async send(name: JobName, data: Record<string, unknown>, startAfter?: Date) {
-    this.jobs.push({ name, data, startAfter });
+  readonly jobs: { name: JobName; data: Record<string, unknown>; startAfter?: Date; options?: JobOptions }[] = [];
+  async send(name: JobName, data: Record<string, unknown>, startAfter?: Date, options?: JobOptions) {
+    // Comme pg-boss : une tâche déjà en file avec la même clé n'est pas ajoutée une seconde fois.
+    const key = options?.singletonKey;
+    if (key && this.jobs.some((j) => j.name === name && j.options?.singletonKey === key)) return;
+    this.jobs.push({ name, data, startAfter, options });
   }
 }
 

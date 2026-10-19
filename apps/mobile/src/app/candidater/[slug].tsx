@@ -18,6 +18,7 @@ import { eventDaysLabels, formatDayDate, type MyApplication, type VehicleFull } 
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { ArrivalSeen, arrivalBody } from "@/features/arrival/ArrivalSeen";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { formatDayHour } from "@/lib/format";
@@ -43,6 +44,9 @@ export default function Candidater() {
   const [step, setStep] = useState(1);
   const [picked, setPicked] = useState<string[]>([]);
   const [rulesAccepted, setRulesAccepted] = useState(false);
+  // Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (obligatoire s'il existe) et une note facultative.
+  const [arrivalSeen, setArrivalSeen] = useState(false);
+  const [arrivalNote, setArrivalNote] = useState("");
   const [companions, setCompanions] = useState(0);
   const [message, setMessage] = useState("");
   const [follow, setFollow] = useState(true);
@@ -126,6 +130,7 @@ export default function Candidater() {
         companions,
         message: message.trim() || null,
         eventDayId: (e.days?.length ?? 0) > 1 ? dayId : undefined,
+        ...arrivalBody(e.arrivals?.exhibitors, arrivalSeen, arrivalNote),
       });
       // Une admission sans sélection est une retenue d'office : annoncée ici, pas une deuxième fois ensuite.
       markAnnounced(apps.filter((a) => a.status === "accepted").map((a) => a.id));
@@ -145,7 +150,13 @@ export default function Candidater() {
         Continuer
       </Button>
     ) : step === 2 ? (
-      <Button variant="primary" icon="next" disabled={!rulesAccepted} onPress={() => setStep(3)} fullWidth>
+      <Button
+        variant="primary"
+        icon="next"
+        disabled={!rulesAccepted || (Boolean(e?.arrivals?.exhibitors) && !arrivalSeen)}
+        onPress={() => setStep(3)}
+        fullWidth
+      >
         Continuer
       </Button>
     ) : (
@@ -290,6 +301,13 @@ export default function Candidater() {
             label="J'ai lu le règlement de l'événement et je l'accepte."
             checked={rulesAccepted}
             onChange={setRulesAccepted}
+          />
+          <ArrivalSeen
+            slot={e.arrivals?.exhibitors}
+            seen={arrivalSeen}
+            onSeen={setArrivalSeen}
+            note={arrivalNote}
+            onNote={setArrivalNote}
           />
           {e.maxVehiclesPerUser >= 1 ? (
             <Plate style={styles.rules}>

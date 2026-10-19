@@ -20,7 +20,15 @@ import { regionCodes } from "../geo";
 import { type Grade, grades } from "../grades";
 import { eventAddressRequired } from "../labels/corrections.fr";
 import type { Affinity } from "../rules/affinity";
+import { ARRIVAL_NOTE_MAX, type Arrivals } from "../rules/arrival";
 import { type EventDayInput, MAX_EVENT_DAYS } from "../rules/eventDays";
+import {
+  POSTER_PREVIEW_MAX_WIDTH,
+  POSTER_TITLE_MAX,
+  type PosterFormat,
+  type PosterStyle,
+  posterStyles,
+} from "../rules/poster";
 import { RECURRENCE_MAX_COUNT, type RecurrenceRule } from "../rules/recurrence";
 import { isoDate, optionalText, pageQuery } from "./common";
 import type { EventAccreditationState } from "./media";
@@ -31,6 +39,48 @@ const criteriaSchema = z.object({
   countries: z.array(z.string().length(2)).max(30).default([]),
   text: optionalText(1000),
 });
+
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM");
+
+/** Lot 47 : un créneau d'arrivée (heures du jour de début, fuseau de l'événement). */
+export const arrivalSlotSchema = z.object({
+  from: hhmm,
+  to: hhmm.nullish().transform((v) => v ?? null),
+  strict: z.boolean().default(false),
+  note: optionalText(ARRIVAL_NOTE_MAX).transform((v) => v ?? null),
+});
+/** Lot 47 : créneaux des exposants et du public ; `null` = pas de créneau. Règles croisées : `validateArrivals`. */
+export const arrivalsSchema = z.object({
+  exhibitors: arrivalSlotSchema.nullable().default(null),
+  public: arrivalSlotSchema.nullable().default(null),
+}) satisfies z.ZodType<Arrivals, unknown>;
+
+/** Lot 47 : réglages de l'affiche générée (photo envoyée par `POST /me/uploads purpose=event_poster_photo`). */
+export const posterSettingsSchema = z.object({
+  photoKey: z
+    .string()
+    .min(1)
+    .max(200)
+    .nullish()
+    .transform((v) => v ?? null),
+  style: z.enum(posterStyles),
+  title: z.string().trim().min(1).max(POSTER_TITLE_MAX),
+});
+export type PosterSettings = z.infer<typeof posterSettingsSchema>;
+
+const posterFormatSchema = z.enum(["post", "story"]) satisfies z.ZodType<PosterFormat>;
+
+/** `POST /posters/preview` : aperçu en direct (rien n'est écrit). */
+export const posterPreviewSchema = posterSettingsSchema.extend({
+  date: isoDate,
+  place: z.string().trim().max(80).default(""),
+  structureName: z.string().trim().max(120).default(""),
+  /** Logo rond de la structure (public) sur l'aperçu, comme sur l'affiche finale. */
+  structureId: z.uuid().nullish(),
+  format: posterFormatSchema.default("post"),
+  width: z.number().int().min(120).max(POSTER_PREVIEW_MAX_WIDTH).default(POSTER_PREVIEW_MAX_WIDTH),
+});
+export type PosterPreview = z.infer<typeof posterPreviewSchema>;
 
 const eventFields = z.object({
   title: z.string().trim().min(3).max(120),
@@ -71,6 +121,10 @@ const eventFields = z.object({
    * au moins deux jours (`PUT /events/:id/days`).
    */
   dayAccess: z.enum(dayAccesses),
+  /** Lot 47 : créneaux d'arrivée (`null` les retire). */
+  arrivals: arrivalsSchema.nullish(),
+  /** Lot 47 : affiche générée (photo, style, titre), rendue par l'API à l'enregistrement ; `null` la retire. */
+  poster: posterSettingsSchema.nullish(),
 });
 
 const datesRule = (v: { startsAt?: Date; endsAt?: Date }, ctx: z.RefinementCtx) => {
@@ -102,8 +156,6 @@ export const eventUpdateSchema = eventFields.partial().superRefine(datesRule);
 export type EventUpdate = z.infer<typeof eventUpdateSchema>;
 
 export const outlookUpdateSchema = z.object({ outlook: z.enum(eventOutlooks) });
-
-const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure au format HH:MM");
 
 /** Un jour saisi dans l'assistant (lot 26) : date locale, heures murales dans le fuseau de l'événement. */
 export const eventDayInputSchema = z.object({
@@ -231,6 +283,10 @@ export type EventCard = {
   /** Position sur la carte de `/evenements`. */
   lat: number | null;
   lng: number | null;
+  /**
+   * Lot 47 : affiche générée (Post 4:5), vignette de toutes les cartes ; `null` sans affiche générée (la carte dessine
+   * alors un gabarit « Minimal » sans photo). L'affiche perso de l'organisateur est `customPosterUrl` (fiche).
+   */
   posterUrl: string | null;
   status: EventStatus;
   outlook: EventOutlook;
@@ -255,8 +311,17 @@ export type MyApplicationBrief = {
   eventDayId: string | null;
 };
 
+/** Lot 47 : l'affiche générée telle que la fiche la reçoit. */
+export type EventPoster = { postUrl: string; storyUrl: string; style: PosterStyle };
+
 export type EventPublic = EventCard & {
   description: string | null;
+  /** Lot 47 : créneaux d'arrivée (exposants, public). */
+  arrivals: Arrivals;
+  /** Lot 47 : affiche générée (Post et Story), `null` s'il n'y en a pas. */
+  poster: EventPoster | null;
+  /** Lot 47 : affiche perso envoyée par l'organisateur (`poster_key`), en plus de l'affiche générée. */
+  customPosterUrl: string | null;
   addressLine: string | null;
   postalCode: string | null;
   timezone: string;
@@ -298,4 +363,6 @@ export type EventOrganizer = EventPublic & {
   recurrenceRule: RecurrenceRule | null;
   /** Rôle « boutique » activé (lot 24). */
   shopEnabled: boolean;
+  /** Lot 47 : réglages de l'affiche générée (assistant), `null` sans affiche générée. */
+  posterSettings: (PosterSettings & { photoUrl: string | null }) | null;
 };

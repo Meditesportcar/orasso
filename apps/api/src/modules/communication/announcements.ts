@@ -8,6 +8,7 @@ import {
   type AnnouncementAudience,
   type AnnouncementCreate,
   type AnnouncementView,
+  arrivalLabel,
   type EventOutlook,
   shorten,
   statusChangeText,
@@ -30,6 +31,7 @@ import { AppError, conflict, notFound, validation } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
+import { arrivalsOf } from "../events/arrivals";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
@@ -314,6 +316,10 @@ export const announcementsService = {
         text = instructions;
       }
       if (!text) throw validation("Écris d'abord les consignes.");
+      // Lot 47 : les consignes commencent par le créneau d'arrivée des exposants (« Arrivée 18 h 30 – 19 h 15
+      // (strict) · Entrée côté capitainerie… »).
+      const slot = arrivalsOf(locked).exhibitors;
+      if (slot) text = `${[arrivalLabel(slot), slot.note].filter(Boolean).join(" · ")}\n\n${text}`;
       const [last] = await tx
         .select({ body: eventAnnouncements.body })
         .from(eventAnnouncements)

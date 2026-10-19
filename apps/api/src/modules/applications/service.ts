@@ -45,6 +45,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { type Tx, withTx } from "../../lib/tx";
 import { accessService } from "../access/service";
+import { arrivalAnswer } from "../events/arrivals";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { expirePendingInvitations } from "../invitations/expire";
@@ -499,6 +500,8 @@ export const applicationsService = {
         });
         if (banned) throw forbidden("Tu ne peux pas candidater aux événements de cette structure");
 
+        // Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants, obligatoire s'il existe ; note du candidat.
+        const arrival = arrivalAnswer(event, input, t);
         // Plusieurs jours (lot 26, S27) : jour choisi selon le mode d'accès ; un événement d'un jour n'en a jamais.
         const { dayId } = await daysRepo.checkChoice(tx, event, input.eventDayId);
         const ids = [...new Set(input.vehicleIds)];
@@ -556,6 +559,7 @@ export const applicationsService = {
               companions: input.companions,
               message: input.message,
               followStructure: input.followStructure,
+              ...arrival,
             })
             .returning();
           if (!row) throw new Error("Candidature non enregistrée");
@@ -885,9 +889,17 @@ export const applicationsService = {
     tx: Tx,
     after: After,
     event: EventRow,
-    input: { userId: string; vehicleId: string; eventDayId?: string | null },
+    input: {
+      userId: string;
+      vehicleId: string;
+      eventDayId?: string | null;
+      arrivalSeen?: boolean;
+      arrivalNote?: string | null;
+    },
   ): Promise<ApplicationRow> {
     const t = now();
+    // Lot 47 : même règle qu'une candidature (« J'ai vu » obligatoire avec un créneau exposants).
+    const arrival = arrivalAnswer(event, input, t);
     // Plusieurs jours (lot 26) : le jour choisi par l'invité, mêmes règles qu'une candidature.
     const { dayId } = await daysRepo.checkChoice(tx, event, input.eventDayId);
     const mine = await tx
@@ -928,6 +940,7 @@ export const applicationsService = {
           status: to,
           source: "invitation",
           rulesAcceptedAt: t,
+          ...arrival,
           followStructure: false,
           decidedAt: t,
           waitlistRank,

@@ -12,6 +12,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { ArrivalSeen, arrivalBody } from "@/features/arrival/ArrivalSeen";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
@@ -49,11 +50,17 @@ export function InvitationSheet({
   const [dayChoice, setDayChoice] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (obligatoire s'il existe) et une note.
+  const [arrivalSeen, setArrivalSeen] = useState(false);
+  const [arrivalNote, setArrivalNote] = useState("");
+  const slot = invitation?.event.arrivalExhibitors ?? null;
 
   useEffect(() => {
     setError(null);
     setVehicleId(null);
     setDayChoice(undefined);
+    setArrivalSeen(false);
+    setArrivalNote("");
     setVehicles(null);
     if (!invitation || invitation.vehicle) return;
     let alive = true;
@@ -90,6 +97,7 @@ export function InvitationSheet({
           inv.id,
           inv.vehicle ? undefined : (vehicleId ?? undefined),
           days.length ? dayId : undefined,
+          arrivalBody(slot, arrivalSeen, arrivalNote),
         );
         onDone(res.outcome === "accepted" ? L.accepted : L.waitlisted);
       }
@@ -188,6 +196,13 @@ export function InvitationSheet({
           <Text variant="caption" color={t.color.inkMuted}>
             {L.rulesNotice}
           </Text>
+          <ArrivalSeen
+            slot={slot}
+            seen={arrivalSeen}
+            onSeen={setArrivalSeen}
+            note={arrivalNote}
+            onNote={setArrivalNote}
+          />
           {error ? (
             <Text variant="caption" color={t.color.winText} accessibilityRole="alert">
               {error}
@@ -196,7 +211,7 @@ export function InvitationSheet({
           <Button
             icon="check"
             loading={busy === "accept"}
-            disabled={busy !== null || blocked || (needsChoice && !vehicleId)}
+            disabled={busy !== null || blocked || (needsChoice && !vehicleId) || (slot !== null && !arrivalSeen)}
             onPress={() => void answer("accept")}
             fullWidth
             testID="invitation-accept"

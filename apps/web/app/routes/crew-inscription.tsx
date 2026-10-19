@@ -12,6 +12,7 @@ import {
 import { Fragment, useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { ArrivalSeen } from "../components/ArrivalSeen";
 import { CrewLogo } from "../components/Crews";
 import { PersonAvatar } from "../components/People";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
@@ -69,6 +70,9 @@ export async function action({ request, params }: Route.ActionArgs) {
       members,
       rulesAccepted: true,
       followStructure: form.get("follow") === "on",
+      // Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (chef), ignoré par l'API sans créneau.
+      arrivalSeen: form.get("arrivalSeen") === "on",
+      arrivalNote: String(form.get("arrivalNote") ?? "").trim() || null,
       // Lot 26 : jour choisi par le chef (vide = tout l'événement).
       ...(form.get("eventDayId") ? { eventDayId: String(form.get("eventDayId")) } : {}),
     },
@@ -265,6 +269,8 @@ export default function CrewInscription({ loaderData, actionData }: Route.Compon
           </section>
 
           <CheckboxField name="rules" required label={crewLabels.registerCrewRules} />
+          {/* Lot 47 : la case « J'ai vu » vaut pour le chef s'il vient ; les membres la cochent à leur confirmation. */}
+          {picked[userId] ? <ArrivalSeen slot={event.arrivals?.exhibitors ?? null} /> : null}
           <CheckboxField
             name="follow"
             defaultChecked

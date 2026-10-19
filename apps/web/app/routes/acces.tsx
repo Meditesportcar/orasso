@@ -2,6 +2,7 @@ import { Button, Chip, Plate, StatusBadge } from "@orasso/design-system/web";
 import {
   type AccessPass,
   type AnnouncementView,
+  type ArrivalSlot,
   afterEventLabels,
   applicationStatusLabels,
   type ContestStatus,
@@ -85,12 +86,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   );
   // Venue en crew à confirmer (lot 19) : le règlement de l'événement s'affiche dans la carte.
   const rules: Record<string, string | null> = {};
+  // Lot 47 : créneau d'arrivée des exposants, pour la case « J'ai vu » de la confirmation.
+  const arrivalSlots: Record<string, ArrivalSlot | null> = {};
   await Promise.all(
     applications
       .filter((a) => !past && a.status === "awaiting_member")
       .map(async (a) => {
         const res = await api<EventPublic>(request, `/events/by-slug/${encodeURIComponent(a.event.slug)}`);
         rules[a.id] = res.ok ? res.data.rulesText : null;
+        arrivalSlots[a.id] = res.ok ? (res.data.arrivals?.exhibitors ?? null) : null;
       }),
   );
   // Consignes et dernière annonce de l'organisateur sur la carte d'un retenu (lot 20) : jamais bloquant.
@@ -127,6 +131,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     passes,
     weather,
     rules,
+    arrivalSlots,
     notes,
     points,
     userId: me.user.id,
@@ -180,6 +185,7 @@ function ApplicationCard({
   pass,
   weather,
   rulesText,
+  arrivalSlot,
   notes,
   past,
   focused = false,
@@ -188,6 +194,7 @@ function ApplicationCard({
   pass?: AccessPass;
   weather?: EventWeather;
   rulesText?: string | null;
+  arrivalSlot?: ArrivalSlot | null;
   notes?: { instructions: AnnouncementView | null; announcement: AnnouncementView | null };
   past: boolean;
   /** Ouverte par un lien d'avis : amenée à l'écran (lot 27). */
@@ -293,6 +300,7 @@ function ApplicationCard({
           crew={app.crew}
           vehicleLabel={app.vehicle?.label ?? null}
           rulesText={rulesText ?? null}
+          arrivalSlot={arrivalSlot ?? null}
           busy={busy}
         />
       )}
@@ -477,6 +485,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
     passes,
     weather,
     rules,
+    arrivalSlots,
     notes,
     points,
     sent,
@@ -575,6 +584,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
             pass={passes[app.id]}
             weather={weather[app.id]}
             rulesText={rules[app.id]}
+            arrivalSlot={arrivalSlots[app.id]}
             notes={notes[app.id]}
             past={past}
             focused={avis?.id === app.id}

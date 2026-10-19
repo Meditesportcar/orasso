@@ -52,10 +52,14 @@ export const crewsApi = {
     request<CrewRegistrationView[]>(`/api/events/${eventId}/crew-applications/mine`),
   registerCrew: (eventId: string, body: CrewRegistration) =>
     request<CrewRegistrationView>(`/api/events/${eventId}/crew-applications`, { method: "POST", body }),
-  confirmCrewVenue: (applicationId: string, followStructure: boolean) =>
+  confirmCrewVenue: (
+    applicationId: string,
+    followStructure: boolean,
+    arrival: { arrivalSeen?: boolean; arrivalNote?: string | null } = {},
+  ) =>
     request<MyApplication>(`/api/applications/${applicationId}/confirm-crew`, {
       method: "POST",
-      body: { rulesAccepted: true, followStructure },
+      body: { rulesAccepted: true, followStructure, ...arrival },
     }),
   declineCrewVenue: (applicationId: string) =>
     request<MyApplication>(`/api/applications/${applicationId}/decline-crew`, { method: "POST" }),

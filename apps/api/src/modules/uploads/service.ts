@@ -35,6 +35,7 @@ const SIZE: Record<UploadPurpose, number> = {
   announcement: 1600,
   media_logo: 512,
   media_content: 1600,
+  event_poster_photo: 2000,
 };
 const FOLDER: Record<UploadPurpose, string> = {
   message: "messages",
@@ -45,6 +46,7 @@ const FOLDER: Record<UploadPurpose, string> = {
   announcement: "announcements",
   media_logo: "media-logos",
   media_content: "media-contents",
+  event_poster_photo: "event-poster-photos",
 };
 
 export const isPrivatePurpose = (purpose: UploadPurpose) => privateUploadPurposes.includes(purpose);

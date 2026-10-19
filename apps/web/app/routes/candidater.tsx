@@ -11,6 +11,7 @@ import {
 } from "@orasso/shared";
 import { useState } from "react";
 import { redirect, useNavigate } from "react-router";
+import { ArrivalSeen, arrivalBody } from "../components/ArrivalSeen";
 import { apiFetch } from "../lib/api.client";
 import { apiOrThrow, requireMe } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
@@ -109,6 +110,10 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
     return (wanted ?? dayChoices.find((c) => !c.full && !c.mine) ?? dayChoices[0])?.id ?? null;
   });
   const [rules, setRules] = useState(false);
+  // Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (obligatoire s'il existe) et une note facultative.
+  const slot = event.arrivals?.exhibitors ?? null;
+  const [arrivalSeen, setArrivalSeen] = useState(false);
+  const [arrivalNote, setArrivalNote] = useState("");
   const [follow, setFollow] = useState(true);
   const [newsletter, setNewsletter] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +156,7 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
       companions: 0,
       message: null,
       eventDayId: multiDay ? dayId : undefined,
+      ...arrivalBody(slot, arrivalSeen, arrivalNote),
     };
     const res = await apiFetch<MyApplication[]>(`/events/${event.id}/applications`, { method: "POST", json: body });
     if (res.ok) {
@@ -270,11 +276,24 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
             onChange={(e) => setRules(e.currentTarget.checked)}
             label="J'ai lu le règlement de l'événement et je l'accepte."
           />
+          <ArrivalSeen
+            slot={slot}
+            seen={arrivalSeen}
+            onSeen={setArrivalSeen}
+            note={arrivalNote}
+            onNote={setArrivalNote}
+          />
           <div className="s-actions">
             <Button variant="secondary" icon="back" onClick={() => setStep(1)}>
               Retour
             </Button>
-            <Button variant="primary" icon="next" disabled={!rules} onClick={() => setStep(3)} className="s-grow">
+            <Button
+              variant="primary"
+              icon="next"
+              disabled={!rules || (slot !== null && !arrivalSeen)}
+              onClick={() => setStep(3)}
+              className="s-grow"
+            >
               Continuer
             </Button>
           </div>

@@ -28,7 +28,13 @@ export async function invitationAction(
   const eventDayId = String(form.get("eventDayId") ?? "") || undefined;
   const res = await api<InvitationAcceptResult>(request, `/event-invitations/${encodeURIComponent(id)}/accept`, {
     method: "POST",
-    json: { ...(vehicleId ? { vehicleId } : {}), ...(eventDayId ? { eventDayId } : {}) },
+    json: {
+      ...(vehicleId ? { vehicleId } : {}),
+      ...(eventDayId ? { eventDayId } : {}),
+      // Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (l'API l'ignore sans créneau).
+      arrivalSeen: form.get("arrivalSeen") === "on",
+      arrivalNote: String(form.get("arrivalNote") ?? "").trim() || null,
+    },
   });
   if (!res.ok) return { ok: null, error: res.error.message, status: res.status };
   return {

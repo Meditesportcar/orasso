@@ -13,6 +13,8 @@ export const rateRules = {
     windowMs: 3_600_000,
     message: "Trop de véhicules ajoutés ou modifiés : réessaie plus tard.",
   },
+  /** Aperçu en direct de l'affiche d'un événement (lot 47) : un rendu d'image à chaque frappe débouncée. */
+  posterPreview: { max: 60, windowMs: 60_000, message: "Trop d'aperçus : réessaie dans une minute." },
   /** Fiche Instagram d'un véhicule (rendu d'image, mis en cache une heure par véhicule). */
   shareImage: { max: 40, windowMs: 3_600_000, message: "Trop de fiches générées : réessaie plus tard." },
   /** Vérification d'un QR de compte : code de 8 chiffres deviné par essais successifs. */

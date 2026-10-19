@@ -74,7 +74,13 @@ export async function crewAction(request: Request, form: FormData) {
       }
       res = await api(request, `/applications/${applicationId}/confirm-crew`, {
         method: "POST",
-        json: { rulesAccepted: true, followStructure: form.get("follow") === "on" },
+        json: {
+          rulesAccepted: true,
+          followStructure: form.get("follow") === "on",
+          // Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (l'API l'ignore sans créneau).
+          arrivalSeen: form.get("arrivalSeen") === "on",
+          arrivalNote: String(form.get("arrivalNote") ?? "").trim() || null,
+        },
       });
       ok = "Venue confirmée : ta candidature part à l'équipe organisatrice.";
       break;

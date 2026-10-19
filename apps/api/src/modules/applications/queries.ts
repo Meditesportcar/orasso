@@ -293,6 +293,8 @@ async function toTriage(
       decidedAt: r.decidedAt?.toISOString() ?? null,
       companions: r.companions,
       message: r.message,
+      arrivalSeenAt: r.arrivalSeenAt?.toISOString() ?? null,
+      arrivalNote: r.arrivalNote,
       waitlistRank: r.status === "waitlisted" ? (ranks.get(r.id) ?? null) : null,
       offerExpiresAt: r.offerExpiresAt?.toISOString() ?? null,
       refusalReasons: r.refusalReasons as RefusalReason[],

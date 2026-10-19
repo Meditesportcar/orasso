@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   addVehicleApi,
-  applyApi,
+  apiCall,
   createEvent,
   decideApi,
   login,
@@ -19,6 +19,11 @@ import {
 test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   const organizer = await login("damien@orasso.local");
   const event = await createEvent(organizer);
+  // Lot 47 : créneau d'arrivée des exposants (17 h 30 – 18 h 15, strict) : la case « J'ai vu » est demandée.
+  const slot = await apiCall(organizer, "PATCH", `/events/${event.id}`, {
+    arrivals: { exhibitors: { from: "17:30", to: "18:15", strict: true, note: "Entrée côté port." }, public: null },
+  });
+  expect(slot.status).toBe(200);
   const suffix = unique();
   const pseudo = `Pilote_${suffix}`;
   const plate = randomPlate();
@@ -65,6 +70,11 @@ test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   await expect(page.locator('[data-step="2"]')).toBeVisible();
   await expect(page.getByRole("button", { name: "Continuer" })).toBeDisabled();
   await page.getByLabel("J'ai lu le règlement").check();
+  // Lot 47 : l'horaire d'arrivée des exposants, case obligatoire et note facultative.
+  await expect(page.getByTestId("arrival-seen")).toContainText("Arrivée 17 h 30 – 18 h 15 (strict)");
+  await expect(page.getByRole("button", { name: "Continuer" })).toBeDisabled();
+  await page.getByLabel("J'ai vu le créneau d'arrivée.").check();
+  await page.getByLabel("Une note pour l'équipe (facultatif)").fill("J'arriverai vers 17 h 45.");
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.locator('[data-step="3"]')).toBeVisible();
   await page.getByRole("button", { name: "Envoyer ma candidature" }).click();
@@ -77,7 +87,14 @@ test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   // Un deuxième participant (par l'API), retenu d'office, pour le pointage rapide par plaque.
   const second = await signUpApi(`Second_${suffix}`);
   const secondPlate = randomPlate();
-  const secondApp = await applyApi(second, event.id, await addVehicleApi(second, secondPlate));
+  // Lot 47 : l'événement a un créneau exposants, la candidature coche « J'ai vu ».
+  const secondRes = await apiCall<{ id: string }[]>(second, "POST", `/events/${event.id}/applications`, {
+    vehicleIds: [await addVehicleApi(second, secondPlate)],
+    rulesAccepted: true,
+    arrivalSeen: true,
+  });
+  expect(secondRes.status).toBe(201);
+  const secondApp = secondRes.data[0]?.id ?? "";
   await decideApi(organizer, event.id, secondApp, "accept");
 
   // --- 5. Organisateur : tri au clavier (thème au choix de l'utilisateur depuis le lot 38, Béton par défaut) ---

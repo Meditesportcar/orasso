@@ -6,7 +6,7 @@ import { crewLabels, eventDaysLabels, formatDayDate } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-
+import { ArrivalSeen, arrivalBody } from "@/features/arrival/ArrivalSeen";
 import { CrewLogo } from "@/features/crews/CrewLogo";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
@@ -37,6 +37,9 @@ export default function CrewRegistration() {
   const registrations = useApi(() => api.myCrewRegistrations(e?.id ?? ""), [e?.id], { enabled: Boolean(e) });
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [rules, setRules] = useState(false);
+  // Lot 47 : la case « J'ai vu » vaut pour le chef s'il vient ; les membres la cochent à leur confirmation.
+  const [arrivalSeen, setArrivalSeen] = useState(false);
+  const [arrivalNote, setArrivalNote] = useState("");
   const [follow, setFollow] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +51,8 @@ export default function CrewRegistration() {
   const members = options.data?.members ?? [];
   const chosen = members.filter((m) => picked[m.person.userId]);
   const others = chosen.filter((m) => !m.isLeader);
+  const leaderComes = chosen.some((m) => m.isLeader);
+  const leaderSlot = e?.arrivals?.exhibitors ?? null;
   const mine = registrations.data?.find((r) => r.crew.id === crew?.id);
   const closed = e ? e.isLocked || e.status !== "published" || e.admission === "invite_only" : false;
 
@@ -243,6 +248,15 @@ export default function CrewRegistration() {
             )}
           </Plate>
           <CheckboxField label={crewLabels.registerCrewRules} checked={rules} onChange={setRules} />
+          {leaderComes ? (
+            <ArrivalSeen
+              slot={leaderSlot}
+              seen={arrivalSeen}
+              onSeen={setArrivalSeen}
+              note={arrivalNote}
+              onNote={setArrivalNote}
+            />
+          ) : null}
           <CheckboxField
             label="Suivre l'organisation (nouveaux événements, avant-premières)"
             checked={follow}
@@ -251,7 +265,7 @@ export default function CrewRegistration() {
           <Button
             icon="crew"
             loading={busy}
-            disabled={!rules || others.length === 0}
+            disabled={!rules || others.length === 0 || (leaderComes && leaderSlot !== null && !arrivalSeen)}
             fullWidth
             testID="crew-registration-send"
             onPress={async () => {
@@ -265,6 +279,7 @@ export default function CrewRegistration() {
                   rulesAccepted: true,
                   followStructure: follow,
                   message: null,
+                  ...(leaderComes ? arrivalBody(leaderSlot, arrivalSeen, arrivalNote) : {}),
                   eventDayId:
                     (e.days?.length ?? 0) > 1 && e.dayAccess !== "whole"
                       ? dayChoice !== undefined
