@@ -1,4 +1,4 @@
-import { CLOCK_OFFSET_HEADER, expressLabels } from "@orasso/shared";
+import { CLOCK_OFFSET_HEADER, signUpRequiredSchema } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -124,14 +124,17 @@ app.post("/auth/sign-up/email", async (c, next) => {
   }
   // Lot 36 : conditions générales acceptées, case obligatoire (site et appli) ; la date est posée sur le profil après
   // la création du compte (`securityAfter`). L'inscription express a sa propre case (route de l'accueil).
-  const body = (await c.req.raw
+  const raw = (await c.req.raw
     .clone()
     .json()
-    .catch(() => null)) as { termsAccepted?: unknown } | null;
-  if (body?.termsAccepted !== true) {
-    throw new AppError(400, "validation_error", expressLabels.termsRequired, {
-      fields: { termsAccepted: expressLabels.termsRequired },
-    });
+    .catch(() => null)) as Record<string, unknown> | null;
+  // Lot 41 : profil choisi, au moins un département, prénom et nom obligatoires (privés) ; l'e-mail, le mot de passe et
+  // le pseudo sont contrôlés par Better Auth et le crochet de création. Le corps est relu par `securityAfter`.
+  const result = signUpRequiredSchema.safeParse(raw ?? {});
+  if (!result.success) {
+    const fields: Record<string, string> = {};
+    for (const issue of result.error.issues) fields[issue.path.join(".") || "_"] ??= issue.message;
+    throw new AppError(400, "validation_error", Object.values(fields)[0] ?? "Données invalides", { fields });
   }
   await next();
 });

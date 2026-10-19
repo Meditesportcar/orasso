@@ -1,0 +1,2 @@
+CREATE TYPE "public"."main_profile_enum" AS ENUM('exhibitor', 'visitor', 'pro', 'organizer', 'provider', 'media');--> statement-breakpoint
+ALTER TABLE "profiles" ADD COLUMN "main_profile" "main_profile_enum";

@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { departmentSchema, devicePlatforms, type notificationFamilies, profileVisibilities } from "../enums";
+import {
+  departmentSchema,
+  devicePlatforms,
+  type MainProfile,
+  mainProfiles,
+  type notificationFamilies,
+  profileVisibilities,
+} from "../enums";
 import type { Grade } from "../grades";
 import type { SuspensionInfo } from "../moderation";
 import type { PlatformRole, StaffRole, StructureRole } from "../roles";
@@ -16,6 +23,7 @@ export const profileUpdateSchema = z
     pseudo: pseudoSchema,
     bio: optionalText(500),
     visibility: z.enum(profileVisibilities),
+    mainProfile: z.enum(mainProfiles),
     departments: z.array(departmentSchema).max(20),
     radiusKm: z.number().int().min(5).max(500),
     interests: z.array(z.uuid()).max(30),
@@ -98,6 +106,8 @@ export type Me = {
     visibility: (typeof profileVisibilities)[number];
     departments: string[];
     radiusKm: number;
+    /** Profil choisi à l'arrivée (lot 41) ; `null` pour les comptes antérieurs. */
+    mainProfile: MainProfile | null;
     interests: string[];
     platformRole: PlatformRole;
     newsletterOptIn: boolean;
