@@ -93,6 +93,8 @@ export const rateRules = {
   },
   mediaContent: { max: 20, windowMs: 86_400_000, message: "Trop de contenus publiés aujourd'hui : réessaie demain." },
   mediaWrite: { max: 60, windowMs: 3_600_000, message: "Trop de modifications : réessaie plus tard." },
+  /** Vues d'un contenu média : par visiteur et par contenu, comme le compteur de la fiche pro. */
+  mediaView: { max: 30, windowMs: 3_600_000, message: "Trop d'actions sur ce contenu." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

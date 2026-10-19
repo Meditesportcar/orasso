@@ -8,6 +8,7 @@ import {
   type AccreditationRequest,
   type ApplicationStatus,
   activeApplicationStatuses,
+  isLocked,
   localDate,
   type MediaAccreditationView,
   type MediaAgenda,
@@ -53,6 +54,7 @@ import { organizerIds } from "../after-event/helpers";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { uploadsService } from "../uploads/service";
+import { assertPressQuota } from "./quota";
 import { contentView, type MediaContentRow, type MediaProfileRow, ownerView, publicView } from "./serializers";
 
 const ACTIVE = activeApplicationStatuses as readonly ApplicationStatus[];
@@ -123,7 +125,32 @@ function announce(eventId: string, app: { id: string; userId: string; status: Ap
   realtime.publish(`user:${app.userId}`, "application.changed", payload);
 }
 
-/** Vues déjà comptées : un contenu, une session, une heure (une seule instance de l'API, comme `rateLimit`). */
+/**
+ * V6 tenu dans la durée : un contenu n'est public (et ne se met en avant ni ne se modifie) que si son média est
+ * accrédité (`accepted`) sur l'événement **maintenant** ; un retrait ou un refus après coup le masque.
+ */
+const accreditedSql = sql`exists (select 1 from ${applications} where ${applications.eventId} = ${mediaContents.eventId}
+  and ${applications.mediaProfileId} = ${mediaContents.mediaProfileId} and ${applications.status} = 'accepted')`;
+
+async function assertAccredited(tx: Tx, eventId: string, mediaProfileId: string) {
+  const [accredited] = await tx
+    .select({ id: applications.id })
+    .from(applications)
+    .where(
+      and(
+        eq(applications.eventId, eventId),
+        eq(applications.mediaProfileId, mediaProfileId),
+        eq(applications.status, "accepted"),
+      ),
+    );
+  if (!accredited) throw forbidden(mediaLabels.notAccredited);
+}
+
+/**
+ * Vues déjà comptées : un contenu, une session, une heure (une seule instance de l'API, comme `rateLimit`). Taille
+ * plafonnée : au-delà, les plus anciennes entrées sortent (une Map garde l'ordre d'insertion).
+ */
+export const MAX_SEEN_VIEWS = 50_000;
 const seenViews = new Map<string, number>();
 let lastViewPrune = 0;
 
@@ -184,7 +211,7 @@ export const mediaService = {
       if (input.name !== existing.name) {
         await db
           .update(applications)
-          .set({ updatedAt: new Date() })
+          .set({ updatedAt: now() })
           .where(and(eq(applications.mediaProfileId, existing.id), inArray(applications.status, [...ACTIVE])));
       }
       return ownerView(row as MediaProfileRow);
@@ -261,6 +288,8 @@ export const mediaService = {
         if (settings.deadline && settings.deadline <= t) {
           throw conflict("accreditation_deadline_passed", mediaLabels.deadlinePassed);
         }
+        // Verrouillage à H-2, comme les candidatures (une date limite plus tôt a déjà répondu au-dessus).
+        if (isLocked(event, t)) throw new AppError(423, "locked", mediaLabels.requestsLocked);
         const [existing] = await tx
           .select({ id: applications.id })
           .from(applications)
@@ -272,21 +301,7 @@ export const mediaService = {
             ),
           );
         if (existing) throw conflict("conflict", mediaLabels.alreadyRequested);
-        if (settings.quota !== null) {
-          const [given] = await tx
-            .select({ n: count() })
-            .from(applications)
-            .where(
-              and(
-                eq(applications.eventId, eventId),
-                eq(applications.kind, "media"),
-                eq(applications.status, "accepted"),
-              ),
-            );
-          if ((given?.n ?? 0) >= settings.quota) {
-            throw conflict("press_quota_reached", mediaLabels.quotaReached, { quota: settings.quota });
-          }
-        }
+        await assertPressQuota(tx, eventId);
 
         const [row] = await tx
           .insert(applications)
@@ -495,6 +510,8 @@ export const mediaService = {
           eq(applications.mediaProfileId, profile.id),
           inArray(applications.status, ["pending", "accepted"]),
           gte(events.endsAt, t),
+          // Événement annulé : hors de l'agenda (ses accréditations sont passées à `cancelled` par l'annulation).
+          eq(events.status, "published"),
         ),
       );
     const saved = await db
@@ -571,17 +588,9 @@ export const mediaService = {
     rateLimit("mediaContent", v.user.id);
     const id = await withTx(async (tx) => {
       const profile = await requireMedia(v, tx);
-      const [accredited] = await tx
-        .select({ id: applications.id })
-        .from(applications)
-        .where(
-          and(
-            eq(applications.eventId, input.eventId),
-            eq(applications.mediaProfileId, profile.id),
-            eq(applications.status, "accepted"),
-          ),
-        );
-      if (!accredited) throw forbidden(mediaLabels.notAccredited);
+      const event = await tx.query.events.findFirst({ where: eq(events.id, input.eventId) });
+      if (event?.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
+      await assertAccredited(tx, input.eventId, profile.id);
       for (const key of input.photoKeys) {
         if (!(await uploadsService.consume(tx, v.user.id, key, "media_content"))) {
           throw validation(mediaLabels.imageUnknown);
@@ -611,6 +620,7 @@ export const mediaService = {
     rateLimit("mediaWrite", v.user.id);
     await withTx(async (tx) => {
       const { c } = await ownContent(tx, v, id);
+      await assertAccredited(tx, c.eventId, c.mediaProfileId);
       const url = input.url === undefined ? c.url : input.url;
       if (c.kind === "link" && !url) throw validation("Adresse du contenu");
       await tx
@@ -643,6 +653,7 @@ export const mediaService = {
   async feature(v: Viewer, eventId: string, contentId: string, featured: boolean): Promise<MediaContentView> {
     const event = await eventsRepo.byId(eventId);
     await requireOrganizerWrite(v, event.structureId);
+    if (event.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
     await withTx(async (tx, after) => {
       const [row] = await tx
         .select({ c: mediaContents, m: mediaProfiles })
@@ -653,6 +664,7 @@ export const mediaService = {
         )
         .for("update");
       if (!row) throw notFound(mediaLabels.contentNotFound);
+      if (featured) await assertAccredited(tx, eventId, row.c.mediaProfileId);
       const was = row.c.featuredAt !== null;
       await tx
         .update(mediaContents)
@@ -680,7 +692,12 @@ export const mediaService = {
       throw notFound("Événement introuvable");
     }
     return loadContents(
-      and(eq(mediaContents.eventId, event.id), isNull(mediaContents.deletedAt), isNull(mediaProfiles.deletedAt)),
+      and(
+        eq(mediaContents.eventId, event.id),
+        isNull(mediaContents.deletedAt),
+        isNull(mediaProfiles.deletedAt),
+        accreditedSql,
+      ),
     );
   },
 
@@ -693,6 +710,7 @@ export const mediaService = {
       .where(and(eq(mediaContents.id, id), isNull(mediaContents.deletedAt)));
     if (!row) throw notFound(mediaLabels.contentNotFound);
     if (viewer?.user.id === row.ownerId) return { views: row.c.views };
+    rateLimit("mediaView", `${session}|${id}`);
     const t = now().getTime();
     if (t - lastViewPrune > 10 * 60_000) {
       for (const [k, at] of seenViews) if (t - at >= HOUR) seenViews.delete(k);
@@ -701,6 +719,11 @@ export const mediaService = {
     const key = `${id}|${session}|${Math.floor(t / HOUR)}`;
     if (seenViews.has(key)) return { views: row.c.views };
     seenViews.set(key, t);
+    while (seenViews.size > MAX_SEEN_VIEWS) {
+      const oldest = seenViews.keys().next().value;
+      if (oldest === undefined) break;
+      seenViews.delete(oldest);
+    }
     const [updated] = await db
       .update(mediaContents)
       .set({ views: sql`${mediaContents.views} + 1` })
