@@ -54,7 +54,17 @@ export const errorCodes = [
   "accreditation_closed",
   "press_quota_reached",
   "accreditation_deadline_passed",
+  // Lot 47 : case « J'ai vu » de l'horaire d'arrivée des exposants non cochée.
+  "arrival_not_seen",
 ] as const;
+
+/** Lot 47 : réponse du candidat au créneau d'arrivée des exposants (candidature seule, chef de crew, membre). */
+export const arrivalAnswerFields = {
+  /** « J'ai vu » : obligatoire quand l'événement a un créneau pour les exposants, ignorée sinon. */
+  arrivalSeen: z.boolean().optional(),
+  /** « J'arriverai vers 19 h 30 à cause du travail » (200 caractères au plus ; vide = pas de note). */
+  arrivalNote: z.string().trim().max(200).nullish(),
+};
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };
 

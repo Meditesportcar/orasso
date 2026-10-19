@@ -12,7 +12,7 @@ import {
 } from "../enums";
 import { type Grade, gradeSchema } from "../grades";
 import type { StructureNoteView } from "./afterEvent";
-import { optionalText, pageQuery } from "./common";
+import { arrivalAnswerFields, optionalText, pageQuery } from "./common";
 import type { ApplicationCrewForTriage, ApplicationCrewInfo } from "./crews";
 import type { ProviderForTriage } from "./provider";
 import type { MyReview } from "./review";
@@ -33,6 +33,7 @@ export const applicationCreateSchema = z.object({
    * accès « par jour », refusé en accès « tout l'événement » et pour un événement d'un jour.
    */
   eventDayId: z.uuid().nullish(),
+  ...arrivalAnswerFields,
 });
 export type ApplicationCreate = z.infer<typeof applicationCreateSchema>;
 
@@ -150,6 +151,9 @@ export type ApplicationForTriage = {
   decidedAt: string | null;
   companions: number;
   message: string | null;
+  /** Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (quand), et la note du candidat. */
+  arrivalSeenAt: string | null;
+  arrivalNote: string | null;
   waitlistRank: number | null;
   offerExpiresAt: string | null;
   refusalReasons: RefusalReason[];
