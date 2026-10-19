@@ -152,6 +152,9 @@ export function homeProfileOf(persona: string | undefined): HomeProfile {
   }
 }
 
+/** Où a lieu l'événement : pour Maps et Waze (les coordonnées d'abord, sinon l'adresse). */
+export type HomeLocation = { lat: number | null; lng: number | null; addressLine: string | null; city: string | null };
+
 /** Structure organisatrice telle que l'accueil l'affiche : logo, nom, pastille « Structure validée ». */
 export type HomeOrganizer = { name: string; logoUrl: string | null; verified: boolean };
 
@@ -160,6 +163,7 @@ export type HomeNextAccess = MyApplication & {
   arrival: ArrivalSlot | null;
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
+  location: HomeLocation | null;
 };
 
 /** Visiteur : son prochain billet valable, avec le créneau d'arrivée du public. */
@@ -170,6 +174,7 @@ export type HomeNextTicket = {
   arrival: ArrivalSlot | null;
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
+  location: HomeLocation | null;
 };
 
 export type HomeProScan = { grade: string; percent: number; usedAt: string };
@@ -205,6 +210,7 @@ export type HomeProviderMission = {
   organizerMessage: string | null;
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
+  location: HomeLocation | null;
 };
 export type HomeNearbyMission = {
   slug: string;
@@ -228,6 +234,7 @@ export type HomeMediaReport = {
   briefing: { zones: string | null; instructions: string | null; contact: string | null } | null;
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
+  location: HomeLocation | null;
 };
 export type HomeMedia = {
   name: string;

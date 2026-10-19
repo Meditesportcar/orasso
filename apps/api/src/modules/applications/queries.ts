@@ -27,6 +27,7 @@ import {
   profiles,
   providerProfiles,
   structureBans,
+  structures,
   user,
   vehicleCategories,
   vehicleMakes,
@@ -50,6 +51,7 @@ import { loadProviders, triageView } from "../providers/serializers";
 import { reviewsService } from "../reviews/service";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleFull, vehicleLabel } from "../vehicles/serializers";
+import { organizerOf } from "./organizer";
 import type { ApplicationRow } from "./service";
 
 /** Candidature seule, ou venue en crew confirmée par le membre (lot 19) : seules visibles de l'organisation. */
@@ -99,6 +101,11 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
     where: inArray(events.id, [...new Set(rows.map((r) => r.eventId))]),
   });
   const eventsById = new Map(eventRows.map((e) => [e.id, e]));
+  // Lot 43 : la structure organisatrice de chaque événement (logo, nom, validée) pour les tickets de Sorties.
+  const structureRows = await db.query.structures.findMany({
+    where: inArray(structures.id, [...new Set(eventRows.map((e) => e.structureId))]),
+  });
+  const structuresById = new Map(structureRows.map((s) => [s.id, s]));
   const vehicleRows = await vehiclesRepo.findFullByIds([
     ...new Set(rows.flatMap((r) => (r.vehicleId ? [r.vehicleId] : []))),
   ]);
@@ -167,6 +174,7 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
         review: myReviews.get(r.id) ?? null,
         crew: crewInfo(r, e),
         arrival: arrivalsOf(e).exhibitors,
+        organizer: organizerOf(structuresById.get(e.structureId)),
       },
     ];
   });

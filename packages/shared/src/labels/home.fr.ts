@@ -93,3 +93,90 @@ export const homeNudges: Record<HomeNudgeKind, { title: string; body: string; ac
     action: "Créer un crew",
   },
 };
+
+// --- Sorties en tickets, accueil par profil, accès flottant (lot 43, prototype DA v2 `s-sorties`, `s-home`) --------------
+
+const ordinal = (n: number) => (n === 1 ? "1er" : `${n}e`);
+
+export const sortiesLabels = {
+  theTeam: "l'équipe organisatrice",
+  pendingLine: (who: string, date: string) => `Réponse de ${who} avant ${date}`,
+  offerLead: (left: string) => `Place libérée · accepte avant ${left}`,
+  offerNote: "Un retenu s'est désisté. Si tu ne réponds pas à temps, la place passe au suivant.",
+  myQr: "Mon QR",
+  withdraw: "Retirer",
+  withdrawBefore: (date: string) => `Désistement sans pénalité jusqu'au ${date}`,
+  enteredAt: (when: string) => `Entrée enregistrée ${when}`,
+  withdrawHelp: "Empêché ? Retire-toi depuis le ticket : ta place part à la liste d'attente.",
+  giveBackHelp: "Un empêchement ? Rends ton billet depuis le ticket",
+  myTicket: "Mon billet",
+  publicTicketLine: (name: string) => `Billet · ${name}`,
+  willBeThere: "Je serai là",
+  staffRoleGiven: (structure: string) => `Rôle donné par ${structure} pour cet événement`,
+  staffModeOpensEve: (when: string) => `Le mode staff s'ouvre la veille (${when}) : synchronise la liste ce jour-là.`,
+  staffUnsent: (n: number) => `${n} envoi${n > 1 ? "s" : ""} en attente : ils partiront au retour du réseau.`,
+  reviewUntil: (date: string) => `Avis possible jusqu'au ${date}`,
+  audienceRank: (rank: number, of: number) => `Prix du public : ${ordinal(rank)} sur ${of}`,
+  emptyUpcomingTitle: "Rien de prévu",
+  emptyUpcomingText: "Trouve un événement et candidate avec l'un de tes véhicules : ton ticket apparaîtra ici.",
+  emptyStaffTitle: "Pas de mission staff",
+  emptyStaffText: "Quand une structure te donne un rôle sur un événement, il apparaît ici.",
+  emptyPastTitle: "Ton carnet est vide",
+  emptyPastText: "Il se remplira après ta première sortie : présence, points, avis.",
+} as const;
+
+/** Accès flottant (barre au-dessus des onglets dès J-7). */
+export const nextAccessBarLabels = {
+  open: "Ouvrir mon prochain accès",
+  line: (day: string, title: string, countdown: string) => `${day} · ${title} · ${countdown}`,
+} as const;
+
+/** Accueil par profil. */
+export const homeProfileLabels = {
+  greeting: (name: string) => `Salut ${name}`,
+  myAccess: "Mon accès",
+  myTicket: "Mon billet",
+  myProviderAccess: "Mon accès prestataire",
+  myPressBadge: "Mon badge presse",
+  structureValidated: "Structure validée · organisateur",
+  openingAt: (hour: string) => `${hour} · ouverture`,
+  installAt: (hour: string) => `${hour} · installation`,
+  publicOpening: (hour: string) => `Ouverture au public ${hour}`,
+  maps: "Maps",
+  waze: "Waze",
+  onMap: "Sur la carte",
+  otherOutings: "Tes autres sorties",
+  seeAll: "Tout voir",
+  staffNudge: "Tu es staff",
+  passportTile: (n: number) => `${n} tampon${n > 1 ? "s" : ""} cette saison`,
+  passportTitle: "Passeport Orasso",
+  tutoTitle: "Découvre ce qu'il y a de nouveau",
+  tutoBody: "Un tour rapide de ton espace.",
+  weatherDayJ: "Météo prévue sur place le jour J",
+  // Pro.
+  discountsThisWeek: "Remises cette semaine",
+  profileViews: "Vues de ta fiche",
+  scanAccountQr: "Scanner un QR de compte",
+  eventsNearWorkshop: "Événements près de l'atelier",
+  clientsGoing: (n: number) => `${n} de tes clients y vont`,
+  fansNearbyTitle: "Passionnés du coin",
+  fansNearby: (n: number) => `${n} dans ton département`,
+  favoritedBy: (n: number) => `${n} t'${n > 1 ? "ont" : "a"} mis en garage favori`,
+  lastScans: "Derniers scans",
+  stats: "Stats",
+  noScans: "Aucun scan pour le moment : les remises utilisées apparaîtront ici.",
+  // Prestataire.
+  organizerMessage: "Message de l'organisateur",
+  spot: (label: string) => `Emplacement ${label}`,
+  missionsNearby: "Missions qui t'attendent",
+  noMission: "Pas encore de mission retenue",
+  noMissionBody: "Candidate à une mission : ta prochaine sortie et ton emplacement apparaîtront ici.",
+  // Média.
+  accredited: "Accréditée",
+  pressInstructions: "Consignes de l'organisation",
+  toCover: "À couvrir bientôt",
+  yourContents: "Tes contenus",
+  views: (n: number) => `${n.toLocaleString("fr-FR")} vue${n > 1 ? "s" : ""} depuis les pages d'événements`,
+  noReport: "Pas de reportage à venir",
+  noReportBody: "Demande une accréditation sur un événement : ton badge presse et les consignes apparaîtront ici.",
+} as const;
