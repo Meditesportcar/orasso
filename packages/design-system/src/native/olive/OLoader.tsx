@@ -14,7 +14,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Ellipse } from "react-native-svg";
+import Svg, { Ellipse, Path } from "react-native-svg";
 import { olive } from "../../motion";
 import { type BrandTone, useTone } from "../Brand";
 import { brandArt } from "../brandArt";
@@ -42,8 +42,10 @@ import {
   useOliveClock,
 } from "./shared";
 
-const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 const RING_LENGTH = ellipsePerimeter(RING.rx, RING.ry);
+/** L'anneau en chemin : départ en haut, sens horaire (il se remplit comme une aiguille). */
+const RING_D = `M0 ${-RING.ry}A${RING.rx} ${RING.ry} 0 1 1 0 ${RING.ry}A${RING.rx} ${RING.ry} 0 1 1 0 ${-RING.ry}`;
 
 export type OLoaderProps = {
   /** 72 px plein écran, 24 px dans un bouton. */
@@ -146,16 +148,14 @@ export function OLoader({
             pointerEvents="none"
           >
             <Ellipse rx={RING.rx} ry={RING.ry} fill="none" stroke={t.color.line} strokeWidth={4} opacity={0.6} />
-            <AnimatedEllipse
-              rx={RING.rx}
-              ry={RING.ry}
+            <AnimatedPath
+              d={RING_D}
               fill="none"
               stroke={t.color.accent}
               strokeWidth={6}
               strokeLinecap="round"
               strokeDasharray={`${RING_LENGTH} ${RING_LENGTH}`}
               animatedProps={ringProps}
-              transform="rotate(-90)"
             />
           </Svg>
         )}

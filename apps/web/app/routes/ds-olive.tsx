@@ -90,7 +90,7 @@ function UploadDemo({ playKey }: { playKey: number }) {
     setProgress(0);
     timer.current = setInterval(() => {
       setProgress((p) => {
-        const next = Math.min(1, p + 0.08);
+        const next = Math.min(1, p + 0.04);
         if (next >= 1 && timer.current) clearInterval(timer.current);
         return next;
       });
@@ -108,17 +108,35 @@ function UploadDemo({ playKey }: { playKey: number }) {
       id="upload"
       wide
       title="Envoi de photos"
-      text="La voiture avance sur la route au rythme de l'envoi et se gare à 100 %."
-      stage={
-        <div className="ds-olive-road">
-          <SendProgress progress={progress} />
-        </div>
-      }
+      text="La voiture drifte autour du O avec sa fumée, l'anneau se remplit avec le pourcentage, puis elle se gare dans le O."
+      stage={<SendProgress progress={progress} />}
     >
       <Button variant="secondary" icon="export" onClick={start}>
         Envoyer 3 photos
       </Button>
     </Card>
+  );
+}
+
+/** Le bouton qui travaille : le O vivant compact, à l'encre du bouton (principal moutarde, secondaire). */
+function BusyDemo() {
+  return (
+    <Card
+      id="busy"
+      wide
+      title="Bouton qui travaille"
+      text="Dans un bouton, la voiture prend l'encre du bouton et grandit pour que le drift se voie à 24 px."
+      stage={
+        <div className="ds-olive-actions">
+          <Button icon="check" loading>
+            Retenir
+          </Button>
+          <Button variant="secondary" icon="check" loading>
+            Envoyer
+          </Button>
+        </div>
+      }
+    />
   );
 }
 
@@ -179,6 +197,7 @@ export function OliveContent() {
           </Button>
         </Card>
         <UploadDemo playKey={play} />
+        <BusyDemo />
         <Card
           id="empty"
           title="État vide"

@@ -68,7 +68,7 @@ function PullDemo({ t, playKey }: { t: ThemeTokens; playKey: number }) {
       stage={
         <View style={styles.pullBox}>
           <PullToRefresh state={refresh}>
-            <ScrollView onScroll={refresh.onScroll} scrollEventThrottle={16} contentContainerStyle={styles.list}>
+            <ScrollView refreshControl={refresh.refreshControl} contentContainerStyle={styles.list}>
               {[0, 1, 2, 3].map((i) => (
                 <View key={i} style={[styles.row, { backgroundColor: t.color.surface }]} />
               ))}
@@ -92,7 +92,7 @@ function UploadDemo({ t, playKey }: { t: ThemeTokens; playKey: number }) {
     setProgress(0);
     timer.current = setInterval(() => {
       setProgress((p) => {
-        const next = Math.min(1, p + 0.08);
+        const next = Math.min(1, p + 0.04);
         if (next >= 1 && timer.current) clearInterval(timer.current);
         return next;
       });
@@ -110,17 +110,35 @@ function UploadDemo({ t, playKey }: { t: ThemeTokens; playKey: number }) {
       t={t}
       testID="olive-upload"
       title="Envoi de photos"
-      text="La voiture avance sur la route au rythme de l'envoi et se gare à 100 %."
-      stage={
-        <View style={styles.road}>
-          <SendProgress progress={progress} />
-        </View>
-      }
+      text="La voiture drifte autour du O avec sa fumée, l'anneau se remplit avec le pourcentage, puis elle se gare dans le O."
+      stage={<SendProgress progress={progress} />}
     >
       <Button variant="secondary" icon="export" onPress={start}>
         Envoyer 3 photos
       </Button>
     </Card>
+  );
+}
+
+/** Le bouton qui travaille : le O vivant compact, à l'encre du bouton (principal moutarde, secondaire). */
+function BusyDemo({ t }: { t: ThemeTokens }) {
+  return (
+    <Card
+      t={t}
+      testID="olive-busy"
+      title="Bouton qui travaille"
+      text="Dans un bouton, la voiture prend l'encre du bouton et grandit pour que le drift se voie à 24 px."
+      stage={
+        <View style={styles.actions}>
+          <Button icon="check" loading>
+            Retenir
+          </Button>
+          <Button variant="secondary" icon="check" loading>
+            Envoyer
+          </Button>
+        </View>
+      }
+    />
   );
 }
 
@@ -190,6 +208,8 @@ export function OliveContent({ t }: { t: ThemeTokens }) {
 
       <UploadDemo t={t} playKey={all} />
 
+      <BusyDemo t={t} />
+
       <Card
         t={t}
         testID="olive-empty"
@@ -250,7 +270,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   list: { padding: 12, gap: 6 },
   row: { height: 26, borderRadius: 8, width: 300 },
-  road: { width: "100%", paddingHorizontal: 12 },
   pullBox: { height: 150, alignSelf: "stretch" },
   tabStage: { width: "100%", paddingHorizontal: 10 },
   phone: { height: 360, borderRadius: 30, overflow: "hidden", marginHorizontal: -16 },

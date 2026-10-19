@@ -16,7 +16,7 @@ mkdirSync(SITE, { recursive: true });
 mkdirSync(APPLI, { recursive: true });
 const APP = process.env.APP_URL;
 
-const VARIANTS = ["hero", "load", "pull", "send", "upload", "empty", "stamp", "tab"] as const;
+const VARIANTS = ["hero", "load", "pull", "send", "upload", "busy", "empty", "stamp", "tab"] as const;
 
 async function phone(browser: Browser, theme: "beton" | "sable", reduced = false) {
   const ctx = await browser.newContext({ viewport: MOBILE, reducedMotion: reduced ? "reduce" : "no-preference" });
@@ -30,7 +30,10 @@ const running = (page: Page) =>
   page.evaluate(() =>
     (document.querySelector("#olive")?.getAnimations({ subtree: true }) ?? [])
       .filter((a) => a.playState === "running" || a.pending)
-      .map((a) => (a as CSSAnimation).animationName ?? (a as CSSTransition).transitionProperty ?? "?"),
+      .map(
+        (a) =>
+          `${(a as CSSAnimation).animationName ?? (a as CSSTransition).transitionProperty ?? "?"} sur ${String(((a.effect as KeyframeEffect | null)?.target as Element | null)?.getAttribute("class") ?? "?")}`,
+      ),
   );
 
 test("/_ds « Le O vivant » : huit variantes, deux thèmes, audit sans défaut, captures à 390 px", async ({
@@ -85,6 +88,59 @@ test("/_ds « Le O vivant » : huit variantes, deux thèmes, audit sans défaut,
   }
 });
 
+test("relecture : envoi en O + anneau qui se gare, bouton qui travaille, ouverture passable d'un clic", async ({
+  browser,
+}) => {
+  for (const theme of ["beton", "sable"] as const) {
+    const { ctx, page } = await phone(browser, theme);
+    await page.goto(`/_ds?only=olive&theme=${theme}`);
+    await page.waitForLoadState("networkidle");
+    const panel = page.locator(`[data-panel="olive-${theme}"]`);
+
+    // Envoi : la voiture drifte autour du O pendant tout l'envoi, l'anneau se remplit, puis elle se gare.
+    const upload = panel.getByTestId("olive-upload");
+    await upload.getByRole("button", { name: "Envoyer 3 photos" }).click();
+    await page.waitForTimeout(900);
+    await expect(upload.locator(".o-olive.is-loading animateMotion")).toHaveCount(1);
+    const ring = Number(
+      await upload.locator(".o-olive").evaluate((el) => getComputedStyle(el).getPropertyValue("--ring")),
+    );
+    expect(ring).toBeGreaterThan(0);
+    expect(ring).toBeLessThan(1);
+    await upload.screenshot({ path: `${SITE}/envoi-en-cours-${theme}.png` });
+    await expect(upload.locator(".o-olive")).toHaveClass(/is-parked/, { timeout: 6_000 });
+    await upload.screenshot({ path: `${SITE}/envoi-gare-${theme}.png` });
+
+    // Bouton qui travaille : O compact, voiture à l'encre du bouton (pas de moutarde sur moutarde), qui drifte.
+    const busy = panel.getByTestId("olive-busy");
+    const primary = busy.locator(".o-button--primary .o-olive");
+    await expect(primary).toHaveClass(/o-olive--compact/);
+    const colors = await primary.evaluate((el) => {
+      const body = el.querySelector(".o-car__body");
+      return {
+        car: body ? getComputedStyle(body).fill : "",
+        button: getComputedStyle(el.closest(".o-button") as Element).backgroundColor,
+        text: getComputedStyle(el.closest(".o-button") as Element).color,
+      };
+    });
+    expect(colors.car).toBe(colors.text);
+    expect(colors.car).not.toBe(colors.button);
+    const carBox = await primary.locator(".o-car__body").boundingBox();
+    expect(Math.max(carBox?.width ?? 0, carBox?.height ?? 0), "voiture visible à 24 px").toBeGreaterThanOrEqual(5);
+    await busy.screenshot({ path: `${SITE}/bouton-chargement-${theme}.png` });
+
+    // Ouverture : un clic pendant la battle saute au logo composé.
+    const hero = panel.getByTestId("olive-hero");
+    await hero.getByRole("button", { name: "Rejouer" }).click();
+    await page.waitForTimeout(600);
+    await expect(hero.locator(".o-opening")).toHaveClass(/is-battle/);
+    await hero.screenshot({ path: `${SITE}/ouverture-battle-${theme}.png` });
+    await hero.locator(".o-opening").click();
+    await expect(hero.locator(".o-opening")).toHaveClass(/is-done/, { timeout: 500 });
+    await ctx.close();
+  }
+});
+
 test("réduction des animations : plus aucune animation en cours après 200 ms, voiture garée, pas de meute", async ({
   browser,
 }) => {
@@ -108,6 +164,7 @@ test("réduction des animations : plus aucune animation en cours après 200 ms, 
     expect(park === "none" || park === "matrix(1, 0, 0, 1, 0, 0)", `voiture garée (${park})`).toBe(true);
     // Les boutons rejouent sans relancer de mouvement.
     await panel.getByRole("button", { name: "Tamponner" }).click();
+    await expect(panel.locator(".o-stamp-drop")).toHaveCount(1);
     await page.waitForTimeout(200);
     expect(await running(page)).toEqual([]);
     await page.screenshot({ path: `${SITE}/ds-olive-reduit-${theme}.png`, fullPage: true });
@@ -140,6 +197,15 @@ test.describe("appli dans le navigateur", () => {
     // Animations réduites : le logo composé apparaît en fondu et l'appli suit presque aussitôt.
     await page.goto(`${APP}/welcome?reduce=1`);
     await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 2_500 });
+
+    // Un toucher n'importe où passe l'ouverture : le staff qui relance l'appli n'attend pas 3 s.
+    await page.goto(`${APP}/welcome`);
+    await expect(page.getByTestId("opening-skip")).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(400);
+    const tapped = Date.now();
+    await page.getByTestId("opening-skip").click({ position: { x: 40, y: 600 } });
+    await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 1_500 });
+    expect(Date.now() - tapped, "ouverture passée en moins d'une seconde et demie").toBeLessThan(1_500);
     expect(warnings, "avertissements Reanimated / erreurs").toEqual([]);
     await ctx.close();
   });
@@ -164,6 +230,17 @@ test.describe("appli dans le navigateur", () => {
         .getByTestId("olive-ground")
         .first()
         .screenshot({ path: `${APPLI}/fond-battle-${theme}.png` });
+      // Envoi (O + anneau) et bouton qui travaille.
+      const upload = page.getByTestId("olive-upload").first();
+      await upload.getByText("Envoyer 3 photos").click();
+      await page.waitForTimeout(1_200);
+      await upload.screenshot({ path: `${APPLI}/envoi-en-cours-${theme}.png` });
+      await page.waitForTimeout(3_500);
+      await upload.screenshot({ path: `${APPLI}/envoi-gare-${theme}.png` });
+      await page
+        .getByTestId("olive-busy")
+        .first()
+        .screenshot({ path: `${APPLI}/bouton-chargement-${theme}.png` });
       expect(warnings).toEqual([]);
       await ctx.close();
     }

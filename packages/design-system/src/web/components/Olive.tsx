@@ -37,6 +37,8 @@ const COMPACT_MAX = 32;
 const STAGE = 260;
 const STAGE_COMPACT = 200;
 const RING = { rx: 80, ry: 64 };
+/** L'anneau en chemin : départ en haut, sens horaire (il se remplit comme une aiguille). */
+const RING_D = `M0 ${-RING.ry}A${RING.rx} ${RING.ry} 0 1 1 0 ${RING.ry}A${RING.rx} ${RING.ry} 0 1 1 0 ${-RING.ry}`;
 
 /** Le O vivant bouge : page visible et écran affiché (OliveActivityProvider). */
 function useWebOliveActive(): boolean {
@@ -242,9 +244,9 @@ export function OLoader({
         focusable="false"
       >
         {p !== null && (
-          <g transform={`translate(${O_CENTER.x} ${O_CENTER.y}) rotate(-90)`}>
+          <g transform={`translate(${O_CENTER.x} ${O_CENTER.y})`}>
             <ellipse className="o-olive__ring-track" rx={RING.rx} ry={RING.ry} />
-            <ellipse className="o-olive__ring" rx={RING.rx} ry={RING.ry} pathLength={100} />
+            <path className="o-olive__ring" d={RING_D} pathLength={100} />
           </g>
         )}
         <OArt id={id} />
