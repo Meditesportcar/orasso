@@ -329,6 +329,7 @@ test("mode staff v2 : tuiles selon les rôles, scan d'un OR2 (OK, déjà entré,
       });
       await expect(page.getByTestId("drive-offline")).toBeVisible({ timeout: 30_000 });
       await page.getByTestId("drive-typed").fill("GA-662-KS");
+      await expect(page.getByTestId("drive-typed")).toHaveValue("GA-662-KS");
       await page.getByTestId("drive-typed").press("Enter");
       await expect(page.getByText(driveTarget?.pseudo ?? "—").first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText(driveTarget?.zoneCode ?? "—", { exact: true }).first()).toBeVisible();

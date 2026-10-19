@@ -149,7 +149,7 @@ export default function Drive() {
       <AppBar
         kind="flow"
         title={L.title}
-        facts={state ? `Liste à jour ${clock(state.meta.syncedAt)} · hors ligne OK` : "Liste absente : synchronise"}
+        facts={state ? `Liste à jour ${clock(state.meta.syncedAt)}` : "Liste absente : synchronise"}
         counter={count ? `${count.arrived} entrés` : undefined}
         onClose={close}
         closeLabel="Quitter l'accueil drive"
@@ -201,8 +201,9 @@ export default function Drive() {
             onChangeText={setTyped}
             autoCapitalize="characters"
             autoCorrect={false}
-            onSubmitEditing={() => {
-              onPlates(extractPlates(typed), true);
+            onSubmitEditing={(e) => {
+              // Le texte de l'évènement : l'état `typed` peut ne pas être encore à jour à la validation.
+              onPlates(extractPlates(e.nativeEvent.text ?? typed), true);
               setTyped("");
             }}
             testID="drive-typed"

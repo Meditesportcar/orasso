@@ -717,12 +717,9 @@ test("garage : certification demandée, plaque d'un autre membre = transfert lan
 });
 
 test.afterAll(() => {
-  // « cannot create file » : expo-sqlite en WebAssembly (base du mode staff ouverte au lancement) qui retrouve le
-  // fichier encore tenu par la page d'avant juste après un rechargement (`goto`) ; propre à la recette web, sans effet
-  // (la base se rouvre au chargement suivant). Signalé au lot 40, à revoir avec le mode staff v2 (lot 48).
-  const real = consoleErrors.filter(
-    (e) => !/favicon|manifest|Failed to load resource|net::ERR|^cannot create file/i.test(e),
-  );
+  // Lot 48 : plus de filtre « cannot create file » (la base du mode staff ne s'ouvre plus au lancement sur le web et se
+  // referme au déchargement de la page).
+  const real = consoleErrors.filter((e) => !/favicon|manifest|Failed to load resource|net::ERR/i.test(e));
   expect(real.slice(0, 5)).toEqual([]);
   for (const [name, a] of Object.entries(audits)) {
     expect(a.horizontalScroll, `${name} : défilement horizontal`).toBe(false);
