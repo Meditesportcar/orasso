@@ -23,9 +23,8 @@ export async function seedMedia(hash: string) {
   const candc = await bySlug("c-et-c-perpignan-2026");
   const expo = await bySlug("expo-rivesaltes-2026");
   if (!damien || !nocturne || !candc || !expo) throw new Error("Base de départ incomplète pour le média");
-  const herault =
-    (await db.query.structures.findFirst({ where: eq(t.structures.slug, "herault-mecaniques") })) ??
-    (await db.query.structures.findFirst({ where: eq(t.structures.id, nocturne.structureId) }));
+  // Béziers Night est un événement de MéditeSportCar (prototype : couvert par Sud Cars, avis de MSC sur La Brasa au lot 46).
+  const herault = await db.query.structures.findFirst({ where: eq(t.structures.id, nocturne.structureId) });
   if (!herault) throw new Error("Structure absente pour Béziers Night");
 
   const leo = await createAccount(hash, {
@@ -52,23 +51,26 @@ export async function seedMedia(hash: string) {
   if (!media) throw new Error("profil média");
 
   // Béziers Night : passée (fin août), couverte par Sud Cars.
-  const beziers = await createEvent(herault.id, damien.userId, {
-    title: "Béziers Night",
-    slug: "beziers-night-2026",
-    format: "night",
-    description: "La nuit des japonaises sur les allées Paul-Riquet.",
-    startsAt: parisAt(-51, 20),
-    endsAt: parisAt(-51, 23, 30),
-    addressLine: "Allées Paul-Riquet",
-    postalCode: "34500",
-    city: "Béziers",
-    department: "34",
-    lat: 43.344,
-    lng: 3.2158,
-    capacity: 120,
-    publishedAt: new Date(now.getTime() - 80 * DAY),
-    registrationsOpenAt: new Date(now.getTime() - 75 * DAY),
-  });
+  // Repris s'il existe déjà (le seed des missions du lot 46 le crée aussi).
+  const beziers =
+    (await bySlug("beziers-night-2026")) ??
+    (await createEvent(herault.id, damien.userId, {
+      title: "Béziers Night",
+      slug: "beziers-night-2026",
+      format: "night",
+      description: "La nuit des japonaises sur les allées Paul-Riquet.",
+      startsAt: parisAt(-51, 20),
+      endsAt: parisAt(-51, 23, 30),
+      addressLine: "Allées Paul-Riquet",
+      postalCode: "34500",
+      city: "Béziers",
+      department: "34",
+      lat: 43.344,
+      lng: 3.2158,
+      capacity: 120,
+      publishedAt: new Date(now.getTime() - 80 * DAY),
+      registrationsOpenAt: new Date(now.getTime() - 75 * DAY),
+    }));
 
   await db.insert(t.eventPressSettings).values([
     {

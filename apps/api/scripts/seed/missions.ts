@@ -135,6 +135,19 @@ export async function seedMissions(hash: string) {
   // --- Événements passés (avis) -------------------------------------------------------------------------------
   const past = async (title: string, slug: string, daysAgo: number, place: Partial<typeof t.events.$inferInsert>) => {
     const startsAt = parisAt(-daysAgo, place.format === "cars_and_coffee" ? 9 : 19);
+    // Béziers Night est aussi créé par le seed du média (lot 45) : on reprend l'événement s'il existe déjà.
+    const existing = await db.query.events.findFirst({ where: eq(t.events.slug, slug) });
+    if (existing) {
+      const [updated] = await db
+        .update(t.events)
+        .set({
+          vendorTypes: ["Food truck"],
+          settledAt: existing.settledAt ?? new Date(existing.startsAt.getTime() + 2 * DAY),
+        })
+        .where(eq(t.events.id, existing.id))
+        .returning();
+      return updated ?? existing;
+    }
     return createEvent(structure.id, damien.userId, {
       title,
       slug,
