@@ -24,7 +24,6 @@ import * as SystemUI from "expo-system-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
-import { SOCIAL_PENDING_KEY } from "@/features/arrivee/model";
 import { ReportSheetHost } from "@/features/ReportSheet";
 import { StaffBackground } from "@/features/staff/StaffBackground";
 import { adminLinkOf } from "@/lib/adminModel";
@@ -93,17 +92,6 @@ function Shell() {
     if (root && PUBLIC_ROOTS.has(root)) return;
     router.replace(onboarded ? "/auth" : "/arrivee/profil");
   }, [status, onboarded, segments, router, navigation?.key]);
-
-  // Lot 41 : un compte créé par Google ou Apple n'a pas encore choisi son profil ni son département : le flux d'arrivée
-  // reprend à l'écran du profil, sans l'écran d'identité (`kv arrivee-social`, posé à la connexion sociale).
-  const firstSegment = (segments as string[])[0];
-  const needsProfile = me ? me.profile.mainProfile === null : false;
-  useEffect(() => {
-    if (status !== "in" || !needsProfile || !navigation?.key || firstSegment === "arrivee") return;
-    void kvGet(SOCIAL_PENDING_KEY).then((v) => {
-      if (v === "1") router.replace({ pathname: "/arrivee/profil", params: { mode: "social" } });
-    });
-  }, [status, needsProfile, firstSegment, router, navigation?.key]);
 
   // Chaque casquette a son groupe de routes : si l'URL est dans celui d'une autre (retour arrière, lien profond),
   // on revient au premier écran de la casquette active ; exposant ↔ visiteur (véhicule ajouté ou archivé), au même

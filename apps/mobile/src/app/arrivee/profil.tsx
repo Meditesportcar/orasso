@@ -15,15 +15,14 @@ const { space2, space3 } = tokens.spacing;
 export default function ArriveeProfil() {
   const { t } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ next?: string; mode?: string }>();
+  const params = useLocalSearchParams<{ next?: string }>();
   const { profile } = useArrivee();
-  const social = params.mode === "social";
   const next = params.next?.startsWith("/") ? params.next : undefined;
 
-  // La destination après l'inscription et le mode « Google / Apple » sont gardés pour les écrans suivants.
+  // La destination après l'inscription (lien partagé ouvert avant) est gardée pour les écrans suivants.
   useEffect(() => {
-    arriveeStore.set({ social, next: next ?? null });
-  }, [social, next]);
+    arriveeStore.set({ next: next ?? null });
+  }, [next]);
 
   const choose = (p: MainProfile) => arriveeStore.set({ profile: p });
 
@@ -41,11 +40,14 @@ export default function ArriveeProfil() {
           >
             {arriveeLabels.next}
           </Button>
-          {social ? null : (
-            <Button variant="plate" icon="profile" fullWidth onPress={() => router.replace("/auth")}>
-              {arriveeLabels.alreadyAccount}
-            </Button>
-          )}
+          <Button
+            variant="plate"
+            icon="profile"
+            fullWidth
+            onPress={() => router.replace({ pathname: "/auth", params: next ? { next } : {} })}
+          >
+            {arriveeLabels.alreadyAccount}
+          </Button>
         </>
       }
     >

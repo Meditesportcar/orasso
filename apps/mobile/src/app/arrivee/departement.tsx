@@ -1,18 +1,14 @@
 // « Ton coin » (prototype `s-dept`) : carte de France des départements, sélection multiple, le premier choisi est le favori
-// (ou le département principal). Sert à Explorer quand la position est refusée. Crédit CC BY 4.0 sous la carte (H7).
-// Connexion Google / Apple : le profil et les départements s'enregistrent ici (`PATCH /me/profile`), sans l'écran suivant.
-import { Button, FranceMap, FranceMapCredit, Text, tokens, useTheme } from "@orasso/design-system/native";
+// (ou le département principal). Sert à Explorer quand la position est refusée. Crédit CC BY 4.0 sous la carte (H7) ;
+// « Choisir dans une liste » ouvre les 101 départements en cases à cocher (chemin accessible, outre-mer compris).
+import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { arriveeLabels, departmentHint, departmentWhy } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { ArriveeScreen } from "@/features/arrivee/ArriveeScreen";
+import { DepartmentPicker } from "@/features/arrivee/DepartmentPicker";
 import { DepartmentSummary } from "@/features/arrivee/DepartmentSummary";
-import { arriveeStore, favoriteOf, SOCIAL_PENDING_KEY, toggleDepartment, useArrivee } from "@/features/arrivee/model";
-import { api } from "@/lib/api";
-import { authErrorMessage } from "@/lib/http";
-import { kvDel } from "@/lib/kv";
-import { useSession } from "@/lib/session";
+import { arriveeStore, toggleDepartment, useArrivee } from "@/features/arrivee/model";
 import { Muted } from "@/ui/Muted";
 
 const { space2, space3 } = tokens.spacing;
@@ -20,31 +16,8 @@ const { space2, space3 } = tokens.spacing;
 export default function ArriveeDepartement() {
   const { t } = useTheme();
   const router = useRouter();
-  const { refreshMe } = useSession();
-  const { profile: chosen, departments, social, next } = useArrivee();
+  const { profile: chosen, departments } = useArrivee();
   const profile = chosen ?? "exhibitor";
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function proceed() {
-    if (!social) {
-      router.push("/arrivee/identite");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await api.updateProfile({ mainProfile: profile, departments });
-      await kvDel(SOCIAL_PENDING_KEY);
-      await refreshMe();
-      arriveeStore.reset();
-      router.replace((next ?? "/") as never);
-    } catch (e) {
-      setError(authErrorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <ArriveeScreen
@@ -55,9 +28,8 @@ export default function ArriveeDepartement() {
           variant="primary"
           icon="next"
           fullWidth
-          loading={busy}
           disabled={departments.length === 0}
-          onPress={() => void proceed()}
+          onPress={() => router.push("/arrivee/identite")}
         >
           {arriveeLabels.next}
         </Button>
@@ -69,20 +41,12 @@ export default function ArriveeDepartement() {
         </Text>
         <Muted variant="body">{departmentWhy[profile]}</Muted>
       </View>
-      <FranceMap
+      <DepartmentPicker
         selected={departments}
-        favorite={favoriteOf(departments)}
         onToggle={(code) => arriveeStore.set({ departments: toggleDepartment(arriveeStore.get().departments, code) })}
-        accessibilityLabel={arriveeLabels.department.mapLabel}
+        summary={<DepartmentSummary selected={departments} profile={profile} />}
       />
-      <FranceMapCredit />
-      <DepartmentSummary selected={departments} profile={profile} />
       <Muted variant="caption">{`${departmentHint[profile]} ${arriveeLabels.department.hint}`}</Muted>
-      {error ? (
-        <Text variant="caption" color={t.color.winText} accessibilityRole="alert">
-          {error}
-        </Text>
-      ) : null}
     </ArriveeScreen>
   );
 }

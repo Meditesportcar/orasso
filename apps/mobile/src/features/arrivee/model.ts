@@ -1,7 +1,7 @@
 // Flux d'arrivée (lot 41) : l'état choisi d'un écran à l'autre (profil, départements, identité) et les règles pures,
 // testées seules. Rien n'est enregistré avant la dernière étape : fermer le flux efface tout.
 import { type TabSetName, tabSets } from "@orasso/design-system";
-import { type MainProfile, mainProfiles, PASSWORD_MIN_LENGTH, pseudoSchema } from "@orasso/shared";
+import { MAX_DEPARTMENTS, type MainProfile, mainProfiles, PASSWORD_MIN_LENGTH, pseudoSchema } from "@orasso/shared";
 import { useSyncExternalStore } from "react";
 
 /** Le profil choisi → la barre d'onglets dessinée sous les tuiles (`tabSets` v2 du système de design). */
@@ -25,6 +25,11 @@ export const profileTileOrder: readonly MainProfile[] = mainProfiles;
 /** Ajoute le département s'il n'est pas choisi, le retire sinon. Le premier de la liste est le favori. */
 export function toggleDepartment(selected: readonly string[], code: string): string[] {
   return selected.includes(code) ? selected.filter((c) => c !== code) : [...selected, code];
+}
+
+/** Ajouter ce département dépasserait la limite (20) ? Retirer reste toujours possible. */
+export function departmentLimitReached(selected: readonly string[], code: string): boolean {
+  return !selected.includes(code) && selected.length >= MAX_DEPARTMENTS;
 }
 
 /** Le favori (ou département principal) : le premier choisi. */
@@ -67,8 +72,6 @@ export type ArriveeState = {
   profile: MainProfile | null;
   departments: string[];
   identity: Identity;
-  /** Connexion Google / Apple : le profil et les départements seulement, sans l'écran d'identité. */
-  social: boolean;
   /** Où aller à la fin (lien partagé ouvert avant l'inscription), ou `null`. */
   next: string | null;
 };
@@ -78,7 +81,6 @@ const initial: ArriveeState = {
   profile: "exhibitor",
   departments: [],
   identity: emptyIdentity,
-  social: false,
   next: null,
 };
 
@@ -110,6 +112,3 @@ export const arriveeStore = {
 export function useArrivee(): ArriveeState {
   return useSyncExternalStore(arriveeStore.subscribe, arriveeStore.get, arriveeStore.get);
 }
-
-/** Clé `kv` : un compte créé par Google ou Apple n'a pas encore choisi son profil (lot 41). */
-export const SOCIAL_PENDING_KEY = "arrivee-social";

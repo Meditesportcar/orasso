@@ -1,21 +1,17 @@
 // Tuto d'arrivée : écran de transition jusqu'au lot 42, qui le remplace par un tuto par profil (`features/tuto/`).
-// Le compte est déjà créé ; « C'est parti » mène à l'onglet central du profil (ou au lien partagé qui a mené ici).
+// Le compte est déjà créé ; « C'est parti » mène à `arrivee/casquette` (créer sa casquette ou « Plus tard »), qui ouvre ensuite l'onglet central du profil. Le lot 42 garde cette sortie.
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { useRouter } from "expo-router";
 import { StyleSheet } from "react-native";
 import { ArriveeScreen } from "@/features/arrivee/ArriveeScreen";
-import { arriveeStore, useArrivee } from "@/features/arrivee/model";
 
 const { space2 } = tokens.spacing;
 
 export default function ArriveeTuto() {
   const { t } = useTheme();
   const router = useRouter();
-  const { next } = useArrivee();
-  const go = () => {
-    arriveeStore.reset();
-    router.replace((next ?? "/") as never);
-  };
+  // Le profil choisi mène à sa barre : l'écran suivant propose de créer la casquette (ou redirige s'il n'y a rien à faire).
+  const go = () => router.replace("/arrivee/casquette");
   return (
     <ArriveeScreen
       step={2}

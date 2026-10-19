@@ -1,20 +1,11 @@
 // Moi, secteur : départements sur la carte de France (lot 41 ; le premier sert à mesurer la distance, il est bordé d'encre), rayon des notifications (10 à 300 km) et
 // centres d'intérêt (les catégories du référentiel). Chaque changement est enregistré tout de suite.
-import {
-  Button,
-  Chip,
-  ChipRow,
-  FranceMap,
-  FranceMapCredit,
-  Plate,
-  Text,
-  TextField,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
-import { useState } from "react";
+import { Button, Chip, ChipRow, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { arriveeLabels } from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
-import { toggleDepartment } from "@/features/arrivee/model";
+import { DepartmentPicker } from "@/features/arrivee/DepartmentPicker";
+import { departmentLimitReached, toggleDepartment } from "@/features/arrivee/model";
 import { api } from "@/lib/api";
 import { addDepartment, normalizeDepartment } from "@/lib/settingsPatch";
 import { useApi } from "@/lib/useApi";
@@ -32,6 +23,32 @@ export function SectorSection({ settings, save }: Pick<SettingsApi, "settings" |
   const [radius, setRadius] = useState<number | null>(null);
   const shownRadius = radius ?? settings?.radiusKm ?? 50;
 
+  // Les départements sont affichés tout de suite et enregistrés l'un après l'autre : le dernier toucher gagne, et aucun
+  // enregistrement en retard ne remet un état faux à l'écran (lot 41).
+  const [local, setLocal] = useState<string[] | null>(null);
+  const latest = useRef<string[]>([]);
+  const chain = useRef<Promise<void>>(Promise.resolve());
+  const pending = useRef(0);
+  useEffect(() => {
+    if (pending.current === 0) latest.current = settings?.departments ?? [];
+  }, [settings?.departments]);
+  const departments = local ?? settings?.departments ?? [];
+
+  function setDepartments(next: string[]) {
+    latest.current = next;
+    setLocal(next);
+    pending.current += 1;
+    chain.current = chain.current
+      .then(() => save({ departments: latest.current }))
+      .finally(() => {
+        pending.current -= 1;
+        if (pending.current === 0) setLocal(null);
+      });
+  }
+  const current = () => (pending.current > 0 ? latest.current : (settings?.departments ?? []));
+  // La limite de 20 est contrôlée (et dite) par le sélecteur.
+  const toggleCode = (c: string) => setDepartments(toggleDepartment(current(), c));
+
   function add() {
     if (!settings) return;
     const normalized = normalizeDepartment(code);
@@ -39,9 +56,13 @@ export function SectorSection({ settings, save }: Pick<SettingsApi, "settings" |
       setCodeError("Département inconnu : saisis son numéro (ex. 66, 2A, 974).");
       return;
     }
+    if (departmentLimitReached(current(), normalized)) {
+      setCodeError(arriveeLabels.errors.tooMany);
+      return;
+    }
     setCodeError(undefined);
     setCode("");
-    void save({ departments: addDepartment(settings.departments, normalized) });
+    setDepartments(addDepartment(current(), normalized));
   }
 
   return (
@@ -51,22 +72,16 @@ export function SectorSection({ settings, save }: Pick<SettingsApi, "settings" |
         <Text variant="label" color={t.color.plateMuted}>
           Départements
         </Text>
-        <FranceMap
-          selected={settings?.departments ?? []}
-          favorite={settings?.departments[0] ?? null}
-          onToggle={(c) => settings && void save({ departments: toggleDepartment(settings.departments, c) })}
-          accessibilityLabel="Carte des départements : touche pour choisir"
-        />
-        <FranceMapCredit onPlate />
-        {settings && settings.departments.length > 0 ? (
+        <DepartmentPicker selected={departments} onToggle={toggleCode} surface="plate" />
+        {departments.length > 0 ? (
           <ChipRow>
-            {settings.departments.map((d) => (
+            {departments.map((d) => (
               <Chip
                 key={d}
                 surface="plate"
                 selected
                 accessibilityLabel={`Retirer le département ${d}`}
-                onPress={() => void save({ departments: settings.departments.filter((x) => x !== d) })}
+                onPress={() => setDepartments(current().filter((x) => x !== d))}
               >
                 {`${d} ✕`}
               </Chip>
