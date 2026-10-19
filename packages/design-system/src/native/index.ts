@@ -5,7 +5,8 @@ export * from "../icons";
 export * from "../labels";
 export * from "../motion";
 export { THEME_IDS, type ThemeId, tokens, tokensV2Overlay } from "../tokens";
-export { AppBar, AppBarAction, type AppBarProps } from "./AppBar";
+export { AppBar, AppBarAction, type AppBarPersona, type AppBarProps } from "./AppBar";
+export { BigTitle, type BigTitleProps, bigTitleSize } from "./BigTitle";
 export {
   type BrandTone,
   Credit,

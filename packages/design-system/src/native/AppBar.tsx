@@ -1,11 +1,11 @@
 // AppBar : l'en-tête en métal brossé. Voir docs/design-system/components/AppBar.
 
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, View, type ViewStyle } from "react-native";
+import { Image, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from "react-native";
 import type { IconName } from "../icons";
 import { Logo, Monogram } from "./Brand";
 import { Button } from "./Button";
-import { textShadowOf, withAlpha } from "./color";
+import { textShadowOf } from "./color";
 import { Icon } from "./Icon";
 import { Metal } from "./Metal";
 import { Text } from "./text";
@@ -28,9 +28,9 @@ type ActionProps = {
 
 /** Une pastille d'action de l'en-tête : 34 px, `radius-chip`. */
 export function AppBarAction({ icon, label, onPress, onLongPress, on = false, count, children }: ActionProps) {
-  const { t, theme } = useTheme();
+  const { t } = useTheme();
   const c = t.color;
-  const sable = theme === "sable";
+  // DA v2 : la barre est nuit dans les deux thèmes, la pastille aussi (plus de variante Sable).
   return (
     <Pressable
       accessibilityRole="button"
@@ -42,9 +42,9 @@ export function AppBarAction({ icon, label, onPress, onLongPress, on = false, co
         styles.action,
         children ? styles.avatar : null,
         {
-          borderWidth: sable ? 2 : 1.5,
-          borderColor: sable ? c.barInk : c.line,
-          backgroundColor: on ? c.barInk : sable ? withAlpha(c.nightInk, 0.22) : "transparent",
+          borderWidth: 1.5,
+          borderColor: c.line,
+          backgroundColor: on ? c.barInk : "transparent",
         },
       ]}
     >
@@ -60,13 +60,17 @@ export function AppBarAction({ icon, label, onPress, onLongPress, on = false, co
   );
 }
 
+/** Pastille de casquette à côté du logotype (DA v2) : logo rond de la structure, ou son initiale. */
+export type AppBarPersona = { logoUrl: string | null; label: string };
+
 export type AppBarProps = {
   /**
-   * `home` : le logotype complet, sans titre (Accueil). `page` : le monogramme, le titre, puis les trois pastilles
-   * Recherche, Cloche, Avatar. `flow` : écran de flux (Scan, Jour J, Candidature) : le monogramme, le titre,
-   * l'action de contexte éventuelle, puis ✕ Fermer en dernier.
+   * `tab` (DA v2, lot 38) : le logotype toujours à gauche (128 px, 112 px sous 360 px), la pastille de casquette,
+   * puis Recherche et Boîte à droite (✕ Fermer si `onClose`) ; le titre de la page est un `BigTitle` sous la barre.
+   * `flow` : écran de flux (Scan, Jour J, Candidature) : le monogramme, le titre, l'action de contexte éventuelle,
+   * puis ✕ Fermer en dernier. `home` et `page` : barres v1, dépréciées (remplacées par `tab` au lot 40).
    */
-  kind: "home" | "page" | "flow";
+  kind: "tab" | "flow" | "home" | "page";
   title?: string;
   /** Ligne de faits sous le titre (Tri, Scan, Direct) : « Nocturne de Canet · MéditeSportCar · J-2 ». */
   facts?: string;
@@ -87,7 +91,13 @@ export type AppBarProps = {
   avatarLabel?: string;
   /** Une autre casquette a quelque chose à traiter : pastille moutarde sur l'avatar. */
   avatarDot?: boolean;
-  /** Écran de flux : ✕ Fermer. */
+  /** Barre `tab` : pastille de casquette à côté du logotype. */
+  persona?: AppBarPersona;
+  /** Barre `tab` : la Boîte, avec son compteur ; elle perd son compteur quand on y est. */
+  onInbox?: () => void;
+  inboxOn?: boolean;
+  inboxCount?: number;
+  /** Écran de flux : ✕ Fermer (et, en barre `tab`, une fermeture facultative). */
   onClose?: () => void;
   closeLabel?: string;
   /** Déborde de la marge de 16 px de l'écran, sur toute sa largeur. */
@@ -116,6 +126,10 @@ export function AppBar({
   onAvatarLongPress,
   avatarLabel = "Moi et mes casquettes",
   avatarDot,
+  persona,
+  onInbox,
+  inboxOn,
+  inboxCount,
   onClose,
   closeLabel = "Fermer",
   bleed = false,
@@ -123,29 +137,62 @@ export function AppBar({
   style,
 }: AppBarProps) {
   const { t, theme } = useTheme();
+  const { width } = useWindowDimensions();
   const c = t.color;
   const showTabActions = kind !== "flow";
+  const barStyle = [
+    styles.bar,
+    {
+      height: spacing.barTop + safeTop,
+      paddingTop: 12 + safeTop,
+      borderBottomWidth: t.barEdgeHeader,
+      borderBottomColor: c.barEdge,
+      boxShadow: t.shadow.shadowBarTop,
+    },
+    bleed && { marginHorizontal: -spacing.space4 },
+    style,
+  ];
+  if (kind === "tab") {
+    return (
+      <View accessibilityRole="header" style={barStyle}>
+        <Metal />
+        <Logo width={width < 360 ? 112 : spacing.brandLogo} tone="dark" />
+        {persona ? (
+          <View
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel={persona.label}
+            style={[styles.persona, { borderColor: c.line, backgroundColor: c.night }]}
+          >
+            {persona.logoUrl ? (
+              <Image source={{ uri: persona.logoUrl }} style={styles.personaImage} />
+            ) : (
+              <Text variant="label" color={c.barInk}>
+                {persona.label.trim().charAt(0).toUpperCase()}
+              </Text>
+            )}
+          </View>
+        ) : null}
+        <View style={styles.spacer} />
+        <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} />
+        <AppBarAction
+          icon="inbox"
+          label="Boîte"
+          onPress={onInbox}
+          on={inboxOn}
+          count={inboxOn ? undefined : inboxCount}
+        />
+        {onClose ? <Button variant="close" label={closeLabel} onPress={onClose} /> : null}
+      </View>
+    );
+  }
   const emboss = textShadowOf(t.shadow.embossBar);
   const titleSize =
     facts && kind === "flow" ? { fontSize: 12, lineHeight: 14 } : facts ? { fontSize: 13, lineHeight: 15 } : null;
   return (
-    <View
-      accessibilityRole="header"
-      style={[
-        styles.bar,
-        {
-          height: spacing.barTop + safeTop,
-          paddingTop: 12 + safeTop,
-          borderBottomWidth: t.barEdgeHeader,
-          borderBottomColor: c.barEdge,
-          boxShadow: t.shadow.shadowBarTop,
-        },
-        bleed && { marginHorizontal: -spacing.space4 },
-        style,
-      ]}
-    >
+    <View accessibilityRole="header" style={barStyle}>
       <Metal />
-      {kind === "home" ? <Logo width={spacing.brandLogo} /> : <Monogram />}
+      {kind === "home" ? <Logo width={spacing.brandLogo} tone="dark" /> : <Monogram tone="dark" />}
       {kind === "home" ? (
         <View style={styles.spacer} />
       ) : (
@@ -224,6 +271,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.radiusChip,
   },
   avatar: { padding: 3 },
+  persona: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.radiusPill,
+    borderWidth: 1.5,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  personaImage: { width: "100%", height: "100%" },
   count: {
     position: "absolute",
     top: -6,

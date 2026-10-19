@@ -10,6 +10,14 @@
 [data-theme="sable"] .o-brand-img--auto.o-brand-img--dark {
   display: none;
 }
+/* DA v2 (lot 38) : les barres sont nuit dans les deux thèmes ; la marque y prend toujours la version fond sombre.
+   [data-bar] marque une barre du site (en-tête, pied, menu latéral). */
+:is(.o-appbar, .o-tabbar, [data-bar]) .o-brand-img--auto.o-brand-img--dark {
+  display: inline-block;
+}
+:is(.o-appbar, .o-tabbar, [data-bar]) .o-brand-img--auto.o-brand-img--light {
+  display: none;
+}
 
 .o-logo {
   display: block;

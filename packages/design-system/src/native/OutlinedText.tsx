@@ -5,8 +5,8 @@
 // Portée limitée : photo et fond animé. La règle « pas de contour ni de néon sur un texte » reste valable ailleurs.
 
 import { StyleSheet, type TextStyle, View } from "react-native";
-import { textStyles } from "./textStyles";
 import { Text, type TextProps } from "./text";
+import { textStyles } from "./textStyles";
 import { useTheme } from "./theme";
 
 export type OutlinedTextProps = TextProps & {
