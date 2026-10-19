@@ -27,7 +27,7 @@ export default function UserProfile() {
   const profile = useApi(() => api.userProfile(pseudo), [pseudo]);
   const p = profile.data;
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/explorer"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   if (!p) {
     return (

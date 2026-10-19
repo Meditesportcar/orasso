@@ -18,12 +18,15 @@ import { EventRow, ProRow, VehicleHitRow } from "@/features/explorer/rows";
 import { PersonRow } from "@/features/social/PersonRow";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { usePersona } from "@/lib/persona";
+import { tabHref } from "@/lib/personaModel";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 
 export default function Recherche() {
   const router = useRouter();
+  const { persona, base, choose } = usePersona();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResults | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,12 +56,18 @@ export default function Recherche() {
     return () => clearTimeout(timer);
   }, [load]);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/explorer"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const seeAll = (segment: "evenements" | "pros" | "personnes") => (
     <Button
       variant="secondary"
       icon="next"
-      onPress={() => router.navigate({ pathname: "/explorer", params: { segment, q: text } })}
+      onPress={() => {
+        // Lot 40 : l'Explorer de la casquette active, sinon celui de la casquette de base (pro, organisateur…).
+        const own = tabHref(persona.kind, "explorer");
+        const query = `segment=${segment}&q=${encodeURIComponent(text)}`;
+        if (own) router.navigate(`${own}?${query}` as never);
+        else choose(base, `${tabHref(base.kind, "explorer") ?? "/"}?${query}`);
+      }}
       fullWidth
       testID={`see-all-${segment}`}
     >

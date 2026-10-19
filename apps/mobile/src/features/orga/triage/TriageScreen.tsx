@@ -8,13 +8,14 @@ import { useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router"
 import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
 import { api } from "@/lib/api";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { COUNTER_ACTIVE, counterCells, triageEvents } from "@/lib/triage";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
-import { JournalSheet } from "@/ui/JournalSheet";
+import { TabTitle } from "@/ui/TabTitle";
 import { TopBar } from "@/ui/TopBar";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 import { Deck } from "./Deck";
@@ -33,7 +34,8 @@ export function TriageScreen() {
   const focused = useIsFocused();
   const params = useLocalSearchParams<{ event?: string }>();
   const at = useNow(60_000);
-  const [journal, setJournal] = useState(false);
+  // Lot 40 : le tri se fait en glissant les cartes ; le glissement entre onglets est coupé sur cet écran.
+  useTabSwipeDisabled();
   const [segment, setSegment] = useState<Segment>("vehicles");
   const [picked, setPicked] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
@@ -93,13 +95,9 @@ export function TriageScreen() {
 
   return (
     <Ground animated={false} style={styles.fill}>
-      <TopBar
-        title={triageAppLabels.title}
-        facts={event?.title ?? structureName}
-        onNotifications={() => setJournal(true)}
-        notificationsOn={journal}
-      />
+      <TopBar />
       <View style={styles.body}>
+        <TabTitle title={triageAppLabels.title} label={event?.title ?? structureName} />
         {firstError && !event ? <OrgaFailure error={firstError} /> : null}
         {!event ? (
           <Plate kind="note" testID="triage-no-event">
@@ -190,7 +188,6 @@ export function TriageScreen() {
           </Button>
         ))}
       </ScreenSheet>
-      <JournalSheet visible={journal} onClose={() => setJournal(false)} />
     </Ground>
   );
 }

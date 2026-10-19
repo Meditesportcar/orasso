@@ -320,7 +320,7 @@ export function EventPage({
                   <Text variant="body" color={c.plateInk}>
                     {EL.publishBlocked}
                   </Text>
-                  <Button variant="plate" icon="check" onPress={() => router.push("/ma-structure")} fullWidth>
+                  <Button variant="plate" icon="check" onPress={() => router.push("/(orga)/structure")} fullWidth>
                     {EL.publishBlockedLink}
                   </Button>
                 </Plate>

@@ -23,7 +23,7 @@ export default function NewCrew() {
   const [department, setDepartment] = useState(me?.profile.departments[0] ?? "66");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/garage"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/garage"));
   return (
     <FlowScreen title={crewLabels.createCrew} onClose={close}>
       <Muted variant="body">{crewLabels.createCrewHint}</Muted>

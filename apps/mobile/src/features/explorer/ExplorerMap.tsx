@@ -8,6 +8,7 @@ import { explorerLabels } from "@orasso/shared";
 import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
 import { Muted } from "@/ui/Muted";
 import { type MapPin, OSM_STYLE, pinsKey, viewFor } from "./mapPins";
 
@@ -19,6 +20,8 @@ export const mapSupported = true;
 export function ExplorerMap({ pins, onOpen }: { pins: MapPin[]; onOpen: (pin: MapPin) => void }) {
   const { t } = useTheme();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Lot 40 : la carte garde le geste horizontal (pas de glissement vers l'onglet voisin).
+  useTabSwipeDisabled();
   const view = useMemo(() => viewFor(pins), [pins]);
   const selected = pins.find((p) => p.id === selectedId) ?? null;
   return (

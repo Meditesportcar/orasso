@@ -30,6 +30,7 @@ import { StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { CROP_VEHICLE, MAX_PHOTOS, type PickedPhoto, photoForm, pickPhotos } from "@/lib/photos";
+import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@/ui/PhotoGrid";
@@ -47,6 +48,7 @@ function options<T extends { id: string; name: string; isOther: boolean }>(rows:
 export default function NouveauVehicule() {
   const { t } = useTheme();
   const router = useRouter();
+  const { refreshMe } = useSession();
   const [type, setType] = useState<VehicleType>("car");
   const [makeId, setMakeId] = useState<string | undefined>();
   const [modelId, setModelId] = useState<string | undefined>();
@@ -156,10 +158,12 @@ export default function NouveauVehicule() {
         setProgress({ current: photos.length, total: photos.length, done: true });
         await waitUploadParked();
       }
+      // Lot 40 : le premier véhicule actif fait passer de visiteur à exposant ; `GET /me` relu, la barre change.
+      await refreshMe().catch(() => undefined);
       // Plaque d'un autre membre : le véhicule existe en attente de transfert ; sa page l'explique.
       if (target.pending) router.replace(`/vehicule/${target.id}`);
       else if (router.canGoBack()) router.back();
-      else router.replace("/garage");
+      else router.replace("/(tabs)/garage");
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -171,7 +175,7 @@ export default function NouveauVehicule() {
   return (
     <FlowScreen
       title="Ajouter un véhicule"
-      onClose={() => (router.canGoBack() ? router.back() : router.replace("/garage"))}
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/garage"))}
       footer={
         <>
           {error ? (

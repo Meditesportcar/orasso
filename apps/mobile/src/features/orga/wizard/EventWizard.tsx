@@ -287,7 +287,7 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     vendorSuggestions,
     poster,
     setPoster,
-    openStructure: () => router.push("/ma-structure"),
+    openStructure: () => router.push("/(orga)/structure"),
   };
   const Screen = SCREENS[step];
 

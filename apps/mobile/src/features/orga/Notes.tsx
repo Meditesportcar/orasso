@@ -255,7 +255,7 @@ export function NotesScreen() {
   const notes = useApi(() => api.notes(structureId, { limit: 50, q: searched || undefined }), [structureId, searched]);
   const [error, setError] = useState<unknown>(null);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/staff"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/(orga)/equipe"));
   const groups = groupNotesByPerson(notes.data?.items ?? []);
   const writable = !isSuspended(structure.data);
 

@@ -15,19 +15,12 @@
 - **Lot 39 — le O vivant et le fond « battle » (branche `lot-39-o-vivant`, vague 2)** : voiture vue de dessus générée (`brandArt.carTop`, `car-top.svg`) ; géométrie pure testée (`src/native/olive/path.ts` : drift autour du O, meutes à virages sans ligne droite finale, tandem) ; huit variantes natives et web (`OpeningBattle`, `OLoader`, `PullToRefresh` (appli), `SendProgress`, `SendBurst`, `EmptyState`, `StampDrop`, `CenterTabO`) ; `Ground variant="battle"` (`still`, `paused`, `GroundQuiet` posé par `Sheet`) ; ouverture de l'appli en battle de 3 s, envoi de photos par `SendProgress`, O vivant sur l'onglet central ; `Loader` et `OpeningScreen` en alias dépréciés jusqu'au lot 58 ; section « Le O vivant » des recettes `/_ds` ; `e2e/lot39.spec.ts`.
 
 - **Lot 45 — API du profil média et de l'accréditation presse (branche `lot-45-api-media`, vague 2)** : profil média, accréditation = candidature `kind = media` décidée par le tri (badge presse = pass, notifications `accreditation_*`), réglages presse de l'organisateur, contenus (publiables si accrédité), mise en avant, vues, agenda, Explorer national (`region`, `accreditationOpen`, temps de route), carte de presse privée vérifiée par l'administration ; migration `0043_media` ; seed Léo / « Sud Cars ». Aucun écran (lots 55 et 57).
-
-## En cours
-
-- La branche `lot-45-api-media` attend la relecture et la fusion du coordinateur (migration `0043_media` à régénérer à la fusion si un autre lot de la vague en ajoute une, règle B1).
-
 - **Lot 46 — API des prestataires v2 (branche `lot-46-api-prestataires-v2`, vague 2)** : missions = besoins de l'organisateur (`/events/:id/needs`), `GET /missions` par métier et rayon du plus proche au plus loin, candidature sur une mission (`needId`), emplacement attribué (`/spot`, notification avec arrivée, électricité et consignes), avis des organisateurs sur un prestataire retenu (1 à 5, 30 jours, public sur la vitrine), vitrine (métiers, menu « une ligne par plat » lu par `parseMenuLines`, besoins sur place, rayon) ; migration `0043_missions` ; seed Sofia_66 / « La Brasa ». Aucun écran (lots 54 et 57).
+- **Lot 40 — navigation v2 de l'appli (branche `lot-40-navigation-v2`, vague 2)** : six casquettes et leurs barres de cinq onglets, le O au centre (exposant `(tabs)`, visiteur `(visitor)`, pro, prestataire, média `(media)`, organisateur), toutes sur `PersonaTabs` ; l'API renvoie l'exposant **ou** le visiteur selon les véhicules actifs (ajouter un véhicule change la barre sans redémarrer) ; barre du haut v2 partout (logotype, pastille de casquette, Recherche, Boîte ; appui long sur le logo = retour au profil de base) ; Boîte hors barre avec les notifications ; Mon profil en hub (casquettes et accès rapides, un seul bouton Créer, réglages en tuiles `reglages/<section>`) ; Sorties = ex-Accès ; glissement entre onglets ; « Réduire les animations ». `/acces` et `/moi` redirigent. Recette `apps/web/e2e/appli-lot40.spec.ts`. Les écrans gardent leur contenu (lots 43, 44, 50 à 55).
 
 ## En cours
 
-- La branche `lot-46-api-prestataires-v2` attend la relecture et la fusion du coordinateur (après le lot 45 : `schema/applications.ts`, migration à régénérer, règle B1).
-- La branche `lot-38-socle-v2` attend la relecture et la fusion du coordinateur. Point à confirmer par Damien : H2 (thème jamais imposé, contraire à `docs/03` l. 10) — le retrait du Sable imposé aux espaces orga et pro du site est dans un commit isolé, facile à annuler.
-
-- Vague 2 : la branche `lot-39-o-vivant` attend la relecture et la fusion du coordinateur (lots 40, 45, 46 en parallèle).
+- Lots 38, 39, 45 et 46 fusionnés dans `main` (`43fc9aa`). La branche `lot-40-navigation-v2` (fusionnée avec `main`) attend la fusion du coordinateur (fichiers partagés : `apps/mobile/src/app/_layout.tsx`, `apps/api/src/modules/profiles/personas.ts`). À noter pour Damien : appui long sur le logo Orasso pour revenir au profil passionné.
 
 ## Prochaine étape
 

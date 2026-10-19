@@ -35,7 +35,7 @@ async function openApp(browser: Browser, email: string, theme: Theme) {
 
 /** Ouvre la feuille des casquettes et choisit l'Administration. */
 async function chooseAdmin(page: Page) {
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
   await page.getByTestId("casquette-admin").click();
   await page.waitForURL(/administration/, { timeout: 20_000 });
 }
@@ -375,7 +375,7 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   });
   await shot("22-survol-bandeau-lecture-seule-beton");
   // Écrire sans demande ouverte : l'API refuse, l'appli affiche son message sans planter.
-  await tab(page, "Staff").click();
+  await tab(page, "Équipe").click();
   await page.getByTestId("team-nav-bans").click();
   await expect(page.getByTestId("assistance-banner")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("bans-pseudo").fill("Pilote_001");
@@ -386,10 +386,10 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
 
   // L'organisateur demande l'aide d'Orasso depuis l'appli (avec un message trop court d'abord).
   const org = await openApp(browser, ownerEmail, "beton");
-  await org.page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await org.page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
   await org.page.getByTestId("casquette-organizer").filter({ hasText: name }).click();
   await org.page.waitForURL(/\/direct/, { timeout: 20_000 });
-  await go(org.page, "/ma-structure");
+  await go(org.page, "/structure");
   await expect(org.page.getByTestId("assistance-panel")).toBeVisible({ timeout: 30_000 });
   await org.page.getByTestId("assistance-message").fill("court");
   await org.page.getByTestId("assistance-ask").click();
@@ -408,8 +408,9 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
 
   // Le lien profond : la demande arrive au Journal de l'équipe et ouvre la file des demandes d'aide.
   deliverNow("equipe@orasso.local");
-  await tab(page, "Staff").click();
-  await page.getByRole("button", { name: "Journal" }).click();
+  await tab(page, "Équipe").click();
+  await page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
+  await page.getByTestId("inbox-journal").click();
   await page
     .getByTestId("journal-item")
     .filter({ hasText: `Demande d'aide · ${name}` })
@@ -422,7 +423,7 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   // Retour au survol : le bandeau annonce l'intervention, l'écriture passe et le journal la porte.
   await page.getByTestId("assistance-row").filter({ hasText: name }).getByTestId("admin-survey").click();
   await page.getByTestId("orga-confirm").click();
-  await tab(page, "Staff").click();
+  await tab(page, "Équipe").click();
   await page.getByTestId("team-nav-bans").click();
   await expect(page.getByTestId("assistance-banner")).toContainText("Intervention en cours", { timeout: 30_000 });
   await shot("27-survol-bandeau-intervention-beton");
@@ -466,7 +467,7 @@ test("modérateur limité à sa file ; un passionné ne voit pas l'administratio
 
   const m = await openApp(browser, "moderatrice@orasso.local", "beton");
   const shot = shotter(m.page);
-  await m.page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await m.page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
   await expect(m.page.getByTestId("casquette-admin")).toContainText("Modération");
   await m.page.getByTestId("casquette-admin").click();
   await m.page.waitForURL(/administration/, { timeout: 20_000 });
@@ -487,7 +488,8 @@ test("modérateur limité à sa file ; un passionné ne voit pas l'administratio
   // Le lien profond de l'alerte prioritaire (suspension automatique) mène à la file.
   deliverNow("moderatrice@orasso.local");
   await go(m.page, "/administration");
-  await m.page.getByRole("button", { name: "Journal" }).click();
+  await m.page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
+  await m.page.getByTestId("inbox-journal").click();
   await m.page.getByTestId("journal-item").filter({ hasText: "Alerte prioritaire" }).first().click();
   await expect(m.page).toHaveURL(/signalements/, { timeout: 20_000 });
   await m.ctx.close();
@@ -496,10 +498,9 @@ test("modérateur limité à sa file ; un passionné ne voit pas l'administratio
   const kenji = await login("kenji@orasso.local");
   expect((await apiCall(kenji, "GET", "/admin/overview")).status).toBe(403);
   const fan = await openApp(browser, "kenji@orasso.local", "beton");
-  await fan.page
-    .getByRole("button", { name: "Moi et mes casquettes" })
-    .click()
-    .catch(() => undefined);
+  // Lot 40 : les casquettes sont dans Mon profil.
+  await fan.page.goto("/moi");
+  await expect(fan.page.getByTestId(/^casquette-(fan|visitor)$/)).toBeVisible({ timeout: 30_000 });
   await expect(fan.page.getByTestId("casquette-admin")).toHaveCount(0);
   await go(fan.page, "/administration");
   await expect(fan.page.getByTestId("tile-structuresPending")).toHaveCount(0);

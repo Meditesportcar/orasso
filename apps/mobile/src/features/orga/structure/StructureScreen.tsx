@@ -1,9 +1,8 @@
 // Casquette Organisateur, « Ma structure » (lot 35a, décision D20) : tout ce que la page Structure du site permet, sauf
 // le compte Stripe (billetterie : lot 35c) et les notes (écran à part) : vérification et badge, fiche publique (mêmes
-// champs que le site), logo, pros partenaires, lien d'invitation. Ouvert depuis l'onglet Staff (Équipe).
+// champs que le site), logo, pros partenaires, lien d'invitation. Onglet Structure de la barre depuis le lot 40.
 import { Button, Chip, ChipRow, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { orgaManageLabels as L, structureKindLabels } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Linking, Share, StyleSheet, View } from "react-native";
 
@@ -26,7 +25,7 @@ import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { FlowScreen, SectionTitle } from "@/ui/Screens";
+import { SectionTitle, TabScreen } from "@/ui/Screens";
 import { AssistancePanel } from "../../admin/Assistance";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 import { failWith } from "../team/fail";
@@ -37,7 +36,6 @@ const { space2, space3 } = tokens.spacing;
 
 export function StructureScreen() {
   const { t } = useTheme();
-  const router = useRouter();
   const { structureId } = useOrga();
   const structure = useApi(() => api.orgStructure(structureId), [structureId]);
   const verification = useApi(() => api.verification(structureId), [structureId]);
@@ -62,7 +60,6 @@ export function StructureScreen() {
   }, [structure.data, form]);
 
   const s = structure.data;
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/staff"));
   const set = <K extends keyof StructureForm>(key: K, value: StructureForm[K]) =>
     setForm((cur) => (cur ? { ...cur, [key]: value } : cur));
   const changed = form && saved ? structureFormChanged(form, saved) : false;
@@ -142,10 +139,9 @@ export function StructureScreen() {
   const inviteUrl = s ? siteUrl(`/invitation/${s.inviteToken}`) : null;
 
   return (
-    <FlowScreen
+    <TabScreen
       title={L.structureTitle}
       facts={s ? `${s.name} · ${structureKindLabels[s.kind]}` : undefined}
-      onClose={close}
       onRefresh={reloadAll}
     >
       <OrgaFailure error={error ?? structure.error ?? verification.error} />
@@ -346,7 +342,7 @@ export function StructureScreen() {
 
       {/* Lot 35d : « Demander l'aide d'Orasso », l'état de la demande et sa clôture (mode assistance, S41). */}
       <AssistancePanel structureId={structureId} />
-    </FlowScreen>
+    </TabScreen>
   );
 }
 

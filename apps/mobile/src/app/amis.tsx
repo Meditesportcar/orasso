@@ -8,6 +8,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { FriendQrScanner } from "@/features/FriendQrScanner";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { usePersona } from "@/lib/persona";
 import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
@@ -19,6 +20,7 @@ const { space1, space2, space3 } = tokens.spacing;
 export default function Amis() {
   const { t } = useTheme();
   const router = useRouter();
+  const { goTab } = usePersona();
   const friends = useApi(() => api.friends(), [], { cacheKey: "friends" });
   const requests = useApi(() => api.friendRequests(), []);
   const [scan, setScan] = useState(false);
@@ -47,7 +49,7 @@ export default function Amis() {
   return (
     <FlowScreen
       title={socialLabels.myFriends}
-      onClose={() => (router.canGoBack() ? router.back() : router.replace("/garage"))}
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/"))}
       onRefresh={reload}
       overlays={<FriendQrScanner visible={scan} onClose={() => setScan(false)} onDone={() => void reload()} />}
     >
@@ -151,7 +153,7 @@ export default function Amis() {
         </>
       ) : null}
 
-      <Button variant="plate" icon="search" onPress={() => router.push("/explorer")} fullWidth>
+      <Button variant="plate" icon="search" onPress={() => goTab("explorer")} fullWidth>
         {socialLabels.searchPeople}
       </Button>
     </FlowScreen>

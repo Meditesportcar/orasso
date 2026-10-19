@@ -49,7 +49,7 @@ export function CreateStructureScreen() {
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<Created | null>(null);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/accueil"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const nameError = name.trim().length > 0 && name.trim().length < 2 ? orgaLabels.createNameError : undefined;
 
   function addCode() {

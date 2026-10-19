@@ -3,7 +3,7 @@
 // branchent leurs cartes dans `features/boite/requests/`). Mise à jour en direct par le canal `user:{id}`.
 import { Chip, ChipRow, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type ConversationSummary, type InboxSummary, messagingLabels } from "@orasso/shared";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -14,9 +14,19 @@ import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
+import { InboxScope } from "@/ui/InboxScope";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
+
+/** La Boîte (lot 40 : hors de la barre d'onglets, ouverte par la barre du haut ; notifications en tête). */
+export default function Boite() {
+  return (
+    <InboxScope>
+      <BoiteScreen />
+    </InboxScope>
+  );
+}
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -65,14 +75,22 @@ function ConversationRow({ c, onPress }: { c: ConversationSummary; onPress: () =
   );
 }
 
-export default function Boite() {
+function BoiteScreen() {
   const router = useRouter();
   const { me, refreshMe } = useSession();
-  const [segment, setSegment] = useState<"messages" | "requests">("messages");
+  // Lot 40 : `/boite?segment=demandes` (lien `/app/boite/demandes` du site) ouvre directement les Demandes.
+  const params = useLocalSearchParams<{ segment?: string }>();
+  const [segment, setSegment] = useState<"messages" | "requests">(
+    params.segment === "demandes" ? "requests" : "messages",
+  );
   const [refreshKey, setRefreshKey] = useState(0);
   const conversations = useApi(() => api.conversations(), []);
   const summary = useApi<InboxSummary>(() => api.inboxSummary(), []);
-  const requests = summary.data ? Object.values(summary.data.requests).reduce((a, b) => a + b, 0) : 0;
+  // Transferts de plaque reçus (lot 40) : comptés ici, `GET /inbox/summary` ne les compte pas.
+  const transfers = useApi(() => api.plateTransfers(), [refreshKey]);
+  const requests =
+    (summary.data ? Object.values(summary.data.requests).reduce((a, b) => a + b, 0) : 0) +
+    (transfers.data?.incoming.length ?? 0);
 
   const reloadAll = useCallback(async () => {
     setRefreshKey((k) => k + 1);

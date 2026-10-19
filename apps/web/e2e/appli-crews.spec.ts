@@ -85,7 +85,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     await expect(k.page.getByTestId("garage-crews")).toBeVisible();
     await shot(k.page, `03-garage-${theme}`);
     await k.page.goto("/accueil");
-    await k.page.getByRole("tab", { name: "Boîte" }).click();
+    await k.page.getByRole("button", { name: "Boîte", exact: true }).first().click();
     await k.page.getByLabel("Demandes").click();
     await expect(k.page.getByTestId("request-crew-request")).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `04-demandes-chef-${theme}`);
@@ -109,7 +109,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
       if (m.type() === "error") errors.push(m.text().slice(0, 200));
     });
     await l.page.goto("/accueil");
-    await l.page.getByRole("tab", { name: "Boîte" }).click();
+    await l.page.getByRole("button", { name: "Boîte", exact: true }).first().click();
     await l.page.getByLabel("Demandes").click();
     await expect(l.page.getByTestId("request-crew-confirmation")).toBeVisible({ timeout: 20_000 });
     await shot(l.page, `07-demandes-venue-${theme}`);
