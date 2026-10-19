@@ -99,8 +99,8 @@ async function choose(page: Page, kind: Kind) {
   await page.goto("/moi");
   await afterOpening(page);
   await page.getByTestId(`casquette-${kind}`).first().click();
-  // Accueil « Bientôt » du pro et du prestataire (lot 43) : ils s'ouvrent sur un onglet rempli.
-  const landing = { organizer: /\/direct/, pro: /\/scanner/, provider: /\/candidatures/, media: /\/accueil/ };
+  // Lot 43 : le pro et le prestataire ont leur Accueil, sur lequel leur casquette s'ouvre.
+  const landing = { organizer: /\/direct/, pro: /\/accueil/, provider: /\/accueil/, media: /\/accueil/ };
   await page.waitForURL(landing[kind], { timeout: 30_000 });
 }
 

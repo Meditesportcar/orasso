@@ -155,12 +155,15 @@ export function SortiesScreen() {
 
   // Rang au prix du public des sorties pointées récentes (calculé par le récap ; rien avant J+1 10 h).
   const [ranks, setRanks] = useState<Record<string, { rank: number; of: number } | null>>({});
+  // `history` est recalculé à chaque rendu : `asked` limite chaque événement à une seule requête.
+  const asked = useRef(new Set<string>());
   useEffect(() => {
-    const recent = history.filter((a) => a.checkedInAt && !(a.event.id in ranks)).slice(0, 3);
+    const recent = history.filter((a) => a.checkedInAt && !asked.current.has(a.event.id)).slice(0, 3);
     for (const a of recent) {
+      asked.current.add(a.event.id);
       void api.eventAudienceRank(a.event.id).then((r) => setRanks((prev) => ({ ...prev, [a.event.id]: r })));
     }
-  }, [history, ranks]);
+  }, [history]);
 
   return (
     <TabScreen

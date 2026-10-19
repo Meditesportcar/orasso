@@ -95,9 +95,9 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(homeOf({ kind: "organizer", structureId: "s-1" })).toBe("/(orga)/direct");
   });
 
-  it("on ouvre une casquette sur un onglet rempli tant que son Accueil est « Bientôt »", () => {
-    expect(landingOf({ kind: "pro", proProfileId: "p-1" })).toBe("/(pro)/scanner");
-    expect(landingOf({ kind: "provider" })).toBe("/(provider)/candidatures");
+  it("on ouvre une casquette sur son Accueil (lot 43 : le pro et le prestataire ont le leur)", () => {
+    expect(landingOf({ kind: "pro", proProfileId: "p-1" })).toBe("/(pro)/accueil");
+    expect(landingOf({ kind: "provider" })).toBe("/(provider)/accueil");
     expect(landingOf(VISITOR)).toBe("/(visitor)/accueil");
     expect(landingOf({ kind: "organizer", structureId: "s-1" })).toBe("/(orga)/direct");
   });
