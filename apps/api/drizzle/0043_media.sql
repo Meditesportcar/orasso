@@ -34,7 +34,7 @@ CREATE TABLE "media_contents" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "media_contents_title_check" CHECK (char_length("media_contents"."title") <= 80),
 	CONSTRAINT "media_contents_photos_check" CHECK (cardinality("media_contents"."photo_keys") <= 30),
-	CONSTRAINT "media_contents_link_check" CHECK ("media_contents"."kind" <> 'link' or "media_contents"."url" is not null)
+	CONSTRAINT "media_contents_link_check" CHECK ("media_contents"."kind" <> 'link' or "media_contents"."url" is not null or "media_contents"."deleted_at" is not null)
 );
 --> statement-breakpoint
 CREATE TABLE "media_profiles" (

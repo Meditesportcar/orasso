@@ -686,17 +686,18 @@ export const checkinsService = {
       .leftJoin(profiles, eq(profiles.userId, scanEvents.staffUserId))
       .where(eq(scanEvents.eventId, eventId))
       .orderBy(asc(scanEvents.scannedAt));
-    // Entrées des véhicules seulement : `expected` ne compte pas les prestataires (lot 21, compteur à part dans le direct).
-    const providerApps = new Set(
+    // Entrées des véhicules seulement : `expected` ne compte ni les prestataires (lot 21, compteur à part dans le direct)
+    // ni les badges presse (lot 45).
+    const otherApps = new Set(
       (
         await db
           .select({ id: applications.id })
           .from(applications)
-          .where(and(eq(applications.eventId, eventId), eq(applications.kind, "provider")))
+          .where(and(eq(applications.eventId, eventId), sql`${applications.kind} <> 'vehicle'`))
       ).map((r) => r.id),
     );
     const entries = (await db.query.checkins.findMany({ where: eq(checkins.eventId, eventId) })).filter(
-      (c) => !providerApps.has(c.applicationId),
+      (c) => !otherApps.has(c.applicationId),
     );
     const expected = (await eventsRepo.statusCounts(eventId)).accepted;
     const items = await listItems(eventId, undefined);

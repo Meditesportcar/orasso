@@ -1,5 +1,5 @@
 {
-  "id": "b7f4718d-3620-4162-aed1-dd1e53087d6c",
+  "id": "377df9b3-4bb7-4a02-89f9-bb93ea4d3ca5",
   "prevId": "ab1a8ecf-da25-468c-abcc-f6def07b723d",
   "version": "7",
   "dialect": "postgresql",
@@ -5734,7 +5734,7 @@
         },
         "media_contents_link_check": {
           "name": "media_contents_link_check",
-          "value": "\"media_contents\".\"kind\" <> 'link' or \"media_contents\".\"url\" is not null"
+          "value": "\"media_contents\".\"kind\" <> 'link' or \"media_contents\".\"url\" is not null or \"media_contents\".\"deleted_at\" is not null"
         }
       },
       "isRLSEnabled": false
