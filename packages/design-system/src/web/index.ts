@@ -32,9 +32,13 @@ export { TabBar, type TabBarProps, type TabItem } from "./components/TabBar";
 export { VehicleCard, type VehicleCardProps, VehicleThumb, type VehicleThumbProps } from "./components/VehicleCard";
 export {
   DEFAULT_THEME_PREFERENCE,
+  DEPT_COOKIE,
+  departmentPosition,
   parseThemePreference,
   readThemeCookie,
   resolveTheme,
+  SOLAR_REFRESH_MS,
+  type SolarContext,
   serverTheme,
   THEME_COOKIE,
   THEME_STORAGE_KEY,

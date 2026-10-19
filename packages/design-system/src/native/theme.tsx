@@ -1,9 +1,14 @@
-// Thèmes natifs : Béton par défaut, Sable au choix ou en suivant le réglage de l'appareil (clair → Sable).
-// Les jetons de chaque thème sont ceux de tokens.json (voir ../tokens.ts) ; les composants lisent `useTheme().t`.
-// La préférence n'est pas écrite sur le disque ici : l'appli la mémorise (initialPreference / onPreferenceChange).
+// Thèmes natifs : Béton par défaut, Sable ou Automatique au choix de l'utilisateur, jamais imposé (DA v2, lot 38).
+// Automatique = Sable le jour, Béton après le coucher du soleil, au centre du premier département de l'utilisateur
+// (Paris sinon, jamais le GPS) ; recalculé toutes les 60 s et au retour au premier plan. L'ancien « auto » (suivre le
+// réglage de l'appareil) a changé de sens : une préférence « auto » déjà enregistrée suit désormais le soleil.
+// Les jetons de chaque thème sont ceux de tokens.json + la surcouche v2 (voir ../tokens.ts) ; les composants lisent
+// `useTheme().t`. La préférence n'est pas écrite sur le disque ici : l'appli la mémorise (initialPreference /
+// onPreferenceChange).
 
+import { isDaylight, type LatLng, SOLAR_FALLBACK } from "@orasso/shared";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { AccessibilityInfo, useColorScheme } from "react-native";
+import { AccessibilityInfo, AppState } from "react-native";
 import { type ColorTokenName, THEME_IDS, type ThemeId, tokens } from "../tokens";
 
 export type ThemePreference = ThemeId | "auto";
@@ -13,11 +18,17 @@ export function parseThemePreference(value: unknown): ThemePreference {
   return value === "beton" || value === "sable" || value === "auto" ? value : DEFAULT_THEME_PREFERENCE;
 }
 
-/** Thème effectif d'une préférence ; « auto » suit le mode clair de l'appareil (Sable) ou sombre (Béton). */
-export function resolveTheme(preference: ThemePreference, scheme: string | null | undefined): ThemeId {
-  if (preference === "auto") return scheme === "light" ? "sable" : "beton";
+/** L'instant et la position du calcul solaire (centre du département, Paris par défaut). */
+export type SolarContext = { now: Date; lat: number; lng: number };
+
+/** Thème effectif d'une préférence ; « auto » = Sable entre le lever et le coucher du soleil, Béton sinon. */
+export function resolveTheme(preference: ThemePreference, context: SolarContext): ThemeId {
+  if (preference === "auto") return isDaylight(context.now, context.lat, context.lng) ? "sable" : "beton";
   return preference;
 }
+
+/** Recalcul du thème automatique : toutes les 60 s (et au retour au premier plan). */
+export const SOLAR_REFRESH_MS = 60_000;
 
 /** Tous les jetons d'un thème, prêts pour les styles React Native. */
 export type ThemeTokens = {
@@ -86,6 +97,8 @@ type ThemeContextValue = {
   /** Jetons du thème effectif. */
   t: ThemeTokens;
   setPreference: (preference: ThemePreference) => void;
+  /** Position du thème automatique (centre du premier département de l'utilisateur) ; `null` = Paris. */
+  setPosition: (position: LatLng | null) => void;
   /** Réduction des animations : tout devient un fondu `fast`, le fond ne bouge plus. */
   reducedMotion: boolean;
 };
@@ -98,19 +111,49 @@ export type ThemeProviderProps = {
   onPreferenceChange?: (preference: ThemePreference) => void;
   /** Force la réduction des animations (recette) ; sinon le réglage système. */
   reducedMotion?: boolean;
+  /** Position initiale du thème automatique ; Paris par défaut (l'appli la règle ensuite avec `setPosition`). */
+  position?: LatLng | null;
+  /** Horloge (recette, horloge simulée) ; `Date.now` par défaut. */
+  now?: () => number;
   children: ReactNode;
 };
+
+/** L'instant courant, rafraîchi toutes les 60 s et au retour au premier plan, seulement quand `active`. */
+function useSolarClock(active: boolean, now: () => number): number {
+  const [time, setTime] = useState(now);
+  useEffect(() => {
+    if (!active) return;
+    setTime(now());
+    const timer = setInterval(() => setTime(now()), SOLAR_REFRESH_MS);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setTime(now());
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [active, now]);
+  return time;
+}
 
 export function ThemeProvider({
   initialPreference = DEFAULT_THEME_PREFERENCE,
   onPreferenceChange,
   reducedMotion,
+  position: initialPosition = null,
+  now = Date.now,
   children,
 }: ThemeProviderProps) {
   const [preference, setPreferenceState] = useState<ThemePreference>(initialPreference);
-  const scheme = useColorScheme();
+  const [position, setPositionState] = useState<LatLng | null>(initialPosition);
   const system = useSystemReducedMotion();
-  const theme = resolveTheme(preference, scheme);
+  const time = useSolarClock(preference === "auto", now);
+  const { lat, lng } = position ?? SOLAR_FALLBACK;
+  const theme = resolveTheme(preference, { now: new Date(time), lat, lng });
+
+  const setPosition = useCallback((next: LatLng | null) => {
+    setPositionState((prev) => (prev?.lat === next?.lat && prev?.lng === next?.lng ? prev : next));
+  }, []);
 
   const setPreference = useCallback(
     (next: ThemePreference) => {
@@ -121,8 +164,15 @@ export function ThemeProvider({
   );
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ preference, theme, t: themeTokens[theme], setPreference, reducedMotion: reducedMotion ?? system }),
-    [preference, theme, setPreference, reducedMotion, system],
+    () => ({
+      preference,
+      theme,
+      t: themeTokens[theme],
+      setPreference,
+      setPosition,
+      reducedMotion: reducedMotion ?? system,
+    }),
+    [preference, theme, setPreference, setPosition, reducedMotion, system],
   );
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

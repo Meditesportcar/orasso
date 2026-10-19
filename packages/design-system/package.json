@@ -20,6 +20,9 @@
     "pretest": "node scripts/generate-tokens.mjs && node scripts/generate-native-brand.mjs",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@orasso/shared": "workspace:*"
+  },
   "peerDependencies": {
     "react": "19.2.3",
     "react-native": "*",

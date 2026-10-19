@@ -59,6 +59,8 @@ export {
   DEFAULT_THEME_PREFERENCE,
   parseThemePreference,
   resolveTheme,
+  SOLAR_REFRESH_MS,
+  type SolarContext,
   type ThemePreference,
   ThemeProvider,
   type ThemeProviderProps,

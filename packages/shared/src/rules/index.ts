@@ -21,6 +21,7 @@ export * from "./registrationBlock";
 export * from "./registrationWindow";
 export * from "./registry";
 export * from "./reviews";
+export * from "./solar";
 export * from "./sponsored";
 export * from "./templates";
 export * from "./ticketing";
