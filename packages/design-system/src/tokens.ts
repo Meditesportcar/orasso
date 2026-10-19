@@ -158,6 +158,9 @@ export const tokens = {
       "faisceau": "linear-gradient(170deg, transparent 0 36%, rgba(255,246,225,0.14) 36% 56%, transparent 56%)",
       "marquage": "repeating-linear-gradient(170deg, transparent 0 104px, rgba(243,235,221,0.18) 104px 112px)",
       "vignette": "radial-gradient(ellipse 130% 90% at 55% 25%, #17191e 0, #101216 62%, #050608 125%)",
+      "battleLamp": "radial-gradient(ellipse 74% 34% at 104% -4%, rgba(255,204,92,0.55), transparent 100%)",
+      "battleSpill": "radial-gradient(ellipse 100% 58% at 100% 0%, rgba(233,184,36,0.22), transparent 72%)",
+      "battleRim": "radial-gradient(ellipse 95% 60% at -4% 108%, rgba(110,130,175,0.12), transparent 70%)",
       "grain": "feTurbulence fractalNoise 0.9 · 2 octaves · blanc α 0.6 · opacity 0.28 · mix-blend-mode overlay"
     },
     "sable": {
@@ -166,6 +169,9 @@ export const tokens = {
       "faisceau": "linear-gradient(170deg, transparent 0 36%, rgba(19,20,23,0.16) 36% 56%, transparent 56%)",
       "marquage": "repeating-linear-gradient(170deg, transparent 0 104px, rgba(19,20,23,0.30) 104px 112px)",
       "vignette": "radial-gradient(ellipse 130% 90% at 55% 25%, #e8dfca 0, #ddd2b8 62%, #c9bc9b 125%)",
+      "battleLamp": "none",
+      "battleSpill": "none",
+      "battleRim": "none",
       "grain": "feTurbulence fractalNoise 0.9 · 2 octaves · noir α 0.6 · opacity 0.32 · mix-blend-mode multiply"
     }
   },
@@ -175,14 +181,20 @@ export const tokens = {
       "reflet": "radial-gradient(ellipse 60% 42% at -12% 108%, rgba(255,246,225,0.42), rgba(255,246,225,0.10) 45%, transparent 65%)",
       "faisceau": "linear-gradient(170deg, transparent 0 36%, rgba(255,246,225,0.14) 36% 56%, transparent 56%)",
       "marquage": "repeating-linear-gradient(170deg, transparent 0 190px, rgba(243,235,221,0.18) 190px 200px)",
-      "vignette": "radial-gradient(ellipse 130% 90% at 55% 25%, #17191e 0, #101216 62%, #050608 125%)"
+      "vignette": "radial-gradient(ellipse 130% 90% at 55% 25%, #17191e 0, #101216 62%, #050608 125%)",
+      "battleLamp": "radial-gradient(ellipse 74% 34% at 104% -4%, rgba(255,204,92,0.55), transparent 100%)",
+      "battleSpill": "radial-gradient(ellipse 100% 58% at 100% 0%, rgba(233,184,36,0.22), transparent 72%)",
+      "battleRim": "radial-gradient(ellipse 95% 60% at -4% 108%, rgba(110,130,175,0.12), transparent 70%)"
     },
     "sable": {
       "halo": "none",
       "reflet": "none",
       "faisceau": "linear-gradient(170deg, transparent 0 36%, rgba(19,20,23,0.16) 36% 56%, transparent 56%)",
       "marquage": "repeating-linear-gradient(170deg, transparent 0 190px, rgba(19,20,23,0.30) 190px 200px)",
-      "vignette": "radial-gradient(ellipse 82% 62% at 50% 26%, #e8dfca 0, #ddd2b8 62%, #c9bc9b 125%)"
+      "vignette": "radial-gradient(ellipse 82% 62% at 50% 26%, #e8dfca 0, #ddd2b8 62%, #c9bc9b 125%)",
+      "battleLamp": "none",
+      "battleSpill": "none",
+      "battleRim": "none"
     }
   },
   "grain": {
@@ -690,6 +702,39 @@ export const tokensV2Overlay = [
       "sable": "none"
     },
     "why": "Sable en fond uni (v10)"
+  },
+  {
+    "kind": "changed",
+    "group": "ground-fx",
+    "name": "battle-lamp",
+    "before": {},
+    "value": {
+      "beton": "radial-gradient(ellipse 74% 34% at 104% -4%, rgba(255,204,92,0.55), transparent 100%)",
+      "sable": "none"
+    },
+    "why": "fond battle (lot 39) : cœur de la lampe à sodium du prototype (--halo-core, 0,55)"
+  },
+  {
+    "kind": "changed",
+    "group": "ground-fx",
+    "name": "battle-spill",
+    "before": {},
+    "value": {
+      "beton": "radial-gradient(ellipse 100% 58% at 100% 0%, rgba(233,184,36,0.22), transparent 72%)",
+      "sable": "none"
+    },
+    "why": "fond battle (lot 39) : lumière diffuse de la lampe (--halo-spill, 0,22)"
+  },
+  {
+    "kind": "changed",
+    "group": "ground-fx",
+    "name": "battle-rim",
+    "before": {},
+    "value": {
+      "beton": "radial-gradient(ellipse 95% 60% at -4% 108%, rgba(110,130,175,0.12), transparent 70%)",
+      "sable": "none"
+    },
+    "why": "fond battle (lot 39) : contre-jour froid en bas à gauche (--rim, 0,12)"
   },
   {
     "kind": "changed",

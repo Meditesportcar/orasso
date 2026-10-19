@@ -94,6 +94,30 @@
         "why": "Sable en fond uni (v10)"
       },
       {
+        "name": "battle-lamp",
+        "value": {
+          "beton": "radial-gradient(ellipse 74% 34% at 104% -4%, rgba(255,204,92,0.55), transparent 100%)",
+          "sable": "none"
+        },
+        "why": "fond battle (lot 39) : cœur de la lampe à sodium du prototype (--halo-core, 0,55)"
+      },
+      {
+        "name": "battle-spill",
+        "value": {
+          "beton": "radial-gradient(ellipse 100% 58% at 100% 0%, rgba(233,184,36,0.22), transparent 72%)",
+          "sable": "none"
+        },
+        "why": "fond battle (lot 39) : lumière diffuse de la lampe (--halo-spill, 0,22)"
+      },
+      {
+        "name": "battle-rim",
+        "value": {
+          "beton": "radial-gradient(ellipse 95% 60% at -4% 108%, rgba(110,130,175,0.12), transparent 70%)",
+          "sable": "none"
+        },
+        "why": "fond battle (lot 39) : contre-jour froid en bas à gauche (--rim, 0,12)"
+      },
+      {
         "name": "vignette",
         "value": {
           "beton": "radial-gradient(ellipse 130% 90% at 55% 25%, #17191e 0, #101216 62%, #050608 125%)",

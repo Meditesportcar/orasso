@@ -2,6 +2,7 @@
 // (src/web/assets/*.svg, copies de identite/) et écrit src/native/brandArt.ts, que les composants Brand natifs
 // dessinent avec react-native-svg. Les SVG portent un manifeste C2PA de plusieurs ko : on ne garde que les formes.
 // Lancé par `pnpm --filter @orasso/design-system run generate`. Sortie versionnée.
+// Lot 39 : section « car-top » (la voiture du O vivant vue de dessus) → brandArt.carTop et src/web/assets/car-top.svg.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -96,6 +97,71 @@ function introFrames(name) {
 }
 const introAnimation = { car: introFrames("acar"), o: introFrames("ao"), wipe: introFrames("aw") };
 
+// --- car-top (lot 39) : la voiture du O vivant vue de dessus -------------------------------------------------------
+// Silhouette de 64 × 28 unités centrée sur l'origine, nez vers +x : caisse, vitres, phares, feux stop, roues (les
+// avant forment un groupe orientable autour de leur centre), aileron facultatif (la Supra du tuto) et trois cercles de
+// fumée derrière les roues arrière. Aucune couleur : les composants la peignent aux jetons (caisse `poster`, feux stop
+// `win`, fumée `ink` à 12 %). Le même tracé est écrit pour le site (src/web/assets/car-top.svg).
+const r1 = (n) => Math.round(n * 100) / 100;
+function roundedRect(x, y, w, h, r) {
+  const k = Math.min(r, w / 2, h / 2);
+  return [
+    `M${r1(x + k)} ${r1(y)}H${r1(x + w - k)}A${r1(k)} ${r1(k)} 0 0 1 ${r1(x + w)} ${r1(y + k)}`,
+    `V${r1(y + h - k)}A${r1(k)} ${r1(k)} 0 0 1 ${r1(x + w - k)} ${r1(y + h)}`,
+    `H${r1(x + k)}A${r1(k)} ${r1(k)} 0 0 1 ${r1(x)} ${r1(y + h - k)}`,
+    `V${r1(y + k)}A${r1(k)} ${r1(k)} 0 0 1 ${r1(x + k)} ${r1(y)}Z`,
+  ].join("");
+}
+const wheel = (cx, cy) => ({ x: cx - 5, y: cy - 2, width: 10, height: 4, rx: 1.5, cx, cy });
+const carTop = {
+  /** Boîte de la voiture seule (sans la fumée) : 64 × 28 unités. */
+  box: [-32, -14, 64, 28],
+  /** Boîte de dessin avec la fumée, centrée sur la voiture (un composant la fait tourner autour de son centre). */
+  viewBox: [-64, -32, 128, 64],
+  body: roundedRect(-30, -12, 60, 24, 9),
+  glass: roundedRect(3, -9, 12, 18, 3) + roundedRect(-22, -8, 8, 16, 2.5),
+  headlights: [
+    { x: 26.5, y: -9.5, width: 2.5, height: 5, rx: 1 },
+    { x: 26.5, y: 4.5, width: 2.5, height: 5, rx: 1 },
+  ],
+  brakeLights: [
+    { x: -30.6, y: -9.5, width: 2.4, height: 6, rx: 1 },
+    { x: -30.6, y: 3.5, width: 2.4, height: 6, rx: 1 },
+  ],
+  rearWheels: [wheel(-18, -12.5), wheel(-18, 12.5)],
+  /** Roues avant : chacune tourne autour de (cx, cy) du contre-braquage. */
+  frontWheels: [wheel(18, -12.5), wheel(18, 12.5)],
+  spoiler: { x: -29, y: -13.5, width: 3.6, height: 27, rx: 1.2 },
+  /** Fumée : trois cercles qui s'estompent (opacité relative, multipliée par les 12 % de la fumée). */
+  smoke: [
+    { cx: -36, cy: 0, r: 5, opacity: 1 },
+    { cx: -43, cy: 0, r: 7, opacity: 0.66 },
+    { cx: -52, cy: 0, r: 9, opacity: 0.33 },
+  ],
+};
+
+const rectSvg = (r, extra = "") =>
+  `<rect x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="${r.rx}"${extra}/>`;
+const carTopSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${carTop.viewBox.join(" ")}" width="128" height="64">
+<!-- Généré par scripts/generate-native-brand.mjs (section car-top). Ne pas modifier. La voiture du O vivant vue de dessus,
+     64 × 28 unités, nez à droite. Couleurs par variables CSS (repli currentColor) : --car-body, --car-glass, --car-light,
+     --car-brake, --car-wheel, --car-smoke. Le site dessine la même géométrie en ligne (web/components/Olive.tsx). -->
+<g id="car-top">
+<g id="smoke" fill="var(--car-smoke, currentColor)">${carTop.smoke
+  .map((c) => `<circle cx="${c.cx}" cy="${c.cy}" r="${c.r}" opacity="${r1(0.12 * c.opacity)}"/>`)
+  .join("")}</g>
+<g id="wheels" fill="var(--car-wheel, currentColor)">${carTop.rearWheels.map((r) => rectSvg(r)).join("")}<g id="front-wheels">${carTop.frontWheels
+  .map((r) => rectSvg(r, ` transform="rotate(0 ${r.cx} ${r.cy})"`))
+  .join("")}</g></g>
+<path id="body" d="${carTop.body}" fill="var(--car-body, currentColor)"/>
+<path id="glass" d="${carTop.glass}" fill="var(--car-glass, currentColor)"/>
+<g id="headlights" fill="var(--car-light, currentColor)">${carTop.headlights.map((r) => rectSvg(r)).join("")}</g>
+<g id="brake-lights" fill="var(--car-brake, currentColor)">${carTop.brakeLights.map((r) => rectSvg(r)).join("")}</g>
+</g>
+</svg>
+`;
+writeFileSync(resolve(root, "src/web/assets/car-top.svg"), carTopSvg);
+
 const json = (value) => JSON.stringify(value, null, 2);
 const out = `// Fichier généré par scripts/generate-native-brand.mjs d'après src/web/assets/*.svg (kit d'identité). Ne pas modifier.
 // Géométrie du logotype, du monogramme et de l'indicateur de chargement, pour react-native-svg.
@@ -123,6 +189,8 @@ export const brandArt = ${json({
   loaderKeyframes: frames,
   /** Logo animé d'ouverture (1,6 s) : images clés de la voiture, du O (échelle, opacité) et du rideau des lettres. */
   intro: introAnimation,
+  /** Lot 39 : la voiture du O vivant vue de dessus (64 × 28, nez vers +x), sans couleur (peinte aux jetons). */
+  carTop,
 })} as const;
 `;
 writeFileSync(resolve(root, "src/native/brandArt.ts"), out);

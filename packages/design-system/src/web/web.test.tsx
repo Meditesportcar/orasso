@@ -2,7 +2,18 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { bezier, curve, duration, park, shake } from "../motion";
+import { battle, bezier, curve, duration, olive, park, shake } from "../motion";
+import { brandArt } from "../native/brandArt";
+import {
+  CarTopArt,
+  CenterTabO,
+  EmptyState,
+  OLoader,
+  OpeningBattle,
+  SendBurst,
+  SendProgress,
+  StampDrop,
+} from "./components/Olive";
 import {
   AppBar,
   BigTitle,
@@ -68,6 +79,15 @@ describe("mouvement : motion.ts et motion.css s'accordent", () => {
     expect([duration.fast, duration.base, duration.poster, duration.scan]).toEqual([120, 220, 420, 1000]);
     expect(curve.park).toBe("cubic-bezier(.12,.75,.25,1)");
     expect(bezier.park).toEqual([0.12, 0.75, 0.25, 1]);
+  });
+  it("le O vivant et le fond battle (lot 39) : mêmes durées et opacités", () => {
+    expect(css).toContain(`--olive-open: ${olive.open}ms;`);
+    expect(css).toContain(`--olive-park: ${olive.park}ms;`);
+    expect(css).toContain(`--olive-orbit: ${olive.orbit}ms;`);
+    expect(css).toMatch(new RegExp(`:root \\{[\\s\\S]*--battle-opacity: ${battle.opacity.beton};`));
+    expect(css).toMatch(new RegExp(`\\[data-theme="sable"\\] \\{\\s*--battle-opacity: ${battle.opacity.sable};`));
+    expect([olive.open, olive.park, olive.orbit]).toEqual([3000, 320, 1400]);
+    expect(battle.gap).toEqual([9000, 14000]);
   });
   it("réduction des animations : tout est un fondu de --timing-fast", () => {
     expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]*animation-name: o-fade !important/);
@@ -143,7 +163,7 @@ describe("rendu serveur des composants", () => {
       </Button>,
     );
     expect(loading).toContain("disabled");
-    expect(loading).toContain("o-loader");
+    expect(loading).toContain("o-olive");
   });
 
   it("Chip, StatusBadge, Counters", () => {
@@ -252,8 +272,8 @@ describe("rendu serveur des composants", () => {
       expect(items.length, set).toBe(5);
       expect(items[2]?.center && items[2]?.o, set).toBe(true);
       const bar = html(<TabBar set={set} active={items[0]?.id ?? ""} />);
-      expect(bar.match(/is-o/g)?.length, set).toBe(1);
-      expect(bar).toContain("o-monogram");
+      expect(bar.match(/is-o(?=[" ])/g)?.length, set).toBe(1);
+      expect(bar).toContain("o-center-o");
     }
     expect(tabSets.fan).toBe(tabSets.exhibitor);
     expect(tabSets.organizer.map((t) => t.label)).toEqual(["Événements", "Tri", "Direct", "Équipe", "Structure"]);
@@ -271,6 +291,54 @@ describe("rendu serveur des composants", () => {
     expect(html(<Outlined on="photo">J-6</Outlined>)).toContain("o-onphoto");
     expect(html(<Outlined on="ground">19 h</Outlined>)).toContain("o-onbg");
     expect(tokensV2Overlay.length).toBeGreaterThan(20);
+  });
+
+  it("le O vivant (lot 39) : chaque variante se rend côté serveur", () => {
+    const loader = html(<OLoader size={72} />);
+    expect(loader).toContain('role="progressbar"');
+    expect(loader).toContain("is-loading");
+    expect(loader).toContain("animateMotion");
+    expect(html(<OLoader size={24} done />)).toContain("is-parked");
+    expect(html(<OpeningBattle />)).toContain("o-opening__letters");
+    const send = html(<SendProgress progress={0.4} />);
+    expect(send).toContain('aria-valuenow="40"');
+    // L'envoi (décision v39) : le O vivant avec l'anneau qui se remplit, la voiture qui drifte.
+    expect(send).toContain("--ring:0.4");
+    expect(send).toContain("o-olive__ring");
+    expect(send).toContain("animateMotion");
+    // Le bouton qui travaille : O vivant compact, voiture à l'encre du O (O noir sur le bouton moutarde).
+    const busy = html(
+      <Button icon="check" loading>
+        Retenir
+      </Button>,
+    );
+    expect(busy).toContain("o-olive--compact");
+    expect(busy).toContain("o-button__loader");
+    const css = readFileSync(resolve(componentsDir, "Olive.css"), "utf8");
+    expect(css).toMatch(/\.o-olive--compact \.o-car \{\s*--car-body: currentColor;/);
+    expect(css).toMatch(/\.o-olive\.o-button__loader \{\s*color: inherit;/);
+    // L'ouverture se passe d'un clic.
+    expect(html(<OpeningBattle />)).toMatch(/<button type="button" class="o-opening/);
+    expect(html(<SendBurst />)).toContain("Candidature envoyée");
+    const empty = html(<EmptyState title="Aucune sortie" text="Rien pour l'instant." />);
+    expect(empty).toContain("o-empty__spot");
+    expect(empty).toContain("Aucune sortie");
+    expect(html(<StampDrop seed={4} shape="square" />)).toContain("o-stamp__ring");
+    expect(html(<StampDrop seed={4} />)).toBe(html(<StampDrop seed={4} />));
+    expect(html(<CenterTabO active />)).toContain("is-parked");
+    expect(html(<CenterTabO active={false} />)).toContain("is-out");
+    expect(html(<Ground variant="battle" />)).toContain("o-ground__battle");
+    expect(html(<Ground variant="battle" still />)).not.toContain("o-anim-ambient-breath");
+    // Le dessin de la voiture vue de dessus : même géométrie que le fichier du site (généré par le même script).
+    const svg = readFileSync(resolve(import.meta.dirname, "assets/car-top.svg"), "utf8");
+    expect(svg).toContain(brandArt.carTop.body);
+    expect(
+      html(
+        <svg aria-hidden="true">
+          <CarTopArt />
+        </svg>,
+      ),
+    ).toContain(brandArt.carTop.body);
   });
 
   it("Ground, Logo, Monogram, Cover", () => {

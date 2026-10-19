@@ -13,10 +13,13 @@ const dir = import.meta.dirname;
 describe("composants natifs : aucune valeur en dur", () => {
   // Les composants et le mouvement : pas de couleur ni de durée écrite à la main (tout vient des jetons).
   // Hors contrôle : les fichiers de données ou de calcul (jetons, géométrie de marque, lecture de dégradés, bruit).
-  const files = readdirSync(dir).filter(
-    (f) => /\.(tsx|ts)$/.test(f) && !/(\.test|brandArt|gradientCss|noise|fontFamily|textStyles|color)\./.test(f),
+  // Lot 39 : le dossier du O vivant (olive/) est contrôlé aussi, sauf la géométrie pure (path.ts).
+  const files = [...readdirSync(dir), ...readdirSync(resolve(dir, "olive")).map((f) => `olive/${f}`)].filter(
+    (f) =>
+      /\.(tsx|ts)$/.test(f) && !/(\.test|brandArt|gradientCss|noise|fontFamily|textStyles|color|olive\/path)\./.test(f),
   );
   it("pas de couleur hexadécimale, rgb(a)/hsl ni de durée dans les composants", () => {
+    expect(files).toContain("olive/OLoader.tsx");
     const offenders: string[] = [];
     for (const file of files) {
       readFileSync(resolve(dir, file), "utf8")
@@ -32,6 +35,62 @@ describe("composants natifs : aucune valeur en dur", () => {
         });
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("le O vivant (lot 39) : variantes, alias, branchements", () => {
+  // Pas de rendu React Native sous vitest (pas de react-native-web ni de Reanimated en Node dans ce paquet) : le rendu de
+  // chaque variante est vérifié dans le navigateur (/_ds de l'appli, e2e/lot39.spec.ts). Ici : la structure.
+  const read = (file: string) => readFileSync(resolve(dir, file), "utf8");
+  it("les huit variantes existent et sont exportées par le paquet", () => {
+    const index = read("olive/index.ts");
+    for (const name of [
+      "OpeningBattle",
+      "OLoader",
+      "useOliveRefresh",
+      "PullToRefresh",
+      "SendProgress",
+      "SendBurst",
+      "EmptyState",
+      "StampDrop",
+      "CenterTabO",
+    ]) {
+      expect(index, name).toMatch(new RegExp(`\\b${name}\\b`));
+    }
+    expect(read("index.ts")).toContain('export * from "./olive";');
+  });
+  it("un seul useFrameCallback par variante, et seulement via l'horloge commune", () => {
+    const olive = readdirSync(resolve(dir, "olive")).filter((f) => /\.tsx$/.test(f));
+    for (const file of olive) {
+      const count = (read(`olive/${file}`).match(/useFrameCallback\(/g) ?? []).length;
+      expect(count, file).toBeLessThanOrEqual(file === "shared.tsx" ? 1 : 0);
+    }
+  });
+  it("Loader et OpeningScreen restent des alias dépréciés jusqu'au lot 58", () => {
+    expect(read("Loader.tsx")).toMatch(/@deprecated[^\n]*lot 58[\s\S]*export const Loader = OLoader;/);
+    expect(read("Opening.tsx")).toMatch(/@deprecated[^\n]*lot 58[^\n]*\nexport const OpeningScreen = OpeningBattle;/);
+  });
+  it("bouton en chargement : O vivant compact, voiture plus grande et à l'encre du bouton", () => {
+    expect(read("Button.tsx")).toContain("<OLoader size={24} ink={ink} label={null} />");
+    const loader = read("olive/OLoader.tsx");
+    expect(loader).toContain("const compact = size <= COMPACT_MAX;");
+    expect(loader).toContain("(compact ? CAR_UNITS_COMPACT : CAR_UNITS) * k");
+    expect(loader).toContain("color={compact ? ink : t.color.accent}");
+    // À 24 px, la voiture fait au moins 7 px (64 unités sur une scène de 200).
+    const shared = read("olive/shared.tsx");
+    const units = Number(shared.match(/CAR_UNITS_COMPACT = (\d+)/)?.[1]);
+    const stage = Number(shared.match(/STAGE_COMPACT = (\d+)/)?.[1]);
+    expect((24 * units) / stage).toBeGreaterThanOrEqual(7);
+  });
+  it("l'envoi : O vivant + anneau (décision v39), l'ouverture se passe d'un toucher", () => {
+    expect(read("olive/Send.tsx")).toContain("<OLoader size={size} progress={p} done={complete}");
+    const opening = read("olive/OpeningBattle.tsx");
+    expect(opening).toContain('accessibilityHint="Passer"');
+  });
+  it("la barre d'onglets porte le O vivant, la feuille fait taire le fond", () => {
+    expect(read("TabBar.tsx")).toContain("<CenterTabO active={active}");
+    expect(read("Motion.tsx")).toContain("useGroundQuiet(visible)");
+    expect(read("Ground.tsx")).toContain('variant === "battle"');
   });
 });
 

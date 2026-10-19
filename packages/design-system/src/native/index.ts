@@ -46,6 +46,7 @@ export { easings, useParkStyle, usePressScale } from "./motionHooks";
 export { claimNeon, useNeonPulse } from "./neon";
 export { OpeningLogo, type OpeningLogoProps, OpeningScreen, type OpeningScreenProps } from "./Opening";
 export { OutlinedText, type OutlinedTextProps, outlineWidth } from "./OutlinedText";
+export * from "./olive";
 export { Photo, type PhotoProps } from "./Photo";
 export { Plate, type PlateProps } from "./Plate";
 export { PosterCard, type PosterCardProps, type PosterStatus } from "./PosterCard";

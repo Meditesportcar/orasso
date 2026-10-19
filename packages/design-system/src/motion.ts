@@ -62,3 +62,45 @@ export const shake = { amplitude: 7, count: 3, duration: 320 } as const;
 
 /** Angle de la coupe diagonale des photos et de l'affiche, en degrés (jeton `cut`). */
 export const cutAngle = Number.parseFloat(tokens.geometry.cut);
+
+/**
+ * Le O vivant (DA v2, lot 39 ; README, écart 5) : la voiture du logo vue de dessus drifte autour du O pendant un
+ * chargement et se gare dedans quand c'est fini. Durées en millisecondes.
+ */
+export const olive = {
+  /** Battle d'ouverture en tandem, à chaque lancement (V12) : 1,6 s du kit allongées à 3 s. */
+  open: 3000,
+  /** La voiture se gare dans le O (même geste que `park` : dépassement puis place). */
+  park: 320,
+  /** Un tour de drift autour du O. */
+  orbit: 1400,
+  /** Contre-braquage des roues avant pendant la glisse, en degrés. */
+  steer: -18,
+  /** Angle de dérive autour du O (corps − tangente), en radians : le nez vers l'intérieur du virage. */
+  slip: 0.62,
+  /** Écart du poursuivant dans la battle en tandem, en tour de piste. */
+  tandemGap: 0.16,
+  /** Le O descend de 64 px avant que l'actualisation parte (tirer pour actualiser). */
+  pullDistance: 64,
+} as const;
+
+/**
+ * Le fond animé « battle » (lot 39, V14) : une meute de 2 voitures (parfois un train de 3) toutes les 9 à 14 s,
+ * 2 à 3 voitures à l'écran au plus, jamais en mode staff, jour J ou tri, jamais avec la réduction des animations.
+ */
+export const battle = {
+  /** Attente entre deux meutes, en millisecondes [min, max]. */
+  gap: [9000, 14000],
+  /** Vitesse de la meute, en px par seconde [min, max]. */
+  speed: [140, 200],
+  /** Probabilité d'un train de trois voitures au lieu d'une paire. */
+  trainChance: 0.27,
+  /** Distance entre deux voitures de la meute, le long de la trajectoire, en px (paire, train). */
+  spacing: { pair: 40, train: 34 },
+  /** Opacité des voitures sur le fond : 18 % en Béton, 10 % en Sable. */
+  opacity: { beton: 0.18, sable: 0.1 },
+  /** Première meute après l'arrivée sur l'écran, en millisecondes. */
+  firstDelay: 1200,
+  /** Longueur de la voiture du fond, en px (la voiture du O garde ses 64 unités). */
+  carLength: 26,
+} as const;

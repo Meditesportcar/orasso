@@ -3,6 +3,8 @@
 export * from "../icons";
 export * from "../labels";
 export * from "../motion";
+export { OliveActivityProvider, useOliveScreenActive } from "../native/olive/activity";
+export { GroundQuiet, useGroundQuiet, useIsGroundQuiet } from "../native/olive/quiet";
 export { THEME_IDS, type ThemeId, tokens, tokensV2Overlay } from "../tokens";
 export { AppBar, AppBarAction, type AppBarPersona, type AppBarProps } from "./components/AppBar";
 export { BigTitle, type BigTitleProps } from "./components/BigTitle";
@@ -23,6 +25,25 @@ export {
 export { Ground, type GroundProps } from "./components/Ground";
 export { Icon, type IconProps } from "./components/Icon";
 export { Cascade, Park, Reveal, ScreenTransition, type ScreenTransitionProps, TabPanel } from "./components/Motion";
+export {
+  BattleLayer,
+  CarTopArt,
+  CenterTabO,
+  type CenterTabOProps,
+  EmptyState,
+  type EmptyStateProps,
+  OLoader,
+  type OLoaderProps,
+  OpeningBattle,
+  type OpeningBattleProps,
+  SendBurst,
+  type SendBurstProps,
+  SendProgress,
+  type SendProgressProps,
+  StampDrop,
+  type StampDropProps,
+  type StampShape,
+} from "./components/Olive";
 export { Outlined, type OutlinedProps } from "./components/Outlined";
 export { Plate, type PlateProps } from "./components/Plate";
 export { PosterCard, type PosterCardProps, type PosterStatus } from "./components/PosterCard";
