@@ -83,8 +83,8 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
     await shot(page, `05-explorer-affinites-${theme}`);
     await page.getByText("Mes affinités", { exact: true }).click();
     await page.getByText("Structures suivies", { exact: true }).click();
-    await expect(rows.first()).toContainText("Narbonne", { timeout: 30_000 });
-    for (const text of await rows.allTextContents()) expect(text).not.toContain("Rivesaltes");
+    await expect(rows.first()).toContainText("Club Audois Passion", { timeout: 30_000 });
+    for (const text of await rows.allTextContents()) expect(text).toContain("Club Audois Passion");
     await shot(page, `06-explorer-suivies-${theme}`);
     await page.getByText("Structures suivies", { exact: true }).click();
     await page.getByText("Filtres", { exact: true }).click();

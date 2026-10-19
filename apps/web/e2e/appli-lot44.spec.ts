@@ -1,8 +1,19 @@
 import { mkdirSync } from "node:fs";
-import type { Page as ApiPage, EventCard, EventPublic } from "@orasso/shared";
+import type { EventPublic } from "@orasso/shared";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { addVehicleApi, apiCall, MOBILE, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import {
+  addVehicleApi,
+  apiCall,
+  applyApi,
+  createEvent,
+  login,
+  MOBILE,
+  randomPlate,
+  SEED_PASSWORD,
+  signUpApi,
+  unique,
+} from "./helpers";
 
 // Lot 44, côté appli (version web de recette) : Explorer v2 (position refusée → repli sur le 66, tout du plus proche au
 // plus loin, filtres repliés, carte stylée rendue : canvas et style `orasso-<thème>`) et fiche événement v2 (affiche en
@@ -45,6 +56,8 @@ async function signIn(page: Page, email: string) {
 }
 
 async function shot(page: Page, name: string) {
+  // Chaque chargement complet rejoue l'ouverture (battle de 3 s) : on attend qu'elle soit passée.
+  await afterOpening(page);
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
@@ -141,13 +154,18 @@ test("fiche v2 : affiche, créneaux, actions selon le profil, fermé, pas encore
   mkdirSync(DIR, { recursive: true });
   const noct = await apiCall<EventPublic>(null, "GET", `/events/by-slug/${NOCTURNE}`);
   expect(noct.data.arrivals.exhibitors).not.toBeNull();
-  const list = await apiCall<ApiPage<EventCard>>(null, "GET", "/events?limit=50");
-  const fullEvent = list.data.items.find((e) => e.remaining === 0);
-  // Un événement pas encore ouvert : créé par l'API de l'organisateur du seed si le seed n'en a pas.
-  const details = await Promise.all(
-    list.data.items.map((e) => apiCall<EventPublic>(null, "GET", `/events/by-slug/${e.slug}`)),
-  );
-  const soonEvent = details.map((d) => d.data).find((d) => Date.parse(d.registrationsOpenAt) > Date.now());
+  // Un événement complet (une place, prise par un autre exposant) et un pas encore ouvert, créés par l'organisateur.
+  const orga = await login("damien@orasso.local");
+  const fullEvent = await createEvent(orga, { title: `Complet ${unique()}`, capacity: 1, admission: "open" });
+  const other = await signUpApi(`Plein44_${unique()}`.slice(0, 24));
+  await applyApi(other, fullEvent.id, await addVehicleApi(other, randomPlate()));
+  const full = await apiCall<EventPublic>(null, "GET", `/events/by-slug/${fullEvent.slug}`);
+  expect(full.data.remaining).toBe(0);
+  const soonEvent = await createEvent(orga, { title: `Bientôt ${unique()}` });
+  const later = await apiCall(orga, "PATCH", `/events/${soonEvent.id}`, {
+    registrationsOpenAt: new Date(Date.now() + 2 * 86_400_000 - 3 * 3_600_000).toISOString(),
+  });
+  expect(later.status).toBe(200);
 
   // Un exposant neuf (véhicule, 66) : « Candidater avec ma … », puis la candidature refusée sans la case.
   const pseudo = `Fiche44_${unique()}`.slice(0, 24);

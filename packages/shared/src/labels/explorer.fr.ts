@@ -183,9 +183,11 @@ export const eventPageLabels = {
   triage: "Trier les candidatures",
   closedTitle: "Inscriptions exposants fermées",
   closedFull: (capacity: number | null) =>
-    capacity
-      ? `Les ${capacity} places sont attribuées. La liste d'attente reste ouverte.`
-      : "Toutes les places sont attribuées. La liste d'attente reste ouverte.",
+    capacity === 1
+      ? "La place est attribuée. La liste d'attente reste ouverte."
+      : capacity
+        ? `Les ${capacity} places sont attribuées. La liste d'attente reste ouverte.`
+        : "Toutes les places sont attribuées. La liste d'attente reste ouverte.",
   joinWaitlist: "Rejoindre la liste d'attente",
   soonTitle: (when: string) => `Candidatures dès ${when}`,
   soonPreview: (structure: string, everyone: string) =>
