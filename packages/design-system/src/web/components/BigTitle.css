@@ -16,7 +16,7 @@
   flex: none;
   margin: 0;
   white-space: nowrap;
-  font-size: clamp(var(--type-poster-l-size), 8.2cqi, var(--type-poster-xl-size));
+  font-size: clamp(var(--type-poster-m-size), 8.2cqi, var(--type-poster-xl-size));
   line-height: 1;
 }
 /* L'étiquette ne se comprime pas : faute de place à droite du titre, elle passe dessous. */
@@ -35,5 +35,9 @@
   .o-bigtitle__label {
     margin-bottom: 0;
     text-align: left;
+  }
+  /* Écrans étroits (320 à 360 px) : le titre rétrécit pour que « Accréditations » tienne sans faire défiler la page. */
+  .o-bigtitle__title {
+    font-size: clamp(var(--type-poster-m-size), 7.2cqi, var(--type-poster-l-size));
   }
 }

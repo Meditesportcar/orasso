@@ -37,7 +37,7 @@ export function Cover({
         <rect className="o-cover__raised" x="744" y="24" width="120" height="48" rx="18" />
         <rect className="o-cover__night" x="800" y="192" width="160" height="96" rx="18" />
       </svg>
-      <figcaption className="o-cover__text o-onbg">
+      <figcaption className="o-cover__text o-onphoto">
         <h1 className="o-cover__title">{title}</h1>
         <p className="o-cover__subtitle o-t-meta">{subtitle}</p>
       </figcaption>
