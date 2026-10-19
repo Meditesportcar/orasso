@@ -29,6 +29,9 @@ export async function anonymizeProviderForDeletedAccount(tx: Tx, userId: string,
         portfolioUrl: null,
         departments: [],
         proProfileId: null,
+        // Vitrine (lot 46) ; les avis des organisateurs restent (historique), la vitrine n'est plus affichée.
+        tagline: null,
+        menu: [],
       })
       .where(eq(providerProfiles.id, provider.id));
   }
