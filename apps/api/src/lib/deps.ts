@@ -58,7 +58,9 @@ export type JobName =
   // Lot 47 : rendu de l'affiche générée d'un événement, repris en cas d'échec (une tâche en file par événement).
   | "event.poster-render"
   // Lot 49 : récap de l'événement le lendemain de la fin, à 10 h.
-  | "event.recap";
+  | "event.recap"
+  // Lot 51 : suppression d'une photo de véhicule à reprendre (original non flouté, copie d'un envoi refusé).
+  | "storage.remove";
 
 /** Options d'une tâche (pg-boss) : une seule en file par clé, reprises en cas d'échec. */
 export type JobOptions = { singletonKey?: string; retryLimit?: number; retryDelay?: number; retryBackoff?: boolean };

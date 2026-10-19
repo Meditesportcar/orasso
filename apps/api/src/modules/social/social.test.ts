@@ -132,7 +132,8 @@ describe("audience d'un profil", () => {
       const text = res.text.toLowerCase().replaceAll(/[\s-]/g, "");
       expect(text).not.toContain("ab123cd");
       expect(text).not.toContain("zy987xw");
-      expect(res.text).not.toContain("plate");
+      // Lot 51 : la pastille `plateBlurred` des photos (plaque floutée, booléen) n'est pas une plaque.
+      expect(res.text.replaceAll('"plateBlurred"', "")).not.toContain("plate");
     }
     // Ni nom, ni e-mail, ni téléphone.
     expect(full.text).not.toContain("@orasso.test");

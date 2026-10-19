@@ -2,6 +2,7 @@
 import type {
   CategoryOption,
   OutgoingPlateTransferView,
+  PlateRect,
   PlateTransferView,
   VehicleCertification,
   VehicleCreate,
@@ -11,7 +12,6 @@ import type {
   VehicleHistoryItem,
   VehicleMake,
   VehicleModel,
-  VehiclePhoto,
   VehicleStatus,
   VehicleUpdate,
 } from "@orasso/shared";
@@ -41,8 +41,16 @@ export const garageApi = {
   reorderVehiclePhotos: (vehicleId: string, photoIds: string[]) =>
     request<VehicleFull>(`/api/me/vehicles/${vehicleId}/photos/order`, { method: "PUT", body: { photoIds } }),
   createVehicle: (body: VehicleCreate) => request<VehicleFull>("/api/me/vehicles", { method: "POST", body }),
+  /** Lot 51 : champ facultatif `plateRects` (JSON) = plaque floutée par l'API avant le stockage. */
   uploadVehiclePhoto: (vehicleId: string, form: FormData) =>
-    request<VehiclePhoto>(`/api/me/vehicles/${vehicleId}/photos`, { method: "POST", form, timeout: 60_000 }),
+    request<VehicleFull>(`/api/me/vehicles/${vehicleId}/photos`, { method: "POST", form, timeout: 60_000 }),
+  /** Floute la plaque d'une photo déjà en ligne (lot 51) : définitif, l'originale n'est gardée nulle part. */
+  blurVehiclePhoto: (vehicleId: string, photoId: string, rects: PlateRect[]) =>
+    request<VehicleFull>(`/api/me/vehicles/${vehicleId}/photos/${photoId}/blur`, {
+      method: "POST",
+      body: { rects },
+      timeout: 60_000,
+    }),
   makes: () => request<VehicleMake[]>("/api/vehicle-reference/makes"),
   models: (makeId: string) => request<VehicleModel[]>(`/api/vehicle-reference/makes/${makeId}/models`),
   generations: (modelId: string) =>

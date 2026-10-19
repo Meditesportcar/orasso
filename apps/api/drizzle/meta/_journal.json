@@ -337,6 +337,13 @@
       "when": 1792432859232,
       "tag": "0047_arrivee",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792438316290,
+      "tag": "0048_plate-blur",
+      "breakpoints": true
     }
   ]
 }
