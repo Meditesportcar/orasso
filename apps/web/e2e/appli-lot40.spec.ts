@@ -3,11 +3,11 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { addVehicleApi, MOBILE, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 
-// Lot 40, côté appli (version web de recette) : navigation v2. Les cinq casquettes du seed (exposant Kenji, visiteur
-// Paul sans véhicule, organisateur Damien, pro garage@, prestataire Paul) : chaque onglet de chaque barre affiche la
-// barre d'onglets, le logotype et un grand titre sur une ligne, dans les deux thèmes (captures à 390 px). La barre
-// média (lot 45 pas encore fusionné) est vérifiée dans /_ds. Mon profil complet, Boîte hors barre (notifications
-// dedans), anciens chemins (/acces, /moi), glissement entre onglets, visiteur → exposant sans redémarrer.
+// Lot 40, côté appli (version web de recette) : navigation v2. Les six casquettes du seed (exposant Kenji, visiteur
+// Paul sans véhicule, organisateur Damien, pro garage@, prestataire Paul, média Léo du lot 45) : chaque onglet de chaque
+// barre affiche la barre d'onglets, le logotype et un grand titre sur une ligne, dans les deux thèmes (captures à
+// 390 px). Mon profil complet, Boîte hors barre (notifications dedans), anciens chemins (/acces, /moi), glissement entre
+// onglets, visiteur → exposant sans redémarrer.
 // Lancer avec APP_URL=http://localhost:8251 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée.
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-40-captures/appli";
@@ -52,6 +52,13 @@ const BARS = {
     ["Vitrine", "vitrine", "Ma vitrine"],
     ["Profil", "profil", "Mon profil"],
   ],
+  media: [
+    ["Explorer", "explorer", "Explorer"],
+    ["Presse", "presse", "Accréditations"],
+    ["Accueil", "accueil", "Accueil"],
+    ["Contenus", "contenus", "Contenus"],
+    ["Profil", "profil", "Mon profil"],
+  ],
 } as const;
 
 type Kind = keyof typeof BARS;
@@ -63,6 +70,7 @@ const ACCOUNTS: Record<Kind, string> = {
   organizer: "damien@orasso.local",
   pro: "garage@orasso.local",
   provider: "paul.photo@orasso.local",
+  media: "leo@orasso.local",
 };
 
 async function open(browser: Browser, theme: Theme, viewport = MOBILE) {
@@ -78,6 +86,7 @@ async function open(browser: Browser, theme: Theme, viewport = MOBILE) {
 
 async function signIn(page: Page, email: string, password = SEED_PASSWORD) {
   await page.goto("/auth");
+  await afterOpening(page);
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(password);
   await page.getByRole("button", { name: "Me connecter" }).click();
@@ -91,7 +100,7 @@ async function choose(page: Page, kind: Kind) {
   await afterOpening(page);
   await page.getByTestId(`casquette-${kind}`).first().click();
   // Accueil « Bientôt » du pro et du prestataire (lot 43) : ils s'ouvrent sur un onglet rempli.
-  const landing = { organizer: /\/direct/, pro: /\/scanner/, provider: /\/candidatures/ };
+  const landing = { organizer: /\/direct/, pro: /\/scanner/, provider: /\/candidatures/, media: /\/accueil/ };
   await page.waitForURL(landing[kind], { timeout: 30_000 });
 }
 
@@ -119,7 +128,11 @@ async function checkTab(page: Page, title: string | null) {
 
 /** Un chargement de page rejoue l'ouverture de l'appli (3 s, lot 38/39) : on attend qu'elle se termine. */
 async function afterOpening(page: Page) {
-  await page.waitForTimeout(3500);
+  // Lot 39 : un toucher passe l'ouverture (OpeningBattle) ; sinon elle dure 3 s.
+  const skip = page.getByTestId("opening-skip");
+  if (await skip.isVisible().catch(() => false))
+    await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
+  await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
 }
 
 async function shot(page: Page, name: string) {
@@ -127,7 +140,7 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
 
-test("les 25 onglets des cinq casquettes du seed : barre, logotype, grand titre sur une ligne (deux thèmes)", async ({
+test("les 30 onglets des six casquettes du seed : barre, logotype, grand titre sur une ligne (deux thèmes)", async ({
   browser,
 }) => {
   test.setTimeout(900_000);
