@@ -2,8 +2,10 @@ import { Button, CheckboxField, Chip, Icon, TextField } from "@orasso/design-sys
 import {
   type AccountSettings,
   departments as allDepartments,
+  arriveeLabels,
   type Category,
   gradeLabels,
+  MAX_DEPARTMENTS,
   moderationLabels,
   mutableTypesByFamily,
   type NotificationFamily,
@@ -18,6 +20,7 @@ import {
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { DepartmentsField } from "../components/ArriveeFields";
 import { TextAreaField } from "../components/Fields";
 import { api, apiOrThrow, requireMe, withCookies } from "../lib/api.server";
 import type { Route } from "./+types/moi";
@@ -61,6 +64,9 @@ export async function action({ request }: Route.ActionArgs) {
     const unknown = depts.filter((d) => !(allDepartments as readonly string[]).includes(d));
     if (unknown.length) {
       return data({ scope: "settings", error: `Département inconnu : ${unknown.join(", ")}` }, { status: 400 });
+    }
+    if (new Set(depts).size > MAX_DEPARTMENTS) {
+      return data({ scope: "settings", error: arriveeLabels.errors.tooMany }, { status: 400 });
     }
     const prefs = Object.fromEntries(
       (["application", "event", "social", "grade"] as const).map((f) => [f, form.get(`fam_${f}`) === "on"]),
@@ -260,12 +266,7 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           <h2 id="secteur-titre" className="s-h2">
             Secteur et centres d'intérêt
           </h2>
-          <TextField
-            label="Départements"
-            name="departments"
-            defaultValue={settings.departments.join(", ")}
-            help="Numéros séparés par des virgules (ex. 66, 11). Le premier sert à mesurer la distance."
-          />
+          <DepartmentsField initial={settings.departments} />
           <label className="o-field">
             <span className="o-field__label o-t-label">Rayon des notifications</span>
             <input

@@ -2,6 +2,7 @@ import { Button, TextField } from "@orasso/design-system/web";
 import { passwordHint, pseudoSchema } from "@orasso/shared";
 import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
+import { ArriveeFields } from "../components/ArriveeFields";
 import { TermsField } from "../components/Fields";
 import { apiFetch } from "../lib/api.client";
 import { getMe, safeReturn, withCookies } from "../lib/api.server";
@@ -45,19 +46,23 @@ export default function Inscription({ loaderData, actionData }: Route.ComponentP
   return (
     <div className="s-narrow s-stack">
       <h1 className="s-title">Créer un compte</h1>
-      <p className="s-lead">Un pseudo, un e-mail, un mot de passe. Tu reviens ensuite exactement là où tu étais.</p>
+      <p className="s-lead">
+        Ton profil, ton coin, ton nom, un pseudo et un e-mail. Tu reviens ensuite exactement là où tu étais.
+      </p>
       <Form method="post" className="s-form">
         <input type="hidden" name="retour" value={retour} />
-        <TextField
-          label="Pseudo"
-          name="pseudo"
-          autoComplete="username"
-          defaultValue={actionData?.values.pseudo}
-          help="3 à 24 caractères : lettres, chiffres, « _ » ou « . »"
-          error={errors.pseudo ?? pseudoHint}
-          onBlur={(e) => checkPseudo(e.currentTarget.value)}
-          required
-        />
+        <ArriveeFields values={actionData?.values} errors={errors}>
+          <TextField
+            label="Pseudo"
+            name="pseudo"
+            autoComplete="username"
+            defaultValue={actionData?.values.pseudo}
+            help="3 à 24 caractères : lettres, chiffres, « _ » ou « . »"
+            error={errors.pseudo ?? pseudoHint}
+            onBlur={(e) => checkPseudo(e.currentTarget.value)}
+            required
+          />
+        </ArriveeFields>
         <TextField
           label="E-mail"
           name="email"

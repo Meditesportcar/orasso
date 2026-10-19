@@ -1,7 +1,10 @@
 import {
   categoryReferenceQuery,
   certificationRequestSchema,
+  type PlateRect,
+  photoBlurSchema,
   photoOrderSchema,
+  plateRectsSchema,
   shareImageQuery,
   vehicleCreateSchema,
   vehicleUpdateSchema,
@@ -11,9 +14,10 @@ import { Hono } from "hono";
 import { validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import { type AppEnv, requireUser } from "../../lib/session";
-import { body, query, uuidParam } from "../../lib/validate";
+import { body, parse, query, uuidParam } from "../../lib/validate";
 import { categoryOptions } from "./categories";
 import { certificationService } from "./certification";
+import { photoBlurService } from "./photos-blur";
 import { vehiclesRepo } from "./repo";
 import { vehiclesService } from "./service";
 
@@ -54,9 +58,28 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   })
   .post("/me/vehicles/:id/photos", async (c) => {
     const v = await requireUser(c);
+    rateLimit("vehiclePhoto", v.user.id);
     const form = await c.req.parseBody();
     if (!(form.photo instanceof File)) throw validation("Champ « photo » attendu (fichier)");
-    return c.json(await vehiclesService.addPhoto(v, uuidParam(c, "id"), form.photo), 201);
+    // Lot 51 : rectangles de plaque (JSON) confirmés dans l'appli ou sur le site, floutés avant le stockage.
+    let plateRects: PlateRect[] | undefined;
+    if (typeof form.plateRects === "string" && form.plateRects.trim()) {
+      let raw: unknown;
+      try {
+        raw = JSON.parse(form.plateRects);
+      } catch {
+        throw validation("Champ « plateRects » : JSON attendu");
+      }
+      plateRects = parse(plateRectsSchema, raw);
+    }
+    return c.json(await vehiclesService.addPhoto(v, uuidParam(c, "id"), form.photo, plateRects), 201);
+  })
+  // Floutage de plaque sur une photo déjà envoyée (irréversible, V9).
+  .post("/me/vehicles/:id/photos/:photoId/blur", async (c) => {
+    const v = await requireUser(c);
+    rateLimit("vehiclePhoto", v.user.id);
+    const { rects } = await body(c, photoBlurSchema);
+    return c.json(await photoBlurService.blur(v, uuidParam(c, "id"), uuidParam(c, "photoId"), rects));
   })
   .put("/me/vehicles/:id/photos/order", async (c) => {
     const v = await requireUser(c);

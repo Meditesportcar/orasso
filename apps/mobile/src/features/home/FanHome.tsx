@@ -20,7 +20,7 @@ import {
 import { useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { Pressable } from "react-native";
-
+import { PendingCard } from "@/features/arrivee/PendingCard";
 import { useMyPosition } from "@/features/explorer/useMyPosition";
 import {
   AgendaWidget,
@@ -240,6 +240,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       }
     >
       {offline ? <Notice>Hors ligne : voici ce que ton téléphone a gardé.</Notice> : null}
+      <PendingCard where="home" />
 
       <Greeting line={todayLine(now, department ? `Dép. ${department}` : null)} name={name} />
 

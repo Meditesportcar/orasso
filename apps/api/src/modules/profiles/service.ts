@@ -130,6 +130,7 @@ export const profilesService = {
         visibility: p.visibility,
         departments: p.departments,
         radiusKm: p.radiusKm,
+        mainProfile: p.mainProfile,
         interests: await profilesRepo.interests(v.user.id),
         platformRole: p.platformRole,
         newsletterOptIn: p.newsletterOptIn,

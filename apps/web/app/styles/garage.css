@@ -199,3 +199,69 @@
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
 }
+
+/* Lot 51 : floutage de plaque à la main (cadre déplaçable, coin pour agrandir). */
+.g-plate__photo {
+  position: relative;
+  max-width: 520px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  background: var(--surface-sunken);
+}
+.g-plate__photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.g-plate__frame {
+  position: absolute;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  background: var(--scrim);
+  backdrop-filter: blur(7px);
+  cursor: grab;
+  touch-action: none;
+}
+.g-plate__handle {
+  position: absolute;
+  right: -9px;
+  bottom: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: nwse-resize;
+}
+.g-plate__badge {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--scrim);
+  color: var(--night-ink);
+}
+.g-plate__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.g-photo-blurred {
+  align-self: flex-start;
+}
+.g-photos li:has(.g-blur[open]) {
+  grid-column: 1 / -1;
+}
+.g-blur > summary.o-t-label {
+  cursor: pointer;
+}
+.g-photos li:has(.g-blur[open]) > a {
+  max-width: 200px;
+}
+.g-noplate {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}

@@ -84,6 +84,8 @@ test("transfert de plaque : Léa saisit la plaque de Marc, Marc confirme, sa voi
   await leaPage
     .getByLabel("Photo")
     .setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: samplePhoto([40, 80, 140]) });
+  // Lot 51 : une photo part avec son cadre de plaque, ou « aucune plaque visible » coché.
+  await leaPage.getByTestId("site-no-plate").check();
   await leaPage.getByRole("button", { name: "Ajouter au garage" }).click();
   await leaPage.waitForURL(/\/app\/garage\/[0-9a-f-]{36}$/);
   await expect(leaPage.getByTestId("plate-pending")).toBeVisible();

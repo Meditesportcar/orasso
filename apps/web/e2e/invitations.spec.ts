@@ -2,7 +2,17 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "n
 import { resolve } from "node:path";
 import { type Browser, expect, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
-import { addVehicleApi, apiCall, createEvent, login, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import {
+  addVehicleApi,
+  apiCall,
+  createEvent,
+  fillArrivee,
+  login,
+  randomPlate,
+  SEED_PASSWORD,
+  signUpApi,
+  unique,
+} from "./helpers";
 
 // Invitations nominatives et événement privé (lot 25) sur le site, critère de fin : l'organisateur crée un événement
 // « Sur invitation », invite Kenji (pseudo) et une adresse e-mail depuis `/orga/…/invitations` ; Kenji accepte dans
@@ -113,6 +123,8 @@ test("événement privé : invitations par pseudo et par e-mail, acceptation ave
   await pageE.getByLabel("Pseudo").fill(`Invite_${s}`.slice(0, 24));
   await pageE.getByLabel("E-mail").fill(email);
   await pageE.getByRole("textbox", { name: "Mot de passe" }).fill(SEED_PASSWORD);
+  await fillArrivee(pageE);
+  await pageE.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
   await pageE.getByRole("button", { name: "Créer un compte" }).click();
   await expect(pageE.getByTestId("received-invitation")).toBeVisible();
   const eCookie = (await ctxE.cookies()).map((c) => `${c.name}=${c.value}`).join("; ");

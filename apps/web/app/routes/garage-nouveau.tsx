@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { PhotoWithPlate, plateDecisionError } from "../components/PlateFrame";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, safeReturn } from "../lib/api.server";
 import type { Route } from "./+types/garage-nouveau";
@@ -52,6 +53,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (weightText && !/^\d{2,5}$/.test(weightText)) errors.weightKg = "Poids en kilos, nombre entier.";
   const hasPhoto = photo instanceof File && photo.size > 0;
   if (active && !hasPhoto) errors.photo = "Ajoute au moins une photo : elle est exigée pour candidater.";
+  // Relecture du lot 51 : une photo part avec son cadre de plaque, ou « aucune plaque visible » coché.
+  if (hasPhoto && plateDecisionError(form)) errors.photo = plateDecisionError(form) ?? undefined;
   if (Object.keys(errors).length) return data({ errors }, { status: 400 });
 
   const body: Partial<VehicleCreate> = {
@@ -77,6 +80,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (!hasPhoto) return redirect(`/app/garage/${created.data.id}`);
   const upload = new FormData();
   upload.set("photo", photo as File);
+  // Lot 51 : cadres de plaque posés à la main, floutés par l'API avant le stockage (définitif).
+  if (text("plateRects")) upload.set("plateRects", text("plateRects"));
   const sent = await api(request, `/me/vehicles/${created.data.id}/photos`, { method: "POST", body: upload });
   if (!sent.ok) {
     // Le véhicule existe : on reste sur la fiche avec le message, la photo se rajoute depuis le garage.
@@ -243,14 +248,12 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
           onChange={(e) => setUnregistered(e.currentTarget.checked)}
           label="Véhicule non immatriculé"
         />
-        <TextField
+        <PhotoWithPlate
           label="Photo"
-          name="photo"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          help="Une photo de ton véhicule, de face ou de trois quarts."
+          help="Une photo de ton véhicule, de face ou de trois quarts. Tu floutes la plaque juste en dessous."
           error={errors.photo}
           required={active}
+          testId="new-plate-frame"
         />
         {errors.form && (
           <p className="s-error" role="alert">

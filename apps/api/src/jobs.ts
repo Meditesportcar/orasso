@@ -27,6 +27,7 @@ import { securityService } from "./modules/security/service";
 import { staffService } from "./modules/staff/service";
 import { uploadsService } from "./modules/uploads/service";
 import { certificationService } from "./modules/vehicles/certification";
+import { retryRemove } from "./modules/vehicles/photos-blur";
 import { plateTransferService } from "./modules/vehicles/plate-transfer";
 import { weatherService } from "./modules/weather/service";
 
@@ -58,6 +59,8 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   // et certifications perdues après six mois sans événement.
   "plate-transfer.escalate": (d) => plateTransferService.escalate(d.transferId),
   "certification.sweep": () => certificationService.sweep(),
+  // Lot 51 : suppression d'une photo de véhicule qui avait échoué (l'original non flouté ne doit pas rester).
+  "storage.remove": (d) => retryRemove(d.key ?? ""),
   // Lot 18 : fichiers de `POST /me/uploads` jamais rattachés depuis plus de 24 h (enregistrement et fichier).
   "uploads.purge": () => uploadsService.purgeExpired(),
   // Lot 19 : venue en crew non confirmée à l'échéance → retirée, chef prévenu ; secours toutes les 5 minutes.
