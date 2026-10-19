@@ -1,12 +1,12 @@
 // Accueil complet (lot 30) : une seule requête agrégée, le réglage des widgets, le garage favori et l'emplacement
 // sponsorisé. Aucune règle ici : le rayon, la position (arrondie par l'API, jamais enregistrée), les sources externes et
 // leur cache sont côté API.
-import type { HomeData, HomeWidgetsConfig } from "@orasso/shared";
+import type { HomeData, HomeWidgetsConfig, PersonaKind, RecapView } from "@orasso/shared";
 
 import { request } from "../http";
 import { qs } from "./qs";
 
-export type HomeQuery = { radiusKm?: number; lat?: number; lng?: number };
+export type HomeQuery = { radiusKm?: number; lat?: number; lng?: number; persona?: PersonaKind };
 
 export const homeApi = {
   homeData: (query: HomeQuery = {}) => request<HomeData>(`/api/me/home${qs(query)}`),
@@ -14,6 +14,11 @@ export const homeApi = {
     request<HomeWidgetsConfig>("/api/me/home/widgets", { method: "PUT", body: config }),
   setFavoritePro: (proId: string) => request<unknown>(`/api/pros/${proId}/favorite`, { method: "POST" }),
   unsetFavoritePro: (proId: string) => request<unknown>(`/api/pros/${proId}/favorite`, { method: "DELETE" }),
+  /** Lot 43 : mon rang au prix du public d'un événement fini (via le récap, calculé à la demande ; `null` avant J+1 10 h). */
+  eventAudienceRank: (eventId: string) =>
+    request<RecapView>(`/api/me/recaps/${eventId}`)
+      .then((r) => r.audienceRank)
+      .catch(() => null),
   sponsoredClick: (id: string) => request<unknown>(`/api/sponsored/${id}/click`, { method: "POST" }),
   /** Compteurs de la fiche pro (lot 14) : « appeler » et « itinéraire » du garage favori. */
   trackPro: (slug: string, kind: "call" | "route") =>
