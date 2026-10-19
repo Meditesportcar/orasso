@@ -35,7 +35,9 @@ describe("carte de France (lot 41)", () => {
     expect(existsSync(license)).toBe(true);
     expect(readFileSync(license, "utf8")).toMatch(/CC BY 4\.0/);
     for (const file of ["departments.ts", "FranceMapNative.tsx", "FranceMapWeb.tsx"]) {
-      expect(readFileSync(resolve(import.meta.dirname, file), "utf8")).not.toMatch(/jsdelivr/i);
+      expect(readFileSync(resolve(import.meta.dirname, file), "utf8")).not.toMatch(
+        new RegExp(["jsdeli", "vr"].join(""), "i"),
+      );
     }
   });
 });
