@@ -1400,6 +1400,23 @@ Source : prototype DA v2 **validé par Damien dans le prototype DA v2, 19/10/202
 - Un participant dont le téléphone n'a jamais eu de réseau depuis la mise à jour garde l'ancien QR statique `OR1` (accepté jusqu'au lot 58) : au retrait de l'`OR1`, prévoir une communication « ouvre l'appli la veille ».
 - Les billets du public restent statiques (`OB1`) : un billet photographié passe une fois (la seconde lecture est « déjà utilisé »). Code tournant des billets : à décider.
 
+#### Corrections de la relecture indépendante (lot 48, 20/10/2026)
+Ces corrections remplacent les points correspondants ci-dessus. Fichiers : `apps/mobile/src/lib/{clock,clockStore,http}.ts`, `lib/staff/{model,drive}.ts`, `lib/plates/{recognize,detect}.ts`, `app/staff/[id]/{scan,drive,liste}.tsx`, `features/jour-j/QrExtras.tsx`, `lib/kits.ts`, `packages/shared/src/{qr/pass.ts,roles.ts,labels/staff.fr.ts}`, `apps/api/src/{app.ts,modules/access/service.ts,modules/staff/service.ts,modules/checkins/service.ts}`, `apps/web/app/{routes/acces.tsx,components/RotatingQr.tsx,styles/site.css}`.
+- **Heure du serveur** : l'appli mesure le décalage avec l'en-tête `Date` de chaque réponse de l'API (milieu de la seconde comparé au milieu de l'aller-retour, aller-retour de plus de 5 s ignoré, médiane des 7 dernières mesures, gardée sur l'appareil). `serverNow()` donne l'heure du code tournant (participant) et de sa vérification (`decideLocal`, staff). L'API expose `date` aux appels du navigateur (CORS). Le bandeau « Ouvre l'appli avec du réseau… » s'affiche sans aucune mesure ou après 24 h sans mesure. Un code périmé au MAC valide rend l'écart : « Téléphone en avance de 2 min : pointe à la main » (code venu « de l'avenir », pas une capture) ou « Code ancien de 2 min : capture ou téléphone en retard, pointe à la main si la personne est là ». Le site recale l'horloge du navigateur avec l'heure du rendu serveur.
+- **Secrets et pointage réservés aux rôles qui pointent** (`checkinStaffRoles` = `scan`, `control`, `super_staff` ; l'organisateur a tous les rôles) : `otpSecret` n'est envoyé qu'à eux (synchro complète et delta). `POST /events/:id/scans`, `POST /events/:id/checkins` et `/checkins/by-plates` sont refusés (403) aux autres rôles (ouvert à tout le staff avant ce lot). L'appli masque « Pointer » et le pointage par plaque à ces rôles.
+- **Ancien QR `OR1`** : le site affiche le code tournant (`RotatingQr`, même anneau) dès que le pass a un secret, jamais l'`OR1`. `decideScan` n'accepte l'`OR1` qu'avec `acceptLegacy: true`, activé par l'appli du staff jusqu'au lot 58 (commentaire daté dans `lib/staff/model.ts`) ; sans l'option, l'`OR1` est refusé « Ancien QR ».
+- **Pass absent de la liste (code tournant)** : `unknown_pass` non vérifié. Le super staff peut l'« accepter quand même » : entrée `override` marquée `unverified_otp`, que le serveur rapproche à la synchro (« Inconnu du serveur » au rapport si le pass n'existe pas). Les autres rôles le refusent (« Pass absent de ta liste : synchronise, ou appelle un super staff »).
+- **Accueil drive** : jamais de pointage sur une seule photo : deux lectures identiques de suite (même voiture ou même plaque inconnue), la plaque la plus proche d'abord (cadre de ligne ML Kit le plus haut, puis le plus bas dans l'image), et si deux plaques de participants sont lisibles sur la même photo, le staff choisit (aucun pointage d'office). Cadence inchangée : une photo toutes les 900 ms, environ 2 s par voiture. Une saisie au clavier suffit seule.
+- **Analyseur de plaque unique** : `lib/plates/recognize.ts` (formes SIV / FNI, lecture `strict` pour le drive, `large` pour la détection du floutage) ; `detect.ts` (lot 51) l'utilise pour `looksLikePlate`, ses tests inchangés passent.
+- **iPhone** : iOS ne permet de masquer que l'enregistrement d'écran, pas la capture : le texte de l'écran le dit (« Enregistrement d'écran masqué… »).
+- **Validité réelle d'un code** : jusqu'à une minute (créneau de 20 s, ±1 créneau de tolérance) : les textes disent « périmée en moins d'une minute ».
+- **Rejeu sur deux téléphones staff hors ligne** dans la même minute : accepté deux fois localement, puis la seconde lecture est marquée `duplicate_other_device` par le serveur au retour du réseau (comme l'`OR1`) : comportement assumé.
+- **Première synchro** : les secrets manquants sont posés en une seule requête (`UPDATE … FROM (VALUES …)`, un secret par ligne, `where otp_secret is null`).
+- **Pass révoqué** : le secret quitte le trousseau avec le kit ; l'écran dit « Cette place n'est plus valide ».
+
+#### À revoir avec Damien (relecture du lot 48)
+- Jusqu'au lot 58, l'appli du staff accepte encore l'`OR1` (`acceptLegacy`) : une capture d'un ancien QR statique reste valable tant que le pass est valide. Le site et l'appli ne l'affichent plus à un pass qui a un secret ; le risque se limite aux captures faites avant ce lot. Le lot 58 coupe l'option.
+
 ## À revoir avec Damien — liste consolidée (lot 34)
 
 Une seule liste, ordonnée, de tout ce que les lots 15 à 35d (et 34) ont laissé à décider. Rien ne bloque : la solution décrite est appliquée (D16). Les points antérieurs (A1 à A14, lots 02 à 14) restent dans leurs sections plus haut ; ceux qui sont réglés depuis sont signalés à la fin.
@@ -1468,4 +1485,4 @@ Une seule liste, ordonnée, de tout ce que les lots 15 à 35d (et 34) ont laiss�
 
 **9. Ajoutés au lot 48 (jour J v2, 19/10/2026)**
 45. Secrets du code tournant sur les téléphones du staff jusqu'à J+1 (AS-V1) ; lecture de plaque à mesurer en plein soleil (AS-V2).
-46. Ancien QR `OR1` affiché si le téléphone n'a pas encore reçu son secret (jusqu'au lot 58) ; billets du public toujours statiques.
+46. Ancien QR `OR1` affiché si le téléphone n'a pas encore reçu son secret ; accepté par le staff (`acceptLegacy`) jusqu'au lot 58 : captures anciennes encore valables ; billets du public toujours statiques.

@@ -311,16 +311,20 @@ test("mode staff v2 : tuiles selon les rôles, scan d'un OR2 (OK, déjà entré,
       await expect(page.getByText(scanTarget?.entry.pseudo ?? "—").first()).toBeVisible({ timeout: 10_000 });
       await shot(page, `scan-or2-ok-${theme}`);
       // Même code relu 4 s plus tard (après l'anti-rebond de 3 s) : déjà entré.
+      // Hors ligne pendant le saut d'horloge : aucune réponse de l'API ne recale l'heure du serveur (en-tête Date).
+      await ctx.setOffline(true);
       await page.clock.fastForward(4_000);
       await scan(code);
       await expect(page.getByText("Déjà entré").first()).toBeVisible({ timeout: 10_000 });
       // Capture rejouée 61 s après : périmée.
       await page.clock.fastForward(61_000);
       await scan(code);
-      await expect(page.getByText("Code périmé : demande à la personne de rafraîchir son écran").first()).toBeVisible({
+      // Relecture : l'écart et le pointage à la main plutôt que « rafraîchis ton écran ».
+      await expect(page.getByText(/^Code ancien de 1 min : capture ou téléphone en retard/).first()).toBeVisible({
         timeout: 10_000,
       });
       await shot(page, `scan-or2-perime-${theme}`);
+      await ctx.setOffline(false);
 
       // Accueil drive : la plaque tapée (la caméra et ML Kit n'existent pas dans le navigateur).
       await goto(page, `/staff/${salon}/drive`);

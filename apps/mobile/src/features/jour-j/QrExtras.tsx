@@ -23,13 +23,22 @@ export function useBlockCapture(active: boolean) {
   }, [active]);
 }
 
+/**
+ * Relecture du lot 48 : sur iPhone, seul l'enregistrement d'écran est masqué (la capture reste possible, iOS ne permet
+ * pas de la bloquer) ; un code reste valable au plus une minute (créneau de 20 s, ±1 créneau de tolérance).
+ */
+const CAPTURE_TEXT =
+  Platform.OS === "ios"
+    ? "Enregistrement d'écran masqué sur cet écran. Une capture ou une photo du code est périmée en moins d'une minute."
+    : "Captures et enregistrement d'écran bloqués sur cet écran. Une photo du code est périmée en moins d'une minute.";
+
 export function CaptureNote() {
   const { t } = useTheme();
   return (
     <View style={styles.lock} testID="qr-capture-note">
       <Icon name="eyeOff" size={22} color={t.color.ink} />
       <Text variant="caption" color={t.color.ink} style={styles.grow}>
-        Captures et enregistrement d'écran bloqués sur cet écran. Une photo du code est périmée en 20 secondes.
+        {CAPTURE_TEXT}
       </Text>
     </View>
   );
@@ -39,7 +48,7 @@ const HOW = [
   "Ton téléphone a reçu une clé à la validation de ta place.",
   "Il fabrique un nouveau code toutes les 20 secondes, signé avec cette clé et l'heure.",
   "Le téléphone du staff vérifie la signature et l'heure, sans réseau.",
-  "Un code copié ou filmé ne passe plus après 20 secondes.",
+  "Un code copié ou filmé ne passe plus après moins d'une minute.",
 ];
 
 export function HowItWorks() {

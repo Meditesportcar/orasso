@@ -26,7 +26,7 @@ export type RotatingCode = {
 export function useRotatingCode(secret: string | null, eventNo: number | undefined, passId: string): RotatingCode {
   const [at, setAt] = useState(serverNowMs);
   useEffect(() => {
-    const timer = setInterval(() => setAt(nowMs()), 1000);
+    const timer = setInterval(() => setAt(serverNowMs()), 1000);
     return () => clearInterval(timer);
   }, []);
   const now = new Date(at);

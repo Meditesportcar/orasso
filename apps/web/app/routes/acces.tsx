@@ -31,6 +31,7 @@ import { CrewConfirm } from "../components/Crews";
 import { dayLabel, hourOf } from "../components/EventDays";
 import { ReceivedInvitationCard } from "../components/Invitations";
 import { Qr } from "../components/Qr";
+import { RotatingQr } from "../components/RotatingQr";
 import { Stars } from "../components/Stars";
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
@@ -129,6 +130,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     past,
     applications,
     passes,
+    // Relecture du lot 48 : heure du serveur au rendu, pour recaler l'horloge du navigateur (code tournant).
+    serverTime: new Date().toISOString(),
     weather,
     rules,
     arrivalSlots,
@@ -183,6 +186,7 @@ export async function action({ request }: Route.ActionArgs) {
 function ApplicationCard({
   app,
   pass,
+  serverTime,
   weather,
   rulesText,
   arrivalSlot,
@@ -192,6 +196,7 @@ function ApplicationCard({
 }: {
   app: MyApplication;
   pass?: AccessPass;
+  serverTime: string;
   weather?: EventWeather;
   rulesText?: string | null;
   arrivalSlot?: ArrivalSlot | null;
@@ -285,7 +290,18 @@ function ApplicationCard({
       {!past && app.status === "accepted" && pass?.payload && (
         <>
           <div className="acc__qr" data-testid="pass-qr">
-            <Qr payload={pass.payload} label={`QR d'inscription : ${app.event.title}`} />
+            {/* Relecture du lot 48 : le code tournant ; l'ancien QR statique seulement pour un pass sans secret. */}
+            {pass.otpSecret ? (
+              <RotatingQr
+                secret={pass.otpSecret}
+                eventNo={pass.eventNo}
+                passId={pass.passId}
+                serverTime={serverTime}
+                label={`QR d'accès : ${app.event.title}`}
+              />
+            ) : (
+              <Qr payload={pass.payload} label={`QR d'inscription : ${app.event.title}`} />
+            )}
           </div>
           <p className="o-t-caption s-muted s-center">
             Présente ce QR à l'entrée. {app.zone ? `Zone ${app.zone.code} · ${app.zone.name}.` : ""}
@@ -483,6 +499,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
     past,
     applications,
     passes,
+    serverTime,
     weather,
     rules,
     arrivalSlots,
@@ -582,6 +599,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
             key={app.id}
             app={app}
             pass={passes[app.id]}
+            serverTime={serverTime}
             weather={weather[app.id]}
             rulesText={rules[app.id]}
             arrivalSlot={arrivalSlots[app.id]}

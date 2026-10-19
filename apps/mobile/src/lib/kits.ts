@@ -102,7 +102,8 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
     api.eventBySlug(app.event.slug),
     loadKit(app.id),
   ]);
-  if (!pass.payload) {
+  // Place plus valide (pass révoqué : ni QR ni secret) : le kit et le secret du code tournant quittent le téléphone.
+  if (!pass.payload || !pass.otpSecret) {
     await dropKit(app.id);
     return null;
   }
@@ -137,7 +138,7 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
     holder: { kind: pass.kind, spotLabel: pass.spotLabel, mediaName: pass.mediaName },
     weather,
   };
-  if (pass.otpSecret) await kvSet(otpKey(app.id), pass.otpSecret);
+  await kvSet(otpKey(app.id), pass.otpSecret);
   await saveKit(kit);
   return kit;
 }
