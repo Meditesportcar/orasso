@@ -78,6 +78,17 @@
   background: var(--night);
   color: var(--accent);
 }
+/* Barres v2 : des libellés plus longs (Candidatures, Événements, Structure) sur cinq onglets de 390 px ; ils passent à
+   la largeur normale d'Archivo pour tenir sans se chevaucher (journal des choix, lot 38). */
+.o-tabbar:has(.is-o) .o-tabbar__tab {
+  font-stretch: var(--stretch-normal);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+/* Le O garde une pastille de 68 px (prototype) : le reste de la largeur va aux quatre autres onglets. */
+.o-tabbar__tab.is-center.is-o {
+  flex: 0 0 68px;
+}
 .o-tabbar__o {
   display: inline-flex;
   transform: skewX(calc(var(--skew-tab) * -1));

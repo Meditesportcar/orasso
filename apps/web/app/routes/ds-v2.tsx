@@ -114,10 +114,12 @@ export function V2Content({ theme }: { theme: ThemeId }) {
       </div>
 
       <h3 className="o-t-label ds-v2-h3">Barres des six profils</h3>
-      <div className="ds-v2-bars">
-        {BARS.map(([set, label]) => (
-          <Bar key={set} set={set} label={label} />
-        ))}
+      <div className="ds-scroll-x">
+        <div className="ds-v2-bars">
+          {BARS.map(([set, label]) => (
+            <Bar key={set} set={set} label={label} />
+          ))}
+        </div>
       </div>
     </div>
   );

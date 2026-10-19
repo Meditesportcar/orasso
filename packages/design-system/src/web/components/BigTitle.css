@@ -19,8 +19,9 @@
   font-size: clamp(var(--type-poster-l-size), 8.2cqi, var(--type-poster-xl-size));
   line-height: 1;
 }
+/* L'étiquette ne se comprime pas : faute de place à droite du titre, elle passe dessous. */
 .o-bigtitle__label {
-  min-width: 0;
+  flex: none;
   margin-bottom: 4px;
   color: var(--ink-muted);
   text-align: right;

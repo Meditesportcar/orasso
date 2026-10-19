@@ -7,6 +7,7 @@ import type { IconName } from "../icons";
 import { type TabSetName, tabSets } from "../labels";
 import { Monogram } from "./Brand";
 import { textShadowOf } from "./color";
+import { archivoFamily } from "./fontFamily";
 import { Icon } from "./Icon";
 import { Metal } from "./Metal";
 import { useParkStyle } from "./motionHooks";
@@ -75,12 +76,15 @@ function TabEntry({
   moved,
   onSelect,
   centerSlot,
+  compact,
 }: {
   tab: TabItem;
   active: boolean;
   moved: boolean;
   onSelect?: (id: string) => void;
   centerSlot?: ReactNode;
+  /** Barre v2 : libellés à la largeur normale d'Archivo pour que les plus longs tiennent (journal, lot 38). */
+  compact?: boolean;
 }) {
   const { t, theme } = useTheme();
   const c = t.color;
@@ -97,7 +101,8 @@ function TabEntry({
       marginBottom: 12,
       borderRadius: 18,
       backgroundColor: night ? c.night : c.accent,
-      ...(tab.o ? { borderWidth: 2, borderColor: c.accent } : null),
+      // DA v2 : pastille du O de 68 px (prototype), le reste de la largeur aux quatre autres onglets.
+      ...(tab.o ? { borderWidth: 2, borderColor: c.accent, flexGrow: 0, flexBasis: 68 } : null),
       boxShadow: t.shadow.neonAccent,
       transform: [{ skewX: `${angle.skewTab}deg` }],
     };
@@ -115,7 +120,7 @@ function TabEntry({
         <TabIcon tab={tab} active={active} moved={moved} ink={ink} centerSlot={centerSlot} />
       </View>
       <View style={counter}>
-        <Text variant="tab" color={ink} style={tab.center ? null : emboss}>
+        <Text variant="tab" color={ink} style={[tab.center ? null : emboss, compact ? styles.compact : null]}>
           {tab.label}
         </Text>
       </View>
@@ -131,6 +136,7 @@ function TabEntry({
 export function TabBar({ set = "exhibitor", tabs, active, onSelect, centerSlot, safeBottom = 0, style }: TabBarProps) {
   const { t } = useTheme();
   const items: readonly TabItem[] = tabs ?? tabSets[set];
+  const compactLabels = items.some((tab) => tab.o);
   const previous = useRef(active);
   const [moved, setMoved] = useState(false);
   useEffect(() => {
@@ -170,6 +176,7 @@ export function TabBar({ set = "exhibitor", tabs, active, onSelect, centerSlot, 
           moved={moved}
           onSelect={onSelect}
           centerSlot={centerSlot}
+          compact={compactLabels}
         />
       ))}
     </View>
@@ -187,5 +194,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: radius.radiusXl,
   },
   tab: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center", gap: 5 },
+  compact: { fontFamily: archivoFamily("normal", 800, false), letterSpacing: 0.2 },
   dot: { position: "absolute", top: -2, right: -3, width: 8, height: 8, borderRadius: radius.radiusPill },
 });

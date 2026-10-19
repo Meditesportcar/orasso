@@ -330,5 +330,5 @@
   margin: 0;
   display: grid;
   gap: var(--space-5);
-  max-width: 390px;
+  width: 390px;
 }
