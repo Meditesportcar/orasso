@@ -11,7 +11,7 @@ import { GradientFill } from "./Gradient";
 import { BREATH_SCALE, SWEEP_TRAVEL, useBreath, usePhares, useSweep } from "./motionHooks";
 import { BattleLayer } from "./olive/BattleLayer";
 import { useIsGroundQuiet } from "./olive/quiet";
-import { useAppActive } from "./olive/shared";
+import { useOliveActive } from "./olive/shared";
 import { Grain } from "./Textures";
 import { useTheme } from "./theme";
 
@@ -84,7 +84,7 @@ function BattleFx({ still, paused }: { still: boolean; paused: boolean }) {
   const { t, reducedMotion } = useTheme();
   const fx = t.groundFx;
   const quiet = useIsGroundQuiet();
-  const active = useAppActive();
+  const active = useOliveActive();
   const moving = !still && !reducedMotion && !paused && active;
   const breath = useBreath(moving);
   const haloStyle = useAnimatedStyle(() => {

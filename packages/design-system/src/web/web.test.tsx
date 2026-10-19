@@ -302,7 +302,23 @@ describe("rendu serveur des composants", () => {
     expect(html(<OpeningBattle />)).toContain("o-opening__letters");
     const send = html(<SendProgress progress={0.4} />);
     expect(send).toContain('aria-valuenow="40"');
-    expect(send).toContain("--p:0.4");
+    // L'envoi (décision v39) : le O vivant avec l'anneau qui se remplit, la voiture qui drifte.
+    expect(send).toContain("--ring:0.4");
+    expect(send).toContain("o-olive__ring");
+    expect(send).toContain("animateMotion");
+    // Le bouton qui travaille : O vivant compact, voiture à l'encre du O (O noir sur le bouton moutarde).
+    const busy = html(
+      <Button icon="check" loading>
+        Retenir
+      </Button>,
+    );
+    expect(busy).toContain("o-olive--compact");
+    expect(busy).toContain("o-button__loader");
+    const css = readFileSync(resolve(componentsDir, "Olive.css"), "utf8");
+    expect(css).toMatch(/\.o-olive--compact \.o-car \{\s*--car-body: currentColor;/);
+    expect(css).toMatch(/\.o-olive\.o-button__loader \{\s*color: inherit;/);
+    // L'ouverture se passe d'un clic.
+    expect(html(<OpeningBattle />)).toMatch(/<button type="button" class="o-opening/);
     expect(html(<SendBurst />)).toContain("Candidature envoyée");
     const empty = html(<EmptyState title="Aucune sortie" text="Rien pour l'instant." />);
     expect(empty).toContain("o-empty__spot");

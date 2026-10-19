@@ -51,13 +51,11 @@
   transform: translateX(0);
 }
 .o-olive.is-loading .o-olive__park,
-.o-send.is-loading .o-olive__park,
-.o-opening.is-battle .o-olive__park {
+.o-opening.is-battle .o-olive__park,
+.o-opening.is-park .o-olive__park {
   transform: translateX(-120px);
 }
-.o-olive.is-parking .o-olive__park,
-.o-send.is-parking .o-olive__park,
-.o-opening.is-park .o-olive__park {
+.o-olive.is-parking .o-olive__park {
   animation: o-olive-park var(--olive-park) linear;
 }
 /* Se garer : park jusqu'à 6 unités au-delà de la place, puis inout jusqu'à la place. */
@@ -74,13 +72,45 @@
     transform: translateX(0);
   }
 }
+/* Petites tailles (bouton) : la voiture prend l'encre du O, la moutarde disparaîtrait sur un bouton moutarde. */
+.o-olive--compact .o-car {
+  --car-body: currentColor;
+}
+/* Dans un bouton, le O et sa voiture prennent l'encre du texte du bouton (lisibles sur toutes les variantes). */
+.o-olive.o-button__loader {
+  color: inherit;
+}
+/* L'anneau de l'envoi : il se remplit avec le pourcentage (--ring, 0 → 1), départ en haut. */
+.o-olive__ring-track {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 4;
+  opacity: 0.6;
+}
+.o-olive__ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  stroke-dashoffset: calc(100 - var(--ring, 0) * 100);
+  transition: stroke-dashoffset var(--timing-base) var(--ease-out);
+}
 
-/* L'ouverture : le O agrandi pendant la battle, puis le logotype se compose. */
+/* L'ouverture : le O agrandi pendant la battle, puis le logotype se compose. Un clic la passe. */
 .o-opening {
   position: relative;
   display: inline-block;
+  padding: 0;
+  border: 0;
   color: var(--ink);
+  font: inherit;
   line-height: 0;
+  background: none;
+  cursor: pointer;
+}
+.o-opening.is-done {
+  cursor: default;
 }
 .o-opening__logo {
   display: block;
@@ -113,58 +143,20 @@
 .o-opening.is-park .o-opening__cars {
   opacity: 0;
 }
+/* La voiture de tête quitte le drift et se gare dans le O (cap droit, à la taille de la voiture du logo). */
+.o-opening__parker {
+  transform: translate(var(--park-x), var(--park-y)) rotate(var(--park-a)) scale(var(--park-s0));
+  animation: o-olive-parker var(--olive-park) var(--ease-park) forwards;
+}
+@keyframes o-olive-parker {
+  to {
+    transform: translate(0, 0) rotate(0deg) scale(var(--park-s1));
+  }
+}
 
-/* L'envoi : la route, la voiture qui avance, le O au bout. */
+/* L'envoi : le O vivant avec son anneau. */
 .o-send {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 56px;
-}
-.o-send__track {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  height: 56px;
-}
-.o-send__road,
-.o-send__done {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  height: 4px;
-  margin-top: -2px;
-  border-radius: 2px;
-}
-.o-send__road {
-  right: 0;
-  background: var(--line);
-}
-.o-send__done {
-  width: calc(var(--p) * 100%);
-  background: var(--accent);
-  transition: width var(--timing-base) var(--ease-out);
-}
-.o-send__car {
-  position: absolute;
-  top: 50%;
-  left: calc(var(--p) * 100%);
-  width: 60px;
-  height: 30px;
-  overflow: visible;
-  transform: translate(-50%, -50%);
-  transition:
-    left var(--timing-base) var(--ease-out),
-    opacity var(--timing-fast) linear;
-}
-.o-send.is-parking .o-send__car,
-.o-send.is-parked .o-send__car {
-  opacity: 0;
-}
-.o-send__o,
-.o-send__o svg {
-  width: 56px;
-  height: 56px;
+  display: inline-flex;
 }
 
 /* Candidature envoyée : le O s'allume une fois (un seul néon à la fois). */
@@ -301,17 +293,16 @@
    rien ne reste en cours après le fondu). */
 @media (prefers-reduced-motion: reduce) {
   .o-olive.is-loading .o-olive__park,
-  .o-send.is-loading .o-olive__park,
   .o-opening .o-olive__park {
     transform: none !important;
   }
   .o-olive__park,
+  .o-olive__ring,
   .o-empty__car,
   .o-stamp-drop svg,
   .o-stamp-drop__bleed,
   .o-opening__logo,
   .o-opening__letters,
-  .o-send__done,
   .o-burst.is-lit .o-olive {
     animation: none !important;
     transition: none !important;
@@ -319,8 +310,7 @@
   .o-olive,
   .o-opening,
   .o-empty,
-  .o-stamp-drop,
-  .o-send {
+  .o-stamp-drop {
     animation: o-fade var(--timing-fast) linear;
   }
 }

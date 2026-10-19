@@ -3,6 +3,7 @@
 export * from "../icons";
 export * from "../labels";
 export * from "../motion";
+export { OliveActivityProvider, useOliveScreenActive } from "../native/olive/activity";
 export { GroundQuiet, useGroundQuiet, useIsGroundQuiet } from "../native/olive/quiet";
 export { THEME_IDS, type ThemeId, tokens, tokensV2Overlay } from "../tokens";
 export { AppBar, AppBarAction, type AppBarPersona, type AppBarProps } from "./components/AppBar";

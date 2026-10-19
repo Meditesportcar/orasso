@@ -70,6 +70,23 @@ describe("le O vivant (lot 39) : variantes, alias, branchements", () => {
     expect(read("Loader.tsx")).toMatch(/@deprecated[^\n]*lot 58[\s\S]*export const Loader = OLoader;/);
     expect(read("Opening.tsx")).toMatch(/@deprecated[^\n]*lot 58[^\n]*\nexport const OpeningScreen = OpeningBattle;/);
   });
+  it("bouton en chargement : O vivant compact, voiture plus grande et à l'encre du bouton", () => {
+    expect(read("Button.tsx")).toContain("<OLoader size={24} ink={ink} label={null} />");
+    const loader = read("olive/OLoader.tsx");
+    expect(loader).toContain("const compact = size <= COMPACT_MAX;");
+    expect(loader).toContain("(compact ? CAR_UNITS_COMPACT : CAR_UNITS) * k");
+    expect(loader).toContain("color={compact ? ink : t.color.accent}");
+    // À 24 px, la voiture fait au moins 7 px (64 unités sur une scène de 200).
+    const shared = read("olive/shared.tsx");
+    const units = Number(shared.match(/CAR_UNITS_COMPACT = (\d+)/)?.[1]);
+    const stage = Number(shared.match(/STAGE_COMPACT = (\d+)/)?.[1]);
+    expect((24 * units) / stage).toBeGreaterThanOrEqual(7);
+  });
+  it("l'envoi : O vivant + anneau (décision v39), l'ouverture se passe d'un toucher", () => {
+    expect(read("olive/Send.tsx")).toContain("<OLoader size={size} progress={p} done={complete}");
+    const opening = read("olive/OpeningBattle.tsx");
+    expect(opening).toContain('accessibilityHint="Passer"');
+  });
   it("la barre d'onglets porte le O vivant, la feuille fait taire le fond", () => {
     expect(read("TabBar.tsx")).toContain("<CenterTabO active={active}");
     expect(read("Motion.tsx")).toContain("useGroundQuiet(visible)");
