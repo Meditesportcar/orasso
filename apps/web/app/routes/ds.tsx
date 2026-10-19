@@ -36,6 +36,7 @@ import { type ReactNode, useState } from "react";
 import { useSearchParams } from "react-router";
 
 import type { Route } from "./+types/ds";
+import { V2Content } from "./ds-v2";
 import "./ds.css";
 
 // Page de démonstration du système de design (lot 03) : chaque composant dans les deux thèmes, à comparer aux
@@ -117,7 +118,7 @@ function ThemeSwitch() {
   const options: Array<[ThemePreference, string]> = [
     ["beton", "Béton"],
     ["sable", "Sable"],
-    ["auto", "Auto"],
+    ["auto", "Automatique"],
   ];
   return (
     // biome-ignore lint/a11y/useSemanticElements: groupe de pastilles-boutons, pas un fieldset de formulaire
@@ -165,6 +166,7 @@ export default function DesignSystemDemo() {
         <ThemeSwitch />
         <nav className="ds-index o-t-meta" aria-label="Composants">
           {[
+            "v2",
             "ground",
             "brand",
             "icons",
@@ -188,6 +190,14 @@ export default function DesignSystemDemo() {
           ))}
         </nav>
       </header>
+
+      <Section
+        id="v2"
+        title="DA v2 (lot 38)"
+        note="Surcouche de jetons et raisons, contour sur photo et sur fond, barre du haut v2, grands titres sur une ligne, barres des six profils."
+      >
+        {(theme) => <V2Content theme={theme} />}
+      </Section>
 
       <Section
         id="ground"
@@ -591,11 +601,15 @@ export default function DesignSystemDemo() {
         )}
       </Section>
 
-      <Section id="tabbar" title="TabBar" note="Cinq onglets ; l'Accès (ou le Tri) au milieu en pastille inclinée.">
+      <Section
+        id="tabbar"
+        title="TabBar"
+        note="Cinq onglets ; le O au milieu (DA v2), ou la pastille inclinée des barres v1 (Tri, encore branchées jusqu'au lot 40)."
+      >
         {() => (
           <div className="ds-stack">
             <Phone>
-              <TabBar set="fan" active={tab} onSelect={setTab} />
+              <TabBar set="exhibitor" active={tab} onSelect={setTab} />
             </Phone>
             <Phone>
               <TabBar

@@ -45,9 +45,12 @@ import { type ReactNode, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { V2Content } from "./V2";
+
 const themes: ThemeId[] = ["beton", "sable"];
 
 const sections = [
+  "v2",
   "ground",
   "brand",
   "icons",
@@ -153,7 +156,7 @@ function ThemeSwitch() {
   const options: [ThemePreference, string][] = [
     ["beton", "Béton"],
     ["sable", "Sable"],
-    ["auto", "Auto"],
+    ["auto", "Automatique"],
   ];
   return (
     <View style={styles.switch}>
@@ -222,6 +225,14 @@ export default function DesignSystemDemo() {
             <ThemeSwitch />
           </View>
         )}
+
+        <Section
+          id="v2"
+          title="DA v2 (lot 38)"
+          note="Surcouche de jetons et raisons, contour sur photo et sur fond, barre du haut v2, grands titres sur une ligne, barres des six profils."
+        >
+          {(theme) => <V2Content t={theme} />}
+        </Section>
 
         <Section
           id="ground"
@@ -667,7 +678,7 @@ export default function DesignSystemDemo() {
           {() => (
             <View style={styles.stack}>
               <Phone>
-                <TabBar set="fan" active={tab} onSelect={setTab} />
+                <TabBar set="exhibitor" active={tab} onSelect={setTab} />
               </Phone>
               <Phone>
                 <TabBar
