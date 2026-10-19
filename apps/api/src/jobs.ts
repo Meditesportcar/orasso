@@ -141,8 +141,11 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
   }
   const previous = deps.jobs;
   deps.jobs = {
-    async send(name, data, startAfter) {
-      await boss.send(name, data, startAfter ? { startAfter } : {});
+    async send(name, data, startAfter, opts) {
+      await boss.send(name, data, {
+        ...(startAfter ? { startAfter } : {}),
+        ...(opts?.singletonKey ? { singletonKey: opts.singletonKey } : {}),
+      });
     },
   };
   // Lot 26 (relecture) : une fois pg-boss arrêté (fin d'un bloc du seed, d'un script), la file précédente revient

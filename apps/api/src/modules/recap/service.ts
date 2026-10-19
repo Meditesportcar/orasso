@@ -15,14 +15,13 @@ import {
   reviewWindowOpen,
   wallTime,
 } from "@orasso/shared";
-import { and, desc, eq, inArray, isNotNull, lte, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
   applications,
   audiencePrizeResults,
   checkins,
-  eventStaff,
   events,
   notifications,
   pointEntries,
@@ -38,6 +37,7 @@ import { withTx } from "../../lib/tx";
 import { audiencePrizeService } from "../audience-prize/service";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
+import { isVerifiedStaff } from "../passport/presence";
 import { passportService } from "../passport/service";
 
 /** Le lendemain de la fin, à 10 h (heure de l'événement). */
@@ -63,10 +63,9 @@ async function presenceOf(eventId: string, userId: string) {
     .where(and(eq(tickets.eventId, eventId), eq(tickets.userId, userId), isNotNull(tickets.usedAt)))
     .orderBy(tickets.usedAt)
     .limit(1);
-  const staff = await db.query.eventStaff.findFirst({
-    where: and(eq(eventStaff.eventId, eventId), eq(eventStaff.userId, userId), eq(eventStaff.presence, "present")),
-  });
-  return { entry: entry ?? null, ticketAt: ticket?.at ?? null, staffPresent: Boolean(staff) };
+  // Staff présent vérifiable (trace du jour J), relecture du lot 49.
+  const staffPresent = await isVerifiedStaff(db, eventId, userId);
+  return { entry: entry ?? null, ticketAt: ticket?.at ?? null, staffPresent };
 }
 
 /** Personnes à prévenir : pointées (véhicule) et billets scannés. */
@@ -230,6 +229,8 @@ export const recapService = {
     const users = await recipients(e.id);
     if (!users.length) return 0;
     return withTx(async (tx, after) => {
+      // Verrou consultatif par événement : deux exécutions simultanées (deux workers) n'envoient jamais deux fois.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`recap:${e.id}`}))`);
       const sent = await tx
         .select({ userId: notifications.userId })
         .from(notifications)

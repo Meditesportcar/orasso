@@ -214,7 +214,7 @@ app.route("/", recapRoutes);
 // session qui a ouvert la connexion (sans elle, les organisateurs perdaient le tri en direct depuis le lot 15).
 realtime.setAuthorizer(async (userId, channel, ctx) => {
   // Lot 49 : classement du prix du public en direct, ouvert à toute personne connectée.
-  if (channel.endsWith(":votes")) return audiencePrizeService.canSubscribe(channel);
+  if (channel.endsWith(":votes")) return audiencePrizeService.canSubscribe(userId, channel);
   const u = await db.query.user.findFirst({ where: eq(user.id, userId) });
   const profile = await profilesRepo.byUserId(userId);
   if (!u || !profile) return false;

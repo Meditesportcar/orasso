@@ -21,7 +21,7 @@ import {
   voteClosesAt,
   voteOpen,
 } from "@orasso/shared";
-import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -29,9 +29,9 @@ import {
   audiencePrizeResults,
   audienceVotes,
   checkins,
-  eventStaff,
   profiles,
   tickets,
+  user,
   vehicleGenerations,
   vehicleMakes,
   vehicleModels,
@@ -40,13 +40,16 @@ import {
 } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { AppError, notFound } from "../../lib/errors";
+import { rateLimit } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { settingsStore } from "../../lib/settings";
 import { storage } from "../../lib/storage";
 import { type Executor, withTx } from "../../lib/tx";
 import { type EventRow, eventsRepo } from "../events/repo";
+import { assertCanSeeEvent, canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
+import { isVerifiedStaff } from "../passport/presence";
 
 type Award = (entry: {
   userId: string;
@@ -56,7 +59,10 @@ type Award = (entry: {
   applicationId: string;
 }) => Promise<unknown | null>;
 
-/** Véhicules pointés de l'événement (candidatures de véhicules entrées), du premier au dernier entré. */
+/**
+ * Véhicules pointés de l'événement (candidatures de véhicules entrées), du premier au dernier entré. Les comptes
+ * supprimés (anonymisés) sortent du classement et du prix : ni points ni notification à un compte supprimé.
+ */
 async function enteredVehicles(ex: Executor, eventId: string) {
   return ex
     .select({
@@ -67,7 +73,8 @@ async function enteredVehicles(ex: Executor, eventId: string) {
     })
     .from(checkins)
     .innerJoin(applications, eq(applications.id, checkins.applicationId))
-    .where(and(eq(checkins.eventId, eventId), eq(applications.kind, "vehicle")))
+    .innerJoin(profiles, eq(profiles.userId, applications.userId))
+    .where(and(eq(checkins.eventId, eventId), eq(applications.kind, "vehicle"), isNull(profiles.deletedAt)))
     .orderBy(asc(checkins.checkedInAt));
 }
 
@@ -91,15 +98,13 @@ async function voterOf(
     .select({ usedAt: sql<Date | null>`min(${tickets.usedAt})` })
     .from(tickets)
     .where(and(eq(tickets.eventId, eventId), eq(tickets.userId, userId), isNotNull(tickets.usedAt)));
-  const staff = await ex.query.eventStaff.findFirst({
-    where: and(eq(eventStaff.eventId, eventId), eq(eventStaff.userId, userId), eq(eventStaff.presence, "present")),
-  });
   const mine = entered.filter((e) => e.userId === userId);
   const ticketScannedAt = ticket?.usedAt ? new Date(ticket.usedAt) : null;
   return {
     checkedInAt: mine[0]?.checkedInAt ?? null,
     ticketScannedAt,
-    staffPresent: Boolean(staff),
+    // Staff présent vérifiable : une trace du jour J (relecture du lot 49).
+    staffPresent: await isVerifiedStaff(ex, eventId, userId),
   } satisfies AudienceVoter;
 }
 
@@ -163,10 +168,14 @@ async function entries(ex: Executor, ranked: readonly AudienceRanked[]): Promise
   }));
 }
 
-/** Événement publié (ou passé), visible des connectés ; un brouillon n'a pas de prix du public. */
-async function visibleEvent(eventId: string): Promise<EventRow> {
+/**
+ * Événement publié (ou passé), visible des connectés ; un brouillon n'a pas de prix du public. Événement privé sur
+ * invitation (lot 25) : `403 invite_only` pour qui n'en est pas ayant droit, sans rien de l'événement.
+ */
+async function visibleEvent(eventId: string, v: Viewer): Promise<EventRow> {
   const event = await eventsRepo.byId(eventId).catch(() => null);
   if (!event || event.status === "draft") throw notFound("Événement introuvable");
+  await assertCanSeeEvent(event, v);
   return event;
 }
 
@@ -176,8 +185,8 @@ const refusal = {
   not_checked_in: () => new AppError(403, "not_checked_in", audiencePrizeTexts.errors.not_checked_in),
 };
 
-/** Classement réduit diffusé à chaque voix (`votes.changed`). */
-async function publishVotes(eventId: string) {
+/** Classement réduit diffusé (`votes.changed`). */
+async function publishNow(eventId: string) {
   const { ranked, total } = await ranking(db, eventId);
   const payload: AudienceVotesChanged = {
     total,
@@ -186,13 +195,36 @@ async function publishVotes(eventId: string) {
   realtime.publish(`event:${eventId}:votes`, "votes.changed", payload);
 }
 
+/** Diffusions regroupées : au plus une par seconde et par événement (la dernière part en fin de seconde). */
+const PUBLISH_EVERY_MS = 1_000;
+const lastPublish = new Map<string, number>();
+const pendingPublish = new Map<string, ReturnType<typeof setTimeout>>();
+
+async function publishVotes(eventId: string) {
+  if (pendingPublish.has(eventId)) return;
+  const wait = (lastPublish.get(eventId) ?? 0) + PUBLISH_EVERY_MS - Date.now();
+  if (wait <= 0) {
+    lastPublish.set(eventId, Date.now());
+    await publishNow(eventId);
+    return;
+  }
+  const timer = setTimeout(() => {
+    pendingPublish.delete(eventId);
+    lastPublish.set(eventId, Date.now());
+    publishNow(eventId).catch((error) => console.error("Classement du prix du public non diffusé :", error));
+  }, wait);
+  timer.unref?.();
+  pendingPublish.set(eventId, timer);
+}
+
 /** Lignes du classement renvoyées en direct (les premiers ; la position de chacun est dans le récap). */
 const BOARD_LIMIT = 100;
 
 export const audiencePrizeService = {
   /** `PUT /events/:id/audience-prize/vote` : une voix, modifiable jusqu'à la clôture. */
   async vote(v: Viewer, eventId: string, applicationId: string): Promise<AudiencePrizeMine> {
-    const event = await visibleEvent(eventId);
+    rateLimit("audienceVote", v.user.id);
+    const event = await visibleEvent(eventId, v);
     await withTx(async (tx, after) => {
       const entered = await enteredVehicles(tx, eventId);
       const voter = await voterOf(tx, eventId, v.user.id, entered);
@@ -221,7 +253,7 @@ export const audiencePrizeService = {
 
   /** `GET /events/:id/audience-prize/mine` : puis-je voter, pour qui j'ai voté, mon heure d'entrée. */
   async mine(v: Viewer, eventId: string): Promise<AudiencePrizeMine> {
-    const event = await visibleEvent(eventId);
+    const event = await visibleEvent(eventId, v);
     const entered = await enteredVehicles(db, eventId);
     const voter = await voterOf(db, eventId, v.user.id, entered);
     const window = windowOf(event, entered);
@@ -252,8 +284,8 @@ export const audiencePrizeService = {
   },
 
   /** `GET /events/:id/audience-prize` : classement en direct, ou résultats figés après le règlement. */
-  async board(_v: Viewer, eventId: string): Promise<AudiencePrizeBoard> {
-    const event = await visibleEvent(eventId);
+  async board(v: Viewer, eventId: string): Promise<AudiencePrizeBoard> {
+    const event = await visibleEvent(eventId, v);
     const { entered, ranked, total } = await ranking(db, eventId);
     const winnerPoints = pointsForWinner({ "points.audience_prize": await settingsStore.get("points.audience_prize") });
     const results = await db.query.audiencePrizeResults.findMany({
@@ -356,10 +388,16 @@ export const audiencePrizeService = {
   },
 
   /** Abonnement au canal `event:{id}:votes` : toute personne connectée, événement publié. */
-  async canSubscribe(channel: string): Promise<boolean> {
+  async canSubscribe(userId: string, channel: string): Promise<boolean> {
     const id = /^event:([0-9a-f-]{36}):votes$/.exec(channel)?.[1];
     if (!id) return false;
     const event = await eventsRepo.byId(id).catch(() => null);
-    return event?.status === "published";
+    if (event?.status !== "published") return false;
+    if (event.admission !== "invite_only") return true;
+    // Événement privé : mêmes ayants droit que sa page (lot 25).
+    const u = await db.query.user.findFirst({ where: eq(user.id, userId) });
+    const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, userId) });
+    if (!u || !profile) return false;
+    return canSeeEvent(event, { user: u as Viewer["user"], profile, session: { secondFactor: null } });
   },
 };

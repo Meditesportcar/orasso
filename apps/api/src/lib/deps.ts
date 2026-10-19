@@ -60,14 +60,17 @@ export type JobName =
 
 export interface JobQueue {
   /** Planifie une tâche ; les gestionnaires revérifient l'état en base avant d'agir (jamais confiance à la charge seule). */
-  send(name: JobName, data: Record<string, unknown>, startAfter?: Date): Promise<void>;
+  send(name: JobName, data: Record<string, unknown>, startAfter?: Date, opts?: JobOptions): Promise<void>;
 }
+
+/** Lot 49 : `singletonKey` = une seule tâche en file pour cette clé (pg-boss). */
+export type JobOptions = { singletonKey?: string };
 
 /** File qui garde les tâches en mémoire (tests, scripts sans pg-boss). */
 export class MemoryJobQueue implements JobQueue {
-  readonly jobs: { name: JobName; data: Record<string, unknown>; startAfter?: Date }[] = [];
-  async send(name: JobName, data: Record<string, unknown>, startAfter?: Date) {
-    this.jobs.push({ name, data, startAfter });
+  readonly jobs: { name: JobName; data: Record<string, unknown>; startAfter?: Date; opts?: JobOptions }[] = [];
+  async send(name: JobName, data: Record<string, unknown>, startAfter?: Date, opts?: JobOptions) {
+    this.jobs.push({ name, data, startAfter, ...(opts ? { opts } : {}) });
   }
 }
 

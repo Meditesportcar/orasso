@@ -47,7 +47,9 @@ export async function scheduleEventJobs(e: EventRow) {
   for (const [name, at] of plan) {
     // Verrouillage et règlement toujours planifiés (même passés : la tâche agit aussitôt, une seule fois).
     const always = name === "event.lock" || name === "event.settle";
-    if (always || at > t) await deps.jobs.send(name, { eventId: e.id, at: at.toISOString() }, at);
+    // Récap (lot 49) : une seule tâche en file par événement et par instant prévu.
+    const opts = name === "event.recap" ? { singletonKey: `recap:${e.id}:${at.toISOString()}` } : undefined;
+    if (always || at > t) await deps.jobs.send(name, { eventId: e.id, at: at.toISOString() }, at, opts);
   }
   // Plusieurs jours (lot 26, § 10) : un rappel la veille de chaque jour suivant, pour les candidatures de ce jour (celles
   // de tout l'événement et du premier jour ont le rappel de la veille du premier jour, ci-dessus). Verrouillage unique au
