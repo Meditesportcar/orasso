@@ -111,7 +111,7 @@ export function JournalSheet({ visible, onClose }: { visible: boolean; onClose: 
                 if (team) {
                   // Lot 35a : une demande pour devenir staff ouvre l'écran Équipe de la structure.
                   onClose();
-                  choose({ kind: "organizer", structureId: team }, "/(orga)/staff");
+                  choose({ kind: "organizer", structureId: team }, "/(orga)/equipe");
                   return;
                 }
                 if (admin) {

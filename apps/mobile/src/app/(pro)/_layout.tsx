@@ -1,47 +1,18 @@
-// Casquette Pro (docs/02 « Appli — casquettes ») : Scanner (onglet par défaut, au centre) · Fiche · Publier · Stats.
-// Les onglets viennent du jeu `pro` du système de design, sans la Boîte (messages, pas encore construits). Aucun
-// bouton ni lien de paiement dans l'appli : l'abonnement se gère sur le site.
-import { legacyTabSets, TabBar, type TabItem } from "@orasso/design-system/native";
+// Casquette Pro (DA v2, lot 40, prototype `s-pscan`) : Scanner · Ma fiche · Accueil (le O, au centre) · Stats · Profil.
+// Modifier la fiche et Publier sont des pages masquées, rangées sous Ma fiche. Aucun bouton ni lien de paiement dans
+// l'appli : l'abonnement se gère sur le site.
 import { Tabs } from "expo-router";
-import type { ComponentProps } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
+import { PersonaTabSet } from "@/ui/PersonaTabs";
 
-const tabs: readonly TabItem[] = legacyTabSets.pro.filter((tab) => tab.id !== "inbox");
-/** Nom de la route → identifiant d'onglet (`legacyTabSets.pro`). */
-const tabIds = { fiche: "card", publier: "publish", scanner: "scanner", stats: "stats" } as const;
-const routeOf = Object.fromEntries(Object.entries(tabIds).map(([route, id]) => [id, route])) as Record<string, string>;
-
-function ProTabBar({ state, navigation }: TabBarProps) {
-  const insets = useSafeAreaInsets();
-  const current = state.routes[state.index]?.name as keyof typeof tabIds | "modifier" | undefined;
-  return (
-    <TabBar
-      tabs={tabs}
-      active={current === "modifier" ? "card" : current ? tabIds[current] : "scanner"}
-      safeBottom={insets.bottom}
-      onSelect={(id) => {
-        const route = routeOf[id];
-        if (route) navigation.navigate(route);
-      }}
-    />
-  );
-}
+const extra = { modifier: "card", publier: "card" };
 
 export default function ProLayout() {
   return (
-    <Tabs
-      initialRouteName="scanner"
-      screenOptions={{ headerShown: false, animation: "none" }}
-      tabBar={(props) => <ProTabBar {...props} />}
-    >
-      <Tabs.Screen name="fiche" />
-      <Tabs.Screen name="publier" />
-      <Tabs.Screen name="scanner" />
-      <Tabs.Screen name="stats" />
-      {/* Modifier la fiche (lot 35c), depuis l'onglet Fiche. */}
+    <PersonaTabSet kind="pro" extra={extra}>
+      {/* Modifier la fiche (lot 35c) et publier une actualité, depuis Ma fiche. */}
       <Tabs.Screen name="modifier" options={{ href: null }} />
-    </Tabs>
+      <Tabs.Screen name="publier" options={{ href: null }} />
+    </PersonaTabSet>
   );
 }

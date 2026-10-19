@@ -1,56 +1,75 @@
-// Barre du haut commune à toutes les casquettes (docs/02, README AppBar) : monogramme, titre, puis Recherche, Cloche
-// et Avatar. L'avatar porte le logo de la casquette active et un point moutarde si une autre casquette a quelque chose à
-// traiter. Appui court : feuille « Mes casquettes » (ou « Moi » directement quand on n'a que la casquette de passionné) ;
-// appui long : retour au passionné. La recherche ouvre l'écran de recherche de premier niveau (lot 29).
-import { AppBar } from "@orasso/design-system/native";
+// Barre du haut v2 de tous les onglets (DA v2, lot 40, prototype `s-plan` ; `AppBar kind="tab"` du système de design) :
+// le logotype toujours à gauche, la pastille de la casquette quand ce n'est pas la casquette de base (logo de la
+// structure pour l'organisateur), puis Recherche et Boîte à droite. L'avatar a quitté la barre : il est dans Mon profil.
+// Appui long sur le logotype : retour à la casquette de base (exposant ou visiteur) ; appui sur la pastille : Mon profil
+// de la casquette de base (prototype : la pastille de l'organisateur ramène au profil). La Boîte réunit messages,
+// demandes et notifications (elle remplace la cloche) : sa pastille compte les deux.
+// Le système de design ne rend ni le logotype ni la pastille pressables (zone du lot 39 pendant ce lot) : deux zones
+// d'appui transparentes les recouvrent, aux mêmes cotes que l'`AppBar` (marge 18 px, écart 10 px, pastille 30 px).
+import { AppBar, tokens } from "@orasso/design-system/native";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { CasquettesSheet } from "@/features/casquettes/CasquettesSheet";
 import { usePersona } from "@/lib/persona";
+import { homeOf, isBaseKind, personaKindLabels, tabHref } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
-import { Avatar } from "./Avatar";
 
-export function TopBar({
-  title,
-  facts,
-  home = false,
-  onNotifications,
-  notificationsOn,
-}: {
-  title?: string;
-  facts?: string;
-  /** Accueil du passionné : le logotype à la place du titre. */
-  home?: boolean;
-  onNotifications: () => void;
-  notificationsOn: boolean;
-}) {
+const { barTop, brandLogo } = tokens.spacing;
+/** Cotes de l'`AppBar` du système de design (`paddingHorizontal`, `gap`, pastille de casquette). */
+const BAR_PADDING = 18;
+const BAR_GAP = 10;
+const PERSONA_SIZE = 30;
+
+export function TopBar({ inboxOn = false, onClose }: { inboxOn?: boolean; onClose?: () => void }) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const router = useRouter();
   const { me } = useSession();
-  const { persona, entries, active, elsewhere, backToFan } = usePersona();
-  const [casquettes, setCasquettes] = useState(false);
-  const fan = persona.kind === "fan";
+  const { persona, base, active, choose, backToBase } = usePersona();
+  const showPersona = !isBaseKind(persona.kind);
+  const logoWidth = width < 360 ? 112 : brandLogo;
+  const inboxCount = (me?.unreadInbox ?? 0) + (me?.counts.unreadNotifications ?? 0);
+  const baseLabel = personaKindLabels[base.kind];
+
   return (
-    <>
+    <View>
       <AppBar
-        kind={home ? "home" : "page"}
-        title={title}
-        facts={facts}
+        kind="tab"
         safeTop={insets.top}
-        notificationCount={me?.counts.unreadNotifications}
+        persona={showPersona ? { logoUrl: active.logoUrl, label: active.label } : undefined}
         onSearch={() => router.push("/recherche")}
-        onNotifications={onNotifications}
-        notificationsOn={notificationsOn}
-        onAvatar={() => (entries.length > 1 ? setCasquettes(true) : router.push("/moi"))}
-        onAvatarLongPress={fan ? undefined : backToFan}
-        avatarDot={elsewhere > 0}
-        avatar={
-          <Avatar url={fan ? me?.profile.avatarUrl : active.logoUrl} pseudo={fan ? me?.profile.pseudo : active.label} />
-        }
+        onInbox={() => router.push(persona.kind === "organizer" ? "/boite/orga" : "/boite")}
+        inboxOn={inboxOn}
+        inboxCount={inboxCount}
+        onClose={onClose}
       />
-      <CasquettesSheet visible={casquettes} onClose={() => setCasquettes(false)} />
-    </>
+      <View pointerEvents="box-none" style={[styles.overlay, { top: insets.top, height: barTop }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Orasso, accueil"
+          accessibilityHint={`Appui long : revenir au profil ${baseLabel.toLowerCase()}`}
+          onPress={() => router.navigate(homeOf(persona) as never)}
+          onLongPress={persona.kind === base.kind ? undefined : backToBase}
+          style={[styles.zone, { left: BAR_PADDING, width: logoWidth }]}
+          testID="topbar-logo"
+        />
+        {showPersona ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${active.label}, ${personaKindLabels[persona.kind]}`}
+            accessibilityHint="Ouvre Mon profil"
+            onPress={() => choose(base, tabHref(base.kind, "profil") ?? undefined)}
+            style={[styles.zone, { left: BAR_PADDING + logoWidth + BAR_GAP, width: PERSONA_SIZE }]}
+            testID="topbar-persona"
+          />
+        ) : null}
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  overlay: { position: "absolute", left: 0, right: 0 },
+  zone: { position: "absolute", top: 0, bottom: 0 },
+});

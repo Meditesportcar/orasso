@@ -35,7 +35,7 @@ export default function ProFiche() {
     : "";
   return (
     <TabScreen
-      title="Fiche"
+      title="Ma fiche"
       facts={pro?.name}
       onRefresh={async () => {
         await myPro.reload();

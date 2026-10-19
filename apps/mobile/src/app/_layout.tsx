@@ -31,6 +31,7 @@ import { ApplicationsProvider } from "@/lib/applications";
 import { initClock } from "@/lib/clockStore";
 import { kvGet, kvSet } from "@/lib/kv";
 import { appLinkOf, teamRequestTarget } from "@/lib/links";
+import { MotionPrefProvider, parseReduceMotion, REDUCE_MOTION_KEY } from "@/lib/motionPref";
 import { PersonaProvider, usePersona } from "@/lib/persona";
 import { homeOf, misplacedGroup } from "@/lib/personaModel";
 import { registerThisDevice } from "@/lib/push";
@@ -58,7 +59,7 @@ function Shell() {
   useEffect(() => {
     setPosition(firstDepartment ? profilePosition([firstDepartment]) : null);
   }, [firstDepartment, setPosition]);
-  const { persona, backToFan, choose } = usePersona();
+  const { persona, backToBase, choose } = usePersona();
   const router = useRouter();
   const segments = useSegments();
   const navigation = useRootNavigationState();
@@ -112,7 +113,8 @@ function Shell() {
     if (status === "in") void registerThisDevice();
   }, [status]);
 
-  // Toucher une notification ouvre l'onglet Accès du passionné (quelle que soit la casquette active) ou l'écran de son lien.
+  // Toucher une notification ouvre l'onglet Sorties de la casquette de base (quelle que soit la casquette active) ou
+  // l'écran de son lien.
   useEffect(() => {
     if (Platform.OS === "web") return;
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -124,7 +126,7 @@ function Shell() {
       // Demande pour devenir staff (lot 35a) : l'écran Équipe de la structure, sous la casquette Organisateur.
       const team = teamRequestTarget(response.notification.request.content.data);
       if (team) {
-        choose({ kind: "organizer", structureId: team }, "/(orga)/staff");
+        choose({ kind: "organizer", structureId: team }, "/(orga)/equipe");
         return;
       }
       // Alerte de modération ou demande d'aide d'une structure (lot 35d) : l'écran de la casquette Administration.
@@ -133,14 +135,14 @@ function Shell() {
         choose({ kind: "admin" }, admin);
         return;
       }
-      backToFan();
-      // Un lien de l'appli (profil d'un ami, événement) ouvre cet écran, sinon l'onglet Accès.
+      backToBase();
+      // Un lien de l'appli (profil d'un ami, événement) ouvre cet écran, sinon l'onglet Sorties (`/acces` y redirige).
       const link = appLinkOf(response.notification.request.content.data?.link);
       if (link) router.navigate(link as never);
       else router.navigate("/acces");
     });
     return () => sub.remove();
-  }, [router, backToFan, choose]);
+  }, [router, backToBase, choose]);
 
   return (
     <View style={[styles.fill, { backgroundColor: ground }]}>
@@ -169,33 +171,38 @@ function Shell() {
 export default function RootLayout() {
   const fontsReady = useOrassoFonts();
   const [preference, setPreference] = useState<ThemePreference | null>(null);
-  // Recette : /_ds?reduce=1 force « réduire les animations » (sinon, le réglage de l'appareil).
+  // Lot 40 : « Réduire les animations » de Mon profil › Préférences (kv), en plus du réglage de l'appareil.
+  const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
+  // Recette : /_ds?reduce=1 force « réduire les animations » (sinon, la préférence puis le réglage de l'appareil).
   const { reduce } = useGlobalSearchParams<{ reduce?: string }>();
 
   useEffect(() => {
     void kvGet("theme").then((v) => setPreference(parseThemePreference(v)));
+    void kvGet(REDUCE_MOTION_KEY).then((v) => setReduceMotion(parseReduceMotion(v)));
   }, []);
 
-  const ready = fontsReady && preference !== null;
+  const ready = fontsReady && preference !== null && reduceMotion !== null;
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
   if (!ready) return null;
 
   return (
-    <ThemeProvider
-      initialPreference={preference}
-      onPreferenceChange={(next) => void kvSet("theme", next)}
-      reducedMotion={reduce === "1" ? true : undefined}
-    >
-      <SessionProvider>
-        <PersonaProvider>
-          <ApplicationsProvider>
-            <Shell />
-          </ApplicationsProvider>
-        </PersonaProvider>
-      </SessionProvider>
-    </ThemeProvider>
+    <MotionPrefProvider value={reduceMotion ?? false} onChange={setReduceMotion}>
+      <ThemeProvider
+        initialPreference={preference}
+        onPreferenceChange={(next) => void kvSet("theme", next)}
+        reducedMotion={reduce === "1" || reduceMotion ? true : undefined}
+      >
+        <SessionProvider>
+          <PersonaProvider>
+            <ApplicationsProvider>
+              <Shell />
+            </ApplicationsProvider>
+          </PersonaProvider>
+        </SessionProvider>
+      </ThemeProvider>
+    </MotionPrefProvider>
   );
 }
 

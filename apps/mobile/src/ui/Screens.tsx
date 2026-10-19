@@ -1,11 +1,12 @@
 // Gabarits d'écran : le fond vivant, l'en-tête (AppBar) et la zone qui défile. Les zones de sécurité (encoche, barre de
 // gestes) sont passées à l'en-tête et à la barre d'onglets, comme le demande le README du système de design.
-import { AppBar, Ground, tokens, useTheme } from "@orasso/design-system/native";
-import { useFocusEffect } from "expo-router";
+import { AppBar, BigTitle, Button, Ground, tokens, useTheme } from "@orasso/design-system/native";
+import { useFocusEffect, usePathname, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SwipeEntry } from "@/features/nav/SwipeEntry";
 import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
 import { JournalSheet } from "./JournalSheet";
@@ -27,42 +28,65 @@ type Common = {
   overlays?: ReactNode;
 };
 
-/** Écran d'un onglet : barre du haut commune (TopBar) avec Recherche, Cloche et Avatar de la casquette active. */
+/**
+ * Écran d'un onglet (DA v2, lot 40) : la barre du haut v2 (logotype, pastille de casquette, Recherche, Boîte), puis le
+ * grand titre sur une ligne (`BigTitle`, `facts` en étiquette à droite) en tête de la zone qui défile. L'onglet ouvert
+ * par un glissement se gare depuis le côté (`SwipeEntry`). Sous `/boite` (la Boîte, hors de la barre d'onglets), la
+ * pastille Boîte est allumée, ✕ ramène d'où l'on vient et les notifications (l'ancien Journal de la cloche) s'ouvrent
+ * en tête de l'écran.
+ */
 export function TabScreen({
   title,
   facts,
-  home = false,
   children,
   onRefresh,
   footer,
   still,
   overlays,
 }: Common & { title?: string; facts?: string; home?: boolean }) {
-  const { refreshMe } = useSession();
+  const { refreshMe, me } = useSession();
+  const router = useRouter();
+  const inInbox = usePathname().startsWith("/boite");
   const [journal, setJournal] = useState(false);
-  // Compteurs de la cloche et du garage à jour à chaque retour sur un onglet.
+  // Compteurs de la Boîte et du garage, casquettes (un véhicule ajouté fait passer de visiteur à exposant) à jour à
+  // chaque retour sur un onglet.
   useFocusEffect(
     useCallback(() => {
       void refreshMe();
     }, [refreshMe]),
   );
+  const unread = me?.counts.unreadNotifications ?? 0;
   return (
     <OverlayProvider>
       <Ground animated={!still} style={styles.fill}>
         <TopBar
-          title={title}
-          facts={facts}
-          home={home}
-          onNotifications={() => setJournal(true)}
-          notificationsOn={journal}
+          inboxOn={inInbox}
+          onClose={inInbox ? () => (router.canGoBack() ? router.back() : router.replace("/")) : undefined}
         />
-        <KeyboardSafe style={styles.fill}>
-          <Body onRefresh={onRefresh}>{children}</Body>
-          {footer ? <View style={styles.footer}>{footer}</View> : null}
-        </KeyboardSafe>
+        <SwipeEntry>
+          <KeyboardSafe style={styles.fill}>
+            <Body onRefresh={onRefresh}>
+              {title ? <BigTitle title={title} label={facts} /> : null}
+              {inInbox ? (
+                <Button
+                  variant="plate"
+                  icon="bell"
+                  next
+                  fullWidth
+                  onPress={() => setJournal(true)}
+                  testID="inbox-journal"
+                >
+                  {unread > 0 ? `Notifications · ${unread} non lue${unread > 1 ? "s" : ""}` : "Notifications"}
+                </Button>
+              ) : null}
+              {children}
+            </Body>
+            {footer ? <View style={styles.footer}>{footer}</View> : null}
+          </KeyboardSafe>
+        </SwipeEntry>
         {overlays}
         <OverlaySlot />
-        <JournalSheet visible={journal} onClose={() => setJournal(false)} />
+        {inInbox ? <JournalSheet visible={journal} onClose={() => setJournal(false)} /> : null}
       </Ground>
     </OverlayProvider>
   );

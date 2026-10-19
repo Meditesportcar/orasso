@@ -91,7 +91,7 @@ export function AuthForm({
 
   async function done() {
     await kvSet("onboarded", "1");
-    router.replace((next ?? "/accueil") as "/accueil");
+    router.replace((next ?? "/") as "/");
   }
 
   async function submit() {

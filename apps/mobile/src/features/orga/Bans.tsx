@@ -36,7 +36,7 @@ export function BansScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | undefined>();
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/staff"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/(orga)/equipe"));
   const list = sortedBans(bans.data ?? []);
 
   function askAdd() {

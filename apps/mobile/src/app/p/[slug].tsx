@@ -43,7 +43,7 @@ export default function ProPage() {
     }).catch(() => undefined);
   }, [p]);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/explorer" : "/auth"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
   const track = (kind: "call" | "route") =>
     void request(`/api/pros/by-slug/${encodeURIComponent(slug)}/track`, { method: "POST", body: { kind } }).catch(
       () => undefined,

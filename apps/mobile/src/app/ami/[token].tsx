@@ -37,7 +37,7 @@ export default function AmiLink() {
   }
 
   return (
-    <FlowScreen title="Lien d'ami" onClose={() => router.replace(status === "in" ? "/accueil" : "/auth")}>
+    <FlowScreen title="Lien d'ami" onClose={() => router.replace(status === "in" ? "/" : "/auth")}>
       <View style={styles.col}>
         {status !== "in" ? (
           <>

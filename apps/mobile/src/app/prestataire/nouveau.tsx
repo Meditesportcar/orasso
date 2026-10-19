@@ -24,7 +24,7 @@ export default function NouveauPrestataire() {
   const [error, setError] = useState<string | null>(null);
   const isPro = me?.personas?.some((p) => p.kind === "pro") ?? false;
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/accueil"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   /** Le profil existe : les casquettes sont relues, puis la casquette Prestataire s'ouvre (Candidatures, qui dit quoi compléter). */
   async function done() {

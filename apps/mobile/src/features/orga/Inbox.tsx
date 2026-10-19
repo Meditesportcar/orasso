@@ -322,7 +322,7 @@ export function InboxScreen() {
                 variant="plate"
                 icon="staff"
                 next
-                onPress={() => router.navigate("/staff")}
+                onPress={() => router.navigate("/(orga)/equipe")}
                 fullWidth
                 testID="orga-requests-open-team"
               >

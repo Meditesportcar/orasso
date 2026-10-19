@@ -28,7 +28,7 @@ export default function OtherVehiclePage() {
   const v = vehicle.data;
   const [viewer, setViewer] = useState<number | null>(null);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/explorer"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   if (!v) {
     return (

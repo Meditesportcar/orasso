@@ -34,7 +34,7 @@ export default function VerificationEmail() {
       .catch(() => setState("expired"));
   }, [token, refreshMe]);
 
-  const next = () => router.replace(status === "in" ? "/accueil" : { pathname: "/auth", params: { mode: "signin" } });
+  const next = () => router.replace(status === "in" ? "/" : { pathname: "/auth", params: { mode: "signin" } });
   return (
     <FlowScreen title="Adresse e-mail" onClose={next}>
       {state === "checking" ? (
