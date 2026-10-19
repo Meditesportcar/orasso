@@ -36,8 +36,9 @@ test("appli : carnet de route, avis, page de l'événement, Moi", async ({ brows
     await page.getByRole("button", { name: "Me connecter" }).click();
     await page.waitForURL(/accueil/, { timeout: 30_000 });
     await page.goto("/acces");
-    await expect(page.getByText("Passés · carnet de route")).toBeVisible({ timeout: 30_000 });
-    await page.getByText("Passés · carnet de route").scrollIntoViewIfNeeded();
+    // Lot 43 : le carnet de route est le segment « Passées » de Sorties.
+    await page.getByText(/^Passées · \d+$/).click();
+    await expect(page.getByTestId("ticket-past").first()).toBeVisible({ timeout: 30_000 });
     await shot(page, `01-acces-carnet-${theme}`);
 
     const leave = page.getByRole("button", { name: "Laisser un avis" });

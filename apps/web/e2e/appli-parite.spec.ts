@@ -317,9 +317,9 @@ test("billets du public : réserver dans l'appli, QR dans Mes billets, rendre un
   await expect(page.getByTestId("ticket")).toHaveCount(1);
   const mine = await apiCall<{ status: string }[]>(fan, "GET", "/me/tickets");
   expect(mine.data.filter((t) => t.status === "valid")).toHaveLength(1);
-  // Accès : un raccourci vers Mes billets.
+  // Sorties (lot 43) : le billet est un ticket, avec « Mon billet ».
   await page.goto("/acces");
-  await expect(page.getByTestId("my-tickets")).toContainText("Mes billets · 1", { timeout: 30_000 });
+  await expect(page.getByTestId("my-tickets")).toContainText("Mon billet", { timeout: 30_000 });
   await ctx.close();
 });
 
