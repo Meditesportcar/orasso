@@ -187,6 +187,20 @@ export function misplacedGroup(persona: Persona, firstSegment: string | undefine
   return kind !== null && kind !== persona.kind;
 }
 
+/**
+ * Où rediriger quand l'URL est dans le groupe d'une autre casquette (`null` sinon). Exposant ↔ visiteur (la casquette
+ * de base a changé : véhicule ajouté ou archivé) : le même onglet dans la nouvelle barre s'il existe, sinon son
+ * Profil — on ne jette pas la personne sur l'Accueil. Autres cas : l'écran d'ouverture de la casquette active.
+ */
+export function misplacedTarget(persona: Persona, segments: readonly string[]): string | null {
+  const from = kindOfSegment(segments[0]);
+  if (from === null || from === persona.kind) return null;
+  if (isBaseKind(from) && isBaseKind(persona.kind)) {
+    return tabHref(persona.kind, segments[1] ?? "") ?? tabHref(persona.kind, "profil");
+  }
+  return landingOf(persona);
+}
+
 export function serializePersona(persona: Persona): string {
   return JSON.stringify(persona);
 }

@@ -14,6 +14,7 @@ import {
   kindOfSegment,
   landingOf,
   misplacedGroup,
+  misplacedTarget,
   parsePersona,
   personaGroups,
   personaKindLabels,
@@ -99,6 +100,16 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(landingOf({ kind: "provider" })).toBe("/(provider)/candidatures");
     expect(landingOf(VISITOR)).toBe("/(visitor)/accueil");
     expect(landingOf({ kind: "organizer", structureId: "s-1" })).toBe("/(orga)/direct");
+  });
+
+  it("exposant ↔ visiteur : même onglet dans la nouvelle barre, sinon le Profil ; ailleurs l'écran d'ouverture", () => {
+    expect(misplacedTarget(FAN, ["(visitor)", "profil"])).toBe("/(tabs)/profil");
+    expect(misplacedTarget(FAN, ["(visitor)", "passeport"])).toBe("/(tabs)/profil");
+    expect(misplacedTarget(VISITOR, ["(tabs)", "explorer"])).toBe("/(visitor)/explorer");
+    expect(misplacedTarget(VISITOR, ["(tabs)", "garage"])).toBe("/(visitor)/profil");
+    expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(orga)", "tri"])).toBe("/(pro)/scanner");
+    expect(misplacedTarget(FAN, ["(tabs)", "garage"])).toBeNull();
+    expect(misplacedTarget(FAN, ["boite"])).toBeNull();
   });
 
   it("chemin d'un onglet, `null` quand la barre ne l'a pas", () => {

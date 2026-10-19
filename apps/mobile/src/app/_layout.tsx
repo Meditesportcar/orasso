@@ -33,7 +33,7 @@ import { kvGet, kvSet } from "@/lib/kv";
 import { appLinkOf, teamRequestTarget } from "@/lib/links";
 import { MotionPrefProvider, parseReduceMotion, REDUCE_MOTION_KEY } from "@/lib/motionPref";
 import { PersonaProvider, usePersona } from "@/lib/persona";
-import { landingOf, misplacedGroup } from "@/lib/personaModel";
+import { misplacedTarget } from "@/lib/personaModel";
 import { registerThisDevice } from "@/lib/push";
 import { initSentry } from "@/lib/sentry";
 import { SessionProvider, useSession } from "@/lib/session";
@@ -94,10 +94,12 @@ function Shell() {
   }, [status, onboarded, segments, router, navigation?.key]);
 
   // Chaque casquette a son groupe de routes : si l'URL est dans celui d'une autre (retour arrière, lien profond),
-  // on revient au premier écran de la casquette active.
+  // on revient au premier écran de la casquette active ; exposant ↔ visiteur (véhicule ajouté ou archivé), au même
+  // onglet de la nouvelle barre, sinon à son Profil (lot 40).
   useEffect(() => {
     if (status !== "in" || !navigation?.key) return;
-    if (misplacedGroup(persona, segments[0] as string | undefined)) router.replace(landingOf(persona) as never);
+    const target = misplacedTarget(persona, segments as string[]);
+    if (target) router.replace(target as never);
   }, [status, persona, segments, router, navigation?.key]);
 
   // Lot 32 : compte suspendu → l'écran « Compte suspendu » (motif, contestation) s'ouvre une fois par lancement.
