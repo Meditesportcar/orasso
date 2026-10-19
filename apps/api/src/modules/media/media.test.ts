@@ -15,8 +15,18 @@ import {
   type TestUser,
   useClock,
 } from "../../../test/helpers";
+import { app as honoApp } from "../../app";
 import { db, pool } from "../../db/client";
-import { mediaProfiles, notifications, profiles, uploads } from "../../db/schema";
+import {
+  checkins,
+  events,
+  mediaContents,
+  mediaProfiles,
+  notifications,
+  profiles,
+  structures,
+  uploads,
+} from "../../db/schema";
 import { accountService } from "../account/service";
 import { notificationsService } from "../notifications/service";
 import { resetMediaViews } from "./service";
@@ -476,5 +486,187 @@ describe("anonymisation", () => {
     expect(p).toMatchObject({ name: "Média supprimé", pressCardNumber: null, website: null });
     expect(p?.deletedAt).toBeTruthy();
     expect((await call(null, "GET", "/events/by-slug/nocturne-de-canet-2026/media-contents")).json).toHaveLength(0);
+    const content = await db.query.mediaContents.findFirst({ where: eq(mediaContents.mediaProfileId, p?.id ?? "") });
+    expect(content).toMatchObject({ title: "Contenu supprimé", url: null });
+  });
+});
+
+// --- Relecture du lot 45 ------------------------------------------------------------------------------------------------
+
+describe("V6 tenu après coup", () => {
+  const LINK = { kind: "link", title: "Le roll de minuit", url: "https://youtube.com/watch?v=x", platform: "youtube" };
+
+  it("retiré : contenu plus public, 403 en modification, mise en avant refusée ; le retrait ne peut être dé-mis en avant", async () => {
+    const app = await accredited();
+    const c = (await call(leo, "POST", "/me/media-contents", { ...LINK, eventId: nocturneId })).json;
+    await call(orga, "PATCH", `/events/${nocturneId}/media-contents/${c.id}/feature`, { featured: true });
+    expect((await call(null, "GET", "/events/by-slug/nocturne-de-canet-2026/media-contents")).json).toHaveLength(1);
+
+    expect((await call(leo, "POST", `/applications/${app.id}/withdraw`)).status).toBe(200);
+    expect((await call(null, "GET", "/events/by-slug/nocturne-de-canet-2026/media-contents")).json).toHaveLength(0);
+    const patch = await call(leo, "PATCH", `/me/media-contents/${c.id}`, { url: "https://piege.example" });
+    expect(patch.status).toBe(403);
+    const feature = await call(orga, "PATCH", `/events/${nocturneId}/media-contents/${c.id}/feature`, {
+      featured: true,
+    });
+    expect(feature.status).toBe(403);
+    // Retirer la mise en avant reste possible pour l'organisation.
+    expect(
+      (await call(orga, "PATCH", `/events/${nocturneId}/media-contents/${c.id}/feature`, { featured: false })).status,
+    ).toBe(200);
+  });
+
+  it("refusé après coup (revenir sur une retenue) : contenu masqué", async () => {
+    const app = await accredited();
+    await call(leo, "POST", "/me/media-contents", { ...LINK, eventId: nocturneId });
+    expect((await decide(nocturneId, app.id, REFUSE_QUOTA)).status).toBe(200);
+    expect((await call(null, "GET", "/events/by-slug/nocturne-de-canet-2026/media-contents")).json).toHaveLength(0);
+  });
+});
+
+describe("droits et cas limites", () => {
+  it("un autre organisateur : 403 sur les réglages presse, la mise en avant et la liste des demandes", async () => {
+    await accredited();
+    const c = (
+      await call(leo, "POST", "/me/media-contents", {
+        kind: "link",
+        title: "Article",
+        url: "https://sudcars.example/a",
+        eventId: nocturneId,
+      })
+    ).json;
+    const other = await signUp("Autre_Orga", { twoFactor: true });
+    await createStructure(other.id);
+    expect((await call(other, "PUT", `/events/${nocturneId}/press-settings`, PRESS)).status).toBe(403);
+    expect((await call(other, "GET", `/events/${nocturneId}/press-settings`)).status).toBe(403);
+    expect(
+      (await call(other, "PATCH", `/events/${nocturneId}/media-contents/${c.id}/feature`, { featured: true })).status,
+    ).toBe(403);
+    expect((await call(other, "GET", `/events/${nocturneId}/accreditations`)).status).toBe(403);
+  });
+
+  it("structure suspendue : réglages presse en lecture seule", async () => {
+    await db.update(structures).set({ verification: "suspended" }).where(eq(structures.id, structureId));
+    expect((await openPress(nocturneId)).status).toBe(403);
+    expect((await call(orga, "GET", `/events/${nocturneId}/press-settings`)).status).toBe(200);
+  });
+
+  it("un second média ne voit pas les accréditations de Léo", async () => {
+    await accredited();
+    const other = await signUp("Media_Deux");
+    await putProfile(other, { name: "Média Deux" });
+    const mine = await call(other, "GET", "/me/accreditations?scope=all");
+    expect(mine.status).toBe(200);
+    expect(mine.json).toEqual([]);
+    expect(mine.text).not.toContain("Sud Cars");
+  });
+
+  it("événement sur invitation : 403 ; annulé : 409 ; verrouillé à H-2 : 423", async () => {
+    await putProfile(leo);
+    const priv = await createEvent(structureId, { admission: "invite_only", department: "66" });
+    await openPress(priv.id);
+    expect((await request(leo, priv.id)).status).toBe(403);
+    await openPress(toulouseId);
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.id, toulouseId));
+    expect((await request(leo, toulouseId)).status).toBe(409);
+    await openPress(nocturneId);
+    clock.set(paris(10, 17, 17, 30));
+    const locked = await request(leo, nocturneId);
+    expect(locked.status).toBe(423);
+    expect(locked.json.error.code).toBe("locked");
+  });
+
+  it("événement annulé : contenu et mise en avant refusés, accréditation hors de l'agenda", async () => {
+    await accredited();
+    const c = (
+      await call(leo, "POST", "/me/media-contents", {
+        kind: "link",
+        title: "Article",
+        url: "https://sudcars.example/a",
+        eventId: nocturneId,
+      })
+    ).json;
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.id, nocturneId));
+    const create = await call(leo, "POST", "/me/media-contents", {
+      kind: "link",
+      title: "Article 2",
+      url: "https://sudcars.example/b",
+      eventId: nocturneId,
+    });
+    expect(create.status).toBe(409);
+    expect(
+      (await call(orga, "PATCH", `/events/${nocturneId}/media-contents/${c.id}/feature`, { featured: true })).status,
+    ).toBe(409);
+    expect((await call(leo, "GET", "/me/media/agenda")).json.weeks).toEqual([]);
+  });
+
+  it("quota tenu à la décision : 409 press_quota_reached à l'acceptation", async () => {
+    await openPress(nocturneId, { quota: 1 });
+    await putProfile(leo);
+    const second = await signUp("Media_Deux");
+    await putProfile(second, { name: "Média Deux" });
+    const a = (await request(leo, nocturneId)).json;
+    const b = (await request(second, nocturneId)).json;
+    expect((await decide(nocturneId, a.id)).status).toBe(200);
+    const over = await decide(nocturneId, b.id);
+    expect(over.status).toBe(409);
+    expect(over.json.error.code).toBe("press_quota_reached");
+  });
+
+  it("staff de filtration sans droit de décision : voit les demandes, ne tranche pas", async () => {
+    await putProfile(leo);
+    await openPress(nocturneId);
+    const app = (await request(leo, nocturneId)).json;
+    const filter = await signUp("Filtre_66");
+    await addMember(structureId, filter.id, "staff", ["filtering"]);
+    const list = await call(filter, "GET", `/events/${nocturneId}/accreditations`);
+    expect(list.status).toBe(200);
+    expect(list.text).not.toContain("CP-123456");
+    const res = await call(filter, "POST", `/events/${nocturneId}/applications/${app.id}/decide`, ACCEPT);
+    expect(res.status).toBe(403);
+  });
+
+  it("rapport de scan : un badge presse entré ne compte ni dans les entrées ni dans les attendus", async () => {
+    const staff = await signUp("Julie_66");
+    await addMember(structureId, staff.id, "staff", ["scan"]);
+    const app = await accredited();
+    await db.insert(checkins).values({
+      applicationId: app.id,
+      eventId: nocturneId,
+      method: "scan",
+      checkedInAt: paris(10, 17, 19, 5),
+      staffUserId: staff.id,
+    });
+    clock.set(paris(10, 17, 19, 30));
+    const report = await call(staff, "GET", `/events/${nocturneId}/scan-report`);
+    expect(report.status).toBe(200);
+    expect(report.json.totals).toMatchObject({ checkins: 0, expected: 0 });
+  });
+
+  it("vues : la dernière adresse de x-forwarded-for fait la session (la première se falsifie)", async () => {
+    await accredited();
+    const c = (
+      await call(leo, "POST", "/me/media-contents", {
+        kind: "link",
+        title: "Article",
+        url: "https://sudcars.example/a",
+        eventId: nocturneId,
+      })
+    ).json;
+    const view = (forwarded: string) =>
+      honoApp.request(`/api/media-contents/${c.id}/view`, {
+        method: "POST",
+        headers: {
+          "x-forwarded-for": forwarded,
+          "user-agent": "test",
+          origin: process.env.PUBLIC_URL ?? "http://localhost:5173",
+        },
+      });
+    await view("1.1.1.1, 10.0.0.9");
+    await view("2.2.2.2, 10.0.0.9");
+    const res = await view("3.3.3.3, 10.0.0.9");
+    expect(((await res.json()) as { views: number }).views).toBe(1);
+    const other = await view("1.1.1.1, 10.0.0.10");
+    expect(((await other.json()) as { views: number }).views).toBe(2);
   });
 });

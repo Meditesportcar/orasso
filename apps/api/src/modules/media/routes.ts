@@ -17,6 +17,7 @@ import { z } from "zod";
 import { type AppEnv, optionalUser, requireUser } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { body, query, uuidParam } from "../../lib/validate";
+import { clientIp } from "../after-event/helpers";
 import { registerPersonaSource } from "../profiles/personas";
 import { mediaOfUser, mediaService } from "./service";
 
@@ -35,9 +36,12 @@ registerPersonaSource(async (v) => {
   ];
 });
 
-/** Visiteur sans compte : son adresse (posée par nginx / le rendu serveur du site) et son navigateur. */
+/**
+ * Visiteur sans compte : son adresse (la **dernière** de `x-forwarded-for`, posée par nginx ; le début de la liste vient
+ * du client et se falsifie) et son navigateur.
+ */
 const sessionOf = (c: { req: { header(name: string): string | undefined } }) =>
-  `${c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "direct"}|${c.req.header("user-agent") ?? ""}`;
+  `${clientIp((name) => c.req.header(name)) ?? "direct"}|${c.req.header("user-agent") ?? ""}`;
 
 const adminMediaQuery = z.object({ pending: z.enum(["0", "1"]).default("0") });
 const verifySchema = z.object({ verified: z.boolean().default(true) });

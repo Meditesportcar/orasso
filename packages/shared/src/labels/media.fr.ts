@@ -58,6 +58,8 @@ export const mediaLabels = {
   notAccredited: "Tu dois être accrédité sur cet événement pour y publier un contenu",
   noWaitlist: "Une accréditation se retient ou se refuse : pas de liste d'attente pour la presse",
   eventEnded: "L'événement est terminé",
+  eventCancelled: "Événement annulé",
+  requestsLocked: "Les demandes d'accréditation sont closes (deux heures avant l'événement)",
   imageUnknown: "Image inconnue ou déjà utilisée",
   contentNotFound: "Contenu introuvable",
   // Notifications.

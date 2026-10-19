@@ -18,7 +18,7 @@ export async function anonymizeMediaForDeletedAccount(tx: Tx, userId: string, at
   const keys = [...contents.flatMap((c) => c.photoKeys), ...profiles.flatMap((p) => (p.logoKey ? [p.logoKey] : []))];
   await tx
     .update(mediaContents)
-    .set({ deletedAt: at, photoKeys: [], featuredAt: null, title: "Contenu supprimé" })
+    .set({ deletedAt: at, photoKeys: [], featuredAt: null, title: "Contenu supprimé", url: null })
     .where(inArray(mediaContents.mediaProfileId, ids));
   await tx.delete(mediaSavedEvents).where(inArray(mediaSavedEvents.mediaProfileId, ids));
   for (const p of profiles) {
