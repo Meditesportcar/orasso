@@ -32,7 +32,8 @@ export function ProfileTile({
     <Pressable
       onPress={onPress}
       accessibilityRole="radio"
-      accessibilityState={{ selected }}
+      aria-checked={selected}
+      accessibilityState={{ checked: selected }}
       accessibilityLabel={`${title}. ${subtitle}`}
       testID={`profile-${profile}`}
       style={[

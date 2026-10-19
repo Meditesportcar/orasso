@@ -1,7 +1,8 @@
 // Gabarit des écrans d'arrivée (lot 41, prototype `s-profil` / `s-dept` / `s-nom`) : barre de flux (progression, retour),
 // zone qui défile, bouton principal collé en bas. Le champ en saisie reste au-dessus du clavier (`KeyboardSafe`).
-import { Button, Ground, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Ground, OliveActivityProvider, tokens, useTheme } from "@orasso/design-system/native";
 import { arriveeLabels } from "@orasso/shared";
+import { useIsFocused } from "expo-router";
 import type { ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,7 +14,7 @@ const { space2, space3, space4 } = tokens.spacing;
 /** Les trois étapes : un quart, la moitié, les trois quarts (le tuto fait le reste). */
 const progress = [0.25, 0.5, 0.75] as const;
 
-export function FlowScreen({
+export function ArriveeScreen({
   step,
   onBack,
   footer,
@@ -27,29 +28,35 @@ export function FlowScreen({
 }) {
   const { t } = useTheme();
   const insets = useSafeAreaInsets();
+  // Le O vivant et le fond se mettent en pause quand l'écran n'est plus affiché (lot 39).
+  const focused = useIsFocused();
   return (
-    <Ground animated style={styles.fill}>
-      <KeyboardSafe style={styles.fill}>
-        <ScrollView
-          style={styles.fill}
-          contentContainerStyle={[styles.content, { paddingTop: insets.top + space3 }]}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.bar}>
-            <View
-              style={[styles.track, { backgroundColor: t.color.line }]}
-              accessibilityRole="progressbar"
-              accessibilityValue={{ min: 0, max: 4, now: step + 1 }}
-            >
-              <View style={[styles.fillBar, { width: `${progress[step] * 100}%`, backgroundColor: t.color.accent }]} />
+    <OliveActivityProvider active={focused}>
+      <Ground animated style={styles.fill}>
+        <KeyboardSafe style={styles.fill}>
+          <ScrollView
+            style={styles.fill}
+            contentContainerStyle={[styles.content, { paddingTop: insets.top + space3 }]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.bar}>
+              <View
+                style={[styles.track, { backgroundColor: t.color.line }]}
+                accessibilityRole="progressbar"
+                accessibilityValue={{ min: 0, max: 4, now: step + 1 }}
+              >
+                <View
+                  style={[styles.fillBar, { width: `${progress[step] * 100}%`, backgroundColor: t.color.accent }]}
+                />
+              </View>
+              {onBack ? <Button variant="close" label={arriveeLabels.close} icon="back" onPress={onBack} /> : null}
             </View>
-            {onBack ? <Button variant="close" label={arriveeLabels.close} icon="back" onPress={onBack} /> : null}
-          </View>
-          {children}
-        </ScrollView>
-        <View style={[styles.footer, { paddingBottom: insets.bottom + space3 }]}>{footer}</View>
-      </KeyboardSafe>
-    </Ground>
+            {children}
+          </ScrollView>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + space3 }]}>{footer}</View>
+        </KeyboardSafe>
+      </Ground>
+    </OliveActivityProvider>
   );
 }
 

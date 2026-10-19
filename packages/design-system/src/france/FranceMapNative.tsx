@@ -2,7 +2,7 @@
 // favori : bordé `ink`. La carte ne bouge pas (pas de zoom ni de recherche : v16). Données et licence : departments.ts.
 
 import { memo } from "react";
-import { StyleSheet, View, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, View, type ViewStyle } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { Text } from "../native/text";
 import { useTheme } from "../native/theme";
@@ -19,33 +19,81 @@ export type FranceMapProps = {
   accessibilityLabel?: string;
 };
 
+/** Le favori est dessiné en dernier pour que son bord passe par-dessus ses voisins. */
+const orderedFor = (favorite?: string | null) =>
+  [...franceDepartments].sort((a, b) => Number(a.code === favorite) - Number(b.code === favorite));
+
 function FranceMapBase({ selected, favorite, onToggle, style, accessibilityLabel }: FranceMapProps) {
   const { t } = useTheme();
   const c = t.color;
   const chosen = new Set(selected);
-  // Le favori est dessiné en dernier pour que son bord passe par-dessus ses voisins.
-  const ordered = [...franceDepartments].sort((a, b) => Number(a.code === favorite) - Number(b.code === favorite));
+  const ordered = orderedFor(favorite);
+  const paint = (code: string) => ({
+    fill: chosen.has(code) ? c.accent : c.mapLand2,
+    stroke: code === favorite ? c.ink : c.ground,
+    strokeWidth: code === favorite ? 2.5 : 1,
+  });
+
+  // Navigateur (recette web de l'appli) : react-native-svg y ajoute à chaque tracé des gestionnaires de réponse que le
+  // DOM ne connaît pas (erreurs React en développement) ; un <svg> du DOM, plus simple, fait le même dessin.
+  if (Platform.OS === "web") {
+    return (
+      <View style={[styles.box, style]}>
+        {/* biome-ignore lint/a11y/useSemanticElements: un fieldset ne s'applique pas à un svg ; groupe de boutons */}
+        <svg
+          viewBox={franceMapViewBox}
+          width="100%"
+          role="group"
+          aria-label={accessibilityLabel}
+          style={{ display: "block", aspectRatio: `${franceMapSize.width} / ${franceMapSize.height}` }}
+        >
+          {ordered.map((d) => {
+            const p = paint(d.code);
+            return (
+              // biome-ignore lint/a11y/useSemanticElements: un tracé SVG ne peut pas être un button
+              <path
+                key={d.code}
+                d={d.d}
+                fill={p.fill}
+                stroke={p.stroke}
+                strokeWidth={p.strokeWidth}
+                strokeLinejoin="round"
+                style={{ cursor: "pointer" }}
+                role="button"
+                tabIndex={0}
+                aria-pressed={chosen.has(d.code)}
+                aria-label={`${d.code} ${d.name}`}
+                data-testid={`dept-${d.code}`}
+                onClick={() => onToggle(d.code)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onToggle(d.code);
+                  }
+                }}
+              />
+            );
+          })}
+        </svg>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.box, style]} accessibilityLabel={accessibilityLabel}>
       <Svg width="100%" viewBox={franceMapViewBox} style={{ aspectRatio: franceMapSize.width / franceMapSize.height }}>
         <G>
-          {ordered.map((d) => {
-            const on = chosen.has(d.code);
-            const fav = d.code === favorite;
-            return (
-              <Path
-                key={d.code}
-                d={d.d}
-                fill={on ? c.accent : c.mapLand2}
-                stroke={fav ? c.ink : c.ground}
-                strokeWidth={fav ? 2.5 : 1}
-                strokeLinejoin="round"
-                onPress={() => onToggle(d.code)}
-                testID={`dept-${d.code}`}
-                accessibilityLabel={`${d.code} ${d.name}${on ? ", choisi" : ""}`}
-              />
-            );
-          })}
+          {ordered.map((d) => (
+            <Path
+              key={d.code}
+              d={d.d}
+              {...paint(d.code)}
+              strokeLinejoin="round"
+              onPress={() => onToggle(d.code)}
+              testID={`dept-${d.code}`}
+              accessibilityLabel={`${d.code} ${d.name}${chosen.has(d.code) ? ", choisi" : ""}`}
+            />
+          ))}
         </G>
       </Svg>
     </View>

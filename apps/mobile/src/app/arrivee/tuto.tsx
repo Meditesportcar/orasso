@@ -3,7 +3,7 @@
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { useRouter } from "expo-router";
 import { StyleSheet } from "react-native";
-import { FlowScreen } from "@/features/arrivee/FlowScreen";
+import { ArriveeScreen } from "@/features/arrivee/ArriveeScreen";
 import { arriveeStore, useArrivee } from "@/features/arrivee/model";
 
 const { space2 } = tokens.spacing;
@@ -17,7 +17,7 @@ export default function ArriveeTuto() {
     router.replace((next ?? "/") as never);
   };
   return (
-    <FlowScreen
+    <ArriveeScreen
       step={2}
       footer={
         <Button variant="primary" icon="next" fullWidth onPress={go}>
@@ -33,7 +33,7 @@ export default function ArriveeTuto() {
           Le tuto de ton profil arrive. En attendant, ton compte est prêt.
         </Text>
       </Plate>
-    </FlowScreen>
+    </ArriveeScreen>
   );
 }
 

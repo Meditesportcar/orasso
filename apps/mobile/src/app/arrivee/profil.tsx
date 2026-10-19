@@ -5,7 +5,7 @@ import { arriveeLabels, type MainProfile } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import { FlowScreen } from "@/features/arrivee/FlowScreen";
+import { ArriveeScreen } from "@/features/arrivee/ArriveeScreen";
 import { arriveeStore, centerTabOf, profileTileOrder, tabSetOfProfile, useArrivee } from "@/features/arrivee/model";
 import { ProfileTile } from "@/features/arrivee/ProfileTile";
 import { Muted } from "@/ui/Muted";
@@ -28,7 +28,7 @@ export default function ArriveeProfil() {
   const choose = (p: MainProfile) => arriveeStore.set({ profile: p });
 
   return (
-    <FlowScreen
+    <ArriveeScreen
       step={0}
       footer={
         <>
@@ -50,7 +50,7 @@ export default function ArriveeProfil() {
       }
     >
       <View style={styles.head}>
-        <Text variant="posterL" color={t.color.ink}>
+        <Text variant="posterL" color={t.color.ink} accessibilityRole="header">
           {arriveeLabels.profile.title}
         </Text>
         <Muted variant="body">{arriveeLabels.profile.text}</Muted>
@@ -63,12 +63,18 @@ export default function ArriveeProfil() {
       <View style={styles.preview}>
         <Muted variant="label">{arriveeLabels.profile.tabsLabel}</Muted>
         {profile ? (
-          <View pointerEvents="none" testID="tab-preview" style={styles.tabs}>
+          <View
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            testID="tab-preview"
+            style={styles.tabs}
+          >
             <TabBar set={tabSetOfProfile[profile]} active={centerTabOf(profile)} />
           </View>
         ) : null}
       </View>
-    </FlowScreen>
+    </ArriveeScreen>
   );
 }
 

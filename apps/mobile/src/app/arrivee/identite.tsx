@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 
 import { siteUrl } from "@/api";
-import { FlowScreen } from "@/features/arrivee/FlowScreen";
+import { ArriveeScreen } from "@/features/arrivee/ArriveeScreen";
 import { arriveeStore, identityReady, useArrivee } from "@/features/arrivee/model";
 import { pseudoRule, usePseudoCheck } from "@/features/arrivee/usePseudoCheck";
 import { authErrorMessage } from "@/lib/http";
@@ -62,7 +62,7 @@ export default function ArriveeIdentite() {
   }
 
   return (
-    <FlowScreen
+    <ArriveeScreen
       step={2}
       onBack={() => router.back()}
       footer={
@@ -72,7 +72,7 @@ export default function ArriveeIdentite() {
       }
     >
       <View style={styles.head}>
-        <Text variant="posterL" color={t.color.ink}>
+        <Text variant="posterL" color={t.color.ink} accessibilityRole="header">
           {arriveeLabels.identity.title}
         </Text>
         <Muted variant="body">{arriveeLabels.identity.text}</Muted>
@@ -154,7 +154,7 @@ export default function ArriveeIdentite() {
           </Text>
         ) : null}
       </Plate>
-    </FlowScreen>
+    </ArriveeScreen>
   );
 }
 

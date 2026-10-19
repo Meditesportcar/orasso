@@ -6,9 +6,8 @@ import { arriveeLabels, departmentHint, departmentWhy } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-
+import { ArriveeScreen } from "@/features/arrivee/ArriveeScreen";
 import { DepartmentSummary } from "@/features/arrivee/DepartmentSummary";
-import { FlowScreen } from "@/features/arrivee/FlowScreen";
 import { arriveeStore, favoriteOf, SOCIAL_PENDING_KEY, toggleDepartment, useArrivee } from "@/features/arrivee/model";
 import { api } from "@/lib/api";
 import { authErrorMessage } from "@/lib/http";
@@ -48,7 +47,7 @@ export default function ArriveeDepartement() {
   }
 
   return (
-    <FlowScreen
+    <ArriveeScreen
       step={1}
       onBack={() => router.back()}
       footer={
@@ -65,7 +64,7 @@ export default function ArriveeDepartement() {
       }
     >
       <View style={styles.head}>
-        <Text variant="posterL" color={t.color.ink}>
+        <Text variant="posterL" color={t.color.ink} accessibilityRole="header">
           {arriveeLabels.department.title}
         </Text>
         <Muted variant="body">{departmentWhy[profile]}</Muted>
@@ -84,7 +83,7 @@ export default function ArriveeDepartement() {
           {error}
         </Text>
       ) : null}
-    </FlowScreen>
+    </ArriveeScreen>
   );
 }
 
