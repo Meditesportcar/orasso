@@ -1,5 +1,11 @@
 // Référentiel véhicules, garage, photos, catégories, transferts de plaque (ARCHITECTURE.md § 1.3).
-import { certificationLostReasons, plateTransferStatuses, vehicleStatuses, vehicleTypes } from "@orasso/shared";
+import {
+  certificationLostReasons,
+  type PlateRect,
+  plateTransferStatuses,
+  vehicleStatuses,
+  vehicleTypes,
+} from "@orasso/shared";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -7,6 +13,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -143,6 +150,12 @@ export const vehiclePhotos = pgTable(
     width: integer("width").notNull(),
     height: integer("height").notNull(),
     bytes: integer("bytes").notNull(),
+    /**
+     * Rectangles de plaque floutés sur la photo stockée (normalisés 0–1, lot 51). Le flou est irréversible : aucun
+     * original n'est gardé (V9).
+     */
+    plateRects: jsonb("plate_rects").$type<PlateRect[]>(),
+    plateBlurred: boolean("plate_blurred").notNull().default(false),
     ...timestamps,
   },
   (t) => [

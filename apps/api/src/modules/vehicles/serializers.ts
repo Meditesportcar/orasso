@@ -38,6 +38,7 @@ export function vehiclePublic(v: VehicleWithAll): VehiclePublic {
       url: storage.url(p.storageKey) ?? "",
       width: p.width,
       height: p.height,
+      plateBlurred: p.plateBlurred,
     })),
     status: v.status,
     certified: Boolean(v.certifiedAt),
