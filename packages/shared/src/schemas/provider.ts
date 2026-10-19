@@ -252,6 +252,10 @@ export type ProviderForTriage = ProviderPublic & {
   phone: string | null;
   email: string | null;
   accreditedMedia: boolean;
+  /** Lot 46 : mission à laquelle la candidature répond, emplacement attribué, avis déjà donné. */
+  need: { id: string; trade: VendorTypeCode; tradeLabel: string } | null;
+  spot: { label: string; note: string | null } | null;
+  review: { rating: number; comment: string | null; createdAt: string } | null;
 };
 
 export type ProviderEventBrief = {
@@ -289,8 +293,8 @@ export type ProviderApplicationView = {
   power: ProviderPower | null;
   /** Consignes de l'événement (retenue seulement). */
   instructions: string | null;
-  /** Avis de l'organisateur après l'événement. */
-  review: { rating: number; comment: string | null; createdAt: string } | null;
+  /** Avis de l'organisateur après l'événement ; `authorName` : son pseudo (« Compte supprimé » si son compte l'est). */
+  review: { rating: number; comment: string | null; createdAt: string; authorName: string } | null;
 };
 
 /** Événement ouvert à un type de prestataire (`GET /events/open-to-providers`). */
@@ -365,8 +369,6 @@ export type ProviderReviewView = {
   structureName: string;
   eventTitle: string;
   eventEndsAt: string;
-  /** Pseudo de l'auteur, « Compte supprimé » si son compte l'est. */
-  authorName: string;
   createdAt: string;
 };
 
@@ -382,3 +384,15 @@ export type ProviderPublicWithReviews = ProviderPublic & { reviews: ProviderRevi
 
 /** Ce que cherche un événement (fiche publique, sans les candidats). */
 export type EventNeedPublic = Omit<EventNeedView, "filled" | "notes" | "position">;
+
+/** Candidature retenue sur un besoin, vue par l'organisation (`GET /events/:id/needs`). */
+export type NeedRetainedProvider = {
+  applicationId: string;
+  providerId: string;
+  providerName: string;
+  spot: { label: string; note: string | null } | null;
+  reviewed: boolean;
+};
+
+/** Un besoin vu par l'organisation : qui l'occupe. */
+export type EventNeedForOrganizer = EventNeedView & { retained: NeedRetainedProvider[] };

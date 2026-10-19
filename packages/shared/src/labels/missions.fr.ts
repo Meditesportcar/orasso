@@ -68,6 +68,7 @@ export const providerReviewTexts = {
   windowClosed: "L'avis se laisse dans les 30 jours après l'événement.",
   duplicate: "Tu as déjà laissé un avis sur ce prestataire pour cet événement.",
   authorRole: "L'avis est laissé par un organisateur de la structure.",
+  selfReview: "Pas d'avis sur un prestataire de ta propre structure.",
 } as const;
 
 export const needApplicationTexts = {
