@@ -5,12 +5,12 @@ import { Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
 import type { IconName } from "../icons";
 import { type TabSetName, tabSets } from "../labels";
-import { Monogram } from "./Brand";
 import { textShadowOf } from "./color";
 import { archivoFamily } from "./fontFamily";
 import { Icon } from "./Icon";
 import { Metal } from "./Metal";
 import { useParkStyle } from "./motionHooks";
+import { CenterTabO } from "./olive/CenterTabO";
 import { Text } from "./text";
 import { angle, radius, spacing, useTheme } from "./theme";
 
@@ -29,7 +29,7 @@ export type TabItem = {
 export type TabBarProps = {
   /** Le profil : choisit les cinq onglets (DA v2). Ignoré si `tabs` est fourni. */
   set?: TabSetName;
-  /** Contenu du O de l'onglet central (lot 39 : le O vivant) ; par défaut le monogramme, voiture garée. */
+  /** Contenu du O de l'onglet central ; par défaut le O vivant (CenterTabO, lot 39) : garé si actif, sorti sinon. */
   centerSlot?: ReactNode;
   tabs?: readonly TabItem[];
   /** Identifiant de l'onglet actif. */
@@ -59,7 +59,8 @@ function TabIcon({
   const { t } = useTheme();
   // Le nouvel onglet se gare, mais seulement quand l'onglet change : pas au premier rendu.
   const park = useParkStyle({ enabled: moved && active && !tab.center, trigger: active });
-  if (tab.center && tab.o) return <>{centerSlot ?? <Monogram size={30} tone="dark" alt="" />}</>;
+  // Lot 39 : le O vivant, voiture garée sur l'onglet central actif, sortie ailleurs.
+  if (tab.center && tab.o) return <>{centerSlot ?? <CenterTabO active={active} size={30} />}</>;
   return (
     <Animated.View style={park}>
       <Icon name={tab.icon} size={22} strokeWidth={1.8} filled={active && !tab.center} color={ink} />

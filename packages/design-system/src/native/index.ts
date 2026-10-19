@@ -44,6 +44,7 @@ export {
 } from "./Motion";
 export { easings, useParkStyle, usePressScale } from "./motionHooks";
 export { claimNeon, useNeonPulse } from "./neon";
+export * from "./olive";
 export { OpeningLogo, type OpeningLogoProps, OpeningScreen, type OpeningScreenProps } from "./Opening";
 export { OutlinedText, type OutlinedTextProps, outlineWidth } from "./OutlinedText";
 export { Photo, type PhotoProps } from "./Photo";

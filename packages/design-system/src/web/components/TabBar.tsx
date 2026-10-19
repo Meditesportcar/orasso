@@ -1,9 +1,9 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { IconName } from "../../icons";
 import { type TabSetName, tabSets } from "../../labels";
-import { Monogram } from "./Brand";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
+import { CenterTabO } from "./Olive";
 import { Brush } from "./Textures";
 
 export type TabItem = {
@@ -22,7 +22,7 @@ export type TabItem = {
 export type TabBarProps = {
   /** Le profil : choisit les cinq onglets (DA v2). Ignoré si `tabs` est fourni. */
   set?: TabSetName;
-  /** Contenu du O de l'onglet central (lot 39 : le O vivant) ; par défaut le monogramme, voiture garée. */
+  /** Contenu du O de l'onglet central ; par défaut le O vivant (CenterTabO, lot 39) : garé si actif, sorti sinon. */
   centerSlot?: ReactNode;
   tabs?: readonly TabItem[];
   /** Identifiant de l'onglet actif. */
@@ -37,7 +37,8 @@ function TabContent({ tab, active, centerSlot }: { tab: TabItem; active: boolean
   if (tab.center && tab.o) {
     return (
       <>
-        <span className="o-tabbar__o">{centerSlot ?? <Monogram size={30} tone="dark" alt="" />}</span>
+        {/* Lot 39 : le O vivant, voiture garée sur l'onglet central actif, sortie ailleurs. */}
+        <span className="o-tabbar__o">{centerSlot ?? <CenterTabO active={active} size={30} />}</span>
         <span className="o-tabbar__center-label">{tab.label}</span>
       </>
     );
