@@ -1,0 +1,40 @@
+/* FranceMap : carte des départements (lot 41). Repos map-land-2, choisi accent, favori bordé d'encre. */
+
+.o-france {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 613 / 585;
+}
+.o-france__dept {
+  fill: var(--map-land-2);
+  stroke: var(--ground);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  cursor: pointer;
+  outline: none;
+  transition: fill var(--timing-fast) var(--ease-inout);
+}
+.o-france__dept:hover {
+  fill: var(--line);
+}
+.o-france__dept.is-selected,
+.o-france__dept.is-selected:hover {
+  fill: var(--accent);
+}
+.o-france__dept.is-favorite {
+  stroke: var(--ink);
+  stroke-width: 2.5;
+}
+.o-france__dept:focus-visible {
+  stroke: var(--ink);
+  stroke-width: 3;
+}
+.o-france__credit {
+  margin: 4px 0 0;
+  color: var(--ink-faint);
+}
+.o-france__credit a {
+  color: inherit;
+  text-decoration: underline;
+}
