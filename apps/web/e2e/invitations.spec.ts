@@ -124,6 +124,7 @@ test("événement privé : invitations par pseudo et par e-mail, acceptation ave
   await pageE.getByLabel("E-mail").fill(email);
   await pageE.getByRole("textbox", { name: "Mot de passe" }).fill(SEED_PASSWORD);
   await fillArrivee(pageE);
+  await pageE.getByLabel("J'accepte les conditions générales d'utilisation d'Orasso").check();
   await pageE.getByRole("button", { name: "Créer un compte" }).click();
   await expect(pageE.getByTestId("received-invitation")).toBeVisible();
   const eCookie = (await ctxE.cookies()).map((c) => `${c.name}=${c.value}`).join("; ");

@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { resolve } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import pg from "pg";
 
 export const SEED_PASSWORD = process.env.SEED_PASSWORD ?? "orasso-demo-2026";
@@ -26,7 +26,12 @@ export const MOBILE = { width: 390, height: 844 } as const;
  * Inscription du site (lot 41) : le profil est préchoisi (exposant) ; reste le département (carte), le prénom et le nom.
  */
 export async function fillArrivee(page: Page, department = "66"): Promise<void> {
-  await page.getByTestId(`dept-${department}`).first().click();
+  // Le site se réhydrate après le premier affichage : on retouche tant que la carte n'a pas pris le département.
+  await expect(async () => {
+    const summary = page.getByTestId("dept-summary");
+    if (!(await summary.innerText()).includes(department)) await page.getByTestId(`dept-${department}`).first().click();
+    await expect(summary).toContainText(department, { timeout: 1_500 });
+  }).toPass({ timeout: 30_000 });
   await page.getByLabel("Prénom").fill("Recette");
   await page.getByLabel("Nom", { exact: true }).fill("E2E");
 }

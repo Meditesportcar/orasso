@@ -35,7 +35,8 @@ const TEXTS: Partial<
     hint: "Touche les départements où tu sors : le premier choisi est ton favori.",
     tag: "favori",
     pseudo: "C'est lui qu'on voit sur ton profil, au tri et au scan.",
-    privacy: "Seule l'équipe organisatrice d'un événement où tu vas peut les voir, et seulement en cas de souci.",
+    privacy:
+      "Les équipes organisatrices des événements où tu t'inscris et des structures que tu suis peuvent les voir, pour la sécurité.",
     bar: ["Explorer", "Sorties", "Accueil", "Garage", "Profil"],
   },
   pro: {
@@ -52,7 +53,7 @@ const TEXTS: Partial<
     tag: "principal",
     pseudo: "C'est lui qu'on voit sur ton profil ; tes demandes portent le nom de ton média.",
     privacy:
-      "Seule l'équipe organisatrice d'un événement où tu interviens peut les voir, et seulement en cas de souci.",
+      "Les équipes organisatrices des événements où tu interviens et des structures que tu suis peuvent les voir, pour la sécurité.",
     bar: ["Explorer", "Presse", "Accueil", "Contenus", "Profil"],
   },
 };
@@ -189,8 +190,21 @@ async function runFlow(browser: Browser, profile: Profile, theme: Theme, capture
     lastName: "Martí",
   });
   await page.getByRole("button", { name: "C'est parti" }).click();
+  // Le profil choisi mène à sa barre : créer sa casquette (ou ajouter sa voiture), « Plus tard » possible. Le profil média
+  // n'a pas encore d'écran de création (lot 55) : il passe directement à l'appli.
+  if (profile !== "media") {
+    const heading = profile === "pro" ? "Crée ta fiche pro" : "Ajoute ta voiture";
+    await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible({ timeout: 30_000 });
+    if (capture) await shot(page, `04-casquette-${profile}`, theme);
+    await page.getByRole("button", { name: "Plus tard" }).click();
+  }
   await page.waitForURL((u) => !u.pathname.startsWith("/arrivee"), { timeout: 30_000 });
   await expect(page.getByRole("tab")).toHaveCount(5, { timeout: 30_000 });
+  // Sans la casquette, la barre est celle du visiteur et l'Accueil porte la carte « Termine ta fiche ».
+  if (profile === "pro" || profile === "media") {
+    await expect(page.getByTestId(`pending-${profile}`).filter({ visible: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId(`pending-${profile}`).filter({ visible: true })).toContainText("Termine ta fiche");
+  }
   await ctx.close();
   return { pseudo, email };
 }

@@ -23,11 +23,11 @@ for (const theme of ["beton", "sable"] as const) {
     for (const key of ["exhibitor", "visitor", "pro", "organizer", "provider", "media"]) {
       await expect(page.getByTestId(`profile-${key}`), key).toBeVisible();
     }
-    await expect(page.getByTestId("profile-exhibitor")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("profile-exhibitor").locator("input")).toBeChecked();
     // Le site se réhydrate après le premier affichage : on retouche jusqu'à ce que le clic compte.
     await expect(async () => {
       await page.getByTestId("profile-pro").click();
-      await expect(page.getByTestId("profile-pro")).toHaveAttribute("aria-pressed", "true", { timeout: 1_500 });
+      await expect(page.getByTestId("profile-pro").locator("input")).toBeChecked({ timeout: 1_500 });
     }).toPass({ timeout: 30_000 });
 
     // Carte : 66 puis 11, textes du pro.
@@ -35,8 +35,11 @@ for (const theme of ["beton", "sable"] as const) {
       "On s'en sert pour montrer ta fiche aux passionnés du coin et te signaler les événements proches, même sans GPS.",
     );
     await expect(page.getByTestId("dept-hint")).toContainText("le premier choisi est celui de ton atelier");
-    await page.getByTestId("dept-66").click();
-    await expect(page.getByTestId("dept-summary")).toContainText("66 · principal");
+    await expect(async () => {
+      if (!(await page.getByTestId("dept-summary").innerText()).includes("66"))
+        await page.getByTestId("dept-66").click();
+      await expect(page.getByTestId("dept-summary")).toContainText("66 · principal", { timeout: 1_500 });
+    }).toPass({ timeout: 30_000 });
     await page.getByTestId("dept-11").click();
     await expect(page.getByTestId("dept-summary")).toContainText("+1");
     await expect(page.getByTestId("dept-66")).toHaveClass(/is-favorite/);
@@ -68,7 +71,7 @@ for (const theme of ["beton", "sable"] as const) {
     expect((await refused).status()).toBe(400);
     await expect(page.getByText("Ton prénom est obligatoire.")).toBeVisible();
     // Les choix sont gardés après le refus.
-    await expect(page.getByTestId("profile-pro")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("profile-pro").locator("input")).toBeChecked();
     await expect(page.getByTestId("dept-summary")).toContainText("66 · principal");
     await page.screenshot({ path: `${DIR}/01-inscription-${theme}.png`, fullPage: true });
 
