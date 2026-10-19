@@ -1160,6 +1160,25 @@ Source : prototype DA v2 (version 41) **validé par Damien le 19/10/2026**, `ARC
 - « Automatique » change de sens pour qui l'avait choisi (appareil → soleil).
 - Libellés des barres v2 à 100 % de largeur au lieu de 125 % ; `number-narrow` à 78,4 % dans l'appli tant que l'instance 62,5 % n'est pas embarquée.
 
+### 19/10/2026 — Profil média et accréditation presse : API (lot 45)
+Source : prototype DA v2, écrans `s-agenda`, `s-accred`, `s-contenus` et Accueil média : **fonction nouvelle validée par Damien dans le prototype DA v2, 19/10/2026** (D23) ; conception `ARCHITECTURE-DA-V2.md` § 5.1, V6, AS-V6 du relais. Aucun écran (lots 55 et 57). Fichiers : `apps/api/src/db/schema/media.ts`, `modules/media/**`, `scripts/seed/media.ts`, `packages/shared/src/schemas/media.ts`, `labels/media.fr.ts`, `notifications/media.ts`, `geo.ts` (régions) ; migration `0043_media`.
+- **Accréditation = candidature `kind = media`** (statuts, tri `?kind=media`, décision, pass = badge presse, désistement, scan) ; hors capacité comme un prestataire (le service testait déjà `kind === "vehicle"` pour la capacité : rien à généraliser). **Une seule accréditation active** par média et événement (index unique partiel).
+- **Distincte de « Média officiel »** (lot 21) : l'accréditation `accredited_media` d'un photographe **prestataire** retenu reste telle quelle ; le profil média est une casquette à part, sans candidature de prestataire.
+- **Conditions de demande** : profil complet (choix : nom, au moins un format **et un lien** — site, Instagram ou YouTube — pour que l'organisation voie le travail), accréditation ouverte (`409 accreditation_closed`, absente = fermée), date limite non passée (`409 accreditation_deadline_passed`, code ajouté), **quota = accréditations données** (`accepted`, `409 press_quota_reached` ; les demandes en attente ne comptent pas, l'organisation garde la main au tri), pas d'accréditation active (`409 conflict`). 10 demandes / jour, 20 contenus / jour.
+- **Pas de liste d'attente pour la presse** (choix) : « Mettre en liste d'attente » sur une accréditation est refusé (400) ; transitions `pending → accepted | refused | withdrawn` du § 5.1.
+- **Notifications** : `accreditation_requested` (famille `staff`, propriétaires et co-organisateurs), `accreditation_accepted` / `accreditation_refused` (famille `event`, à la place de `application_*`, la note de refus affichée telle quelle), `media_content_featured`.
+- **Contenus publiables seulement si accrédité** (`accepted`) sur l'événement (**V6**) ; un retrait garde la ligne (vues de la couverture) et efface les photos. Vues : **+1 par session et par heure**, en mémoire (une instance, comme les limites de débit) ; session = compte connecté, sinon adresse + navigateur ; le média ne se compte pas lui-même.
+- **Carte de presse privée (AS-V6)** : sérialisée seulement vers son titulaire et l'administration (`GET /admin/media`, `POST /admin/media/:id/verify-press-card`, super admin, tracé au journal) ; publiquement, seulement « vérifiée » oui/non ; changer de numéro retire la vérification ; effacée à l'anonymisation (profil vidé, contenus retirés).
+- **Explorer national** : `GET /events` accepte `accreditationOpen=1` et `region=<code>` (13 régions métropolitaines, `regions` de `geo.ts`) ; les cartes portent `accreditation {open, mine}` et `travelMinutes` **pour un compte qui a un profil média, ou dès qu'un de ces deux filtres est demandé** ; temps de route = vol d'oiseau à 70 km/h depuis le centre du premier département de secteur du profil (à défaut, de la zone couverte par le média), arrondi au quart d'heure.
+- **Route ajoutée pour l'organisation** : `GET /events/:id/accreditations` (demandes avec la fiche publique du média et ses contenus) : la file du tri existante ne porte pas la fiche média (choix : ne pas toucher `applications/queries.ts`).
+- **Agenda** : accréditations en attente ou données et événements gardés, à venir, groupés par semaine (lundi, heure de Paris). L'état « Invitation » du prototype (« presse sur invitation ») n'a pas d'API : non codé (aucune règle écrite).
+- **Staff** : entrée de synchro `kind: "media"`, `vehicleLabel` « Presse · Sud Cars », `providerType` « Presse », `providerName` = nom du média (l'écran de scan v2 du lot 48 lit ces champs).
+
+#### À revoir avec Damien (lot 45)
+- **AS-V6** : le numéro de carte de presse est une donnée personnelle ; il n'est visible que de l'administration et effacé à la suppression du compte. Faut-il même le demander (ou seulement un justificatif vérifié une fois) ?
+- Quota compté sur les accréditations **données**, pas sur les demandes ; l'organisation peut accepter au-delà du quota depuis le tri (non bloqué).
+- Compteur de vues en mémoire : il repart de zéro (pour le dédoublonnage) au redémarrage de l'API ; suffisant pour une instance.
+
 ## À revoir avec Damien — liste consolidée (lot 34)
 
 Une seule liste, ordonnée, de tout ce que les lots 15 à 35d (et 34) ont laissé à décider. Rien ne bloque : la solution décrite est appliquée (D16). Les points antérieurs (A1 à A14, lots 02 à 14) restent dans leurs sections plus haut ; ceux qui sont réglés depuis sont signalés à la fin.

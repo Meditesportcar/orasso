@@ -16,12 +16,14 @@ import {
   type VehicleType,
   vehicleTypes,
 } from "../enums";
+import { regionCodes } from "../geo";
 import { type Grade, grades } from "../grades";
 import { eventAddressRequired } from "../labels/corrections.fr";
 import type { Affinity } from "../rules/affinity";
 import { type EventDayInput, MAX_EVENT_DAYS } from "../rules/eventDays";
 import { RECURRENCE_MAX_COUNT, type RecurrenceRule } from "../rules/recurrence";
 import { isoDate, optionalText, pageQuery } from "./common";
+import type { EventAccreditationState } from "./media";
 
 const criteriaSchema = z.object({
   categoryIds: z.array(z.uuid()).max(30).default([]),
@@ -196,6 +198,13 @@ export const eventListQuerySchema = pageQuery.extend({
    * connecté), `distance` (à la position envoyée ou au secteur du profil). Sans position connue, retombe sur la date.
    */
   sort: z.enum(eventSorts).default("date"),
+  /** Lot 45 (Explorer du média) : seulement les événements dont l'accréditation presse est ouverte. */
+  accreditationOpen: z
+    .enum(["1", "true", "0", "false"])
+    .transform((v) => v === "1" || v === "true")
+    .optional(),
+  /** Lot 45 : une des 13 régions métropolitaines (`regions` de `geo.ts`). */
+  region: z.enum(regionCodes).optional(),
 });
 export type EventListQuery = z.infer<typeof eventListQuerySchema>;
 
@@ -232,6 +241,10 @@ export type EventCard = {
   distanceKm?: number | null;
   /** Affinités avec moi (lot 29) : renseignées pour le tri `affinity`. */
   affinity?: Affinity;
+  /** Lot 45 : accréditation presse (ouverte, la mienne), pour un média ou avec le filtre `accreditationOpen`. */
+  accreditation?: EventAccreditationState;
+  /** Lot 45 : temps de route estimé depuis mon secteur (70 km/h à vol d'oiseau), `null` sans secteur. */
+  travelMinutes?: number | null;
 };
 
 export type MyApplicationBrief = {

@@ -50,6 +50,10 @@ export const errorCodes = [
   "siret_missing",
   "siret_not_matched",
   "registry_unavailable",
+  // Lot 45 : accréditation presse.
+  "accreditation_closed",
+  "press_quota_reached",
+  "accreditation_deadline_passed",
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 export type ApiError = { error: { code: ErrorCode; message: string; details?: Record<string, unknown> } };

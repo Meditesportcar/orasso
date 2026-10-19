@@ -24,7 +24,17 @@ export type ContactStatus = (typeof contactStatuses)[number];
  * Envoi de fichiers générique `POST /me/uploads` (§ 0.3). `message`, `incident`, `report` : clés privées, servies
  * seulement par une route contrôlée ; les autres : publiques (`/api/files`).
  */
-export const uploadPurposes = ["message", "crew_logo", "incident", "report", "provider_photo", "announcement"] as const;
+export const uploadPurposes = [
+  "message",
+  "crew_logo",
+  "incident",
+  "report",
+  "provider_photo",
+  "announcement",
+  // Lot 45 : logo d'un média, photos d'une galerie de contenu média (publiques une fois rattachées).
+  "media_logo",
+  "media_content",
+] as const;
 export type UploadPurpose = (typeof uploadPurposes)[number];
 
 /**
@@ -46,4 +56,7 @@ export const acceptedUploadPurposes = [
   "incident",
   // Lot 32 : capture jointe à un signalement (privée, rattachée par `POST /reports`, effacée avec le signalement).
   "report",
+  // Lot 45 : logo du profil média (`POST /me/media-profile/logo`), galerie d'un contenu (`POST /me/media-contents`).
+  "media_logo",
+  "media_content",
 ] as const satisfies readonly UploadPurpose[];

@@ -4,6 +4,7 @@ import { relations } from "drizzle-orm";
 import { applications } from "./applications";
 import { user } from "./auth";
 import { events, eventZones } from "./events";
+import { mediaContents, mediaProfiles } from "./media";
 import { categories, profiles } from "./profiles";
 import { structures } from "./structures";
 import {
@@ -52,4 +53,11 @@ export const applicationsRelations = relations(applications, ({ one }) => ({
   zone: one(eventZones, { fields: [applications.zoneId], references: [eventZones.id] }),
   user: one(user, { fields: [applications.userId], references: [user.id] }),
   profile: one(profiles, { fields: [applications.userId], references: [profiles.userId] }),
+  mediaProfile: one(mediaProfiles, { fields: [applications.mediaProfileId], references: [mediaProfiles.id] }),
+}));
+
+// Lot 45 : contenus d'un média.
+export const mediaContentsRelations = relations(mediaContents, ({ one }) => ({
+  mediaProfile: one(mediaProfiles, { fields: [mediaContents.mediaProfileId], references: [mediaProfiles.id] }),
+  event: one(events, { fields: [mediaContents.eventId], references: [events.id] }),
 }));

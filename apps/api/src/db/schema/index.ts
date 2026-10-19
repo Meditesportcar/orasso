@@ -12,6 +12,7 @@ export * from "./events";
 export * from "./field";
 export * from "./home";
 export * from "./invitations";
+export * from "./media";
 export * from "./messaging";
 export * from "./moderation";
 export * from "./notifications";
