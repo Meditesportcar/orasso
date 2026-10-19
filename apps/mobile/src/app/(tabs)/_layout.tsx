@@ -1,5 +1,5 @@
 // Les cinq onglets du passionné : Accueil · Explorer · Accès (au centre, en couleur) · Garage · Boîte.
-import { TabBar, tabSets } from "@orasso/design-system/native";
+import { legacyTabSets, TabBar } from "@orasso/design-system/native";
 import { Tabs } from "expo-router";
 import type { ComponentProps } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,7 +8,7 @@ import { useSession } from "@/lib/session";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
-/** Nom de la route → identifiant d'onglet du système de design (`tabSets.fan`). */
+/** Nom de la route → identifiant d'onglet du système de design (`legacyTabSets.fan`). */
 const tabIds = { accueil: "home", explorer: "explore", acces: "access", garage: "garage", boite: "inbox" } as const;
 const routeOf = Object.fromEntries(Object.entries(tabIds).map(([route, id]) => [id, route])) as Record<string, string>;
 
@@ -17,7 +17,7 @@ function AppTabBar({ state, navigation }: TabBarProps) {
   const { me } = useSession();
   const current = state.routes[state.index]?.name as keyof typeof tabIds | undefined;
   // Pastille de la Boîte (lot 18) : conversations avec du non lu + demandes en attente (`GET /me` → `unreadInbox`).
-  const tabs = tabSets.fan.map((tab) => (tab.id === "inbox" ? { ...tab, dot: (me?.unreadInbox ?? 0) > 0 } : tab));
+  const tabs = legacyTabSets.fan.map((tab) => (tab.id === "inbox" ? { ...tab, dot: (me?.unreadInbox ?? 0) > 0 } : tab));
   return (
     <TabBar
       tabs={tabs}

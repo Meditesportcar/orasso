@@ -65,7 +65,7 @@
   transform: skewX(calc(var(--skew) * -1));
 }
 
-/* Pastilles d'action : 34 px, contour line 1,5 px en Béton, contour encre 2 px sur crème à 22 % en Sable. */
+/* Pastilles d'action : 34 px, contour line 1,5 px. DA v2 : la barre est nuit dans les deux thèmes, la pastille aussi. */
 .o-appbar__action {
   position: relative;
   display: inline-flex;
@@ -85,10 +85,6 @@
   transition:
     background-color var(--timing-fast) var(--ease-inout),
     color var(--timing-fast) var(--ease-inout);
-}
-[data-theme="sable"] .o-appbar__action {
-  border: 2px solid var(--bar-ink);
-  background: color-mix(in srgb, var(--night-ink) 22%, transparent);
 }
 /* Sur l'écran que la pastille ouvre : fond bar-ink, icône inversée. */
 .o-appbar__action.is-on {
@@ -134,4 +130,36 @@
 }
 .o-appbar__close {
   flex: none;
+}
+
+/* Barre « tab » (DA v2, lot 38) : le logotype toujours à gauche, 128 px (112 px sous 360 px), puis la pastille de
+   casquette ; Recherche et Boîte calées à droite. Le titre de la page est un BigTitle sous la barre. */
+.o-appbar--tab {
+  padding-inline: 16px 12px;
+}
+.o-appbar__logo {
+  flex: none;
+}
+@media (max-width: 359px) {
+  .o-appbar__logo {
+    width: 112px;
+  }
+}
+.o-appbar__persona {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  overflow: hidden;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  background: var(--night);
+  color: var(--bar-ink);
+  text-shadow: none;
+}
+.o-appbar__persona > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

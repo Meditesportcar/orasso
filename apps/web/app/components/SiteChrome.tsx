@@ -4,10 +4,13 @@ import type { ReactNode } from "react";
 const THEME_CHOICES: { id: ThemePreference; label: string }[] = [
   { id: "beton", label: "Béton" },
   { id: "sable", label: "Sable" },
-  { id: "auto", label: "Auto" },
+  { id: "auto", label: "Automatique" },
 ];
 
-/** Choix du thème (Béton, Sable ou celui de l'appareil), mémorisé dans le cookie lu par le serveur. */
+/**
+ * Choix du thème (DA v2, lot 38 : jamais imposé) : Béton, Sable ou Automatique (le soleil au centre du département de
+ * l'utilisateur), mémorisé dans le cookie lu par le serveur.
+ */
 export function ThemeSwitch() {
   const { preference, setPreference } = useTheme();
   return (
@@ -18,13 +21,14 @@ export function ThemeSwitch() {
           {choice.label}
         </Chip>
       ))}
+      <span className="s-theme__hint o-t-caption">Sable le jour, Béton après le coucher du soleil</span>
     </fieldset>
   );
 }
 
 export function SiteHeader({ children }: { children?: ReactNode }) {
   return (
-    <header className="s-bar s-header">
+    <header className="s-bar s-header" data-bar>
       <a className="s-header__brand" href="/" aria-label="Orasso, accueil">
         <Logo width={120} />
       </a>
@@ -49,7 +53,7 @@ export const LEGAL_PAGES = [
 
 export function SiteFooter() {
   return (
-    <footer className="s-bar s-footer o-t-meta">
+    <footer className="s-bar s-footer o-t-meta" data-bar>
       <PoweredBy />
       {LEGAL_PAGES.map((page) => (
         <a key={page.slug} href={`/${page.slug}`}>

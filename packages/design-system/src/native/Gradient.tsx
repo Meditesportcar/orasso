@@ -155,7 +155,7 @@ export function GradientFill({ css, style }: GradientFillProps) {
 
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} onLayout={onLayout}>
-      {size && size.width > 0 && size.height > 0 && (
+      {size && size.width > 0 && size.height > 0 && gradient.kind !== "none" && (
         <Svg width={size.width} height={size.height}>
           {gradient.kind === "radial" ? (
             <Radial gradient={gradient} width={size.width} height={size.height} id={id} />

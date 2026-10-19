@@ -10,6 +10,14 @@ const API = `http://localhost:${process.env.API_PORT ?? 3001}`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 
 export type Cookie = string;
+
+/** Téléphone de référence de la recette (lot 38) : 390 × 844. */
+export const MOBILE = { width: 390, height: 844 } as const;
+
+/** Préférence de thème du site (cookie `orasso-theme` lu par le serveur et par le script d'init), lot 38. */
+export async function setTheme(page: Page, theme: "beton" | "sable" | "auto"): Promise<void> {
+  await page.context().addCookies([{ name: "orasso-theme", value: theme, url: WEB }]);
+}
 export type CreatedEvent = { id: string; slug: string; title: string };
 
 /**

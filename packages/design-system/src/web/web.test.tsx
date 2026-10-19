@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { bezier, curve, duration, park, shake } from "../motion";
 import {
   AppBar,
+  BigTitle,
   Button,
   CheckboxField,
   Chip,
@@ -15,16 +16,19 @@ import {
   iconNames,
   Logo,
   Monogram,
+  Outlined,
   PosterCard,
   ScanResult,
   SelectField,
   StatusBadge,
   TabBar,
   TextField,
+  tabSets,
+  tokensV2Overlay,
   VehicleCard,
   VehicleThumb,
 } from "./index";
-import { readThemeCookie, resolveTheme, serverTheme, themeInitScript } from "./theme";
+import { departmentPosition, readThemeCookie, resolveTheme, serverTheme, themeInitScript } from "./theme";
 
 const componentsDir = resolve(import.meta.dirname, "components");
 const files = readdirSync(componentsDir).filter((f) => /\.(tsx?|css)$/.test(f));
@@ -72,14 +76,37 @@ describe("mouvement : motion.ts et motion.css s'accordent", () => {
 });
 
 describe("thème", () => {
-  it("Béton par défaut ; auto suit le mode clair ; cookie lu côté serveur", () => {
+  const perpignan = { lat: 42.6, lng: 2.52 };
+  it("Béton par défaut ; auto suit le soleil (lot 38) ; cookie lu côté serveur", () => {
     expect(readThemeCookie(null)).toBe("beton");
     expect(readThemeCookie("a=b; orasso-theme=sable")).toBe("sable");
     expect(readThemeCookie("orasso-theme=violet")).toBe("beton");
-    expect(resolveTheme("auto", true)).toBe("sable");
-    expect(resolveTheme("auto", false)).toBe("beton");
+    expect(resolveTheme("auto", { now: new Date("2026-10-19T12:00:00+02:00"), ...perpignan })).toBe("sable");
+    expect(resolveTheme("auto", { now: new Date("2026-10-19T23:59:00+02:00"), ...perpignan })).toBe("beton");
+    expect(resolveTheme("sable", { now: new Date("2026-10-19T23:59:00+02:00"), ...perpignan })).toBe("sable");
     expect(serverTheme("auto")).toBe("beton");
+    expect(serverTheme("sable")).toBe("sable");
+    expect(departmentPosition("zz")).toEqual({ lat: 48.85, lng: 2.35 });
     expect(themeInitScript).toContain("orasso-theme");
+    expect(themeInitScript).toContain("orasso-dept");
+  });
+
+  it("le script d'init pose le même thème que resolveTheme, à midi et à minuit", () => {
+    const run = (cookie: string, nowMs: number) => {
+      const attrs: Record<string, string> = {};
+      const fakeDocument = { cookie, documentElement: { setAttribute: (k: string, v: string) => (attrs[k] = v) } };
+      const fakeDate = { now: () => nowMs };
+      const storage = { getItem: () => null };
+      new Function("document", "localStorage", "Date", themeInitScript)(fakeDocument, storage, fakeDate);
+      return attrs["data-theme"];
+    };
+    const noon = Date.parse("2026-10-19T12:00:00+02:00");
+    const midnight = Date.parse("2026-10-19T00:00:00+02:00");
+    expect(run("orasso-theme=auto; orasso-dept=66", noon)).toBe("sable");
+    expect(run("orasso-theme=auto; orasso-dept=66", midnight)).toBe("beton");
+    expect(run("orasso-theme=auto", noon)).toBe("sable");
+    expect(run("orasso-theme=sable", midnight)).toBe("sable");
+    expect(run("", noon)).toBe("beton");
   });
 });
 
@@ -214,6 +241,34 @@ describe("rendu serveur des composants", () => {
     expect(tabs).toContain('aria-current="page"');
     expect(tabs.match(/is-center/g)?.length).toBe(1);
     expect(html(<TabBar set="organizer" active="sort" />)).toContain("Tri");
+  });
+
+  it("DA v2 : six barres, le O au centre, barre tab, BigTitle, contour", () => {
+    const sets = ["exhibitor", "visitor", "pro", "provider", "media", "organizer"] as const;
+    for (const set of sets) {
+      const items = tabSets[set];
+      expect(items.length, set).toBe(5);
+      expect(items[2]?.center && items[2]?.o, set).toBe(true);
+      const bar = html(<TabBar set={set} active={items[0]?.id ?? ""} />);
+      expect(bar.match(/is-o/g)?.length, set).toBe(1);
+      expect(bar).toContain("o-monogram");
+    }
+    expect(tabSets.fan).toBe(tabSets.exhibitor);
+    expect(tabSets.organizer.map((t) => t.label)).toEqual(["Événements", "Tri", "Direct", "Équipe", "Structure"]);
+    for (const icon of ["ticket", "stamp", "briefcase", "shop", "press", "gallery", "badge", "o"]) {
+      expect(iconNames).toContain(icon);
+    }
+    const top = html(<AppBar kind="tab" persona={{ logoUrl: null, label: "MéditeSportCar" }} inboxCount={3} />);
+    expect(top).toContain("o-logo");
+    expect(top).toContain('aria-label="Boîte"');
+    expect(top).toContain('aria-label="MéditeSportCar"');
+    expect(top).not.toContain("o-monogram");
+    const title = html(<BigTitle title="Mon garage" label="3 véhicules" />);
+    expect(title).toContain("o-bigtitle__title");
+    expect(title).toContain("3 véhicules");
+    expect(html(<Outlined on="photo">J-6</Outlined>)).toContain("o-onphoto");
+    expect(html(<Outlined on="ground">19 h</Outlined>)).toContain("o-onbg");
+    expect(tokensV2Overlay.length).toBeGreaterThan(20);
   });
 
   it("Ground, Logo, Monogram, Cover", () => {

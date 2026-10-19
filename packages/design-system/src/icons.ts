@@ -2,7 +2,8 @@
 // coins et bouts arrondis. Les formes sont des données (pas du DOM) : le site les rend en <svg>, l'appli en
 // react-native-svg. Noms en anglais (code) ; le nom du README est donné en commentaire.
 // Ajouts hors des 32 (README : « jeu à compléter au développement ») : live (Direct, prototype), eye, eyeOff
-// (affichage du mot de passe, README Field).
+// (affichage du mot de passe, README Field) ; ajouts datés dans docs/design-system/README.md (météo, flag, accueil,
+// barres des six profils de la DA v2).
 
 export type IconShape =
   | readonly ["path", { readonly d: string }]
@@ -104,6 +105,23 @@ export const iconShapes = {
     p("M12.5 12l-3 4.5h4l-2.5 4.5"),
   ],
   weatherWind: [p("M3 8h10a2.5 2.5 0 10-2.5-2.5M3 12h15a3 3 0 11-3 3M3 16h7a2 2 0 11-2 2")],
+  // Barres des six profils (lot 38, DA v2, ajout daté dans docs/design-system/README.md, écart 4) : même grille, même
+  // trait, aucune couleur propre. Formes relevées dans le prototype v2 (ticket, tampon, mallette, image) ou dessinées.
+  ticket: [
+    p("M3 8a2 2 0 002-2h14a2 2 0 002 2v2a2 2 0 000 4v2a2 2 0 00-2 2H5a2 2 0 00-2-2v-2a2 2 0 000-4z"),
+    p("M14.5 6.5v2M14.5 11v2M14.5 15.5v2"),
+  ], // Sorties (candidatures, billets, missions)
+  stamp: [p("M9 3h6l-1 7h4a2 2 0 012 2v3H4v-3a2 2 0 012-2h4z"), p("M4 20h16")], // Passeport
+  briefcase: [r(3, 7, 18, 13, 2), p("M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M3 13h18")], // Missions (prestataire)
+  shop: [
+    p("M4 9l1.5-5h13L20 9"),
+    p("M4 9a2.7 2.7 0 005.3 0 2.7 2.7 0 005.4 0A2.7 2.7 0 0020 9"),
+    p("M5 11v9h14v-9M10 20v-5h4v5"),
+  ], // Vitrine
+  press: [p("M4 5h13v14H6a2 2 0 01-2-2z"), p("M17 9h3v8a2 2 0 01-2 2"), p("M7 9h7M7 13h7M7 16h4")], // Presse (média)
+  gallery: [r(3, 4, 18, 16, 2), c(9, 10, 2), p("M21 16l-5-5-9 9")], // Contenus (média), Vitrine
+  badge: [c(12, 9, 6), p("M8.5 14L7 21l5-3 5 3-1.5-7")], // Structure (badge vérifié)
+  o: [p("M12 4c5 0 9 3.6 9 8s-4 8-9 8-9-3.6-9-8 4-8 9-8z"), p("M8.5 13l7-2.5")], // le O (onglet central, sans la marque)
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;

@@ -3,6 +3,8 @@ import type { Page } from "@playwright/test";
 // Contrôle automatique des règles du système de design sur l'écran affiché (CLAUDE.md, règle 2) : un seul bouton
 // principal, un seul néon moutarde, tout bouton porte une icône, pas de vert, aucun texte tronqué par des points de
 // suspension, pas de défilement horizontal. Sert à la recette (lot 12) ; ne remplace pas le regard sur les captures.
+// Lot 38 (DA v2, écart 1) : tout texte visible posé sur une photo ou sur le fond animé (`.o-cover`, `[data-onbg]`) porte
+// le contour couleur du fond (`-webkit-text-stroke`) : `unoutlinedOnPhoto` liste ceux qui n'en ont pas.
 export type Audit = {
   primaryButtons: number;
   neonAccent: number;
@@ -10,6 +12,7 @@ export type Audit = {
   greens: string[];
   truncated: string[];
   horizontalScroll: boolean;
+  unoutlinedOnPhoto: string[];
 };
 
 export async function auditPage(page: Page): Promise<Audit> {
@@ -52,6 +55,13 @@ export async function auditPage(page: Page): Promise<Audit> {
         .filter((el) => getComputedStyle(el).textOverflow === "ellipsis" && el.scrollWidth > el.clientWidth + 1)
         .map(label),
       horizontalScroll: document.documentElement.scrollWidth > window.innerWidth + 1,
+      unoutlinedOnPhoto: [...document.querySelectorAll(".o-cover, [data-onbg]")]
+        .flatMap((zone) => [zone, ...zone.querySelectorAll("*")])
+        .filter((el) => visible(el) && !el.closest("svg"))
+        .filter((el) => [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").trim()))
+        .filter((el) => Number.parseFloat(getComputedStyle(el).getPropertyValue("-webkit-text-stroke-width")) <= 0)
+        .map(label)
+        .slice(0, 10),
     };
   });
 }

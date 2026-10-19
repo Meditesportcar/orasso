@@ -157,3 +157,14 @@
   letter-spacing: var(--type-number-spacing);
   font-variant-numeric: tabular-nums;
 }
+
+.o-t-number-narrow {
+  font-family: var(--font-sans);
+  font-size: var(--type-number-narrow-size);
+  line-height: var(--type-number-narrow-line);
+  font-weight: var(--type-number-narrow-weight);
+  font-style: var(--type-number-narrow-style);
+  letter-spacing: var(--type-number-narrow-spacing);
+  font-stretch: 62.5%;
+  font-variant-numeric: tabular-nums;
+}

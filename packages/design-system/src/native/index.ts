@@ -4,8 +4,9 @@
 export * from "../icons";
 export * from "../labels";
 export * from "../motion";
-export { THEME_IDS, type ThemeId, tokens } from "../tokens";
-export { AppBar, AppBarAction, type AppBarProps } from "./AppBar";
+export { THEME_IDS, type ThemeId, tokens, tokensV2Overlay } from "../tokens";
+export { AppBar, AppBarAction, type AppBarPersona, type AppBarProps } from "./AppBar";
+export { BigTitle, type BigTitleProps, bigTitleSize } from "./BigTitle";
 export {
   type BrandTone,
   Credit,
@@ -44,6 +45,7 @@ export {
 export { easings, useParkStyle, usePressScale } from "./motionHooks";
 export { claimNeon, useNeonPulse } from "./neon";
 export { OpeningLogo, type OpeningLogoProps, OpeningScreen, type OpeningScreenProps } from "./Opening";
+export { OutlinedText, type OutlinedTextProps, outlineWidth } from "./OutlinedText";
 export { Photo, type PhotoProps } from "./Photo";
 export { Plate, type PlateProps } from "./Plate";
 export { PosterCard, type PosterCardProps, type PosterStatus } from "./PosterCard";
@@ -57,6 +59,8 @@ export {
   DEFAULT_THEME_PREFERENCE,
   parseThemePreference,
   resolveTheme,
+  SOLAR_REFRESH_MS,
+  type SolarContext,
   type ThemePreference,
   ThemeProvider,
   type ThemeProviderProps,

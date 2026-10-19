@@ -253,3 +253,82 @@
 .ds-scroll-x {
   overflow-x: auto;
 }
+
+/* ---------- Section v2 (lot 38) ---------- */
+.ds-v2-h3 {
+  margin: var(--space-2) 0 0;
+  color: var(--ink-muted);
+}
+.ds-v2-tokens {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ds-v2-token {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: center;
+}
+.ds-v2-swatch {
+  grid-row: span 2;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.ds-v2-swatch--fx {
+  background: var(--fx-vignette);
+}
+.ds-v2-token__name {
+  overflow-wrap: anywhere;
+}
+.ds-v2-token__why {
+  color: var(--ink-muted);
+}
+/* Une « photo » de démonstration : aplats vifs des jetons, là où un texte sans contour se perdrait. */
+.ds-v2-photo {
+  display: grid;
+  align-content: end;
+  gap: var(--space-1);
+  width: 220px;
+  height: 160px;
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(160deg, var(--poster) 0%, var(--accent) 48%, var(--win) 100%);
+  color: var(--night-ink);
+}
+.ds-v2-onbg {
+  color: var(--ink);
+}
+.ds-v2-onbg p {
+  margin: 0 0 var(--space-1);
+}
+.ds-v2-titles {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+.ds-v2-frame {
+  flex: none;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+}
+.ds-v2-frame__size {
+  color: var(--ink-muted);
+}
+.ds-v2-bars {
+  display: grid;
+  gap: var(--space-6);
+}
+.ds-v2-bar {
+  margin: 0;
+  display: grid;
+  gap: var(--space-5);
+  width: 390px;
+}

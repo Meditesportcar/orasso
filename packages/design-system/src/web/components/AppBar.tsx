@@ -44,13 +44,18 @@ export function AppBarAction({ icon, label, onClick, href, on = false, count, ch
   );
 }
 
+/** Pastille de casquette à côté du logotype (DA v2) : logo rond de la structure, ou son initiale. */
+export type AppBarPersona = { logoUrl: string | null; label: string };
+
 export type AppBarProps = {
   /**
-   * `home` : le logotype complet, sans titre (Accueil). `page` : le monogramme, le titre, puis les trois pastilles
-   * Recherche, Cloche, Avatar. `flow` : écran de flux (Scan, Jour J, Candidature) : le monogramme, le titre,
-   * l'action de contexte éventuelle, puis ✕ Fermer en dernier.
+   * `tab` (DA v2, lot 38) : le logotype toujours à gauche (128 px, 112 px sous 360 px), la pastille de casquette,
+   * puis Recherche et Boîte à droite (✕ Fermer si `onClose`/`closeHref`) ; le titre de la page est un `BigTitle`
+   * sous la barre. `flow` : écran de flux (Scan, Jour J, Candidature) : le monogramme, le titre, l'action de
+   * contexte éventuelle, puis ✕ Fermer en dernier. `home` et `page` : barres v1, dépréciées (remplacées par
+   * `tab` au lot 40, retirées au lot 58).
    */
-  kind: "home" | "page" | "flow";
+  kind: "tab" | "flow" | "home" | "page";
   title?: string;
   /** Ligne de faits sous le titre (Tri, Scan, Direct) : « Nocturne de Canet · MéditeSportCar · J-2 ». */
   facts?: ReactNode;
@@ -71,7 +76,14 @@ export type AppBarProps = {
   avatarLabel?: string;
   /** Une autre casquette a quelque chose à traiter : pastille moutarde sur l'avatar. */
   avatarDot?: boolean;
-  /** Écran de flux : ✕ Fermer. */
+  /** Barre `tab` : pastille de casquette à côté du logotype. */
+  persona?: AppBarPersona;
+  /** Barre `tab` : la Boîte, avec son compteur (messages, demandes) ; elle perd son compteur quand on y est. */
+  onInbox?: () => void;
+  inboxHref?: string;
+  inboxOn?: boolean;
+  inboxCount?: number;
+  /** Écran de flux : ✕ Fermer (et, en barre `tab`, une fermeture facultative). */
   onClose?: () => void;
   closeHref?: string;
   closeLabel?: string;
@@ -100,12 +112,50 @@ export function AppBar({
   onAvatar,
   avatarLabel = "Moi et mes casquettes",
   avatarDot,
+  persona,
+  onInbox,
+  inboxHref,
+  inboxOn,
+  inboxCount,
   onClose,
   closeHref,
   closeLabel = "Fermer",
   bleed = false,
   className,
 }: AppBarProps) {
+  if (kind === "tab") {
+    const hasClose = Boolean(onClose || closeHref);
+    return (
+      <header className={cx("o-appbar", "o-appbar--tab", bleed && "o-appbar--bleed", className)}>
+        <Brush />
+        <Logo width={128} className="o-appbar__logo" />
+        {persona && (
+          <span className="o-appbar__persona" title={persona.label}>
+            {persona.logoUrl ? (
+              <img src={persona.logoUrl} alt={persona.label} />
+            ) : (
+              <span className="o-t-label" role="img" aria-label={persona.label}>
+                {persona.label.trim().charAt(0).toUpperCase()}
+              </span>
+            )}
+          </span>
+        )}
+        <span className="o-appbar__spacer" />
+        <AppBarAction icon="search" label="Rechercher" onClick={onSearch} href={searchHref} on={searchOn} />
+        <AppBarAction
+          icon="inbox"
+          label="Boîte"
+          onClick={onInbox}
+          href={inboxHref}
+          on={inboxOn}
+          count={inboxOn ? undefined : inboxCount}
+        />
+        {hasClose && (
+          <Button variant="close" label={closeLabel} onClick={onClose} href={closeHref} className="o-appbar__close" />
+        )}
+      </header>
+    );
+  }
   const showTabActions = kind !== "flow";
   return (
     <header className={cx("o-appbar", `o-appbar--${kind}`, bleed && "o-appbar--bleed", className)}>

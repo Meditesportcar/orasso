@@ -1,0 +1,39 @@
+/* BigTitle : le grand titre d'un onglet sur une ligne (DA v2, écart 7, 19/10/2026). Le titre ne passe jamais à la
+   ligne : sa taille suit la largeur du conteneur, et c'est l'étiquette de droite qui se replie dessous. */
+
+.o-bigtitle {
+  container-type: inline-size;
+  padding-top: 6px;
+}
+.o-bigtitle__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.o-bigtitle__title {
+  flex: none;
+  margin: 0;
+  white-space: nowrap;
+  font-size: clamp(var(--type-poster-l-size), 8.2cqi, var(--type-poster-xl-size));
+  line-height: 1;
+}
+/* L'étiquette ne se comprime pas : faute de place à droite du titre, elle passe dessous. */
+.o-bigtitle__label {
+  flex: none;
+  margin-bottom: 4px;
+  color: var(--ink-muted);
+  text-align: right;
+}
+/* Écran de 360 px (titre de 328 px entre les marges de 16 px) : l'étiquette passe sous le titre. */
+@container (max-width: 340px) {
+  .o-bigtitle__row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .o-bigtitle__label {
+    margin-bottom: 0;
+    text-align: left;
+  }
+}

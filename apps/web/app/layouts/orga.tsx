@@ -1,4 +1,4 @@
-import { Ground, Monogram, ThemeScope } from "@orasso/design-system/web";
+import { Ground, Monogram } from "@orasso/design-system/web";
 import {
   type AssistanceState,
   afterEventLabels,
@@ -84,113 +84,112 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
   const base = `/orga/${structure.slug}`;
   const eventBase = eventId ? `${base}/e/${eventId}` : null;
   return (
-    <ThemeScope theme="sable">
-      <Ground variant="site" fixed>
-        <div className="orga">
-          <nav className="orga__side" aria-label="Espace organisateur">
-            <div className="orga__brand">
-              <Monogram size={32} />
-            </div>
-            <div className="orga__who">
-              <span className="o-t-label">{structure.name}</span>
-            </div>
-            <SideLink href={base} on={pathname === base || pathname.startsWith(`${base}/nouvel-evenement`)}>
-              Événements
+    // Lot 38 (DA v2, H2) : le thème n'est plus imposé (Sable) ; il suit le choix de l'utilisateur, Béton par défaut.
+    <Ground variant="site" fixed>
+      <div className="orga">
+        <nav className="orga__side" aria-label="Espace organisateur" data-bar>
+          <div className="orga__brand">
+            <Monogram size={32} />
+          </div>
+          <div className="orga__who">
+            <span className="o-t-label">{structure.name}</span>
+          </div>
+          <SideLink href={base} on={pathname === base || pathname.startsWith(`${base}/nouvel-evenement`)}>
+            Événements
+          </SideLink>
+          {eventBase && isOrganizer && (
+            <SideLink href={eventBase} on={pathname === eventBase || pathname.startsWith(`${eventBase}/modifier`)}>
+              Cet événement
             </SideLink>
-            {eventBase && isOrganizer && (
-              <SideLink href={eventBase} on={pathname === eventBase || pathname.startsWith(`${eventBase}/modifier`)}>
-                Cet événement
-              </SideLink>
-            )}
-            {eventBase && isOrganizer && (
-              <SideLink href={`${eventBase}/candidatures`} on={pathname.startsWith(`${eventBase}/candidatures`)}>
-                Candidatures
-              </SideLink>
-            )}
-            {eventBase && (
-              <SideLink href={`${eventBase}/jour-j`} on={pathname.startsWith(`${eventBase}/jour-j`)}>
-                Jour J et après
-              </SideLink>
-            )}
-            {eventBase && isOrganizer && (
-              <SideLink href={`${eventBase}/apres`} on={pathname.startsWith(`${eventBase}/apres`)}>
-                {afterEventLabels.navLink}
-              </SideLink>
-            )}
-            {eventBase && canCheckTickets && (
-              <SideLink href={`${eventBase}/billets`} on={pathname.startsWith(`${eventBase}/billets`)}>
-                Billets
-              </SideLink>
-            )}
-            <SideLink href={`${base}/communication`} on={pathname.startsWith(`${base}/communication`)}>
-              Communication
+          )}
+          {eventBase && isOrganizer && (
+            <SideLink href={`${eventBase}/candidatures`} on={pathname.startsWith(`${eventBase}/candidatures`)}>
+              Candidatures
             </SideLink>
-            {isOrganizer && (
-              <SideLink href={`${base}/staff`} on={pathname.startsWith(`${base}/staff`)}>
-                Staff
-              </SideLink>
-            )}
-            {isOrganizer && (
-              <SideLink href={`${base}/structure`} on={pathname.startsWith(`${base}/structure`)}>
-                Structure
-              </SideLink>
-            )}
-            <div className="orga__spacer" />
-            <a className="orga__link" href="/app/acces">
-              Mon compte · {pseudo}
-            </a>
-            <Form method="post" action="/deconnexion">
-              <button type="submit" className="orga__link s-linkbutton">
-                Déconnexion
-              </button>
-            </Form>
-          </nav>
-          <main className="orga__content">
-            <TwoFactorNotice hint={twoFactorHint} space="l'espace organisateur" />
-            {assistance && (
-              <p
-                className={
-                  assistance.mode === "intervention" ? "s-notice adm-assist" : "s-notice s-notice--alert adm-assist"
-                }
-                role="status"
-                data-testid="orga-assistance"
-                data-mode={assistance.mode}
-              >
-                <span>
-                  <strong>
-                    {assistance.mode === "intervention" && assistance.since
-                      ? assistanceTexts.intervention(formatDay(assistance.since))
-                      : assistanceTexts.readOnly}
-                  </strong>{" "}
-                  {assistance.mode === "intervention" ? assistanceTexts.interventionHint : assistanceTexts.readOnlyHint}
-                </span>
-                <a href={`/admin/structures/${structure.id}`}>Fiche dans l'administration</a>
-              </p>
-            )}
-            {badge?.kind === "suspended" && (
-              <p className="s-notice s-notice--alert ae-banner" role="alert" data-testid="orga-suspended">
-                <span>
-                  {badge.reason === "badge_expired"
-                    ? afterEventLabels.badgeSuspendedExpired
-                    : badge.reason === "moderation"
-                      ? afterEventLabels.badgeSuspendedModeration
-                      : afterEventLabels.badgeSuspended}
-                </span>
-                <a href="mailto:contact@orasso.fr">{afterEventLabels.badgeContact}</a>
-              </p>
-            )}
-            {badge?.kind === "expiring" && (
-              <p className="s-notice ae-banner" role="status" data-testid="orga-badge-expiring">
-                <span>
-                  {afterEventLabels.badgeExpiring(badge.days)} {afterEventLabels.badgeExpiringHint}
-                </span>
-                <a href={`${base}/structure`}>Ouvrir la structure</a>
-              </p>
-            )}
-            <Outlet />
-          </main>
-        </div>
-      </Ground>
-    </ThemeScope>
+          )}
+          {eventBase && (
+            <SideLink href={`${eventBase}/jour-j`} on={pathname.startsWith(`${eventBase}/jour-j`)}>
+              Jour J et après
+            </SideLink>
+          )}
+          {eventBase && isOrganizer && (
+            <SideLink href={`${eventBase}/apres`} on={pathname.startsWith(`${eventBase}/apres`)}>
+              {afterEventLabels.navLink}
+            </SideLink>
+          )}
+          {eventBase && canCheckTickets && (
+            <SideLink href={`${eventBase}/billets`} on={pathname.startsWith(`${eventBase}/billets`)}>
+              Billets
+            </SideLink>
+          )}
+          <SideLink href={`${base}/communication`} on={pathname.startsWith(`${base}/communication`)}>
+            Communication
+          </SideLink>
+          {isOrganizer && (
+            <SideLink href={`${base}/staff`} on={pathname.startsWith(`${base}/staff`)}>
+              Staff
+            </SideLink>
+          )}
+          {isOrganizer && (
+            <SideLink href={`${base}/structure`} on={pathname.startsWith(`${base}/structure`)}>
+              Structure
+            </SideLink>
+          )}
+          <div className="orga__spacer" />
+          <a className="orga__link" href="/app/acces">
+            Mon compte · {pseudo}
+          </a>
+          <Form method="post" action="/deconnexion">
+            <button type="submit" className="orga__link s-linkbutton">
+              Déconnexion
+            </button>
+          </Form>
+        </nav>
+        <main className="orga__content">
+          <TwoFactorNotice hint={twoFactorHint} space="l'espace organisateur" />
+          {assistance && (
+            <p
+              className={
+                assistance.mode === "intervention" ? "s-notice adm-assist" : "s-notice s-notice--alert adm-assist"
+              }
+              role="status"
+              data-testid="orga-assistance"
+              data-mode={assistance.mode}
+            >
+              <span>
+                <strong>
+                  {assistance.mode === "intervention" && assistance.since
+                    ? assistanceTexts.intervention(formatDay(assistance.since))
+                    : assistanceTexts.readOnly}
+                </strong>{" "}
+                {assistance.mode === "intervention" ? assistanceTexts.interventionHint : assistanceTexts.readOnlyHint}
+              </span>
+              <a href={`/admin/structures/${structure.id}`}>Fiche dans l'administration</a>
+            </p>
+          )}
+          {badge?.kind === "suspended" && (
+            <p className="s-notice s-notice--alert ae-banner" role="alert" data-testid="orga-suspended">
+              <span>
+                {badge.reason === "badge_expired"
+                  ? afterEventLabels.badgeSuspendedExpired
+                  : badge.reason === "moderation"
+                    ? afterEventLabels.badgeSuspendedModeration
+                    : afterEventLabels.badgeSuspended}
+              </span>
+              <a href="mailto:contact@orasso.fr">{afterEventLabels.badgeContact}</a>
+            </p>
+          )}
+          {badge?.kind === "expiring" && (
+            <p className="s-notice ae-banner" role="status" data-testid="orga-badge-expiring">
+              <span>
+                {afterEventLabels.badgeExpiring(badge.days)} {afterEventLabels.badgeExpiringHint}
+              </span>
+              <a href={`${base}/structure`}>Ouvrir la structure</a>
+            </p>
+          )}
+          <Outlet />
+        </main>
+      </div>
+    </Ground>
   );
 }

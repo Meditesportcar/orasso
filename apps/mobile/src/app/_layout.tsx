@@ -6,6 +6,7 @@ import {
   useOrassoFonts,
   useTheme,
 } from "@orasso/design-system/native";
+import { profilePosition } from "@orasso/shared";
 import * as Notifications from "expo-notifications";
 import {
   DarkTheme,
@@ -50,8 +51,13 @@ const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "o", "p", "ami", "_ds", "v
 
 // Le thème (Béton par défaut, Sable, auto) et les polices Archivo sont posés une fois, à la racine.
 function Shell() {
-  const { theme, t } = useTheme();
+  const { theme, t, setPosition } = useTheme();
   const { status, me } = useSession();
+  // Thème « Automatique » (lot 38) : le soleil au centre du premier département de l'utilisateur (Paris sinon).
+  const firstDepartment = me?.profile.departments[0];
+  useEffect(() => {
+    setPosition(firstDepartment ? profilePosition([firstDepartment]) : null);
+  }, [firstDepartment, setPosition]);
   const { persona, backToFan, choose } = usePersona();
   const router = useRouter();
   const segments = useSegments();

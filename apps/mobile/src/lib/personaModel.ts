@@ -25,6 +25,9 @@ export const FAN_ENTRY: AppPersonaEntry = { kind: "fan", id: "fan", label: "Pass
 
 export const personaKindLabels: Record<AppPersonaKind, string> = {
   fan: "Passionné",
+  // DA v2 (lot 38) : profils ajoutés au partage ; le lot 40 leur donne leurs groupes de routes et leurs barres.
+  visitor: "Visiteur",
+  media: "Média",
   organizer: "Organisateur",
   pro: "Professionnel",
   provider: "Prestataire",
@@ -34,6 +37,8 @@ export const personaKindLabels: Record<AppPersonaKind, string> = {
 /** Groupe de routes Expo Router de chaque casquette (`app/<groupe>/`). */
 export const personaGroups: Record<AppPersonaKind, string> = {
   fan: "(tabs)",
+  visitor: "(tabs)",
+  media: "(tabs)",
   organizer: "(orga)",
   pro: "(pro)",
   provider: "(provider)",
@@ -43,6 +48,8 @@ export const personaGroups: Record<AppPersonaKind, string> = {
 /** Premier écran de chaque casquette (l'onglet par défaut de sa barre). */
 export const personaHomes = {
   fan: "/(tabs)/accueil",
+  visitor: "/(tabs)/accueil",
+  media: "/(tabs)/accueil",
   organizer: "/(orga)/direct",
   pro: "/(pro)/scanner",
   provider: "/(provider)/candidatures",

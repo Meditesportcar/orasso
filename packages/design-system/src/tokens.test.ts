@@ -1,10 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { THEME_IDS, tokens } from "./tokens";
+import { loadMergedTokens, mergeTokens } from "../scripts/merge-tokens.mjs";
+import { THEME_IDS, tokens, tokensV2Overlay } from "./tokens";
 
 const root = resolve(import.meta.dirname, "..");
-const json = JSON.parse(readFileSync(resolve(root, "../../docs/design-system/tokens.json"), "utf8"));
+// Base gelée (docs/design-system/tokens.json) + surcouche DA v2 (tokens.v2.json, lot 38) : les valeurs attendues sont
+// celles de la fusion, exactement comme le générateur les voit.
+const { json, base, overlay, changes } = loadMergedTokens();
 const css = readFileSync(resolve(root, "src/web/tokens.css"), "utf8");
 const typography = readFileSync(resolve(root, "src/web/typography.css"), "utf8");
 
@@ -25,7 +28,7 @@ const themedGroups: Array<[string, keyof typeof tokens, (name: string) => string
   ["bar-fx", "barFx", (n) => n],
 ];
 
-describe("jetons : tous ceux de tokens.json sont dans tokens.ts et tokens.css", () => {
+describe("jetons : tous ceux de tokens.json (+ surcouche v2) sont dans tokens.ts et tokens.css", () => {
   it("couleurs, ombres, fonds et barres : chaque thème, TS et CSS", () => {
     for (const [group, tsKey, varName] of themedGroups) {
       const list: Tok[] = json[group].tokens;
@@ -112,8 +115,8 @@ describe("jetons : tous ceux de tokens.json sont dans tokens.ts et tokens.css", 
       blend: "screen",
     });
     expect(tokens.barBrush.beton.color).toEqual([0.95, 0.92, 0.85]);
-    expect(tokens.barBrush.sable).toMatchObject({ alpha: 1, opacity: 0.38, blend: "multiply" });
-    expect(tokens.barBrush.sable.color).toEqual([0.08, 0.07, 0.05]);
+    // Surcouche v2 : la barre Sable est nuit, brossée comme en Béton.
+    expect(tokens.barBrush.sable).toEqual(tokens.barBrush.beton);
     for (const theme of THEME_IDS) {
       expect(block(`[data-theme="${theme}"]`)).toContain(`--grain-opacity: ${tokens.grain[theme].opacity};`);
       expect(block(`[data-theme="${theme}"]`)).toContain(`--bar-brush-blend: ${tokens.barBrush[theme].blend};`);
@@ -124,5 +127,88 @@ describe("jetons : tous ceux de tokens.json sont dans tokens.ts et tokens.css", 
     const beton = Object.keys(tokens.color.beton).sort();
     const sable = Object.keys(tokens.color.sable).sort();
     expect(sable).toEqual(beton);
+  });
+});
+
+describe("surcouche DA v2 (tokens.v2.json, lot 38)", () => {
+  const groups: Record<string, [keyof typeof tokens, (name: string) => string]> = {
+    color: ["color", (n) => n],
+    shadow: ["shadow", (n) => n],
+    "ground-fx": ["groundFx", (n) => `fx-${n}`],
+    "bar-fx": ["barFx", (n) => n],
+  };
+  const textures = ["grain", "bar-brush", "bar-brush-filter"];
+
+  it("chaque valeur remplacée est appliquée dans tokens.ts et tokens.css", () => {
+    let checked = 0;
+    for (const [group, [tsKey, varName]] of Object.entries(groups)) {
+      for (const entry of (overlay[group]?.tokens ?? []) as Array<{ name: string; value: Record<string, string> }>) {
+        for (const [theme, value] of Object.entries(entry.value)) {
+          const ts = (tokens[tsKey] as Record<string, Record<string, string>>)[theme] as Record<string, string>;
+          expect(ts[camel(entry.name)], `${group}/${entry.name} (${theme}) dans tokens.ts`).toBe(value);
+          if (!textures.includes(entry.name)) {
+            expect(block(`[data-theme="${theme}"]`), `${group}/${entry.name} (${theme}) dans tokens.css`).toContain(
+              `--${varName(entry.name)}: ${value};`,
+            );
+          }
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(20);
+  });
+
+  it("les jetons ajoutés (carte, encres de tampon) sont dans les deux thèmes", () => {
+    const added = overlay.added as {
+      color: Array<{ name: string; value: Record<string, string> }>;
+      "stamp-ink": Array<{ department: string; value: Record<string, string> }>;
+    };
+    for (const theme of THEME_IDS) {
+      const themeCss = block(`[data-theme="${theme}"]`);
+      const color = tokens.color[theme] as Record<string, string>;
+      for (const entry of added.color) {
+        expect(color[camel(entry.name)]).toBe(entry.value[theme]);
+        expect(themeCss).toContain(`--${entry.name}: ${entry.value[theme]};`);
+      }
+      for (const entry of added["stamp-ink"]) {
+        expect(color[camel(`stamp-ink-${entry.department}`)]).toBe(entry.value[theme]);
+        expect(themeCss).toContain(`--stamp-ink-${entry.department}: ${entry.value[theme]};`);
+      }
+      // Les départements sans encre propre prennent `win`.
+      expect(color.stampInkDefault).toBe(color.win);
+    }
+    expect(Object.keys(tokens.color.beton)).toEqual(expect.arrayContaining(["mapLand", "mapSea", "stampInk66"]));
+  });
+
+  it("Sable : halo et reflet éteints (fond uni), barre nuit", () => {
+    expect(tokens.groundFx.sable.halo).toBe("none");
+    expect(tokens.groundFx.sable.reflet).toBe("none");
+    expect(tokens.color.sable.bar).toBe(tokens.color.beton.night);
+    expect(tokens.color.sable.inkMuted).toBe("#4f493f");
+  });
+
+  it("number-narrow : le style number à 62,5 % de largeur", () => {
+    const { fontStretch, ...narrow } = tokens.type.numberNarrow;
+    const { fontStretch: base, ...number } = tokens.type.number;
+    expect(fontStretch).toBe("62.5%");
+    expect(base).toBeNull();
+    expect(narrow).toEqual(number);
+    expect(typography).toMatch(/\.o-t-number-narrow \{[^}]*font-stretch: 62\.5%;/);
+  });
+
+  it("les deux thèmes ont les mêmes clés dans chaque groupe", () => {
+    for (const key of ["color", "shadow", "groundFx", "groundFxSite", "barFx"] as const) {
+      const group = tokens[key] as Record<string, Record<string, unknown>>;
+      expect(Object.keys(group.sable ?? {}).sort(), key).toEqual(Object.keys(group.beton ?? {}).sort());
+    }
+  });
+
+  it("tokensV2Overlay liste chaque écart avec sa raison, et la base n'est pas modifiée", () => {
+    expect(tokensV2Overlay.length).toBe(changes.length);
+    for (const change of tokensV2Overlay) expect(change.why, change.name).toBeTruthy();
+    const copy = structuredClone(base);
+    mergeTokens(base, overlay);
+    expect(base).toEqual(copy);
+    expect(json.color.tokens.length).toBeGreaterThan(base.color.tokens.length);
   });
 });
