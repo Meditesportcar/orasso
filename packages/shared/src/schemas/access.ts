@@ -34,6 +34,17 @@ export type AccessPass = {
   issuedAt: string;
   revokedAt: string | null;
   revokedReason: PassRevokedReason | null;
+  /**
+   * Lot 48 : secret du code tournant `OR2` (32 octets, base64url) gardé sur le téléphone ; `null` si le pass est
+   * révoqué. `payload` (`OR1`) reste fourni pour les anciennes versions de l'appli jusqu'au lot 58.
+   */
+  otpSecret: string | null;
+  /** Lot 48 : en-tête de l'écran du QR — véhicule (zone), prestataire (emplacement), média (badge presse). */
+  kind: "vehicle" | "provider" | "media";
+  /** Prestataire : emplacement attribué par l'organisateur (« B2 »), lot 46. */
+  spotLabel: string | null;
+  /** Média : nom du média (« Sud Cars »), lot 45. */
+  mediaName: string | null;
 };
 
 /** `GET /api/keys` : clés publiques Ed25519 (32 octets, base64url). */
@@ -141,6 +152,11 @@ export type AccessListEntry = {
   lastSeenAt?: string | null;
   /** Coordonnées : super staff et organisateur seulement. */
   contact?: { firstName: string | null; lastName: string | null; phone: string | null; email: string };
+  /**
+   * Lot 48 : secret du code tournant `OR2` (32 octets, base64url), pass valides de la synchro du staff seulement :
+   * la vérification hors ligne en a besoin. Purgé du téléphone à J+1 avec le reste de la liste.
+   */
+  otpSecret?: string | null;
   updatedAt: string;
 };
 
@@ -201,9 +217,9 @@ const scanItem = z.object({
   scannedAt: isoDate,
 });
 
-/** Pointage fait hors ligne depuis la liste (« Pointer ») ou le pointage rapide par plaque. */
+/** Pointage fait hors ligne depuis la liste (« Pointer »), le pointage rapide par plaque ou l'accueil drive (lot 48). */
 const checkinItem = z.object({
-  kind: z.enum(["manual", "plate"]),
+  kind: z.enum(["manual", "plate", "drive"]),
   id: z.uuid(),
   applicationId: z.uuid(),
   note: optionalText(200),
@@ -234,7 +250,7 @@ export type ScanBatchResult = {
 
 export const checkinCreateSchema = z.object({
   applicationId: z.uuid(),
-  method: z.enum(["manual", "plate"]).default("manual"),
+  method: z.enum(["manual", "plate", "drive"]).default("manual"),
   note: optionalText(200),
 });
 

@@ -8,6 +8,7 @@ export const scanRefusalLabels: Record<ScanRefusal, string> = {
   unknown_qr: "QR inconnu",
   unknown_key: "Clé inconnue : synchronise",
   forged: "QR falsifié",
+  expired: "Code périmé : demande à la personne de rafraîchir son écran",
   other_event: "QR d'un autre événement",
   other_day: "Inscrit pour un autre jour",
   withdrawn: "Désisté",
@@ -31,6 +32,7 @@ export const checkinMethodLabels: Record<CheckinMethod, string> = {
   manual: "Sans scan",
   plate: "Pointage par plaque",
   express: "Inscription express",
+  drive: "Accueil drive",
 };
 
 export const staffPresenceLabels: Record<StaffPresence, string> = {

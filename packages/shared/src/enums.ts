@@ -206,8 +206,8 @@ export const departmentSchema = z.string().refine((d) => (departments as readonl
 export const staffPresences = ["unknown", "present", "absent"] as const;
 export type StaffPresence = (typeof staffPresences)[number];
 
-/** Comment un véhicule est entré (une seule entrée par candidature). */
-export const checkinMethods = ["scan", "manual", "plate", "express"] as const;
+/** Comment un véhicule est entré (une seule entrée par candidature) ; `drive` : plaque lue par la caméra (lot 48). */
+export const checkinMethods = ["scan", "manual", "plate", "express", "drive"] as const;
 export type CheckinMethod = (typeof checkinMethods)[number];
 
 /** Décision du serveur sur une lecture reçue d'un appareil (§ 2.5). */

@@ -2,7 +2,8 @@
 // « OR1 » + base32 majuscules sans remplissage de (message 22 octets ‖ signature Ed25519 64 octets) = 141 caractères,
 // tous dans le jeu alphanumérique du QR (version 6, correction M).
 import { localDate } from "../rules/eventDays";
-import { base32Decode, base32Encode, bytesToUuid, concatBytes, uuidToBytes } from "./bytes";
+import { base32Decode, base32Encode, base64UrlDecode, bytesToUuid, concatBytes, uuidToBytes } from "./bytes";
+import { decodeRotatingPayload, ROTATING_PREFIX, verifyRotatingCode } from "./rotating";
 
 export const PASS_PREFIX = "OR1";
 export const PASS_VERSION = 1;
@@ -109,12 +110,25 @@ export type LocalAccessEntry = {
    * absent = tout l'événement (valable chaque jour).
    */
   dayDate?: string | null;
+  /**
+   * Lot 48 : secret du code tournant `OR2` de ce pass (32 octets, base64url), reçu dans la liste synchronisée ; absent
+   * d'une liste synchronisée avant le lot 48 (le code tournant est alors refusé « Clé inconnue : synchronise »).
+   */
+  otpSecret?: string | null;
 };
 
 export const localScanDecisions = ["ok", "already", "refused", "override", "unknown_pass"] as const;
 export type LocalScanDecision = (typeof localScanDecisions)[number];
 
-export type ScanRefusal = "unknown_qr" | "unknown_key" | "forged" | "other_event" | "other_day" | PassRevokedReason;
+/** `expired` (lot 48) : code tournant `OR2` hors de sa fenêtre (capture ou photo du code). */
+export type ScanRefusal =
+  | "unknown_qr"
+  | "unknown_key"
+  | "forged"
+  | "expired"
+  | "other_event"
+  | "other_day"
+  | PassRevokedReason;
 
 export type ScanDecision =
   | {
@@ -132,6 +146,8 @@ export type ScanDecision =
 /**
  * Décision locale d'un scan (fonction pure) : préfixe, clé, signature, événement, liste locale, déjà entré.
  * « Accepter quand même » (`override`) sur `unknown_pass` est un geste du staff, enregistré à part.
+ * Lot 48 : le code tournant `OR2` est vérifié avec le secret du pass de la liste locale et l'heure `now` (obligatoire
+ * pour lui) ; l'ancien QR `OR1` (signature Ed25519) reste accepté jusqu'au lot 58.
  */
 export function decideScan(
   payload: string,
@@ -143,10 +159,12 @@ export function decideScan(
     /**
      * Heure du scan (lot 26, règle 6 bis) : une entrée d'un jour précis (`dayDate`) lue un autre jour (date locale de
      * Paris) est refusée « Autre jour » ; le staff peut l'accepter quand même. Absente : pas de contrôle du jour.
+     * Lot 48 : heure de vérification du code tournant `OR2` (sans elle, un `OR2` est refusé « QR inconnu »).
      */
     now?: Date;
   },
 ): ScanDecision {
+  if (payload.trim().startsWith(ROTATING_PREFIX)) return decideRotating(payload, ctx);
   const check = verifyPassPayload(payload, ctx.keys, ctx.verify);
   if (!check.ok) {
     const reason = ({ malformed: "unknown_qr", unknown_key: "unknown_key", bad_signature: "forged" } as const)[
@@ -158,16 +176,48 @@ export function decideScan(
   if (pass.eventNo !== ctx.eventNo) return { decision: "refused", reason: "other_event", passId: pass.passId };
   const entry = ctx.findEntry(pass.passId);
   if (!entry) return { decision: "unknown_pass", passId: pass.passId };
+  return decideEntry(pass.passId, entry, ctx.now);
+}
+
+/**
+ * Code tournant `OR2` : pass cherché dans la liste par son identifiant, MAC vérifié avec son secret, créneau à ±1.
+ * Un pass absent de la liste (ou sans secret) ne peut pas être vérifié : refusé « Clé inconnue : synchronise », sans
+ * « Accepter quand même » (rien ne prouve que le code vient d'Orasso).
+ */
+function decideRotating(
+  payload: string,
+  ctx: { eventNo: number; findEntry: (passId: string) => LocalAccessEntry | undefined; now?: Date },
+): ScanDecision {
+  const code = decodeRotatingPayload(payload);
+  if (!code || !ctx.now) return { decision: "refused", reason: "unknown_qr", passId: null };
+  if (code.eventNo !== ctx.eventNo) return { decision: "refused", reason: "other_event", passId: code.passId };
+  const entry = ctx.findEntry(code.passId);
+  // Pass révoqué : refusé quoi qu'il en soit, avec son motif (« Désisté »…), même sans pouvoir vérifier le code.
+  if (entry?.status === "revoked") {
+    return { decision: "refused", reason: entry.revokedReason ?? "cancelled", passId: code.passId };
+  }
+  const secret = entry?.otpSecret ? base64UrlDecode(entry.otpSecret) : null;
+  if (!entry || !secret) return { decision: "refused", reason: "unknown_key", passId: code.passId };
+  const check = verifyRotatingCode(payload, secret, ctx.now);
+  if (!check.ok) {
+    const reason = check.reason === "expired" ? "expired" : check.reason === "bad_mac" ? "forged" : "unknown_qr";
+    return { decision: "refused", reason, passId: code.passId };
+  }
+  return decideEntry(code.passId, entry, ctx.now);
+}
+
+/** Règles communes une fois le QR authentifié : révoqué, autre jour, déjà entré, OK. */
+function decideEntry(passId: string, entry: LocalAccessEntry, now: Date | undefined): ScanDecision {
   if (entry.status === "revoked") {
-    return { decision: "refused", reason: entry.revokedReason ?? "cancelled", passId: pass.passId };
+    return { decision: "refused", reason: entry.revokedReason ?? "cancelled", passId };
   }
-  if (entry.dayDate && ctx.now && localDate(ctx.now) !== entry.dayDate) {
+  if (entry.dayDate && now && localDate(now) !== entry.dayDate) {
     // Déjà accepté quand même aujourd'hui : « déjà entré », le panneau ne se rouvre pas à chaque lecture.
-    if (entry.checkedInAt && localDate(new Date(entry.checkedInAt)) === localDate(ctx.now)) {
-      return { decision: "already", passId: pass.passId, entry, checkedInAt: entry.checkedInAt };
+    if (entry.checkedInAt && localDate(new Date(entry.checkedInAt)) === localDate(now)) {
+      return { decision: "already", passId, entry, checkedInAt: entry.checkedInAt };
     }
-    return { decision: "refused", reason: "other_day", passId: pass.passId, entry, dayDate: entry.dayDate };
+    return { decision: "refused", reason: "other_day", passId, entry, dayDate: entry.dayDate };
   }
-  if (entry.checkedInAt) return { decision: "already", passId: pass.passId, entry, checkedInAt: entry.checkedInAt };
-  return { decision: "ok", passId: pass.passId, entry };
+  if (entry.checkedInAt) return { decision: "already", passId, entry, checkedInAt: entry.checkedInAt };
+  return { decision: "ok", passId, entry };
 }
