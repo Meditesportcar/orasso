@@ -34,10 +34,12 @@ export function ProfilScreen() {
   const [sheet, setSheet] = useState<"qr" | "create" | "staff" | null>(null);
   const close = () => setSheet(null);
   const base = isBaseKind(persona.kind);
-  const exhibitor = persona.kind === "fan";
 
   const points = useApi(() => api.points(), [], { cacheKey: "points" });
-  const crews = useApi(() => api.myCrews(), [], { cacheKey: "my-crews", enabled: exhibitor });
+  const crews = useApi(() => api.myCrews(), [], { cacheKey: "my-crews", enabled: base });
+  // Lot 40 : les véhicules archivés (vendus, souvenirs, accidentés) restent joignables sans onglet Garage.
+  const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base });
+  const archived = vehicles.data?.filter((v) => v.status !== "active").length ?? 0;
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
 
   const profile = me?.profile;
@@ -56,7 +58,7 @@ export function ProfilScreen() {
     <TabScreen
       title="Mon profil"
       onRefresh={async () => {
-        await Promise.all([refreshMe(), points.reload(), crews.reload(), staff.reload()]);
+        await Promise.all([refreshMe(), points.reload(), crews.reload(), staff.reload(), vehicles.reload()]);
       }}
       overlays={
         <>
@@ -101,7 +103,23 @@ export function ProfilScreen() {
       )}
 
       {base && profile ? (
-        <SeasonCard points={profile.pointsSeason} grade={gradeLabels[profile.grade]} data={points.data ?? null} />
+        <>
+          <SeasonCard points={profile.pointsSeason} grade={gradeLabels[profile.grade]} data={points.data ?? null} />
+          {/* L'historique des points (ex-écran Moi) : dernières lignes, malus et pointages en attente. */}
+          <HubRow
+            lead={<RowIcon name="grade" />}
+            title="Historique des points"
+            caption={
+              points.data?.entries[0]
+                ? `Dernière ligne : ${points.data.entries[0].event?.title ?? "points"} · ${
+                    points.data.entries[0].points > 0 ? "+" : ""
+                  }${points.data.entries[0].points}`.replace("-", "−")
+                : "Pointages, bonus et malus de la saison"
+            }
+            onPress={() => router.push("/reglages/points")}
+            testID="profil-points"
+          />
+        </>
       ) : null}
 
       {/* lot 50 : la tuile ouvre le passeport et compte les tampons. */}
@@ -114,7 +132,17 @@ export function ProfilScreen() {
         />
       ) : null}
 
-      {exhibitor ? (
+      {base && archived > 0 ? (
+        <HubRow
+          lead={<RowIcon name="vehicle" />}
+          title="Mes véhicules archivés"
+          caption={`${archived} · vendus, souvenirs, accidentés`}
+          onPress={() => router.push("/vehicules-archives")}
+          testID="profil-archived"
+        />
+      ) : null}
+
+      {base ? (
         <HubRow
           lead={<RowIcon name="staff" />}
           title={crew ? `Mon crew · ${crew.name}` : "Mon crew"}

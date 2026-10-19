@@ -15,6 +15,7 @@ import { DeleteAccountSheet } from "@/features/moi/DeleteAccountSheet";
 import { EmailBanner } from "@/features/moi/EmailBanner";
 import { NotificationsSection } from "@/features/moi/NotificationsSection";
 import { PasskeysSheet } from "@/features/moi/PasskeysSheet";
+import { PointsSection } from "@/features/moi/PointsSection";
 import { ProfileSection } from "@/features/moi/ProfileSection";
 import { QrSecretSheet } from "@/features/moi/QrSecretSheet";
 import { SectorSection } from "@/features/moi/SectorSection";
@@ -36,6 +37,7 @@ const SECTIONS = {
   confidentialite: "Confidentialité",
   profil: "Mon profil public",
   aide: "Aide",
+  points: "Mes points",
 } as const;
 type Section = keyof typeof SECTIONS;
 
@@ -79,6 +81,9 @@ export default function Reglages() {
       {settings.error ? <Notice tone="error">{settings.error}</Notice> : null}
 
       {section === "notifications" ? <NotificationsSection settings={settings.settings} save={settings.save} /> : null}
+
+      {/* Lot 40 : historique des points de la saison (ex-écran Moi), ouvert depuis la carte de saison. */}
+      {section === "points" ? <PointsSection /> : null}
 
       {section === "preferences" ? (
         <>
