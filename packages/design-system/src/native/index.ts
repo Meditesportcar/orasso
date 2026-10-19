@@ -3,6 +3,8 @@
 //   <ThemeProvider> … </ThemeProvider>   et   useOrassoFonts() avant d'afficher l'interface.
 export * from "../icons";
 export * from "../labels";
+export * from "../map";
+export { ClusterPin, EventPin, MePin, ProPin } from "../map/native";
 export * from "../motion";
 export { THEME_IDS, type ThemeId, tokens, tokensV2Overlay } from "../tokens";
 export { AppBar, AppBarAction, type AppBarPersona, type AppBarProps } from "./AppBar";

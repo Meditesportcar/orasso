@@ -2,5 +2,6 @@
 // Les composants React du site sont dans "@orasso/design-system/web" ; ceux de l'appli (lot 04) viendront à côté.
 export * from "./icons";
 export * from "./labels";
+export * from "./map";
 export * from "./motion";
 export * from "./tokens";
