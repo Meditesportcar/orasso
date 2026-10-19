@@ -109,7 +109,8 @@ export const mediaContents = pgTable(
     index("media_contents_profile_idx").on(t.mediaProfileId, t.publishedAt),
     check("media_contents_title_check", sql`char_length(${t.title}) <= 80`),
     check("media_contents_photos_check", sql`cardinality(${t.photoKeys}) <= 30`),
-    check("media_contents_link_check", sql`${t.kind} <> 'link' or ${t.url} is not null`),
+    // Un lien a son adresse, sauf retiré (l'anonymisation l'efface).
+    check("media_contents_link_check", sql`${t.kind} <> 'link' or ${t.url} is not null or ${t.deletedAt} is not null`),
   ],
 );
 
