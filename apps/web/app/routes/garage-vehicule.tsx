@@ -225,7 +225,11 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
                   </summary>
                   <Form method="post" className="s-stack s-stack--tight">
                     <input type="hidden" name="photoId" value={p.id} />
-                    <PlateFrame src={p.url} alt={`${v.label}, vue ${i + 1}`} testId="site-plate-editor" />
+                    <PlateFrame
+                      src={p.url}
+                      alt={`${v.label}, vue ${i + 1}`}
+                      testId={p.plateBlurred ? "site-plate-editor-more" : "site-plate-editor"}
+                    />
                     <Button
                       type="submit"
                       name="intent"
