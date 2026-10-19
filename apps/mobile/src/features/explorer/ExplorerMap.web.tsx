@@ -46,7 +46,9 @@ export function ExplorerMap({ pins, me, onSelect, children }: ExplorerMapProps) 
       // Metro ne sait pas servir le fil de travail de MapLibre (`new URL(…, import.meta.url)`) : on donne celui de la même
       // version, que MapLibre télécharge et charge lui-même (recette web de l'appli seulement ; le natif n'en a pas besoin).
       if (!maplibre.getWorkerUrl?.()?.startsWith("https://"))
-        maplibre.setWorkerUrl(`https://cdn.jsdelivr.net/npm/maplibre-gl@${maplibre.getVersion()}/dist/maplibre-gl-worker.mjs`);
+        maplibre.setWorkerUrl(
+          `https://cdn.jsdelivr.net/npm/maplibre-gl@${maplibre.getVersion()}/dist/maplibre-gl-worker.mjs`,
+        );
       const view = viewFor(latest.current.pins);
       const created = createOrassoMap(maplibre, box.current, {
         theme: themeRef.current,

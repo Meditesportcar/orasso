@@ -3,9 +3,9 @@ import { expect, type Page, test } from "@playwright/test";
 import { apiCall, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 
 // Recherche de premier niveau et Explorer (lot 29) dans l'appli, version web de recette (`expo start --web`) :
-// recherche depuis la barre du haut (« Supra », « Rivesaltes »), Explorer (affinités, filtres en feuille, position,
-// carte → repli liste avec message sur le web, Pros), pages d'une structure et d'un pro, lien depuis la page d'un
-// événement. La carte MapLibre native se vérifie sur l'APK (épingles, fiche au toucher).
+// recherche depuis la barre du haut (« Supra », « Rivesaltes »), Explorer (lot 44 : du plus proche au plus loin, « Mes
+// affinités » et « Structures suivies » en filtres, position jamais enregistrée, Pros), pages d'une structure et d'un
+// pro, lien depuis la page d'un événement. La carte stylée est vérifiée par `appli-lot44.spec.ts`.
 // Lancer avec APP_URL=http://localhost:<port de Metro> (CORS_ORIGINS de l'API = même origine).
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-29-captures/appli";
@@ -69,45 +69,33 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
     await page.getByTestId("see-all-evenements").click({ timeout: 30_000 });
     await expect(page.getByTestId("events-q")).toHaveValue("de", { timeout: 30_000 });
 
-    // --- Explorer : affinités ----------------------------------------------------------------------------------
+    // --- Explorer v2 (lot 44) : position accordée → tout, du plus proche au plus loin -----------------------------
     await page.goto("/explorer");
     const rows = page.getByTestId("event-row");
+    await expect(page.getByTestId("sort-line")).toContainText("du plus proche au plus loin", { timeout: 30_000 });
+    await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+    await shot(page, `04-explorer-distance-${theme}`);
+
+    // « Mes affinités » : l'organisateur suivi en tête ; « Structures suivies » : seulement lui.
+    await page.getByText("Filtres", { exact: true }).click();
+    await page.getByText("Mes affinités", { exact: true }).click();
     await expect(rows.first()).toContainText("Rassemblement de Narbonne", { timeout: 30_000 });
-    await expect(rows.first()).toContainText("Organisateur suivi");
-    await shot(page, `04-explorer-affinites-${theme}`);
-
-    // Par date : plus de pastille d'affinité en tête.
-    await page.getByText("Date", { exact: true }).click();
-    await expect(rows.first()).not.toContainText("Organisateur suivi", { timeout: 30_000 });
-
-    // Filtre en feuille : département 11.
-    await page.getByTestId("open-filters").click();
-    await page.getByRole("combobox", { name: "Département" }).click();
-    await page.getByRole("menuitem", { name: "11", exact: true }).click();
-    await shot(page, `05-explorer-filtres-${theme}`);
-    await page.getByRole("button", { name: "Appliquer" }).click();
-    await expect(rows.first()).toContainText(/Narbonne|Carcassonne/, { timeout: 30_000 });
+    await shot(page, `05-explorer-affinites-${theme}`);
+    await page.getByText("Mes affinités", { exact: true }).click();
+    await page.getByText("Structures suivies", { exact: true }).click();
+    await expect(rows.first()).toContainText("Narbonne", { timeout: 30_000 });
     for (const text of await rows.allTextContents()) expect(text).not.toContain("Rivesaltes");
-    await shot(page, `06-explorer-aude-${theme}`);
+    await shot(page, `06-explorer-suivies-${theme}`);
+    await page.getByText("Structures suivies", { exact: true }).click();
+    await page.getByText("Filtres", { exact: true }).click();
 
-    // Carte : sur le web, la liste reste avec un message (le rendu natif se vérifie sur l'APK).
-    await page.getByText("Carte", { exact: true }).click();
-    await expect(page.getByText("La carte est disponible dans l'appli sur téléphone")).toBeVisible();
-    await expect(rows.first()).toBeVisible();
-    await shot(page, `07-explorer-carte-repli-${theme}`);
-    await page.getByText("Liste", { exact: true }).click();
-
-    // Position facultative : jamais enregistrée.
-    await page.getByRole("button", { name: /Utiliser ma position/i }).click();
-    await expect(page.getByText(/non enregistrée/)).toBeVisible({ timeout: 30_000 });
-    await page.getByText("Distance", { exact: true }).click();
-    await expect(rows.first()).toContainText(/à \d+(,\d)? km|Toulouse|Narbonne/, { timeout: 30_000 });
+    // Position : jamais enregistrée.
     const me = await apiCall<{ profile: { departments: string[] } }>(cookie, "GET", "/me");
     expect(me.data.profile.departments).toEqual(["66"]);
 
     // --- Pros ---------------------------------------------------------------------------------------------------
     await page.getByText("Pros", { exact: true }).first().click();
-    await page.getByTestId("pros-q").fill("detailing");
+    await page.getByTestId("events-q").fill("detailing");
     const pros = page.getByTestId("pro-row");
     await expect(pros.filter({ hasText: "Detailing Hérault" })).toBeVisible({ timeout: 30_000 });
     await shot(page, `08-explorer-pros-${theme}`);

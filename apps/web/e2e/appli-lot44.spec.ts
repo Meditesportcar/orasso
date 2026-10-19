@@ -1,0 +1,242 @@
+import { mkdirSync } from "node:fs";
+import type { Page as ApiPage, EventCard, EventPublic } from "@orasso/shared";
+import { type Browser, expect, type Page, test } from "@playwright/test";
+import { auditPage } from "./audit";
+import { addVehicleApi, apiCall, MOBILE, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+
+// Lot 44, côté appli (version web de recette) : Explorer v2 (position refusée → repli sur le 66, tout du plus proche au
+// plus loin, filtres repliés, carte stylée rendue : canvas et style `orasso-<thème>`) et fiche événement v2 (affiche en
+// vedette, créneaux d'arrivée en deux plaques, action principale selon le profil, fermé / pas encore ouvert), plus la
+// candidature refusée sans la case « J'ai vu le créneau d'arrivée ». Deux thèmes, captures à 390 px.
+// Lancer avec APP_URL=http://localhost:8291 (relais isolé devant Metro), API et site seedés (glyphes servis par le site).
+const APP = process.env.APP_URL;
+const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-44-captures/appli";
+test.skip(!APP, "Appli : lancer avec APP_URL");
+
+type Theme = "beton" | "sable";
+const NOCTURNE = "nocturne-de-canet-2026";
+
+async function open(browser: Browser, theme: Theme) {
+  // Pas de permission de géolocalisation : la demande est refusée par le navigateur (repli sur le département).
+  const ctx = await browser.newContext({ viewport: MOBILE, baseURL: APP });
+  const page = await ctx.newPage();
+  await page.goto("/");
+  await page.evaluate((t) => {
+    localStorage.setItem("orasso.onboarded", "1");
+    localStorage.setItem("orasso.theme", t);
+  }, theme);
+  return { ctx, page };
+}
+
+async function afterOpening(page: Page) {
+  const skip = page.getByTestId("opening-skip");
+  if (await skip.isVisible().catch(() => false))
+    await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
+  await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
+}
+
+async function signIn(page: Page, email: string) {
+  await page.goto("/auth");
+  await afterOpening(page);
+  await page.getByLabel("E-mail").fill(email);
+  await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
+  await page.getByRole("button", { name: "Me connecter" }).click();
+  await page.waitForURL(/accueil|direct|scanner|candidatures/, { timeout: 30_000 });
+}
+
+async function shot(page: Page, name: string) {
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${DIR}/${name}.png` });
+}
+
+async function audit(page: Page) {
+  const a = await auditPage(page);
+  expect(a.greens).toEqual([]);
+  expect(a.horizontalScroll).toBe(false);
+  expect(a.truncated).toEqual([]);
+  expect(a.primaryButtons).toBeLessThanOrEqual(1);
+}
+
+/** Les distances affichées sur les cartes, dans l'ordre. */
+async function distances(page: Page): Promise<number[]> {
+  const texts = await page.getByTestId("event-km").allTextContents();
+  return texts.map((t) => Number(t.replace(" km", "").replace(",", ".")));
+}
+
+test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtres, carte stylée", async ({ browser }) => {
+  test.setTimeout(600_000);
+  mkdirSync(DIR, { recursive: true });
+  // Un passionné du 66 avec un véhicule (exposant).
+  const pseudo = `Explo44_${unique()}`.slice(0, 24);
+  const cookie = await signUpApi(pseudo);
+  await apiCall(cookie, "PATCH", "/me/profile", { departments: ["66"] });
+  await addVehicleApi(cookie, randomPlate());
+  for (const theme of ["beton", "sable"] as const) {
+    const { ctx, page } = await open(browser, theme);
+    await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+    await page.goto("/explorer");
+    await afterOpening(page);
+    // Demande à la première ouverture, puis refus → icône rouge et repli sur le 66.
+    await expect(page.getByTestId("position-ask")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("sort-line")).toContainText("autour du 66");
+    await shot(page, `explorer-demande-${theme}`);
+    await page.getByTestId("position-enable").click();
+    await expect(page.getByTestId("sort-line")).toContainText("Position refusée : autour du 66", { timeout: 30_000 });
+    await expect(page.getByTestId("gps-button")).toContainText("66");
+    await expect(page.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
+    expect(await page.getByTestId("event-row").count()).toBeGreaterThan(3);
+    const km = await distances(page);
+    expect(km.length).toBeGreaterThan(3);
+    expect([...km].sort((a, b) => a - b)).toEqual(km);
+    await expect(page.getByTestId("results-count")).toContainText("résultat");
+    await audit(page);
+    await shot(page, `explorer-liste-${theme}`);
+
+    // Filtres repliés : Format, Quand, Selon mes goûts.
+    await page.getByText("Filtres", { exact: true }).click();
+    await expect(page.getByTestId("explorer-filters")).toBeVisible();
+    await page.getByTestId("explorer-filters").getByText("Exposition", { exact: true }).click();
+    await expect(page.getByTestId("event-row").first()).toContainText("Exposition", { timeout: 30_000 });
+    for (const row of await page.getByTestId("event-row").allTextContents()) expect(row).toContain("Exposition");
+    await shot(page, `explorer-filtres-${theme}`);
+    await page.getByTestId("explorer-filters").getByText("Tous", { exact: true }).click();
+    await page.getByText("Mes affinités", { exact: true }).click();
+    await expect(page.getByTestId("sort-line")).toContainText("affinités");
+    await page.getByText("Mes affinités", { exact: true }).click();
+    await page.getByText("Filtres", { exact: true }).click();
+
+    // Carte stylée : canvas MapLibre, style du thème, étiquettes datées.
+    await page.getByText("Carte", { exact: true }).click();
+    const canvas = page.getByTestId("explorer-map-canvas");
+    await expect(canvas).toHaveAttribute("data-map-style", `orasso-${theme}`, { timeout: 45_000 });
+    await expect(canvas.locator("canvas.maplibregl-canvas")).toBeVisible();
+    await expect(canvas.locator('[data-testid="map-marker"], [data-testid="map-cluster"]').first()).toBeVisible();
+    await page.waitForTimeout(3000);
+    await shot(page, `explorer-carte-${theme}`);
+    await ctx.close();
+  }
+});
+
+test("Explorer : la carte suit le thème en direct et se replie sur le raster sans OpenFreeMap", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const { ctx, page } = await open(browser, "beton");
+  await page.route("https://tiles.openfreemap.org/**", (route) => route.abort());
+  await signIn(page, "kenji@orasso.local");
+  await page.goto("/explorer");
+  await afterOpening(page);
+  await page.getByText("Plus tard", { exact: true }).click({ timeout: 30_000 });
+  await page.getByText("Carte", { exact: true }).click();
+  const canvas = page.getByTestId("explorer-map-canvas");
+  await expect(canvas).toHaveAttribute("data-map-style", "orasso-beton-raster", { timeout: 45_000 });
+  await expect(canvas.locator("canvas.maplibregl-canvas")).toBeVisible();
+  await page.waitForTimeout(2000);
+  await shot(page, "explorer-carte-repli-raster-beton");
+  await ctx.close();
+});
+
+test("fiche v2 : affiche, créneaux, actions selon le profil, fermé, pas encore ouvert, case du créneau", async ({
+  browser,
+}) => {
+  test.setTimeout(600_000);
+  mkdirSync(DIR, { recursive: true });
+  const noct = await apiCall<EventPublic>(null, "GET", `/events/by-slug/${NOCTURNE}`);
+  expect(noct.data.arrivals.exhibitors).not.toBeNull();
+  const list = await apiCall<ApiPage<EventCard>>(null, "GET", "/events?limit=50");
+  const fullEvent = list.data.items.find((e) => e.remaining === 0);
+  // Un événement pas encore ouvert : créé par l'API de l'organisateur du seed si le seed n'en a pas.
+  const details = await Promise.all(
+    list.data.items.map((e) => apiCall<EventPublic>(null, "GET", `/events/by-slug/${e.slug}`)),
+  );
+  const soonEvent = details.map((d) => d.data).find((d) => Date.parse(d.registrationsOpenAt) > Date.now());
+
+  // Un exposant neuf (véhicule, 66) : « Candidater avec ma … », puis la candidature refusée sans la case.
+  const pseudo = `Fiche44_${unique()}`.slice(0, 24);
+  const cookie = await signUpApi(pseudo);
+  await apiCall(cookie, "PATCH", "/me/profile", { departments: ["66"] });
+  const vehicleId = await addVehicleApi(cookie, randomPlate());
+
+  for (const theme of ["beton", "sable"] as const) {
+    const { ctx, page } = await open(browser, theme);
+    await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+    await page.goto(`/e/${NOCTURNE}`);
+    await afterOpening(page);
+    await expect(page.getByTestId("event-hero")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("arrival-exhibitors")).toContainText("Exposants");
+    await expect(page.getByTestId("arrival-exhibitors")).toContainText(/Strict|Conseillé/);
+    if (noct.data.arrivals.public) await expect(page.getByTestId("arrival-public")).toBeVisible();
+    await expect(page.getByTestId("event-primary")).toContainText("Candidater avec ma");
+    await audit(page);
+    await shot(page, `fiche-ouverte-${theme}`);
+    await page.getByTestId("arrival-slots").scrollIntoViewIfNeeded();
+    await shot(page, `fiche-creneaux-${theme}`);
+
+    if (fullEvent) {
+      await page.goto(`/e/${fullEvent.slug}`);
+      await expect(page.getByTestId("event-closed")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("join-waitlist")).toBeVisible();
+      await shot(page, `fiche-fermee-${theme}`);
+    }
+    if (soonEvent) {
+      await page.goto(`/e/${soonEvent.slug}`);
+      await expect(page.getByTestId("event-soon")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("event-soon")).toContainText("Candidatures dès");
+      await shot(page, `fiche-pas-encore-ouverte-${theme}`);
+    }
+
+    if (theme === "beton") {
+      // Candidature : « Continuer » reste grisé tant que la case du créneau n'est pas cochée.
+      await page.goto(`/candidater/${NOCTURNE}`);
+      await page.getByRole("checkbox").first().click({ timeout: 30_000 });
+      await page.getByRole("button", { name: "Continuer" }).click();
+      await page.getByRole("checkbox", { name: /J'ai lu le règlement/ }).click();
+      await expect(page.getByTestId("arrival-seen")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Continuer" })).toBeDisabled();
+      await page.getByRole("checkbox", { name: /J'ai vu le créneau d'arrivée/ }).click();
+      await expect(page.getByRole("button", { name: "Continuer" })).toBeEnabled();
+      await shot(page, "candidature-case-creneau-beton");
+    }
+    await ctx.close();
+  }
+  // L'API refuse aussi la candidature sans la case (lot 47).
+  const refused = await apiCall(cookie, "POST", `/events/${noct.data.id}/applications`, {
+    vehicleIds: [vehicleId],
+    rulesAccepted: true,
+    followStructure: false,
+    newsletterOptIn: false,
+    companions: 0,
+  });
+  expect(refused.status).toBe(400);
+});
+
+test("fiche v2 : l'action principale suit le profil (visiteur, pro, organisateur)", async ({ browser }) => {
+  test.setTimeout(400_000);
+  const cases: Array<{ email: string; casquette?: string; expected: RegExp; name: string }> = [
+    {
+      email: "paul.photo@orasso.local",
+      expected: /Réserver mon entrée|Suivre l'organisateur|Organisateur suivi/,
+      name: "visiteur",
+    },
+    {
+      email: "garage@orasso.local",
+      casquette: "pro",
+      expected: /Suivre l'organisateur|Organisateur suivi/,
+      name: "pro",
+    },
+    { email: "damien@orasso.local", casquette: "organizer", expected: /Trier les candidatures/, name: "organisateur" },
+  ];
+  for (const c of cases) {
+    const { ctx, page } = await open(browser, "sable");
+    await signIn(page, c.email);
+    if (c.casquette) {
+      await page.goto("/moi");
+      await afterOpening(page);
+      await page.getByTestId(`casquette-${c.casquette}`).first().click();
+      await page.waitForTimeout(2000);
+    }
+    await page.goto(`/e/${NOCTURNE}`);
+    await afterOpening(page);
+    await expect(page.getByTestId("event-primary")).toHaveText(c.expected, { timeout: 30_000 });
+    await shot(page, `fiche-action-${c.name}-sable`);
+    await ctx.close();
+  }
+});
