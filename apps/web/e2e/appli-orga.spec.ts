@@ -133,7 +133,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await expect(page.getByTestId("orga-feed")).toContainText(announcement, { timeout: 20_000 });
 
   // --- Boîte : message groupé aux retenus ------------------------------------------------------------------------
-  await page.getByRole("button", { name: "Boîte", exact: true }).click();
+  await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
   await expect(page.getByRole("button", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(page, "07-boite-participants-beton");
   await page.getByRole("button", { name: "Groupés" }).click();
@@ -152,6 +152,8 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await shot(page, "10-boite-staff-beton");
 
   // --- Staff : relance d'un membre sans réponse, puis mode staff ------------------------------------------------
+  // Lot 40 : la Boîte est hors de la barre d'onglets ; ✕ ramène aux onglets.
+  await page.getByRole("button", { name: "Fermer" }).first().click();
   await tab(page, "Équipe").click();
   await pickOption(page, "Événement", /Nocturne de Canet/);
   await expect(page.getByTestId("orga-staff-member").first()).toBeVisible({ timeout: 20_000 });
@@ -191,9 +193,10 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await s.page.getByTestId("orga-event-row").filter({ hasText: "Salon Argelès" }).click();
   await expect(s.page.getByTestId("orga-outlook-banner")).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "22-evenement-sable");
-  await s.page.getByRole("button", { name: "Boîte", exact: true }).click();
+  await s.page.getByRole("button", { name: "Boîte", exact: true }).first().click();
   await expect(s.page.getByRole("button", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "23-boite-sable");
+  await s.page.getByRole("button", { name: "Fermer" }).first().click();
   await tab(s.page, "Équipe").click();
   await expect(s.page.getByTestId("team-member").first()).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "24-staff-sable");

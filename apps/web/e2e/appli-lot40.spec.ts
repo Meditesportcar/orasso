@@ -109,6 +109,8 @@ async function checkTab(page: Page, title: string | null) {
       return Math.round(el.getBoundingClientRect().height / line);
     });
     expect(lines, `« ${title} » sur une ligne`).toBeLessThanOrEqual(1);
+    const cut = await heading.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+    expect(cut, `« ${title} » sans points de suspension`).toBe(false);
   }
   const audit = await auditPage(page);
   expect(audit.greens).toEqual([]);

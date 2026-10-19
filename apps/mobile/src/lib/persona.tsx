@@ -112,8 +112,9 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
       const target = (to ?? landingOf(next)) as never;
       // Lot 35d : la navigation attend que la nouvelle casquette soit posée ; sinon la redirection « mauvais groupe »
       // de la racine voit l'ancienne casquette et renvoie vers son écran d'accueil (venant du survol d'une structure).
-      if (to) setTimeout(() => router.replace(target), 0);
-      else router.replace(target);
+      // Lot 40 : toujours différée, la redirection ramenant au même onglet de la casquette active (sans attendre, le
+      // Scanner du pro serait vu depuis la casquette précédente).
+      setTimeout(() => router.replace(target), 0);
     },
     [router],
   );

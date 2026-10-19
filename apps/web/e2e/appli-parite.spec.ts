@@ -532,7 +532,7 @@ test("compte : newsletter, export des données, clés d'accès renommées puis s
       ),
     );
     const { ctx, page } = await openApp(browser, email, theme);
-    await page.goto("/moi");
+    await page.goto("/reglages/confidentialite"); // Lot 40 : Mes données vit dans Confidentialité.
     await expect(page.getByTestId("moi-data")).toBeVisible({ timeout: 30_000 });
     const first = theme === "sable";
     await reveal(page, page.getByTestId("moi-data"));
@@ -576,6 +576,8 @@ test("compte : newsletter, export des données, clés d'accès renommées puis s
     await shot(page, "09-moi-donnees", theme);
 
     // Clés d'accès : liste, renommage, suppression.
+    await page.goto("/reglages/securite"); // Lot 40 : les clés d'accès vivent dans Sécurité.
+    await page.waitForTimeout(3500); // l'ouverture de l'appli rejouée au chargement
     await reveal(page, page.getByTestId("moi-passkeys"));
     await page.getByTestId("moi-passkeys").click();
     await expect(page.getByTestId("passkey-row")).toHaveCount(1, { timeout: 20_000 });

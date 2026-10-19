@@ -106,7 +106,7 @@ test("appli : conversation en direct avec le site, lu par, Boîte, demandes, dem
     await apiCall(cCookie, "POST", "/contact-requests", { pseudo: a, message: "Bonjour, ta voiture est superbe !" });
     // L'onglet Boîte (l'adresse `/boite` existe aussi dans les casquettes Organisateur et Prestataire).
     await page.goto("/accueil");
-    await page.getByRole("button", { name: "Boîte", exact: true }).click();
+    await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
     await expect(page.getByTestId("conversation-row").filter({ hasText: b })).toBeVisible({ timeout: 30_000 });
     await shot(page, `01-boite-messages-${theme}`);
     await page.getByLabel("Demandes").click();

@@ -1,6 +1,6 @@
 // Gabarits d'écran : le fond vivant, l'en-tête (AppBar) et la zone qui défile. Les zones de sécurité (encoche, barre de
 // gestes) sont passées à l'en-tête et à la barre d'onglets, comme le demande le README du système de design.
-import { AppBar, BigTitle, Button, Ground, tokens, useTheme } from "@orasso/design-system/native";
+import { AppBar, Button, Ground, tokens, useTheme } from "@orasso/design-system/native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -13,6 +13,7 @@ import { useInInbox } from "./InboxScope";
 import { JournalSheet } from "./JournalSheet";
 import { KeyboardSafe } from "./KeyboardSafe";
 import { OverlayProvider, OverlaySlot } from "./Overlay";
+import { TabTitle } from "./TabTitle";
 import { TopBar } from "./TopBar";
 
 const { space2, space3, space4, space6 } = tokens.spacing;
@@ -67,7 +68,7 @@ export function TabScreen({
         <SwipeEntry>
           <KeyboardSafe style={styles.fill}>
             <Body onRefresh={onRefresh}>
-              {title ? <BigTitle title={title} label={facts} /> : null}
+              {title ? <TabTitle title={title} label={facts} /> : null}
               {inInbox ? (
                 <Button
                   variant="plate"

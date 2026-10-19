@@ -3,7 +3,7 @@
 // le canal `event:{id}:triage`) et, dessous, la file par glissement, la liste d'attente ou le mode liste. Toutes les
 // règles (capacité, liste d'attente, délais, verrouillage) restent dans l'API : l'écran n'affiche que ce qu'elle répond.
 import {
-  BigTitle,
+
   Button,
   Chip,
   ChipRow,
@@ -26,6 +26,7 @@ import { useSession } from "@/lib/session";
 import { COUNTER_ACTIVE, counterCells, triageEvents } from "@/lib/triage";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
+import { TabTitle } from "@/ui/TabTitle";
 import { TopBar } from "@/ui/TopBar";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 import { Deck } from "./Deck";
@@ -107,7 +108,7 @@ export function TriageScreen() {
     <Ground animated={false} style={styles.fill}>
       <TopBar />
       <View style={styles.body}>
-        <BigTitle title={triageAppLabels.title} label={event?.title ?? structureName} />
+        <TabTitle title={triageAppLabels.title} label={event?.title ?? structureName} />
         {firstError && !event ? <OrgaFailure error={firstError} /> : null}
         {!event ? (
           <Plate kind="note" testID="triage-no-event">
