@@ -35,7 +35,7 @@ export default function ProLayout({ loaderData }: Route.ComponentProps) {
     <ThemeScope theme="sable">
       <Ground variant="site" fixed>
         <div className="orga">
-          <nav className="orga__side" aria-label="Espace pro">
+          <nav className="orga__side" aria-label="Espace pro" data-bar>
             <div className="orga__brand">
               <Monogram size={32} />
             </div>

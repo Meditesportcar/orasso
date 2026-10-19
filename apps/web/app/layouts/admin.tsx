@@ -66,7 +66,7 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
   return (
     <Ground variant="site" fixed>
       <div className="orga">
-        <nav className="orga__side" aria-label="Administration">
+        <nav className="orga__side" aria-label="Administration" data-bar>
           <div className="orga__brand">
             <Monogram size={32} />
           </div>

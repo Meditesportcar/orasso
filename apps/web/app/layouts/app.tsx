@@ -1,4 +1,4 @@
-import { AppBarAction, Ground, Icon, legacyTabSets, TabBar, type TabItem } from "@orasso/design-system/web";
+import { AppBarAction, Ground, Icon, legacyTabSets, TabBar, type TabItem, useTheme } from "@orasso/design-system/web";
 import {
   explorerLabels,
   moderationLabels,
@@ -6,6 +6,7 @@ import {
   SEARCH_MAX_LENGTH,
   SEARCH_MIN_LENGTH,
 } from "@orasso/shared";
+import { useEffect } from "react";
 import { Form, Outlet, useLocation, useRevalidator } from "react-router";
 
 import { SiteHeader, ThemeSwitch } from "../components/SiteChrome";
@@ -30,6 +31,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     emailVerified: me.user.emailVerified,
     // Lot 32 : compte suspendu (lecture seule) : bandeau avec le motif et « Contester ».
     suspension: me.suspension,
+    // Lot 38 : thème Automatique au centre du premier département (cookie orasso-dept, Paris sans secteur).
+    department: me.profile.departments[0] ?? null,
   };
 }
 
@@ -49,6 +52,8 @@ function activeTab(pathname: string): string {
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
   const revalidator = useRevalidator();
+  const { setDepartment } = useTheme();
+  useEffect(() => setDepartment(loaderData.department), [loaderData.department, setDepartment]);
   // Boîte et Journal en direct (lot 18) : un message, une demande ou une notification recharge les compteurs.
   useChannel(`user:${loaderData.userId}`, (m) => {
     if (m.type === "inbox.changed" || m.type === "conversation.updated" || m.type === "notification") {

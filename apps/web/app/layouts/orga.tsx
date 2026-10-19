@@ -87,7 +87,7 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
     <ThemeScope theme="sable">
       <Ground variant="site" fixed>
         <div className="orga">
-          <nav className="orga__side" aria-label="Espace organisateur">
+          <nav className="orga__side" aria-label="Espace organisateur" data-bar>
             <div className="orga__brand">
               <Monogram size={32} />
             </div>
