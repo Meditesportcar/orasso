@@ -33,7 +33,7 @@ import { kvGet, kvSet } from "@/lib/kv";
 import { appLinkOf, teamRequestTarget } from "@/lib/links";
 import { MotionPrefProvider, parseReduceMotion, REDUCE_MOTION_KEY } from "@/lib/motionPref";
 import { PersonaProvider, usePersona } from "@/lib/persona";
-import { homeOf, misplacedGroup } from "@/lib/personaModel";
+import { landingOf, misplacedGroup } from "@/lib/personaModel";
 import { registerThisDevice } from "@/lib/push";
 import { initSentry } from "@/lib/sentry";
 import { SessionProvider, useSession } from "@/lib/session";
@@ -97,7 +97,7 @@ function Shell() {
   // on revient au premier écran de la casquette active.
   useEffect(() => {
     if (status !== "in" || !navigation?.key) return;
-    if (misplacedGroup(persona, segments[0] as string | undefined)) router.replace(homeOf(persona));
+    if (misplacedGroup(persona, segments[0] as string | undefined)) router.replace(landingOf(persona) as never);
   }, [status, persona, segments, router, navigation?.key]);
 
   // Lot 32 : compte suspendu → l'écran « Compte suspendu » (motif, contestation) s'ouvre une fois par lancement.
@@ -120,7 +120,7 @@ function Shell() {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       // Décision sur une candidature de prestataire (lot 21) : l'écran Candidatures de la casquette Prestataire.
       if (response.notification.request.content.data?.screen === "provider_applications") {
-        choose({ kind: "provider" });
+        choose({ kind: "provider" }, "/(provider)/candidatures");
         return;
       }
       // Demande pour devenir staff (lot 35a) : l'écran Équipe de la structure, sous la casquette Organisateur.

@@ -29,7 +29,7 @@ export default function NouveauPrestataire() {
   /** Le profil existe : les casquettes sont relues, puis la casquette Prestataire s'ouvre (Candidatures, qui dit quoi compléter). */
   async function done() {
     await refreshMe();
-    choose({ kind: "provider" });
+    choose({ kind: "provider" }, "/(provider)/candidatures");
   }
 
   async function fromPro() {

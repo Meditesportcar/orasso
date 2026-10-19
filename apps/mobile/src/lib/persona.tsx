@@ -18,6 +18,7 @@ import {
   FAN_ENTRY,
   homeOf,
   isBaseKind,
+  landingOf,
   otherBadges,
   type Persona,
   parsePersona,
@@ -108,7 +109,7 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
     (next: Persona, to?: string) => {
       setStored(next);
       void kvSet(KEY, serializePersona(next));
-      const target = (to ?? homeOf(next)) as never;
+      const target = (to ?? landingOf(next)) as never;
       // Lot 35d : la navigation attend que la nouvelle casquette soit posée ; sinon la redirection « mauvais groupe »
       // de la racine voit l'ancienne casquette et renvoie vers son écran d'accueil (venant du survol d'une structure).
       if (to) setTimeout(() => router.replace(target), 0);

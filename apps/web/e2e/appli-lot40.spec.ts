@@ -90,7 +90,9 @@ async function choose(page: Page, kind: Kind) {
   await page.goto("/moi");
   await afterOpening(page);
   await page.getByTestId(`casquette-${kind}`).first().click();
-  await page.waitForURL(kind === "organizer" ? /\/direct/ : /\/accueil/, { timeout: 30_000 });
+  // Accueil « Bientôt » du pro et du prestataire (lot 43) : ils s'ouvrent sur un onglet rempli.
+  const landing = { organizer: /\/direct/, pro: /\/scanner/, provider: /\/candidatures/ };
+  await page.waitForURL(landing[kind], { timeout: 30_000 });
 }
 
 /** La barre d'onglets, le logotype, un grand titre sur une ligne ; audit des règles qui valent dans l'appli web. */
@@ -135,7 +137,7 @@ test("les 25 onglets des cinq casquettes du seed : barre, logotype, grand titre 
       await choose(page, kind);
       for (const [label, route, title] of BARS[kind]) {
         await page.getByRole("tab", { name: label, exact: true }).click();
-        await page.waitForURL(new RegExp(`/${route}(\\?|$)`), { timeout: 30_000 });
+        await expect(page).toHaveURL(new RegExp(`/${route}(\\?|$)`), { timeout: 30_000 });
         await checkTab(page, title);
         await shot(page, `${kind}-${route}-${theme}`);
       }

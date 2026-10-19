@@ -160,9 +160,7 @@ async function chooseCasquette(page: Page, kind: "organizer" | "pro", name?: str
     await page.waitForURL(/\/direct/, { timeout: 20_000 });
     return;
   }
-  // Lot 40 : la casquette Pro s'ouvre sur l'Accueil (au centre) ; le Scanner est le premier onglet.
-  await page.waitForURL(/\/accueil/, { timeout: 20_000 });
-  await page.getByRole("tab", { name: "Scanner" }).click();
+  // Lot 40 : la casquette Pro s'ouvre sur le Scanner tant que son Accueil est « Bientôt » (lot 43).
   await page.waitForURL(/\/scanner/, { timeout: 20_000 });
 }
 

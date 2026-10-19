@@ -50,9 +50,7 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     await expect(page.getByText("Mes casquettes")).toBeVisible({ timeout: 30_000 });
     await shot(page, `01-moi-casquettes-${theme}`);
     await page.getByTestId("casquette-pro").click();
-    // Lot 40 : la casquette Pro s'ouvre sur l'Accueil (au centre) ; le Scanner est le premier onglet.
-    await page.waitForURL(/\/accueil/);
-    await page.getByRole("tab", { name: "Scanner" }).click();
+    // Lot 40 : la casquette Pro s'ouvre sur le Scanner tant que son Accueil est « Bientôt » (lot 43).
     await page.waitForURL(/\/scanner/);
     await expect(page.getByText("Scanner").first()).toBeVisible();
     await shot(page, `02-scanner-attente-${theme}`);

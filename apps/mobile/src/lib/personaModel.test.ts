@@ -12,6 +12,7 @@ import {
   homeOf,
   isBaseKind,
   kindOfSegment,
+  landingOf,
   misplacedGroup,
   parsePersona,
   personaGroups,
@@ -91,6 +92,13 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(homeOf({ kind: "visitor" })).toBe("/(visitor)/accueil");
     expect(homeOf({ kind: "media", mediaProfileId: "m-1" })).toBe("/(media)/accueil");
     expect(homeOf({ kind: "organizer", structureId: "s-1" })).toBe("/(orga)/direct");
+  });
+
+  it("on ouvre une casquette sur un onglet rempli tant que son Accueil est « Bientôt »", () => {
+    expect(landingOf({ kind: "pro", proProfileId: "p-1" })).toBe("/(pro)/scanner");
+    expect(landingOf({ kind: "provider" })).toBe("/(provider)/candidatures");
+    expect(landingOf(VISITOR)).toBe("/(visitor)/accueil");
+    expect(landingOf({ kind: "organizer", structureId: "s-1" })).toBe("/(orga)/direct");
   });
 
   it("chemin d'un onglet, `null` quand la barre ne l'a pas", () => {

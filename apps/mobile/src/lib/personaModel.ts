@@ -92,6 +92,17 @@ export function homeOf(persona: Persona): (typeof personaHomes)[AppPersonaKind] 
   return personaHomes[persona.kind];
 }
 
+/**
+ * Où ouvrir une casquette (lancement, changement de casquette sans destination) : son Accueil, sauf tant qu'il est
+ * « Bientôt » (lot 43) — le Scanner pour le pro, les Candidatures pour le prestataire. Le logotype mène toujours à
+ * l'Accueil (`homeOf`).
+ */
+export function landingOf(persona: Persona): string {
+  if (persona.kind === "pro") return "/(pro)/scanner";
+  if (persona.kind === "provider") return "/(provider)/candidatures";
+  return homeOf(persona);
+}
+
 /** Chemin d'un onglet de la casquette (`/(visitor)/sorties`), `null` si sa barre n'a pas cet onglet. */
 export function tabHref(kind: AppPersonaKind, route: string): string | null {
   if (kind === "admin") return null;
