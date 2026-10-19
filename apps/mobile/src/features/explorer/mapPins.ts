@@ -1,9 +1,16 @@
 // Carte de l'Explorer : les épingles et la vue de départ, en fonctions pures (testées). Une épingle n'existe que pour ce
 // qui est public par nature (un événement publié, un pro publié) et qui a une position : jamais une personne.
-import { type EventCard, eventFormatLabels, type ProCard, proActivityLabels } from "@orasso/shared";
+// Lot 44 : l'épingle porte son genre (étiquette datée d'un événement, plaque d'un pro) et son texte ; le fond de carte
+// est le style Orasso du paquet de style (`mapStyle`, repli raster compris).
+import { pinDateLabel } from "@orasso/design-system";
+import { type EventCard, eventFormatLabels, type LatLng, type ProCard, proActivityLabels } from "@orasso/shared";
+import type { ReactNode } from "react";
 
 export type MapPin = {
   id: string;
+  kind: "event" | "pro";
+  /** Texte du marqueur : « SAM 24 » (événement), le nom (pro). */
+  label: string;
   lat: number;
   lng: number;
   title: string;
@@ -24,6 +31,8 @@ export function eventPins(events: EventCard[]): MapPin[] {
       ? [
           {
             id: e.id,
+            kind: "event" as const,
+            label: pinDateLabel(e.startsAt),
             lat: e.lat,
             lng: e.lng,
             title: e.title,
@@ -41,6 +50,8 @@ export function proPins(pros: ProCard[]): MapPin[] {
       ? [
           {
             id: p.slug,
+            kind: "pro" as const,
+            label: p.name,
             lat: p.lat,
             lng: p.lng,
             title: p.name,
@@ -53,7 +64,7 @@ export function proPins(pros: ProCard[]): MapPin[] {
 }
 
 /** Vue de départ : la France sans épingle, un zoom de ville avec une seule, sinon le cadre qui les contient toutes. */
-export function viewFor(pins: readonly MapPin[]): MapView {
+export function viewFor(pins: readonly Pick<MapPin, "lat" | "lng">[]): MapView {
   const first = pins[0];
   if (!first) return FRANCE_VIEW;
   if (pins.length === 1) return { center: [first.lng, first.lat], zoom: 10 };
@@ -73,19 +84,24 @@ export function viewFor(pins: readonly MapPin[]): MapView {
 }
 
 /** Clé qui change quand les épingles changent : la carte repart alors de la vue qui convient. */
-export const pinsKey = (pins: readonly MapPin[]): string => pins.map((p) => p.id).join("|");
+export const pinsKey = (pins: readonly Pick<MapPin, "id">[]): string => pins.map((p) => p.id).join("|");
 
-/** Même fond de carte que le site (tuiles OpenStreetMap, trame raster). */
-export const OSM_STYLE = {
-  version: 8 as const,
-  sources: {
-    osm: {
-      type: "raster" as const,
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      maxzoom: 19,
-      attribution: "© OpenStreetMap",
-    },
-  },
-  layers: [{ id: "osm", type: "raster" as const, source: "osm" }],
+/** Origine du site qui sert les glyphes Archivo étroit : `EXPO_PUBLIC_SITE_URL`, sinon l'API (même hôte en ligne). */
+export function mapGlyphsOrigin(): string | null {
+  const raw = process.env.EXPO_PUBLIC_SITE_URL || process.env.EXPO_PUBLIC_API_URL || "";
+  return raw ? raw.replace(/\/+$/, "") : null;
+}
+
+/** Adresse des tuiles vectorielles remplacée pour la recette du repli (`EXPO_PUBLIC_MAP_TILES_URL`). */
+export const mapTilesUrl = (): string | null => process.env.EXPO_PUBLIC_MAP_TILES_URL || null;
+
+/** Propriétés communes de la carte (téléphone et navigateur). */
+export type ExplorerMapProps = {
+  pins: MapPin[];
+  /** Position de l'appareil (point bleu), seulement si elle est activée. */
+  me?: LatLng | null;
+  selectedId?: string | null;
+  onSelect: (pin: MapPin) => void;
+  /** Aperçu sous la carte (la carte de l'événement touché). */
+  children?: ReactNode;
 };

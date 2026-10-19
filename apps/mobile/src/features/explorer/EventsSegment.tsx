@@ -1,114 +1,99 @@
-// Explorer, segment Événements (lot 29) : liste ou carte, tri par affinités (S34) / date / distance, filtres en feuille
-// (format, catégorie, département, dates, rayon), « Utiliser ma position » facultatif. Tri et filtres : dans l'API.
-import { Button, Chip, ChipRow, TextField } from "@orasso/design-system/native";
-import { type EventSort, explorerLabels } from "@orasso/shared";
+// Explorer v2, segment Événements (lot 44, `s-explore`) : la ligne d'ordre (« Tous les événements, du plus proche au
+// plus loin », position refusée → autour du département favori), le nombre de résultats, puis les cartes v2 (la
+// première en vedette avec son affiche) ou la carte stylée avec l'aperçu de l'événement touché. Tri et filtres : API.
+import { Button, EmptyState, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { type EventCard, explorerLabels, explorerV2Labels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
+import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
-import { useApi } from "@/lib/useApi";
-import { Muted } from "@/ui/Muted";
+import { nowMs } from "@/lib/clock";
 import { Notice } from "@/ui/Notice";
-import { ExplorerMap, mapSupported } from "./ExplorerMap";
-import { EventFiltersSheet } from "./FiltersSheets";
+import { EventCardV2 } from "./EventCardV2";
+import { ExplorerMap } from "./ExplorerMap";
 import { eventPins } from "./mapPins";
-import { activeFilters, emptyEventFilters, eventQuery } from "./queries";
-import { EventRow } from "./rows";
-import { useMyPosition } from "./useMyPosition";
+import { type EventFilters, eventQuery } from "./queries";
+import type { ExplorerPosition } from "./useExplorerPosition";
 import { usePaged } from "./usePaged";
 
-const SORTS: { id: EventSort; label: string }[] = [
-  { id: "affinity", label: explorerLabels.sortAffinity },
-  { id: "date", label: explorerLabels.sortDate },
-  { id: "distance", label: explorerLabels.sortDistance },
-];
+const { space2 } = tokens.spacing;
 
-export function EventsSegment({ initialQ = "" }: { initialQ?: string }) {
+/** La ligne d'ordre au-dessus de la liste. */
+export function sortLine(filters: EventFilters, status: ExplorerPosition["status"], dept: string | null): string {
+  if (filters.affinity) return L.sortAffinity;
+  if (filters.followed) return L.sortFollowed;
+  if (status === "on") return L.sortOn;
+  if (!dept) return L.sortByDate;
+  return status === "denied" ? L.sortDenied(dept) : L.sortAround(dept);
+}
+
+export function EventsSegment({
+  q,
+  filters,
+  position,
+  dept,
+  view,
+}: {
+  q: string;
+  filters: EventFilters;
+  position: ExplorerPosition;
+  dept: string | null;
+  view: "list" | "map";
+}) {
+  const { t } = useTheme();
   const router = useRouter();
-  const categories = useApi(() => api.categories(), [], { cacheKey: "ref.categories" });
-  const [q, setQ] = useState(initialQ);
-  const [filters, setFilters] = useState(emptyEventFilters);
-  const [sort, setSort] = useState<EventSort>("affinity");
-  const [view, setView] = useState<"list" | "map">("list");
-  const [sheet, setSheet] = useState(false);
-  const me = useMyPosition();
-  const mode = view === "map" ? "map" : "list";
-
+  const [selected, setSelected] = useState<string | null>(null);
+  const ready = position.status !== "checking" && position.status !== "asking";
   const list = usePaged(
-    (cursor) => api.exploreEvents(eventQuery(q, filters, sort, me.position, mode, cursor)),
-    [q, filters, sort, me.position, mode],
+    (cursor) => api.exploreEvents(eventQuery(q, filters, position.position, view, new Date(nowMs()), cursor)),
+    [q, filters, position.position, view],
     q ? 300 : 0,
+    ready,
   );
+  const items = list.items ?? [];
   const pins = useMemo(() => eventPins(list.items ?? []), [list.items]);
-  const noDistance =
-    sort !== "date" &&
-    !me.position &&
-    (list.items?.length ?? 0) > 0 &&
-    (list.items ?? []).every((e) => e.distanceKm == null);
-  const showMap = view === "map";
-  const mapHere = showMap && mapSupported;
+  const picked: EventCard | undefined = items.find((e) => e.id === selected);
+  const open = (e: EventCard) => router.push(`/e/${e.slug}`);
 
   return (
     <>
-      <TextField
-        label={explorerLabels.searchTitle}
-        placeholder="Nom d'événement, ville…"
-        value={q}
-        onChangeText={setQ}
-        autoCapitalize="none"
-        returnKeyType="search"
-        testID="events-q"
-      />
-      <ChipRow>
-        {SORTS.map((s) => (
-          <Chip key={s.id} selected={sort === s.id} onPress={() => setSort(s.id)}>
-            {s.label}
-          </Chip>
-        ))}
-      </ChipRow>
-      <ChipRow>
-        <Chip selected={view === "list"} onPress={() => setView("list")}>
-          {explorerLabels.list}
-        </Chip>
-        <Chip selected={view === "map"} onPress={() => setView("map")}>
-          {explorerLabels.map}
-        </Chip>
-      </ChipRow>
-      <Button variant="secondary" icon="list" onPress={() => setSheet(true)} fullWidth testID="open-filters">
-        {activeFilters(filters) > 0 ? `${explorerLabels.filters} (${activeFilters(filters)})` : explorerLabels.filters}
-      </Button>
-      {me.position ? (
-        <>
-          <Muted variant="caption">{explorerLabels.usingPosition}</Muted>
-          <Button variant="plate" icon="close" onPress={me.clear} fullWidth>
-            {explorerLabels.stopPosition}
-          </Button>
-        </>
-      ) : (
-        <Button
-          variant="secondary"
-          icon="place"
-          loading={me.status === "asking"}
-          onPress={() => void me.request()}
-          fullWidth
-        >
-          {explorerLabels.usePosition}
-        </Button>
-      )}
-      {me.status === "denied" ? <Notice>{explorerLabels.positionDenied}</Notice> : null}
-      {noDistance ? <Muted variant="caption">{explorerLabels.positionUnknown}</Muted> : null}
+      <View style={styles.sortline} testID="sort-line">
+        <Text variant="meta" color={t.color.inkMuted} style={styles.sortText}>
+          {sortLine(filters, position.status, dept)}
+        </Text>
+        {list.items ? (
+          <Text variant="meta" color={t.color.inkMuted} testID="results-count">
+            {L.results(items.length, list.hasMore)}
+          </Text>
+        ) : null}
+      </View>
 
       {list.error ? <Notice tone="error">{list.error}</Notice> : null}
-      {list.items === null && !list.error ? <Muted variant="body">Chargement…</Muted> : null}
-      {list.items?.length === 0 ? <Muted variant="body">{explorerLabels.eventsEmpty}</Muted> : null}
+      {list.items === null && !list.error ? (
+        <View style={styles.loading} testID="explorer-loading">
+          <OLoader label={L.loading} />
+        </View>
+      ) : null}
+      {list.items?.length === 0 ? <EmptyState title={L.emptyTitle} text={L.emptyText} /> : null}
 
-      {showMap ? <ExplorerMap pins={pins} onOpen={(pin) => router.push(pin.href as never)} /> : null}
-      {mapHere
-        ? null
-        : list.items?.map((event) => (
-            <EventRow key={event.id} event={event} hints={sort !== "date" || me.position !== null} />
-          ))}
-      {!mapHere && list.hasMore ? (
+      {view === "map" && list.items ? (
+        <ExplorerMap pins={pins} me={position.position} selectedId={selected} onSelect={(p) => setSelected(p.id)}>
+          {picked ? (
+            <EventCardV2 event={picked} onPress={() => open(picked)} />
+          ) : (
+            <Text variant="caption" color={t.color.inkMuted}>
+              {pins.length > 0 ? L.mapHint : explorerLabels.mapNoPosition}
+            </Text>
+          )}
+        </ExplorerMap>
+      ) : null}
+      {view === "list"
+        ? items.map((event, i) => (
+            <EventCardV2 key={event.id} event={event} big={i === 0} onPress={() => open(event)} />
+          ))
+        : null}
+      {view === "list" && list.hasMore ? (
         <Button
           variant="secondary"
           icon="add"
@@ -119,14 +104,12 @@ export function EventsSegment({ initialQ = "" }: { initialQ?: string }) {
           {explorerLabels.more}
         </Button>
       ) : null}
-
-      <EventFiltersSheet
-        visible={sheet}
-        value={filters}
-        categories={categories.data ?? []}
-        onClose={() => setSheet(false)}
-        onApply={setFilters}
-      />
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  sortline: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
+  sortText: { flex: 1 },
+  loading: { alignItems: "center", paddingVertical: space2 },
+});

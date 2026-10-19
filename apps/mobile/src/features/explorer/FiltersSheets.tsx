@@ -1,20 +1,13 @@
-// Filtres de l'Explorer en feuille : format, catégorie, département, dates, rayon (événements) ; activité, département,
-// rayon (pros). On règle dans un brouillon, « Appliquer » le valide : la liste ne se recharge pas à chaque choix.
-import { Button, SelectField, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import {
-  type Category,
-  departments,
-  eventFormatLabels,
-  eventFormats,
-  explorerLabels,
-  proActivities,
-  proActivityLabels,
-} from "@orasso/shared";
+// Filtres des pros de l'Explorer en feuille : activité, département, rayon. On règle dans un brouillon, « Appliquer » le
+// valide : la liste ne se recharge pas à chaque choix. Les filtres des événements sont repliés sous l'en-tête
+// (Explorer v2, lot 44 : Format, Quand, Selon mes goûts).
+import { Button, SelectField, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { departments, explorerLabels, proActivities, proActivityLabels } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { AppSheet } from "@/ui/AppSheet";
-import { type EventFilters, emptyEventFilters, emptyProFilters, type ProFilters, RADII } from "./queries";
+import { emptyProFilters, type ProFilters, RADII } from "./queries";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -26,106 +19,6 @@ const radiusOptions = [
   { value: "", label: explorerLabels.filterAll },
   ...RADII.map((r) => ({ value: String(r), label: `${r} km` })),
 ];
-
-function Actions({ onApply, onReset }: { onApply: () => void; onReset: () => void }) {
-  return (
-    <View style={styles.actions}>
-      <Button variant="secondary" icon="check" onPress={onApply} fullWidth>
-        {explorerLabels.filtersApply}
-      </Button>
-      <Button variant="plate" icon="undo" onPress={onReset} fullWidth>
-        {explorerLabels.filtersReset}
-      </Button>
-    </View>
-  );
-}
-
-export function EventFiltersSheet({
-  visible,
-  value,
-  categories,
-  onClose,
-  onApply,
-}: {
-  visible: boolean;
-  value: EventFilters;
-  categories: Category[];
-  onClose: () => void;
-  onApply: (next: EventFilters) => void;
-}) {
-  const { t } = useTheme();
-  const [draft, setDraft] = useState(value);
-  useEffect(() => {
-    if (visible) setDraft(value);
-  }, [visible, value]);
-  const set = <K extends keyof EventFilters>(key: K, v: EventFilters[K]) => setDraft((d) => ({ ...d, [key]: v }));
-  return (
-    <AppSheet visible={visible} onClose={onClose} accessibilityLabel={explorerLabels.filters} maxHeight={0.9}>
-      <Text variant="title" color={t.color.ink}>
-        {explorerLabels.filters}
-      </Text>
-      <SelectField
-        label={explorerLabels.filterFormat}
-        value={draft.format}
-        onValueChange={(v) => set("format", v)}
-        options={[
-          { value: "", label: explorerLabels.filterAll },
-          ...eventFormats.map((f) => ({ value: f, label: eventFormatLabels[f] })),
-        ]}
-      />
-      <SelectField
-        label={explorerLabels.filterCategory}
-        value={draft.categoryId}
-        onValueChange={(v) => set("categoryId", v)}
-        options={[
-          { value: "", label: explorerLabels.filterAllFeminine },
-          ...categories.map((c) => ({ value: c.id, label: c.label })),
-        ]}
-      />
-      <SelectField
-        label={explorerLabels.filterDepartment}
-        value={draft.department}
-        onValueChange={(v) => set("department", v)}
-        options={departmentOptions}
-      />
-      <TextField
-        label={explorerLabels.filterFrom}
-        value={draft.from}
-        onChangeText={(v) => set("from", v)}
-        placeholder="AAAA-MM-JJ"
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="numbers-and-punctuation"
-        maxLength={10}
-        testID="filter-from"
-      />
-      <TextField
-        label={explorerLabels.filterTo}
-        value={draft.to}
-        onChangeText={(v) => set("to", v)}
-        placeholder="AAAA-MM-JJ"
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="numbers-and-punctuation"
-        maxLength={10}
-        testID="filter-to"
-      />
-      <SelectField
-        label={explorerLabels.filterRadius}
-        value={draft.radiusKm ? String(draft.radiusKm) : ""}
-        onValueChange={(v) => set("radiusKm", v ? Number(v) : null)}
-        options={radiusOptions}
-      />
-      <Actions
-        onApply={() => {
-          onApply(draft);
-          onClose();
-        }}
-        onReset={() => setDraft(emptyEventFilters)}
-      />
-    </AppSheet>
-  );
-}
 
 export function ProFiltersSheet({
   visible,
@@ -169,13 +62,22 @@ export function ProFiltersSheet({
         onValueChange={(v) => setDraft((d) => ({ ...d, radiusKm: v ? Number(v) : null }))}
         options={radiusOptions}
       />
-      <Actions
-        onApply={() => {
-          onApply(draft);
-          onClose();
-        }}
-        onReset={() => setDraft(emptyProFilters)}
-      />
+      <View style={styles.actions}>
+        <Button
+          variant="secondary"
+          icon="check"
+          onPress={() => {
+            onApply(draft);
+            onClose();
+          }}
+          fullWidth
+        >
+          {explorerLabels.filtersApply}
+        </Button>
+        <Button variant="plate" icon="undo" onPress={() => setDraft(emptyProFilters)} fullWidth>
+          {explorerLabels.filtersReset}
+        </Button>
+      </View>
     </AppSheet>
   );
 }

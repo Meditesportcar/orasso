@@ -1,39 +1,57 @@
 import { describe, expect, it } from "vitest";
 
-import { activeFilters, dayBound, emptyEventFilters, emptyProFilters, eventQuery, proQuery } from "./queries";
+import {
+  activeFilters,
+  dayBound,
+  emptyEventFilters,
+  emptyProFilters,
+  eventQuery,
+  proQuery,
+  whenRange,
+} from "./queries";
 
-describe("réglages de l'Explorer → API", () => {
-  it("rien de réglé : seuls le tri et la taille de page partent", () => {
-    const q = eventQuery("", emptyEventFilters, "affinity", null, "list");
-    expect(q).toMatchObject({ sort: "affinity", limit: 20 });
+// Mercredi 21 octobre 2026, 15 h à Paris.
+const NOW = new Date("2026-10-21T13:00:00Z");
+
+describe("réglages de l'Explorer v2 → API", () => {
+  it("rien de réglé : tout, du plus proche au plus loin (distance), 20 par page", () => {
+    const q = eventQuery("", emptyEventFilters, null, "list", NOW);
+    expect(q).toMatchObject({ sort: "distance", limit: 20 });
     expect(q.q).toBeUndefined();
     expect(q.lat).toBeUndefined();
-    expect(q.radiusKm).toBeUndefined();
+    expect(q.followed).toBeUndefined();
+    expect(q.from).toBeUndefined();
   });
 
-  it("filtres, texte, position et carte (100 résultats)", () => {
+  it("format, Quand, Mes affinités, Structures suivies, position et carte (100 résultats)", () => {
     const q = eventQuery(
       "  rivesaltes ",
-      { format: "exhibition", categoryId: "c1", department: "66", from: "2026-11-01", to: "2026-11-30", radiusKm: 50 },
-      "distance",
+      { format: "exhibition", when: "weekend", affinity: true, followed: true },
       { lat: 42.7, lng: 2.9 },
       "map",
+      NOW,
       "abc",
     );
     expect(q).toMatchObject({
       q: "rivesaltes",
       format: "exhibition",
-      categoryId: "c1",
-      department: "66",
-      sort: "distance",
-      radiusKm: 50,
+      sort: "affinity",
+      followed: "1",
       lat: 42.7,
       lng: 2.9,
       limit: 100,
       cursor: "abc",
+      from: "2026-10-23T22:00:00.000Z",
+      to: "2026-10-25T22:59:00.000Z",
     });
-    expect(q.from).toMatch(/^2026-10-31T23:00:00\.000Z$|^2026-11-01T0[01]:00:00\.000Z$/);
-    expect(q.to).toBeDefined();
+  });
+
+  it("Quand : ce week-end (en cours le samedi et le dimanche), ce mois-ci, toutes dates", () => {
+    expect(whenRange("all", NOW)).toEqual({});
+    // Dimanche 25 octobre : le week-end en cours (samedi 24 à 0 h).
+    expect(whenRange("weekend", new Date("2026-10-25T10:00:00Z")).from).toBe("2026-10-23T22:00:00.000Z");
+    expect(whenRange("month", NOW)).toEqual({ from: NOW.toISOString(), to: "2026-10-31T22:59:00.000Z" });
+    expect(whenRange("month", new Date("2026-12-10T10:00:00Z")).to).toBe("2026-12-31T22:59:00.000Z");
   });
 
   it("dates : minuit de Paris au début, 23 h 59 à la fin, illisible = ignorée", () => {
@@ -51,7 +69,7 @@ describe("réglages de l'Explorer → API", () => {
 
   it("compte les filtres actifs", () => {
     expect(activeFilters(emptyEventFilters)).toBe(0);
-    expect(activeFilters({ ...emptyEventFilters, format: "show", radiusKm: 10 })).toBe(2);
+    expect(activeFilters({ ...emptyEventFilters, format: "show", followed: true })).toBe(2);
     expect(activeFilters({ ...emptyProFilters, activity: "parts" })).toBe(1);
   });
 });

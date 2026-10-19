@@ -17,6 +17,8 @@ export type ExploreEventsQuery = Position & {
   from?: string;
   to?: string;
   sort?: EventSort;
+  /** Lot 44 : seulement les structures suivies. */
+  followed?: "1";
   structureId?: string;
   scope?: "upcoming" | "past";
   limit?: number;
