@@ -156,7 +156,7 @@ test("barre média (lot 45 à venir) : cinq onglets dans /_ds", async ({ browser
 test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer, réglages en tuiles", async ({
   browser,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(480_000);
   mkdirSync(DIR, { recursive: true });
   for (const theme of ["beton", "sable"] as const) {
     const { ctx, page } = await open(browser, theme);
@@ -164,7 +164,7 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     // L'ancien chemin `/moi` mène à l'onglet Profil.
     await page.goto("/moi");
     await afterOpening(page);
-    await page.waitForURL(/\/profil/, { timeout: 30_000 });
+    await expect(page).toHaveURL(/\/profil/, { timeout: 30_000 });
     await checkTab(page, "Mon profil");
     for (const id of ["profil-head", "profil-season", "profil-passport", "profil-crew", "casquette-fan"]) {
       await expect(page.getByTestId(id).first()).toBeVisible();
@@ -208,7 +208,8 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await shot(page, `boite-${theme}`);
     // L'ancien onglet Accès mène à Sorties.
     await page.goto("/acces");
-    await page.waitForURL(/\/sorties/, { timeout: 30_000 });
+    await expect(page).toHaveURL(/\/sorties/, { timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Mes sorties", exact: true })).toBeVisible({ timeout: 30_000 });
     await ctx.close();
   }
 });

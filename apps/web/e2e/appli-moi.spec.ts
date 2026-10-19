@@ -63,6 +63,8 @@ async function reveal(page: Page, testId: string) {
   if (section && !page.url().includes(`/reglages/${section}`)) {
     await page.goto(`/reglages/${section}`);
     await page.getByTestId(testId).first().waitFor({ timeout: 30_000 });
+    // Un chargement de page rejoue l'ouverture de l'appli (3 s) : on attend qu'elle se termine avant d'appuyer.
+    await page.waitForTimeout(3500);
   }
   const el = page.getByTestId(testId).first();
   await el.scrollIntoViewIfNeeded();
@@ -85,10 +87,11 @@ test("Moi : profil, aperçu public, notifications, public / privé, secteur, ray
   });
   await openApp(page, "sable");
   await signIn(page, email);
+  // Compte tout neuf : adresse non confirmée, bandeau avec « Renvoyer » en tête de Mon profil (lot 40).
+  await page.goto("/moi");
+  await expect(page.getByTestId("email-banner")).toBeVisible({ timeout: 30_000 });
   await page.goto("/reglages/profil");
   await expect(page.getByTestId("moi-profile")).toBeVisible({ timeout: 30_000 });
-  // Compte tout neuf : adresse non confirmée, bandeau avec « Renvoyer ».
-  await expect(page.getByTestId("email-banner")).toBeVisible();
   await shot(page, "01-moi-profil-sable");
 
   // Profil : pseudo (disponibilité), description, photo → visibles dans /me/public-preview.
@@ -286,7 +289,8 @@ test("Casquettes : feuille Mes casquettes, bascule vers (orga) et (pro), appui l
   // Sarah_66 (seed) : co-organisatrice de MéditeSportCar (candidatures à trier) et propriétaire de Roues Libres 66.
   const sarah = await login("sarah@orasso.local");
   const me = await apiCall<{ personas: { kind: string; label: string; badge: number }[] }>(sarah, "GET", "/me");
-  expect(me.data.personas.map((p) => p.kind)).toEqual(["fan", "organizer", "organizer"]);
+  // Lot 40 : Sarah n'a pas de véhicule actif, sa casquette de base est le visiteur.
+  expect(me.data.personas.map((p) => p.kind)).toEqual(["visitor", "organizer", "organizer"]);
   expect(me.data.personas.some((p) => p.badge > 0)).toBe(true);
 
   for (const theme of ["sable", "beton"] as const) {
