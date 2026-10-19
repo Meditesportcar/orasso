@@ -65,7 +65,10 @@ export async function seedPosters() {
   }
 
   // --- Affiches générées ------------------------------------------------------------------------------------------
-  const todo = await db.query.events.findMany({ where: isNull(t.events.posterStyle), orderBy: [asc(t.events.startsAt)] });
+  const todo = await db.query.events.findMany({
+    where: isNull(t.events.posterStyle),
+    orderBy: [asc(t.events.startsAt)],
+  });
   if (!todo.length) {
     console.log("Affiches des événements déjà générées.");
     return;
@@ -89,11 +92,7 @@ export async function seedPosters() {
       await storage.put(photoKey, data);
     }
     const settings: PosterSettings = { photoKey, style, title: posterTitleOf(e.title) };
-    const [row] = await db
-      .update(t.events)
-      .set(posterColumns(settings))
-      .where(eq(t.events.id, e.id))
-      .returning();
+    const [row] = await db.update(t.events).set(posterColumns(settings)).where(eq(t.events.id, e.id)).returning();
     if (row) {
       await posterService.regenerate(row);
       made++;

@@ -35,6 +35,7 @@ export function neon(ctx: PosterCtx): PosterLayout {
         fill: C.accent,
         align: "center",
         skewX: -8,
+        maxWidth: 40 * cqw,
         rows: [
           { text: p.D, font: "narrow", size: 15 * cqw, color: C.dark },
           { text: p.M, font: "narrow", size: 3.4 * cqw, color: C.dark, spacing: 0.12, gapBefore: 1.6 * cqw },

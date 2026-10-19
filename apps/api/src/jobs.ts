@@ -16,6 +16,7 @@ import { crewRegistrationService } from "./modules/crews/registration";
 import { highGradePreview } from "./modules/events/high-grade";
 import { eventJobs } from "./modules/events/jobs";
 import { nearbyService } from "./modules/events/nearby";
+import { posterService } from "./modules/events/poster/service";
 import { fieldService } from "./modules/field/service";
 import { sponsoredService } from "./modules/home/sponsored";
 import { moderationService } from "./modules/moderation/service";
@@ -82,6 +83,8 @@ export const handlers: Record<JobName, (data: Payload) => Promise<unknown>> = {
   "points.regrade": () => adminSettingsService.regrade(),
   // Lot 36 : invitation à installer l'appli (le service revérifie : appli jamais ouverte, e-mail jamais envoyé).
   "account.app-install": (d) => accountService.sendAppInstallReminder(d.userId ?? ""),
+  // Lot 47 : affiche générée (rendu échoué pendant la requête, structure renommée ou nouveau logo) ; reprise par pg-boss.
+  "event.poster-render": (d) => posterService.renderJob(d.eventId ?? ""),
 };
 
 /**
@@ -138,8 +141,8 @@ export async function startJobs({ work = true } = {}): Promise<PgBoss> {
   }
   const previous = deps.jobs;
   deps.jobs = {
-    async send(name, data, startAfter) {
-      await boss.send(name, data, startAfter ? { startAfter } : {});
+    async send(name, data, startAfter, options) {
+      await boss.send(name, data, { ...(startAfter ? { startAfter } : {}), ...options });
     },
   };
   // Lot 26 (relecture) : une fois pg-boss arrêté (fin d'un bloc du seed, d'un script), la file précédente revient

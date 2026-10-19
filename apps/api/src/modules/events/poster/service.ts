@@ -9,11 +9,13 @@ import {
   type PosterSettings,
   posterStyles,
 } from "@orasso/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { db } from "../../../db/client";
 import { events, structures, uploads } from "../../../db/schema";
+import { deps, now } from "../../../lib/deps";
 import { validation } from "../../../lib/errors";
+import { captureError } from "../../../lib/sentry";
 import type { Viewer } from "../../../lib/session";
 import { storage } from "../../../lib/storage";
 import type { Tx } from "../../../lib/tx";
@@ -60,16 +62,21 @@ export async function eventPosterInput(
   };
 }
 
-/** Colonnes des réglages d'affiche ; les rendus sont remis à zéro (refaits par `regenerate`). */
+/**
+ * Colonnes des réglages d'affiche. Les rendus en place restent jusqu'à ce qu'un nouveau rendu réussisse (`regenerate`
+ * les remplace) ; seul le retrait de l'affiche (`null`) les efface.
+ */
 export function posterColumns(p: PosterSettings | null): Partial<typeof events.$inferInsert> {
   return {
     posterPhotoKey: p?.photoKey ?? null,
     posterStyle: p?.style ?? null,
     posterTitle: p?.title ?? null,
-    posterPostKey: null,
-    posterStoryKey: null,
+    ...(p ? {} : { posterPostKey: null, posterStoryKey: null }),
   };
 }
+
+/** Reprise d'un rendu échoué : cinq essais espacés (1 min, puis de plus en plus), une seule tâche en file par événement. */
+export const POSTER_RENDER_JOB = { retryLimit: 5, retryDelay: 60, retryBackoff: true } as const;
 
 /** Vrai si `next` (corps d'un PATCH) ne change rien aux réglages enregistrés. */
 export function samePoster(next: PosterSettings | null | undefined, current: PosterSettings | null): boolean {
@@ -119,6 +126,7 @@ export const posterService = {
     const settings = posterSettingsOf(e);
     if (!settings) return e;
     const keys = await this.renderForEvent(e, settings);
+    // Rendu périmé (date, ville, photo, style ou titre changés pendant le rendu) : il ne s'écrit pas.
     const [row] = await db
       .update(events)
       .set({ posterPostKey: keys.postKey, posterStoryKey: keys.storyKey })
@@ -128,6 +136,8 @@ export const posterService = {
           eq(events.posterStyle, settings.style),
           eq(events.posterTitle, settings.title),
           eq(events.startsAt, e.startsAt),
+          e.city === null ? isNull(events.city) : eq(events.city, e.city),
+          settings.photoKey === null ? isNull(events.posterPhotoKey) : eq(events.posterPhotoKey, settings.photoKey),
         ),
       )
       .returning();
@@ -138,6 +148,56 @@ export const posterService = {
     }
     await this.removeRenders(e);
     return row;
+  },
+
+  /**
+   * Rendu après un enregistrement : il ne fait **jamais** échouer la requête. En cas d'échec, l'erreur part vers
+   * Sentry et une tâche `event.poster-render` reprend le rendu (pg-boss, essais espacés). Rend l'événement à jour.
+   */
+  async refresh(e: EventRow, userId?: string | null): Promise<EventRow> {
+    try {
+      return await this.regenerate(e);
+    } catch (error) {
+      captureError(error, userId);
+      console.error(`Affiche de l'événement ${e.id} : rendu échoué, repris par une tâche.`, error);
+      await this.schedule(e.id).catch((err) => captureError(err, userId));
+      return e;
+    }
+  },
+
+  /** Met le rendu de l'affiche d'un événement en file (une seule tâche en attente par événement). */
+  schedule(eventId: string): Promise<void> {
+    return deps.jobs.send("event.poster-render", { eventId }, undefined, {
+      singletonKey: `poster:${eventId}`,
+      ...POSTER_RENDER_JOB,
+    });
+  },
+
+  /** Tâche `event.poster-render` : rend l'affiche avec les réglages du moment ; une erreur relance la reprise. */
+  async renderJob(eventId: string): Promise<void> {
+    const e = await db.query.events.findFirst({ where: eq(events.id, eventId) });
+    if (!e || !posterSettingsOf(e)) return;
+    await this.regenerate(e);
+  },
+
+  /**
+   * Nom ou logo d'une structure changé : ses affiches générées (événements ni annulés ni terminés) sont refaites, par
+   * des tâches (la requête de l'organisateur n'attend pas).
+   */
+  async scheduleForStructure(structureId: string): Promise<number> {
+    const rows = await db
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          eq(events.structureId, structureId),
+          isNotNull(events.posterStyle),
+          ne(events.status, "cancelled"),
+          gt(events.endsAt, now()),
+        ),
+      );
+    for (const r of rows) await this.schedule(r.id).catch((err) => captureError(err));
+    return rows.length;
   },
 
   /** Efface les rendus d'un état précédent de l'événement (jamais l'affiche perso ni la photo). */

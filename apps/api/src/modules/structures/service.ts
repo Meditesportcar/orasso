@@ -51,6 +51,12 @@ import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
 import { staffRequestsService } from "../staff/requests";
 
+/** Lot 47 : affiches générées à refaire (import différé : le module des affiches dépend des envois de fichiers). */
+async function schedulePosters(structureId: string) {
+  const { posterService } = await import("../events/poster/service");
+  await posterService.scheduleForStructure(structureId);
+}
+
 export type StructureRow = typeof structures.$inferSelect;
 
 const YEAR_MS = 365 * 86_400_000;
@@ -236,6 +242,8 @@ export const structuresService = {
     const [s] = await db.update(structures).set({ logoKey: key }).where(eq(structures.id, id)).returning();
     if (!s) throw notFound("Structure introuvable");
     if (previous) await storage.remove(previous);
+    // Lot 47 : le logo rond est sur les affiches générées de la structure : elles sont refaites par des tâches.
+    await schedulePosters(id);
     return toOrganizer(s, access);
   },
 
@@ -306,6 +314,8 @@ export const structuresService = {
       .where(eq(structures.id, id))
       .returning();
     if (!s) throw notFound("Structure introuvable");
+    // Lot 47 : le nom de la structure est sur ses affiches générées (initiales) : elles sont refaites par des tâches.
+    if (s.name !== current.name) await schedulePosters(id);
     return toOrganizer(s, access);
   },
 

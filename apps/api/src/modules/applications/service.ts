@@ -889,9 +889,17 @@ export const applicationsService = {
     tx: Tx,
     after: After,
     event: EventRow,
-    input: { userId: string; vehicleId: string; eventDayId?: string | null },
+    input: {
+      userId: string;
+      vehicleId: string;
+      eventDayId?: string | null;
+      arrivalSeen?: boolean;
+      arrivalNote?: string | null;
+    },
   ): Promise<ApplicationRow> {
     const t = now();
+    // Lot 47 : même règle qu'une candidature (« J'ai vu » obligatoire avec un créneau exposants).
+    const arrival = arrivalAnswer(event, input, t);
     // Plusieurs jours (lot 26) : le jour choisi par l'invité, mêmes règles qu'une candidature.
     const { dayId } = await daysRepo.checkChoice(tx, event, input.eventDayId);
     const mine = await tx
@@ -932,6 +940,7 @@ export const applicationsService = {
           status: to,
           source: "invitation",
           rulesAcceptedAt: t,
+          ...arrival,
           followStructure: false,
           decidedAt: t,
           waitlistRank,

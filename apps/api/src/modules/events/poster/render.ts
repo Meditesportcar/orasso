@@ -31,9 +31,35 @@ function ctxOf(input: PosterInput, format: PosterFormat, width?: number): Poster
 /**
  * Rend l'affiche au format demandé ; `width` (aperçu) réduit tout en proportion. Toujours sous 600 Ko : PNG en
  * couleurs vraies, sinon en palette (tramée, puis sans trame) ; une photo trop chargée (grain, feuillage) est enfin
- * adoucie avant un dernier rendu.
+ * adoucie avant un dernier rendu. Trois rendus au plus en même temps (le reste attend son tour).
  */
-export async function render(input: PosterInput, format: PosterFormat, width?: number): Promise<Buffer> {
+export function render(input: PosterInput, format: PosterFormat, width?: number): Promise<Buffer> {
+  return withRenderSlot(() => posterEngine.render(input, format, width));
+}
+
+// --- Sémaphore global : un rendu occupe le processeur une à quelques centaines de millisecondes ----------------------
+export const MAX_CONCURRENT_RENDERS = 3;
+let active = 0;
+const waiting: (() => void)[] = [];
+
+async function withRenderSlot<T>(fn: () => Promise<T>): Promise<T> {
+  while (active >= MAX_CONCURRENT_RENDERS) await new Promise<void>((resolve) => waiting.push(resolve));
+  active++;
+  try {
+    return await fn();
+  } finally {
+    active--;
+    waiting.shift()?.();
+  }
+}
+
+/** Rendus en cours (tests du sémaphore). */
+export const activeRenders = () => active;
+
+/** Le moteur, remplaçable dans les tests (rendu qui échoue, rendu lent). */
+export const posterEngine = { render: renderPng };
+
+async function renderPng(input: PosterInput, format: PosterFormat, width?: number): Promise<Buffer> {
   const raw = await pixels(input, format, width);
   let out = await raw().png({ compressionLevel: 6 }).toBuffer();
   for (const step of PALETTES) {

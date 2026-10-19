@@ -28,6 +28,8 @@ export type PosterFont = keyof typeof POSTER_FONTS;
 export type TextImage = { data: Buffer; width: number; height: number; capTop: number; cap: number };
 
 const ACCENTED = /[̀-ͯ]/;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: on retire justement les caractères de contrôle.
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g;
 const metrics = new Map<string, { cap: number; accent: number }>();
 
 async function rawLine(content: string, font: PosterFont, size: number, color: string, letter: string) {
@@ -76,7 +78,8 @@ export async function textLine(
   o: { font: PosterFont; size: number; color: string; spacing?: number; maxWidth?: number },
 ): Promise<TextImage> {
   const size = Math.max(4, Math.round(o.size));
-  const text = (content.trim() || "·").toUpperCase();
+  // Caractères de contrôle retirés (pango refuserait le balisage) ; émojis et écritures de droite à gauche passent.
+  const text = (content.replace(CONTROL, " ").trim() || "·").toUpperCase();
   // Interlettrage pango : en 1024es de point (72 dpi : 1 pt = 1 px).
   const letter = o.spacing ? ` letter_spacing="${Math.round(o.spacing * size * 1024)}"` : "";
   const [out, m] = await Promise.all([rawLine(text, o.font, size, o.color, letter), fontMetrics(o.font, size)]);

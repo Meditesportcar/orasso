@@ -67,7 +67,8 @@ export type BoxLayer = {
   kind: "box";
   x: number;
   y: number;
-  /** Largeur fixe, sinon ajustée au texte. */
+  /** Largeur fixe, sinon ajustée au texte (au plus `maxWidth`). */
+  maxWidth?: number;
   width?: number;
   padding: [number, number, number, number];
   fill: string;

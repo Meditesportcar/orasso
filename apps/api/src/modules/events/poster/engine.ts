@@ -140,7 +140,8 @@ async function boxLayer(l: BoxLayer): Promise<Placed> {
   );
   const [pt, pr, pb, pl] = l.padding;
   const inner = Math.max(...rows.map((r) => r.width));
-  const width = Math.ceil(l.width ?? inner + pl + pr);
+  // Largeur ajustée au texte, jamais au-delà de `maxWidth` : une ligne trop longue (ville) est réduite, jamais coupée.
+  const width = Math.ceil(l.width ?? Math.min(inner + pl + pr, l.maxWidth ?? Number.POSITIVE_INFINITY));
   // Lignes empilées par leurs capitales.
   let y = pt;
   const overlays: OverlayOptions[] = [];

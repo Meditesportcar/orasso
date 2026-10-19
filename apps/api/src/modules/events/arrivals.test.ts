@@ -113,6 +113,31 @@ describe("créneaux d'arrivée de l'événement", () => {
     expect(res.json.arrivals).toEqual(NOCTURNE);
   });
 
+  it("un créneau peut passer minuit (23:30 – 00:30) ; plus de 12 h, non", async () => {
+    const e = await createEvent(structureId, { startsAt: paris(10, 24, 23), endsAt: paris(10, 25, 3) });
+    const ok = await call(orga, "PATCH", `/events/${e.id}`, {
+      arrivals: { exhibitors: { from: "23:30", to: "00:30", strict: true }, public: { from: "00:15" } },
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.json.arrivals.exhibitors).toMatchObject({ from: "23:30", to: "00:30" });
+    const bad = await call(orga, "PATCH", `/events/${e.id}`, {
+      arrivals: { exhibitors: { from: "23:30", to: "12:00" }, public: null },
+    });
+    expect(bad.json.error.details.reason).toBe("exhibitors_order");
+  });
+
+  it("les jours d'un événement sur plusieurs jours gardent les créneaux (revalidés aux nouvelles bornes)", async () => {
+    const e = await nocturne();
+    const ok = await call(orga, "PUT", `/events/${e.id}/days`, {
+      days: [
+        { date: "2026-10-24", startTime: "10:00", endTime: "20:00" },
+        { date: "2026-10-25", startTime: "10:00", endTime: "12:00" },
+      ],
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.json.arrivals).toEqual(NOCTURNE);
+  });
+
   it("un organisateur d'une autre structure ne touche pas aux créneaux", async () => {
     const e = await nocturne(null);
     const other = await signUp("Autre", { twoFactor: true });
@@ -217,6 +242,35 @@ describe("case « J'ai vu » à la candidature", () => {
       .where(eq(applications.id, member?.id ?? ""));
     expect(after?.arrivalSeenAt).toBeTruthy();
     expect(after?.arrivalNote).toBe("Vers 19 h");
+  });
+});
+
+describe("invitation acceptée", () => {
+  it("même règle : « J'ai vu » obligatoire avec un créneau exposants, créneau donné à l'écran", async () => {
+    const e = await createEvent(structureId, {
+      startsAt: paris(10, 24, 19),
+      endsAt: paris(10, 24, 23, 30),
+      admission: "invite_only",
+    });
+    expect((await call(orga, "PATCH", `/events/${e.id}`, { arrivals: NOCTURNE })).status).toBe(200);
+    const kenji = await signUp("Kenji");
+    const car = await createVehicle(kenji.id, ref);
+    expect((await call(orga, "POST", `/events/${e.id}/invitations`, { pseudos: ["Kenji"] })).json.created).toBe(1);
+    const mine = await call(kenji, "GET", "/me/event-invitations");
+    const inv = mine.json[0];
+    expect(inv.event.arrivalExhibitors).toEqual(NOCTURNE.exhibitors);
+    const refused = await call(kenji, "POST", `/event-invitations/${inv.id}/accept`, { vehicleId: car.id });
+    expect(refused.status).toBe(400);
+    expect(refused.json.error.code).toBe("arrival_not_seen");
+    const ok = await call(kenji, "POST", `/event-invitations/${inv.id}/accept`, {
+      vehicleId: car.id,
+      arrivalSeen: true,
+      arrivalNote: "Vers 19 h",
+    });
+    expect(ok.status).toBe(200);
+    const [row] = await db.select().from(applications).where(eq(applications.userId, kenji.id));
+    expect(row?.arrivalSeenAt).toBeTruthy();
+    expect(row?.arrivalNote).toBe("Vers 19 h");
   });
 });
 

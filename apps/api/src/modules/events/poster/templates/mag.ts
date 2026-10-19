@@ -45,6 +45,7 @@ export function mag(ctx: PosterCtx): PosterLayout {
       x: 4 * cqw,
       y: nmBottom - nmSize * 0.7 - 1.2 * cqh - pillH - 1 * cqw,
       padding: [0.8 * cqw, 1.6 * cqw, 0.8 * cqw, 1.6 * cqw],
+      maxWidth: 92 * cqw,
       fill: C.accent,
       align: "left",
       rows: [{ text: p.pl, font: "narrow", size: pillSize, color: C.dark, spacing: 0.12 }],

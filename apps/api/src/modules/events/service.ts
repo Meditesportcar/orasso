@@ -353,7 +353,7 @@ export const eventsService = {
       return row;
     });
     // Lot 47 : affiche générée rendue après l'enregistrement (hors transaction : le rendu prend une seconde).
-    if (poster) await posterService.regenerate(e);
+    if (poster) await posterService.refresh(e, v.user.id);
     return this.getForOrganizer(v, e.id);
   },
 
@@ -436,17 +436,17 @@ export const eventsService = {
       after(() => notificationsService.kick());
       return row;
     });
-    // Lot 47 : affiche générée rendue après l'enregistrement ; régénérée d'elle-même si la date ou le lieu change.
+    // Lot 47 : affiche générée rendue après l'enregistrement (jamais bloquant : reprise par une tâche) ; régénérée
+    // d'elle-même si la date ou la ville change. Les rendus en place restent jusqu'au nouveau rendu réussi.
     if (poster) {
-      await posterService.regenerate(updated);
-      await posterService.removeRenders(before);
+      await posterService.refresh(updated, v.user.id);
     } else if (poster === null) {
       await posterService.removeRenders(before);
     } else if (
       posterSettingsOf(updated) &&
       (updated.startsAt.getTime() !== before.startsAt.getTime() || updated.city !== before.city)
     ) {
-      await posterService.regenerate(updated);
+      await posterService.refresh(updated, v.user.id);
     }
     return this.getForOrganizer(v, updated.id);
   },
@@ -475,6 +475,8 @@ export const eventsService = {
       if (input.days.length) {
         resolved = resolveDays(input.days, current.timezone);
         if (!resolved.ok) throw validation(daysErrors[resolved.error], { field: "days", reason: resolved.error });
+        // Lot 47 : les créneaux d'arrivée restent cohérents avec les nouvelles bornes.
+        assertArrivals(arrivalsOf(current), resolved.startsAt, resolved.endsAt, current.timezone);
       }
       const next = resolved?.ok ? resolved.days : [];
       const existing = await daysRepo.list(id, tx);
@@ -537,7 +539,7 @@ export const eventsService = {
     // Lot 47 : le premier jour change la date de l'affiche générée.
     const fresh = await eventsRepo.byId(id);
     if (posterSettingsOf(fresh) && fresh.startsAt.getTime() !== e.startsAt.getTime()) {
-      await posterService.regenerate(fresh);
+      await posterService.refresh(fresh, v.user.id);
     }
     return this.getForOrganizer(v, id);
   },
@@ -688,7 +690,7 @@ export const eventsService = {
       return copy.id;
     });
     // Lot 47 : l'affiche générée de la copie est rendue avec sa nouvelle date.
-    await posterService.regenerate(await eventsRepo.byId(copyId));
+    await posterService.refresh(await eventsRepo.byId(copyId), v.user.id);
     return this.getForOrganizer(v, copyId);
   },
 
@@ -746,7 +748,7 @@ export const eventsService = {
     const s = await structureById(e.structureId);
     const rows: EventRow[] = [];
     // Lot 47 : chaque occurrence a son affiche, à sa date (rendues l'une après l'autre).
-    for (const x of ids) rows.push(await posterService.regenerate(await eventsRepo.byId(x)));
+    for (const x of ids) rows.push(await posterService.refresh(await eventsRepo.byId(x), v.user.id));
     return rows.map((r) => card(r, s, r.capacity));
   },
 
@@ -780,15 +782,15 @@ export const eventsService = {
   async generatePoster(v: Viewer, id: string, settings: PosterSettings): Promise<EventOrganizer> {
     const { e } = await organizerEventWrite(v, id);
     if (e.status === "cancelled") throw conflict("conflict", "Événement annulé");
-    const row = await withTx(async (tx) => {
+    const updated = await withTx(async (tx) => {
       const current = await eventsRepo.lockForUpdate(tx, id);
       await posterService.acceptPhoto(tx, v, current.posterPhotoKey, settings.photoKey);
-      const [updated] = await tx.update(events).set(posterColumns(settings)).where(eq(events.id, id)).returning();
-      if (!updated) throw notFound("Événement introuvable");
-      return { updated, current };
+      const [row] = await tx.update(events).set(posterColumns(settings)).where(eq(events.id, id)).returning();
+      if (!row) throw notFound("Événement introuvable");
+      return row;
     });
-    await posterService.regenerate(row.updated);
-    await posterService.removeRenders(row.current);
+    // Les anciens rendus ne s'effacent qu'une fois le nouveau rendu écrit (`regenerate`).
+    await posterService.refresh(updated, v.user.id);
     return this.getForOrganizer(v, id);
   },
 

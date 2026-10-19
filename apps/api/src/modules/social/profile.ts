@@ -18,6 +18,7 @@ import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { crewsService } from "../crews/service";
+import { eventPosterUrl } from "../events/card";
 import { type Profile, profilesRepo } from "../profiles/repo";
 import { vehiclesRepo } from "../vehicles/repo";
 import { vehicleBrief, vehicleLabel, vehiclePublic } from "../vehicles/serializers";
@@ -85,6 +86,7 @@ async function profileEvents(userId: string, at: Date) {
       startsAt: events.startsAt,
       city: events.city,
       posterKey: events.posterKey,
+      posterPostKey: events.posterPostKey,
       structureName: structures.name,
     })
     .from(applications)
@@ -122,7 +124,7 @@ async function profileEvents(userId: string, at: Date) {
       title: e.title,
       startsAt: e.startsAt.toISOString(),
       city: e.city,
-      posterUrl: storage.url(e.posterKey),
+      posterUrl: eventPosterUrl(e),
       structureName: e.structureName,
     })),
     past: { count: past.length, titles: past.slice(0, 5).map((e) => e.title) },
