@@ -57,7 +57,10 @@ async function toWebp(input: Buffer, purpose: UploadPurpose) {
     const side = SIZE[purpose];
     return await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS })
       .rotate()
-      .resize(side, side, { fit: purpose === "crew_logo" || purpose === "media_logo" ? "cover" : "inside", withoutEnlargement: true })
+      .resize(side, side, {
+        fit: purpose === "crew_logo" || purpose === "media_logo" ? "cover" : "inside",
+        withoutEnlargement: true,
+      })
       .webp({ quality: 80 })
       .toBuffer({ resolveWithObject: true });
   } catch {
