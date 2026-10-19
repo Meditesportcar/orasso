@@ -254,7 +254,7 @@
 .g-photos li:has(.g-blur[open]) {
   grid-column: 1 / -1;
 }
-.g-blur summary {
+.g-blur > summary.o-t-label {
   cursor: pointer;
 }
 .g-photos li:has(.g-blur[open]) > a {
