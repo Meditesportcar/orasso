@@ -14,6 +14,7 @@ import {
   isMultiDay,
   lockAt,
   type MyStaffEvent,
+  mediaLabels,
   type PassRevokedReason,
   providerTypeLabel,
   type StaffRole,
@@ -34,6 +35,7 @@ import {
   eventStaff,
   events,
   eventZones,
+  mediaProfiles,
   profiles,
   scanEvents,
   structureMembers,
@@ -448,6 +450,13 @@ async function accessEntries(
   const providers = await loadProviders(
     rows.flatMap((r) => (r.app.providerProfileId ? [r.app.providerProfileId] : [])),
   );
+  // Lot 45 : accréditation presse, « Presse · Sud Cars » (le nom vient du profil média).
+  const mediaIds = [...new Set(rows.flatMap((r) => (r.app.mediaProfileId ? [r.app.mediaProfileId] : [])))];
+  const mediaNames = new Map(
+    (mediaIds.length ? await db.select().from(mediaProfiles).where(inArray(mediaProfiles.id, mediaIds)) : []).map(
+      (m) => [m.id, m.name],
+    ),
+  );
   // Lot 26 : plusieurs jours, dernière lecture reçue par candidature (arrivés du jour d'un « tout l'événement »).
   const lastSeen = new Map<string, Date>();
   if (dayDates.size) {
@@ -508,6 +517,7 @@ async function accessEntries(
     }
     const prov = app.providerProfileId ? providers.get(app.providerProfileId) : undefined;
     const provType = prov ? providerTypeLabel(prov.type as VendorTypeCode, prov.customType) : null;
+    const media = app.kind === "media" ? (mediaNames.get(app.mediaProfileId ?? "") ?? "") : null;
     const entry: AccessListEntry = {
       passId: pass.id,
       applicationId: app.id,
@@ -515,11 +525,19 @@ async function accessEntries(
       revokedReason: null,
       pseudo: profile.pseudo,
       // Prestataire : « Food truck · La Caravane » (§ 6.2) ; l'écran de scan dit « Prestataire · Food truck ».
-      vehicleLabel: prov ? `${provType} · ${prov.name}` : v ? vehicleLabel(v) : null,
+      vehicleLabel:
+        media !== null
+          ? mediaLabels.pressLabel(media)
+          : prov
+            ? `${provType} · ${prov.name}`
+            : v
+              ? vehicleLabel(v)
+              : null,
       vehicleType: v?.vehicleType ?? null,
       kind: app.kind,
-      providerType: provType,
-      providerName: prov?.name ?? null,
+      // Média : résultat de scan « Presse », nom du média à la place du pseudo.
+      providerType: media !== null ? mediaLabels.scanKind : provType,
+      providerName: media ?? prov?.name ?? null,
       categories: v ? v.categories.map((c) => c.category.slug) : [],
       plateHint: plate ? plate.slice(0, 3) : null,
       plateHash: plate ? plateHash(event.plateSalt, plate) : null,

@@ -8,9 +8,11 @@ import { crewNotificationLabels } from "../notifications/crews";
 import { eventNotificationLabels } from "../notifications/events";
 import { garageNotificationLabels } from "../notifications/garage";
 import { invitationNotificationLabels } from "../notifications/invitations";
+import { mediaNotificationLabels } from "../notifications/media";
 import { messagingNotificationLabels } from "../notifications/messaging";
 import { moderationNotificationLabels } from "../notifications/moderation";
 import { pointsNotificationLabels } from "../notifications/points";
+import { providersV2NotificationLabels } from "../notifications/providers-v2";
 import { socialNotificationLabels } from "../notifications/social";
 import { staffNotificationLabels } from "../notifications/staff";
 import { weatherNotificationLabels } from "../notifications/weather";
@@ -43,4 +45,6 @@ export const notificationTypeLabels: Record<NotificationType, string> = {
   ...invitationNotificationLabels,
   ...afterEventNotificationLabels,
   ...adminNotificationLabels,
+  ...mediaNotificationLabels,
+  ...providersV2NotificationLabels,
 };

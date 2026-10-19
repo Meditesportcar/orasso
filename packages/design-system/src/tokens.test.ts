@@ -187,6 +187,18 @@ describe("surcouche DA v2 (tokens.v2.json, lot 38)", () => {
     expect(tokens.color.sable.inkMuted).toBe("#4f493f");
   });
 
+  it("fond battle (lot 39) : lampe à sodium et contre-jour froid du prototype en Béton, rien en Sable", () => {
+    expect(tokens.groundFx.beton.battleLamp).toContain("rgba(255,204,92,0.55)");
+    expect(tokens.groundFx.beton.battleSpill).toContain("rgba(233,184,36,0.22)");
+    expect(tokens.groundFx.beton.battleRim).toBe(
+      "radial-gradient(ellipse 95% 60% at -4% 108%, rgba(110,130,175,0.12), transparent 70%)",
+    );
+    for (const name of ["battleLamp", "battleSpill", "battleRim"] as const) {
+      expect(tokens.groundFx.sable[name]).toBe("none");
+    }
+    expect(block('[data-theme="beton"]')).toContain("--fx-battle-rim: radial-gradient(ellipse 95% 60% at -4% 108%");
+  });
+
   it("plate-field : graphite clair sous l'encre crème d'une plaque, dans les deux thèmes", () => {
     for (const theme of THEME_IDS) {
       expect(tokens.color[theme].plateField).toBe("#363941");

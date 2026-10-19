@@ -1,7 +1,7 @@
 // Gabarits d'écran : le fond vivant, l'en-tête (AppBar) et la zone qui défile. Les zones de sécurité (encoche, barre de
 // gestes) sont passées à l'en-tête et à la barre d'onglets, comme le demande le README du système de design.
-import { AppBar, Button, Ground, tokens, useTheme } from "@orasso/design-system/native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { AppBar, Button, Ground, OliveActivityProvider, tokens, useTheme } from "@orasso/design-system/native";
+import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -49,6 +49,8 @@ export function TabScreen({
   const { refreshMe, me } = useSession();
   const router = useRouter();
   const inInbox = useInInbox();
+  // Lot 39 : le O vivant et le fond se mettent en pause quand l'écran n'est plus affiché.
+  const focused = useIsFocused();
   const [journal, setJournal] = useState(false);
   // Compteurs de la Boîte et du garage, casquettes (un véhicule ajouté fait passer de visiteur à exposant) à jour à
   // chaque retour sur un onglet.
@@ -59,38 +61,40 @@ export function TabScreen({
   );
   const unread = me?.counts.unreadNotifications ?? 0;
   return (
-    <OverlayProvider>
-      <Ground animated={!still} style={styles.fill}>
-        <TopBar
-          inboxOn={inInbox}
-          onClose={inInbox ? () => (router.canGoBack() ? router.back() : router.replace("/")) : undefined}
-        />
-        <SwipeEntry>
-          <KeyboardSafe style={styles.fill}>
-            <Body onRefresh={onRefresh}>
-              {title ? <TabTitle title={title} label={facts} /> : null}
-              {inInbox ? (
-                <Button
-                  variant="plate"
-                  icon="bell"
-                  next
-                  fullWidth
-                  onPress={() => setJournal(true)}
-                  testID="inbox-journal"
-                >
-                  {unread > 0 ? `Notifications · ${unread}` : "Notifications"}
-                </Button>
-              ) : null}
-              {children}
-            </Body>
-            {footer ? <View style={styles.footer}>{footer}</View> : null}
-          </KeyboardSafe>
-        </SwipeEntry>
-        {overlays}
-        <OverlaySlot />
-        {inInbox ? <JournalSheet visible={journal} onClose={() => setJournal(false)} /> : null}
-      </Ground>
-    </OverlayProvider>
+    <OliveActivityProvider active={focused}>
+      <OverlayProvider>
+        <Ground animated={!still} style={styles.fill}>
+          <TopBar
+            inboxOn={inInbox}
+            onClose={inInbox ? () => (router.canGoBack() ? router.back() : router.replace("/")) : undefined}
+          />
+          <SwipeEntry>
+            <KeyboardSafe style={styles.fill}>
+              <Body onRefresh={onRefresh}>
+                {title ? <TabTitle title={title} label={facts} /> : null}
+                {inInbox ? (
+                  <Button
+                    variant="plate"
+                    icon="bell"
+                    next
+                    fullWidth
+                    onPress={() => setJournal(true)}
+                    testID="inbox-journal"
+                  >
+                    {unread > 0 ? `Notifications · ${unread}` : "Notifications"}
+                  </Button>
+                ) : null}
+                {children}
+              </Body>
+              {footer ? <View style={styles.footer}>{footer}</View> : null}
+            </KeyboardSafe>
+          </SwipeEntry>
+          {overlays}
+          <OverlaySlot />
+          {inInbox ? <JournalSheet visible={journal} onClose={() => setJournal(false)} /> : null}
+        </Ground>
+      </OverlayProvider>
+    </OliveActivityProvider>
   );
 }
 
@@ -106,19 +110,22 @@ export function FlowScreen({
   onRefresh,
   overlays,
 }: Common & { title: string; facts?: string; counter?: string; onClose: () => void }) {
+  const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   return (
-    <OverlayProvider>
-      <Ground animated={!still} style={styles.fill}>
-        <AppBar kind="flow" title={title} facts={facts} counter={counter} onClose={onClose} safeTop={insets.top} />
-        <KeyboardSafe style={styles.fill}>
-          <Body onRefresh={onRefresh}>{children}</Body>
-          {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
-        </KeyboardSafe>
-        {overlays}
-        <OverlaySlot />
-      </Ground>
-    </OverlayProvider>
+    <OliveActivityProvider active={focused}>
+      <OverlayProvider>
+        <Ground animated={!still} style={styles.fill}>
+          <AppBar kind="flow" title={title} facts={facts} counter={counter} onClose={onClose} safeTop={insets.top} />
+          <KeyboardSafe style={styles.fill}>
+            <Body onRefresh={onRefresh}>{children}</Body>
+            {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
+          </KeyboardSafe>
+          {overlays}
+          <OverlaySlot />
+        </Ground>
+      </OverlayProvider>
+    </OliveActivityProvider>
   );
 }
 

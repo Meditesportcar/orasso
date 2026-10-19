@@ -13,6 +13,14 @@
   --press-scale: 0.97;
   --shake-amplitude: 7px;
   --shake-duration: 320ms;
+  /* Le O vivant et le fond « battle » (lot 39) : motion.ts `olive` et `battle`. */
+  --olive-open: 3000ms;
+  --olive-park: 320ms;
+  --olive-orbit: 1400ms;
+  --battle-opacity: 0.18;
+}
+[data-theme="sable"] {
+  --battle-opacity: 0.1;
 }
 
 /* Ce qui arrive se gare : park jusqu'au dépassement, puis inout jusqu'à la place. */

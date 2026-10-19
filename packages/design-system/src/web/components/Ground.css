@@ -41,6 +41,14 @@
   background: var(--fx-halo);
   transform-origin: 95% 0;
 }
+/* Fond « battle » (lot 39) : lampe à sodium (cœur + diffusion) et contre-jour froid du prototype. */
+.o-ground__lamp {
+  background: var(--fx-battle-lamp), var(--fx-battle-spill);
+  transform-origin: 95% 0;
+}
+.o-ground__rim {
+  background: var(--fx-battle-rim);
+}
 
 /* Sur le site : mêmes couches, halo resserré, marquage au pas de 200 px. */
 .o-ground--site .o-ground__vignette {

@@ -36,6 +36,7 @@ import { type ReactNode, useState } from "react";
 import { useSearchParams } from "react-router";
 
 import type { Route } from "./+types/ds";
+import { OliveContent } from "./ds-olive";
 import { V2Content } from "./ds-v2";
 import "./ds.css";
 
@@ -167,6 +168,7 @@ export default function DesignSystemDemo() {
         <nav className="ds-index o-t-meta" aria-label="Composants">
           {[
             "v2",
+            "olive",
             "ground",
             "brand",
             "icons",
@@ -197,6 +199,14 @@ export default function DesignSystemDemo() {
         note="Surcouche de jetons et raisons, contour sur photo et sur fond, barre du haut v2, grands titres sur une ligne, barres des six profils."
       >
         {(theme) => <V2Content theme={theme} />}
+      </Section>
+
+      <Section
+        id="olive"
+        title="Le O vivant (lot 39)"
+        note="La voiture du logo devient l'indicateur d'Orasso : drift continu pendant un chargement, garée dans le O quand c'est fini. Huit variantes et le fond animé « battle »."
+      >
+        {() => <OliveContent />}
       </Section>
 
       <Section

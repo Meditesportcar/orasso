@@ -1,12 +1,11 @@
 import type { HTMLAttributes, ReactNode } from "react";
-import loaderLight from "../assets/chargement-fond-clair.svg";
-import loaderDark from "../assets/chargement-fond-sombre.svg";
 import logoLight from "../assets/logo-fond-clair.svg";
 import logoDark from "../assets/logo-fond-sombre.svg";
 import monogramLight from "../assets/monogramme-fond-clair.svg";
 import monogramDark from "../assets/monogramme-fond-sombre.svg";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
+import { OLoader } from "./Olive";
 
 /** Version du fichier de marque : « dark » = fond sombre (O crème), « light » = fond clair (O noir), « auto » = selon le thème. */
 export type BrandTone = "auto" | "dark" | "light";
@@ -94,28 +93,11 @@ export function Monogram({ size = 30, tone = "auto", className, alt = "Orasso" }
   );
 }
 
-/** L'indicateur de chargement du kit : la voiture qui se gare (cycle `loader`). 72 px plein écran, 24 px dans un bouton. */
-export function Loader({
-  size = 24,
-  tone = "auto",
-  className,
-}: {
-  size?: number;
-  tone?: BrandTone;
-  className?: string;
-}) {
-  return (
-    <ThemedImage
-      dark={loaderDark}
-      light={loaderLight}
-      tone={tone}
-      alt="Chargement en cours"
-      className={cx("o-loader", className)}
-      width={size}
-      height={size}
-    />
-  );
-}
+/**
+ * @deprecated Lot 39 (DA v2, écart 5) : l'indicateur de chargement est le O vivant, `OLoader` (Olive.tsx). Alias
+ * retiré au lot 58.
+ */
+export const Loader = OLoader;
 
 export type CreditProps = {
   /** `dark-surface` : plaque, photo, affiche inversée (brand-credit) ; `light-surface` : crème, moutarde (brand-credit-light). */

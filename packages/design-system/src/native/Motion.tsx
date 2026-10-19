@@ -6,6 +6,7 @@ import { type LayoutChangeEvent, Pressable, StyleSheet, View, type ViewProps, ty
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { withAlpha } from "./color";
 import { duration, easings, park, startPark, useFadeStyle, useParkStyle } from "./motionHooks";
+import { useGroundQuiet } from "./olive/quiet";
 import { angle, radius, useTheme } from "./theme";
 
 type BoxProps = ViewProps & { children?: ReactNode };
@@ -213,6 +214,8 @@ export function Sheet({ visible, onClose, from = "bottom", origin, children, acc
   const [mounted, setMounted] = useState(visible);
   const progress = useSharedValue(0);
   const veil = useSharedValue(0);
+  // Lot 39 : feuille ouverte, le fond animé « battle » se tait.
+  useGroundQuiet(visible);
 
   useEffect(() => {
     if (visible) {

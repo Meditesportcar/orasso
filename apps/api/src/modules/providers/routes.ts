@@ -2,11 +2,16 @@
 // pas être pris pour `/events/:id`.
 import {
   accreditationSchema,
+  eventNeedSchema,
+  eventNeedUpdateSchema,
+  missionsQuerySchema,
   openToProvidersQuerySchema,
   providerApplicationCreateSchema,
   providerApplicationsQuerySchema,
   providerPhotoOrderSchema,
   providerProfileSchema,
+  providerReviewSchema,
+  providerSpotSchema,
 } from "@orasso/shared";
 import { Hono } from "hono";
 
@@ -16,6 +21,7 @@ import { settingsStore } from "../../lib/settings";
 import { storage } from "../../lib/storage";
 import { body, query, uuidParam } from "../../lib/validate";
 import { registerPersonaSource } from "../profiles/personas";
+import { missionsService } from "./missions";
 import { loadProvider } from "./serializers";
 import { providerOfUser, providersService } from "./service";
 
@@ -100,4 +106,55 @@ export const providersRoutes = new Hono<AppEnv>()
   })
   .get("/events/by-slug/:slug/providers", async (c) =>
     c.json(await providersService.presentAtEvent(c.req.param("slug")), 200, { "cache-control": "no-cache" }),
-  );
+  )
+  // --- Lot 46 : missions, emplacement, avis des organisateurs (ARCHITECTURE-DA-V2 § 5.2) ----------------------------
+  .get("/providers/:id/reviews", async (c) => {
+    await requireUser(c);
+    return c.json(await missionsService.reviewsOfProvider(uuidParam(c, "id")));
+  })
+  .get("/missions", async (c) => {
+    const v = await requireUser(c);
+    c.header("cache-control", "no-store");
+    return c.json(await missionsService.missions(v, query(c, missionsQuerySchema)));
+  })
+  .get("/events/by-slug/:slug/needs", async (c) =>
+    c.json(await missionsService.needsPublic(c.req.param("slug")), 200, { "cache-control": "no-cache" }),
+  )
+  .get("/events/:id/needs", async (c) => {
+    const v = await requireUser(c);
+    c.header("cache-control", "no-store");
+    return c.json(await missionsService.listNeeds(v, uuidParam(c, "id")));
+  })
+  .post("/events/:id/needs", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await missionsService.createNeed(v, uuidParam(c, "id"), await body(c, eventNeedSchema)), 201);
+  })
+  .patch("/events/:id/needs/:needId", async (c) => {
+    const v = await requireUser(c);
+    return c.json(
+      await missionsService.updateNeed(
+        v,
+        uuidParam(c, "id"),
+        uuidParam(c, "needId"),
+        await body(c, eventNeedUpdateSchema),
+      ),
+    );
+  })
+  .delete("/events/:id/needs/:needId", async (c) => {
+    const v = await requireUser(c);
+    await missionsService.deleteNeed(v, uuidParam(c, "id"), uuidParam(c, "needId"));
+    return c.body(null, 204);
+  })
+  .patch("/events/:id/applications/:appId/spot", async (c) => {
+    const v = await requireUser(c);
+    return c.json(
+      await missionsService.setSpot(v, uuidParam(c, "id"), uuidParam(c, "appId"), await body(c, providerSpotSchema)),
+    );
+  })
+  .post("/events/:id/applications/:appId/provider-review", async (c) => {
+    const v = await requireUser(c);
+    return c.json(
+      await missionsService.review(v, uuidParam(c, "id"), uuidParam(c, "appId"), await body(c, providerReviewSchema)),
+      201,
+    );
+  });

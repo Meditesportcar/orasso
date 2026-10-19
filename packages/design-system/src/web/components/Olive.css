@@ -1,0 +1,316 @@
+/* Le O vivant (lot 39) : la voiture du logo devient l'indicateur d'Orasso. Couleurs par jetons, durées par variables de
+   motion.css (--olive-*, --battle-opacity). Voir web/components/Olive.tsx et src/native/olive. */
+
+/* La voiture vue de dessus : caisse --car-body (poster par défaut, moutarde pour la voiture de tête). */
+.o-car__body {
+  fill: var(--car-body, var(--poster));
+}
+.o-car--lead {
+  --car-body: var(--accent);
+}
+.o-car__glass {
+  fill: color-mix(in srgb, var(--ground) 85%, transparent);
+}
+.o-car__light {
+  fill: var(--night-ink);
+}
+.o-car__brake {
+  fill: var(--win);
+}
+.o-car__wheel {
+  fill: var(--night);
+}
+.o-car__smoke {
+  fill: var(--ink);
+}
+
+/* Le O et sa voiture garée. */
+.o-olive {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  line-height: 0;
+}
+.o-olive svg {
+  display: block;
+  overflow: visible;
+}
+.o-olive--auto {
+  color: var(--ink);
+}
+.o-olive--dark {
+  color: var(--night-ink);
+}
+.o-olive--light {
+  color: var(--night);
+}
+.o-olive__o {
+  fill: currentColor;
+}
+.o-olive__park {
+  transform: translateX(0);
+}
+.o-olive.is-loading .o-olive__park,
+.o-opening.is-battle .o-olive__park,
+.o-opening.is-park .o-olive__park {
+  transform: translateX(-120px);
+}
+.o-olive.is-parking .o-olive__park {
+  animation: o-olive-park var(--olive-park) linear;
+}
+/* Se garer : park jusqu'à 6 unités au-delà de la place, puis inout jusqu'à la place. */
+@keyframes o-olive-park {
+  from {
+    transform: translateX(-120px);
+    animation-timing-function: var(--ease-park);
+  }
+  60% {
+    transform: translateX(6px);
+    animation-timing-function: var(--ease-inout);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+/* Petites tailles (bouton) : la voiture prend l'encre du O, la moutarde disparaîtrait sur un bouton moutarde. */
+.o-olive--compact .o-car {
+  --car-body: currentColor;
+}
+/* Dans un bouton, le O et sa voiture prennent l'encre du texte du bouton (lisibles sur toutes les variantes). */
+.o-olive.o-button__loader {
+  color: inherit;
+}
+/* L'anneau de l'envoi : il se remplit avec le pourcentage (--ring, 0 → 1), départ en haut. */
+.o-olive__ring-track {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 4;
+  opacity: 0.6;
+}
+.o-olive__ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  stroke-dashoffset: calc(100 - var(--ring, 0) * 100);
+  transition: stroke-dashoffset var(--timing-base) var(--ease-out);
+}
+
+/* L'ouverture : le O agrandi pendant la battle, puis le logotype se compose. Un clic la passe. */
+.o-opening {
+  position: relative;
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  font: inherit;
+  line-height: 0;
+  background: none;
+  cursor: pointer;
+}
+.o-opening.is-done {
+  cursor: default;
+}
+.o-opening__logo {
+  display: block;
+  overflow: visible;
+  fill: currentColor;
+  transform-origin: 50% 50%;
+  transition: transform var(--timing-poster) var(--ease-park);
+}
+.o-opening.is-battle .o-opening__logo,
+.o-opening.is-park .o-opening__logo {
+  transform: translateX(calc(var(--o-dx) * var(--o-zoom))) scale(var(--o-zoom));
+}
+.o-opening__letters {
+  transition:
+    opacity var(--timing-poster) linear,
+    transform var(--timing-poster) var(--ease-park);
+}
+.o-opening.is-battle .o-opening__letters,
+.o-opening.is-park .o-opening__letters {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+.o-opening__cars {
+  transition: opacity var(--timing-fast) linear;
+}
+/* La chasse prend l'encre du logo : elle se détache sur tout fond (affiche, Béton, Sable). */
+.o-opening .o-car--chase {
+  --car-body: currentColor;
+}
+.o-opening.is-park .o-opening__cars {
+  opacity: 0;
+}
+/* La voiture de tête quitte le drift et se gare dans le O (cap droit, à la taille de la voiture du logo). */
+.o-opening__parker {
+  transform: translate(var(--park-x), var(--park-y)) rotate(var(--park-a)) scale(var(--park-s0));
+  animation: o-olive-parker var(--olive-park) var(--ease-park) forwards;
+}
+@keyframes o-olive-parker {
+  to {
+    transform: translate(0, 0) rotate(0deg) scale(var(--park-s1));
+  }
+}
+
+/* L'envoi : le O vivant avec son anneau. */
+.o-send {
+  display: inline-flex;
+}
+
+/* Candidature envoyée : le O s'allume une fois (un seul néon à la fois). */
+.o-burst {
+  display: inline-flex;
+}
+.o-burst.is-lit .o-olive {
+  animation: o-olive-lit var(--timing-poster) var(--ease-out);
+}
+@keyframes o-olive-lit {
+  from {
+    filter: drop-shadow(0 0 10px var(--accent));
+  }
+  to {
+    filter: none;
+  }
+}
+
+/* État vide : la place en pointillés, la voiture attend dehors. */
+.o-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  text-align: center;
+}
+.o-empty__art {
+  height: auto;
+}
+.o-empty__spot {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.4;
+  stroke-dasharray: 5 5;
+}
+.o-empty__car {
+  transform: translateX(-120px);
+  animation: o-olive-arrive calc(var(--timing-base) * 3.4) linear;
+}
+@keyframes o-olive-arrive {
+  from {
+    transform: translateX(-200px);
+    animation-timing-function: var(--ease-park);
+  }
+  70% {
+    transform: translateX(-114px);
+    animation-timing-function: var(--ease-inout);
+  }
+  to {
+    transform: translateX(-120px);
+  }
+}
+.o-empty__text {
+  display: grid;
+  gap: var(--space-1);
+}
+.o-empty__title {
+  margin: 0;
+  color: var(--ink);
+}
+.o-empty__body {
+  max-width: 32ch;
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+/* Le tampon : le O frappe la page, l'encre bave. */
+.o-stamp-drop {
+  display: inline-block;
+  line-height: 0;
+}
+.o-stamp-drop svg {
+  display: block;
+  overflow: visible;
+  fill: var(--stamp-ink);
+  transform: rotate(var(--stamp-angle));
+  animation: o-olive-stamp var(--timing-poster) var(--ease-park);
+}
+.o-stamp__ring {
+  fill: none;
+  stroke: var(--stamp-ink);
+  stroke-width: 9;
+}
+.o-stamp-drop__bleed {
+  opacity: 0.32;
+  transform: translate(var(--bleed-x), var(--bleed-y)) scale(var(--bleed-s));
+  transform-box: view-box;
+  transform-origin: 70px 50px;
+  animation: o-fade var(--timing-poster) linear;
+}
+@keyframes o-olive-stamp {
+  from {
+    opacity: 0;
+    transform: rotate(calc(var(--stamp-angle) - 6deg)) scale(1.8);
+  }
+  55% {
+    opacity: 1;
+    transform: rotate(calc(var(--stamp-angle) - 2.7deg)) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--stamp-angle)) scale(1);
+  }
+}
+
+/* L'onglet central : garée si actif, sortie par la droite sinon ; elle revient par la gauche. */
+.o-center-o.is-out .o-olive__park {
+  transform: translateX(130px);
+}
+.o-center-o.is-moved.is-out .o-olive__park {
+  transition: transform calc(var(--timing-base) * 2) var(--ease-inout);
+}
+.o-center-o.is-moved.is-parked .o-olive__park {
+  animation: o-olive-park var(--olive-park) linear;
+}
+
+/* Le fond « battle » : les meutes à 18 % (Béton) ou 10 % (Sable). */
+.o-ground__battle {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: var(--battle-opacity);
+  pointer-events: none;
+}
+.o-ground__battle svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: visible;
+}
+
+/* Réduction des animations : la voiture est garée, pas de trajet, tout apparaît en fondu `fast` (sans remplissage :
+   rien ne reste en cours après le fondu). */
+@media (prefers-reduced-motion: reduce) {
+  .o-olive.is-loading .o-olive__park,
+  .o-opening .o-olive__park {
+    transform: none !important;
+  }
+  .o-olive__park,
+  .o-olive__ring,
+  .o-empty__car,
+  .o-stamp-drop svg,
+  .o-stamp-drop__bleed,
+  .o-opening__logo,
+  .o-opening__letters,
+  .o-burst.is-lit .o-olive {
+    animation: none !important;
+    transition: none !important;
+  }
+  .o-olive,
+  .o-opening,
+  .o-empty,
+  .o-stamp-drop {
+    animation: o-fade var(--timing-fast) linear;
+  }
+}

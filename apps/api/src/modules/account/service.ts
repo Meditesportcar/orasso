@@ -62,6 +62,7 @@ import { applicationsService } from "../applications/service";
 import { anonymizeCommunicationForDeletedAccount } from "../communication/anonymize";
 import { anonymizeCrewsForDeletedAccount } from "../crews/anonymize";
 import { invitationsService } from "../invitations/service";
+import { anonymizeMediaForDeletedAccount } from "../media/anonymize";
 import { anonymizeMessagingForDeletedAccount } from "../messaging/anonymize";
 import { anonymizeModerationForDeletedAccount } from "../moderation/anonymize";
 import { pointsService } from "../points/service";
@@ -498,6 +499,8 @@ export const accountService = {
       }
       // Profil prestataire (lot 21) : retiré et vidé de ce qui l'identifie (les candidatures passées gardent leur lien).
       photoKeys.push(...(await anonymizeProviderForDeletedAccount(tx, userId, at)));
+      // Profil média (lot 45) : retiré, carte de presse effacée, contenus retirés.
+      photoKeys.push(...(await anonymizeMediaForDeletedAccount(tx, userId, at)));
       await tx.insert(adminAuditLog).values({
         actorUserId: opts.actor?.userId ?? userId,
         action: opts.actor ? "user.anonymize" : "user.self_delete",

@@ -141,3 +141,17 @@ export function providerProfileIssue(p: ProviderProfileDraft): string | null {
 export function canAccredit(provider: { type: VendorTypeCode }, status: string): boolean {
   return provider.type === "photographer" && status === "accepted";
 }
+
+// --- Prestataires v2 (lot 46, ARCHITECTURE-DA-V2 § 5.2) : missions, emplacement, vitrine, avis --------------------
+
+/** Électricité : besoin d'un prestataire (vitrine) ou ce que fournit l'organisateur (mission). */
+export const providerPowers = ["none", "a16", "a32", "generator_ok"] as const;
+export type ProviderPower = (typeof providerPowers)[number];
+
+/** Menu de la vitrine : 40 lignes au plus, libellé ≤ 60 caractères. */
+export const PROVIDER_MENU_MAX_LINES = 40;
+export const PROVIDER_MENU_LABEL_MAX = 60;
+/** Rayon d'intervention par défaut (km) : celui du prototype (`s-vitrine`, « Jusqu'à 80 km »). */
+export const PROVIDER_DEFAULT_RADIUS_KM = 80;
+/** Besoin d'un événement : 1 à 9 prestataires du même métier. */
+export const EVENT_NEED_MAX_QUANTITY = 9;

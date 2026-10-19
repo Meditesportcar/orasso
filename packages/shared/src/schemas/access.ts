@@ -113,8 +113,8 @@ export type AccessListEntry = {
   /** Véhicule : « Porsche 911 (997) » ; prestataire : « Food truck · La Caravane ». */
   vehicleLabel: string | null;
   vehicleType: VehicleType | null;
-  /** Lot 21 : `provider` = prestataire (pas de plaque ni de catégorie). */
-  kind: "vehicle" | "provider";
+  /** Lot 21 : `provider` = prestataire (pas de plaque ni de catégorie) ; lot 45 : `media` = badge presse. */
+  kind: "vehicle" | "provider" | "media";
   /** Prestataire : libellé du type (« Food truck ») et nom de l'activité, pour le résultat de scan. */
   providerType: string | null;
   providerName: string | null;

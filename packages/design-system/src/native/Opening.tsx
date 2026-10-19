@@ -1,6 +1,8 @@
 // L'écran d'ouverture : le logo animé du kit, seul, 1,6 s, une fois par lancement, fond immobile.
 // La voiture arrive de la gauche et se gare dans le O, le O prend sa place, les lettres se découvrent.
 // Images clés : identite/anime/orasso-logo-anime-fond-sombre.svg (brandArt.intro). « Reduce motion » : logo garé.
+// Lot 39 (DA v2, écart 5) : l'écran d'ouverture devient la battle en tandem de 3 s (olive/OpeningBattle.tsx) ;
+// `OpeningScreen` en reste un alias déprécié, retiré au lot 58. Le logo animé du kit (OpeningLogo) reste disponible.
 
 import { useEffect, useId } from "react";
 import { StyleSheet, View } from "react-native";
@@ -8,9 +10,9 @@ import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSequen
 import Svg, { Path } from "react-native-svg";
 import { type BrandTone, LogoLetters, oTransform, useTone } from "./Brand";
 import { brandArt } from "./brandArt";
-import { Ground } from "./Ground";
-import { AnimatedCar, keyframeSteps } from "./Loader";
 import { duration } from "./motionHooks";
+import { AnimatedCar, keyframeSteps } from "./olive/brandCar";
+import { OpeningBattle, type OpeningBattleProps } from "./olive/OpeningBattle";
 import { useTheme } from "./theme";
 
 const { intro, logoViewBox } = brandArt;
@@ -96,25 +98,13 @@ export function OpeningLogo({ width = 240, tone = "dark", onDone }: OpeningLogoP
   );
 }
 
-export type OpeningScreenProps = {
-  /** Appelé quand le logo est garé : l'appli passe à son premier écran. */
-  onDone?: () => void;
-  logoWidth?: number;
-};
+/** @deprecated Lot 39 : utiliser `OpeningBattleProps`. Retiré au lot 58. */
+export type OpeningScreenProps = OpeningBattleProps;
 
-/** L'écran d'ouverture : le logo animé du kit, seul, sur le fond (immobile). Une fois par lancement. */
-export function OpeningScreen({ onDone, logoWidth }: OpeningScreenProps) {
-  return (
-    <Ground animated={false}>
-      <View style={styles.center}>
-        <OpeningLogo width={logoWidth} onDone={onDone} />
-      </View>
-    </Ground>
-  );
-}
+/** @deprecated Lot 39 : utiliser `OpeningBattle` (la battle en tandem, 3 s). Alias retiré au lot 58. */
+export const OpeningScreen = OpeningBattle;
 
 const styles = StyleSheet.create({
   layer: { position: "absolute", top: 0, left: 0 },
   clip: { overflow: "hidden" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
 });

@@ -13,6 +13,7 @@ import {
   isLocked,
   isMultiDay,
   lockAt,
+  mediaLabels,
   type PassRevokedReason,
   providerApplicationsLink,
   providerWaitlistNote,
@@ -47,6 +48,8 @@ import { accessService } from "../access/service";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { expirePendingInvitations } from "../invitations/expire";
+import { notifyMediaDecision } from "../media/notify";
+import { assertPressQuota } from "../media/quota";
 import { notificationsService } from "../notifications/service";
 import { socialJournal } from "../social/journal";
 import { staffService } from "../staff/service";
@@ -145,6 +148,8 @@ async function waitlistPosition(tx: Tx | typeof db, app: ApplicationRow): Promis
 
 /** Notifie le candidat d'une décision (« au fil des décisions », docs/01). */
 async function notifyDecision(tx: Tx, event: EventRow, app: ApplicationRow) {
+  // Lot 45 : accréditation presse, notifications propres (`accreditation_accepted` / `accreditation_refused`).
+  if (app.kind === "media") return notifyMediaDecision(tx, event, app);
   const label = await labelOf(app, tx);
   const provider = app.kind === "provider";
   const base = {
@@ -388,6 +393,10 @@ async function decideInTx(
   const to = ({ accept: "accepted", waitlist: "waitlisted", refuse: "refused" } as const)[input.decision];
   const actor: Actor = { kind: access.actor, userId: v.user.id };
   if (!canTransition(app.status, to, actor.kind)) throw invalidTransition(app.status, to);
+  // Lot 45 : une accréditation presse se retient ou se refuse (pas de liste d'attente pour la presse).
+  if (app.kind === "media" && to === "waitlisted") throw validation(mediaLabels.noWaitlist);
+  // Lot 45 : le quota presse tient aussi à la décision (accréditations données, sous le verrou de l'événement).
+  if (app.kind === "media" && to === "accepted") await assertPressQuota(tx, eventId);
   if (app.status === "refused" && isLocked(event, t)) {
     throw lockedError("Inscriptions verrouillées : un refus ne se corrige plus");
   }
@@ -410,7 +419,7 @@ async function decideInTx(
 
   let patch: Partial<typeof applications.$inferInsert> = { decidedAt: t, decidedBy: v.user.id };
   if (to === "accepted") {
-    // Un prestataire est retenu hors capacité (lot 21).
+    // Un prestataire (lot 21) ou un média (lot 45) est retenu hors capacité : seuls les véhicules la comptent.
     if (app.kind === "vehicle") {
       // Les offres en cours réservent leur place ; une offre forcée par l'organisateur occupe déjà la sienne.
       // Plusieurs jours (lot 26) : places du jour de la candidature (tout l'événement : chaque jour).

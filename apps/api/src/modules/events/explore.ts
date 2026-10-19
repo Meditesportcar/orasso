@@ -20,6 +20,7 @@ import { now } from "../../lib/deps";
 import { distanceKmSql, roundKm, withinRadiusSql } from "../../lib/geo-sql";
 import type { Viewer } from "../../lib/session";
 import { containsPattern, searchTokens } from "../../lib/text-search";
+import { decorateForMedia, mediaExploreFilters } from "../media/explore";
 import { card } from "./card";
 import { daysRepo } from "./days";
 import type { EventRow } from "./repo";
@@ -106,6 +107,8 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
   if (wantsRadius && located) {
     filters.push(withinRadiusSql(events.lat, events.lng, located.position, q.radiusKm ?? 50));
   }
+  // Lot 45 : Explorer national du média (accréditation ouverte, région).
+  filters.push(...mediaExploreFilters(q));
 
   // Affinités (S34), calculées pour la personne qui demande.
   const userId = viewer?.user.id ?? null;
@@ -159,5 +162,6 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
     }
     return out;
   });
+  await decorateForMedia(items, q, viewer);
   return { items, nextCursor: rows.length > q.limit ? encodeOffset(offset + q.limit) : null };
 }

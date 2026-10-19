@@ -4,6 +4,7 @@ import {
   applicationSources,
   applicationStatuses,
   type FilteringOpinion,
+  type MediaFormat,
   type RefusalReason,
   transitionActors,
 } from "@orasso/shared";
@@ -26,7 +27,8 @@ import { user } from "./auth";
 import { timestamps, tstz } from "./common";
 import { crews } from "./crews";
 import { eventDays, events, eventZones } from "./events";
-import { providerProfiles } from "./providers";
+import { mediaProfiles } from "./media";
+import { eventNeeds, providerProfiles } from "./providers";
 import { vehicles } from "./vehicles";
 
 export const applicationKindEnum = pgEnum("application_kind", applicationKinds);
@@ -52,6 +54,9 @@ export const applications = pgTable(
     providerProfileId: uuid("provider_profile_id").references(() => providerProfiles.id, { onDelete: "restrict" }),
     /** Accréditation « média officiel » donnée par l'organisateur à un photographe retenu (par événement, S23). */
     accreditedMedia: boolean("accredited_media").notNull().default(false),
+    /** Accréditation presse (`kind = media`, lot 45) : le profil média et les formats prévus ; `vehicle_id` est nul. */
+    mediaProfileId: uuid("media_profile_id").references(() => mediaProfiles.id, { onDelete: "restrict" }),
+    mediaFormats: text("media_formats").array().$type<MediaFormat[]>(),
     /**
      * Événement sur plusieurs jours (lot 26) : le jour choisi ; `null` = tout l'événement (et toujours `null` pour un
      * événement d'un jour). `no action` : un jour qui a des candidatures ne se supprime pas (avant le lot 26 :
@@ -83,6 +88,10 @@ export const applications = pgTable(
     crewId: uuid("crew_id").references(() => crews.id, { onDelete: "set null" }),
     crewApplicationId: uuid("crew_application_id"),
     memberConfirmedAt: tstz("member_confirmed_at"),
+    /** Lot 46 : mission du prestataire, emplacement attribué (« B2 ») et sa note ; écrits par le module prestataires. */
+    needId: uuid("need_id").references(() => eventNeeds.id, { onDelete: "set null" }),
+    spotLabel: text("spot_label"),
+    spotNote: text("spot_note"),
     ...timestamps,
   },
   (t) => [
@@ -109,7 +118,19 @@ export const applications = pgTable(
       .where(sql`${t.status} in ('pending', 'accepted', 'waitlisted', 'offered')`),
     check("applications_provider_kind_check", sql`${t.kind} <> 'provider' or ${t.providerProfileId} is not null`),
     check("applications_vehicle_kind_check", sql`${t.kind} <> 'vehicle' or ${t.vehicleId} is not null`),
+    // Lot 45 : une accréditation active par média et par événement ; un `media` porte son profil. Écrit sans citer la
+    // valeur `media` : la migration qui l'ajoute à l'enum ne peut pas l'utiliser dans la même transaction.
+    uniqueIndex("applications_active_media_key")
+      .on(t.eventId, t.mediaProfileId)
+      .where(sql`${t.status} in ('pending', 'accepted', 'waitlisted', 'offered')`),
+    check(
+      "applications_media_kind_check",
+      sql`${t.kind} in ('vehicle', 'provider') or ${t.mediaProfileId} is not null`,
+    ),
     check("applications_companions_check", sql`${t.companions} between 0 and 9`),
+    index("applications_need_idx").on(t.needId).where(sql`${t.needId} is not null`),
+    check("applications_spot_label_check", sql`${t.spotLabel} is null or char_length(${t.spotLabel}) <= 12`),
+    check("applications_spot_note_check", sql`${t.spotNote} is null or char_length(${t.spotNote}) <= 200`),
   ],
 );
 
