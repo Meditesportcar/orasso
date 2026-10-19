@@ -18,6 +18,12 @@
 ## En cours
 
 - La branche `lot-45-api-media` attend la relecture et la fusion du coordinateur (migration `0043_media` à régénérer à la fusion si un autre lot de la vague en ajoute une, règle B1).
+
+- **Lot 46 — API des prestataires v2 (branche `lot-46-api-prestataires-v2`, vague 2)** : missions = besoins de l'organisateur (`/events/:id/needs`), `GET /missions` par métier et rayon du plus proche au plus loin, candidature sur une mission (`needId`), emplacement attribué (`/spot`, notification avec arrivée, électricité et consignes), avis des organisateurs sur un prestataire retenu (1 à 5, 30 jours, public sur la vitrine), vitrine (métiers, menu « une ligne par plat » lu par `parseMenuLines`, besoins sur place, rayon) ; migration `0043_missions` ; seed Sofia_66 / « La Brasa ». Aucun écran (lots 54 et 57).
+
+## En cours
+
+- La branche `lot-46-api-prestataires-v2` attend la relecture et la fusion du coordinateur (après le lot 45 : `schema/applications.ts`, migration à régénérer, règle B1).
 - La branche `lot-38-socle-v2` attend la relecture et la fusion du coordinateur. Point à confirmer par Damien : H2 (thème jamais imposé, contraire à `docs/03` l. 10) — le retrait du Sable imposé aux espaces orga et pro du site est dans un commit isolé, facile à annuler.
 
 ## Prochaine étape

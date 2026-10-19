@@ -22,6 +22,7 @@ export * from "./labels/home.fr";
 export * from "./labels/invitations.fr";
 export * from "./labels/media.fr";
 export * from "./labels/messaging.fr";
+export * from "./labels/missions.fr";
 export * from "./labels/moderation.fr";
 export * from "./labels/notifications.fr";
 export * from "./labels/orga.fr";

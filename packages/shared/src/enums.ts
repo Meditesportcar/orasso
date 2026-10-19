@@ -22,6 +22,7 @@ import { mediaNotificationTypes } from "./notifications/media";
 import { messagingNotificationTypes, pushOnlyNotificationTypes as messagingPushOnly } from "./notifications/messaging";
 import { moderationEmailAlwaysTypes, moderationNotificationTypes } from "./notifications/moderation";
 import { pointsNotificationTypes } from "./notifications/points";
+import { providersV2NotificationTypes } from "./notifications/providers-v2";
 import { journalOnlyNotificationTypes as socialJournalOnly, socialNotificationTypes } from "./notifications/social";
 import { staffEmailAlwaysTypes, staffNotificationTypes } from "./notifications/staff";
 import { weatherNotificationTypes } from "./notifications/weather";
@@ -162,6 +163,7 @@ export const notificationTypes = {
   ...afterEventNotificationTypes,
   ...adminNotificationTypes,
   ...mediaNotificationTypes,
+  ...providersV2NotificationTypes,
 } as const satisfies Record<string, NotificationFamily>;
 export type NotificationType = keyof typeof notificationTypes;
 

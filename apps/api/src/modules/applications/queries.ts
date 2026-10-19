@@ -44,6 +44,7 @@ import { crewsForApplications, crewsForTriage, eventCrewFilters } from "../crews
 import { type DayRow, daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { pointsService } from "../points/service";
+import { providerTriageExtras } from "../providers/needs";
 import { loadProviders, triageView } from "../providers/serializers";
 import { reviewsService } from "../reviews/service";
 import { vehiclesRepo } from "../vehicles/repo";
@@ -190,6 +191,8 @@ async function toTriage(
   const vehicleRows = await vehiclesRepo.findFullByIds(rows.flatMap((r) => (r.vehicleId ? [r.vehicleId] : [])));
   const vehiclesById = new Map(vehicleRows.map((v) => [v.id, v]));
   const providersById = await loadProviders(rows.flatMap((r) => (r.providerProfileId ? [r.providerProfileId] : [])));
+  // Lot 46 : mission, emplacement et avis des candidatures de prestataires.
+  const providerExtras = await providerTriageExtras(rows);
   const people = await db
     .select({ p: profiles, email: user.email })
     .from(profiles)
@@ -283,7 +286,7 @@ async function toTriage(
     return {
       id: r.id,
       kind: r.kind,
-      provider: prov ? triageView(prov, r.accreditedMedia, withContact) : null,
+      provider: prov ? triageView(prov, r.accreditedMedia, withContact, providerExtras.get(r.id)) : null,
       accreditedMedia: r.accreditedMedia,
       status: r.status,
       createdAt: r.createdAt.toISOString(),

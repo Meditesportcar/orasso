@@ -11,15 +11,20 @@ import {
   instagramUrl,
   isLocked,
   lockAt,
+  needApplicationTexts,
+  needRemaining,
   type OpenEventForProvider,
   PROVIDER_MAX_PHOTOS,
   type ProviderApplicationCreate,
   type ProviderApplicationView,
+  type ProviderPower,
   type ProviderProfileInput,
   type ProviderProfileView,
-  type ProviderPublic,
+  type ProviderPublicWithReviews,
+  parseMenuLines,
   providerProfileIssue,
   providerTypeChangeBlocked,
+  providerTypeLabel,
   type VendorTypeCode,
 } from "@orasso/shared";
 import { and, asc, count, desc, eq, gt, inArray, isNull, lte, max, sql } from "drizzle-orm";
@@ -30,6 +35,7 @@ import {
   applicationEvents,
   applications,
   checkins,
+  eventNeeds,
   events,
   notifications,
   proPhotos,
@@ -37,6 +43,7 @@ import {
   providerPhotos,
   providerProfiles,
   structureBans,
+  structureMembers,
   structures,
 } from "../../db/schema";
 import { organizerActor, requireOrganizer } from "../../lib/access";
@@ -48,6 +55,8 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { withTx } from "../../lib/tx";
 import { eventsRepo } from "../events/repo";
+import { notificationsService } from "../notifications/service";
+import { filledByNeed, needView, reviewsByApplication, reviewsOf } from "./needs";
 import {
   loadProvider,
   loadProviders,
@@ -106,11 +115,64 @@ const fieldsOf = (input: ProviderProfileInput) => ({
   departments: input.departments,
 });
 
+/**
+ * Champs de la vitrine (lot 46) envoyés seulement : un champ absent reste tel quel. Les métiers gardent le métier
+ * principal en tête ; le menu est celui que lit `parseMenuLines` (une ligne illisible est déjà refusée par le schéma).
+ */
+function vitrineFieldsOf(input: ProviderProfileInput, type: string) {
+  const out: Partial<typeof providerProfiles.$inferInsert> = {};
+  if (input.trades !== undefined) out.trades = [...new Set([type, ...input.trades])];
+  if (input.tagline !== undefined) out.tagline = input.tagline || null;
+  if (input.teamSize !== undefined) out.teamSize = input.teamSize;
+  if (input.menu !== undefined) {
+    const { items, errors } = parseMenuLines(input.menu ?? "");
+    if (errors[0]) throw validation("Données invalides", { fields: { menu: errors[0].message } });
+    out.menu = items;
+  }
+  if (input.powerNeed !== undefined) out.powerNeed = input.powerNeed;
+  if (input.frontageM !== undefined) out.frontageM = input.frontageM;
+  if (input.waterNeed !== undefined) out.waterNeed = input.waterNeed;
+  if (input.radiusKm !== undefined) out.radiusKm = input.radiusKm;
+  return out;
+}
+
 /** Diffusion temps réel d'un changement de candidature (tri de l'organisateur, compte du candidat). */
 function announce(event: { id: string }, app: { id: string; userId: string; status: ApplicationStatus }) {
   const payload = { applicationId: app.id, eventId: event.id, status: app.status };
   realtime.publish(`event:${event.id}:triage`, "application.changed", payload);
   realtime.publish(`user:${app.userId}`, "application.changed", payload);
+}
+
+/** Ce qu'une candidature de prestataire montre depuis le lot 21. */
+function applicationBase(
+  a: typeof applications.$inferSelect,
+  e: typeof events.$inferSelect,
+  t: Date,
+  rankOf: Map<string, number>,
+  enteredAt: Map<string, Date>,
+) {
+  return {
+    id: a.id,
+    status: a.status,
+    accreditedMedia: a.accreditedMedia,
+    message: a.message,
+    createdAt: a.createdAt.toISOString(),
+    decidedAt: a.decidedAt?.toISOString() ?? null,
+    waitlistRank: a.status === "waitlisted" ? (rankOf.get(a.id) ?? null) : null,
+    refusalNote: a.status === "refused" && a.refusalSent ? a.refusalNote : null,
+    event: {
+      id: e.id,
+      slug: e.slug,
+      title: e.title,
+      format: e.format,
+      startsAt: e.startsAt.toISOString(),
+      endsAt: e.endsAt.toISOString(),
+      city: e.city,
+      status: e.status,
+    },
+    checkedInAt: enteredAt.get(a.id)?.toISOString() ?? null,
+    canWithdraw: ACTIVE.includes(a.status) && t < e.endsAt,
+  };
 }
 
 export const providersService = {
@@ -148,9 +210,14 @@ export const providersService = {
           );
         // Le type (et donc l'accréditation, les types acceptés par l'événement) ne change pas sous une candidature.
         if (typeChanged && active.length > 0) throw conflict("conflict", providerTypeChangeBlocked);
+        const vitrine = vitrineFieldsOf(input, type);
+        // Le métier principal change : il passe en tête des métiers cochés.
+        if (vitrine.trades === undefined && type !== existing.type && existing.trades.length) {
+          vitrine.trades = [...new Set([type, ...existing.trades.filter((x) => x !== existing.type)])];
+        }
         await tx
           .update(providerProfiles)
-          .set({ ...fieldsOf({ ...input, type: input.type }), type, customType })
+          .set({ ...fieldsOf({ ...input, type: input.type }), ...vitrine, type, customType })
           .where(eq(providerProfiles.id, existing.id));
         // Synchro différentielle du staff : le nom et le type viennent du profil, pas de la candidature.
         if (typeChanged || input.name !== existing.name) {
@@ -165,7 +232,7 @@ export const providersService = {
     try {
       const [row] = await db
         .insert(providerProfiles)
-        .values({ userId: v.user.id, type: input.type, ...fieldsOf(input) })
+        .values({ userId: v.user.id, type: input.type, ...fieldsOf(input), ...vitrineFieldsOf(input, input.type) })
         .returning();
       if (!row) throw new Error("Profil non enregistré");
       return ownerView((await loadProvider(row.id)) as ProviderWith);
@@ -296,11 +363,11 @@ export const providersService = {
     return ownerView((await loadProvider(created.id)) as ProviderWith);
   },
 
-  /** `GET /providers/:id` (connectés) : profil public, jamais le téléphone ni l'e-mail. */
-  async getPublic(id: string): Promise<ProviderPublic> {
+  /** `GET /providers/:id` (connectés) : vitrine publique et avis des organisateurs, jamais le téléphone ni l'e-mail. */
+  async getPublic(id: string): Promise<ProviderPublicWithReviews> {
     const p = await loadProvider(id);
     if (!p || p.deletedAt) throw notFound("Prestataire introuvable");
-    return publicView(p);
+    return { ...publicView(p), reviews: await reviewsOf(p.id) };
   },
 
   // --- Événements ouverts ---------------------------------------------------------------------------------------------
@@ -394,7 +461,25 @@ export const providersService = {
           portfolioUrl: profileRow.portfolioUrl,
         });
         if (issue) throw validation(issue, { reason: "profile_incomplete" });
-        if (!eventAcceptsVendorType(event.vendorTypes, profileRow.type as VendorTypeCode, profileRow.customType)) {
+        // Lot 46 : réponse à une mission. Le besoin appartient à l'événement, son métier est l'un des miens et il
+        // reste une place ; sans mission, l'événement doit accueillir mon métier principal (lot 21).
+        let need: typeof eventNeeds.$inferSelect | null = null;
+        if (input.needId) {
+          const [found] = await tx
+            .select()
+            .from(eventNeeds)
+            .where(and(eq(eventNeeds.id, input.needId), eq(eventNeeds.eventId, eventId)));
+          need = found ?? null;
+          if (!need) throw validation("Mission introuvable pour cet événement", { reason: "need_invalid" });
+          const trades = profileRow.trades.length ? profileRow.trades : [profileRow.type];
+          if (!trades.includes(need.trade)) {
+            throw validation("Cette mission cherche un autre métier que le tien", { reason: "need_trade" });
+          }
+          const filled = (await filledByNeed([need.id], tx)).get(need.id) ?? 0;
+          if (needRemaining(need, filled) === 0) throw conflict("conflict", "Cette mission est déjà pourvue");
+        } else if (
+          !eventAcceptsVendorType(event.vendorTypes, profileRow.type as VendorTypeCode, profileRow.customType)
+        ) {
           throw validation("Cet événement n'accueille pas ce type de prestataire", { reason: "type_not_accepted" });
         }
 
@@ -411,9 +496,35 @@ export const providersService = {
             companions: 0,
             message: input.message,
             followStructure: false,
+            needId: need?.id ?? null,
           })
           .returning();
         if (!row) throw new Error("Candidature non enregistrée");
+        if (need) {
+          const organizers = await tx
+            .select({ userId: structureMembers.userId })
+            .from(structureMembers)
+            .where(
+              and(
+                eq(structureMembers.structureId, event.structureId),
+                eq(structureMembers.status, "active"),
+                inArray(structureMembers.role, ["owner", "co_organizer"]),
+              ),
+            );
+          await notificationsService.notifyMany(
+            tx,
+            organizers.map((o) => o.userId),
+            "need_application_received",
+            {
+              title: needApplicationTexts.notifTitle(event.title),
+              body: needApplicationTexts.notifBody(profileRow.name, providerTypeLabel(need.trade as VendorTypeCode)),
+              data: { applicationId: row.id, eventId, needId: need.id },
+              eventId,
+              eventStartsAt: event.startsAt,
+            },
+          );
+          after(() => notificationsService.kick());
+        }
         await tx.insert(applicationEvents).values({
           applicationId: row.id,
           fromStatus: null,
@@ -469,28 +580,25 @@ export const providersService = {
       perEvent.set(w.eventId, n);
       rankOf.set(w.id, n);
     }
-    return rows.map(({ a, e }) => ({
-      id: a.id,
-      status: a.status,
-      accreditedMedia: a.accreditedMedia,
-      message: a.message,
-      createdAt: a.createdAt.toISOString(),
-      decidedAt: a.decidedAt?.toISOString() ?? null,
-      waitlistRank: a.status === "waitlisted" ? (rankOf.get(a.id) ?? null) : null,
-      refusalNote: a.status === "refused" && a.refusalSent ? a.refusalNote : null,
-      event: {
-        id: e.id,
-        slug: e.slug,
-        title: e.title,
-        format: e.format,
-        startsAt: e.startsAt.toISOString(),
-        endsAt: e.endsAt.toISOString(),
-        city: e.city,
-        status: e.status,
-      },
-      checkedInAt: enteredAt.get(a.id)?.toISOString() ?? null,
-      canWithdraw: ACTIVE.includes(a.status) && t < e.endsAt,
-    }));
+    // Lot 46 : mission, emplacement, arrivée, électricité, consignes, avis de l'organisateur.
+    const needIds = [...new Set(rows.flatMap((r) => (r.a.needId ? [r.a.needId] : [])))];
+    const needRows = needIds.length ? await db.select().from(eventNeeds).where(inArray(eventNeeds.id, needIds)) : [];
+    const filled = await filledByNeed(needIds);
+    const needOf = new Map(needRows.map((n) => [n.id, n]));
+    const reviewOf = await reviewsByApplication(appIds);
+    return rows.map(({ a, e }) => {
+      const need = a.needId ? needOf.get(a.needId) : undefined;
+      const accepted = a.status === "accepted";
+      return {
+        ...applicationBase(a, e, t, rankOf, enteredAt),
+        need: need ? needView(need, filled.get(need.id) ?? 0) : null,
+        spot: accepted && a.spotLabel ? { label: a.spotLabel, note: a.spotNote } : null,
+        installAt: need?.installAt?.toISOString() ?? null,
+        power: (need?.power as ProviderPower | undefined) ?? null,
+        instructions: accepted ? e.instructions : null,
+        review: reviewOf.get(a.id) ?? null,
+      };
+    });
   },
 
   // --- Accréditation et fiche de l'événement ------------------------------------------------------------------------

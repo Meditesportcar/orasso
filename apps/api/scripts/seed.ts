@@ -26,6 +26,7 @@ import { seedHome } from "./seed/home";
 import { seedInvitations } from "./seed/invitations";
 import { seedMedia } from "./seed/media";
 import { seedMessaging } from "./seed/messaging";
+import { seedMissions } from "./seed/missions";
 import { seedModeration } from "./seed/moderation";
 import { seedMultiDay } from "./seed/multi-day";
 import { seedPros } from "./seed/pros";
@@ -123,6 +124,8 @@ async function main() {
   await seedAdmin(hash);
   // Lot 45 : média « Sud Cars » de Léo, accréditations presse (acceptée, en attente, refusée), contenus de Béziers Night.
   await seedMedia(hash);
+  // Lot 46 : La Brasa (Sofia_66), besoins sur 4 événements, emplacement B2 sur la Nocturne, 2 avis d'organisateur.
+  await seedMissions(hash);
 }
 
 try {

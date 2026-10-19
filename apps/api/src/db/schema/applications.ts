@@ -28,7 +28,7 @@ import { timestamps, tstz } from "./common";
 import { crews } from "./crews";
 import { eventDays, events, eventZones } from "./events";
 import { mediaProfiles } from "./media";
-import { providerProfiles } from "./providers";
+import { eventNeeds, providerProfiles } from "./providers";
 import { vehicles } from "./vehicles";
 
 export const applicationKindEnum = pgEnum("application_kind", applicationKinds);
@@ -88,6 +88,10 @@ export const applications = pgTable(
     crewId: uuid("crew_id").references(() => crews.id, { onDelete: "set null" }),
     crewApplicationId: uuid("crew_application_id"),
     memberConfirmedAt: tstz("member_confirmed_at"),
+    /** Lot 46 : mission du prestataire, emplacement attribué (« B2 ») et sa note ; écrits par le module prestataires. */
+    needId: uuid("need_id").references(() => eventNeeds.id, { onDelete: "set null" }),
+    spotLabel: text("spot_label"),
+    spotNote: text("spot_note"),
     ...timestamps,
   },
   (t) => [
@@ -124,6 +128,9 @@ export const applications = pgTable(
       sql`${t.kind} in ('vehicle', 'provider') or ${t.mediaProfileId} is not null`,
     ),
     check("applications_companions_check", sql`${t.companions} between 0 and 9`),
+    index("applications_need_idx").on(t.needId).where(sql`${t.needId} is not null`),
+    check("applications_spot_label_check", sql`${t.spotLabel} is null or char_length(${t.spotLabel}) <= 12`),
+    check("applications_spot_note_check", sql`${t.spotNote} is null or char_length(${t.spotNote}) <= 200`),
   ],
 );
 

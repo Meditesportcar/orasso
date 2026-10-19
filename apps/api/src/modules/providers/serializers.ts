@@ -2,9 +2,13 @@
 import {
   type EventProviderPublic,
   instagramUrl,
+  menuPriceRange,
+  menuToText,
   type ProviderForTriage,
+  type ProviderPower,
   type ProviderProfileView,
   type ProviderPublic,
+  type ProviderVitrine,
   providerProfileIssue,
   providerTypeLabel,
   type VendorTypeCode,
@@ -57,8 +61,26 @@ export async function loadProvider(id: string, ex: Executor = db): Promise<Provi
 const photoViews = (p: ProviderWith) => p.photos.map((x) => ({ id: x.id, url: storage.url(x.storageKey) ?? "" }));
 const typeOf = (p: ProviderRow) => p.type as VendorTypeCode;
 
+/** Vitrine (lot 46) : métiers (le principal en tête), menu et prix, besoins sur place, rayon. */
+export function vitrineOf(p: ProviderRow): ProviderVitrine {
+  const trades = p.trades.length ? (p.trades as VendorTypeCode[]) : [typeOf(p)];
+  return {
+    trades,
+    tagline: p.tagline,
+    teamSize: p.teamSize,
+    menu: p.menu,
+    menuRange: menuPriceRange(p.menu),
+    powerNeed: p.powerNeed as ProviderPower | null,
+    frontageM: p.frontageM,
+    waterNeed: p.waterNeed,
+    radiusKm: p.radiusKm,
+  };
+}
+
 export function ownerView(p: ProviderWith): ProviderProfileView {
   return {
+    ...vitrineOf(p),
+    menuText: menuToText(p.menu),
     id: p.id,
     type: typeOf(p),
     customType: p.customType,
@@ -87,6 +109,7 @@ export function ownerView(p: ProviderWith): ProviderProfileView {
 
 export function publicView(p: ProviderWith): ProviderPublic {
   return {
+    ...vitrineOf(p),
     id: p.id,
     type: typeOf(p),
     typeLabel: providerTypeLabel(typeOf(p), p.customType),
@@ -101,13 +124,24 @@ export function publicView(p: ProviderWith): ProviderPublic {
   };
 }
 
-/** Organisateur : coordonnées comprises ; staff de filtration : sans téléphone ni e-mail. */
-export function triageView(p: ProviderWith, accreditedMedia: boolean, withContact: boolean): ProviderForTriage {
+/**
+ * Organisateur : coordonnées comprises ; staff de filtration : sans téléphone ni e-mail. Lot 46 : mission,
+ * emplacement et avis de la candidature (`providerTriageExtras`).
+ */
+export function triageView(
+  p: ProviderWith,
+  accreditedMedia: boolean,
+  withContact: boolean,
+  extras?: Pick<ProviderForTriage, "need" | "spot" | "review">,
+): ProviderForTriage {
   return {
     ...publicView(p),
     phone: withContact ? p.phone : null,
     email: withContact ? p.email : null,
     accreditedMedia,
+    need: extras?.need ?? null,
+    spot: extras?.spot ?? null,
+    review: extras?.review ?? null,
   };
 }
 
