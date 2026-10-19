@@ -1,5 +1,6 @@
-// Accès : ta place aux événements. À venir (une carte par candidature avec son statut, place libérée à accepter,
-// désistement), Où je suis staff, Passés (carnet de route : pointage en attente, points, contestation d'un malus).
+// Sorties (ex-Accès ; lot 40 : contenu déplacé tel quel, le lot 43 le passe en tickets, prototype `s-sorties`) : ta
+// place aux événements. À venir (une carte par candidature avec son statut, place libérée à accepter, désistement),
+// Où je suis staff, Passés (carnet de route : pointage en attente, points, contestation d'un malus).
 
 import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
@@ -29,6 +30,7 @@ import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { formatDayHour, formatShortDate } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
+import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { useStaffActions } from "@/lib/staff/useStaff";
 import { useApi } from "@/lib/useApi";
@@ -41,9 +43,10 @@ import { SectionTitle, TabScreen } from "@/ui/Screens";
 
 const { space2, space3 } = tokens.spacing;
 
-export default function Acces() {
+export function SortiesScreen() {
   const { t } = useTheme();
   const router = useRouter();
+  const { goTab } = usePersona();
   const now = useNow();
   const { upcoming, past, loading, offline, reload } = useApplications();
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
@@ -106,7 +109,7 @@ export default function Acces() {
 
   return (
     <TabScreen
-      title="Accès"
+      title="Mes sorties"
       onRefresh={async () => {
         await Promise.all([reload(), staff.reload(), invitations.reload()]);
       }}
@@ -211,7 +214,7 @@ export default function Acces() {
             Aucune candidature en cours. Trouve un événement et candidate avec l'un de tes véhicules : ta carte d'accès
             apparaîtra ici.
           </Text>
-          <Button variant="plate" icon="explore" onPress={() => router.navigate("/explorer")} fullWidth>
+          <Button variant="plate" icon="explore" onPress={() => goTab("explorer")} fullWidth>
             Explorer les événements
           </Button>
         </Plate>

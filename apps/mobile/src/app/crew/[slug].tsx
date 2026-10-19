@@ -52,7 +52,7 @@ export default function CrewScreen() {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/explorer"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const reloadAll = async () => {
     await Promise.all([crew.reload(), members.reload(), pending.reload()]);
   };
@@ -323,7 +323,7 @@ export default function CrewScreen() {
               if (!(await ask(crewLabels.archiveConfirm))) return;
               void run(async () => {
                 await api.archiveCrew(v.id);
-                router.replace("/garage");
+                router.replace("/(tabs)/garage");
               });
             }}
           >

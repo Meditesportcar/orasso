@@ -96,8 +96,8 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
         dirty.current = false;
         await refreshMe();
         await myPro.reload();
-        choose({ kind: "pro", proProfileId: created.id });
-        router.replace({ pathname: "/fiche", params: { fait: "creee" } });
+        // Lot 40 : la nouvelle casquette s'ouvre sur Ma fiche (pas sur son Accueil), avec le mot de confirmation.
+        choose({ kind: "pro", proProfileId: created.id }, "/(pro)/fiche?fait=creee");
       });
       if (!ok) dirty.current = true;
       return;

@@ -110,7 +110,7 @@ function NavRow({
   icon: "place" | "flag" | "chat" | "incident";
   label: string;
   hint: string;
-  to: "/ma-structure" | "/bannis" | "/modeles" | "/notes";
+  to: "/(orga)/structure" | "/bannis" | "/modeles" | "/notes";
   testID: string;
 }) {
   const router = useRouter();
@@ -539,7 +539,7 @@ export function StaffScreen() {
         icon="place"
         label={L.structureOpen}
         hint={L.structureOpenHint}
-        to="/ma-structure"
+        to="/(orga)/structure"
         testID="team-nav-structure"
       />
       <NavRow icon="flag" label={L.bansOpen} hint={L.bansOpenHint} to="/bannis" testID="team-nav-bans" />

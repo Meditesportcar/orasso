@@ -30,7 +30,7 @@ async function openApp(browser: import("@playwright/test").Browser, email: strin
 }
 
 async function chooseOrganizer(page: Page, name: string) {
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
   await page.getByTestId("casquette-organizer").filter({ hasText: name }).click();
   await page.waitForURL(/\/direct/, { timeout: 20_000 });
 }
@@ -63,6 +63,8 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   const salon = events.data.find((e) => e.title.includes("Salon"));
   const nocturne = events.data.find((e) => e.title.includes("Nocturne de Canet"));
   expect(salon && nocturne).toBeTruthy();
+  // Une recette interrompue a pu laisser le Salon en Incertain : on repart du seed (Maintenu).
+  await apiCall(damien, "PATCH", `/events/${salon?.id}/outlook`, { outlook: "maintained" });
 
   // Un pilote retenu et pas encore entré : son QR, lu comme le ferait son téléphone.
   const list = await apiCall<{ applicationId: string; pseudo: string; checkedInAt: string | null }[]>(
@@ -133,7 +135,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await expect(page.getByTestId("orga-feed")).toContainText(announcement, { timeout: 20_000 });
 
   // --- Boîte : message groupé aux retenus ------------------------------------------------------------------------
-  await tab(page, "Boîte").click();
+  await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
   await expect(page.getByRole("button", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(page, "07-boite-participants-beton");
   await page.getByRole("button", { name: "Groupés" }).click();
@@ -152,7 +154,9 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await shot(page, "10-boite-staff-beton");
 
   // --- Staff : relance d'un membre sans réponse, puis mode staff ------------------------------------------------
-  await tab(page, "Staff").click();
+  // Lot 40 : la Boîte est hors de la barre d'onglets ; ✕ ramène aux onglets.
+  await page.getByRole("button", { name: "Fermer" }).first().click();
+  await tab(page, "Équipe").click();
   await pickOption(page, "Événement", /Nocturne de Canet/);
   await expect(page.getByTestId("orga-staff-member").first()).toBeVisible({ timeout: 20_000 });
   await shot(page, "11-staff-beton");
@@ -160,7 +164,10 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   const remind = page.locator('[data-testid="orga-staff-remind"]:not([disabled])');
   if ((await remind.count()) > 0) {
     await remind.first().click();
-    await expect(page.getByText("Relance envoyée.")).toBeVisible({ timeout: 20_000 });
+    // Recette rejouée le même jour : l'API refuse une seconde relance (le bouton reste allumé côté appli).
+    await expect(page.getByText("Relance envoyée.").or(page.getByText(/déjà été relancée aujourd'hui/))).toBeVisible({
+      timeout: 20_000,
+    });
   } else {
     expect(await page.getByTestId("orga-staff-remind").count()).toBeGreaterThan(0);
   }
@@ -191,10 +198,11 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await s.page.getByTestId("orga-event-row").filter({ hasText: "Salon Argelès" }).click();
   await expect(s.page.getByTestId("orga-outlook-banner")).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "22-evenement-sable");
-  await tab(s.page, "Boîte").click();
+  await s.page.getByRole("button", { name: "Boîte", exact: true }).first().click();
   await expect(s.page.getByRole("button", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "23-boite-sable");
-  await tab(s.page, "Staff").click();
+  await s.page.getByRole("button", { name: "Fermer" }).first().click();
+  await tab(s.page, "Équipe").click();
   await expect(s.page.getByTestId("team-member").first()).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "24-staff-sable");
   await tab(s.page, "Tri").click();
@@ -236,8 +244,9 @@ test("créer une structure depuis Mes casquettes, sans casquette organisateur au
   await page.goto("/direct");
   await page.waitForURL(/accueil/, { timeout: 20_000 });
 
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
-  await page.getByRole("button", { name: "Créer une structure" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
+  await page.getByTestId("profil-create").click(); // Lot 40 : un seul bouton « Créer », puis la feuille.
+  await page.getByTestId("casquette-create-organizer").click();
   await page.waitForURL(/structure\/nouvelle/, { timeout: 20_000 });
   await page.getByTestId("orga-create-name").fill(`Club Test ${Date.now()}`);
   await page.screenshot({ path: `${DIR}/30-creer-structure-beton.png` });

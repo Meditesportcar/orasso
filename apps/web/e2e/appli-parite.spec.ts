@@ -137,7 +137,7 @@ async function openApp(browser: Browser, email: string, theme: Theme): Promise<{
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: APP, acceptDownloads: true });
   const page = await ctx.newPage();
   page.on("console", (m) => {
-    if (m.type() === "error") consoleErrors.push(m.text().slice(0, 200));
+    if (m.type() === "error") consoleErrors.push(`${m.text().slice(0, 160)} @ ${new URL(page.url()).pathname}`);
   });
   await page.goto("/");
   await page.evaluate((t) => {
@@ -153,10 +153,15 @@ async function openApp(browser: Browser, email: string, theme: Theme): Promise<{
 }
 
 async function chooseCasquette(page: Page, kind: "organizer" | "pro", name?: string) {
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
   const entry = page.getByTestId(`casquette-${kind}`);
   await (name ? entry.filter({ hasText: name }) : entry).first().click();
-  await page.waitForURL(kind === "organizer" ? /\/direct/ : /\/scanner/, { timeout: 20_000 });
+  if (kind === "organizer") {
+    await page.waitForURL(/\/direct/, { timeout: 20_000 });
+    return;
+  }
+  // Lot 40 : la casquette Pro s'ouvre sur le Scanner tant que son Accueil est « Bientôt » (lot 43).
+  await page.waitForURL(/\/scanner/, { timeout: 20_000 });
 }
 
 async function db<T>(work: (client: pg.Client) => Promise<T>): Promise<T> {
@@ -324,7 +329,8 @@ test("pro : créer sa fiche depuis Mes casquettes (lot 34)", async ({ browser })
   const pseudo = `FicheApp_${unique()}`.slice(0, 24);
   await signUpApi(pseudo);
   const { ctx, page } = await openApp(browser, `${pseudo.toLowerCase()}@e2e.orasso.test`, "sable");
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
+  await page.getByTestId("profil-create").click(); // Un seul bouton « Créer », puis la feuille.
   await page.getByTestId("casquette-create-pro").click();
   await page.waitForURL(/pro-nouvelle/, { timeout: 20_000 });
   await expect(page.getByTestId("pro-form")).toBeVisible({ timeout: 30_000 });
@@ -471,7 +477,9 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
     }
 
     // Publications : création, modification, suppression avec confirmation.
-    await page.goto("/publier");
+    // Lot 40 : Publier n'est plus un onglet ; on y arrive depuis Ma fiche.
+    await page.getByRole("tab", { name: "Ma fiche", exact: true }).click();
+    await page.getByTestId("pro-new-post").click();
     await expect(page.getByTestId("pro-posts-counter")).toBeVisible({ timeout: 30_000 });
     if (first) {
       await page.getByLabel("Titre").fill("Offre de rentrée");
@@ -524,7 +532,7 @@ test("compte : newsletter, export des données, clés d'accès renommées puis s
       ),
     );
     const { ctx, page } = await openApp(browser, email, theme);
-    await page.goto("/moi");
+    await page.goto("/reglages/confidentialite"); // Lot 40 : Mes données vit dans Confidentialité.
     await expect(page.getByTestId("moi-data")).toBeVisible({ timeout: 30_000 });
     const first = theme === "sable";
     await reveal(page, page.getByTestId("moi-data"));
@@ -568,6 +576,9 @@ test("compte : newsletter, export des données, clés d'accès renommées puis s
     await shot(page, "09-moi-donnees", theme);
 
     // Clés d'accès : liste, renommage, suppression.
+    // Lot 40 : les clés d'accès vivent dans Sécurité ; on y va dans l'appli (✕ puis la tuile), sans recharger la page.
+    await page.getByRole("button", { name: "Fermer" }).first().click();
+    await page.getByTestId("reglage-securite").click();
     await reveal(page, page.getByTestId("moi-passkeys"));
     await page.getByTestId("moi-passkeys").click();
     await expect(page.getByTestId("passkey-row")).toHaveCount(1, { timeout: 20_000 });
@@ -706,7 +717,12 @@ test("garage : certification demandée, plaque d'un autre membre = transfert lan
 });
 
 test.afterAll(() => {
-  const real = consoleErrors.filter((e) => !/favicon|manifest|Failed to load resource|net::ERR/i.test(e));
+  // « cannot create file » : expo-sqlite en WebAssembly (base du mode staff ouverte au lancement) qui retrouve le
+  // fichier encore tenu par la page d'avant juste après un rechargement (`goto`) ; propre à la recette web, sans effet
+  // (la base se rouvre au chargement suivant). Signalé au lot 40, à revoir avec le mode staff v2 (lot 48).
+  const real = consoleErrors.filter(
+    (e) => !/favicon|manifest|Failed to load resource|net::ERR|^cannot create file/i.test(e),
+  );
   expect(real.slice(0, 5)).toEqual([]);
   for (const [name, a] of Object.entries(audits)) {
     expect(a.horizontalScroll, `${name} : défilement horizontal`).toBe(false);

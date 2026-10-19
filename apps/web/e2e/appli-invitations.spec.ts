@@ -27,7 +27,7 @@ test("Inviter depuis la casquette Organisateur, réponse dans Accès", async ({ 
   expect(ev.status).toBe(200);
 
   const { ctx, page } = await openApp(browser, "damien@orasso.local");
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
   await page.getByTestId("casquette-organizer").filter({ hasText: "MéditeSportCar" }).click();
   await page.waitForURL(/\/direct/, { timeout: 20_000 });
   await page.goto(`/evenement/${ev.data.id}`);

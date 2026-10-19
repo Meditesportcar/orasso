@@ -58,7 +58,7 @@ export default function VehiculeFiche() {
   const [certMessage, setCertMessage] = useState("");
   const v = vehicle.data;
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/garage"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/garage"));
 
   async function run(label: string, work: () => Promise<unknown>) {
     setBusy(label);
@@ -165,7 +165,7 @@ export default function VehiculeFiche() {
                 setDeleteError(null);
                 api
                   .deleteVehicle(v.id)
-                  .then(() => router.replace("/garage"))
+                  .then(() => router.replace("/(tabs)/garage"))
                   .catch((e) => setDeleteError(errorMessage(e)))
                   .finally(() => setDeleting(false));
               }}

@@ -15,7 +15,7 @@ import {
   signUp,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { applications, structureMembers, structures } from "../../db/schema";
+import { applications, structureMembers, structures, vehicles } from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -26,12 +26,30 @@ beforeEach(async () => {
 });
 
 describe("casquettes dans GET /me", () => {
-  it("un simple passionné n'a que la casquette passionné, sans pastille", async () => {
+  it("sans véhicule actif, un compte n'a que la casquette visiteur, sans pastille (lot 40)", async () => {
     const u = await signUp("Seule");
     const { status, json } = await call(u, "GET", "/me");
     expect(status).toBe(200);
-    expect(json.personas).toEqual([{ kind: "fan", id: "fan", label: "Passionné", logoUrl: null, badge: 0 }]);
+    expect(json.personas).toEqual([{ kind: "visitor", id: "visitor", label: "Visiteur", logoUrl: null, badge: 0 }]);
     expect(json.unreadInbox).toBe(0);
+  });
+
+  it("un véhicule actif fait l'exposant ; archiver le dernier rend visiteur ; jamais les deux (V5)", async () => {
+    const u = await signUp("Kenji");
+    const ref = await seedReference();
+    const first = await createVehicle(u.id, ref);
+    const exhibitor = await call(u, "GET", "/me");
+    expect(exhibitor.json.personas).toEqual([
+      { kind: "fan", id: "fan", label: "Passionné · exposant", logoUrl: null, badge: 0 },
+    ]);
+    // Un second véhicule ne double pas la casquette.
+    const second = await createVehicle(u.id, ref);
+    expect((await call(u, "GET", "/me")).json.personas.map((p: { kind: string }) => p.kind)).toEqual(["fan"]);
+    // Vendu, souvenir : plus aucun véhicule actif → visiteur.
+    await db.update(vehicles).set({ status: "sold" }).where(eq(vehicles.id, first.id));
+    await db.update(vehicles).set({ status: "keepsake" }).where(eq(vehicles.id, second.id));
+    const visitor = await call(u, "GET", "/me");
+    expect(visitor.json.personas.map((p: { kind: string }) => p.kind)).toEqual(["visitor"]);
   });
 
   it("le propriétaire et le co-organisateur actifs voient la structure, pas le staff ni un membre retiré", async () => {
@@ -47,7 +65,7 @@ describe("casquettes dans GET /me", () => {
 
     for (const u of [owner, co]) {
       const { json } = await call(u, "GET", "/me");
-      expect(json.personas.map((p: { kind: string }) => p.kind)).toEqual(["fan", "organizer"]);
+      expect(json.personas.map((p: { kind: string }) => p.kind)).toEqual(["visitor", "organizer"]);
       expect(json.personas[1]).toMatchObject({ kind: "organizer", id: s.id, label: "Club de test", badge: 0 });
     }
     for (const u of [staff, gone]) {
@@ -83,7 +101,7 @@ describe("casquettes dans GET /me", () => {
 
     const { json } = await call(owner, "GET", "/me");
     expect(json.personas.map((p: { kind: string; badge: number }) => [p.kind, p.badge])).toEqual([
-      ["fan", 0],
+      ["visitor", 0],
       ["organizer", 1],
       ["pro", 0],
     ]);

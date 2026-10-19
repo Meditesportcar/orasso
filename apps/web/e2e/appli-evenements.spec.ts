@@ -33,7 +33,7 @@ async function openApp(browser: Browser, email: string, theme: Theme) {
 }
 
 async function chooseOrganizer(page: Page, name: string) {
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi"); // Lot 40 : les casquettes sont dans Mon profil (plus d'avatar en haut).
   await page.getByTestId("casquette-organizer").filter({ hasText: name }).click();
   await page.waitForURL(/\/direct/, { timeout: 20_000 });
 }

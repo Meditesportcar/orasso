@@ -36,7 +36,7 @@ export default function StructurePage() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ tone: "info" | "error"; text: string } | null>(null);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/explorer" : "/auth"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
   const needAccount = () => router.push({ pathname: "/auth", params: { mode: "signup", next: `/o/${slug}` } });
 
   if (!s) {

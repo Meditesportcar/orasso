@@ -79,8 +79,8 @@ describe("casquettes : groupes de routes", () => {
   it("chaque casquette a son premier écran", () => {
     expect(homeOf(FAN)).toBe("/(tabs)/accueil");
     expect(homeOf({ kind: "organizer", structureId: "s-1" })).toBe("/(orga)/direct");
-    expect(homeOf({ kind: "pro", proProfileId: "p-1" })).toBe("/(pro)/scanner");
-    expect(homeOf({ kind: "provider" })).toBe("/(provider)/candidatures");
+    expect(homeOf({ kind: "pro", proProfileId: "p-1" })).toBe("/(pro)/accueil");
+    expect(homeOf({ kind: "provider" })).toBe("/(provider)/accueil");
   });
 
   it("redirige seulement quand l'URL est dans le groupe d'une autre casquette", () => {

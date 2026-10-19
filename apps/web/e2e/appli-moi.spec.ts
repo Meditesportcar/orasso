@@ -46,8 +46,26 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png` });
 }
 
-/** Fait défiler jusqu'à un élément de Moi (zone qui défile) puis le place en haut pour la capture. */
+/** Lot 40 : l'écran Moi est devenu Mon profil ; ses sections vivent dans les réglages en tuiles (`/reglages/<section>`). */
+const SECTION_OF: Record<string, string> = {
+  "moi-profile": "profil",
+  "moi-public-preview": "profil",
+  "notif-family-event": "notifications",
+  "visibility-public": "confidentialite",
+  "moi-data": "confidentialite",
+  "moi-sector": "preferences",
+  "moi-security": "securite",
+};
+
+/** Ouvre le réglage qui contient l'élément, le fait défiler (zone qui défile) puis le place en haut pour la capture. */
 async function reveal(page: Page, testId: string) {
+  const section = SECTION_OF[testId];
+  if (section && !page.url().includes(`/reglages/${section}`)) {
+    await page.goto(`/reglages/${section}`);
+    await page.getByTestId(testId).first().waitFor({ timeout: 30_000 });
+    // Un chargement de page rejoue l'ouverture de l'appli (3 s) : on attend qu'elle se termine avant d'appuyer.
+    await page.waitForTimeout(3500);
+  }
   const el = page.getByTestId(testId).first();
   await el.scrollIntoViewIfNeeded();
   await el.evaluate((node) => node.scrollIntoView({ block: "start" }));
@@ -69,10 +87,11 @@ test("Moi : profil, aperçu public, notifications, public / privé, secteur, ray
   });
   await openApp(page, "sable");
   await signIn(page, email);
+  // Compte tout neuf : adresse non confirmée, bandeau avec « Renvoyer » en tête de Mon profil (lot 40).
   await page.goto("/moi");
+  await expect(page.getByTestId("email-banner")).toBeVisible({ timeout: 30_000 });
+  await page.goto("/reglages/profil");
   await expect(page.getByTestId("moi-profile")).toBeVisible({ timeout: 30_000 });
-  // Compte tout neuf : adresse non confirmée, bandeau avec « Renvoyer ».
-  await expect(page.getByTestId("email-banner")).toBeVisible();
   await shot(page, "01-moi-profil-sable");
 
   // Profil : pseudo (disponibilité), description, photo → visibles dans /me/public-preview.
@@ -117,7 +136,7 @@ test("Moi : profil, aperçu public, notifications, public / privé, secteur, ray
     .toBe(false);
 
   // Compte privé → aperçu réduit (ni description, ni secteur).
-  await page.getByTestId("moi-sector").scrollIntoViewIfNeeded();
+  await reveal(page, "moi-sector");
   await page.getByLabel("Ajouter un département").fill("11");
   await page.getByRole("button", { name: "Ajouter ce département" }).click();
   await expect
@@ -213,7 +232,7 @@ test("Moi : profil, aperçu public, notifications, public / privé, secteur, ray
   await page2.getByLabel("Code à 6 chiffres").fill(totp(secret, Date.now() + 30_000));
   await page2.getByRole("button", { name: "Valider" }).click();
   await page2.waitForURL(/accueil/, { timeout: 30_000 });
-  await page2.goto("/moi");
+  await page2.goto("/reglages/profil");
   await expect(page2.getByTestId("moi-profile")).toBeVisible({ timeout: 30_000 });
   await shot(page2, "01-moi-profil-beton");
   await reveal(page2, "notif-family-event");
@@ -247,8 +266,8 @@ test("Moi : supprimer mon compte → écran de connexion, GET /me en 401", async
   const page = await ctx.newPage();
   await openApp(page, "sable");
   await signIn(page, email);
-  await page.goto("/moi");
-  await expect(page.getByTestId("moi-profile")).toBeVisible({ timeout: 30_000 });
+  await page.goto("/reglages/confidentialite");
+  await expect(page.getByTestId("moi-data")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Supprimer mon compte" }).click();
   await page.getByLabel("Ton mot de passe").fill("mauvais-mot-de-passe");
   await page.getByRole("checkbox", { name: /suppression est définitive/ }).click();
@@ -270,7 +289,8 @@ test("Casquettes : feuille Mes casquettes, bascule vers (orga) et (pro), appui l
   // Sarah_66 (seed) : co-organisatrice de MéditeSportCar (candidatures à trier) et propriétaire de Roues Libres 66.
   const sarah = await login("sarah@orasso.local");
   const me = await apiCall<{ personas: { kind: string; label: string; badge: number }[] }>(sarah, "GET", "/me");
-  expect(me.data.personas.map((p) => p.kind)).toEqual(["fan", "organizer", "organizer"]);
+  // Lot 40 : Sarah n'a pas de véhicule actif, sa casquette de base est le visiteur.
+  expect(me.data.personas.map((p) => p.kind)).toEqual(["visitor", "organizer", "organizer"]);
   expect(me.data.personas.some((p) => p.badge > 0)).toBe(true);
 
   for (const theme of ["sable", "beton"] as const) {
@@ -280,11 +300,11 @@ test("Casquettes : feuille Mes casquettes, bascule vers (orga) et (pro), appui l
     await signIn(page, "sarah@orasso.local");
     await shot(page, `10-accueil-pastille-${theme}`);
 
-    // L'avatar ouvre la feuille ; la structure à trier porte « à traiter ».
-    await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
-    await expect(page.getByTestId("casquette-organizer")).toHaveCount(2);
-    await expect(page.getByTestId("casquette-fan")).toContainText("Active");
-    await expect(page.getByText(/\d+ à traiter/)).toBeVisible();
+    // Lot 40 : les casquettes sont dans Mon profil ; la structure à trier porte ses candidatures « à trier ».
+    await page.goto("/moi");
+    await expect(page.getByTestId("casquette-organizer")).toHaveCount(2, { timeout: 30_000 });
+    await expect(page.getByTestId(/^casquette-(fan|visitor)$/)).toContainText(/Actif|Active/);
+    await expect(page.getByText(/\d+ candidatures? à trier/).first()).toBeVisible();
     await shot(page, `11-mes-casquettes-${theme}`);
 
     // Bascule vers la casquette Organisateur : le Direct (lot 22), barre à cinq onglets, casquette mémorisée.
@@ -293,33 +313,32 @@ test("Casquettes : feuille Mes casquettes, bascule vers (orga) et (pro), appui l
     await expect(
       page.getByTestId("orga-direct-event").or(page.getByText("Aucun événement publié à suivre")),
     ).toBeVisible({ timeout: 20_000 });
-    for (const label of ["Direct", "Événements", "Tri", "Boîte", "Staff"]) {
+    for (const label of ["Événements", "Tri", "Direct", "Équipe", "Structure"]) {
       await expect(page.getByRole("tab", { name: label })).toBeVisible();
     }
     await shot(page, `12-casquette-organisateur-${theme}`);
-    await page.getByRole("tab", { name: "Staff" }).click();
-    await page.waitForURL(/staff/, { timeout: 15_000 });
+    await page.getByRole("tab", { name: "Équipe" }).click();
+    await page.waitForURL(/equipe/, { timeout: 15_000 });
     await page.reload();
     await expect(page.getByRole("tab", { name: "Direct" })).toBeVisible({ timeout: 30_000 });
-    expect(page.url()).toMatch(/staff|direct/);
+    expect(page.url()).toMatch(/equipe|direct/);
 
-    // Appui long sur l'avatar : retour au passionné (barre à cinq autres onglets).
-    const avatar = page.getByRole("button", { name: "Moi et mes casquettes" });
-    await avatar.hover();
+    // Appui long sur le logotype : retour à la casquette de base (barre à cinq autres onglets).
+    await page.getByTestId("topbar-logo").hover();
     await page.mouse.down();
     await page.waitForTimeout(1200);
     await page.mouse.up();
     await page.waitForURL(/accueil/, { timeout: 15_000 });
-    await expect(page.getByRole("tab", { name: "Garage" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Profil" })).toBeVisible();
     await ctx.close();
   }
 
-  // Casquette Pro (fiche pro du seed) : rangée dans (pro), même mécanisme.
+  // Casquette Pro (fiche pro du seed) : rangée dans (pro), même mécanisme ; l'Accueil est au centre.
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: APP });
   const page = await ctx.newPage();
   await openApp(page, "sable");
   await signIn(page, "garage@orasso.local");
-  await page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+  await page.goto("/moi");
   await page.getByTestId("casquette-pro").click();
   await page.waitForURL(/scanner/, { timeout: 15_000 });
   await expect(page.getByRole("tab", { name: "Scanner" })).toBeVisible();

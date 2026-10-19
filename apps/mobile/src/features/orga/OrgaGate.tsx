@@ -45,7 +45,12 @@ export function TwoFactorGate({ primary = true }: { primary?: boolean } = {}) {
       </Text>
       {kind === "setup" ? (
         <>
-          <Button variant={primary ? "primary" : "plate"} icon="profile" onPress={() => router.push("/moi")} fullWidth>
+          <Button
+            variant={primary ? "primary" : "plate"}
+            icon="profile"
+            onPress={() => router.push("/reglages/securite")}
+            fullWidth
+          >
             {orgaLabels.gateOpenSecurity}
           </Button>
           <Button variant="plate" icon="back" onPress={() => void signOut()} fullWidth>
@@ -57,7 +62,7 @@ export function TwoFactorGate({ primary = true }: { primary?: boolean } = {}) {
           <Button variant={primary ? "primary" : "plate"} icon="back" onPress={() => void signOut()} fullWidth>
             {orgaLabels.gateSignInAgain}
           </Button>
-          <Button variant="plate" icon="profile" onPress={() => router.push("/moi")} fullWidth>
+          <Button variant="plate" icon="profile" onPress={() => router.push("/reglages/securite")} fullWidth>
             {orgaLabels.gateOpenSecurity}
           </Button>
         </>

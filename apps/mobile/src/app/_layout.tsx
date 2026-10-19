@@ -31,8 +31,9 @@ import { ApplicationsProvider } from "@/lib/applications";
 import { initClock } from "@/lib/clockStore";
 import { kvGet, kvSet } from "@/lib/kv";
 import { appLinkOf, teamRequestTarget } from "@/lib/links";
+import { MotionPrefProvider, parseReduceMotion, REDUCE_MOTION_KEY } from "@/lib/motionPref";
 import { PersonaProvider, usePersona } from "@/lib/persona";
-import { homeOf, misplacedGroup } from "@/lib/personaModel";
+import { misplacedTarget } from "@/lib/personaModel";
 import { registerThisDevice } from "@/lib/push";
 import { initSentry } from "@/lib/sentry";
 import { SessionProvider, useSession } from "@/lib/session";
@@ -58,7 +59,7 @@ function Shell() {
   useEffect(() => {
     setPosition(firstDepartment ? profilePosition([firstDepartment]) : null);
   }, [firstDepartment, setPosition]);
-  const { persona, backToFan, choose } = usePersona();
+  const { persona, backToBase, choose } = usePersona();
   const router = useRouter();
   const segments = useSegments();
   const navigation = useRootNavigationState();
@@ -93,10 +94,12 @@ function Shell() {
   }, [status, onboarded, segments, router, navigation?.key]);
 
   // Chaque casquette a son groupe de routes : si l'URL est dans celui d'une autre (retour arrière, lien profond),
-  // on revient au premier écran de la casquette active.
+  // on revient au premier écran de la casquette active ; exposant ↔ visiteur (véhicule ajouté ou archivé), au même
+  // onglet de la nouvelle barre, sinon à son Profil (lot 40).
   useEffect(() => {
     if (status !== "in" || !navigation?.key) return;
-    if (misplacedGroup(persona, segments[0] as string | undefined)) router.replace(homeOf(persona));
+    const target = misplacedTarget(persona, segments as string[]);
+    if (target) router.replace(target as never);
   }, [status, persona, segments, router, navigation?.key]);
 
   // Lot 32 : compte suspendu → l'écran « Compte suspendu » (motif, contestation) s'ouvre une fois par lancement.
@@ -112,19 +115,20 @@ function Shell() {
     if (status === "in") void registerThisDevice();
   }, [status]);
 
-  // Toucher une notification ouvre l'onglet Accès du passionné (quelle que soit la casquette active) ou l'écran de son lien.
+  // Toucher une notification ouvre l'onglet Sorties de la casquette de base (quelle que soit la casquette active) ou
+  // l'écran de son lien.
   useEffect(() => {
     if (Platform.OS === "web") return;
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       // Décision sur une candidature de prestataire (lot 21) : l'écran Candidatures de la casquette Prestataire.
       if (response.notification.request.content.data?.screen === "provider_applications") {
-        choose({ kind: "provider" });
+        choose({ kind: "provider" }, "/(provider)/candidatures");
         return;
       }
       // Demande pour devenir staff (lot 35a) : l'écran Équipe de la structure, sous la casquette Organisateur.
       const team = teamRequestTarget(response.notification.request.content.data);
       if (team) {
-        choose({ kind: "organizer", structureId: team }, "/(orga)/staff");
+        choose({ kind: "organizer", structureId: team }, "/(orga)/equipe");
         return;
       }
       // Alerte de modération ou demande d'aide d'une structure (lot 35d) : l'écran de la casquette Administration.
@@ -133,14 +137,14 @@ function Shell() {
         choose({ kind: "admin" }, admin);
         return;
       }
-      backToFan();
-      // Un lien de l'appli (profil d'un ami, événement) ouvre cet écran, sinon l'onglet Accès.
+      backToBase();
+      // Un lien de l'appli (profil d'un ami, événement) ouvre cet écran, sinon l'onglet Sorties (`/acces` y redirige).
       const link = appLinkOf(response.notification.request.content.data?.link);
       if (link) router.navigate(link as never);
       else router.navigate("/acces");
     });
     return () => sub.remove();
-  }, [router, backToFan, choose]);
+  }, [router, backToBase, choose]);
 
   return (
     <View style={[styles.fill, { backgroundColor: ground }]}>
@@ -170,33 +174,38 @@ function Shell() {
 export default function RootLayout() {
   const fontsReady = useOrassoFonts();
   const [preference, setPreference] = useState<ThemePreference | null>(null);
-  // Recette : /_ds?reduce=1 force « réduire les animations » (sinon, le réglage de l'appareil).
+  // Lot 40 : « Réduire les animations » de Mon profil › Préférences (kv), en plus du réglage de l'appareil.
+  const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
+  // Recette : /_ds?reduce=1 force « réduire les animations » (sinon, la préférence puis le réglage de l'appareil).
   const { reduce } = useGlobalSearchParams<{ reduce?: string }>();
 
   useEffect(() => {
     void kvGet("theme").then((v) => setPreference(parseThemePreference(v)));
+    void kvGet(REDUCE_MOTION_KEY).then((v) => setReduceMotion(parseReduceMotion(v)));
   }, []);
 
-  const ready = fontsReady && preference !== null;
+  const ready = fontsReady && preference !== null && reduceMotion !== null;
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
   if (!ready) return null;
 
   return (
-    <ThemeProvider
-      initialPreference={preference}
-      onPreferenceChange={(next) => void kvSet("theme", next)}
-      reducedMotion={reduce === "1" ? true : undefined}
-    >
-      <SessionProvider>
-        <PersonaProvider>
-          <ApplicationsProvider>
-            <Shell />
-          </ApplicationsProvider>
-        </PersonaProvider>
-      </SessionProvider>
-    </ThemeProvider>
+    <MotionPrefProvider value={reduceMotion ?? false} onChange={setReduceMotion}>
+      <ThemeProvider
+        initialPreference={preference}
+        onPreferenceChange={(next) => void kvSet("theme", next)}
+        reducedMotion={reduce === "1" || reduceMotion ? true : undefined}
+      >
+        <SessionProvider>
+          <PersonaProvider>
+            <ApplicationsProvider>
+              <Shell />
+            </ApplicationsProvider>
+          </PersonaProvider>
+        </SessionProvider>
+      </ThemeProvider>
+    </MotionPrefProvider>
   );
 }
 

@@ -80,7 +80,7 @@ export function ConversationScreen({
   const [menu, setMenu] = useState<MessageView | null>(null);
   const lastRead = useRef<string | null>(null);
 
-  const close = onClose ?? (() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/boite")));
+  const close = onClose ?? (() => (router.canGoBack() ? router.back() : router.replace("/boite")));
   const mySide = useCallback(
     (m: MessageView) => (conversation?.side === "structure" ? m.asStructure : m.sender?.userId === myId),
     [conversation?.side, myId],

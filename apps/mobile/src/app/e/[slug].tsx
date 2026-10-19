@@ -83,7 +83,7 @@ export default function EventPage() {
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerSent, setProviderSent] = useState(false);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/explorer" : "/auth"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
 
   if (!e) {
     return (

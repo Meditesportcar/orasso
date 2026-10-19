@@ -203,7 +203,7 @@ export function TemplatesScreen() {
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/staff"));
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/(orga)/equipe"));
   const all = templates.data?.items ?? [];
   const orasso = all.filter((x) => x.orasso);
   const mine = all.filter((x) => !x.orasso);
