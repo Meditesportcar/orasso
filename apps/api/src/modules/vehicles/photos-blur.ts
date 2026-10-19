@@ -7,7 +7,7 @@ import { and, eq } from "drizzle-orm";
 import sharp, { type OverlayOptions } from "sharp";
 
 import { vehiclePhotos, vehicles } from "../../db/schema";
-import { now } from "../../lib/deps";
+import { deps, now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
@@ -15,9 +15,15 @@ import { withTx } from "../../lib/tx";
 import { vehiclesRepo } from "./repo";
 import { vehicleFull } from "./serializers";
 
-/** Facteur de pixellisation : la zone est réduite 12 fois puis agrandie au plus proche voisin. */
-const PIXEL_FACTOR = 12;
-const BLUR_SIGMA = 8;
+/**
+ * La zone est réduite à une grille fixe, quelle que soit sa taille (une plaque prise de près fait 800 px) : 9 blocs
+ * en largeur, 3 au plus en hauteur, soit moins d'un bloc par caractère ; puis agrandie au plus proche voisin et
+ * floutée d'un rayon proportionnel à sa hauteur (`hauteur / 4`) : aucun caractère n'est récupérable.
+ */
+export const BLUR_COLUMNS = 9;
+export const BLUR_ROWS = 3;
+/** Garde-fou de décodage (images piégées) : 50 millions de pixels au plus (une photo de 48 Mpx passe). */
+export const MAX_INPUT_PIXELS = 50_000_000;
 
 type Box = { left: number; top: number; width: number; height: number };
 
@@ -30,34 +36,39 @@ export function plateBox(r: PlateRect, width: number, height: number): Box {
   return { left, top, width: right - left, height: bottom - top };
 }
 
+/** Rayon du flou d'une zone : proportionnel à sa hauteur (borné aux limites de sharp). */
+export const blurSigma = (box: Box): number => Math.min(1000, Math.max(0.3, box.height / 4));
+
 /**
- * Pixellise puis floute chaque zone (extract → réduction ×12 → agrandissement `nearest` → `blur(8)` → composite).
- * L'image d'entrée doit déjà être orientée (photo stockée) ; sortie WebP comme à l'envoi.
+ * Floute chaque zone : grille fixe (`BLUR_COLUMNS` × `BLUR_ROWS`), agrandissement `nearest`, flou de rayon
+ * `hauteur / 4`, composite. L'image n'est décodée qu'une fois (pixels bruts) ; elle doit déjà être orientée (photo
+ * stockée, ou sortie de la recompression à l'envoi) ; sortie WebP comme à l'envoi.
  */
 export async function blurPlateRegions(
   input: Buffer,
   rects: PlateRect[],
 ): Promise<{ data: Buffer; info: { width: number; height: number; size: number } }> {
-  const base = sharp(input);
-  const meta = await base.metadata();
-  const width = meta.width ?? 0;
-  const height = meta.height ?? 0;
+  const decoded = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const raw = { width: decoded.info.width, height: decoded.info.height, channels: decoded.info.channels };
   const overlays: OverlayOptions[] = [];
   for (const r of rects) {
-    const box = plateBox(r, width, height);
-    const region = await sharp(input).extract(box).toBuffer();
-    const small = await sharp(region)
-      .resize(Math.max(1, Math.round(box.width / PIXEL_FACTOR)), Math.max(1, Math.round(box.height / PIXEL_FACTOR)), {
-        fit: "fill",
-      })
+    const box = plateBox(r, raw.width, raw.height);
+    const small = await sharp(decoded.data, { raw })
+      .extract(box)
+      .resize(Math.min(BLUR_COLUMNS, box.width), Math.min(BLUR_ROWS, box.height), { fit: "fill" })
+      .png()
       .toBuffer();
-    const pixelated = await sharp(small)
+    const blurred = await sharp(small)
       .resize(box.width, box.height, { fit: "fill", kernel: "nearest" })
-      .blur(BLUR_SIGMA)
+      .blur(blurSigma(box))
+      .png()
       .toBuffer();
-    overlays.push({ input: pixelated, left: box.left, top: box.top });
+    overlays.push({ input: blurred, left: box.left, top: box.top });
   }
-  return base.composite(overlays).webp({ quality: 80 }).toBuffer({ resolveWithObject: true });
+  return sharp(decoded.data, { raw }).composite(overlays).webp({ quality: 80 }).toBuffer({ resolveWithObject: true });
 }
 
 /** Un rectangle déjà couvert par une zone floutée n'a rien à flouter de plus (envoi rejoué : idempotent). */
@@ -66,6 +77,25 @@ export function coveredBy(r: PlateRect, applied: PlateRect[]): boolean {
   return applied.some(
     (a) => r.x >= a.x - e && r.y >= a.y - e && r.x + r.w <= a.x + a.w + e && r.y + r.h <= a.y + a.h + e,
   );
+}
+
+/**
+ * Retire un fichier de photo devenu inutile (l'original non flouté, ou la copie d'un envoi refusé). Un échec ne fait
+ * pas échouer la requête déjà validée : il est journalisé et la suppression est reprise par la tâche `storage.remove`.
+ */
+export async function removeOrRetry(key: string): Promise<void> {
+  try {
+    await storage.remove(key);
+  } catch (error) {
+    console.error("Suppression de photo à reprendre :", key, error);
+    await deps.jobs.send("storage.remove", { key }, new Date(now().getTime() + 60_000)).catch(() => undefined);
+  }
+}
+
+/** Tâche `storage.remove` : seules les photos de véhicules sont concernées. */
+export async function retryRemove(key: string): Promise<void> {
+  if (!/^vehicles\/[0-9a-f-]{36}\/[0-9a-f]{16}\.webp$/.test(key)) return;
+  await storage.remove(key);
 }
 
 export const photoBlurService = {
@@ -114,7 +144,7 @@ export const photoBlurService = {
         });
         replaced = true;
       } finally {
-        await storage.remove(replaced ? photo.storageKey : key);
+        await removeOrRetry(replaced ? photo.storageKey : key);
       }
     }
     const row = await vehiclesRepo.findFullById(vehicleId);

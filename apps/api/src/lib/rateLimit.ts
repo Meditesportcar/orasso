@@ -13,6 +13,11 @@ export const rateRules = {
     windowMs: 3_600_000,
     message: "Trop de véhicules ajoutés ou modifiés : réessaie plus tard.",
   },
+  /**
+   * Lot 51 : photos de véhicule envoyées ou floutées (décodage d'image, CPU) ; plus large que `vehicleWrite` : un ajout
+   * en cinq étapes envoie jusqu'à 8 photos, et un garage peut en compter plusieurs.
+   */
+  vehiclePhoto: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
   /** Fiche Instagram d'un véhicule (rendu d'image, mis en cache une heure par véhicule). */
   shareImage: { max: 40, windowMs: 3_600_000, message: "Trop de fiches générées : réessaie plus tard." },
   /** Vérification d'un QR de compte : code de 8 chiffres deviné par essais successifs. */

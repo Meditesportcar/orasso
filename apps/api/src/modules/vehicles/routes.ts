@@ -58,6 +58,7 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   })
   .post("/me/vehicles/:id/photos", async (c) => {
     const v = await requireUser(c);
+    rateLimit("vehiclePhoto", v.user.id);
     const form = await c.req.parseBody();
     if (!(form.photo instanceof File)) throw validation("Champ « photo » attendu (fichier)");
     // Lot 51 : rectangles de plaque (JSON) confirmés dans l'appli ou sur le site, floutés avant le stockage.
@@ -76,7 +77,7 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   // Floutage de plaque sur une photo déjà envoyée (irréversible, V9).
   .post("/me/vehicles/:id/photos/:photoId/blur", async (c) => {
     const v = await requireUser(c);
-    rateLimit("vehicleWrite", v.user.id);
+    rateLimit("vehiclePhoto", v.user.id);
     const { rects } = await body(c, photoBlurSchema);
     return c.json(await photoBlurService.blur(v, uuidParam(c, "id"), uuidParam(c, "photoId"), rects));
   })

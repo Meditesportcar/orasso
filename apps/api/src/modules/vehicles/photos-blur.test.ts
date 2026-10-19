@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, seedReference, signUp, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { pool } from "../../db/client";
-import { blurPlateRegions, coveredBy, plateBox } from "./photos-blur";
+import { BLUR_COLUMNS, BLUR_ROWS, blurPlateRegions, blurSigma, coveredBy, plateBox } from "./photos-blur";
 
 afterAll(async () => {
   await pool.end();
@@ -114,6 +114,76 @@ describe("règles pures", () => {
     // Hors de la zone : seule la compression WebP joue (écart minime).
     expect(diff(before, after, { left: 0, top: 0, width: 90, height: 40 })).toBeLessThan(6);
     expect(diff(before, after, { left: 320, top: 160, width: 80, height: 40 })).toBeLessThan(6);
+  });
+});
+
+/**
+ * Plaque prise de près : 800 × 180 px de « caractères » (barres noires de largeurs et d'écarts variés, comme
+ * « GA-662-KS ») sur fond blanc, posée sur une photo de 1600 × 1000.
+ */
+async function closeUpPlate(): Promise<{ image: Buffer; rect: { x: number; y: number; w: number; h: number } }> {
+  const W = 1600;
+  const H = 1000;
+  const plate = { left: 400, top: 600, width: 800, height: 180 };
+  const raw = Buffer.alloc(W * H * 3, 120);
+  const glyphs = [18, 42, 10, 30, 55, 14, 26, 48, 12, 36, 20, 40, 16, 28];
+  for (let y = plate.top; y < plate.top + plate.height; y++) {
+    let x = plate.left;
+    let ink = false;
+    let g = 0;
+    while (x < plate.left + plate.width) {
+      const span = glyphs[g++ % glyphs.length] ?? 20;
+      const inGlyphRow = y > plate.top + 25 && y < plate.top + plate.height - 25;
+      for (let k = 0; k < span && x < plate.left + plate.width; k++, x++) {
+        raw.fill(ink && inGlyphRow ? 10 : 245, (y * W + x) * 3, (y * W + x) * 3 + 3);
+      }
+      ink = !ink;
+    }
+  }
+  const image = await sharp(raw, { raw: { width: W, height: H, channels: 3 } })
+    .png()
+    .toBuffer();
+  return { image, rect: { x: 400 / W, y: 600 / H, w: 800 / W, h: 180 / H } };
+}
+
+/** Écart type et amplitude du profil horizontal (moyenne de chaque colonne) de la zone, en niveaux de gris. */
+async function zoneStats(image: Buffer, box: { left: number; top: number; width: number; height: number }) {
+  const { data } = await sharp(image).extract(box).greyscale().raw().toBuffer({ resolveWithObject: true });
+  let sum = 0;
+  for (const v of data) sum += v;
+  const mean = sum / data.length;
+  let sq = 0;
+  for (const v of data) sq += (v - mean) ** 2;
+  const columns: number[] = [];
+  for (let x = 0; x < box.width; x++) {
+    let c = 0;
+    for (let y = 0; y < box.height; y++) c += data[y * box.width + x] ?? 0;
+    columns.push(c / box.height);
+  }
+  // Variation d'une colonne à la voisine : un caractère lisible fait des sauts nets.
+  let jump = 0;
+  for (let x = 1; x < columns.length; x++) jump = Math.max(jump, Math.abs((columns[x] ?? 0) - (columns[x - 1] ?? 0)));
+  return { spread: Math.sqrt(sq / data.length), jump };
+}
+
+describe("plaque prise de près (800 px)", () => {
+  it("aucun détail récupérable : zone lisse, pas de saut d'une colonne à l'autre", async () => {
+    const { image, rect } = await closeUpPlate();
+    const inside = { left: 440, top: 630, width: 720, height: 120 };
+    const before = await zoneStats(image, inside);
+    expect(before.spread).toBeGreaterThan(80);
+    expect(before.jump).toBeGreaterThan(100);
+    const out = await blurPlateRegions(image, [rect]);
+    const after = await zoneStats(out.data, inside);
+    expect(after.spread, "écart type de la zone floutée").toBeLessThan(25);
+    expect(after.jump, "plus aucun bord de caractère").toBeLessThan(4);
+  });
+
+  it("le rayon du flou suit la hauteur de la zone, la grille est fixe", () => {
+    expect(blurSigma({ left: 0, top: 0, width: 800, height: 180 })).toBe(45);
+    expect(blurSigma({ left: 0, top: 0, width: 4, height: 1 })).toBe(0.3);
+    expect(BLUR_COLUMNS).toBeLessThanOrEqual(10);
+    expect(BLUR_ROWS).toBeLessThanOrEqual(3);
   });
 });
 

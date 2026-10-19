@@ -34,7 +34,7 @@ import { notificationsService } from "../notifications/service";
 import { socialJournal } from "../social/journal";
 import { checkCategories } from "./categories";
 import { certificationService } from "./certification";
-import { blurPlateRegions } from "./photos-blur";
+import { blurPlateRegions, MAX_INPUT_PIXELS, removeOrRetry } from "./photos-blur";
 import { plateTransferService } from "./plate-transfer";
 import { type VehicleRow, vehiclesRepo } from "./repo";
 import { vehicleFull, vehiclePublic } from "./serializers";
@@ -387,7 +387,7 @@ export const vehiclesService = {
     }
     let output: { data: Buffer; info: { width: number; height: number; size: number } };
     try {
-      output = await sharp(Buffer.from(await file.arrayBuffer()))
+      output = await sharp(Buffer.from(await file.arrayBuffer()), { limitInputPixels: MAX_INPUT_PIXELS })
         .rotate()
         .resize(PHOTO_MAX_SIDE, PHOTO_MAX_SIDE, { fit: "inside", withoutEnlargement: true })
         .webp({ quality: 80 })
@@ -422,7 +422,7 @@ export const vehiclesService = {
         await certificationService.afterChange(tx, after, id, certifiedBefore);
       });
     } catch (error) {
-      await storage.remove(key);
+      await removeOrRetry(key);
       throw error;
     }
     return full(id);
