@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { type Decide, fromWallTime, nearestFullMoon, stampSeed } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
@@ -19,8 +19,10 @@ import {
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import {
+  applications,
   audiencePrizeResults,
   audienceVotes,
+  checkins,
   devices,
   events,
   notifications,
@@ -35,13 +37,13 @@ import type { Viewer } from "../../lib/session";
 import { settingsStore } from "../../lib/settings";
 import { accountService } from "../account/service";
 import { applicationsService } from "../applications/service";
+import { audiencePrizeService } from "../audience-prize/service";
 import { checkinsService } from "../checkins/service";
 import { scheduleEventJobs } from "../events/jobs";
 import { notificationsService } from "../notifications/service";
 import { pointsService } from "../points/service";
 import { recapService } from "../recap/service";
 import { staffService } from "../staff/service";
-import { passportService } from "./service";
 
 afterAll(async () => {
   await notificationsService.flush();
@@ -82,6 +84,22 @@ async function enroll(eid: string, u: TestUser, v: Viewer) {
   });
   await applicationsService.decide(orgaV, eid, app!.id, ACCEPT);
   return { applicationId: app!.id, vehicleId: vehicle.id };
+}
+
+/** Sortie passée, pointée avant la mise en ligne du passeport (candidature retenue + entrée, sans tampon). */
+async function pastEntry(eid: string, person: Person, at: Date) {
+  const [app] = await db
+    .insert(applications)
+    .values({
+      eventId: eid,
+      userId: person.u.id,
+      vehicleId: person.vehicleId,
+      status: "accepted",
+      rulesAcceptedAt: at,
+      followStructure: false,
+    })
+    .returning();
+  await db.insert(checkins).values({ applicationId: app!.id, eventId: eid, method: "scan", checkedInAt: at });
 }
 
 async function checkin(person: Person, at: Date, eid = eventId) {
@@ -191,15 +209,31 @@ describe("passeport : tampons", () => {
     expect((await call(null, "GET", "/me/passport")).status).toBe(401);
   });
 
-  it("staff : tampon à la présence confirmée le jour J, sinon au règlement ; visite au billet contrôlé", async () => {
+  it("staff : la veille seule ne compte pas ; « là » le jour J ou une action le jour J, oui ; visite au billet", async () => {
     const marcel = await signUp("Marcel_66");
     await addMember(structureId, marcel.id, "staff", ["scan"]);
+    const theo = await signUp("Theo_66");
+    await addMember(structureId, theo.id, "staff", ["scan"]);
+    // « Je serai là » la veille : ni tampon, ni voix, ni rare au règlement.
     clock.set(paris(10, 16, 18));
     await staffService.setPresence(await viewerOf(marcel), eventId, true);
+    await staffService.setPresence(await viewerOf(theo), eventId, true);
     expect(await stampsOf(marcel.id)).toHaveLength(0);
+    // Julie : « Je suis là » 1 h avant le début (dans la fenêtre de 3 h) → tampon tout de suite.
     clock.set(paris(10, 17, 18));
     await staffService.setPresence(julieV, eventId, true);
     expect((await stampsOf(julie.id)).map((s) => s.kind)).toEqual(["staff"]);
+    // Théo pointe une voiture le jour J : sa présence devient vérifiable.
+    clock.set(paris(10, 17, 19, 2));
+    await checkinsService.create(await viewerOf(theo), eventId, {
+      applicationId: p.kenji.applicationId,
+      method: "manual",
+      note: null,
+    });
+    await checkin(p.lea, paris(10, 17, 19, 10));
+    clock.set(paris(10, 17, 20));
+    expect((await vote(marcel, p.lea.applicationId)).json.error.code).toBe("not_checked_in");
+    expect((await vote(theo, p.lea.applicationId)).status).toBe(200);
 
     // Billet gratuit du public, contrôlé à l'entrée par le staff d'accueil.
     await db.update(events).set({ publicAccess: "free_reservation" }).where(eq(events.id, eventId));
@@ -214,11 +248,28 @@ describe("passeport : tampons", () => {
 
     clock.set(SETTLE);
     await pointsService.settleEvent(eventId);
-    expect((await stampsOf(marcel.id)).map((s) => s.kind).sort()).toEqual(["first_outing", "staff"]);
+    expect(await stampsOf(marcel.id)).toHaveLength(0);
+    expect((await stampsOf(theo.id)).map((s) => s.kind).sort()).toEqual(["first_outing", "staff"]);
+    expect((await stampsOf(julie.id)).map((s) => s.kind).sort()).toEqual(["first_outing", "staff"]);
   });
 
-  it("rares au règlement : première sortie, 10e événement, nuit de pleine lune ; rejoué sans doublon", async () => {
-    // Kenji : neuf événements avant celui-ci.
+  it("staff repassé « pas là » (ou corrigé par l'organisateur) : tampon retiré, pas compté au règlement", async () => {
+    clock.set(paris(10, 17, 18));
+    await staffService.setPresence(julieV, eventId, true);
+    expect(await stampsOf(julie.id)).toHaveLength(1);
+    await staffService.setPresence(julieV, eventId, false);
+    expect(await stampsOf(julie.id)).toHaveLength(0);
+    await staffService.setPresence(julieV, eventId, true);
+    expect(await stampsOf(julie.id)).toHaveLength(1);
+    await staffService.update(orgaV, eventId, julie.id, { presence: "absent" });
+    expect(await stampsOf(julie.id)).toHaveLength(0);
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    expect(await stampsOf(julie.id)).toHaveLength(0);
+  });
+
+  it("rares sur l'historique réel : 10e événement, pas de « première sortie » pour un habitué ; pleine lune", async () => {
+    // Kenji : neuf sorties pointées avant la mise en ligne du passeport (aucun tampon), Léa : une.
     for (let i = 1; i <= 9; i++) {
       const past = await createEvent(structureId, {
         format: "gathering",
@@ -227,22 +278,29 @@ describe("passeport : tampons", () => {
         endsAt: paris(3, i, 14),
         settledAt: paris(3, i + 2, 14),
       });
-      await passportService.stamp(db, p.kenji.u.id, past, "participation");
+      await pastEntry(past.id, p.kenji, paris(3, i, 10, 30));
+      if (i === 1) await pastEntry(past.id, p.lea, paris(3, i, 10, 40));
     }
+    expect(await db.query.passportStamps.findMany()).toHaveLength(0);
     await checkin(p.kenji, paris(10, 17, 19, 2));
     await checkin(p.lea, paris(10, 17, 19, 10));
+    await checkin(p.nina, paris(10, 17, 19, 20));
     clock.set(SETTLE);
     expect(await pointsService.settleEvent(eventId)).toBe(true);
     expect((await stampsOf(p.kenji.u.id)).map((s) => s.kind).sort()).toEqual(["participation", "tenth_event"]);
-    const lea = await stampsOf(p.lea.u.id);
-    expect(lea.map((s) => s.kind).sort()).toEqual(["first_outing", "participation"]);
-    expect(lea.find((s) => s.kind === "first_outing")).toMatchObject({ rare: true, shape: "octagon", ink: "66" });
+    expect((await stampsOf(p.lea.u.id)).map((s) => s.kind)).toEqual(["participation"]);
+    const nina = await stampsOf(p.nina.u.id);
+    expect(nina.map((s) => s.kind).sort()).toEqual(["first_outing", "participation"]);
+    expect(nina.find((s) => s.kind === "first_outing")).toMatchObject({ rare: true, shape: "octagon", ink: "66" });
+    // Le tampon garde l'heure de l'entrée.
+    expect(nina.find((s) => s.kind === "participation")?.stampedAt).toEqual(paris(10, 17, 19, 20));
     // Marc, retenu mais absent : rien.
     expect(await stampsOf(p.marc.u.id)).toHaveLength(0);
     // Rejoué (tâche + balayage) : rien de plus.
     await db.update(events).set({ settledAt: null }).where(eq(events.id, eventId));
     await pointsService.settleEvent(eventId);
-    expect(await db.query.passportStamps.findMany({ where: eq(passportStamps.eventId, eventId) })).toHaveLength(4);
+    // 5 pour les pilotes, 2 pour Julie (staff : elle a pointé le jour J, présence vérifiable).
+    expect(await db.query.passportStamps.findMany({ where: eq(passportStamps.eventId, eventId) })).toHaveLength(7);
 
     // Pleine lune : un événement qui commence à l'instant de la pleine lune la plus proche.
     const moon = nearestFullMoon(paris(10, 17, 19));
@@ -252,16 +310,16 @@ describe("passeport : tampons", () => {
       endsAt: new Date(moon.getTime() + 3 * 3_600_000),
     });
     clock.set(new Date(moon.getTime() - 7 * 86_400_000));
-    const nina = await enroll(night.id, p.nina.u, p.nina.v);
-    await checkin({ ...p.nina, ...nina }, new Date(moon.getTime() + 600_000), night.id);
+    const marc = await enroll(night.id, p.marc.u, p.marc.v);
+    await checkin({ ...p.marc, ...marc }, new Date(moon.getTime() + 600_000), night.id);
     clock.set(new Date(moon.getTime() + 3 * 3_600_000 + 48 * 3_600_000));
     await pointsService.settleEvent(night.id);
-    expect((await stampsOf(p.nina.u.id, night.id)).map((s) => s.kind).sort()).toEqual([
+    expect((await stampsOf(p.marc.u.id, night.id)).map((s) => s.kind).sort()).toEqual([
       "first_outing",
       "full_moon",
       "participation",
     ]);
-    const passport = (await call(p.nina.u, "GET", "/me/passport")).json;
+    const passport = (await call(p.marc.u, "GET", "/me/passport")).json;
     expect(passport).toMatchObject({ total: 3, rare: 2 });
   });
 });
@@ -273,7 +331,8 @@ describe("passeport : contestation", () => {
     expect(await stampsOf(p.marc.u.id)).toHaveLength(0);
     const contest = await pointsService.contest(p.marc.v, p.marc.applicationId, "J'étais là, le QR ne passait pas.");
     await pointsService.decide(orgaV, contest.id, { decision: "accept", note: null, checkin: true });
-    expect((await stampsOf(p.marc.u.id)).map((s) => s.kind)).toEqual(["participation"]);
+    // Les rares sont réévalués : c'est sa première sortie.
+    expect((await stampsOf(p.marc.u.id)).map((s) => s.kind).sort()).toEqual(["first_outing", "participation"]);
   });
 });
 
@@ -476,20 +535,140 @@ describe("récap", () => {
     expect((await call(p.marc.u, "GET", "/me/recaps")).json).toEqual([]);
   });
 
-  it("anonymisation : tampons et votes conservés, anonymes", async () => {
+  it("anonymisation : tampons et voix conservés ; le compte supprimé sort du classement et du prix", async () => {
     await checkin(p.kenji, paris(10, 17, 19, 2));
     await checkin(p.lea, paris(10, 17, 19, 10));
+    await checkin(p.nina, paris(10, 17, 19, 20));
     clock.set(paris(10, 17, 20));
-    await vote(p.kenji.u, p.lea.applicationId);
     await vote(p.lea.u, p.kenji.applicationId);
+    await vote(p.nina.u, p.kenji.applicationId);
+    await vote(p.kenji.u, p.lea.applicationId);
     clock.set(paris(10, 18, 12));
     await accountService.anonymize(p.kenji.u.id, null);
     expect(await stampsOf(p.kenji.u.id)).toHaveLength(1);
     expect(await db.query.audienceVotes.findFirst({ where: eq(audienceVotes.voterUserId, p.kenji.u.id) })).toBeTruthy();
     const board = (await call(p.lea.u, "GET", `/events/${eventId}/audience-prize`)).json;
-    const kenji = board.entries.find((e: { applicationId: string }) => e.applicationId === p.kenji.applicationId);
-    expect(kenji.pseudo).toMatch(/^supprime_/);
-    expect(board.total).toBe(2);
+    expect(board.entries.find((e: { applicationId: string }) => e.applicationId === p.kenji.applicationId)).toBe(
+      undefined,
+    );
+    expect(board).toMatchObject({ total: 1, vehicles: 2 });
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    expect(await db.query.pointEntries.findMany({ where: eq(pointEntries.kind, "audience_prize") })).toHaveLength(0);
+    expect(await db.query.notifications.findMany({ where: eq(notifications.type, "audience_prize_won") })).toHaveLength(
+      0,
+    );
+  });
+});
+
+describe("relecture : accès, robustesse, concurrence", () => {
+  it("événement privé : classement, voix et canal refusés à un tiers (403 invite_only), ouverts aux ayants droit", async () => {
+    await db.update(events).set({ admission: "invite_only" }).where(eq(events.id, eventId));
+    const stranger = await signUp("Inconnu_66");
+    for (const path of [`/events/${eventId}/audience-prize`, `/events/${eventId}/audience-prize/mine`]) {
+      const r = await call(stranger, "GET", path);
+      expect(r.status).toBe(403);
+      expect(r.json.error.code).toBe("invite_only");
+      expect(r.text).not.toContain("Béziers");
+    }
+    expect((await vote(stranger, p.kenji.applicationId)).status).toBe(403);
+    expect(await audiencePrizeService.canSubscribe(stranger.id, `event:${eventId}:votes`)).toBe(false);
+    // Retenu (candidature active) et organisateur : oui.
+    expect((await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).status).toBe(200);
+    expect(await audiencePrizeService.canSubscribe(p.kenji.u.id, `event:${eventId}:votes`)).toBe(true);
+    expect(await audiencePrizeService.canSubscribe(orga.id, `event:${eventId}:votes`)).toBe(true);
+  });
+
+  it("vote sur un événement annulé : 409 vote_closed", async () => {
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    await checkin(p.lea, paris(10, 17, 19, 10));
+    await db.update(events).set({ status: "cancelled" }).where(eq(events.id, eventId));
+    clock.set(paris(10, 17, 20));
+    const r = await vote(p.kenji.u, p.lea.applicationId);
+    expect(r.status).toBe(409);
+    expect(r.json.error.code).toBe("vote_closed");
+  });
+
+  it("deux voix simultanées de la même personne : une seule ligne, la voix tient", async () => {
+    await checkin(p.kenji, paris(10, 17, 19, 2));
+    await checkin(p.lea, paris(10, 17, 19, 10));
+    await checkin(p.nina, paris(10, 17, 19, 20));
+    clock.set(paris(10, 17, 20));
+    const [a, b] = await Promise.all([vote(p.kenji.u, p.lea.applicationId), vote(p.kenji.u, p.nina.applicationId)]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const rows = await db.query.audienceVotes.findMany({ where: eq(audienceVotes.voterUserId, p.kenji.u.id) });
+    expect(rows).toHaveLength(1);
+    expect([p.lea.applicationId, p.nina.applicationId]).toContain(rows[0]!.applicationId);
+  });
+
+  it("tampon par plaque et par lot hors ligne (heure du scan) ; publié une seule fois, au premier pointage", async () => {
+    const ws = listen(`user:${p.kenji.u.id}`);
+    clock.set(paris(10, 17, 19, 30));
+    const plates = await db.query.vehicles.findFirst({ where: eq(vehicles.id, p.lea.vehicleId) });
+    await checkinsService.byPlates(julieV, eventId, [plates!.plate!]);
+    expect((await stampsOf(p.lea.u.id)).map((s) => s.kind)).toEqual(["participation"]);
+    const [device] = await db.insert(devices).values({ userId: julie.id, platform: "android" }).returning();
+    const item = () => ({
+      kind: "manual" as const,
+      id: randomUUID(),
+      applicationId: p.kenji.applicationId,
+      note: null,
+      scannedAt: paris(10, 17, 19, 5),
+    });
+    clock.set(paris(10, 17, 19, 40));
+    await checkinsService.receiveBatch(julieV, eventId, { deviceId: device!.id, items: [item()] });
+    await checkinsService.receiveBatch(julieV, eventId, { deviceId: device!.id, items: [item()] });
+    expect(ws.messages.filter((m) => m.type === "passport.stamped")).toHaveLength(1);
+    ws.stop();
+    expect((await stampsOf(p.kenji.u.id))[0]?.stampedAt).toEqual(paris(10, 17, 19, 5));
+  });
+
+  it("une erreur du tampon ne fait jamais échouer le pointage (liste et lot) ; le règlement rattrape", async () => {
+    const original = notificationsService.notify.bind(notificationsService);
+    const spy = vi
+      .spyOn(notificationsService, "notify")
+      .mockImplementation((ex, userId, type, input) =>
+        type === "stamp_received"
+          ? Promise.reject(new Error("panne simulée du tampon"))
+          : original(ex, userId, type, input),
+      );
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const created = await checkin(p.kenji, paris(10, 17, 19, 2));
+      expect(created.created).toBe(true);
+      const [device] = await db.insert(devices).values({ userId: julie.id, platform: "android" }).returning();
+      const r = await checkinsService.receiveBatch(julieV, eventId, {
+        deviceId: device!.id,
+        items: [
+          {
+            kind: "manual",
+            id: randomUUID(),
+            applicationId: p.lea.applicationId,
+            note: null,
+            scannedAt: paris(10, 17, 19, 10),
+          },
+        ],
+      });
+      expect(r.results[0]).toMatchObject({ result: "accepted" });
+      expect(await stampsOf(p.kenji.u.id)).toHaveLength(0);
+      expect(await stampsOf(p.lea.u.id)).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+      quiet.mockRestore();
+    }
+    expect(await db.query.checkins.findMany({ where: eq(checkins.eventId, eventId) })).toHaveLength(2);
+    clock.set(SETTLE);
+    await pointsService.settleEvent(eventId);
+    expect((await stampsOf(p.kenji.u.id)).map((s) => s.kind)).toContain("participation");
+    expect((await stampsOf(p.lea.u.id)).map((s) => s.kind)).toContain("participation");
+  });
+
+  it("tâche event.recap : singletonKey recap:<id>:<instant>", async () => {
+    const e = (await db.query.events.findFirst({ where: eq(events.id, eventId) }))!;
+    await scheduleEventJobs(e);
+    expect(clock.jobs.jobs.find((j) => j.name === "event.recap")?.opts).toEqual({
+      singletonKey: `recap:${eventId}:${RECAP.toISOString()}`,
+    });
   });
 });
 

@@ -37,6 +37,7 @@ import {
   eventStaff,
   expressInvites,
   notifications,
+  passportStamps,
   profiles,
   scanEvents,
 } from "../../db/schema";
@@ -512,6 +513,10 @@ describe("inscription express", () => {
     expect(res.json.passPayload).toMatch(/^OR1/);
     const entry = await db.query.checkins.findFirst({ where: eq(checkins.applicationId, res.json.applicationId) });
     expect(entry).toMatchObject({ method: "express", staffUserId: julie.id });
+    // Lot 49 : l'entrée express pose le tampon de participation.
+    expect(
+      await db.query.passportStamps.findFirst({ where: eq(passportStamps.applicationId, res.json.applicationId) }),
+    ).toMatchObject({ kind: "participation" });
     const created = await db.query.expressInvites.findFirst({ where: eq(expressInvites.email, "nouveau@exemple.fr") });
     const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, created?.userId ?? "") });
     expect(profile?.termsAcceptedAt).toBeInstanceOf(Date);
