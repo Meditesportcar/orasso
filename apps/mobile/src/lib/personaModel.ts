@@ -195,9 +195,12 @@ export function misplacedGroup(persona: Persona, firstSegment: string | undefine
 export function misplacedTarget(persona: Persona, segments: readonly string[]): string | null {
   const from = kindOfSegment(segments[0]);
   if (from === null || from === persona.kind) return null;
-  if (isBaseKind(from) && isBaseKind(persona.kind)) {
-    return tabHref(persona.kind, segments[1] ?? "") ?? tabHref(persona.kind, "profil");
-  }
+  // Le même onglet existe dans la barre active : on y va. Les chemins des groupes ne portent pas le groupe (`/explorer`
+  // existe chez l'exposant, le visiteur et le média) : un lien profond ou un rechargement peut tomber dans le groupe
+  // d'une autre casquette.
+  const same = tabHref(persona.kind, segments[1] ?? "");
+  if (same) return same;
+  if (isBaseKind(from) && isBaseKind(persona.kind)) return tabHref(persona.kind, "profil");
   return landingOf(persona);
 }
 

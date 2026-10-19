@@ -108,6 +108,9 @@ describe("six groupes de routes, cinq onglets chacun", () => {
     expect(misplacedTarget(VISITOR, ["(tabs)", "explorer"])).toBe("/(visitor)/explorer");
     expect(misplacedTarget(VISITOR, ["(tabs)", "garage"])).toBe("/(visitor)/profil");
     expect(misplacedTarget({ kind: "pro", proProfileId: "p" }, ["(orga)", "tri"])).toBe("/(pro)/scanner");
+    // `/explorer` résolu dans le groupe média, `/accueil` dans celui du pro : l'onglet de la casquette active.
+    expect(misplacedTarget(VISITOR, ["(media)", "explorer"])).toBe("/(visitor)/explorer");
+    expect(misplacedTarget(FAN, ["(pro)", "accueil"])).toBe("/(tabs)/accueil");
     expect(misplacedTarget(FAN, ["(tabs)", "garage"])).toBeNull();
     expect(misplacedTarget(FAN, ["boite"])).toBeNull();
   });
