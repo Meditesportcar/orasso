@@ -1182,6 +1182,7 @@ Source : prototype DA v2 (version 41) **validé par Damien dans le prototype DA 
   - Boîte de la structure : sans casquette Organisateur, `/boite/orga` renvoie à `/boite` ; la pastille Boîte de l'organisateur compte les non-lus de la structure (participants, discussions du staff, demandes). Route inconnue → écran « Page introuvable » qui ramène à la casquette.
   - Les chemins des groupes ne portent pas le groupe (`/explorer` existe chez l'exposant, le visiteur et le média) : un lien ou un rechargement résolu dans le groupe d'une autre casquette ouvre **le même onglet de la casquette active** s'il existe.
   - Version web de recette : le grand titre se réduit jusqu'à 70 % par mesure (`ui/TabTitle.tsx`), l'étiquette passe dessous ; react-native-web n'ajuste pas `BigTitle` et le coupait par des points de suspension. Le téléphone garde `BigTitle`.
+  - Recette web, signalé : après un rechargement (`goto`), expo-sqlite (base du mode staff ouverte au lancement par `StaffBackground`) écrit « cannot create file » dans la console, le fichier étant encore tenu par la page d'avant ; sans effet visible, ignoré par `appli-parite.spec.ts` et à revoir avec le mode staff v2 (lot 48).
   - `/app/boite/demandes` ouvre le segment Demandes (`/boite?segment=demandes`). **Les réécritures `/app/...` de `+native-intent.ts` ne valent que pour `orasso://`** tant que `app.json` ne déclare en liens d'application que `/e/` et `/verification-email` : à élargir au lot 58, avec l'APK (non modifié ici).
 
 #### À revoir avec Damien (lot 40)

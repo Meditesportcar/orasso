@@ -165,9 +165,9 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   if ((await remind.count()) > 0) {
     await remind.first().click();
     // Recette rejouée le même jour : l'API refuse une seconde relance (le bouton reste allumé côté appli).
-    await expect(
-      page.getByText("Relance envoyée.").or(page.getByText(/déjà été relancée aujourd'hui/)),
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Relance envoyée.").or(page.getByText(/déjà été relancée aujourd'hui/))).toBeVisible({
+      timeout: 20_000,
+    });
   } else {
     expect(await page.getByTestId("orga-staff-remind").count()).toBeGreaterThan(0);
   }

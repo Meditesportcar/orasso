@@ -2,18 +2,7 @@
 // segments Véhicules / Prestataires / Liste d'attente / Liste, les compteurs en tête (mêmes que le site, en direct par
 // le canal `event:{id}:triage`) et, dessous, la file par glissement, la liste d'attente ou le mode liste. Toutes les
 // règles (capacité, liste d'attente, délais, verrouillage) restent dans l'API : l'écran n'affiche que ce qu'elle répond.
-import {
-
-  Button,
-  Chip,
-  ChipRow,
-  Counters,
-  Ground,
-  Plate,
-  Text,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
+import { Button, Chip, ChipRow, Counters, Ground, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { triageAppLabels } from "@orasso/shared";
 import { useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";

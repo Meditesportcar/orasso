@@ -137,7 +137,7 @@ async function openApp(browser: Browser, email: string, theme: Theme): Promise<{
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: APP, acceptDownloads: true });
   const page = await ctx.newPage();
   page.on("console", (m) => {
-    if (m.type() === "error") consoleErrors.push(m.text().slice(0, 200));
+    if (m.type() === "error") consoleErrors.push(`${m.text().slice(0, 160)} @ ${new URL(page.url()).pathname}`);
   });
   await page.goto("/");
   await page.evaluate((t) => {
@@ -576,8 +576,9 @@ test("compte : newsletter, export des données, clés d'accès renommées puis s
     await shot(page, "09-moi-donnees", theme);
 
     // Clés d'accès : liste, renommage, suppression.
-    await page.goto("/reglages/securite"); // Lot 40 : les clés d'accès vivent dans Sécurité.
-    await page.waitForTimeout(3500); // l'ouverture de l'appli rejouée au chargement
+    // Lot 40 : les clés d'accès vivent dans Sécurité ; on y va dans l'appli (✕ puis la tuile), sans recharger la page.
+    await page.getByRole("button", { name: "Fermer" }).first().click();
+    await page.getByTestId("reglage-securite").click();
     await reveal(page, page.getByTestId("moi-passkeys"));
     await page.getByTestId("moi-passkeys").click();
     await expect(page.getByTestId("passkey-row")).toHaveCount(1, { timeout: 20_000 });
@@ -716,7 +717,12 @@ test("garage : certification demandée, plaque d'un autre membre = transfert lan
 });
 
 test.afterAll(() => {
-  const real = consoleErrors.filter((e) => !/favicon|manifest|Failed to load resource|net::ERR/i.test(e));
+  // « cannot create file » : expo-sqlite en WebAssembly (base du mode staff ouverte au lancement) qui retrouve le
+  // fichier encore tenu par la page d'avant juste après un rechargement (`goto`) ; propre à la recette web, sans effet
+  // (la base se rouvre au chargement suivant). Signalé au lot 40, à revoir avec le mode staff v2 (lot 48).
+  const real = consoleErrors.filter(
+    (e) => !/favicon|manifest|Failed to load resource|net::ERR|^cannot create file/i.test(e),
+  );
   expect(real.slice(0, 5)).toEqual([]);
   for (const [name, a] of Object.entries(audits)) {
     expect(a.horizontalScroll, `${name} : défilement horizontal`).toBe(false);
