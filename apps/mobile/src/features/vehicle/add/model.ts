@@ -39,6 +39,8 @@ export type DraftPhoto = {
   /** Cadres proposés par la détection (mode Automatique). */
   detected?: PlateRect[];
   detection?: Detection;
+  /** Photo locale sans cadre : la personne a confirmé « Envoyer sans flouter : aucune plaque visible ». */
+  noPlate?: boolean;
 };
 
 export type BlurMode = "auto" | "manual";
@@ -203,7 +205,13 @@ export function stepIssue(step: number, d: Draft, currentYear = new Date().getFu
       return d.photos.length === 0 ? L.photoRequired : null;
     case 4:
       if (d.photos.some((p) => p.detection === "pending")) return L.detecting;
+      {
+        // Relecture : aucune photo nouvelle ne part sans cadre, sauf confirmation explicite qu'elle ne montre pas de plaque.
+        const unchecked = d.photos.findIndex(needsPlateDecision);
+        if (unchecked >= 0) return L.noPlateIssue(unchecked + 1);
+      }
       if (!d.former && !d.unregistered && !d.plate.trim()) return L.plateRequired;
+      if (!d.unregistered && d.plate.trim() && normalizePlate(d.plate).length < 3) return L.plateInvalid;
       return null;
     default:
       return null;
@@ -351,6 +359,15 @@ export function photoPlan(d: Draft, before: readonly { id: string }[] = []): Pho
 export const blurredCount = (d: Draft): number =>
   d.photos.reduce((n, p) => n + (p.rects.length ? p.rects.length : p.plateBlurred ? 1 : 0), 0);
 
+/** Photo locale sans cadre ni confirmation « aucune plaque visible » : elle ne peut pas partir. */
+export const needsPlateDecision = (p: DraftPhoto): boolean => !p.remoteId && p.rects.length === 0 && !p.noPlate;
+
+/** Aucune détection possible sur ces photos (web, Expo Go, module absent) : le mode « Automatique » n'a pas de sens. */
+export const detectionUnavailable = (photos: readonly DraftPhoto[]): boolean => {
+  const local = photos.filter((p) => !p.remoteId);
+  return local.length > 0 && local.every((p) => p.detection === "unavailable");
+};
+
 /** Passe une photo en tête (couverture de la carte). */
 export function withCover(photos: DraftPhoto[], index: number): DraftPhoto[] {
   const chosen = photos[index];
@@ -362,4 +379,48 @@ export function withCover(photos: DraftPhoto[], index: number): DraftPhoto[] {
 export function applyMode(photos: DraftPhoto[], mode: BlurMode): DraftPhoto[] {
   if (mode === "manual") return photos;
   return photos.map((p) => (p.remoteId ? p : { ...p, rects: p.detected ?? [] }));
+}
+
+// --- Éditeur du cadre ------------------------------------------------------------------------------------------------
+
+/** Hauteur maximale de la photo dans l'éditeur : une photo en hauteur (9:16) reste entière à l'écran. */
+export const EDITOR_MAX_HEIGHT = 460;
+
+/** Taille d'affichage d'une photo entière (son format exact) dans une largeur et une hauteur données. */
+export function fitPhoto(width: number, height: number, maxW: number, maxH: number): { w: number; h: number } {
+  if (maxW <= 0) return { w: 0, h: 0 };
+  const ratio = width > 0 && height > 0 ? width / height : 4 / 3;
+  let w = maxW;
+  let h = w / ratio;
+  if (h > maxH) {
+    h = maxH;
+    w = h * ratio;
+  }
+  return { w: Math.round(w), h: Math.round(h) };
+}
+
+// --- Erreurs à l'envoi -----------------------------------------------------------------------------------------------
+
+/** Étape à rouvrir pour une erreur 4xx de l'API portant sur un champ, ou null (réseau, serveur : on reprend). */
+export function stepOfError(e: unknown): number | null {
+  // Forme d'`ApiRequestError` (lib/http), lue sans l'importer : ce module reste pur.
+  if (typeof e !== "object" || e === null || !("status" in e)) return null;
+  const err = e as { status: number; code?: string; message?: string; details?: Record<string, unknown> };
+  if (err.status === 0 || err.status >= 500 || err.status === 429) return null;
+  const fields = Object.keys((err.details?.fields as Record<string, unknown> | undefined) ?? {});
+  const has = (...names: string[]) => fields.some((f) => names.some((n) => f === n || f.startsWith(`${n}.`)));
+  if (err.code === "plate_taken" || has("plate", "unregistered", "status") || /plaque/i.test(err.message ?? ""))
+    return 4;
+  if (has("vehicleType", "makeId", "modelId", "generationId")) return 0;
+  if (has("year", "engine", "powerHp", "weightKg", "color")) return 1;
+  if (has("categoryIds")) return 2;
+  if (
+    err.status === 413 ||
+    err.status === 415 ||
+    has("photo", "plateRects", "rects") ||
+    /photo/i.test(err.message ?? "")
+  ) {
+    return 3;
+  }
+  return null;
 }

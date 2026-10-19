@@ -64,7 +64,12 @@ export const vehicleWizardLabels = {
   // Étape 4
   photosTitle: "Ses photos",
   photosText: "Une à huit photos. L'étoile choisit la couverture de sa carte.",
-  photosAutoNote: "La plaque est floutée toute seule sur chaque photo : tu vérifies à l'étape suivante.",
+  photosAutoNote:
+    "À l'étape suivante, tu vérifies la plaque de chaque photo : repérée par ton téléphone quand il le peut, sinon tu poses le cadre.",
+  noPlate: "Envoyer sans flouter : aucune plaque visible",
+  noPlateIssue: (n: number) =>
+    `Photo ${n} : place le cadre sur la plaque, ou confirme « Envoyer sans flouter : aucune plaque visible ».`,
+  plateInvalid: "Numéro de plaque invalide : lettres et chiffres, 3 au moins.",
   addPhoto: "Ajouter",
   photoCount: (n: number) => `${n} sur 8`,
   cover: "Couverture",
@@ -125,6 +130,8 @@ export const vehicleWizardLabels = {
   // Floutage après coup (page du véhicule, site)
   blurAction: "Flouter la plaque",
   blurConfirm: "Flouter définitivement",
+  sendPhoto: "Envoyer la photo",
+  blurMore: "Flouter une autre zone",
   blurHelp:
     "Place le cadre sur la plaque, agrandis-le par le coin. Le flou est définitif : l'originale n'est gardée nulle part.",
   blurDone: "Plaque floutée.",

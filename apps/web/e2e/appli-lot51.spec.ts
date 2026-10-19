@@ -140,9 +140,15 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     // 5. Plaque : pas de ML Kit dans le navigateur → à la main ; cadre posé puis déplacé.
     await expect(page.getByRole("heading", { name: "Sa plaque, floutée" })).toBeVisible();
     await expect(page.getByText("Pas de repérage automatique ici").first()).toBeVisible();
-    await shot(page, "05a-plaque-automatique", theme);
-    await page.getByRole("button", { name: "À la main" }).click();
+    // Relecture : sans détection, pas de mode « Automatique » ; une photo sans cadre ne part pas sans confirmation.
+    await expect(page.getByRole("button", { name: "Automatique" })).toHaveCount(0);
+    await expect(page.getByTestId("plate-none")).toBeVisible();
+    await page.getByTestId("vehicle-plate").fill(randomPlate());
+    await next(page);
+    await expect(page.getByTestId("vehicle-step-error")).toContainText("Photo 1 : place le cadre");
+    await shot(page, "05a-plaque-sans-detection", theme);
     await page.getByTestId("plate-frame-add").click();
+    await expect(page.getByTestId("plate-none")).toHaveCount(0);
     const frame = page.getByTestId("plate-frame").first();
     await expect(frame).toBeVisible();
     const box = await frame.boundingBox();
@@ -154,7 +160,6 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     const rect = await frameRect(page);
     expect(rect.x).toBeLessThan(0.35);
     await expect(page.getByText("1 plaque floutée").first()).toBeVisible();
-    await page.getByTestId("vehicle-plate").fill(randomPlate());
     await checkDesign(page);
     await shot(page, "05-plaque-a-la-main", theme);
     await next(page);
@@ -190,6 +195,32 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await expect(page.getByText("Marque, photos, plaque floutée : deux minutes.").first()).toBeVisible();
     await checkDesign(page);
     await shot(page, "07-garage", theme);
+
+    // Photo ajoutée après la création (relecture) : éditeur du cadre avant l'envoi, photo 9:16 montrée entière.
+    await page.getByTestId("garage-card").click();
+    await page.waitForURL(/\/vehicule\//, { timeout: 30_000 });
+    const tall = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Ajouter une photo" }).click();
+    await (await tall).setFiles({ name: "debout.png", mimeType: "image/png", buffer: checkerPhoto(360, 640) });
+    const editor = page.getByTestId("blur-editor");
+    await expect(editor).toBeVisible({ timeout: 20_000 });
+    const tallBox = await editor.boundingBox();
+    expect((tallBox?.width ?? 0) / (tallBox?.height ?? 1)).toBeCloseTo(360 / 640, 1);
+    await expect(page.getByTestId("blur-confirm")).toBeDisabled();
+    await page.getByTestId("blur-frame-add").click();
+    await shot(page, "09-photo-ajoutee-cadre", theme);
+    await page.getByTestId("blur-confirm").click();
+    await expect(page.getByTestId("blur-editor")).toHaveCount(0, { timeout: 30_000 });
+    const after = await apiCall<{ photos: { url: string; width: number; height: number; plateBlurred: boolean }[] }>(
+      cookie,
+      "GET",
+      `/me/vehicles/${vehicle?.id}`,
+    );
+    expect(after.data.photos).toHaveLength(2);
+    expect(after.data.photos[1]?.plateBlurred).toBe(true);
+    expect(after.data.photos[1]?.height).toBeGreaterThan(after.data.photos[1]?.width ?? 0);
+    await page.goto("/garage");
+    await afterOpening(page);
 
     // Modification par les mêmes étapes, préremplies.
     await page.getByTestId("garage-edit").click();

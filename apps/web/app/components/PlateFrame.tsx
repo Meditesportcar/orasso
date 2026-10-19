@@ -12,7 +12,62 @@ import {
   type PlateRect,
   resizePlateFrame,
 } from "@orasso/shared";
-import { type PointerEvent as ReactPointerEvent, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+
+import { FileField } from "./Fields";
+
+/**
+ * Champ « photo » avec la plaque (relecture du lot 51) : la photo choisie s'affiche, on y pose le cadre de la plaque
+ * (floutée par l'API avant le stockage), ou on coche « Envoyer sans flouter : aucune plaque visible ». Le serveur
+ * refuse une photo sans l'un ni l'autre (`plateDecisionError`).
+ */
+export function PhotoWithPlate({
+  label,
+  help,
+  error,
+  required,
+  testId,
+}: {
+  label: string;
+  help?: string;
+  error?: string;
+  required?: boolean;
+  testId?: string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => () => (url ? URL.revokeObjectURL(url) : undefined), [url]);
+  return (
+    <>
+      <FileField
+        label={label}
+        name="photo"
+        accept="image/jpeg,image/png,image/webp"
+        help={help}
+        error={error}
+        required={required}
+        onChange={(e) => {
+          const file = e.currentTarget.files?.[0];
+          setUrl(file ? URL.createObjectURL(file) : null);
+        }}
+      />
+      {url ? (
+        <section className="s-stack s-stack--tight" aria-label={L.blurAction}>
+          <div className="o-t-label">{L.blurAction}</div>
+          <PlateFrame key={url} src={url} alt="Photo choisie" initial={[]} testId={testId} />
+          <label className="g-noplate o-t-body">
+            <input type="checkbox" name="noPlate" data-testid="site-no-plate" /> {L.noPlate}
+          </label>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+/** Message d'erreur si une photo part sans cadre ni « aucune plaque visible » (action du serveur), sinon null. */
+export function plateDecisionError(form: FormData): string | null {
+  const rects = String(form.get("plateRects") ?? "").trim();
+  return rects || form.get("noPlate") === "on" ? null : L.noPlateIssue(1).replace(/^Photo 1 : /, "Photo : ");
+}
 
 export function PlateFrame({
   src,

@@ -6,6 +6,7 @@ import { movePlateFrame, type PlateRect, resizePlateFrame } from "@orasso/shared
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type ImageSourcePropType, PanResponder, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { EDITOR_MAX_HEIGHT, fitPhoto } from "./model";
 
 const { space2 } = tokens.spacing;
 const HANDLE = 22;
@@ -32,28 +33,28 @@ export function PlateFrameEditor({
   badge?: ReactNode;
   testID?: string;
 }) {
-  const [box, setBox] = useState({ w: 0, h: 0 });
-  const ratio = width > 0 && height > 0 ? Math.max(0.6, Math.min(2, width / height)) : 4 / 3;
+  // Relecture du lot 51 : la photo est montrée entière, à son vrai format (9:16, panorama…) ; le cadre est donc posé
+  // sur l'image réelle, sans recadrage qui décalerait ses coordonnées.
+  const [outer, setOuter] = useState(0);
+  const box = fitPhoto(width, height, outer, EDITOR_MAX_HEIGHT);
   return (
-    <View
-      style={[styles.editor, { aspectRatio: ratio }]}
-      onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
-      testID={testID}
-    >
-      <Photo source={source} style={StyleSheet.absoluteFill} />
-      {box.w > 0
-        ? rects.map((r, i) => (
-            <FrameBox
-              // biome-ignore lint/suspicious/noArrayIndexKey: les cadres n'ont pas d'identité propre, l'ordre suffit.
-              key={i}
-              rect={r}
-              box={box}
-              editable={editable}
-              onCommit={(next) => onChange(rects.map((x, j) => (j === i ? next : x)))}
-            />
-          ))
-        : null}
-      {badge ? <View style={styles.badge}>{badge}</View> : null}
+    <View style={styles.outer} onLayout={(e) => setOuter(e.nativeEvent.layout.width)}>
+      <View style={[styles.editor, { width: box.w, height: box.h }]} testID={testID}>
+        <Photo source={source} style={StyleSheet.absoluteFill} />
+        {box.w > 0
+          ? rects.map((r, i) => (
+              <FrameBox
+                // biome-ignore lint/suspicious/noArrayIndexKey: les cadres n'ont pas d'identité propre, l'ordre suffit.
+                key={i}
+                rect={r}
+                box={box}
+                editable={editable}
+                onCommit={(next) => onChange(rects.map((x, j) => (j === i ? next : x)))}
+              />
+            ))
+          : null}
+        {badge ? <View style={styles.badge}>{badge}</View> : null}
+      </View>
     </View>
   );
 }
@@ -168,7 +169,8 @@ export function PhotoBadge({ children, accent = false }: { children: ReactNode; 
 }
 
 const styles = StyleSheet.create({
-  editor: { width: "100%", borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
+  outer: { width: "100%", alignItems: "center" },
+  editor: { borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
   frame: { position: "absolute", borderWidth: 2, borderRadius: 6 },
   grab: { cursor: "grab" } as object,
   handle: {

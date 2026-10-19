@@ -7,15 +7,19 @@ import {
   blurredCount,
   createBody,
   type Draft,
+  detectionUnavailable,
   draftFromVehicle,
   emptyDraft,
   filterRows,
+  fitPhoto,
   keptCategories,
   liveCard,
+  needsPlateDecision,
   originCategories,
   photoPlan,
   shortName,
   stepIssue,
+  stepOfError,
   styleCategories,
   updateBody,
   withCover,
@@ -59,7 +63,7 @@ const filled = (over: Partial<Draft> = {}): Draft => ({
   year: 2021,
   color: "Blanche",
   categoryIds: ["id-jdm", "id-sportive"],
-  photos: [{ key: "a", uri: "file:///a.jpg", width: 1200, height: 900, rects: [] }],
+  photos: [{ key: "a", uri: "file:///a.jpg", width: 1200, height: 900, rects: [], noPlate: true }],
   plate: "GA-662-KS",
   ...over,
 });
@@ -209,5 +213,59 @@ describe("envoi", () => {
     const withDetection = photos.map((p) => ({ ...p, detected }));
     expect(applyMode(withDetection, "auto")[0]?.rects).toEqual(detected);
     expect(applyMode(withDetection, "manual")[0]?.rects).toEqual([]);
+  });
+});
+
+describe("relecture du lot 51", () => {
+  const local = (over: Partial<Draft["photos"][number]> = {}) => ({
+    key: "l",
+    uri: "file:///l.jpg",
+    width: 1200,
+    height: 900,
+    rects: [],
+    ...over,
+  });
+
+  it("une photo nouvelle sans cadre ne part pas sans « aucune plaque visible »", () => {
+    expect(needsPlateDecision(local())).toBe(true);
+    expect(needsPlateDecision(local({ noPlate: true }))).toBe(false);
+    expect(needsPlateDecision(local({ rects: [{ x: 0.1, y: 0.1, w: 0.2, h: 0.1 }] }))).toBe(false);
+    expect(needsPlateDecision(local({ remoteId: "p1" }))).toBe(false);
+    expect(stepIssue(4, filled({ photos: [local({ noPlate: true }), local({ key: "m" })] }))).toMatch(/^Photo 2 :/);
+  });
+
+  it("plaque trop courte refusée avant l'envoi (normalizePlate)", () => {
+    expect(stepIssue(4, filled({ plate: "a-1" }))).toMatch(/invalide/);
+    expect(stepIssue(4, filled({ plate: "ab-1" }))).toBeNull();
+  });
+
+  it("sans détection possible, l'automatique n'a pas lieu d'être", () => {
+    expect(detectionUnavailable([local({ detection: "unavailable" }), local({ remoteId: "x" })])).toBe(true);
+    expect(detectionUnavailable([local({ detection: "unavailable" }), local({ detection: "none" })])).toBe(false);
+    expect(detectionUnavailable([])).toBe(false);
+  });
+
+  it("l'éditeur montre la photo entière à son format : 9:16 et panorama", () => {
+    expect(fitPhoto(1080, 1920, 358, 460)).toEqual({ w: 259, h: 460 });
+    expect(fitPhoto(3000, 1000, 358, 460)).toEqual({ w: 358, h: 119 });
+    expect(fitPhoto(1200, 900, 358, 460)).toEqual({ w: 358, h: 269 });
+    expect(fitPhoto(1200, 900, 0, 460)).toEqual({ w: 0, h: 0 });
+  });
+
+  it("une erreur de champ à l'envoi ramène à son étape", () => {
+    const err = (status: number, code: string, message: string, fields?: Record<string, string>) => ({
+      status,
+      code,
+      message,
+      details: fields ? { fields } : undefined,
+    });
+    expect(stepOfError(err(409, "plate_taken", "Plaque déjà enregistrée"))).toBe(4);
+    expect(stepOfError(err(400, "validation_error", "Données invalides", { plate: "Plaque obligatoire" }))).toBe(4);
+    expect(stepOfError(err(400, "validation_error", "Données invalides", { powerHp: "trop grand" }))).toBe(1);
+    expect(stepOfError(err(400, "validation_error", "Données invalides", { "categoryIds.0": "x" }))).toBe(2);
+    expect(stepOfError(err(415, "unsupported_media_type", "Image illisible"))).toBe(3);
+    expect(stepOfError(err(0, "network", "Pas de connexion"))).toBeNull();
+    expect(stepOfError(err(500, "internal", "Erreur"))).toBeNull();
+    expect(stepOfError(new Error("x"))).toBeNull();
   });
 });

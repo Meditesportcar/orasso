@@ -260,3 +260,8 @@
 .g-photos li:has(.g-blur[open]) > a {
   max-width: 200px;
 }
+.g-noplate {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}

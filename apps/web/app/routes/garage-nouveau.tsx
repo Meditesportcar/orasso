@@ -13,7 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
-import { PlateFrame } from "../components/PlateFrame";
+import { PhotoWithPlate, plateDecisionError } from "../components/PlateFrame";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, safeReturn } from "../lib/api.server";
 import type { Route } from "./+types/garage-nouveau";
@@ -53,6 +53,8 @@ export async function action({ request }: Route.ActionArgs) {
   if (weightText && !/^\d{2,5}$/.test(weightText)) errors.weightKg = "Poids en kilos, nombre entier.";
   const hasPhoto = photo instanceof File && photo.size > 0;
   if (active && !hasPhoto) errors.photo = "Ajoute au moins une photo : elle est exigée pour candidater.";
+  // Relecture du lot 51 : une photo part avec son cadre de plaque, ou « aucune plaque visible » coché.
+  if (hasPhoto && plateDecisionError(form)) errors.photo = plateDecisionError(form) ?? undefined;
   if (Object.keys(errors).length) return data({ errors }, { status: 400 });
 
   const body: Partial<VehicleCreate> = {
@@ -105,9 +107,6 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const [year, setYear] = useState("");
   const [status, setStatus] = useState("active");
   const [categories, setCategories] = useState<CategoryOption[]>([]);
-  // Lot 51 : aperçu de la photo choisie, pour poser le cadre de la plaque.
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  useEffect(() => () => (photoUrl ? URL.revokeObjectURL(photoUrl) : undefined), [photoUrl]);
   const active = status === "active";
 
   useEffect(() => {
@@ -249,25 +248,13 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
           onChange={(e) => setUnregistered(e.currentTarget.checked)}
           label="Véhicule non immatriculé"
         />
-        <TextField
+        <PhotoWithPlate
           label="Photo"
-          name="photo"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
           help="Une photo de ton véhicule, de face ou de trois quarts. Tu floutes la plaque juste en dessous."
           error={errors.photo}
           required={active}
-          onChange={(e) => {
-            const file = e.currentTarget.files?.[0];
-            setPhotoUrl(file ? URL.createObjectURL(file) : null);
-          }}
+          testId="new-plate-frame"
         />
-        {photoUrl ? (
-          <section className="s-stack s-stack--tight" aria-label="Flouter la plaque">
-            <div className="o-t-label">Flouter la plaque</div>
-            <PlateFrame key={photoUrl} src={photoUrl} alt="Photo choisie" initial={[]} testId="new-plate-frame" />
-          </section>
-        ) : null}
         {errors.form && (
           <p className="s-error" role="alert">
             {errors.form}

@@ -9,7 +9,7 @@ import { StyleSheet, View } from "react-native";
 
 import { mediaSource } from "@/lib/media";
 import { Muted } from "@/ui/Muted";
-import { type BlurMode, blurredCount, type Draft, type DraftPhoto } from "./model";
+import { type BlurMode, blurredCount, type Draft, type DraftPhoto, detectionUnavailable } from "./model";
 import { PhotoBadge, PlateFrameEditor } from "./PlateFrameEditor";
 import { ChoiceRow, StepHead, StepNote } from "./parts";
 
@@ -29,11 +29,13 @@ export function StepPlate({
   patch,
   onMode,
   onRects,
+  onNoPlate,
 }: {
   draft: Draft;
   patch: (change: Partial<Draft>) => void;
   onMode: (mode: BlurMode) => void;
   onRects: (index: number, rects: DraftPhoto["rects"]) => void;
+  onNoPlate: (index: number, value: boolean) => void;
 }) {
   const [index, setIndex] = useState(0);
   const i = Math.min(index, Math.max(0, draft.photos.length - 1));
@@ -41,13 +43,18 @@ export function StepPlate({
   const manual = draft.blurMode === "manual";
   const badge = photo ? badgeOf(photo, draft.blurMode) : null;
   const total = blurredCount(draft);
+  const unavailable = detectionUnavailable(draft.photos);
   return (
     <>
       <StepHead title={L.plateTitle} text={L.plateText} />
+      {unavailable ? <StepNote icon="plate">{L.noDetection}</StepNote> : null}
       <ChipRow>
-        <Chip selected={!manual} onPress={() => onMode("auto")} accessibilityLabel={L.auto}>
-          {L.auto}
-        </Chip>
+        {/* Relecture : sans détection possible ici (web, Expo Go), « Automatique » ne promet rien qu'on ne fait pas. */}
+        {unavailable ? null : (
+          <Chip selected={!manual} onPress={() => onMode("auto")} accessibilityLabel={L.auto}>
+            {L.auto}
+          </Chip>
+        )}
         <Chip selected={manual} onPress={() => onMode("manual")} accessibilityLabel={L.manual}>
           {L.manual}
         </Chip>
@@ -111,6 +118,15 @@ export function StepPlate({
                 </Button>
               ) : null}
             </View>
+          ) : null}
+          {!photo.remoteId && photo.rects.length === 0 ? (
+            <ChoiceRow
+              title={L.noPlate}
+              icon="check"
+              selected={Boolean(photo.noPlate)}
+              onPress={() => onNoPlate(i, !photo.noPlate)}
+              testID="plate-none"
+            />
           ) : null}
           <StepNote icon="alert">{L.irreversible}</StepNote>
         </>

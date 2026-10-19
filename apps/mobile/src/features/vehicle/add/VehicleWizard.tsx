@@ -27,6 +27,7 @@ import {
   createBody,
   type Draft,
   type DraftPhoto,
+  detectionUnavailable,
   draftFromVehicle,
   emptyDraft,
   keptCategories,
@@ -37,6 +38,7 @@ import {
   STEP_COUNT,
   shortName,
   stepIssue,
+  stepOfError,
   updateBody,
   withCover,
 } from "./model";
@@ -64,11 +66,22 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   // Envoi interrompu (réseau) : on reprend sans recréer le véhicule ni renvoyer les photos déjà parties.
   const sent = useRef<{
     vehicleId: string | null;
+    /** Fiche telle que l'API la connaît (créée ou modifiée) : la reprise n'envoie que ce qui a changé depuis. */
+    base: VehicleFull | null;
     done: Set<string>;
     pending: boolean;
     /** Photo locale envoyée → identifiant de la photo en ligne (ordre final). */
     uploaded: Map<string, string>;
-  }>({ vehicleId: vehicle?.id ?? null, done: new Set(), pending: false, uploaded: new Map() });
+    /** Envoi de photo dont la réponse n'est pas arrivée : à vérifier avant de la renvoyer (pas de doublon). */
+    inFlight: { key: string; before: string[] } | null;
+  }>({
+    vehicleId: vehicle?.id ?? null,
+    base: vehicle ?? null,
+    done: new Set(),
+    pending: false,
+    uploaded: new Map(),
+    inFlight: null,
+  });
 
   const patch = (change: Partial<Draft>) => setDraft((d) => ({ ...d, ...change }));
 
@@ -147,13 +160,19 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
           ),
         }));
       }
+      // Relecture : aucune détection possible ici (web, Expo Go) → « À la main », sans promesse d'automatique.
+      setDraft((d) => (detectionUnavailable(d.photos) ? { ...d, blurMode: "manual" } : d));
     } catch (e) {
       setError(errorMessage(e));
     }
   }
 
   function setMode(mode: BlurMode) {
-    setDraft((d) => ({ ...d, blurMode: mode, photos: applyMode(d.photos, mode) }));
+    setDraft((d) =>
+      mode === "auto" && detectionUnavailable(d.photos)
+        ? d
+        : { ...d, blurMode: mode, photos: applyMode(d.photos, mode) },
+    );
   }
 
   // --- Étapes --------------------------------------------------------------------------------------------------------
@@ -179,24 +198,42 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     setPhase("sending");
     setError(null);
     const s = sent.current;
-    const ops = photoPlan(draft, vehicle?.photos ?? []).filter((op) => !s.done.has(opKey(op)));
-    const total = ops.length;
+    let ops = photoPlan(draft, vehicle?.photos ?? []).filter((op) => !s.done.has(opKey(op)));
+    let total = ops.length;
     setProgress({ done: 0, total, complete: false });
     try {
       let current: VehicleFull | null = null;
       if (!s.vehicleId) {
         current = await api.createVehicle(createBody(draft));
         s.vehicleId = current.id;
+        s.base = current;
         s.pending = Boolean(current.plateTransfer);
-      } else if (vehicle && !s.done.has("patch")) {
-        const body = updateBody(draft, vehicle);
-        if (Object.keys(body).length) current = await api.updateVehicle(vehicle.id, body);
-        s.done.add("patch");
+      } else if (s.base) {
+        // Modification, ou reprise après une erreur corrigée : seulement ce qui a changé depuis la dernière fiche.
+        const body = updateBody(draft, s.base);
+        if (Object.keys(body).length) {
+          current = await api.updateVehicle(s.vehicleId, body);
+          s.base = current;
+          s.pending = Boolean(current.plateTransfer);
+        }
       }
       const id = s.vehicleId as string;
       current ??= await api.vehicle(id);
+      // Réponse perdue pendant un envoi de photo : si la photo est arrivée, on la garde au lieu de la renvoyer.
+      if (s.inFlight) {
+        const before = new Set(s.inFlight.before);
+        const known = new Set(s.uploaded.values());
+        const arrived = current.photos.find((p) => !before.has(p.id) && !known.has(p.id));
+        if (arrived) {
+          s.uploaded.set(s.inFlight.key, arrived.id);
+          s.done.add(`upload:${s.inFlight.key}`);
+        }
+        s.inFlight = null;
+      }
       // Photos envoyées : leur identifiant, pour poser l'ordre final (couverture en tête).
       const uploaded = s.uploaded;
+      ops = ops.filter((op) => !s.done.has(opKey(op)));
+      total = ops.length;
       let n = 0;
       for (const op of ops) {
         if (op.kind === "remove") {
@@ -207,7 +244,9 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
             const form = await photoForm({ uri: photo.uri, width: photo.width, height: photo.height }, n);
             if (op.rects.length) form.append("plateRects", JSON.stringify(op.rects));
             const before = new Set(current.photos.map((p) => p.id));
+            s.inFlight = { key: op.key, before: [...before] };
             const after = await api.uploadVehiclePhoto(id, form);
+            s.inFlight = null;
             const added = after.photos.find((p) => !before.has(p.id));
             if (added) uploaded.set(op.key, added.id);
             current = after;
@@ -233,6 +272,13 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
       setSaved(current);
       setPhase("done");
     } catch (e) {
+      // Relecture : une erreur sur un champ (plaque déjà prise, valeur refusée, photo illisible) ramène à son étape,
+      // brouillon gardé ; une panne réseau ou serveur reste sur l'envoi avec « Reprendre ».
+      const back = stepOfError(e);
+      if (back !== null) {
+        setPhase("steps");
+        setStep(back);
+      }
       setError(errorMessage(e));
     }
   }
@@ -405,7 +451,11 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
           onMode={setMode}
           onRects={(i, rects) => {
             const key = draft.photos[i]?.key;
-            if (key) updatePhoto(key, (p) => ({ ...p, rects }));
+            if (key) updatePhoto(key, (p) => ({ ...p, rects, noPlate: rects.length ? false : p.noPlate }));
+          }}
+          onNoPlate={(i, noPlate) => {
+            const key = draft.photos[i]?.key;
+            if (key) updatePhoto(key, (p) => ({ ...p, noPlate }));
           }}
         />
       ) : null}

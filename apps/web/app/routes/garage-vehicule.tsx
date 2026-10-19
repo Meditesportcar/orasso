@@ -23,8 +23,8 @@ import {
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
-import { FileField, TextAreaField } from "../components/Fields";
-import { PlateFrame } from "../components/PlateFrame";
+import { TextAreaField } from "../components/Fields";
+import { PhotoWithPlate, PlateFrame, plateDecisionError } from "../components/PlateFrame";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime, formatDay } from "../lib/format";
 import type { Route } from "./+types/garage-vehicule";
@@ -93,8 +93,12 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (!(photo instanceof File) || photo.size === 0) {
       return data({ error: "Choisis une photo.", done: null }, { status: 400 });
     }
+    // Relecture du lot 51 : la photo part avec son cadre de plaque (flouté par l'API), ou « aucune plaque visible ».
+    const decision = plateDecisionError(form);
+    if (decision) return data({ error: decision, done: null }, { status: 400 });
     const upload = new FormData();
     upload.set("photo", photo);
+    if (text("plateRects")) upload.set("plateRects", text("plateRects"));
     const res = await api(request, `${base}/photos`, { method: "POST", body: upload });
     return res.ok ? data({ error: null, done: "photo" }) : fail(res);
   }
@@ -212,9 +216,13 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
                 <span className="g-photo-blurred" data-testid="photo-plate-blurred">
                   <Chip variant="accent">{vehicleWizardLabels.plateBlurred}</Chip>
                 </span>
-              ) : (
-                <details className="g-blur" data-testid="photo-blur">
-                  <summary className="o-t-label">{vehicleWizardLabels.blurAction}</summary>
+              ) : null}
+              {/* Relecture : une photo déjà floutée peut recevoir un autre cadre (l'API l'accepte). */}
+              {
+                <details className="g-blur" data-testid={p.plateBlurred ? "photo-blur-more" : "photo-blur"}>
+                  <summary className="o-t-label">
+                    {p.plateBlurred ? vehicleWizardLabels.blurMore : vehicleWizardLabels.blurAction}
+                  </summary>
                   <Form method="post" className="s-stack s-stack--tight">
                     <input type="hidden" name="photoId" value={p.id} />
                     <PlateFrame src={p.url} alt={`${v.label}, vue ${i + 1}`} testId="site-plate-editor" />
@@ -230,7 +238,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
                     </Button>
                   </Form>
                 </details>
-              )}
+              }
             </li>
           ))}
         </ul>
@@ -239,7 +247,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
       )}
       {v.photos.length < 8 && (
         <Form method="post" encType="multipart/form-data" className="s-form">
-          <FileField label="Ajouter une photo" name="photo" accept="image/jpeg,image/png,image/webp" required />
+          <PhotoWithPlate label="Ajouter une photo" required testId="add-plate-frame" />
           <Button type="submit" name="intent" value="photo-add" variant="secondary" icon="add" loading={busy}>
             Envoyer la photo
           </Button>

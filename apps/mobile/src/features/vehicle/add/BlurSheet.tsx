@@ -1,6 +1,8 @@
-// « Flouter la plaque » d'une photo déjà en ligne (lot 51, page du véhicule) : la personne place le cadre (ou le cadre
-// proposé par l'appareil quand la photo est locale, jamais ici : la photo en ligne n'est pas relue), puis confirme ;
-// l'API floute définitivement (V9) et la page se recharge avec la pastille « Plaque floutée ».
+// Floutage de plaque depuis la page du véhicule (lot 51) :
+//  - photo déjà en ligne : la personne place le cadre puis confirme, l'API floute définitivement (V9) ;
+//  - photo ajoutée après la création (relecture) : elle passe par le même éditeur **avant l'envoi** — cadres proposés
+//    par l'appareil quand il le peut (ML Kit), sinon posés à la main —, ou par la confirmation explicite « Envoyer sans
+//    flouter : aucune plaque visible ». Aucun original portant une plaque n'est envoyé sans cadre.
 import { Button, Text, useTheme } from "@orasso/design-system/native";
 import {
   DEFAULT_PLATE_FRAME,
@@ -16,39 +18,72 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
+import { type PickedPhoto, photoForm } from "@/lib/photos";
+import { detectPlates } from "@/lib/plates/detect";
 import { AppSheet } from "@/ui/AppSheet";
 import { PhotoBadge, PlateFrameEditor } from "./PlateFrameEditor";
+import { ChoiceRow } from "./parts";
+
+export type BlurTarget = { kind: "remote"; photo: VehiclePhoto } | { kind: "local"; photo: PickedPhoto } | null;
 
 export function BlurSheet({
   vehicleId,
-  photo,
+  target,
   onClose,
   onDone,
 }: {
   vehicleId: string;
-  /** La photo à flouter ; `null` : feuille fermée. */
-  photo: VehiclePhoto | null;
+  /** La photo à flouter (en ligne) ou à envoyer (locale) ; `null` : feuille fermée. */
+  target: BlurTarget;
   onClose: () => void;
   onDone: (vehicle: VehicleFull) => Promise<unknown>;
 }) {
   const { t } = useTheme();
-  const [rects, setRects] = useState<PlateRect[]>([DEFAULT_PLATE_FRAME]);
+  const [rects, setRects] = useState<PlateRect[]>([]);
+  const [noPlate, setNoPlate] = useState(false);
+  const [detecting, setDetecting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const local = target?.kind === "local";
 
   useEffect(() => {
-    if (photo) {
+    if (!target) return;
+    setError(null);
+    setNoPlate(false);
+    if (target.kind === "remote") {
       setRects([DEFAULT_PLATE_FRAME]);
-      setError(null);
+      return;
     }
-  }, [photo]);
+    // Photo locale : on cherche la plaque sur l'appareil ; rien ne part au serveur avant la confirmation.
+    setRects([]);
+    setDetecting(true);
+    let stale = false;
+    detectPlates(target.photo.uri, target.photo.width, target.photo.height)
+      .catch(() => null)
+      .then((found) => {
+        if (!stale && found?.length) setRects(found);
+      })
+      .finally(() => {
+        if (!stale) setDetecting(false);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [target]);
 
   async function confirm() {
-    if (!photo || !rects.length) return;
+    if (!target) return;
     setBusy(true);
     setError(null);
     try {
-      const v = await api.blurVehiclePhoto(vehicleId, photo.id, rects);
+      let v: VehicleFull;
+      if (target.kind === "remote") {
+        v = await api.blurVehiclePhoto(vehicleId, target.photo.id, rects);
+      } else {
+        const form = await photoForm(target.photo, 0);
+        if (rects.length) form.append("plateRects", JSON.stringify(rects));
+        v = await api.uploadVehiclePhoto(vehicleId, form);
+      }
       await onDone(v);
       onClose();
     } catch (e) {
@@ -58,25 +93,31 @@ export function BlurSheet({
     }
   }
 
+  const source = target
+    ? target.kind === "remote"
+      ? mediaSource(target.photo.url)
+      : { uri: target.photo.uri }
+    : undefined;
+  const ready = rects.length > 0 || (local && noPlate);
   return (
-    <AppSheet visible={photo !== null} onClose={onClose} accessibilityLabel={L.blurAction} maxHeight={0.92}>
+    <AppSheet visible={target !== null} onClose={onClose} accessibilityLabel={L.blurAction} maxHeight={0.92}>
       <Text variant="title" color={t.color.ink}>
         {L.blurAction}
       </Text>
       <Text variant="body" color={t.color.inkMuted}>
         {L.blurHelp}
       </Text>
-      {photo ? (
+      {target ? (
         <PlateFrameEditor
-          source={mediaSource(photo.url)}
-          width={photo.width}
-          height={photo.height}
+          source={source}
+          width={target.photo.width}
+          height={target.photo.height}
           rects={rects}
           editable
           onChange={setRects}
           badge={
             <PhotoBadge accent={rects.length > 0}>
-              {rects.length ? L.blurredCount(rects.length) : L.placeFrame}
+              {detecting ? L.detecting : rects.length ? L.blurredCount(rects.length) : L.placeFrame}
             </PhotoBadge>
           }
           testID="blur-editor"
@@ -86,11 +127,24 @@ export function BlurSheet({
         variant="secondary"
         icon="add"
         disabled={rects.length >= MAX_PLATE_RECTS || busy}
-        onPress={() => setRects((r) => [...r, nextPlateFrame(r)])}
+        onPress={() => {
+          setRects((r) => [...r, nextPlateFrame(r)]);
+          setNoPlate(false);
+        }}
         fullWidth
+        testID="blur-frame-add"
       >
         {L.addFrame}
       </Button>
+      {local && rects.length === 0 ? (
+        <ChoiceRow
+          title={L.noPlate}
+          icon="check"
+          selected={noPlate}
+          onPress={() => setNoPlate((x) => !x)}
+          testID="blur-none"
+        />
+      ) : null}
       {error ? (
         <Text variant="caption" color={t.color.winText} accessibilityRole="alert">
           {error}
@@ -100,12 +154,12 @@ export function BlurSheet({
         variant="primary"
         icon="plate"
         loading={busy}
-        disabled={!rects.length}
+        disabled={!ready || detecting}
         onPress={() => void confirm()}
         fullWidth
         testID="blur-confirm"
       >
-        {L.blurConfirm}
+        {local ? L.sendPhoto : L.blurConfirm}
       </Button>
       <Button variant="plate" icon="back" onPress={onClose} fullWidth>
         Fermer

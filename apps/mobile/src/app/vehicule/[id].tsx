@@ -12,7 +12,6 @@ import {
   garageAppLabels,
   photoLabels,
   plateTransferLabels,
-  type VehiclePhoto,
   vehicleStatusLabels,
   vehicleTypeLabels,
   vehicleWizardLabels,
@@ -23,7 +22,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { ArchiveSheet } from "@/features/vehicle/ArchiveSheet";
-import { BlurSheet } from "@/features/vehicle/add/BlurSheet";
+import { BlurSheet, type BlurTarget } from "@/features/vehicle/add/BlurSheet";
 import { EditSheet } from "@/features/vehicle/EditSheet";
 import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { ShareSheet } from "@/features/vehicle/ShareSheet";
@@ -31,11 +30,11 @@ import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
-import { CROP_VEHICLE, MAX_PHOTOS, photoForm, pickPhotos } from "@/lib/photos";
+import { CROP_VEHICLE, MAX_PHOTOS, pickPhotos } from "@/lib/photos";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@/ui/PhotoGrid";
+import { PhotoGrid } from "@/ui/PhotoGrid";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -47,7 +46,6 @@ export default function VehiculeFiche() {
   const vehicle = useApi(() => api.vehicle(id), [id]);
   const history = useApi(() => api.vehicleHistory(id), [id]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [upload, setUpload] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewer, setViewer] = useState<number | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -60,7 +58,7 @@ export default function VehiculeFiche() {
   const [notice, setNotice] = useState<string | null>(null);
   const [certMessage, setCertMessage] = useState("");
   // Lot 51 : floutage de la plaque d'une photo déjà en ligne (définitif).
-  const [blurring, setBlurring] = useState<VehiclePhoto | null>(null);
+  const [blurring, setBlurring] = useState<BlurTarget>(null);
   const v = vehicle.data;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/garage"));
@@ -78,21 +76,18 @@ export default function VehiculeFiche() {
     }
   }
 
-  // Lot 36 : une photo à la fois, recadrée au format de la carte (4:3), avec l'avancement de l'envoi.
-  const add = () =>
-    run(photoLabels.uploadingOne, async () => {
-      if (!v) return;
-      const picked = await pickPhotos(MAX_PHOTOS - v.photos.length, CROP_VEHICLE);
-      for (let i = 0; i < picked.length; i++) {
-        setUpload({ current: i + 1, total: picked.length });
-        await api.uploadVehiclePhoto(v.id, await photoForm(picked[i] as (typeof picked)[number], i));
-      }
-      // Lot 39 : l'anneau se ferme et la voiture se gare dans le O avant que l'indicateur disparaisse.
-      if (picked.length > 0) {
-        setUpload({ current: picked.length, total: picked.length, done: true });
-        await waitUploadParked();
-      }
-    }).finally(() => setUpload(null));
+  // Lot 36 : une photo à la fois, recadrée au format de la carte (4:3). Relecture du lot 51 : avant l'envoi, la photo
+  // passe par l'éditeur du cadre de plaque (détection ou à la main, ou « aucune plaque visible ») ; l'API la floute.
+  const add = async () => {
+    if (!v) return;
+    setError(null);
+    try {
+      const [picked] = await pickPhotos(MAX_PHOTOS - v.photos.length, CROP_VEHICLE);
+      if (picked) setBlurring({ kind: "local", photo: picked });
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
   const makeCover = (index: number) =>
     run(photoLabels.cover, async () => {
       if (!v) return;
@@ -133,10 +128,9 @@ export default function VehiculeFiche() {
             <PhotoViewer photos={v.photos} start={viewer} onClose={() => setViewer(null)} />
             <BlurSheet
               vehicleId={v.id}
-              photo={blurring}
+              target={blurring}
               onClose={() => setBlurring(null)}
               onDone={async () => {
-                setNotice(vehicleWizardLabels.blurDone);
                 await vehicle.reload();
               }}
             />
@@ -239,7 +233,6 @@ export default function VehiculeFiche() {
             />
           )}
           {v.photos.length > 1 ? <Muted variant="caption">{photoLabels.coverHint}</Muted> : null}
-          {upload ? <UploadProgress {...upload} /> : null}
           {/* Lot 51 : chaque photo dit si sa plaque est floutée ; sinon, le cadre se pose à la main. */}
           {v.photos.length > 0 ? (
             <ChipRow>
@@ -247,7 +240,7 @@ export default function VehiculeFiche() {
                 <Chip
                   key={p.id}
                   selected={p.plateBlurred}
-                  onPress={() => setBlurring(p)}
+                  onPress={() => setBlurring({ kind: "remote", photo: p })}
                   accessibilityLabel={`Photo ${i + 1} : ${p.plateBlurred ? vehicleWizardLabels.plateBlurred : vehicleWizardLabels.blurAction}`}
                 >
                   {`${i + 1} · ${p.plateBlurred ? vehicleWizardLabels.plateBlurred : vehicleWizardLabels.blurAction}`}
@@ -260,7 +253,7 @@ export default function VehiculeFiche() {
               {photoLabels.addOne}
             </Button>
           ) : null}
-          {busy && !upload ? <Muted variant="meta">{busy}</Muted> : null}
+          {busy ? <Muted variant="meta">{busy}</Muted> : null}
           {error ? <Notice tone="error">{error}</Notice> : null}
 
           <SectionTitle>Fiche</SectionTitle>
