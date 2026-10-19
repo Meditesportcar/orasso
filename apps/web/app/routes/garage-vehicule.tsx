@@ -19,10 +19,12 @@ import {
   type VehicleHistoryItem,
   vehicleStatusLabels,
   vehicleTypeLabels,
+  vehicleWizardLabels,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
-import { FileField, TextAreaField } from "../components/Fields";
+import { TextAreaField } from "../components/Fields";
+import { PhotoWithPlate, PlateFrame, plateDecisionError } from "../components/PlateFrame";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime, formatDay } from "../lib/format";
 import type { Route } from "./+types/garage-vehicule";
@@ -91,9 +93,30 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (!(photo instanceof File) || photo.size === 0) {
       return data({ error: "Choisis une photo.", done: null }, { status: 400 });
     }
+    // Relecture du lot 51 : la photo part avec son cadre de plaque (flouté par l'API), ou « aucune plaque visible ».
+    const decision = plateDecisionError(form);
+    if (decision) return data({ error: decision, done: null }, { status: 400 });
     const upload = new FormData();
     upload.set("photo", photo);
+    if (text("plateRects")) upload.set("plateRects", text("plateRects"));
     const res = await api(request, `${base}/photos`, { method: "POST", body: upload });
+    return res.ok ? data({ error: null, done: "photo" }) : fail(res);
+  }
+  // Lot 51 : floutage à la main d'une photo déjà en ligne (définitif, l'API refuse un cadre hors de l'image).
+  if (intent === "photo-blur") {
+    let rects: unknown;
+    try {
+      rects = JSON.parse(text("plateRects") || "[]");
+    } catch {
+      rects = [];
+    }
+    if (!Array.isArray(rects) || rects.length === 0) {
+      return data({ error: "Place le cadre sur la plaque.", done: null }, { status: 400 });
+    }
+    const res = await api(request, `${base}/photos/${encodeURIComponent(text("photoId"))}/blur`, {
+      method: "POST",
+      json: { rects },
+    });
     return res.ok ? data({ error: null, done: "photo" }) : fail(res);
   }
   if (intent === "photo-remove") {
@@ -189,6 +212,37 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
                   Retirer
                 </Button>
               </Form>
+              {p.plateBlurred ? (
+                <span className="g-photo-blurred" data-testid="photo-plate-blurred">
+                  <Chip variant="accent">{vehicleWizardLabels.plateBlurred}</Chip>
+                </span>
+              ) : null}
+              {/* Relecture : une photo déjà floutée peut recevoir un autre cadre (l'API l'accepte). */}
+              {
+                <details className="g-blur" data-testid={p.plateBlurred ? "photo-blur-more" : "photo-blur"}>
+                  <summary className="o-t-label">
+                    {p.plateBlurred ? vehicleWizardLabels.blurMore : vehicleWizardLabels.blurAction}
+                  </summary>
+                  <Form method="post" className="s-stack s-stack--tight">
+                    <input type="hidden" name="photoId" value={p.id} />
+                    <PlateFrame
+                      src={p.url}
+                      alt={`${v.label}, vue ${i + 1}`}
+                      testId={p.plateBlurred ? "site-plate-editor-more" : "site-plate-editor"}
+                    />
+                    <Button
+                      type="submit"
+                      name="intent"
+                      value="photo-blur"
+                      variant="secondary"
+                      icon="check"
+                      loading={busy}
+                    >
+                      {vehicleWizardLabels.blurConfirm}
+                    </Button>
+                  </Form>
+                </details>
+              }
             </li>
           ))}
         </ul>
@@ -197,7 +251,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
       )}
       {v.photos.length < 8 && (
         <Form method="post" encType="multipart/form-data" className="s-form">
-          <FileField label="Ajouter une photo" name="photo" accept="image/jpeg,image/png,image/webp" required />
+          <PhotoWithPlate label="Ajouter une photo" required testId="add-plate-frame" />
           <Button type="submit" name="intent" value="photo-add" variant="secondary" icon="add" loading={busy}>
             Envoyer la photo
           </Button>

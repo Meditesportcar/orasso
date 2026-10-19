@@ -1,5 +1,5 @@
 {
-  "id": "14afa79e-b098-428e-b68d-ce9952e4b822",
+  "id": "1cf566cc-0ea9-4ae8-8bef-e34378252f33",
   "prevId": "f0acef0f-d57a-49f5-8c77-83085e6fb750",
   "version": "7",
   "dialect": "postgresql",
@@ -44,12 +44,6 @@
           "type": "bytea",
           "primaryKey": false,
           "notNull": true
-        },
-        "otp_secret": {
-          "name": "otp_secret",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
         },
         "issued_at": {
           "name": "issued_at",
@@ -9204,6 +9198,13 @@
           "notNull": true,
           "default": 50
         },
+        "main_profile": {
+          "name": "main_profile",
+          "type": "main_profile_enum",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
         "platform_role": {
           "name": "platform_role",
           "type": "platform_role",
@@ -15113,8 +15114,7 @@
         "scan",
         "manual",
         "plate",
-        "express",
-        "drive"
+        "express"
       ]
     },
     "public.local_scan_decision": {
@@ -15512,6 +15512,18 @@
         "sport",
         "circuit",
         "legende"
+      ]
+    },
+    "public.main_profile_enum": {
+      "name": "main_profile_enum",
+      "schema": "public",
+      "values": [
+        "exhibitor",
+        "visitor",
+        "pro",
+        "organizer",
+        "provider",
+        "media"
       ]
     },
     "public.platform_role": {

@@ -11,14 +11,14 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { NativeModules, Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { pointEntry } from "@/features/staff/actions";
 import { ExpressSheet } from "@/features/staff/ExpressSheet";
 import { clock, pointedResult, resultProps, type ShownResult, vibrate } from "@/features/staff/result";
 import { SearchSheet } from "@/features/staff/SearchSheet";
 import { now as clockNow } from "@/lib/clock";
-import { ocrAvailable, readPhotoText } from "@/lib/plates/driveOcr";
+import { recognizeText } from "@/lib/plates/mlkit";
 import { extractPlates } from "@/lib/plates/recognize";
 import { DriveGate, type DriveOutcome } from "@/lib/staff/drive";
 import { counters } from "@/lib/staff/model";
@@ -29,6 +29,8 @@ import { useStaffEvent } from "@/lib/staff/useStaff";
 const { space2, space3 } = tokens.spacing;
 /** Une photo toutes les 900 ms quand aucune lecture n'est en cours (docs : résultat en une seconde). */
 const EVERY_MS = 900;
+/** ML Kit est-il dans ce build ? (Web, Expo Go, ancien APK : non → saisie de la plaque au clavier.) */
+const ocrAvailable = () => Platform.OS !== "web" && Boolean(NativeModules.TextRecognition);
 
 /** « GA-662-KS » pour l'affichage de la plaque lue (jamais gardée). */
 const shown = (p: string) =>
@@ -113,7 +115,9 @@ export default function Drive() {
           shutterSound: false,
         });
         uri = photo?.uri;
-        const text = uri ? await readPhotoText(uri) : null;
+        // Lecture ML Kit du lot 51 (lib/plates/mlkit) : une ligne lue par ligne de texte, jamais deux lignes assemblées.
+        const lines = uri ? await recognizeText(uri) : null;
+        const text = lines ? lines.map((l) => l.text).join("\n") : null;
         if (alive && text) onPlates(extractPlates(text), false);
       } catch {
         // Photo manquée (caméra occupée) : la suivante part dans 900 ms.

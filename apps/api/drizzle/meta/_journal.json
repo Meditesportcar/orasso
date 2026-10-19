@@ -334,8 +334,22 @@
     {
       "idx": 47,
       "version": "7",
-      "when": 1792433593506,
-      "tag": "0047_rotating-qr",
+      "when": 1792432859232,
+      "tag": "0047_arrivee",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792438316290,
+      "tag": "0048_plate-blur",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1792442859474,
+      "tag": "0049_rotating-qr",
       "breakpoints": true
     }
   ]

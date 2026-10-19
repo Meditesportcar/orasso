@@ -45,10 +45,10 @@ initSentry();
 void SplashScreen.preventAutoHideAsync();
 
 /**
- * Écrans ouverts sans compte : premier lancement, connexion, page d'un événement (lien partagé), d'une structure ou d'un
+ * Écrans ouverts sans compte : flux d'arrivée (lot 41), connexion, page d'un événement (lien partagé), d'une structure ou d'un
  * pro (pages publiques du site, lot 29), recette du design.
  */
-const PUBLIC_ROOTS = new Set(["welcome", "auth", "e", "o", "p", "ami", "_ds", "verification-email"]);
+const PUBLIC_ROOTS = new Set(["arrivee", "auth", "e", "o", "p", "ami", "_ds", "verification-email"]);
 
 // Le thème (Béton par défaut, Sable, auto) et les polices Archivo sont posés une fois, à la racine.
 function Shell() {
@@ -90,7 +90,7 @@ function Shell() {
     if (status !== "out" || onboarded === null || !navigation?.key) return;
     const root = segments[0] as string | undefined;
     if (root && PUBLIC_ROOTS.has(root)) return;
-    router.replace(onboarded ? "/auth" : "/welcome");
+    router.replace(onboarded ? "/auth" : "/arrivee/profil");
   }, [status, onboarded, segments, router, navigation?.key]);
 
   // Chaque casquette a son groupe de routes : si l'URL est dans celui d'une autre (retour arrière, lien profond),

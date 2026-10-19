@@ -14,6 +14,7 @@ import {
 import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { ArriveeFields } from "../components/ArriveeFields";
 import { TermsField } from "../components/Fields";
 import { ReceivedInvitationCard } from "../components/Invitations";
 import { apiFetch } from "../lib/api.client";
@@ -55,7 +56,14 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (isInvitationIntent(intent)) {
     const res = await invitationAction(request, form);
     if (res.error)
-      return data({ error: res.error, errors: {}, values: { pseudo: "", email: "" } }, { status: res.status });
+      return data(
+        {
+          error: res.error,
+          errors: {},
+          values: { pseudo: "", email: "", mainProfile: "", departments: [], firstName: "", lastName: "" },
+        },
+        { status: res.status },
+      );
     return redirect(`/app/acces${intent === "invitation_accept" ? "" : "?invitation=refusee"}`);
   }
   // Inscription depuis le lien : le compte est créé, puis l'invitation lui est rattachée (même adresse e-mail).
@@ -132,16 +140,18 @@ export default function InvitationEvenement({ loaderData, actionData }: Route.Co
           <p className="s-muted">{L.mailHow}</p>
           <Form method="post" className="s-form">
             <input type="hidden" name="intent" value="signup" />
-            <TextField
-              label="Pseudo"
-              name="pseudo"
-              autoComplete="username"
-              defaultValue={actionData?.values.pseudo}
-              help="3 à 24 caractères : lettres, chiffres, « _ » ou « . »"
-              error={errors.pseudo ?? pseudoHint}
-              onBlur={(e) => checkPseudo(e.currentTarget.value)}
-              required
-            />
+            <ArriveeFields values={actionData?.values} errors={errors}>
+              <TextField
+                label="Pseudo"
+                name="pseudo"
+                autoComplete="username"
+                defaultValue={actionData?.values.pseudo}
+                help="3 à 24 caractères : lettres, chiffres, « _ » ou « . »"
+                error={errors.pseudo ?? pseudoHint}
+                onBlur={(e) => checkPseudo(e.currentTarget.value)}
+                required
+              />
+            </ArriveeFields>
             <TextField
               label="E-mail"
               name="email"

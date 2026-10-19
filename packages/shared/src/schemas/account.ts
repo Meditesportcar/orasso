@@ -1,6 +1,13 @@
 // Compte et sécurité (lot 15, ARCHITECTURE-SUITE § 1.2).
 import { z } from "zod";
-import { departmentSchema, type NotificationFamily, notificationTypes, profileVisibilities } from "../enums";
+import {
+  departmentSchema,
+  MAX_DEPARTMENTS,
+  type NotificationFamily,
+  notificationTypes,
+  profileVisibilities,
+} from "../enums";
+import { arriveeLabels } from "../labels/arrivee.fr";
 import { type HomeWidgets, homeWidgetsSchema } from "./home";
 import type { UserProfileView } from "./social";
 
@@ -17,7 +24,7 @@ export const accountSettingsSchema = z
     }),
     mutedTypes: z.array(z.enum(notificationTypeNames)).max(100),
     visibility: z.enum(profileVisibilities),
-    departments: z.array(departmentSchema).max(20),
+    departments: z.array(departmentSchema).max(MAX_DEPARTMENTS, arriveeLabels.errors.tooMany),
     radiusKm: z.number().int().min(10).max(300),
     interests: z.array(z.uuid()).max(30),
     homeWidgets: homeWidgetsSchema.nullable(),

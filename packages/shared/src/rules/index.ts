@@ -18,6 +18,7 @@ export * from "./moderation";
 export * from "./moon";
 export * from "./notifications";
 export * from "./password";
+export * from "./plateFrame";
 export * from "./points";
 export * from "./poster";
 export * from "./pro";

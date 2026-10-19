@@ -50,6 +50,13 @@ export const journalOnlyNotificationTypes: readonly string[] = [
  */
 
 export const profileVisibilities = ["public", "private"] as const;
+
+/**
+ * Profil choisi à l'arrivée (lot 41, DA v2) : règle les textes et le tuto, pas la liste des casquettes (V5). `exhibitor`
+ * correspond à la casquette `fan` ; `null` pour les comptes antérieurs au lot 41.
+ */
+export const mainProfiles = ["exhibitor", "visitor", "pro", "organizer", "provider", "media"] as const;
+export type MainProfile = (typeof mainProfiles)[number];
 export type ProfileVisibility = (typeof profileVisibilities)[number];
 
 export const devicePlatforms = ["ios", "android", "web"] as const;
@@ -196,6 +203,8 @@ export const departments = [
   "974",
   "976",
 ] as const;
+/** Nombre maximal de départements choisis (secteur d'un profil). */
+export const MAX_DEPARTMENTS = 20;
 export const departmentSchema = z.string().refine((d) => (departments as readonly string[]).includes(d), {
   message: "Département inconnu",
 });

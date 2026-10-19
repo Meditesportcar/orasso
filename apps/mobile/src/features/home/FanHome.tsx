@@ -21,6 +21,7 @@ import {
 import { useRouter } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { Pressable, StyleSheet } from "react-native";
+import { PendingCard } from "@/features/arrivee/PendingCard";
 import { useMyPosition } from "@/features/explorer/useMyPosition";
 import {
   AgendaWidget,
@@ -158,6 +159,7 @@ export function FanHome() {
       }
     >
       {offline ? <Notice>Hors ligne : voici ce que ton téléphone a gardé.</Notice> : null}
+      <PendingCard where="home" />
 
       {next ? (
         <PosterCard
