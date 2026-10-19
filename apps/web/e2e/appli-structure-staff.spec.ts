@@ -371,7 +371,7 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
     expect([401, 403, 404]).toContain(refused.status);
   }
   const fan = await openApp(browser, "kenji@orasso.local", "beton");
-  await go(fan.page, "/staff");
+  await go(fan.page, "/equipe");
   await fan.page.waitForURL(/accueil/, { timeout: 20_000 });
   await go(fan.page, "/structure");
   await fan.page.waitForURL(/accueil/, { timeout: 20_000 });

@@ -3,7 +3,8 @@
 // structure pour l'organisateur), puis Recherche et Boîte à droite. L'avatar a quitté la barre : il est dans Mon profil.
 // Appui long sur le logotype : retour à la casquette de base (exposant ou visiteur) ; appui sur la pastille : Mon profil
 // de la casquette de base (prototype : la pastille de l'organisateur ramène au profil). La Boîte réunit messages,
-// demandes et notifications (elle remplace la cloche) : sa pastille compte les deux.
+// demandes et notifications (elle remplace la cloche) : sa pastille compte les deux ; pour l'organisateur, les non-lus
+// de la Boîte de la structure.
 // Le système de design ne rend ni le logotype ni la pastille pressables (zone du lot 39 pendant ce lot) : deux zones
 // d'appui transparentes les recouvrent, aux mêmes cotes que l'`AppBar` (marge 18 px, écart 10 px, pastille 30 px).
 import { AppBar, tokens } from "@orasso/design-system/native";
@@ -11,9 +12,11 @@ import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { api } from "@/lib/api";
 import { usePersona } from "@/lib/persona";
 import { homeOf, isBaseKind, personaKindLabels, tabHref } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
+import { useApi } from "@/lib/useApi";
 
 const { barTop, brandLogo } = tokens.spacing;
 /** Cotes de l'`AppBar` du système de design (`paddingHorizontal`, `gap`, pastille de casquette). */
@@ -29,7 +32,16 @@ export function TopBar({ inboxOn = false, onClose }: { inboxOn?: boolean; onClos
   const { persona, base, active, choose, backToBase } = usePersona();
   const showPersona = !isBaseKind(persona.kind);
   const logoWidth = width < 360 ? 112 : brandLogo;
-  const inboxCount = (me?.unreadInbox ?? 0) + (me?.counts.unreadNotifications ?? 0);
+  // Organisateur : la Boîte de la structure (messages de participants, discussions du staff, demandes non traités).
+  const structureId = persona.kind === "organizer" ? persona.structureId : null;
+  const orgInbox = useApi(() => api.orgInboxSummary(structureId ?? ""), [structureId], {
+    enabled: structureId !== null && !active.assisted,
+    refreshMs: 60_000,
+  });
+  const orgCount = orgInbox.data
+    ? orgInbox.data.participantMessages + orgInbox.data.staffDiscussions + orgInbox.data.staffRequests
+    : 0;
+  const inboxCount = structureId ? orgCount : (me?.unreadInbox ?? 0) + (me?.counts.unreadNotifications ?? 0);
   const baseLabel = personaKindLabels[base.kind];
 
   return (
