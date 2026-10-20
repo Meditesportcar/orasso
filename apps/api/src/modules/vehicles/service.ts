@@ -3,6 +3,7 @@ import {
   normalizePlate,
   type PlateRect,
   type ShareFormat,
+  type ShareStyle,
   type VehicleCreate,
   type VehicleDetail,
   type VehicleFull,
@@ -163,12 +164,25 @@ export const vehiclesService = {
     }));
   },
 
-  /** PNG de la fiche à partager (story ou publication), sans plaque ; mis en cache une heure. */
-  async shareImage(v: Viewer, id: string, format: ShareFormat): Promise<Buffer> {
+  /**
+   * PNG de la fiche à partager (story ou publication), sans plaque ; mis en cache une heure. La story (lot 50) porte
+   * le grade du propriétaire et les rassos pointés avec ce véhicule.
+   */
+  async shareImage(v: Viewer, id: string, format: ShareFormat, style: ShareStyle = "night"): Promise<Buffer> {
     await ownVehicle(v, id);
     const row = await vehiclesRepo.findFullById(id);
     if (!row) throw notFound("Véhicule introuvable");
-    return cachedShareImage(row, v.profile.pseudo, format);
+    if (format !== "story") return cachedShareImage(row, v.profile.pseudo, format);
+    const [rassos] = await db
+      .select({ n: count() })
+      .from(checkins)
+      .innerJoin(applications, eq(applications.id, checkins.applicationId))
+      .where(eq(applications.vehicleId, id));
+    return cachedShareImage(row, v.profile.pseudo, format, Date.now(), {
+      style,
+      grade: v.profile.grade,
+      rassos: rassos?.n ?? 0,
+    });
   },
 
   async create(v: Viewer, input: VehicleCreate): Promise<VehicleFull> {

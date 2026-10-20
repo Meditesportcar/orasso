@@ -16,6 +16,22 @@ export type CategoryMakeMode = (typeof categoryMakeModes)[number];
 export const shareFormats = ["story", "post"] as const;
 export type ShareFormat = (typeof shareFormats)[number];
 
+/** Style de la carte au format story (lot 50, prototype `s-share`) : Nuit (Béton), Sable (clair), Néon (nuit et cadre moutarde). */
+export const shareStyles = ["night", "sand", "neon"] as const;
+export type ShareStyle = (typeof shareStyles)[number];
+export const SHARE_DEFAULT_STYLE: ShareStyle = "night";
+
+/**
+ * Zones que l'interface d'Instagram recouvre sur une story (retours de Damien, v33) : le haut (profil, barre) et le bas
+ * (champ de réponse). Fractions de la hauteur : rien d'important n'y est dessiné, les bandes sont de la couleur du fond.
+ */
+export const SHARE_SAFE = { top: 0.14, bottom: 0.2 } as const;
+
+/** Hauteurs en px des deux bandes masquées d'une story de hauteur `height`. */
+export function shareSafeBands(height: number): { top: number; bottom: number } {
+  return { top: Math.round(height * SHARE_SAFE.top), bottom: Math.round(height * SHARE_SAFE.bottom) };
+}
+
 /** Dimensions (px) des fiches Instagram. */
 export const SHARE_SIZES: Record<ShareFormat, { width: number; height: number }> = {
   story: { width: 1080, height: 1920 },
