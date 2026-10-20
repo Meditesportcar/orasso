@@ -180,7 +180,7 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
 
   // --- 2. L'organisateur l'accepte depuis l'appli : entrée dans l'équipe sans rôle (lot 36) -------------------
   await request.getByTestId("team-request-accept").click();
-  await expect(page.getByRole("checkbox", { name: "Scan accueil" })).toHaveCount(0);
+  await expect(page.getByRole("checkbox", { name: "Accueil et scan" })).toHaveCount(0);
   await shot(page, "02-accepter-feuille-beton");
   await page.getByTestId("team-accept-confirm").click();
   await expect(page.getByText("Demande acceptée.")).toBeVisible({ timeout: 20_000 });
@@ -194,8 +194,8 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
 
   // --- 3. Il donne des rôles à la personne ----------------------------------------------------------------------
   await row.getByTestId("team-member-manage").click();
-  await page.getByRole("checkbox", { name: "Scan accueil" }).click();
-  await page.getByRole("checkbox", { name: "Entrée visiteurs" }).click();
+  await page.getByRole("checkbox", { name: "Accueil et scan" }).click();
+  await page.getByRole("checkbox", { name: "Contrôle des billets" }).click();
   await shot(page, "04-gerer-membre-beton");
   await page.getByTestId("team-member-save").click();
   await expect(page.getByText("Rôles enregistrés.")).toBeVisible({ timeout: 20_000 });

@@ -36,8 +36,8 @@ export type StaffRole = z.infer<typeof staffRoleSchema>;
 export const checkinStaffRoles: readonly StaffRole[] = ["scan", "control", "super_staff"];
 
 export const staffRoleLabels: Record<StaffRole, string> = {
-  scan: "Scan accueil",
-  shop: "Entrée visiteurs",
+  scan: "Accueil et scan",
+  shop: "Contrôle des billets",
   placement: "Placement",
   control: "Contrôle",
   filtering: "Filtration",
