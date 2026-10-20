@@ -2,11 +2,14 @@
 // « Prestataires présents » d'un événement. Aucune règle métier ici : elles sont dans l'API.
 import type {
   EventProviderPublic,
+  MissionsResult,
   OpenEventForProvider,
   ProviderApplicationCreate,
   ProviderApplicationView,
   ProviderProfileInput,
   ProviderProfileView,
+  ProviderPublic,
+  ProviderReviewsSummary,
 } from "@orasso/shared";
 
 import { request } from "../http";
@@ -27,6 +30,10 @@ export const providersApi = {
   openToProviders: () => request<OpenEventForProvider[]>("/api/events/open-to-providers"),
   applyAsProvider: (eventId: string, body: ProviderApplicationCreate) =>
     request<ProviderApplicationView>(`/api/events/${eventId}/provider-applications`, { method: "POST", body }),
+  // Lot 54 (API du lot 46) : missions autour de moi, vitrine publique d'un prestataire et ses avis.
+  missions: (query: { trade?: string; radiusKm?: number }) => request<MissionsResult>(`/api/missions${qs(query)}`),
+  providerPublic: (id: string) => request<ProviderPublic>(`/api/providers/${id}`),
+  providerReviews: (id: string) => request<ProviderReviewsSummary>(`/api/providers/${id}/reviews`),
   eventProviders: (slug: string) =>
     request<EventProviderPublic[]>(`/api/events/by-slug/${encodeURIComponent(slug)}/providers`),
 };
