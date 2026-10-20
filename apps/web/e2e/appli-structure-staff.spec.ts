@@ -188,12 +188,14 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   let added = (await members()).find((m) => m.pseudo === pseudo);
   expect(added?.status).toBe("active");
   expect(added?.staffRoles).toEqual([]);
-  const row = page.getByTestId("team-member").filter({ hasText: pseudo });
+  // Lot 52 : l'équipe est en bulles ; un toucher ouvre la feuille du membre.
+  const row = page.getByTestId("team-bubbles").getByRole("button", { name: new RegExp(`^${pseudo}, `) });
   await expect(row).toBeVisible();
   await shot(page, "03-equipe-membres-beton");
 
   // --- 3. Il donne des rôles à la personne ----------------------------------------------------------------------
-  await row.getByTestId("team-member-manage").click();
+  await row.click();
+  await page.getByTestId("team-bubble-manage").click();
   await page.getByRole("checkbox", { name: "Accueil et scan" }).click();
   await page.getByRole("checkbox", { name: "Contrôle des billets" }).click();
   await shot(page, "04-gerer-membre-beton");
@@ -203,7 +205,8 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   expect(added?.staffRoles).toEqual(["scan", "shop"]);
 
   // --- 4. Il la retire (feuille de confirmation) --------------------------------------------------------------
-  await row.getByTestId("team-member-manage").click();
+  await row.click();
+  await page.getByTestId("team-bubble-manage").click();
   await page.getByTestId("team-member-remove").click();
   await shot(page, "05-retirer-confirmation-beton");
   await page.getByTestId("orga-confirm").click();
@@ -338,7 +341,10 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   const s = await openApp(browser, "damien@orasso.local", "beton");
   await chooseOrganizer(s.page, "MéditeSportCar");
   await go(s.page, "/structure");
+  // Lot 52 : chaque tuile ouvre son volet, un à la fois.
+  await s.page.getByTestId("tile-verification").click();
   await expect(s.page.getByTestId("orga-verification")).toBeVisible({ timeout: 30_000 });
+  await s.page.getByTestId("tile-card").click();
   await expect(s.page.getByTestId("orga-structure-name")).toBeVisible();
   await shot(s.page, "12-structure-beton");
   // La fiche : changer la description puis la remettre.
@@ -389,12 +395,13 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   const b = await openApp(browser, "damien@orasso.local", "sable");
   await chooseOrganizer(b.page, "MéditeSportCar");
   await tab(b.page, "Équipe").click();
-  await expect(b.page.getByTestId("team-member").first()).toBeVisible({ timeout: 30_000 });
+  await expect(b.page.getByTestId("team-bubble").first()).toBeVisible({ timeout: 30_000 });
   await shot(b.page, "20-equipe-sable");
   await b.page.getByTestId("team-invite").click();
   await shot(b.page, "21-inviter-sable");
   await b.page.keyboard.press("Escape");
   await go(b.page, "/structure");
+  await b.page.getByTestId("tile-verification").click();
   await expect(b.page.getByTestId("orga-verification")).toBeVisible({ timeout: 30_000 });
   await shot(b.page, "22-structure-sable");
   await go(b.page, "/modeles");
@@ -484,6 +491,8 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   const a = await openApp(browser, email, "beton");
   await chooseOrganizer(a.page, name);
   await go(a.page, "/structure");
+  await expect(a.page.getByTestId("structure-unverified")).toBeVisible({ timeout: 30_000 });
+  await a.page.getByTestId("tile-verification").click();
   await expect(a.page.getByTestId("orga-verification")).toBeVisible({ timeout: 30_000 });
   await expect(a.page.getByTestId("orga-verification-number")).toBeVisible();
   await shot(a.page, "30-structure-non-verifiee-beton");
@@ -521,7 +530,8 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   await a.page.getByTestId("orga-confirm").click();
   await expect(a.page.getByTestId("orga-verification-document")).toHaveCount(0, { timeout: 20_000 });
 
-  // Logo : même sélecteur de fichier.
+  // Logo : même sélecteur de fichier (volet de la tuile Logo).
+  await a.page.getByTestId("tile-logo").click();
   const logoChooser = a.page.waitForEvent("filechooser");
   await a.page.getByTestId("orga-logo-change").click();
   (await logoChooser).setFiles({ name: "logo.png", mimeType: "image/png", buffer: samplePhoto([40, 90, 160]) });
@@ -534,6 +544,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   const canigou = await openApp(browser, "pres_canigou@orasso.local", "sable");
   await chooseOrganizer(canigou.page, "Écurie du Canigou");
   await go(canigou.page, "/structure");
+  await canigou.page.getByTestId("tile-verification").click();
   await expect(canigou.page.getByTestId("orga-verification")).toContainText(/expire dans/, { timeout: 30_000 });
   await shot(canigou.page, "32-badge-echeance-sable");
   await canigou.ctx.close();
@@ -554,6 +565,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   await shot(tram.page, "33-structure-suspendue-ecriture-refusee-sable");
   await tram.page.keyboard.press("Escape");
   await go(tram.page, "/structure");
+  await tram.page.getByTestId("tile-verification").click();
   await expect(tram.page.getByTestId("orga-badge-suspended")).toBeVisible({ timeout: 30_000 });
   await shot(tram.page, "34-structure-suspendue-sable");
   await tram.ctx.close();

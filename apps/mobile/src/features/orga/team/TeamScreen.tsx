@@ -359,7 +359,7 @@ export function TeamScreen() {
                         setManaging(opened);
                       }}
                       fullWidth
-                      testID="team-member-manage"
+                      testID="team-bubble-manage"
                     >
                       {L2.actionManage}
                     </Button>
@@ -372,7 +372,7 @@ export function TeamScreen() {
                         setRemoving(opened);
                       }}
                       fullWidth
-                      testID="team-member-remove"
+                      testID="team-bubble-remove"
                     >
                       {L2.actionRemove}
                     </Button>

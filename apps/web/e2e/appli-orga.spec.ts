@@ -158,19 +158,20 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await page.getByRole("button", { name: "Fermer" }).first().click();
   await tab(page, "Équipe").click();
   await pickOption(page, "Événement", /Nocturne de Canet/);
-  await expect(page.getByTestId("orga-staff-member").first()).toBeVisible({ timeout: 20_000 });
+  // Lot 52 : l'équipe en bulles ; un toucher ouvre la feuille du membre, qui propose « Relancer » (sans réponse, pas le jour J).
+  await expect(page.getByTestId("team-bubble").first()).toBeVisible({ timeout: 20_000 });
   await shot(page, "11-staff-beton");
-  // Un membre déjà relancé depuis moins d'une heure a son bouton éteint (rejouer la recette de suite) : on prend le premier actif.
-  const remind = page.locator('[data-testid="orga-staff-remind"]:not([disabled])');
-  if ((await remind.count()) > 0) {
-    await remind.first().click();
-    // Recette rejouée le même jour : l'API refuse une seconde relance (le bouton reste allumé côté appli).
-    await expect(page.getByText("Relance envoyée.").or(page.getByText(/déjà été relancée aujourd'hui/))).toBeVisible({
-      timeout: 20_000,
-    });
-  } else {
-    expect(await page.getByTestId("orga-staff-remind").count()).toBeGreaterThan(0);
-  }
+  await page
+    .getByRole("button", { name: /^Hugo_66, / })
+    .first()
+    .click();
+  const remind = page.getByTestId("orga-staff-remind");
+  await expect(remind).toBeVisible({ timeout: 20_000 });
+  // Recette rejouée le même jour : l'API refuse une seconde relance (le bouton reste allumé côté appli).
+  await remind.click();
+  await expect(page.getByText("Relance envoyée.").or(page.getByText(/déjà été relancée aujourd'hui/))).toBeVisible({
+    timeout: 20_000,
+  });
   await shot(page, "12-staff-relance-beton");
 
   await tab(page, "Direct").click();
@@ -203,7 +204,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await shot(s.page, "23-boite-sable");
   await s.page.getByRole("button", { name: "Fermer" }).first().click();
   await tab(s.page, "Équipe").click();
-  await expect(s.page.getByTestId("team-member").first()).toBeVisible({ timeout: 20_000 });
+  await expect(s.page.getByTestId("team-bubble").first()).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "24-staff-sable");
   await tab(s.page, "Tri").click();
   await shot(s.page, "25-tri-attente-sable");

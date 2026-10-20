@@ -390,6 +390,8 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   await org.page.getByTestId("casquette-organizer").filter({ hasText: name }).click();
   await org.page.waitForURL(/\/direct/, { timeout: 20_000 });
   await go(org.page, "/structure");
+  // Lot 52 : « Demander l'aide d'Orasso » est une tuile de l'onglet Structure.
+  await org.page.getByTestId("tile-help").click();
   await expect(org.page.getByTestId("assistance-panel")).toBeVisible({ timeout: 30_000 });
   await org.page.getByTestId("assistance-message").fill("court");
   await org.page.getByTestId("assistance-ask").click();

@@ -310,7 +310,7 @@ test("décision groupée de 3 candidatures, puis invitations depuis un événeme
     .filter({ hasText: target?.title ?? "" })
     .click();
   await expect(page.getByTestId("triage-counters")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Liste", exact: true }).click();
+  await page.getByRole("button", { name: "En liste", exact: true }).click();
   await expect(page.getByTestId("triage-list-row").first()).toBeVisible({ timeout: 20_000 });
   const boxes = page.getByTestId("triage-list").getByRole("checkbox");
   for (let i = 0; i < 3; i++) await boxes.nth(i).click();

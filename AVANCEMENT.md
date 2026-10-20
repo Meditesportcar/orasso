@@ -29,6 +29,8 @@
 
 - **Lot 48 — jour J v2 (branche `lot-48-jour-j-v2`, vague 4)** : QR d'accès tournant `OR2` (nouveau code signé toutes les 20 s avec un secret par pass, vérifié hors ligne par le staff, anneau et n° du code, captures bloquées sur l'écran, en-tête par profil : zone, emplacement, badge presse, billet) ; mode staff v2 (synchro, rôle, « Je suis là », tuiles selon les rôles, entrés par zone, Alerte / Main courante / Discussion en bas, thème au choix) ; accueil drive (la caméra lit la plaque avec ML Kit sur l'appareil, hachage, liste en mémoire, pointage `drive`) ; migration `0049_rotating-qr` ; dépendances natives `expo-screen-capture` et `@react-native-ml-kit/text-recognition` (APK au lot 58). Recette `apps/web/e2e/appli-lot48.spec.ts`.
 
+- **Lot 52 — appli organisateur v2 (branche `lot-52-orga-v2`, vague 5)** : Événements (« Créer un événement », segments En cours / Brouillons, brouillon qui dit ce qui manque, anciens derrière « … » avec duplication et invitation des retenus expliquée) ; Tri (grande photo, nom en `OutlinedText`, note d'arrivée visible, segments Candidatures · Liste d'attente · Prestataires par mission avec emplacement · Presse, mode liste conservé) ; Direct (hors événement : prochain événement, à trier, zones, équipe ; Prix du public le jour J) ; Équipe en bulles (taille = événements tenus, historique et actions, rôles par événement selon les présences, ce que chaque rôle permet) ; Structure (sceau tournant et pastille au O, message « Vérification en cours », tuiles) ; rôle « Contrôle des billets » ; route `GET /structures/:id/team-history` (aucune migration). Recette `apps/web/e2e/appli-lot52.spec.ts`.
+
 ## En cours
 
 - Branche `lot-51-garage-floutage` poussée, en attente de fusion (après 47 et 49 : migration `0045_plate-blur` à régénérer, règle B1).
@@ -46,6 +48,8 @@
 - Lot 41 (branche `lot-41-arrivee`, depuis `main` `7d4fd86`) en attente de la fusion du coordinateur : migration `0045_arrivee` à régénérer selon l'ordre des fusions (règle B1) ; fichiers partagés : `apps/mobile/src/app/_layout.tsx`, `apps/api/src/app.ts`, `modules/security/auth-hooks.ts`, `packages/shared` (labels, schémas), `apps/web/e2e/helpers.ts`.
 
 - Vague 4 : la branche `lot-48-jour-j-v2` attend la relecture et la fusion du coordinateur (migration `0049_rotating-qr`, parent `0048_plate-blur`, règle B1 ; fichiers partagés : `modules/staff/service.ts`, `modules/checkins/service.ts`, `shared/enums.ts`, `shared/schemas/access.ts`, `apps/mobile/package.json`).
+
+- Vague 5 : la branche `lot-52-orga-v2` attend la relecture indépendante (D27) et la fusion du coordinateur (aucune migration ; fichiers partagés : `packages/shared` (`roles.ts`, `labels.fr.ts`, `labels/shop.fr.ts`, `schemas/index.ts`), `apps/api/src/modules/staff/routes.ts`, `scripts/seed.ts`). Le lot 53 remplace l'assistant derrière « Créer un événement » et « Reprendre ».
 
 ## Prochaine étape
 
