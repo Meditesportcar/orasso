@@ -200,11 +200,11 @@ export function Art({ children, label, testID }: { children: ReactNode; label?: 
   );
 }
 
-/** Une carte dans le cadre. */
+/** Une carte dans le cadre : plus sombre que la plaque, dans les deux thèmes (la plaque est graphite aussi en Sable). */
 export function Card({ children, style }: { children?: ReactNode; style?: ViewStyle }) {
   const { t } = useTheme();
   return (
-    <View style={[styles.card, { backgroundColor: t.color.surfaceRaised, borderRadius: radius.radiusMd }, style]}>
+    <View style={[styles.card, { backgroundColor: t.color.surfaceSunken, borderRadius: radius.radiusMd }, style]}>
       {children}
     </View>
   );

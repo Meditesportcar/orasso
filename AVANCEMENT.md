@@ -27,6 +27,8 @@
 
 - **Lot 43 — Sorties en tickets, Accueil par profil, accès flottant (branche `lot-43-sorties-accueil`, vague 4)** : `GET /me/home?persona=` (profil et blocs de l'exposant, du visiteur, du pro, du prestataire, du média ; aucune migration) ; Sorties en tickets à souche de date (segments À venir / Staff / Passées, Mon QR, Retirer, liste d'attente, place libérée, Mon billet, mission staff, passées avec points, avis et prix du public) ; Accueil par profil (carte du prochain événement à affiche générée, compte à rebours en contour, organisateur validé, arrivée, Mon accès / Mon billet, Maps, Waze, Sur la carte ; accueils du pro, du prestataire et du média) ; accès flottant de J-7 à J+1 au-dessus de la barre d'onglets ; le pro et le prestataire s'ouvrent désormais sur leur Accueil. Recette `apps/web/e2e/appli-lot43.spec.ts`.
 
+- **Lot 42 — tutos par profil, au « tu » (branche `lot-42-tutos`, vague 4)** : six tutos (exposant 7 diapos, visiteur 6, pro 4, organisateur 6, prestataire 4, média 4 : 31), textes du prototype (`shared/labels/tuto.fr.ts`), une illustration animée par diapo en `react-native-svg` + Reanimated (`features/tuto/` : carte, candidature garage › règlement › envoi › « En attente », QR et barre de scan, parking vu de dessus avec la voiture moutarde qui suit le chemin, tampon du passeport, grades et pros, bulles d'équipe, météo et notifications, direct, plan d'emplacement, badge presse…) ; une seule illustration montée, réduction des animations = état final ; joués après l'arrivée (« Passer » et « C'est parti » mènent à `arrivee/casquette`), rejouables depuis Mon profil › Aide (« Revoir le tuto »), route `tuto/[profile]` qui ouvre la tuile de l'Accueil du lot 43 (`TUTO_ROUTE_READY = true`). Aucune migration. Recette `apps/web/e2e/appli-lot42.spec.ts` (`APP_URL`) ; `appli-lot41.spec.ts` adapté.
+
 ## En cours
 
 - Branche `lot-51-garage-floutage` poussée, en attente de fusion (après 47 et 49 : migration `0045_plate-blur` à régénérer, règle B1).
@@ -40,6 +42,8 @@
 - Vague 3 : la branche `lot-49-api-passeport-vote-recap` attend la relecture et la fusion du coordinateur (migration `0045_passport`, parent `0044_missions`, à régénérer si le lot 47 en ajoute une avant elle, règle B1 ; elle étend `point_kind` par `ADD VALUE`, jamais utilisé dans la même migration). Les pages Réglages de l'administration (site et appli) n'affichent pas encore `points.audience_prize` (API prête).
 
 - La branche `lot-43-sorties-accueil` (vague 4) attend la relecture et la fusion du coordinateur (fichiers partagés : `ui/PersonaTabs.tsx`, `lib/personaModel.ts` (`landingOf`), `packages/shared` (`home.ts`, `labels/home.fr.ts`), `seed.ts` ; la tuile « Découvre ce qu'il y a de nouveau » mène à `tuto/[profil]` du lot 42).
+
+- La branche `lot-42-tutos` (vague 4) attend la relecture et la fusion du coordinateur (aucune migration ; fichiers partagés : `packages/shared/src/labels.fr.ts`, `features/home/parts.tsx` (`TUTO_ROUTE_READY`), `app/reglages/[section].tsx`, `e2e/appli-lot41.spec.ts`).
 
 - Lot 41 (branche `lot-41-arrivee`, depuis `main` `7d4fd86`) en attente de la fusion du coordinateur : migration `0045_arrivee` à régénérer selon l'ordre des fusions (règle B1) ; fichiers partagés : `apps/mobile/src/app/_layout.tsx`, `apps/api/src/app.ts`, `modules/security/auth-hooks.ts`, `packages/shared` (labels, schémas), `apps/web/e2e/helpers.ts`.
 

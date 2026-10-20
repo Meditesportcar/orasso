@@ -16,7 +16,9 @@ describe("les six tutos", () => {
         expect(slide.day.length, `${p} jour`).toBeGreaterThan(0);
         expect(slide.title.length, `${p} titre`).toBeGreaterThan(0);
         expect(slide.text.length, `${p} texte`).toBeGreaterThan(0);
-        expect(`${slide.title} ${slide.text}`, `${p} « ${slide.title} »`).not.toMatch(/\b(votre|vos|vous (êtes|avez|pouvez|devez))\b/i);
+        expect(`${slide.title} ${slide.text}`, `${p} « ${slide.title} »`).not.toMatch(
+          /\b(votre|vos|vous (êtes|avez|pouvez|devez))\b/i,
+        );
       }
     }
   });

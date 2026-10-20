@@ -1407,6 +1407,22 @@ Source : prototype DA v2 (versions 37–38 et 41) **validé par Damien dans le p
 - Badge « Prix du public » de la carte : lu dans `audiencePrizes` quand l'API le servira (lot 49 : `vehicles.audience_prizes`, pas encore exposé dans `VehicleFull` sur cette branche).
 - Le floutage automatique est une proposition : la lecture ML Kit dépend de la lumière et de l'angle ; à mesurer sur le Xiaomi au lot 58.
 
+### 2026-10-20 — Tutos par profil, au « tu » (lot 42)
+Source : prototype DA v2 **validé par Damien dans le prototype DA v2, 19/10/2026** (`s-tuto`, 31 diapos), `retours-damien-2026-10-18.md` (v18 à v27), `ARCHITECTURE-DA-V2.md` § 3.2. Fichiers : `packages/shared/src/labels/tuto.fr.ts`, `apps/mobile/src/features/tuto/`, `app/tuto/[profile].tsx`, `app/arrivee/tuto.tsx`, `app/reglages/[section].tsx`, `features/home/parts.tsx`.
+- **Textes exacts du prototype**, extraits tels quels (jour, titre, texte) ; les textes d'exemple des illustrations (Nocturne de Canet, Kenji_66, Atelier Têt Detailing, La Brasa…) sont des exemples d'écran, jamais des données, rangés dans `tutoArt`. Une seule diapo sociale par profil concerné : exposant et visiteur seulement (v27).
+- **Valeurs de points illustratives** : « +40 pts », « +20 pts », « Sport · 1 280 pts », « Circuit à 1 760 », remises 5 / 8 / 10 / 15 % : le barème est « en discussion » (docs/01), les tutos ne promettent rien de contraire ; les chiffres sont ceux du prototype et disent « exemple » par leur contexte (Nocturne de Canet, Kenji_66).
+- **Illustrations refaites en natif** (`react-native-svg` + Reanimated) au lieu d'importer les SVG animés du prototype : cartes, étiquettes, barres, compteurs, bulles d'équipe, plan du parking avec la voiture vue de dessus (`CarTop`, couleur moutarde) qui suit le chemin, tampon `StampDrop` du lot 39 dans le passeport. Les photos et logos d'exemple sont des cadres sombres avec un pictogramme et des disques aux couleurs des jetons (`night`, `accent`, `win`, `poster`, `status-waitlist`) : aucune teinte libre. Le tampon plus ancien du passeport (« Expo Rivesaltes ») et les huit styles d'affiche du prototype sont simplifiés (un tampon, trois affiches de couleur).
+- **Une seule illustration montée** : la diapo visible ; changer de diapo la démonte et monte la suivante (fondu de 120 ms). Réduction des animations (réglage de l'appareil ou « Réduire les animations » de Mon profil) : chaque brique s'affiche dans son état final, sans mouvement (« Retenue » déjà posé, compteurs à leur valeur).
+- **Fin du tuto** : joué depuis l'arrivée, « Passer » et « C'est parti » mènent à `arrivee/casquette` (lot 41). Rejoué (Aide ou tuile de l'Accueil), ils reviennent à l'écran précédent, sinon à l'Accueil de la casquette active. La clé `tuto:<profil>` est posée à la fin du tuto (« Passer » compris) ; la tuile de l'Accueil la lit. Les comptes existants n'ont aucun tuto imposé : seulement la tuile du lot 43.
+- **Profil du tuto d'arrivée** : le `main_profile` enregistré (`GET /me`), à défaut le choix de l'arrivée (le compte se charge). Pour « Revoir le tuto », le profil choisi à l'arrivée d'abord, puis la casquette de base (exposant ou visiteur) et les autres casquettes du compte (`replayProfiles`) ; l'ancienne casquette « passionné » joue le tuto de l'exposant.
+- **Glissement** : le geste de passage entre diapos réutilise `useTabSwipe` (même seuil et même vélocité) ; la route étant hors des groupes d'onglets, aucun glissement d'onglet n'existe ici.
+- **Parité site** : aucun tuto sur le site (l'appli, c'est sa place, brief du lot).
+
+#### À revoir avec Damien (lot 42)
+- **Diapo sociale** limitée à l'exposant et au visiteur (v27) : à ouvrir au pro, à l'organisateur, au prestataire et au média si Damien le souhaite.
+- **Valeurs illustratives** (+40 / +20 / +60, 1 280 / 1 760 points, remises 5 à 15 %) à aligner sur le barème quand il sera tranché.
+- **Illustrations simplifiées** par rapport au prototype (pas de carte OSM réelle, photos remplacées par un pictogramme) : le rendu des animations est à voir sur le Xiaomi au lot 58.
+
 ## À revoir avec Damien — liste consolidée (lot 34)
 
 Une seule liste, ordonnée, de tout ce que les lots 15 à 35d (et 34) ont laissé à décider. Rien ne bloque : la solution décrite est appliquée (D16). Les points antérieurs (A1 à A14, lots 02 à 14) restent dans leurs sections plus haut ; ceux qui sont réglés depuis sont signalés à la fin.

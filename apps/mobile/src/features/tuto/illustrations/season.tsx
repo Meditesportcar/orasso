@@ -101,7 +101,7 @@ export function SocialBand({ crewAction }: { crewAction: "join" | "follow" }) {
         trail={action(s.follow, s.followed, 1400)}
       />
       <Enter kind="up" delay={1800}>
-        <View style={[styles.msg, { backgroundColor: t.color.surfaceRaised }]}>
+        <View style={[styles.msg, { backgroundColor: t.color.surfaceSunken }]}>
           <Sm>{s.chatFrom}</Sm>
           <Text variant="body" color={t.color.plateInk}>
             {s.chatA}

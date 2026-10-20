@@ -98,18 +98,18 @@ function Spot() {
         <View style={styles.plan}>
           <View style={styles.zones}>
             <View style={[zone, styles.half]}>
-              <Text variant="zone" color={t.color.plateMuted}>
+              <Text variant="meta" color={t.color.plateMuted}>
                 {tutoArt.parking.zoneJdm}
               </Text>
             </View>
             <View style={[zone, styles.half]}>
-              <Text variant="zone" color={t.color.plateMuted}>
+              <Text variant="meta" color={t.color.plateMuted}>
                 {tutoArt.parking.zoneEuro}
               </Text>
             </View>
           </View>
           <View style={[zone, styles.food]}>
-            <Text variant="zone" color={t.color.plateMuted}>
+            <Text variant="meta" color={t.color.plateMuted}>
               {spot.food}
             </Text>
             <View style={styles.slots}>
@@ -126,7 +126,7 @@ function Spot() {
               <View style={[styles.slot, { borderColor: t.color.plateChip }]} />
             </View>
           </View>
-          <Text variant="zone" color={t.color.plateMuted} style={styles.entry}>
+          <Text variant="meta" color={t.color.plateMuted} style={styles.entry}>
             {spot.entry}
           </Text>
         </View>

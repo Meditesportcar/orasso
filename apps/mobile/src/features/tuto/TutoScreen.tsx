@@ -140,8 +140,8 @@ const styles = StyleSheet.create({
   dots: { flexDirection: "row", flexWrap: "wrap", gap: space1 + 2, flex: 1 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   dotOn: { width: 22 },
-  content: { paddingHorizontal: space4, paddingBottom: space3 },
-  slide: { gap: space3 },
+  content: { flexGrow: 1, justifyContent: "center", paddingHorizontal: space4, paddingBottom: space3 },
+  slide: { flex: 1, justifyContent: "center", gap: space3 },
   copy: { gap: space1 },
   actions: { flexDirection: "row", alignItems: "center", gap: space2, paddingHorizontal: space4, paddingTop: space2 },
 });

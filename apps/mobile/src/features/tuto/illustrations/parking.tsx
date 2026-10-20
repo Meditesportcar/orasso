@@ -126,17 +126,17 @@ export function ParkingPlan() {
           </Svg>
         </Animated.View>
         <View style={styles.zoneJdm}>
-          <Text variant="zone" color={t.color.plateMuted}>
+          <Text variant="meta" color={t.color.plateMuted}>
             {parking.zoneJdm}
           </Text>
         </View>
         <View style={styles.zoneEuro}>
-          <Text variant="zone" color={t.color.plateMuted}>
+          <Text variant="meta" color={t.color.plateMuted}>
             {parking.zoneEuro}
           </Text>
         </View>
         <View style={styles.entry}>
-          <Text variant="zone" color={t.color.plateMuted}>
+          <Text variant="meta" color={t.color.plateMuted}>
             {parking.entry}
           </Text>
         </View>

@@ -112,7 +112,7 @@ function Souvenirs() {
         </Card>
         <View style={styles.photos}>
           <View style={[styles.photo, styles.photoA]}>
-            <Enter kind="pop" delay={900}>
+            <Enter kind="pop" delay={900} style={styles.photoBox}>
               <Ph size={64} />
               <Text variant="meta" color={t.color.plateMuted}>
                 {s.photoA}
@@ -120,7 +120,7 @@ function Souvenirs() {
             </Enter>
           </View>
           <View style={[styles.photo, styles.photoB]}>
-            <Enter kind="pop" delay={1100}>
+            <Enter kind="pop" delay={1100} style={styles.photoBox}>
               <Ph size={64} />
               <Text variant="meta" color={t.color.plateMuted}>
                 {s.photoB}
@@ -191,11 +191,12 @@ const styles = StyleSheet.create({
   rule: { flex: 1, minWidth: 0 },
   centered: { alignItems: "center", gap: space3, paddingVertical: space2 },
   note: { maxWidth: 240 },
-  top: { flexDirection: "row", gap: space2, minHeight: 150 },
-  page: { flex: 1, minHeight: 150 },
+  top: { flexDirection: "row", gap: space2, minHeight: 180 },
+  page: { flex: 1, minHeight: 180 },
   stamp: { alignItems: "center", paddingTop: space2 },
-  photos: { flex: 1, minHeight: 150 },
-  photo: { position: "absolute", gap: 2 },
-  photoA: { right: 0, top: 0, transform: [{ rotate: "7deg" }] },
-  photoB: { right: 28, top: 74, transform: [{ rotate: "-6deg" }] },
+  photos: { flex: 1, minHeight: 180 },
+  photo: { position: "absolute", width: 96, alignItems: "center" },
+  photoBox: { alignItems: "center", gap: 2 },
+  photoA: { right: 4, top: 0, transform: [{ rotate: "7deg" }] },
+  photoB: { right: 40, top: 96, transform: [{ rotate: "-6deg" }] },
 });
