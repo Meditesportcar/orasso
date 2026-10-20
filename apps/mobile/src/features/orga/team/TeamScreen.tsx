@@ -5,6 +5,7 @@
 // seuls Accueil et scan, Contrôle et Super staff pointent les entrées : chaque rôle dit ce qu'il permet.
 import { Button, Chip, Counters, Plate, SelectField, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  type EventStaffMember,
   orgaManageLabels as L,
   orgaV2Labels as L2,
   orgaLabels,
@@ -15,7 +16,7 @@ import {
   structureRoleLabels,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { MessageButton } from "@/features/boite/MessageButton";
@@ -57,9 +58,14 @@ export function TeamScreen() {
   const events = useApi(() => api.structureEvents(structureId), [structureId], {
     cacheKey: `orga-events-${structureId}`,
   });
-  const choices = useMemo(() => groupEvents(events.data ?? [], at).upcoming, [events.data, at]);
-  const [picked, setPicked] = useState<string | null>(null);
   const current = pickCurrentEvent(events.data ?? [], at);
+  // Les événements à venir, plus celui du jour (même fini : son équipe reste à régler) s'il n'en fait pas partie.
+  const choices = useMemo(() => {
+    const upcoming = groupEvents(events.data ?? [], at).upcoming;
+    const today = current?.event;
+    return today && !upcoming.some((e) => e.id === today.id) ? [today, ...upcoming] : upcoming;
+  }, [events.data, at, current?.event]);
+  const [picked, setPicked] = useState<string | null>(null);
   const eventId = picked ?? current?.event.id ?? choices[0]?.id ?? null;
   const event = (events.data ?? []).find((e) => e.id === eventId) ?? null;
   const staff = useApi(
@@ -81,6 +87,17 @@ export function TeamScreen() {
   const [inviting, setInviting] = useState(false);
   const [giving, setGiving] = useState<StructureMember | null>(null);
   const [adding, setAdding] = useState<StaffRole | null>(null);
+  // Retrait d'un rôle d'un toucher : annulable quelques secondes.
+  const [undo, setUndo] = useState<{ userId: string; pseudo: string; roles: StaffRole[]; canDecide: boolean } | null>(
+    null,
+  );
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+    },
+    [],
+  );
 
   const groups = memberGroups(members.data ?? []);
   const histories = history.data ?? [];
@@ -151,8 +168,8 @@ export function TeamScreen() {
   }
 
   /** Donne ou retire un rôle à un membre pour l'événement choisi (l'API garde les droits et la double authentification). */
-  async function setRole(userId: string, roles: StaffRole[], canDecide: boolean, message: string) {
-    if (!eventId) return;
+  async function setRole(userId: string, roles: StaffRole[], canDecide: boolean, message: string): Promise<boolean> {
+    if (!eventId) return false;
     setBusy(userId);
     setSheetError(null);
     try {
@@ -162,14 +179,36 @@ export function TeamScreen() {
       setError(null);
       setNotice(message);
       await Promise.all([staff.reload(), history.reload()]);
+      return true;
     } catch (e) {
+      // Une feuille ouverte garde le message ; sinon il s'affiche à l'écran (jamais une erreur invisible).
       if (isTwoFactorError(e)) {
         closeAll();
         setError(e);
-      } else setSheetError(errorMessage(e));
+      } else if (adding !== null || giving !== null) setSheetError(errorMessage(e));
+      else setError(e);
+      return false;
     } finally {
       setBusy(null);
     }
+  }
+
+  /** Retire un rôle d'un toucher, puis laisse 8 s pour annuler. */
+  async function removeRole(m: EventStaffMember, role: StaffRole) {
+    setNotice(null);
+    setUndo(null);
+    const ok = await setRole(m.userId, withRole(m.roles, role, false), m.canDecide, L2.rolesRemoved);
+    if (!ok) return;
+    setUndo({ userId: m.userId, pseudo: m.pseudo, roles: m.roles, canDecide: m.canDecide });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndo(null), 8_000);
+  }
+
+  async function undoRemoval() {
+    if (!undo) return;
+    const back = undo;
+    setUndo(null);
+    await setRole(back.userId, back.roles, back.canDecide, L2.rolesRestored);
   }
 
   async function remindAll() {
@@ -211,7 +250,7 @@ export function TeamScreen() {
     emitTeamChanged();
   };
 
-  const failure = error ?? structure.error ?? members.error ?? events.error ?? staff.error;
+  const failure = error ?? structure.error ?? members.error ?? history.error ?? events.error ?? staff.error;
   const openedHistory = opened ? historyOf(histories, opened.userId) : null;
   const openedStaff = opened ? list.find((m) => m.userId === opened.userId) : undefined;
   const addable = adding ? list.filter((m) => !m.roles.includes(adding)) : [];
@@ -314,7 +353,9 @@ export function TeamScreen() {
                       </Text>
                       <Text variant="caption" color={c.plateMuted}>
                         {formatDay(h.startsAt)} ·{" "}
-                        {h.roles.map((r) => staffRoleLabels[r]).join(" · ") || L.teamRolesNone}
+                        {h.roles === null
+                          ? L2.roleNotNoted
+                          : h.roles.map((r) => staffRoleLabels[r]).join(" · ") || L.teamRolesNone}
                         {" · "}
                         {staffPresenceLabels[h.presence]}
                       </Text>
@@ -379,7 +420,7 @@ export function TeamScreen() {
                   </>
                 ) : null}
                 <Button variant="plate" icon="close" onPress={() => setOpened(null)} fullWidth>
-                  Fermer
+                  {L2.close}
                 </Button>
               </>
             ) : null}
@@ -441,7 +482,7 @@ export function TeamScreen() {
                   </Plate>
                 ))}
                 <Button variant="plate" icon="close" onPress={() => setAdding(null)} fullWidth>
-                  Fermer
+                  {L2.close}
                 </Button>
               </>
             ) : null}
@@ -452,6 +493,11 @@ export function TeamScreen() {
       <OrgaFailure error={failure} />
       {isSuspended(structure.data) ? <Notice tone="error">{L.structureSuspended}</Notice> : null}
       {notice ? <Notice>{notice}</Notice> : null}
+      {undo ? (
+        <Button variant="plate" icon="undo" onPress={() => void undoRemoval()} fullWidth testID="team-role-undo">
+          {`${L2.undo} · ${undo.pseudo}`}
+        </Button>
+      ) : null}
 
       {groups.requests.length > 0 ? (
         <>
@@ -565,7 +611,7 @@ export function TeamScreen() {
         </>
       ) : null}
 
-      <SectionTitle>{L2.rolesFor(event?.title ?? "")}</SectionTitle>
+      {event ? <SectionTitle>{L2.rolesFor(event.title)}</SectionTitle> : null}
       {choices.length === 0 ? (
         <Muted variant="body">{events.loading ? "Chargement…" : L2.rolesNoEvent}</Muted>
       ) : (
@@ -580,9 +626,9 @@ export function TeamScreen() {
         <>
           <Counters
             items={[
-              { value: summary.present, label: "Présents" },
-              { value: summary.absent, label: "Absents" },
-              { value: summary.unknown, label: "Sans réponse" },
+              { value: summary.present, label: L2.presentCount },
+              { value: summary.absent, label: L2.absentCount },
+              { value: summary.unknown, label: L2.unansweredCount },
             ]}
             active={summary.unknown > 0 ? 2 : undefined}
           />
@@ -626,7 +672,7 @@ export function TeamScreen() {
                   accessibilityLabel={`${L2.rolesAddMember} : ${staffRoleLabels[role]}`}
                   testID={`team-role-add-${role}`}
                 >
-                  Ajouter
+                  {L2.add}
                 </Button>
               </View>
               <Text variant="caption" color={c.plateMuted}>
@@ -646,9 +692,9 @@ export function TeamScreen() {
                       held={historyOf(histories, m.userId).eventsHeld}
                       size={44}
                       mark={m.presence === "present"}
-                      onPress={() =>
-                        void setRole(m.userId, withRole(m.roles, role, false), m.canDecide, L2.rolesRemoved)
-                      }
+                      label={L2.removeRoleLabel(staffRoleLabels[role], m.pseudo)}
+                      disabled={busy !== null}
+                      onPress={() => void removeRole(m, role)}
                     />
                     <Text variant="meta" color={c.plateMuted}>
                       {m.presence === "present"
@@ -771,7 +817,7 @@ function GiveRole({
         {L.eventRolesSave}
       </Button>
       <Button variant="plate" icon="close" onPress={onClose} fullWidth>
-        Fermer
+        {L2.close}
       </Button>
     </>
   );

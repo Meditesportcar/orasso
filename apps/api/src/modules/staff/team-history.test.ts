@@ -83,7 +83,7 @@ const put = (eventId: string, userId: string, values: Partial<typeof eventStaff.
   db.insert(eventStaff).values({ eventId, userId, ...values });
 
 describe("historique de l'équipe", () => {
-  it("compte les événements commencés sans absence, pas les événements à venir", async () => {
+  it("compte les seules présences confirmées des événements commencés, pas les événements à venir", async () => {
     await put(events[0] as string, julie.id, { presence: "present" });
     await put(events[1] as string, julie.id, { presence: "unknown" });
     await put(events[2] as string, julie.id, { presence: "present" });
@@ -92,7 +92,7 @@ describe("historique de l'équipe", () => {
       const res = await history(orga, structureId, mode);
       expect(res.status).toBe(200);
       const j = res.json.find((h: { userId: string }) => h.userId === julie.id);
-      expect(j.eventsHeld).toBe(2);
+      expect(j.eventsHeld).toBe(1);
       expect(j.events.map((e: { title: string }) => e.title)).toEqual(["Passé deux", "Passé un"]);
       const m = res.json.find((h: { userId: string }) => h.userId === marc.id);
       expect(m.eventsHeld).toBe(0);
@@ -101,12 +101,12 @@ describe("historique de l'équipe", () => {
     }
   });
 
-  it("les rôles d'un événement priment sur ceux de la structure", async () => {
+  it("un événement passé sans rôle noté ne reprend pas les rôles d'aujourd'hui", async () => {
     await put(events[0] as string, julie.id, { presence: "present", roles: ["placement", "filtering"] });
     await put(events[1] as string, julie.id, { presence: "present" });
     const res = await history(orga, structureId);
     const j = res.json.find((h: { userId: string }) => h.userId === julie.id);
-    expect(j.events[0].roles).toEqual(["scan"]);
+    expect(j.events[0].roles).toBeNull();
     expect(j.events[1].roles).toEqual(["placement", "filtering"]);
   });
 

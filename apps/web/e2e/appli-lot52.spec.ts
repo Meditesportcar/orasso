@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { MOBILE, SEED_PASSWORD } from "./helpers";
+import { apiCall, login, MOBILE, SEED_PASSWORD } from "./helpers";
 import { auditApp } from "./helpers/lot43";
 import { sql } from "./helpers/lot48";
 
@@ -115,6 +115,8 @@ for (const theme of THEMES) {
     await expect(card.getByText("candidatures", { exact: true })).toBeVisible();
     await expect(card.getByText("retenues", { exact: true })).toBeVisible();
     await expect(card.getByText("à trier", { exact: true })).toBeVisible();
+    // Chaque carte porte sa vignette : l'affiche générée ou le gabarit « Minimal ».
+    await expect(card.getByTestId("orga-event-thumb")).toBeVisible();
     await rules(page, theme, "Événements");
     await shot(page, "evenements", theme);
 
@@ -321,9 +323,24 @@ for (const theme of THEMES) {
     const pseudo = (await candidate.getByText(/_\d+$/).first().textContent()) ?? "";
     await candidate.getByTestId("team-role-give").click();
     await expect(page.getByText("Rôle donné.")).toBeVisible({ timeout: 30_000 });
-    const holder = page.getByTestId("team-role-placement").getByRole("button", { name: new RegExp(`^${pseudo},`) });
+    const holder = page
+      .getByTestId("team-role-placement")
+      .getByRole("button", { name: new RegExp(`^Retirer Placement à ${pseudo}`) });
     await expect(holder).toBeVisible({ timeout: 30_000 });
     await holder.click();
+    await expect(page.getByText("Rôle retiré.")).toBeVisible({ timeout: 30_000 });
+    // Le retrait s'annule quelques secondes : on le rétablit puis on le retire pour de bon.
+    await page.getByTestId("team-role-undo").click();
+    await expect(page.getByText("Rôle rétabli.")).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page
+        .getByTestId("team-role-placement")
+        .getByRole("button", { name: new RegExp(`^Retirer Placement à ${pseudo}`) }),
+    ).toBeVisible({ timeout: 30_000 });
+    await page
+      .getByTestId("team-role-placement")
+      .getByRole("button", { name: new RegExp(`^Retirer Placement à ${pseudo}`) })
+      .click();
     await expect(page.getByText("Rôle retiré.")).toBeVisible({ timeout: 30_000 });
     await ctx.close();
   });
@@ -373,10 +390,48 @@ for (const theme of THEMES) {
       timeout: 30_000,
     });
     await expect(second.page.getByTestId("structure-pending")).toContainText("Réponse sous 72 h");
+    await expect(second.page.getByTestId("structure-pending")).toContainText("restent en brouillon");
     await expect(second.page.getByTestId("structure-seal")).toHaveCount(0);
     await expect(second.page.getByTestId("structure-o")).toHaveCount(0);
     await rules(second.page, theme, "Structure · en vérification");
     await shot(second.page, "structure-verification", theme);
+    // Un brouillon complet de cette structure ne peut pas partir : il dit que la vérification manque (docs/01).
+    const owner = await login("pres_vallespir@orasso.local");
+    const mine = await apiCall<{ memberships: { structureId: string }[] }>(owner, "GET", "/me");
+    const sid = mine.data.memberships[0]?.structureId ?? "";
+    const known = await apiCall<{ title: string }[]>(owner, "GET", `/structures/${sid}/events`);
+    if (!known.data.some((e) => e.title === "Balade du Vallespir")) {
+      const start = new Date(Date.now() + 40 * 86_400_000);
+      const made = await apiCall(owner, "POST", `/structures/${sid}/events`, {
+        title: "Balade du Vallespir",
+        format: "gathering",
+        startsAt: start.toISOString(),
+        endsAt: new Date(start.getTime() + 4 * 3_600_000).toISOString(),
+        addressLine: "Place de la mairie",
+        postalCode: "66110",
+        city: "Amélie-les-Bains",
+        department: "66",
+        lat: 42.48,
+        lng: 2.67,
+        admittedVehicleTypes: ["car"],
+        capacity: 30,
+        maxVehiclesPerUser: 1,
+        admission: "filtered",
+        publicAccess: "free",
+        registrationsOpenAt: new Date(Date.now() + 86_400_000).toISOString(),
+        rulesText: "Respect des riverains.",
+      });
+      expect(made.status).toBe(201);
+    }
+    await tab(second.page, "Événements");
+    await second.page.getByText(/^Brouillons · \d+$/).click();
+    await expect(second.page.getByTestId("orga-draft-missing").first()).toContainText(
+      "la vérification de ta structure",
+      {
+        timeout: 30_000,
+      },
+    );
+    await shot(second.page, "evenements-brouillon-verification", theme);
     // Les tuiles réservées au propriétaire restent à lui : ici il l'est, la tuile Paiements est active.
     await expect(second.page.getByTestId("tile-payments")).toBeEnabled();
     await second.ctx.close();

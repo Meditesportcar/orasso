@@ -28,9 +28,9 @@ const M = orgaV2Labels.missing;
 
 /**
  * Ce qui manque à un brouillon avant de pouvoir le publier, dans l'ordre des étapes de l'assistant : « adresse »,
- * « affiche »… Vide quand rien ne manque. Mêmes règles que l'assistant (`eventStepProblem` et ses voisines).
+ * « affiche »… Vide quand rien ne manque ; une structure non vérifiée ne peut pas publier : « la vérification de ta structure ». Mêmes règles que l'assistant (`eventStepProblem` et ses voisines).
  */
-export function draftMissing(event: EventOrganizer, at: Date): string[] {
+export function draftMissing(event: EventOrganizer, at: Date, structureVerified = true): string[] {
   const d = initialEventDraft(at, event);
   const out: string[] = [];
   if (eventTitleProblem(d)) out.push(M.title);
@@ -42,6 +42,8 @@ export function draftMissing(event: EventOrganizer, at: Date): string[] {
   if (eventOpeningProblem(d)) out.push(M.opening);
   if (eventStepProblem("zones", d)) out.push(M.zones);
   if (!event.posterUrl && !event.customPosterUrl) out.push(M.poster);
+  // docs/01 : la publication est réservée aux structures vérifiées (l'API la refuse sinon).
+  if (!structureVerified) out.push(M.verification);
   return out;
 }
 

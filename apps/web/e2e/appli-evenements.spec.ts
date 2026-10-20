@@ -361,7 +361,7 @@ test("décision groupée de 3 candidatures, puis invitations depuis un événeme
   expect(sent.length).toBeGreaterThan(0);
 
   // Un véhicule proposé (abonnés, retenus passés) encore libre, puis retrait d'une invitation en attente.
-  const free = v(page, "invitation-candidates").getByRole("checkbox", { checked: false });
+  const free = v(page, "invitation-candidates").getByRole("checkbox", { checked: false, disabled: false });
   if (await free.count()) {
     await free.first().click();
     await v(page, "invite-send").click();

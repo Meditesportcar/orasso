@@ -1,6 +1,6 @@
 // Équipe en bulles (lot 52) : l'historique de chaque membre avec la structure, d'après `event_staff`. Rien n'est stocké
 // de plus : « événements tenus » = événements publiés de la structure, commencés (ou terminés), où le membre était
-// ajouté sans avoir déclaré son absence. Réservé aux organisateurs de la structure.
+// ajouté présent (présence confirmée, la règle des points à J+2). Réservé aux organisateurs de la structure.
 import type { StaffRole, TeamMemberHistory } from "@orasso/shared";
 import { and, desc, eq } from "drizzle-orm";
 
@@ -16,7 +16,7 @@ export const teamHistoryService = {
   async ofStructure(v: Viewer, structureId: string): Promise<TeamMemberHistory[]> {
     await requireOrganizer(v, structureId);
     const members = await db
-      .select({ userId: structureMembers.userId, staffRoles: structureMembers.staffRoles })
+      .select({ userId: structureMembers.userId })
       .from(structureMembers)
       .where(and(eq(structureMembers.structureId, structureId), eq(structureMembers.status, "active")));
     const rows = await db
@@ -38,12 +38,13 @@ export const teamHistoryService = {
       const mine = rows.filter((r) => r.userId === m.userId && r.startsAt.getTime() <= at);
       return {
         userId: m.userId,
-        eventsHeld: mine.filter((r) => r.presence !== "absent").length,
+        eventsHeld: mine.filter((r) => r.presence === "present").length,
         events: mine.slice(0, RECENT).map((r) => ({
           eventId: r.eventId,
           title: r.title,
           startsAt: r.startsAt.toISOString(),
-          roles: (r.roles ?? m.staffRoles) as StaffRole[],
+          // Un événement passé sans rôle noté ne reprend pas les rôles d'aujourd'hui : ce serait réécrire l'historique.
+          roles: r.roles as StaffRole[] | null,
           presence: r.presence,
         })),
       };

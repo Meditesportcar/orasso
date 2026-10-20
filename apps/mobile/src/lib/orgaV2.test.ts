@@ -71,6 +71,13 @@ describe("brouillon : ce qui manque", () => {
     expect(missing).toEqual(["adresse", "affiche"]);
     expect(orgaV2Labels.draftMissing(missing.join(", "))).toBe("Il manque : adresse, affiche.");
   });
+  it("une structure non vérifiée ne peut pas publier : le brouillon le dit", () => {
+    expect(draftMissing(draft(), NOW, false)).toEqual(["la vérification de ta structure"]);
+    expect(draftMissing(draft({ addressLine: null, city: null }), NOW, false)).toEqual([
+      "adresse",
+      "la vérification de ta structure",
+    ]);
+  });
   it("une affiche personnelle suffit", () => {
     expect(draftMissing(draft({ posterUrl: null, customPosterUrl: "/x.jpg" }), NOW)).toEqual([]);
   });

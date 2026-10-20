@@ -229,7 +229,7 @@ export default function Scan() {
     <Ground animated={false} style={styles.fill}>
       <AppBar
         kind="flow"
-        title="Scan accueil"
+        title="Accueil et scan"
         facts={state ? `Liste à jour ${clock(state.meta.syncedAt)} · hors ligne OK` : "Liste absente : synchronise"}
         counter={count ? `${count.arrived} / ${count.expected}` : undefined}
         onClose={close}

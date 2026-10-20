@@ -227,6 +227,8 @@ export function CandidateCard({ item, photoHeight }: { item: ApplicationForTriag
             {orgaV2Labels.triArrivalNote} : « {item.arrivalNote} »
           </Text>
         ) : null}
+        {/* Une alerte reste en tête du corps : elle ne sort jamais de la carte. */}
+        <AlertStrip alerts={item.alerts} />
         {p?.need ? <Chip surface="plate">{p.need.tradeLabel}</Chip> : null}
         {v && v.categories.length > 0 ? (
           <ChipRow>
@@ -238,7 +240,6 @@ export function CandidateCard({ item, photoHeight }: { item: ApplicationForTriag
           </ChipRow>
         ) : null}
         {p && item.accreditedMedia ? <Chip surface="plate">{triageAppLabels.mediaAccredited}</Chip> : null}
-        <AlertStrip alerts={item.alerts} />
         <FactRows item={item} />
       </View>
     </Plate>

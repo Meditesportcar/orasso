@@ -17,6 +17,8 @@ export function Bubble({
   onPress,
   size,
   mark,
+  label,
+  disabled,
   testID,
 }: {
   pseudo: string;
@@ -28,6 +30,9 @@ export function Bubble({
   size?: number;
   /** Petite marque en haut à droite (présence confirmée). */
   mark?: boolean;
+  /** Nom accessible, quand l'action n'est pas « ouvrir la fiche » (retirer un rôle). */
+  label?: string;
+  disabled?: boolean;
   testID?: string;
 }) {
   const { t } = useTheme();
@@ -37,9 +42,9 @@ export function Bubble({
   return (
     <Pressable
       onPress={onPress}
-      disabled={!onPress}
+      disabled={!onPress || disabled}
       accessibilityRole={onPress ? "button" : "text"}
-      accessibilityLabel={L.bubbleLabel(pseudo, held)}
+      accessibilityLabel={label ?? L.bubbleLabel(pseudo, held)}
       testID={testID}
       style={[styles.hit, { width: diameter, height: diameter }]}
     >

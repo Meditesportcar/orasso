@@ -2,7 +2,12 @@
 // ses formats et son message, « Accréditer » ou « Refuser » avec la raison (même feuille que le tri des véhicules).
 // Pas de liste d'attente pour la presse. Le quota et les autres règles sont ceux de l'API : son message s'affiche tel quel.
 import { Button, Chip, ChipRow, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type AccreditationForOrganizer, orgaV2Labels as L, mediaFormatLabels } from "@orasso/shared";
+import {
+  type AccreditationForOrganizer,
+  applicationStatusLabels,
+  orgaV2Labels as L,
+  mediaFormatLabels,
+} from "@orasso/shared";
 import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
@@ -58,7 +63,7 @@ export function PressList({ eventId, onChanged }: { eventId: string; onChanged: 
             <View style={styles.chips}>
               {a.media.pressCardVerified ? (
                 <Chip variant="verified" surface="plate">
-                  Carte de presse vérifiée
+                  {L.pressCardVerified}
                 </Chip>
               ) : null}
             </View>
@@ -111,7 +116,11 @@ export function PressList({ eventId, onChanged }: { eventId: string; onChanged: 
                 {a.media.name}
               </Text>
               <Chip surface="plate" variant={a.status === "accepted" ? "accent" : "default"}>
-                {a.status === "accepted" ? L.pressAccepted : L.pressRefused}
+                {a.status === "accepted"
+                  ? L.pressAccepted
+                  : a.status === "refused"
+                    ? L.pressRefused
+                    : applicationStatusLabels[a.status]}
               </Chip>
             </View>
           </Plate>

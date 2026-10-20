@@ -16,6 +16,34 @@ import { ScreenSheet } from "./ScreenSheet";
 
 const { space1, space2, space3 } = tokens.spacing;
 
+/** Une ligne de retenu : son nom, son emplacement, le bouton pour l'attribuer. */
+function SpotRow({ p, onEdit }: { p: NeedRetainedProvider; onEdit: (p: NeedRetainedProvider) => void }) {
+  const { t } = useTheme();
+  return (
+    <Plate style={styles.row} testID="triage-spot-row">
+      <View style={styles.grow}>
+        <Text variant="bodyStrong" color={t.color.plateInk}>
+          {p.providerName}
+        </Text>
+        {p.spot ? (
+          <Text variant="caption" color={t.color.plateMuted}>
+            {L.spotAssigned(p.spot.label)}
+          </Text>
+        ) : null}
+      </View>
+      <Button
+        variant="plate"
+        icon="place"
+        onPress={() => onEdit(p)}
+        accessibilityLabel={`${L.spotAssign} : ${p.providerName}`}
+        testID="triage-spot-edit"
+      >
+        {p.spot ? p.spot.label : L.spotAssign}
+      </Button>
+    </Plate>
+  );
+}
+
 export function MissionsPanel({
   eventId,
   pending,
@@ -29,6 +57,11 @@ export function MissionsPanel({
 }) {
   const { t } = useTheme();
   const needs = useApi(() => api.eventNeeds(eventId), [eventId, reloadKey], { refreshMs: 60_000 });
+  // Les retenus sans mission précise reçoivent aussi un emplacement.
+  const accepted = useApi(
+    () => api.triagePage(eventId, { kind: "provider", status: "accepted", sort: "created_at", limit: 100 }),
+    [eventId, reloadKey],
+  );
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<NeedRetainedProvider | null>(null);
   const [label, setLabel] = useState("");
@@ -39,7 +72,16 @@ export function MissionsPanel({
 
   const list = needs.data ?? [];
   const groups = missionGroups(pending, list);
-  const retainedCount = list.reduce((n, need) => n + need.retained.length, 0);
+  const loose: NeedRetainedProvider[] = (accepted.data?.items ?? [])
+    .filter((i) => i.provider && !i.provider.need)
+    .map((i) => ({
+      applicationId: i.id,
+      providerId: i.provider?.id ?? i.id,
+      providerName: i.provider?.name ?? "",
+      spot: i.provider?.spot ?? null,
+      reviewed: false,
+    }));
+  const retainedCount = list.reduce((n, need) => n + need.retained.length, 0) + loose.length;
   if (list.length === 0 && pending.length === 0) return null;
 
   function edit(p: NeedRetainedProvider) {
@@ -144,7 +186,7 @@ export function MissionsPanel({
               </Button>
             ) : null}
             <Button variant="plate" icon="back" onPress={() => setEditing(null)} fullWidth>
-              Retour
+              {L.back}
             </Button>
           </>
         ) : (
@@ -155,32 +197,20 @@ export function MissionsPanel({
                 <View key={need.id} style={styles.group}>
                   <Muted variant="label">{L.missionPlaces(need.tradeLabel, need.filled, need.quantity)}</Muted>
                   {need.retained.map((p) => (
-                    <Plate key={p.applicationId} style={styles.row} testID="triage-spot-row">
-                      <View style={styles.grow}>
-                        <Text variant="bodyStrong" color={t.color.plateInk}>
-                          {p.providerName}
-                        </Text>
-                        {p.spot ? (
-                          <Text variant="caption" color={t.color.plateMuted}>
-                            {L.spotAssigned(p.spot.label)}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <Button
-                        variant="plate"
-                        icon="place"
-                        onPress={() => edit(p)}
-                        accessibilityLabel={`${L.spotAssign} : ${p.providerName}`}
-                        testID="triage-spot-edit"
-                      >
-                        {p.spot ? p.spot.label : L.spotAssign}
-                      </Button>
-                    </Plate>
+                    <SpotRow key={p.applicationId} p={p} onEdit={edit} />
                   ))}
                 </View>
               ))}
+            {loose.length > 0 ? (
+              <View style={styles.group}>
+                <Muted variant="label">{L.missionFree}</Muted>
+                {loose.map((p) => (
+                  <SpotRow key={p.applicationId} p={p} onEdit={edit} />
+                ))}
+              </View>
+            ) : null}
             <Button variant="plate" icon="close" onPress={() => setOpen(false)} fullWidth>
-              Fermer
+              {L.close}
             </Button>
           </>
         )}
