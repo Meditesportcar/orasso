@@ -50,7 +50,6 @@ export function RecapScreen() {
   return (
     <FlowScreen
       title={recapScreenTexts.title}
-      facts={r?.myArrival ? recapTexts.arrived(new Date(r.myArrival)) : undefined}
       onClose={close}
       onRefresh={async () => {
         await recap.reload();
@@ -113,6 +112,11 @@ function RecapBody({ view, onShare, onReview }: { view: RecapView; onShare: () =
         <Text variant="posterXl" color={c.posterInk}>
           {recapScreenTexts.was(view.event.title)}
         </Text>
+        {view.myArrival ? (
+          <Text variant="caption" color={c.posterMuted} testID="recap-arrived">
+            {recapTexts.arrived(new Date(view.myArrival))}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.nums}>

@@ -77,12 +77,12 @@ export function VoteScreen() {
   return (
     <FlowScreen
       title={audiencePrizeTexts.title}
-      facts={facts || undefined}
       onClose={close}
       onRefresh={async () => {
         await Promise.all([board.reload(), mine.reload()]);
       }}
     >
+      {facts && view !== "vote" ? <Muted variant="label">{facts}</Muted> : null}
       {failed ? <Notice tone="error">{voteScreenTexts.loadFailed}</Notice> : null}
       {!board.data && !failed ? <Muted variant="body">Chargement…</Muted> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
@@ -95,6 +95,11 @@ export function VoteScreen() {
       {view === "vote" && board.data && mine.data ? (
         <>
           <View style={[styles.poster, { backgroundColor: c.poster }]} testID="vote-poster">
+            {facts ? (
+              <Text variant="label" color={c.posterMuted} testID="vote-facts">
+                {facts}
+              </Text>
+            ) : null}
             {mine.data.checkedInAt ? (
               <Text variant="label" color={c.posterMuted}>
                 {audiencePrizeTexts.checkedInAt(new Date(mine.data.checkedInAt))}
@@ -234,7 +239,12 @@ function Ranking({
         const first = i === 0 && e.votes > 0;
         return (
           <View key={e.applicationId} style={styles.row} testID="vote-board-row">
-            <OutlinedText on="ground" variant="posterL" color={first ? c.accent : c.ink} containerStyle={styles.rank}>
+            <OutlinedText
+              on="ground"
+              variant="posterL"
+              color={first ? c.accentText : c.ink}
+              containerStyle={styles.rank}
+            >
               {String(e.rank)}
             </OutlinedText>
             <View style={[styles.rowBody, { backgroundColor: c.plate, borderColor: own ? c.accent : "transparent" }]}>

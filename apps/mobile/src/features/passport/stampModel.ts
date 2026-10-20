@@ -241,3 +241,8 @@ export function stampPlacement(index: number, seed: number): StampPlacement {
     size: Math.round(SLOT_SIZE + (random() - 0.5) * 12),
   };
 }
+
+/** Corps du texte de l'anneau : 9,5 jusqu'à 26 caractères, puis réduit pour que le titre tienne sur le tour (jamais en dessous de 5,5). */
+export function ringFontSize(ring: string): number {
+  return Math.round(Math.max(5.5, Math.min(9.5, (9.5 * 26) / Math.max(1, ring.length))) * 10) / 10;
+}

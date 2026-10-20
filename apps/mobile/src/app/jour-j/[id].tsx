@@ -291,7 +291,7 @@ export default function JourJ() {
       )}
 
       {/* Prix du public (lot 50) : ouvert dès le pointage, jusqu'à la fin de l'événement. En bouton secondaire. */}
-      {entered && now < new Date(kit.event.endsAt) ? (
+      {(entered || Boolean(app?.checkedInAt)) && now < new Date(kit.event.endsAt) ? (
         <Button
           variant="plate"
           icon="badge"

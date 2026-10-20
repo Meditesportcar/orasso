@@ -11,6 +11,7 @@ import Svg, { Circle, Defs, G, LinearGradient, Path, Stop, Text as SvgText, Text
 
 import {
   inkTokenKey,
+  ringFontSize,
   STAMP_BOX,
   STAMP_GOLD,
   STAMP_RING_PATH,
@@ -69,7 +70,7 @@ export function Stamp({
         <Path key={d} d={d} fill={ink} />
       ))}
       {art.ring ? (
-        <SvgText fill={ink} fontFamily="Archivo-Narrow-Bold" fontSize={9.5} letterSpacing={1.6}>
+        <SvgText fill={ink} fontFamily="Archivo-Narrow-Bold" fontSize={ringFontSize(text.ring)} letterSpacing={1.6}>
           <TextPath href={`#${id}p`} startOffset="2%">
             {text.ring}
           </TextPath>
@@ -128,7 +129,7 @@ export function Stamp({
           </LinearGradient>
           <Path id={`${id}p`} d={STAMP_RING_PATH} />
         </Defs>
-        <G rotation={look.angle} origin="60, 60" opacity={look.opacity}>
+        <G transform={`rotate(${look.angle} 60 60)`} opacity={look.opacity}>
           <G
             opacity={look.bleed.alpha}
             transform={`translate(${look.bleed.x} ${look.bleed.y}) translate(60 60) scale(${look.bleed.scale}) translate(-60 -60)`}
