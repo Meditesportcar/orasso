@@ -204,6 +204,7 @@ test("le tampon tombe au pointage : sur le passeport, puis sur l'écran jour J",
     await expect(drop).toContainText(event.title);
     await page.waitForTimeout(700);
     await shot(page, `tampon-tombe-${theme}`);
+    await checkRules(page, theme, `chute du tampon ${theme}`);
     await expect(drop).toHaveCount(0, { timeout: 15_000 });
     await expect.poll(() => page.locator('[data-testid^="stamp-"]').count(), { timeout: 30_000 }).toBe(before + 1);
     await shot(page, `tampon-pose-${theme}`);
@@ -230,6 +231,8 @@ test("le tampon tombe au pointage : sur le passeport, puis sur l'écran jour J",
     await signIn(reloaded, "kenji@orasso.local");
     await goto(reloaded, `/jour-j/${again.applicationId}`);
     await expect(reloaded.getByTestId("jourj-vote")).toBeVisible({ timeout: 30_000 });
+    await shot(reloaded, `jour-j-vote-${theme}`);
+    await checkRules(reloaded, theme, `jour J avec le bouton de vote ${theme}`);
     await ctxR.close();
   }
 });
@@ -260,6 +263,14 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
   for (const [round, theme] of THEMES.entries()) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "kenji@orasso.local");
+    // Entrée par l'onglet Passeport (« Prix du public » : le vote en cours pour un véhicule pointé).
+    await goto(page, "/mon-passeport");
+    const link = page.getByTestId("passport-vote").filter({ hasText: event.title });
+    await expect(link).toBeVisible({ timeout: 60_000 });
+    await shot(page, `passeport-prix-du-public-${theme}`);
+    await checkRules(page, theme, `passeport avec le vote ${theme}`);
+    await link.click();
+    await expect(page).toHaveURL(/vote\//, { timeout: 30_000 });
     // Entrée par le jour J de Kenji (le bouton du prix du public), puis l'écran.
     await goto(page, `/jour-j/${kenji.applicationId}`);
     await expect(page.getByTestId("jourj-vote")).toBeVisible({ timeout: 60_000 });
@@ -330,7 +341,7 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
 
     await goto(page, `/recap/${event.id}`);
     await expect(page.getByRole("heading", { name: "Récap", exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(`C'était la ${event.title}`)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(`Ta sortie : ${event.title}`)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("recap-vehicles")).toContainText("4");
     await expect(page.getByTestId("recap-evening")).toBeVisible();
     await expect(page.getByTestId("recap-points")).toContainText("Points prévus : acquis au règlement");
@@ -375,7 +386,13 @@ test("récap de Béziers Night (seed) : par les Sorties, points acquis, tampon d
   for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "kenji@orasso.local");
-    await page.getByRole("tab", { name: "Sorties", exact: true }).click();
+    // Les récaps prêts, dans l'onglet Passeport.
+    await goto(page, "/mon-passeport");
+    await expect(page.getByTestId("passport-recap").filter({ hasText: "Béziers Night" })).toBeVisible({
+      timeout: 60_000,
+    });
+    await shot(page, `passeport-recaps-${theme}`);
+    await goto(page, "/sorties");
     await expect(page).toHaveURL(/sorties/, { timeout: 30_000 });
     await page.getByText(/^Passées · \d+$/).click();
     const row = page.getByTestId("ticket-past").filter({ hasText: "Béziers Night" });
@@ -383,7 +400,7 @@ test("récap de Béziers Night (seed) : par les Sorties, points acquis, tampon d
     await expect(row).toContainText("Prix du public : 4e sur 71");
     await row.getByTestId("ticket-recap").click();
     await expect(page).toHaveURL(/recap\//, { timeout: 30_000 });
-    await expect(page.getByText("C'était la Béziers Night")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Ta sortie : Béziers Night")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("recap-vehicles")).toContainText("71");
     await expect(page.getByTestId("recap-rank")).toContainText("4e");
     await expect(page.getByTestId("recap-rank")).toContainText("sur 71");
@@ -431,6 +448,7 @@ test("carte à partager : trois styles, zones masquées par Instagram, les trois
     await expect(page.getByText("Cacher les zones masquées")).toBeVisible();
     await shot(page, `partage-zones-${theme}`);
     await expect(page.getByTestId("share-story")).toContainText("En story");
+    await checkRules(page, theme, `feuille de partage ${theme}`);
     await expect(page.getByTestId("share-post")).toContainText("Image");
     await ctx.close();
   }

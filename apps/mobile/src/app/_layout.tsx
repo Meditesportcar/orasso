@@ -23,7 +23,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
-
+import { StampArrival } from "@/features/passport/StampArrival";
 import { ReportSheetHost } from "@/features/ReportSheet";
 import { StaffBackground } from "@/features/staff/StaffBackground";
 import { adminLinkOf } from "@/lib/adminModel";
@@ -158,6 +158,8 @@ function Shell() {
         )}
       </NavigationThemeProvider>
       <AnnouncementSheet />
+      {/* Lot 50 : le tampon du passeport qui tombe au pointage, au-dessus de tout écran et de ses feuilles. */}
+      {status === "in" ? <StampArrival /> : null}
       {/* Lot 32 : feuille « Signaler », une pour toute l'appli. */}
       {status === "in" ? <ReportSheetHost /> : null}
       {status === "in" ? <StaffBackground /> : null}

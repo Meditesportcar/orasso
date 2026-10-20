@@ -82,12 +82,26 @@ describe("story v2", () => {
     }
   });
 
+  it("l'adresse imprimée est « orasso.fr » (le site n'a pas de page publique par pseudo), le @pseudo est sur la carte", () => {
+    const { layout } = storyLayout(base());
+    const texts = layout.layers.flatMap((l) => (l.kind === "text" ? l.lines : []));
+    expect(texts).toContain("orasso.fr");
+    expect(texts).toContain("@kenji_66");
+    expect(texts.some((t) => t.startsWith("orasso.fr/"))).toBe(false);
+  });
+
+  // Les bandes sont déjà vérifiées au pixel (tests ci-dessus) ; celui-ci vérifie en plus les ancrages déclarés : tout
+  // calque (photo, texte, signature, cartouche) reste entre la bande du haut et celle du bas, nom très long compris.
   it("la mise en page ne dépose rien dans les bandes", () => {
-    const { layout, bands } = storyLayout(base());
+    const { layout, bands } = storyLayout(base({ name: "Hispano-Suiza-Alfonso-Treize-Cinquante-Super-Sport" }));
     for (const l of layout.layers) {
       if (l.kind === "photo") expect(l.y).toBeGreaterThanOrEqual(bands.top);
+      if (l.kind === "photo") expect(l.y + l.h).toBeLessThanOrEqual(1920 - bands.bottom);
+      if (l.kind === "box") expect(l.y).toBeGreaterThanOrEqual(bands.top);
       if (l.kind === "text") {
-        expect(l.y).toBeGreaterThan(bands.top);
+        // Ancré par la ligne de base : le haut du bloc = la base moins ses lignes.
+        const top = (l.anchor ?? "top") === "bottom" ? l.y - l.lines.length * l.size * (l.lineHeight ?? 0.9) : l.y;
+        expect(top).toBeGreaterThanOrEqual(bands.top);
         expect(l.y).toBeLessThan(1920 - bands.bottom);
       }
       if (l.kind === "sig") expect(l.y).toBeLessThan(1920 - bands.bottom);

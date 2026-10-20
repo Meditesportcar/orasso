@@ -11,6 +11,7 @@ import Svg, { Circle, Defs, G, LinearGradient, Path, Stop, Text as SvgText, Text
 
 import {
   inkTokenKey,
+  lineFontSize,
   ringFontSize,
   STAMP_BOX,
   STAMP_GOLD,
@@ -82,8 +83,8 @@ export function Stamp({
           textAnchor="middle"
           fill={ink}
           fontFamily="Archivo-Narrow-Bold"
-          fontSize={8.5}
-          letterSpacing={1}
+          fontSize={lineFontSize(text.short, art.titleWidth)}
+          letterSpacing={0.6}
         >
           {text.short}
         </SvgText>

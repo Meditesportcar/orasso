@@ -309,6 +309,7 @@ export function SortiesScreen() {
               onOpen={() => router.push(`/e/${x.event.slug}`)}
               onShow={() => router.push("/billets")}
               onGiveBack={() => setGiving(x)}
+              onVote={() => router.push(`/vote/${x.event.id}?titre=${encodeURIComponent(x.event.title)}`)}
             />
           ))}
 
@@ -340,6 +341,8 @@ export function SortiesScreen() {
               key={s.event.id}
               item={s}
               unsent={unsentBy.get(s.event.id)?.count ?? 0}
+              now={now}
+              onVote={() => router.push(`/vote/${s.event.id}?titre=${encodeURIComponent(s.event.title)}`)}
               onOpen={() => router.push(`/staff/${s.event.id}`)}
               onChanged={() => void staff.reload()}
             />
@@ -392,7 +395,20 @@ export function SortiesScreen() {
               title={x.event.title}
               detail={sortiesLabels.publicTicketLine(x.name)}
               onPressTitle={() => router.push(`/e/${x.event.slug}`)}
-            />
+            >
+              {x.status === "used" && recapReady.has(x.event.id) ? (
+                <Button
+                  variant="plate"
+                  icon="list"
+                  next
+                  onPress={() => router.push(`/recap/${x.event.id}`)}
+                  fullWidth
+                  testID="ticket-public-recap"
+                >
+                  {recapScreenTexts.seeRecap}
+                </Button>
+              ) : null}
+            </Ticket>
           ))}
           {countPast === 0 ? (
             <EmptyState title={sortiesLabels.emptyPastTitle} text={sortiesLabels.emptyPastText} />
@@ -469,11 +485,7 @@ function ApplicationTicket({
   if (app.refusalNote) notes.push(`« ${app.refusalNote} »`);
   if (offered) notes.push(sortiesLabels.offerNote);
   if (awaiting && app.crew) notes.push(crewLabels.confirmBody(app.crew.leaderPseudo, null));
-  const voting =
-    app.status === "accepted" &&
-    Boolean(app.checkedInAt) &&
-    now >= new Date(app.event.startsAt) &&
-    now < new Date(app.event.endsAt);
+  const voting = app.status === "accepted" && Boolean(app.checkedInAt) && now < new Date(app.event.endsAt);
   const canWithdraw = app.status === "pending" || app.status === "waitlisted" || app.status === "accepted";
   const lead = offered
     ? sortiesLabels.offerLead(formatDuration(remaining))
@@ -545,6 +557,7 @@ function TicketOfPublic({
   onOpen,
   onShow,
   onGiveBack,
+  onVote,
 }: {
   ticket: MyTicket;
   now: Date;
@@ -552,7 +565,10 @@ function TicketOfPublic({
   onOpen: () => void;
   onShow: () => void;
   onGiveBack: () => void;
+  /** Lot 50 : le vote du prix du public, pendant l'événement, pour un billet contrôlé à l'entrée. */
+  onVote: () => void;
 }) {
+  const voting = ticket.status === "used" && now < new Date(ticket.event.endsAt);
   const detail = [
     ticket.name,
     ticket.priceCents == null ? "gratuit" : formatPrice(ticket.priceCents),
@@ -573,6 +589,11 @@ function TicketOfPublic({
       <Button variant={primary ? "primary" : "plate"} icon="ticket" next onPress={onShow} fullWidth testID="my-tickets">
         {sortiesLabels.myTicket}
       </Button>
+      {voting ? (
+        <Button variant="plate" icon="badge" next onPress={onVote} fullWidth testID="ticket-vote">
+          {voteScreenTexts.open}
+        </Button>
+      ) : null}
       {ticket.priceCents == null ? (
         <Button variant="plate" tone="dashed" icon="undo" onPress={onGiveBack} fullWidth testID="ticket-give-back">
           {ticketAppLabels.giveBack}
@@ -586,11 +607,16 @@ function TicketOfPublic({
 function StaffTicket({
   item,
   unsent,
+  now,
+  onVote,
   onOpen,
   onChanged,
 }: {
   item: MyStaffEvent;
   unsent: number;
+  now: Date;
+  /** Lot 50 : le staff présent peut voter pendant l'événement (l'API tranche). */
+  onVote: () => void;
   onOpen: () => void;
   onChanged: () => void;
 }) {
@@ -636,6 +662,11 @@ function StaffTicket({
       {item.staffModeOpen ? (
         <Button variant="plate" icon="qr" onPress={onOpen} next fullWidth>
           Mode staff
+        </Button>
+      ) : null}
+      {present && now >= new Date(item.event.startsAt) && now < new Date(item.event.endsAt) ? (
+        <Button variant="plate" icon="badge" onPress={onVote} next fullWidth testID="staff-vote">
+          {voteScreenTexts.open}
         </Button>
       ) : null}
     </Ticket>

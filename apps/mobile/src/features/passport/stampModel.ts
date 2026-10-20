@@ -47,6 +47,8 @@ export type StampShapeArt = {
   fills: string[];
   /** Le titre court sur l'anneau (formes rondes) ; sinon sur une ligne au-dessus de la date. */
   ring: boolean;
+  /** Largeur utile du titre sur une ligne (formes sans anneau). */
+  titleWidth: number;
   /** Ordonnées du titre sur ligne, de la date et de l'année. */
   titleY: number;
   dateY: number;
@@ -65,6 +67,7 @@ export function stampShapeArt(silhouette: StampSilhouette): StampShapeArt {
         ],
         fills: [],
         ring: false,
+        titleWidth: 80,
         titleY: 46,
         dateY: 68,
         yearY: 82,
@@ -78,6 +81,7 @@ export function stampShapeArt(silhouette: StampSilhouette): StampShapeArt {
         ],
         fills: ["M78 30a12 12 0 1 0 8 20a10 10 0 1 1-8-20z"],
         ring: true,
+        titleWidth: 0,
         titleY: 46,
         dateY: 66,
         yearY: 78,
@@ -91,6 +95,7 @@ export function stampShapeArt(silhouette: StampSilhouette): StampShapeArt {
         ],
         fills: [],
         ring: false,
+        titleWidth: 58,
         titleY: 50,
         dateY: 68,
         yearY: 82,
@@ -104,6 +109,7 @@ export function stampShapeArt(silhouette: StampSilhouette): StampShapeArt {
         ],
         fills: [],
         ring: true,
+        titleWidth: 0,
         titleY: 46,
         dateY: 66,
         yearY: 78,
@@ -117,6 +123,7 @@ export function stampShapeArt(silhouette: StampSilhouette): StampShapeArt {
         ],
         fills: [],
         ring: true,
+        titleWidth: 0,
         titleY: 46,
         dateY: 66,
         yearY: 78,
@@ -193,7 +200,7 @@ export type StampText = {
   year: string;
   /** Texte de l'anneau : « NOCTURNE DE CANET · 66 · ». */
   ring: string;
-  /** Titre sur une ligne (formes sans anneau) : 18 caractères au plus, un point si coupé (prototype). */
+  /** Titre sur une ligne (formes sans anneau) : 24 caractères au plus, un point si coupé ; le corps se réduit (`lineFontSize`). */
   short: string;
 };
 
@@ -209,7 +216,7 @@ export function stampText(stamp: Pick<PassportStamp, "kind" | "rare" | "event">,
     date: `${dd}.${mm}`,
     year: stamp.rare ? "RARE" : String(w.year),
     ring: `${title}${dept ? ` · ${dept}` : ""} ·`,
-    short: title.length > 18 ? `${title.slice(0, 18)}.` : title,
+    short: title.length > 24 ? `${title.slice(0, 24)}.` : title,
   };
 }
 
@@ -242,7 +249,21 @@ export function stampPlacement(index: number, seed: number): StampPlacement {
   };
 }
 
+/**
+ * Corps du titre sur une ligne (rectangle, tasse) : réduit selon la longueur pour tenir dans la forme (8,5 au plus,
+ * 4,5 au moins) ; un titre long n'est plus coupé par le bord du cadre.
+ */
+export function lineFontSize(title: string, width: number): number {
+  return Math.round(Math.max(4.5, Math.min(8.5, width / (Math.max(1, title.length) * 0.67))) * 10) / 10;
+}
+
 /** Corps du texte de l'anneau : 9,5 jusqu'à 26 caractères, puis réduit pour que le titre tienne sur le tour (jamais en dessous de 5,5). */
 export function ringFontSize(ring: string): number {
   return Math.round(Math.max(5.5, Math.min(9.5, (9.5 * 26) / Math.max(1, ring.length))) * 10) / 10;
+}
+
+/** Forme de la chute (`StampDrop` du kit : le O nu, dans un rond, dans un cadre) : le O doré pour un rare, le rond pour un rond, le cadre pour le reste. */
+export function dropShapeOf(stamp: Pick<PassportStamp, "shape" | "rare">): "o" | "round" | "square" {
+  if (stamp.rare) return "o";
+  return stamp.shape === "round" ? "round" : "square";
 }

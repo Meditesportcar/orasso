@@ -149,3 +149,10 @@ export type RecapListItem = {
   /** Récap disponible à partir de J+1 10 h. */
   readyAt: string;
 };
+
+/** `GET /events/:id/audience-prize/candidates?cursor=` : tous les véhicules pointés, sans les voix (la grille du vote). */
+export const audienceCandidatesQuery = z.object({ cursor: z.coerce.number().int().min(0).max(100_000).default(0) });
+
+export type AudienceCandidate = Pick<AudiencePrizeEntry, "applicationId" | "vehicleLabel" | "pseudo" | "photoUrl">;
+
+export type AudienceCandidates = { items: AudienceCandidate[]; next: number | null };

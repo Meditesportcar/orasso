@@ -210,7 +210,7 @@ export function storyLayout(i: StoryInput): { layout: PosterLayout; bands: { top
   // Pied : l'adresse à gauche, la signature à droite.
   layers.push({
     kind: "text",
-    lines: [`orasso.fr/${i.pseudo}`],
+    lines: ["orasso.fr"],
     keepCase: true,
     font: "bold",
     size: 32,

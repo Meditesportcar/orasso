@@ -193,6 +193,11 @@ export const passportScreenTexts = {
   /** Toast du prototype : « Nouveau tampon : Nocturne de Canet ». */
   stamped: (title: string) => `Nouveau tampon : ${title}`,
   close: "Toucher pour fermer",
+  /** Onglet Passeport du visiteur : « Tampons, Prix du public, Récaps » (plan de l'appli du prototype). */
+  votesTitle: "Prix du public",
+  votesNone: "Aucun vote ouvert pour toi en ce moment : il ouvre à ton pointage ou à l'entrée de ton billet.",
+  recapsTitle: "Récaps",
+  recapsNone: "Ton récap arrive le lendemain de chaque événement où tu as été pointé.",
 };
 
 export const voteScreenTexts = {
@@ -218,8 +223,8 @@ export const voteScreenTexts = {
 
 export const recapScreenTexts = {
   title: "Récap",
-  /** « C'était la Nocturne de Canet » */
-  was: (title: string) => `C'était la ${title}`,
+  /** « Ta sortie : Nocturne de Canet » (sans accord : « la » ne va pas à tous les titres, relecture du lot 50). */
+  was: (title: string) => `Ta sortie : ${title}`,
   loadFailed: "Impossible de charger le récap : vérifie ta connexion.",
   notReady: "Le récap arrive le lendemain de l'événement, à 10 h.",
   /** Sorties › Passées. */

@@ -24,8 +24,9 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, TabScreen } from "@/ui/Screens";
+import { PassportLinks } from "./PassportLinks";
 import { Stamp } from "./Stamp";
-import { StampArrival } from "./StampArrival";
+import { useStampedListener } from "./stampBus";
 import { PAGE_BOX, stampPlacement } from "./stampModel";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -67,13 +68,13 @@ export function PassportScreen({ tab }: { tab: boolean }) {
       arrivedId={arrivedId}
     />
   );
-  const overlays = <StampArrival onStamped={onStamped} />;
+  useStampedListener(onStamped);
   const refresh = async () => {
     await passport.reload();
   };
   if (tab) {
     return (
-      <TabScreen title={title} facts={facts} onRefresh={refresh} overlays={overlays}>
+      <TabScreen title={title} facts={facts} onRefresh={refresh}>
         {body}
       </TabScreen>
     );
@@ -84,7 +85,6 @@ export function PassportScreen({ tab }: { tab: boolean }) {
       facts={facts}
       onClose={() => (router.canGoBack() ? router.back() : router.replace("/profil"))}
       onRefresh={refresh}
-      overlays={overlays}
     >
       {body}
     </FlowScreen>
@@ -141,6 +141,8 @@ function PassportBody({
       ) : (
         <Book key={`${current}-${view.total}`} view={view} arrivedId={arrivedId} />
       )}
+
+      <PassportLinks />
 
       <View style={styles.legend} testID="passport-legend">
         {LEGEND.map((l) => (

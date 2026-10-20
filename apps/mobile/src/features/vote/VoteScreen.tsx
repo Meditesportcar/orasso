@@ -4,15 +4,18 @@
 
 import { EmptyState, Icon, OutlinedText, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  type AudienceCandidate,
   type AudiencePrizeBoard,
   type AudiencePrizeEntry,
   type AudiencePrizeMine,
+  type AudienceVotesChanged,
   audiencePrizeTexts,
   voteScreenTexts,
 } from "@orasso/shared";
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
@@ -23,7 +26,7 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
-import { barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
+import { applyTop3, barPercent, gridOrder, isOwn, myRank, reloadDelay, voteView } from "./model";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -41,11 +44,62 @@ export function VoteScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  // Classement en direct : le serveur regroupe les diffusions (une par seconde au plus).
+  // La grille : tous les véhicules pointés (pas seulement les 100 premiers du classement), par pages de 100.
+  const candidates = useApi(
+    async () => {
+      const all: AudienceCandidate[] = [];
+      let cursor: number | null = 0;
+      while (cursor !== null) {
+        const page: { items: AudienceCandidate[]; next: number | null } = await api.audienceCandidates(id, cursor);
+        all.push(...page.items);
+        cursor = page.next;
+      }
+      return all;
+    },
+    [id],
+    { enabled: Boolean(id) },
+  );
+
+  // Classement en direct : chaque message `votes.changed` porte le total et le top 3, affichés tout de suite ; le
+  // classement complet n'est rechargé qu'au plus toutes les 10 s (et au retour au premier plan) : un message par
+  // seconde et par téléphone ferait des dizaines de requêtes par seconde pendant un vote de 150 personnes.
+  const [live, setLive] = useState<AudienceVotesChanged | null>(null);
   const reload = board.reload;
+  const lastReload = useRef<number | null>(null);
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloadBoard = useCallback(() => {
+    pending.current = null;
+    lastReload.current = Date.now();
+    void reload();
+  }, [reload]);
+  const scheduleReload = useCallback(() => {
+    if (pending.current) return;
+    const wait = reloadDelay(lastReload.current, Date.now());
+    if (wait === 0) reloadBoard();
+    else pending.current = setTimeout(reloadBoard, wait);
+  }, [reloadBoard]);
   useChannel(id ? `event:${id}:votes` : null, (event) => {
-    if (event.type === "votes.changed") void reload();
+    if (event.type !== "votes.changed") return;
+    setLive(event.payload as AudienceVotesChanged);
+    scheduleReload();
   });
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") scheduleReload();
+    });
+    return () => {
+      sub.remove();
+      if (pending.current) clearTimeout(pending.current);
+    };
+  }, [scheduleReload]);
+  // Le total et le top 3 du message, reportés sur le classement chargé.
+  const shown: AudiencePrizeBoard | null = board.data
+    ? {
+        ...board.data,
+        total: live ? Math.max(live.total, 0) : board.data.total,
+        entries: live ? applyTop3(board.data.entries, live.top3) : board.data.entries,
+      }
+    : null;
 
   const view = voteView(board.data, mine.data);
   const closesAt = mine.data ? new Date(mine.data.closesAt) : null;
@@ -54,21 +108,22 @@ export function VoteScreen() {
     .join(" · ");
 
   const vote = useCallback(
-    async (entry: AudiencePrizeEntry) => {
+    async (entry: AudienceCandidate) => {
       setBusy(entry.applicationId);
       setError(null);
       try {
         const next = await api.audienceVote(id, entry.applicationId);
         mine.setData(next);
         setSaved(true);
-        await reload();
+        if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+        scheduleReload();
       } catch (e) {
         setError(errorMessage(e));
       } finally {
         setBusy(null);
       }
     },
-    [id, mine.setData, reload],
+    [id, mine.setData, scheduleReload],
   );
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
@@ -79,7 +134,7 @@ export function VoteScreen() {
       title={audiencePrizeTexts.title}
       onClose={close}
       onRefresh={async () => {
-        await Promise.all([board.reload(), mine.reload()]);
+        await Promise.all([board.reload(), mine.reload(), candidates.reload()]);
       }}
     >
       {facts && view !== "vote" ? <Muted variant="label">{facts}</Muted> : null}
@@ -117,14 +172,14 @@ export function VoteScreen() {
           ) : (
             <Muted variant="caption">{voteScreenTexts.chooseHint}</Muted>
           )}
-          <Grid entries={gridOrder(board.data.entries)} mine={mine.data} busy={busy} onVote={(e) => void vote(e)} />
+          <Grid entries={gridOrder(candidates.data ?? [])} mine={mine.data} busy={busy} onVote={(e) => void vote(e)} />
         </>
       ) : null}
 
       {view === "closed" ? <Notice>{voteScreenTexts.closedNote}</Notice> : null}
 
-      {board.data && (view === "vote" || view === "closed" || view === "settled") ? (
-        <Ranking board={board.data} mine={mine.data} settled={view === "settled"} />
+      {shown && (view === "vote" || view === "closed" || view === "settled") ? (
+        <Ranking board={shown} mine={mine.data} settled={view === "settled"} />
       ) : null}
     </FlowScreen>
   );
@@ -136,10 +191,10 @@ function Grid({
   busy,
   onVote,
 }: {
-  entries: AudiencePrizeEntry[];
+  entries: AudienceCandidate[];
   mine: AudiencePrizeMine;
   busy: string | null;
-  onVote: (entry: AudiencePrizeEntry) => void;
+  onVote: (entry: AudienceCandidate) => void;
 }) {
   const { t } = useTheme();
   const c = t.color;

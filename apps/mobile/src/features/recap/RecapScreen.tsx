@@ -152,14 +152,16 @@ function RecapBody({ view, onShare, onReview }: { view: RecapView; onShare: () =
       </View>
 
       <View style={styles.moments}>
-        <Moment icon="grade" testID="recap-points">
-          <Text variant="body" color={c.ink}>
-            {pointsText}
-          </Text>
-          <Text variant="meta" color={c.inkMuted}>
-            {view.points.status === "projected" ? recapTexts.projected : recapTexts.settled}
-          </Text>
-        </Moment>
+        {view.points.total !== 0 ? (
+          <Moment icon="grade" testID="recap-points">
+            <Text variant="body" color={c.ink}>
+              {pointsText}
+            </Text>
+            <Text variant="meta" color={c.inkMuted}>
+              {view.points.status === "projected" ? recapTexts.projected : recapTexts.settled}
+            </Text>
+          </Moment>
+        ) : null}
         {view.stamp ? (
           <Moment icon="stamp" testID="recap-stamp-line">
             <Text variant="body" color={c.ink}>

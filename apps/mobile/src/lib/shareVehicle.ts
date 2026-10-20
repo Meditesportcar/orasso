@@ -8,7 +8,13 @@ import * as Sharing from "expo-sharing";
 import { Platform } from "react-native";
 
 import { apiUrl } from "@/api";
-import { ApiRequestError, getSessionToken, NETWORK_MESSAGE } from "./http";
+import { ApiRequestError, getSessionToken } from "./http";
+import { shareErrorInfo } from "./shareErrors";
+
+const shareError = (status: number | null, detail?: string) => {
+  const info = shareErrorInfo(status, detail);
+  return new ApiRequestError(info.status, info.code, info.message);
+};
 
 export type ShareOutcome = "shared" | "saved" | "unavailable";
 
@@ -38,9 +44,9 @@ export async function prepareShareImage(
     try {
       res = await fetch(url, { headers: authHeaders() });
     } catch {
-      throw new ApiRequestError(0, "network", NETWORK_MESSAGE);
+      throw shareError(0);
     }
-    if (!res.ok) throw new ApiRequestError(res.status, "internal", "Impossible de générer la carte.");
+    if (!res.ok) throw shareError(res.status);
     return { uri: URL.createObjectURL(await res.blob()), fileName };
   }
   try {
@@ -50,9 +56,14 @@ export async function prepareShareImage(
       { headers: authHeaders(), idempotent: true },
     );
     return { uri: file.uri, fileName };
-  } catch {
-    throw new ApiRequestError(0, "network", "Impossible de générer la carte : vérifie ta connexion.");
+  } catch (e) {
+    throw shareError(null, e instanceof Error ? e.message : String(e));
   }
+}
+
+/** Libère l'adresse d'objet d'une carte (web) ; sans effet sur le téléphone. */
+export function releasePrepared(prepared: PreparedShare): void {
+  if (Platform.OS === "web" && prepared.uri.startsWith("blob:")) URL.revokeObjectURL(prepared.uri);
 }
 
 /** Ouvre la feuille de partage du système (téléphone) ou enregistre le fichier (navigateur). */

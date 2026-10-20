@@ -12,19 +12,40 @@ import {
   shareStyleLabels,
   shareStyles,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
 
 import { errorMessage } from "@/lib/http";
-import { type PreparedShare, prepareShareImage, type ShareOutcome, sendShareImage } from "@/lib/shareVehicle";
+import {
+  type PreparedShare,
+  prepareShareImage,
+  releasePrepared,
+  type ShareOutcome,
+  sendShareImage,
+} from "@/lib/shareVehicle";
 import { AppSheet } from "@/ui/AppSheet";
+import { shareSheetKey } from "./shareSheetKey";
 
 const { space1, space2 } = tokens.spacing;
 
 /** Largeur de l'aperçu (hauteur : 16/9 de plus). */
 const PREVIEW_WIDTH = 220;
 
-export function ShareSheet({
+/**
+ * La feuille repart de zéro quand le véhicule ou sa version change (relecture du lot 50) : après le floutage d'une
+ * plaque, la version change et l'ancien PNG (plaque nette) ne doit jamais être resservi.
+ */
+export function ShareSheet(props: {
+  vehicleId: string;
+  /** `VehicleFull.shareVersion`. */
+  version: string;
+  visible: boolean;
+  onClose: () => void;
+}) {
+  return <ShareSheetBody key={shareSheetKey(props.vehicleId, props.version)} {...props} />;
+}
+
+function ShareSheetBody({
   vehicleId,
   version,
   visible,
@@ -45,6 +66,15 @@ export function ShareSheet({
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<ShareOutcome | null>(null);
   const story = stories[style];
+  // Les adresses d'objet du web sont libérées à la fermeture de la feuille.
+  const kept = useRef(stories);
+  kept.current = stories;
+  useEffect(
+    () => () => {
+      for (const prepared of Object.values(kept.current)) if (prepared) releasePrepared(prepared);
+    },
+    [],
+  );
 
   // L'aperçu du style choisi : rendu par l'API une fois, gardé tant que la feuille est ouverte.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `stories` est lu pour ne pas redemander une carte déjà rendue
@@ -68,7 +98,10 @@ export function ShareSheet({
     setOutcome(null);
     try {
       const prepared = format === "story" ? story : await prepareShareImage(vehicleId, "post", style, version);
-      if (prepared) setOutcome(await sendShareImage(prepared));
+      if (prepared) {
+        setOutcome(await sendShareImage(prepared));
+        if (format === "post") releasePrepared(prepared);
+      }
     } catch (e) {
       setError(errorMessage(e));
     } finally {

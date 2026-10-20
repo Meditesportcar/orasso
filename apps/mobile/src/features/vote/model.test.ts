@@ -1,7 +1,48 @@
 import type { AudiencePrizeBoard, AudiencePrizeEntry, AudiencePrizeMine } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
+import { applyTop3, BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, reloadDelay, voteView } from "./model";
+
+describe("classement en direct", () => {
+  it("un rechargement complet toutes les 10 s au plus : le premier tout de suite, les suivants différés", () => {
+    expect(reloadDelay(null, 1_000)).toBe(0);
+    expect(reloadDelay(1_000, 1_000 + 2_000)).toBe(BOARD_RELOAD_MS - 2_000);
+    expect(reloadDelay(1_000, 1_000 + BOARD_RELOAD_MS)).toBe(0);
+    // Rafale d'un message par seconde pendant 30 s : au plus 3 rechargements.
+    let last: number | null = null;
+    let reloads = 0;
+    for (let t = 0; t < 30_000; t += 1_000) {
+      if (reloadDelay(last, t) === 0) {
+        reloads++;
+        last = t;
+      }
+    }
+    expect(reloads).toBe(3);
+  });
+
+  it("le top 3 du message met à jour voix et rang sans recharger", () => {
+    const e = (id: string, votes: number, rank: number) => ({
+      applicationId: id,
+      vehicleLabel: id,
+      pseudo: id,
+      photoUrl: null,
+      votes,
+      rank,
+    });
+    const next = applyTop3(
+      [e("b", 31, 1), e("a", 24, 2), e("c", 11, 3)],
+      [
+        { applicationId: "a", votes: 33, rank: 1 },
+        { applicationId: "b", votes: 31, rank: 2 },
+      ],
+    );
+    expect(next.map((x) => [x.applicationId, x.votes, x.rank])).toEqual([
+      ["a", 33, 1],
+      ["b", 31, 2],
+      ["c", 11, 3],
+    ]);
+  });
+});
 
 // Prix du public, côté appli (lot 50) : ce que l'écran montre selon la réponse de l'API.
 const entry = (id: string, votes: number, rank: number): AudiencePrizeEntry => ({

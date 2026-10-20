@@ -31,7 +31,7 @@ export function myRank(
 }
 
 /** Vrai pour mon propre véhicule : grisé, « C'est toi », pas de voix pour soi-même. */
-export function isOwn(entry: AudiencePrizeEntry, mine: Pick<AudiencePrizeMine, "ownApplicationIds">): boolean {
+export function isOwn(entry: { applicationId: string }, mine: Pick<AudiencePrizeMine, "ownApplicationIds">): boolean {
   return mine.ownApplicationIds.includes(entry.applicationId);
 }
 
@@ -39,6 +39,32 @@ export function isOwn(entry: AudiencePrizeEntry, mine: Pick<AudiencePrizeMine, "
  * Ordre de la grille : stable et sans rapport avec le classement (une grille triée par voix pousserait à voter pour le
  * premier). Les numéros « N° 1 » du prototype suivent cet ordre.
  */
-export function gridOrder(entries: readonly AudiencePrizeEntry[]): AudiencePrizeEntry[] {
+export function gridOrder<T extends { applicationId: string }>(entries: readonly T[]): T[] {
   return [...entries].sort((a, b) => a.applicationId.localeCompare(b.applicationId));
+}
+
+/** Intervalle minimal entre deux rechargements complets du classement (le message `votes.changed` porte total et top 3). */
+export const BOARD_RELOAD_MS = 10_000;
+
+/**
+ * Dans combien de millisecondes recharger le classement complet ? 0 : tout de suite. Au plus une fois toutes les
+ * `BOARD_RELOAD_MS` ; le rechargement en attente part alors (un seul à la fois).
+ */
+export function reloadDelay(lastReloadAt: number | null, now: number, minMs = BOARD_RELOAD_MS): number {
+  if (lastReloadAt === null) return 0;
+  return Math.max(0, lastReloadAt + minMs - now);
+}
+
+/** Reporte le top 3 d'un message en direct sur le classement affiché (voix et rang), sans rien recharger. */
+export function applyTop3(
+  entries: readonly AudiencePrizeEntry[],
+  top3: readonly { applicationId: string; votes: number; rank: number }[],
+): AudiencePrizeEntry[] {
+  const by = new Map(top3.map((t) => [t.applicationId, t]));
+  return entries
+    .map((e) => {
+      const t = by.get(e.applicationId);
+      return t ? { ...e, votes: t.votes, rank: t.rank } : e;
+    })
+    .sort((a, b) => b.votes - a.votes || a.rank - b.rank);
 }

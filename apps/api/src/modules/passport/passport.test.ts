@@ -404,6 +404,47 @@ describe("prix du public", () => {
     expect(closed.json.error.code).toBe("vote_closed");
   });
 
+  it("150 pointés (cas terrain) : la grille du vote les liste tous, par pages, sans voix ; le classement reste limité à 100", async () => {
+    const at = paris(10, 17, 19);
+    for (let i = 0; i < 150; i++) {
+      const vehicle = await createVehicle(p.marc.u.id, ref);
+      const [app] = await db
+        .insert(applications)
+        .values({
+          eventId,
+          userId: p.marc.u.id,
+          vehicleId: vehicle.id,
+          status: "accepted",
+          rulesAcceptedAt: at,
+          followStructure: false,
+        })
+        .returning();
+      await db
+        .insert(checkins)
+        .values({ applicationId: app!.id, eventId, method: "scan", checkedInAt: new Date(at.getTime() + i * 1000) });
+    }
+    await checkin(p.lea, paris(10, 17, 19, 5));
+    clock.set(paris(10, 17, 20));
+    const url = `/events/${eventId}/audience-prize/candidates`;
+    const first = (await call(p.kenji.u, "GET", url)).json;
+    const second = (await call(p.kenji.u, "GET", `${url}?cursor=${first.next}`)).json;
+    expect(first.items).toHaveLength(100);
+    expect(first.next).toBe(100);
+    expect(second.items).toHaveLength(51);
+    expect(second.next).toBeNull();
+    const ids = new Set([...first.items, ...second.items].map((c: { applicationId: string }) => c.applicationId));
+    expect(ids.size).toBe(151);
+    // Aucune voix dans la grille (pas de fuite du classement) ; le classement garde ses 100 lignes.
+    expect(Object.keys(first.items[0]).sort()).toEqual(["applicationId", "photoUrl", "pseudo", "vehicleLabel"]);
+    const board = (await call(p.kenji.u, "GET", `/events/${eventId}/audience-prize`)).json;
+    expect(board.entries).toHaveLength(100);
+    expect(board.vehicles).toBe(151);
+    // Voter pour une voiture au-delà de la centième de la grille est possible (la 101e pointée).
+    const last = second.items[0].applicationId;
+    expect((await vote(p.lea.u, last)).status).toBe(200);
+    expect((await call(p.kenji.u, "GET", `${url}?cursor=-1`)).status).toBe(400);
+  });
+
   it("égalité : le premier pointé passe devant", async () => {
     await checkin(p.lea, paris(10, 17, 19, 10));
     await checkin(p.kenji, paris(10, 17, 19, 2));

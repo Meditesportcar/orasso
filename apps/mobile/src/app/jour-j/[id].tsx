@@ -4,7 +4,7 @@
 // retenue (secret du code compris) : l'écran s'affiche et le code se fabrique sans aucun réseau. S'ouvre à partir de la
 // veille, se ferme après le scan ou à J+1.
 // Lot 50 : une fois entré, le bouton « Prix du public » (secondaire : le QR reste l'élément principal) ; au scan, le
-// tampon tombe à l'écran (`passport.stamped`, `StampArrival`).
+// tampon tombe à l'écran (`passport.stamped`, `StampArrival` à la racine).
 
 import { Button, Chip, Plate, StatusBadge, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
@@ -23,7 +23,6 @@ import { StyleSheet, useWindowDimensions } from "react-native";
 import { CaptureNote, GpsRow, HowItWorks, useBlockCapture } from "@/features/jour-j/QrExtras";
 import { type QrHolder, QrPoster } from "@/features/jour-j/QrPoster";
 import { useRotatingCode } from "@/features/jour-j/useRotatingCode";
-import { StampArrival } from "@/features/passport/StampArrival";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { api } from "@/lib/api";
@@ -183,20 +182,17 @@ export default function JourJ() {
       onClose={close}
       still
       overlays={
-        <>
-          <WithdrawSheet
-            app={withdrawing ? app : null}
-            now={now}
-            onClose={() => setWithdrawing(false)}
-            onConfirm={async (target) => {
-              await api.withdraw(target.id);
-              setWithdrawing(false);
-              await reload();
-              router.replace("/acces");
-            }}
-          />
-          <StampArrival />
-        </>
+        <WithdrawSheet
+          app={withdrawing ? app : null}
+          now={now}
+          onClose={() => setWithdrawing(false)}
+          onConfirm={async (target) => {
+            await api.withdraw(target.id);
+            setWithdrawing(false);
+            await reload();
+            router.replace("/acces");
+          }}
+        />
       }
       footer={
         state === "open" && app && app.status === "accepted" ? (

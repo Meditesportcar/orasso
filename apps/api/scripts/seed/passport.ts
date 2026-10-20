@@ -9,6 +9,7 @@ import {
   AUDIENCE_PRIZE_RESULTS_KEPT,
   audienceWinner,
   isRare,
+  POINTS,
   rankResults,
   type StampKind,
   seasonDates,
@@ -196,6 +197,25 @@ export async function seedPassport() {
     )
     .onConflictDoNothing();
   for (const e of entered) await stamp(e.ownerId, beziers, "participation", e.checkedInAt, e.applicationId);
+  // Règlement du jour : chaque pointé a ses points de participation (le récap acquis ne dit pas « +0 point »).
+  await withTx(async (tx) => {
+    const season = await pointsService.seasonFor(tx, beziers.settledAt ?? now);
+    for (const e of entered) {
+      await tx
+        .insert(t.pointEntries)
+        .values({
+          userId: e.ownerId,
+          seasonId: season.id,
+          kind: "participation",
+          points: POINTS.participation,
+          eventId: beziers.id,
+          applicationId: e.applicationId,
+          createdAt: beziers.settledAt ?? now,
+        })
+        .onConflictDoNothing();
+      await pointsService.recompute(tx, e.ownerId);
+    }
+  });
   const won = winner ? entered.find((e) => e.applicationId === winner.applicationId) : undefined;
   if (won) {
     await db.update(t.vehicles).set({ audiencePrizes: 1 }).where(eq(t.vehicles.id, won.vehicleId));

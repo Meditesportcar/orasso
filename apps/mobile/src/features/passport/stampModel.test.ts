@@ -1,7 +1,16 @@
 import { type PassportStamp, passportPages, stampShapes } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { inkTokenKey, PAGE_BOX, silhouetteOf, stampLook, stampPlacement, stampShapeArt, stampText } from "./stampModel";
+import {
+  inkTokenKey,
+  lineFontSize,
+  PAGE_BOX,
+  silhouetteOf,
+  stampLook,
+  stampPlacement,
+  stampShapeArt,
+  stampText,
+} from "./stampModel";
 
 // Tampons du passeport (lot 50) : le dessin est déterministe (même `seed`, même tampon) et chaque forme a le sien.
 const stamp = (over: Partial<PassportStamp> = {}): PassportStamp => ({
@@ -84,13 +93,30 @@ describe("texte et encre", () => {
     expect(stampText(stamp({ kind: "first_outing", rare: true })).title).toBe("PREMIÈRE SORTIE");
     expect(stampText(stamp({ kind: "first_outing", rare: true })).year).toBe("RARE");
     const long = stamp({ event: { ...stamp().event, title: "Rassemblement des passionnés de Collioure" } });
-    expect(stampText(long).short).toBe("RASSEMBLEMENT DES .");
+    expect(stampText(long).short).toBe("RASSEMBLEMENT DES PASSIO.");
     expect(stampText(long).ring).toContain("RASSEMBLEMENT DES PASSIONNÉS DE COLLIOURE");
   });
 
   it("l'encre est le jeton du département, ou celui par défaut", () => {
     expect(inkTokenKey("66")).toBe("stampInk66");
     expect(inkTokenKey("default")).toBe("stampInkDefault");
+  });
+});
+
+describe("titre sur une ligne (rectangle, tasse)", () => {
+  it("le corps se réduit avec la longueur : un titre de 18 caractères ou plus tient dans la forme", () => {
+    for (const shape of ["rect", "cup"] as const) {
+      const width = stampShapeArt(shape).titleWidth;
+      expect(lineFontSize("EXPO", width)).toBe(8.5);
+      for (const title of ["PORTES OUVERTES DE PERPIGNAN", "SALON DE PERPIGNAN", "C&C NARBONNE NORD"]) {
+        const size = lineFontSize(title, width);
+        expect(size).toBeLessThanOrEqual(8.5);
+        expect(size).toBeGreaterThanOrEqual(4.5);
+        // largeur estimée du texte (0,67 corps par caractère, interlettre compris) dans la largeur de la forme
+        if (size > 4.5) expect(title.length * size * 0.67).toBeLessThanOrEqual(width + 0.5);
+      }
+      expect(lineFontSize("SALON DE PERPIGNAN", width)).toBeLessThan(lineFontSize("EXPO", width));
+    }
   });
 });
 
