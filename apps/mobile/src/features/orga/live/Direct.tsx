@@ -4,7 +4,7 @@
 // rechargement toutes les 60 s au cas où le canal se coupe.
 
 import { Button, Chip, ChipRow, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { eventDaysLabels, formatDayDate, type LiveCounters, localDate, orgaLabels } from "@orasso/shared";
+import { eventDaysLabels, formatDayDate, type LiveCounters, localDate, orgaLabels, orgaV2Labels } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
@@ -29,7 +29,8 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { SectionTitle, TabScreen } from "@/ui/Screens";
-import { OrgaFailure, useOrga } from "./OrgaGate";
+import { OrgaFailure, useOrga } from "../OrgaGate";
+import { DirectNext } from "./DirectNext";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -85,6 +86,11 @@ function DirectEvent({
   const alerts = useApi(() => api.eventAlerts(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
   const incidents = useApi(() => api.eventIncidents(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
   const scans = useApi(() => api.scanReport(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
+  // Lot 52 : l'équipe du prochain événement (hors événement) et le Prix du public (jour J, lot 49).
+  const staff = useApi(() => api.eventStaff(eventId), [eventId], { enabled: !field });
+  const audience = useApi(() => api.audienceBoard(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
+  const prize = audience.error ? null : audience.data;
+  const at = useNow(60_000);
   const [incident, setIncident] = useState<FieldIncident | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -182,77 +188,101 @@ function DirectEvent({
       {error ? <Notice tone="error">{error}</Notice> : null}
       {live.offline ? <Notice>Hors ligne : derniers chiffres connus.</Notice> : null}
 
-      <Plate style={styles.block} testID="orga-direct-event">
-        <ChipRow>
-          <Chip surface="plate" variant="accent">
-            {phaseLabels[current.phase]}
-          </Chip>
-        </ChipRow>
-        <Text variant="posterM" color={c.plateInk}>
-          {current.event.title}
-        </Text>
-        <Text variant="body" color={c.plateMuted}>
-          {formatDayHour(current.event.startsAt)}
-          {current.event.city ? ` · ${current.event.city}` : ""}
-        </Text>
-      </Plate>
-
-      {days.length > 1 ? (
-        <ChipRow>
-          <Chip selected={shownDay === null} onPress={() => setDayId(null)}>
-            {eventDaysLabels.allDays}
-          </Chip>
-          {days.map((d) => (
-            <Chip key={d.id} selected={shownDay === d.id} onPress={() => setDayId(d.id)}>
-              {formatDayDate(d.date)}
-            </Chip>
-          ))}
-        </ChipRow>
-      ) : null}
-
-      {l ? (
-        <View style={styles.counters} testID="orga-direct-counters">
-          <Counters
-            items={[
-              { value: l.arrived, label: orgaLabels.directArrived },
-              { value: missingVehicles(l), label: orgaLabels.directExpected },
-              { value: l.alertsOpen, label: orgaLabels.directAlerts },
-            ]}
-            active={0}
-          />
-          <Counters
-            items={[
-              { value: `${l.staffPresent}/${l.staffExpected}`, label: orgaLabels.directStaff },
-              ...(l.providers.expected > 0
-                ? [{ value: `${l.providers.arrived}/${l.providers.expected}`, label: orgaLabels.directProviders }]
-                : []),
-            ]}
-          />
-        </View>
-      ) : (
-        <Muted variant="body">{live.loading ? "Chargement…" : null}</Muted>
-      )}
-
-      {cats.length > 0 ? (
+      {/* Lot 52 : hors événement, le Direct est l'Accueil de l'organisateur (prochain événement, à trier, zones, équipe). */}
+      {!field && detail.data ? <DirectNext event={detail.data} live={l} staff={staff.data ?? []} at={at} /> : null}
+      {field ? (
         <>
-          <SectionTitle>{orgaLabels.directByCategory}</SectionTitle>
-          <Plate style={styles.block} testID="orga-direct-categories">
-            {cats.map((row) => (
-              <View key={row.key} style={styles.line}>
-                <Text variant="bodyStrong" color={c.plateInk} style={styles.grow}>
-                  {row.label}
-                </Text>
-                <Text variant="bodyStrong" color={c.plateInk}>
-                  {row.arrived} / {row.expected}
-                </Text>
-              </View>
-            ))}
+          <Plate style={styles.block} testID="orga-direct-event">
+            <ChipRow>
+              <Chip surface="plate">{phaseLabels[current.phase]}</Chip>
+            </ChipRow>
+            <Text variant="posterM" color={c.plateInk}>
+              {current.event.title}
+            </Text>
+            <Text variant="body" color={c.plateMuted}>
+              {formatDayHour(current.event.startsAt)}
+              {current.event.city ? ` · ${current.event.city}` : ""}
+            </Text>
           </Plate>
+
+          {days.length > 1 ? (
+            <ChipRow>
+              <Chip selected={shownDay === null} onPress={() => setDayId(null)}>
+                {eventDaysLabels.allDays}
+              </Chip>
+              {days.map((d) => (
+                <Chip key={d.id} selected={shownDay === d.id} onPress={() => setDayId(d.id)}>
+                  {formatDayDate(d.date)}
+                </Chip>
+              ))}
+            </ChipRow>
+          ) : null}
+
+          {l ? (
+            <View style={styles.counters} testID="orga-direct-counters">
+              <Counters
+                items={[
+                  { value: l.arrived, label: orgaLabels.directArrived },
+                  { value: missingVehicles(l), label: orgaLabels.directExpected },
+                  { value: l.alertsOpen, label: orgaLabels.directAlerts },
+                ]}
+                active={0}
+              />
+              <Counters
+                items={[
+                  { value: `${l.staffPresent}/${l.staffExpected}`, label: orgaLabels.directStaff },
+                  ...(l.providers.expected > 0
+                    ? [{ value: `${l.providers.arrived}/${l.providers.expected}`, label: orgaLabels.directProviders }]
+                    : []),
+                ]}
+              />
+            </View>
+          ) : (
+            <Muted variant="body">{live.loading ? "Chargement…" : null}</Muted>
+          )}
+
+          {cats.length > 0 ? (
+            <>
+              <SectionTitle>{orgaLabels.directByCategory}</SectionTitle>
+              <Plate style={styles.block} testID="orga-direct-categories">
+                {cats.map((row) => (
+                  <View key={row.key} style={styles.line}>
+                    <Text variant="bodyStrong" color={c.plateInk} style={styles.grow}>
+                      {row.label}
+                    </Text>
+                    <Text variant="bodyStrong" color={c.plateInk}>
+                      {row.arrived} / {row.expected}
+                    </Text>
+                  </View>
+                ))}
+              </Plate>
+            </>
+          ) : null}
         </>
       ) : null}
 
       {field ? (
         <>
+          {prize && prize.entries.length > 0 ? (
+            <>
+              <SectionTitle>{orgaV2Labels.directPrize}</SectionTitle>
+              <Plate style={styles.block} testID="orga-direct-prize">
+                <Text variant="caption" color={c.plateMuted}>
+                  {prize.open ? orgaV2Labels.directPrizeOpen : orgaV2Labels.directPrizeClosed}
+                </Text>
+                {prize.entries.slice(0, 3).map((entry) => (
+                  <View key={entry.applicationId} style={styles.line}>
+                    <Text variant="bodyStrong" color={c.plateInk} style={styles.grow}>
+                      {entry.rank}. {entry.vehicleLabel}
+                    </Text>
+                    <Text variant="body" color={c.plateMuted}>
+                      {orgaV2Labels.directPrizeVotes(entry.votes)}
+                    </Text>
+                  </View>
+                ))}
+              </Plate>
+            </>
+          ) : null}
           <SectionTitle>{orgaLabels.directAlertsTitle}</SectionTitle>
           {open.length === 0 ? (
             <Muted variant="body">{orgaLabels.directAlertsNone}</Muted>
@@ -359,7 +389,7 @@ function DirectEvent({
           </Button>
         ) : null}
         <Button
-          variant={field ? "plate" : "primary"}
+          variant="plate"
           icon="calendar"
           next={!field}
           onPress={() => router.push(`/evenement/${eventId}`)}

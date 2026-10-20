@@ -2,11 +2,14 @@
 // double authentification prouvée par la session (`403 two_factor_required`) et un rôle d'organisateur de la
 // structure : l'API refuse, l'appli n'affiche que ce qu'elle reçoit. Aucune règle métier ici.
 import type {
+  AccreditationForOrganizer,
   AnnouncementCreate,
   AnnouncementPage,
+  AudiencePrizeBoard,
   ConversationPage,
   EventCard,
   EventCounters,
+  EventNeedForOrganizer,
   EventOrganizer,
   EventStaffMember,
   EventStaffUpdate,
@@ -18,10 +21,12 @@ import type {
   MessageSegment,
   MessagingQuota,
   OrganizerInboxSummary,
+  ProviderSpotInput,
   StaffConversationState,
   StructureCreate,
   StructureMember,
   StructureOrganizer,
+  TeamMemberHistory,
   TemplateView,
 } from "@orasso/shared";
 
@@ -88,6 +93,16 @@ export const orgaApi = {
   remindStaff: (eventId: string, userId: string) =>
     request<{ reminded: boolean }>(`/api/events/${eventId}/staff/${userId}/remind`, { method: "POST" }),
   structureMembers: (structureId: string) => request<StructureMember[]>(`/api/structures/${structureId}/members`),
+  /** Lot 52 : historique de chaque membre (équipe en bulles). */
+  teamHistory: (structureId: string) => request<TeamMemberHistory[]>(`/api/structures/${structureId}/team-history`),
+
+  // Lot 52 : missions des prestataires, emplacement attribué, Prix du public.
+  eventNeeds: (eventId: string) => request<EventNeedForOrganizer[]>(`/api/events/${eventId}/needs`),
+  eventAccreditations: (eventId: string) =>
+    request<AccreditationForOrganizer[]>(`/api/events/${eventId}/accreditations`),
+  setProviderSpot: (eventId: string, applicationId: string, body: ProviderSpotInput) =>
+    request<unknown>(`/api/events/${eventId}/applications/${applicationId}/spot`, { method: "PATCH", body }),
+  audienceBoard: (eventId: string) => request<AudiencePrizeBoard>(`/api/events/${eventId}/audience-prize`),
 
   // Boîte de la structure.
   orgInboxSummary: (structureId: string) =>

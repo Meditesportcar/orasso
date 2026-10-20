@@ -16,7 +16,7 @@ export const triageAppLabels = {
   providersCount: (n: number) => `Prestataires · ${n}`,
 
   // Compteurs de l'événement (mêmes que le site : places restantes, retenus, à trier, attente, refusés).
-  counterRemaining: "Restantes",
+  counterRemaining: "Places",
   counterAccepted: "Retenus",
   counterPending: "À trier",
   counterWaitlisted: "Attente",

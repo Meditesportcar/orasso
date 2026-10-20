@@ -3,7 +3,7 @@
 // le canal `event:{id}:triage`) et, dessous, la file par glissement, la liste d'attente ou le mode liste. Toutes les
 // règles (capacité, liste d'attente, délais, verrouillage) restent dans l'API : l'écran n'affiche que ce qu'elle répond.
 import { Button, Chip, ChipRow, Counters, Ground, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { triageAppLabels } from "@orasso/shared";
+import { orgaV2Labels, triageAppLabels } from "@orasso/shared";
 import { useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -20,12 +20,14 @@ import { TopBar } from "@/ui/TopBar";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 import { Deck } from "./Deck";
 import { ListMode } from "./ListMode";
+import { MissionsPanel } from "./MissionsPanel";
+import { PressList } from "./PressList";
 import { ScreenSheet } from "./ScreenSheet";
 import { Waitlist } from "./Waitlist";
 
 const { space2, space3, space4 } = tokens.spacing;
 
-type Segment = "vehicles" | "providers" | "waitlist" | "list";
+type Segment = "vehicles" | "waitlist" | "providers" | "press" | "list";
 
 export function TriageScreen() {
   const { t } = useTheme();
@@ -68,9 +70,12 @@ export function TriageScreen() {
   );
   const reloadCounters = counters.reload;
   const reloadProviders = providers.reload;
+  // Lot 52 : les places prises des missions se relisent quand une décision part.
+  const [changes, setChanges] = useState(0);
   const onChanged = useCallback(() => {
     void reloadCounters();
     void reloadProviders();
+    setChanges((n) => n + 1);
   }, [reloadCounters, reloadProviders]);
 
   // Compteurs en direct. La preuve de 2FA de la session est exigée par l'API pour ce canal.
@@ -83,21 +88,26 @@ export function TriageScreen() {
   const zones = detail.data?.zones ?? [];
   const firstError = events.error ?? counters.error;
 
+  // Lot 52 (DA v2, `s-otri`) : Candidatures · Liste d'attente · Prestataires · Presse, puis le mode liste.
   const segments: { key: Segment; label: string }[] = [
-    { key: "vehicles", label: triageAppLabels.segVehicles },
+    { key: "vehicles", label: orgaV2Labels.segApplications },
+    { key: "waitlist", label: orgaV2Labels.segWaitlist },
     {
       key: "providers",
-      label: providerCount > 0 ? triageAppLabels.providersCount(providerCount) : triageAppLabels.segProviders,
+      label: providerCount > 0 ? `${orgaV2Labels.segProviders} · ${providerCount}` : orgaV2Labels.segProviders,
     },
-    { key: "waitlist", label: triageAppLabels.segWaitlist },
-    { key: "list", label: triageAppLabels.segList },
+    { key: "press", label: orgaV2Labels.segPress },
+    { key: "list", label: orgaV2Labels.segList },
   ];
 
   return (
     <Ground animated={false} style={styles.fill}>
       <TopBar />
       <View style={styles.body}>
-        <TabTitle title={triageAppLabels.title} label={event?.title ?? structureName} />
+        <TabTitle
+          title={triageAppLabels.title}
+          label={event ? orgaV2Labels.triRemaining(event.title, counters.data?.pending ?? 0) : structureName}
+        />
         {firstError && !event ? <OrgaFailure error={firstError} /> : null}
         {!event ? (
           <Plate kind="note" testID="triage-no-event">
@@ -144,14 +154,18 @@ export function TriageScreen() {
                 />
               ) : null}
               {segment === "providers" ? (
-                <Deck
-                  key={`${event.id}-provider`}
-                  eventId={event.id}
-                  kind="provider"
-                  zones={[]}
-                  onChanged={onChanged}
-                />
+                <>
+                  <MissionsPanel eventId={event.id} pending={providers.data?.items ?? []} reloadKey={changes} />
+                  <Deck
+                    key={`${event.id}-provider`}
+                    eventId={event.id}
+                    kind="provider"
+                    zones={[]}
+                    onChanged={onChanged}
+                  />
+                </>
               ) : null}
+              {segment === "press" ? <PressList key={event.id} eventId={event.id} onChanged={onChanged} /> : null}
               {segment === "waitlist" ? <Waitlist key={event.id} eventId={event.id} onChanged={onChanged} /> : null}
               {segment === "list" ? (
                 <ListMode
