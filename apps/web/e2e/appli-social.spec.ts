@@ -95,8 +95,9 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     await expect(page.getByTestId("friend-state")).toContainText("Demande envoyée", { ignoreCase: true });
     await shot(page, `06-profil-demande-envoyee-${theme}`);
 
-    // Scan du QR de compte de Bravo depuis le Garage (charge utile saisie : pas de caméra dans le navigateur).
-    await page.goto("/garage");
+    // Scan du QR de compte de Bravo depuis Mes amis (charge utile saisie : pas de caméra dans le navigateur). Le bouton
+    // était dans le Garage avant le garage v2 (lot 51) ; il vit dans Mes amis.
+    await page.goto("/amis");
     await page.getByTestId("friend-scan-open").click();
     // Un code par minute et par passage (dérive d'une minute acceptée) : le deuxième passage n'est pas un rejeu.
     const payload = accountQrPayload(bravoQr.secret, bravoQr.shortId, new Date());
