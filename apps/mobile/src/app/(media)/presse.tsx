@@ -1,8 +1,6 @@
-// Onglet Accréditations (lot 40 : « Bientôt » ; l'écran arrive au lot 55).
-import { Soon } from "@/ui/Soon";
+// Onglet Presse du média, prototype `s-accred` (lot 55 : fichier d'onglet, l'écran vit dans `features/media/`).
+import { AccreditationsScreen } from "@/features/media/AccreditationsScreen";
 
 export default function Presse() {
-  return (
-    <Soon title="Accréditations">Tes demandes d'accréditation, ton badge presse et les consignes arrivent ici.</Soon>
-  );
+  return <AccreditationsScreen />;
 }

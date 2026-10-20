@@ -59,7 +59,7 @@ function Shell() {
   useEffect(() => {
     setPosition(firstDepartment ? profilePosition([firstDepartment]) : null);
   }, [firstDepartment, setPosition]);
-  const { persona, backToBase, choose } = usePersona();
+  const { persona, backToBase, choose, entries } = usePersona();
   const router = useRouter();
   const segments = useSegments();
   const navigation = useRootNavigationState();
@@ -125,6 +125,18 @@ function Shell() {
         choose({ kind: "provider" }, "/(provider)/candidatures");
         return;
       }
+      // Décision sur une accréditation presse, contenu mis en avant (lot 55) : Presse ou Contenus de la casquette Média.
+      const screen = response.notification.request.content.data?.screen;
+      if (screen === "media_accreditations" || screen === "media_contents") {
+        const media = entries.find((e) => e.kind === "media");
+        if (media) {
+          choose(
+            { kind: "media", mediaProfileId: media.id },
+            screen === "media_contents" ? "/(media)/contenus" : "/(media)/presse",
+          );
+          return;
+        }
+      }
       // Demande pour devenir staff (lot 35a) : l'écran Équipe de la structure, sous la casquette Organisateur.
       const team = teamRequestTarget(response.notification.request.content.data);
       if (team) {
@@ -144,7 +156,7 @@ function Shell() {
       else router.navigate("/acces");
     });
     return () => sub.remove();
-  }, [router, backToBase, choose]);
+  }, [router, backToBase, choose, entries]);
 
   return (
     <View style={[styles.fill, { backgroundColor: ground }]}>

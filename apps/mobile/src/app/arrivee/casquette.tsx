@@ -1,7 +1,6 @@
-// Fin de l'arrivée : le profil choisi mène à sa barre. Un Pro, un Organisateur ou un Prestataire crée sa casquette par les
+// Fin de l'arrivée : le profil choisi mène à sa barre. Un Pro, un Organisateur, un Prestataire ou un Média crée sa casquette par les
 // écrans de création existants ; un Exposant sans véhicule ajoute sa voiture ; « Plus tard » ouvre l'appli sur la barre
-// visiteur, avec une carte « Termine ta fiche » (Accueil, Mon profil). Le profil média n'a pas encore d'écran de création
-// (lot 55) : il passe directement à l'appli, la carte le dit.
+// visiteur, avec une carte « Termine ta fiche » (Accueil, Mon profil).
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { pendingLabels } from "@orasso/shared";
 import { Redirect, useRouter } from "expo-router";
