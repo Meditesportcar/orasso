@@ -1,7 +1,13 @@
 // Garage et certification (lot 31) : entrées validées et types de sortie des nouvelles routes.
 import { z } from "zod";
 import { type PlateTransferStatus, vehicleTypes } from "../enums";
-import { type CategoryMakeMode, type CertificationLostReason, type CertificationStatus, shareFormats, shareStyles } from "../garage";
+import {
+  type CategoryMakeMode,
+  type CertificationLostReason,
+  type CertificationStatus,
+  shareFormats,
+  shareStyles,
+} from "../garage";
 import type { Grade } from "../grades";
 import type { CategoryRefusal, CertificationFields, CertificationMissing } from "../rules/garage";
 import { optionalText } from "./common";

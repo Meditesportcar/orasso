@@ -130,7 +130,10 @@ export function storyLine(v: Pick<VehicleWithAll, "year" | "make">): string {
 
 /** Nom de la story : le modèle et la génération (la marque est sur la ligne du dessous). */
 export function storyName(v: Pick<VehicleWithAll, "model" | "generation">): string {
-  const parts = [v.model.isOther ? null : v.model.name, v.generation && !v.generation.isOther ? v.generation.name : null];
+  const parts = [
+    v.model.isOther ? null : v.model.name,
+    v.generation && !v.generation.isOther ? v.generation.name : null,
+  ];
   return parts.filter(Boolean).join(" ") || "Véhicule";
 }
 
@@ -165,8 +168,8 @@ export async function renderShareImage(
   const available = width - SHARE_MARGIN * 2;
   const layout = shareImageLayout(vehicleLabel(v), format, width);
   const nameSize = layout.fontSize;
-  const factsSize = format === "story" ? 40 : 36;
-  const gap = format === "story" ? 36 : 28;
+  const factsSize = 36;
+  const gap = 28;
 
   const [name, facts, by, site, brand] = await Promise.all([
     text(layout.lines.join("\n"), "name", nameSize, SHARE_COLORS.ink, available),
@@ -177,11 +180,11 @@ export async function renderShareImage(
   ]);
 
   // Empilé depuis le bas : site, pseudo, chiffres, nom.
-  const bottom = height - (format === "story" ? 150 : 90);
+  const bottom = height - 90;
   let y = bottom - site.height;
   const layers: OverlayOptions[] = [
-    { input: gradient(width, height, format === "story" ? 0.42 : 0.38), top: 0, left: 0 },
-    { input: brand.data, top: format === "story" ? 110 : 70, left: SHARE_MARGIN },
+    { input: gradient(width, height, 0.38), top: 0, left: 0 },
+    { input: brand.data, top: 70, left: SHARE_MARGIN },
     { input: site.data, top: y, left: SHARE_MARGIN },
   ];
   y -= gap + by.height;

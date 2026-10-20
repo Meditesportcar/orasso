@@ -326,8 +326,8 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
           text={homeProfileLabels.passportTile(data.stampsThisSeason)}
           icon="stamp"
           testID="home-passport"
-          // L'écran du passeport est au lot 50 : le visiteur a son onglet, l'exposant passe par Mon profil.
-          onPress={() => goTab(exhibitor ? "profil" : "passeport")}
+          // Le visiteur a son onglet Passeport ; l'exposant ouvre l'écran (lot 50).
+          onPress={() => (exhibitor ? router.push("/mon-passeport") : goTab("passeport"))}
         />
       ) : null}
 

@@ -7,11 +7,10 @@
 // de la zone du bas. Jamais de plaque. Les couleurs sont celles du prototype : un objet fabriqué (écart 6 du README du
 // système de design), comme les affiches.
 import { fitTitle, posterCharWidth, SHARE_SIZES, type ShareStyle, shareSafeBands } from "@orasso/shared";
-
+import sharp from "sharp";
 import { renderLayout } from "../events/poster/engine";
 import { CAP } from "../events/poster/templates/shared";
 import type { PosterInput, PosterLayer, PosterLayout } from "../events/poster/types";
-import sharp from "sharp";
 
 /** Couleurs des trois styles (prototype `.story`, `.story.sand`, `.story.plate`). */
 export const STORY_COLORS: Record<
