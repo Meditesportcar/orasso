@@ -15,7 +15,7 @@ export const orgaV2Labels = {
   presentCount: "Présents",
   absentCount: "Absents",
   unansweredCount: "Sans réponse",
-  pressCardVerified: "Carte de presse vérifiée",
+  profileVerified: "Profil vérifié",
   roleNotNoted: "rôle non noté",
   removeRoleLabel: (role: string, pseudo: string) => `Retirer ${role} à ${pseudo}`,
   rolesRemovedUndo: "Rôle retiré",

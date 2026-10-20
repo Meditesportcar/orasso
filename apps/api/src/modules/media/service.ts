@@ -92,7 +92,6 @@ const fieldsOf = (input: MediaProfileInput) => ({
   website: input.website ?? null,
   instagram: input.instagram,
   youtube: input.youtube ?? null,
-  pressCardNumber: input.pressCardNumber,
   departments: input.departments,
 });
 
@@ -195,16 +194,15 @@ export const mediaService = {
     return p ? ownerView(p) : null;
   },
 
-  /** `PUT /me/media-profile` : crée ou remplace le profil (un par compte). Changer la carte retire sa vérification. */
+  /** `PUT /me/media-profile` : crée ou remplace le profil (un par compte). */
   async upsert(v: Viewer, input: MediaProfileInput): Promise<MediaProfileView> {
     assertWritable(v);
     rateLimit("mediaWrite", v.user.id);
     const existing = await mediaOfUser(v.user.id);
     if (existing) {
-      const cardChanged = (input.pressCardNumber ?? null) !== existing.pressCardNumber;
       const [row] = await db
         .update(mediaProfiles)
-        .set({ ...fieldsOf(input), ...(cardChanged ? { pressCardVerifiedAt: null } : {}) })
+        .set(fieldsOf(input))
         .where(eq(mediaProfiles.id, existing.id))
         .returning();
       // Synchro différentielle du staff : « Presse · <nom> » vient du profil.
@@ -248,7 +246,7 @@ export const mediaService = {
     return ownerView(row);
   },
 
-  /** `GET /media/:id` (connectés) : fiche publique, jamais la carte de presse. */
+  /** `GET /media/:id` (connectés) : fiche publique, sans donnée privée. */
   async getPublic(id: string): Promise<MediaPublic> {
     const p = await db.query.mediaProfiles.findFirst({ where: eq(mediaProfiles.id, id) });
     if (!p || p.deletedAt) throw notFound("Média introuvable");
@@ -734,32 +732,24 @@ export const mediaService = {
 
   // --- Administration -------------------------------------------------------------------------------------------------
 
-  /** `GET /admin/media?pending=1` : profils avec leur carte de presse (administration seulement). */
+  /** `GET /admin/media?pending=1` : profils média, ceux à vérifier avec pending=1 (administration seulement). */
   async adminList(v: Viewer, pendingOnly: boolean): Promise<MediaProfileView[]> {
     await requirePlatformRole(v, "super_admin");
     const rows = await db
       .select()
       .from(mediaProfiles)
-      .where(
-        and(
-          isNull(mediaProfiles.deletedAt),
-          pendingOnly
-            ? and(sql`${mediaProfiles.pressCardNumber} is not null`, isNull(mediaProfiles.pressCardVerifiedAt))
-            : undefined,
-        ),
-      )
+      .where(and(isNull(mediaProfiles.deletedAt), pendingOnly ? isNull(mediaProfiles.pressCardVerifiedAt) : undefined))
       .orderBy(desc(mediaProfiles.createdAt))
       .limit(200);
     return rows.map(ownerView);
   },
 
   /** `POST /admin/media/:id/verify-press-card {verified}` : la carte a été vérifiée (tracé au journal). */
-  async verifyPressCard(v: Viewer, id: string, verified: boolean): Promise<MediaProfileView> {
+  async verifyProfile(v: Viewer, id: string, verified: boolean): Promise<MediaProfileView> {
     await requirePlatformRole(v, "super_admin");
     return withTx(async (tx) => {
       const p = await tx.query.mediaProfiles.findFirst({ where: eq(mediaProfiles.id, id) });
       if (!p || p.deletedAt) throw notFound("Média introuvable");
-      if (verified && !p.pressCardNumber) throw validation("Aucune carte de presse à vérifier");
       const [row] = await tx
         .update(mediaProfiles)
         .set({ pressCardVerifiedAt: verified ? now() : null })
@@ -767,7 +757,7 @@ export const mediaService = {
         .returning();
       await tx.insert(adminAuditLog).values({
         actorUserId: v.user.id,
-        action: verified ? "media.press_card_verify" : "media.press_card_unverify",
+        action: verified ? "media.verify" : "media.unverify",
         targetType: "media_profile",
         targetId: id,
       });
