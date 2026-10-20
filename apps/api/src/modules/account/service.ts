@@ -499,7 +499,7 @@ export const accountService = {
       }
       // Profil prestataire (lot 21) : retiré et vidé de ce qui l'identifie (les candidatures passées gardent leur lien).
       photoKeys.push(...(await anonymizeProviderForDeletedAccount(tx, userId, at)));
-      // Profil média (lot 45) : retiré, carte de presse effacée, contenus retirés.
+      // Profil média (lot 45) : retiré et vidé, contenus retirés.
       photoKeys.push(...(await anonymizeMediaForDeletedAccount(tx, userId, at)));
       await tx.insert(adminAuditLog).values({
         actorUserId: opts.actor?.userId ?? userId,

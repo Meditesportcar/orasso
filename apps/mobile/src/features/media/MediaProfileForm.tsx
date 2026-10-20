@@ -209,6 +209,7 @@ export function MediaProfileForm({
       </Plate>
 
       <Notice>{L.profileVerifyNote}</Notice>
+      {profile?.verifiedAt ? <Notice testID="media-reverify">{L.profileReverifyNote}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Button
         variant="primary"
@@ -229,6 +230,11 @@ const styles = StyleSheet.create({
   form: { gap: space3 },
   plate: { gap: space2, padding: space3 },
   logoRow: { flexDirection: "row", alignItems: "center", gap: space3 },
-  logo: { width: 72, height: 72, borderRadius: tokens.radius.radiusSm, borderWidth: 1.5 },
+  logo: {
+    width: tokens.spacing.space12 + tokens.spacing.space6,
+    height: tokens.spacing.space12 + tokens.spacing.space6,
+    borderRadius: tokens.radius.radiusSm,
+    borderWidth: 1.5,
+  },
   logoActions: { flex: 1, gap: space2 },
 });

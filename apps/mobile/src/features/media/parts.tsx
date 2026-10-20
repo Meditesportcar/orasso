@@ -41,7 +41,7 @@ export function EventLine({
           <Text variant="meta" color={c.plateMuted}>
             {stub.day}
           </Text>
-          <Text variant="posterM" color={c.plateInk} style={styles.day}>
+          <Text variant="posterM" color={c.plateInk}>
             {stub.date}
           </Text>
           <Text variant="meta" color={c.plateMuted}>
@@ -76,7 +76,7 @@ export function StateAction({
   if (invitation) return <Chip surface="plate">{L.invitation}</Chip>;
   if (state === "request") {
     return (
-      <Button variant="secondary" icon="send" onPress={onRequest} testID="media-request">
+      <Button variant="plate" icon="send" onPress={onRequest} testID="media-request">
         {L.request}
       </Button>
     );
@@ -139,20 +139,19 @@ const styles = StyleSheet.create({
   line: { gap: space2, padding: space2 },
   press: { flexDirection: "row", alignItems: "center", gap: space3 },
   stub: {
-    width: 52,
+    width: tokens.spacing.space12 + space1,
     alignItems: "center",
     borderRightWidth: 1.5,
     borderStyle: "dashed",
     paddingRight: space2,
   },
-  day: { lineHeight: 28 },
   text: { flex: 1, gap: space1 },
   right: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: space2 },
   keep: {
     flexDirection: "row",
     alignItems: "center",
     gap: space1,
-    minHeight: 38,
+    minHeight: tokens.spacing.touch,
     paddingHorizontal: space2,
     borderRadius: tokens.radius.radiusPill,
     borderWidth: 1.5,

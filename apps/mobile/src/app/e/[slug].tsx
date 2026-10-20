@@ -80,15 +80,7 @@ export default function EventPage() {
   const kind: ProfileKind = status !== "in" ? "guest" : persona.kind;
   // Le véhicule « de couverture » : le premier du garage actif (« Candidater avec ma Supra »).
   const vehicles = useApi(() => api.vehicles(), [status], { enabled: status === "in" && kind === "fan" });
-  // Média (lot 55) : l'état de l'accréditation presse sur cet événement et les formats du profil pour la demande. L'état
-  // vient de la carte de l'événement dans `GET /events` (le média la décore : ouverte, la mienne).
-  const mediaCard = useApi(
-    async () =>
-      (await api.exploreEvents({ q: e?.title ?? "", limit: 20 })).items.find((i) => i.id === e?.id)?.accreditation ??
-      null,
-    [e?.id, status, kind],
-    { enabled: Boolean(e) && status === "in" && kind === "media" },
-  );
+  // Média (lot 55) : les formats du profil pour la demande ; l'état de l'accréditation vient de la fiche (`e.accreditation`).
   const mediaProfile = useApi(async () => (await api.myMediaProfile()).profile, [status, kind], {
     enabled: status === "in" && kind === "media",
     cacheKey: "media-profile",
@@ -171,7 +163,7 @@ export default function EventPage() {
     providerApplied: providerSent || (providerApps.data ?? []).some((a) => a.event.id === e.id),
     providerCanApply: showProviderApply && !providerSent,
     cancelled,
-    accreditation: mediaCard.data,
+    accreditation: e.accreditation ?? null,
   });
   const isFollowing = following || Boolean(structure.data?.isFollowing);
   const cover = (vehicles.data ?? []).find((v) => v.status === "active");
@@ -353,7 +345,7 @@ export default function EventPage() {
       ) : null}
       {/* Lot 55 : contenus des médias accrédités (mis en avant d'abord), et pour un média l'état de l'accréditation. */}
       {!cancelled ? <MediaContents slug={e.slug} /> : null}
-      {kind === "media" && !cancelled && mediaCard.data && !mediaCard.data.open && !mediaCard.data.mine ? (
+      {kind === "media" && !cancelled && e.accreditation && !e.accreditation.open && !e.accreditation.mine ? (
         <Notice testID="media-closed">{M.eventClosedText}</Notice>
       ) : null}
       {showProviderApply && action !== "providerApply" ? (
@@ -393,7 +385,7 @@ export default function EventPage() {
         target={mediaTarget}
         defaultFormats={mediaProfile.data?.formats ?? []}
         onClose={() => setMediaTarget(null)}
-        onSent={() => void mediaCard.reload()}
+        onSent={() => void event.reload()}
       />
       <AppSheet visible={booking} onClose={() => setBooking(false)} accessibilityLabel={L.bookEntry}>
         <Text variant="title" color={t.color.ink}>

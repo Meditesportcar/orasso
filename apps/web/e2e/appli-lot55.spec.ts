@@ -68,6 +68,52 @@ async function shot(page: Page, name: string, theme: Theme) {
   await page.screenshot({ path: `${DIR}/${name}-${theme}.png` });
 }
 
+/**
+ * Contraste minimal (3 : texte large et gras des boutons) entre le texte de chaque bouton visible et son fond réel (le
+ * premier fond opaque en remontant les parents). Attrape un bouton sans fond (« secondary » : encre) posé sur une plaque
+ * sombre, illisible en Sable.
+ */
+async function lowContrastButtons(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const parse = (c: string) => {
+      const m = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/);
+      return m ? { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]), a: m[4] === undefined ? 1 : Number(m[4]) } : null;
+    };
+    const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
+      const f = (v: number) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const bad: string[] = [];
+    for (const el of document.querySelectorAll('[role="button"]')) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0 || r.right < 0 || r.left > window.innerWidth) continue;
+      if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+      if (el.closest('[aria-hidden="true"]') || el.closest('[role="tablist"]') || r.bottom <= 72) continue;
+      const label = el.querySelector("div[dir]");
+      if (!label || !(label.textContent ?? "").trim()) continue;
+      // Les boutons du système ont leur étiquette en Archivo large (Expanded) ; les pastilles et les cartes non.
+      if (!/Expanded/.test(getComputedStyle(label).fontFamily)) continue;
+      const fg = parse(getComputedStyle(label).color);
+      let bg: ReturnType<typeof parse> = null;
+      for (let n: Element | null = el; n; n = n.parentElement) {
+        const c = parse(getComputedStyle(n).backgroundColor);
+        if (c && c.a > 0.5) {
+          bg = c;
+          break;
+        }
+      }
+      if (!fg || !bg) continue;
+      const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+      const ratio = ((a ?? 0) + 0.05) / ((b ?? 0) + 0.05);
+      if (ratio < 3) bad.push(`${(el.textContent ?? "").trim().slice(0, 40)} (${ratio.toFixed(1)})`);
+    }
+    return bad;
+  });
+}
+
 /** Règles du système de design à l'écran : un seul primaire, un seul néon, icône partout, pas de vert, pas de défilement horizontal. */
 async function rules(page: Page, theme: Theme, name: string) {
   await page.waitForTimeout(1200);
@@ -80,6 +126,7 @@ async function rules(page: Page, theme: Theme, name: string) {
   expect(a.greens, `${name} : pas de vert`).toEqual([]);
   expect(a.horizontalScroll, `${name} : pas de défilement horizontal`).toBe(false);
   expect(a.unoutlinedOnPhoto, `${name} : texte sur photo en contour`).toEqual([]);
+  expect(await lowContrastButtons(page), `${name} : texte de bouton lisible sur son fond`).toEqual([]);
 }
 
 async function closeSheet(page: Page) {
@@ -287,6 +334,8 @@ for (const theme of THEMES) {
     await expect(page.getByRole("heading", { name: "Profil média", exact: true }).first()).toBeVisible({
       timeout: 30_000,
     });
+    // Le profil est vérifié : l'appli dit, avant l'enregistrement, que changer l'identité relance la vérification.
+    await expect(page.getByTestId("media-reverify")).toBeVisible();
     await expect(page.getByLabel("Nom du média")).toHaveValue("Sud Cars");
     await expect(page.getByText(/carte de presse/i)).toHaveCount(1); // la seule mention : « Aucun numéro de carte de presse n'est demandé ».
     await expect(page.getByText(/numéro de carte de presse n'est demandé/)).toBeVisible();

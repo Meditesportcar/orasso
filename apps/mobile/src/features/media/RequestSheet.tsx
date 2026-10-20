@@ -25,7 +25,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 
-const { space2 } = tokens.spacing;
+const { space2, space3 } = tokens.spacing;
 
 export type RequestTarget = { id: string; slug: string; title: string };
 
@@ -148,6 +148,6 @@ export function RequestSheet({
 }
 
 const styles = StyleSheet.create({
-  rules: { padding: space2 + 4 },
+  rules: { padding: space3 },
   sent: { alignItems: "center", gap: space2 },
 });

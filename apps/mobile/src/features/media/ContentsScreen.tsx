@@ -42,7 +42,7 @@ import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@
 import { TabScreen } from "@/ui/Screens";
 import { contentCaption, groupByEvent, guessPlatform, normalizeUrl, totalViews } from "./model";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space1, space2, space3, space6, space12 } = tokens.spacing;
 
 export function ContentsScreen() {
   const { t } = useTheme();
@@ -328,7 +328,7 @@ function AddContentSheet({
               {photos.length > 0 ? (
                 <PhotoGrid
                   photos={photos.map((p, i) => ({ key: `${p.uri}-${i}`, source: { uri: p.uri } }))}
-                  tileStyle={{ width: 96, height: 72, borderRadius: tokens.radius.radiusSm }}
+                  tileStyle={{ width: space12 * 2, height: space12 + space6, borderRadius: tokens.radius.radiusSm }}
                   disabled={busy}
                   onRemove={(i) => setPhotos((cur) => cur.filter((_, j) => j !== i))}
                 />
@@ -509,5 +509,5 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: "row", alignItems: "center", gap: space2 },
   rowText: { flex: 1, gap: space1 },
   thumbs: { flexDirection: "row", gap: space2 },
-  thumb: { width: 72, height: 54, borderRadius: tokens.radius.radiusSm },
+  thumb: { width: space12 + space6, height: space12, borderRadius: tokens.radius.radiusSm },
 });

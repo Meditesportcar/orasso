@@ -11,6 +11,7 @@ import { StyleSheet, View } from "react-native";
 
 import { Ticket } from "@/features/sorties/Ticket";
 import { api } from "@/lib/api";
+import { useApplications } from "@/lib/applications";
 import { nowMs } from "@/lib/clock";
 import { formatShortDate } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
@@ -22,7 +23,7 @@ import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { daysUntil } from "./model";
 
-const { space2 } = tokens.spacing;
+const { space1, space2 } = tokens.spacing;
 
 type Segment = "upcoming" | "past";
 const formatsOf = (a: MediaAccreditationView) => a.formats.map((f) => mediaFormatLabels[f].toLowerCase()).join(" et ");
@@ -34,6 +35,7 @@ export function AccreditationsScreen() {
   const [briefing, setBriefing] = useState<MediaAccreditationView | null>(null);
   const [withdrawing, setWithdrawing] = useState<MediaAccreditationView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { reload: reloadApplications } = useApplications();
   const list = useApi(() => api.myAccreditations("all"), [], { cacheKey: "media-accreditations" });
 
   const now = new Date(nowMs());
@@ -60,7 +62,8 @@ export function AccreditationsScreen() {
             onClose={() => setWithdrawing(null)}
             onDone={() => {
               setWithdrawing(null);
-              void list.reload();
+              // Les kits suivent : le badge retiré quitte le téléphone (QR et secret du code tournant).
+              void Promise.all([list.reload(), reloadApplications()]);
             }}
             onError={setError}
           />
@@ -161,13 +164,7 @@ function UpcomingTicket({
       {accredited ? (
         <>
           {a.pass ? (
-            <Button
-              variant={primary ? "primary" : "secondary"}
-              icon="qr"
-              onPress={onBadge}
-              fullWidth
-              testID="media-badge"
-            >
+            <Button variant={primary ? "primary" : "plate"} icon="qr" onPress={onBadge} fullWidth testID="media-badge">
               {mediaLabels.pressBadge}
             </Button>
           ) : null}
@@ -299,5 +296,5 @@ function WithdrawMediaSheet({
 
 const styles = StyleSheet.create({
   segments: { flexDirection: "row", gap: space2 },
-  block: { gap: 4 },
+  block: { gap: space1 },
 });

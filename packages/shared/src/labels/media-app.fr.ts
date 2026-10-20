@@ -39,7 +39,7 @@ export const mediaAppLabels = {
   later: "Plus tard",
   agendaEmpty: "Rien dans ton agenda",
   agendaEmptyText:
-    "Garde un événement avec l'étoile ou demande une accréditation : il apparaît ici, semaine par semaine.",
+    "Garde un événement avec le cœur ou demande une accréditation : il apparaît ici, semaine par semaine.",
   keptOpen: "gardé, accréditation ouverte",
   keptOnly: "gardé",
   pressOnInvitation: "presse sur invitation",
@@ -102,9 +102,9 @@ export const mediaAppLabels = {
   featured: "Mis en avant sur la page",
   noContents: "Aucun contenu pour l'instant",
   noContentsText:
-    "Dès que tu es accrédité, ajoute un lien (article, vidéo) ou une galerie : ils s'affichent sur la page de l'événement.",
+    "Dès que ton accréditation est acceptée, ajoute un lien (article, vidéo) ou une galerie : ils s'affichent sur la page de l'événement.",
   needAccreditation:
-    "Tu peux publier sur un événement où tu es accrédité. Demande d'abord ton accréditation dans Explorer.",
+    "Tu peux publier sur un événement où ton accréditation est acceptée. Demande d'abord ton accréditation dans Explorer.",
   addTitle: "Ajouter un contenu",
   addEvent: "Événement",
   addKind: "Ce que tu ajoutes",
@@ -163,6 +163,8 @@ export const mediaAppLabels = {
   profileCoverCount: (n: number) => plural(n, "département"),
   profileVerifyNote:
     "Orasso vérifie ton profil : une pastille « Profil vérifié » s'affiche ensuite pour les organisations. Aucun numéro de carte de presse n'est demandé.",
+  profileReverifyNote:
+    "Changer le nom, le site, Instagram, YouTube ou le logo relance la vérification : « Profil vérifié » disparaît jusqu'à la prochaine vérification.",
   profileCreate: "Créer mon profil média",
   profileSave: "Enregistrer",
   profileSaved: "Profil enregistré",

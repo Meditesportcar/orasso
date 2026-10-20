@@ -1,6 +1,6 @@
 // Lot 45 : profil média et accréditation presse. Demande (fermée, quota, date limite, doublon), décision par le tri
 // existant (badge presse = pass, notifications accreditation_*), retrait, contenus (V6), mise en avant, vues, agenda,
-// Explorer national (région, accréditation ouverte), carte de presse privée (AS-V6), synchro du staff, casquette.
+// Explorer national (région, accréditation ouverte), vérification du profil (D26), synchro du staff, casquette.
 import { fromWallTime } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -175,8 +175,49 @@ describe("profil média", () => {
     expect(ok.status).toBe(200);
     expect(ok.json.verifiedAt).not.toBeNull();
     expect((await call(admin, "GET", "/admin/media?pending=1")).json).toHaveLength(0);
-    // Modifier le profil ne retire pas la vérification.
+    // La description seule garde la vérification ; le nom, le site, Instagram, YouTube ou le logo la remettent à zéro.
     expect((await putProfile(leo, { description: "Autre texte" })).json.verifiedAt).not.toBeNull();
+    expect((await putProfile(leo, { name: "Sud Cars Racing" })).json.verifiedAt).toBeNull();
+    // Site, Instagram, YouTube : chacun relance la vérification.
+    for (const over of [
+      { website: "https://autre.example" },
+      { instagram: "@autre" },
+      { youtube: "https://youtube.com/@autre" },
+    ]) {
+      expect(
+        (await call(admin, "POST", `/admin/media/${p.id}/verify`, { verified: true })).json.verifiedAt,
+      ).not.toBeNull();
+      expect((await putProfile(leo, over)).json.verifiedAt, JSON.stringify(over)).toBeNull();
+    }
+    // Le logo aussi.
+    expect((await call(admin, "POST", `/admin/media/${p.id}/verify`, { verified: true })).status).toBe(200);
+    await db.insert(uploads).values({
+      key: "media-logos/v.webp",
+      userId: leo.id,
+      purpose: "media_logo",
+      width: 512,
+      height: 512,
+      bytes: 100,
+    });
+    expect(
+      (await call(leo, "POST", "/me/media-profile/logo", { key: "media-logos/v.webp" })).json.verifiedAt,
+    ).toBeNull();
+  });
+
+  it("la fiche de l'événement porte l'état de l'accréditation pour un média connecté, jamais pour les autres", async () => {
+    await putProfile(leo);
+    await openPress(nocturneId);
+    const mine = await call(leo, "GET", "/events/by-slug/nocturne-de-canet-2026");
+    expect(mine.json.accreditation).toEqual({ open: true, mine: null });
+    const app = (await request(leo, nocturneId)).json;
+    expect((await call(leo, "GET", "/events/by-slug/nocturne-de-canet-2026")).json.accreditation).toEqual({
+      open: true,
+      mine: "pending",
+    });
+    expect(app.status).toBe("pending");
+    const other = await signUp("Kenji_66");
+    expect((await call(other, "GET", "/events/by-slug/nocturne-de-canet-2026")).json.accreditation).toBeUndefined();
+    expect((await call(null, "GET", "/events/by-slug/nocturne-de-canet-2026")).json.accreditation).toBeUndefined();
   });
 });
 

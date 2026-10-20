@@ -1,4 +1,4 @@
-// Compte supprimé (anonymisé) : le profil média est retiré et vidé de ce qui l'identifie, la carte de presse effacée
+// Compte supprimé (anonymisé) : le profil média est retiré et vidé de ce qui l'identifie, la vérification effacée
 // (AS-V6), les contenus retirés et leurs photos effacées (lot 45, ARCHITECTURE-SUITE § 1.5 étendu). Appelé par
 // `accountService.anonymize`, dans sa transaction ; les accréditations passées gardent leur lien (historique des
 // organisateurs). Renvoie les clés des fichiers à supprimer du stockage après la validation.

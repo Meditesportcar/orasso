@@ -14,7 +14,7 @@ import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space1, space2, space3, space6, space12 } = tokens.spacing;
 
 export function MediaContents({ slug }: { slug: string }) {
   const { t } = useTheme();
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", gap: space2 },
   text: { flex: 1, gap: space1 },
   thumbs: { flexDirection: "row", gap: space2 },
-  thumb: { width: 72, height: 54, borderRadius: tokens.radius.radiusSm },
+  thumb: { width: space12 + space6, height: space12, borderRadius: tokens.radius.radiusSm },
   gallery: { flex: 1, gap: space3 },
   galleryHead: { flexDirection: "row", alignItems: "center", gap: space2, paddingHorizontal: space3 },
   pages: { flex: 1 },

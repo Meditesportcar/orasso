@@ -177,6 +177,8 @@ export type MediaAccreditationView = {
   event: MediaEventBrief;
   /** Badge presse : le pass d'accès (QR par `GET /applications/:id/pass`) ; `null` tant qu'il n'est pas émis. */
   pass: { id: string; valid: boolean } | null;
+  /** Entrée enregistrée le jour J (scan du badge) ; `null` avant. */
+  checkedInAt: string | null;
   /** Consignes de l'organisation : seulement une fois accrédité. */
   briefing: PressBriefing | null;
   /** « Couvert · 3 vidéos · 1 840 vues depuis la page de l'événement ». */

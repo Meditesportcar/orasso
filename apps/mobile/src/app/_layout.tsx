@@ -115,6 +115,16 @@ function Shell() {
     if (status === "in") void registerThisDevice();
   }, [status]);
 
+  // Cible d'une notification média reçue avant le chargement des casquettes (démarrage à froid), ouverte dès qu'elles sont là.
+  const pendingMedia = useRef<string | null>(null);
+  useEffect(() => {
+    const media = entries.find((e) => e.kind === "media");
+    if (!pendingMedia.current || !media) return;
+    const target = pendingMedia.current;
+    pendingMedia.current = null;
+    choose({ kind: "media", mediaProfileId: media.id }, target);
+  }, [entries, choose]);
+
   // Toucher une notification ouvre l'onglet Sorties de la casquette de base (quelle que soit la casquette active) ou
   // l'écran de son lien.
   useEffect(() => {
@@ -128,14 +138,12 @@ function Shell() {
       // Décision sur une accréditation presse, contenu mis en avant (lot 55) : Presse ou Contenus de la casquette Média.
       const screen = response.notification.request.content.data?.screen;
       if (screen === "media_accreditations" || screen === "media_contents") {
+        const target = screen === "media_contents" ? "/(media)/contenus" : "/(media)/presse";
         const media = entries.find((e) => e.kind === "media");
-        if (media) {
-          choose(
-            { kind: "media", mediaProfileId: media.id },
-            screen === "media_contents" ? "/(media)/contenus" : "/(media)/presse",
-          );
-          return;
-        }
+        if (media) choose({ kind: "media", mediaProfileId: media.id }, target);
+        // Démarrage à froid : les casquettes ne sont pas encore lues ; on garde la cible, jamais l'écran d'Accès (passionné).
+        else pendingMedia.current = target;
+        return;
       }
       // Demande pour devenir staff (lot 35a) : l'écran Équipe de la structure, sous la casquette Organisateur.
       const team = teamRequestTarget(response.notification.request.content.data);

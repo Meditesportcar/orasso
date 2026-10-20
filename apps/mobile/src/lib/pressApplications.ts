@@ -28,7 +28,7 @@ export function accreditationAsApplication(a: MediaAccreditationView): MyApplica
     refusalNote: a.refusalNote,
     zone: null,
     createdAt: a.createdAt,
-    checkedInAt: null,
+    checkedInAt: a.checkedInAt,
     pointsPending: false,
     points: null,
     malus: null,
