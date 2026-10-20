@@ -8,7 +8,9 @@
     "./web": "./src/web/index.ts",
     "./web/styles.css": "./src/web/styles.css",
     "./web/tokens.css": "./src/web/tokens.css",
-    "./native": "./src/native/index.ts"
+    "./native": "./src/native/index.ts",
+    "./map/web": "./src/map/web.ts",
+    "./map/map.css": "./src/map/map.css"
   },
   "sideEffects": [
     "*.css"
@@ -24,16 +26,18 @@
     "@orasso/shared": "workspace:*"
   },
   "peerDependencies": {
+    "expo-audio": "*",
+    "expo-font": "*",
     "react": "19.2.3",
     "react-native": "*",
-    "react-native-svg": "*",
     "react-native-reanimated": "*",
-    "expo-font": "*",
-    "expo-audio": "*"
+    "react-native-svg": "*"
   },
   "devDependencies": {
+    "@maplibre/maplibre-gl-style-spec": "^26.4.4",
     "@types/react": "~19.2.18",
     "@types/react-dom": "~19.2.7",
+    "maplibre-gl": "^6.14.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },

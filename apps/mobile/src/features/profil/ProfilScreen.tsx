@@ -207,7 +207,7 @@ export function ProfilScreen() {
           testID="reglage-profil"
         />
       </View>
-      {/* lot 42 : « Revoir le tuto » dans l'Aide. */}
+      {/* « Revoir le tuto » est dans l'Aide (lot 42). */}
       <View style={styles.footerRow}>
         <Button variant="plate" icon="chat" onPress={() => router.push("/reglages/aide")} testID="profil-help">
           Aide

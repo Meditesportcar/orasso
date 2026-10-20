@@ -1,72 +1,45 @@
 import "maplibre-gl/dist/maplibre-gl.css";
+import { fitPoints, pinDateLabel, placePins, type WebPin } from "@orasso/design-system/web";
 import type { EventCard } from "@orasso/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
+import { useOrassoMap } from "./useOrassoMap";
 
 const FRANCE: [number, number] = [2.35, 46.6];
 
 /**
- * Carte MapLibre (fond OpenStreetMap) de tous les événements d'une liste qui ont une position : un repère par
- * événement, un clic ouvre une bulle avec le lien vers la page. Chargée dans le navigateur seulement.
+ * Carte des événements d'une liste qui ont une position, au style Orasso (lot 44) : une étiquette datée par
+ * événement, les proches regroupés en pastille ; un clic ouvre une bulle avec le lien vers la page.
  */
 export function EventsMap({ events }: { events: EventCard[] }) {
-  const container = useRef<HTMLDivElement>(null);
-  const [failed, setFailed] = useState(false);
+  const container = useRef<HTMLElement>(null);
   const located = useMemo(() => events.filter((e) => e.lat != null && e.lng != null), [events]);
-
-  useEffect(() => {
-    let map: import("maplibre-gl").Map | undefined;
-    let cancelled = false;
-    (async () => {
-      try {
-        const maplibre = await import("maplibre-gl");
-        if (cancelled || !container.current) return;
-        map = new maplibre.Map({
-          container: container.current,
-          center: FRANCE,
-          zoom: 4.6,
-          attributionControl: { compact: true },
-          style: {
-            version: 8,
-            sources: {
-              osm: {
-                type: "raster",
-                tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-                tileSize: 256,
-                maxzoom: 19,
-                attribution: "© OpenStreetMap",
-              },
-            },
-            layers: [{ id: "osm", type: "raster", source: "osm" }],
-          },
-        });
-        const bounds = new maplibre.LngLatBounds();
-        for (const event of located) {
-          const lngLat: [number, number] = [event.lng as number, event.lat as number];
-          const marker = document.createElement("button");
-          marker.type = "button";
-          marker.className = "s-marker s-marker--button";
-          marker.dataset.testid = "map-marker";
-          marker.setAttribute("aria-label", event.title);
+  const failed = useOrassoMap(
+    container,
+    { center: FRANCE, zoom: 4.6 },
+    (maplibre, { map }) => {
+      const pins: WebPin[] = located.map((e) => ({
+        id: e.id,
+        kind: "event",
+        lat: e.lat as number,
+        lng: e.lng as number,
+        label: pinDateLabel(e.startsAt),
+        title: e.title,
+      }));
+      const bySlug = new Map(located.map((e) => [e.id, e.slug]));
+      fitPoints(maplibre, map, pins);
+      const placed = placePins(maplibre, map, pins, {
+        popupFor: (pin) => {
           const link = document.createElement("a");
           link.className = "s-popup";
-          link.href = `/e/${encodeURIComponent(event.slug)}`;
-          link.textContent = event.title;
-          const popup = new maplibre.Popup({ offset: 14, closeButton: false }).setDOMContent(link);
-          new maplibre.Marker({ element: marker }).setLngLat(lngLat).setPopup(popup).addTo(map);
-          bounds.extend(lngLat);
-        }
-        if (located.length === 1) map.setCenter([located[0]?.lng as number, located[0]?.lat as number]);
-        if (located.length === 1) map.setZoom(10);
-        else if (located.length > 1) map.fitBounds(bounds, { padding: 48, maxZoom: 11, duration: 0 });
-      } catch {
-        setFailed(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      map?.remove();
-    };
-  }, [located]);
+          link.href = `/e/${encodeURIComponent(bySlug.get(pin.id) ?? "")}`;
+          link.textContent = pin.title;
+          return link;
+        },
+      });
+      return () => placed.remove();
+    },
+    located,
+  );
 
   if (failed) return <p className="s-muted">La carte n'a pas pu se charger.</p>;
   return (

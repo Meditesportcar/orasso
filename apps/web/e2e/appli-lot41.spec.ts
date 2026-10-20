@@ -189,7 +189,9 @@ async function runFlow(browser: Browser, profile: Profile, theme: Theme, capture
     firstName: "Julien",
     lastName: "Martí",
   });
-  await page.getByRole("button", { name: "C'est parti" }).click();
+  // Le tuto du profil (lot 42) s'ouvre : « Passer » mène à l'écran « casquette ».
+  await expect(page.getByTestId(`tuto-${profile}`)).toBeVisible();
+  await page.getByRole("button", { name: "Passer" }).click();
   // Le profil choisi mène à sa barre : créer sa casquette (ou ajouter sa voiture), « Plus tard » possible. Le profil média
   // n'a pas encore d'écran de création (lot 55) : il passe directement à l'appli.
   if (profile !== "media") {

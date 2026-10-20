@@ -222,6 +222,9 @@ describe("API de l'affiche", () => {
     // Carte de l'Explorer.
     const list = await call(null, "GET", "/events");
     expect(list.json.items.find((c: { id: string }) => c.id === e.id).posterUrl).toBe(page.json.poster.postUrl);
+    expect(list.json.items.find((c: { id: string }) => c.id === e.id).generatedPosterUrl).toBe(
+      page.json.poster.postUrl,
+    );
     // Story : pièce jointe pour l'organisateur.
     const story = await app.request(`/api/events/${e.id}/poster/story`, {
       headers: { origin: ORIGIN, cookie: orga.cookie },

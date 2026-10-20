@@ -112,6 +112,11 @@ export const iconShapes = {
     p("M14.5 6.5v2M14.5 11v2M14.5 15.5v2"),
   ], // Sorties (candidatures, billets, missions)
   stamp: [p("M9 3h6l-1 7h4a2 2 0 012 2v3H4v-3a2 2 0 012-2h4z"), p("M4 20h16")], // Passeport
+  send: [p("M21 3L10 14M21 3l-7 18-4-7-7-4z")], // Candidater (lot 44, prototype `s-event`)
+  cards: [
+    p("M7.7 3.1l11.9 1.7a2 2 0 011.7 2.2l-1.9 13a2 2 0 01-2.3 1.7L5.2 20a2 2 0 01-1.7-2.3l1.9-12.9a2 2 0 012.3-1.7z"),
+    p("M4 7v12a2 2 0 002 2h9"),
+  ], // Trier les candidatures (lot 44)
   briefcase: [r(3, 7, 18, 13, 2), p("M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M3 13h18")], // Missions (prestataire)
   shop: [
     p("M4 9l1.5-5h13L20 9"),

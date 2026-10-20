@@ -100,6 +100,12 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
   if (q.department) filters.push(eq(events.department, q.department));
   if (q.structureId) filters.push(eq(events.structureId, q.structureId));
   if (q.categoryId) filters.push(sql`${events.criteria} -> 'categoryIds' ? ${q.categoryId}`);
+  // Lot 44 : « Structures suivies » (Explorer, Selon mes goûts) ; sans compte, le filtre est ignoré.
+  if (q.followed && viewer) {
+    filters.push(
+      sql`exists (select 1 from structure_follows sf where sf.structure_id = ${events.structureId} and sf.user_id = ${viewer.user.id})`,
+    );
+  }
   for (const token of searchTokens(q.q)) {
     const like = containsPattern(token);
     filters.push(or(sql`${events.title} ilike ${like}`, sql`${events.city} ilike ${like}`));
