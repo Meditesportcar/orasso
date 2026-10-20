@@ -194,9 +194,7 @@ function DirectEvent({
         <>
           <Plate style={styles.block} testID="orga-direct-event">
             <ChipRow>
-              <Chip surface="plate" variant="accent">
-                {phaseLabels[current.phase]}
-              </Chip>
+              <Chip surface="plate">{phaseLabels[current.phase]}</Chip>
             </ChipRow>
             <Text variant="posterM" color={c.plateInk}>
               {current.event.title}

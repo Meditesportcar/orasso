@@ -70,7 +70,12 @@ export function bubbleSize(eventsHeld: number): number {
 
 /** Les initiales d'une bulle sans avatar : deux lettres du pseudo, en capitales. */
 export function bubbleInitials(pseudo: string): string {
-  const parts = pseudo.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  // « Julie_66 » : le numéro de fin n'est pas un mot (comme « Pilote_001 »).
+  const parts = pseudo
+    .replace(/[^\p{L}\p{N}]*\d+$/u, "")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+  if (parts.length === 0) return pseudo.slice(0, 2).toLocaleUpperCase("fr-FR");
   const letters = parts.length >= 2 ? `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}` : (parts[0] ?? pseudo).slice(0, 2);
   return letters.toLocaleUpperCase("fr-FR");
 }

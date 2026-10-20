@@ -98,7 +98,9 @@ describe("bulles", () => {
     expect(bubbleSize(-3)).toBe(BUBBLE_MIN);
   });
   it("les initiales", () => {
-    expect(bubbleInitials("Sarah_66")).toBe("S6");
+    expect(bubbleInitials("Sarah_66")).toBe("SA");
+    expect(bubbleInitials("Pilote_001")).toBe("PI");
+    expect(bubbleInitials("123")).toBe("12");
     expect(bubbleInitials("damien")).toBe("DA");
     expect(bubbleInitials("Léa Martin")).toBe("LM");
   });

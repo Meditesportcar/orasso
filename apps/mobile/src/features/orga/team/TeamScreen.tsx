@@ -47,7 +47,7 @@ export function TeamScreen() {
   const c = t.color;
   const router = useRouter();
   const { me } = useSession();
-  const { structureId, structureName } = useOrga();
+  const { structureId } = useOrga();
   const at = useNow(60_000);
   const viewer = myRoleIn(me?.memberships, structureId);
 
@@ -456,7 +456,7 @@ export function TeamScreen() {
       {groups.requests.length > 0 ? (
         <>
           <SectionTitle>{L.teamRequestsTitle(groups.requests.length)}</SectionTitle>
-          <Muted variant="caption">{L.teamRequestsIntro}</Muted>
+          <Muted variant="caption">{L2.requestsIntro}</Muted>
           {groups.requests.map((m) => (
             <Plate key={m.userId} style={styles.row} testID="team-request">
               <View style={styles.line}>

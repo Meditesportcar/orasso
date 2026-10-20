@@ -97,6 +97,8 @@ export const orgaV2Labels = {
   teamTitle: "L'équipe",
   teamCount: (members: number, requests: number) =>
     `${members} membre${members > 1 ? "s" : ""}${requests > 0 ? ` · ${requests} demande${requests > 1 ? "s" : ""}` : ""}`,
+  requestsIntro:
+    "Accepter fait entrer la personne dans l'équipe sans rôle : les rôles se donnent ensuite, pour chaque événement, selon les présences.",
   bubblesHint:
     "La taille d'une bulle suit le nombre d'événements tenus. Touche une bulle pour voir son historique et ses actions.",
   bubbleLabel: (pseudo: string, held: number) =>

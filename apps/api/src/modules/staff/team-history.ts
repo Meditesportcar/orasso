@@ -34,10 +34,11 @@ export const teamHistoryService = {
       .orderBy(desc(events.startsAt));
     const at = now().getTime();
     return members.map((m) => {
-      const mine = rows.filter((r) => r.userId === m.userId);
+      // L'historique ne compte que ce qui a commencé : un événement à venir n'est pas encore « tenu ».
+      const mine = rows.filter((r) => r.userId === m.userId && r.startsAt.getTime() <= at);
       return {
         userId: m.userId,
-        eventsHeld: mine.filter((r) => r.startsAt.getTime() <= at && r.presence !== "absent").length,
+        eventsHeld: mine.filter((r) => r.presence !== "absent").length,
         events: mine.slice(0, RECENT).map((r) => ({
           eventId: r.eventId,
           title: r.title,
