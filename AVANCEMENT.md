@@ -2,6 +2,15 @@
 
 À lire au début de chaque session, à mettre à jour à la fin. Réécrit le 19/10/2026 au lot 38 (ouverture du chantier « Intégration de la DA v2 ») : l'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\DELL\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
 
+## État au 20/10/2026 : chantier DA v2 en pause (changement de PC)
+
+- **En ligne sur dev.orasso.fr** : `main` = `e5d24e9`, lots 38 à 49 et 51 (vagues 1 à 4 de la DA v2), migrations jusqu'à `0049_rotating-qr`.
+- **Fusionnés sur la branche `integration`, pas encore déployés** : lots 52 (organisateur v2) et 54 (pro et prestataire v2), et un garde-fou de test contre les expressions régulières cassées (`packages/shared/src/regexGuard.test.ts`).
+- **En pause** : lot 50 (passeport, vote, récap ; branche `lot-50-passeport-vote-recap`, corrections poussées, vérification à refaire) et lot 55 (média ; branche `lot-55-media`, corrections codées, trois specs à rejouer).
+- **À faire** : vérification et déploiement de la vague 5, puis lots 53 et 56 (vague 6), 57 (vague 7), 58 (recette finale, APK v2, vague 8).
+- **Reprendre** par la section « POINT DE REPRISE (20/10, pause) » du journal du relais (`~/.claude/relais/orasso/JOURNAL.md`) : ordre exact, réglages du `.env` de l'intégration (`CORS_ORIGINS=http://localhost:8399`, `DEV_CLOCK=on`, `DEV_SKIP_2FA=true`) et points à revoir avec Damien.
+- **Lancer le projet** : inchangé (voir plus bas, « Lancer le projet sur ce PC (Windows) » ; sur le nouveau PC, adapter les chemins).
+
 ## Terminé
 
 **Toutes les fonctions « Validé » de docs/01 et les six parcours clés de docs/02, sur le site et dans l'appli.** `POINTAGE-V1.md` (repointé au lot 34) n'a plus de ligne « À faire » ; ce qui manque a une raison écrite (comptes ou clés à créer, docs « plus tard », aucun paiement dans l'appli).
