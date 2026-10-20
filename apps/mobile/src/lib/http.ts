@@ -6,7 +6,7 @@ import { Platform } from "react-native";
 import { apiUrl } from "@/api";
 
 import { authOriginHeader } from "./api/cookies";
-import { applyClockHeader } from "./clock";
+import { applyClockHeader, applyDateHeader } from "./clock";
 
 let sessionToken: string | null = null;
 export const setSessionToken = (token: string | null) => {
@@ -72,6 +72,7 @@ export async function requestWithHeaders<T>(
   Object.assign(headers, authOriginHeader(path, Platform.OS !== "web", apiUrl("/")));
   if (body !== undefined) headers["content-type"] = "application/json";
   let response: Response;
+  const sentAt = Date.now();
   try {
     response = await fetch(apiUrl(path), {
       method,
@@ -87,7 +88,11 @@ export async function requestWithHeaders<T>(
   }
   // Horloge simulée (lot 34a) : l'API annonce son décalage en développement ; sans l'en-tête, il retombe à 0.
   // Une réponse d'erreur du serveur frontal (5xx, sans en-tête) ne dit rien de l'horloge.
-  if (response.status < 500) applyClockHeader(response.headers.get(CLOCK_OFFSET_HEADER));
+  if (response.status < 500) {
+    applyClockHeader(response.headers.get(CLOCK_OFFSET_HEADER));
+    // Relecture du lot 48 : décalage avec l'heure du serveur (code tournant), mesuré sur chaque réponse.
+    applyDateHeader(response.headers.get("date"), sentAt, Date.now());
+  }
   const text = await response.text();
   let json: unknown = null;
   try {

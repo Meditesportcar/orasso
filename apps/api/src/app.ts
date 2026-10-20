@@ -85,7 +85,8 @@ if (corsOrigins.length) {
       origin: corsOrigins,
       allowHeaders: ["authorization", "content-type", "x-device-id"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      exposeHeaders: ["set-auth-token", CLOCK_OFFSET_HEADER],
+      // `date` : le navigateur (recette web de l'appli) mesure le décalage avec l'heure du serveur (lot 48, code tournant).
+      exposeHeaders: ["set-auth-token", CLOCK_OFFSET_HEADER, "date"],
       // Recette web de l'appli : cookies de l'étape « code » de la double authentification (lot 15).
       credentials: true,
     }),

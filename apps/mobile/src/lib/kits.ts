@@ -6,7 +6,7 @@ import type { EventOutlook, EventWeather, MyApplication } from "@orasso/shared";
 import { api } from "./api";
 import { now as clockNow } from "./clock";
 import { jourJClosesAt } from "./jourj";
-import { kvDel, kvGetJson, kvSetJson } from "./kv";
+import { kvDel, kvGet, kvGetJson, kvSet, kvSetJson } from "./kv";
 import { mergeWeather } from "./weather";
 
 export type AccessKit = {
@@ -40,13 +40,24 @@ export type AccessKit = {
     cancelled: boolean;
     instructions: string | null;
   };
-  pass: { passId: string; payload: string; issuedAt: string };
+  /**
+   * `payload` : ancien QR statique `OR1`, plus affiché depuis le lot 48 (gardé pour un ancien client, retiré au lot 58).
+   * `eventNo` : numéro de l'événement dans le code tournant `OR2` (absent des kits d'avant le lot 48).
+   */
+  pass: { passId: string; payload: string; issuedAt: string; eventNo?: number };
+  /** Lot 48 : en-tête de l'écran du QR selon la candidature (zone, emplacement, badge presse). */
+  holder?: { kind: "vehicle" | "provider" | "media"; spotLabel: string | null; mediaName: string | null };
   /** Dernière météo connue de l'événement (cache de l'API, lot 28) ; `null` si aucune (hors des 7 jours, ou jamais reçue). */
   weather: EventWeather | null;
 };
 
 const INDEX_KEY = "kits";
 const kitKey = (applicationId: string) => `kit.${applicationId}`;
+/** Lot 48 : secret du code tournant, à part du kit, dans le trousseau sécurisé (expo-secure-store, voir kv.ts). */
+const otpKey = (applicationId: string) => `otp.${applicationId}`;
+
+/** Secret du code tournant `OR2` d'une place (base64url) ; `null` si le téléphone ne l'a pas encore reçu. */
+export const loadOtpSecret = (applicationId: string) => kvGet(otpKey(applicationId));
 
 export const loadKit = (applicationId: string) => kvGetJson<AccessKit>(kitKey(applicationId));
 
@@ -58,6 +69,7 @@ async function saveKit(kit: AccessKit) {
 
 export async function dropKit(applicationId: string) {
   await kvDel(kitKey(applicationId));
+  await kvDel(otpKey(applicationId));
   const ids = (await kvGetJson<string[]>(INDEX_KEY)) ?? [];
   await kvSetJson(
     INDEX_KEY,
@@ -67,7 +79,7 @@ export async function dropKit(applicationId: string) {
 
 export async function clearKits() {
   const ids = (await kvGetJson<string[]>(INDEX_KEY)) ?? [];
-  await Promise.all(ids.map((id) => kvDel(kitKey(id))));
+  await Promise.all(ids.flatMap((id) => [kvDel(kitKey(id)), kvDel(otpKey(id))]));
   await kvDel(INDEX_KEY);
 }
 
@@ -90,7 +102,8 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
     api.eventBySlug(app.event.slug),
     loadKit(app.id),
   ]);
-  if (!pass.payload) {
+  // Place plus valide (pass révoqué : ni QR ni secret) : le kit et le secret du code tournant quittent le téléphone.
+  if (!pass.payload || !pass.otpSecret) {
     await dropKit(app.id);
     return null;
   }
@@ -121,9 +134,11 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
       cancelled: event.status === "cancelled",
       instructions: event.instructions,
     },
-    pass: { passId: pass.passId, payload: pass.payload, issuedAt: pass.issuedAt },
+    pass: { passId: pass.passId, payload: pass.payload, issuedAt: pass.issuedAt, eventNo: pass.eventNo },
+    holder: { kind: pass.kind, spotLabel: pass.spotLabel, mediaName: pass.mediaName },
     weather,
   };
+  await kvSet(otpKey(app.id), pass.otpSecret);
   await saveKit(kit);
   return kit;
 }

@@ -3,7 +3,7 @@
 // les 3 premiers caractères de la plaque, valide, suivant »), coordonnées pour le super staff seulement. Hors ligne.
 
 import { AppBar, Button, Chip, Ground, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { type AccessListEntry, eventDaysLabels, formatDayDate } from "@orasso/shared";
+import { type AccessListEntry, checkinStaffRoles, eventDaysLabels, formatDayDate } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
@@ -55,6 +55,8 @@ export default function StaffList() {
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
   const superStaff = state?.meta.myRoles.includes("super_staff") ?? false;
+  // Relecture du lot 48 : seuls les rôles qui pointent (scan, contrôle, super staff) voient « Pointer » ; l'API refuse les autres.
+  const canPoint = state?.meta.myRoles.some((r) => checkinStaffRoles.includes(r)) ?? false;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` (pointage) relance le filtre : la liste en mémoire change sans changer d'identité
   const rows = useMemo(() => {
@@ -107,7 +109,7 @@ export default function StaffList() {
           initialNumToRender={20}
           ListHeaderComponent={
             <View style={styles.header}>
-              {quick && state ? (
+              {quick && canPoint && state ? (
                 <QuickPlate state={state} onPoint={(e) => point(e, "plate")} />
               ) : (
                 <TextField
@@ -130,9 +132,11 @@ export default function StaffList() {
                   </Chip>
                 ) : null}
               </View>
-              <Button variant="plate" icon="plate" onPress={() => setQuick((q) => !q)} fullWidth>
-                {quick ? "Fin pointage plaque" : "Pointage rapide par plaque"}
-              </Button>
+              {canPoint ? (
+                <Button variant="plate" icon="plate" onPress={() => setQuick((q) => !q)} fullWidth>
+                  {quick ? "Fin pointage plaque" : "Pointage rapide par plaque"}
+                </Button>
+              ) : null}
               {superStaff ? null : (
                 <Muted variant="meta">
                   Les coordonnées (téléphone, e-mail) ne sont visibles que par le super staff de l'événement.
@@ -176,9 +180,11 @@ export default function StaffList() {
                     </Text>
                   ) : null}
                 </View>
-                <Button variant="plate" icon="check" disabled={Boolean(inside)} onPress={() => point(item, "manual")}>
-                  {inside ? "Pointé" : "Pointer"}
-                </Button>
+                {canPoint ? (
+                  <Button variant="plate" icon="check" disabled={Boolean(inside)} onPress={() => point(item, "manual")}>
+                    {inside ? "Pointé" : "Pointer"}
+                  </Button>
+                ) : null}
               </Plate>
             );
           }}

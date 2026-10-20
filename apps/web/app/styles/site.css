@@ -442,6 +442,20 @@
   width: 100%;
   height: auto;
 }
+/* Code tournant (relecture du lot 48) : l'anneau moutarde se vide en 20 s autour du QR. */
+.acc__rotating {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--night);
+}
+.acc__ring {
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: conic-gradient(var(--accent) calc(var(--ring-left, 1) * 360deg), transparent 0);
+}
+.acc__qr-wait {
+  aspect-ratio: 1;
+}
 .acc__actions {
   display: flex;
   gap: var(--space-3);

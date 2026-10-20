@@ -120,7 +120,9 @@ test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   // --- 6. Le passionné voit son QR (mise à jour en direct, sans recharger) ---
   const qr = page.getByTestId("pass-qr").locator("svg");
   await expect(qr).toBeVisible({ timeout: 20_000 });
-  await expect(qr).toHaveAttribute("data-qr-version", "6");
+  // Relecture du lot 48 : le code tournant OR2 (69 caractères, QR version 4), jamais l'ancien QR statique.
+  await expect(qr).toHaveAttribute("data-qr-version", "4");
+  await expect(page.getByTestId("rotating-countdown")).toBeVisible();
   await expect(page.getByTestId("application").first()).toHaveAttribute("data-status", "accepted");
 
   // --- 7. Staff : liste du jour J, pointage manuel puis pointage rapide par plaque ---

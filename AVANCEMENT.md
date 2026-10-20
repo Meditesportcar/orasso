@@ -29,6 +29,8 @@
 
 - **Lot 42 — tutos par profil, au « tu » (branche `lot-42-tutos`, vague 4)** : six tutos (exposant 7 diapos, visiteur 6, pro 4, organisateur 6, prestataire 4, média 4 : 31), textes du prototype (`shared/labels/tuto.fr.ts`), une illustration animée par diapo en `react-native-svg` + Reanimated (`features/tuto/` : carte, candidature garage › règlement › envoi › « En attente », QR et barre de scan, parking vu de dessus avec la voiture moutarde qui suit le chemin, tampon du passeport, grades et pros, bulles d'équipe, météo et notifications, direct, plan d'emplacement, badge presse…) ; une seule illustration montée, réduction des animations = état final ; joués après l'arrivée (« Passer » et « C'est parti » mènent à `arrivee/casquette`), rejouables depuis Mon profil › Aide (« Revoir le tuto »), route `tuto/[profile]` qui ouvre la tuile de l'Accueil du lot 43 (`TUTO_ROUTE_READY = true`). Aucune migration. Recette `apps/web/e2e/appli-lot42.spec.ts` (`APP_URL`) ; `appli-lot41.spec.ts` adapté.
 
+- **Lot 48 — jour J v2 (branche `lot-48-jour-j-v2`, vague 4)** : QR d'accès tournant `OR2` (nouveau code signé toutes les 20 s avec un secret par pass, vérifié hors ligne par le staff, anneau et n° du code, captures bloquées sur l'écran, en-tête par profil : zone, emplacement, badge presse, billet) ; mode staff v2 (synchro, rôle, « Je suis là », tuiles selon les rôles, entrés par zone, Alerte / Main courante / Discussion en bas, thème au choix) ; accueil drive (la caméra lit la plaque avec ML Kit sur l'appareil, hachage, liste en mémoire, pointage `drive`) ; migration `0049_rotating-qr` ; dépendances natives `expo-screen-capture` et `@react-native-ml-kit/text-recognition` (APK au lot 58). Recette `apps/web/e2e/appli-lot48.spec.ts`.
+
 ## En cours
 
 - Branche `lot-51-garage-floutage` poussée, en attente de fusion (après 47 et 49 : migration `0045_plate-blur` à régénérer, règle B1).
@@ -46,6 +48,8 @@
 - La branche `lot-42-tutos` (vague 4) attend la relecture et la fusion du coordinateur (aucune migration ; fichiers partagés : `packages/shared/src/labels.fr.ts`, `features/home/parts.tsx` (`TUTO_ROUTE_READY`), `app/reglages/[section].tsx`, `e2e/appli-lot41.spec.ts`).
 
 - Lot 41 (branche `lot-41-arrivee`, depuis `main` `7d4fd86`) en attente de la fusion du coordinateur : migration `0045_arrivee` à régénérer selon l'ordre des fusions (règle B1) ; fichiers partagés : `apps/mobile/src/app/_layout.tsx`, `apps/api/src/app.ts`, `modules/security/auth-hooks.ts`, `packages/shared` (labels, schémas), `apps/web/e2e/helpers.ts`.
+
+- Vague 4 : la branche `lot-48-jour-j-v2` attend la relecture et la fusion du coordinateur (migration `0049_rotating-qr`, parent `0048_plate-blur`, règle B1 ; fichiers partagés : `modules/staff/service.ts`, `modules/checkins/service.ts`, `shared/enums.ts`, `shared/schemas/access.ts`, `apps/mobile/package.json`).
 
 ## Prochaine étape
 

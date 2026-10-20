@@ -21,7 +21,7 @@ import {
   type TicketScanResultView,
   type VisitorDelta,
 } from "@orasso/shared";
-import { now as clockNow } from "../clock";
+import { now as clockNow, serverNow } from "../clock";
 
 import { plateHashOf } from "./crypto";
 
@@ -58,7 +58,7 @@ export type StaffEventMeta = {
   serverOffsetMs?: number;
 };
 
-export type LocalCheckinMethod = "scan" | "override" | "manual" | "plate";
+export type LocalCheckinMethod = "scan" | "override" | "manual" | "plate" | "drive";
 
 /** Entrée enregistrée sur l'appareil avant (ou en attendant) la confirmation du serveur (table `local_checkins`). */
 export type LocalCheckin = {
@@ -81,7 +81,7 @@ export type ScanItemWire = {
   scannedAt: string;
 };
 export type CheckinItemWire = {
-  kind: "manual" | "plate";
+  kind: "manual" | "plate" | "drive";
   id: string;
   applicationId: string;
   note: string | null;
@@ -98,6 +98,7 @@ export type ActionKind =
   | "scan"
   | "manual"
   | "plate"
+  | "drive"
   | "presence"
   | "express"
   | "incident"
@@ -105,7 +106,7 @@ export type ActionKind =
   | "ticket_scan"
   | "visitor"
   | "incident_photo";
-export const BATCH_KINDS: readonly ActionKind[] = ["scan", "manual", "plate"];
+export const BATCH_KINDS: readonly ActionKind[] = ["scan", "manual", "plate", "drive"];
 /** Les actions dont l'identifiant (clé d'idempotence côté serveur) voyage aussi dans le corps. */
 export const ID_IN_PAYLOAD: readonly ActionKind[] = [...BATCH_KINDS, "ticket_scan", "visitor"];
 
@@ -299,13 +300,15 @@ export function decideLocal(
   keys: ReadonlyMap<number, Uint8Array>,
   verify: Ed25519Verify,
   /** Lot 26 : heure du scan (règle « Autre jour » d'un événement sur plusieurs jours). */
-  now: Date = clockNow(),
+  now: Date = serverNow(),
 ): ScanDecision {
   return decideScan(payload, {
     eventNo: state.meta.eventNo,
     keys,
     verify,
     now,
+    // Ancien QR statique `OR1` accepté jusqu'au lot 58 (relecture du lot 48, 19/10/2026) : le lot 58 met `false`.
+    acceptLegacy: true,
     findEntry: (passId) => {
       const entry = state.entries.get(passId);
       if (entry) return { ...entry, checkedInAt: checkedInAt(state, entry) };
@@ -337,8 +340,15 @@ export function scanAction(
 ): { item: ScanItemWire; checkin: LocalCheckin | null } {
   const passId = decision.passId;
   // Lot 26 : « Accepter quand même » un QR d'un autre jour garde la raison (`other_day`) pour le rapport.
+  // Relecture du lot 48 : code tournant non vérifiable (pass absent de la liste) → `unverified_otp` au rapport.
   const reason =
-    decision.decision === "refused" ? decision.reason : "reason" in decision ? (decision.reason ?? null) : null;
+    decision.decision === "refused"
+      ? decision.reason
+      : "reason" in decision
+        ? (decision.reason ?? null)
+        : "unverified" in decision && decision.unverified
+          ? "unverified_otp"
+          : null;
   const zoneCode = entry?.zoneCode ?? null;
   const item: ScanItemWire = {
     kind: "scan",
@@ -366,10 +376,10 @@ export function scanAction(
   return { item, checkin };
 }
 
-/** Pointage « Pointer » (liste, recherche) ou rapide par plaque, fait sur l'appareil. */
+/** Pointage « Pointer » (liste, recherche), rapide par plaque ou par l'accueil drive (lot 48), fait sur l'appareil. */
 export function checkinAction(
   entry: AccessListEntry,
-  kind: "manual" | "plate",
+  kind: "manual" | "plate" | "drive",
   id: string,
   now: Date,
   note?: string,
