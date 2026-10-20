@@ -4,8 +4,8 @@
 // gardent l'avis de l'organisateur. Le retrait se fait depuis le ticket. Les prestataires ne comptent jamais dans les
 // places. Cohérent avec le Tri de l'organisateur (lot 52) : statut, emplacement et « Sans mission précise ».
 import { Button, Chip, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { OFFER_DELAY_DEFAULT, type ProviderApplicationView, proV2Labels } from "@orasso/shared";
-import { useRouter } from "expo-router";
+import { type ProviderApplicationView, proV2Labels, providerWaitlistNote } from "@orasso/shared";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -18,6 +18,7 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { AppSheet } from "@/ui/AppSheet";
+import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
@@ -37,6 +38,8 @@ const byStatusThenDate = (a: ProviderApplicationView, b: ProviderApplicationView
 export function CandidaturesScreen() {
   const { t } = useTheme();
   const router = useRouter();
+  // « Voir ma candidature » (Missions, fiche événement) : le ticket demandé passe en tête.
+  const { open } = useLocalSearchParams<{ open?: string }>();
   const now = useNow();
   const { refreshMe } = useSession();
   const profile = useApi(async () => (await api.providerProfile()).profile, [], { cacheKey: "provider-profile" });
@@ -49,10 +52,15 @@ export function CandidaturesScreen() {
   const [error, setError] = useState<string | null>(null);
 
   // Une candidature retirée (ou expirée, annulée) n'est plus un ticket à venir.
-  const next = (upcoming.data ?? []).filter((a) => candidatureKind(a) !== "withdrawn").sort(byStatusThenDate);
+  const next = (upcoming.data ?? [])
+    .filter((a) => candidatureKind(a) !== "withdrawn")
+    .sort((a, b) => Number(b.id === open) - Number(a.id === open) || byStatusThenDate(a, b));
   const done = [...(past.data ?? [])].sort((a, b) => Date.parse(b.event.startsAt) - Date.parse(a.event.startsAt));
   const firstRetained = next.find((a) => a.status === "accepted")?.id;
-  const waitHours = OFFER_DELAY_DEFAULT / 3_600_000;
+
+  // Une panne n'est pas « aucune candidature » : le message et « Réessayer » ; les données en cache restent affichées.
+  const failed =
+    (upcoming.error && !upcoming.data ? upcoming.error : null) ?? (past.error && !past.data ? past.error : null);
 
   async function reloadAll() {
     await Promise.all([upcoming.reload(), past.reload(), profile.reload()]);
@@ -140,7 +148,9 @@ export function CandidaturesScreen() {
         ]}
       />
 
-      {segment === "upcoming" ? (
+      {failed ? <LoadError message={failed.message} onRetry={() => void reloadAll()} /> : null}
+
+      {failed ? null : segment === "upcoming" ? (
         <View style={styles.stack} testID="candidatures-upcoming">
           {next.length === 0 ? (
             upcoming.loading ? (
@@ -153,7 +163,7 @@ export function CandidaturesScreen() {
               const kind = candidatureKind(app);
               const retained = kind === "retained";
               const notes: string[] = [needLabel(app)];
-              if (kind === "waitlist") notes.unshift(proV2Labels.waitlistText(waitHours));
+              if (kind === "waitlist") notes.unshift(providerWaitlistNote);
               if (app.spot?.note) notes.push(app.spot.note);
               return (
                 <Ticket
@@ -167,12 +177,13 @@ export function CandidaturesScreen() {
                   notes={notes}
                   onPressTitle={() => router.push(`/e/${app.event.slug}`)}
                 >
+                  {app.accreditedMedia ? <Chip surface="plate">{proV2Labels.mediaOfficial}</Chip> : null}
                   {retained ? (
                     <View style={styles.row}>
                       <Button
                         variant={app.id === firstRetained ? "primary" : "plate"}
                         icon="qr"
-                        onPress={() => router.push(`/jour-j/${app.id}`)}
+                        onPress={() => router.push(`/stand/${app.id}`)}
                         testID="candidature-access"
                       >
                         {"Mon accès"}

@@ -70,10 +70,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space2,
-    minHeight: 52,
+    minHeight: tokens.spacing.touch,
     paddingVertical: space2,
     paddingHorizontal: space3,
-    borderWidth: 1.5,
+    borderWidth: 1,
   },
   label: { flex: 1, minWidth: 0 },
 });

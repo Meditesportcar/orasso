@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   camera: { width: "100%", aspectRatio: 1, overflow: "hidden", justifyContent: "flex-end" },
   aim: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
-  frame: { width: "62%", aspectRatio: 1, borderWidth: 3, borderRadius: 20 },
+  frame: { width: "62%", aspectRatio: 1, borderWidth: space1, borderRadius: tokens.radius.radiusLg },
   caption: { padding: space3 },
   center: { textAlign: "center" },
   permission: { position: "absolute", top: space3, left: space3, right: space3 },

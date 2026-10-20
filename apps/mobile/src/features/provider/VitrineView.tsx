@@ -13,7 +13,7 @@ import {
 } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
-import { formatRating, frontageIcon, monthYear, powerIcon, waterIcon } from "@/lib/proPresta";
+import { formatRating, frontageIcon, monthYear, powerIcon, tradeIcons, waterIcon } from "@/lib/proPresta";
 import { IconTiles } from "@/ui/IconTiles";
 import { Muted } from "@/ui/Muted";
 import { SecHead } from "@/ui/SecHead";
@@ -52,13 +52,16 @@ export function VitrineView({
 
   return (
     <View style={styles.stack} testID="vitrine-view">
-      <View style={styles.chips}>
-        {vitrine.trades.map((code) => (
-          <Chip key={code}>{vendorTypeLabels[code]}</Chip>
-        ))}
-        {vitrine.tagline ? <Chip>{vitrine.tagline}</Chip> : null}
-        {vitrine.teamSize ? <Chip>{vitrineTexts.teamSize(vitrine.teamSize)}</Chip> : null}
-      </View>
+      <IconTiles
+        testID="vitrine-identity-tiles"
+        items={[
+          ...vitrine.trades.map((code) => ({ key: code, label: vendorTypeLabels[code], icon: tradeIcons[code] })),
+          ...(vitrine.tagline ? [{ key: "tagline", label: vitrine.tagline, icon: "badge" as const }] : []),
+          ...(vitrine.teamSize
+            ? [{ key: "team", label: vitrineTexts.teamSize(vitrine.teamSize), icon: "crew" as const }]
+            : []),
+        ]}
+      />
 
       <SecHead
         title={vitrineTexts.menuTitle}

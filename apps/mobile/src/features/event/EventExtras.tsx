@@ -43,12 +43,12 @@ export function ProvidersPresent({ providers, reportable }: { providers: Provide
       {providers.map((p) => (
         <View key={p.id} style={styles.provider} testID="provider-present">
           <View style={styles.providerText}>
-            {/* Lot 54 : la vitrine du prestataire (menu, besoins, avis des organisateurs). */}
+            {/* Lot 54 : la vitrine du prestataire (menu, besoins, avis des organisateurs), pour un compte connecté : l'API la réserve aux connectés. */}
             <Text
               variant="bodyStrong"
               color={t.color.plateInk}
-              accessibilityRole="link"
-              onPress={() => router.push(`/providers/${p.id}`)}
+              accessibilityRole={reportable ? "link" : undefined}
+              onPress={reportable ? () => router.push(`/providers/${p.id}`) : undefined}
             >
               {p.name}
             </Text>

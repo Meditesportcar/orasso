@@ -1,10 +1,12 @@
 // Casquette Prestataire, Missions (DA v2, lot 54, prototype `s-missions`) : les événements qui cherchent mon métier,
 // du plus proche au plus loin. Grand titre « Missions · Autour du 66 », puces de métier (ceux de ma vitrine) et de rayon
-// (curseur), la phrase « N événements cherchent un food truck… », puis une carte en ticket par événement : statut de ma
-// candidature ou « 1 place sur 2 », structure · distance · attendus, ce qui est fourni, et « Proposer <nom> » qui ouvre
-// la feuille d'envoi. L'API (lot 46, `GET /missions`) fait le tri et le calcul de distance.
+// (curseur, 5 à 500 km comme la vitrine), la phrase « N événements cherchent un food truck… », puis une carte en ticket
+// par événement : statut de ma candidature ou « 1 place sur 2 », structure · distance · attendus, ce qui est fourni, et
+// « Proposer <nom> » qui ouvre la feuille d'envoi. Dessous, « Sans mission précise · Ouverts à ton activité » : les
+// événements qui acceptent mon type sans avoir écrit de besoin (candidature libre, docs/01). L'API (lot 46,
+// `GET /missions`) fait le tri et le calcul de distance.
 import { Button, Chip, EmptyState, tokens } from "@orasso/design-system/native";
-import type { VendorTypeCode } from "@orasso/shared";
+import type { OpenEventForProvider, VendorTypeCode } from "@orasso/shared";
 import {
   type MissionCard,
   missionTexts,
@@ -15,19 +17,32 @@ import {
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
+
 import { Ticket } from "@/features/sorties/Ticket";
 import { api } from "@/lib/api";
+import { formatDayHour } from "@/lib/format";
 import { alreadyApplied, candidatureKind, missionDetail, missionFacts, missionTag } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
+import { SecHead } from "@/ui/SecHead";
 import { Slider } from "@/ui/Slider";
 import { StatusTag } from "@/ui/StatusTag";
+import { ApplySheet } from "./ApplySheet";
 import { ProposeSheet } from "./ProposeSheet";
 
 const { space1, space2, space3 } = tokens.spacing;
+
+/** Rayon d'intervention : la même plage que la vitrine (`providerProfileSchema`). */
+const RADIUS_MIN = 5;
+const RADIUS_MAX = 500;
+const RADIUS_STEP = 5;
+
+/** Statuts qui permettent de candidater de nouveau à un événement. */
+const REOPENED = ["withdrawn", "refused", "expired", "cancelled"];
 
 export function MissionsScreen() {
   const router = useRouter();
@@ -36,12 +51,13 @@ export function MissionsScreen() {
   const p = profile.data;
   const [trade, setTrade] = useState<VendorTypeCode | null>(null);
   const [radius, setRadius] = useState<number | null>(null);
+  const [draft, setDraft] = useState<number | null>(null);
   const [radiusOpen, setRadiusOpen] = useState(false);
   const [proposing, setProposing] = useState<MissionCard | null>(null);
+  const [applying, setApplying] = useState<OpenEventForProvider | null>(null);
 
   // Le rayon de départ est celui de la vitrine, une fois le profil lu.
   const baseRadius = p?.radiusKm ?? PROVIDER_DEFAULT_RADIUS_KM;
-  const [draft, setDraft] = useState<number | null>(null);
   const shownRadius = draft ?? radius ?? baseRadius;
 
   const missions = useApi(
@@ -49,16 +65,25 @@ export function MissionsScreen() {
     [trade, radius, p?.id],
     { enabled: Boolean(p), cacheKey: `missions-${trade ?? "main"}-${radius ?? "base"}` },
   );
+  const open = useApi(() => api.openToProviders(), [p?.id], { enabled: Boolean(p), cacheKey: "provider-open-events" });
   const result = missions.data;
   const trades = p ? (p.trades.length ? p.trades : [p.type]) : [];
   const activeTrade: VendorTypeCode | null = result?.trade ?? trade ?? trades[0] ?? null;
   const tradeLabel = activeTrade ? vendorTypeLabels[activeTrade] : "";
   const items = result?.items ?? [];
+  // Les événements déjà montrés par une mission n'ont pas à revenir dans la candidature libre.
+  const shown = new Set(items.map((c) => c.id));
+  const freeEvents = (open.data ?? []).filter(
+    (e) => !shown.has(e.id) && (!e.myApplication || REOPENED.includes(e.myApplication.status)),
+  );
 
   async function reloadAll() {
-    await Promise.all([profile.reload(), missions.reload()]);
+    await Promise.all([profile.reload(), missions.reload(), open.reload()]);
     void refreshMe();
   }
+
+  // Une panne n'est jamais une liste vide : le message de l'API et « Réessayer » (les données en cache restent affichées).
+  const failed = (profile.error && !p ? profile.error : null) ?? (missions.error && !result ? missions.error : null);
 
   return (
     <TabScreen
@@ -66,19 +91,33 @@ export function MissionsScreen() {
       facts={result?.from ? proV2Labels.around(result.from) : proV2Labels.aroundUnknown}
       onRefresh={reloadAll}
       overlays={
-        <ProposeSheet
-          mission={proposing}
-          providerName={p?.name ?? ""}
-          onClose={() => setProposing(null)}
-          onSend={async ({ needId, message }) => {
-            if (!proposing) return;
-            await api.applyAsProvider(proposing.id, { rulesAccepted: true, message, needId });
-            await reloadAll();
-          }}
-        />
+        <>
+          <ProposeSheet
+            mission={proposing}
+            providerName={p?.name ?? ""}
+            onClose={() => setProposing(null)}
+            onSend={async ({ needId, message }) => {
+              if (!proposing) return;
+              await api.applyAsProvider(proposing.id, { rulesAccepted: true, message, needId });
+              await reloadAll();
+            }}
+          />
+          <ApplySheet
+            eventTitle={applying?.title ?? null}
+            onClose={() => setApplying(null)}
+            onSend={async (message) => {
+              if (!applying) return;
+              await api.applyAsProvider(applying.id, { rulesAccepted: true, message });
+              setApplying(null);
+              await reloadAll();
+            }}
+          />
+        </>
       }
     >
-      {!p ? (
+      {failed ? (
+        <LoadError message={failed.message} onRetry={() => void reloadAll()} />
+      ) : !p ? (
         profile.loading ? null : (
           <>
             <Notice>Crée ton profil prestataire pour voir les missions autour de toi.</Notice>
@@ -109,9 +148,9 @@ export function MissionsScreen() {
                   setRadius(km);
                   setDraft(null);
                 }}
-                min={10}
-                max={300}
-                step={10}
+                min={RADIUS_MIN}
+                max={RADIUS_MAX}
+                step={RADIUS_STEP}
                 label={proV2Labels.radiusLabel}
                 format={proV2Labels.radiusChip}
               />
@@ -168,7 +207,12 @@ export function MissionsScreen() {
                     <Button
                       variant="plate"
                       icon="ticket"
-                      onPress={() => router.navigate("/candidatures")}
+                      onPress={() =>
+                        router.navigate({
+                          pathname: "/candidatures",
+                          params: card.myApplication ? { open: card.myApplication.id } : {},
+                        })
+                      }
                       testID="mission-see"
                     >
                       {missionTexts.seeApplication}
@@ -188,6 +232,36 @@ export function MissionsScreen() {
               );
             })}
           </View>
+
+          {open.error && !open.data ? (
+            <LoadError message={open.error.message} onRetry={() => void open.reload()} />
+          ) : null}
+          {freeEvents.length > 0 ? (
+            <View style={styles.stack} testID="missions-free">
+              <SecHead title={proV2Labels.openTitle} hint={proV2Labels.openSubtitle} />
+              {freeEvents.map((e) => (
+                <Ticket
+                  key={e.id}
+                  testID="provider-open-event"
+                  date={e.startsAt}
+                  badge={<Chip surface="plate">{proV2Labels.openSubtitle}</Chip>}
+                  title={e.title}
+                  detail={[e.structureName, e.city, formatDayHour(e.startsAt)].filter(Boolean).join(" · ")}
+                  onPressTitle={() => router.push(`/e/${e.slug}`)}
+                >
+                  <Button
+                    variant="plate"
+                    icon="send"
+                    disabled={Boolean(p.issue)}
+                    onPress={() => setApplying(e)}
+                    testID="open-apply"
+                  >
+                    {proV2Labels.apply}
+                  </Button>
+                </Ticket>
+              ))}
+            </View>
+          ) : null}
         </>
       )}
     </TabScreen>

@@ -89,6 +89,15 @@ export function ProviderForm({
 
   // Le menu est relu à chaque frappe : une erreur par ligne illisible, avec son numéro.
   const menuErrors = menu.trim() ? parseMenuLines(menu).errors : [];
+  // Équipe et façade : mêmes bornes que l'API (1 à 50 personnes, 1 à 30 mètres) ; « 0 » est refusé avec le message du champ.
+  const teamValue = wholeNumber(team);
+  const teamError =
+    team.trim() && (teamValue === null || teamValue < 1 || teamValue > 50) ? proV2Labels.teamRange : undefined;
+  const frontageValue = wholeNumber(frontage);
+  const frontageError =
+    frontage.trim() && (frontageValue === null || frontageValue < 1 || frontageValue > 30)
+      ? proV2Labels.frontageRange
+      : undefined;
   const menuError = menuErrors.length ? menuErrors.map((e) => e.message).join("\n") : undefined;
 
   const toggleTrade = (code: string) => {
@@ -105,6 +114,7 @@ export function ProviderForm({
     setSaved(false);
     if (name.trim().length < 2) return setError(proV2Labels.nameMissing);
     if (!stand && trades.length === 0) return setError("Coche au moins un métier.");
+    if (teamError || frontageError) return setError(teamError ?? frontageError ?? null);
     if (menuErrors.length) return setError("Corrige les lignes du menu avant d'enregistrer.");
     const radiusKm = wholeNumber(radius) ?? PROVIDER_DEFAULT_RADIUS_KM;
     if (radiusKm < 5 || radiusKm > 500) return setError(proV2Labels.radiusLimits(5, 500));
@@ -196,6 +206,7 @@ export function ProviderForm({
           maxLength={2}
           placeholder="ex. 2"
           help="Le nombre de personnes sur le stand."
+          error={teamError}
         />
         <TextField
           label="Présentation"
@@ -244,6 +255,7 @@ export function ProviderForm({
           keyboardType="number-pad"
           maxLength={2}
           placeholder="ex. 6"
+          error={frontageError}
         />
         <CheckboxField label={vitrineTexts.waterField} checked={water} onChange={setWater} />
       </Plate>

@@ -32,7 +32,9 @@ import {
   SubscriptionBlock,
 } from "./ProBlocks";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space1, space2, space3, space4, space12 } = tokens.spacing;
+/** Logo rond de l'en-tête : 64 px. */
+const LOGO = space12 + space4;
 
 type Mode = "view" | "edit";
 
@@ -124,107 +126,105 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
             ]}
           />
 
-          {mode === "view" ? (
-            <View style={styles.stack} testID="pro-view">
-              <Muted variant="label">{proV2Labels.activities}</Muted>
-              <IconTiles
-                testID="pro-view-activities"
-                items={pro.activities.map((a) => ({ key: a, label: proActivityLabels[a], icon: proActivityIcons[a] }))}
-              />
+          <View style={[styles.stack, mode !== "view" && styles.hidden]} testID="pro-view">
+            <Muted variant="label">{proV2Labels.activities}</Muted>
+            <IconTiles
+              testID="pro-view-activities"
+              items={pro.activities.map((a) => ({ key: a, label: proActivityLabels[a], icon: proActivityIcons[a] }))}
+            />
 
-              <SecHead title={proV2Labels.discountsTitle} hint={proV2Labels.discountsHint} />
-              {cells.length ? (
-                <Plate style={styles.discounts} testID="pro-view-discounts">
-                  {cells.map((c, i) => (
-                    <View
-                      key={c.key}
-                      style={[styles.discount, i > 0 && { borderLeftWidth: 1, borderLeftColor: t.color.plateLine }]}
-                    >
-                      <Text variant="label" color={t.color.plateMuted}>
-                        {c.label}
-                      </Text>
-                      <Text variant="numberNarrow" color={t.color.plateInk} style={styles.percent}>
-                        {`${c.percent} %`}
-                      </Text>
-                    </View>
-                  ))}
-                </Plate>
-              ) : (
-                <Muted variant="body">{proV2Labels.discountsNone}</Muted>
-              )}
-
-              <SecHead
-                title={proV2Labels.worksTitle}
-                hint={pro.photos.length ? proV2Labels.works(pro.photos.length) : undefined}
-              />
-              {pro.photos.length ? (
-                <View style={styles.works} testID="pro-view-works">
-                  {pro.photos.map((p, i) => (
-                    <Pressable
-                      key={p.id}
-                      style={styles.work}
-                      onPress={() => setViewer(i)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Réalisation ${i + 1} en plein écran`}
-                    >
-                      <Photo source={mediaSource(p.url)} style={styles.workPhoto} />
-                    </Pressable>
-                  ))}
-                </View>
-              ) : (
-                <Muted variant="body">{proV2Labels.worksNone}</Muted>
-              )}
-
-              <View style={styles.actions}>
-                {hasPosition ? (
-                  <Button
-                    variant="primary"
-                    icon="place"
-                    style={styles.grow}
-                    onPress={() =>
-                      void Linking.openURL(
-                        mapsUrl({
-                          lat: pro.lat,
-                          lng: pro.lng,
-                          addressLine: pro.addressLine,
-                          city: pro.city,
-                          title: pro.name,
-                        }),
-                      ).catch(() => undefined)
-                    }
-                    testID="pro-go"
+            <SecHead title={proV2Labels.discountsTitle} hint={proV2Labels.discountsHint} />
+            {cells.length ? (
+              <Plate style={styles.discounts} testID="pro-view-discounts">
+                {cells.map((c, i) => (
+                  <View
+                    key={c.key}
+                    style={[styles.discount, i > 0 && { borderLeftWidth: 1, borderLeftColor: t.color.plateLine }]}
                   >
-                    {proV2Labels.goThere}
-                  </Button>
-                ) : null}
-                <Button variant="secondary" icon="heart" onPress={() => setPreviewNote(true)} testID="pro-favorite">
-                  {proV2Labels.favorite}
-                </Button>
+                    <Text variant="label" color={t.color.plateMuted}>
+                      {c.label}
+                    </Text>
+                    <Text variant="numberNarrow" color={t.color.plateInk} style={styles.percent}>
+                      {`${c.percent} %`}
+                    </Text>
+                  </View>
+                ))}
+              </Plate>
+            ) : (
+              <Muted variant="body">{proV2Labels.discountsNone}</Muted>
+            )}
+
+            <SecHead
+              title={proV2Labels.worksTitle}
+              hint={pro.photos.length ? proV2Labels.works(pro.photos.length) : undefined}
+            />
+            {pro.photos.length ? (
+              <View style={styles.works} testID="pro-view-works">
+                {pro.photos.map((p, i) => (
+                  <Pressable
+                    key={p.id}
+                    style={styles.work}
+                    onPress={() => setViewer(i)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Réalisation ${i + 1} en plein écran`}
+                  >
+                    <Photo source={mediaSource(p.url)} style={styles.workPhoto} />
+                  </Pressable>
+                ))}
               </View>
-              {previewNote ? <Notice>{proV2Labels.favoritePreview}</Notice> : null}
-            </View>
-          ) : (
-            <View style={styles.stack} testID="pro-edit">
-              <ProFicheFields />
-              {/* Lot 40 : Publier n'est plus un onglet (barre v2) ; on y arrive depuis Ma fiche. */}
-              <Button
-                variant="plate"
-                icon="add"
-                next
-                onPress={() => router.push("/(pro)/publier")}
-                fullWidth
-                testID="pro-new-post"
-              >
-                Publier une actualité
+            ) : (
+              <Muted variant="body">{proV2Labels.worksNone}</Muted>
+            )}
+
+            <View style={styles.actions}>
+              {hasPosition ? (
+                <Button
+                  variant="primary"
+                  icon="place"
+                  style={styles.grow}
+                  onPress={() =>
+                    void Linking.openURL(
+                      mapsUrl({
+                        lat: pro.lat,
+                        lng: pro.lng,
+                        addressLine: pro.addressLine,
+                        city: pro.city,
+                        title: pro.name,
+                      }),
+                    ).catch(() => undefined)
+                  }
+                  testID="pro-go"
+                >
+                  {proV2Labels.goThere}
+                </Button>
+              ) : null}
+              <Button variant="secondary" icon="heart" onPress={() => setPreviewNote(true)} testID="pro-favorite">
+                {proV2Labels.favorite}
               </Button>
-              <PublicationBlock pro={pro} reload={reload} />
-              <SiretBlock pro={pro} reload={reload} />
-              <DiscountsBlock pro={pro} reload={reload} />
-              <MediaBlock pro={pro} reload={reload} />
-              <PartnersBlock pro={pro} reload={reload} />
-              <SubscriptionBlock pro={pro} />
             </View>
-          )}
+            {previewNote ? <Notice>{proV2Labels.favoritePreview}</Notice> : null}
+          </View>
+          {/* Montée en permanence : changer de segment ne perd pas la saisie en cours. */}
+          <View style={[styles.stack, mode !== "edit" && styles.hidden]} testID="pro-edit">
+            <ProFicheFields />
+            {/* Lot 40 : Publier n'est plus un onglet (barre v2) ; on y arrive depuis Ma fiche. */}
+            <Button
+              variant="plate"
+              icon="add"
+              next
+              onPress={() => router.push("/(pro)/publier")}
+              fullWidth
+              testID="pro-new-post"
+            >
+              Publier une actualité
+            </Button>
+            <PublicationBlock pro={pro} reload={reload} />
+            <SiretBlock pro={pro} reload={reload} />
+            <DiscountsBlock pro={pro} reload={reload} />
+            <MediaBlock pro={pro} reload={reload} />
+            <PartnersBlock pro={pro} reload={reload} />
+            <SubscriptionBlock pro={pro} />
+          </View>
         </>
       )}
     </TabScreen>
@@ -234,12 +234,13 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
 const styles = StyleSheet.create({
   identity: { flexDirection: "row", alignItems: "center", gap: space3 },
   identityText: { flex: 1, minWidth: 0, gap: space1 },
-  logo: { width: 64, height: 64, borderRadius: 32, overflow: "hidden" },
+  logo: { width: LOGO, height: LOGO, borderRadius: tokens.radius.radiusPill, overflow: "hidden" },
   pills: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space2 },
   stack: { gap: space3 },
   discounts: { flexDirection: "row", padding: 0, overflow: "hidden" },
   discount: { flex: 1, minWidth: 0, alignItems: "center", gap: 2, paddingVertical: space3, paddingHorizontal: space1 },
-  percent: { fontSize: 30, lineHeight: 34, textAlign: "center" },
+  percent: { textAlign: "center" },
+  hidden: { display: "none" },
   works: { flexDirection: "row", flexWrap: "wrap", gap: space1 },
   work: { width: "32.4%" },
   workPhoto: { width: "100%", aspectRatio: 1, borderRadius: tokens.radius.radiusSm },

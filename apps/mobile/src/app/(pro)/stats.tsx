@@ -39,7 +39,7 @@ export default function ProStats() {
               <Text variant="label" color={t.color.plateMuted}>
                 {proV2Labels.views}
               </Text>
-              <Text variant="numberNarrow" color={t.color.plateInk} style={styles.bigNumber} testID="pro-stats-views">
+              <Text variant="numberNarrow" color={t.color.plateInk} testID="pro-stats-views">
                 {formatCount(s.views)}
               </Text>
             </Plate>
@@ -47,12 +47,7 @@ export default function ProStats() {
               <Text variant="label" color={t.color.plateMuted}>
                 {proV2Labels.discounts}
               </Text>
-              <Text
-                variant="numberNarrow"
-                color={t.color.plateInk}
-                style={styles.bigNumber}
-                testID="pro-stats-discounts"
-              >
+              <Text variant="numberNarrow" color={t.color.plateInk} testID="pro-stats-discounts">
                 {formatCount(s.discounts)}
               </Text>
             </Plate>
@@ -94,11 +89,10 @@ export default function ProStats() {
 const styles = StyleSheet.create({
   big: { flexDirection: "row", gap: space2 },
   bigCell: { flex: 1, minWidth: 0, gap: space1, padding: space3 },
-  bigNumber: { fontSize: 44, lineHeight: 48 },
   block: { gap: space2, padding: space3 },
   barRow: { flexDirection: "row", alignItems: "center", gap: space2 },
   barLabel: { width: 76 },
-  track: { flex: 1, height: 10, borderRadius: 5, overflow: "hidden" },
-  fill: { height: 10, borderRadius: 5 },
+  track: { flex: 1, height: space2, borderRadius: tokens.radius.radiusPill, overflow: "hidden" },
+  fill: { height: space2, borderRadius: tokens.radius.radiusPill },
   barCount: { width: 32, textAlign: "right" },
 });

@@ -13,6 +13,7 @@ import { photoForm, pickPhotos } from "@/lib/photos";
 import { initialsOf } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { PhotoGrid } from "@/ui/PhotoGrid";
@@ -22,7 +23,9 @@ import { Segments } from "@/ui/Segments";
 import { ProviderForm } from "./ProviderForm";
 import { VitrineView } from "./VitrineView";
 
-const { space1, space3 } = tokens.spacing;
+const { space1, space3, space4, space12 } = tokens.spacing;
+/** Logo rond de l'en-tête : 64 px. */
+const LOGO = space12 + space4;
 
 type Mode = "view" | "edit";
 
@@ -82,7 +85,9 @@ export function VitrineScreen() {
         await Promise.all([profile.reload(), reviews.reload()]);
       }}
     >
-      {!p && profile.loading ? (
+      {!p && profile.error ? (
+        <LoadError message={profile.error.message} onRetry={() => void profile.reload()} />
+      ) : !p && profile.loading ? (
         <Muted variant="body">Chargement…</Muted>
       ) : (
         <>
@@ -114,48 +119,50 @@ export function VitrineScreen() {
           ) : null}
           {p?.issue ? <Notice>Pour candidater : {p.issue}</Notice> : null}
 
-          {mode === "view" && p ? (
-            <VitrineView vitrine={p} reviews={reviews.data} />
-          ) : (
-            <View style={styles.stack} testID="vitrine-edit">
-              <ProviderForm key={p?.id ?? "new"} profile={p} submitLabel={proV2Labels.save} onSaved={replace} />
-              {p ? (
-                <>
-                  <SecHead title={proV2Labels.photosTitle(p.photos.length, PROVIDER_MAX_PHOTOS)} />
-                  <Muted variant="body">{proV2Labels.photosHelp}</Muted>
-                  {/* Lot 36 : retrait par la croix visible puis une confirmation (plus au simple toucher). */}
-                  {p.photos.length > 0 ? (
-                    <PhotoGrid
-                      photos={p.photos.map((photo, i) => ({
-                        key: photo.id,
-                        source: mediaSource(photo.url),
-                        label: `Photo ${i + 1}`,
-                      }))}
-                      onRemove={(i) => {
-                        const photo = p.photos[i];
-                        return photo ? removePhoto(photo.id) : undefined;
-                      }}
-                      disabled={busy}
-                      testID="provider-photos"
-                    />
-                  ) : null}
-                  {error ? <Notice tone="error">{error}</Notice> : null}
-                  {p.photos.length < PROVIDER_MAX_PHOTOS ? (
-                    <Button
-                      variant="secondary"
-                      icon="add"
-                      loading={busy}
-                      disabled={busy}
-                      onPress={() => void addPhotos()}
-                      fullWidth
-                    >
-                      {proV2Labels.photosAdd}
-                    </Button>
-                  ) : null}
-                </>
-              ) : null}
+          {p ? (
+            <View style={mode === "view" ? undefined : styles.hidden}>
+              <VitrineView vitrine={p} reviews={reviews.data} />
             </View>
-          )}
+          ) : null}
+          {/* Montée en permanence : changer de segment ne perd pas la saisie en cours. */}
+          <View style={[styles.stack, p && mode === "view" && styles.hidden]} testID="vitrine-edit">
+            <ProviderForm key={p?.id ?? "new"} profile={p} submitLabel={proV2Labels.save} onSaved={replace} />
+            {p ? (
+              <>
+                <SecHead title={proV2Labels.photosTitle(p.photos.length, PROVIDER_MAX_PHOTOS)} />
+                <Muted variant="body">{proV2Labels.photosHelp}</Muted>
+                {/* Lot 36 : retrait par la croix visible puis une confirmation (plus au simple toucher). */}
+                {p.photos.length > 0 ? (
+                  <PhotoGrid
+                    photos={p.photos.map((photo, i) => ({
+                      key: photo.id,
+                      source: mediaSource(photo.url),
+                      label: `Photo ${i + 1}`,
+                    }))}
+                    onRemove={(i) => {
+                      const photo = p.photos[i];
+                      return photo ? removePhoto(photo.id) : undefined;
+                    }}
+                    disabled={busy}
+                    testID="provider-photos"
+                  />
+                ) : null}
+                {error ? <Notice tone="error">{error}</Notice> : null}
+                {p.photos.length < PROVIDER_MAX_PHOTOS ? (
+                  <Button
+                    variant="secondary"
+                    icon="add"
+                    loading={busy}
+                    disabled={busy}
+                    onPress={() => void addPhotos()}
+                    fullWidth
+                  >
+                    {proV2Labels.photosAdd}
+                  </Button>
+                ) : null}
+              </>
+            ) : null}
+          </View>
         </>
       )}
     </TabScreen>
@@ -165,11 +172,12 @@ export function VitrineScreen() {
 const styles = StyleSheet.create({
   identity: { flexDirection: "row", alignItems: "center", gap: space3 },
   identityText: { flex: 1, minWidth: 0, gap: space1 },
+  hidden: { display: "none" },
   logo: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 1.5,
+    width: LOGO,
+    height: LOGO,
+    borderRadius: tokens.radius.radiusPill,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },

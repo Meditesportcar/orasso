@@ -7,7 +7,6 @@ import {
   gradeLabels,
   grades,
   proV2Labels as L,
-  lockAt,
   type MissionCard,
   missionTexts,
   type ProActivity,
@@ -186,20 +185,9 @@ export function spotLine(app: ProviderApplicationView): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
-/**
- * Date limite de réponse d'une candidature en attente : le verrouillage de l'événement (l'organisateur trie jusque-là).
- * L'API ne renvoie pas `lockAt` pour une candidature : on le recalcule avec la règle commune et le délai par défaut.
- */
-export function answerDeadline(startsAt: string, lockOffsetMinutes = 120): Date {
-  return lockAt({ startsAt: new Date(startsAt), lockOffsetMinutes });
-}
-
-/** « Envoyée le 19 oct. · réponse avant le 25 oct. » */
+/** « Envoyée le 19 oct · en attente de la réponse de l'équipe organisatrice » : aucune échéance n'est promise. */
 export function pendingLine(app: ProviderApplicationView): string {
-  return [
-    L.sentOn(formatShortDate(app.createdAt)),
-    L.answerBefore(formatShortDate(answerDeadline(app.event.startsAt))),
-  ].join(" · ");
+  return L.pendingLine(formatShortDate(app.createdAt));
 }
 
 /** « J-6 » devant la date de l'événement (retenue à venir). */
@@ -245,7 +233,7 @@ export function monthYear(iso: string | Date): string {
 
 /** « LB » : initiales des deux premiers mots du nom (logo rond de la vitrine). */
 export function initialsOf(name: string): string {
-  const words = name.trim().split(/s+/).filter(Boolean);
+  const words = name.trim().split(/\s+/).filter(Boolean);
   return (
     words.length > 1 ? `${words[0]?.[0] ?? ""}${words[1]?.[0] ?? ""}` : (words[0] ?? "?").slice(0, 2)
   ).toUpperCase();

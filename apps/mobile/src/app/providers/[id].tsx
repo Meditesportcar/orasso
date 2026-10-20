@@ -15,7 +15,9 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
-const { space1, space3 } = tokens.spacing;
+const { space1, space3, space4, space12 } = tokens.spacing;
+/** Logo rond de l'en-tête : 64 px. */
+const LOGO = space12 + space4;
 
 export default function ProviderPage() {
   const { t } = useTheme();
@@ -98,6 +100,13 @@ export default function ProviderPage() {
 const styles = StyleSheet.create({
   identity: { flexDirection: "row", alignItems: "center", gap: space3 },
   identityText: { flex: 1, minWidth: 0, gap: space1 },
-  logo: { width: 64, height: 64, borderRadius: 32, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  logo: {
+    width: LOGO,
+    height: LOGO,
+    borderRadius: tokens.radius.radiusPill,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   links: { gap: space1 },
 });

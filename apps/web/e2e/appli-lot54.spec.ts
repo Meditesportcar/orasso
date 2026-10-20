@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { accountQr, apiCall, login, MOBILE, SEED_PASSWORD } from "./helpers";
 import { auditApp } from "./helpers/lot43";
+import { sql } from "./helpers/lot48";
 
 // Lot 54, côté appli (version web de recette) : les casquettes Pro et Prestataire en DA v2.
 // Pro (garage@orasso.local, « Yann » du brief) : Ma fiche en grille (activités en tuiles, remises par grade, réalisations,
@@ -110,7 +111,8 @@ for (const theme of THEMES) {
     await expect(page.getByText("Vue passionné", { exact: true })).toBeVisible();
     await expect(page.getByText("Modifier ma fiche", { exact: true })).toBeVisible();
     await expect(page.getByTestId("pro-view-activities")).toBeVisible();
-    await expect(page.getByText("Remises par grade", { exact: true })).toBeVisible();
+    // Les deux vues restent montées (la saisie survit au changement de segment) : seul ce qui se voit compte.
+    await expect(page.getByText("Remises par grade", { exact: true }).locator("visible=true")).toBeVisible();
     await expect(page.getByText("Montre ton QR de compte", { exact: true })).toBeVisible();
     await expect(page.getByTestId("pro-view-discounts")).toBeVisible();
     await expect(page.getByText("Réalisations", { exact: true })).toBeVisible();
@@ -130,6 +132,12 @@ for (const theme of THEMES) {
     await expect(page.getByPlaceholder("ex. atelier-tet.fr")).toBeVisible();
     await expect(page.getByPlaceholder("ex. 912 345 678 00014")).toBeVisible();
     await expect(page.getByText(/14 chiffres, ex\. 912 345 678 00014/)).toBeVisible();
+    // Correction 6 : la saisie en cours survit à un aller-retour entre les segments.
+    await page.getByLabel("Présentation").fill("Brouillon gardé en changeant de segment.");
+    await page.getByText("Vue passionné", { exact: true }).click();
+    await expect(page.getByTestId("pro-view")).toBeVisible();
+    await page.getByText("Modifier ma fiche", { exact: true }).click();
+    await expect(page.getByLabel("Présentation")).toHaveValue("Brouillon gardé en changeant de segment.");
     await expect(page.getByTestId("pro-address-check")).toBeVisible();
     await expect(page.getByTestId("pro-new-post")).toBeVisible();
     await rules(page, theme, "Modifier ma fiche");
@@ -142,24 +150,27 @@ for (const theme of THEMES) {
     await expect(page.getByText("Remises par grade", { exact: true }).last()).toBeVisible();
     await expect(page.getByTestId("pro-camera")).toBeVisible();
     const field = page.getByLabel(/Recette · charge utile/);
-    if (theme === "beton") {
-      const kenji = await login("kenji@orasso.local");
-      await field.fill(await accountQr(kenji));
-      await field.press("Enter");
-      const result = page.getByTestId("pro-scan-result");
-      await expect(result).toBeVisible({ timeout: 20_000 });
-      await expect(result).toContainText(/Dernier scan : Kenji/);
-      await expect(page.getByTestId("pro-scan-discount")).toContainText(
-        /Grade \w+ · (remise de \d+ % appliquée|pas de remise)/,
-      );
-      await expect(result).not.toContainText("@");
-    } else {
-      await field.fill("OA1AAAAAAAAAAA.12345678");
-      await field.press("Enter");
-      await expect(page.getByTestId("pro-scan-result")).toContainText(/Compte inconnu|Refusé/, { timeout: 20_000 });
-    }
+    // Un passionné différent par thème : le code de 60 s d'un même compte ne se relit pas (rejeu refusé).
+    const scanned =
+      theme === "beton"
+        ? { email: "kenji@orasso.local", pseudo: "Kenji" }
+        : { email: "nina@orasso.local", pseudo: "Nina" };
+    await field.fill(await accountQr(await login(scanned.email)));
+    await field.press("Enter");
+    const result = page.getByTestId("pro-scan-result");
+    await expect(result).toBeVisible({ timeout: 20_000 });
+    await expect(result).toContainText(new RegExp(`Dernier scan : ${scanned.pseudo}`));
+    await expect(page.getByTestId("pro-scan-discount")).toContainText(
+      /Grade \w+ · (remise de \d+ % appliquée|pas de remise)/,
+    );
+    await expect(result).not.toContainText("@");
     await rules(page, theme, "Scanner");
     await shot(page, "scanner", theme);
+    // Un code illisible est refusé sans effacer le dernier scan de la séance.
+    await field.fill("OA1AAAAAAAAAAA.12345678");
+    await field.press("Enter");
+    await expect(page.getByTestId("pro-scan-result")).toContainText(/Compte inconnu|Refusé|Code/, { timeout: 20_000 });
+    await shot(page, "scanner-refuse", theme);
 
     // Stats : deux chiffres en grand, détail par grade.
     await tab(page, "Stats");
@@ -202,6 +213,41 @@ for (const theme of THEMES) {
     await rules(page, theme, "Missions");
     await shot(page, "missions", theme);
 
+    // Candidature libre : un événement qui accepte les food trucks sans avoir écrit de besoin (docs/01).
+    await sql(
+      `update events set vendor_types = vendor_types || array['Food truck']::text[] where id = (
+         select e.id from events e
+         where e.status = 'published' and e.starts_at > now() + interval '4 days'
+           and not ('Food truck' = any(e.vendor_types))
+           and not exists (select 1 from event_needs n where n.event_id = e.id)
+         order by e.starts_at asc limit 1)`,
+    );
+    await page.reload();
+    await afterOpening(page);
+    await tab(page, "Missions");
+    await expect(page.getByTestId("missions-free")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Ouverts à ton activité", { exact: true })).toBeVisible();
+    await expect(page.getByText("Sans mission précise", { exact: true }).first()).toBeVisible();
+    const free = page.getByTestId("provider-open-event").first();
+    const freeTitle = (await free.locator('[role="link"]').first().textContent())?.trim() ?? "";
+    await rules(page, theme, "Missions · ouverts à ton activité");
+    await page.getByTestId("missions-free").scrollIntoViewIfNeeded();
+    await shot(page, "missions-ouverts", theme);
+    await free.getByTestId("open-apply").click();
+    await page.getByText("J'accepte le règlement de l'événement").click();
+    await page.getByRole("button", { name: "Envoyer ma candidature" }).click();
+    await expect(page.getByTestId("provider-open-event").filter({ hasText: freeTitle })).toHaveCount(0, {
+      timeout: 30_000,
+    });
+
+    // « Voir ma candidature » ouvre le ticket concerné, en tête de l'onglet Candidatures.
+    await page.getByTestId("mission-card").filter({ hasText: "Expo Rivesaltes" }).getByTestId("mission-see").click();
+    await page.waitForURL(/candidatures/);
+    await expect(page.getByTestId("provider-application").first()).toContainText("Expo Rivesaltes", {
+      timeout: 30_000,
+    });
+    await tab(page, "Missions");
+
     // Proposer La Brasa à la première mission encore ouverte : la feuille, puis l'envoi.
     const openCard = page
       .getByTestId("mission-card")
@@ -234,10 +280,11 @@ for (const theme of THEMES) {
     await expect(nocturne).toContainText("Retenue");
     await expect(nocturne).toContainText(/Emplacement B2 · arrivée 16 h · électricité 16 A/);
     await expect(nocturne.getByTestId("candidature-access")).toBeVisible();
+    await expect(nocturne.getByTestId("candidature-access")).toBeVisible();
     await expect(nocturne.getByTestId("candidature-instructions-open")).toBeVisible();
     const pending = page.getByTestId("provider-application").filter({ hasText: eventTitle }).first();
     await expect(pending).toContainText("En attente");
-    await expect(pending).toContainText(/Envoyée le \d+ \S+ · réponse avant le \d+ \S+/);
+    await expect(pending).toContainText(/Envoyée le \d+ \S+ · en attente de la réponse de l'équipe organisatrice/);
     await expect(pending.getByTestId("candidature-withdraw")).toBeVisible();
     await expect(page.getByText(/Un empêchement \? Retire ta candidature depuis le ticket/)).toBeVisible();
     await rules(page, theme, "Candidatures");
@@ -282,11 +329,12 @@ for (const theme of THEMES) {
     await expect(page.getByTestId("vitrine-menu-list")).toContainText("Bocata de botifarra");
     await expect(page.getByTestId("vitrine-menu-list")).toContainText("9 €");
     await expect(page.getByText("De 4 à 11 €", { exact: true })).toBeVisible();
-    await expect(page.getByText("Besoins sur place", { exact: true })).toBeVisible();
+    await expect(page.getByText("Besoins sur place", { exact: true }).locator("visible=true")).toBeVisible();
     await expect(page.getByText("Électricité 16 A", { exact: true })).toBeVisible();
     await expect(page.getByText("6 m de façade", { exact: true })).toBeVisible();
     await expect(page.getByText("Pas d'eau", { exact: true })).toBeVisible();
-    await expect(page.getByText("Jusqu'à 80 km", { exact: true })).toBeVisible();
+    await expect(page.getByText("Jusqu'à 80 km", { exact: true }).locator("visible=true")).toBeVisible();
+    await expect(page.getByTestId("vitrine-identity-tiles")).toContainText("Grillades catalanes");
     await expect(page.getByText("Avis des organisateurs", { exact: true })).toBeVisible();
     await expect(page.getByTestId("vitrine-reviews")).toContainText("MéditeSportCar");
     await rules(page, theme, "Vitrine");
@@ -301,6 +349,14 @@ for (const theme of THEMES) {
     await menu.fill(`${original}\nFrites sans prix`);
     await expect(page.getByText(/Ligne \d+ : indique le prix/)).toBeVisible();
     await shot(page, "vitrine-erreur", theme);
+    // Équipe à « 0 » refusée comme l'API, et la saisie survit au changement de segment.
+    await page.getByLabel("Équipe").fill("0");
+    await expect(page.getByText("Équipe : de 1 à 50 personnes.")).toBeVisible();
+    await page.getByText("Vue organisateur", { exact: true }).click();
+    await page.getByText("Modifier ma vitrine", { exact: true }).click();
+    await expect(page.getByLabel("Équipe")).toHaveValue("0");
+    await expect(page.getByText("Équipe : de 1 à 50 personnes.")).toBeVisible();
+    await page.getByLabel("Équipe").fill("2");
     await page.getByTestId("vitrine-save").click();
     await expect(page.getByText("Corrige les lignes du menu avant d'enregistrer.")).toBeVisible();
     await menu.fill(original);

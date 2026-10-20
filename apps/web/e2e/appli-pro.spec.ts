@@ -86,7 +86,7 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     // Lot 54 : l'abonnement et les remises sont dans le segment « Modifier ma fiche ».
     await page.getByText("Modifier ma fiche", { exact: true }).click();
     await expect(page.getByTestId("pro-subscription")).toHaveText("Gratuit jusqu'au 21 juin 2027");
-    await expect(page.getByText("Remises par grade")).toBeVisible();
+    await expect(page.getByText("Remises par grade").locator("visible=true").first()).toBeVisible();
     const body = (await page.locator("body").textContent()) ?? "";
     expect(body).not.toMatch(/€|\bprix\b|stripe|checkout/i);
     await expect(page.getByRole("button", { name: /payer|acheter|souscrire|s'abonner/i })).toHaveCount(0);

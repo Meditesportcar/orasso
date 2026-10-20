@@ -1,5 +1,5 @@
 // Lot 54 : calculs purs des onglets Pro et Prestataire.
-import type { MissionCard, ProviderApplicationView } from "@orasso/shared";
+import { type MissionCard, type ProviderApplicationView, providerWaitlistNote } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,6 +8,7 @@ import {
   discountCells,
   formatCount,
   gradeBars,
+  initialsOf,
   missionDetail,
   missionFacts,
   missionTag,
@@ -135,7 +136,9 @@ describe("candidatures", () => {
     expect(spotLine(app({ spot: { label: "C1", note: null } }))).toBe("Emplacement C1");
   });
   it("écrit la ligne d'une candidature en attente", () => {
-    expect(pendingLine(app({ status: "pending" }))).toBe("Envoyée le 19 oct · réponse avant le 24 oct");
+    expect(pendingLine(app({ status: "pending" }))).toBe(
+      "Envoyée le 19 oct · en attente de la réponse de l'équipe organisatrice",
+    );
   });
   it("garde l'avis des candidatures passées", () => {
     expect(reviewTag(app({ review: { rating: 5, comment: "Top", createdAt: "x", authorName: "MSC" } }))).toBe(
@@ -212,5 +215,22 @@ describe("fiche pro et stats", () => {
     expect(bars.find((b) => b.grade === "route")?.percent).toBe(100);
     expect(bars.find((b) => b.grade === "rodage")?.percent).toBe(43);
     expect(gradeBars({}).every((b) => b.percent === 0)).toBe(true);
+  });
+});
+
+describe("initiales de la vitrine", () => {
+  it("prend la première lettre des deux premiers mots", () => {
+    expect(initialsOf("La Brasa")).toBe("LB");
+    expect(initialsOf("  La   Brasa  catalane ")).toBe("LB");
+  });
+  it("garde deux lettres pour un seul mot", () => {
+    expect(initialsOf("Brasa")).toBe("BR");
+    expect(initialsOf("")).toBe("?");
+  });
+});
+
+describe("liste d'attente du prestataire", () => {
+  it("n'annonce aucun délai : l'organisateur recontacte", () => {
+    expect(providerWaitlistNote).toBe("L'organisateur te recontactera s'il y a de la place pour toi.");
   });
 });
