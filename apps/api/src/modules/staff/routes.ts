@@ -17,6 +17,7 @@ import { staffRemindService } from "./remind";
 import { staffRequestsService } from "./requests";
 import { staffService } from "./service";
 import { shopService } from "./shop";
+import { teamHistoryService } from "./team-history";
 
 const userIdParam = (raw: string | undefined) => {
   const id = raw ?? "";
@@ -27,6 +28,11 @@ const userIdParam = (raw: string | undefined) => {
 export const staffRoutes = new Hono<AppEnv>()
   .get("/me/staff-events", async (c) => c.json(await staffService.myEvents(await requireUser(c))))
   .get("/events/:id/staff", async (c) => c.json(await staffService.list(await requireUser(c), uuidParam(c, "id"))))
+  // Équipe en bulles (lot 52) : historique de chaque membre avec la structure.
+  .get("/structures/:id/team-history", async (c) => {
+    c.header("cache-control", "private, no-store");
+    return c.json(await teamHistoryService.ofStructure(await requireUser(c), uuidParam(c, "id")));
+  })
   .patch("/events/:id/staff/:userId", async (c) => {
     const v = await requireUser(c);
     const input = await body(c, eventStaffUpdateSchema);

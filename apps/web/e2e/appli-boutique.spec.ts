@@ -35,7 +35,7 @@ test("boutique : billet OK puis déjà utilisé, compteur, alerte avec position 
   );
   const userId = (await apiCall<{ user: { id: string } }>(fan, "GET", "/me")).data.user.id;
   expect((await apiCall(damien, "POST", `/structures/${structureId}/members/${userId}/accept`)).status).toBe(204);
-  // Lot 36 : accepter ne donne pas de rôle ; le rôle « Entrée visiteurs » (ex-boutique) est donné ensuite.
+  // Lot 36 : accepter ne donne pas de rôle ; le rôle « Contrôle des billets » (ex-boutique) est donné ensuite.
   expect(
     (await apiCall(damien, "PATCH", `/structures/${structureId}/members/${userId}`, { staffRoles: ["shop"] })).status,
   ).toBe(204);

@@ -30,6 +30,7 @@ import { seedMessaging } from "./seed/messaging";
 import { seedMissions } from "./seed/missions";
 import { seedModeration } from "./seed/moderation";
 import { seedMultiDay } from "./seed/multi-day";
+import { seedOrgaV2 } from "./seed/orga-v2";
 import { seedPassport } from "./seed/passport";
 import { seedPosters } from "./seed/posters";
 import { seedPros } from "./seed/pros";
@@ -135,6 +136,8 @@ async function main() {
   await seedPosters();
   // Lot 43 : billet de Paul (visiteur), remises, vues et abonnés du garage du port pour l'Accueil par profil.
   await seedHomeProfiles();
+  // Lot 52 : brouillon incomplet, engagement de l'équipe (bulles), structure en cours de vérification.
+  await seedOrgaV2(hash);
 }
 
 try {

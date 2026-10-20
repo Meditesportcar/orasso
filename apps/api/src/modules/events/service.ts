@@ -318,7 +318,13 @@ export const eventsService = {
       where: eq(events.structureId, structureId),
       orderBy: [asc(events.startsAt)],
     });
-    return Promise.all(rows.map(async (e) => card(e, s, (await eventsRepo.counters(e)).remaining)));
+    // Lot 52 : les compteurs de candidatures accompagnent la carte (l'onglet Événements n'ouvre plus chaque fiche).
+    return Promise.all(
+      rows.map(async (e) => {
+        const counters = await eventsRepo.counters(e);
+        return { ...card(e, s, counters.remaining), counters };
+      }),
+    );
   },
 
   /** Création minimale en brouillon (organisateur). */

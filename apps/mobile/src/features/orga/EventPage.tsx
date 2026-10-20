@@ -25,6 +25,7 @@ import {
   eventStatusLabels,
   invitationLabels,
   orgaLabels,
+  orgaV2Labels,
   ticketingAppLabels,
   triageAppLabels,
   wizardEndLabels,
@@ -311,6 +312,26 @@ export function EventPage({
             </Text>
             {e.status === "cancelled" ? <StatusBadge status="cancelled" onPlate /> : null}
           </Plate>
+          {/* Lot 52 : une copie d'une édition passée dit qu'on peut en inviter les retenus. */}
+          {e.parentEventId && e.status !== "cancelled" ? (
+            <Plate kind="note" style={styles.block} testID="orga-reinvite">
+              <Text variant="bodyStrong" color={c.plateInk}>
+                {orgaV2Labels.reinviteTitle}
+              </Text>
+              <Text variant="caption" color={c.plateMuted}>
+                {orgaV2Labels.reinviteBody}
+              </Text>
+              <Button
+                variant="plate"
+                icon="share"
+                onPress={() => router.push(`/evenement/${eventId}/inviter`)}
+                fullWidth
+                testID="orga-reinvite-open"
+              >
+                {orgaV2Labels.reinviteOpen}
+              </Button>
+            </Plate>
+          ) : null}
 
           {e.status === "draft" ? (
             <>

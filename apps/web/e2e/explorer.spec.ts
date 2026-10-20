@@ -111,9 +111,10 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
   expect(aude).toContain("Rassemblement de Narbonne");
   expect(aude).not.toContain("Expo Rivesaltes");
   await page.goto("/app/explorer?segment=evenements&format=exhibition&tri=date");
-  for (const title of await page.getByTestId("event-tile").locator("h3").allTextContents()) {
-    expect(title).toMatch(/expo|exposition/i);
-  }
+  // Le format affiché sur la carte, pas le titre (le seed du lot 46 a un « Salon auto rétro » au format Exposition).
+  const formats = await page.getByTestId("event-tile").locator(".s-tile__format").allTextContents();
+  expect(formats.length).toBeGreaterThan(0);
+  for (const format of formats) expect(format).toBe("Exposition");
 
   // Distance depuis le secteur du profil (66) : un événement catalan avant Toulouse.
   await page.goto("/app/explorer?segment=evenements&tri=distance");

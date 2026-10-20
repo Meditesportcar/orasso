@@ -300,6 +300,8 @@ export type EventCard = {
    * gabarit « Minimal », jamais l'affiche perso. Le site garde `posterUrl` jusqu'au lot 56.
    */
   generatedPosterUrl: string | null;
+  /** Lot 52 : compteurs de candidatures, seulement dans la liste de l'organisateur de la structure. */
+  counters?: EventCounters;
   status: EventStatus;
   outlook: EventOutlook;
   structure: { id: string; slug: string; name: string; logoUrl: string | null };
