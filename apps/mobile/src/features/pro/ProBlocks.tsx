@@ -21,6 +21,7 @@ import {
   PRO_DISCOUNT_MAX_PERCENT,
   PRO_MAX_PHOTOS,
   type ProOwner,
+  proV2Labels,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
@@ -167,6 +168,8 @@ export function SiretBlock({ pro, reload }: BlockProps) {
           onChangeText={setNumber}
           keyboardType="number-pad"
           maxLength={20}
+          placeholder="ex. 912 345 678 00014"
+          help={proV2Labels.siretHint}
           testID="pro-siret-field"
         />
         <Feedback error={error} notice={notice} testID="pro-siret-notice" />

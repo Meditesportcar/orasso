@@ -68,7 +68,7 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     if (first) {
       await expect(result).toContainText("PassionneApp");
       await expect(result).toContainText("Rodage");
-      await expect(page.getByTestId("pro-scan-discount")).toHaveText("−5 %");
+      await expect(page.getByTestId("pro-scan-discount")).toHaveText("Grade Rodage · remise de 5 % appliquée");
       // « Rien d'autre » : ni e-mail, ni points, ni véhicules.
       await expect(result).not.toContainText("@");
       await shot(page, `03-scan-remise-${theme}`);
@@ -83,8 +83,10 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
 
     // Fiche, Publier, Stats (onglets de la casquette).
     await page.goto("/fiche");
+    // Lot 54 : l'abonnement et les remises sont dans le segment « Modifier ma fiche ».
+    await page.getByText("Modifier ma fiche", { exact: true }).click();
     await expect(page.getByTestId("pro-subscription")).toHaveText("Gratuit jusqu'au 21 juin 2027");
-    await expect(page.getByText("Remises par grade")).toBeVisible();
+    await expect(page.getByText("Remises par grade").locator("visible=true").first()).toBeVisible();
     const body = (await page.locator("body").textContent()) ?? "";
     expect(body).not.toMatch(/€|\bprix\b|stripe|checkout/i);
     await expect(page.getByRole("button", { name: /payer|acheter|souscrire|s'abonner/i })).toHaveCount(0);
@@ -104,7 +106,7 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     await shot(page, `05-publier-${theme}`);
 
     await page.goto("/stats");
-    await expect(page.getByText("remises utilisées", { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("pro-stats-discounts")).toBeVisible({ timeout: 30_000 });
     await shot(page, `06-stats-${theme}`);
     await ctx.close();
   }

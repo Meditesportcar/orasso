@@ -2,8 +2,9 @@
 // la carte est réservé aux décisions). Même contenu que la fiche du site : véhicule (marque, modèle, génération, année,
 // puissance, poids, catégories, préparation), candidat, historique avec la structure, crew et ses autres candidatures,
 // avis de filtration avec leurs notes, alertes. Les coordonnées du candidat ne sont pas affichées.
-import { Chip, ChipRow, Plate, Text, useTheme } from "@orasso/design-system/native";
+import { Button, Chip, ChipRow, Plate, Text, useTheme } from "@orasso/design-system/native";
 import { type ApplicationForTriage, afterEventLabels, triageAppLabels } from "@orasso/shared";
+import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -39,6 +40,7 @@ export function FullSheet({
   onClose: () => void;
 }) {
   const { t } = useTheme();
+  const router = useRouter();
   const { structureId } = useOrga();
   // Notes internes (lot 35a) : lecture seule pour une structure suspendue, comme sur le site.
   const structure = useApi(() => api.orgStructure(structureId), [structureId], { enabled: item !== null });
@@ -103,6 +105,19 @@ export function FullSheet({
                   {p.description}
                 </Text>
               ) : null}
+              {/* Lot 54 : la vitrine complète (menu, besoins sur place, avis des organisateurs). */}
+              <Button
+                variant="plate"
+                icon="shop"
+                next
+                onPress={() => {
+                  onClose();
+                  router.push(`/providers/${p.id}`);
+                }}
+                testID="triage-provider-vitrine"
+              >
+                Voir la vitrine
+              </Button>
             </Plate>
           ) : null}
           <Plate>
