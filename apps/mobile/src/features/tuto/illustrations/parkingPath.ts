@@ -9,11 +9,11 @@ export const PATH: readonly (readonly [number, number])[] = [
   [150, 200],
   [150, 128],
   [72, 128],
-  [72, 64],
+  [72, 78],
 ];
 
 /** Les cases du plan : la place de l'exposant (zone JDM) est le bout du chemin. */
-export const PLACE = { x: 40, y: 34, w: 64, h: 60 } as const;
+export const PLACE = { x: 40, y: 32, w: 64, h: 72 } as const;
 
 const lengths = PATH.slice(1).map(([x, y], i) => {
   const [px = 0, py = 0] = PATH[i] ?? [0, 0];

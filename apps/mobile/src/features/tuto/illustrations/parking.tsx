@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   zoneJdm: { position: "absolute", left: 12, top: 12 },
   zoneEuro: { position: "absolute", left: 164, top: 12 },
   place: { position: "absolute", left: PLACE.x, top: PLACE.y, width: PLACE.w, height: PLACE.h, borderWidth: 1.5 },
-  placeLabel: { position: "absolute", left: PLACE.x + 6, top: PLACE.y + PLACE.h - 20 },
+  placeLabel: { position: "absolute", left: PLACE.x + 6, top: PLACE.y + 6 },
   entry: { position: "absolute", left: 12, top: 176 },
   car: { position: "absolute", left: 0, top: 0, alignItems: "center", justifyContent: "center" },
   scanTag: { position: "absolute", right: 0, bottom: 0 },
