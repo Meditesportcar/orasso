@@ -192,14 +192,13 @@ async function runFlow(browser: Browser, profile: Profile, theme: Theme, capture
   // Le tuto du profil (lot 42) s'ouvre : « Passer » mène à l'écran « casquette ».
   await expect(page.getByTestId(`tuto-${profile}`)).toBeVisible();
   await page.getByRole("button", { name: "Passer" }).click();
-  // Le profil choisi mène à sa barre : créer sa casquette (ou ajouter sa voiture), « Plus tard » possible. Le profil média
-  // n'a pas encore d'écran de création (lot 55) : il passe directement à l'appli.
-  if (profile !== "media") {
-    const heading = profile === "pro" ? "Crée ta fiche pro" : "Ajoute ta voiture";
-    await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible({ timeout: 30_000 });
-    if (capture) await shot(page, `04-casquette-${profile}`, theme);
-    await page.getByRole("button", { name: "Plus tard" }).click();
-  }
+  // Le profil choisi mène à sa barre : créer sa casquette (ou ajouter sa voiture), « Plus tard » possible (le profil média
+  // a son écran de création depuis le lot 55).
+  const heading =
+    profile === "pro" ? "Crée ta fiche pro" : profile === "media" ? "Crée ton profil média" : "Ajoute ta voiture";
+  await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible({ timeout: 30_000 });
+  if (capture) await shot(page, `04-casquette-${profile}`, theme);
+  await page.getByRole("button", { name: "Plus tard" }).click();
   await page.waitForURL((u) => !u.pathname.startsWith("/arrivee"), { timeout: 30_000 });
   await expect(page.getByRole("tab")).toHaveCount(5, { timeout: 30_000 });
   // Sans la casquette, la barre est celle du visiteur et l'Accueil porte la carte « Termine ta fiche ».

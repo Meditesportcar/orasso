@@ -7,7 +7,7 @@ import { Button, Chip, ChipRow, EmptyState, Icon, OLoader, Text, tokens, useThem
 import { type EventCard, eventFormatLabels, eventFormats, mediaAppLabels as L, regions } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { StyleSheet, TextInput, View } from "react-native";
 
 import { ExplorerMap } from "@/features/explorer/ExplorerMap";
 import { eventPins } from "@/features/explorer/mapPins";

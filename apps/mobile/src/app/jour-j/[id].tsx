@@ -68,7 +68,7 @@ export default function JourJ() {
   const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { me } = useSession();
-  const { upcoming, past, reload } = useApplications();
+  const { upcoming, past, press, reload } = useApplications();
   const now = useNow(10_000);
   const network = useNetworkState();
   const online = network.isConnected !== false && network.isInternetReachable !== false;
@@ -77,7 +77,7 @@ export default function JourJ() {
   const [secret, setSecret] = useState<string | null>(null);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
-  const app = [...(upcoming ?? []), ...(past ?? [])].find((a) => a.id === id) ?? null;
+  const app = [...(upcoming ?? []), ...(past ?? []), ...press].find((a) => a.id === id) ?? null;
   const pseudo = me?.profile.pseudo ?? kit?.pseudo ?? "";
   // Dernière annonce de l'organisateur (lot 20) : avec du réseau, gardée sur le téléphone pour la suite (hors ligne OK).
   const slug = app?.event.slug ?? kit?.event.slug ?? "";
@@ -193,7 +193,8 @@ export default function JourJ() {
         />
       }
       footer={
-        state === "open" && app && app.status === "accepted" ? (
+        // Le badge presse se retire depuis l'onglet Presse (pas de malus de points pour la presse, lot 55).
+        state === "open" && app && app.status === "accepted" && kit.holder?.kind !== "media" ? (
           <Button
             variant="plate"
             tone="dashed"

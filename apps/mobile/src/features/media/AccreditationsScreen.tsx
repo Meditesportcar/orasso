@@ -159,25 +159,25 @@ function UpcomingTicket({
       dim={refused}
     >
       {accredited ? (
-        <View style={styles.actions}>
+        <>
           {a.pass ? (
             <Button
               variant={primary ? "primary" : "secondary"}
               icon="qr"
               onPress={onBadge}
-              style={styles.grow}
+              fullWidth
               testID="media-badge"
             >
               {mediaLabels.pressBadge}
             </Button>
           ) : null}
-          <Button variant="plate" icon="press" onPress={onBriefing} style={styles.grow} testID="media-briefing">
+          <Button variant="plate" icon="press" onPress={onBriefing} fullWidth testID="media-briefing">
             {mediaLabels.instructions}
           </Button>
-        </View>
+        </>
       ) : null}
       {a.canWithdraw && a.status !== "refused" ? (
-        <Button variant="plate" tone="dashed" icon="close" onPress={onWithdraw} testID="media-withdraw">
+        <Button variant="plate" tone="dashed" icon="close" onPress={onWithdraw} fullWidth testID="media-withdraw">
           {a.status === "pending" ? L.withdraw : "Me désister"}
         </Button>
       ) : null}
@@ -299,7 +299,5 @@ function WithdrawMediaSheet({
 
 const styles = StyleSheet.create({
   segments: { flexDirection: "row", gap: space2 },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  grow: { flexGrow: 1 },
   block: { gap: 4 },
 });

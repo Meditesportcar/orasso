@@ -28,6 +28,7 @@ import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { api } from "@/lib/api";
+import { nowMs } from "@/lib/clock";
 import { formatDay } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
@@ -199,7 +200,10 @@ function AddContentSheet({
   const [upload, setUpload] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const chosen = eventId ?? events[0]?.id ?? null;
+  // Par défaut : le dernier événement commencé (on publie après coup), sinon le premier.
+  const byRecent = [...events].sort((a, b) => b.startsAt.localeCompare(a.startsAt));
+  const latest = byRecent.find((e) => new Date(e.startsAt).getTime() <= nowMs()) ?? byRecent[0];
+  const chosen = eventId ?? latest?.id ?? null;
   const ready =
     chosen !== null && title.trim().length >= 2 && (kind === "link" ? Boolean(url.trim()) : photos.length > 0);
 
@@ -270,7 +274,7 @@ function AddContentSheet({
         <>
           <Muted variant="label">{L.addEvent}</Muted>
           <ChipRow>
-            {events.map((e) => (
+            {byRecent.map((e) => (
               <Chip key={e.id} selected={chosen === e.id} onPress={() => setEventId(e.id)}>
                 {e.title}
               </Chip>

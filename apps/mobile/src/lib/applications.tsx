@@ -8,11 +8,14 @@ import { AppState } from "react-native";
 import { api } from "./api";
 import { syncKits } from "./kits";
 import { kvGetJson, kvSetJson } from "./kv";
+import { accreditationAsApplication } from "./pressApplications";
 import { useSession } from "./session";
 
 type ApplicationsValue = {
   upcoming: MyApplication[] | null;
   past: MyApplication[] | null;
+  /** Lot 55 : les badges presse (accréditations retenues d'un média), pour le QR du jour J ; jamais dans Sorties. */
+  press: MyApplication[];
   loading: boolean;
   /** Valeurs lues dans le cache : l'API n'a pas répondu. */
   offline: boolean;
@@ -35,11 +38,13 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
   const { status, me } = useSession();
   const [upcoming, setUpcoming] = useState<MyApplication[] | null>(null);
   const [past, setPast] = useState<MyApplication[] | null>(null);
+  const [press, setPress] = useState<MyApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [announcement, setAnnouncement] = useState<MyApplication | null>(null);
   const announced = useRef<Set<string> | null>(null);
   const pseudo = me?.profile.pseudo ?? "";
+  const hasMedia = me?.personas?.some((p) => p.kind === "media") ?? false;
 
   const detectAnnouncement = useCallback(async (apps: MyApplication[]) => {
     const stored = await kvGetJson<string[]>(ANNOUNCED_KEY);
@@ -65,19 +70,25 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
       void kvSetJson(UPCOMING_KEY, up);
       void kvSetJson(PAST_KEY, ps);
       await detectAnnouncement(up);
-      void syncKits([...up, ...ps.filter((a) => a.status === "accepted")], pseudo);
+      // Lot 55 : le badge presse d'un média suit le même chemin que le QR d'un véhicule (kit enregistré, hors ligne).
+      const accreditations = hasMedia
+        ? (await api.myAccreditations("all").catch(() => [])).map(accreditationAsApplication)
+        : [];
+      setPress(accreditations.filter((a) => a.status === "accepted"));
+      void syncKits([...up, ...ps.filter((a) => a.status === "accepted"), ...accreditations], pseudo);
     } catch {
       setOffline(true);
     } finally {
       setLoading(false);
     }
-  }, [status, pseudo, detectAnnouncement]);
+  }, [status, pseudo, hasMedia, detectAnnouncement]);
 
   // Cache d'abord (visible hors ligne), puis l'API.
   useEffect(() => {
     if (status !== "in") {
       setUpcoming(null);
       setPast(null);
+      setPress([]);
       setAnnouncement(null);
       announced.current = null;
       return;
@@ -108,6 +119,7 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
     () => ({
       upcoming,
       past,
+      press,
       loading,
       offline,
       reload,
@@ -126,7 +138,7 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
         void persistAnnounced(announced.current);
       },
     }),
-    [upcoming, past, loading, offline, reload, announcement],
+    [upcoming, past, press, loading, offline, reload, announcement],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
