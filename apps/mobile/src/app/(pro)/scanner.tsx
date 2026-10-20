@@ -1,7 +1,10 @@
-// Casquette Pro, Scanner (onglet par défaut, docs/02) : lecteur du QR de compte du client. Résultat : pseudo, grade et
+// Casquette Pro, Scanner (DA v2, lot 54, prototype `s-pscan`) : la caméra en plein cadre sur le QR de compte du client,
+// puis le dernier scan en carte (pseudo, grade, remise appliquée) et un historique court. Résultat : pseudo, grade et
 // remise du pro pour ce grade, rien d'autre. Le code HOTP de 60 s est vérifié par l'API (réservée aux pros, limitée) ;
-// chaque remise lue est comptée dans les statistiques. Aucun paiement dans l'appli.
-import { Button, Plate, ScanResult, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+// chaque remise lue est comptée dans les statistiques. Ce n'est PAS le QR d'accès tournant du jour J (lot 48) : le
+// pointage est réservé aux rôles staff de pointage. Aucun paiement dans l'appli.
+import { Button, Chip, Plate, ScanResult, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { proV2Labels } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
 import { useIsFocused } from "expo-router";
@@ -12,14 +15,19 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { type ProScan, proScanOf } from "@/lib/pro";
 import { useApi } from "@/lib/useApi";
+import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { TabScreen } from "@/ui/Screens";
+import { SectionTitle, TabScreen } from "@/ui/Screens";
 
-const { space2, space3 } = tokens.spacing;
+const { space1, space2, space3 } = tokens.spacing;
 
 /** Un même QR lu plusieurs fois par la caméra n'est envoyé qu'une fois dans cet intervalle (ms). */
 const REPEAT_MS = 4_000;
+/** Scans gardés dans l'historique de la séance (le dernier en carte + les précédents). */
+const HISTORY = 6;
+
+type OkScan = Extract<ProScan, { state: "ok" }>;
 
 export default function ProScanner() {
   const { t } = useTheme();
@@ -27,6 +35,7 @@ export default function ProScanner() {
   const [permission, requestPermission] = useCameraPermissions();
   const focused = useIsFocused();
   const [result, setResult] = useState<ProScan | null>(null);
+  const [history, setHistory] = useState<OkScan[]>([]);
   const [busy, setBusy] = useState(false);
   const seen = useRef<{ payload: string; at: number } | null>(null);
   const counter = useRef(0);
@@ -41,7 +50,9 @@ export default function ProScanner() {
     setBusy(true);
     const key = `scan-${++counter.current}`;
     try {
-      setResult(proScanOf(await api.verifyAccountQr(payload), key));
+      const scan = proScanOf(await api.verifyAccountQr(payload), key);
+      setResult(scan);
+      if (scan.state === "ok") setHistory((h) => [scan, ...h].slice(0, HISTORY));
     } catch (error) {
       // 403 (pas de fiche publiée), 429 (limite de vérifications) ou réseau : le message de l'API, tel quel.
       setResult({ state: "refused", key, reason: errorMessage(error) });
@@ -62,19 +73,25 @@ export default function ProScanner() {
 
   const pro = myPro.data;
   const cameraOk = permission?.granted && Platform.OS !== "web";
+  // Le dernier scan réussi en carte ; les précédents dessous.
+  const lastOk = result?.state === "ok" ? result : null;
+  const earlier = history.filter((h) => h.key !== lastOk?.key);
 
   return (
-    <TabScreen title="Scanner" facts="QR de compte du client">
+    <TabScreen title={proV2Labels.scannerTitle} facts={proV2Labels.scannerLabel}>
       {!pro && myPro.loading ? null : !pro ? (
         <Notice>
           Tu n'as pas encore de fiche pro. Crée-la sur le site Orasso (menu Professionnels) : le lecteur s'ouvre dès que
           ta fiche est publiée.
         </Notice>
       ) : !pro.published ? (
-        <Notice>Publie ta fiche (onglet Fiche) pour ouvrir le lecteur : il est réservé aux fiches publiées.</Notice>
+        <Notice>Publie ta fiche (onglet Ma fiche) pour ouvrir le lecteur : il est réservé aux fiches publiées.</Notice>
       ) : (
         <>
-          <View style={[styles.camera, { backgroundColor: t.color.night, borderRadius: tokens.radius.radiusLg }]}>
+          <View
+            style={[styles.camera, { backgroundColor: t.color.night, borderRadius: tokens.radius.radiusLg }]}
+            testID="pro-camera"
+          >
             {cameraOk && focused ? (
               <CameraView
                 style={StyleSheet.absoluteFill}
@@ -84,6 +101,9 @@ export default function ProScanner() {
               />
             ) : null}
             <View pointerEvents="none" style={styles.aim}>
+              <View style={[styles.frame, { borderColor: t.color.accent }]} />
+            </View>
+            <View pointerEvents="none" style={styles.caption}>
               <Text variant="label" color={t.color.nightInk} style={styles.center}>
                 {cameraOk
                   ? "Caméra ouverte · vise le QR de compte du client"
@@ -104,34 +124,45 @@ export default function ProScanner() {
           {result ? (
             <View testID="pro-scan-result" accessibilityLabel={result.state === "ok" ? "Scan valide" : "Scan refusé"}>
               {result.state === "ok" ? (
-                <>
-                  <ScanResult
-                    key={result.key}
-                    state="ok"
-                    pseudo={result.pseudo}
-                    vehicle={`${result.grade} · ${result.discount}`}
-                    animated={false}
-                    sound={false}
-                  />
-                  <Plate style={styles.discount}>
-                    <Text variant="label" color={t.color.plateMuted}>
-                      Remise à appliquer
+                <Plate style={styles.last}>
+                  <Avatar pseudo={result.pseudo} size={40} />
+                  <View style={styles.lastText}>
+                    <Text variant="bodyStrong" color={t.color.plateInk}>
+                      {proV2Labels.lastScan(result.pseudo)}
                     </Text>
-                    <Text variant="posterL" color={t.color.plateInk} testID="pro-scan-discount">
-                      {result.discount}
+                    <Text variant="caption" color={t.color.plateMuted} testID="pro-scan-discount">
+                      {proV2Labels.lastScanDetail(result.grade, result.percent)}
                     </Text>
-                  </Plate>
-                </>
+                  </View>
+                  <Chip surface="plate" selected>
+                    {result.grade}
+                  </Chip>
+                </Plate>
               ) : (
                 <ScanResult key={result.key} state="refused" reason={result.reason} animated={false} sound={false} />
               )}
             </View>
           ) : (
-            <Muted variant="caption">
-              Le client ouvre son QR de compte (onglet Garage). Il change toutes les minutes : une capture prêtée
-              expire.
-            </Muted>
+            <Muted variant="caption">{proV2Labels.noScanYet}</Muted>
           )}
+
+          {earlier.length ? (
+            <>
+              <SectionTitle>{proV2Labels.historyTitle}</SectionTitle>
+              <Plate style={styles.history} testID="pro-scan-history">
+                {earlier.map((h) => (
+                  <View key={h.key} style={styles.historyRow}>
+                    <Text variant="bodyStrong" color={t.color.plateInk} style={styles.lastText}>
+                      {h.pseudo}
+                    </Text>
+                    <Text variant="caption" color={t.color.plateMuted}>
+                      {`${h.grade} · ${h.discount}`}
+                    </Text>
+                  </View>
+                ))}
+              </Plate>
+            </>
+          ) : null}
 
           {__DEV__ ? <DevInject onInject={(p) => void handle(p)} busy={busy} /> : null}
         </>
@@ -160,19 +191,15 @@ function DevInject({ onInject, busy }: { onInject: (payload: string) => void; bu
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  camera: { height: 260, overflow: "hidden", justifyContent: "flex-end" },
-  aim: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: space3,
-  },
+  camera: { width: "100%", aspectRatio: 1, overflow: "hidden", justifyContent: "flex-end" },
+  aim: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
+  frame: { width: "62%", aspectRatio: 1, borderWidth: 3, borderRadius: 20 },
+  caption: { padding: space3 },
   center: { textAlign: "center" },
   permission: { position: "absolute", top: space3, left: space3, right: space3 },
-  discount: { gap: space2, padding: space3, marginTop: space2 },
+  last: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3 },
+  lastText: { flex: 1, minWidth: 0, gap: 2 },
+  history: { gap: space1, padding: space3 },
+  historyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
   dev: { flexDirection: "row", paddingTop: space2 },
 });
