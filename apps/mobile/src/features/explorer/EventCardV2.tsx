@@ -52,9 +52,12 @@ export function MinimalPoster({ event, big }: { event: Pick<EventCard, "format" 
   const { t } = useTheme();
   return (
     <View style={[styles.minimal, { backgroundColor: t.color.poster }]} testID="poster-minimal">
-      <Text variant="label" color={t.color.posterMuted}>
-        {eventFormatLabels[event.format]}
-      </Text>
+      {/* Le format seulement en grand : dans la vignette de 84 px, il se couperait au milieu du mot. */}
+      {big ? (
+        <Text variant="label" color={t.color.posterMuted}>
+          {eventFormatLabels[event.format]}
+        </Text>
+      ) : null}
       <Text variant={big ? "posterM" : "posterS"} color={t.color.posterInk}>
         {event.title}
       </Text>
