@@ -132,6 +132,8 @@ describe("repli de posterUrl et sécurité de l'aperçu", () => {
     expect(list.json.items.find((c: { id: string }) => c.id === e.id).posterUrl).toBe(
       "/api/files/events/x/poster-perso.webp",
     );
+    // Lot 44 : l'appli lit l'affiche générée seule et dessine le gabarit « Minimal » sans elle.
+    expect(list.json.items.find((c: { id: string }) => c.id === e.id).generatedPosterUrl).toBeNull();
     const page = await call(null, "GET", `/events/by-slug/${e.slug}`);
     expect(page.json.customPosterUrl).toBe("/api/files/events/x/poster-perso.webp");
     expect(page.json.poster).toBeNull();

@@ -236,6 +236,25 @@ describe("affinités (S34) : GET /events?sort=affinity", () => {
   });
 });
 
+describe("structures suivies (lot 44) : GET /events?followed=1", () => {
+  it("ne garde que les événements des structures que je suis ; sans compte, le filtre est ignoré", async () => {
+    const viewer = await person("Suiveur_66", { departments: ["66"] });
+    const owner = await person("Orga_A");
+    const followed = await createStructure(owner.id);
+    const other = await createStructure(owner.id);
+    await db.insert(structureFollows).values({ structureId: followed.id, userId: viewer.id, source: "manual" });
+    const mine = await createEvent(followed.id, { title: "Chez ceux que je suis", ...PARIS });
+    const theirs = await createEvent(other.id, { title: "Ailleurs", ...PERPIGNAN });
+    for (const mode of MODES) {
+      const res = await get(viewer, "/events?followed=1&sort=distance", mode);
+      expect(res.status).toBe(200);
+      expect(ids(res.json.items)).toEqual([mine.slug]);
+    }
+    const anonymous = await get(null, "/events?followed=1");
+    expect(ids(anonymous.json.items).sort()).toEqual([mine.slug, theirs.slug].sort());
+  });
+});
+
 describe("distance : GET /events?sort=distance", () => {
   it("part du centre du département du profil, du plus proche au plus loin, sans position les événements sans adresse passent après", async () => {
     const viewer = await person("Viewer_66", { departments: ["66"] });

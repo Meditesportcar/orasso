@@ -31,6 +31,7 @@ export function card(
     lat: e.lat,
     lng: e.lng,
     posterUrl: eventPosterUrl(e),
+    generatedPosterUrl: storage.url(e.posterPostKey),
     status: e.status,
     outlook: e.outlook,
     structure: { id: s.id, slug: s.slug, name: s.name, logoUrl: storage.url(s.logoKey) },

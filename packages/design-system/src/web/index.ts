@@ -5,6 +5,16 @@ export { DepartmentChecklist, type DepartmentChecklistProps } from "../france/De
 export { FranceMap, FranceMapCredit, type FranceMapProps } from "../france/FranceMapWeb";
 export * from "../icons";
 export * from "../labels";
+export * from "../map";
+export {
+  createOrassoMap,
+  fitPoints,
+  type OrassoMap,
+  type OrassoMapOptions,
+  type PinOptions,
+  placePins,
+  type WebPin,
+} from "../map/web";
 export * from "../motion";
 export { OliveActivityProvider, useOliveScreenActive } from "../native/olive/activity";
 export { GroundQuiet, useGroundQuiet, useIsGroundQuiet } from "../native/olive/quiet";

@@ -93,3 +93,107 @@ export function eventHints(event: Pick<EventCard, "affinity" | "distanceKm">): s
 export function proHints(pro: Pick<ProCard, "distanceKm">): string[] {
   return pro.distanceKm !== undefined && pro.distanceKm !== null ? [explorerLabels.awayKm(pro.distanceKm)] : [];
 }
+
+/**
+ * Explorer v2 (lot 44, prototype DA v2 `s-explore`, validé par Damien le 19/10/2026) : en-tête de deux lignes,
+ * position demandée puis repli sur le département favori, tout du plus proche au plus loin, filtres repliés.
+ */
+export const explorerV2Labels = {
+  searchPlaceholder: "Événement, pro, pseudo, crew",
+  searchLabel: "Rechercher",
+  gpsOn: "Ma position",
+  gpsOnA11y: "Position activée : touche pour ne plus l'utiliser",
+  gpsOffA11y: "Position refusée : touche pour la redemander",
+  gpsBlockedA11y: "Position refusée : touche pour ouvrir les réglages du téléphone",
+  gpsAskA11y: "Activer ma position",
+  filters: "Filtres",
+  map: "Carte",
+  list: "Liste",
+  groupFormat: "Format",
+  groupWhen: "Quand",
+  groupTaste: "Selon mes goûts",
+  formatAll: "Tous",
+  whenAll: "Toutes dates",
+  whenWeekend: "Ce week-end",
+  whenMonth: "Ce mois-ci",
+  tasteAffinity: "Mes affinités",
+  tasteFollowed: "Structures suivies",
+  askTitle: "Trie par distance depuis là où tu es",
+  /** Texte de la demande ; `dept` : département favori (« 66 »), `null` sans département. */
+  askText: (dept: string | null) =>
+    `${dept ? `Sinon, on part du ${dept}, ton département favori.` : "Sinon, on trie par date."} Ta position, arrondie à 10 km, part avec la recherche pour trier : Orasso ne l'enregistre pas (elle peut rester un temps dans les journaux techniques du serveur).`,
+  askEnable: "Activer",
+  askLater: "Plus tard",
+  /** Ligne d'ordre au-dessus de la liste. */
+  sortOn: "Tous les événements, du plus proche au plus loin",
+  sortDenied: (dept: string) => `Position refusée : autour du ${dept}, du plus proche au plus loin`,
+  sortAround: (dept: string) => `Tous les événements, autour du ${dept}`,
+  sortByDate: "Tous les événements, par date",
+  sortAffinity: "Selon tes affinités, puis par date",
+  sortFollowed: "Tes structures suivies, du plus proche au plus loin",
+  prosOn: "Tous les pros, du plus proche au plus loin",
+  prosAround: (dept: string) => `Tous les pros, autour du ${dept}`,
+  prosByName: "Tous les pros, par nom",
+  results: (n: number, more: boolean) => `${n}${more ? "+" : ""} résultat${n > 1 || more ? "s" : ""}`,
+  km: (km: number) => `${km < 10 ? km.toFixed(1).replace(".", ",") : Math.round(km)} km`,
+  seatsLeft: (left: number, capacity: number) => `${left} place${left > 1 ? "s" : ""} exposants sur ${capacity}`,
+  seatsFull: (capacity: number) => `Complet · ${capacity} exposants`,
+  seatsFree: "Places exposants sans limite",
+  waitlistFlag: "Complet · liste d'attente",
+  verified: "Structure validée",
+  emptyTitle: "Rien par ici",
+  emptyText: "Aucun événement ne correspond. Change de format ou de date.",
+  prosEmptyText: "Aucun pro ne correspond. Essaie une autre recherche.",
+  loading: "On cherche autour de toi…",
+  mapHint: "Touche une étiquette pour voir l'événement.",
+  mapProHint: "Touche une plaque pour voir le pro.",
+  mapLabel: "Carte des résultats",
+} as const;
+
+/** Fiche événement v2 (lot 44, prototype DA v2 `s-event`, validé par Damien le 19/10/2026). */
+export const eventPageLabels = {
+  free: "Gratuit",
+  when: "Quand",
+  where: "Où",
+  seeMap: "voir la carte",
+  hideMap: "masquer la carte",
+  exhibitors: "Exposants",
+  seatsLeft: "places restantes",
+  noLimit: "sans limite de places",
+  publicTitle: "Public",
+  arrivals: "Créneaux d'arrivée",
+  arrivalExhibitors: "Exposants",
+  arrivalPublic: "Public",
+  strict: "Strict",
+  advised: "Conseillé",
+  customPoster: "Affiche de l'organisateur",
+  customPosterHint: "Programme, partenaires, plan d'accès",
+  customPosterSheet:
+    "L'affiche perso de l'organisateur vit ici, dans le détail. Sur les cartes, c'est l'affiche générée qui s'affiche, toujours au même format.",
+  rules: "Règlement",
+  organizerValidated: "Validée",
+  follow: "Suivre",
+  following: "Suivie",
+  followers: (n: number) => (n > 1 ? `${n} abonnés` : `${n} abonné`),
+  applyWith: (vehicle: string) => `Candidater avec ma ${vehicle}`,
+  applyNoVehicle: "Candidater avec un véhicule",
+  bookEntry: "Réserver mon entrée",
+  followOrganizer: "Suivre l'organisateur",
+  followingOrganizer: "Organisateur suivi",
+  myApplication: "Voir ma candidature",
+  triage: "Trier les candidatures",
+  closedTitle: "Inscriptions exposants fermées",
+  endedTitle: "Événement terminé",
+  closedFull: (capacity: number | null) =>
+    capacity === 1
+      ? "La place est attribuée. La liste d'attente reste ouverte."
+      : capacity
+        ? `Les ${capacity} places sont attribuées. La liste d'attente reste ouverte.`
+        : "Toutes les places sont attribuées. La liste d'attente reste ouverte.",
+  joinWaitlist: "Rejoindre la liste d'attente",
+  soonTitle: (when: string) => `Candidatures dès ${when}`,
+  soonPreview: (structure: string, everyone: string) =>
+    `Avant-première pour les abonnés de ${structure}. Pour tout le monde : ${everyone}.`,
+  soonFollow: (structure: string) => `Suivre ${structure}`,
+  soonFollowing: "Tu suis cette structure : l'avant-première est pour toi.",
+} as const;
