@@ -2,13 +2,14 @@
 // touche la moitié droite ou gauche : le glissement est réservé aux décisions), nom du véhicule en entier (deux lignes,
 // jamais tronqué), candidat, historique, crew, avis de filtration, plaque et alertes. Rien de plus que ce que montre
 // le tri du site : l'API borne déjà ce qu'elle renvoie (coordonnées au seul organisateur, jamais affichées ici).
-import { Chip, ChipRow, Icon, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, ChipRow, Icon, OutlinedText, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type ApplicationAlert,
   type ApplicationForTriage,
   applicationStatusLabels,
   crewLabels,
   gradeLabels,
+  orgaV2Labels,
   triageAppLabels,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
@@ -201,21 +202,32 @@ export function CandidateCard({ item, photoHeight }: { item: ApplicationForTriag
     : (p?.typeLabel ?? "");
   return (
     <Plate style={styles.card} testID="triage-card">
-      <PhotoCarousel
-        photos={photosOf(item)}
-        label={titleOf(item)}
-        certified={Boolean(v?.certified)}
-        height={photoHeight}
-      />
+      <View>
+        <PhotoCarousel
+          photos={photosOf(item)}
+          label={titleOf(item)}
+          certified={Boolean(v?.certified)}
+          height={photoHeight}
+        />
+        {/* DA v2 (`s-otri`) : le nom en entier, contour couleur de la nuit, posé sur la grande photo. */}
+        <View style={styles.overlay} pointerEvents="none">
+          <OutlinedText variant="posterM" on="photo" color={t.color.barInk} testID="triage-vehicle">
+            {titleOf(item)}
+          </OutlinedText>
+          {specs ? (
+            <OutlinedText variant="meta" on="photo" color={t.color.barInk}>
+              {specs}
+            </OutlinedText>
+          ) : null}
+        </View>
+      </View>
       <View style={styles.body}>
-        <Text variant="posterM" color={t.color.plateInk} testID="triage-vehicle">
-          {titleOf(item)}
-        </Text>
-        {specs ? (
-          <Text variant="meta" color={t.color.plateMuted}>
-            {specs}
+        {item.arrivalNote ? (
+          <Text variant="bodyStrong" color={t.color.plateInk} testID="triage-arrival-note">
+            {orgaV2Labels.triArrivalNote} : « {item.arrivalNote} »
           </Text>
         ) : null}
+        {p?.need ? <Chip surface="plate">{p.need.tradeLabel}</Chip> : null}
         {v && v.categories.length > 0 ? (
           <ChipRow>
             {v.categories.map((c) => (
@@ -239,7 +251,8 @@ const styles = StyleSheet.create({
   photo: { overflow: "hidden" },
   noPhoto: { alignItems: "center", justifyContent: "center" },
   tapZones: { ...StyleSheet.absoluteFill, flexDirection: "row" },
-  dots: { position: "absolute", left: space3, bottom: space2, flexDirection: "row", gap: space1 },
+  dots: { position: "absolute", left: space3, top: space2, flexDirection: "row", gap: space1 },
+  overlay: { position: "absolute", left: space3, right: space3, bottom: space3, gap: space1 },
   dot: { width: 18, height: 3, borderRadius: radiusPill },
   certified: { position: "absolute", top: space2, right: space3 },
   body: { padding: space3, gap: space2, flexShrink: 1 },

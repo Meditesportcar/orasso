@@ -251,7 +251,7 @@ export function Deck({
     else control.current?.exit(decision);
   };
 
-  const photoHeight = Math.max(120, Math.min(230, Math.round(areaHeight * 0.4)));
+  const photoHeight = Math.max(150, Math.min(300, Math.round(areaHeight * 0.55)));
   const armedShown = state.armed.slice(-2).reverse();
   const hidden = state.armed.length - armedShown.length;
   const zoneNow = current ? (zonePick[current.id] ?? null) : null;
