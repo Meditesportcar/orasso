@@ -3,12 +3,12 @@
 import { orgaManageLabels } from "@orasso/shared";
 
 import { OrgaGate } from "@/features/orga/OrgaGate";
-import { StaffScreen } from "@/features/orga/Staff";
+import { TeamScreen } from "@/features/orga/team/TeamScreen";
 
 export default function Equipe() {
   return (
     <OrgaGate title={orgaManageLabels.teamTitle}>
-      <StaffScreen />
+      <TeamScreen />
     </OrgaGate>
   );
 }
