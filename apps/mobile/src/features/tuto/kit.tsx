@@ -24,6 +24,15 @@ import Animated, {
 const { space1, space2, space3 } = tokens.spacing;
 const radius = tokens.radius;
 
+/**
+ * Durées propres aux illustrations (aucun jeton du système n'a ces ordres de grandeur : `timing` va de 120 à 600 ms
+ * pour les écrans, ici ce sont des scènes qui se jouent seules) : une lettre tapée, un compteur qui monte.
+ */
+export const TYPE_MS = 55;
+/** De combien de pixels le garage défile avant de s'arrêter sur la voiture choisie. */
+export const SCROLL_FROM = 110;
+export const COUNT_MS = 900;
+
 export type EnterKind = "up" | "pop" | "fade" | "left" | "right";
 
 /** Une entrée : de 0 à 1 après `delay` ms. Réduction des animations : 1 tout de suite. */
@@ -103,7 +112,7 @@ export function Later({ delay, children }: { delay: number; children: ReactEleme
 export function Typed({
   text,
   delay = 0,
-  perChar = 55,
+  perChar = TYPE_MS,
   variant = "bodyStrong",
   color,
 }: {
@@ -141,7 +150,7 @@ export function Count({
   to,
   from = 0,
   delay = 0,
-  dur = 900,
+  dur = COUNT_MS,
   variant = "number",
   color,
 }: {
@@ -188,8 +197,13 @@ export function Art({ children, label, testID }: { children: ReactNode; label?: 
   const { t } = useTheme();
   return (
     <View
-      testID={testID}
+      testID={testID ?? "tuto-art"}
+      accessible
+      accessibilityRole="image"
       accessibilityLabel={label}
+      // Les textes d'exemple de l'illustration ne sont pas lus : sa description suffit (Android et iOS).
+      importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
       style={[
         styles.art,
         { backgroundColor: t.color.plate, borderColor: t.color.plateLine, borderRadius: radius.radiusLg },
@@ -468,19 +482,55 @@ export function FakeButton({ icon, children, delay = 0 }: { icon: IconName; chil
   const animated = useAnimatedStyle(() => ({ transform: [{ scale: p.value }] }));
   return (
     <Animated.View
-      style={[animated, styles.button, { backgroundColor: t.color.accent, borderRadius: radius.radiusMd }]}
+      style={[animated, styles.button, { backgroundColor: t.color.plateInk, borderRadius: radius.radiusMd }]}
       accessibilityElementsHidden
     >
-      <Icon name={icon} size={18} color={t.color.accentInk} />
-      <Text variant="button" color={t.color.accentInk}>
+      {/* Encre sur fond, comme `.tc-send` du prototype : jamais un second bouton moutarde (un seul principal par écran). */}
+      <Icon name={icon} size={18} color={t.color.plate} />
+      <Text variant="button" color={t.color.plate}>
         {children}
       </Text>
     </Animated.View>
   );
 }
 
+/** Une rangée qui défile de côté jusqu'à sa place (le garage), après `delay` ms. Réduction : déjà en place. */
+export function Scroll({
+  delay = 0,
+  style,
+  children,
+}: {
+  delay?: number;
+  style?: StyleProp<ViewStyle>;
+  children?: ReactNode;
+}) {
+  const p = useEnterProgress(delay, duration.poster);
+  const animated = useAnimatedStyle(() => {
+    "worklet";
+    return {
+      opacity: interpolate(p.value, [0, 0.2, 1], [0, 1, 1]),
+      transform: [{ translateX: (1 - p.value) * SCROLL_FROM }],
+    };
+  });
+  return <Animated.View style={[animated, style]}>{children}</Animated.View>;
+}
+
 /** Une pièce qui s'envole de sa carte vers le haut (la candidature, la demande part) puis disparaît. */
-export function Fly({ delay, dx, dy, children }: { delay: number; dx: number; dy: number; children: ReactNode }) {
+export function Fly({
+  delay,
+  dx,
+  dy,
+  left = space3,
+  top = "40%",
+  children,
+}: {
+  delay: number;
+  dx: number;
+  dy: number;
+  left?: number | `${number}%`;
+  top?: number | `${number}%`;
+  children: ReactNode;
+}) {
   const { reducedMotion } = useTheme();
   const p = useEnterProgress(delay, duration.poster);
   const animated = useAnimatedStyle(() => {
@@ -493,7 +543,7 @@ export function Fly({ delay, dx, dy, children }: { delay: number; dx: number; dy
   });
   if (reducedMotion) return null;
   return (
-    <Animated.View pointerEvents="none" style={[styles.fly, animated]}>
+    <Animated.View pointerEvents="none" style={[styles.fly, { left, top }, animated]}>
       {children}
     </Animated.View>
   );
@@ -565,7 +615,7 @@ const styles = StyleSheet.create({
   barRow: { flexDirection: "row", alignItems: "center", gap: space2 },
   barName: { width: 64 },
   barValue: { width: 48 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
+  dot: { width: 10, height: 10, borderRadius: radius.radiusPill },
   button: {
     flexDirection: "row",
     alignItems: "center",

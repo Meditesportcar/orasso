@@ -30,7 +30,7 @@ const { space1, space2 } = tokens.spacing;
 
 function Find() {
   return (
-    <Art label="Explorer : une expo près de toi">
+    <Art label={tutoArt.alt.findPublic}>
       <EventOnMap meta={tutoArt.eventMetaPublic} />
     </Art>
   );
@@ -68,7 +68,7 @@ function Reserve() {
               <Sm>{visitor.ticketFor}</Sm>
               <Sm>{visitor.inOutings}</Sm>
             </Grow>
-            <QrTile size={56} delay={1850} label="QR du billet (exemple)" />
+            <QrTile size={56} delay={1850} label={tutoArt.alt.qrTicket} />
           </Row>
         </Card>
       </Enter>
@@ -82,7 +82,7 @@ function Stamp() {
   const { visitor } = tutoArt;
   return (
     <Art label={`${visitor.scanOk} · ${visitor.ticketFor}`}>
-      <ScanBox qrLabel="QR du billet (exemple)" laserAt={550}>
+      <ScanBox qrLabel={tutoArt.alt.qrTicket} laserAt={550}>
         <Enter kind="fade" delay={1650} style={styles.grow}>
           <Text variant="posterM" color={t.color.accent}>
             {visitor.scanOk}

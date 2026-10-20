@@ -157,7 +157,7 @@ export const tutoSlides: Record<MainProfile, readonly TutoSlideText[]> = {
     {
       day: "Lundi, J+2",
       title: "Les points partent tout seuls",
-      text: "Le pointage de ton staff fait foi : chaque présent reçoit ses points, l'absent non excusé un malus. Il peut le contester, c'est toi qui tranches.",
+      text: "Le pointage de ton staff fait foi : chaque présent reçoit ses points, l'absent non excusé un malus. La personne peut contester, c'est toi qui tranches.",
     },
   ],
   provider: [
@@ -211,6 +211,19 @@ export const tutoSlides: Record<MainProfile, readonly TutoSlideText[]> = {
  * données : Nocturne de Canet, Kenji_66, Atelier Têt Detailing… comme dans le prototype.
  */
 export const tutoArt = {
+  /** Descriptions des illustrations pour les lecteurs d'écran (une phrase par diapo, les exemples ne sont pas lus). */
+  alt: {
+    find: "Explorer : un événement près de toi",
+    findPublic: "Explorer : une expo près de toi",
+    apply: "Candidature : choisir sa voiture dans le garage, cocher le règlement, envoyer",
+    qrTicket: "QR du billet (exemple)",
+    qrAccount: "QR de compte (exemple)",
+    qrBadge: "QR du badge presse (exemple)",
+  },
+  /** Le département montré dans les exemples d'Explorer. */
+  department: "66",
+  departments: "66 · 11",
+  initials: { a: "IN", b: "KE", c: "MA" },
   event: { month: "OCT", weekday: "SAM", day: "24", title: "Nocturne de Canet" },
   eventMeta: "MéditeSportCar · 12 km",
   eventMetaPublic: "MéditeSportCar · 12 km · ouvert au public",
@@ -321,7 +334,7 @@ export const tutoArt = {
     typed: "Nocturne de Canet",
     posterWord: "Canet",
     published: "Publiée · 60 places exposants",
-    retained: "Retenus",
+    retained: "Retenues",
     waitlist: "Liste d'attente",
     cardA: { name: "Nissan GT-R", meta: "Inès_34" },
     cardB: { name: "BMW E30 325i", meta: "Marco_11 · Route · 2 événements" },
@@ -359,8 +372,8 @@ export const tutoArt = {
       present: "présents pointés",
       rows: [
         { name: "Kenji_66", meta: "Exposant · zone JDM", tag: "+40 pts", accent: true },
-        { name: "Léa_66", meta: "Visiteuse", tag: "+20 pts", accent: true },
-        { name: "Marco_11", meta: "Retenu, absent sans s'être désisté", tag: "Malus", accent: false },
+        { name: "Léa_66", meta: "Entrée public", tag: "+20 pts", accent: true },
+        { name: "Marco_11", meta: "Retenue, absence sans désistement", tag: "Malus", accent: false },
       ],
       sent: "Points envoyés, rien à saisir",
     },
@@ -427,7 +440,7 @@ export const tutoArt = {
     ],
     kept: "Gardé dans ton agenda",
     request: {
-      accredited: "Accréditée",
+      accredited: "Accréditation validée",
       card: { logo: "SC", name: "Sud Cars · Léo", meta: "YouTube · 48 k abonnés · vidéaste" },
       chips: ["Vidéo", "Photo", "Presse écrite"],
       send: "Demander l'accréditation",

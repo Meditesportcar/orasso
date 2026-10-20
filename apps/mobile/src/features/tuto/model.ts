@@ -11,6 +11,18 @@ export function parseTutoProfile(value: string | string[] | undefined): MainProf
 /** La clé mémorisée quand le tuto d'un profil a été vu (l'Accueil n'en propose plus la tuile). */
 export const tutoSeenKey = (profile: MainProfile) => `tuto:${profile}`;
 
+/**
+ * Les clés posées à la fin du tuto d'arrivée : celle du profil, et celle du visiteur (barre affichée tant que la casquette
+ * du profil n'est pas créée : exposant sans véhicule, pro, média…), pour qu'aucune tuile « Nouveau » ne suive le tuto.
+ */
+export function tutoKeysAfterArrival(profile: MainProfile): string[] {
+  return [
+    ...new Set(
+      [profile, "visitor", ...(profile === "exhibitor" ? ["exhibitor"] : [])].map((p) => tutoSeenKey(p as MainProfile)),
+    ),
+  ];
+}
+
 /** La casquette d'un compte → le profil de son tuto (l'ancienne casquette « passionné » est l'exposant). */
 export function tutoProfileOfPersona(kind: string): MainProfile | null {
   if (kind === "fan") return "exhibitor";

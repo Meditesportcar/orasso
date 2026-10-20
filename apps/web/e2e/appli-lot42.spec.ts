@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
+import { tokens } from "@orasso/design-system";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { MOBILE, SEED_PASSWORD } from "./helpers";
+import { MOBILE, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 import { auditApp } from "./helpers/lot43";
 
 // Lot 42, côté appli (version web de recette) : les six tutos par profil, au « tu » (31 diapos : exposant 7, visiteur 6,
@@ -65,7 +66,7 @@ const TUTOS: Record<Profile, { titles: string[]; first: string; last: string }> 
     ],
     first:
       "L'assistant te guide en huit temps : format, adresse, arrivées, critères, règlement… et l'affiche se génère toute seule, en plusieurs styles.",
-    last: "Le pointage de ton staff fait foi : chaque présent reçoit ses points, l'absent non excusé un malus. Il peut le contester, c'est toi qui tranches.",
+    last: "Le pointage de ton staff fait foi : chaque présent reçoit ses points, l'absent non excusé un malus. La personne peut contester, c'est toi qui tranches.",
   },
   provider: {
     titles: [
@@ -143,6 +144,27 @@ async function shot(page: Page, name: string, wait = 900) {
 }
 
 /** Règles du système de design à l'écran du tuto : un seul bouton principal, un seul néon, pas de vert, pas de défilement horizontal. */
+/**
+ * Aucun faux bouton moutarde dans les illustrations : un aplat moutarde large (≥ 160 × 32 px) dans le cadre d'une
+ * illustration serait pris pour un second bouton principal. Les étiquettes, barres, bulles et la barre de scan sont plus petites.
+ */
+async function noBigAccentFill(page: Page, theme: Theme, label: string) {
+  const accent = tokens.color[theme].accent;
+  const found = await page.evaluate((hex) => {
+    const probe = document.createElement("div");
+    probe.style.backgroundColor = hex;
+    document.body.appendChild(probe);
+    const rgb = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return [...document.querySelectorAll('[data-testid="tuto-art"] *')]
+      .filter((el) => getComputedStyle(el).backgroundColor === rgb)
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width >= 160 && r.height >= 32)
+      .map((r) => `${Math.round(r.width)}x${Math.round(r.height)}`);
+  }, accent);
+  expect(found, `${label} : pas de faux bouton moutarde dans l'illustration`).toEqual([]);
+}
+
 async function checkRules(page: Page, theme: Theme, label: string) {
   const audit = await auditApp(page, theme);
   expect(
@@ -153,6 +175,7 @@ async function checkRules(page: Page, theme: Theme, label: string) {
   expect(audit.buttonsWithoutIcon, `${label} : tout bouton porte une icône`).toEqual([]);
   expect(audit.greens, `${label} : pas de vert`).toEqual([]);
   expect(audit.horizontalScroll, `${label} : pas de défilement horizontal`).toBe(false);
+  await noBigAccentFill(page, theme, label);
 }
 
 test("les six tutos défilent : points, premier et dernier texte, Passer et C'est parti (deux thèmes, captures)", async ({
@@ -179,6 +202,8 @@ test("les six tutos défilent : points, premier et dernier texte, Passer et C'es
           "aria-label",
           `Diapo ${i + 1} sur ${tuto.titles.length}`,
         );
+        // Chaque diapo a son illustration (cadre décrit pour les lecteurs d'écran).
+        await expect(page.getByTestId("tuto-art")).toHaveCount(1);
         // Une seule diapo montée à la fois (les autres sont démontées : rien ne tourne en coulisse).
         await expect(page.locator('[data-testid^="tuto-slide-"]')).toHaveCount(1);
         const capture = profile === "exhibitor" || i === Math.min(2, tuto.titles.length - 1);
@@ -277,7 +302,21 @@ test("Mon profil › Aide : « Revoir le tuto » rejoue le tuto de chaque profil
   await ctx.close();
 });
 
-test("tuile « Découvre ce qu'il y a de nouveau » : elle ouvre le tuto, puis disparaît de l'Accueil", async ({
+test("tuile « Nouveau » : jamais pour un compte créé avec l'arrivée (profil choisi), même sans le kv du tuto", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const pseudo = `Tuto_${unique()}`.slice(0, 24);
+  await signUpApi(pseudo, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+  const { ctx, page } = await open(browser, "beton", { seen: false });
+  await signIn(page, `${pseudo.toLowerCase()}@e2e.orasso.test`);
+  await expect(page.getByRole("tab")).toHaveCount(5, { timeout: 30_000 });
+  await page.waitForTimeout(2500);
+  await expect(page.getByTestId("home-tuto").filter({ visible: true })).toHaveCount(0);
+  await ctx.close();
+});
+
+test("tuile « Découvre ce qu'il y a de nouveau » (ancien compte, sans profil choisi) : elle ouvre le tuto, puis disparaît de l'Accueil", async ({
   browser,
 }) => {
   test.setTimeout(300_000);

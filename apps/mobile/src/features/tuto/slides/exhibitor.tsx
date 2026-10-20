@@ -5,16 +5,33 @@ import { tutoArt } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 import { EventOnMap } from "../illustrations/discover";
 import { ParkingPlan } from "../illustrations/parking";
-import { QrTile } from "../illustrations/scan";
+import { ScanBox } from "../illustrations/scan";
 import { GradesAndPros, SocialBand } from "../illustrations/season";
-import { Art, BarFill, Between, Card, Enter, FakeButton, Fly, Lbl, Nm, Ph, Row, Sm, Swap, Tag } from "../kit";
+import {
+  Art,
+  BarFill,
+  Between,
+  Card,
+  Enter,
+  FakeButton,
+  Fly,
+  Lbl,
+  Logo,
+  Nm,
+  Ph,
+  Row,
+  Scroll,
+  Sm,
+  Swap,
+  Tag,
+} from "../kit";
 
 const { space1, space2, space3 } = tokens.spacing;
 const radius = tokens.radius;
 
 function Find() {
   return (
-    <Art label="Explorer : un événement près de toi">
+    <Art label={tutoArt.alt.find}>
       <EventOnMap meta={tutoArt.eventMeta} />
     </Art>
   );
@@ -25,14 +42,18 @@ function Apply() {
   const { t } = useTheme();
   const g = tutoArt.garage;
   return (
-    <Art label={`${g.car} : choisir sa voiture, cocher le règlement, envoyer`}>
+    <Art label={tutoArt.alt.apply}>
       <Between>
         <Lbl>{g.kicker}</Lbl>
-        <Enter kind="pop" delay={2700}>
-          <Tag kind="line">{g.wait}</Tag>
-        </Enter>
+        <Row>
+          <Enter kind="pop" delay={2700}>
+            <Tag kind="line">{g.wait}</Tag>
+          </Enter>
+          <Logo initials="MSC" tone="accent" size={30} />
+        </Row>
       </Between>
-      <View style={styles.strip}>
+      {/* Le garage défile jusqu'à la voiture choisie (v19). */}
+      <Scroll delay={100} style={styles.strip}>
         <Ph size={64} />
         <View style={[styles.chosen, { borderColor: t.color.accent, borderRadius: radius.radiusSm }]}>
           <Ph size={64} icon="vehicle" />
@@ -41,7 +62,7 @@ function Apply() {
           </Enter>
         </View>
         <Ph size={64} />
-      </View>
+      </Scroll>
       <Nm>{g.car}</Nm>
       <Row>
         <View style={[styles.box, { borderColor: t.color.accent }]}>
@@ -62,7 +83,7 @@ function Apply() {
         }
         after={<FakeButton icon="check">{g.sent}</FakeButton>}
       />
-      <Fly delay={2500} dx={120} dy={-150}>
+      <Fly delay={2500} dx={200} dy={-120} left="30%" top="45%">
         <Ph size={44} />
       </Fly>
     </Art>
@@ -80,7 +101,8 @@ function Accepted() {
           after={<Tag kind="acc">{garage.retained}</Tag>}
           delay={900}
         />
-        <QrTile size={120} delay={1500} label={accepted.qrLabel} />
+        {/* Liseré moutarde et barre de scan (v22) : l'accès est prêt à passer. */}
+        <ScanBox qrLabel={accepted.qrLabel} laserAt={1700} />
         <View style={styles.note}>
           <Sm center>{accepted.note}</Sm>
         </View>
@@ -175,7 +197,7 @@ const styles = StyleSheet.create({
     top: 4,
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: radius.radiusPill,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -187,7 +209,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  boxFill: { width: 18, height: 18, borderRadius: 3, alignItems: "center", justifyContent: "center" },
+  boxFill: { width: 18, height: 18, borderRadius: radius.radiusSm / 2, alignItems: "center", justifyContent: "center" },
   rule: { flex: 1, minWidth: 0 },
   centered: { alignItems: "center", gap: space3, paddingVertical: space2 },
   note: { maxWidth: 240 },

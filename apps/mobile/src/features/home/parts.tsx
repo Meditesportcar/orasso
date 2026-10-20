@@ -23,6 +23,7 @@ import { WeatherWidget } from "@/features/WeatherWidget";
 import { type Destination, openMaps, openWaze } from "@/lib/directions";
 import { formatShortDate } from "@/lib/format";
 import { kvGet, kvSet } from "@/lib/kv";
+import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
 import { SectionTitle } from "@/ui/Screens";
 
@@ -339,11 +340,14 @@ export const TUTO_ROUTE_READY = true;
  */
 export function TutoTile({ profile }: { profile: string }) {
   const router = useRouter();
+  const { me } = useSession();
+  // Réservée aux comptes existants : un compte créé avec l'arrivée a déjà vu son tuto (`mainProfile` renseigné).
+  const existing = me ? me.profile.mainProfile === null : false;
   const [show, setShow] = useState(false);
   const opened = useRef(false);
   useEffect(() => {
-    if (TUTO_ROUTE_READY) void kvGet(`tuto:${profile}`).then((v) => setShow(v === null));
-  }, [profile]);
+    if (TUTO_ROUTE_READY && existing) void kvGet(`tuto:${profile}`).then((v) => setShow(v === null));
+  }, [profile, existing]);
   // Retour sur l'accueil après le tuto : il est vu.
   useFocusEffect(
     useCallback(() => {
@@ -353,7 +357,7 @@ export function TutoTile({ profile }: { profile: string }) {
       setShow(false);
     }, [profile]),
   );
-  if (!TUTO_ROUTE_READY || !show) return null;
+  if (!TUTO_ROUTE_READY || !existing || !show) return null;
   return (
     <NoteTile
       label="Nouveau"

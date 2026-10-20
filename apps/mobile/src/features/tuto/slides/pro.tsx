@@ -76,7 +76,7 @@ function Discount() {
   const s = tutoArt.pro.scan;
   return (
     <Art label={`${s.off} · ${s.verified}`}>
-      <ScanBox qrLabel="QR de compte (exemple)" laserAt={500}>
+      <ScanBox qrLabel={tutoArt.alt.qrAccount} laserAt={500}>
         <Enter kind="fade" delay={1600} style={styles.grow}>
           <Text variant="posterL" color={t.color.accent}>
             {s.off}

@@ -1418,6 +1418,17 @@ Source : prototype DA v2 **validé par Damien dans le prototype DA v2, 19/10/202
 - **Glissement** : le geste de passage entre diapos réutilise `useTabSwipe` (même seuil et même vélocité) ; la route étant hors des groupes d'onglets, aucun glissement d'onglet n'existe ici.
 - **Parité site** : aucun tuto sur le site (l'appli, c'est sa place, brief du lot).
 
+- **Corrections de la relecture (20/10)** :
+  - **Tuile « Nouveau »** réservée aux comptes existants : elle est masquée dès que `me.profile.mainProfile` est renseigné (les comptes antérieurs à l'arrivée l'ont à `null`) ; à la fin du tuto d'arrivée, on pose aussi `tuto:visitor` (la barre vue tant que la casquette du profil n'existe pas). `TutoScreen` est monté avec `key={profile}`.
+  - **Faux boutons** des illustrations (« Candidature envoyée », « Réserver mon entrée ») en encre sur fond (`plateInk` sur `plate`), comme `.tc-send` du prototype : un seul bouton moutarde par écran. La recette cherche tout aplat moutarde large dans le cadre d'une illustration.
+  - **Cap de la Supra** : le dernier virage (de « gauche » vers « haut ») est un virage à droite ; la voiture finit le nez vers le haut (−90°), avec une glisse (dépassement de 15° puis redressement) à chaque virage. Géométrie dans `illustrations/parkingPath.ts`, testée.
+  - **Gestes décidés (v19, v22, v23)** : le garage défile jusqu'à la voiture choisie et la carte part vers le logo MSC de l'organisateur ; la Retenue montre le QR dans son liseré moutarde avec la barre de scan ; le parking affiche « Ta place », qui s'allume quand la voiture arrive.
+  - **Lecteurs d'écran** : le cadre d'une illustration est une image décrite (`accessible`, rôle `image`, descendants masqués sur Android et iOS).
+  - **Nombre de diapos** : `TutoScreen` lève une erreur si textes et illustrations diffèrent (plus de `Math.min` silencieux) ; un test lit les fichiers de diapos et compare à `tutoSlides`. Le rendu de chaque diapo est vérifié par la recette (cadre d'illustration présent sur les 31 diapos), React Native n'étant pas chargé par Vitest.
+  - **Au tu, sans genre** (écart au prototype) : « Visiteuse » → « Entrée public » ; « Retenu, absent sans s'être désisté » → « Retenue, absence sans désistement » ; « Retenus » → « Retenues » ; « Accréditée » → « Accréditation validée » ; « Il peut le contester » → « La personne peut contester ». « Retenue » reste (statut d'une candidature, docs/01).
+  - **Cartes sombres en Sable** : les cartes des illustrations prennent `surface-sunken` (graphite) et non le `--card` clair du prototype, la plaque qui les porte étant graphite dans les deux thèmes (`plate`) ; écart voulu, à revoir si Damien préfère des cartes claires en Sable.
+  - **Jetons** : rayons rendus par `radiusPill` / `radiusSm`, durées de scène (frappe, compteur, trajet du parking) en constantes nommées documentées (aucun jeton `timing` n'a ces ordres de grandeur) ; libellés des illustrations (QR d'exemple, descriptions, « 66 », « 66 · 11 », initiales) déplacés dans `tuto.fr.ts`.
+
 #### À revoir avec Damien (lot 42)
 - **Diapo sociale** limitée à l'exposant et au visiteur (v27) : à ouvrir au pro, à l'organisateur, au prestataire et au média si Damien le souhaite.
 - **Valeurs illustratives** (+40 / +20 / +60, 1 280 / 1 760 points, remises 5 à 15 %) à aligner sur le barème quand il sera tranché.

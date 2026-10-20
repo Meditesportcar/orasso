@@ -18,5 +18,5 @@ export default function TutoRoute() {
     if (router.canGoBack()) router.back();
     else router.replace(homeOf(persona) as never);
   };
-  return <TutoScreen profile={profile} onDone={done} />;
+  return <TutoScreen key={profile} profile={profile} onDone={done} />;
 }

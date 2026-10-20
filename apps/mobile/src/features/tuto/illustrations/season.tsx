@@ -84,7 +84,7 @@ export function SocialBand({ crewAction }: { crewAction: "join" | "follow" }) {
     <>
       <Between>
         <Lbl>{s.kicker}</Lbl>
-        <Tag>66</Tag>
+        <Tag>{tutoArt.department}</Tag>
       </Between>
       <Item
         delay={200}
@@ -109,17 +109,17 @@ export function SocialBand({ crewAction }: { crewAction: "join" | "follow" }) {
         </View>
       </Enter>
       <Enter kind="up" delay={2400} style={styles.mine}>
-        <View style={[styles.msg, styles.me, { backgroundColor: t.color.accent }]}>
-          <Text variant="body" color={t.color.accentInk}>
+        <View style={[styles.msg, styles.me, { backgroundColor: t.color.plateLine }]}>
+          <Text variant="body" color={t.color.plateInk}>
             {s.chatB}
           </Text>
         </View>
       </Enter>
       <Enter kind="up" delay={2900}>
         <Row style={styles.friends}>
-          <Logo initials="IN" tone="night" round size={22} />
-          <Logo initials="KE" tone="waitlist" round size={22} />
-          <Logo initials="MA" tone="win" round size={22} />
+          <Logo initials={tutoArt.initials.a} tone="night" round size={22} />
+          <Logo initials={tutoArt.initials.b} tone="waitlist" round size={22} />
+          <Logo initials={tutoArt.initials.c} tone="win" round size={22} />
           <Grow>
             <Sm>{s.friends}</Sm>
           </Grow>

@@ -37,7 +37,7 @@ function Spot() {
     <Art label={m.agenda}>
       <Between>
         <Lbl>{m.agenda}</Lbl>
-        <Tag>66 · 11</Tag>
+        <Tag>{tutoArt.departments}</Tag>
       </Between>
       <View style={styles.week}>
         {m.week.map((w, i) => {
@@ -154,7 +154,7 @@ function Badge() {
               <Nm>{b.name}</Nm>
               <Sm>{b.meta}</Sm>
             </Grow>
-            <QrTile size={64} delay={500} label="QR du badge presse (exemple)" />
+            <QrTile size={64} delay={500} label={tutoArt.alt.qrBadge} />
           </Row>
           <Sm>{b.renew}</Sm>
         </Card>

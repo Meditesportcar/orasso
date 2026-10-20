@@ -16,34 +16,19 @@ import Animated, {
 import Svg, { Path, Rect } from "react-native-svg";
 
 import { Enter, Tag, useEnterProgress } from "../kit";
+import { headings, headStops, PATH, PLACE, PLAN_H, PLAN_W, stops, xs, ys } from "./parkingPath";
 
 const radius = tokens.radius;
-
-/** Le plan se dessine dans un repère fixe de 300 × 210, mis à l'échelle de la largeur disponible. */
-const W = 300;
-const H = 210;
-/** Le chemin : de l'entrée jusqu'à la place, en trois segments. */
-const PATH: readonly (readonly [number, number])[] = [
-  [150, 200],
-  [150, 128],
-  [72, 128],
-  [72, 64],
-];
+const W = PLAN_W;
+const H = PLAN_H;
 /** Longueur de la voiture ; sa boîte de dessin (fumée comprise) fait le double en largeur, 1 fois en hauteur. */
 const CAR = 36;
-
-const lengths = PATH.slice(1).map(([x, y], i) => {
-  const [px = 0, py = 0] = PATH[i] ?? [0, 0];
-  return Math.hypot(x - px, y - py);
-});
-const total = lengths.reduce((a, b) => a + b, 0);
-/** Part du trajet à chaque sommet (0 → 1). */
-const stops = PATH.map((_, i) => lengths.slice(0, i).reduce((a, b) => a + b, 0) / total);
-const xs = PATH.map(([x]) => x);
-const ys = PATH.map(([, y]) => y);
-/** Cap de la voiture (nez vers la droite à 0°) : vers le haut, vers la gauche, vers le haut. Le virage est lissé. */
-const headStops = [0, stops[1] ?? 0, (stops[1] ?? 0) + 0.06, stops[2] ?? 0, (stops[2] ?? 0) + 0.06, 1];
-const headings = [-90, -90, -180, -180, -270, -270];
+/**
+ * Le trajet est une scène qui se joue seule (aucun jeton de `timing` n'a cet ordre de grandeur) : la voiture part après
+ * le scan (1,4 s) et roule 3,2 s ; la place s'allume à l'arrivée.
+ */
+const PARK_DELAY = 1400;
+const PARK_MS = 3200;
 const pathD = PATH.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ");
 
 export function ParkingPlan() {
@@ -59,7 +44,7 @@ export function ParkingPlan() {
       return;
     }
     progress.value = 0;
-    progress.value = withDelay(1400, withTiming(1, { duration: 3200, easing: Easing.inOut(Easing.quad) }));
+    progress.value = withDelay(PARK_DELAY, withTiming(1, { duration: PARK_MS, easing: Easing.inOut(Easing.quad) }));
   }, [reducedMotion]);
   const car = useAnimatedStyle(() => {
     "worklet";
@@ -73,6 +58,8 @@ export function ParkingPlan() {
   });
   const dash = useEnterProgress(900, duration.poster);
   const trail = useAnimatedStyle(() => ({ opacity: dash.value }));
+  // La place s'allume quand la voiture arrive (dernier dixième du trajet).
+  const lit = useAnimatedStyle(() => ({ opacity: interpolate(progress.value, [0.9, 1], [0, 1], "clamp") }));
   return (
     <View
       onLayout={onLayout}
@@ -113,6 +100,13 @@ export function ParkingPlan() {
             strokeWidth={1}
           />
         </Svg>
+        <View style={[styles.place, { borderColor: t.color.plateChip, borderRadius: radius.radiusSm }]} />
+        <Animated.View style={[styles.place, { borderColor: t.color.accent, borderRadius: radius.radiusSm }, lit]} />
+        <Animated.View style={[styles.placeLabel, lit]}>
+          <Text variant="meta" color={t.color.accent}>
+            {parking.place}
+          </Text>
+        </Animated.View>
         <Animated.View style={[StyleSheet.absoluteFill, trail]}>
           <Svg width={W} height={H}>
             <Path
@@ -159,6 +153,8 @@ const styles = StyleSheet.create({
   plan: { position: "absolute", left: 0, top: 0, transformOrigin: "0% 0%" },
   zoneJdm: { position: "absolute", left: 12, top: 12 },
   zoneEuro: { position: "absolute", left: 164, top: 12 },
+  place: { position: "absolute", left: PLACE.x, top: PLACE.y, width: PLACE.w, height: PLACE.h, borderWidth: 1.5 },
+  placeLabel: { position: "absolute", left: PLACE.x + 6, top: PLACE.y + PLACE.h - 20 },
   entry: { position: "absolute", left: 12, top: 176 },
   car: { position: "absolute", left: 0, top: 0, alignItems: "center", justifyContent: "center" },
   scanTag: { position: "absolute", right: 0, bottom: 0 },

@@ -38,7 +38,11 @@ export function TutoScreen({ profile, onDone }: { profile: MainProfile; onDone: 
   const insets = useSafeAreaInsets();
   const texts = tutoSlides[profile];
   const illustrations = tutoIllustrations[profile];
-  const count = Math.min(texts.length, illustrations.length);
+  // Un tuto dont les textes et les illustrations ne correspondent pas est une erreur de code : elle se voit tout de suite.
+  if (texts.length !== illustrations.length) {
+    throw new Error(`Tuto « ${profile} » : ${texts.length} textes pour ${illustrations.length} illustrations`);
+  }
+  const count = texts.length;
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const last = index === count - 1;
@@ -138,7 +142,7 @@ const styles = StyleSheet.create({
     paddingBottom: space2,
   },
   dots: { flexDirection: "row", flexWrap: "wrap", gap: space1 + 2, flex: 1 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
+  dot: { width: 8, height: 8, borderRadius: tokens.radius.radiusPill },
   dotOn: { width: 22 },
   content: { flexGrow: 1, justifyContent: "center", paddingHorizontal: space4, paddingBottom: space3 },
   slide: { flex: 1, justifyContent: "center", gap: space3 },

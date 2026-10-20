@@ -3,7 +3,7 @@
 import { useRouter } from "expo-router";
 
 import { useArrivee } from "@/features/arrivee/model";
-import { tutoSeenKey } from "@/features/tuto/model";
+import { tutoKeysAfterArrival } from "@/features/tuto/model";
 import { TutoScreen } from "@/features/tuto/TutoScreen";
 import { kvSet } from "@/lib/kv";
 import { useSession } from "@/lib/session";
@@ -15,8 +15,9 @@ export default function ArriveeTuto() {
   // Le profil enregistré fait foi ; le choix de l'arrivée sert tant que le compte se charge.
   const profile = me?.profile.mainProfile ?? chosen ?? "visitor";
   const done = () => {
-    void kvSet(tutoSeenKey(profile), "1");
+    // Le tuto du profil, et celui de la barre qu'il peut voir tout de suite (visiteur tant que la casquette n'existe pas).
+    for (const key of tutoKeysAfterArrival(profile)) void kvSet(key, "1");
     router.replace("/arrivee/casquette");
   };
-  return <TutoScreen profile={profile} onDone={done} />;
+  return <TutoScreen key={profile} profile={profile} onDone={done} />;
 }
