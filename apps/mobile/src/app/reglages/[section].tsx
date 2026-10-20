@@ -4,11 +4,10 @@
 // Sécurité ; Confidentialité (compte public ou privé, mes données, supprimer le compte) ; Mon profil public (photo,
 // pseudo, description, aperçu) ; Aide (sanctions, version).
 import { Button, Chip, ChipRow, Text, type ThemePreference, useTheme } from "@orasso/design-system/native";
-import { moderationLabels } from "@orasso/shared";
+import { moderationLabels, tutoLabels, tutoProfileNames } from "@orasso/shared";
 import Constants from "expo-constants";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-
 import { ChangePasswordSheet } from "@/features/moi/ChangePasswordSheet";
 import { DataSection } from "@/features/moi/DataSection";
 import { DeleteAccountSheet } from "@/features/moi/DeleteAccountSheet";
@@ -24,6 +23,7 @@ import { SessionsSheet } from "@/features/moi/SessionsSheet";
 import { TwoFactorSheet } from "@/features/moi/TwoFactorSheet";
 import { useSettings } from "@/features/moi/useSettings";
 import { VisibilitySection } from "@/features/moi/VisibilitySection";
+import { replayProfiles } from "@/features/tuto/model";
 import { useMotionPref } from "@/lib/motionPref";
 import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
@@ -167,7 +167,24 @@ export default function Reglages() {
           >
             {me?.suspension?.canContest ? moderationLabels.contest : moderationLabels.mySanctions}
           </Button>
-          {/* lot 42 : « Revoir le tuto ». */}
+          {/* Lot 42 : « Revoir le tuto », un bouton par profil de la personne (profil choisi à l'arrivée, puis ses casquettes). */}
+          <SectionTitle>{tutoLabels.replay}</SectionTitle>
+          <Muted variant="body">{tutoLabels.replayHint}</Muted>
+          {replayProfiles(
+            (me?.personas ?? []).map((p) => p.kind),
+            me?.profile.mainProfile ?? null,
+          ).map((p) => (
+            <Button
+              key={p}
+              variant="plate"
+              icon="live"
+              fullWidth
+              onPress={() => router.push(`/tuto/${p}` as never)}
+              testID={`replay-tuto-${p}`}
+            >
+              {tutoProfileNames[p]}
+            </Button>
+          ))}
           <SectionTitle>Nous écrire</SectionTitle>
           <Muted variant="body">Une question, un souci : contact@orasso.fr</Muted>
           <Text variant="caption" color={t.color.inkFaint}>
