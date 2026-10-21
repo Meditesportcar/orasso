@@ -100,7 +100,7 @@ export function VoteScreen() {
       sub.remove();
       if (pending.current) clearTimeout(pending.current);
     };
-  }, [scheduleReload]);
+  }, [scheduleReload, candidates.reload]);
   // Le total et le top 3 du message, reportés sur le classement chargé.
   const shown: AudiencePrizeBoard | null = board.data
     ? {

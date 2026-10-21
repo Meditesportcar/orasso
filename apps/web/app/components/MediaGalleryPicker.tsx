@@ -74,7 +74,11 @@ export function MediaGalleryPicker({ onPendingChange }: { onPendingChange?: (pen
     setError(null);
     try {
       const res = await fetch("/api/me/uploads", { method: "POST", body, credentials: "same-origin" });
-      const json = (await res.json().catch(() => null)) as { id?: string; key?: string; error?: { message?: string } } | null;
+      const json = (await res.json().catch(() => null)) as {
+        id?: string;
+        key?: string;
+        error?: { message?: string };
+      } | null;
       if (!res.ok || !json?.key) {
         setError(json?.error?.message ?? L.uploadFailed);
         return;
@@ -122,12 +126,7 @@ export function MediaGalleryPicker({ onPendingChange }: { onPendingChange?: (pen
             <li key={s.key}>
               {s.preview ? <img src={s.preview} alt="" /> : null}
               {s.blurred && <Chip variant="accent">{L.addPhotosBlurred}</Chip>}
-              <Button
-                type="button"
-                variant="secondary"
-                icon="close"
-                onClick={() => void remove(s)}
-              >
+              <Button type="button" variant="secondary" icon="close" onClick={() => void remove(s)}>
                 {L.addPhotosRemove}
               </Button>
             </li>

@@ -539,7 +539,9 @@ test("média : envoi d'une photo retardé, aperçu flouté, Explorer au-delà de
   expect(await preview.getAttribute("src")).toMatch(/^data:image\/jpeg/);
   await expect(publish).toBeEnabled();
   // Photo retirée : son envoi est supprimé côté serveur (il occupait le quota des envois en attente).
-  const deleted = page.waitForResponse((r) => r.url().includes("/api/me/uploads/") && r.request().method() === "DELETE");
+  const deleted = page.waitForResponse(
+    (r) => r.url().includes("/api/me/uploads/") && r.request().method() === "DELETE",
+  );
   await picker.getByRole("button", { name: "Retirer cette photo" }).click();
   expect((await deleted).status()).toBe(204);
   await expect(picker.getByTestId("media-gallery-sent")).toHaveCount(0);

@@ -29,7 +29,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const contents: MediaContentView[] = [];
   let cursor: string | null = null;
   for (let i = 0; i < pages; i++) {
-    const res = await api<Page<MediaContentView>>(
+    const res: Awaited<ReturnType<typeof api<Page<MediaContentView>>>> = await api<Page<MediaContentView>>(
       request,
       `/media/${id}/contents?limit=20${cursor ? `&cursor=${cursor}` : ""}`,
     );
