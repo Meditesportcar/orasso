@@ -20,6 +20,9 @@ export type ExploreEventsQuery = Position & {
   /** Lot 44 : seulement les structures suivies. */
   followed?: "1";
   structureId?: string;
+  /** Lot 55 (Explorer du média) : seulement les accréditations ouvertes ; région (code de `regions`). */
+  accreditationOpen?: "1";
+  region?: string;
   scope?: "upcoming" | "past";
   limit?: number;
   cursor?: string;

@@ -133,13 +133,13 @@ export const mediaRoutes = new Hono<AppEnv>()
     const viewer = await optionalUser(c);
     return c.json(await mediaService.view(uuidParam(c, "id"), viewer?.user.id ?? sessionOf(c), viewer));
   })
-  // Administration : carte de presse à vérifier (page du lot 57).
+  // Administration : profils média à vérifier (page du lot 57).
   .get("/admin/media", async (c) => {
     const v = await requireUser(c);
     return c.json(await mediaService.adminList(v, query(c, adminMediaQuery).pending === "1"));
   })
-  .post("/admin/media/:id/verify-press-card", async (c) => {
+  .post("/admin/media/:id/verify", async (c) => {
     const v = await requireUser(c);
     const { verified } = await body(c, verifySchema);
-    return c.json(await mediaService.verifyPressCard(v, uuidParam(c, "id"), verified));
+    return c.json(await mediaService.verifyProfile(v, uuidParam(c, "id"), verified));
   });

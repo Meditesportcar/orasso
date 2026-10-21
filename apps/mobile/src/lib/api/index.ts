@@ -14,6 +14,7 @@ import { garageApi } from "./garage";
 import { homeApi } from "./home";
 import { invitationsApi } from "./invitations";
 import { listsApi } from "./lists";
+import { mediaApi } from "./media";
 import { messagingApi } from "./messaging";
 import { moderationApi } from "./moderation";
 import { orgaApi } from "./orga";
@@ -46,6 +47,7 @@ export const api = {
   ...garageApi,
   ...homeApi,
   ...eventsApi,
+  ...mediaApi,
   ...explorerApi,
   ...applicationsApi,
   ...staffApi,

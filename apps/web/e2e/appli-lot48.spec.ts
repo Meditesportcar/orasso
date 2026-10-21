@@ -139,8 +139,9 @@ test("QR tournant : quatre variantes, nouveau code au passage d'un créneau de 2
       await ctx.close();
     }
 
-    // 3. Média : badge presse de Léo. Pas d'écran jour J média avant le lot 55 : son kit (réel, secret compris) est
-    // posé sur le téléphone pour un événement qui commence dans l'heure, comme le ferait la synchro des kits.
+    // 3. Média : badge presse de Léo. Son kit (réel, secret compris) est posé sur le téléphone pour un événement qui
+    // commence dans l'heure. Depuis le lot 55 la synchro des kits enregistre le vrai kit du badge (la Nocturne, dans
+    // deux jours) : on coupe la liste des accréditations pour que le kit posé ici reste celui de l'écran.
     {
       const leo = await login("leo@orasso.local");
       const pass = await apiCall<{
@@ -154,6 +155,7 @@ test("QR tournant : quatre variantes, nouveau code au passage d'un créneau de 2
       expect(pass.data.otpSecret).toBeTruthy();
       expect(pass.data.mediaName).toBeTruthy();
       const { ctx, page } = await open(browser, theme);
+      await page.route("**/api/me/accreditations**", (route) => route.fulfill({ json: [] }));
       await signIn(page, "leo@orasso.local");
       const startsAt = new Date((await page.evaluate(() => Date.now())) + 3_600_000);
       await page.evaluate(

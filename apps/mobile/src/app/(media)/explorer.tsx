@@ -1,6 +1,6 @@
-// Onglet Explorer (lot 40 : « Bientôt » ; l'écran arrive au lot 55).
-import { Soon } from "@/ui/Soon";
+// Onglet Explorer du média, prototype `s-agenda` (lot 55 : fichier d'onglet, l'écran vit dans `features/media/`).
+import { ExplorerMedia } from "@/features/media/ExplorerMedia";
 
 export default function Explorer() {
-  return <Soon title="Explorer">Les événements partout en France, avec l'état des accréditations, arrivent ici.</Soon>;
+  return <ExplorerMedia />;
 }

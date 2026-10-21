@@ -1,6 +1,6 @@
 // Lot 45 : profil média et accréditation presse. Demande (fermée, quota, date limite, doublon), décision par le tri
 // existant (badge presse = pass, notifications accreditation_*), retrait, contenus (V6), mise en avant, vues, agenda,
-// Explorer national (région, accréditation ouverte), carte de presse privée (AS-V6), synchro du staff, casquette.
+// Explorer national (région, accréditation ouverte), vérification du profil (D26), synchro du staff, casquette.
 import { fromWallTime } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -52,7 +52,6 @@ const PROFILE = {
   formats: ["photo", "video"],
   description: "Média auto du Sud : photos, vidéos et articles.",
   website: "https://sudcars.example",
-  pressCardNumber: "CP-123456",
   departments: [],
 };
 const PRESS = {
@@ -131,10 +130,11 @@ async function accredited(u: TestUser = leo, eventId = nocturneId) {
 }
 
 describe("profil média", () => {
-  it("crée et met à jour le profil ; la carte de presse n'apparaît que pour son titulaire", async () => {
+  it("crée et met à jour le profil ; aucune carte de presse (D26) n'est demandée ni renvoyée", async () => {
     const created = await putProfile(leo, { website: null });
     expect(created.status).toBe(200);
-    expect(created.json).toMatchObject({ name: "Sud Cars", formats: ["photo", "video"], pressCardNumber: "CP-123456" });
+    expect(created.json).toMatchObject({ name: "Sud Cars", formats: ["photo", "video"] });
+    expect(created.json.pressCardNumber).toBeUndefined();
     expect(created.json.issue).toMatch(/lien/);
     const updated = await putProfile(leo);
     expect(updated.json.id).toBe(created.json.id);
@@ -143,8 +143,7 @@ describe("profil média", () => {
     const other = await signUp("Kenji_66");
     const pub = await call(other, "GET", `/media/${created.json.id}`);
     expect(pub.status).toBe(200);
-    expect(pub.json).toMatchObject({ name: "Sud Cars", pressCardVerified: false });
-    expect(pub.text).not.toContain("CP-123456");
+    expect(pub.json).toMatchObject({ name: "Sud Cars", verified: false });
     expect(pub.json.pressCardNumber).toBeUndefined();
     expect((await call(null, "GET", `/media/${created.json.id}`)).status).toBe(401);
   });
@@ -169,16 +168,56 @@ describe("profil média", () => {
   it("administration : liste à vérifier, vérification tracée ; refusée aux autres", async () => {
     const p = (await putProfile(leo)).json;
     const admin = await signUp("Admin_Orasso", { role: "super_admin", twoFactor: true });
-    expect((await call(leo, "POST", `/admin/media/${p.id}/verify-press-card`, { verified: true })).status).toBe(403);
+    expect((await call(leo, "POST", `/admin/media/${p.id}/verify`, { verified: true })).status).toBe(403);
     const pending = await call(admin, "GET", "/admin/media?pending=1");
     expect(pending.json.map((m: { id: string }) => m.id)).toContain(p.id);
-    expect(pending.json[0].pressCardNumber).toBe("CP-123456");
-    const ok = await call(admin, "POST", `/admin/media/${p.id}/verify-press-card`, { verified: true });
+    const ok = await call(admin, "POST", `/admin/media/${p.id}/verify`, { verified: true });
     expect(ok.status).toBe(200);
-    expect(ok.json.pressCardVerifiedAt).not.toBeNull();
+    expect(ok.json.verifiedAt).not.toBeNull();
     expect((await call(admin, "GET", "/admin/media?pending=1")).json).toHaveLength(0);
-    // Changer de carte retire la vérification.
-    expect((await putProfile(leo, { pressCardNumber: "CP-999" })).json.pressCardVerifiedAt).toBeNull();
+    // La description seule garde la vérification ; le nom, le site, Instagram, YouTube ou le logo la remettent à zéro.
+    expect((await putProfile(leo, { description: "Autre texte" })).json.verifiedAt).not.toBeNull();
+    expect((await putProfile(leo, { name: "Sud Cars Racing" })).json.verifiedAt).toBeNull();
+    // Site, Instagram, YouTube : chacun relance la vérification.
+    for (const over of [
+      { website: "https://autre.example" },
+      { instagram: "@autre" },
+      { youtube: "https://youtube.com/@autre" },
+    ]) {
+      expect(
+        (await call(admin, "POST", `/admin/media/${p.id}/verify`, { verified: true })).json.verifiedAt,
+      ).not.toBeNull();
+      expect((await putProfile(leo, over)).json.verifiedAt, JSON.stringify(over)).toBeNull();
+    }
+    // Le logo aussi.
+    expect((await call(admin, "POST", `/admin/media/${p.id}/verify`, { verified: true })).status).toBe(200);
+    await db.insert(uploads).values({
+      key: "media-logos/v.webp",
+      userId: leo.id,
+      purpose: "media_logo",
+      width: 512,
+      height: 512,
+      bytes: 100,
+    });
+    expect(
+      (await call(leo, "POST", "/me/media-profile/logo", { key: "media-logos/v.webp" })).json.verifiedAt,
+    ).toBeNull();
+  });
+
+  it("la fiche de l'événement porte l'état de l'accréditation pour un média connecté, jamais pour les autres", async () => {
+    await putProfile(leo);
+    await openPress(nocturneId);
+    const mine = await call(leo, "GET", "/events/by-slug/nocturne-de-canet-2026");
+    expect(mine.json.accreditation).toEqual({ open: true, mine: null });
+    const app = (await request(leo, nocturneId)).json;
+    expect((await call(leo, "GET", "/events/by-slug/nocturne-de-canet-2026")).json.accreditation).toEqual({
+      open: true,
+      mine: "pending",
+    });
+    expect(app.status).toBe("pending");
+    const other = await signUp("Kenji_66");
+    expect((await call(other, "GET", "/events/by-slug/nocturne-de-canet-2026")).json.accreditation).toBeUndefined();
+    expect((await call(null, "GET", "/events/by-slug/nocturne-de-canet-2026")).json.accreditation).toBeUndefined();
   });
 });
 
@@ -473,7 +512,7 @@ describe("agenda et Explorer national", () => {
 });
 
 describe("anonymisation", () => {
-  it("profil retiré, carte de presse effacée, contenus retirés", async () => {
+  it("profil retiré, contenus retirés", async () => {
     await accredited();
     await call(leo, "POST", "/me/media-contents", {
       kind: "link",
