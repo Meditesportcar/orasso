@@ -498,7 +498,6 @@ test("média : envoi d'une photo retardé, aperçu flouté, Explorer au-delà de
   await expect(page.getByTestId("media-event")).toHaveCount(30);
   await expect(page.getByTestId("media-results")).toContainText("30+");
   await page.getByTestId("media-explorer-more").click();
-  await expect(page).toHaveURL(/pages=2/);
   await expect(page.getByTestId("media-event")).toHaveCount(31);
   await expect(page.getByTestId("media-explorer-more")).toHaveCount(0);
   await expect(page.getByLabel("Rechercher un événement")).toHaveValue(tag);
@@ -548,6 +547,92 @@ test("média : envoi d'une photo retardé, aperçu flouté, Explorer au-delà de
   await ctx.close();
 });
 
+test("média : fiche avec galerie complète, suite au curseur au-delà de la 10e page et panne (relecture, tour 2)", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const api = `http://localhost:${process.env.API_PORT ?? 3001}`;
+  const origin = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
+  const leo = await login("leo@orasso.local");
+  const profile = await apiCall<{ profile: { id: string } | null }>(leo, "GET", "/me/media-profile");
+  const mediaId = profile.data.profile?.id;
+  const nocturne = await eventBySlug(leo, "nocturne-de-canet-2026");
+
+  // Une galerie de 8 photos (plus de 6) et 12 liens : plus de 10 pages à 1 contenu par page.
+  const photoKeys: string[] = [];
+  const png = await checkerPhoto();
+  for (let i = 0; i < 8; i++) {
+    const body = new FormData();
+    body.append("purpose", "media_content");
+    body.append("file", new Blob([new Uint8Array(png)], { type: "image/png" }), `tour2-${i}.png`);
+    const res = await fetch(`${api}/api/me/uploads`, { method: "POST", headers: { origin, cookie: leo }, body });
+    expect(res.status, `envoi de la photo ${i}`).toBe(201);
+    photoKeys.push(((await res.json()) as { key: string }).key);
+  }
+  const created: string[] = [];
+  const galleryTitle = `Huit photos ${unique()}`;
+  const gallery = await apiCall<{ id: string }>(leo, "POST", "/me/media-contents", {
+    eventId: nocturne.id,
+    kind: "gallery",
+    title: galleryTitle,
+    url: null,
+    platform: "other",
+    photoKeys,
+  });
+  expect(gallery.status).toBe(201);
+  created.push(gallery.data.id);
+  for (let i = 0; i < 12; i++) {
+    const link = await apiCall<{ id: string }>(leo, "POST", "/me/media-contents", {
+      eventId: nocturne.id,
+      kind: "link",
+      title: `Lien ${String(i).padStart(2, "0")} ${unique()}`,
+      url: "https://example.org/article",
+      platform: "website",
+      photoKeys: [],
+    });
+    expect(link.status).toBe(201);
+    created.push(link.data.id);
+  }
+  const all = await apiCall<unknown[]>(leo, "GET", "/me/media-contents");
+  const total = all.data.length;
+  expect(total).toBeGreaterThan(11);
+
+  try {
+    const { ctx, page } = await open(browser, "beton", "sofia@orasso.local");
+    // Galerie complète : les 8 photos sont dans la grille, la visionneuse les parcourt.
+    await page.goto(`/m/${mediaId}`);
+    const card = page.getByTestId("media-public-content").filter({ hasText: galleryTitle });
+    await expect(card.getByTestId("media-gallery-photo")).toHaveCount(8);
+    await card.getByTestId("media-gallery-photo").nth(7).click();
+    await expect(page.getByTestId("media-gallery-position")).toHaveText("8 / 8");
+    await page.getByRole("button", { name: "Photo suivante" }).click();
+    await expect(page.getByTestId("media-gallery-position")).toHaveText("1 / 8");
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("media-gallery-viewer")).toBeHidden();
+
+    // Suite au curseur, un contenu par page : on franchit la 10e page sans reboucler, sans doublon.
+    await page.goto(`/m/${mediaId}?taille=1`);
+    await expect(page.getByTestId("media-public-content")).toHaveCount(1);
+    for (let n = 2; n <= total; n++) {
+      await page.getByTestId("media-public-more").click();
+      await expect(page.getByTestId("media-public-content")).toHaveCount(n);
+    }
+    await expect(page.getByTestId("media-public-more")).toHaveCount(0);
+    const titles = await page.getByTestId("media-public-content").locator("h3").allTextContents();
+    expect(new Set(titles).size).toBe(total);
+
+    // Panne : un curseur refusé par l'API n'est pas « aucun contenu » ; « Réessayer » est proposé.
+    await page.goto(`/m/${mediaId}?cursor=invalide`);
+    await expect(page.getByTestId("media-public-error")).toBeVisible();
+    await expect(page.getByTestId("media-public-retry")).toHaveAttribute("href", /cursor=invalide/);
+    await page.goto(`/m/${mediaId}`);
+    await expect(page.getByTestId("media-public-error")).toHaveCount(0);
+    await expect(page.getByTestId("media-public-content").first()).toBeVisible();
+    await ctx.close();
+  } finally {
+    for (const id of created) await apiCall(leo, "DELETE", `/me/media-contents/${id}`);
+  }
+});
 test("accès refusés : staff sur Presse (403), non connecté sur /m/:id et /providers/:id (relecture)", async ({
   browser,
 }) => {

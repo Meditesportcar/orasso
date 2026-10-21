@@ -155,6 +155,16 @@ export const mediaAppLabels = {
   exploreErrorText: "Le service ne répond pas pour l'instant. Tes filtres sont gardés.",
   exploreRetry: "Réessayer",
   exploreMore: "Voir la suite",
+  /** Relecture du lot 57 (tour 2) : fiche média, contenus publiés (erreur de chargement, galerie complète). */
+  contentsErrorTitle: "Les contenus ne se chargent pas",
+  contentsErrorText: "Le service ne répond pas pour l'instant. Ce qui est déjà affiché est gardé.",
+  contentsRetry: "Réessayer",
+  galleryOpenPhoto: (n: number, total: number) => `Ouvrir la photo ${n} sur ${total}`,
+  galleryViewer: "Photos de la galerie",
+  galleryPrev: "Photo précédente",
+  galleryNext: "Photo suivante",
+  galleryClose: "Fermer",
+  galleryPosition: (n: number, total: number) => `${n} / ${total}`,
 
   // --- Profil média -----------------------------------------------------------------------------------------------------------
   profileTitle: "Profil média",

@@ -29,6 +29,7 @@ import { Qr } from "../components/Qr";
 import { RotatingQr } from "../components/RotatingQr";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { formatDay, formatWhen } from "../lib/format";
+import { type CursorChunk, cursorParam, loadChunk, useCursorList } from "../lib/useCursorList";
 import "../styles/garage.css";
 import "../styles/media.css";
 import type { Route } from "./+types/media";
@@ -59,10 +60,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     upcoming: [] as MediaAccreditationView[],
     past: [] as MediaAccreditationView[],
     passes: {} as Record<string, AccessPass>,
-    events: [] as EventCard[],
-    eventsFailed: false,
-    hasMore: false,
-    pages: 1,
+    chunk: { items: [], next: null, failed: false, cursor: "" } as CursorChunk<EventCard>,
+    cursor: "",
     filters: { region: "", q: "", open: true },
     contents: [] as MediaContentView[],
     accredited: [] as { id: string; title: string }[],
@@ -93,27 +92,17 @@ export async function loader({ request }: Route.LoaderArgs) {
     if (open) params.set("accreditationOpen", "1");
     if (regions.some((r) => r.code === region)) params.set("region", region);
     if (q) params.set("q", q);
-    // Relecture du lot 57 : pagination qui garde les filtres (`pages` = nombre de pages déjà montrées), et panne de
-    // l'API distincte d'une recherche vide.
-    const pages = Math.min(10, Math.max(1, Math.floor(Number(url.searchParams.get("pages"))) || 1));
-    const items: EventCard[] = [];
-    let cursor: string | null = null;
-    let failed = false;
-    for (let i = 0; i < pages; i++) {
-      if (cursor) params.set("cursor", cursor);
-      const res = await api<Page<EventCard>>(request, `/events?${params}`);
-      if (!res.ok) {
-        failed = true;
-        break;
-      }
-      items.push(...res.data.items);
-      cursor = res.data.nextCursor;
-      if (!cursor) break;
-    }
-    out.events = items;
-    out.eventsFailed = failed;
-    out.hasMore = Boolean(cursor) && !failed;
-    out.pages = pages;
+    // Relecture du lot 57 : une page au curseur (`?cursor=`, la suite se charge dans la page), filtres gardés, et panne
+    // de l'API distincte d'une recherche vide.
+    const cursor = cursorParam(url);
+    const chunk = await loadChunk<EventCard>(cursor, async (c) => {
+      const page = new URLSearchParams(params);
+      if (c) page.set("cursor", c);
+      const res = await api<Page<EventCard>>(request, `/events?${page}`);
+      return res.ok ? res.data : null;
+    });
+    out.chunk = chunk;
+    out.cursor = cursor;
     out.filters = { region, q, open };
   } else if (tab === "contenus") {
     const [contents, all] = await Promise.all([
@@ -128,15 +117,124 @@ export async function loader({ request }: Route.LoaderArgs) {
   return out;
 }
 
-/** Adresse de l'Explorer avec ses filtres et le nombre de pages montrées (pagination et « Réessayer »). */
-function explorerHref(filters: { region: string; q: string; open: boolean }, pages: number): string {
+/** Adresse de l'Explorer avec ses filtres et un curseur de page (« Voir la suite » et « Réessayer »). */
+function explorerHref(filters: { region: string; q: string; open: boolean }, cursor: string): string {
   const params = new URLSearchParams({ onglet: "explorer", q: filters.q });
   if (filters.region) params.set("region", filters.region);
   if (filters.open) params.set("ouverte", "1");
-  if (pages > 1) params.set("pages", String(pages));
+  if (cursor) params.set("cursor", cursor);
   return `/app/media?${params}`;
 }
 
+type LoaderData = Awaited<ReturnType<typeof loader>>;
+type Filters = { region: string; q: string; open: boolean };
+
+/** Résultats de l'Explorer : la page du curseur, « Voir la suite » ajoute la suivante (sans plafond), panne et « Réessayer ». */
+function ExplorerResults({ filters, first, busy }: { filters: Filters; first: CursorChunk<EventCard>; busy: boolean }) {
+  const list = useCursorList<EventCard, LoaderData>(
+    first,
+    (cursor) => explorerHref(filters, cursor),
+    (data) => data.chunk,
+  );
+  const hasMore = list.to !== null && !list.failed;
+  return (
+    <>
+      {list.failed && (
+        <Plate className="s-stack s-stack--tight" role="alert" data-testid="media-explorer-error">
+          <strong>{L.exploreErrorTitle}</strong>
+          <p>{L.exploreErrorText}</p>
+          <div>
+            <Button
+              icon="undo"
+              href={explorerHref(filters, list.to ?? first.cursor)}
+              onClick={(e) => {
+                e.preventDefault();
+                list.load();
+              }}
+              data-testid="media-explorer-retry"
+            >
+              {L.exploreRetry}
+            </Button>
+          </div>
+        </Plate>
+      )}
+      {!(list.failed && list.items.length === 0) && (
+        <p className="o-t-caption s-muted" data-testid="media-results">
+          {L.results(list.items.length, hasMore, filters.open)}
+        </p>
+      )}
+      {list.items.length === 0 ? (
+        list.failed ? null : (
+          <Plate className="s-stack s-stack--tight">
+            <strong>{L.emptyTitle}</strong>
+            <p>{L.emptyText}</p>
+          </Plate>
+        )
+      ) : (
+        list.items.map((e) => {
+          const acc = e.accreditation;
+          return (
+            <article key={e.id} className="s-card s-stack s-stack--tight" data-testid="media-event">
+              <div className="s-row s-row--between">
+                <div className="s-stack s-stack--tight">
+                  <div className="o-t-label s-label">{eventFormatLabels[e.format]}</div>
+                  <h3 className="s-h2 o-never-truncate">
+                    <a href={`/e/${e.slug}`}>{e.title}</a>
+                  </h3>
+                  <div className="o-t-meta s-muted">
+                    {formatWhen(e.startsAt, e.endsAt)}
+                    {e.city ? ` · ${e.city}` : ""}
+                    {e.department ? ` (${e.department})` : ""} · {e.structure.name}
+                    {e.travelMinutes ? ` · ${mediaLabels.travelTime(e.travelMinutes)}` : ""}
+                  </div>
+                </div>
+                <Chip variant={acc?.mine === "accepted" ? "accent" : "default"}>
+                  {acc?.mine === "accepted"
+                    ? mediaLabels.accredited
+                    : acc?.mine === "refused"
+                      ? mediaLabels.refused
+                      : acc?.mine
+                        ? mediaLabels.pending
+                        : acc?.open
+                          ? mediaLabels.accreditationOpen
+                          : L.closed}
+                </Chip>
+              </div>
+              <div className="s-row">
+                <Form method="post">
+                  <input type="hidden" name="intent" value="save" />
+                  <input type="hidden" name="eventId" value={e.id} />
+                  <Button type="submit" variant="secondary" icon="heart" aria-label={L.keepA11y(e.title)}>
+                    {L.keep}
+                  </Button>
+                </Form>
+              </div>
+              {acc?.open && (!acc.mine || acc.mine === "withdrawn" || acc.mine === "refused") && (
+                <RequestForm event={e} busy={busy} />
+              )}
+            </article>
+          );
+        })
+      )}
+      {hasMore && (
+        <div>
+          <Button
+            variant="secondary"
+            icon="down"
+            href={explorerHref(filters, list.to ?? "")}
+            onClick={(e) => {
+              e.preventDefault();
+              list.load();
+            }}
+            data-testid="media-explorer-more"
+          >
+            {L.exploreMore}
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
 const text = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
 
 export async function action({ request }: Route.ActionArgs) {
@@ -515,87 +613,7 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
               </Button>
             </div>
           </Form>
-          {d.eventsFailed && (
-            <Plate className="s-stack s-stack--tight" role="alert" data-testid="media-explorer-error">
-              <strong>{L.exploreErrorTitle}</strong>
-              <p>{L.exploreErrorText}</p>
-              <div>
-                <Button icon="undo" href={explorerHref(d.filters, d.pages)} data-testid="media-explorer-retry">
-                  {L.exploreRetry}
-                </Button>
-              </div>
-            </Plate>
-          )}
-          {!(d.eventsFailed && d.events.length === 0) && (
-            <p className="o-t-caption s-muted" data-testid="media-results">
-              {L.results(d.events.length, d.hasMore, d.filters.open)}
-            </p>
-          )}
-          {d.events.length === 0 ? (
-            d.eventsFailed ? null : (
-              <Plate className="s-stack s-stack--tight">
-                <strong>{L.emptyTitle}</strong>
-                <p>{L.emptyText}</p>
-              </Plate>
-            )
-          ) : (
-            d.events.map((e) => {
-              const acc = e.accreditation;
-              return (
-                <article key={e.id} className="s-card s-stack s-stack--tight" data-testid="media-event">
-                  <div className="s-row s-row--between">
-                    <div className="s-stack s-stack--tight">
-                      <div className="o-t-label s-label">{eventFormatLabels[e.format]}</div>
-                      <h3 className="s-h2 o-never-truncate">
-                        <a href={`/e/${e.slug}`}>{e.title}</a>
-                      </h3>
-                      <div className="o-t-meta s-muted">
-                        {formatWhen(e.startsAt, e.endsAt)}
-                        {e.city ? ` · ${e.city}` : ""}
-                        {e.department ? ` (${e.department})` : ""} · {e.structure.name}
-                        {e.travelMinutes ? ` · ${mediaLabels.travelTime(e.travelMinutes)}` : ""}
-                      </div>
-                    </div>
-                    <Chip variant={acc?.mine === "accepted" ? "accent" : "default"}>
-                      {acc?.mine === "accepted"
-                        ? mediaLabels.accredited
-                        : acc?.mine === "refused"
-                          ? mediaLabels.refused
-                          : acc?.mine
-                            ? mediaLabels.pending
-                            : acc?.open
-                              ? mediaLabels.accreditationOpen
-                              : L.closed}
-                    </Chip>
-                  </div>
-                  <div className="s-row">
-                    <Form method="post">
-                      <input type="hidden" name="intent" value="save" />
-                      <input type="hidden" name="eventId" value={e.id} />
-                      <Button type="submit" variant="secondary" icon="heart" aria-label={L.keepA11y(e.title)}>
-                        {L.keep}
-                      </Button>
-                    </Form>
-                  </div>
-                  {acc?.open && (!acc.mine || acc.mine === "withdrawn" || acc.mine === "refused") && (
-                    <RequestForm event={e} busy={busy} />
-                  )}
-                </article>
-              );
-            })
-          )}
-          {d.hasMore && (
-            <div>
-              <Button
-                variant="secondary"
-                icon="down"
-                href={explorerHref(d.filters, d.pages + 1)}
-                data-testid="media-explorer-more"
-              >
-                {L.exploreMore}
-              </Button>
-            </div>
-          )}
+          <ExplorerResults key={explorerHref(d.filters, d.cursor)} filters={d.filters} first={d.chunk} busy={busy} />
         </section>
       )}
 
