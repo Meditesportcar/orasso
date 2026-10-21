@@ -61,10 +61,14 @@ export default function AdminMedias({ loaderData, actionData }: Route.ComponentP
         </div>
         <nav className="s-row" aria-label="Filtre">
           <a href="/admin/medias" aria-current={filter === "to_verify" ? "page" : undefined}>
-            <Chip surface="plate" selected={filter === "to_verify"}>À vérifier</Chip>
+            <Chip surface="plate" selected={filter === "to_verify"}>
+              À vérifier
+            </Chip>
           </a>
           <a href="/admin/medias?filtre=all" aria-current={filter === "all" ? "page" : undefined}>
-            <Chip surface="plate" selected={filter === "all"}>Tous</Chip>
+            <Chip surface="plate" selected={filter === "all"}>
+              Tous
+            </Chip>
           </a>
         </nav>
       </div>
