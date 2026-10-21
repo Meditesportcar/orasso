@@ -1,5 +1,5 @@
 // Casquette Organisateur, « Modifier » un événement (lot 35b, D20) : l'assistant prérempli, depuis la page de
-// l'événement (ou juste après « Dupliquer », `?copie=1`). Hors de la barre d'onglets (`href: null`).
+// l'événement (ou juste après « Dupliquer », `?copie=1`). Flux plein écran, hors du groupe à onglets (lot C4a).
 import { eventWizardStepOf, eventEditorLabels as L, orgaLabels } from "@orasso/shared";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 

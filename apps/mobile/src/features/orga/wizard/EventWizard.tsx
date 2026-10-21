@@ -9,7 +9,7 @@
 // événement), et reprise au retour (« Recommencer » l'efface) ; le téléphone retient aussi, par brouillon, le temps le
 // plus avancé atteint et la récurrence choisie (`WizardMemo`). Hors réseau, l'assistant reste sur son temps.
 // L'API garde ses règles (structure suspendue, double authentification, 423 après le début, 409 `day_in_use`).
-import { Button, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, tokens } from "@orasso/design-system/native";
 import {
   afterNeedWrites,
   afterZoneWrites,
@@ -68,6 +68,7 @@ import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { ConfirmSheet } from "../ConfirmSheet";
 import { OrgaFailure, useOrga } from "../OrgaGate";
+import { BackSquare, StepRail } from "./StepRail";
 import {
   AfficheTemps,
   ArriveesTemps,
@@ -117,7 +118,6 @@ export function EventWizard({
   /** Lot 53 : temps où ouvrir (`?temps=`, prime sur tout) ; sans lui, un brouillon rouvre où on l'a laissé. */
   initialStep?: EventWizardStep | null;
 }) {
-  const { t } = useTheme();
   const router = useRouter();
   const { structureId } = useOrga();
   const { clearEventDraft, keepEventDraftPoster, loadEventDraft, loadWizardMemo, saveEventDraft, saveWizardMemo } =
@@ -593,98 +593,74 @@ export function EventWizard({
       facts={structure.data?.name ?? event?.title}
       onClose={close}
       footer={
-        <>
-          <View style={styles.progress} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            {eventWizardSteps.map((s, i) => (
-              <View key={s} style={[styles.segment, { backgroundColor: i <= index ? t.color.accent : t.color.line }]} />
-            ))}
-          </View>
-          {last && isDraft ? (
-            <View style={styles.end}>
-              <Button
-                icon="send"
-                loading={halted}
-                disabled={halted || !canSave || !canPublish}
-                onPress={() => void finish("publish")}
-                testID="wizard-publish"
-              >
-                {W.publish}
-              </Button>
-              <View style={styles.actions}>
-                <Button
-                  variant="secondary"
-                  icon="back"
-                  disabled={halted}
-                  onPress={() => void go(-1)}
-                  accessibilityLabel={W.previous}
-                  testID="wizard-back"
-                >
-                  {L.back}
-                </Button>
-                <Button
-                  variant="secondary"
-                  icon="calendar"
-                  disabled={halted || !canSave}
-                  onPress={() => void finish("draft")}
-                  style={styles.grow}
-                  testID="wizard-save"
-                >
-                  {W.draft}
-                </Button>
-                <Button
-                  variant="secondary"
-                  icon="eye"
-                  disabled={halted || !canSave}
-                  onPress={() => void finish("preview")}
-                  testID="wizard-preview"
-                >
-                  {W.preview}
-                </Button>
-              </View>
-            </View>
-          ) : (
+        last && isDraft ? (
+          <View style={styles.end}>
+            <Button
+              icon="send"
+              loading={halted}
+              disabled={halted || !canSave || !canPublish}
+              onPress={() => void finish("publish")}
+              testID="wizard-publish"
+            >
+              {W.publish}
+            </Button>
             <View style={styles.actions}>
-              {index > 0 ? (
-                <Button
-                  variant="secondary"
-                  icon="back"
-                  disabled={halted}
-                  onPress={() => void go(-1)}
-                  testID="wizard-back"
-                >
-                  {L.back}
-                </Button>
-              ) : (
-                <Button variant="secondary" icon="close" disabled={halted} onPress={close} testID="wizard-cancel">
-                  {L.cancel}
-                </Button>
-              )}
-              {last ? (
-                <Button
-                  icon="check"
-                  loading={halted}
-                  disabled={halted || !canSave}
-                  onPress={() => void finish("save")}
-                  style={styles.grow}
-                  testID="wizard-save"
-                >
-                  {L.saveChanges}
-                </Button>
-              ) : (
-                <Button
-                  icon="next"
-                  loading={halted}
-                  disabled={halted || !canSave}
-                  onPress={() => void go(1)}
-                  style={styles.grow}
-                  testID="wizard-next"
-                >
-                  {W.continue}
-                </Button>
-              )}
+              <BackSquare disabled={halted} onPress={() => void go(-1)} label={W.previous} testID="wizard-back" />
+              <Button
+                variant="secondary"
+                icon="calendar"
+                disabled={halted || !canSave}
+                onPress={() => void finish("draft")}
+                style={styles.grow}
+                testID="wizard-save"
+              >
+                {W.draft}
+              </Button>
+              <Button
+                variant="secondary"
+                icon="eye"
+                disabled={halted || !canSave}
+                onPress={() => void finish("preview")}
+                testID="wizard-preview"
+              >
+                {W.preview}
+              </Button>
             </View>
-          )}
-        </>
+          </View>
+        ) : (
+          <View style={styles.actions}>
+            {index > 0 ? (
+              <BackSquare disabled={halted} onPress={() => void go(-1)} label={W.previous} testID="wizard-back" />
+            ) : (
+              <Button variant="secondary" icon="close" disabled={halted} onPress={close} testID="wizard-cancel">
+                {L.cancel}
+              </Button>
+            )}
+            {last ? (
+              <Button
+                icon="check"
+                loading={halted}
+                disabled={halted || !canSave}
+                onPress={() => void finish("save")}
+                style={styles.grow}
+                testID="wizard-save"
+              >
+                {L.saveChanges}
+              </Button>
+            ) : (
+              <Button
+                icon="next"
+                loading={halted}
+                disabled={halted || !canSave}
+                onPress={() => void go(1)}
+                style={styles.grow}
+                testID="wizard-next"
+              >
+                {W.continue}
+              </Button>
+            )}
+          </View>
+        )
       }
       overlays={
         <ConfirmSheet
@@ -705,9 +681,18 @@ export function EventWizard({
         />
       }
     >
-      <Muted variant="label" testID="wizard-step">
-        {L.stepOf(index + 1, eventWizardSteps.length, eventStepLabels[step])}
-      </Muted>
+      {/* Lot C4a : frise cliquable de l'artefact (.csteps) à la place de « Étape N sur 8 » et des tirets du bas. */}
+      <StepRail
+        labels={eventWizardSteps.map((s) => eventStepLabels[s])}
+        index={index}
+        disabled={halted || busy || photoSending !== null}
+        onPick={(i) => {
+          setError(null);
+          setNotice(null);
+          setIndex(i);
+        }}
+        stepLabel={L.stepOf(index + 1, eventWizardSteps.length, eventStepLabels[step])}
+      />
       <View style={styles.head}>
         <Muted variant="title" testID="wizard-title-head">
           {title}
@@ -746,8 +731,6 @@ export function EventWizard({
 }
 
 const styles = StyleSheet.create({
-  progress: { flexDirection: "row", gap: space1 },
-  segment: { flex: 1, height: 4 },
   actions: { flexDirection: "row", gap: space2, flexWrap: "wrap" },
   end: { gap: space2 },
   grow: { flex: 1 },
