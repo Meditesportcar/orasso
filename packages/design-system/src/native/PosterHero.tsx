@@ -42,8 +42,7 @@ export function NightScene() {
     <View
       pointerEvents="none"
       style={StyleSheet.absoluteFill}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
+      aria-hidden
     >
       <Svg width="100%" height="100%" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
         <Defs>
