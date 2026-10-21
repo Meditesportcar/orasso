@@ -1,7 +1,20 @@
-import { Button, Chip, ChipRow, Counters, Icon, Reveal, SelectField, StatusBadge } from "@orasso/design-system/web";
+import {
+  Button,
+  Chip,
+  ChipRow,
+  Counters,
+  Icon,
+  Outlined,
+  Reveal,
+  SelectField,
+  StatusBadge,
+} from "@orasso/design-system/web";
 import {
   type AnnouncementView,
+  type AudiencePrizeBoard,
   applicationStatusLabels,
+  arrivalLabel,
+  arrivalTexts,
   type Category,
   crewLabels,
   type EventProviderPublic,
@@ -13,8 +26,12 @@ import {
   eventOutlookLabels,
   instagramHandle,
   invitationLabels,
+  siteLabels as L,
+  type MediaContentView,
   type MyCrew,
   type MyTicket,
+  mediaContentKindLabels,
+  mediaPlatformLabels,
   previewSummary,
   publicAccessText,
   registrationBlock,
@@ -30,6 +47,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { dayLabel, EventDays } from "../components/EventDays";
 import { EventFeed } from "../components/EventFeed";
 import { EventMap } from "../components/EventMap";
+import { PosterFace } from "../components/EventTile";
 import { ContactOrganizer } from "../components/Messaging";
 import { ReportDialog } from "../components/ReportDialog";
 import { ShareButtons } from "../components/ShareButtons";
@@ -54,7 +72,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const event = found.ok
     ? found.data
     : await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(slug)}`);
-  const [structure, categories, me, reviews, tickets, providers, weather, feed] = await Promise.all([
+  const [structure, categories, me, reviews, tickets, providers, weather, feed, media] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     api<Category[]>(request, "/vehicle-reference/categories"),
     getMe(request),
@@ -68,9 +86,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     api<EventWeather | null>(request, `/events/by-slug/${encodeURIComponent(slug)}/weather`),
     // Fil de l'événement (lot 20) : public, enrichi pour les retenus et l'organisation.
     api<{ items: AnnouncementView[] }>(request, `/events/by-slug/${encodeURIComponent(slug)}/announcements`),
+    // Contenus des médias accrédités (lot 45) : liens et galeries publiés sur l'événement.
+    api<MediaContentView[]>(request, `/events/by-slug/${encodeURIComponent(slug)}/media-contents`),
   ]);
   // Inscription en crew (lot 19) : proposée au chef d'un crew, sauf événement sur invitation seulement.
   const crews = me && event.admission !== "invite_only" ? await api<MyCrew[]>(request, "/me/crews") : null;
+  // Prix du public (lot 49) : le gagnant, une fois l'événement réglé (connecté seulement : le classement exige un compte).
+  const ended = new Date(event.endsAt).getTime() <= nowMs();
+  const board = me && ended ? await api<AudiencePrizeBoard>(request, `/events/${event.id}/audience-prize`) : null;
   return {
     event,
     structure,
@@ -79,6 +102,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     providers: providers.ok ? providers.data : [],
     weather: weather.ok ? weather.data : null,
     feed: feed.ok ? feed.data.items : [],
+    media: media.ok ? media.data : [],
+    prize: board?.ok && board.data.settled ? board.data.winner : null,
     offer: tickets.ok ? tickets.data.offer : null,
     myTickets: tickets.ok ? tickets.data.mine : [],
     paymentCancelled: new URL(request.url).searchParams.get("paiement") === "annule",
@@ -361,6 +386,8 @@ function EventPage({
     myTickets,
     paymentCancelled,
     providers,
+    media,
+    prize,
     leadsCrew,
   } = loaderData;
   const mine = event.myApplications ?? [];
@@ -400,24 +427,25 @@ function EventPage({
           </p>
         )}
         <Reveal>
-          <section className="ev__hero" aria-labelledby="ev-title">
-            {event.posterUrl && <img className="ev__hero-photo" src={event.posterUrl} alt="" />}
-            <div className="ev__hero-fade" />
-            <div className="ev__band">
+          {/* DA v2 (lot 56) : l'affiche générée en vedette, le titre en contour sur le fond ; sans affiche générée,
+              le gabarit « Minimal » (jamais l'affiche perso, qui vit plus bas dans le détail). */}
+          <section className="ev__feature" aria-labelledby="ev-title" data-testid="event-hero">
+            <div className="ev__feature-text">
               <Chip variant="accent">{bandText}</Chip>
-            </div>
-            <div className="ev__hero-text">
               <div className="s-label o-t-label">
                 {eventFormatLabels[event.format]} · <a href="#organisateur">{event.structure.name}</a>{" "}
                 {structure.verified && <span className="s-verified">Structure vérifiée</span>}
               </div>
-              <h1 id="ev-title" className="s-title s-title--xl">
+              <Outlined on="ground" as="h1" id="ev-title" className="o-t-poster-xl ev__feature-title">
                 {event.title}
-              </h1>
+              </Outlined>
               <div className="o-t-meta">
                 {formatWhen(event.startsAt, event.endsAt)}
                 {place ? ` · ${place}` : ""}
               </div>
+            </div>
+            <div className="ev__poster-frame" data-testid="event-poster">
+              <PosterFace event={{ ...event, generatedPosterUrl: event.poster?.postUrl ?? null }} />
             </div>
           </section>
         </Reveal>
@@ -449,7 +477,39 @@ function EventPage({
           }
         />
 
-        <section className="s-section s-section--first">
+        {/* Créneaux d'arrivée (lot 47) : deux plaques, exposants et public. */}
+        {(event.arrivals.exhibitors || event.arrivals.public) && (
+          <section className="s-section s-section--first" data-testid="arrivals" aria-labelledby="arrivals-title">
+            <h2 className="s-h2" id="arrivals-title">
+              {L.event.arrivals}
+            </h2>
+            <div className="ev__arrivals">
+              {(
+                [
+                  [L.event.arrivalsExhibitors, event.arrivals.exhibitors],
+                  [L.event.arrivalsPublic, event.arrivals.public],
+                ] as const
+              ).map(([label, slot]) =>
+                slot ? (
+                  <div key={label} className="ev__plaque" data-testid="arrival-plaque">
+                    <span className="o-t-label">{label}</span>
+                    <strong className="o-t-number-narrow">
+                      {arrivalLabel(slot)
+                        .replace(/^Arrivée /, "")
+                        .replace(/ \(.*\)$/, "")}
+                    </strong>
+                    <p className="o-t-caption">{slot.strict ? arrivalTexts.strict : arrivalTexts.advised}</p>
+                    {slot.note && <p className="o-t-caption">{slot.note}</p>}
+                  </div>
+                ) : null,
+              )}
+            </div>
+          </section>
+        )}
+
+        <section
+          className={`s-section${event.arrivals.exhibitors || event.arrivals.public ? "" : " s-section--first"}`}
+        >
           <h2 className="s-h2">Véhicules recherchés</h2>
           <ChipRow>
             {wanted.map((label) => (
@@ -516,6 +576,57 @@ function EventPage({
           <section className="s-section">
             <h2 className="s-h2">Programme et infos</h2>
             <p className="s-muted s-prewrap">{event.description}</p>
+          </section>
+        )}
+
+        {media.length > 0 && (
+          <section className="s-section" data-testid="media-contents" aria-labelledby="media-title">
+            <h2 className="s-h2" id="media-title">
+              Contenus des médias
+            </h2>
+            <ul className="prov__present">
+              {media.map((c) => (
+                <li key={c.id} className="prov__present-item" data-testid="media-content">
+                  <span className="prov__present-text">
+                    <strong className="o-never-truncate">{c.title}</strong>
+                    <span className="o-t-caption s-muted">
+                      {c.media.name} · {mediaContentKindLabels[c.kind]} · {mediaPlatformLabels[c.platform]}
+                    </span>
+                    {c.url && (
+                      <a className="o-t-caption" href={c.url} target="_blank" rel="noopener noreferrer">
+                        Voir le contenu
+                      </a>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {prize && (
+          <section className="s-section" data-testid="audience-prize" aria-labelledby="prize-title">
+            <h2 className="s-h2" id="prize-title">
+              Prix du public
+            </h2>
+            <p>
+              <strong>{prize.vehicleLabel}</strong> · {prize.pseudo} · {prize.votes} voix
+            </p>
+          </section>
+        )}
+
+        {/* L'affiche de l'organisateur (lot 47) vit ici, dans le détail : la vedette est l'affiche générée. */}
+        {event.customPosterUrl && (
+          <section className="s-section" data-testid="custom-poster">
+            <h2 className="s-h2">{L.event.organizerPoster}</h2>
+            <img className="ev__custom-poster" src={event.customPosterUrl} alt="" loading="lazy" />
+          </section>
+        )}
+
+        {event.rulesText && (
+          <section className="s-section" data-testid="event-rules">
+            <h2 className="s-h2">{L.event.rules}</h2>
+            <p className="s-muted s-prewrap">{event.rulesText}</p>
           </section>
         )}
 

@@ -108,3 +108,38 @@ describe("adresses non routables en transport Brevo", () => {
     expect(sent).toMatchObject({ transport: "brevo", status: "sent" });
   });
 });
+
+describe("gabarit commun des e-mails (lot 56)", () => {
+  it("chaque type d'envoi : affiche de nuit, titre, pied ; le bouton quand il y a un lien", async () => {
+    const { mailSamples } = await import("../modules/dev-mail/samples");
+    const samples = mailSamples();
+    expect(samples.length).toBeGreaterThanOrEqual(8);
+    for (const s of samples) {
+      expect(s.content.html, s.id).toContain("/mail/affiche-nuit.jpg");
+      expect(s.content.html, s.id).toContain("Tu reçois cet e-mail parce que tu as un compte Orasso.");
+      expect(s.content.text, s.id).toContain("Orasso");
+      if (s.hasButton) {
+        expect(s.content.html, s.id).toMatch(/<a href="https?:\/\/[^"]+"[^>]*>[^<]+ &rarr;<\/a>/);
+        expect(s.content.html, s.id).toContain("#e9b824");
+      }
+    }
+  });
+
+  it("le code de secours s'affiche en grand, échappé, dans le HTML et le texte", () => {
+    const m = renderMail(
+      "Ton code",
+      ["Garde-le."],
+      { label: "Ouvrir", url: "https://orasso.fr/app" },
+      { code: "K7Q2-<M9>" },
+    );
+    expect(m.html).toContain("Code de secours");
+    expect(m.html).toContain("K7Q2-&lt;M9&gt;");
+    expect(m.text).toContain("Code de secours : K7Q2-<M9>");
+  });
+
+  it("le texte du titre et du corps est échappé", () => {
+    const m = renderMail("A <b>", ["x & y"]);
+    expect(m.html).toContain("A &lt;b&gt;");
+    expect(m.html).toContain("x &amp; y");
+  });
+});

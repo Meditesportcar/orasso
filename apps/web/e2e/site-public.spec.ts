@@ -394,19 +394,22 @@ test("référencement : titres, descriptions et aperçus de lien des pages publi
   expect(ld.name).toBe("Nocturne de Canet");
 });
 
-test("accueil : événements près de chez toi, trois entrées, appli bientôt disponible", async ({ page }) => {
+test("accueil v2 : titre, bandeau des dates, événements, entrées, boutiques vers /appli", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Du rassemblement à l'entrée");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Tout le monde à sa place");
   await expect(page.getByTestId("home-events").getByTestId("event-tile").first()).toBeVisible();
   await expect(page.getByRole("link", { name: "Trouver un événement" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Découvrir l'outil" })).toHaveAttribute("href", "/organisateurs");
-  await expect(page.getByRole("link", { name: "Voir la présentation" })).toHaveAttribute("href", "/professionnels");
-  await expect(page.getByRole("button", { name: "Bientôt sur Android et iPhone" })).toBeDisabled();
-  // Département choisi : « près de chez toi ».
+  await expect(page.getByRole("link", { name: "Voir l'espace organisateur" })).toHaveAttribute(
+    "href",
+    "/organisateurs",
+  );
+  await expect(page.getByRole("link", { name: "Voir l'offre pro" })).toHaveAttribute("href", "/professionnels");
+  await expect(page.getByRole("link", { name: "Google Play" }).first()).toHaveAttribute("href", "/appli");
+  // Département choisi : les événements de ce département, sinon les prochains de France.
   await page.goto("/?departement=66");
-  await expect(page.getByRole("heading", { name: "Prochains événements près de chez toi" })).toBeVisible();
+  await expect(page.getByTestId("home-events")).toBeVisible();
   await page.goto("/?departement=2A");
-  await expect(page.getByText("Aucun événement à venir dans le 2A")).toBeVisible();
+  await expect(page.getByTestId("home-events")).toBeVisible();
 });
 
 test("audit du système de design sur les pages publiques (deux thèmes, bureau et 390 px)", async ({

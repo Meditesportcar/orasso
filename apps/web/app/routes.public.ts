@@ -4,6 +4,8 @@ import { index, layout, type RouteConfig, route } from "@react-router/dev/routes
 export default [
   // Page de démonstration du système de design : non liée, non référencée (lot 03).
   route("_ds", "routes/ds.tsx"),
+  // Aperçu des e-mails (lot 56) : développement seulement.
+  route("_mail", "routes/dev-mail.tsx"),
   route("deconnexion", "routes/deconnexion.tsx"),
   // Référencement (lot 13) : plan du site et robots.txt.
   route("sitemap.xml", "routes/sitemap.ts"),

@@ -1538,6 +1538,21 @@ Source : prototype DA v2 **validé par Damien dans le prototype DA v2, 19/10/202
 - Pas de « réponse avant le … » ni de délai pour accepter en liste d'attente : l'API ne promet ni l'un ni l'autre à un prestataire (le prototype montrait « 12 h »).
 - Icônes des tuiles : formes approchées du jeu existant ; veux-tu des pictogrammes dédiés (étincelle, clé, camion) ajoutés au système de design ?
 
+### 21/10/2026 — Site public v2, crédits de données, e-mails v2 (lot 56)
+
+Validé par Damien dans le prototype DA v2, 19/10/2026 (`s-web-home`, `s-web-events`, `s-web-orga`, `s-web-pro`, `s-email`). Textes dans `packages/shared/src/labels/site.fr.ts`.
+
+- **Boutons principaux** : l'en-tête (« Télécharger l'appli ») et les bandes d'appel sont en secondaire ; le seul principal de chaque page est celui du hero (règle « un seul principal par écran », écart au prototype qui en montre deux).
+- **« Créer un compte » retiré de l'en-tête** (le prototype n'a que « Connexion » et « Télécharger l'appli ») : le compte se crée depuis `/connexion`, le hero de l'accueil et les pages de candidature.
+- **Mur des huit styles** : `POST /posters/preview` exige un compte, la page publique ne peut pas l'appeler. Les huit rendus sont faits une fois par `pnpm --filter @orasso/api site:assets` (même moteur, événement « Nocturne de Canet », photo de substitution en dégradé) dans `apps/web/public/styles/`. À relancer si un gabarit change.
+- **« Autour de »** : douze villes proposées (`apps/web/app/lib/events-filter.ts`) et un rayon (20 à 200 km, 60 par défaut), envoyés à l'API (`lat`, `lng`, `radiusKm`, `sort=distance`). Dates : ce week-end, ce mois-ci, le mois prochain (heure de Paris). Les menus sont des `<select>` natifs habillés en pastilles ; le département s'ouvre en feuille avec `FranceMap`. La recherche texte reste en bout de phrase.
+- **Cartes** : classe `s-pcard` (pas de classe `o-postercard` dans le système) ; affiche = `generatedPosterUrl`, sinon gabarit « Minimal » sur l'aplat de l'affiche, jamais l'affiche perso. La fiche garde l'affiche perso dans le détail.
+- **Pas de lien Boutiques réel** : Google Play et App Store pointent `/appli` (qui dit si l'appli est publiée).
+- **Crédits des données** : pied de toutes les pages et `/mentions-legales` (OpenFreeMap, OpenMapTiles, © contributeurs OpenStreetMap, Victor Cazanave CC BY 4.0, Open-Meteo).
+- **Fiche événement** : contenus des médias (`/events/by-slug/:slug/media-contents`) et prix du public (gagnant, connecté seulement : le classement exige un compte). Pas d'action propre au profil média sur le site (rien n'existe côté web).
+- **E-mails** : un gabarit unique (`apps/api/src/lib/mail-template.ts`, `renderMail` inchangé en signature, option `code` pour le code de secours), couleurs des jetons Béton écrites en dur (un e-mail n'a pas de variables CSS), image d'en-tête servie par le site (`/mail/affiche-nuit.jpg`). La newsletter passe aussi par le gabarit (pied de désinscription conservé). Aperçu : `/_mail` (site) lit `GET /dev/mail` (API, `NODE_ENV=development` seulement).
+- **Aucune migration.**
+
 ## À revoir avec Damien — liste consolidée (lot 34)
 
 Une seule liste, ordonnée, de tout ce que les lots 15 à 35d (et 34) ont laissé à décider. Rien ne bloque : la solution décrite est appliquée (D16). Les points antérieurs (A1 à A14, lots 02 à 14) restent dans leurs sections plus haut ; ceux qui sont réglés depuis sont signalés à la fin.
