@@ -25,7 +25,15 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
-import { createLiveBoard, onVoteSubscribed } from "./liveBoard";
+import {
+  createLatest,
+  createLiveBoard,
+  createLoadTracker,
+  createVoteSubscription,
+  type Latest,
+  type LiveBoard,
+  type LoadTracker,
+} from "./liveBoard";
 import { applyTop3, BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
 import { createRefreshGate, type RefreshGate } from "./refreshGate";
 
@@ -42,34 +50,62 @@ export function VoteScreen() {
   const [live, setLive] = useState<AudienceVotesChanged | null>(null);
   // Les messages en direct sont réconciliés avec les réponses HTTP : un message antérieur au départ d'une requête de
   // classement est abandonné à l'arrivée de sa réponse (votes manqués pendant une coupure).
-  const liveBoard = useRef(createLiveBoard());
+  // Réponses ordonnées : une réponse partie avant la dernière appliquée est ignorée (le total ne recule jamais).
+  // Les chargements sont suivis (ouverture comprise) pour que le premier abonnement ne les double pas.
+  const order = useRef<{
+    live: LiveBoard<AudiencePrizeBoard>;
+    mine: Latest<AudiencePrizeMine>;
+    candidates: Latest<AudienceCandidate[]>;
+    loads: { board: LoadTracker; list: LoadTracker };
+  } | null>(null);
+  if (!order.current) {
+    order.current = {
+      live: createLiveBoard<AudiencePrizeBoard>(),
+      mine: createLatest<AudiencePrizeMine>(),
+      candidates: createLatest<AudienceCandidate[]>(),
+      loads: { board: createLoadTracker(), list: createLoadTracker() },
+    };
+  }
+  const { live: liveBoard, mine: mineOrder, candidates: candidatesOrder, loads } = order.current;
   const board = useApi(
-    async () => {
-      const token = liveBoard.current.begin();
-      const fresh = await api.audienceBoard(id);
-      setLive(liveBoard.current.loaded(token));
-      return fresh;
-    },
+    () =>
+      loads.board.track(async () => {
+        const token = liveBoard.begin();
+        const fresh = await api.audienceBoard(id);
+        const settled = liveBoard.loaded(token, fresh);
+        setLive(settled.live);
+        return settled.board;
+      }),
     [id],
     { enabled: Boolean(id) },
   );
-  const mine = useApi(() => api.audienceMine(id), [id], { enabled: Boolean(id) });
+  const mine = useApi(
+    () =>
+      loads.list.track(async () => {
+        const request = mineOrder.begin();
+        return mineOrder.settle(request, await api.audienceMine(id)).value;
+      }),
+    [id],
+    { enabled: Boolean(id) },
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   // La grille : tous les véhicules pointés (pas seulement les 100 premiers du classement), par pages de 100.
   const candidates = useApi(
-    async () => {
-      const all: AudienceCandidate[] = [];
-      let cursor: number | null = 0;
-      while (cursor !== null) {
-        const page: { items: AudienceCandidate[]; next: number | null } = await api.audienceCandidates(id, cursor);
-        all.push(...page.items);
-        cursor = page.next;
-      }
-      return all;
-    },
+    () =>
+      loads.list.track(async () => {
+        const request = candidatesOrder.begin();
+        const all: AudienceCandidate[] = [];
+        let cursor: number | null = 0;
+        while (cursor !== null) {
+          const page: { items: AudienceCandidate[]; next: number | null } = await api.audienceCandidates(id, cursor);
+          all.push(...page.items);
+          cursor = page.next;
+        }
+        return candidatesOrder.settle(request, all).value;
+      }),
     [id],
     { enabled: Boolean(id) },
   );
@@ -91,6 +127,10 @@ export function VoteScreen() {
       }),
     };
   }
+  // Abonnement confirmé : le premier ne recharge que ce que l'ouverture n'a pas chargé (ouvert hors ligne) ; une
+  // reconnexion recharge toujours (des messages ont pu être manqués).
+  const subscription = useRef<{ onSubscribed: () => void } | null>(null);
+  if (!subscription.current) subscription.current = createVoteSubscription(gates.current, loads);
   const scheduleReload = useCallback(() => gates.current?.board.request(), []);
   const scheduleListReload = useCallback(() => gates.current?.list.request(), []);
   useChannel(
@@ -102,14 +142,10 @@ export function VoteScreen() {
         return;
       }
       if (event.type !== "votes.changed") return;
-      setLive(liveBoard.current.receive(event.payload as AudienceVotesChanged));
+      setLive(liveBoard.receive(event.payload as AudienceVotesChanged));
       scheduleReload();
     },
-    () => {
-      // Abonnement confirmé, y compris le premier : ouvert hors ligne, l'écran n'a rien chargé ; reconnecté, des
-      // messages ont pu être manqués. Les portes absorbent le doublon avec le chargement d'ouverture.
-      if (gates.current) onVoteSubscribed(gates.current);
-    },
+    () => subscription.current?.onSubscribed(),
   );
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
@@ -147,6 +183,7 @@ export function VoteScreen() {
       setError(null);
       try {
         const next = await api.audienceVote(id, entry.applicationId);
+        mineOrder.set(next); // un rechargement parti avant le vote ne remet pas l'ancien choix
         mine.setData(next);
         setSaved(true);
         if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
@@ -157,7 +194,7 @@ export function VoteScreen() {
         setBusy(null);
       }
     },
-    [id, mine.setData, scheduleReload],
+    [id, mine.setData, mineOrder, scheduleReload],
   );
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
