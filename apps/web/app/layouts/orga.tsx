@@ -136,7 +136,7 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
             </SideLink>
           )}
           <div className="orga__spacer" />
-          <a className="orga__link" href="/app/acces">
+          <a className="orga__link" href="/app/sorties">
             Mon compte · {pseudo}
           </a>
           <Form method="post" action="/deconnexion">

@@ -95,7 +95,7 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
           <div className="orga__theme">
             <ThemeSwitch />
           </div>
-          <a className="orga__link" href="/app/acces">
+          <a className="orga__link" href="/app/sorties">
             Mon compte · {pseudo}
           </a>
           <Form method="post" action="/deconnexion">
