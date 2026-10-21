@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect } from "react";
 import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { chipAccessibility } from "./chipAccessibility";
 import { duration, easings } from "./motionHooks";
 import { Text } from "./text";
 import { angle, radius, spacing, useTheme } from "./theme";
@@ -24,6 +25,8 @@ export type ChipProps = {
   onPress?: () => void;
   style?: ViewStyle;
   accessibilityLabel?: string;
+  /** Onglet exclusif ; par défaut, bouton à bascule (filtre cumulable). */
+  accessibilityRole?: "button" | "tab";
 };
 
 /** Une catégorie, un filtre ou un fait, en capitales étroites. */
@@ -36,6 +39,7 @@ export function Chip({
   onPress,
   style,
   accessibilityLabel,
+  accessibilityRole = "button",
 }: ChipProps) {
   const { t } = useTheme();
   const c = t.color;
@@ -96,8 +100,7 @@ export function Chip({
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
+      {...chipAccessibility(selected, accessibilityRole)}
       accessibilityLabel={accessibilityLabel}
       style={styles.press}
     >
@@ -107,10 +110,20 @@ export function Chip({
 }
 
 /** Une rangée de chips qui défile à l'horizontale ; la sélectionnée reste visible. */
-export function ChipRow({ children }: { children: ReactNode }) {
+export function ChipRow({
+  children,
+  accessibilityRole,
+  accessibilityLabel,
+}: {
+  children: ReactNode;
+  accessibilityRole?: "tablist";
+  accessibilityLabel?: string;
+}) {
   return (
     <ScrollView
       horizontal
+      accessibilityRole={accessibilityRole}
+      accessibilityLabel={accessibilityLabel}
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.row}
       style={styles.rowScroll}
@@ -121,7 +134,12 @@ export function ChipRow({ children }: { children: ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  press: { alignSelf: "flex-start" },
+  press: {
+    alignSelf: "flex-start",
+    minHeight: spacing.touch,
+    minWidth: spacing.touch,
+    justifyContent: "center",
+  },
   base: {
     flexDirection: "row",
     alignSelf: "flex-start",
