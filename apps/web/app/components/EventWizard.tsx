@@ -11,7 +11,9 @@ import "../styles/wizard.css";
 import { Button } from "@orasso/design-system/web";
 import {
   afterNeedWrites,
+  afterZoneWrites,
   type Category,
+  createdNeedDiffers,
   draftStart,
   type EventDraft,
   type EventNeedView,
@@ -52,6 +54,7 @@ import {
   withNeedKeys,
   withServerNeeds,
   wizardEndLabels,
+  type ZoneWrites,
   zoneChanges,
 } from "@orasso/shared";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -347,11 +350,13 @@ export function EventWizard(props: Props) {
       const r = await apiFetch(`/events/${id}/zones/${z.id}`, { method: "PATCH", json: z.zone });
       if (!r.ok) refused.zones.push(z.zone.position);
     }
+    // Zones créées, gardées si la suite échoue : le nouvel essai les met à jour au lieu de les recréer (tour 3). Un 409
+    // (zone de ce code déjà là, créée ailleurs) reste un refus visible.
+    const zoneWrites: ZoneWrites = { created: [] };
     for (const zone of zones.create) {
-      const r = await apiFetch(`/events/${id}/zones`, { method: "POST", json: zone });
-      // 409 : une zone de ce code existe déjà (créée par un essai précédent dont la relecture a échoué) : c'est fait ;
-      // la relecture la rattache à la saisie par son code (correctif 53c).
-      if (!r.ok && r.status !== 409) refused.zones.push(zone.position);
+      const r = await apiFetch<{ id: string }>(`/events/${id}/zones`, { method: "POST", json: zone });
+      if (r.ok) zoneWrites.created.push({ position: zone.position, id: r.data.id });
+      else refused.zones.push(zone.position);
     }
     const needs = needChanges(savedNeeds, sent);
     // Écritures réussies, gardées si la suite échoue : un nouvel essai ne recrée pas les mêmes missions (correctif 53c).
@@ -366,8 +371,17 @@ export function EventWizard(props: Props) {
     }
     for (const need of needs.create) {
       const r = await apiFetch<EventNeedView>(`/events/${id}/needs`, { method: "POST", json: need });
-      if (r.ok) writes.created.push({ position: need.position, need: r.data });
-      else refused.needs.push(need.position);
+      if (!r.ok) {
+        refused.needs.push(need.position);
+        continue;
+      }
+      writes.created.push({ position: need.position, need: r.data });
+      // Clé déjà connue : l'API a rendu la mission d'un essai précédent, peut-être avec d'anciennes valeurs (tour 3).
+      if (createdNeedDiffers(r.data, need)) {
+        const { clientKey: _key, ...values } = need;
+        const p = await apiFetch(`/events/${id}/needs/${r.data.id}`, { method: "PATCH", json: values });
+        if (!p.ok) refused.needs.push(need.position);
+      }
     }
     if (ownPoster) {
       const form = new FormData();
@@ -390,9 +404,10 @@ export function EventWizard(props: Props) {
       // Les missions créées gardent leur identifiant, les supprimées sortent des enregistrées : le nouvel essai repart
       // de là (ni doublon, ni suppression renvoyée).
       const after = afterNeedWrites({ savedNeeds, sent, current: latest.current, writes });
+      const draft = afterZoneWrites(sent, after.draft, zoneWrites);
       setSavedNeeds(after.savedNeeds);
-      latest.current = after.draft;
-      setD(after.draft);
+      latest.current = draft;
+      setD(draft);
       // Relecture impossible : rien n'est marqué enregistré, la saisie reste à renvoyer.
       return fail(!fresh.ok ? fresh.error.message : !freshNeeds.ok ? freshNeeds.error.message : "", created);
     }
