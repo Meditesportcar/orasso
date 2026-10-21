@@ -154,7 +154,7 @@ for (const theme of THEMES) {
     await tab(page, "Scanner");
     await expect(page.getByRole("heading", { name: "Scanner", exact: true }).first()).toBeVisible({ timeout: 30_000 });
     // Les onglets voisins restent montés : seul ce qui se voit compte.
-    await expect(page.getByText("Remises par grade", { exact: true }).last()).toBeVisible();
+    await expect(page.getByText("Remises par grade", { exact: true }).locator("visible=true").first()).toBeVisible();
     await expect(page.getByTestId("pro-camera")).toBeVisible();
     const field = page.getByLabel(/Recette · charge utile/);
     // Un passionné différent par thème : le code de 60 s d'un même compte ne se relit pas (rejeu refusé).

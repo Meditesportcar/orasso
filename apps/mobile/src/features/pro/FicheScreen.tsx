@@ -25,9 +25,8 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
-import { SecHead } from "@/ui/SecHead";
 import { ProFicheFields } from "./FicheForm";
-import { ActGrid, DiscGrid, SegBlock, SquareLogo, ValidatedPill } from "./kit";
+import { ActGrid, DiscGrid, SecH, SegBlock, SquareLogo, ValidatedPill } from "./kit";
 import {
   DiscountsBlock,
   MediaBlock,
@@ -161,7 +160,7 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
               items={pro.activities.map((a) => ({ key: a, label: proActivityLabels[a], icon: proActivityIcons[a] }))}
             />
 
-            <SecHead title={proV2Labels.discountsTitle} hint={proV2Labels.discountsHint} />
+            <SecH title={proV2Labels.discountsTitle} hint={proV2Labels.discountsHint} />
             {cells.length ? (
               <DiscGrid
                 testID="pro-view-discounts"
@@ -177,7 +176,7 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
               <Muted variant="body">{proV2Labels.discountsNone}</Muted>
             )}
 
-            <SecHead
+            <SecH
               title={proV2Labels.worksTitle}
               hint={pro.photos.length ? proV2Labels.works(pro.photos.length) : undefined}
             />
