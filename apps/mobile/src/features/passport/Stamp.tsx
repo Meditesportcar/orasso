@@ -5,10 +5,6 @@
 
 import { useTheme } from "@orasso/design-system/native";
 import type { PassportStamp } from "@orasso/shared";
-import { useEffect, useId } from "react";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import Svg, { Circle, Defs, G, LinearGradient, Path, Stop, Text as SvgText, TextPath } from "react-native-svg";
-
 import {
   inkTokenKey,
   lineFontSize,
@@ -20,7 +16,10 @@ import {
   stampLook,
   stampShapeArt,
   stampText,
-} from "./stampModel";
+} from "@orasso/shared";
+import { useEffect, useId } from "react";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Svg, { Circle, Defs, G, LinearGradient, Path, Stop, Text as SvgText, TextPath } from "react-native-svg";
 
 export function Stamp({
   stamp,

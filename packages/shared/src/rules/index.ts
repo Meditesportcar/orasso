@@ -30,6 +30,7 @@ export * from "./registry";
 export * from "./reviews";
 export * from "./solar";
 export * from "./sponsored";
+export * from "./stampArt";
 export * from "./stamps";
 export * from "./templates";
 export * from "./ticketing";

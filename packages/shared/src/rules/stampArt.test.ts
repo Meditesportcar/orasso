@@ -1,6 +1,6 @@
-import { type PassportStamp, passportPages, stampShapes } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
+import type { PassportStamp } from "../schemas/passport";
 import {
   inkTokenKey,
   lineFontSize,
@@ -10,7 +10,8 @@ import {
   stampPlacement,
   stampShapeArt,
   stampText,
-} from "./stampModel";
+} from "./stampArt";
+import { passportPages, stampShapes } from "./stamps";
 
 // Tampons du passeport (lot 50) : le dessin est déterministe (même `seed`, même tampon) et chaque forme a le sien.
 const stamp = (over: Partial<PassportStamp> = {}): PassportStamp => ({
