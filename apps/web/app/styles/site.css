@@ -401,6 +401,67 @@
   width: 100%;
   max-width: 560px;
 }
+/* Barre de l'espace connecté : la même que l'appli (AppBar « tab » du système de design), collée en haut. */
+.app__bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+/* Accès flottant (lot C5, artefact `.near`) : carte d'affiche posée au-dessus de la barre d'onglets, de J-7 à J+1. Aucun
+   néon : le seul de l'écran est celui du bouton principal ou de l'onglet allumé. */
+.near {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bar-tabs) + var(--space-3));
+  z-index: 6;
+  inline-size: min(calc(100% - 2 * var(--space-4)), 520px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--poster);
+  color: var(--poster-ink);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+}
+.near__day {
+  display: grid;
+  place-items: center;
+  min-inline-size: 44px;
+}
+.near__day b {
+  font-size: var(--type-poster-l-size);
+  font-weight: var(--type-poster-l-weight);
+  line-height: 0.9;
+}
+.near__text {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+.near__text strong {
+  text-transform: uppercase;
+}
+.near__text span {
+  color: var(--poster-muted);
+}
+.near__qr {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: var(--touch);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.near:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .app__top {
   display: flex;
   align-items: center;
@@ -1428,25 +1489,6 @@
   border: 1.5px solid var(--line);
 }
 
-/* Cloche du Journal (en-tête du site) : pastille moutarde à plat, sans néon (le néon est celui du bouton principal ou de
-   l'onglet allumé : un seul par écran). */
-.s-bell {
-  position: relative;
-  display: inline-flex;
-}
-.s-bell__count {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 16px;
-  padding: 2px 4px;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: var(--accent-ink);
-  text-align: center;
-  pointer-events: none;
-}
-
 /* Liens de liste : la couleur du lien du site ne s'applique pas aux cartes, aux personnes ni au Journal. */
 .s-main .s-journal__link,
 .s-main .s-person__name,
@@ -1631,43 +1673,4 @@
 }
 .s-composer__field {
   min-height: 64px;
-}
-
-/* Recherche de premier niveau (lot 29) : champ dans l'en-tête du compte, renvoie vers l'Explorer. Jetons seulement. */
-.s-search,
-.s-search__form {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-.s-search__input {
-  inline-size: 11rem;
-  min-block-size: var(--touch);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-  /* Lot 38 : l'en-tête est nuit dans les deux thèmes ; le champ graphite garde l'encre de barre. */
-  color: var(--bar-ink);
-  font-family: inherit;
-}
-.s-search__input::placeholder {
-  color: var(--bar-muted);
-}
-.s-search__input:focus-visible,
-.s-search__submit:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.s-search__submit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--touch);
-  block-size: var(--touch);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--bar-ink);
-  cursor: pointer;
 }

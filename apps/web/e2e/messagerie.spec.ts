@@ -149,8 +149,9 @@ test("messagerie : amis en direct, lu par, image privée, demande de contact, or
   await expect(pageD.getByTestId("read-by")).toContainText(`Lu par ${u}`, { timeout: 15_000 });
 
   // Pastille de la Boîte : C a la réponse d'Alma non lue.
-  await pageC.goto("/app/acces");
-  await expect(pageC.locator(".o-tabbar__dot")).toBeVisible();
+  // Lot C5 : la Boîte est en haut à droite (compteur de l'AppBar), plus dans la barre d'onglets.
+  await pageC.goto("/app/sorties");
+  await expect(pageC.getByRole("link", { name: "Boîte" }).locator(".o-appbar__count")).toBeVisible();
   const summary = await apiCall<{ unreadMessages: number }>(cCookie, "GET", "/me/inbox/summary");
   expect(summary.data.unreadMessages).toBe(1);
   for (const ctx of [ctxA, ctxB, ctxC, ctxU, ctxD]) await ctx.close();

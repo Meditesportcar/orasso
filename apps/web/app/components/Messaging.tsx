@@ -42,18 +42,26 @@ export function ContactOrganizer({
   );
 }
 
-/** Segments Messages / Demandes avec leur compteur. */
+/**
+ * Segments de la Boîte (artefact DA v2, `sh-inbox`) : Tout (le fil du Journal : notifications et activité des amis),
+ * Messages, Demandes, avec leur compteur. La cloche du Journal n'existe plus : le Journal est le segment « Tout ».
+ */
 export function InboxSegments({
   active,
   messages,
   requests,
 }: {
-  active: "messages" | "requests";
+  active: "all" | "messages" | "requests";
   messages: number;
   requests: number;
 }) {
   return (
     <nav className="s-tabs" aria-label={messagingLabels.inbox}>
+      <a href="/app/journal" className="s-chip-link" aria-current={active === "all" ? "page" : undefined}>
+        <Chip selected={active === "all"} data-testid="segment-all">
+          {messagingLabels.all}
+        </Chip>
+      </a>
       <a href="/app/boite" className="s-chip-link" aria-current={active === "messages" ? "page" : undefined}>
         <Chip selected={active === "messages"}>
           {messagingLabels.messages}

@@ -1,33 +1,32 @@
-import { AppBarAction, Ground, Icon, legacyTabSets, TabBar, type TabItem, useTheme } from "@orasso/design-system/web";
-import {
-  explorerLabels,
-  moderationLabels,
-  reportReasonLabels,
-  SEARCH_MAX_LENGTH,
-  SEARCH_MIN_LENGTH,
-} from "@orasso/shared";
+import { AppBar, Ground, Icon, TabBar, type TabItem, tabSets, useTheme } from "@orasso/design-system/web";
+import { type MyApplication, moderationLabels, reportReasonLabels } from "@orasso/shared";
 import { useEffect } from "react";
 import { Form, Outlet, useLocation, useRevalidator } from "react-router";
 
-import { SiteHeader, ThemeSwitch } from "../components/SiteChrome";
-import { requireMe } from "../lib/api.server";
+import { ThemeSwitch } from "../components/SiteChrome";
+import { api, requireMe } from "../lib/api.server";
+import { now } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
+import { nearAccessOf } from "../lib/near-access";
 import { useChannel } from "../lib/useChannel";
 import "../styles/moderation.css";
 import type { Route } from "./+types/app";
 
-// Espace connecté : mêmes sections que l'appli (Accueil, Explorer, Accès, Garage, Boîte).
+// Espace connecté (lot C5, artefact DA v2) : la même barre que l'appli, celle de la casquette de base (exposant :
+// Explorer · Sorties · Accueil · Garage · Profil ; visiteur : Passeport à la place du Garage), la Boîte et la recherche
+// en haut à droite, l'accès flottant au-dessus de la barre. Les casquettes, la déconnexion et le reste vivent dans
+// Profil (`/app/moi`) : « chaque fonction à un seul endroit ».
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
+  // Accès flottant : la place retenue la plus proche (J-7 à J+1). Une lecture qui échoue ne bloque pas l'espace.
+  const apps = await api<MyApplication[]>(request, "/me/applications?scope=upcoming");
   return {
     userId: me.user.id,
-    pseudo: me.profile.pseudo,
-    // Pastille de la Boîte (lot 18) : conversations avec du non lu + demandes en attente.
-    unreadInbox: me.unreadInbox,
-    orga: me.memberships.find((m) => m.status === "active")?.structureSlug ?? null,
-    pro: me.pro?.slug ?? null,
-    provider: me.personas.some((p) => p.kind === "provider"),
-    unread: me.counts.unreadNotifications,
+    // La casquette de base décide de la barre : visiteur sans véhicule, exposant sinon (comme l'appli).
+    base: me.personas.some((p) => p.kind === "visitor") ? ("visitor" as const) : ("fan" as const),
+    // Pastille de la Boîte (lots 18 et C5) : conversations avec du non lu, demandes en attente, notifications non lues.
+    unreadInbox: me.unreadInbox + me.counts.unreadNotifications,
+    near: apps.ok ? nearAccessOf(apps.data, now()) : null,
     emailVerified: me.user.emailVerified,
     // Lot 32 : compte suspendu (lecture seule) : bandeau avec le motif et « Contester ».
     suspension: me.suspension,
@@ -39,18 +38,27 @@ export async function loader({ request }: Route.LoaderArgs) {
 const HREFS: Record<string, string> = {
   home: "/app",
   explore: "/app/explorer",
-  access: "/app/sorties",
+  outings: "/app/sorties",
   garage: "/app/garage",
-  inbox: "/app/boite",
+  passport: "/app/passeport",
+  profile: "/app/moi",
 };
 
+/** Onglet actif d'après l'adresse ; la Boîte et le Journal sont une feuille au-dessus de l'écran, sans onglet. */
 function activeTab(pathname: string): string {
-  const hit = Object.entries(HREFS).find(([id, href]) => id !== "home" && pathname.startsWith(href));
-  return hit ? hit[0] : "home";
+  if (pathname.startsWith("/app/boite") || pathname.startsWith("/app/journal")) return "";
+  if (pathname === "/app") return "home";
+  if (/^\/app\/(sorties|acces|billets|vote|recap)(\/|$)/.test(pathname)) return "outings";
+  if (pathname.startsWith("/app/explorer")) return "explore";
+  if (pathname.startsWith("/app/garage")) return "garage";
+  if (pathname.startsWith("/app/passeport")) return "passport";
+  return /^\/app\/(moi|securite|sanctions|amis|crews|media|prestataire|structure|pro)(\/|$)/.test(pathname)
+    ? "profile"
+    : "home";
 }
 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const revalidator = useRevalidator();
   const { setDepartment } = useTheme();
   useEffect(() => setDepartment(loaderData.department), [loaderData.department, setDepartment]);
@@ -60,69 +68,26 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       revalidator.revalidate();
     }
   });
-  const tabs: TabItem[] = legacyTabSets.fan.map((tab) => ({
+  const tabs: TabItem[] = tabSets[loaderData.base === "visitor" ? "visitor" : "exhibitor"].map((tab) => ({
     ...tab,
-    // Lot 57 : l'onglet Accès devient Sorties (DA v2, `s-sorties`).
-    label: tab.id === "access" ? "Sorties" : tab.label,
     href: HREFS[tab.id],
-    dot: tab.id === "inbox" && loaderData.unreadInbox > 0,
   }));
+  // Un onglet absent de la barre de la casquette (Passeport d'un exposant, Garage d'un visiteur) tombe sur Profil.
+  const raw = activeTab(pathname);
+  const tab = raw === "" || tabs.some((t) => t.id === raw) ? raw : "profile";
+  const near = loaderData.near;
   return (
     <Ground variant="site" animated fixed>
       <div className="app">
-        <SiteHeader nav={false}>
-          {loaderData.orga && <a href={`/orga/${loaderData.orga}`}>Organisateur</a>}
-          {loaderData.pro && <a href={`/pro/${loaderData.pro}`}>Pro</a>}
-          {loaderData.provider && <a href="/app/prestataire">Prestataire</a>}
-          {/* Recherche de premier niveau (lot 29) : renvoie vers l'Explorer, résultats groupés. */}
-          <search className="s-search" data-testid="site-search">
-            <form action="/app/explorer" method="get" className="s-search__form">
-              <label className="o-visually-hidden" htmlFor="site-search-input">
-                {explorerLabels.searchTitle}
-              </label>
-              <input
-                id="site-search-input"
-                className="s-search__input o-t-meta"
-                type="search"
-                name="q"
-                placeholder={explorerLabels.searchTitle}
-                minLength={SEARCH_MIN_LENGTH}
-                maxLength={SEARCH_MAX_LENGTH}
-                autoComplete="off"
-                required
-              />
-              <button type="submit" className="s-search__submit" aria-label={explorerLabels.searchTitle}>
-                <Icon name="search" size={18} />
-              </button>
-            </form>
-          </search>
-          {/* Journal (lot 17) : la cloche et sa pastille d'éléments non lus. */}
-          <span className="s-bell">
-            <AppBarAction icon="bell" label="Journal" href="/app/journal" on={pathname === "/app/journal"} />
-            {loaderData.unread > 0 && (
-              <span className="s-bell__count o-t-credit" data-testid="bell-count">
-                {loaderData.unread}
-                <span className="o-visually-hidden"> non lus</span>
-              </span>
-            )}
-          </span>
-          {/* Boîte (lot 56) : messages et demandes, avec sa pastille de non lus. */}
-          <span className="s-bell">
-            <AppBarAction icon="inbox" label="Boîte" href="/app/boite" on={pathname.startsWith("/app/boite")} />
-            {loaderData.unreadInbox > 0 && (
-              <span className="s-bell__count o-t-credit" data-testid="inbox-count">
-                {loaderData.unreadInbox}
-                <span className="o-visually-hidden"> non lus</span>
-              </span>
-            )}
-          </span>
-          <a href="/app/moi">{loaderData.pseudo}</a>
-          <Form method="post" action="/deconnexion">
-            <button type="submit" className="s-linkbutton o-t-button">
-              Déconnexion
-            </button>
-          </Form>
-        </SiteHeader>
+        <AppBar
+          kind="tab"
+          className="app__bar"
+          searchHref="/app/explorer?segment=resultats"
+          searchOn={pathname.startsWith("/app/explorer") && /[?&](q=|segment=resultats)/.test(search)}
+          inboxHref="/app/journal"
+          inboxOn={tab === ""}
+          inboxCount={loaderData.unreadInbox}
+        />
         <div className="app__body">
           {!loaderData.emailVerified && (
             <Form method="post" action="/app/moi" className="s-notice s-row s-row--between" data-testid="verify-banner">
@@ -149,8 +114,24 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             <ThemeSwitch />
           </div>
         </div>
+        {near && tab !== "home" && tab !== "outings" && (
+          <a className="near" href="/app/sorties" data-testid="near-access">
+            <span className="near__day o-t-credit">
+              <b>{near.day}</b>
+              <small>{near.month}</small>
+            </span>
+            <span className="near__text">
+              <strong className="o-t-label">{near.title}</strong>
+              <span className="o-t-caption">{near.countdown}</span>
+            </span>
+            <span className="near__qr o-t-button">
+              <Icon name="qr" size={18} />
+              Mon accès
+            </span>
+          </a>
+        )}
         <div className="app__tabs">
-          <TabBar tabs={tabs} active={activeTab(pathname)} aria-label="Mon compte" />
+          <TabBar tabs={tabs} active={tab} aria-label="Mon compte" />
         </div>
       </div>
     </Ground>
