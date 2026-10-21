@@ -7,7 +7,6 @@ import {
   Button,
   Chip,
   ChipRow,
-  Counters,
   Icon,
   type IconName,
   Plate,
@@ -234,18 +233,22 @@ export function StructureScreen() {
 
       {s ? (
         <>
+          {/* `.st-head` de l'artefact : logo 96 px et sceau, nom centré, pastille « Structure validée », nature. */}
           <View style={styles.head} testID="structure-head">
-            <SealedLogo url={s.logoUrl} name={s.name} verified={verified} />
-            <View style={styles.grow}>
-              <Text variant="posterM" color={t.color.ink}>
-                {s.name}
-              </Text>
-              {verified ? (
-                <Text variant="label" color={t.color.accentText} testID="structure-validated">
+            <SealedLogo url={s.logoUrl} name={s.name} verified={verified} size={96} />
+            <Text variant="posterM" color={t.color.ink} style={styles.center}>
+              {s.name}
+            </Text>
+            {verified ? (
+              <View style={[styles.pill, { backgroundColor: t.color.accent }]}>
+                <Text variant="label" color={t.color.accentInk} testID="structure-validated">
                   {L2.structVerified}
                 </Text>
-              ) : null}
-            </View>
+              </View>
+            ) : null}
+            <Muted variant="caption" style={styles.center}>
+              {structureKindLabels[s.kind]}
+            </Muted>
           </View>
           {state === "pending" ? (
             <Plate kind="note" style={styles.block} testID="structure-pending">
@@ -267,16 +270,27 @@ export function StructureScreen() {
               </Text>
             </Plate>
           ) : null}
-          <Counters
-            items={[
-              { value: s.followersCount, label: L2.structFollowers },
-              { value: published.length, label: L2.structEvents },
+          {/* `.st-stats` : trois cartes, chiffres étroits de 32 px, libellé dessous. */}
+          <View style={styles.stats}>
+            {[
+              { value: String(s.followersCount), label: L2.structFollowers },
+              { value: String(published.length), label: L2.structEvents },
               {
                 value: rating !== null && rating !== undefined ? String(rating).replace(".", ",") : L2.structRatingNone,
                 label: L2.structRating,
               },
-            ]}
-          />
+            ].map((i) => (
+              <View
+                key={i.label}
+                style={[styles.stat, { backgroundColor: t.color.surface, borderColor: t.color.line }]}
+              >
+                <Text variant="numberNarrow" color={t.color.ink} style={styles.statValue}>
+                  {i.value}
+                </Text>
+                <Muted variant="caption">{i.label}</Muted>
+              </View>
+            ))}
+          </View>
         </>
       ) : (
         <Muted variant="body">{structure.loading ? "Chargement…" : null}</Muted>
@@ -620,7 +634,12 @@ export function StructureScreen() {
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: "row", alignItems: "center", gap: space3 },
+  head: { alignItems: "center", gap: 10, paddingTop: 10, paddingBottom: 4 },
+  center: { textAlign: "center" },
+  pill: { height: 30, paddingHorizontal: 12, borderRadius: 15, justifyContent: "center" },
+  stats: { flexDirection: "row", gap: 8 },
+  stat: { flex: 1, borderRadius: 16, padding: 12, borderWidth: 1 },
+  statValue: { fontSize: 32, lineHeight: 30, fontWeight: "800" },
   grow: { flex: 1, gap: space1 },
   block: { gap: space2, padding: space3 },
   logoBlock: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3 },

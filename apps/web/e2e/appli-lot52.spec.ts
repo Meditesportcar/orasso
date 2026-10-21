@@ -214,8 +214,8 @@ for (const theme of THEMES) {
     expect(julie, "Julie plus grande que Marc").toBeGreaterThan(marc);
     expect(julie).toBeGreaterThanOrEqual(theo);
     expect(theo).toBeGreaterThanOrEqual(marc);
-    expect(marc).toBeGreaterThanOrEqual(44);
-    expect(julie).toBeLessThanOrEqual(88);
+    expect(marc).toBeGreaterThanOrEqual(36); // Lot C4a : bulles de 36 à 96 px (artefact `s-ostaff`).
+    expect(julie).toBeLessThanOrEqual(96);
     await rules(page, theme, "Équipe");
     await shot(page, "equipe", theme);
 
