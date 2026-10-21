@@ -71,7 +71,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     // Kenji (chef) : fiche, Explorer, Garage, Boîte > Demandes, puis inscription en crew depuis l'événement.
     const k = await appLogin(browser, kenji, theme);
     k.page.on("console", (m) => {
-      if (m.type() === "error") errors.push(m.text().slice(0, 200));
+      if (m.type() === "error") errors.push(`${m.text().slice(0, 200)} @ ${m.location().url}`);
     });
     await k.page.goto(`/crew/${crew.slug}`);
     await expect(k.page.getByTestId("crew-pending-request")).toBeVisible({ timeout: 30_000 });
@@ -107,7 +107,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     // Léa : Boîte > Demandes (venue à confirmer), puis Accès → feuille de confirmation.
     const l = await appLogin(browser, lea, theme);
     l.page.on("console", (m) => {
-      if (m.type() === "error") errors.push(m.text().slice(0, 200));
+      if (m.type() === "error") errors.push(`${m.text().slice(0, 200)} @ ${m.location().url}`);
     });
     await l.page.goto("/accueil");
     await l.page.getByRole("button", { name: "Boîte", exact: true }).first().click();

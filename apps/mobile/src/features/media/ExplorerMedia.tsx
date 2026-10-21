@@ -51,7 +51,12 @@ export function ExplorerMedia() {
   const [error, setError] = useState<string | null>(null);
 
   const profile = useApi(async () => (await api.myMediaProfile()).profile, [], { cacheKey: "media-profile" });
-  const agenda = useApi(() => api.mediaAgenda(), [], { cacheKey: "media-agenda" });
+  // Pas d'appel sans profil média : `/explorer` est aussi l'URL de l'Explorer des autres casquettes, que ce groupe sert un
+  // instant sur un lien profond avant la redirection, et l'API répond 404 à un compte sans profil média.
+  const agenda = useApi(() => api.mediaAgenda(), [], {
+    cacheKey: "media-agenda",
+    enabled: !profile.loading && profile.data !== null,
+  });
   const list = usePaged(
     (cursor) => api.exploreEvents(searchQuery(q, filters, new Date(nowMs()), view, cursor)),
     [q, filters, view],
