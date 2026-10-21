@@ -9,7 +9,7 @@ import type { DayAccess, EventAdmission, EventFormat, EventPublicAccess, Vehicle
 import type { Grade } from "./grades";
 import { arrivalProblems } from "./labels/arrival.fr";
 import { eventAddressRequired } from "./labels/corrections.fr";
-import { criteriaOrigins } from "./labels/event-editor.fr";
+import { criteriaOrigins, wizardV2Labels } from "./labels/event-editor.fr";
 import { defaultEventRules } from "./labels/events.fr";
 import { EVENT_NEED_MAX_QUANTITY, type ProviderPower, type VendorTypeCode } from "./provider";
 import { type ArrivalSlot, type Arrivals, arrivalInstant, validateArrivals } from "./rules/arrival";
@@ -20,7 +20,7 @@ import {
   type RecurrenceRule,
   recurrenceOccurrences,
 } from "./rules/recurrence";
-import { fromWallTime, wallTime } from "./rules/time";
+import { addDays, calendarDaysBetween, fromWallTime, wallTime } from "./rules/time";
 import type { EventOrganizer, EventZone, PosterSettings } from "./schemas/event";
 import type { EventNeedView } from "./schemas/provider";
 
@@ -99,6 +99,12 @@ export type NeedDraft = {
   water: boolean;
   frontageM: string;
   installTime: string;
+  /**
+   * Jour de l'installation, en jours après celui que donne l'heure seule (comme un créneau d'arrivée : le jour de
+   * l'événement, ou le lendemain après minuit). Absent ou 0 : ce jour-là. Gardé à la relecture (une installation le
+   * 2e jour d'un événement sur deux jours reste le 2e jour) ; il suit l'événement si sa date change.
+   */
+  installDay?: number;
 };
 
 /**
@@ -162,6 +168,11 @@ export type EventDraft = {
   needs?: NeedDraft[];
   /** Lot 53 : « Récurrent » au temps 1 ; `null` ou absent = ponctuel ou plusieurs jours. */
   recurrence?: RecurrenceDraft | null;
+  /**
+   * Dates saisies avant de choisir « Récurrent » (qui cale le début sur la règle) : reprises si l'on revient à
+   * « Ponctuel ». Propre à la saisie, jamais envoyé.
+   */
+  datesBeforeRecurrence?: { startsAt: string; endsAt: string } | null;
 };
 
 /** Brouillon neuf (valeurs par défaut des docs) ou prérempli depuis un événement existant (modification). */
@@ -272,16 +283,31 @@ export function initialEventDraft(now: Date, event?: EventOrganizer): EventDraft
   };
 }
 
-/** Lot 47 : le problème des créneaux d'arrivée du brouillon (mêmes règles que l'API), ou `null`. */
-export function eventArrivalsProblem(d: EventDraft): string | null {
+function arrivalsProblemCode(d: EventDraft) {
   if (!d.arrivals) return null;
   const startsAt = draftStart(d);
   const days = sortedDraftDays(d);
   const last = days[days.length - 1];
   const endsAt = d.multiDay && last ? fromWallInput(`${last.date}T${last.endTime}`) : fromWallInput(d.endsAt);
   if (!startsAt || !endsAt) return null;
-  const problem = validateArrivals({ arrivals: d.arrivals, startsAt: new Date(startsAt), endsAt: new Date(endsAt) });
+  return validateArrivals({ arrivals: d.arrivals, startsAt: new Date(startsAt), endsAt: new Date(endsAt) });
+}
+
+/** Lot 47 : le problème des créneaux d'arrivée du brouillon (mêmes règles que l'API), ou `null`. */
+export function eventArrivalsProblem(d: EventDraft): string | null {
+  const problem = arrivalsProblemCode(d);
   return problem ? arrivalProblems[problem] : null;
+}
+
+/**
+ * Horaires changés avant le temps « Les arrivées » (correction du lot 53) : un créneau des exposants qui ne commence
+ * plus avant la fin de l'événement ferait refuser tout l'enregistrement par l'API, sans pouvoir avancer jusqu'au temps
+ * qui le corrige. Il est retiré (`cleared` le dit, pour prévenir) ; c'est la seule règle des créneaux qui dépend des
+ * horaires de l'événement.
+ */
+export function withArrivalsInHours(d: EventDraft): { draft: EventDraft; cleared: (keyof Arrivals)[] } {
+  if (!d.arrivals || arrivalsProblemCode(d) !== "exhibitors_after_event") return { draft: d, cleared: [] };
+  return { draft: withArrivalSlot(d, "exhibitors", null), cleared: ["exhibitors"] };
 }
 
 /** Titre de l'événement (première étape). */
@@ -455,20 +481,47 @@ export function firstEventProblem(d: EventDraft): { step: EventWizardStep; probl
 }
 
 /**
- * Le temps où rouvrir un brouillon (lot 53, « un brouillon rouvre l'assistant à son étape ») : le premier temps en
- * défaut, sinon « Tout est prêt ». Un événement publié rouvre sur le temps demandé, sinon sur le premier.
+ * Ce qui empêche de publier : un temps en défaut (`firstEventProblem`), ou pas encore d'affiche (le temps « Ton
+ * affiche » n'a jamais été ouvert : ses réglages sont posés en l'ouvrant). « Brouillon » et l'enregistrement d'un
+ * événement déjà publié n'exigent pas l'affiche (les événements d'avant le lot 47 n'en ont pas).
  */
-export function eventResumeStep(d: EventDraft, draft: boolean, wanted?: EventWizardStep | null): EventWizardStep {
+export function eventPublishProblem(d: EventDraft): { step: EventWizardStep; problem: string } | null {
+  return firstEventProblem(d) ?? (d.poster ? null : { step: "affiche", problem: wizardV2Labels.posterRequired });
+}
+
+/**
+ * Le temps où rouvrir un brouillon (lot 53, « un brouillon rouvre l'assistant à son étape ») : jamais plus loin que le
+ * temps le plus avancé atteint (`reached`, index gardé sur l'appareil), ni que le premier temps en défaut, ni que
+ * « Ton affiche » tant qu'il n'y a pas d'affiche ; sinon « Tout est prêt ». Un événement publié rouvre sur le temps
+ * demandé, sinon sur le premier.
+ */
+export function eventResumeStep(
+  d: EventDraft,
+  draft: boolean,
+  wanted?: EventWizardStep | null,
+  reached?: number | null,
+): EventWizardStep {
   if (wanted) return wanted;
   if (!draft) return "type";
-  return firstEventProblem(d)?.step ?? "publier";
+  const problem = eventWizardSteps.indexOf(eventPublishProblem(d)?.step ?? "publier");
+  const cap = typeof reached === "number" && reached >= 0 ? reached : eventWizardSteps.length - 1;
+  return eventWizardSteps[Math.min(problem, cap)] ?? "type";
 }
 
 /** Jours triés (lot 26). */
 export const sortedDraftDays = (d: Pick<EventDraft, "days">) =>
   [...d.days].sort((a, b) => a.date.localeCompare(b.date));
 
+/** Une date « AAAA-MM-JJ » complète et qui existe (pas une saisie en cours comme « 2026-1 »). */
+export const isFullDate = (date: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const at = new Date(`${date}T12:00:00Z`);
+  return !Number.isNaN(at.getTime()) && at.toISOString().slice(0, 10) === date;
+};
+
+/** Le lendemain d'une date complète ; une date incomplète (saisie au clavier en cours) est rendue telle quelle. */
 const nextDate = (date: string) => {
+  if (!isFullDate(date)) return date;
   const next = new Date(`${date}T12:00:00Z`);
   next.setUTCDate(next.getUTCDate() + 1);
   return next.toISOString().slice(0, 10);
@@ -677,10 +730,18 @@ export function firstRecurrenceDate(r: RecurrenceDraft, from: Date): string | nu
  * sur la première date de la règle, aux heures déjà saisies (19:00 – 23:30 par défaut).
  */
 export function withEventKind(d: EventDraft, kind: EventKind, now: Date): EventDraft {
-  if (kind === "multi") return withMultiDay({ ...d, recurrence: null }, true, now);
-  const single = { ...d, multiDay: false };
-  if (kind === "one") return { ...single, recurrence: null };
-  return withRecurrence(single, d.recurrence ?? defaultRecurrence, now);
+  if (kind === "rec" && d.recurrence && !d.multiDay) return d;
+  // Quitter « Récurrent » rend les dates saisies avant (la règle les avait calées sur sa première date).
+  const before = d.recurrence ? d.datesBeforeRecurrence : null;
+  const back = { ...d, ...(before ?? {}), recurrence: null, datesBeforeRecurrence: null };
+  if (kind === "multi") return withMultiDay(back, true, now);
+  const single = { ...back, multiDay: false };
+  if (kind === "one") return single;
+  return withRecurrence(
+    { ...single, datesBeforeRecurrence: { startsAt: single.startsAt, endsAt: single.endsAt } },
+    defaultRecurrence,
+    now,
+  );
 }
 
 /** Change la règle et recale le début et la fin sur sa première date (heures gardées). */
@@ -746,6 +807,15 @@ export function rulesCount(text: string): { lines: number; chars: number } {
   return { lines: text.split("\n").filter((l) => l.trim()).length, chars: text.trim().length };
 }
 
+/**
+ * Un modèle ou « Reprendre le dernier » remplacerait-il un règlement saisi ? Pas si le champ est vide, encore le modèle
+ * prérempli, ou déjà ce texte (relecture du lot 53 : sinon, on demande).
+ */
+export function rulesReplaceNeedsConfirm(current: string, next: string): boolean {
+  const text = current.trim();
+  return Boolean(text) && text !== next.trim() && text !== defaultEventRules.trim();
+}
+
 /** Créneau par défaut quand on en fixe un : exposants 18:30 – 19:15 strict, public 19:30 – 23:00 recommandé. */
 export function defaultArrivalSlot(which: keyof Arrivals): ArrivalSlot {
   return which === "exhibitors"
@@ -790,19 +860,38 @@ export function styleCategories<T extends { id: string; label: string }>(
   return categories.filter((c) => selected.includes(c.id) || !criteriaOrigins.some((o) => o.chip === c.label));
 }
 
-/** Missions enregistrées → lignes du volet « Sur place ». */
-export function needsFromSaved(saved: readonly EventNeedView[]): NeedDraft[] {
+/**
+ * Instant d'installation d'une mission : l'heure placée comme un créneau d'arrivée (le jour de l'événement, ou le
+ * lendemain après minuit), puis décalée de `day` jours.
+ */
+function installInstant(time: string, day: number | undefined, start: string): Date | null {
+  const base = arrivalInstant(time, new Date(start));
+  if (!base || !day) return base;
+  return fromWallTime(addDays(wallTime(base), day));
+}
+
+/**
+ * Missions enregistrées → lignes du volet « Sur place ». `start` : début de l'événement (ISO), pour garder le jour de
+ * l'installation (`installDay`) ; sans lui, seule l'heure est reprise.
+ */
+export function needsFromSaved(saved: readonly EventNeedView[], start?: string | null): NeedDraft[] {
   return [...saved]
     .sort((a, b) => a.position - b.position)
-    .map((n) => ({
-      id: n.id,
-      trade: n.trade,
-      quantity: String(n.quantity),
-      power: n.power,
-      water: n.water,
-      frontageM: n.frontageM === null ? "" : String(n.frontageM),
-      installTime: n.installAt ? toWallInput(n.installAt).slice(11, 16) : "",
-    }));
+    .map((n) => {
+      const installTime = n.installAt ? toWallInput(n.installAt).slice(11, 16) : "";
+      const base = n.installAt && start ? arrivalInstant(installTime, new Date(start)) : null;
+      const installDay = base && n.installAt ? calendarDaysBetween(base, new Date(n.installAt)) : 0;
+      return {
+        id: n.id,
+        trade: n.trade,
+        quantity: String(n.quantity),
+        power: n.power,
+        water: n.water,
+        frontageM: n.frontageM === null ? "" : String(n.frontageM),
+        installTime,
+        ...(installDay ? { installDay } : {}),
+      };
+    });
 }
 
 /** Une mission telle que l'API l'attend (`eventNeedSchema`). */
@@ -850,7 +939,7 @@ export function needChanges(
   const update: { id: string; need: NeedPayload }[] = [];
   const create: NeedPayload[] = [];
   for (const [position, n] of needs.entries()) {
-    const at = start && n.installTime.trim() ? arrivalInstant(n.installTime.trim(), new Date(start)) : null;
+    const at = start && n.installTime.trim() ? installInstant(n.installTime.trim(), n.installDay, start) : null;
     const need: NeedPayload = {
       trade: n.trade,
       quantity: Number(n.quantity),
@@ -870,4 +959,167 @@ export function needChanges(
       update.push({ id: n.id, need });
   }
   return { remove, update, create };
+}
+
+// --- Enregistrement à chaque temps : réconciliation (corrections des relectures du lot 53) -----------------------
+
+/** Propres à la saisie : le serveur ne les garde pas ; ils restent ceux de la saisie après un enregistrement. */
+const draftOnlyKeys = ["recurrence", "datesBeforeRecurrence"] as const satisfies readonly (keyof EventDraft)[];
+
+/** L'événement enregistré vu comme un brouillon (ce que le serveur garde vraiment), missions comprises. */
+export function serverDraft(event: EventOrganizer, needs: readonly EventNeedView[]): EventDraft {
+  return { ...initialEventDraft(new Date(event.startsAt), event), needs: needsFromSaved(needs, event.startsAt) };
+}
+
+/**
+ * Ce que l'API a refusé pendant un enregistrement : lignes du brouillon envoyé (index = `position` du corps), nombre de
+ * suppressions refusées, affiche perso non envoyée.
+ */
+export type SaveRefusals = { zones: number[]; needs: number[]; removals: number; poster: boolean };
+
+export const noRefusals = (): SaveRefusals => ({ zones: [], needs: [], removals: 0, poster: false });
+
+export const hasRefusals = (r: SaveRefusals) => r.zones.length > 0 || r.needs.length > 0 || r.removals > 0 || r.poster;
+
+/** « Brouillon enregistré, sauf la zone JDM, la mission 2 : … » (lignes du brouillon envoyé). */
+export function refusalMessage(sent: EventDraft, r: SaveRefusals): string {
+  const L = wizardV2Labels;
+  const what = [
+    ...r.zones.map((i) => L.refusedZone(sent.zones[i]?.code.trim().toUpperCase() ?? "")),
+    ...r.needs.map((i) => L.refusedMission(i + 1)),
+    ...(r.removals ? [L.refusedRemoval] : []),
+    ...(r.poster ? [L.refusedPoster] : []),
+  ];
+  return L.savedRefused(what);
+}
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Lignes envoyées → lignes relues : la version du serveur (identifiant d'une ligne créée compris), la ligne envoyée si
+ * l'API l'a refusée, `null` si elle n'existe plus côté serveur. Une ligne créée se retrouve parmi les lignes relues
+ * qu'aucune ligne envoyée ne portait, dans l'ordre (`match` : même code de zone, même métier de mission).
+ */
+function rowsAfterSave<T extends { id?: string }>(
+  sent: readonly T[],
+  server: readonly T[],
+  refused: ReadonlySet<number>,
+  match: (sent: T, server: T) => boolean,
+): (T | null)[] {
+  const sentIds = new Set(sent.map((r) => r.id).filter(Boolean));
+  const fresh = server.filter((s) => !sentIds.has(s.id));
+  const claimed = new Set<T>();
+  return sent.map((row, i) => {
+    if (refused.has(i)) return row;
+    if (row.id) return server.find((s) => s.id === row.id) ?? null;
+    const created = fresh.find((s) => !claimed.has(s) && match(row, s));
+    if (!created) return row;
+    claimed.add(created);
+    return created;
+  });
+}
+
+/**
+ * Lignes après l'enregistrement, avec la saisie faite pendant l'envoi : inchangée, la version relue ; modifiée, la
+ * saisie est gardée (une ligne créée garde son nouvel identifiant, pour ne pas être créée deux fois).
+ */
+function mergeRows<T extends { id?: string }>(sent: readonly T[], current: readonly T[], next: (T | null)[]): T[] {
+  if (current === sent || same(current, sent)) return next.filter((r): r is T => r !== null);
+  return current.map((row, i) => {
+    const j = sent.indexOf(row);
+    if (j >= 0) return next[j] ?? row;
+    const created = current.length === sent.length && !row.id && !sent[i]?.id ? next[i]?.id : undefined;
+    return created ? { ...row, id: created } : row;
+  });
+}
+
+/**
+ * Après un enregistrement (à chaque temps), la saisie et l'état relu du serveur, champ par champ : ce que le serveur a
+ * changé (métiers ajoutés par une mission, adresse géocodée, valeurs ramenées à leur forme enregistrée) remplace la
+ * saisie envoyée ; ce qu'il a refusé (zones, missions) reste dans la saisie ; ce qui a été tapé pendant l'envoi est
+ * gardé. `pristine` : ce qui est vraiment enregistré (la récurrence, propre à la saisie, comptée comme gardée sur
+ * l'appareil) ; la saisie en diffère tant que quelque chose reste à renvoyer.
+ */
+export function reconcileDraft(input: {
+  /** Le brouillon envoyé. */
+  sent: EventDraft;
+  /** La saisie au retour de l'enregistrement (identique à `sent` si rien n'a été tapé entre-temps). */
+  current: EventDraft;
+  /** L'événement relu (`serverDraft`). */
+  server: EventDraft;
+  refused?: SaveRefusals;
+}): { draft: EventDraft; pristine: EventDraft } {
+  const { sent, current, server } = input;
+  const refused = input.refused ?? noRefusals();
+  const zones = rowsAfterSave(
+    sent.zones,
+    server.zones,
+    new Set(refused.zones),
+    (a, b) => a.code.trim().toUpperCase() === b.code,
+  );
+  const needs = rowsAfterSave(
+    sent.needs ?? [],
+    server.needs ?? [],
+    new Set(refused.needs),
+    (a, b) => a.trade === b.trade,
+  );
+  const draft: EventDraft = { ...server };
+  const own = draft as Record<string, unknown>;
+  for (const key of Object.keys(current) as (keyof EventDraft)[]) {
+    if (key === "zones" || key === "needs") continue;
+    const local = (draftOnlyKeys as readonly string[]).includes(key);
+    if (local || !same(current[key], sent[key])) own[key] = current[key];
+  }
+  draft.zones = mergeRows(sent.zones, current.zones, zones);
+  draft.needs = mergeRows(sent.needs ?? [], current.needs ?? [], needs);
+  const pristine: EventDraft = { ...server };
+  for (const key of draftOnlyKeys) {
+    if (current[key] !== undefined) (pristine as Record<string, unknown>)[key] = current[key];
+  }
+  return { draft, pristine };
+}
+
+/** Deux brouillons identiques (l'ordre des champs ne compte pas ; un champ absent vaut un champ `undefined`). */
+export function sameDraft(a: EventDraft, b: EventDraft): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof EventDraft>;
+  for (const key of keys) if (!same(a[key], b[key])) return false;
+  return true;
+}
+
+// --- Mémoire de l'assistant sur l'appareil, par événement -------------------------------------------------------
+
+/**
+ * Ce que l'appareil retient d'un événement en cours de création (correction du lot 53) : le temps le plus avancé
+ * atteint (`reached`, pour rouvrir le brouillon où on l'a laissé ; -1 inconnu) et la récurrence choisie (le serveur ne
+ * la garde qu'une fois la série créée, à la fin : elle n'est jamais effacée avant).
+ */
+export type WizardMemo = { reached: number; recurrence: RecurrenceDraft | null };
+
+export const serializeWizardMemo = (memo: WizardMemo) =>
+  JSON.stringify({ v: 1, steps: eventWizardSteps.length, ...memo });
+
+/** Relit la mémoire (`null` si absente ou abîmée) ; un index d'un autre découpage est ignoré. */
+export function parseWizardMemo(raw: string | null | undefined): WizardMemo | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as { v?: unknown; steps?: unknown; reached?: unknown; recurrence?: unknown } | null;
+    if (value?.v !== 1) return null;
+    const r = value.recurrence as Partial<RecurrenceDraft> | null | undefined;
+    const recurrence =
+      r && typeof r.nth === "number" && typeof r.weekday === "number" && typeof r.count === "number"
+        ? { nth: r.nth, weekday: r.weekday, count: r.count }
+        : null;
+    return { reached: storedStepIndex(value.steps, value.reached) ?? -1, recurrence };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Index de temps gardé avec une saisie : valable seulement s'il a été écrit avec le découpage actuel (`steps` = 8) ;
+ * sinon `null` (ancien brouillon à douze étapes : on rouvre au temps calculé).
+ */
+export function storedStepIndex(steps: unknown, index: unknown): number | null {
+  if (steps !== eventWizardSteps.length || typeof index !== "number" || !Number.isInteger(index)) return null;
+  return Math.min(Math.max(index, 0), eventWizardSteps.length - 1);
 }

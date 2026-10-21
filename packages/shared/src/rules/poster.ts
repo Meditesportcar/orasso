@@ -130,3 +130,39 @@ export function posterDate(startsAt: Date, timeZone = BUSINESS_TIMEZONE): Poster
     hour: w.minute === 0 ? `${w.hour} h` : `${w.hour} h ${String(w.minute).padStart(2, "0")}`,
   };
 }
+
+/**
+ * Aperçus d'affiche déjà rendus (assistant, lot 53) : `POST /posters/preview` est limité (60 rendus par minute) ; le
+ * rail des huit styles et l'aperçu ne redemandent pas un rendu déjà fait avec les mêmes réglages (bascule Post / Story,
+ * retour sur le temps). Les plus anciens sortent au-delà de `max` (`drop` libère leur adresse locale).
+ */
+export function createPreviewCache<T>(max = 64, drop?: (value: T) => void) {
+  const entries = new Map<string, T>();
+  return {
+    get(key: string): T | undefined {
+      const value = entries.get(key);
+      if (value === undefined) return undefined;
+      entries.delete(key);
+      entries.set(key, value);
+      return value;
+    },
+    set(key: string, value: T) {
+      entries.delete(key);
+      entries.set(key, value);
+      while (entries.size > max) {
+        const [oldest, old] = entries.entries().next().value as [string, T];
+        entries.delete(oldest);
+        drop?.(old);
+      }
+    },
+    get size() {
+      return entries.size;
+    },
+  };
+}
+
+/** Clé d'un aperçu : tous les réglages qui changent le rendu. */
+export const posterPreviewKey = (input: Record<string, unknown>) =>
+  JSON.stringify(Object.keys(input)
+    .sort()
+    .map((k) => [k, input[k]]));

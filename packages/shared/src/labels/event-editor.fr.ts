@@ -384,6 +384,30 @@ export const wizardV2Labels = {
   recapPreview: (date: string) => `Avant-première ${date}`,
   recapNoPreview: "Sans avant-première",
   recapRecurrence: (n: number) => `${n} date${n > 1 ? "s" : ""} de plus, en brouillon`,
+
+  // Corrections des relectures du lot 53 (21/10/2026).
+  posterRequired: "Choisis ton affiche avant de publier.",
+  recurrenceDraftOnly: "Une série se crée depuis un brouillon. Pour d'autres dates, duplique l'événement.",
+  arrivalsCleared: (which: string) =>
+    `Le créneau d'arrivée ${which} ne tombait plus dans les horaires : il est retiré. Refais-le au temps « Les arrivées ».`,
+  arrivalsClearedWho: { exhibitors: "des exposants", public: "du public" } as Record<string, string>,
+  savedRefused: (what: string[]) =>
+    `Brouillon enregistré, sauf ${what.join(", ")} : la saisie est gardée, touche « Continuer » pour renvoyer.`,
+  refusedZone: (code: string) => `la zone ${code || "sans code"}`,
+  refusedMission: (n: number) => `la mission ${n}`,
+  refusedRemoval: "une suppression",
+  refusedPoster: "l'affiche perso",
+  seriesFailed: (message: string) =>
+    `Les dates suivantes n'ont pas été créées (${message}). La règle est gardée : réessaie.`,
+  rulesReplaceTitle: "Remplacer ton règlement ?",
+  rulesReplaceBody: (what: string) => `Le texte saisi sera remplacé par ${what}.`,
+  rulesReplaceConfirm: "Remplacer",
+  rulesReplaceKeep: "Garder le mien",
+  rulesWhatTemplate: (label: string) => `le « ${label} »`,
+  rulesWhatLast: "le règlement de ton dernier événement",
+  posterPreviewFailed: "Les aperçus n'ont pas pu être rendus (limite atteinte ou réseau) : réessaie dans une minute.",
+  posterPreviewRetry: "Réessayer",
+  missionDay: (n: number) => (n === 1 ? "Installation le lendemain" : `Installation ${n} jours plus tard`),
 } as const;
 
 /** Modèles de règlement (`s-create` : « Modèle Nocturne », « Modèle Expo » ; le modèle d'Orasso reste proposé). */

@@ -34,6 +34,7 @@ import { eventCreateSchema, eventDaysPutSchema, eventUpdateSchema, recurrenceRul
 import { eventNeedSchema, eventNeedUpdateSchema } from "./schemas/provider";
 
 const NOW = new Date("2026-10-17T08:00:00Z"); // 10 h à Paris
+const POSTER = { photoKey: null, style: "minimal" as const, title: "Rasso du port" };
 
 function filled(over: Partial<EventDraft> = {}): EventDraft {
   return {
@@ -194,7 +195,9 @@ describe("huit temps (lot 53)", () => {
     const noAddress = filled({ addressLine: "", city: "" });
     expect(firstEventProblem(noAddress)).toMatchObject({ step: "lieu", problem: expect.stringMatching(/adresse/i) });
     expect(eventResumeStep(noAddress, true)).toBe("lieu");
-    expect(eventResumeStep(filled(), true)).toBe("publier");
+    // Sans affiche, un brouillon complet rouvre sur « Ton affiche » (relecture du lot 53) ; avec, sur « Tout est prêt ».
+    expect(eventResumeStep(filled(), true)).toBe("affiche");
+    expect(eventResumeStep(filled({ poster: POSTER }), true)).toBe("publier");
     expect(eventResumeStep(filled(), false)).toBe("type");
     expect(eventResumeStep(filled(), false, "affiche")).toBe("affiche");
   });
