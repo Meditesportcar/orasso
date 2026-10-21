@@ -11,7 +11,7 @@ import {
 } from "@orasso/design-system/web";
 import { type Category, eventFormatLabels, eventFormats, siteLabels as L } from "@orasso/shared";
 import { useRef, useState } from "react";
-import { Form, useSubmit } from "react-router";
+import { Form, useLocation, useSubmit } from "react-router";
 
 import { categoryOptions, filterCities, filterRadii } from "../lib/events-filter";
 
@@ -36,10 +36,13 @@ export type PhraseValues = {
  * (Retour / Suivant du navigateur, lien partagé), pour que les champs ne contredisent jamais les résultats.
  */
 function useSynced(value: string): [string, (next: string) => void] {
+  const navigationKey = useLocation().key;
   const [state, setState] = useState(value);
-  const [seen, setSeen] = useState(value);
-  if (seen !== value) {
-    setSeen(value);
+  const [seen, setSeen] = useState({ value, navigationKey });
+  // Remise aux critères à chaque navigation validée (clé d'historique), même si la valeur du serveur est identique :
+  // un Retour pendant la requête ne laisse pas une saisie locale contredire les résultats.
+  if (seen.value !== value || seen.navigationKey !== navigationKey) {
+    setSeen({ value, navigationKey });
     setState(value);
   }
   return [state, setState];

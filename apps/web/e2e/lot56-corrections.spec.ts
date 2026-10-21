@@ -214,6 +214,40 @@ test.describe("/evenements", () => {
     expect(new URL(page.url()).searchParams.get("au")).toBe(to);
   });
 
+  test("Retour pendant la requête : la catégorie choisie ne survit pas, même si la valeur du loader est identique", async ({
+    page,
+  }) => {
+    const categories = await apiCall<{ id: string; label: string }[]>(null, "GET", "/vehicle-reference/categories");
+    const category = categories.data[0];
+    if (!category) throw new Error("Aucune catégorie dans le seed");
+    await setTheme(page, "beton");
+    await page.setViewportSize(DESKTOP);
+    await page.goto("/evenements");
+    await page.waitForLoadState("networkidle");
+    // Deuxième page sans catégorie.
+    await page.getByTestId("pick-quand").selectOption("weekend");
+    await page.waitForURL(/quand=weekend/);
+    await page.waitForLoadState("networkidle");
+    const pick = page.getByTestId("pick-categorie");
+    await expect(pick).toHaveValue("");
+    // Les réponses du loader sont retardées : la catégorie est choisie, puis Retour avant toute réponse.
+    let delayed = true;
+    await page.route(/\.data/, async (route) => {
+      if (delayed) await new Promise((r) => setTimeout(r, 1500));
+      await route.continue();
+    });
+    await pick.selectOption(category.id);
+    await page.goBack();
+    delayed = false;
+    await page.waitForURL((u) => !u.searchParams.get("quand") && !u.searchParams.get("categorie"));
+    await page.waitForLoadState("networkidle");
+    await expect(pick).toHaveValue("");
+    // La soumission suivante ne réapplique pas la catégorie.
+    await page.getByTestId("pick-format").selectOption("exhibition");
+    await page.waitForURL(/format=exhibition/);
+    expect(new URL(page.url()).searchParams.get("categorie") ?? "").toBe("");
+  });
+
   test("catégorie du lien absente du référentiel : affichée, gardée par les autres filtres", async ({ page }) => {
     const ghost = "00000000-0000-4000-8000-000000000000";
     await setTheme(page, "beton");
@@ -359,6 +393,57 @@ test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre 
     await thumbs.nth(1).locator("a").click();
     await expect(viewer).toBeVisible();
     expect(views).toHaveLength(1);
+  } finally {
+    if (contentId) await client.query("delete from media_contents where id = $1", [contentId]);
+    await client.end();
+  }
+});
+
+test("fiche événement : la consultation de galerie est retentée après un échec", async ({ page }) => {
+  const events = await apiCall<{ items: { posterUrl: string | null }[] }>(null, "GET", "/events?limit=5");
+  const slug = "nocturne-de-canet-2026";
+  const key = events.data.items.map((i) => i.posterUrl?.replace(/^\/api\/files\//, "")).find(Boolean);
+  if (!key) throw new Error("Aucune image du seed pour la galerie");
+  const ev = await apiCall<{ id: string }>(null, "GET", `/events/by-slug/${slug}`);
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  let contentId = "";
+  try {
+    const media = await client.query<{ id: string }>("select id from media_profiles where deleted_at is null limit 1");
+    const mediaId = media.rows[0]?.id;
+    if (!mediaId) throw new Error("Aucun profil média dans le seed");
+    const inserted = await client.query<{ id: string }>(
+      `insert into media_contents (media_profile_id, event_id, kind, title, url, platform, photo_keys)
+       values ($1, $2, 'gallery', 'Galerie retentée E2E', null, 'other', $3) returning id`,
+      [mediaId, ev.data.id, [key, key]],
+    );
+    contentId = inserted.rows[0]?.id ?? "";
+    await setTheme(page, "beton");
+    await page.setViewportSize(DESKTOP);
+    let calls = 0;
+    await page.route(/\/api\/media-contents\/[^/]+\/view$/, async (route) => {
+      calls += 1;
+      if (calls === 1) await route.fulfill({ status: 503, body: "" });
+      else await route.continue();
+    });
+    await page.goto(`/e/${slug}`);
+    await page.waitForLoadState("networkidle");
+    const content = page.getByTestId("media-content").filter({ hasText: "Galerie retentée E2E" });
+    const thumbs = content.getByTestId("media-gallery").locator("li");
+    const viewer = page.getByTestId("gallery-viewer");
+    await thumbs.first().locator("a").click();
+    await expect(viewer).toBeVisible();
+    await expect.poll(() => calls).toBe(1);
+    await viewer.getByRole("button", { name: "Fermer" }).click();
+    // Premier appel en échec (503) : la réouverture réessaie, et réussit.
+    await expect(viewer).toBeHidden();
+    await thumbs.nth(1).locator("a").click();
+    await expect.poll(() => calls).toBe(2);
+    await viewer.getByRole("button", { name: "Fermer" }).click();
+    // Consultation confirmée : plus d'envoi.
+    await thumbs.first().locator("a").click();
+    await expect(viewer).toBeVisible();
+    expect(calls).toBe(2);
   } finally {
     if (contentId) await client.query("delete from media_contents where id = $1", [contentId]);
     await client.end();

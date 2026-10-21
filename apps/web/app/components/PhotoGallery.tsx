@@ -15,16 +15,23 @@ export function PhotoGallery({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [index, setIndex] = useState(0);
-  const counted = useRef(false);
+  const counted = useRef<"idle" | "pending" | "done">("idle");
   const open = (i: number) => {
     setIndex(i);
     // Une consultation par ouverture de page ; l'API déduplique par session et par heure et ignore le média lui-même.
-    if (!counted.current) {
-      counted.current = true;
-      void fetch(`/api/media-contents/${encodeURIComponent(contentId)}/view`, {
+    if (counted.current === "idle") {
+      counted.current = "pending";
+      fetch(`/api/media-contents/${encodeURIComponent(contentId)}/view`, {
         method: "POST",
         credentials: "same-origin",
-      }).catch(() => undefined);
+      })
+        .then((r) => {
+          // Confirmée seulement sur une réponse réussie : après une coupure ou un 503, la réouverture réessaie.
+          counted.current = r.ok ? "done" : "idle";
+        })
+        .catch(() => {
+          counted.current = "idle";
+        });
     }
     dialog.current?.showModal();
   };
