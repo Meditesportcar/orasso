@@ -27,6 +27,7 @@ import {
   firstEventProblem,
   hasRefusals,
   initialEventDraft,
+  type NeedDraft,
   needChanges,
   needsFromSaved,
   noNeedWrites,
@@ -48,6 +49,8 @@ import {
   withCopyOpening,
   withDefaultPoster,
   withLoadedNeeds,
+  withNeedKeys,
+  withServerNeeds,
   wizardEndLabels,
   zoneChanges,
 } from "@orasso/shared";
@@ -178,23 +181,25 @@ export function EventWizard(props: Props) {
   const dirty = !sameDraft(d, pristine.current);
 
   // Missions enregistrées (lot 46) : chargées pour le volet « Sur place », avant de reprendre une saisie gardée.
-  // Correctif 53c : elles rejoignent la saisie quels que soient les autres champs (un titre tapé avant leur arrivée ne
-  // les fait plus oublier), et rien ne s'enregistre tant qu'elles ne sont pas chargées : sans elles, l'enregistrement
-  // les prendrait pour des suppressions. Échec : message, « Recharger les missions ».
+  // Correctif 53c : elles rejoignent la saisie quels que soient les autres champs (`withLoadedNeeds` : une mission
+  // inconnue de la saisie est ajoutée, une mission déjà dans la saisie garde ses modifications), et rien ne
+  // s'enregistre sur le serveur tant qu'elles ne sont pas chargées. Échec : message, « Recharger les missions », qui ne
+  // relance que ce chargement ; la saisie reste gardée dans le navigateur.
   const [needsState, setNeedsState] = useState<"loading" | "ok" | "failed">(event ? "loading" : "ok");
   const [needsAttempt, setNeedsAttempt] = useState(0);
-  const needsReady = needsState === "ok";
+  const loadedNeeds = useRef<NeedDraft[] | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `needsAttempt` relance le chargement (« Recharger »).
   useEffect(() => {
     if (!event) return;
     let alive = true;
-    setNeedsState("loading");
+    setNeedsState((s) => (s === "ok" ? s : "loading"));
     void apiFetch<EventNeedView[]>(`/events/${event.id}/needs`).then((res) => {
       if (!alive) return;
       if (!res.ok) return setNeedsState("failed");
       const loaded = needsFromSaved(res.data, event.startsAt);
+      loadedNeeds.current = loaded;
       setSavedNeeds(res.data);
-      pristine.current = withLoadedNeeds(pristine.current, loaded);
+      pristine.current = withServerNeeds(pristine.current, loaded);
       setD((p) => withLoadedNeeds(p, loaded));
       setNeedsState("ok");
     });
@@ -245,14 +250,21 @@ export function EventWizard(props: Props) {
   const [restored, setRestored] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const leaving = useRef(false);
+  // Relue une fois, dès que le chargement des missions a abouti ou échoué (« Recharger les missions » ne la relit pas) ;
+  // les missions chargées y sont fusionnées : une saisie gardée ne supprime jamais une mission qu'elle ne connaissait
+  // pas (ajoutée ailleurs, ou saisie gardée d'avant le correctif 53c).
+  const restoredFrom = useRef<string | null>(null);
+  const needsSettled = needsState !== "loading";
   useEffect(() => {
-    if (!needsReady) return;
+    if (!needsSettled || restoredFrom.current === storageKey) return;
+    restoredFrom.current = storageKey;
     const raw = readStorage(storageKey);
     if (!raw) return;
     try {
       const stored = JSON.parse(raw) as StoredWizard;
-      if (sameDraft(stored.draft, pristine.current)) return;
-      setD(stored.draft);
+      const draft = loadedNeeds.current ? withLoadedNeeds(stored.draft, loadedNeeds.current) : stored.draft;
+      if (sameDraft(draft, pristine.current)) return;
+      setD(draft);
       // `?temps=` prime ; un index écrit avec l'ancien découpage (douze étapes) est ignoré.
       const kept = storedStepIndex(stored.steps, stored.index);
       if (!props.stepWanted && kept !== null) setIndex(kept);
@@ -260,12 +272,12 @@ export function EventWizard(props: Props) {
     } catch {
       // Saisie gardée abîmée : ignorée.
     }
-  }, [storageKey, props.stepWanted, needsReady]);
+  }, [storageKey, props.stepWanted, needsSettled]);
   useEffect(() => {
-    if (saving || !needsReady) return;
+    if (saving || !needsSettled || restoredFrom.current !== storageKey) return;
     const timer = setTimeout(() => writeStorage(storageKey, dirty ? storedWizard(d, index) : null), 300);
     return () => clearTimeout(timer);
-  }, [d, index, dirty, saving, storageKey, needsReady]);
+  }, [d, index, dirty, saving, storageKey, needsSettled]);
   useEffect(() => {
     if (!dirty || saving) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -290,13 +302,19 @@ export function EventWizard(props: Props) {
    * réconcilie la saisie (`reconcileDraft`). `event` : l'événement enregistré, ou `null` si quelque chose a été refusé
    * (erreur affichée, saisie refusée gardée) ; `created` : identifiant d'un brouillon créé par cet appel.
    */
-  async function persist(sent: EventDraft): Promise<Saved> {
+  async function persist(input: EventDraft): Promise<Saved> {
     const fail = (failure: string, created: string | null): Saved => {
       setError(failure);
       return { event: null, created, failure };
     };
-    // Missions pas encore chargées : elles passeraient pour des suppressions (correctif 53c).
+    // Missions pas encore chargées : sans elles, l'enregistrement ne peut pas les comparer (correctif 53c).
     if (needsBlock) return fail(needsBlock, null);
+    // Chaque nouvelle mission reçoit sa clé de création avant de partir (création idempotente, correctif 53c).
+    const sent = withNeedKeys(input);
+    if (sent !== input) {
+      latest.current = sent;
+      setD(sent);
+    }
     const wasMultiDay = (saved?.days.length ?? 0) > 1;
     if (saved && wasMultiDay && !sent.multiDay) {
       const back = await apiFetch(`/events/${saved.id}/days`, { method: "PUT", json: eventDaysPayload(sent) });
@@ -330,8 +348,10 @@ export function EventWizard(props: Props) {
       if (!r.ok) refused.zones.push(z.zone.position);
     }
     for (const zone of zones.create) {
-      if (!(await apiFetch(`/events/${id}/zones`, { method: "POST", json: zone })).ok)
-        refused.zones.push(zone.position);
+      const r = await apiFetch(`/events/${id}/zones`, { method: "POST", json: zone });
+      // 409 : une zone de ce code existe déjà (créée par un essai précédent dont la relecture a échoué) : c'est fait ;
+      // la relecture la rattache à la saisie par son code (correctif 53c).
+      if (!r.ok && r.status !== 409) refused.zones.push(zone.position);
     }
     const needs = needChanges(savedNeeds, sent);
     // Écritures réussies, gardées si la suite échoue : un nouvel essai ne recrée pas les mêmes missions (correctif 53c).
@@ -378,16 +398,16 @@ export function EventWizard(props: Props) {
     }
     setSaved(fresh.data);
     setSavedNeeds(freshNeeds.data);
-    const { draft, pristine: kept } = reconcileDraft({
+    const reconciled = reconcileDraft({
       sent,
       current: latest.current,
       server: serverDraft(fresh.data, freshNeeds.data),
       refused,
     });
-    pristine.current = kept;
-    latest.current = draft;
-    setD(draft);
-    if (hasRefusals(refused)) return fail(refusalMessage(sent, refused), created);
+    pristine.current = reconciled.pristine;
+    latest.current = reconciled.draft;
+    setD(reconciled.draft);
+    if (hasRefusals(reconciled.refused)) return fail(refusalMessage(sent, reconciled.refused), created);
     return { event: fresh.data, created, failure: null };
   }
 
