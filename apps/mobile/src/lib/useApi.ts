@@ -4,7 +4,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiRequestError } from "./http";
-import { kvGetJson, kvSetJson } from "./kv";
+import { accountGuard, cacheGetJson, cacheScope, cacheSetJson } from "./kv";
 
 type Options = {
   /** Mémorise la réponse dans le trousseau (profil, candidatures) : visible hors ligne. */
@@ -42,29 +42,45 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
   }, []);
 
   // Valeur du cache, affichée avant la réponse de l'API.
+  // Le cache est rangé sous le compte connecté (`kv.ts`) : un autre compte ne le lit jamais.
+  const account = cacheScope();
+  // Écran resté monté d'un compte à l'autre : la valeur de l'ancien compte ne reste pas affichée.
+  const previousAccount = useRef(account);
   useEffect(() => {
-    if (!cacheKey) return;
+    if (previousAccount.current && previousAccount.current !== account) {
+      setData(null);
+      setError(null);
+      setOffline(false);
+    }
+    previousAccount.current = account;
+  }, [account]);
+  useEffect(() => {
+    if (!cacheKey || !account) return;
     let cancelled = false;
-    kvGetJson<T>(cacheKey).then((cached) => {
+    cacheGetJson<T>(cacheKey).then((cached) => {
       if (!cancelled && cached) setData((current) => current ?? cached);
     });
     return () => {
       cancelled = true;
     };
-  }, [cacheKey]);
+  }, [cacheKey, account]);
 
   const reload = useCallback(async (): Promise<T | null> => {
     if (!enabled) return null;
+    // Compte du départ : une réponse qui arrive après un changement de compte est jetée (état, cache), même si
+    // l'écran est resté monté d'un compte à l'autre.
+    const guard = accountGuard();
     try {
       const fresh = await fetcherRef.current();
       if (!alive.current) return fresh;
+      if (!guard.current()) return null;
       setData(fresh);
       setError(null);
       setOffline(false);
-      if (cacheKey) void kvSetJson(cacheKey, fresh);
+      if (cacheKey) void cacheSetJson(cacheKey, fresh, guard.scope);
       return fresh;
     } catch (e) {
-      if (!alive.current) return null;
+      if (!alive.current || !guard.current()) return null;
       const err = e instanceof ApiRequestError ? e : new ApiRequestError(0, "network", "Pas de connexion");
       setError(err);
       if (err.isNetwork) setOffline(true);

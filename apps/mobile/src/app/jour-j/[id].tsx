@@ -3,7 +3,8 @@
 // statut de l'événement, l'itinéraire, les consignes, la météo. Tout vient du kit enregistré sur le téléphone dès la
 // retenue (secret du code compris) : l'écran s'affiche et le code se fabrique sans aucun réseau. S'ouvre à partir de la
 // veille, se ferme après le scan ou à J+1.
-// Lot 50 : le bouton « Prix du public » viendra ici. Lot 49/50 : au scan, le tampon tombe (`passport.stamped`).
+// Lot 50 : une fois entré, le bouton « Prix du public » (secondaire : le QR reste l'élément principal) ; au scan, le
+// tampon tombe à l'écran (`passport.stamped`, `StampArrival` à la racine).
 
 import { Button, Chip, Plate, StatusBadge, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
@@ -12,6 +13,7 @@ import {
   formatDayDate,
   gradeLabels,
   localDate,
+  voteScreenTexts,
   weatherTexts,
 } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
@@ -68,7 +70,7 @@ export default function JourJ() {
   const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { me } = useSession();
-  const { upcoming, past, reload } = useApplications();
+  const { upcoming, past, press, reload } = useApplications();
   const now = useNow(10_000);
   const network = useNetworkState();
   const online = network.isConnected !== false && network.isInternetReachable !== false;
@@ -77,7 +79,7 @@ export default function JourJ() {
   const [secret, setSecret] = useState<string | null>(null);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
-  const app = [...(upcoming ?? []), ...(past ?? [])].find((a) => a.id === id) ?? null;
+  const app = [...(upcoming ?? []), ...(past ?? []), ...press].find((a) => a.id === id) ?? null;
   const pseudo = me?.profile.pseudo ?? kit?.pseudo ?? "";
   // Dernière annonce de l'organisateur (lot 20) : avec du réseau, gardée sur le téléphone pour la suite (hors ligne OK).
   const slug = app?.event.slug ?? kit?.event.slug ?? "";
@@ -193,7 +195,8 @@ export default function JourJ() {
         />
       }
       footer={
-        state === "open" && app && app.status === "accepted" ? (
+        // Le badge presse se retire depuis l'onglet Presse (pas de malus de points pour la presse, lot 55).
+        state === "open" && app && app.status === "accepted" && kit.holder?.kind !== "media" ? (
           <Button
             variant="plate"
             tone="dashed"
@@ -284,6 +287,20 @@ export default function JourJ() {
         </>
       )}
 
+      {/* Prix du public (lot 50) : ouvert dès le pointage, jusqu'à la fin de l'événement. En bouton secondaire. */}
+      {(entered || Boolean(app?.checkedInAt)) && now < new Date(kit.event.endsAt) ? (
+        <Button
+          variant="plate"
+          icon="badge"
+          next
+          fullWidth
+          testID="jourj-vote"
+          onPress={() => router.push(`/vote/${kit.event.id}?titre=${encodeURIComponent(kit.event.title)}`)}
+        >
+          {voteScreenTexts.open}
+        </Button>
+      ) : null}
+
       <HowItWorks />
 
       <GpsRow
@@ -300,6 +317,11 @@ export default function JourJ() {
         <Text variant="bodyStrong" color={c.plateInk}>
           {place || kit.event.title}
         </Text>
+        {kit.event.entranceNote ? (
+          <Text variant="meta" color={c.plateInk} testID="jour-j-entrance">
+            {kit.event.entranceNote}
+          </Text>
+        ) : null}
         <Text variant="meta" color={c.plateMuted}>
           {formatDay(kit.event.startsAt, tz)} · {formatHour(kit.event.startsAt, tz)} –{" "}
           {formatHour(kit.event.endsAt, tz)}

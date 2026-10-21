@@ -7,7 +7,7 @@ import { clearAccountQrSecret, saveAccountQrSecret } from "./accountQrStore";
 import { api, authApi } from "./api";
 import { ApiRequestError, setSessionToken } from "./http";
 import { clearKits } from "./kits";
-import { kvDel, kvGet, kvGetJson, kvSet, kvSetJson } from "./kv";
+import { bindCacheScope, kvDel, kvGet, kvGetJson, kvSet, kvSetJson, purgeCaches } from "./kv";
 import { realtime } from "./realtime";
 import { purgeAllStaff } from "./staff/runtime";
 
@@ -45,6 +45,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const loadMe = useCallback(async (): Promise<Me | null> => {
     try {
       const fresh = await api.me();
+      // Les caches de lecture passent sous ce compte avant que les écrans ne les lisent.
+      await bindCacheScope(fresh.user.id);
       setMe(fresh);
       setOffline(false);
       void kvSetJson(ME_KEY, fresh);
@@ -59,6 +61,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // Pas de réseau : on garde le dernier profil connu.
       const cached = await kvGetJson<Me>(ME_KEY);
       if (cached) {
+        await bindCacheScope(cached.user.id);
         setMe(cached);
         setOffline(true);
       }
@@ -142,7 +145,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
 /**
  * Efface tout ce qui appartient au compte sur cet appareil (jeton, profil, QR de compte, kits jour J, listes du mode
- * staff avec les coordonnées du super staff). Seules les lectures du staff pas encore envoyées restent, pour ce compte.
+ * staff avec les coordonnées du super staff, caches de lecture de l'appli). Seules les lectures du staff pas encore
+ * envoyées restent, pour ce compte.
  */
 async function clearSession() {
   setSessionToken(null);
@@ -154,6 +158,7 @@ async function clearSession() {
     clearKits(),
     kvDel("announced"),
     kvDel("staff-events"),
+    purgeCaches(),
     purgeAllStaff(),
   ]);
 }

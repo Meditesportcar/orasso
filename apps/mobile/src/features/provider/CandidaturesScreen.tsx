@@ -13,7 +13,7 @@ import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { Ticket } from "@/features/sorties/Ticket";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
-import { candidatureKind, countdown, needLabel, pendingLine, reviewTag, spotLine } from "@/lib/proPresta";
+import { candidatureKind, countdown, needLabel, reviewTag, upcomingDetail } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
@@ -173,7 +173,7 @@ export function CandidaturesScreen() {
                   badge={badgeOf(app)}
                   lead={retained ? countdown(app, now) : undefined}
                   title={app.event.title}
-                  detail={retained ? (spotLine(app) ?? undefined) : kind === "pending" ? pendingLine(app) : undefined}
+                  detail={upcomingDetail(app) ?? undefined}
                   notes={notes}
                   onPressTitle={() => router.push(`/e/${app.event.slug}`)}
                 >

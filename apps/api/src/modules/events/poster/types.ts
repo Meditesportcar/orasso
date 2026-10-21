@@ -42,6 +42,8 @@ export type TextLayer = {
   color: string;
   /** Interlettrage, fraction du corps. */
   spacing?: number;
+  /** Garde les minuscules (pseudo, adresse) au lieu des capitales de l'affiche (lot 50, carte à partager). */
+  keepCase?: boolean;
   /** Interligne, fraction du corps (0.9 par défaut). */
   lineHeight?: number;
   /** Largeur de la boîte (chaque ligne y tient, réduite au besoin). */

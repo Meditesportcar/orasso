@@ -44,9 +44,10 @@ function Slot({ title, slot, mine }: { title: string; slot: ArrivalSlot; mine: b
   );
 }
 
-export function ArrivalSlots({ arrivals }: { arrivals: Arrivals }) {
+/** `entranceNote` : la précision pour l'entrée saisie dans l'assistant (lot 53), sous les créneaux. */
+export function ArrivalSlots({ arrivals, entranceNote }: { arrivals: Arrivals; entranceNote?: string | null }) {
   const { t } = useTheme();
-  if (!arrivals.exhibitors && !arrivals.public) return null;
+  if (!arrivals.exhibitors && !arrivals.public && !entranceNote) return null;
   return (
     <View style={styles.wrap} testID="arrival-slots">
       <Text variant="title" color={t.color.ink} accessibilityRole="header">
@@ -56,6 +57,16 @@ export function ArrivalSlots({ arrivals }: { arrivals: Arrivals }) {
         {arrivals.exhibitors ? <Slot title={L.arrivalExhibitors} slot={arrivals.exhibitors} mine /> : null}
         {arrivals.public ? <Slot title={L.arrivalPublic} slot={arrivals.public} mine={false} /> : null}
       </View>
+      {entranceNote ? (
+        <Plate style={styles.note} testID="arrival-entrance">
+          <Text variant="label" color={t.color.plateMuted}>
+            {L.entranceNote}
+          </Text>
+          <Text variant="body" color={t.color.plateInk}>
+            {entranceNote}
+          </Text>
+        </Plate>
+      ) : null}
     </View>
   );
 }
@@ -66,4 +77,5 @@ const styles = StyleSheet.create({
   slot: { flex: 1, gap: space1, padding: space3, borderRadius: tokens.radius.radiusMd },
   time: { fontSize: tokens.type.posterL.fontSize, lineHeight: tokens.type.posterL.lineHeight },
   tag: { alignSelf: "flex-start" },
+  note: { gap: space1, padding: space3, borderRadius: tokens.radius.radiusMd },
 });

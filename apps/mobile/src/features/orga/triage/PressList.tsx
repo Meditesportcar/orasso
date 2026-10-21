@@ -61,9 +61,9 @@ export function PressList({ eventId, onChanged }: { eventId: string; onChanged: 
         {pending.map((a) => (
           <Plate key={a.id} style={styles.card} testID="triage-press-card">
             <View style={styles.chips}>
-              {a.media.pressCardVerified ? (
+              {a.media.verified ? (
                 <Chip variant="verified" surface="plate">
-                  {L.pressCardVerified}
+                  {L.profileVerified}
                 </Chip>
               ) : null}
             </View>

@@ -44,9 +44,13 @@ test("assistant : adresse obligatoire, aperçu du brouillon, saisie gardée, pub
     const title = `Rasso lot 36 ${unique()}`;
     await page.getByLabel("Titre").fill(title);
     const day = new Date(Date.now() + 20 * 86_400_000).toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
-    await page.getByLabel("Début").fill(`${day}T18:00`);
-    await page.getByLabel("Fin").fill(`${day}T22:00`);
-    await page.getByRole("button", { name: "Suivant" }).click();
+    // Lot 53 : huit temps ; l'adresse a le sien (le deuxième).
+    await page.getByLabel("Date", { exact: true }).fill(day);
+    await page.getByLabel("Début").fill("18:00");
+    await page.getByLabel("Fin").fill("22:00");
+    await page.getByRole("button", { name: "Continuer" }).click();
+    await expect(page.getByTestId("wizard-step")).toContainText("Lieu");
+    await page.getByRole("button", { name: "Continuer" }).click();
     await expect(page.getByTestId("wizard-error")).toContainText("adresse et la ville");
     await page.screenshot({ path: `${DIR}/01-assistant-adresse-obligatoire-${theme}.png`, fullPage: true });
     await page.getByLabel("Adresse", { exact: true }).fill("Parking du port");
@@ -56,10 +60,18 @@ test("assistant : adresse obligatoire, aperçu du brouillon, saisie gardée, pub
     await page.waitForTimeout(600);
     await page.reload();
     await expect(page.getByTestId("wizard-restored")).toBeVisible();
-    await expect(page.getByLabel("Titre")).toHaveValue(title);
+    // Lot 53 : la saisie revient au temps où on l'a laissée (le lieu).
+    await expect(page.getByLabel("Adresse", { exact: true })).toHaveValue("Parking du port");
 
-    for (let i = 0; i < 11; i++) await page.getByRole("button", { name: "Suivant" }).click();
-    await expect(page.getByTestId("wizard-step")).toContainText("Billetterie");
+    // Chaque « Continuer » enregistre : on attend le temps suivant avant de recliquer.
+    for (let i = 0; i < 8; i++) {
+      const more = page.getByRole("button", { name: "Continuer" });
+      if (!(await more.isVisible())) break;
+      const before = (await page.getByTestId("wizard-step").textContent()) ?? "";
+      await more.click();
+      await expect(page.getByTestId("wizard-step")).not.toHaveText(before, { timeout: 30_000 });
+    }
+    await expect(page.getByTestId("wizard-step")).toContainText("Tout est prêt");
     await expect(page.getByTestId("wizard-publish")).toBeVisible();
     await expect(page.getByTestId("wizard-keep-draft")).toBeVisible();
     await page.screenshot({ path: `${DIR}/02-assistant-fin-trois-choix-${theme}.png`, fullPage: true });
@@ -76,8 +88,9 @@ test("assistant : adresse obligatoire, aperçu du brouillon, saisie gardée, pub
     // Modifier le brouillon puis publier depuis la fin de l'assistant.
     const damien = await login("damien@orasso.local");
     const ev = await apiCall<{ id: string }>(damien, "GET", `/events/by-slug/${slug}`);
+    // Lot 53 : un brouillon complet rouvre directement sur « Tout est prêt ».
     await page.goto(`/orga/meditesportcar/e/${ev.data.id}/modifier`);
-    for (let i = 0; i < 11; i++) await page.getByRole("button", { name: "Suivant" }).click();
+    await expect(page.getByTestId("wizard-step")).toContainText("Tout est prêt");
     await page.getByTestId("wizard-publish").click();
     await page.waitForURL(/publie=1/);
     await expect(page.getByTestId("published-note")).toBeVisible();

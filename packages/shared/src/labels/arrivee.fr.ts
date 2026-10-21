@@ -143,7 +143,11 @@ export const pendingLabels = {
     caption: "Pour candidater aux missions des événements.",
     cta: "Créer mon profil",
   },
-  media: { title: "Ton profil média", caption: "Sa création arrive bientôt : tu le retrouveras ici.", cta: "" },
+  media: {
+    title: "Crée ton profil média",
+    caption: "Pour demander des accréditations et publier tes contenus.",
+    cta: "Créer mon profil média",
+  },
   vehicle: {
     title: "Ajoute ta voiture",
     caption: "Tu en as besoin pour candidater. Sans véhicule, tu as la barre du visiteur.",

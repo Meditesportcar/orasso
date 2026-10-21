@@ -65,6 +65,7 @@ import { applicationsService } from "../applications/service";
 import { announcementsService } from "../communication/announcements";
 import { staffChatsService } from "../communication/staff-chats";
 import { assertCanSeeEvent } from "../invitations/access";
+import { decorateForMedia } from "../media/explore";
 import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
@@ -112,6 +113,7 @@ async function publicView(e: EventRow, s: StructureRow, showInstructions: boolea
     isLocked: isLocked(e, t),
     rulesText: e.rulesText,
     instructions: showInstructions ? e.instructions : null,
+    entranceNote: e.entranceNote,
     acceptedCount: counters.accepted,
   };
 }
@@ -204,6 +206,7 @@ function copyValues(e: EventRow) {
     lockOffsetMinutes: e.lockOffsetMinutes,
     rulesText: e.rulesText,
     instructions: e.instructions,
+    entranceNote: e.entranceNote,
     vendorTypes: e.vendorTypes,
     shopEnabled: e.shopEnabled,
     dayAccess: e.dayAccess,
@@ -279,7 +282,7 @@ export const eventsService = {
     const view = await publicView(e, s, member || accepted);
     if (!viewer) return view;
     const follower = await isFollowing(e.structureId, viewer.user.id);
-    return {
+    const full: EventPublic = {
       ...view,
       // Les candidatures de prestataire ont leur propre liste (`GET /me/provider-applications`, lot 21).
       myApplications: mine
@@ -287,6 +290,9 @@ export const eventsService = {
         .map((a) => ({ id: a.id, vehicleId: a.vehicleId, status: a.status, eventDayId: a.eventDayId })),
       registrationOpensAtForMe: registrationOpensAt(e, { follower, grade: viewer.profile.grade }).toISOString(),
     };
+    // Lot 55 : pour un média connecté, l'état de l'accréditation presse (`accreditation {open, mine}`, `travelMinutes`).
+    await decorateForMedia([full], {} as EventListQuery, viewer);
+    return full;
   },
 
   async getForOrganizer(v: Viewer, id: string): Promise<EventOrganizer> {

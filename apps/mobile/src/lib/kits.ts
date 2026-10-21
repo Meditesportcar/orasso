@@ -39,6 +39,8 @@ export type AccessKit = {
     outlook: EventOutlook;
     cancelled: boolean;
     instructions: string | null;
+    /** Lot 53 : précision pour l'entrée (absente des kits enregistrés avant). */
+    entranceNote?: string | null;
   };
   /**
    * `payload` : ancien QR statique `OR1`, plus affiché depuis le lot 48 (gardé pour un ancien client, retiré au lot 58).
@@ -96,18 +98,25 @@ async function fetchWeather(slug: string): Promise<EventWeather | null | undefin
 }
 
 /** Récupère le QR et les infos de l'événement ; garde l'ancienne météo si la nouvelle n'est pas disponible. */
-export async function refreshKit(app: MyApplication, pseudo: string): Promise<AccessKit | null> {
+export async function refreshKit(
+  app: MyApplication,
+  pseudo: string,
+  isCurrent: () => boolean = () => true,
+): Promise<AccessKit | null> {
   const [pass, event, previous] = await Promise.all([
     api.pass(app.id),
     api.eventBySlug(app.event.slug),
     loadKit(app.id),
   ]);
+  // Le compte a changé pendant la requête : ce kit n'est plus le sien, rien n'est enregistré.
+  if (!isCurrent()) return null;
   // Place plus valide (pass révoqué : ni QR ni secret) : le kit et le secret du code tournant quittent le téléphone.
   if (!pass.payload || !pass.otpSecret) {
     await dropKit(app.id);
     return null;
   }
   const weather = mergeWeather(await fetchWeather(event.slug), previous?.weather);
+  if (!isCurrent()) return null;
   const kit: AccessKit = {
     applicationId: app.id,
     savedAt: new Date().toISOString(),
@@ -133,6 +142,7 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
       outlook: event.outlook,
       cancelled: event.status === "cancelled",
       instructions: event.instructions,
+      entranceNote: event.entranceNote ?? null,
     },
     pass: { passId: pass.passId, payload: pass.payload, issuedAt: pass.issuedAt, eventNo: pass.eventNo },
     holder: { kind: pass.kind, spotLabel: pass.spotLabel, mediaName: pass.mediaName },
@@ -147,19 +157,25 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
  * Met à jour les kits de toutes les places retenues à venir ; efface ceux dont la place n'est plus valide
  * ou dont l'événement est passé depuis J+1. Une panne réseau laisse les kits en place (c'est tout l'intérêt).
  */
-export async function syncKits(apps: MyApplication[], pseudo: string): Promise<void> {
+export async function syncKits(
+  apps: MyApplication[],
+  pseudo: string,
+  isCurrent: () => boolean = () => true,
+): Promise<void> {
   // Une place retenue dont le mode jour J est fermé (J+1 passé) n'a plus besoin de kit.
   const now = clockNow();
   const accepted = apps.filter((a) => a.status === "accepted" && now < jourJClosesAt(a.event));
   const acceptedIds = new Set(accepted.map((a) => a.id));
+  if (!isCurrent()) return;
   const known = (await kvGetJson<string[]>(INDEX_KEY)) ?? [];
   for (const id of known) {
     if (acceptedIds.has(id)) continue;
     const kit = await loadKit(id);
+    if (!isCurrent()) return;
     // Place perdue (désistement, refus, annulation) ou événement terminé : le QR n'a plus de raison d'être ici.
     if (!kit || apps.some((a) => a.id === id) || clockNow() >= jourJClosesAt(kit.event, kit.event.timezone)) {
       await dropKit(id);
     }
   }
-  await Promise.all(accepted.map((app) => refreshKit(app, pseudo).catch(() => null)));
+  await Promise.all(accepted.map((app) => refreshKit(app, pseudo, isCurrent).catch(() => null)));
 }

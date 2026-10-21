@@ -25,7 +25,7 @@ import { usePersona } from "@/lib/persona";
 import { emptyProForm, formOfPro, type ProFicheForm, proBody, socialNetworks, toggleActivity } from "@/lib/proForm";
 import { proActivityIcons } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
-import { useApi } from "@/lib/useApi";
+import { type ApiState, useApi } from "@/lib/useApi";
 import { useRun } from "@/lib/useRun";
 import { Feedback } from "@/ui/Feedback";
 import { IconTiles } from "@/ui/IconTiles";
@@ -69,11 +69,18 @@ function AddressCheck({ query, located }: { query: string; located: boolean }) {
   );
 }
 
-/** Les champs de la fiche : modification (onglet Ma fiche) ou création (depuis Créer). */
-export function ProFicheFields({ create = false }: { create?: boolean }) {
+/** La fiche telle que l'écran parent la charge : une seule source, pour que l'en-tête suive l'enregistrement. */
+export type MyProState = Pick<ApiState<Awaited<ReturnType<typeof api.myPro>>>, "data" | "loading" | "reload">;
+
+/**
+ * Les champs de la fiche : modification (onglet Ma fiche, qui passe sa propre `state`) ou création (depuis Créer).
+ * Sans `state`, le composant charge la fiche lui-même (création : pour savoir si elle existe déjà).
+ */
+export function ProFicheFields({ create = false, state }: { create?: boolean; state?: MyProState }) {
   const { refreshMe } = useSession();
   const { choose } = usePersona();
-  const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
+  const own = useApi(() => api.myPro(), [], { cacheKey: state ? undefined : "my-pro", enabled: !state });
+  const myPro = state ?? own;
   const pro = myPro.data;
   const [form, setForm] = useState<ProFicheForm | null>(() => (create ? emptyProForm() : null));
   const dirty = useRef(false);

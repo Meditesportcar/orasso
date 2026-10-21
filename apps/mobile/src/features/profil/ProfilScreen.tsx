@@ -4,7 +4,7 @@
 // `reglages/<section>`), Aide et Se déconnecter. Partagé par l'onglet Profil des cinq casquettes qui en ont un.
 // Zones marquées pour les lots suivants : tuto (42), passeport (50), profil média (55).
 import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { gradeLabels } from "@orasso/shared";
+import { gradeLabels, passportScreenTexts } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -41,6 +41,8 @@ export function ProfilScreen() {
   const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base });
   const archived = vehicles.data?.filter((v) => v.status !== "active").length ?? 0;
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
+  // Lot 50 : le passeport compte ses tampons (la saison en cours).
+  const passport = useApi(() => api.passport(), [], { cacheKey: "passport.now", enabled: base });
 
   const profile = me?.profile;
   const department = profile?.departments[0];
@@ -58,7 +60,14 @@ export function ProfilScreen() {
     <TabScreen
       title="Mon profil"
       onRefresh={async () => {
-        await Promise.all([refreshMe(), points.reload(), crews.reload(), staff.reload(), vehicles.reload()]);
+        await Promise.all([
+          refreshMe(),
+          points.reload(),
+          crews.reload(),
+          staff.reload(),
+          vehicles.reload(),
+          passport.reload(),
+        ]);
       }}
       overlays={
         <>
@@ -123,12 +132,17 @@ export function ProfilScreen() {
         </>
       ) : null}
 
-      {/* lot 50 : la tuile ouvre le passeport et compte les tampons. */}
+      {/* lot 50 : la tuile ouvre le passeport (l'onglet du visiteur, sinon l'écran) et compte les tampons. */}
       {base ? (
         <HubRow
           lead={<RowIcon name="stamp" />}
-          title="Mon passeport"
-          caption="Bientôt : tes tampons d'événements"
+          title={passportScreenTexts.tileTitle}
+          caption={
+            passport.data
+              ? passportScreenTexts.tile(passport.data.total, passport.data.rare)
+              : "Tes tampons d'événements"
+          }
+          onPress={() => router.navigate((tabHref(persona.kind, "passeport") ?? "/mon-passeport") as never)}
           testID="profil-passport"
         />
       ) : null}

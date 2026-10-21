@@ -72,7 +72,8 @@ export type DiscountCell = { key: string; label: string; percent: number };
 
 /**
  * Remises par grade en grands chiffres (`s-pro` : Rodage 5 % · Route 8 % · Sport 10 % · Circuit+ 15 %). Le grade
- * « Légende » ne s'ajoute que si sa remise diffère de celle de Circuit ; sinon « Circuit+ » les couvre tous les deux.
+ * « Circuit+ » n'apparaît que si Circuit et Légende ont toutes deux une remise, égale (le scan cherche le grade exact :
+ * une remise affichée pour un grade doit exister pour lui) ; sinon deux cases, ou une seule.
  * Un grade sans remise n'a pas de case.
  */
 export function discountCells(discounts: ProDiscounts): DiscountCell[] {
@@ -82,7 +83,7 @@ export function discountCells(discounts: ProDiscounts): DiscountCell[] {
   };
   const circuit = discounts.circuit;
   const legend = discounts.legende;
-  const merged = circuit !== undefined && (legend === undefined || legend === circuit);
+  const merged = circuit !== undefined && legend === circuit;
   return [
     ...cell("rodage"),
     ...cell("route"),
@@ -188,6 +189,23 @@ export function spotLine(app: ProviderApplicationView): string | null {
 /** « Envoyée le 19 oct · en attente de la réponse de l'équipe organisatrice » : aucune échéance n'est promise. */
 export function pendingLine(app: ProviderApplicationView): string {
   return L.pendingLine(formatShortDate(app.createdAt));
+}
+
+/**
+ * Ligne de détail du ticket « À venir » : l'emplacement (retenue), l'attente de réponse (en attente) ou le motif de
+ * l'organisateur dès le refus (comme avant le lot 54), sans attendre que l'événement soit passé.
+ */
+export function upcomingDetail(app: ProviderApplicationView): string | null {
+  switch (candidatureKind(app)) {
+    case "retained":
+      return spotLine(app);
+    case "pending":
+      return pendingLine(app);
+    case "refused":
+      return app.refusalNote || null;
+    default:
+      return null;
+  }
 }
 
 /** « J-6 » devant la date de l'événement (retenue à venir). */

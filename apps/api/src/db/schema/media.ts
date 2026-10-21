@@ -23,8 +23,9 @@ import { events } from "./events";
 export const mediaContentKindEnum = pgEnum("media_content_kind", mediaContentKinds);
 
 /**
- * Profil média (un par compte). `press_card_number` : privé (AS-V6), jamais sérialisé hors du titulaire et de
- * l'administration, effacé à l'anonymisation ; `press_card_verified_at` posé par l'administration. `departments` vide =
+ * Profil média (un par compte). D26 : `press_card_number` n'est plus rempli ni lu (colonne laissée vide) ;
+ * `press_card_verified_at` (nom conservé en base) = profil média vérifié par l'administration, remis à zéro si le nom,
+ * le site, Instagram, YouTube ou le logo changent. `departments` vide =
  * toute la France.
  */
 export const mediaProfiles = pgTable(

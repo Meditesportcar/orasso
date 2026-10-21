@@ -27,7 +27,6 @@ describe("action principale de la fiche selon le profil (lot 44)", () => {
     expect(eventAction({ ...base, kind: "pro" }).action).toBe("followOrganizer");
     expect(eventAction({ ...base, kind: "provider", providerCanApply: true }).action).toBe("providerApply");
     expect(eventAction({ ...base, kind: "provider" }).action).toBeNull();
-    expect(eventAction({ ...base, kind: "media" }).action).toBeNull();
     expect(eventAction({ ...base, kind: "organizer", ownStructure: true }).action).toBe("triage");
     expect(eventAction({ ...base, kind: "organizer" }).action).toBe("apply");
   });
@@ -50,6 +49,23 @@ describe("action principale de la fiche selon le profil (lot 44)", () => {
     expect(eventAction(ended)).toEqual({ action: null, gate: "ended" });
     expect(eventAction({ ...ended, kind: "visitor" }).gate).toBe("ended");
     expect(eventAction({ ...ended, kind: "organizer", ownStructure: true }).action).toBe("triage");
+  });
+
+  it("média : demander l'accréditation si elle est ouverte, sinon rien ; la sienne, quel que soit son état (lot 55)", () => {
+    const media = { ...base, kind: "media" as const };
+    expect(eventAction(media).action).toBeNull();
+    expect(eventAction({ ...media, accreditation: { open: false, mine: null } }).action).toBeNull();
+    expect(eventAction({ ...media, accreditation: { open: true, mine: null } }).action).toBe("requestAccreditation");
+    expect(eventAction({ ...media, accreditation: { open: true, mine: "cancelled" } }).action).toBe(
+      "requestAccreditation",
+    );
+    for (const mine of ["pending", "accepted", "refused"] as const) {
+      expect(eventAction({ ...media, accreditation: { open: false, mine } }).action).toBe("myAccreditation");
+    }
+    // Terminé ou annulé : aucune action.
+    const ended = { ...media, accreditation: { open: true, mine: null }, block: { code: "ended" as const } };
+    expect(eventAction(ended)).toEqual({ action: null, gate: "ended" });
+    expect(eventAction({ ...media, accreditation: { open: true, mine: null }, cancelled: true }).action).toBeNull();
   });
 
   it("prestataire qui a déjà candidaté : « Voir ma candidature »", () => {

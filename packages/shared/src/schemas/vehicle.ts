@@ -116,6 +116,8 @@ export type VehiclePublic = {
   photos: VehiclePhoto[];
   status: VehicleStatus;
   certified: boolean;
+  /** Prix du public remportés avec ce véhicule (lot 50 : badge de la carte du garage). */
+  audiencePrizes: number;
 };
 
 /** Fiche du propriétaire et de l'organisateur : avec la plaque. */

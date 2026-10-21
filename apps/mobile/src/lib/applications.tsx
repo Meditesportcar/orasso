@@ -7,12 +7,15 @@ import { AppState } from "react-native";
 
 import { api } from "./api";
 import { syncKits } from "./kits";
-import { kvGetJson, kvSetJson } from "./kv";
+import { accountGuard, cacheGetJson, cacheSetJson, kvGetJson, kvSetJson } from "./kv";
+import { accreditationAsApplication } from "./pressApplications";
 import { useSession } from "./session";
 
 type ApplicationsValue = {
   upcoming: MyApplication[] | null;
   past: MyApplication[] | null;
+  /** Lot 55 : les badges presse (accréditations retenues d'un média), pour le QR du jour J ; jamais dans Sorties. */
+  press: MyApplication[];
   loading: boolean;
   /** Valeurs lues dans le cache : l'API n'a pas répondu. */
   offline: boolean;
@@ -35,14 +38,17 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
   const { status, me } = useSession();
   const [upcoming, setUpcoming] = useState<MyApplication[] | null>(null);
   const [past, setPast] = useState<MyApplication[] | null>(null);
+  const [press, setPress] = useState<MyApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [announcement, setAnnouncement] = useState<MyApplication | null>(null);
   const announced = useRef<Set<string> | null>(null);
   const pseudo = me?.profile.pseudo ?? "";
+  const hasMedia = me?.personas?.some((p) => p.kind === "media") ?? false;
 
-  const detectAnnouncement = useCallback(async (apps: MyApplication[]) => {
+  const detectAnnouncement = useCallback(async (apps: MyApplication[], isCurrent: () => boolean) => {
     const stored = await kvGetJson<string[]>(ANNOUNCED_KEY);
+    if (!isCurrent()) return;
     const accepted = apps.filter((a) => a.status === "accepted");
     if (!stored) {
       // Premier chargement sur cet appareil : les places déjà retenues ne sont pas des nouveautés.
@@ -52,32 +58,42 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
     }
     announced.current ??= new Set(stored);
     const fresh = accepted.find((a) => !announced.current?.has(a.id));
-    if (fresh) setAnnouncement((current) => current ?? fresh);
+    if (fresh && isCurrent()) setAnnouncement((current) => current ?? fresh);
   }, []);
 
   const reload = useCallback(async () => {
     if (status !== "in") return;
+    // Compte du départ : une réponse tardive après un changement de compte est jetée en entier (état, cache, kits).
+    const guard = accountGuard();
     try {
       const [up, ps] = await Promise.all([api.applications("upcoming"), api.applications("past")]);
+      if (!guard.current()) return;
       setUpcoming(up);
       setPast(ps);
       setOffline(false);
-      void kvSetJson(UPCOMING_KEY, up);
-      void kvSetJson(PAST_KEY, ps);
-      await detectAnnouncement(up);
-      void syncKits([...up, ...ps.filter((a) => a.status === "accepted")], pseudo);
+      void cacheSetJson(UPCOMING_KEY, up, guard.scope);
+      void cacheSetJson(PAST_KEY, ps, guard.scope);
+      await detectAnnouncement(up, guard.current);
+      // Lot 55 : le badge presse d'un média suit le même chemin que le QR d'un véhicule (kit enregistré, hors ligne).
+      const accreditations = hasMedia
+        ? (await api.myAccreditations("all").catch(() => [])).map(accreditationAsApplication)
+        : [];
+      if (!guard.current()) return;
+      setPress(accreditations.filter((a) => a.status === "accepted"));
+      void syncKits([...up, ...ps.filter((a) => a.status === "accepted"), ...accreditations], pseudo, guard.current);
     } catch {
-      setOffline(true);
+      if (guard.current()) setOffline(true);
     } finally {
       setLoading(false);
     }
-  }, [status, pseudo, detectAnnouncement]);
+  }, [status, pseudo, hasMedia, detectAnnouncement]);
 
   // Cache d'abord (visible hors ligne), puis l'API.
   useEffect(() => {
     if (status !== "in") {
       setUpcoming(null);
       setPast(null);
+      setPress([]);
       setAnnouncement(null);
       announced.current = null;
       return;
@@ -85,8 +101,8 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       const [cachedUp, cachedPast] = await Promise.all([
-        kvGetJson<MyApplication[]>(UPCOMING_KEY),
-        kvGetJson<MyApplication[]>(PAST_KEY),
+        cacheGetJson<MyApplication[]>(UPCOMING_KEY),
+        cacheGetJson<MyApplication[]>(PAST_KEY),
       ]);
       if (cancelled) return;
       setUpcoming((current) => current ?? cachedUp);
@@ -108,6 +124,7 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
     () => ({
       upcoming,
       past,
+      press,
       loading,
       offline,
       reload,
@@ -126,7 +143,7 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
         void persistAnnounced(announced.current);
       },
     }),
-    [upcoming, past, loading, offline, reload, announcement],
+    [upcoming, past, press, loading, offline, reload, announcement],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

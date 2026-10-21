@@ -16,6 +16,7 @@ import {
   formatDayDate,
   invitationLabels,
   eventPageLabels as L,
+  mediaAppLabels as M,
   previewSummary,
   registrationBlock,
   type VendorTypeCode,
@@ -33,6 +34,8 @@ import { Info, ProvidersPresent, Reviews } from "@/features/event/EventExtras";
 import { EventFactsGrid, EventTitle, OrganizerRow } from "@/features/event/EventFacts";
 import { EventGatePlate } from "@/features/event/EventGate";
 import { EventHero } from "@/features/event/EventHero";
+import { MediaContents } from "@/features/event/MediaContents";
+import { RequestSheet, type RequestTarget } from "@/features/media/RequestSheet";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { ReportButton } from "@/features/ReportSheet";
 import { TicketsBlock } from "@/features/tickets/TicketsBlock";
@@ -57,7 +60,7 @@ export default function EventPage() {
   const router = useRouter();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { status, me, refreshMe } = useSession();
-  const { persona } = usePersona();
+  const { persona, goTab } = usePersona();
   const event = useApi(() => api.eventBySlug(slug), [slug, status], { enabled: status !== "loading" });
   const e = event.data;
   const reviews = useApi(() => api.eventReviews(slug), [slug, status], { enabled: status !== "loading" });
@@ -77,6 +80,12 @@ export default function EventPage() {
   const kind: ProfileKind = status !== "in" ? "guest" : persona.kind;
   // Le véhicule « de couverture » : le premier du garage actif (« Candidater avec ma Supra »).
   const vehicles = useApi(() => api.vehicles(), [status], { enabled: status === "in" && kind === "fan" });
+  // Média (lot 55) : les formats du profil pour la demande ; l'état de l'accréditation vient de la fiche (`e.accreditation`).
+  const mediaProfile = useApi(async () => (await api.myMediaProfile()).profile, [status, kind], {
+    enabled: status === "in" && kind === "media",
+    cacheKey: "media-profile",
+  });
+  const [mediaTarget, setMediaTarget] = useState<RequestTarget | null>(null);
   const hasPro = me?.personas?.some((p) => p.kind === "pro") ?? false;
   const hasProvider = me?.personas?.some((p) => p.kind === "provider") ?? false;
   const providerProfile = useApi(async () => (await api.providerProfile()).profile, [status, hasPro, hasProvider], {
@@ -154,6 +163,7 @@ export default function EventPage() {
     providerApplied: providerSent || (providerApps.data ?? []).some((a) => a.event.id === e.id),
     providerCanApply: showProviderApply && !providerSent,
     cancelled,
+    accreditation: e.accreditation ?? null,
   });
   const isFollowing = following || Boolean(structure.data?.isFollowing);
   const cover = (vehicles.data ?? []).find((v) => v.status === "active");
@@ -222,19 +232,27 @@ export default function EventPage() {
                 }
               : action === "book"
                 ? { label: L.bookEntry, icon: "ticket" as const, onPress: () => setBooking(true) }
-                : action === "providerApply"
+                : action === "requestAccreditation"
                   ? {
-                      label: profileData ? "Candidater comme prestataire" : "Candidater pour un stand",
-                      icon: "add" as const,
-                      onPress: () => void openProviderApply(),
+                      label: M.eventRequest,
+                      icon: "send" as const,
+                      onPress: () => setMediaTarget({ id: e.id, slug: e.slug, title: e.title }),
                     }
-                  : action === "followOrganizer"
-                    ? {
-                        label: isFollowing ? L.followingOrganizer : L.followOrganizer,
-                        icon: isFollowing ? ("check" as const) : ("add" as const),
-                        onPress: () => void toggleFollow(),
-                      }
-                    : null;
+                  : action === "myAccreditation"
+                    ? { label: M.eventMine, icon: "press" as const, onPress: () => goTab("presse") }
+                    : action === "providerApply"
+                      ? {
+                          label: profileData ? "Candidater comme prestataire" : "Candidater pour un stand",
+                          icon: "add" as const,
+                          onPress: () => void openProviderApply(),
+                        }
+                      : action === "followOrganizer"
+                        ? {
+                            label: isFollowing ? L.followingOrganizer : L.followOrganizer,
+                            icon: isFollowing ? ("check" as const) : ("add" as const),
+                            onPress: () => void toggleFollow(),
+                          }
+                        : null;
 
   const footer = gate ? (
     <EventGatePlate
@@ -278,7 +296,7 @@ export default function EventPage() {
       />
       {followError ? <Notice tone="error">{followError}</Notice> : null}
       <EventFactsGrid event={e} />
-      <ArrivalSlots arrivals={e.arrivals} />
+      <ArrivalSlots arrivals={e.arrivals} entranceNote={e.entranceNote} />
       {e.customPosterUrl ? <CustomPoster url={e.customPosterUrl} structureName={e.structure.name} /> : null}
 
       {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
@@ -333,7 +351,11 @@ export default function EventPage() {
       {providers.data && providers.data.length > 0 ? (
         <ProvidersPresent providers={providers.data} reportable={status === "in"} />
       ) : null}
-      {/* lot 55 : contenus média mis en avant sur l'événement (zone réservée, `s-event`) et action « Mon accréditation ». */}
+      {/* Lot 55 : contenus des médias accrédités (mis en avant d'abord), et pour un média l'état de l'accréditation. */}
+      {!cancelled ? <MediaContents slug={e.slug} /> : null}
+      {kind === "media" && !cancelled && e.accreditation && !e.accreditation.open && !e.accreditation.mine ? (
+        <Notice testID="media-closed">{M.eventClosedText}</Notice>
+      ) : null}
       {showProviderApply && action !== "providerApply" ? (
         <>
           {providerError ? <Notice tone="error">{providerError}</Notice> : null}
@@ -366,6 +388,12 @@ export default function EventPage() {
           setProviderSent(true);
           void refreshMe();
         }}
+      />
+      <RequestSheet
+        target={mediaTarget}
+        defaultFormats={mediaProfile.data?.formats ?? []}
+        onClose={() => setMediaTarget(null)}
+        onSent={() => void event.reload()}
       />
       <AppSheet visible={booking} onClose={() => setBooking(false)} accessibilityLabel={L.bookEntry}>
         <Text variant="title" color={t.color.ink}>

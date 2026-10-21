@@ -94,6 +94,8 @@ export const events = pgTable(
     lockedAt: tstz("locked_at"),
     rulesText: text("rules_text"),
     instructions: text("instructions"),
+    /** Lot 53 : « Précision pour l'entrée » (`s-create`, temps « Où ça se passe ? ») : publique, comme l'adresse. */
+    entranceNote: text("entrance_note"),
     /** Types de prestataires attendus (cases à cocher et « + » de l'assistant, lot 13) ; pas de candidature en V1. */
     vendorTypes: text("vendor_types").array().notNull().default(sql`'{}'::text[]`),
     /** Duplication ou récurrence (lot 13) : l'événement dont celui-ci est la copie ou une occurrence. */

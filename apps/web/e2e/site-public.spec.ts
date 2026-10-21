@@ -91,7 +91,7 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   expect(docRes.headers()["content-type"]).toContain("application/pdf");
   await card.getByLabel(/Note/).fill("Statuts reçus, structure sérieuse.");
   await card.getByRole("button", { name: "Valider" }).click();
-  // La file peut garder d'autres structures du seed (Écurie du Vallespir) : la carte validée disparaît.
+  // La file n'est pas forcément vide (seed du lot 52 : une structure « en vérification ») : la carte validée en sort.
   await expect(card).toHaveCount(0);
   // Le justificatif n'est lisible ni sans connexion ni par le propriétaire.
   const anon = await browser.newContext();
@@ -107,77 +107,77 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   await owner.goto(`/orga/${slug}`);
   await owner.getByRole("link", { name: "Nouvel événement" }).click();
   const step = owner.getByTestId("wizard-step");
-  await expect(step).toContainText("Étape 1 sur 12 · Format");
+  // Lot 53 : huit temps (type, lieu, arrivées, critères, avant-première, règlement, affiche, tout est prêt).
+  await expect(step).toContainText("Étape 1 sur 8 · Type");
   await owner.waitForLoadState("networkidle"); // hydratation : l'assistant est un composant du navigateur
-  // Validation de l'étape : un titre est exigé.
-  await owner.getByRole("button", { name: "Suivant" }).click();
+  // Validation du temps : un titre est exigé.
+  await owner.getByRole("button", { name: "Continuer" }).click();
   await expect(owner.getByTestId("wizard-error")).toContainText("titre");
   await owner.getByRole("button", { name: "Rassemblement", exact: true }).click();
   await owner.getByLabel("Titre").fill(eventTitle);
   await owner.getByLabel("Description et programme").fill("Rendez-vous du soir sur le port, voitures anciennes.");
   // Demain 18 h : la fenêtre du staff est ouverte (de la veille à la fin), l'inscription express est donc possible.
-  await owner.getByLabel("Début").fill(`${parisDay(1)}T18:00`);
-  await owner.getByLabel("Fin").fill(`${parisDay(1)}T23:00`);
+  await owner.getByLabel("Date", { exact: true }).fill(parisDay(1));
+  await owner.getByLabel("Début").fill("18:00");
+  await owner.getByLabel("Fin").fill("23:00");
+  // Volet « Public et places » : véhicules et places.
+  await owner.getByText("Public et places").click();
+  await owner.getByLabel("Moto").check({ force: true });
+  await owner.getByRole("button", { name: "Avec une limite" }).click();
+  await owner.getByLabel("Nombre de places").fill("30");
+  await owner.getByRole("button", { name: "Continuer" }).click();
+
+  await expect(step).toContainText("Lieu");
   await owner.getByLabel("Adresse", { exact: true }).fill("Place de la République");
   await owner.getByLabel("Code postal").fill("66140");
   await owner.getByLabel("Ville").fill("Canet-en-Roussillon");
-  await owner.getByRole("button", { name: "Vérifier l'adresse" }).click();
-  await expect(owner.getByTestId("address-status")).not.toHaveText("Recherche…");
-  const geocoded = ((await owner.getByTestId("address-status").textContent()) ?? "").startsWith("Trouvée");
-  await owner.getByRole("button", { name: "Suivant" }).click();
-
-  await expect(step).toContainText("Véhicules");
-  await owner.getByLabel("Moto").check({ force: true });
-  await owner.getByRole("button", { name: "Suivant" }).click();
-
-  await expect(step).toContainText("Places");
-  await owner.getByRole("button", { name: "Avec une limite" }).click();
-  await owner.getByLabel("Nombre de places").fill("30");
-  await owner.getByRole("button", { name: "Suivant" }).click();
-
-  await expect(step).toContainText("Prestataires");
+  await owner.getByTestId("wizard-geocode").click();
+  const suggestion = owner.getByTestId("wizard-suggestion");
+  const geocoded = await suggestion.isVisible({ timeout: 20_000 }).catch(() => false);
+  if (geocoded) await suggestion.click();
+  // Volet « Sur place » : zones et prestataires attendus.
+  await owner.getByText("Sur place", { exact: true }).click();
+  await owner.getByRole("button", { name: "Ajouter une zone" }).click();
+  await owner.getByLabel("Code", { exact: true }).fill("A");
+  await owner.getByLabel("Nom", { exact: true }).fill("Allée A");
   await owner.getByLabel("Food truck").check({ force: true });
   await owner.getByLabel("Un autre type").fill("Glacier");
   await owner.getByRole("button", { name: "Ajouter", exact: true }).click();
   await expect(owner.getByLabel("Glacier")).toBeChecked();
-  await owner.getByRole("button", { name: "Suivant" }).click();
+  await owner.getByRole("button", { name: "Continuer" }).click();
 
-  await expect(step).toContainText("Public");
+  await expect(step).toContainText("Arrivées");
+  await owner.getByText("Public", { exact: true }).last().click();
   await owner.getByRole("button", { name: "Entrée libre" }).click();
-  await owner.getByRole("button", { name: "Suivant" }).click();
-
-  await expect(step).toContainText("Admission");
-  await owner.getByRole("button", { name: "Sur filtration" }).click();
-  await owner.getByRole("button", { name: "Suivant" }).click();
+  await owner.getByRole("button", { name: "Continuer" }).click();
 
   await expect(step).toContainText("Critères");
-  await owner.getByRole("button", { name: "Japon" }).click();
-  await owner.getByLabel("Précisions").fill("Voitures d'avant 2000.");
-  await owner.getByRole("button", { name: "Suivant" }).click();
+  await owner.getByRole("button", { name: "Sur filtration" }).click();
+  await owner.getByRole("button", { name: "Japonaise" }).click();
+  await owner.getByLabel("Précisions (facultatif)").fill("Voitures d'avant 2000.");
+  await owner.getByRole("button", { name: "Continuer" }).click();
 
   await expect(step).toContainText("Avant-première");
-  await owner.getByLabel("Avant-première des abonnés").selectOption("48");
-  await owner.getByRole("button", { name: "Suivant" }).click();
+  await owner.getByLabel("Combien de temps avant").selectOption("48");
+  await owner.getByRole("button", { name: "Continuer" }).click();
 
   await expect(step).toContainText("Règlement");
   await expect(owner.getByRole("textbox", { name: "Règlement" })).toHaveValue(/Règlement de l'événement/);
-  await owner.getByRole("button", { name: "Suivant" }).click();
-
-  await expect(step).toContainText("Infos");
   await owner.getByLabel("Consignes aux retenus").fill("Entrée par le parking nord, arrivée dès 17 h 30.");
-  await owner.getByLabel("Affiche").setInputFiles({ name: "affiche.png", mimeType: "image/png", buffer: POSTER });
-  await owner.getByRole("button", { name: "Suivant" }).click();
+  await owner.getByRole("button", { name: "Continuer" }).click();
 
-  await expect(step).toContainText("Zones");
-  await owner.getByRole("button", { name: "Ajouter une zone" }).click();
-  await owner.getByLabel("Code").fill("A");
-  await owner.getByLabel("Nom", { exact: true }).fill("Allée A");
-  await owner.getByRole("button", { name: "Suivant" }).click();
+  await expect(step).toContainText("Affiche");
+  await owner.getByTestId("wizard-own-poster").locator("input").setInputFiles({
+    name: "affiche.png",
+    mimeType: "image/png",
+    buffer: POSTER,
+  });
+  await owner.getByRole("button", { name: "Continuer" }).click();
 
-  await expect(step).toContainText("Billetterie");
+  await expect(step).toContainText("Tout est prêt");
   await expect(owner.getByTestId("wizard-recap")).toContainText(eventTitle);
-  await owner.getByRole("button", { name: "Garder en brouillon" }).click();
-  await owner.waitForURL(/\/orga\/[^/]+\/e\/[0-9a-f-]{36}/);
+  await owner.getByRole("button", { name: "Brouillon" }).click();
+  await owner.waitForURL(/\/orga\/[^/]+\/e\/[0-9a-f-]{36}(\?|$)/);
   const eventId = new URL(owner.url()).pathname.split("/")[4] ?? "";
   await expect(owner.getByTestId("event-title")).toHaveText(eventTitle);
   await expect(owner.getByTestId("event-status")).toHaveText("Brouillon");

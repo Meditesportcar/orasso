@@ -2,7 +2,8 @@
 // (leo@orasso.local) tient le média « Sud Cars » (photo et vidéo, toute la France). Réglages presse ouverts sur la
 // Nocturne de Canet (quota 5, « zone piste 19 h – 21 h · paddock libre ») : Léo accrédité (badge presse émis) ; en
 // attente sur le C&C Perpignan ; refusé sur l'Expo Rivesaltes (« Quota presse atteint… ») ; « Béziers Night », passée,
-// couverte avec deux contenus (article et vidéo YouTube), la vidéo mise en avant. Idempotent.
+// couverte avec deux contenus (article et vidéo YouTube), la vidéo mise en avant. Accréditation ouverte aussi à Toulouse,
+// Montpellier et Narbonne (Explorer du média, lot 55). Idempotent.
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
@@ -44,7 +45,7 @@ export async function seedMedia(hash: string) {
       website: "https://sudcars.example",
       instagram: "@sudcars",
       youtube: "https://www.youtube.com/@sudcars",
-      pressCardNumber: "CP-2026-0412",
+      pressCardVerifiedAt: now,
       departments: [],
     })
     .returning();
@@ -85,6 +86,16 @@ export async function seedMedia(hash: string) {
     { eventId: expo.id, accreditationOpen: false, quota: 2 },
     { eventId: beziers.id, accreditationOpen: false, quota: 3, zones: "allées et podium" },
   ]);
+  // Des événements ouverts hors du coin de Léo (Explorer du média : toute la France, temps de route estimé).
+  for (const slug of ["rassemblement-toulouse", "salon-montpellier", "rassemblement-narbonne"]) {
+    const away = await bySlug(slug);
+    if (away) {
+      await db
+        .insert(t.eventPressSettings)
+        .values({ eventId: away.id, accreditationOpen: true, zones: "zone presse près de l'entrée" })
+        .onConflictDoNothing();
+    }
+  }
 
   const accreditation = async (
     event: { id: string; startsAt: Date },

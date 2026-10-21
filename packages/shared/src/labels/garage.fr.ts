@@ -1,4 +1,4 @@
-import type { CertificationLostReason, CertificationStatus, ShareFormat } from "../garage";
+import type { CertificationLostReason, CertificationStatus, ShareFormat, ShareStyle } from "../garage";
 import type { CategoryRefusal, CertificationMissing } from "../rules/garage";
 
 // Garage et certification (lot 31).
@@ -18,6 +18,23 @@ export const countryLabels: Record<string, string> = {
 };
 
 export const countryLabel = (code: string | null): string | null => (code ? (countryLabels[code] ?? code) : null);
+
+/** Origine d'un véhicule, dite comme sur la carte à partager : « Toyota · 2021 · Japonaise » (adjectif du pays de la marque). */
+export const countryOriginLabels: Record<string, string> = {
+  CZ: "Tchèque",
+  DE: "Allemande",
+  ES: "Espagnole",
+  FR: "Française",
+  GB: "Britannique",
+  IT: "Italienne",
+  JP: "Japonaise",
+  KR: "Coréenne",
+  SE: "Suédoise",
+  US: "Américaine",
+};
+
+export const originLabel = (code: string | null): string | null =>
+  code ? (countryOriginLabels[code] ?? countryLabels[code] ?? code) : null;
 
 /** Raison affichée sous une catégorie grisée dans le formulaire du véhicule. */
 export const categoryRefusalLabels: Record<CategoryRefusal, string> = {
@@ -63,6 +80,24 @@ export const certificationConditions: { key: Exclude<CertificationMissing, "pend
 export const shareFormatLabels: Record<ShareFormat, string> = {
   story: "Story (9:16)",
   post: "Publication (1:1)",
+};
+
+/** Carte à partager (lot 50, prototype `s-share`) : styles, zones masquées et boutons. */
+export const shareStyleLabels: Record<ShareStyle, string> = { night: "Nuit", sand: "Sable", neon: "Néon" };
+
+export const shareSheetLabels = {
+  title: "Carte à partager",
+  subtitle: "Format story, signée Orasso",
+  help: "Une carte avec la photo de couverture, le nom du véhicule et tes chiffres clés. Jamais la plaque.",
+  showSafe: "Voir les zones masquées par Instagram",
+  hideSafe: "Cacher les zones masquées",
+  maskedByInstagram: "Masqué par Instagram",
+  story: "En story",
+  image: "Image",
+  saved: "Image enregistrée.",
+  unavailable: "Le partage n'est pas disponible sur cet appareil.",
+  loading: "Préparation de la carte…",
+  failed: "Impossible de préparer la carte : vérifie ta connexion.",
 };
 
 /** Motifs de statut proposés dans la feuille « Vendu / Souvenir / Accidenté ». */

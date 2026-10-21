@@ -1,5 +1,4 @@
-// Vues du média (lot 45) : titulaire et administration (carte de presse comprise), public (jamais la carte), contenus.
-// La carte de presse (AS-V6) ne sort que par `ownerView` : toute autre réponse passe par `publicView`.
+// Vues du média (lot 45) : titulaire et administration, public, contenus (D26 : plus de numéro de carte de presse).
 import {
   instagramUrl,
   type MediaContentView,
@@ -27,8 +26,7 @@ export function ownerView(p: MediaProfileRow): MediaProfileView {
     instagram: p.instagram,
     youtube: p.youtube,
     logoUrl: storage.url(p.logoKey),
-    pressCardNumber: p.pressCardNumber,
-    pressCardVerifiedAt: p.pressCardVerifiedAt?.toISOString() ?? null,
+    verifiedAt: p.pressCardVerifiedAt?.toISOString() ?? null,
     departments: p.departments,
     issue: mediaProfileIssue(p),
     createdAt: p.createdAt.toISOString(),
@@ -46,7 +44,7 @@ export function publicView(p: MediaProfileRow): MediaPublic {
     youtube: p.youtube,
     logoUrl: storage.url(p.logoKey),
     departments: p.departments,
-    pressCardVerified: p.pressCardVerifiedAt !== null,
+    verified: p.pressCardVerifiedAt !== null,
   };
 }
 

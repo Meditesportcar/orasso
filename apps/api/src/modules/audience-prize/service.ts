@@ -4,6 +4,7 @@
 // des points (`points.audience_prize`, 50 par défaut, H6), le compteur du véhicule, un tampon rare et une notification.
 import {
   AUDIENCE_PRIZE_RESULTS_KEPT,
+  type AudienceCandidates,
   type AudiencePrizeBoard,
   type AudiencePrizeEntry,
   type AudiencePrizeMine,
@@ -219,6 +220,8 @@ async function publishVotes(eventId: string) {
 
 /** Lignes du classement renvoyées en direct (les premiers ; la position de chacun est dans le récap). */
 const BOARD_LIMIT = 100;
+/** Véhicules par page de la grille du vote. */
+const CANDIDATES_PAGE = 100;
 
 export const audiencePrizeService = {
   /** `PUT /events/:id/audience-prize/vote` : une voix, modifiable jusqu'à la clôture. */
@@ -280,6 +283,30 @@ export const audiencePrizeService = {
       votedFor: vote?.applicationId ?? null,
       votedAt: vote?.updatedAt.toISOString() ?? null,
       ownApplicationIds: own.map((o) => o.id),
+    };
+  },
+
+  /**
+   * `GET /events/:id/audience-prize/candidates` : tous les véhicules pointés, du premier au dernier entré, par pages de
+   * 100, sans aucune voix (la grille du vote ne doit pas dépendre du classement, limité à 100 lignes : au-delà, des
+   * voitures ne pourraient pas recevoir de voix). Mêmes droits de lecture que le classement.
+   */
+  async candidates(v: Viewer, eventId: string, cursor: number): Promise<AudienceCandidates> {
+    await visibleEvent(eventId, v);
+    const entered = await enteredVehicles(db, eventId);
+    const page = entered.slice(cursor, cursor + CANDIDATES_PAGE);
+    const byApp = await cards(
+      db,
+      page.map((e) => e.applicationId),
+    );
+    return {
+      items: page.map((e) => ({
+        applicationId: e.applicationId,
+        vehicleLabel: byApp.get(e.applicationId)?.vehicleLabel ?? "Autre véhicule",
+        pseudo: byApp.get(e.applicationId)?.pseudo ?? "",
+        photoUrl: byApp.get(e.applicationId)?.photoUrl ?? null,
+      })),
+      next: cursor + CANDIDATES_PAGE < entered.length ? cursor + CANDIDATES_PAGE : null,
     };
   },
 

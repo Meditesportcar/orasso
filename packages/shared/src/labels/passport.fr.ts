@@ -178,3 +178,56 @@ export const recapTexts = {
   readyTitle: (title: string) => `Ton récap de ${title} est arrivé`,
   readyBody: "Tes chiffres, ton classement, tes points et ton tampon.",
 };
+
+// Textes ajoutés par les écrans de l'appli (lot 50) : ce que le prototype dit en plus des textes du lot 49.
+export const passportScreenTexts = {
+  emptyTitle: "Ton premier tampon t'attend",
+  offline: "Hors ligne : voici ce que ton téléphone a gardé.",
+  loadFailed: "Impossible de charger ton passeport : vérifie ta connexion.",
+  /** Tuile « Mon passeport » de Mon profil et de l'Accueil : « 9 tampons, dont 1 rare ». */
+  tile: (total: number, rare: number) =>
+    total === 0
+      ? "Ton premier tampon t'attend"
+      : `${plural(total, "tampon", "tampons")}${rare ? `, dont ${plural(rare, "rare", "rares")}` : ""}`,
+  tileTitle: "Mon passeport",
+  /** Toast du prototype : « Nouveau tampon : Nocturne de Canet ». */
+  stamped: (title: string) => `Nouveau tampon : ${title}`,
+  close: "Toucher pour fermer",
+  /** Onglet Passeport du visiteur : « Tampons, Prix du public, Récaps » (plan de l'appli du prototype). */
+  votesTitle: "Prix du public",
+  votesNone: "Aucun vote ouvert pour toi en ce moment : il ouvre à ton pointage ou à l'entrée de ton billet.",
+  recapsTitle: "Récaps",
+  recapsNone: "Ton récap arrive le lendemain de chaque événement où tu as été pointé.",
+};
+
+export const voteScreenTexts = {
+  /** Bouton de l'écran jour J et des Sorties. */
+  open: "Prix du public",
+  you: "C'est toi",
+  number: (n: number) => `N° ${n}`,
+  yourVote: "Ton vote",
+  /** Après un vote : « Vote enregistré · tu peux le changer jusqu'à 22 h 30 ». */
+  saved: (closesAt: Date, timeZone?: string) =>
+    `Vote enregistré · tu peux le changer jusqu'à ${frHour(closesAt, timeZone)}`,
+  chooseHint: "Touche une voiture pour voter.",
+  pick: (label: string) => `Voter pour ${label}`,
+  results: "Résultats",
+  winner: "Gagnant",
+  /** Fin du vote, avant le règlement de J+2. */
+  closedNote: "Le vote est clos : le résultat arrive deux jours après l'événement.",
+  /** Un seul véhicule pointé ou pas de gagnant. */
+  noWinner: "Pas de gagnant : il faut au moins 2 véhicules et 3 voix.",
+  empty: "Aucun véhicule n'a encore été pointé.",
+  loadFailed: "Impossible de charger le prix du public : vérifie ta connexion.",
+};
+
+export const recapScreenTexts = {
+  title: "Récap",
+  /** « Ta sortie : Nocturne de Canet » (sans accord : « la » ne va pas à tous les titres, relecture du lot 50). */
+  was: (title: string) => `Ta sortie : ${title}`,
+  loadFailed: "Impossible de charger le récap : vérifie ta connexion.",
+  notReady: "Le récap arrive le lendemain de l'événement, à 10 h.",
+  /** Sorties › Passées. */
+  seeRecap: "Voir le récap",
+  shareFailed: "Le partage n'est pas disponible sur cet appareil.",
+};

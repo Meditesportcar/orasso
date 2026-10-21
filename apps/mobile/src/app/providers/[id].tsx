@@ -4,16 +4,21 @@
 import { departmentChoices, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { proV2Labels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 import { VitrineView } from "@/features/provider/VitrineView";
 import { ReportButton } from "@/features/ReportSheet";
+import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { api } from "@/lib/api";
+import { mediaSource } from "@/lib/media";
 import { initialsOf } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { PhotoGrid } from "@/ui/PhotoGrid";
 import { FlowScreen } from "@/ui/Screens";
+import { SecHead } from "@/ui/SecHead";
 
 const { space1, space3, space4, space12 } = tokens.spacing;
 /** Logo rond de l'en-tête : 64 px. */
@@ -27,6 +32,7 @@ export default function ProviderPage() {
   const provider = useApi(() => api.providerPublic(id), [id, status], { enabled: status === "in" });
   const reviews = useApi(() => api.providerReviews(id), [id, status], { enabled: status === "in" });
   const p = provider.data;
+  const [viewer, setViewer] = useState<number | null>(null);
   const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
   const place = p?.departments[0] ? departmentChoices.find((d) => d.code === p.departments[0])?.name : undefined;
 
@@ -67,6 +73,33 @@ export default function ProviderPage() {
         <Text variant="body" color={t.color.ink}>
           {p.description}
         </Text>
+      ) : null}
+      {/* Lecture seule : les photos que le prestataire a ajoutées à sa vitrine ; aucune photo, rien à afficher. */}
+      {p.photos.length > 0 ? (
+        <>
+          <SecHead title={proV2Labels.worksTitle} hint={proV2Labels.works(p.photos.length)} />
+          <PhotoGrid
+            testID="provider-public-photos"
+            photos={p.photos.map((photo, i) => ({
+              key: photo.id,
+              source: mediaSource(photo.url),
+              label: `Photo ${i + 1} de ${p.name}`,
+            }))}
+            onOpen={setViewer}
+          />
+          <PhotoViewer
+            photos={p.photos.map((x, i) => ({
+              id: x.id,
+              url: x.url,
+              position: i + 1,
+              width: 4,
+              height: 3,
+              plateBlurred: false,
+            }))}
+            start={viewer}
+            onClose={() => setViewer(null)}
+          />
+        </>
       ) : null}
       <VitrineView vitrine={p} reviews={reviews.data} />
       {p.instagram || p.website || p.portfolioUrl ? (

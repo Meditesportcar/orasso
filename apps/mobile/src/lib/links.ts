@@ -13,9 +13,16 @@ const INBOX_LINK = /^\/app\/boite(?:\/([0-9a-f-]{36}|demandes))?$/;
  */
 const REVIEW_LINK = /^\/app\/acces\?avis=([0-9a-f-]{36})$/;
 
+/** Récap (lot 50, notifications `event_recap_ready` et `audience_prize_won`) et passeport (`stamp_received`). */
+const RECAP_LINK = /^\/app\/recap\/([0-9a-f-]{36})$/;
+const PASSPORT_LINK = "/app/passeport";
+
 export function appLinkOf(value: unknown): string | null {
   if (typeof value !== "string") return null;
   if (APP_LINK.test(value)) return value;
+  const recap = RECAP_LINK.exec(value);
+  if (recap) return `/recap/${recap[1]}`;
+  if (value === PASSPORT_LINK) return "/mon-passeport";
   const review = REVIEW_LINK.exec(value);
   if (review) return `/acces?avis=${review[1]}`;
   const inbox = INBOX_LINK.exec(value);
