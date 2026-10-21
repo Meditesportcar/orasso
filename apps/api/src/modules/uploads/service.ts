@@ -3,7 +3,7 @@
 // message, d'incident et de rapport (jamais servies par `/api/files`). Le fichier attend d'être rattaché (une seule
 // fois, par son auteur) ; ceux jamais rattachés sont effacés après 24 h.
 import { randomUUID } from "node:crypto";
-import { privateUploadPurposes, type UploadPurpose, type UploadResult } from "@orasso/shared";
+import { type PlateRect, privateUploadPurposes, type UploadPurpose, type UploadResult } from "@orasso/shared";
 import { and, count, eq, isNull, lt, sql } from "drizzle-orm";
 import sharp from "sharp";
 
@@ -15,6 +15,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
 import { requireAnnouncementUploader } from "../communication/guards";
+import { blurPlateRegions } from "../vehicles/photos-blur";
 
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 /** Fichiers envoyés mais pas encore rattachés, par personne (bornés sous verrou). */
@@ -86,7 +87,7 @@ async function purgeExpired(tx: Tx, userId: string): Promise<string[]> {
 }
 
 export const uploadsService = {
-  async upload(v: Viewer, purpose: UploadPurpose, file: File): Promise<UploadResult> {
+  async upload(v: Viewer, purpose: UploadPurpose, file: File, plateRects?: PlateRect[]): Promise<UploadResult> {
     if (v.profile.suspendedUntil && v.profile.suspendedUntil > now()) {
       throw forbidden("Ton compte est suspendu : lecture seule.");
     }
@@ -95,7 +96,9 @@ export const uploadsService = {
     if (purpose === "announcement") await requireAnnouncementUploader(v);
     if (file.size === 0) throw validation("Fichier vide");
     if (file.size > MAX_UPLOAD_BYTES) throw new AppError(413, "payload_too_large", "Image de 15 Mo au plus");
-    const image = await toWebp(Buffer.from(await file.arrayBuffer()), purpose);
+    const webp = await toWebp(Buffer.from(await file.arrayBuffer()), purpose);
+    // Lot 57 (D28) : plaques floutées sur l'image recompressée, avant tout stockage (aucun original gardé).
+    const image = plateRects?.length ? await blurPlateRegions(webp.data, plateRects) : webp;
     const folder = FOLDER[purpose];
     const key = `${isPrivatePurpose(purpose) ? "private/" : ""}${folder}/${randomUUID()}.webp`;
     let expired: string[] = [];
