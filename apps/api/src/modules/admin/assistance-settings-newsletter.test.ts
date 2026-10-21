@@ -485,6 +485,8 @@ describe("démarrage en production", () => {
           QR_SIGNING_ACTIVE_KID: "1",
           DEV_SKIP_2FA: "",
           STRIPE_SECRET_KEY: "",
+          METEO_URL: "",
+          DEV_CLOCK: "off",
           UNSUBSCRIBE_SECRET: "",
           ...extra,
         },

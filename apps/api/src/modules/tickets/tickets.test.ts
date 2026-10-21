@@ -573,6 +573,8 @@ describe("garde de la clé Stripe", () => {
         QR_SIGNING_ACTIVE_KID: "1",
         DEV_SKIP_2FA: "",
         STRIPE_SECRET_KEY: "",
+        METEO_URL: "",
+        DEV_CLOCK: "off",
         STRIPE_WEBHOOK_SECRET: "",
         STRIPE_CONNECT_CLIENT_ID: "",
         // Lot 33 : secret des liens de désinscription, obligatoire en production.
