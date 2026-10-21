@@ -54,7 +54,7 @@ import { vehicleBriefLabel, vehicleLabel } from "../vehicles/serializers";
 import { closeConfirmNotification, withdrawAwaiting } from "./awaiting";
 
 const ACTIVE = ["pending", "accepted", "waitlisted", "offered", "awaiting_member"] as const;
-const accessLink = { label: "Ouvrir mes accès", path: "/app/acces" };
+const accessLink = { label: "Ouvrir mes accès", path: "/app/sorties" };
 
 /** Raison pour laquelle ce véhicule ne peut pas candidater (même règles que la candidature seule, § 2.1). */
 function vehicleBlock(x: VehicleWithAll, event: EventRow): string | null {

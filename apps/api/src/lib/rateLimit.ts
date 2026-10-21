@@ -32,6 +32,8 @@ export const rateRules = {
   geocode: { max: 60, windowMs: 60_000, message: "Trop de recherches d'adresse : réessaie dans une minute." },
   /** Envoi de justificatifs, logos et affiches. */
   fileUpload: { max: 30, windowMs: 3_600_000, message: "Trop d'envois de fichiers : réessaie plus tard." },
+  /** Galerie de 30 photos, avec de la marge pour remplacer les photos retirées du formulaire. */
+  mediaFileUpload: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
   /** Création d'une structure : n'importe quel utilisateur peut en créer, pas des dizaines. */
   structureCreate: { max: 5, windowMs: 86_400_000, message: "Trop de structures créées aujourd'hui." },
   /** Pointage rapide par plaques (jusqu'à 300 plaques par envoi). */

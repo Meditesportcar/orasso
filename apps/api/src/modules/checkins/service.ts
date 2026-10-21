@@ -51,6 +51,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { ed25519Verify, signing } from "../../lib/signing";
 import { type Tx, withTx } from "../../lib/tx";
+import { announceCandidatesChanged } from "../audience-prize/service";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { passportService } from "../passport/service";
@@ -357,6 +358,7 @@ function announce(after: (cb: () => unknown) => void, eventId: string, applicati
   if (!applicationIds.length) return;
   after(async () => {
     realtime.publish(`event:${eventId}:access`, "access.changed", { applicationIds });
+    announceCandidatesChanged(eventId);
     realtime.publish(`event:${eventId}:live`, "live", await checkinsService.liveCounters(eventId));
     await passportService.announce(eventId, applicationIds);
   });

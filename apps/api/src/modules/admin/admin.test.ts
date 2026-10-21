@@ -21,6 +21,7 @@ import { db, pool } from "../../db/client";
 import {
   adminAuditLog,
   emailOutbox,
+  mediaProfiles,
   notifications,
   passkey,
   profiles,
@@ -168,6 +169,24 @@ describe("droits de l'administration", () => {
 });
 
 describe("accueil", () => {
+  it("mediaToVerify compte seulement les profils actifs non vérifiés et suit la vérification", async () => {
+    const verified = await signUp("Media_Verifie");
+    const deleted = await signUp("Media_Supprime");
+    const [pending] = await db
+      .insert(mediaProfiles)
+      .values([
+        { userId: fan.id, name: "Média à vérifier" },
+        { userId: verified.id, name: "Média vérifié", pressCardVerifiedAt: new Date() },
+        { userId: deleted.id, name: "Média supprimé", deletedAt: new Date() },
+      ])
+      .returning();
+    expect((await req(admin, "GET", "/admin/overview")).json.mediaToVerify).toBe(1);
+    expect((await req(admin, "POST", `/admin/media/${pending!.id}/verify`, {})).status).toBe(200);
+    expect((await req(admin, "GET", "/admin/overview")).json.mediaToVerify).toBe(0);
+    expect((await req(admin, "POST", `/admin/media/${pending!.id}/verify`, { verified: false })).status).toBe(200);
+    expect((await req(admin, "GET", "/admin/overview")).json.mediaToVerify).toBe(1);
+  });
+
   it("compte les files à traiter", async () => {
     const ref = await seedReference();
     const [other] = await db.insert(vehicleMakes).values({ name: "Autre", slug: "autre", isOther: true }).returning();
