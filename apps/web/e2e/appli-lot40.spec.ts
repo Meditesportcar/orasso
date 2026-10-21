@@ -106,7 +106,7 @@ async function choose(page: Page, kind: Kind) {
 
 /** La barre d'onglets, le logotype, un grand titre sur une ligne ; audit des règles qui valent dans l'appli web. */
 async function checkTab(page: Page, title: string | null) {
-  await expect(page.getByRole("tab")).toHaveCount(5, { timeout: 30_000 });
+  await expect(page.getByRole("tablist").last().getByRole("tab")).toHaveCount(5, { timeout: 30_000 });
   await expect(page.getByTestId("topbar-logo").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Boîte", exact: true }).first()).toBeVisible();
   if (title) {
@@ -221,7 +221,8 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
     await page.waitForURL(/\/boite$/, { timeout: 30_000 });
     await expect(page.getByTestId("inbox-journal")).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(0);
+    // Pas de barre d'onglets ici : seuls les deux segments de la Boîte (Messages, Demandes) sont des onglets.
+    await expect(page.getByRole("tab")).toHaveCount(2);
     await shot(page, `boite-${theme}`);
     // L'ancien onglet Accès mène à Sorties.
     await page.goto("/acces");

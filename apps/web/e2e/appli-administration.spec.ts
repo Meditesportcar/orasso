@@ -225,7 +225,7 @@ test("super admin : structure à vérifier, signalement, sanction, 2FA d'un comp
   await page.getByTestId("orga-confirm").click();
   await expect(page.getByTestId("report-sanction")).toContainText("Levée le", { timeout: 20_000 });
   await go(page, "/sanctions");
-  await page.getByRole("button", { name: "Toutes" }).click();
+  await page.getByRole("tab", { name: "Toutes" }).click();
   const sanction = page.getByTestId("sanction").filter({ hasText: "Suspension de 7 jours" }).first();
   await expect(sanction).toBeVisible({ timeout: 30_000 });
   await shot("09-sanctions-beton");
@@ -535,7 +535,7 @@ test("les mêmes écrans dans le thème Sable (contrôle du système de design)"
   ];
   for (const [path, testId, name] of screens) {
     await go(b.page, path);
-    if (path === "/sanctions") await b.page.getByRole("button", { name: "Toutes" }).click();
+    if (path === "/sanctions") await b.page.getByRole("tab", { name: "Toutes" }).click();
     await expect(b.page.getByTestId(testId).first()).toBeVisible({ timeout: 30_000 });
     await shot(name);
   }

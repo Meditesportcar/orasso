@@ -141,7 +141,7 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await expect(page.getByRole("heading", { name: "Sa plaque, floutée" })).toBeVisible();
     await expect(page.getByText("Pas de repérage automatique ici").first()).toBeVisible();
     // Relecture : sans détection, pas de mode « Automatique » ; une photo sans cadre ne part pas sans confirmation.
-    await expect(page.getByRole("button", { name: "Automatique" })).toHaveCount(0);
+    await expect(page.getByText("Automatique", { exact: true })).toHaveCount(0);
     await expect(page.getByTestId("plate-none")).toBeVisible();
     await page.getByTestId("vehicle-plate").fill(randomPlate());
     await next(page);

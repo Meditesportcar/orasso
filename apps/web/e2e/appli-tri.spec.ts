@@ -194,7 +194,7 @@ test("tri par glissement : 5 décisions, annulation, liste d'attente, prestatair
   await closeSheet(page);
 
   // --- Liste d'attente : réordonnée (Descendre), puis Retenir ---------------------------------------------------
-  await page.getByRole("button", { name: "Liste d'attente", exact: true }).click();
+  await page.getByRole("tab", { name: "Liste d'attente", exact: true }).click();
   await expect(page.getByTestId("waitlist-row").first()).toBeVisible({ timeout: 20_000 });
   const order = async () =>
     (
@@ -223,7 +223,7 @@ test("tri par glissement : 5 décisions, annulation, liste d'attente, prestatair
     .toBe(countBefore + 1);
 
   // --- Prestataires : une décision ---------------------------------------------------------------------------------
-  await page.getByRole("button", { name: /^Prestataires/ }).click();
+  await page.getByRole("tab", { name: /^Prestataires/ }).click();
   await expect(page.getByTestId("triage-vehicle")).toBeVisible({ timeout: 20_000 });
   await shot("08-prestataire-beton");
   const providerTitle = (await page.getByTestId("triage-vehicle").textContent()) ?? "";
@@ -324,7 +324,7 @@ test("tri : thème Sable", async ({ browser }) => {
   await expect(page.getByTestId("triage-full-title")).toBeVisible();
   await page.screenshot({ path: `${DIR}/31-fiche-sable.png` });
   await closeSheet(page);
-  await page.getByRole("button", { name: "Liste d'attente", exact: true }).click();
+  await page.getByRole("tab", { name: "Liste d'attente", exact: true }).click();
   await expect(page.getByTestId("waitlist")).toBeVisible({ timeout: 20_000 });
   await page.screenshot({ path: `${DIR}/32-attente-sable.png` });
   await page.getByRole("button", { name: "En liste", exact: true }).click();
