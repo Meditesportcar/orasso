@@ -1,13 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { accountQr, apiCall, createPublishedPro, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Parcours 6 (docs/02), côté appli : le pro lit le QR de compte du passionné dans la casquette Pro (version web de
 // recette de l'appli, sans caméra : la charge utile est saisie dans le champ « Recette ») → pseudo + grade + remise,
 // rien d'autre → la remise est comptée dans les statistiques. Aucun bouton ni lien de paiement dans la casquette.
 // Lancer avec APP_URL=http://localhost:8141 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-14-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-14-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 async function shot(page: Page, name: string) {

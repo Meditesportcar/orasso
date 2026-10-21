@@ -3,6 +3,7 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { apiCall, login, MOBILE, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 import { rotatingCode, sql } from "./helpers/lot48";
+import { RELAIS } from "./relais";
 
 // Lot 48, côté appli (version web de recette) : jour J v2. Le QR tournant (`s-qr`) dans ses quatre variantes (zone d'un
 // pilote du Salon, emplacement B2 de Sofia, badge presse de Léo, billet du public) et le passage d'un créneau de 20 s avec
@@ -11,7 +12,7 @@ import { rotatingCode, sql } from "./helpers/lot48";
 // « GA-662-KS » → OK avec la zone. Deux thèmes, captures à 390 px, audit des règles du système de design.
 // Lancer avec APP_URL=http://localhost:8331 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-48-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-48-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

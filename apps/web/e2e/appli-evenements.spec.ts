@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, resuspendSeedStructure, SEED_PASSWORD, samplePhoto } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Appli dans le navigateur (lot 35b, décision D20 : tout se gère depuis l'appli). Deux parcours de la fiche :
 // 1. créer un événement d'un jour de bout en bout depuis l'appli (brouillon gardé après une sortie), le publier, le
@@ -11,7 +12,7 @@ import { apiCall, login, resuspendSeedStructure, SEED_PASSWORD, samplePhoto } fr
 // n'a pas accès à l'assistant. Contrôle des règles du système de design sur chaque capture (390 px).
 // Lancer avec APP_URL=http://localhost:<port de Metro> (EXPO_PUBLIC_API_URL, EXPO_PUBLIC_SITE_URL et CORS_ORIGINS posés).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-35b-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-35b-captures`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

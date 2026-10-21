@@ -1,6 +1,6 @@
 # Avancement
 
-À lire au début de chaque session, à mettre à jour à la fin. Réécrit le 19/10/2026 au lot 38 (ouverture du chantier « Intégration de la DA v2 ») : l'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\DELL\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+À lire au début de chaque session, à mettre à jour à la fin. Réécrit le 19/10/2026 au lot 38 (ouverture du chantier « Intégration de la DA v2 ») : l'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
 
 ## État au 20/10/2026 : chantier DA v2 en pause (changement de PC)
 
@@ -145,7 +145,7 @@ bash deploy/deploy.sh logs api   # journaux (api, web ou db)
 bash deploy/deploy.sh rollback   # version précédente
 ```
 
-Seul ce qui est commité part. Migrations appliquées au démarrage de l'API ; seed de démonstration lancé à chaque déploiement si `db:seed` existe. Le VPS est partagé avec d'autres sites en production : lire `deploy/README.md` avant d'y toucher (nginx, secrets, sauvegarde, restauration). Identifiants du site : `C:\Users\DELL\.claude\relais\orasso\secrets-dev.txt`.
+Seul ce qui est commité part. Migrations appliquées au démarrage de l'API ; seed de démonstration lancé à chaque déploiement si `db:seed` existe. Le VPS est partagé avec d'autres sites en production : lire `deploy/README.md` avant d'y toucher (nginx, secrets, sauvegarde, restauration). Identifiants du site : `C:\Users\Dams\.claude\relais\orasso\secrets-dev.txt`.
 
 
 

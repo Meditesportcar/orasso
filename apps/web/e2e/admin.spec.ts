@@ -15,6 +15,7 @@ import {
   simulateSettle,
   unique,
 } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Administration (lot 33) sur le site, critère de fin : accueil avec compteurs non nuls ; fiche d'un utilisateur →
 // réinitialisation de la double authentification tracée ; base véhicules : un « Autre » rattaché à une marque créée,
@@ -24,7 +25,7 @@ import {
 // le modérateur ne voit que la file des signalements. Avec CAPTURES=1 : écrans dans les deux thèmes (l'administration
 // suit le thème de l'utilisateur), bureau et 390 px, avec le contrôle du système de design.
 // Prérequis : site et API lancés (DEV_SKIP_2FA=true, tâches pg-boss actives) sur la base locale avec le seed.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-33-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-33-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const MAIL_DIR = resolve(import.meta.dirname, "../../../", process.env.DATA_DIR ?? ".data", "mail");
 const VIEWS = [

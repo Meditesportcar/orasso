@@ -14,6 +14,7 @@ import {
   simulateSettle,
   unique,
 } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Après l'événement et badge de structure (lot 27) sur le site, critère de fin : un événement réglé (J+2) → bilan
 // (présents, absents, taux), note interne écrite au tri, remerciement envoyé aux présents (une seule fois) avec le
@@ -23,7 +24,7 @@ import {
 // Les rappels J−30 / J−7 / J−1, la suspension, le rafraîchissement du bilan à J+8 et la levée sont vérifiés à l'heure
 // simulée par les tests de l'API (`after-event.test.ts`).
 // Prérequis : site et API lancés (DEV_SKIP_2FA=true comme le reste de la recette) sur la base locale avec le seed.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-27-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-27-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const VIEWS = [
   { id: "bureau", width: 1280, height: 900 },

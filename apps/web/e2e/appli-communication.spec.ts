@@ -1,12 +1,13 @@
 import { mkdirSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Appli dans le navigateur (lot 20) : fil de l'événement sur la page événement, bouton « Discussion » du mode staff
 // (conversation du staff de l'événement, en Sable). Lancer avec APP_URL=http://localhost:<relais> (Metro derrière
 // apps/mobile/scripts/web-isolated.mjs, EXPO_PUBLIC_API_URL et CORS_ORIGINS posés).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-20-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-20-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 test("appli : fil de l'événement et discussion du staff", async ({ browser }) => {

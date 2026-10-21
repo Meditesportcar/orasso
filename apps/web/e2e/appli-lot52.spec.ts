@@ -5,6 +5,7 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, MOBILE, SEED_PASSWORD } from "./helpers";
 import { auditApp } from "./helpers/lot43";
 import { sql } from "./helpers/lot48";
+import { RELAIS } from "./relais";
 
 // Lot 52, côté appli (version web de recette) : la casquette Organisateur en DA v2. Cinq onglets : Événements (créer,
 // brouillon qui dit ce qui manque, anciens derrière « … », duplication et invitation expliquée), Tri (grande photo, note
@@ -15,7 +16,7 @@ import { sql } from "./helpers/lot48";
 // Lancer avec APP_URL=http://localhost:8371 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée. Le
 // dernier test avance l'horloge simulée (DEV_CLOCK=on) : relancer `pnpm db:seed --reset` ensuite.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-52-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-52-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 20_000 });
 

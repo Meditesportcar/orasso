@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { apiCall, login, loginInBrowser, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Recherche de premier niveau et Explorer (lot 29) sur le site : recherche « Supra » (véhicules et propriétaires),
 // « Rivesaltes » (événement), tri par affinités (l'événement d'une structure suivie arrive en tête), filtres et
@@ -9,7 +10,7 @@ import { apiCall, login, loginInBrowser, signUpApi, unique } from "./helpers";
 // dans les deux thèmes, au bureau et sur téléphone, avec le contrôle automatique du système de design.
 // Prérequis : site et API lancés sur la base locale avec le seed (dont `scripts/seed/explorer.ts`).
 // Les crews (lot 19) : « drift » → crew reste à vérifier à la seconde passe.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-29-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-29-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const VIEWS = [
   { id: "bureau", width: 1280, height: 900 },

@@ -9,6 +9,7 @@ import {
   SIGNUP_EXTRAS,
   samplePhoto,
 } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Appli dans le navigateur (lot 35a, décision D20) : Équipe, structure, bannissements, modèles, export et notes. Parcours
 // de la fiche : une demande de staff arrive, l'organisateur l'accepte depuis l'appli, change le rôle de la personne, la
@@ -17,7 +18,7 @@ import {
 // Lancer avec APP_URL=http://localhost:<relais> (Metro derrière apps/mobile/scripts/web-isolated.mjs, EXPO_PUBLIC_API_URL,
 // EXPO_PUBLIC_SITE_URL et CORS_ORIGINS posés). Captures à 390 px dans les deux thèmes.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-35a-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-35a-captures`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

@@ -1,12 +1,13 @@
 import { mkdirSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Staff côté site (lot 24) : un passionné demande à devenir staff de MéditeSportCar depuis la page de la structure,
 // l'organisateur l'accepte dans /orga/<structure>/staff en lui donnant le rôle boutique, puis voit les présences par
 // événement et relance ceux qui n'ont pas répondu ; l'invitation de l'organisateur arrive dans Boîte > Demandes.
 // Lancer avec le site et l'API sur la base locale du seed (DEV_SKIP_2FA=true pour l'organisateur).
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-24-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-24-captures/site`;
 
 test("devenir staff : demande, acceptation avec le rôle boutique, présences et relance, invitation", async ({
   browser,

@@ -1,13 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Accueil complet (lot 30) dans l'appli, version web de recette (`expo start --web`), avec Kenji (département 66) :
 // blocs, carte « Sponsorisé », réorganisation enregistrée et relue après rechargement, captures Béton / Sable.
 // Prérequis : seed du lot 30, API avec `OVERPASS_URL=off`, `FUEL_API_URL=off`, `WEATHER_PROVIDER=off`.
 // Lancer avec APP_URL=http://localhost:<port de Metro> (CORS_ORIGINS de l'API = même origine).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-30-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-30-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 async function open(browser: import("@playwright/test").Browser, theme: "beton" | "sable") {

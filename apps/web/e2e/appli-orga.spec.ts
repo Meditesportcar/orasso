@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD, SIGNUP_EXTRAS } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Appli dans le navigateur (lot 22) : casquette Organisateur. Damien bascule vers MéditeSportCar : le Direct du « Salon
 // Argelès » monte en direct quand Julie (mode staff, autre onglet) scanne un QR ; page événement (Incertain → bandeau et
@@ -8,7 +9,7 @@ import { apiCall, login, SEED_PASSWORD, SIGNUP_EXTRAS } from "./helpers";
 // Lancer avec APP_URL=http://localhost:<relais> (Metro derrière apps/mobile/scripts/web-isolated.mjs, EXPO_PUBLIC_API_URL,
 // EXPO_PUBLIC_SITE_URL et CORS_ORIGINS posés). Captures dans les deux thèmes.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-22-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-22-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

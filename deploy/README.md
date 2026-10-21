@@ -14,7 +14,7 @@ Le VPS (`claude@51.210.242.118`) est **partagé avec d'autres sites en productio
 | Versions | `/opt/orasso/releases/<commit>` (3 dernières), `/opt/orasso/state/current` et `previous` |
 | nginx | `/etc/nginx/sites-available/dev.orasso.fr` (lien dans `sites-enabled`) ; `/` → site, `/api/` et `/api/ws` → API |
 | Certificat | Let's Encrypt `dev.orasso.fr` (certbot webroot `/var/www/html`, renouvellement automatique, reload nginx) |
-| Mot de passe du site | `/etc/nginx/orasso-dev.htpasswd` ; identifiants dans `C:\Users\DELL\.claude\relais\orasso\secrets-dev.txt` (hors dépôt) |
+| Mot de passe du site | `/etc/nginx/orasso-dev.htpasswd` ; identifiants dans `C:\Users\Dams\.claude\relais\orasso\secrets-dev.txt` (hors dépôt) |
 | Sauvegarde | `/usr/local/sbin/orasso-backup-db.sh`, timer `orasso-backup` à 01:15 UTC, dumps dans `/var/backups/orasso` (7 jours) |
 
 Le site demande un mot de passe (version de test, non indexée). `/api/` n'en demande pas : l'appli mobile l'appelle directement et l'API a sa propre authentification.

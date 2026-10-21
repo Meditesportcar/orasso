@@ -2,12 +2,13 @@ import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { createEvent, login, MOBILE, setTheme, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 44, côté site : les trois cartes (liste des événements, liste des pros, page d'un événement) au style Orasso,
 // qui suivent le thème (Béton, Sable) ; glyphes Archivo étroit servis par le site ; repli raster quand OpenFreeMap ne
 // répond pas (source coupée par Playwright). Captures à 390 px dans le relais.
 // Prérequis : API et site lancés sur la base seedée ; accès à tiles.openfreemap.org.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-44-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-44-captures/site`;
 const THEMES = ["beton", "sable"] as const;
 
 /** La carte est rendue (canvas MapLibre) avec le style attendu. */

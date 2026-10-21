@@ -2,11 +2,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { apiCall, login, randomPlate, SEED_PASSWORD, samplePhoto, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Captures du lot 13 (site public, structure, création d'événement, express, administration) dans les deux thèmes,
 // au bureau et sur téléphone (390 px), avec le contrôle automatique du système de design :
 // `CAPTURES=1 pnpm --filter @orasso/web exec playwright test captures-lot13`.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-13-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-13-captures`;
 test.skip(!process.env.CAPTURES, "Captures : lancer avec CAPTURES=1");
 
 const API = `http://localhost:${process.env.API_PORT ?? 3001}`;

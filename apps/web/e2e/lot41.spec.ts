@@ -2,12 +2,13 @@ import { mkdirSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { apiCall, login, MOBILE, SEED_PASSWORD, setTheme, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 41, côté site : /inscription alignée sur le flux d'arrivée de l'appli — six profils, carte de France des
 // départements (toucher le 66 puis le 11 → puce « 66 · principal » et « +1 »), crédit CC BY 4.0 sous la carte, prénom
 // et nom obligatoires et privés. Refus sans prénom (400 et message), compte créé avec profil, départements et nom.
 // Deux thèmes, audit des règles du système, captures à 390 px. Prérequis : API et site lancés.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-41-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-41-captures/site`;
 mkdirSync(DIR, { recursive: true });
 
 for (const theme of ["beton", "sable"] as const) {

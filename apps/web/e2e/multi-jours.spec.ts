@@ -2,13 +2,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { addVehicleApi, apiCall, login, randomPlate, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Événements sur plusieurs jours (lot 26) sur le site : l'organisateur crée un événement de trois jours dans
 // l'assistant (« Plusieurs jours », horaires, places d'un jour, accès au choix) ; la page publique montre les jours ;
 // un passionné candidate pour le jour 2 (choix du jour), sa carte Accès porte le jour ; le tri a la colonne et le filtre
 // « Jour » ; le jour J a son sélecteur de jour. Avec CAPTURES=1 : captures Béton / Sable, bureau et 390 px, audit du
 // système de design. Prérequis : site et API lancés (DEV_SKIP_2FA=true) sur la base avec le seed.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-26-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-26-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const VIEWS = [
   { id: "bureau", width: 1280, height: 900 },

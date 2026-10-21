@@ -13,6 +13,7 @@ import {
   signUpApi,
   unique,
 } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 35c, parité de l'appli (D20), version web de recette : billetterie de l'organisateur (billet gratuit, billet
 // payant, compte Stripe simulé côté API), fiche pro (modification, remise, publication, photo, partenaire, SIRET,
@@ -22,7 +23,7 @@ import {
 // l'API lancée avec des variables Stripe factices (jamais de vraie clé) : STRIPE_SECRET_KEY=sk_test_recette…,
 // STRIPE_WEBHOOK_SECRET=whsec_recette…, STRIPE_CONNECT_CLIENT_ID=ca_recette…, GEOCODER_URL=off.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-35c-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-35c-captures`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 // Une action qui n'aboutit pas échoue en 30 s au lieu d'attendre la fin du test.
 test.use({ actionTimeout: 30_000, navigationTimeout: 60_000 });

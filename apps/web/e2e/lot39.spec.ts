@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { MOBILE, setTheme } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 39 : le O vivant et le fond animé « battle ». Recette /_ds (section « olive ») dans les deux thèmes avec l'audit :
 // les huit variantes, chargement → garée, onglet central garé / sorti, une meute du fond ; réduction des animations :
@@ -9,7 +10,7 @@ import { MOBILE, setTheme } from "./helpers";
 // de 3 s puis l'appli, fondu de 120 ms avec ?reduce=1, aucun avertissement Reanimated, captures de /_ds.
 // Prérequis : API et site lancés (base seedée inutile pour /_ds).
 
-const ROOT = process.env.LOT39_CAPTURES ?? "C:/Users/DELL/.claude/relais/orasso/lot-39-captures";
+const ROOT = process.env.LOT39_CAPTURES ?? `${RELAIS}/lot-39-captures`;
 const SITE = `${ROOT}/site`;
 const APPLI = `${ROOT}/appli`;
 mkdirSync(SITE, { recursive: true });

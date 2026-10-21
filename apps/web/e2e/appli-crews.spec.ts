@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { addVehicleApi, apiCall, createEvent, login, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Crews (lot 19) dans l'appli en version web de recette (`expo start --web` derrière
 // `apps/mobile/scripts/web-isolated.mjs`) : fiche du crew (chef), Explorer « Personnes et crews », en-tête du Garage,
@@ -8,7 +9,7 @@ import { addVehicleApi, apiCall, createEvent, login, randomPlate, SEED_PASSWORD,
 // Boîte > Demandes (venue à confirmer, demande reçue par le chef). Deux thèmes à 390 px.
 // Lancer avec APP_URL=http://localhost:<relais> (CORS_ORIGINS de l'API = même origine).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-19-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-19-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 async function shot(page: Page, name: string) {

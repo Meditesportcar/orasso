@@ -3,6 +3,7 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import { accountQr, apiCall, login, MOBILE, SEED_PASSWORD } from "./helpers";
 import { auditApp } from "./helpers/lot43";
 import { sql } from "./helpers/lot48";
+import { RELAIS } from "./relais";
 
 // Lot 54, côté appli (version web de recette) : les casquettes Pro et Prestataire en DA v2.
 // Pro (garage@orasso.local, « Yann » du brief) : Ma fiche en grille (activités en tuiles, remises par grade, réalisations,
@@ -15,7 +16,7 @@ import { sql } from "./helpers/lot48";
 // Lancer avec APP_URL=http://localhost:8391 (relais `apps/mobile/scripts/web-isolated.mjs` devant `expo start --web`), API
 // seedée. Rejouer une spec seule sur seed neuf (`pnpm db:seed --reset`) : elle écrit des candidatures de Sofia.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-54-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-54-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 20_000 });
 

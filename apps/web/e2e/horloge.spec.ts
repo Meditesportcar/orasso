@@ -2,12 +2,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Horloge simulée (lot 34a), page /admin/horloge : le super admin avance d'un jour puis d'une heure, le bandeau « Horloge
 // simulée » apparaît sur tout le site, un jalon d'événement est proposé, puis « Revenir à l'heure réelle » éteint tout.
 // Prérequis : site et API lancés avec DEV_CLOCK=on (et DEV_SKIP_2FA=true) sur la base locale avec le seed.
 // Avec CAPTURES=1 : captures de la page, dans les deux thèmes, au bureau et à 390 px, avec le contrôle du design.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-34a-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-34a-captures`;
 const ADMIN = "damien@orasso.local";
 
 test("horloge simulée : avancer, bandeau partout, jalon d'événement, retour à l'heure réelle", async ({ page }) => {
