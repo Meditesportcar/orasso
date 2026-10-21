@@ -10,7 +10,7 @@ export function SecHead({ title, hint }: { title: string; hint?: string }) {
   const { t } = useTheme();
   return (
     <View style={styles.row}>
-      <Text variant="title" color={t.color.ink} accessibilityRole="header" style={styles.title}>
+      <Text variant="posterM" color={t.color.ink} accessibilityRole="header" style={styles.title}>
         {title}
       </Text>
       {hint ? (
@@ -30,6 +30,7 @@ const styles = StyleSheet.create({
     gap: space2,
     marginTop: space2,
   },
-  title: { flexShrink: 1 },
+  // Lot C1 : `.sec-h h2` de l’artefact, Archivo 125 % 900 italique 16 px.
+  title: { flexShrink: 1, fontSize: 16, lineHeight: 18, letterSpacing: -0.16 },
   hint: { flexShrink: 1, textAlign: "right" },
 });

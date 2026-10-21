@@ -4,6 +4,7 @@ export * from "../france";
 export { DepartmentChecklist, type DepartmentChecklistProps } from "../france/DepartmentChecklistWeb";
 export { FranceMap, FranceMapCredit, type FranceMapProps } from "../france/FranceMapWeb";
 export * from "../icons";
+export { initialsOf } from "../initials";
 export * from "../labels";
 export * from "../map";
 export {

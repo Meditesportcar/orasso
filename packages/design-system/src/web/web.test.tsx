@@ -258,7 +258,9 @@ describe("rendu serveur des composants", () => {
     expect(home).toContain("o-logo");
     const flow = html(<AppBar kind="flow" title="Scan accueil" counter="62 / 116" />);
     expect(flow).toContain('aria-label="Fermer"');
-    expect(flow).toContain("o-monogram");
+    // Lot C1 : la `.flowbar` de l'artefact (titre et ✕, sans monogramme ni brossage).
+    expect(flow).toContain("o-appbar--flow");
+    expect(flow).not.toContain("o-brush");
     const tabs = html(<TabBar set="fan" active="garage" />);
     expect(tabs).toContain('aria-current="page"');
     expect(tabs.match(/is-center/g)?.length).toBe(1);
@@ -346,7 +348,10 @@ describe("rendu serveur des composants", () => {
     expect(ground).toContain("o-anim-ambient-breath");
     expect(ground).toContain("o-grain--beton");
     expect(ground).toContain("o-grain--sable");
-    expect(html(<Ground>x</Ground>)).not.toContain("o-anim-ambient");
+    // Lot C1 : le fond « battle » de l'artefact par défaut ; immobile s'il est `still`.
+    expect(html(<Ground>x</Ground>)).toContain("o-ground--battle");
+    expect(html(<Ground still>x</Ground>)).not.toContain("o-anim-ambient");
+    expect(html(<Ground variant="screen">x</Ground>)).not.toContain("o-anim-ambient");
     expect(html(<Logo />)).toContain("o-brand-img--dark");
     expect(html(<Monogram tone="light" />)).not.toContain("o-brand-img--dark");
     expect(html(<Cover />)).toContain("Orasso");
