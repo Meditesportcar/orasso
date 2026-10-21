@@ -2,6 +2,8 @@
 
 export const messagingLabels = {
   inbox: "Boîte",
+  /** Segment « Tout » de la Boîte (le Journal). */
+  all: "Tout",
   messages: "Messages",
   requests: "Demandes",
   noConversations: "Aucune conversation pour l'instant. Écris à un ami depuis son profil, ou contacte un organisateur.",

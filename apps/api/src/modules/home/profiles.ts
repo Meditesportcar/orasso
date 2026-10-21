@@ -42,7 +42,7 @@ import { now } from "../../lib/deps";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { arrivalsOf } from "../events/arrivals";
-import { eventPosterUrl } from "../events/card";
+import { eventPhotoUrl, eventPosterUrl } from "../events/card";
 import { missionsService } from "../providers/missions";
 import { ticketsService } from "../tickets/service";
 
@@ -55,6 +55,7 @@ const PRO_EVENTS_RADIUS_KM = 60;
 type EventExtras = {
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
+  photoUrl: string | null;
   arrivals: ReturnType<typeof arrivalsOf>;
   location: HomeLocation;
 };
@@ -72,6 +73,7 @@ export async function eventExtras(eventIds: readonly string[]): Promise<Map<stri
     out.set(e.id, {
       organizer: { name: s.name, logoUrl: storage.url(s.logoKey), verified: s.verification === "verified" },
       posterUrl: eventPosterUrl(e),
+      photoUrl: eventPhotoUrl(e),
       arrivals: arrivalsOf(e),
       location: { lat: e.lat, lng: e.lng, addressLine: e.addressLine, city: e.city },
     });
@@ -88,6 +90,7 @@ export async function enrichNextAccess(app: MyApplication | null): Promise<HomeN
     arrival: extra?.arrivals.exhibitors ?? app.arrival ?? null,
     organizer: extra?.organizer ?? null,
     posterUrl: extra?.posterUrl ?? null,
+    photoUrl: extra?.photoUrl ?? null,
     location: extra?.location ?? null,
   };
 }
@@ -115,6 +118,7 @@ export async function nextTicketOf(v: Viewer): Promise<HomeNextTicket | null> {
     arrival,
     organizer: extra?.organizer ?? null,
     posterUrl: extra?.posterUrl ?? null,
+    photoUrl: extra?.photoUrl ?? null,
     location: extra?.location ?? null,
   };
 }
@@ -219,7 +223,8 @@ export async function proBlock(v: Viewer): Promise<HomePro | null> {
         startsAt: e.startsAt.toISOString(),
         city: e.city,
         posterUrl: eventPosterUrl(e),
-      } satisfies Pick<EventCard, "id" | "slug" | "title" | "startsAt" | "city" | "posterUrl">,
+        photoUrl: eventPhotoUrl(e),
+      } satisfies Pick<EventCard, "id" | "slug" | "title" | "startsAt" | "city" | "posterUrl" | "photoUrl">,
       clientsGoing: goingBy.get(e.id) ?? 0,
     })),
     fansNearby: fans[0]?.n ?? 0,
@@ -269,6 +274,7 @@ export async function providerBlock(v: Viewer): Promise<HomeProvider | null> {
       organizerMessage: best.a.spotNote,
       organizer: extra?.organizer ?? null,
       posterUrl: extra?.posterUrl ?? null,
+      photoUrl: extra?.photoUrl ?? null,
       location: extra?.location ?? null,
     };
   }
@@ -338,6 +344,7 @@ export async function mediaBlock(v: Viewer): Promise<HomeMedia | null> {
       briefing,
       organizer: extra?.organizer ?? null,
       posterUrl: extra?.posterUrl ?? null,
+      photoUrl: extra?.photoUrl ?? null,
       location: extra?.location ?? null,
     };
   }
