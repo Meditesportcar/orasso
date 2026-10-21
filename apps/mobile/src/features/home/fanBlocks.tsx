@@ -1,0 +1,326 @@
+// Blocs de l'Accueil du passionnÃ© (lot C2a, artefact DA v2 `s-home`), reproduits d'aprÃ¨s le HTML et le CSS de
+// l'artefact : intitulÃ© de section `.sec-h`, carte mÃ©tÃ©o `.wx`, mini-tickets `.stat-strip` / `.mini-t`, incitation
+// `.nudge`, rail d'affiches `.rail` / `.mp`. Les cartes prennent `--card` (= jeton `surface`), rayon 16 Ã  18.
+import { Icon, type IconName, Photo, Text, tokens, useTheme, weatherIcons } from "@orasso/design-system/native";
+import { type EventCard, homeProfileLabels, type MyWeather, weatherCodeLabels } from "@orasso/shared";
+import type { ReactNode } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+
+import { temperatureRange } from "@/lib/weather";
+
+const { space2, space3, space4 } = tokens.spacing;
+
+/** `.greet` : Ã©tiquette du jour, Â« Salut Kenji Â» en affiche 32 px, et l'aide au glissement entre onglets Ã  droite. */
+export function Greet({ line, name }: { line: string; name: string }) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <View style={styles.greet} testID="home-greeting">
+      <View style={styles.fill}>
+        <Text variant="label" color={c.inkMuted}>
+          {line}
+        </Text>
+        <Text variant="posterXl" color={c.ink} accessibilityRole="header" style={styles.greetTitle}>
+          {homeProfileLabels.greeting(name)}
+        </Text>
+      </View>
+      <View accessibilityLabel="Glisse Ã  gauche ou Ã  droite pour changer d'onglet" style={styles.swipe}>
+        <Icon name="back" size={14} color={c.inkMuted} />
+        <Icon name="next" size={14} color={c.inkMuted} />
+      </View>
+    </View>
+  );
+}
+
+/** `.sec-h` : titre italique large 16 px, lien moutarde Â« Tout voir â€º Â» Ã  droite. */
+export function SecH({
+  title,
+  link,
+  onLink,
+  testID,
+}: {
+  title: string;
+  link?: string;
+  onLink?: () => void;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <View style={styles.secH} testID={testID}>
+      <Text variant="posterM" color={c.ink} accessibilityRole="header" style={styles.secTitle}>
+        {title}
+      </Text>
+      {link && onLink ? (
+        <Pressable onPress={onLink} accessibilityRole="link" style={styles.secLink} hitSlop={10}>
+          <Text variant="bodyStrong" color={c.accentText} style={styles.secLinkText}>
+            {link}
+          </Text>
+          <Icon name="next" size={14} color={c.accentText} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+/** `.wx` : pastille d'icÃ´ne 64 px sur `--accent-soft`, lieu et jour en gras, grand chiffre, pied en pointillÃ©s. */
+export function WeatherCard({
+  weather,
+  place,
+  when,
+}: {
+  weather: MyWeather;
+  place: string | null;
+  when: string | null;
+}) {
+  const { t, theme } = useTheme();
+  const c = t.color;
+  const s = weather.summary;
+  // `--accent-soft` de l'artefact : moutarde Ã  16 % (BÃ©ton) ou 26 % (Sable).
+  const accentSoft = `${c.accent}${theme === "sable" ? "42" : "29"}`;
+  const label = weatherCodeLabels[s.code];
+  const title = weather.kind === "event" ? "MÃ©tÃ©o prÃ©vue sur place le jour J" : "MÃ©tÃ©o du jour";
+  const line = [place, when].filter(Boolean).join(", ");
+  return (
+    <View
+      style={[styles.card, styles.wx, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
+      accessible
+      accessibilityLabel={`${title} : ${line ? `${line}, ` : ""}${label}, ${temperatureRange(s)}`}
+      testID="home-weather"
+    >
+      <View style={[styles.wxIcon, { backgroundColor: accentSoft }]}>
+        <Icon name={weatherIcons[s.code]} size={34} color={c.accentText} />
+      </View>
+      <View style={styles.fill}>
+        <Text variant="label" color={c.inkMuted}>
+          {title}
+        </Text>
+        {line ? (
+          <Text variant="bodyStrong" color={c.ink} style={styles.wxTitle}>
+            {line}
+          </Text>
+        ) : null}
+        <View style={styles.wxBig}>
+          <Text variant="numberNarrow" color={c.ink} style={styles.wxNum}>
+            {`${Math.round(s.tempMax)}Â°`}
+          </Text>
+          <Text variant="caption" color={c.inkMuted} style={styles.fill}>
+            {label}
+          </Text>
+        </View>
+      </View>
+      <View style={[styles.wxFoot, { borderTopColor: c.line }]}>
+        <View style={styles.wxFootItem}>
+          <Icon name="weatherWind" size={16} color={c.inkMuted} />
+          <Text variant="caption" color={c.inkMuted}>{`Vent ${Math.round(s.windMaxKmh)} km/h`}</Text>
+        </View>
+        {s.precipitationProbability !== null ? (
+          <View style={styles.wxFootItem}>
+            <Icon name="weatherRain" size={16} color={c.inkMuted} />
+            <Text variant="caption" color={c.inkMuted}>{`Pluie ${Math.round(s.precipitationProbability)} %`}</Text>
+          </View>
+        ) : null}
+        <Text variant="caption" color={c.inkMuted}>
+          {weather.attribution}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/** `.mini-t` : petit ticket (Ã©tiquette, titre italique 13 px, une ligne 12 px). */
+export function MiniTicket({
+  tag,
+  title,
+  caption,
+  onPress,
+  testID,
+}: {
+  tag: ReactNode;
+  title: string;
+  caption?: string;
+  onPress?: () => void;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      testID={testID}
+      style={[styles.mini, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
+    >
+      {tag}
+      <Text variant="posterS" color={c.ink} style={styles.miniTitle}>
+        {title}
+      </Text>
+      {caption ? (
+        <Text variant="caption" color={c.inkMuted} style={styles.miniCap}>
+          {caption}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+/** `.stat-strip` : deux colonnes Ã©gales. */
+export function MiniStrip({ children }: { children: ReactNode }) {
+  return <View style={styles.strip}>{children}</View>;
+}
+
+/** `.nudge` : carte d'incitation, une pastille ou des tampons Ã  gauche ou Ã  droite, chevron. */
+export function Nudge({
+  label,
+  text,
+  caption,
+  icon,
+  trailing,
+  onPress,
+  testID,
+}: {
+  label: string;
+  text: string;
+  caption?: string;
+  icon?: IconName;
+  trailing?: ReactNode;
+  onPress: () => void;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label} : ${text}`}
+      testID={testID}
+      style={[styles.nudge, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
+    >
+      {icon ? (
+        <View style={[styles.crMini, { backgroundColor: c.ink }]}>
+          <Icon name={icon} size={22} color={c.accent} />
+        </View>
+      ) : null}
+      <View style={styles.fill}>
+        <Text variant="label" color={c.inkMuted}>
+          {label}
+        </Text>
+        <Text variant="bodyStrong" color={c.ink} style={styles.nudgeText}>
+          {text}
+        </Text>
+        {caption ? (
+          <Text variant="caption" color={c.inkMuted}>
+            {caption}
+          </Text>
+        ) : null}
+      </View>
+      {trailing ?? <Icon name="next" size={20} color={c.ink} />}
+    </Pressable>
+  );
+}
+
+const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "Europe/Paris",
+});
+
+/** `.rail` d'affiches `.mp` (150 Ã— 188, corps : titre italique, date Â· distance). */
+export function PosterRail({
+  events,
+  onOpen,
+}: {
+  events: (EventCard & { distanceKm?: number | null })[];
+  onOpen: (slug: string) => void;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.rail}
+      style={styles.railOut}
+      testID="home-rail"
+    >
+      {events.map((e) => {
+        const day = DAY_FMT.format(new Date(e.startsAt)).replace(/\./g, "");
+        const dist = typeof e.distanceKm === "number" ? ` Â· ${Math.round(e.distanceKm)} km` : "";
+        return (
+          <Pressable
+            key={e.id}
+            onPress={() => onOpen(e.slug)}
+            accessibilityRole="button"
+            accessibilityLabel={e.title}
+            style={[styles.mp, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
+            testID="home-rail-item"
+          >
+            <View style={[styles.mpArt, { backgroundColor: c.night }]}>
+              {(e.generatedPosterUrl ?? e.posterUrl) ? (
+                <Photo
+                  source={{ uri: e.generatedPosterUrl ?? e.posterUrl ?? undefined }}
+                  style={StyleSheet.absoluteFill as never}
+                  accessibilityLabel=""
+                />
+              ) : null}
+            </View>
+            <View style={styles.mpBody}>
+              <Text variant="posterS" color={c.ink} style={styles.mpTitle} numberOfLines={2}>
+                {e.title}
+              </Text>
+              <Text variant="caption" color={c.inkMuted} style={styles.mpCap}>
+                {`${day.charAt(0).toUpperCase()}${day.slice(1)}${dist}`}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  card: { borderRadius: 18, padding: space4 },
+  greet: { flexDirection: "row", alignItems: "flex-end", gap: 10, paddingTop: space2 },
+  greetTitle: { fontSize: 32, lineHeight: 31, marginTop: 2 },
+  swipe: { flexDirection: "row", paddingBottom: 6, opacity: 0.8 },
+  secH: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: space2 },
+  secTitle: { fontSize: 16, lineHeight: 18, flexShrink: 1 },
+  secLink: { flexDirection: "row", alignItems: "center", gap: 4 },
+  secLinkText: { fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  wx: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 14, rowGap: 4 },
+  wxIcon: { width: 64, height: 64, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  wxTitle: { fontSize: 15, lineHeight: 19, fontWeight: "800", marginTop: 2 },
+  wxBig: { flexDirection: "row", alignItems: "baseline", gap: 10 },
+  wxNum: { fontSize: 46, lineHeight: 44 },
+  wxFoot: {
+    width: "100%",
+    borderTopWidth: 1,
+    borderStyle: "dashed",
+    paddingTop: 10,
+    marginTop: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 16,
+    rowGap: 4,
+  },
+  wxFootItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  strip: { flexDirection: "row", gap: 10 },
+  mini: { flex: 1, borderRadius: 16, padding: space3, gap: 8 },
+  miniTitle: { lineHeight: 14 },
+  miniCap: { fontSize: 12, lineHeight: 16 },
+  nudge: { flexDirection: "row", alignItems: "center", gap: space3, padding: 14, borderRadius: 18 },
+  nudgeText: { marginTop: 4 },
+  crMini: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center" },
+  railOut: { marginHorizontal: -space4 },
+  rail: { gap: 12, paddingHorizontal: space4, paddingTop: 4, paddingBottom: 10 },
+  mp: { width: 150, borderRadius: 16, overflow: "hidden" },
+  mpArt: { height: 188 },
+  mpBody: { padding: 10, gap: 3 },
+  mpTitle: { fontSize: 12.5, lineHeight: 13 },
+  mpCap: { fontSize: 12, lineHeight: 16 },
+});
