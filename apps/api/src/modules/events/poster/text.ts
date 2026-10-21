@@ -75,11 +75,12 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
  */
 export async function textLine(
   content: string,
-  o: { font: PosterFont; size: number; color: string; spacing?: number; maxWidth?: number },
+  o: { font: PosterFont; size: number; color: string; spacing?: number; maxWidth?: number; keepCase?: boolean },
 ): Promise<TextImage> {
   const size = Math.max(4, Math.round(o.size));
   // Caractères de contrôle retirés (pango refuserait le balisage) ; émojis et écritures de droite à gauche passent.
-  const text = (content.replace(CONTROL, " ").trim() || "·").toUpperCase();
+  const plain = content.replace(CONTROL, " ").trim() || "·";
+  const text = o.keepCase ? plain : plain.toUpperCase();
   // Interlettrage pango : en 1024es de point (72 dpi : 1 pt = 1 px).
   const letter = o.spacing ? ` letter_spacing="${Math.round(o.spacing * size * 1024)}"` : "";
   const [out, m] = await Promise.all([rawLine(text, o.font, size, o.color, letter), fontMetrics(o.font, size)]);

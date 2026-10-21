@@ -1,7 +1,13 @@
 // Garage et certification (lot 31) : entrées validées et types de sortie des nouvelles routes.
 import { z } from "zod";
 import { type PlateTransferStatus, vehicleTypes } from "../enums";
-import { type CategoryMakeMode, type CertificationLostReason, type CertificationStatus, shareFormats } from "../garage";
+import {
+  type CategoryMakeMode,
+  type CertificationLostReason,
+  type CertificationStatus,
+  shareFormats,
+  shareStyles,
+} from "../garage";
 import type { Grade } from "../grades";
 import type { CategoryRefusal, CertificationFields, CertificationMissing } from "../rules/garage";
 import { optionalText } from "./common";
@@ -17,6 +23,8 @@ export type CategoryReferenceQuery = z.infer<typeof categoryReferenceQuery>;
 /** `download=1` : l'image est servie en pièce jointe (téléchargement depuis le site) au lieu de s'afficher. */
 export const shareImageQuery = z.object({
   format: z.enum(shareFormats).default("story"),
+  /** Style de la story (lot 50) ; sans effet sur la publication 1:1. */
+  style: z.enum(shareStyles).default("night"),
   download: z.literal("1").optional(),
 });
 

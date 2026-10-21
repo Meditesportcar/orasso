@@ -1,6 +1,6 @@
-// Onglet Passeport (lot 40 : « Bientôt » ; l'écran arrive au lot 50).
-import { Soon } from "@/ui/Soon";
+// Onglet Passeport du visiteur (lot 40 : « Bientôt » ; lot 50 : l'écran).
+import { PassportScreen } from "@/features/passport/PassportScreen";
 
 export default function Passeport() {
-  return <Soon title="Passeport">Tes tampons, le prix du public et tes récaps arrivent ici.</Soon>;
+  return <PassportScreen tab />;
 }

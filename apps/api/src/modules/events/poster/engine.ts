@@ -74,7 +74,14 @@ async function photoLayer(l: PhotoLayer, photo: Buffer | null): Promise<Placed> 
 async function textBlock(l: TextLayer) {
   const lines = await Promise.all(
     l.lines.map((line) =>
-      textLine(line, { font: l.font, size: l.size, color: l.color, spacing: l.spacing, maxWidth: l.width }),
+      textLine(line, {
+        font: l.font,
+        size: l.size,
+        color: l.color,
+        spacing: l.spacing,
+        maxWidth: l.width,
+        keepCase: l.keepCase,
+      }),
     ),
   );
   const step = l.size * (l.lineHeight ?? 0.9);

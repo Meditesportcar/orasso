@@ -30,7 +30,7 @@ const ticket = (id: string, days: number, status: MyTicket["status"] = "valid") 
   ({
     id,
     status,
-    event: { slug: id, title: `Billet ${id}`, startsAt: at(days), endsAt: at(days, 4) },
+    event: { id: `e-${id}`, slug: id, title: `Billet ${id}`, startsAt: at(days), endsAt: at(days, 4) },
   }) as unknown as MyTicket;
 
 const staff = (id: string, days: number, presence: MyStaffEvent["presence"], open = false) =>

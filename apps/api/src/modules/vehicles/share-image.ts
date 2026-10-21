@@ -5,13 +5,24 @@
 // dépendance de l'API ; `share-image.test.ts` compare ces valeurs aux jetons).
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { countryLabel, SHARE_MARGIN, SHARE_SIZES, type ShareFormat, shareImageLayout } from "@orasso/shared";
+import {
+  countryLabel,
+  type Grade,
+  gradeLabels,
+  originLabel,
+  SHARE_MARGIN,
+  SHARE_SIZES,
+  type ShareFormat,
+  type ShareStyle,
+  shareImageLayout,
+} from "@orasso/shared";
 import sharp, { type OverlayOptions } from "sharp";
 
 import { repoRoot } from "../../env";
 import { storage } from "../../lib/storage";
 import type { VehicleWithAll } from "./repo";
 import { vehicleLabel } from "./serializers";
+import { renderStory } from "./share-story";
 
 /** Jetons du thème Béton (`color.beton.*`). */
 export const SHARE_COLORS = {
@@ -103,14 +114,62 @@ function gradient(width: number, height: number, from: number): Buffer {
   );
 }
 
-/** Rend la fiche. `pseudo` : le propriétaire (affiché « par … »). */
-export async function renderShareImage(v: VehicleWithAll, pseudo: string, format: ShareFormat): Promise<Buffer> {
+/** Ce que la story v2 ajoute à la fiche : style, grade du propriétaire, rassos pointés (lot 50). */
+export type ShareExtras = { style?: ShareStyle; grade?: Grade; rassos?: number };
+
+/** « Toyota  ·  2021  ·  Japonaise » : marque, année, origine (sans les morceaux absents). */
+export function storyLine(v: Pick<VehicleWithAll, "year" | "make">): string {
+  return [
+    v.make.isOther ? null : v.make.name,
+    v.year ? String(v.year) : null,
+    v.make.isOther ? null : originLabel(v.make.country),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Nom de la story : le modèle et la génération (la marque est sur la ligne du dessous). */
+export function storyName(v: Pick<VehicleWithAll, "model" | "generation">): string {
+  const parts = [
+    v.model.isOther ? null : v.model.name,
+    v.generation && !v.generation.isOther ? v.generation.name : null,
+  ];
+  return parts.filter(Boolean).join(" ") || "Véhicule";
+}
+
+async function renderStoryCard(v: VehicleWithAll, pseudo: string, extras: ShareExtras): Promise<Buffer> {
+  const cover = v.photos[0];
+  const photo = cover ? await storage.get(cover.storageKey) : null;
+  const numbers = [
+    v.powerHp ? { value: String(v.powerHp), label: "ch" } : null,
+    extras.rassos ? { value: String(extras.rassos), label: "rassos" } : null,
+    v.audiencePrizes ? { value: String(v.audiencePrizes), label: "prix du public" } : null,
+  ].filter((n): n is { value: string; label: string } => n !== null);
+  return renderStory({
+    style: extras.style ?? "night",
+    photo,
+    grade: gradeLabels[extras.grade ?? "rodage"],
+    pseudo,
+    name: storyName(v),
+    line: storyLine(v),
+    numbers,
+  });
+}
+
+/** Rend la fiche. `pseudo` : le propriétaire. La story passe par le gabarit v2 (zones sûres d'Instagram). */
+export async function renderShareImage(
+  v: VehicleWithAll,
+  pseudo: string,
+  format: ShareFormat,
+  extras: ShareExtras = {},
+): Promise<Buffer> {
+  if (format === "story") return renderStoryCard(v, pseudo, extras);
   const { width, height } = SHARE_SIZES[format];
   const available = width - SHARE_MARGIN * 2;
   const layout = shareImageLayout(vehicleLabel(v), format, width);
   const nameSize = layout.fontSize;
-  const factsSize = format === "story" ? 40 : 36;
-  const gap = format === "story" ? 36 : 28;
+  const factsSize = 36;
+  const gap = 28;
 
   const [name, facts, by, site, brand] = await Promise.all([
     text(layout.lines.join("\n"), "name", nameSize, SHARE_COLORS.ink, available),
@@ -121,11 +180,11 @@ export async function renderShareImage(v: VehicleWithAll, pseudo: string, format
   ]);
 
   // Empilé depuis le bas : site, pseudo, chiffres, nom.
-  const bottom = height - (format === "story" ? 150 : 90);
+  const bottom = height - 90;
   let y = bottom - site.height;
   const layers: OverlayOptions[] = [
-    { input: gradient(width, height, format === "story" ? 0.42 : 0.38), top: 0, left: 0 },
-    { input: brand.data, top: format === "story" ? 110 : 70, left: SHARE_MARGIN },
+    { input: gradient(width, height, 0.38), top: 0, left: 0 },
+    { input: brand.data, top: 70, left: SHARE_MARGIN },
     { input: site.data, top: y, left: SHARE_MARGIN },
   ];
   y -= gap + by.height;
@@ -149,8 +208,16 @@ const TTL_MS = 3_600_000;
 const MAX_ENTRIES = 60;
 const cache = new Map<string, { at: number; data: Buffer }>();
 
-export function shareImageCacheKey(v: VehicleWithAll, format: ShareFormat): string {
-  return [v.id, format, v.updatedAt.getTime(), v.photos.map((p) => p.id).join(","), v.certifiedAt ? "c" : ""].join("|");
+export function shareImageCacheKey(v: VehicleWithAll, format: ShareFormat, extras: ShareExtras = {}): string {
+  return [
+    v.id,
+    format,
+    format === "story" ? (extras.style ?? "night") : "",
+    format === "story" ? `${extras.grade ?? ""}/${extras.rassos ?? 0}/${v.audiencePrizes}` : "",
+    v.updatedAt.getTime(),
+    v.photos.map((p) => p.id).join(","),
+    v.certifiedAt ? "c" : "",
+  ].join("|");
 }
 
 export async function cachedShareImage(
@@ -158,11 +225,12 @@ export async function cachedShareImage(
   pseudo: string,
   format: ShareFormat,
   at: number = Date.now(),
+  extras: ShareExtras = {},
 ): Promise<Buffer> {
-  const key = `${shareImageCacheKey(v, format)}|${pseudo}`;
+  const key = `${shareImageCacheKey(v, format, extras)}|${pseudo}`;
   const hit = cache.get(key);
   if (hit && at - hit.at < TTL_MS) return hit.data;
-  const data = await renderShareImage(v, pseudo, format);
+  const data = await renderShareImage(v, pseudo, format, extras);
   for (const [k, e] of cache) if (at - e.at >= TTL_MS) cache.delete(k);
   if (cache.size >= MAX_ENTRIES) cache.delete(cache.keys().next().value as string);
   cache.set(key, { at, data });

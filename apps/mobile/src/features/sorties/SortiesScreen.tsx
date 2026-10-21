@@ -15,6 +15,7 @@ import {
   type MyTicket,
   POINTS_PENDING_LABEL,
   type ReceivedInvitation,
+  recapScreenTexts,
   refusalReasonLabels,
   seasonYear,
   sortiesLabels,
@@ -22,6 +23,7 @@ import {
   staffRequestLabels,
   staffRoleLabels,
   ticketAppLabels,
+  voteScreenTexts,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -76,6 +78,9 @@ export function SortiesScreen() {
   const invitations = useApi(() => api.myEventInvitations(), []);
   // Billets du public (lot 34).
   const tickets = useApi(() => api.myTickets(), []);
+  // Récaps prêts (lot 50) : à partir du lendemain de l'événement, 10 h.
+  const recaps = useApi(() => api.recaps(), [], { cacheKey: "recaps" });
+  const recapReady = new Set((recaps.data ?? []).filter((r) => new Date(r.readyAt) <= now).map((r) => r.eventId));
   const [segment, setSegment] = useState<SortiesSegment>("upcoming");
   const [answering, setAnswering] = useState<ReceivedInvitation | null>(null);
   const [answered, setAnswered] = useState<string | null>(null);
@@ -175,7 +180,7 @@ export function SortiesScreen() {
       title="Mes sorties"
       facts={`Saison ${seasonYear(now)}`}
       onRefresh={async () => {
-        await Promise.all([reload(), staff.reload(), invitations.reload(), tickets.reload()]);
+        await Promise.all([reload(), staff.reload(), invitations.reload(), tickets.reload(), recaps.reload()]);
       }}
       overlays={
         <>
@@ -286,6 +291,7 @@ export function SortiesScreen() {
               primaryOffer={app.id === offerId}
               onOpen={() => router.push(`/e/${app.event.slug}`)}
               onJourJ={() => router.push(`/jour-j/${app.id}`)}
+              onVote={() => router.push(`/vote/${app.event.id}?titre=${encodeURIComponent(app.event.title)}`)}
               onWithdraw={() => setWithdrawing(app)}
               onAccept={() => void run(app, () => api.acceptOffer(app.id))}
               onDecline={() => void run(app, () => api.declineOffer(app.id))}
@@ -303,6 +309,7 @@ export function SortiesScreen() {
               onOpen={() => router.push(`/e/${x.event.slug}`)}
               onShow={() => router.push("/billets")}
               onGiveBack={() => setGiving(x)}
+              onVote={() => router.push(`/vote/${x.event.id}?titre=${encodeURIComponent(x.event.title)}`)}
             />
           ))}
 
@@ -334,6 +341,8 @@ export function SortiesScreen() {
               key={s.event.id}
               item={s}
               unsent={unsentBy.get(s.event.id)?.count ?? 0}
+              now={now}
+              onVote={() => router.push(`/vote/${s.event.id}?titre=${encodeURIComponent(s.event.title)}`)}
               onOpen={() => router.push(`/staff/${s.event.id}`)}
               onChanged={() => void staff.reload()}
             />
@@ -366,6 +375,8 @@ export function SortiesScreen() {
               app={app}
               now={now}
               rank={ranks[app.event.id] ?? null}
+              recapReady={recapReady.has(app.event.id)}
+              onRecap={() => router.push(`/recap/${app.event.id}`)}
               onContest={() => setContesting({ applicationId: app.id, title: app.event.title })}
               onReview={() =>
                 app.review &&
@@ -384,7 +395,20 @@ export function SortiesScreen() {
               title={x.event.title}
               detail={sortiesLabels.publicTicketLine(x.name)}
               onPressTitle={() => router.push(`/e/${x.event.slug}`)}
-            />
+            >
+              {x.status === "used" && recapReady.has(x.event.id) ? (
+                <Button
+                  variant="plate"
+                  icon="list"
+                  next
+                  onPress={() => router.push(`/recap/${x.event.id}`)}
+                  fullWidth
+                  testID="ticket-public-recap"
+                >
+                  {recapScreenTexts.seeRecap}
+                </Button>
+              ) : null}
+            </Ticket>
           ))}
           {countPast === 0 ? (
             <EmptyState title={sortiesLabels.emptyPastTitle} text={sortiesLabels.emptyPastText} />
@@ -404,6 +428,7 @@ function ApplicationTicket({
   primaryOffer,
   onOpen,
   onJourJ,
+  onVote,
   onWithdraw,
   onAccept,
   onDecline,
@@ -419,6 +444,8 @@ function ApplicationTicket({
   primaryOffer?: boolean;
   onOpen: () => void;
   onJourJ: () => void;
+  /** Lot 50 : le vote du prix du public, pendant l'événement, pour qui est pointé. */
+  onVote: () => void;
   onWithdraw: () => void;
   onAccept: () => void;
   onDecline: () => void;
@@ -458,6 +485,7 @@ function ApplicationTicket({
   if (app.refusalNote) notes.push(`« ${app.refusalNote} »`);
   if (offered) notes.push(sortiesLabels.offerNote);
   if (awaiting && app.crew) notes.push(crewLabels.confirmBody(app.crew.leaderPseudo, null));
+  const voting = app.status === "accepted" && Boolean(app.checkedInAt) && now < new Date(app.event.endsAt);
   const canWithdraw = app.status === "pending" || app.status === "waitlisted" || app.status === "accepted";
   const lead = offered
     ? sortiesLabels.offerLead(formatDuration(remaining))
@@ -507,6 +535,11 @@ function ApplicationTicket({
           {sortiesLabels.myQr}
         </Button>
       ) : null}
+      {voting ? (
+        <Button variant="plate" icon="badge" next onPress={onVote} fullWidth testID="ticket-vote">
+          {voteScreenTexts.open}
+        </Button>
+      ) : null}
       {canWithdraw && !app.checkedInAt ? (
         <Button variant="plate" tone="dashed" icon="close" disabled={busy} onPress={onWithdraw} fullWidth>
           {sortiesLabels.withdraw}
@@ -524,6 +557,7 @@ function TicketOfPublic({
   onOpen,
   onShow,
   onGiveBack,
+  onVote,
 }: {
   ticket: MyTicket;
   now: Date;
@@ -531,7 +565,10 @@ function TicketOfPublic({
   onOpen: () => void;
   onShow: () => void;
   onGiveBack: () => void;
+  /** Lot 50 : le vote du prix du public, pendant l'événement, pour un billet contrôlé à l'entrée. */
+  onVote: () => void;
 }) {
+  const voting = ticket.status === "used" && now < new Date(ticket.event.endsAt);
   const detail = [
     ticket.name,
     ticket.priceCents == null ? "gratuit" : formatPrice(ticket.priceCents),
@@ -552,6 +589,11 @@ function TicketOfPublic({
       <Button variant={primary ? "primary" : "plate"} icon="ticket" next onPress={onShow} fullWidth testID="my-tickets">
         {sortiesLabels.myTicket}
       </Button>
+      {voting ? (
+        <Button variant="plate" icon="badge" next onPress={onVote} fullWidth testID="ticket-vote">
+          {voteScreenTexts.open}
+        </Button>
+      ) : null}
       {ticket.priceCents == null ? (
         <Button variant="plate" tone="dashed" icon="undo" onPress={onGiveBack} fullWidth testID="ticket-give-back">
           {ticketAppLabels.giveBack}
@@ -565,11 +607,16 @@ function TicketOfPublic({
 function StaffTicket({
   item,
   unsent,
+  now,
+  onVote,
   onOpen,
   onChanged,
 }: {
   item: MyStaffEvent;
   unsent: number;
+  now: Date;
+  /** Lot 50 : le staff présent peut voter pendant l'événement (l'API tranche). */
+  onVote: () => void;
   onOpen: () => void;
   onChanged: () => void;
 }) {
@@ -617,6 +664,11 @@ function StaffTicket({
           Mode staff
         </Button>
       ) : null}
+      {present && now >= new Date(item.event.startsAt) && now < new Date(item.event.endsAt) ? (
+        <Button variant="plate" icon="badge" onPress={onVote} next fullWidth testID="staff-vote">
+          {voteScreenTexts.open}
+        </Button>
+      ) : null}
     </Ticket>
   );
 }
@@ -626,6 +678,8 @@ function PastTicket({
   app,
   now,
   rank,
+  recapReady,
+  onRecap,
   onContest,
   onReview,
   onOpen,
@@ -633,6 +687,8 @@ function PastTicket({
   app: MyApplication;
   now: Date;
   rank: { rank: number; of: number } | null;
+  recapReady: boolean;
+  onRecap: () => void;
   onContest: () => void;
   onReview: () => void;
   onOpen: () => void;
@@ -702,7 +758,11 @@ function PastTicket({
           Réponse de l'équipe organisatrice : {app.review.given.reply}
         </Text>
       ) : null}
-      {/* lot 50 : « Voir le récap » (route recap/[id]) vient ici. */}
+      {recapReady && app.checkedInAt ? (
+        <Button variant="plate" icon="list" next onPress={onRecap} fullWidth testID="ticket-recap">
+          {recapScreenTexts.seeRecap}
+        </Button>
+      ) : null}
     </Ticket>
   );
 }
