@@ -206,12 +206,12 @@ function DirectEvent({
           </Plate>
 
           {days.length > 1 ? (
-            <ChipRow>
-              <Chip selected={shownDay === null} onPress={() => setDayId(null)}>
+            <ChipRow accessibilityRole="tablist">
+              <Chip accessibilityRole="tab" selected={shownDay === null} onPress={() => setDayId(null)}>
                 {eventDaysLabels.allDays}
               </Chip>
               {days.map((d) => (
-                <Chip key={d.id} selected={shownDay === d.id} onPress={() => setDayId(d.id)}>
+                <Chip accessibilityRole="tab" key={d.id} selected={shownDay === d.id} onPress={() => setDayId(d.id)}>
                   {formatDayDate(d.date)}
                 </Chip>
               ))}

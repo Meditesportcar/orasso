@@ -119,9 +119,9 @@ function ShareSheetBody({
         {L.subtitle}. {L.help}
       </Text>
       <View testID="share-styles">
-        <ChipRow>
+        <ChipRow accessibilityRole="radiogroup" accessibilityLabel={L.title}>
           {shareStyles.map((s) => (
-            <Chip key={s} selected={s === style} onPress={() => setStyle(s)}>
+            <Chip accessibilityRole="radio" key={s} selected={s === style} onPress={() => setStyle(s)}>
               {shareStyleLabels[s]}
             </Chip>
           ))}

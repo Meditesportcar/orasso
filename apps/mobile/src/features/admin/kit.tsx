@@ -304,9 +304,9 @@ export function Filters<T extends string>({
   onChange: (id: T) => void;
 }) {
   return (
-    <ChipRow>
+    <ChipRow accessibilityRole="tablist">
       {options.map((o) => (
-        <Chip key={o.id} selected={o.id === value} onPress={() => onChange(o.id)}>
+        <Chip accessibilityRole="tab" key={o.id} selected={o.id === value} onPress={() => onChange(o.id)}>
           {o.label}
         </Chip>
       ))}

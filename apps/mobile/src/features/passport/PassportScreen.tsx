@@ -127,9 +127,10 @@ function PassportBody({
       {offline ? <Notice>{passportScreenTexts.offline}</Notice> : null}
       {view.seasons.length > 1 ? (
         <View testID="passport-seasons">
-          <ChipRow>
+          <ChipRow accessibilityRole="tablist">
             {view.seasons.map((s) => (
               <Chip
+                accessibilityRole="tab"
                 key={s.year}
                 selected={s.year === current}
                 onPress={() => onSeason(s.year === view.seasons[0]?.year ? undefined : s.year)}

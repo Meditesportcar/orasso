@@ -70,11 +70,11 @@ export function AccreditationsScreen() {
         </>
       }
     >
-      <View style={styles.segments}>
-        <Chip selected={segment === "upcoming"} onPress={() => setSegment("upcoming")}>
+      <View accessibilityRole="tablist" style={styles.segments}>
+        <Chip accessibilityRole="tab" selected={segment === "upcoming"} onPress={() => setSegment("upcoming")}>
           {L.upcoming(upcoming.length)}
         </Chip>
-        <Chip selected={segment === "past"} onPress={() => setSegment("past")}>
+        <Chip accessibilityRole="tab" selected={segment === "past"} onPress={() => setSegment("past")}>
           {L.past(past.length)}
         </Chip>
       </View>
