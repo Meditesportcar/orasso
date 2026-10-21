@@ -190,6 +190,57 @@ async function contentById(id: string): Promise<MediaContentView> {
   return view;
 }
 
+/** Contenu déjà publié par ce média sur cet événement avec exactement ces clés de galerie (tentative rejouée). */
+async function sameGallery(v: Viewer, input: MediaContentCreate): Promise<string | null> {
+  if (input.photoKeys.length === 0) return null;
+  const profile = await mediaOfUser(v.user.id);
+  if (!profile) return null;
+  const [again] = await db
+    .select({ id: mediaContents.id })
+    .from(mediaContents)
+    .where(
+      and(
+        eq(mediaContents.mediaProfileId, profile.id),
+        eq(mediaContents.eventId, input.eventId),
+        eq(mediaContents.photoKeys, input.photoKeys),
+        isNull(mediaContents.deletedAt),
+      ),
+    )
+    .limit(1);
+  return again?.id ?? null;
+}
+
+/** Création d'un contenu : accréditation vérifiée, photos consommées (une clé déjà consommée : « image inconnue »). */
+async function createNewContent(v: Viewer, input: MediaContentCreate): Promise<MediaContentView> {
+  const id = await withTx(async (tx) => {
+    const profile = await requireMedia(v, tx);
+    const event = await tx.query.events.findFirst({ where: eq(events.id, input.eventId) });
+    if (event?.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
+    await assertAccredited(tx, input.eventId, profile.id);
+    for (const key of input.photoKeys) {
+      if (!(await uploadsService.consume(tx, v.user.id, key, "media_content"))) {
+        throw validation(mediaLabels.imageUnknown);
+      }
+    }
+    const [row] = await tx
+      .insert(mediaContents)
+      .values({
+        mediaProfileId: profile.id,
+        eventId: input.eventId,
+        kind: input.kind,
+        title: input.title,
+        url: input.kind === "link" ? input.url : null,
+        platform: input.platform,
+        photoKeys: input.photoKeys,
+        publishedAt: now(),
+      })
+      .returning({ id: mediaContents.id });
+    if (!row) throw new Error("Contenu non enregistré");
+    return row.id;
+  });
+  return contentById(id);
+}
+
 export const mediaService = {
   // --- Profil -------------------------------------------------------------------------------------------------------
 
@@ -630,52 +681,21 @@ export const mediaService = {
   /** `POST /me/media-contents` : seulement si le média est accrédité (`accepted`) sur l'événement (V6). */
   async createContent(v: Viewer, input: MediaContentCreate): Promise<MediaContentView> {
     assertWritable(v);
+    // Publication idempotente (lot 59d) : les clés d'une galerie servent d'identifiant de tentative. Une reprise après
+    // une réponse perdue rend le contenu déjà publié, avant la limite du jour (tour 2 : elle ne compte pas et n'est
+    // jamais refusée par la limite).
+    const published = await sameGallery(v, input);
+    if (published) return contentById(published);
     rateLimit("mediaContent", v.user.id);
-    const id = await withTx(async (tx) => {
-      const profile = await requireMedia(v, tx);
-      const event = await tx.query.events.findFirst({ where: eq(events.id, input.eventId) });
-      if (event?.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
-      await assertAccredited(tx, input.eventId, profile.id);
-      // Publication idempotente (lot 59d) : les clés d'une galerie servent d'identifiant de tentative. Si une première
-      // tentative a été validée mais que sa réponse s'est perdue, la reprise avec les mêmes clés (déjà consommées)
-      // rend le contenu déjà publié au lieu d'échouer.
-      if (input.photoKeys.length > 0) {
-        const [again] = await tx
-          .select({ id: mediaContents.id })
-          .from(mediaContents)
-          .where(
-            and(
-              eq(mediaContents.mediaProfileId, profile.id),
-              eq(mediaContents.eventId, input.eventId),
-              eq(mediaContents.photoKeys, input.photoKeys),
-              isNull(mediaContents.deletedAt),
-            ),
-          )
-          .limit(1);
-        if (again) return again.id;
-      }
-      for (const key of input.photoKeys) {
-        if (!(await uploadsService.consume(tx, v.user.id, key, "media_content"))) {
-          throw validation(mediaLabels.imageUnknown);
-        }
-      }
-      const [row] = await tx
-        .insert(mediaContents)
-        .values({
-          mediaProfileId: profile.id,
-          eventId: input.eventId,
-          kind: input.kind,
-          title: input.title,
-          url: input.kind === "link" ? input.url : null,
-          platform: input.platform,
-          photoKeys: input.photoKeys,
-          publishedAt: now(),
-        })
-        .returning({ id: mediaContents.id });
-      if (!row) throw new Error("Contenu non enregistré");
-      return row.id;
-    });
-    return contentById(id);
+    try {
+      return await createNewContent(v, input);
+    } catch (e) {
+      // Deux envois simultanés de la même galerie (tour 2) : le second échoue sur les clés que le premier vient de
+      // consommer ; si le premier a publié, c'est ce contenu qui est rendu, pas une erreur.
+      const winner = await sameGallery(v, input);
+      if (winner) return contentById(winner);
+      throw e;
+    }
   },
 
   async updateContent(v: Viewer, id: string, input: MediaContentUpdate): Promise<MediaContentView> {
