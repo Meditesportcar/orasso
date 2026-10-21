@@ -1,59 +1,8 @@
-// Assistant d'événement de l'appli (lot 35b, D20) : ce qui est propre au téléphone autour du modèle partagé
-// (`@orasso/shared`, `eventWizard.ts`, celui du site). La première étape du site (format, dates, lieu) est découpée en
-// trois écrans ; chaque écran valide avec les mêmes règles que le site. Le brouillon d'une création est gardé sur le
-// téléphone (voir `eventDraftStore.ts`) : ce fichier dit comment il s'écrit et se relit.
-import {
-  type AppWizardStep,
-  appWizardSteps,
-  type EventDraft,
-  type EventWizardStep,
-  eventAddressProblem,
-  eventDatesProblem,
-  eventStepProblem,
-  eventStepSkipped,
-  eventTitleProblem,
-} from "@orasso/shared";
-
-/** L'étape du site qui porte les règles d'un écran de l'appli. */
-export function siteStepOf(step: AppWizardStep): EventWizardStep {
-  return step === "dates" || step === "lieu" ? "format" : step;
-}
-
-/** Le problème qui empêche de quitter un écran, ou `null` (règles du site, `eventStepProblem`). */
-export function appStepProblem(step: AppWizardStep, d: EventDraft): string | null {
-  if (step === "format") return eventTitleProblem(d);
-  if (step === "dates") return eventDatesProblem(d);
-  if (step === "lieu") return eventAddressProblem(d);
-  return eventStepProblem(step, d);
-}
-
-export const appStepSkipped = (step: AppWizardStep, d: Pick<EventDraft, "admission">) =>
-  eventStepSkipped(siteStepOf(step), d);
-
-/** Écran suivant ou précédent, en sautant les critères hors filtration. */
-export function moveStep(index: number, delta: 1 | -1, d: Pick<EventDraft, "admission">): number {
-  let next = index + delta;
-  const target = appWizardSteps[next];
-  if (target && appStepSkipped(target, d)) next += delta;
-  return Math.min(Math.max(next, 0), appWizardSteps.length - 1);
-}
-
-/** Premier écran en défaut avant l'enregistrement, ou `null`. */
-export function firstAppProblem(d: EventDraft): { index: number; problem: string } | null {
-  for (const [index, step] of appWizardSteps.entries()) {
-    if (appStepSkipped(step, d)) continue;
-    const problem = appStepProblem(step, d);
-    if (problem) return { index, problem };
-  }
-  return null;
-}
-
-/** Nombre d'écrans réellement parcourus (sans les critères hors filtration) et rang de l'écran courant. */
-export function progressOf(index: number, d: Pick<EventDraft, "admission">): { n: number; total: number } {
-  const shown = appWizardSteps.filter((s) => !appStepSkipped(s, d));
-  const step = appWizardSteps[index];
-  return { n: step ? Math.max(1, shown.indexOf(step) + 1) : 1, total: shown.length };
-}
+// Assistant d'événement de l'appli (lot 35b, D20 ; lot 53 : les huit temps de `s-create`, comme le site) : ce qui est
+// propre au téléphone autour du modèle partagé (`@orasso/shared`, `eventWizard.ts`). Chaque temps valide avec les mêmes
+// règles que le site (`eventStepProblem`). Le brouillon d'une création est gardé sur le téléphone (voir
+// `eventDraftStore.ts`) : ce fichier dit comment il s'écrit et se relit.
+import { type EventDraft, eventWizardSteps } from "@orasso/shared";
 
 /** « AAAA-MM-JJTHH:MM » → « AAAA-MM-JJ » (vide si absent ; une saisie en cours reste telle quelle). */
 export const datePart = (value: string) => value.split("T")[0] ?? "";
@@ -115,7 +64,7 @@ export function parseStoredDraft(raw: string | null): StoredDraft | null {
     const d = value.draft as Partial<EventDraft> | undefined;
     if (!d || typeof d.title !== "string" || !Array.isArray(d.vehicleTypes) || !Array.isArray(d.zones)) return null;
     if (!Array.isArray(d.days) || typeof d.format !== "string") return null;
-    const step = Number.isInteger(value.step) ? Math.min(Math.max(value.step ?? 0, 0), appWizardSteps.length - 1) : 0;
+    const step = Number.isInteger(value.step) ? Math.min(Math.max(value.step ?? 0, 0), eventWizardSteps.length - 1) : 0;
     return {
       v: 1,
       draft: d as EventDraft,
