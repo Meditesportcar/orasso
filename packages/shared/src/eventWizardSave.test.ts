@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  afterNeedWrites,
   type EventDraft,
   eventArrivalsProblem,
   eventPayload,
@@ -14,6 +15,7 @@ import {
   initialEventDraft,
   needChanges,
   needsFromSaved,
+  noNeedWrites,
   noRefusals,
   parseWizardMemo,
   reconcileDraft,
@@ -27,6 +29,7 @@ import {
   withArrivalsInHours,
   withDefaultPoster,
   withEventKind,
+  withLoadedNeeds,
   withMultiDay,
   withSingleDate,
 } from "./eventWizard";
@@ -288,5 +291,68 @@ describe("aperçus d'affiche", () => {
     expect(dropped).toEqual(["u2"]);
     expect(cache.get(k("jdm"))).toBeUndefined();
     expect(posterPreviewKey({ a: 1, b: 2 })).toBe(posterPreviewKey({ b: 2, a: 1 }));
+  });
+});
+
+// Correctif 53c : missions chargées après une première saisie, écritures gardées après une panne.
+describe("missions chargées après l'ouverture (correctif 53c)", () => {
+  it("rejoignent la saisie même si un autre champ a changé : l'enregistrement suivant ne les supprime pas", () => {
+    const opened = filled();
+    const typed = { ...opened, title: "Titre tapé avant le chargement" };
+    const loaded = needsFromSaved([need(), need({ id: "n2", trade: "photographer", position: 1 })], null);
+    const merged = withLoadedNeeds(typed, loaded);
+    expect(merged.title).toBe("Titre tapé avant le chargement");
+    expect(merged.needs?.map((n) => n.id)).toEqual(["n1", "n2"]);
+    const saved = [need(), need({ id: "n2", trade: "photographer", position: 1 })];
+    expect(needChanges(saved, merged).remove).toEqual([]);
+    // Appliquée deux fois (React), même résultat ; une ligne ajoutée entre-temps est gardée après elles.
+    const added = {
+      ...typed,
+      needs: [
+        {
+          trade: "barber" as const,
+          quantity: "1",
+          power: "none" as const,
+          water: false,
+          frontageM: "",
+          installTime: "",
+        },
+      ],
+    };
+    const twice = withLoadedNeeds(withLoadedNeeds(added, loaded), loaded);
+    expect(twice.needs?.map((n) => n.id ?? n.trade)).toEqual(["n1", "n2", "barber"]);
+  });
+});
+
+describe("panne après l'écriture des missions (correctif 53c)", () => {
+  it("une mission créée prend son identifiant : le nouvel essai ne la recrée pas", () => {
+    const row = {
+      trade: "food_truck" as const,
+      quantity: "1",
+      power: "none" as const,
+      water: false,
+      frontageM: "",
+      installTime: "",
+    };
+    const sent = filled({ needs: [row] });
+    const first = needChanges([], sent);
+    expect(first.create).toHaveLength(1);
+    // La création a réussi (n7), la relecture finale a échoué.
+    const writes = { ...noNeedWrites(), created: [{ position: 0, need: need({ id: "n7" }) }] };
+    const { savedNeeds, draft } = afterNeedWrites({ savedNeeds: [], sent, current: sent, writes });
+    expect(draft.needs?.[0]?.id).toBe("n7");
+    const again = needChanges(savedNeeds, draft);
+    expect(again.create).toEqual([]);
+    expect(again.remove).toEqual([]);
+  });
+
+  it("une mission supprimée n'est pas supprimée deux fois ; la saisie tapée pendant l'envoi est gardée", () => {
+    const sent = filled({ needs: [] });
+    const current = { ...sent, title: "Changé pendant l'envoi" };
+    const writes = { ...noNeedWrites(), removed: ["n1"] };
+    const { savedNeeds, draft } = afterNeedWrites({ savedNeeds: [need()], sent, current, writes });
+    expect(savedNeeds).toEqual([]);
+    expect(draft.title).toBe("Changé pendant l'envoi");
+    expect(needChanges(savedNeeds, draft).remove).toEqual([]);
   });
 });

@@ -1092,6 +1092,54 @@ export function reconcileDraft(input: {
   return { draft, pristine };
 }
 
+// --- Missions chargées après l'ouverture, écritures gardées après une panne (correctif 53c) ----------------------
+
+/**
+ * Missions enregistrées, arrivées après l'ouverture de l'assistant : ajoutées à la saisie **quels que soient les autres
+ * champs** (un titre tapé avant leur arrivée ne les fait pas oublier, sinon l'enregistrement suivant les supprimerait).
+ * Les lignes déjà connues (avec identifiant) sont remplacées par la version chargée ; une ligne ajoutée entre-temps
+ * (sans identifiant) est gardée après elles. Appliquée deux fois, elle donne le même résultat.
+ */
+export function withLoadedNeeds(current: EventDraft, loaded: readonly NeedDraft[]): EventDraft {
+  const typed = (current.needs ?? []).filter((n) => !n.id);
+  return { ...current, needs: [...loaded, ...typed] };
+}
+
+/**
+ * Écritures de missions réussies pendant un enregistrement interrompu ensuite (relecture finale en échec, réseau) :
+ * créations (`position` : ligne du brouillon envoyé, `need` : la mission créée, avec son identifiant) et suppressions.
+ */
+export type NeedWrites = { created: { position: number; need: EventNeedView }[]; removed: string[] };
+
+export const noNeedWrites = (): NeedWrites => ({ created: [], removed: [] });
+
+/**
+ * Avant de retenter un enregistrement interrompu : les missions créées prennent leur identifiant dans la saisie (elles
+ * ne seront pas recréées) et rejoignent les missions enregistrées ; les missions supprimées en sortent (la suppression
+ * n'est pas renvoyée). `sent` : le brouillon envoyé ; `current` : la saisie au retour (tapée pendant l'envoi comprise).
+ */
+export function afterNeedWrites(input: {
+  savedNeeds: readonly EventNeedView[];
+  sent: EventDraft;
+  current: EventDraft;
+  writes: NeedWrites;
+}): { savedNeeds: EventNeedView[]; draft: EventDraft } {
+  const { sent, current, writes } = input;
+  const removed = new Set(writes.removed);
+  const savedNeeds = [...input.savedNeeds.filter((n) => !removed.has(n.id)), ...writes.created.map((c) => c.need)];
+  const needs = [...(current.needs ?? [])];
+  const claimed = new Set<number>();
+  for (const { position, need } of writes.created) {
+    const row = sent.needs?.[position];
+    if (!row) continue;
+    const j = needs.findIndex((n, k) => !claimed.has(k) && !n.id && same(n, row));
+    if (j < 0) continue;
+    claimed.add(j);
+    needs[j] = { ...needs[j], id: need.id } as NeedDraft;
+  }
+  return { savedNeeds, draft: { ...current, needs } };
+}
+
 /** Deux brouillons identiques (l'ordre des champs ne compte pas ; un champ absent vaut un champ `undefined`). */
 export function sameDraft(a: EventDraft, b: EventDraft): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof EventDraft>;
