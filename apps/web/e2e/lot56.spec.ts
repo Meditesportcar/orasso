@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { loginInBrowser, MOBILE, setTheme, signUpApi, unique } from "./helpers";
-import { RELAIS, RELAIS } from "./relais";
+import { RELAIS } from "./relais";
 
 // Lot 56 : site public v2 (accueil, événements, organisateurs, professionnels, fiche événement, annuaire des pros), en-tête
 // et pied, cartes avec affiche, crédits des données, e-mails v2. Quatre pages + fiche + pros, à 390 px et 1280 px, dans les
