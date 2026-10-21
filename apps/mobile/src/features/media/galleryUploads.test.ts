@@ -1,7 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+// Le trousseau est simulé par une table en mémoire (comme `cacheScope.test.ts`) : la liste des suppressions par compte
+// passe par le vrai cache de `kv.ts`.
+const keychain = new Map<string, string>();
+vi.mock("react-native", () => ({ Platform: { OS: "ios" } }));
+vi.mock("expo-secure-store", () => ({
+  getItemAsync: async (key: string) => keychain.get(key) ?? null,
+  setItemAsync: async (key: string, value: string) => void keychain.set(key, value),
+  deleteItemAsync: async (key: string) => void keychain.delete(key),
+}));
+
+import { accountGuard, bindCacheScope, cacheGetJson, cacheSetJson, purgeCaches } from "../../lib/kv";
 import {
+  accountRemovalStore,
   createUploadSession,
+  PENDING_REMOVALS_KEY,
+  publishContent,
   type RemovalStore,
   type SentUpload,
   syncGalleryUploads,
@@ -179,5 +193,189 @@ describe("createUploadSession : suppressions à reprendre", () => {
     await session.retryRemovals();
     expect(api.removed.sort()).toEqual(["id-file:///p0.jpg#1", "id-file:///p1.jpg#2"]);
     expect(first.store.list).toEqual([]);
+  });
+});
+
+/** API simulée avec son vrai plafond : 40 envois en attente (ni consommés ni supprimés) au plus, sinon 429. */
+function cappedApi(cap = 40) {
+  const waiting = new Set<string>();
+  const removed: string[] = [];
+  let n = 0;
+  return {
+    waiting,
+    removed,
+    send: async () => {
+      if (waiting.size >= cap) throw Object.assign(new Error("Trop de fichiers en attente"), { status: 429 });
+      n += 1;
+      waiting.add(`id${n}`);
+      return { id: `id${n}`, key: `key${n}` };
+    },
+    remove: async (u: SentUpload) => {
+      waiting.delete(u.id);
+      removed.push(u.id);
+    },
+  };
+}
+
+describe("tour 2 : photos remplacées supprimées avant les nouveaux envois", () => {
+  it("publication échouée avec 30 photos, puis les 30 remplacées : pas de 429 au onzième envoi", async () => {
+    const api = cappedApi();
+    const session = createUploadSession({ remove: api.remove, store: memoryStore() });
+    const sync = (list: TestPhoto[]) =>
+      session.run((t) => syncGalleryUploads(list, t.cache, api.send, t.retire, undefined, t.stopped, t.release));
+    await sync(photos(30)); // la création a échoué ensuite : 30 envois gardés en attente
+    expect(api.waiting.size).toBe(30);
+    const others = Array.from({ length: 30 }, (_, i) => ({ photo: { uri: `file:///autre${i}.jpg` }, rects: [] }));
+    await expect(sync(others)).resolves.toHaveLength(30);
+    expect(api.waiting.size).toBe(30);
+    expect(api.removed).toHaveLength(30);
+  });
+
+  it("par publishContent : la photo retirée part avant le premier nouvel envoi", async () => {
+    const order: string[] = [];
+    const session = createUploadSession({
+      remove: async (u) => void order.push(`suppr ${u.id}`),
+      store: memoryStore(),
+    });
+    let n = 0;
+    const send = async () => {
+      n += 1;
+      order.push(`envoi ${n}`);
+      return { id: `id${n}`, key: `key${n}` };
+    };
+    await session.run((t) => syncGalleryUploads(photos(1), t.cache, send, t.retire));
+    await session.run((t) =>
+      publishContent(t, {
+        photos: [{ photo: { uri: "file:///b.jpg" }, rects: [] }],
+        send,
+        create: async () => undefined,
+      }),
+    );
+    expect(order).toEqual(["envoi 1", "suppr id1", "envoi 2"]);
+  });
+});
+
+describe("tour 2 : suppressions bornées, publication jamais retenue", () => {
+  it("hors ligne, 30 suppressions à reprendre : arrêt à la première panne réseau (une seule tentative)", async () => {
+    const store = memoryStore();
+    store.list = Array.from({ length: 30 }, (_, i) => ({ id: `old${i}`, key: `k${i}` }));
+    const remove = vi.fn(async () => {
+      throw new Error("hors ligne");
+    });
+    const session = createUploadSession({ remove, store });
+    await session.retryRemovals();
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(store.list).toHaveLength(30);
+  });
+
+  it("une erreur qui n'est pas réseau n'arrête pas la série : l'envoi reste à reprendre, les autres partent", async () => {
+    const store = memoryStore();
+    store.list = [
+      { id: "a", key: "ka" },
+      { id: "b", key: "kb" },
+    ];
+    const session = createUploadSession({
+      remove: async (u) => {
+        if (u.id === "a") throw Object.assign(new Error("refusé"), { network: false });
+      },
+      store,
+      stopsRemovals: (e) => (e as { network?: boolean }).network !== false,
+    });
+    await session.retryRemovals();
+    expect(store.list).toEqual([{ id: "a", key: "ka" }]);
+  });
+
+  it("une publication réussie ne rejoue pas la liste et n'attend pas les anciennes suppressions (lentes)", async () => {
+    const store = memoryStore();
+    store.list = Array.from({ length: 30 }, (_, i) => ({ id: `old${i}`, key: `k${i}` }));
+    const remove = vi.fn(() => new Promise<void>(() => undefined)); // délai réseau sans fin
+    const session = createUploadSession({ remove, store });
+    void session.retryRemovals(); // ouverture du formulaire : le rejeu reste bloqué sur la première
+    const api = fakeApi();
+    const create = vi.fn(async () => undefined);
+    const published = session.run((t) => publishContent(t, { photos: photos(2), send: api.send, create }));
+    const outcome = await Promise.race([
+      published.then(() => "publié"),
+      tick()
+        .then(tick)
+        .then(() => "en attente"),
+    ]);
+    expect(outcome).toBe("publié");
+    expect(create).toHaveBeenCalledWith(["key-file:///p0.jpg#1", "key-file:///p1.jpg#2"]);
+    expect(remove).toHaveBeenCalledTimes(1); // le rejeu de l'ouverture seulement, jamais relancé par la publication
+  });
+});
+
+describe("tour 2 : publishContent (chemin du formulaire « Ajouter »)", () => {
+  it("fermeture pendant l'attente de fin d'animation : UploadsCancelled, rien de créé, envois supprimés", async () => {
+    const api = fakeApi();
+    const session = createUploadSession({ remove: api.remove, store: memoryStore() });
+    const create = vi.fn(async () => undefined);
+    let closed: Promise<void> = Promise.resolve();
+    const published = session.run((t) =>
+      publishContent(t, {
+        photos: photos(2),
+        send: api.send,
+        create,
+        parked: async () => {
+          closed = session.discard(); // fermeture du formulaire pendant que la jauge se range
+        },
+      }),
+    );
+    await expect(published).rejects.toBeInstanceOf(UploadsCancelled);
+    await closed;
+    expect(create).not.toHaveBeenCalled();
+    expect(api.removed.sort()).toEqual(["id-file:///p0.jpg#1", "id-file:///p1.jpg#2"]);
+    expect(session.cache.size).toBe(0);
+  });
+
+  it("lien : pas d'envoi, création avec une liste de clés vide", async () => {
+    const api = fakeApi();
+    const session = createUploadSession({ remove: api.remove, store: memoryStore() });
+    const create = vi.fn(async () => undefined);
+    await session.run((t) => publishContent(t, { photos: null, send: api.send, create }));
+    expect(create).toHaveBeenCalledWith([]);
+    expect(api.sentUris).toEqual([]);
+  });
+});
+
+describe("tour 2 : liste des suppressions liée au compte qui l'a créée", () => {
+  const kv = { accountGuard, cacheGetJson, cacheSetJson };
+
+  it("A se déconnecte pendant une suppression, B se connecte : rien de A dans le cache de B, la série s'arrête", async () => {
+    keychain.clear();
+    await bindCacheScope("compte-a");
+    let release!: () => void;
+    const hang = new Promise<void>((r) => {
+      release = r;
+    });
+    const calls: string[] = [];
+    const session = createUploadSession({
+      remove: async (u) => {
+        calls.push(u.id);
+        await hang;
+        throw new Error("hors ligne");
+      },
+      store: accountRemovalStore(kv),
+    });
+    for (const u of [
+      { id: "a1", key: "cle-photo-a1" },
+      { id: "a2", key: "cle-photo-a2" },
+    ])
+      session.cache.set(u.id, u);
+    const closing = session.discard(); // nettoyage commencé sous A
+    for (let i = 0; i < 5; i++) await tick();
+    expect(calls).toEqual(["a1"]);
+    await purgeCaches(); // A se déconnecte…
+    await bindCacheScope("compte-b"); // … B se connecte
+    await cacheSetJson(PENDING_REMOVALS_KEY, [{ id: "b1", key: "cle-photo-b1" }]);
+    release();
+    await closing;
+    expect(await cacheGetJson(PENDING_REMOVALS_KEY)).toEqual([{ id: "b1", key: "cle-photo-b1" }]);
+    expect([...keychain.values()].some((v) => v.includes("cle-photo-a"))).toBe(false);
+    // La session créée sous A ne lit ni ne rejoue jamais la liste de B.
+    await session.retryRemovals();
+    expect(calls).toEqual(["a1"]);
+    expect(await cacheGetJson(PENDING_REMOVALS_KEY)).toEqual([{ id: "b1", key: "cle-photo-b1" }]);
   });
 });

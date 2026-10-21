@@ -36,7 +36,7 @@ import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
 import { formatDay } from "@/lib/format";
 import { ApiRequestError, errorMessage } from "@/lib/http";
-import { cacheGetJson, cacheSetJson } from "@/lib/kv";
+import { accountGuard, cacheGetJson, cacheScope, cacheSetJson } from "@/lib/kv";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { type PickedPhoto, pickPhotos } from "@/lib/photos";
@@ -47,7 +47,14 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@/ui/PhotoGrid";
 import { TabScreen } from "@/ui/Screens";
-import { createUploadSession, type SentUpload, syncGalleryUploads, UploadsCancelled } from "./galleryUploads";
+import {
+  accountRemovalStore,
+  createUploadSession,
+  publishContent,
+  type SentUpload,
+  type UploadSession,
+  UploadsCancelled,
+} from "./galleryUploads";
 import { contentCaption, groupByEvent, guessPlatform, normalizeUrl, totalViews } from "./model";
 
 const { space1, space2, space3, space6, space12 } = tokens.spacing;
@@ -193,12 +200,8 @@ async function removeUpload(upload: SentUpload): Promise<void> {
   }
 }
 
-/** Suppressions à reprendre : rangées sous le compte connecté, jamais mêlées aux envois réutilisables. */
-const PENDING_REMOVALS_KEY = "media-pending-upload-removals";
-const pendingRemovalStore = {
-  read: async () => (await cacheGetJson<SentUpload[]>(PENDING_REMOVALS_KEY)) ?? [],
-  write: async (list: SentUpload[]) => cacheSetJson(PENDING_REMOVALS_KEY, list),
-};
+/** Une panne réseau arrête la série de suppressions (les suivantes échoueraient aussi, 15 s chacune). */
+const stopsRemovals = (e: unknown) => !(e instanceof ApiRequestError) || e.isNetwork;
 
 type EventChoice = { id: string; title: string; startsAt: string };
 
@@ -224,7 +227,14 @@ function AddContentSheet({
   const [upload, setUpload] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Envois gardés, fermeture et nettoyage sérialisés ; suppressions en échec gardées pour être reprises (lot 59d).
-  const session = useRef(createUploadSession({ remove: removeUpload, store: pendingRemovalStore })).current;
+  // Une session par compte : la liste des suppressions à reprendre est celle du compte qui l'a créée (tour 2).
+  const account = cacheScope();
+  const sessions = useRef<{ account: string | null; session: UploadSession } | null>(null);
+  if (!sessions.current || sessions.current.account !== account) {
+    const store = accountRemovalStore({ accountGuard, cacheGetJson, cacheSetJson });
+    sessions.current = { account, session: createUploadSession({ remove: removeUpload, store, stopsRemovals }) };
+  }
+  const session = sessions.current.session;
   // Retour sur le formulaire : les suppressions restées en échec (hors ligne) sont rejouées.
   useEffect(() => {
     if (visible) void session.retryRemovals();
@@ -269,49 +279,40 @@ function AddContentSheet({
     // Toute la publication passe par la file de la session : une fermeture du formulaire attend sa fin, et une
     // réouverture ne retrouve jamais un envoi en cours de suppression.
     try {
-      await session.run(async (tools) => {
-        let keys: string[] = [];
-        if (kind === "gallery") {
-          // Les envois réussis sont gardés d'un essai à l'autre : une panne de publication ne renvoie pas les 30 photos.
-          keys = await syncGalleryUploads(
-            photos,
-            tools.cache,
-            async ({ photo, rects }, i) => {
-              const form = new FormData();
-              form.append("purpose", "media_content");
-              if (rects.length) form.append("plateRects", JSON.stringify(rects));
-              if (Platform.OS === "web") {
-                const blob = await (await fetch(photo.uri)).blob();
-                form.append("file", new File([blob], `photo-${i + 1}.jpg`, { type: "image/jpeg" }));
-              } else {
-                form.append("file", {
-                  uri: photo.uri,
-                  name: `photo-${i + 1}.jpg`,
-                  type: "image/jpeg",
-                } as unknown as Blob);
-              }
-              const { id, key } = await api.upload(form);
-              return { id, key };
-            },
-            tools.retire,
-            (current, total) => setUpload({ current, total }),
-            tools.stopped,
-          );
-          setUpload({ current: photos.length, total: photos.length, done: true });
-          await waitUploadParked();
-          if (tools.stopped()) throw new UploadsCancelled();
-        }
-        await api.createMediaContent({
-          eventId: chosen,
-          kind,
-          title: title.trim(),
-          url: kind === "link" ? normalizeUrl(url) : null,
-          platform: kind === "link" ? platform : "other",
-          photoKeys: keys,
-        });
-        // Publié : les fichiers sont consommés, plus rien à garder ni à supprimer.
-        tools.keepNothing();
-      });
+      await session.run((tools) =>
+        publishContent(tools, {
+          photos: kind === "gallery" ? photos : null,
+          send: async ({ photo, rects }, i) => {
+            const form = new FormData();
+            form.append("purpose", "media_content");
+            if (rects.length) form.append("plateRects", JSON.stringify(rects));
+            if (Platform.OS === "web") {
+              const blob = await (await fetch(photo.uri)).blob();
+              form.append("file", new File([blob], `photo-${i + 1}.jpg`, { type: "image/jpeg" }));
+            } else {
+              form.append("file", {
+                uri: photo.uri,
+                name: `photo-${i + 1}.jpg`,
+                type: "image/jpeg",
+              } as unknown as Blob);
+            }
+            const { id, key } = await api.upload(form);
+            return { id, key };
+          },
+          onProgress: (current, total) => setUpload({ current, total }),
+          onSent: () => setUpload({ current: photos.length, total: photos.length, done: true }),
+          parked: waitUploadParked,
+          create: (photoKeys) =>
+            api.createMediaContent({
+              eventId: chosen,
+              kind,
+              title: title.trim(),
+              url: kind === "link" ? normalizeUrl(url) : null,
+              platform: kind === "link" ? platform : "other",
+              photoKeys,
+            }),
+        }),
+      );
       reset();
       onDone();
     } catch (e) {
