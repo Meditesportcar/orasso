@@ -245,7 +245,20 @@ describe("pro : remises, vues, événements proches, passionnés, scans", () => 
       });
     }
     void far;
+    // Événement privé près de l'atelier, avec photo : le pro, non invité, n'en voit rien (ni titre, ni affiche, ni photo).
+    await createEvent(structure.id, {
+      title: "Soirée privée",
+      admission: "invite_only",
+      startsAt: at(3),
+      lat: 42.71,
+      lng: 2.95,
+      department: "66",
+      posterPhotoKey: "event-posters/prive.webp",
+      posterPostKey: "event-posters/prive-post.png",
+    });
     const r = (await home(owner, "pro")).pro;
+    expect(JSON.stringify(r)).not.toContain("prive");
+    expect(JSON.stringify(r)).not.toContain("Soirée privée");
     expect(r.name).toBe("Garage de test");
     expect(r.discountsThisWeek).toBe(3);
     expect(r.profileViews).toBe(42);

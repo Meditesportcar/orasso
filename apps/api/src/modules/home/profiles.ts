@@ -43,6 +43,7 @@ import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { arrivalsOf } from "../events/arrivals";
 import { eventPhotoUrl, eventPosterUrl } from "../events/card";
+import { canSeeEvent } from "../invitations/access";
 import { missionsService } from "../providers/missions";
 import { ticketsService } from "../tickets/service";
 
@@ -183,15 +184,20 @@ export async function proBlock(v: Viewer): Promise<HomePro | null> {
   ]);
 
   // Événements près de l'atelier : par distance quand la fiche et l'événement ont des coordonnées, sinon même département.
-  const near = upcoming
+  const candidates = upcoming
     .map((r) => r.e)
     .filter((e) => {
       if (pro.lat !== null && pro.lng !== null && e.lat !== null && e.lng !== null) {
         return distanceKm({ lat: pro.lat, lng: pro.lng }, { lat: e.lat, lng: e.lng }) <= PRO_EVENTS_RADIUS_KM;
       }
       return pro.department !== null && e.department === pro.department;
-    })
-    .slice(0, 3);
+    });
+  // Événement privé sur invitation : seuls ses ayants droit le voient (titre, affiche et photo comprises).
+  const near: typeof candidates = [];
+  for (const e of candidates) {
+    if (near.length === 3) break;
+    if (await canSeeEvent(e, v)) near.push(e);
+  }
   const going = near.length
     ? await db
         .select({ eventId: applications.eventId, n: sql<number>`count(distinct ${applications.userId})::int` })
