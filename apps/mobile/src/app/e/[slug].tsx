@@ -296,7 +296,7 @@ export default function EventPage() {
       />
       {followError ? <Notice tone="error">{followError}</Notice> : null}
       <EventFactsGrid event={e} />
-      <ArrivalSlots arrivals={e.arrivals} />
+      <ArrivalSlots arrivals={e.arrivals} entranceNote={e.entranceNote} />
       {e.customPosterUrl ? <CustomPoster url={e.customPosterUrl} structureName={e.structure.name} /> : null}
 
       {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}

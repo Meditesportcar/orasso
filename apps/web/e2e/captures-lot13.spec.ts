@@ -202,23 +202,9 @@ test("captures du site public, de la structure et de la création d'événement"
       await shot(o, theme, view.id, "14-orga-evenement-brouillon");
       await o.goto(`/orga/${structure.slug}/nouvel-evenement`);
       await o.waitForLoadState("networkidle");
-      await shot(o, theme, view.id, "15-assistant-1-format");
-      await o.getByLabel("Titre").fill("Rassemblement d'exemple");
-      await o.getByLabel("Début").fill("2026-12-05T18:00");
-      await o.getByLabel("Fin").fill("2026-12-05T23:00");
-      for (let i = 0; i < 3; i++) await o.getByRole("button", { name: "Suivant" }).click();
-      await shot(o, theme, view.id, "16-assistant-4-prestataires");
-      for (let i = 0; i < 3; i++) await o.getByRole("button", { name: "Suivant" }).click();
-      await shot(o, theme, view.id, "17-assistant-7-criteres");
-      for (let i = 0; i < 3; i++) await o.getByRole("button", { name: "Suivant" }).click();
-      await shot(o, theme, view.id, "18-assistant-10-infos");
-      await o.getByRole("button", { name: "Suivant" }).click();
-      await o.getByRole("button", { name: "Ajouter une zone" }).click();
-      await o.getByLabel("Code").fill("JDM");
-      await o.getByLabel("Nom", { exact: true }).fill("Zone JDM");
-      await shot(o, theme, view.id, "19-assistant-11-zones");
-      await o.getByRole("button", { name: "Suivant" }).click();
-      await shot(o, theme, view.id, "19b-assistant-12-billetterie");
+      // Lot 53 : l'assistant est en huit temps ; ils sont tous capturés par `lot53.spec.ts` (site, deux thèmes, 390 px
+      // et bureau). Ici, seulement son ouverture.
+      await shot(o, theme, view.id, "15-assistant-1-type");
       await o.context().close();
     }
   }

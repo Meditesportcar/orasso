@@ -164,6 +164,8 @@ export const eventPageLabels = {
   arrivals: "Créneaux d'arrivée",
   arrivalExhibitors: "Exposants",
   arrivalPublic: "Public",
+  /** Lot 53 : « Précision pour l'entrée » saisie dans l'assistant. */
+  entranceNote: "Pour entrer",
   strict: "Strict",
   advised: "Conseillé",
   customPoster: "Affiche de l'organisateur",

@@ -112,6 +112,8 @@ const eventFields = z.object({
   highGradeMin: z.enum(grades),
   rulesText: optionalText(10000),
   instructions: optionalText(2000),
+  /** Lot 53 : « Précision pour l'entrée (facultatif) », publique comme l'adresse. */
+  entranceNote: optionalText(160),
   /** Types de prestataires attendus (cases à cocher et « + »), sans candidature en V1. */
   vendorTypes: z.array(z.string().trim().min(1).max(40)).max(16),
   /** Rôle « boutique » du staff activé pour cet événement (lot 24). */
@@ -357,6 +359,8 @@ export type EventPublic = EventCard & {
   rulesText: string | null;
   /** Consignes : réservées aux inscrits retenus et à l'organisation. */
   instructions: string | null;
+  /** Lot 53 : précision pour l'entrée (« Entrée par le quai Nord »), publique comme l'adresse. */
+  entranceNote: string | null;
   acceptedCount: number;
   /** Lot 26 : jours (vide = événement d'un jour) et mode d'accès (`whole` pour un événement d'un jour). */
   days: EventDay[];
