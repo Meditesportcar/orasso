@@ -22,7 +22,8 @@ function Editor({ eventId, copy, temps, avert }: { eventId: string; copy: boolea
         key={e.id}
         event={e}
         notice={avert ?? (copy ? L.duplicated : null)}
-        initialStep={eventWizardStepOf(temps)}
+        // Une copie encore en brouillon s'ouvre sur le premier temps (on y change d'abord la date).
+        initialStep={eventWizardStepOf(temps) ?? (e.parentEventId && e.status === "draft" ? "type" : null)}
       />
     );
   }

@@ -138,7 +138,7 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   // Volet « Sur place » : zones et prestataires attendus.
   await owner.getByText("Sur place", { exact: true }).click();
   await owner.getByRole("button", { name: "Ajouter une zone" }).click();
-  await owner.getByLabel("Code").fill("A");
+  await owner.getByLabel("Code", { exact: true }).fill("A");
   await owner.getByLabel("Nom", { exact: true }).fill("Allée A");
   await owner.getByLabel("Food truck").check({ force: true });
   await owner.getByLabel("Un autre type").fill("Glacier");

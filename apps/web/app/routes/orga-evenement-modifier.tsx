@@ -29,7 +29,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     api<VehicleMake[]>(request, "/vehicle-reference/makes"),
   ]);
   if (event.structure.id !== structure.id) throw new Response("Événement introuvable.", { status: 404 });
-  const wanted = eventWizardStepOf(new URL(request.url).searchParams.get("temps"));
+  // Une copie (duplication) encore en brouillon s'ouvre sur le premier temps : on y change d'abord la date.
+  const copy = Boolean(event.parentEventId) && event.status === "draft";
+  const wanted = eventWizardStepOf(new URL(request.url).searchParams.get("temps")) ?? (copy ? "type" : null);
   return {
     structure: {
       id: structure.id,
