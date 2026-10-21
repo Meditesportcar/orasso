@@ -13,7 +13,7 @@ import { useInInbox } from "./InboxScope";
 import { JournalSheet } from "./JournalSheet";
 import { KeyboardSafe } from "./KeyboardSafe";
 import { OverlayProvider, OverlaySlot } from "./Overlay";
-import { type ScrollAssist, ScrollAssistContext } from "./ScrollAssist";
+import { revealOffset, type ScrollAssist, ScrollAssistContext } from "./ScrollAssist";
 import { TabTitle } from "./TabTitle";
 import { TopBar } from "./TopBar";
 
@@ -141,14 +141,14 @@ function Body({ children, onRefresh }: { children: ReactNode; onRefresh?: () => 
     () => ({
       hold: (on) => setHeld(on),
       reveal: (view) => {
-        // Après le rendu de la fiche : on mesure la page et la vue à l'écran, puis on défile de ce qui dépasse en bas.
+        // Après le rendu de la fiche : on mesure la page et la vue à l'écran, puis on défile (`revealOffset`).
         setTimeout(() => {
           const page = scroll.current?.getNativeScrollRef();
           if (!page || !view) return;
-          page.measureInWindow((_px, py, _pw, ph) => {
-            view.measureInWindow((_x, y, _w, h) => {
-              const overflow = y + h - (py + ph);
-              if (overflow > 0) scroll.current?.scrollTo({ y: offset.current + overflow + space3, animated: true });
+          page.measureInWindow((_px, pageY, _pw, pageH) => {
+            view.measureInWindow((_x, viewY, _w, viewH) => {
+              const y = revealOffset({ offset: offset.current, pageY, pageH, viewY, viewH, margin: space3 });
+              if (y !== null) scroll.current?.scrollTo({ y, animated: true });
             });
           });
         }, 80);
@@ -164,6 +164,11 @@ function Body({ children, onRefresh }: { children: ReactNode; onRefresh?: () => 
       keyboardShouldPersistTaps="handled"
       scrollEnabled={!held}
       scrollEventThrottle={32}
+      // Lot 59c, tour 2 : filet de sécurité, plus aucun doigt sur la page = elle défile de nouveau.
+      onTouchEnd={(e) => {
+        if (e.nativeEvent.touches.length === 0) setHeld(false);
+      }}
+      onTouchCancel={() => setHeld(false)}
       onScroll={(e) => {
         offset.current = e.nativeEvent.contentOffset.y;
       }}

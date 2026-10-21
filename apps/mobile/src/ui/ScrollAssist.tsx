@@ -15,6 +15,24 @@ export type ScrollAssist = {
 
 export const ScrollAssistContext = createContext<ScrollAssist | null>(null);
 
+/**
+ * Où défiler pour montrer une vue (positions à l'écran) : `null` si elle est déjà entière ; son bas si elle dépasse en
+ * bas ; son haut si elle est plus haute que la page (lot 59c, tour 2 : un groupe de fiches garde ses premières visibles).
+ */
+export function revealOffset(m: {
+  offset: number;
+  pageY: number;
+  pageH: number;
+  viewY: number;
+  viewH: number;
+  margin: number;
+}): number | null {
+  const bottomOverflow = m.viewY + m.viewH - (m.pageY + m.pageH);
+  if (bottomOverflow <= 0) return null;
+  if (m.viewH + 2 * m.margin > m.pageH) return m.offset + (m.viewY - m.pageY) - m.margin;
+  return m.offset + bottomOverflow + m.margin;
+}
+
 /** L'aide de la page qui défile autour de l'écran ; `null` hors d'un gabarit d'écran. */
 export function useScrollAssist(): ScrollAssist | null {
   return useContext(ScrollAssistContext);

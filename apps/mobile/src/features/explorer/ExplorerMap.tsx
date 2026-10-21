@@ -37,6 +37,7 @@ import { type GestureResponderEvent, StyleSheet, useWindowDimensions, View } fro
 
 import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
 import { useScrollAssist } from "@/ui/ScrollAssist";
+import { createTouchHold } from "@/ui/scrollHold";
 import {
   type ExplorerMapProps,
   type MapPin,
@@ -55,7 +56,15 @@ const PRESS_DEDUPE_MS = 500;
 /** Vrai : la carte s'affiche ici. */
 export const mapSupported = true;
 
-export function ExplorerMap({ pins, me, selectedId, onSelect, onSelectGroup, children }: ExplorerMapProps) {
+export function ExplorerMap({
+  pins,
+  me,
+  selectedId,
+  onSelect,
+  onSelectGroup,
+  children,
+  reveal: revealOnPress = true,
+}: ExplorerMapProps) {
   const { theme, t } = useTheme();
   const [zoom, setZoom] = useState<number>(() => {
     const v = viewFor(pins);
@@ -88,12 +97,15 @@ export function ExplorerMap({ pins, me, selectedId, onSelect, onSelectGroup, chi
     if (lastPress.current.id === id && at - lastPress.current.at < PRESS_DEDUPE_MS) return;
     lastPress.current = { id, at };
     action();
-    if (reveal) assist?.reveal(below.current);
+    if (reveal && revealOnPress) assist?.reveal(below.current);
   };
-  // Un doigt sur la carte : la page ne défile plus ; le dernier doigt levé la rend.
-  const release = (e: GestureResponderEvent) => {
-    if (e.nativeEvent.touches.length === 0) assist?.hold(false);
-  };
+  // Un doigt sur la carte : la page ne défile plus ; le dernier des doigts posés sur la carte, levé, la rend (lot 59c,
+  // tour 2 : identifiants suivis, un doigt resté ailleurs ne compte pas) ; la carte démontée la rend aussi.
+  const assistRef = useRef(assist);
+  assistRef.current = assist;
+  const touchHold = useMemo(() => createTouchHold((on) => assistRef.current?.hold(on)), []);
+  useEffect(() => () => touchHold.cancel(), [touchHold]);
+  const ids = (e: GestureResponderEvent) => e.nativeEvent.changedTouches.map((t) => t.identifier);
   // Lot 40 : la carte garde le geste horizontal (pas de glissement vers l'onglet voisin).
   useTabSwipeDisabled();
   const view = useMemo(() => viewFor(pins), [pins]);
@@ -110,9 +122,9 @@ export function ExplorerMap({ pins, me, selectedId, onSelect, onSelectGroup, chi
     <View style={styles.wrap} testID="explorer-map">
       <View
         style={[styles.map, { borderColor: t.color.line, height: mapHeight(screenHeight) }]}
-        onTouchStart={() => assist?.hold(true)}
-        onTouchEnd={release}
-        onTouchCancel={() => assist?.hold(false)}
+        onTouchStart={(e) => touchHold.start(ids(e))}
+        onTouchEnd={(e) => touchHold.end(ids(e))}
+        onTouchCancel={() => touchHold.cancel()}
       >
         {/* La clé remet la caméra sur les nouvelles épingles quand les filtres changent. */}
         {vectorOk === undefined ? null : (

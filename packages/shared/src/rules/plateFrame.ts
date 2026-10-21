@@ -52,8 +52,9 @@ export function rotatePlateFrame(r: PlateRect, angle: number): PlateRect {
 }
 
 /**
- * Tourne le cadre par sa poignée, posée `offset` px au-dessus du milieu de son bord haut : l'angle suit la direction du
- * centre du cadre vers le doigt (écart `dx, dy` en px depuis le début du geste ; `H` : hauteur de la photo affichée).
+ * Tourne le cadre par sa poignée, posée `offset` px au-dessus du milieu de son bord haut (ou au-dessous du bord bas,
+ * `below`, quand le cadre est collé en haut de la photo : lot 59c, tour 2) : l'angle suit la direction du centre du cadre
+ * vers le doigt (écart `dx, dy` en px depuis le début du geste ; `H` : hauteur de la photo affichée).
  */
 export function dragRotatePlateFrame(
   start: PlateRect,
@@ -61,13 +62,15 @@ export function dragRotatePlateFrame(
   dy: number,
   H: number,
   offset = PLATE_ROTATE_HANDLE_OFFSET,
+  below = false,
 ): PlateRect {
   const a0 = rad(start.angle ?? 0);
-  const reach = (start.h * H) / 2 + offset;
+  const side = below ? -1 : 1;
+  const reach = ((start.h * H) / 2 + offset) * side;
   const vx = reach * Math.sin(a0) + dx;
   const vy = -reach * Math.cos(a0) + dy;
   if (Math.hypot(vx, vy) < 1) return start;
-  return rotatePlateFrame(start, (Math.atan2(vx, -vy) * 180) / Math.PI);
+  return rotatePlateFrame(start, (Math.atan2(side * vx, -side * vy) * 180) / Math.PI);
 }
 
 /**

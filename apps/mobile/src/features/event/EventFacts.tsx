@@ -198,7 +198,7 @@ export function EventFactsGrid({ event }: { event: EventPublic }) {
         </Fact>
       </View>
       {map && pins.length > 0 ? (
-        <ExplorerMap pins={pins} selectedId={event.id} onSelect={() => undefined}>
+        <ExplorerMap pins={pins} selectedId={event.id} onSelect={() => undefined} reveal={false}>
           {place ? (
             <Text variant="meta" color={c.inkMuted}>
               {place}

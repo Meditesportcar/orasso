@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { MOBILE, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { checkerPhoto } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
 // Lot 59c, retours de l'APK d'essai, côté appli (version web de recette) : note des captures sous le QR de compte (le
@@ -71,6 +72,13 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await expect(note).toContainText("une à deux minutes");
     await audit(page);
     await shot(page, `qr-compte-note-${theme}`);
+    // Tour 2 : quitter Profil par un onglet ferme la feuille (et rend les captures) ; au retour, elle est fermée.
+    await page.getByRole("tab", { name: "Explorer" }).click();
+    await page.waitForURL(/explorer/, { timeout: 20_000 });
+    await page.getByRole("tab", { name: "Profil" }).click();
+    await page.waitForURL(/profil/, { timeout: 20_000 });
+    await expect(page.getByTestId("profil-account-qr")).toBeVisible();
+    await expect(page.getByTestId("qr-capture-note")).toHaveCount(0);
     await ctx.close();
   });
 }
@@ -130,9 +138,9 @@ test("Explorer : l'étiquette touchée sur la carte montre sa fiche, dans l'écr
     await page.getByText("Carte", { exact: true }).click();
     const canvas = page.getByTestId("explorer-map-canvas");
     await expect(canvas).toHaveAttribute("data-map-style", `orasso-${theme}`, { timeout: 45_000 });
-    // Carte plus haute : 55 % de l'écran (464 px sur 844).
+    // Carte plus haute : 55 % de l'écran, 30 % laissé à la page (441 px sur 844, tour 2).
     const box = await canvas.boundingBox();
-    expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(455);
+    expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(435);
     await page.waitForTimeout(2500);
     await canvas.getByTestId("map-marker").first().click();
     const picked = page.getByTestId("map-picked");
@@ -143,4 +151,78 @@ test("Explorer : l'étiquette touchée sur la carte montre sa fiche, dans l'écr
     await shot(page, `explorer-carte-fiche-${theme}`);
     await ctx.close();
   }
+});
+
+/** Angle (degrés) et largeur d'origine (px, avant rotation) d'un élément, lus dans le style calculé. */
+async function turn(page: Page, testId: string) {
+  return page
+    .getByTestId(testId)
+    .first()
+    .evaluate((el) => {
+      const m = getComputedStyle(el).transform.match(/matrix\(([^,]+),\s*([^,]+)/);
+      const angle = m ? (Math.atan2(Number(m[2]), Number(m[1])) * 180) / Math.PI : 0;
+      return { angle, width: (el as HTMLElement).offsetWidth };
+    });
+}
+
+async function dragFrom(page: Page, testId: string, dx: number, dy: number) {
+  const b = await page.getByTestId(testId).first().boundingBox();
+  if (!b) throw new Error(`${testId} absent`);
+  const x = b.x + b.width / 2;
+  const y = b.y + b.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(x + (dx * i) / 10, y + (dy * i) / 10);
+  await page.mouse.up();
+}
+
+test("ajout d'un véhicule : les poignées du cadre tournent et agrandissent (le cadre ne leur prend plus le doigt)", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const pseudo = `Rot59_${unique()}`.slice(0, 20);
+  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+  await signUpApi(pseudo, email);
+  const { ctx, page } = await open(browser, "sable");
+  await signIn(page, email);
+  await page.goto("/vehicule/nouveau");
+  await afterOpening(page);
+  const next = () => page.getByTestId("vehicle-step-next").click();
+  await page.getByRole("radio", { name: "Supra", exact: false }).first().click();
+  await page.getByRole("radio", { name: "Mk5", exact: false }).first().click();
+  await next();
+  await page.getByTestId("vehicle-year-2021").click();
+  await next();
+  await page.getByRole("checkbox", { name: "Sportive", exact: true }).click();
+  await next();
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByTestId("vehicle-photo-add").click();
+  await (await chooser).setFiles({ name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
+  await expect(page.getByTestId("new-vehicle-photos").getByText("Couverture")).toBeVisible({ timeout: 20_000 });
+  await next();
+  await page.getByTestId("plate-frame-add").click();
+  await expect(page.getByTestId("plate-frame").first()).toBeVisible();
+  const before = await turn(page, "plate-frame");
+  expect(Math.round(before.angle)).toBe(0);
+
+  // Poignée de rotation tirée vers la droite : le cadre penche, sans se déplacer.
+  await dragFrom(page, "plate-frame-rotate", 30, 0);
+  const turned = await turn(page, "plate-frame");
+  expect(turned.angle).toBeGreaterThan(15);
+  expect(turned.angle).toBeLessThan(60);
+  // Coin : le cadre s'agrandit.
+  await dragFrom(page, "plate-frame-handle", 30, 10);
+  expect((await turn(page, "plate-frame")).width).toBeGreaterThan(before.width + 10);
+  await shot(page, "plaque-cadre-tourne-sable");
+
+  // Cadre remonté en haut de la photo : la poignée de rotation passe dessous (elle ne sort plus de la photo).
+  await dragFrom(page, "plate-frame", 0, -400);
+  const frameBox = await page.getByTestId("plate-frame").first().boundingBox();
+  const handleBox = await page.getByTestId("plate-frame-rotate").first().boundingBox();
+  const editorBox = await page.getByTestId("plate-editor").boundingBox();
+  if (!frameBox || !handleBox || !editorBox) throw new Error("cadre, poignée ou photo absent");
+  expect(handleBox.y).toBeGreaterThanOrEqual(editorBox.y);
+  expect(handleBox.y + handleBox.height / 2).toBeGreaterThan(frameBox.y + frameBox.height / 2);
+  await shot(page, "plaque-poignee-dessous-sable");
+  await ctx.close();
 });

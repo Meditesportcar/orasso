@@ -16,9 +16,10 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type ImageSourcePropType, PanResponder, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { EDITOR_MAX_HEIGHT, fitPhoto } from "./model";
+import { capturesGesture, PLATE_HANDLE, type PlateGesture, rotateHandleBelow } from "./plateGestures";
 
 const { space2 } = tokens.spacing;
-const HANDLE = 22;
+const HANDLE = PLATE_HANDLE;
 /** Cible tactile des poignées : 22 px visibles, 46 px au doigt. */
 const HIT = { top: 12, bottom: 12, left: 12, right: 12 };
 
@@ -52,7 +53,10 @@ export function PlateFrameEditor({
   return (
     <View style={styles.outer} onLayout={(e) => setOuter(e.nativeEvent.layout.width)}>
       <View style={[styles.editor, { width: box.w, height: box.h }]} testID={testID}>
-        <Photo source={source} style={StyleSheet.absoluteFill} />
+        {/* Lot 59c, tour 2 : l'arrondi coupe la photo seule ; les poignées des cadres peuvent dépasser. */}
+        <View style={styles.clip}>
+          <Photo source={source} style={StyleSheet.absoluteFill} />
+        </View>
         {box.w > 0
           ? rects.map((r, i) => (
               <FrameBox
@@ -108,17 +112,19 @@ function FrameBox({
   }, [box, bw, bh]);
 
   // Les gestes lisent toujours les dernières valeurs (le PanResponder est créé une fois).
-  const latest = useRef({ rect, box, editable, onCommit });
-  latest.current = { rect, box, editable, onCommit };
+  const below = rotateHandleBelow(rect, box.h);
+  const latest = useRef({ rect, box, editable, onCommit, below });
+  latest.current = { rect, box, editable, onCommit, below };
   const start = useRef(rect);
   const current = useRef(rect);
 
-  const responder = (kind: "move" | "resize" | "rotate") =>
+  const responder = (kind: PlateGesture) =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => latest.current.editable,
-      onStartShouldSetPanResponderCapture: () => latest.current.editable,
       onMoveShouldSetPanResponder: () => latest.current.editable,
-      onMoveShouldSetPanResponderCapture: () => latest.current.editable,
+      // Lot 59c, tour 2 : seules les poignées capturent (sinon le cadre, leur parent, leur prenait le doigt).
+      onStartShouldSetPanResponderCapture: () => capturesGesture(kind) && latest.current.editable,
+      onMoveShouldSetPanResponderCapture: () => capturesGesture(kind) && latest.current.editable,
       // Le cadre garde le geste : la page ne défile pas pendant qu'on le place.
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
@@ -133,7 +139,7 @@ function FrameBox({
             ? movePlateFrame(start.current, g.dx / W, g.dy / H)
             : kind === "resize"
               ? resizeOrientedPlateFrame(start.current, g.dx, g.dy, W, H)
-              : dragRotatePlateFrame(start.current, g.dx, g.dy, H);
+              : dragRotatePlateFrame(start.current, g.dx, g.dy, H, PLATE_ROTATE_HANDLE_OFFSET, latest.current.below);
         current.current = next;
         x.value = next.x;
         y.value = next.y;
@@ -177,13 +183,16 @@ function FrameBox({
             hitSlop={HIT}
             style={[styles.handle, { backgroundColor: t.color.accent }]}
           />
-          <View pointerEvents="none" style={[styles.stem, { backgroundColor: t.color.accent }]} />
+          <View
+            pointerEvents="none"
+            style={[styles.stem, below ? styles.stemBelow : null, { backgroundColor: t.color.accent }]}
+          />
           <View
             {...rotate.panHandlers}
             accessibilityLabel={L.rotateFrame}
             testID="plate-frame-rotate"
             hitSlop={HIT}
-            style={[styles.handle, styles.rotate, { backgroundColor: t.color.accent }]}
+            style={[styles.handle, below ? styles.rotateBelow : styles.rotate, { backgroundColor: t.color.accent }]}
           />
         </>
       ) : null}
@@ -205,7 +214,16 @@ export function PhotoBadge({ children, accent = false }: { children: ReactNode; 
 
 const styles = StyleSheet.create({
   outer: { width: "100%", alignItems: "center" },
-  editor: { borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
+  editor: { borderRadius: tokens.radius.radiusMd },
+  clip: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: tokens.radius.radiusMd,
+    overflow: "hidden",
+  },
   frame: { position: "absolute", borderWidth: 2, borderRadius: 6 },
   grab: { cursor: "grab" } as object,
   handle: {
@@ -232,6 +250,14 @@ const styles = StyleSheet.create({
     top: -PLATE_ROTATE_HANDLE_OFFSET,
     height: PLATE_ROTATE_HANDLE_OFFSET,
   },
+  // Cadre collé en haut de la photo : poignée et tige sous le bord bas (lot 59c, tour 2).
+  rotateBelow: {
+    right: undefined,
+    bottom: -PLATE_ROTATE_HANDLE_OFFSET - HANDLE / 2,
+    left: "50%",
+    marginLeft: -HANDLE / 2,
+  },
+  stemBelow: { top: undefined, bottom: -PLATE_ROTATE_HANDLE_OFFSET },
   badge: { position: "absolute", left: space2, top: space2 },
   hint: { marginTop: space2, alignSelf: "stretch" },
   pill: { paddingHorizontal: space2, paddingVertical: 4, borderRadius: tokens.radius.radiusPill },

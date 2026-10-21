@@ -98,8 +98,15 @@ export function mapGlyphsOrigin(): string | null {
 /** Adresse des tuiles vectorielles remplacée pour la recette du repli (`EXPO_PUBLIC_MAP_TILES_URL`). */
 export const mapTilesUrl = (): string | null => process.env.EXPO_PUBLIC_MAP_TILES_URL || null;
 
-/** Hauteur de la carte : 55 % de l'écran, entre 360 et 520 px (420 avant le lot 59c, trop petite au téléphone). */
-export const mapHeight = (screenHeight: number) => Math.round(Math.min(520, Math.max(360, screenHeight * 0.55)));
+/** Barres du haut et du bas d'un onglet (px, environ) : ce qui ne défile pas autour de la page. */
+export const MAP_CHROME = 150;
+/**
+ * Hauteur de la carte : 55 % de l'écran (420 px avant le lot 59c, trop petite au téléphone), 520 px au plus, et au
+ * moins 30 % de l'écran laissé à la page qui défile hors de la carte (lot 59c, tour 2 : petit téléphone) ; 280 px au
+ * moins. À juger sur l'APK.
+ */
+export const mapHeight = (screenHeight: number) =>
+  Math.round(Math.max(280, Math.min(520, screenHeight * 0.55, screenHeight * 0.7 - MAP_CHROME)));
 
 /** Propriétés communes de la carte (téléphone et navigateur). */
 export type ExplorerMapProps = {
@@ -112,4 +119,9 @@ export type ExplorerMapProps = {
   onSelectGroup?: (pins: MapPin[]) => void;
   /** Aperçu sous la carte (la carte de l'événement touché). */
   children?: ReactNode;
+  /**
+   * Faire défiler la page jusqu'à l'aperçu après un toucher (par défaut). `false` sur la fiche d'un événement : la carte
+   * n'y montre que lui et le toucher ne fait rien (lot 59c, tour 2).
+   */
+  reveal?: boolean;
 };

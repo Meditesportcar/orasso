@@ -19,7 +19,7 @@ type MapLibre = typeof import("maplibre-gl");
 /** Vrai : la carte s'affiche aussi dans un navigateur. */
 export const mapSupported = true;
 
-export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children }: ExplorerMapProps) {
+export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children, reveal = true }: ExplorerMapProps) {
   const { theme, t } = useTheme();
   const box = useRef<HTMLElement | null>(null);
   const handle = useRef<OrassoMap | null>(null);
@@ -36,8 +36,8 @@ export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children }: Exp
   const { height: screenHeight } = useWindowDimensions();
   const below = useRef<View>(null);
   const assist = useScrollAssist();
-  const assistRef = useRef(assist);
-  assistRef.current = assist;
+  const assistRef = useRef(reveal ? assist : null);
+  assistRef.current = reveal ? assist : null;
 
   const webPins = (list: MapPin[]): WebPin[] => [
     ...list.map((p) => ({ id: p.id, kind: p.kind, lat: p.lat, lng: p.lng, label: p.label, title: p.title })),

@@ -70,3 +70,13 @@ describe("cadre orientable (lot 59c)", () => {
     expect(resizeOrientedPlateFrame(tilted, 0, -1000, 400, 200).w).toBe(PLATE_FRAME_MIN_W);
   });
 });
+
+describe("poignée de rotation sous le cadre (lot 59c, tour 2)", () => {
+  const r = { x: 0.25, y: 0.02, w: 0.5, h: 0.1 };
+  it("même angle que la poignée du haut, geste inversé", () => {
+    // Poignée à 36 px sous le centre : tirée de 36 px vers la gauche et 36 vers le haut, elle passe à gauche du centre.
+    expect(dragRotatePlateFrame(r, -36, -36, 200, 26, true).angle).toBe(90);
+    expect(dragRotatePlateFrame(r, 36, 0, 200, 26, true).angle).toBe(-45);
+    expect(dragRotatePlateFrame(r, 0, 0, 200, 26, true)).toEqual(r);
+  });
+});

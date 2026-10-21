@@ -5,6 +5,7 @@
 
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { ACCOUNT_QR_STEP_SECONDS, type AccountQrSecret, gradeLabels } from "@orasso/shared";
+import { useIsFocused } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { ACCOUNT_CAPTURE_TEXT, CaptureNote, useBlockCapture } from "@/features/jour-j/QrExtras";
@@ -25,7 +26,13 @@ export function AccountQrSheet({ visible, onClose }: { visible: boolean; onClose
   const [secret, setSecret] = useState<AccountQrSecret | null>(null);
   const [missing, setMissing] = useState(false);
   const [now, setNow] = useState(() => clockNow());
-  useBlockCapture(visible, "account-qr");
+  // Lot 59c, tour 2 : l'écran Profil reste monté quand on change d'onglet (ou au retour Android) ; la feuille se ferme
+  // dès qu'il n'est plus affiché, et le blocage des captures ne vaut que pendant qu'elle est vraiment à l'écran.
+  const focused = useIsFocused();
+  useEffect(() => {
+    if (visible && !focused) onClose();
+  }, [visible, focused, onClose]);
+  useBlockCapture(visible && focused, "account-qr");
 
   // Le secret vient du trousseau ; s'il manque (premier lancement après une mise à jour), on le redemande à l'API.
   useEffect(() => {
