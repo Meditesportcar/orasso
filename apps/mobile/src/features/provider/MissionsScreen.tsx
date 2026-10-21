@@ -136,7 +136,12 @@ export function MissionsScreen() {
               value={activeTrade ?? p.type}
               onChange={setTrade}
             />
-            <Chip variant="accent" selected={radiusOpen} onPress={() => setRadiusOpen((v) => !v)}>
+            <Chip
+              accessibilityRole="toggle"
+              variant="accent"
+              selected={radiusOpen}
+              onPress={() => setRadiusOpen((v) => !v)}
+            >
               {proV2Labels.radiusChip(shownRadius)}
             </Chip>
           </View>

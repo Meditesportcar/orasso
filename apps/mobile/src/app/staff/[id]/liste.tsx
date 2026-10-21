@@ -122,9 +122,14 @@ export default function StaffList() {
                 />
               )}
               <View style={styles.chips}>
-                <Segments items={FILTERS.map(([id, label]) => ({ id, label }))} value={filter} onChange={setFilter} />
+                <Segments
+                  tall
+                  items={FILTERS.map(([id, label]) => ({ id, label }))}
+                  value={filter}
+                  onChange={setFilter}
+                />
                 {multiDay ? (
-                  <Chip selected={today} onPress={() => setToday((v) => !v)}>
+                  <Chip accessibilityRole="toggle" selected={today} onPress={() => setToday((v) => !v)}>
                     {eventDaysLabels.today}
                   </Chip>
                 ) : null}

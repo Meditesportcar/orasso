@@ -5,17 +5,21 @@ import { Chip, tokens } from "@orasso/design-system/native";
 import { Pressable, StyleSheet, View } from "react-native";
 
 const { space2 } = tokens.spacing;
+const STAFF_TOUCH = 56;
 
 export function Segments<T extends string>({
   items,
   value,
   onChange,
   testID,
+  tall = false,
 }: {
   items: readonly { id: T; label: string; testID?: string }[];
   value: T;
   onChange: (id: T) => void;
   testID?: string;
+  /** Mode staff (gants, soleil) : cible de 56 px au lieu du jeton `touch`. */
+  tall?: boolean;
 }) {
   return (
     <View style={styles.row} testID={testID} accessibilityRole="tablist">
@@ -27,7 +31,7 @@ export function Segments<T extends string>({
           aria-selected={value === s.id}
           accessibilityLabel={s.label}
           testID={s.testID}
-          style={styles.tab}
+          style={[styles.tab, tall && styles.tall]}
         >
           <Chip selected={value === s.id}>{s.label}</Chip>
         </Pressable>
@@ -37,6 +41,8 @@ export function Segments<T extends string>({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  // flexShrink : dans une rangée qui passe à la ligne, les segments rétrécissent et passent à la ligne (360 dp).
+  row: { flexDirection: "row", flexWrap: "wrap", flexShrink: 1, gap: space2 },
   tab: { minHeight: tokens.spacing.touch, minWidth: tokens.spacing.touch, justifyContent: "center" },
+  tall: { minHeight: STAFF_TOUCH },
 });
