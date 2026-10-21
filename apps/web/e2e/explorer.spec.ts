@@ -114,7 +114,7 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
   // Le format affiché sur la carte, pas le titre (le seed du lot 46 a un « Salon auto rétro » au format Exposition).
   const formats = await page.getByTestId("event-tile").locator(".w-card__format").allTextContents();
   expect(formats.length).toBeGreaterThan(0);
-  for (const format of formats) expect(format).toMatch(/^Exposition/);
+  for (const format of formats) expect(format).toMatch(/Exposition · \d/);
 
   // Distance depuis le secteur du profil (66) : un événement catalan avant Toulouse.
   await page.goto("/app/explorer?segment=evenements&tri=distance");

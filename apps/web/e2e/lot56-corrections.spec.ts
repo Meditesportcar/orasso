@@ -56,7 +56,7 @@ test.describe("parties pures", () => {
     // Pro vérifié sans aucune remise : badge, et surtout aucun pourcentage de présentation.
     const bare = proPitchCard({ verified: true, discounts: {} });
     expect(bare).toEqual({ fictional: false, badge: true, discounts: [] });
-    expect(proPitchCard({ verified: false, discounts: { sport: null } }).discounts).toEqual([]);
+    expect(proPitchCard({ verified: false, discounts: { sport: 0 } }).discounts).toEqual([]);
     // Aucun pro publié : carte clairement fictive, avec les pourcentages de présentation, sans badge.
     const fiction = proPitchCard(null);
     expect(fiction.fictional).toBe(true);
