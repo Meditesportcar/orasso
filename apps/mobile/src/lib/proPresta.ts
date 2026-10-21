@@ -191,6 +191,23 @@ export function pendingLine(app: ProviderApplicationView): string {
   return L.pendingLine(formatShortDate(app.createdAt));
 }
 
+/**
+ * Ligne de détail du ticket « À venir » : l'emplacement (retenue), l'attente de réponse (en attente) ou le motif de
+ * l'organisateur dès le refus (comme avant le lot 54), sans attendre que l'événement soit passé.
+ */
+export function upcomingDetail(app: ProviderApplicationView): string | null {
+  switch (candidatureKind(app)) {
+    case "retained":
+      return spotLine(app);
+    case "pending":
+      return pendingLine(app);
+    case "refused":
+      return app.refusalNote || null;
+    default:
+      return null;
+  }
+}
+
 /** « J-6 » devant la date de l'événement (retenue à venir). */
 export const countdown = (app: ProviderApplicationView, now: Date) => dayCountdown(app.event.startsAt, now);
 

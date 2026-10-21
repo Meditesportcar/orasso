@@ -16,6 +16,7 @@ import {
   pendingLine,
   reviewTag,
   spotLine,
+  upcomingDetail,
 } from "./proPresta";
 
 const card = (over: Partial<MissionCard> = {}): MissionCard =>
@@ -113,6 +114,20 @@ describe("missions", () => {
     expect(alreadyApplied(card())).toBe(false);
     expect(alreadyApplied(card({ myApplication: { id: "a", status: "pending", needId: null } }))).toBe(true);
     expect(alreadyApplied(card({ myApplication: { id: "a", status: "withdrawn", needId: null } }))).toBe(false);
+  });
+});
+
+describe("détail du ticket « À venir »", () => {
+  it("montre le motif de refus dès le refus, sans attendre que l'événement soit passé", () => {
+    expect(upcomingDetail(app({ status: "refused", refusalNote: "Plus de place en restauration" }))).toBe(
+      "Plus de place en restauration",
+    );
+    expect(upcomingDetail(app({ status: "refused", refusalNote: null }))).toBeNull();
+  });
+  it("garde l'emplacement des retenues et l'attente des candidatures en cours", () => {
+    expect(upcomingDetail(app({ spot: { label: "C1", note: null } }))).toBe("Emplacement C1");
+    expect(upcomingDetail(app({ status: "pending" }))).toBe(pendingLine(app({ status: "pending" })));
+    expect(upcomingDetail(app({ status: "waitlisted" }))).toBeNull();
   });
 });
 
