@@ -146,8 +146,10 @@ async function shot(page: Page, name: string, wait = 900) {
 
 /** Règles du système de design à l'écran du tuto : un seul bouton principal, un seul néon, pas de vert, pas de défilement horizontal. */
 /**
- * Aucun faux bouton moutarde dans les illustrations : un aplat moutarde large (≥ 160 × 32 px) dans le cadre d'une
- * illustration serait pris pour un second bouton principal. Les étiquettes, barres, bulles et la barre de scan sont plus petites.
+ * Aucun faux bouton moutarde dans les illustrations : un aplat moutarde en forme de bouton (≥ 160 px de large, 32 à 64 px
+ * de haut) dans le cadre d'une illustration serait pris pour un second bouton principal. Les étiquettes, barres, bulles et la
+ * barre de scan sont plus petites ; l'écran carré « Scan OK » du lecteur (artefact `.tz-ok`, lot C3) n'a pas la forme d'un
+ * bouton, ni une étiquette inclinée, ni une bulle de discussion.
  */
 async function noBigAccentFill(page: Page, theme: Theme, label: string) {
   const accent = tokens.color[theme].accent;
@@ -159,8 +161,18 @@ async function noBigAccentFill(page: Page, theme: Theme, label: string) {
     probe.remove();
     return [...document.querySelectorAll('[data-testid="tuto-art"] *')]
       .filter((el) => getComputedStyle(el).backgroundColor === rgb)
+      // Une étiquette inclinée (`.tag`, skewX(−8°) : « Scan OK · zone JDM » de l'artefact) n'est pas un bouton (droit).
+      .filter((el) => {
+        const m = getComputedStyle(el).transform.match(/^matrix\(([^)]+)\)$/);
+        return !m || Math.abs(Number(m[1]?.split(",")[2] ?? 0)) < 0.01;
+      })
+      // Une bulle de discussion (`.tz-msg.me` : un coin pointu) n'est pas un bouton (quatre coins égaux).
+      .filter((el) => {
+        const cs = getComputedStyle(el);
+        return cs.borderTopLeftRadius === cs.borderBottomRightRadius && cs.borderTopRightRadius === cs.borderBottomLeftRadius;
+      })
       .map((el) => el.getBoundingClientRect())
-      .filter((r) => r.width >= 160 && r.height >= 32)
+      .filter((r) => r.width >= 160 && r.height >= 32 && r.height <= 64)
       .map((r) => `${Math.round(r.width)}x${Math.round(r.height)}`);
   }, accent);
   expect(found, `${label} : pas de faux bouton moutarde dans l'illustration`).toEqual([]);
@@ -194,7 +206,9 @@ test("les six tutos défilent : points, premier et dernier texte, Passer et C'es
       await expect(page.getByTestId("tuto-dot")).toHaveCount(tuto.titles.length);
       await expect(page.getByTestId("tuto-dots")).toHaveAttribute("aria-label", `Diapo 1 sur ${tuto.titles.length}`);
       await expect(page.getByRole("button", { name: "Passer" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Précédent" })).toHaveCount(0);
+      // Lot C3 (artefact `s-tuto`) : le bouton carré « précédent » est là dès la première diapo, sans effet (désactivé).
+      await expect(page.getByRole("button", { name: "Précédent" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Précédent" })).toBeDisabled();
       await expect(page.getByText(tuto.first, { exact: true })).toBeVisible();
       for (let i = 0; i < tuto.titles.length; i++) {
         await expect(page.getByTestId(`tuto-slide-${i + 1}`)).toBeVisible();

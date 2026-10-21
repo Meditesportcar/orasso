@@ -187,6 +187,10 @@ test.describe("appli dans le navigateur", () => {
         warnings.push(msg.text());
     });
     page.on("pageerror", (err) => warnings.push(err.message));
+    // Lot C3 : l'ouverture de 3 s joue à chaque lancement d'un appareil déjà venu ; au tout premier, c'est l'accueil
+    // (`/arrivee`, artefact `s-splash`) qui joue la battle autour du O. On se place donc sur un appareil déjà venu.
+    await page.goto(`${APP}/+not-found-lot39`);
+    await page.evaluate(() => localStorage.setItem("orasso.onboarded", "1"));
     await page.goto(`${APP}/arrivee/profil`);
     const opening = page.getByTestId("opening-battle");
     await expect(opening).toBeVisible({ timeout: 20_000 });

@@ -32,6 +32,9 @@ async function skipOpening(page: Page) {
 test("liste des départements : rôle et état, outre-mer, premier = favori, 20 au plus", async ({ browser }) => {
   test.setTimeout(240_000);
   const { ctx, page } = await fresh(browser);
+  // Lot C3 : le premier lancement ouvre l'accueil (artefact `s-splash`), « Commencer » mène au choix du profil.
+  await page.waitForURL(/\/arrivee$/, { timeout: 30_000 });
+  await page.getByRole("button", { name: "Commencer" }).click();
   await page.waitForURL(/arrivee\/profil/, { timeout: 30_000 });
   await page.getByRole("button", { name: "Continuer" }).click();
   await page.waitForURL(/arrivee\/departement/);
@@ -42,7 +45,8 @@ test("liste des départements : rôle et état, outre-mer, premier = favori, 20 
   await expect(reunion).toHaveAttribute("aria-checked", "false");
   await reunion.click();
   await expect(reunion).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByText("974 · favori")).toBeVisible();
+  // Puce du favori (artefact `.dchip.fav`) : le numéro dans sa pastille, puis le nom et « favori ».
+  await expect(page.getByText("La Réunion · favori")).toBeVisible();
   const pyrenees = page.getByRole("checkbox", { name: "66 · Pyrénées-Orientales" });
   await pyrenees.click();
   await expect(pyrenees).toHaveAttribute("aria-checked", "true");
@@ -61,8 +65,9 @@ test("liste des départements : rôle et état, outre-mer, premier = favori, 20 
 });
 
 test("« J'ai déjà un compte » garde la destination (next)", async ({ browser }) => {
-  const { ctx, page } = await fresh(browser, "/arrivee/profil?next=%2Fe%2Fnocturne");
-  await expect(page.getByRole("heading", { name: "Tu viens comment ?" }).first()).toBeVisible({ timeout: 30_000 });
+  // Lot C3 : « J'ai déjà un compte » est sur l'accueil (artefact `s-splash`), plus sur « Tu viens comment ? ».
+  const { ctx, page } = await fresh(browser, "/arrivee?next=%2Fe%2Fnocturne");
+  await expect(page.getByRole("button", { name: "Commencer" })).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "J'ai déjà un compte" }).click();
   await page.waitForURL(/\/auth/);
   expect(decodeURIComponent(page.url())).toContain("next=/e/nocturne");
