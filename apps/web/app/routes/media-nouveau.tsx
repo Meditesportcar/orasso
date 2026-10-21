@@ -84,8 +84,8 @@ export default function MediaNouveau({ loaderData, actionData }: Route.Component
       <div className="s-head">
         <div className="o-t-label s-label">Casquette Média</div>
         <h1 className="s-title">{profile ? L.casquetteEdit : L.createTitle}</h1>
-        <p className="s-lead">{L.profileCreateIntro}</p>
       </div>
+      <p className="s-lead">{L.profileCreateIntro}</p>
       {actionData?.error && (
         <p className="s-error" role="alert" data-testid="media-profile-error">
           {actionData.error}

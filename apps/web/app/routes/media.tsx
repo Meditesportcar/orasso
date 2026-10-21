@@ -179,11 +179,14 @@ function AccreditationCard({
   pass,
   serverTime,
   busy,
+  past = false,
 }: {
   a: MediaAccreditationView;
   pass?: AccessPass;
   serverTime: string;
   busy: boolean;
+  /** Accréditation passée : plus de badge à montrer. */
+  past?: boolean;
 }) {
   const formats = a.formats.map((f) => mediaFormatLabels[f]).join(" · ");
   const state =
@@ -230,7 +233,7 @@ function AccreditationCard({
                 <Qr payload={pass.payload} label={`${L.badgeOf} : ${a.event.title}`} />
               )}
             </div>
-          ) : (
+          ) : past ? null : (
             <p className="o-t-caption s-muted">{L.badgeNotYet}</p>
           )}
           <section className="s-stack s-stack--tight" aria-label={L.briefingTitle} data-testid="media-briefing">
@@ -328,7 +331,7 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
             <h1 className="s-title o-never-truncate" data-testid="media-name">
               {p.name}
             </h1>
-            <ChipRow>
+            <ChipRow className="s-chips-wrap">
               <Chip variant={p.verifiedAt ? "verified" : "default"} data-testid="media-verified">
                 {p.verifiedAt ? L.profileVerified : L.profileToVerify}
               </Chip>
@@ -349,7 +352,7 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
       </div>
       {p.issue && <p className="s-notice">{p.issue}</p>}
 
-      <nav className="s-tabs" aria-label="Média">
+      <nav className="s-tabs md-tabs" aria-label="Média">
         {TABS.map((t) => (
           <a key={t.id} href={`/app/media?onglet=${t.id}`} aria-current={d.tab === t.id ? "page" : undefined}>
             <Chip selected={d.tab === t.id}>{t.label}</Chip>
@@ -397,7 +400,7 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
             {d.past.length === 0 ? (
               <p className="s-muted">{L.pressPastEmptyText}</p>
             ) : (
-              d.past.map((a) => <AccreditationCard key={a.id} a={a} serverTime={d.serverTime} busy={busy} />)
+              d.past.map((a) => <AccreditationCard key={a.id} a={a} serverTime={d.serverTime} busy={busy} past />)
             )}
           </section>
         </>
@@ -496,11 +499,11 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
                 <fieldset className="s-stack s-stack--tight">
                   <legend className="o-t-label">{L.addKind}</legend>
                   <label className="o-check">
-                    <input type="radio" name="kind" value="link" defaultChecked className="o-check__input" />{" "}
+                    <input type="radio" name="kind" value="link" defaultChecked className="md-radio" />{" "}
                     {L.kindOf({ kind: "link", platform: "other" })}
                   </label>
                   <label className="o-check">
-                    <input type="radio" name="kind" value="gallery" className="o-check__input" /> Galerie
+                    <input type="radio" name="kind" value="gallery" className="md-radio" /> Galerie
                   </label>
                 </fieldset>
                 <div className="md-kind md-kind--link s-stack s-stack--tight">

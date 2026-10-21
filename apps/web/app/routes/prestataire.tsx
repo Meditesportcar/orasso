@@ -182,7 +182,7 @@ function ApplicationRow({ app }: { app: ProviderApplicationView }) {
       </div>
       <p className="o-t-caption s-muted">{formatWhen(app.event.startsAt, app.event.endsAt)}</p>
       {app.accreditedMedia && (
-        <ChipRow>
+        <ChipRow className="s-chips-wrap">
           <Chip variant="accent">Média officiel</Chip>
         </ChipRow>
       )}
@@ -491,7 +491,7 @@ export default function Prestataire({ loaderData, actionData }: Route.ComponentP
                         {missionTexts.places(n.remaining, n.quantity, n.tradeLabel)}
                         {n.installAt ? ` · ${providerSpotTexts.arrival(formatTime(n.installAt))}` : ""}
                       </div>
-                      <ChipRow>
+                      <ChipRow className="s-chips-wrap">
                         <Chip>{missionTexts.power(n.power)}</Chip>
                         {n.water && <Chip>{missionTexts.water}</Chip>}
                         {n.frontageM ? <Chip>{vitrineTexts.frontage(n.frontageM)}</Chip> : null}

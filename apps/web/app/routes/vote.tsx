@@ -104,15 +104,15 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
       <div className="s-head">
         <div className="o-t-label s-label">{event.title}</div>
         <h1 className="s-title">{audiencePrizeTexts.title}</h1>
-        <p className="s-lead">
-          {board.settled
-            ? voteScreenTexts.results
-            : board.open
-              ? audiencePrizeTexts.openUntil(new Date(board.closesAt))
-              : audiencePrizeTexts.closed}
-          {mine.checkedInAt ? ` · ${audiencePrizeTexts.checkedInAt(new Date(mine.checkedInAt))}` : ""}
-        </p>
       </div>
+      <p className="s-lead">
+        {board.settled
+          ? voteScreenTexts.results
+          : board.open
+            ? audiencePrizeTexts.openUntil(new Date(board.closesAt))
+            : audiencePrizeTexts.closed}
+        {mine.checkedInAt ? ` · ${audiencePrizeTexts.checkedInAt(new Date(mine.checkedInAt))}` : ""}
+      </p>
 
       {actionData?.error && (
         <p className="s-error" role="alert">
@@ -203,14 +203,17 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
               <span className="o-t-number-narrow">{e.rank}</span>
               <span className="o-never-truncate">
                 {e.vehicleLabel} <span className="s-muted">· {e.pseudo}</span>
-                <span className="vote-bar" style={{ width: `${top ? Math.max(4, (e.votes / top) * 100) : 0}%` }} />
+                <span
+                  className="vote-bar"
+                  style={{ width: `${top && e.votes ? Math.max(4, (e.votes / top) * 100) : 0}%` }}
+                />
               </span>
               <span className="o-t-caption">{audiencePrizeTexts.votes(e.votes)}</span>
             </li>
           ))}
         </ol>
       </section>
-      <Button variant="secondary" icon="back" href={`/e/${event.slug}`}>
+      <Button variant="secondary" icon="calendar" href={`/e/${event.slug}`}>
         Voir l'événement
       </Button>
     </div>

@@ -116,7 +116,9 @@ export default function OrgaPresse({ loaderData, actionData }: Route.ComponentPr
           <h1 className="s-title">{L.title}</h1>
           <div className="o-t-meta s-label">{formatWhen(event.startsAt, event.endsAt)}</div>
         </div>
-        <Chip surface="plate" data-testid="press-counts">{L.counts(s.counts.pending, s.counts.accepted)}</Chip>
+        <Chip surface="plate" data-testid="press-counts">
+          {L.counts(s.counts.pending, s.counts.accepted)}
+        </Chip>
       </div>
       <p className="s-muted">{L.intro}</p>
       {actionData?.ok && (
@@ -185,7 +187,7 @@ export default function OrgaPresse({ loaderData, actionData }: Route.ComponentPr
               </h3>
               {r.media.verified && <Chip variant="verified">{mediaAppLabels.profileVerified}</Chip>}
             </div>
-            <ChipRow>
+            <ChipRow className="s-chips-wrap">
               {r.formats.map((f) => (
                 <Chip key={f}>{mediaFormatLabels[f]}</Chip>
               ))}

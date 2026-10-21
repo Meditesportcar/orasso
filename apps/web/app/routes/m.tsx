@@ -33,7 +33,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
         <div className="s-stack s-stack--tight">
           <div className="o-t-label s-label">Média</div>
           <h1 className="s-title o-never-truncate">{m.name}</h1>
-          <ChipRow>
+          <ChipRow className="s-chips-wrap">
             {m.verified && <Chip variant="verified">{L.profileVerified}</Chip>}
             {m.formats.map((f) => (
               <Chip key={f}>{mediaFormatLabels[f]}</Chip>

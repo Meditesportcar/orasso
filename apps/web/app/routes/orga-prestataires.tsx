@@ -291,7 +291,7 @@ export default function OrgaPrestataires({ loaderData, actionData }: Route.Compo
             <article key={n.id} className="s-stack pv-need-block" data-testid="need" data-trade={n.trade}>
               <div className="s-row s-row--between">
                 <h3 className="s-h2">{orgaV2Labels.missionPlaces(n.tradeLabel, n.filled, n.quantity)}</h3>
-                <ChipRow>
+                <ChipRow className="s-chips-wrap">
                   <Chip>{providerPowerLabels[n.power]}</Chip>
                   {n.water && <Chip>{L.water}</Chip>}
                   {n.installAt && <Chip>{`${L.installAt} ${formatTime(n.installAt)}`}</Chip>}

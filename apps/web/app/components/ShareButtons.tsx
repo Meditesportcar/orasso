@@ -87,10 +87,10 @@ export function ShareCard({ vehicleId, version }: { vehicleId: string; version: 
       </button>
       <div className="s-row" data-testid="share-links">
         <Button variant="secondary" icon="export" href={src("story", true)} data-testid="share-story">
-          {shareSheetLabels.story} · {shareFormatLabels.story}
+          {shareFormatLabels.story}
         </Button>
         <Button variant="secondary" icon="export" href={src("post", true)} data-testid="share-post">
-          {shareSheetLabels.image} · {shareFormatLabels.post}
+          {shareFormatLabels.post}
         </Button>
       </div>
     </div>

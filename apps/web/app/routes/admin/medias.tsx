@@ -93,7 +93,7 @@ export default function AdminMedias({ loaderData, actionData }: Route.ComponentP
                 {m.verifiedAt ? L.profileVerified : L.profileToVerify}
               </Chip>
             </div>
-            <ChipRow>
+            <ChipRow className="s-chips-wrap">
               {m.formats.map((f) => (
                 <Chip key={f}>{mediaFormatLabels[f]}</Chip>
               ))}

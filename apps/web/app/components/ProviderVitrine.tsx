@@ -50,7 +50,7 @@ export function ProviderVitrine({
         </div>
         <h2 className="s-title o-never-truncate">{p.name}</h2>
         {p.tagline && <p className="s-lead">{p.tagline}</p>}
-        <ChipRow>
+        <ChipRow className="s-chips-wrap">
           {p.trades.map((t) => (
             <Chip key={t}>{vendorTypeLabels[t]}</Chip>
           ))}
@@ -91,7 +91,7 @@ export function ProviderVitrine({
 
       <section className="s-stack s-stack--tight" aria-label={vitrineTexts.needsTitle}>
         <h3 className="s-h2">{vitrineTexts.needsTitle}</h3>
-        <ChipRow>
+        <ChipRow className="s-chips-wrap">
           {p.powerNeed && <Chip>{vitrineTexts.power(p.powerNeed)}</Chip>}
           {p.frontageM ? <Chip>{vitrineTexts.frontage(p.frontageM)}</Chip> : null}
           {p.waterNeed !== null && <Chip>{vitrineTexts.water(p.waterNeed)}</Chip>}

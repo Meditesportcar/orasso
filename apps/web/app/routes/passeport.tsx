@@ -72,10 +72,10 @@ export default function Passeport({ loaderData }: Route.ComponentProps) {
       <div className="s-head">
         <div className="o-t-label s-label">{view.season.name}</div>
         <h1 className="s-title">{passportTexts.title}</h1>
-        <p className="s-lead" data-testid="passport-summary">
-          {view.total === 0 ? passportScreenTexts.emptyTitle : passportTexts.summary(view.total, view.rare)}
-        </p>
       </div>
+      <p className="s-lead" data-testid="passport-summary">
+        {view.total === 0 ? passportScreenTexts.emptyTitle : passportTexts.summary(view.total, view.rare)}
+      </p>
       {view.seasons.length > 1 && (
         <nav className="s-row" aria-label="Saisons">
           {view.seasons.map((s) => (

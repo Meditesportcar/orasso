@@ -61,7 +61,7 @@ export function MediaGalleryPicker() {
       </legend>
       <input type="hidden" name="photoKeys" value={JSON.stringify(sent.map((s) => s.key))} />
       {sent.length > 0 && (
-        <ul className="md-thumbs" data-testid="media-gallery-sent">
+        <ul className="md-thumbs md-thumbs--edit" data-testid="media-gallery-sent">
           {sent.map((s) => (
             <li key={s.key}>
               <img src={s.preview} alt="" />
