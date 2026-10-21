@@ -60,12 +60,20 @@ export function ExplorerScreen() {
         <ChipRow>
           <Segments items={SEGMENTS.map((id) => ({ id, label: LABELS[id] }))} value={segment} onChange={setSegment} />
           {segment === "evenements" ? (
-            <Chip selected={filtersOpen || count > 0} onPress={() => setFiltersOpen((o) => !o)}>
+            <Chip
+              accessibilityRole="toggle"
+              selected={filtersOpen || count > 0}
+              onPress={() => setFiltersOpen((o) => !o)}
+            >
               {count > 0 ? `${L.filters} · ${count}` : L.filters}
             </Chip>
           ) : null}
           {segment !== "personnes" ? (
-            <Chip selected={view === "map"} onPress={() => setView((v) => (v === "map" ? "list" : "map"))}>
+            <Chip
+              accessibilityRole="toggle"
+              selected={view === "map"}
+              onPress={() => setView((v) => (v === "map" ? "list" : "map"))}
+            >
               {view === "map" ? L.list : L.map}
             </Chip>
           ) : null}
@@ -204,10 +212,10 @@ function FiltersPanel({
       </Group>
       {signedIn ? (
         <Group label={L.groupTaste}>
-          <Chip selected={value.affinity} onPress={() => set("affinity", !value.affinity)}>
+          <Chip accessibilityRole="toggle" selected={value.affinity} onPress={() => set("affinity", !value.affinity)}>
             {L.tasteAffinity}
           </Chip>
-          <Chip selected={value.followed} onPress={() => set("followed", !value.followed)}>
+          <Chip accessibilityRole="toggle" selected={value.followed} onPress={() => set("followed", !value.followed)}>
             {L.tasteFollowed}
           </Chip>
         </Group>

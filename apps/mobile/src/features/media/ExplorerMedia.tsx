@@ -176,10 +176,10 @@ export function ExplorerMedia() {
           </ChipRow>
           <Muted variant="label">{L.whatWhen}</Muted>
           <ChipRow>
-            <View style={styles.formatTabs} accessibilityRole="tablist" accessibilityLabel={L.whatWhen}>
+            <View style={styles.formatTabs}>
               {eventFormats.map((f) => (
                 <Chip
-                  accessibilityRole="tab"
+                  accessibilityRole="toggle"
                   key={f}
                   selected={filters.format === f}
                   onPress={() => set("format", filters.format === f ? "" : f)}
@@ -188,10 +188,18 @@ export function ExplorerMedia() {
                 </Chip>
               ))}
             </View>
-            <Chip selected={filters.thisMonth} onPress={() => set("thisMonth", !filters.thisMonth)}>
+            <Chip
+              accessibilityRole="toggle"
+              selected={filters.thisMonth}
+              onPress={() => set("thisMonth", !filters.thisMonth)}
+            >
               {L.thisMonth}
             </Chip>
-            <Chip selected={filters.openOnly} onPress={() => set("openOnly", !filters.openOnly)}>
+            <Chip
+              accessibilityRole="toggle"
+              selected={filters.openOnly}
+              onPress={() => set("openOnly", !filters.openOnly)}
+            >
               {L.openOnly}
             </Chip>
           </ChipRow>
@@ -200,7 +208,11 @@ export function ExplorerMedia() {
             <Muted variant="caption" style={styles.fill}>
               {list.items ? L.results(items.length, list.hasMore, filters.openOnly) : ""}
             </Muted>
-            <Chip selected={view === "map"} onPress={() => setView((v) => (v === "map" ? "list" : "map"))}>
+            <Chip
+              accessibilityRole="toggle"
+              selected={view === "map"}
+              onPress={() => setView((v) => (v === "map" ? "list" : "map"))}
+            >
               {view === "map" ? L.list : L.map}
             </Chip>
           </View>
