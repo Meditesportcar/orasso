@@ -2,7 +2,9 @@
 // viennent de `tabSets` du système de design (`PersonaTabSet` pour les six profils), chaque route du groupe Expo Router
 // a l'identifiant d'un onglet ; les pages masquées (`href: null`) pointent vers l'onglet qui les range et gardent la
 // barre. Le conteneur porte le glissement entre onglets (`useTabSwipe`, lot 40).
-import { TabBar, type TabItem, tabSets } from "@orasso/design-system/native";
+// Lot C1 (artefact DA v2) : la barre flotte au-dessus du contenu (`.tabbar` absolue, 10 px des bords) ; elle se retire,
+// avec l'accès flottant, sur un écran de flux et sous une feuille ouverte (`useTabBarHidden`).
+import { TabBar, type TabItem, tabSets, useTabBarHidden } from "@orasso/design-system/native";
 import { Tabs } from "expo-router";
 import { type ComponentProps, type ReactNode, useCallback, useMemo, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
@@ -32,10 +34,12 @@ function PersonaTabBar({
   const current = state.routes[state.index]?.name;
   // Le glissement a besoin de l'onglet courant et de la navigation du groupe : la barre les lui prête.
   navigator.current = { current, navigate: (route) => navigation.navigate(route) };
+  const hidden = useTabBarHidden();
+  if (hidden) return null;
   return (
-    <View>
+    <View pointerEvents="box-none" style={styles.floating} testID="persona-tabbar">
       {/* Lot 43 : l'accès flottant, au-dessus de la barre dès J-7 (toutes les casquettes qui ont un accès). */}
-      <NextAccessBar routeKey={current} />
+      <NextAccessBar routeKey={current} tabId={current ? routes[current] : undefined} />
       <TabBar
         tabs={tabs}
         active={(current ? routes[current] : undefined) ?? tabs[0]?.id ?? ""}
@@ -130,6 +134,7 @@ export function PersonaTabSet({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  floating: { position: "absolute", left: 0, right: 0, bottom: 0 },
   // Version web (recette) : glisser à la souris sélectionnerait le texte, et une sélection interrompt le geste.
   noSelect: { userSelect: "none" },
 });

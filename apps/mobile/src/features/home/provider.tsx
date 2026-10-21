@@ -33,7 +33,7 @@ export function ProviderHome() {
   const accepted = mission?.status === "accepted";
 
   return (
-    <TabScreen title={homeLabels.title} onRefresh={async () => void (await home.reload())}>
+    <TabScreen onRefresh={async () => void (await home.reload())}>
       <Greeting line={todayLine(now)} name={name} />
 
       {home.error && !data ? <Notice>{homeLabels.loadFailed}</Notice> : null}

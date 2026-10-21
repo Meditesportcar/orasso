@@ -251,7 +251,6 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
 
   return (
     <TabScreen
-      title={homeLabels.title}
       onRefresh={async () => {
         await Promise.all([reload(), home.reload(), staff.reload()]);
       }}

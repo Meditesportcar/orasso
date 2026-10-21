@@ -3,7 +3,7 @@
 
 import type { TextStyle } from "react-native";
 import { type TypeStyleName, tokens } from "../tokens";
-import { archivoFamily, type FontWidth } from "./fontFamily";
+import { archivoAt, archivoFamily, type FontWidth } from "./fontFamily";
 
 const widthOf: Record<TypeStyleName, FontWidth> = {
   posterXl: "wide",
@@ -21,8 +21,7 @@ const widthOf: Record<TypeStyleName, FontWidth> = {
   bodyStrong: "normal",
   caption: "normal",
   number: "normal",
-  // Surcouche v2 : Archivo à 62,5 % (web : font-stretch). Natif : pas encore d'instance statique à 62,5 % ; la plus
-  // étroite embarquée (78,4 %) en attendant (scripts/generate-native-fonts.py, consigné au journal des choix, lot 38).
+  // Largeur imposée par le jeton (fontStretch, 62 %) : voir textStyle.
   numberNarrow: "narrow",
 };
 
@@ -45,7 +44,11 @@ export function textStyle(name: TypeStyleName): TextStyle {
   const spec = tokens.type[name];
   const italic = spec.fontStyle === "italic";
   const style: TextStyle = {
-    fontFamily: archivoFamily(widthOf[name], spec.fontWeight, italic),
+    // Lot C1 : un style qui porte sa largeur (boutons 118 %, onglets 115 %, étiquettes 75 %, chiffres 62 %) prend
+    // l'instance embarquée la plus proche ; sinon la largeur de son groupe.
+    fontFamily: spec.fontStretch
+      ? archivoAt(Number.parseFloat(spec.fontStretch), spec.fontWeight, italic)
+      : archivoFamily(widthOf[name], spec.fontWeight, italic),
     fontSize: spec.fontSize,
     lineHeight: spec.lineHeight,
     // Les jetons donnent l'interlettrage en em ; React Native le veut en px.
