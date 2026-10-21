@@ -1,23 +1,32 @@
 // Fiche d'un crew (lot 19, ARCHITECTURE-SUITE § 4.4) : nom, logo, description, département, chef et nombre de membres
 // pour toute personne connectée ; membres et discussion pour les membres (S16) ; demandes, invitations, logo et
-// dissolution pour le chef. Inscrire le crew à un événement : depuis la page de l'événement (« Inscrire mon crew »).
-import { Button, Chip, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+// dissolution pour le chef.
+// Lot C2b (artefact `s-crew`) : écran à affiche (image en tête, rond du crew qui remonte dessus), étiquettes, action
+// principale « Inscrire le crew » (le chef choisit un événement ; la feuille de candidature a le mode « Avec <crew> »)
+// avec discussion et invitation en boutons carrés, rail des membres, « Demandes · Toi seul les vois ». « Sorties
+// ensemble » et « Le garage du crew » attendent les données de l'API (lot C5, consigné au journal). La gestion du chef
+// (retirer, logo, dissoudre) reste, rangée en bas.
+import { Photo, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { CREW_REQUEST_MESSAGE_MAX, crewLabels, gradeLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
-import { CrewLogo } from "@/features/crews/CrewLogo";
+import { PosterFlow } from "@/features/event/PosterFlow";
+import { CrewDot, initialsOf, SmButton, Tag } from "@/features/passionne/kit";
 import { ReportButton } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
 import { pickAvatar } from "@/lib/avatar";
 import { errorMessage } from "@/lib/http";
+import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
+import { AppSheet } from "@/ui/AppSheet";
 import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { FlowScreen, SectionTitle } from "@/ui/Screens";
+import { FlowScreen } from "@/ui/Screens";
+import { SecHead } from "@/ui/SecHead";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -48,6 +57,7 @@ export default function CrewScreen() {
   });
   const [message, setMessage] = useState("");
   const [invite, setInvite] = useState("");
+  const [inviting, setInviting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -85,41 +95,133 @@ export default function CrewScreen() {
     );
   }
 
+  const since = new Date(v.createdAt).getFullYear();
+  const inviteSheet = (
+    <AppSheet visible={inviting} onClose={() => setInviting(false)} accessibilityLabel={crewLabels.invite}>
+      <Text variant="posterM" color={c.ink}>
+        {crewLabels.invite}
+      </Text>
+      <TextField label={crewLabels.invitePseudo} value={invite} onChangeText={setInvite} autoCapitalize="none" />
+      <SmButton
+        kind="p"
+        big
+        wide
+        icon="send"
+        disabled={busy || !invite.trim()}
+        onPress={() =>
+          void run(async () => {
+            await api.inviteToCrew(v.id, invite.trim());
+            setInvite("");
+            setInviting(false);
+          }, crewLabels.invited(invite.trim()))
+        }
+        testID="crew-invite-send"
+      >
+        {crewLabels.invite}
+      </SmButton>
+      {pending.data && pending.data.invitations.length > 0 ? (
+        <Muted variant="caption">
+          {crewLabels.pendingInvitations} : {pending.data.invitations.map((i) => i.person.pseudo).join(", ")}
+        </Muted>
+      ) : null}
+    </AppSheet>
+  );
+
   return (
-    <FlowScreen title={v.name} onClose={close} onRefresh={reloadAll}>
-      <Plate style={styles.head} testID="crew" accessibilityLabel={`${crewLabels.crew} ${v.name}`}>
-        <View style={styles.headRow}>
-          <CrewLogo url={v.logoUrl} name={v.name} size={72} />
-          <View style={styles.headText}>
-            <Text variant="posterL" color={c.plateInk}>
-              {v.name}
-            </Text>
-            <View style={styles.chips}>
-              <Chip surface="plate">{v.department}</Chip>
-              <Chip surface="plate">{crewLabels.membersCount(v.membersCount)}</Chip>
-              {leader ? (
-                <Chip variant="accent" surface="plate">
-                  {crewLabels.leader}
-                </Chip>
-              ) : null}
-            </View>
-            {v.leader ? (
-              <Text variant="caption" color={c.plateMuted}>
-                {crewLabels.leaderOf(v.leader.pseudo)}
-              </Text>
-            ) : null}
+    <PosterFlow
+      onClose={close}
+      onRefresh={reloadAll}
+      overlays={leader ? inviteSheet : null}
+      testID="crew-page"
+      hero={
+        <View style={styles.hero}>
+          <Photo
+            source={mediaSource(v.logoUrl)}
+            placeholder={`linear-gradient(160deg, ${c.surfaceRaised} 0%, ${c.night} 100%)`}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Photo
+              placeholder={`linear-gradient(180deg, ${c.night}0d 0%, ${c.night}b3 100%)`}
+              style={StyleSheet.absoluteFill}
+            />
           </View>
         </View>
-        {v.description ? (
-          <Text variant="body" color={c.plateInk}>
-            {v.description}
+      }
+    >
+      {/* `.cr-id` : le rond du crew remonte sur l'image, nom en grand, « Crew · département · membres · depuis ». */}
+      <View style={styles.id} testID="crew" accessibilityLabel={`${crewLabels.crew} ${v.name}`}>
+        <View style={[styles.logoRing, { backgroundColor: c.ground }]}>
+          {v.logoUrl ? (
+            <View style={styles.logoImg}>
+              <Photo source={mediaSource(v.logoUrl)} style={StyleSheet.absoluteFill} />
+            </View>
+          ) : (
+            <CrewDot initials={initialsOf(v.name, 2)} size={84} />
+          )}
+        </View>
+        <View style={styles.idText}>
+          <Text variant="posterL" color={c.ink} style={styles.name}>
+            {v.name}
           </Text>
-        ) : null}
-      </Plate>
+          <Text variant="caption" color={c.inkMuted}>
+            {[crewLabels.crew, v.department, crewLabels.membersCount(v.membersCount), `depuis ${since}`].join(" · ")}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.tags}>
+        {leader ? <Tag kind="acc">Tu es responsable</Tag> : null}
+        {v.leader && !leader ? <Tag kind="line">{crewLabels.leaderOf(v.leader.pseudo)}</Tag> : null}
+      </View>
+      {v.description ? (
+        <Text variant="body" color={c.inkMuted}>
+          {v.description}
+        </Text>
+      ) : null}
 
       {v.archived ? <Notice>{crewLabels.archived}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {ok ? <Notice>{ok}</Notice> : null}
+
+      {member && !v.archived ? (
+        <View style={styles.actions}>
+          {leader ? (
+            <SmButton
+              kind="p"
+              big
+              icon="ticket"
+              style={styles.grow}
+              onPress={() => router.navigate("/explorer")}
+              testID="crew-register"
+            >
+              {crewLabels.registerCrewSend}
+            </SmButton>
+          ) : null}
+          {v.conversationId ? (
+            <SmButton
+              kind={leader ? "s" : "p"}
+              big
+              icon="chat"
+              style={leader ? undefined : styles.grow}
+              onPress={() => router.push(`/boite/${v.conversationId}`)}
+              accessibilityLabel={crewLabels.openDiscussion}
+              testID="crew-discussion"
+            >
+              {leader ? undefined : crewLabels.openDiscussion}
+            </SmButton>
+          ) : null}
+          {leader ? (
+            <SmButton
+              kind="s"
+              big
+              icon="share"
+              onPress={() => setInviting(true)}
+              accessibilityLabel="Inviter dans le crew"
+              testID="crew-invite"
+            />
+          ) : null}
+        </View>
+      ) : null}
 
       {!v.archived && v.viewerState === "none" ? (
         <View style={styles.block}>
@@ -130,138 +232,140 @@ export default function CrewScreen() {
             maxLength={CREW_REQUEST_MESSAGE_MAX}
             multiline
           />
-          <Button
-            icon="crew"
-            loading={busy}
-            fullWidth
+          <SmButton
+            kind="p"
+            big
+            wide
+            icon="staff"
+            disabled={busy}
             testID="crew-request"
             onPress={() =>
               void run(() => api.requestCrew(v.id, message.trim() || null), crewLabels.requestSentTo(v.name))
             }
           >
             {crewLabels.requestJoin}
-          </Button>
+          </SmButton>
         </View>
       ) : null}
       {v.viewerState === "requested" ? (
-        <Button variant="secondary" icon="wait" disabled fullWidth>
+        <SmButton kind="s" big wide icon="wait" disabled>
           {crewLabels.requestSent}
-        </Button>
+        </SmButton>
       ) : null}
       {v.viewerState === "invited" ? (
-        <View style={styles.row}>
-          <Button icon="check" loading={busy} onPress={() => void run(() => api.acceptCrewInvitation(v.id))}>
+        <View style={styles.actions}>
+          <SmButton
+            kind="p"
+            big
+            icon="check"
+            style={styles.grow}
+            disabled={busy}
+            onPress={() => void run(() => api.acceptCrewInvitation(v.id))}
+          >
             {crewLabels.acceptInvitation}
-          </Button>
-          <Button
-            variant="secondary"
+          </SmButton>
+          <SmButton
+            kind="s"
+            big
             icon="close"
             disabled={busy}
             onPress={() => void run(() => api.declineCrewInvitation(v.id))}
           >
             {crewLabels.declineInvitation}
-          </Button>
+          </SmButton>
         </View>
-      ) : null}
-      {member && v.conversationId ? (
-        <Button
-          variant={leader ? "secondary" : "primary"}
-          icon="chat"
-          fullWidth
-          testID="crew-discussion"
-          onPress={() => router.push(`/boite/${v.conversationId}`)}
-        >
-          {crewLabels.openDiscussion}
-        </Button>
       ) : null}
       {!member ? <Muted variant="caption">{crewLabels.membersPrivate}</Muted> : null}
 
-      {leader && pending.data ? (
+      {/* `.cr-members` : rail des membres (rond, pseudo, grade ; « Responsable » pour le chef). */}
+      {members.data ? (
         <>
-          <SectionTitle>{crewLabels.pendingRequests}</SectionTitle>
-          {pending.data.requests.length === 0 ? <Muted variant="body">{crewLabels.noPending}</Muted> : null}
-          {pending.data.requests.map((r) => (
-            <Plate key={r.person.userId} style={styles.person} testID="crew-pending-request">
+          <SecHead title={crewLabels.members} hint={crewLabels.membersCount(members.data.length)} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
+            {members.data.map((m) => (
               <Pressable
-                style={styles.personRow}
+                key={m.userId}
+                accessibilityRole="link"
+                accessibilityLabel={m.pseudo}
+                onPress={() => router.push(`/u/${encodeURIComponent(m.pseudo)}`)}
+                style={styles.member}
+                testID="crew-member"
+              >
+                <Avatar url={m.avatarUrl} pseudo={m.pseudo} size={54} />
+                <Text variant="bodyStrong" color={c.ink} style={styles.memberName} numberOfLines={1}>
+                  {m.pseudo}
+                </Text>
+                <Text variant="caption" color={c.inkMuted} style={styles.memberSub}>
+                  {gradeLabels[m.grade]}
+                </Text>
+                {m.role === "leader" ? <Tag kind="acc">Responsable</Tag> : null}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </>
+      ) : null}
+
+      {/* Demandes : « Toi seul les vois » ; Accepter en petit bouton, Refuser en fantôme. */}
+      {leader && pending.data && pending.data.requests.length > 0 ? (
+        <>
+          <SecHead title="Demandes" hint="Toi seul les vois" />
+          {pending.data.requests.map((r) => (
+            <View
+              key={r.person.userId}
+              style={[styles.item, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
+              testID="crew-pending-request"
+            >
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={r.person.pseudo}
                 onPress={() => router.push(`/u/${encodeURIComponent(r.person.pseudo)}`)}
               >
-                <Avatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={36} />
-                <Text variant="bodyStrong" color={c.plateInk}>
+                <Avatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={40} />
+              </Pressable>
+              <View style={styles.grow}>
+                <Text variant="bodyStrong" color={c.ink}>
                   {r.person.pseudo}
                 </Text>
-              </Pressable>
-              {r.message ? (
-                <Text variant="body" color={c.plateMuted}>
-                  {r.message}
+                <Text variant="caption" color={c.inkMuted}>
+                  {[gradeLabels[r.person.grade], r.message ?? "veut rejoindre"].join(" · ")}
                 </Text>
-              ) : null}
-              <View style={styles.row}>
-                <Button
-                  variant="plate"
+              </View>
+              <View style={styles.itemActions}>
+                <SmButton
+                  kind="s"
                   icon="check"
                   disabled={busy}
                   onPress={() => void run(() => api.acceptCrewRequest(v.id, r.person.userId))}
                 >
                   {crewLabels.accept}
-                </Button>
-                <Button
-                  variant="plate"
-                  tone="dashed"
+                </SmButton>
+                <SmButton
+                  kind="g"
                   icon="close"
                   disabled={busy}
+                  accessibilityLabel={crewLabels.decline}
                   onPress={() => void run(() => api.declineCrewRequest(v.id, r.person.userId))}
-                >
-                  {crewLabels.decline}
-                </Button>
+                />
               </View>
-            </Plate>
+            </View>
           ))}
-          <View style={styles.block}>
-            <TextField label={crewLabels.invitePseudo} value={invite} onChangeText={setInvite} autoCapitalize="none" />
-            <Button
-              variant="secondary"
-              icon="add"
-              disabled={busy || !invite.trim()}
-              onPress={() =>
-                void run(async () => {
-                  await api.inviteToCrew(v.id, invite.trim());
-                  setInvite("");
-                }, crewLabels.invited(invite.trim()))
-              }
-            >
-              {crewLabels.invite}
-            </Button>
-          </View>
-          {pending.data.invitations.length > 0 ? (
-            <Muted variant="caption">
-              {crewLabels.pendingInvitations} : {pending.data.invitations.map((i) => i.person.pseudo).join(", ")}
-            </Muted>
-          ) : null}
         </>
       ) : null}
 
-      {members.data ? (
+      {/* Gérer le crew (chef) : retirer un membre, logo, dissolution ; hors de l'artefact, rangé en bas. */}
+      {leader && !v.archived ? (
         <>
-          <SectionTitle>{crewLabels.members}</SectionTitle>
-          {members.data.map((m) => (
-            <Plate key={m.userId} style={styles.person} testID="crew-member">
-              <Pressable style={styles.personRow} onPress={() => router.push(`/u/${encodeURIComponent(m.pseudo)}`)}>
-                <Avatar url={m.avatarUrl} pseudo={m.pseudo} size={36} />
-                <View style={styles.headText}>
-                  <Text variant="bodyStrong" color={c.plateInk}>
-                    {m.pseudo}
-                  </Text>
-                  <Text variant="caption" color={c.plateMuted}>
-                    {gradeLabels[m.grade]}
-                    {m.role === "leader" ? ` · ${crewLabels.leader}` : ""}
-                  </Text>
-                </View>
-              </Pressable>
-              {leader && m.role !== "leader" && !v.archived ? (
-                <Button
-                  variant="plate"
-                  tone="dashed"
+          <SecHead title={crewLabels.edit} />
+          {(members.data ?? [])
+            .filter((m) => m.role !== "leader")
+            .map((m) => (
+              <View key={m.userId} style={[styles.item, { backgroundColor: c.surface }]}>
+                <Avatar url={m.avatarUrl} pseudo={m.pseudo} size={32} />
+                <Text variant="bodyStrong" color={c.ink} style={styles.grow}>
+                  {m.pseudo}
+                </Text>
+                <SmButton
+                  kind="g"
                   icon="close"
                   disabled={busy}
                   onPress={async () => {
@@ -270,20 +374,13 @@ export default function CrewScreen() {
                   }}
                 >
                   {crewLabels.remove}
-                </Button>
-              ) : null}
-            </Plate>
-          ))}
-        </>
-      ) : null}
-
-      {leader && !v.archived ? (
-        <>
-          <SectionTitle>{crewLabels.edit}</SectionTitle>
-          <View style={styles.row}>
-            <Button
-              variant="secondary"
-              icon="add"
+                </SmButton>
+              </View>
+            ))}
+          <View style={styles.actions}>
+            <SmButton
+              kind="s"
+              icon="gallery"
               disabled={busy}
               onPress={() =>
                 void run(async () => {
@@ -303,39 +400,39 @@ export default function CrewScreen() {
               }
             >
               {crewLabels.changeLogo}
-            </Button>
+            </SmButton>
             {v.logoUrl ? (
-              <Button
-                variant="secondary"
+              <SmButton
+                kind="s"
                 icon="close"
                 disabled={busy}
                 onPress={() => void run(() => api.setCrewLogo(v.id, null))}
               >
                 {crewLabels.removeLogo}
-              </Button>
+              </SmButton>
             ) : null}
+            <SmButton
+              kind="g"
+              icon="close"
+              disabled={busy}
+              onPress={async () => {
+                if (!(await ask(crewLabels.archiveConfirm))) return;
+                void run(async () => {
+                  await api.archiveCrew(v.id);
+                  router.replace("/(tabs)/garage");
+                });
+              }}
+            >
+              {crewLabels.archive}
+            </SmButton>
           </View>
-          <Button
-            variant="secondary"
-            icon="close"
-            disabled={busy}
-            onPress={async () => {
-              if (!(await ask(crewLabels.archiveConfirm))) return;
-              void run(async () => {
-                await api.archiveCrew(v.id);
-                router.replace("/(tabs)/garage");
-              });
-            }}
-          >
-            {crewLabels.archive}
-          </Button>
           <Muted variant="caption">{crewLabels.leaderCannotLeave}</Muted>
         </>
       ) : null}
 
       {v.viewerState === "member" && !v.archived ? (
-        <Button
-          variant="secondary"
+        <SmButton
+          kind="g"
           icon="undo"
           disabled={busy}
           onPress={async () => {
@@ -344,21 +441,29 @@ export default function CrewScreen() {
           }}
         >
           {crewLabels.leave}
-        </Button>
+        </SmButton>
       ) : null}
       {/* Signaler (lot 32) : un crew dont on n'est pas le chef. */}
       {!leader && !v.archived ? <ReportButton look="link" type="crew" id={v.id} /> : null}
-    </FlowScreen>
+    </PosterFlow>
   );
 }
 
 const styles = StyleSheet.create({
-  head: { gap: space3, padding: space3 },
-  headRow: { flexDirection: "row", alignItems: "center", gap: space3 },
-  headText: { flex: 1, gap: space1 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  hero: { height: 200, width: "100%" },
+  id: { flexDirection: "row", alignItems: "flex-end", gap: space3 + 2, marginTop: -42 },
+  logoRing: { borderRadius: 46, padding: 4 },
+  logoImg: { width: 84, height: 84, borderRadius: 42, overflow: "hidden" },
+  idText: { flex: 1, minWidth: 0, gap: space1, paddingBottom: space1 },
+  name: { fontSize: 24, lineHeight: 23 },
+  tags: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  actions: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: space2 },
+  grow: { flex: 1, minWidth: 0 },
   block: { gap: space2 },
-  person: { gap: space2, padding: space3 },
-  personRow: { flexDirection: "row", alignItems: "center", gap: space3 },
+  rail: { gap: space2, paddingVertical: space1, paddingHorizontal: 2 },
+  member: { width: 92, alignItems: "center", gap: 3 },
+  memberName: { fontSize: 12, fontFamily: "Archivo-ExtraBold", textAlign: "center" },
+  memberSub: { fontSize: 10.5, lineHeight: 13, textAlign: "center" },
+  item: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3, borderRadius: 16 },
+  itemActions: { flexDirection: "row", alignItems: "center", gap: space1 },
 });
