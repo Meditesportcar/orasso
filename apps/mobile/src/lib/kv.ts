@@ -114,6 +114,8 @@ export const CACHE_KEY_PREFIXES = [
   "passport.",
   "recap.",
   "home-",
+  "event-draft-",
+  "event-wizard-memo-",
 ] as const;
 
 async function purgeLegacyCaches(): Promise<void> {
