@@ -23,6 +23,7 @@ import {
 import { useStaffEvent } from "@/lib/staff/useStaff";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
+import { Segments } from "@/ui/Segments";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -121,11 +122,7 @@ export default function StaffList() {
                 />
               )}
               <View style={styles.chips}>
-                {FILTERS.map(([key, label]) => (
-                  <Chip key={key} selected={filter === key} onPress={() => setFilter(key)}>
-                    {label}
-                  </Chip>
-                ))}
+                <Segments items={FILTERS.map(([id, label]) => ({ id, label }))} value={filter} onChange={setFilter} />
                 {multiDay ? (
                   <Chip selected={today} onPress={() => setToday((v) => !v)}>
                     {eventDaysLabels.today}

@@ -281,11 +281,11 @@ function AddContentSheet({
             ))}
           </ChipRow>
           <Muted variant="label">{L.addKind}</Muted>
-          <ChipRow>
-            <Chip selected={kind === "link"} onPress={() => setKind("link")}>
+          <ChipRow accessibilityRole="tablist">
+            <Chip accessibilityRole="tab" selected={kind === "link"} onPress={() => setKind("link")}>
               Lien
             </Chip>
-            <Chip selected={kind === "gallery"} onPress={() => setKind("gallery")}>
+            <Chip accessibilityRole="tab" selected={kind === "gallery"} onPress={() => setKind("gallery")}>
               Galerie
             </Chip>
           </ChipRow>

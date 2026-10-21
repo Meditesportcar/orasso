@@ -49,6 +49,7 @@ import { useNow } from "@/lib/useNow";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
+import { Segments } from "@/ui/Segments";
 import { ApplicationStatusTag, StatusTag } from "@/ui/StatusTag";
 import {
   arrivalPhrase,
@@ -249,19 +250,16 @@ export function SortiesScreen() {
       {answered ? <Notice>{answered}</Notice> : null}
       {avisNotice ? <Notice>{avisNotice}</Notice> : null}
 
-      <View style={styles.segments} testID="sorties-segments">
-        <Chip selected={segment === "upcoming"} onPress={() => setSegment("upcoming")}>
-          {`À venir · ${countUpcoming}`}
-        </Chip>
-        {showStaff ? (
-          <Chip selected={segment === "staff"} onPress={() => setSegment("staff")}>
-            {`Staff · ${staffItems.length}`}
-          </Chip>
-        ) : null}
-        <Chip selected={segment === "past"} onPress={() => setSegment("past")}>
-          {`Passées · ${countPast}`}
-        </Chip>
-      </View>
+      <Segments
+        testID="sorties-segments"
+        value={segment}
+        onChange={setSegment}
+        items={[
+          { id: "upcoming", label: `À venir · ${countUpcoming}` },
+          ...(showStaff ? [{ id: "staff" as const, label: `Staff · ${staffItems.length}` }] : []),
+          { id: "past", label: `Passées · ${countPast}` },
+        ]}
+      />
 
       {segment === "upcoming" ? (
         <>
@@ -768,7 +766,6 @@ function PastTicket({
 }
 
 const styles = StyleSheet.create({
-  segments: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   chipLine: { flexDirection: "row", alignItems: "center", gap: space2 },
   reply: { textTransform: "none" },
 });

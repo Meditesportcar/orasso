@@ -106,8 +106,9 @@ function BoiteScreen() {
   const items = conversations.data?.items ?? [];
   return (
     <TabScreen title={messagingLabels.inbox} onRefresh={reloadAll}>
-      <ChipRow>
+      <ChipRow accessibilityRole="tablist">
         <Chip
+          accessibilityRole="tab"
           selected={segment === "messages"}
           onPress={() => setSegment("messages")}
           accessibilityLabel={messagingLabels.messages}
@@ -115,6 +116,7 @@ function BoiteScreen() {
           {`${messagingLabels.messages}${summary.data?.unreadMessages ? ` · ${summary.data.unreadMessages}` : ""}`}
         </Chip>
         <Chip
+          accessibilityRole="tab"
           selected={segment === "requests"}
           onPress={() => setSegment("requests")}
           accessibilityLabel={messagingLabels.requests}

@@ -29,6 +29,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
+import { Segments } from "@/ui/Segments";
 import { Slider } from "@/ui/Slider";
 import { StatusTag } from "@/ui/StatusTag";
 import { ApplySheet } from "./ApplySheet";
@@ -130,11 +131,11 @@ export function MissionsScreen() {
         <>
           {p.issue ? <Notice>{proV2Labels.profileIncomplete(p.issue)}</Notice> : null}
           <View style={styles.chips} testID="missions-filters">
-            {trades.map((code) => (
-              <Chip key={code} selected={activeTrade === code} onPress={() => setTrade(code)}>
-                {vendorTypeLabels[code]}
-              </Chip>
-            ))}
+            <Segments<VendorTypeCode>
+              items={trades.map((id) => ({ id, label: vendorTypeLabels[id] }))}
+              value={activeTrade ?? p.type}
+              onChange={setTrade}
+            />
             <Chip variant="accent" selected={radiusOpen} onPress={() => setRadiusOpen((v) => !v)}>
               {proV2Labels.radiusChip(shownRadius)}
             </Chip>

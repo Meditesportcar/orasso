@@ -48,14 +48,14 @@ export function StepPlate({
     <>
       <StepHead title={L.plateTitle} text={L.plateText} />
       {unavailable ? <StepNote icon="plate">{L.noDetection}</StepNote> : null}
-      <ChipRow>
+      <ChipRow accessibilityRole="tablist">
         {/* Relecture : sans détection possible ici (web, Expo Go), « Automatique » ne promet rien qu'on ne fait pas. */}
         {unavailable ? null : (
-          <Chip selected={!manual} onPress={() => onMode("auto")} accessibilityLabel={L.auto}>
+          <Chip accessibilityRole="tab" selected={!manual} onPress={() => onMode("auto")} accessibilityLabel={L.auto}>
             {L.auto}
           </Chip>
         )}
-        <Chip selected={manual} onPress={() => onMode("manual")} accessibilityLabel={L.manual}>
+        <Chip accessibilityRole="tab" selected={manual} onPress={() => onMode("manual")} accessibilityLabel={L.manual}>
           {L.manual}
         </Chip>
         <Muted variant="meta" testID="plate-blur-count">

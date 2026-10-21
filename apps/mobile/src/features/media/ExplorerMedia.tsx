@@ -116,11 +116,11 @@ export function ExplorerMedia() {
         />
       }
     >
-      <ChipRow>
-        <Chip selected={segment === "search"} onPress={() => setSegment("search")}>
+      <ChipRow accessibilityRole="tablist">
+        <Chip accessibilityRole="tab" selected={segment === "search"} onPress={() => setSegment("search")}>
           {L.segSearch}
         </Chip>
-        <Chip selected={segment === "agenda"} onPress={() => setSegment("agenda")}>
+        <Chip accessibilityRole="tab" selected={segment === "agenda"} onPress={() => setSegment("agenda")}>
           {L.segAgenda}
         </Chip>
       </ChipRow>
@@ -159,12 +159,13 @@ export function ExplorerMedia() {
             />
           </View>
           <Muted variant="label">{L.where}</Muted>
-          <ChipRow>
-            <Chip selected={filters.region === ""} onPress={() => set("region", "")}>
+          <ChipRow accessibilityRole="tablist">
+            <Chip accessibilityRole="tab" selected={filters.region === ""} onPress={() => set("region", "")}>
               {L.allFrance}
             </Chip>
             {regions.map((r) => (
               <Chip
+                accessibilityRole="tab"
                 key={r.code}
                 selected={filters.region === r.code}
                 onPress={() => set("region", filters.region === r.code ? "" : r.code)}
@@ -175,15 +176,18 @@ export function ExplorerMedia() {
           </ChipRow>
           <Muted variant="label">{L.whatWhen}</Muted>
           <ChipRow>
-            {eventFormats.map((f) => (
-              <Chip
-                key={f}
-                selected={filters.format === f}
-                onPress={() => set("format", filters.format === f ? "" : f)}
-              >
-                {eventFormatLabels[f]}
-              </Chip>
-            ))}
+            <View style={styles.formatTabs} accessibilityRole="tablist" accessibilityLabel={L.whatWhen}>
+              {eventFormats.map((f) => (
+                <Chip
+                  accessibilityRole="tab"
+                  key={f}
+                  selected={filters.format === f}
+                  onPress={() => set("format", filters.format === f ? "" : f)}
+                >
+                  {eventFormatLabels[f]}
+                </Chip>
+              ))}
+            </View>
             <Chip selected={filters.thisMonth} onPress={() => set("thisMonth", !filters.thisMonth)}>
               {L.thisMonth}
             </Chip>
@@ -350,6 +354,7 @@ function AgendaLine({
 }
 
 const styles = StyleSheet.create({
+  formatTabs: { flexDirection: "row", gap: space2 },
   fill: { flex: 1 },
   search: {
     flexDirection: "row",

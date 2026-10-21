@@ -88,9 +88,10 @@ export default function Reglages() {
       {section === "preferences" ? (
         <>
           <SectionTitle>Thème</SectionTitle>
-          <ChipRow>
+          <ChipRow accessibilityRole="tablist">
             {themeChoices.map((choice) => (
               <Chip
+                accessibilityRole="tab"
                 key={choice.value}
                 selected={preference === choice.value}
                 onPress={() => setPreference(choice.value)}
@@ -103,11 +104,11 @@ export default function Reglages() {
             Sable est fait pour le plein soleil. Automatique : Sable le jour, Béton après le coucher du soleil.
           </Muted>
           <SectionTitle>Animations</SectionTitle>
-          <ChipRow>
-            <Chip selected={!reduceMotion} onPress={() => setReduceMotion(false)}>
+          <ChipRow accessibilityRole="tablist">
+            <Chip accessibilityRole="tab" selected={!reduceMotion} onPress={() => setReduceMotion(false)}>
               Normales
             </Chip>
-            <Chip selected={reduceMotion} onPress={() => setReduceMotion(true)}>
+            <Chip accessibilityRole="tab" selected={reduceMotion} onPress={() => setReduceMotion(true)}>
               Réduire les animations
             </Chip>
           </ChipRow>

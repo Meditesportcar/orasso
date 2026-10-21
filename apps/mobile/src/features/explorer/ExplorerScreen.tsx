@@ -15,6 +15,7 @@ import { ProsSegment } from "@/features/explorer/ProsSegment";
 import { PeopleSearch } from "@/features/social/PeopleSearch";
 import { useSession } from "@/lib/session";
 import { TabScreen } from "@/ui/Screens";
+import { Segments } from "@/ui/Segments";
 import { activeFilters, type EventFilters, emptyEventFilters, type When } from "./queries";
 import { type ExplorerPosition, useExplorerPosition } from "./useExplorerPosition";
 
@@ -57,11 +58,7 @@ export function ExplorerScreen() {
       <View style={styles.head} testID="explorer-head">
         <SearchLine q={q} onChange={setQ} position={position} dept={dept} />
         <ChipRow>
-          {SEGMENTS.map((s) => (
-            <Chip key={s} selected={segment === s} onPress={() => setSegment(s)}>
-              {LABELS[s]}
-            </Chip>
-          ))}
+          <Segments items={SEGMENTS.map((id) => ({ id, label: LABELS[id] }))} value={segment} onChange={setSegment} />
           {segment === "evenements" ? (
             <Chip selected={filtersOpen || count > 0} onPress={() => setFiltersOpen((o) => !o)}>
               {count > 0 ? `${L.filters} · ${count}` : L.filters}
@@ -183,19 +180,24 @@ function FiltersPanel({
   const set = <K extends keyof EventFilters>(key: K, v: EventFilters[K]) => onChange({ ...value, [key]: v });
   return (
     <View style={styles.filters} testID="explorer-filters">
-      <Group label={L.groupFormat}>
-        <Chip selected={value.format === ""} onPress={() => set("format", "")}>
+      <Group label={L.groupFormat} exclusive>
+        <Chip accessibilityRole="tab" selected={value.format === ""} onPress={() => set("format", "")}>
           {L.formatAll}
         </Chip>
         {eventFormats.map((f) => (
-          <Chip key={f} selected={value.format === f} onPress={() => set("format", value.format === f ? "" : f)}>
+          <Chip
+            accessibilityRole="tab"
+            key={f}
+            selected={value.format === f}
+            onPress={() => set("format", value.format === f ? "" : f)}
+          >
             {eventFormatLabels[f]}
           </Chip>
         ))}
       </Group>
-      <Group label={L.groupWhen}>
+      <Group label={L.groupWhen} exclusive>
         {WHEN.map((w) => (
-          <Chip key={w.id} selected={value.when === w.id} onPress={() => set("when", w.id)}>
+          <Chip accessibilityRole="tab" key={w.id} selected={value.when === w.id} onPress={() => set("when", w.id)}>
             {w.label}
           </Chip>
         ))}
@@ -214,14 +216,16 @@ function FiltersPanel({
   );
 }
 
-function Group({ label, children }: { label: string; children: ReactNode }) {
+function Group({ label, children, exclusive = false }: { label: string; children: ReactNode; exclusive?: boolean }) {
   const { t } = useTheme();
   return (
     <View style={styles.group}>
       <Text variant="label" color={t.color.inkMuted}>
         {label}
       </Text>
-      <ChipRow>{children}</ChipRow>
+      <ChipRow accessibilityRole={exclusive ? "tablist" : undefined} accessibilityLabel={label}>
+        {children}
+      </ChipRow>
     </View>
   );
 }
