@@ -24,7 +24,7 @@ export function Segments<T extends string>({
           key={s.id}
           onPress={() => onChange(s.id)}
           accessibilityRole="tab"
-          accessibilityState={{ selected: value === s.id }}
+          aria-selected={value === s.id}
           accessibilityLabel={s.label}
           testID={s.testID}
           style={styles.tab}
