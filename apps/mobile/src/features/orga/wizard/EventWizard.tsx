@@ -48,14 +48,7 @@ import { StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { now } from "@/lib/clock";
 import { draftWorthKeeping, type StoredDraft } from "@/lib/eventDraft";
-import {
-  clearEventDraft,
-  keepEventDraftPoster,
-  loadEventDraft,
-  loadWizardMemo,
-  saveEventDraft,
-  saveWizardMemo,
-} from "@/lib/eventDraftStore";
+import { eventDraftStoreForAccount } from "@/lib/eventDraftStore";
 import { saveEvent } from "@/lib/eventSave";
 import { formatStamp } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
@@ -120,6 +113,8 @@ export function EventWizard({
   const { t } = useTheme();
   const router = useRouter();
   const { structureId } = useOrga();
+  const { clearEventDraft, keepEventDraftPoster, loadEventDraft, loadWizardMemo, saveEventDraft, saveWizardMemo } =
+    useRef(eventDraftStoreForAccount()).current;
   const editing = Boolean(event);
   const [saved, setSaved] = useState<EventOrganizer | undefined>(event);
   const [savedNeeds, setSavedNeeds] = useState<EventNeedView[]>([]);
@@ -212,7 +207,7 @@ export function EventWizard({
     return () => {
       alive = false;
     };
-  }, [event, structureId, initialStep]);
+  }, [event, structureId, initialStep, loadEventDraft, loadWizardMemo]);
 
   // Saisie gardée sur le téléphone : une création dès qu'elle vaut la peine, un brouillon tant qu'il n'est pas
   // synchronisé (effacée quand la saisie est enregistrée).
@@ -236,7 +231,19 @@ export function EventWizard({
     pending.current = write;
     const timer = setTimeout(write, 400);
     return () => clearTimeout(timer);
-  }, [keepOnDevice, loaded, d, dirty, index, createdId, structureId, keptPoster, eventId]);
+  }, [
+    keepOnDevice,
+    loaded,
+    d,
+    dirty,
+    index,
+    createdId,
+    structureId,
+    keptPoster,
+    eventId,
+    clearEventDraft,
+    saveEventDraft,
+  ]);
   useEffect(() => () => pending.current?.(), []);
 
   // Mémoire du brouillon : temps le plus avancé atteint, récurrence (jusqu'à la création de la série).
@@ -253,7 +260,7 @@ export function EventWizard({
       return;
     memo.current = next;
     void saveWizardMemo(saved.id, next);
-  }, [saved, loaded, index, d.recurrence]);
+  }, [saved, loaded, index, d.recurrence, saveWizardMemo]);
 
   const setPoster = useCallback(
     (photo: PickedPhoto | null) => {
@@ -261,7 +268,7 @@ export function EventWizard({
       if (!keepOnDevice) return;
       void keepEventDraftPoster(structureId, photo, eventId).then(setKeptPoster);
     },
-    [keepOnDevice, structureId, eventId],
+    [keepOnDevice, structureId, eventId, keepEventDraftPoster],
   );
 
   // Lot 36 : copie d'un événement encore en brouillon : l'ouverture des candidatures suit le début.

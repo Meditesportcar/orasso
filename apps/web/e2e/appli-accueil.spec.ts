@@ -6,6 +6,7 @@ import { RELAIS } from "./relais";
 // Accueil complet (lot 30) dans l'appli, version web de recette (`expo start --web`), avec Kenji (département 66) :
 // blocs, carte « Sponsorisé », réorganisation enregistrée et relue après rechargement, captures Béton / Sable.
 // Prérequis : seed du lot 30, API avec `OVERPASS_URL=off`, `FUEL_API_URL=off`, `WEATHER_PROVIDER=off`.
+// Pour une suite avec meteo.spec.ts : `open-meteo` avec `METEO_URL` vers son stub local convient aussi.
 // Lancer avec APP_URL=http://localhost:<port de Metro> (CORS_ORIGINS de l'API = même origine).
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-30-captures/appli`;

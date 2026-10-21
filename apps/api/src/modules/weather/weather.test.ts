@@ -25,6 +25,7 @@ import {
   structureMembers,
   weatherDepartments,
 } from "../../db/schema";
+import { env } from "../../env";
 import {
   aggregateMetNorway,
   fetchForecast,
@@ -100,12 +101,19 @@ function fakeFetch(body: () => unknown, status = 200) {
 const sentHeaders = (init?: RequestInit) => (init?.headers ?? {}) as Record<string, string>;
 
 let clock: ReturnType<typeof useClock>;
+const previousMeteoUrl = env.METEO_URL;
+const previousNodeEnv = env.NODE_ENV;
 beforeEach(async () => {
+  env.METEO_URL = undefined;
   await db.delete(weatherDepartments);
   await resetDb();
   clock = useClock(NOW);
 });
-afterEach(() => setWeatherFetch(null));
+afterEach(() => {
+  env.METEO_URL = previousMeteoUrl;
+  env.NODE_ENV = previousNodeEnv;
+  setWeatherFetch(null);
+});
 
 async function setup(over: Partial<typeof events.$inferInsert> = {}) {
   const orga = await signUp("Orga_Meteo", { twoFactor: true });
@@ -164,6 +172,22 @@ describe("fournisseurs", () => {
     expect(metSymbolToCode("sleet")).toBe("snow");
     expect(metSymbolToCode("partlycloudy_night")).toBe("partly_cloudy");
     expect(metSymbolToCode("fog")).toBe("fog");
+  });
+
+  it("METEO_URL : le stub reçoit les paramètres Open-Meteo, jamais en production", async () => {
+    env.METEO_URL = "http://127.0.0.1:18591/v1/forecast";
+    const f = fakeFetch(sunny);
+    setWeatherFetch(f as unknown as typeof fetch);
+    expect(await fetchForecast(42.7, 3.03)).not.toBeNull();
+    const url = new URL(String(f.mock.calls[0]?.[0]));
+    expect(url.origin).toBe("http://127.0.0.1:18591");
+    expect(url.pathname).toBe("/v1/forecast");
+    expect(url.searchParams.get("latitude")).toBe("42.7000");
+    expect(url.searchParams.get("longitude")).toBe("3.0300");
+    expect(url.searchParams.get("forecast_days")).toBe("8");
+    env.NODE_ENV = "production";
+    await fetchForecast(42.7, 3.03);
+    expect(new URL(String(f.mock.calls[1]?.[0])).hostname).toBe("api.open-meteo.com");
   });
 
   it("MET Norway : User-Agent obligatoire, Expires respecté (un seul appel), If-Modified-Since renvoyé ensuite", async () => {
@@ -392,6 +416,24 @@ describe("rappel de la veille", () => {
 });
 
 describe("routes", () => {
+  it("rafraîchissement de recette : option obligatoire, authentification et rôle admin, absent en production", async () => {
+    const { orga, e } = await setup();
+    const path = `/dev/weather/${e.id}/refresh`;
+    expect((await call(null, "POST", path)).status).toBe(404);
+    env.METEO_URL = "http://127.0.0.1:18591/v1/forecast";
+    expect((await call(null, "POST", path)).status).toBe(401);
+    expect((await call(orga, "POST", path)).status).toBe(403);
+    const noFactor = await signUp("Admin_Weather_No2fa", { role: "super_admin" });
+    expect((await call(noFactor, "POST", path)).status).toBe(403);
+    const admin = await signUp("Admin_Weather", { twoFactor: true, role: "super_admin" });
+    expect((await call(admin, "POST", "/dev/weather/invalide/refresh")).status).toBe(400);
+    const f = fakeFetch(rainy);
+    setWeatherFetch(f as unknown as typeof fetch);
+    expect(await call(admin, "POST", path)).toMatchObject({ status: 200, json: { refreshed: 1 } });
+    env.NODE_ENV = "production";
+    expect((await call(admin, "POST", path)).status).toBe(404);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
   it("GET /events/by-slug/:slug/weather : météo avec attribution et cache d'une heure ; null au-delà de 7 jours", async () => {
     const { e } = await setup();
     setWeatherFetch(fakeFetch(rainy) as unknown as typeof fetch);
