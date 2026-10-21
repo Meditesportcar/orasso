@@ -23,7 +23,8 @@ export function TopBar({ inboxOn = false, onClose }: { inboxOn?: boolean; onClos
   const router = useRouter();
   const { me } = useSession();
   const { persona, base, active, choose, backToBase } = usePersona();
-  const showPersona = persona.kind === "organizer";
+  // Organisateur (artefact) et Administration (hors artefact, sans onglet Profil : la pastille est son seul retour).
+  const showPersona = persona.kind === "organizer" || persona.kind === "admin";
   // Organisateur : la Boîte de la structure (messages de participants, discussions du staff, demandes non traités).
   const structureId = persona.kind === "organizer" ? persona.structureId : null;
   const orgInbox = useApi(() => api.orgInboxSummary(structureId ?? ""), [structureId], {

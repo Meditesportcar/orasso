@@ -91,7 +91,7 @@ export function EventCardV2({ event, big = false, onPress }: { event: EventCard;
       <Text variant="label" color={c.plateMuted}>
         {stub.month}
       </Text>
-      <Text variant="meta" color={c.accent} style={styles.stubHour}>
+      <Text variant="meta" color={c.accentText} style={styles.stubHour}>
         {stub.hour}
       </Text>
     </View>

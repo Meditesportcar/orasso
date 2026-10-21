@@ -32,7 +32,7 @@ export type TabBarProps = {
 };
 
 function TabContent({ tab, active, centerSlot }: { tab: TabItem; active: boolean; centerSlot?: ReactNode }): ReactNode {
-  const icon = <Icon name={tab.icon} size={22} strokeWidth={2} filled={active && !tab.center} />;
+  const icon = <Icon name={tab.icon} size={22} strokeWidth={2} filled={active && !tab.center ? "parts" : false} />;
   if (tab.center) {
     // Lot C1 : le rond `.obtn` de l'artefact (68 px, débord de 22 px), le libellé en bas de la barre.
     return (
