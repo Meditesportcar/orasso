@@ -1,6 +1,4 @@
 import { mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import {
@@ -20,6 +18,7 @@ import {
   unique,
 } from "./helpers";
 import { checkerPhoto } from "./helpers/lot51";
+import { RELAIS } from "./relais";
 
 // Lot 57, côté site : parité des fonctions nouvelles de la DA v2 (D20). Organisateur : réglages presse et décision d'une
 // accréditation, mise en avant d'un contenu, besoin + candidature + emplacement + avis après le règlement, affiche
@@ -27,9 +26,7 @@ import { checkerPhoto } from "./helpers/lot51";
 // récap de Béziers Night, profil média de Léo (contenu avec floutage proposé), vitrine de Sofia, carte à partager,
 // Mon profil en hub. Administration : vérification d'un profil média. Deux thèmes, `auditPage`, captures 390 px et
 // bureau, pas de défilement horizontal à 390 px.
-const DIR =
-  process.env.CAPTURES_DIR ??
-  join(homedir(), ".claude", "relais", "orasso", "lot-57-captures", "site").replaceAll("\\", "/");
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-57-captures/site`;
 const WIDE = { width: 1280, height: 900 } as const;
 const THEMES = ["beton", "sable"] as const;
 type Theme = (typeof THEMES)[number];
