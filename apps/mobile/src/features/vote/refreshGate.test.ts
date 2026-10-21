@@ -78,3 +78,19 @@ describe("createRefreshGate", () => {
     vi.useRealTimers();
   });
 });
+
+describe("createRefreshGate : démontage", () => {
+  it("dispose() avec un chargement actif ne recrée ni minuteur ni appel", async () => {
+    const { gate, run } = setup(50);
+    gate.request();
+    await vi.advanceTimersByTimeAsync(10);
+    gate.request(); // demande de rattrapage pendant que le chargement tourne : `again`
+    gate.dispose(); // écran quitté
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(run).toHaveBeenCalledTimes(1);
+    gate.request();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(run).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+});

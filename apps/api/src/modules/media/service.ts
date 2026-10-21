@@ -636,6 +636,24 @@ export const mediaService = {
       const event = await tx.query.events.findFirst({ where: eq(events.id, input.eventId) });
       if (event?.status === "cancelled") throw conflict("conflict", mediaLabels.eventCancelled);
       await assertAccredited(tx, input.eventId, profile.id);
+      // Publication idempotente (lot 59d) : les clés d'une galerie servent d'identifiant de tentative. Si une première
+      // tentative a été validée mais que sa réponse s'est perdue, la reprise avec les mêmes clés (déjà consommées)
+      // rend le contenu déjà publié au lieu d'échouer.
+      if (input.photoKeys.length > 0) {
+        const [again] = await tx
+          .select({ id: mediaContents.id })
+          .from(mediaContents)
+          .where(
+            and(
+              eq(mediaContents.mediaProfileId, profile.id),
+              eq(mediaContents.eventId, input.eventId),
+              eq(mediaContents.photoKeys, input.photoKeys),
+              isNull(mediaContents.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (again) return again.id;
+      }
       for (const key of input.photoKeys) {
         if (!(await uploadsService.consume(tx, v.user.id, key, "media_content"))) {
           throw validation(mediaLabels.imageUnknown);

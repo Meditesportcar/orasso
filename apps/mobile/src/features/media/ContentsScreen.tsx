@@ -35,7 +35,8 @@ import { PhotoBadge, PlateFrameEditor } from "@/features/vehicle/add/PlateFrameE
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
 import { formatDay } from "@/lib/format";
-import { errorMessage } from "@/lib/http";
+import { ApiRequestError, errorMessage } from "@/lib/http";
+import { cacheGetJson, cacheSetJson } from "@/lib/kv";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { type PickedPhoto, pickPhotos } from "@/lib/photos";
@@ -46,7 +47,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@/ui/PhotoGrid";
 import { TabScreen } from "@/ui/Screens";
-import { discardGalleryUploads, syncGalleryUploads, type UploadCache } from "./galleryUploads";
+import { createUploadSession, type SentUpload, syncGalleryUploads, UploadsCancelled } from "./galleryUploads";
 import { contentCaption, groupByEvent, guessPlatform, normalizeUrl, totalViews } from "./model";
 
 const { space1, space2, space3, space6, space12 } = tokens.spacing;
@@ -183,6 +184,22 @@ function ContentRow({ c, onPress }: { c: MediaContentView; onPress: () => void }
 
 // --- Ajouter ------------------------------------------------------------------------------------------------------------------
 
+/** Suppression d'un envoi : un fichier déjà parti (404) est une suppression réussie. */
+async function removeUpload(upload: SentUpload): Promise<void> {
+  try {
+    await api.deleteUpload(upload.id);
+  } catch (e) {
+    if (!(e instanceof ApiRequestError && e.status === 404)) throw e;
+  }
+}
+
+/** Suppressions à reprendre : rangées sous le compte connecté, jamais mêlées aux envois réutilisables. */
+const PENDING_REMOVALS_KEY = "media-pending-upload-removals";
+const pendingRemovalStore = {
+  read: async () => (await cacheGetJson<SentUpload[]>(PENDING_REMOVALS_KEY)) ?? [],
+  write: async (list: SentUpload[]) => cacheSetJson(PENDING_REMOVALS_KEY, list),
+};
+
 type EventChoice = { id: string; title: string; startsAt: string };
 
 function AddContentSheet({
@@ -206,7 +223,12 @@ function AddContentSheet({
   const [busy, setBusy] = useState(false);
   const [upload, setUpload] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const sent = useRef<UploadCache>(new Map());
+  // Envois gardés, fermeture et nettoyage sérialisés ; suppressions en échec gardées pour être reprises (lot 59d).
+  const session = useRef(createUploadSession({ remove: removeUpload, store: pendingRemovalStore })).current;
+  // Retour sur le formulaire : les suppressions restées en échec (hors ligne) sont rejouées.
+  useEffect(() => {
+    if (visible) void session.retryRemovals();
+  }, [visible, session]);
 
   // Par défaut : le dernier événement commencé (on publie après coup), sinon le premier.
   const byRecent = [...events].sort((a, b) => b.startsAt.localeCompare(a.startsAt));
@@ -244,49 +266,57 @@ function AddContentSheet({
     if (!chosen) return;
     setBusy(true);
     setError(null);
+    // Toute la publication passe par la file de la session : une fermeture du formulaire attend sa fin, et une
+    // réouverture ne retrouve jamais un envoi en cours de suppression.
     try {
-      let keys: string[] = [];
-      if (kind === "gallery") {
-        // Les envois réussis sont gardés d'un essai à l'autre : une panne de publication ne renvoie pas les 30 photos.
-        keys = await syncGalleryUploads(
-          photos,
-          sent.current,
-          async ({ photo, rects }, i) => {
-            const form = new FormData();
-            form.append("purpose", "media_content");
-            if (rects.length) form.append("plateRects", JSON.stringify(rects));
-            if (Platform.OS === "web") {
-              const blob = await (await fetch(photo.uri)).blob();
-              form.append("file", new File([blob], `photo-${i + 1}.jpg`, { type: "image/jpeg" }));
-            } else {
-              form.append("file", {
-                uri: photo.uri,
-                name: `photo-${i + 1}.jpg`,
-                type: "image/jpeg",
-              } as unknown as Blob);
-            }
-            const { id, key } = await api.upload(form);
-            return { id, key };
-          },
-          (u) => api.deleteUpload(u.id),
-          (current, total) => setUpload({ current, total }),
-        );
-        setUpload({ current: photos.length, total: photos.length, done: true });
-        await waitUploadParked();
-      }
-      await api.createMediaContent({
-        eventId: chosen,
-        kind,
-        title: title.trim(),
-        url: kind === "link" ? normalizeUrl(url) : null,
-        platform: kind === "link" ? platform : "other",
-        photoKeys: keys,
+      await session.run(async (tools) => {
+        let keys: string[] = [];
+        if (kind === "gallery") {
+          // Les envois réussis sont gardés d'un essai à l'autre : une panne de publication ne renvoie pas les 30 photos.
+          keys = await syncGalleryUploads(
+            photos,
+            tools.cache,
+            async ({ photo, rects }, i) => {
+              const form = new FormData();
+              form.append("purpose", "media_content");
+              if (rects.length) form.append("plateRects", JSON.stringify(rects));
+              if (Platform.OS === "web") {
+                const blob = await (await fetch(photo.uri)).blob();
+                form.append("file", new File([blob], `photo-${i + 1}.jpg`, { type: "image/jpeg" }));
+              } else {
+                form.append("file", {
+                  uri: photo.uri,
+                  name: `photo-${i + 1}.jpg`,
+                  type: "image/jpeg",
+                } as unknown as Blob);
+              }
+              const { id, key } = await api.upload(form);
+              return { id, key };
+            },
+            tools.retire,
+            (current, total) => setUpload({ current, total }),
+            tools.stopped,
+          );
+          setUpload({ current: photos.length, total: photos.length, done: true });
+          await waitUploadParked();
+          if (tools.stopped()) throw new UploadsCancelled();
+        }
+        await api.createMediaContent({
+          eventId: chosen,
+          kind,
+          title: title.trim(),
+          url: kind === "link" ? normalizeUrl(url) : null,
+          platform: kind === "link" ? platform : "other",
+          photoKeys: keys,
+        });
+        // Publié : les fichiers sont consommés, plus rien à garder ni à supprimer.
+        tools.keepNothing();
       });
-      sent.current.clear();
       reset();
       onDone();
     } catch (e) {
-      setError(errorMessage(e));
+      // Formulaire fermé pendant l'envoi : rien à afficher, le nettoyage a suivi.
+      if (!(e instanceof UploadsCancelled)) setError(errorMessage(e));
       setUpload(null);
     } finally {
       setBusy(false);
@@ -298,7 +328,7 @@ function AddContentSheet({
       visible={visible}
       onClose={() => {
         // Formulaire fermé sans publier : les envois gardés pour une reprise sont supprimés.
-        void discardGalleryUploads(sent.current, (u) => api.deleteUpload(u.id));
+        void session.discard();
         onClose();
       }}
       accessibilityLabel={L.addTitle}

@@ -469,6 +469,16 @@ describe("contenus", () => {
     });
     expect(ok.status).toBe(201);
     expect(ok.json.photos).toHaveLength(1);
+    // Réponse perdue après validation (lot 59d) : la reprise avec les mêmes clés rend le même contenu, sans doublon.
+    const again = await call(leo, "POST", "/me/media-contents", {
+      eventId: nocturneId,
+      kind: "gallery",
+      title: "La nuit des japonaises",
+      photoKeys: ["media-contents/a.webp"],
+    });
+    expect(again.status).toBe(201);
+    expect(again.json.id).toBe(ok.json.id);
+    expect((await call(leo, "GET", "/me/media-contents")).json).toHaveLength(1);
   });
 
   it("mise en avant par l'organisation seulement ; page publique : mis en avant d'abord ; vues par session et heure", async () => {

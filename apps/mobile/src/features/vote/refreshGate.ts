@@ -23,9 +23,11 @@ export function createRefreshGate(options: {
   let running = false;
   let again = false;
   let timer: unknown = null;
+  let disposed = false;
 
   const start = () => {
     timer = null;
+    if (disposed) return;
     if (running) {
       again = true;
       return;
@@ -37,7 +39,7 @@ export function createRefreshGate(options: {
       .catch(() => undefined)
       .finally(() => {
         running = false;
-        if (again) {
+        if (again && !disposed) {
           again = false;
           request();
         }
@@ -45,6 +47,7 @@ export function createRefreshGate(options: {
   };
 
   function request() {
+    if (disposed) return;
     if (timer !== null) return;
     if (running) {
       again = true;
@@ -58,6 +61,8 @@ export function createRefreshGate(options: {
   return {
     request,
     dispose() {
+      disposed = true;
+      again = false;
       if (timer !== null) clearTimer(timer);
       timer = null;
     },

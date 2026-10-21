@@ -26,6 +26,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { applyTop3, BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
+import { createLiveBoard, onVoteSubscribed } from "./liveBoard";
 import { createRefreshGate, type RefreshGate } from "./refreshGate";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -38,7 +39,20 @@ export function VoteScreen() {
   const { upcoming, past } = useApplications();
   const known = [...(upcoming ?? []), ...(past ?? [])].find((a) => a.event.id === id)?.event.title;
   const title = titre || known || null;
-  const board = useApi(() => api.audienceBoard(id), [id], { enabled: Boolean(id) });
+  const [live, setLive] = useState<AudienceVotesChanged | null>(null);
+  // Les messages en direct sont réconciliés avec les réponses HTTP : un message antérieur au départ d'une requête de
+  // classement est abandonné à l'arrivée de sa réponse (votes manqués pendant une coupure).
+  const liveBoard = useRef(createLiveBoard());
+  const board = useApi(
+    async () => {
+      const token = liveBoard.current.begin();
+      const fresh = await api.audienceBoard(id);
+      setLive(liveBoard.current.loaded(token));
+      return fresh;
+    },
+    [id],
+    { enabled: Boolean(id) },
+  );
   const mine = useApi(() => api.audienceMine(id), [id], { enabled: Boolean(id) });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +77,6 @@ export function VoteScreen() {
   // Classement en direct : chaque message `votes.changed` porte le total et le top 3, affichés tout de suite ; le
   // classement complet n'est rechargé qu'au plus toutes les 10 s (et au retour au premier plan) : un message par
   // seconde et par téléphone ferait des dizaines de requêtes par seconde pendant un vote de 150 personnes.
-  const [live, setLive] = useState<AudienceVotesChanged | null>(null);
   // Deux rechargements regroupés (`refreshGate`) : le classement, et la grille avec mon droit de voter. Chacun au plus
   // toutes les 10 s, jamais deux à la fois, avec un dernier rafraîchissement garanti après une rafale.
   const reloaders = useRef({ board: board.reload, candidates: candidates.reload, mine: mine.reload });
@@ -80,7 +93,6 @@ export function VoteScreen() {
   }
   const scheduleReload = useCallback(() => gates.current?.board.request(), []);
   const scheduleListReload = useCallback(() => gates.current?.list.request(), []);
-  const subscribedOnce = useRef(false);
   useChannel(
     id ? `event:${id}:votes` : null,
     (event) => {
@@ -90,18 +102,13 @@ export function VoteScreen() {
         return;
       }
       if (event.type !== "votes.changed") return;
-      setLive(event.payload as AudienceVotesChanged);
+      setLive(liveBoard.current.receive(event.payload as AudienceVotesChanged));
       scheduleReload();
     },
     () => {
-      // Abonnement confirmé : la première fois, les données viennent d'être chargées ; ensuite c'est une reconnexion,
-      // et des messages ont pu être manqués pendant la coupure.
-      if (!subscribedOnce.current) {
-        subscribedOnce.current = true;
-        return;
-      }
-      scheduleReload();
-      scheduleListReload();
+      // Abonnement confirmé, y compris le premier : ouvert hors ligne, l'écran n'a rien chargé ; reconnecté, des
+      // messages ont pu être manqués. Les portes absorbent le doublon avec le chargement d'ouverture.
+      if (gates.current) onVoteSubscribed(gates.current);
     },
   );
   useEffect(() => {
