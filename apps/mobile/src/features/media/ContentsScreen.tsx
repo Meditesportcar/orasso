@@ -17,16 +17,21 @@ import {
 } from "@orasso/design-system/native";
 import {
   mediaAppLabels as L,
+  MAX_PLATE_RECTS,
   MEDIA_GALLERY_MAX_PHOTOS,
   type MediaContentView,
   type MediaPlatform,
   mediaPlatformLabels,
   mediaPlatforms,
+  nextPlateFrame,
+  type PlateRect,
+  vehicleWizardLabels as W,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
+import { PhotoBadge, PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
 import { formatDay } from "@/lib/format";
@@ -34,6 +39,7 @@ import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { type PickedPhoto, pickPhotos } from "@/lib/photos";
+import { detectPlates } from "@/lib/plates/detect";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
@@ -195,7 +201,7 @@ function AddContentSheet({
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [platform, setPlatform] = useState<MediaPlatform>("website");
-  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
+  const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [busy, setBusy] = useState(false);
   const [upload, setUpload] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -205,7 +211,14 @@ function AddContentSheet({
   const latest = byRecent.find((e) => new Date(e.startsAt).getTime() <= nowMs()) ?? byRecent[0];
   const chosen = eventId ?? latest?.id ?? null;
   const ready =
-    chosen !== null && title.trim().length >= 2 && (kind === "link" ? Boolean(url.trim()) : photos.length > 0);
+    chosen !== null &&
+    title.trim().length >= 2 &&
+    (kind === "link" ? Boolean(url.trim()) : photos.length > 0 && photos.every((p) => p.decided));
+  // La première photo sans décision de floutage : le formulaire laisse la place à l'éditeur du cadre (D28).
+  const undecided = kind === "gallery" ? photos.findIndex((p) => !p.decided) : -1;
+  const deciding = undecided >= 0 ? photos[undecided] : null;
+  const decide = (index: number, patch: Partial<GalleryPhoto>) =>
+    setPhotos((cur) => cur.map((p, j) => (j === index ? { ...p, ...patch, decided: true } : p)));
 
   function reset() {
     setEventId(null);
@@ -219,7 +232,9 @@ function AddContentSheet({
   }
 
   async function pick() {
-    const more = await pickPhotos(MEDIA_GALLERY_MAX_PHOTOS - photos.length);
+    const more = (await pickPhotos(MEDIA_GALLERY_MAX_PHOTOS - photos.length)).map(
+      (photo): GalleryPhoto => ({ photo, rects: [], decided: false }),
+    );
     setPhotos((cur) => [...cur, ...more].slice(0, MEDIA_GALLERY_MAX_PHOTOS));
   }
 
@@ -230,10 +245,11 @@ function AddContentSheet({
     try {
       const keys: string[] = [];
       if (kind === "gallery") {
-        for (const [i, photo] of photos.entries()) {
+        for (const [i, { photo, rects }] of photos.entries()) {
           setUpload({ current: i + 1, total: photos.length });
           const form = new FormData();
           form.append("purpose", "media_content");
+          if (rects.length) form.append("plateRects", JSON.stringify(rects));
           if (Platform.OS === "web") {
             const blob = await (await fetch(photo.uri)).blob();
             form.append("file", new File([blob], `photo-${i + 1}.jpg`, { type: "image/jpeg" }));
@@ -270,6 +286,14 @@ function AddContentSheet({
       </Text>
       {events.length === 0 ? (
         <Notice testID="media-add-blocked">{L.needAccreditation}</Notice>
+      ) : deciding ? (
+        <PhotoBlurStep
+          key={deciding.photo.uri}
+          item={deciding}
+          onBlurred={(rects) => decide(undecided, { rects })}
+          onPlain={() => decide(undecided, { rects: [] })}
+          onRemove={() => setPhotos((cur) => cur.filter((_, j) => j !== undecided))}
+        />
       ) : (
         <>
           <Muted variant="label">{L.addEvent}</Muted>
@@ -327,7 +351,7 @@ function AddContentSheet({
               </Muted>
               {photos.length > 0 ? (
                 <PhotoGrid
-                  photos={photos.map((p, i) => ({ key: `${p.uri}-${i}`, source: { uri: p.uri } }))}
+                  photos={photos.map((p, i) => ({ key: `${p.photo.uri}-${i}`, source: { uri: p.photo.uri } }))}
                   tileStyle={{ width: space12 * 2, height: space12 + space6, borderRadius: tokens.radius.radiusSm }}
                   disabled={busy}
                   onRemove={(i) => setPhotos((cur) => cur.filter((_, j) => j !== i))}
@@ -360,6 +384,93 @@ function AddContentSheet({
         </>
       )}
     </AppSheet>
+  );
+}
+
+// --- Floutage des plaques d'une photo (D28 : proposé, jamais imposé) --------------------------------------------------------
+
+/** Une photo de galerie et la décision prise : floutée (cadres posés ou proposés par l'appareil) ou envoyée telle quelle. */
+type GalleryPhoto = { photo: PickedPhoto; rects: PlateRect[]; decided: boolean };
+
+/**
+ * Étape du formulaire pour la première photo sans décision (outils du lot 51) : les cadres sont proposés par
+ * l'appareil quand il le peut (ML Kit), sinon posés à la main ; « Envoyer sans flouter » passe sans blocage.
+ */
+function PhotoBlurStep({
+  item,
+  onBlurred,
+  onPlain,
+  onRemove,
+}: {
+  item: GalleryPhoto;
+  onBlurred: (rects: PlateRect[]) => void;
+  onPlain: () => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTheme();
+  const [rects, setRects] = useState<PlateRect[]>([]);
+  const [detecting, setDetecting] = useState(true);
+  useEffect(() => {
+    let stale = false;
+    detectPlates(item.photo.uri, item.photo.width, item.photo.height)
+      .catch(() => null)
+      .then((found) => {
+        if (!stale && found?.length) setRects(found);
+      })
+      .finally(() => {
+        if (!stale) setDetecting(false);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [item.photo.uri, item.photo.width, item.photo.height]);
+  return (
+    <>
+      <Text variant="bodyStrong" color={t.color.ink}>
+        {L.addPhotosBlurTitle}
+      </Text>
+      <Muted variant="caption">{L.addPhotosBlurHint}</Muted>
+      <PlateFrameEditor
+        source={{ uri: item.photo.uri }}
+        width={item.photo.width}
+        height={item.photo.height}
+        rects={rects}
+        editable
+        onChange={setRects}
+        badge={
+          <PhotoBadge accent={rects.length > 0}>
+            {detecting ? W.detecting : rects.length ? W.blurredCount(rects.length) : W.placeFrame}
+          </PhotoBadge>
+        }
+        testID="media-blur-editor"
+      />
+      <Button
+        variant="secondary"
+        icon="add"
+        disabled={rects.length >= MAX_PLATE_RECTS}
+        onPress={() => setRects((r) => [...r, nextPlateFrame(r)])}
+        fullWidth
+        testID="media-blur-add"
+      >
+        {W.addFrame}
+      </Button>
+      <Button
+        variant="primary"
+        icon="plate"
+        disabled={rects.length === 0 || detecting}
+        onPress={() => onBlurred(rects)}
+        fullWidth
+        testID="media-blur-confirm"
+      >
+        {L.addPhotosBlurSend}
+      </Button>
+      <Button variant="secondary" icon="send" onPress={onPlain} fullWidth testID="media-blur-plain">
+        {L.addPhotosPlainSend}
+      </Button>
+      <Button variant="plate" icon="close" onPress={onRemove} fullWidth testID="media-blur-remove">
+        {L.addPhotosRemove}
+      </Button>
+    </>
   );
 }
 
