@@ -1,6 +1,15 @@
 // Gabarits d'écran : le fond vivant, l'en-tête (AppBar) et la zone qui défile. Les zones de sécurité (encoche, barre de
 // gestes) sont passées à l'en-tête et à la barre d'onglets, comme le demande le README du système de design.
-import { AppBar, Button, Ground, OliveActivityProvider, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  AppBar,
+  Button,
+  Ground,
+  OliveActivityProvider,
+  TAB_BAR_SPACE,
+  tokens,
+  useFlowChrome,
+  useTheme,
+} from "@orasso/design-system/native";
 import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -31,8 +40,12 @@ type Common = {
   overlays?: ReactNode;
 };
 
+/** Place laissée sous le contenu d'un onglet (`.scr .body { padding-bottom: 150px }` de l'artefact) : barre
+ * d'onglets flottante et accès flottant passent par-dessus. */
+const TAB_BODY_BOTTOM = 150;
+
 /**
- * Écran d'un onglet (DA v2, lot 40) : la barre du haut v2 (logotype, pastille de casquette, Recherche, Boîte), puis le
+ * Écran d'un onglet (DA v2, lot 40 ; lot C1 : fond de l'artefact, barre flottante par-dessus le contenu) : la barre du haut v2 (logotype, pastille de casquette, Recherche, Boîte), puis le
  * grand titre sur une ligne (`BigTitle`, `facts` en étiquette à droite) en tête de la zone qui défile. L'onglet ouvert
  * par un glissement se gare depuis le côté (`SwipeEntry`). Sous `/boite` (la Boîte, hors de la barre d'onglets), la
  * pastille Boîte est allumée, ✕ ramène d'où l'on vient et les notifications (l'ancien Journal de la cloche) s'ouvrent
@@ -52,6 +65,7 @@ export function TabScreen({
   const inInbox = useInInbox();
   // Lot 39 : le O vivant et le fond se mettent en pause quand l'écran n'est plus affiché.
   const focused = useIsFocused();
+  const insets = useSafeAreaInsets();
   const [journal, setJournal] = useState(false);
   // Compteurs de la Boîte et du garage, casquettes (un véhicule ajouté fait passer de visiteur à exposant) à jour à
   // chaque retour sur un onglet.
@@ -64,14 +78,14 @@ export function TabScreen({
   return (
     <OliveActivityProvider active={focused}>
       <OverlayProvider>
-        <Ground animated={!still} style={styles.fill}>
+        <Ground still={still} paused={!focused} style={styles.fill}>
           <TopBar
             inboxOn={inInbox}
             onClose={inInbox ? () => (router.canGoBack() ? router.back() : router.replace("/")) : undefined}
           />
           <SwipeEntry>
             <KeyboardSafe style={styles.fill}>
-              <Body onRefresh={onRefresh}>
+              <Body onRefresh={onRefresh} bottom={footer ? space6 : TAB_BODY_BOTTOM + insets.bottom}>
                 {title ? <TabTitle title={title} label={facts} /> : null}
                 {inInbox ? (
                   <Button
@@ -87,7 +101,10 @@ export function TabScreen({
                 ) : null}
                 {children}
               </Body>
-              {footer ? <View style={styles.footer}>{footer}</View> : null}
+              {footer ? (
+                // Le bouton fixe de l'écran reste au-dessus de la barre d'onglets flottante.
+                <View style={[styles.footer, { paddingBottom: TAB_BAR_SPACE + insets.bottom + space2 }]}>{footer}</View>
+              ) : null}
             </KeyboardSafe>
           </SwipeEntry>
           {overlays}
@@ -99,7 +116,11 @@ export function TabScreen({
   );
 }
 
-/** Écran de flux (candidature, ajout de véhicule, jour J) : monogramme, titre, ✕ Fermer en dernier. */
+/**
+ * Écran de flux (candidature, ajout de véhicule, jour J) : `.flowbar` de l'artefact (titre, ✕ Fermer en dernier).
+ * Lot C1 : affiché dans un groupe d'onglets (assistant de création, pages masquées), il retire la barre d'onglets et
+ * l'accès flottant (`.app.is-flow`).
+ */
 export function FlowScreen({
   title,
   facts,
@@ -113,10 +134,11 @@ export function FlowScreen({
 }: Common & { title: string; facts?: string; counter?: string; onClose: () => void }) {
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
+  useFlowChrome(focused);
   return (
     <OliveActivityProvider active={focused}>
       <OverlayProvider>
-        <Ground animated={!still} style={styles.fill}>
+        <Ground still={still} paused={!focused} style={styles.fill}>
           <AppBar kind="flow" title={title} facts={facts} counter={counter} onClose={onClose} safeTop={insets.top} />
           <KeyboardSafe style={styles.fill}>
             <Body onRefresh={onRefresh}>{children}</Body>
@@ -130,7 +152,16 @@ export function FlowScreen({
   );
 }
 
-function Body({ children, onRefresh }: { children: ReactNode; onRefresh?: () => Promise<unknown> }) {
+function Body({
+  children,
+  onRefresh,
+  bottom,
+}: {
+  children: ReactNode;
+  onRefresh?: () => Promise<unknown>;
+  /** Marge sous le contenu (onglets : place de la barre flottante). */
+  bottom?: number;
+}) {
   const { t } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   // Lot 59c : une carte tient la page pendant ses gestes (`ScrollAssist`).
@@ -160,7 +191,7 @@ function Body({ children, onRefresh }: { children: ReactNode; onRefresh?: () => 
     <ScrollView
       ref={scroll}
       style={styles.fill}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, bottom !== undefined ? { paddingBottom: bottom } : null]}
       keyboardShouldPersistTaps="handled"
       scrollEnabled={!held}
       scrollEventThrottle={32}

@@ -1,11 +1,11 @@
 /* Base du système de design web : largeurs d'Archivo, remise à zéro légère, focus visible. */
 
 :root {
-  /* Les trois largeurs d'Archivo (axe wdth). L'étroite est réglée pour égaler Archivo Narrow 700 des aperçus
-     (mesure : même largeur de texte à 0,1 % près) ; voir docs/JOURNAL-DES-CHOIX.md. */
+  /* Les trois largeurs d'Archivo (axe wdth). L'étroite suit l'artefact DA v2 depuis le lot C1 (.t-label : 75 %) ;
+     boutons (118 %), onglets (115 %) et chiffres (62 %) ont leur largeur dans typography.css (tokens.v2.json). */
   --stretch-wide: 125%;
   --stretch-normal: 100%;
-  --stretch-narrow: 78.4%;
+  --stretch-narrow: 75%;
   /* La pile « narrow » de tokens.json cite Archivo Narrow : ici Archivo seule, à la largeur étroite. */
   --font-narrow: "Archivo", system-ui, sans-serif;
 }

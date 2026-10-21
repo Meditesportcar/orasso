@@ -26,10 +26,10 @@ const themed = (tokens) =>
   Object.fromEntries(THEMES.map((t) => [t, Object.fromEntries(tokens.map((tk) => [tk.name, tk.value[t]]))]));
 
 const color = themed(json.color.tokens);
-// Dérivé (README Plate et StatusBadge) : sur une plaque graphite, la liste d'attente garde le bleu clair du Béton,
-// dans les deux thèmes, car le bleu panneau foncé du Sable ne se lit pas sur le graphite.
+// Dérivé (README Plate et StatusBadge) : sur une plaque, la liste d'attente prend le bleu lisible sur la plaque. Lot C1 :
+// la plaque est la carte du thème (claire en Sable), elle prend donc le bleu de son thème.
 for (const t of THEMES)
-  color[t]["status-waitlist-on-plate"] = json.color.tokens.find((tk) => tk.name === "status-waitlist").value.beton;
+  color[t]["status-waitlist-on-plate"] = json.color.tokens.find((tk) => tk.name === "status-waitlist").value[t];
 const shadow = themed(json.shadow.tokens);
 const groundFxRaw = themed(json["ground-fx"].tokens.filter((tk) => tk.name !== "grain"));
 const barFxRaw = themed(json["bar-fx"].tokens);

@@ -242,13 +242,14 @@ for (const home of HOMES) {
       if (home.choose) {
         await choose(page, home.choose);
       }
-      await expect(page.getByRole("heading", { name: "Accueil", exact: true })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("home-greeting")).toBeVisible({ timeout: 30_000 });
+      // Lot C1 (artefact DA v2) : plus de grand titre « Accueil », la salutation en tient lieu.
+      await expect(page.getByRole("heading", { name: "Accueil", exact: true })).toHaveCount(0);
       for (const text of home.texts) {
         await expect(page.getByText(text).first(), `« ${String(text)} »`).toBeVisible({ timeout: 30_000 });
       }
       if (home.hero) {
-        // Le compte à rebours et l'heure sont en contour sur l'affiche (huit copies + le texte).
+        // Le compte à rebours et l'heure sont cernés sur la photo (huit copies + le texte), en haut à droite (lot C1).
         await expect(page.getByTestId("home-hero-art")).toBeVisible();
         await expect(page.getByTestId("home-countdown")).toContainText(/J-\d+|Demain|Aujourd'hui|J\+\d+/);
         await expect(page.getByTestId("home-hour")).toContainText(/· (ouverture|installation)/);
@@ -301,16 +302,25 @@ test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, 
       await expect(bar).toHaveCount(1, { timeout: 30_000 });
       await expect(bar).toContainText(near.event.title);
       await expect(bar).toContainText("J-6");
-      await expect(bar).toContainText(/^(Dim|Lun|Mar|Mer|Jeu|Ven|Sam)\. \d{1,2} · /);
+      // Lot C1 : la carte `.near` de l'artefact (« J-6 / sam. », titre, « Retenue · Sam. 24 · 18 h 30 », « QR »).
+      await expect(bar).toContainText(/(Dim|Lun|Mar|Mer|Jeu|Ven|Sam)\. \d{1,2} · /);
+      await expect(bar).toContainText("QR");
     }
     await page.getByRole("tab", { name: "Explorer", exact: true }).click();
     await shot(page, `acces-flottant-explorer-${theme}`);
     await page.getByRole("tab", { name: "Garage", exact: true }).click();
     await expect(page.getByTestId("next-access-bar")).toBeVisible();
     await shot(page, `acces-flottant-garage-${theme}`);
-    // Sans néon : la barre n'en porte pas (le seul néon de l'écran est celui d'un bouton principal).
+    // Sans néon (le seul néon de l'écran est celui d'un bouton principal) : l'ombre portée --shadow-lg de l'artefact,
+    // sans halo moutarde.
     const shadow = await page.getByTestId("next-access-bar").evaluate((el) => getComputedStyle(el).boxShadow);
-    expect(shadow).toBe("none");
+    expect(shadow).not.toContain("233, 184, 36");
+    // Masquée sur Accueil et Sorties (`.app.no-near` de l'artefact).
+    for (const tab of ["Accueil", "Sorties"]) {
+      await page.getByRole("tab", { name: tab, exact: true }).click();
+      await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
+    }
+    await page.getByRole("tab", { name: "Garage", exact: true }).click();
     // Elle mène à l'écran du jour J de la candidature.
     await page.getByTestId("next-access-bar").click();
     await expect(page).toHaveURL(new RegExp(`/jour-j/${near.applicationId}`), { timeout: 30_000 });
@@ -322,11 +332,13 @@ test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, 
   // À J-9 : rien ne flotte.
   const { ctx, page } = await open(browser, "beton");
   await signIn(page, far.email);
-  const proof = { Explorer: "Explorer", Garage: "Mon garage", Sorties: "Mes sorties" } as const;
+  const proof = { Garage: "Mon garage", Sorties: "Mes sorties" } as const;
   for (const tab of ["Explorer", "Garage", "Sorties"] as const) {
     await page.getByRole("tab", { name: tab, exact: true }).click();
-    // D'abord la preuve que l'écran et ses données sont là, ensuite l'absence de la barre.
-    await expect(page.getByRole("heading", { name: proof[tab], exact: true })).toBeVisible({ timeout: 60_000 });
+    // D'abord la preuve que l'écran et ses données sont là, ensuite l'absence de la barre. Lot C1 : Explorer n'a plus de
+    // grand titre (artefact), son en-tête de recherche en tient lieu.
+    if (tab === "Explorer") await expect(page.getByTestId("explorer-head")).toBeVisible({ timeout: 60_000 });
+    else await expect(page.getByRole("heading", { name: proof[tab], exact: true })).toBeVisible({ timeout: 60_000 });
     if (tab === "Sorties")
       await expect(page.getByTestId("ticket-application").first()).toBeVisible({ timeout: 60_000 });
     await page.waitForLoadState("networkidle").catch(() => undefined);

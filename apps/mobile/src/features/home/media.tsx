@@ -41,7 +41,7 @@ export function MediaHome() {
   const views = (media?.contents ?? []).reduce((sum, x) => sum + x.views, 0);
 
   return (
-    <TabScreen title={homeLabels.title} onRefresh={async () => void (await home.reload())}>
+    <TabScreen onRefresh={async () => void (await home.reload())}>
       <Greeting line={todayLine(now, media?.name ?? null)} name={name} />
 
       {home.error && !data ? <Notice>{homeLabels.loadFailed}</Notice> : null}

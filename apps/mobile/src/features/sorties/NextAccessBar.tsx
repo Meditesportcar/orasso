@@ -1,13 +1,14 @@
-// Accès flottant (lot 43, prototype `s-sorties` : « ton accès urgent flotte au-dessus de la barre sur tous les onglets dès
-// J-7 »). Une fine barre posée juste au-dessus de la barre d'onglets : « Sam. 24 · Nocturne de Canet · J-6 », qui ouvre
-// l'écran du jour J. Elle apparaît de J-7 à J+1 pour un accès (candidature retenue, billet, mission staff,
+// Accès flottant (lot 43 ; lot C1 : `.near` de l'artefact DA v2). Une carte affiche (crème en Béton, noire en Sable)
+// posée au-dessus de la barre d'onglets flottante : « J-6 / sam. », le titre en italique, la ligne « Retenue · Sam. 24 ·
+// 18 h 30 » et le bouton moutarde « QR », qui ouvre l'écran du jour J. Masquée sur Accueil et Sorties (l'accès y est
+// déjà en tête) et sur tout écran de flux. Elle apparaît de J-7 à J+1 pour un accès (candidature retenue, billet, mission staff,
 // accréditation) ; jamais sur l'écran du jour J ni en mode staff (ce sont des écrans plein cadre, hors de la barre
 // d'onglets). Aucun néon : le seul de l'écran est celui de son bouton principal.
 //
 // Les données sont celles que le téléphone garde déjà (candidatures lisibles hors ligne) ; billets et missions staff sont
 // rechargés à chaque changement d'onglet, sans bruit si le réseau manque.
 
-import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { archivoAt, Icon, Text, useTheme } from "@orasso/design-system/native";
 import { nextAccessBarLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,13 +16,22 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
-import { dayCountdown } from "@/lib/format";
+import { dayCountdown, formatHour } from "@/lib/format";
 import { usePersona } from "@/lib/persona";
 import { useNow } from "@/lib/useNow";
 import { type AccessItem, applicationAccesses, barDay, nextAccessOf, staffAccesses, ticketAccesses } from "./model";
 
-const { space2, space3 } = tokens.spacing;
-const { radiusMd } = tokens.radius;
+/** Onglets où l'artefact ne montre pas l'accès flottant (`.app.no-near`). */
+const NO_NEAR = new Set(["home", "outings"]);
+
+/** Nature de l'accès, en tête de la ligne d'information. */
+const KIND_LABEL: Record<AccessItem["kind"], string> = {
+  application: "Retenue",
+  ticket: "Billet",
+  staff: "Staff",
+  accreditation: "Accréditée",
+  mission: "Mission",
+};
 
 const KINDS = new Set(["fan", "visitor", "provider", "media"]);
 
@@ -72,9 +82,9 @@ function useExtraAccesses(kind: string, routeKey: string | undefined, now: Date)
   );
 }
 
-export function NextAccessBar({ routeKey }: { routeKey?: string }) {
+export function NextAccessBar({ routeKey, tabId }: { routeKey?: string; tabId?: string }) {
   const { persona } = usePersona();
-  if (!KINDS.has(persona.kind)) return null;
+  if (!KINDS.has(persona.kind) || (tabId && NO_NEAR.has(tabId))) return null;
   return <Bar kind={persona.kind} routeKey={routeKey} />;
 }
 
@@ -91,36 +101,76 @@ function Bar({ kind, routeKey }: { kind: string; routeKey?: string }) {
   );
   const next = nextAccessOf(items, now);
   if (!next) return null;
-  const line = nextAccessBarLabels.line(barDay(next.startsAt), next.title, dayCountdown(next.startsAt, now));
+  const countdown = dayCountdown(next.startsAt, now);
+  const [weekday] = barDay(next.startsAt).split(" ");
+  const info = `${KIND_LABEL[next.kind]} · ${barDay(next.startsAt)} · ${formatHour(next.startsAt)}`;
+  const line = nextAccessBarLabels.line(barDay(next.startsAt), next.title, countdown);
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
-      <Pressable
-        onPress={() => router.push(next.href as never)}
-        accessibilityRole="button"
-        accessibilityLabel={`${nextAccessBarLabels.open} : ${line}`}
-        testID="next-access-bar"
-        style={[styles.bar, { backgroundColor: c.surfaceRaised, borderColor: c.plateLine }]}
-      >
-        <Icon name={next.kind === "ticket" ? "ticket" : "qr"} size={18} color={c.ink} />
-        <Text variant="meta" color={c.ink} style={styles.line} numberOfLines={1}>
-          {line}
+    <Pressable
+      onPress={() => router.push(next.href as never)}
+      accessibilityRole="button"
+      accessibilityLabel={`${nextAccessBarLabels.open} : ${line}`}
+      testID="next-access-bar"
+      style={[styles.near, { backgroundColor: c.poster, boxShadow: t.shadow.shadowPoster }]}
+    >
+      <View style={styles.nd}>
+        <Text variant="body" color={c.posterInk} style={styles.ndBig}>
+          {countdown}
         </Text>
-        <Icon name="next" size={18} color={c.ink} />
-      </Pressable>
-    </View>
+        <Text variant="body" color={c.posterInk} style={styles.ndSmall}>
+          {weekday}
+        </Text>
+      </View>
+      <View style={styles.nt}>
+        <Text variant="posterS" color={c.posterInk} numberOfLines={2} style={styles.ntTitle}>
+          {next.title}
+        </Text>
+        <Text variant="body" color={c.posterMuted} numberOfLines={1} style={styles.ntInfo}>
+          {info}
+        </Text>
+      </View>
+      <View style={[styles.nq, { backgroundColor: c.accent }]}>
+        <Icon name={next.kind === "ticket" ? "ticket" : "qr"} size={16} color={c.accentInk} />
+        <Text variant="body" color={c.accentInk} style={styles.nqText}>
+          QR
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: space3, paddingBottom: space2 },
-  bar: {
+  // `.near` : 18 px des bords, rayon 16, au-dessus de la barre d'onglets.
+  near: {
+    marginHorizontal: 18,
+    marginBottom: -12,
     flexDirection: "row",
     alignItems: "center",
-    gap: space2,
-    minHeight: 44,
-    paddingHorizontal: space3,
-    borderRadius: radiusMd,
-    borderWidth: 1.5,
+    gap: 10,
+    paddingVertical: 8,
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRadius: 16,
   },
-  line: { flex: 1 },
+  nd: { alignItems: "center", minWidth: 44 },
+  ndBig: { fontFamily: archivoAt(62, 800), fontSize: 28, lineHeight: 26 },
+  ndSmall: {
+    fontFamily: archivoAt(75, 700),
+    fontSize: 9.5,
+    lineHeight: 12,
+    letterSpacing: 0.76,
+    textTransform: "uppercase",
+  },
+  nt: { flex: 1, minWidth: 0 },
+  ntTitle: { fontSize: 13, lineHeight: 14 },
+  ntInfo: { fontSize: 12, lineHeight: 16 },
+  nq: {
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  nqText: { fontFamily: archivoAt(115, 900), fontSize: 12, lineHeight: 14, textTransform: "uppercase" },
 });

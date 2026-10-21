@@ -1,24 +1,30 @@
 // Pièces communes des accueils par profil (lot 43, prototype `s-home`) : la salutation, la carte du prochain événement
-// (affiche en fond, compte à rebours en contour), les petites tuiles, les lignes de liste, la tuile « nouveau ».
+// (`PosterHero` du système de design depuis le lot C1), les petites tuiles, les lignes de liste, la tuile « nouveau ».
 // Un seul bouton principal par carte ; les itinéraires sont des boutons secondaires.
 
 import {
   Button,
   Icon,
   type IconName,
-  OutlinedText,
-  Photo,
+  OrgLogo,
   Plate,
+  PosterHero,
   Text,
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import { type HomeOrganizer, homeProfileLabels, homeWidgetTitles, type MyWeather, weatherTexts } from "@orasso/shared";
+import {
+  BUSINESS_TIMEZONE,
+  type HomeOrganizer,
+  homeProfileLabels,
+  homeWidgetTitles,
+  type MyWeather,
+  weatherTexts,
+} from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { barDay } from "@/features/sorties/model";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { type Destination, openMaps, openWaze } from "@/lib/directions";
 import { formatShortDate } from "@/lib/format";
@@ -28,7 +34,6 @@ import { Muted } from "@/ui/Muted";
 import { SectionTitle } from "@/ui/Screens";
 
 const { space1, space2, space3, space4 } = tokens.spacing;
-const { radiusSm } = tokens.radius;
 
 /** « Dimanche 18 octobre · Perpignan » : date du jour et ville (ou structure) de la salutation. */
 export function Greeting({ line, name }: { line: string; name: string }) {
@@ -46,9 +51,11 @@ export function Greeting({ line, name }: { line: string; name: string }) {
 }
 
 export type HeroProps = {
+  /** Photo de l'événement (lot C5) ; sans elle, l'affiche générée entière sur la scène de nuit. */
+  photoUrl?: string | null;
   posterUrl: string | null;
   startsAt: string;
-  /** « J-6 », « Demain », « Aujourd'hui » : en contour sur l'affiche. */
+  /** « J-6 », « Demain », « Aujourd'hui » : en haut à droite de la photo. */
   countdown: string;
   /** « 19 h · ouverture » : en contour sur l'affiche. */
   hourLabel: string;
@@ -65,27 +72,13 @@ export type HeroProps = {
   testID?: string;
 };
 
-/** Le logo de la structure : une pastille avec ses initiales quand il n'y a pas d'image. */
+/** Le logo de la structure (lot C1 : `OrgLogo` du système de design, rond ; repli : trois initiales moutarde). */
 export function OrganizerLine({ organizer }: { organizer: HomeOrganizer }) {
   const { t } = useTheme();
   const c = t.color;
-  const initials = organizer.name
-    .split(/\s+/)
-    .map((w) => w.charAt(0))
-    .join("")
-    .slice(0, 3)
-    .toUpperCase();
   return (
     <View style={styles.org} testID="home-organizer">
-      <View style={[styles.orgLogo, { backgroundColor: c.night, borderColor: c.plateLine }]}>
-        {organizer.logoUrl ? (
-          <Photo source={{ uri: organizer.logoUrl }} style={styles.orgImage} accessibilityLabel={organizer.name} />
-        ) : (
-          <Text variant="meta" color={c.nightInk}>
-            {initials}
-          </Text>
-        )}
-      </View>
+      <OrgLogo name={organizer.name} logoUrl={organizer.logoUrl} size={34} />
       <View style={styles.orgText}>
         <Text variant="bodyStrong" color={c.plateInk}>
           {organizer.name}
@@ -103,11 +96,18 @@ export function OrganizerLine({ organizer }: { organizer: HomeOrganizer }) {
   );
 }
 
+const WEEKDAY_FMT = new Intl.DateTimeFormat("fr-FR", { weekday: "short", timeZone: BUSINESS_TIMEZONE });
+const MONTH_FMT = new Intl.DateTimeFormat("fr-FR", { month: "short", timeZone: BUSINESS_TIMEZONE });
+const DAY_FMT = new Intl.DateTimeFormat("fr-FR", { day: "numeric", timeZone: BUSINESS_TIMEZONE });
+const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 /**
- * La carte du prochain événement : l'affiche générée en fond (dégradé s'il n'y en a pas), le jour en souche, le compte à
- * rebours et l'heure en contour, puis l'organisateur, le lieu, l'arrivée, l'accès et les itinéraires.
+ * La carte du prochain événement (lot C1 : `PosterHero`, la `.poster.hn` de l'artefact) : photo en tête (sinon
+ * l'affiche générée entière sur la scène de nuit), pavé de date moutarde, compte à rebours condensé, puis
+ * l'organisateur, le lieu, l'arrivée, l'accès et les itinéraires.
  */
 export function HeroCard({
+  photoUrl,
   posterUrl,
   startsAt,
   countdown,
@@ -121,65 +121,39 @@ export function HeroCard({
   onMap,
   testID = "home-hero",
 }: HeroProps) {
-  const { t } = useTheme();
-  const c = t.color;
-  const day = barDay(startsAt).split(" ");
+  const date = new Date(startsAt);
   return (
-    <Plate style={styles.hero} testID={testID}>
-      <View style={styles.art} testID="home-hero-art">
-        <Photo
-          source={posterUrl ? { uri: posterUrl } : undefined}
-          placeholder={`linear-gradient(135deg, ${c.surfaceRaised} 0%, ${c.night} 100%)`}
-          style={StyleSheet.absoluteFill as never}
-          accessibilityLabel={posterUrl ? `Affiche : ${title}` : undefined}
-        />
-        <View style={[styles.date, { backgroundColor: c.night }]} testID="home-hero-date">
-          <Text variant="meta" color={c.nightInk}>
-            {day[0]}
-          </Text>
-          <Text variant="posterM" color={c.accent} style={styles.dateDay}>
-            {day[1]}
-          </Text>
-        </View>
-        <View style={styles.countdown}>
-          <OutlinedText variant="posterL" on="photo" color={c.accent} testID="home-countdown">
-            {countdown}
-          </OutlinedText>
-          <OutlinedText variant="label" on="photo" color={c.barInk} testID="home-hour">
-            {hourLabel}
-          </OutlinedText>
-        </View>
-      </View>
-      <View style={styles.info}>
-        {tags ? <View style={styles.tags}>{tags}</View> : null}
-        <Text variant="posterL" color={c.plateInk} accessibilityRole="header">
-          {title}
-        </Text>
-        {organizer ? <OrganizerLine organizer={organizer} /> : null}
-        {meta.map((m) => (
-          <View key={m.text} style={styles.metaLine}>
-            <Icon name={m.icon} size={16} color={c.plateMuted} />
-            <Text variant="body" color={c.plateInk} style={styles.metaText}>
-              {m.text.charAt(0).toUpperCase() + m.text.slice(1)}
-            </Text>
-          </View>
-        ))}
-        <Button variant="primary" icon={action.icon} onPress={action.onPress} fullWidth testID="home-hero-action">
-          {action.label}
-        </Button>
-        <View style={styles.gps}>
-          <Button variant="plate" icon="place" onPress={() => openMaps(destination)} testID="home-maps">
-            {homeProfileLabels.maps}
-          </Button>
-          <Button variant="plate" icon="place" onPress={() => openWaze(destination)} testID="home-waze">
-            {homeProfileLabels.waze}
-          </Button>
-          <Button variant="plate" icon="explore" onPress={onMap} testID="home-on-map">
-            {homeProfileLabels.onMap}
-          </Button>
-        </View>
-      </View>
-    </Plate>
+    <PosterHero
+      testID={testID}
+      countdownTestID="home-countdown"
+      hourTestID="home-hour"
+      photoUrl={photoUrl}
+      posterUrl={posterUrl}
+      weekday={cap(WEEKDAY_FMT.format(date))}
+      day={DAY_FMT.format(date)}
+      month={cap(MONTH_FMT.format(date))}
+      countdown={countdown}
+      hourLabel={hourLabel}
+      title={title}
+      tags={tags}
+      organizer={
+        organizer
+          ? {
+              name: organizer.name,
+              logoUrl: organizer.logoUrl,
+              verified: organizer.verified,
+              subtitle: organizer.verified ? homeProfileLabels.structureValidated : null,
+            }
+          : null
+      }
+      meta={meta.map((m) => ({ icon: m.icon, text: m.text.charAt(0).toUpperCase() + m.text.slice(1) }))}
+      action={{ ...action, testID: "home-hero-action" }}
+      gps={[
+        { label: homeProfileLabels.maps, icon: "nav", onPress: () => openMaps(destination), testID: "home-maps" },
+        { label: homeProfileLabels.waze, icon: "nav", onPress: () => openWaze(destination), testID: "home-waze" },
+        { label: homeProfileLabels.onMap, icon: "map", onPress: onMap, testID: "home-on-map" },
+      ]}
+    />
   );
 }
 
@@ -406,38 +380,9 @@ export function WeatherBlock({ weather }: { weather: MyWeather | null }) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   greeting: { gap: space1, paddingTop: space2 },
-  hero: { padding: 0, overflow: "hidden" },
-  art: { height: 200, justifyContent: "flex-end", overflow: "hidden" },
-  date: {
-    position: "absolute",
-    top: space3,
-    left: space3,
-    alignItems: "center",
-    paddingVertical: space1,
-    paddingHorizontal: space3,
-    borderRadius: radiusSm,
-    transform: [{ rotate: "-4deg" }],
-  },
-  dateDay: { lineHeight: 26 },
-  countdown: { padding: space3, gap: 0 },
-  info: { gap: space3, padding: space4 },
-  tags: { flexDirection: "row", flexWrap: "wrap", gap: space2, alignItems: "center" },
   org: { flexDirection: "row", alignItems: "center", gap: space3 },
-  orgLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: radiusSm,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  orgImage: { width: 40, height: 40 },
   orgText: { flex: 1, gap: 2 },
   orgOk: { flexDirection: "row", alignItems: "center", gap: space1 },
-  metaLine: { flexDirection: "row", alignItems: "center", gap: space2 },
-  metaText: { flex: 1 },
-  gps: { flexDirection: "row", gap: space2, flexWrap: "wrap" },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
   mini: { gap: space1, padding: space3 },
   miniTag: { alignItems: "flex-start", marginBottom: space1 },

@@ -208,13 +208,13 @@ describe("surcouche DA v2 (tokens.v2.json, lot 38)", () => {
     expect(tokens.color.sable.surfaceRaised).not.toBe(tokens.color.sable.plateField);
   });
 
-  it("number-narrow : le style number à 62,5 % de largeur", () => {
+  it("number-narrow : le style number à 62 % de largeur (.t-num de l'artefact, lot C1)", () => {
     const { fontStretch, ...narrow } = tokens.type.numberNarrow;
     const { fontStretch: base, ...number } = tokens.type.number;
-    expect(fontStretch).toBe("62.5%");
+    expect(fontStretch).toBe("62%");
     expect(base).toBeNull();
     expect(narrow).toEqual(number);
-    expect(typography).toMatch(/\.o-t-number-narrow \{[^}]*font-stretch: 62\.5%;/);
+    expect(typography).toMatch(/\.o-t-number-narrow \{[^}]*font-stretch: 62%;/);
   });
 
   it("les deux thèmes ont les mêmes clés dans chaque groupe", () => {
