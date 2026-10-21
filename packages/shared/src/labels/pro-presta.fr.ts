@@ -10,6 +10,10 @@ export const proV2Labels = {
   proValidated: "Pro validé",
   segView: "Vue passionné",
   segEdit: "Modifier ma fiche",
+  /** Lot C4b (§ 5.2 de l'audit) : troisième segment, la publication, les actualités, les partenaires et l'abonnement. */
+  segPosts: "Publications",
+  /** Champs de la fiche hors artefact (nom, e-mail, zone, réseaux, horaires) : regroupés sous les champs de l'artefact. */
+  moreDetails: "Autres informations",
   activities: "Activités",
   activitiesEdit: "Activités · touche pour cocher",
   discountsTitle: "Remises par grade",
