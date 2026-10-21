@@ -158,7 +158,7 @@ export const accessService = {
   },
 
   /**
-   * QR d'une candidature pour son titulaire (`GET /applications/:id/pass`), affiché dans l'appli et sur `/app/acces`.
+   * QR d'une candidature pour son titulaire (`GET /applications/:id/pass`), affiché dans l'appli et sur `/app/sorties`.
    * Une candidature retenue sans pass (données antérieures au lot 06) en reçoit un à la lecture.
    */
   async mine(v: Viewer, applicationId: string): Promise<AccessPass> {

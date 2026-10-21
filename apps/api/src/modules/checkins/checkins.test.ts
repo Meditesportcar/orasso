@@ -12,7 +12,7 @@ import {
   type ScanBatchItem,
 } from "@orasso/shared";
 import { and, count, eq, sql } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
@@ -41,6 +41,8 @@ import {
   profiles,
   scanEvents,
 } from "../../db/schema";
+import { mail } from "../../lib/mail";
+import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { ed25519Verify } from "../../lib/signing";
 import { applicationsService } from "../applications/service";
@@ -450,6 +452,7 @@ describe("synchronisation du staff", () => {
       where: and(eq(notifications.type, "staff_sync_reminder"), eq(notifications.eventId, eventId)),
     });
     expect(reminders.map((n) => n.userId)).toEqual([julie.id]); // Théo a dit « pas là »
+    expect(reminders[0]?.data).toMatchObject({ link: "/app/sorties?vue=staff" });
   });
 
   it("rôles ajustés pour l'événement par l'équipe organisatrice", async () => {
@@ -485,10 +488,17 @@ describe("terrain : alertes et main courante", () => {
 describe("inscription express", () => {
   it("lien par e-mail, compte + véhicule + QR + entrée express, session ouverte", async () => {
     const ref = await db.query.vehicleModels.findFirst();
+    const send = vi.spyOn(mail, "send");
     const invite = await call(julie, "POST", `/events/${eventId}/express-invites`, { email: "Nouveau@Exemple.fr" });
     expect(invite.status).toBe(201);
     const mails = await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") });
     expect(mails.map((m) => m.to)).toEqual(["nouveau@exemple.fr"]);
+    // La personne n'a pas de compte : le pied ne dit pas le contraire (relecture du lot 56).
+    const sentMail = send.mock.calls.find(([template]) => template === "express_invite")?.[2];
+    send.mockRestore();
+    expect(sentMail?.html).toContain("Tu reçois cet e-mail parce qu'on t'a invité sur Orasso.");
+    expect(sentMail?.html).not.toContain("parce que tu as un compte");
+    expect(sentMail?.text).not.toContain("parce que tu as un compte");
     const token = invite.json.url.split("/express/")[1];
     expect((await call(null, "GET", `/express/${token}`)).json).toMatchObject({
       used: false,
@@ -508,7 +518,16 @@ describe("inscription express", () => {
     expect(
       (await call(null, "POST", `/express/${token}`, { ...body, password: "court-123", termsAccepted: true })).status,
     ).toBe(400);
-    const res = await call(null, "POST", `/express/${token}`, { ...body, termsAccepted: true });
+    const messages: unknown[] = [];
+    const socket = { send: (data: string) => messages.push(JSON.parse(data)) };
+    realtime.subscribe(`event:${eventId}:votes`, socket);
+    let res: Awaited<ReturnType<typeof call>>;
+    try {
+      res = await call(null, "POST", `/express/${token}`, { ...body, termsAccepted: true });
+    } finally {
+      realtime.unsubscribeAll(socket);
+    }
+    expect(messages).toEqual([{ channel: `event:${eventId}:votes`, type: "votes.candidates.changed", payload: {} }]);
     expect(res.status).toBe(201);
     expect(res.json.passPayload).toMatch(/^OR1/);
     const entry = await db.query.checkins.findFirst({ where: eq(checkins.applicationId, res.json.applicationId) });

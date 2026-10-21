@@ -6,6 +6,7 @@ import {
   crewLabels,
   eventDaysLabels,
   formatDayDate,
+  orgaV2Labels,
   type Page,
   type RefusalReason,
   refusalReasonLabels,
@@ -271,6 +272,13 @@ export function TriageFile({
             {current.applicant.absencesCount > 1 ? "s" : ""}
           </span>
         </div>
+        {/* Lot 57 (`s-otri`) : la note de l'exposant sur son arrivée (« arrivée tardive »), visible au tri. */}
+        {current.arrivalNote && (
+          <div className="tri__kv" data-testid="triage-arrival-note">
+            <span>{orgaV2Labels.triArrivalNote}</span>
+            <span className="s-prewrap">{current.arrivalNote}</span>
+          </div>
+        )}
         {current.day && (
           <div className="tri__kv" data-testid="triage-day">
             <span>{eventDaysLabels.day}</span>

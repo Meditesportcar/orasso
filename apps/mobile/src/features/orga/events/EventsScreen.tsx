@@ -22,6 +22,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
+import { Segments } from "@/ui/Segments";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -264,14 +265,14 @@ export function EventsScreen() {
           …
         </Button>
       </View>
-      <View style={styles.chips}>
-        <Chip selected={segment === "progress"} onPress={() => setSegment("progress")}>
-          {L.segInProgress(groups.upcoming.length)}
-        </Chip>
-        <Chip selected={segment === "drafts"} onPress={() => setSegment("drafts")}>
-          {L.segDrafts(groups.drafts.length)}
-        </Chip>
-      </View>
+      <Segments
+        value={segment}
+        onChange={setSegment}
+        items={[
+          { id: "progress", label: L.segInProgress(groups.upcoming.length) },
+          { id: "drafts", label: L.segDrafts(groups.drafts.length) },
+        ]}
+      />
       {empty && !events.error ? (
         <Muted variant="body">{events.loading ? "Chargement…" : orgaLabels.eventsEmpty}</Muted>
       ) : null}

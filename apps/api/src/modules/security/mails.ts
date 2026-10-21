@@ -92,21 +92,31 @@ export const securityMails = {
   },
 
   accountDeleted(pseudo: string): MailContent {
-    return renderMail("Ton compte Orasso est supprimé", [
-      `Bonjour ${pseudo},`,
-      "Comme tu l'as demandé, ton compte est supprimé : ton pseudo, ton adresse, tes coordonnées, tes véhicules et leurs photos sont effacés.",
-      "L'historique des événements auxquels tu as participé reste chez les organisateurs, sans ton nom (« Compte supprimé »).",
-      "Merci d'avoir roulé avec nous.",
-    ]);
+    return renderMail(
+      "Ton compte Orasso est supprimé",
+      [
+        `Bonjour ${pseudo},`,
+        "Comme tu l'as demandé, ton compte est supprimé : ton pseudo, ton adresse, tes coordonnées, tes véhicules et leurs photos sont effacés.",
+        "L'historique des événements auxquels tu as participé reste chez les organisateurs, sans ton nom (« Compte supprimé »).",
+        "Merci d'avoir roulé avec nous.",
+      ],
+      undefined,
+      { footer: "deleted" },
+    );
   },
 
   /** Lot 33 : anonymisation décidée par l'équipe Orasso (même effacement que la suppression demandée). */
   accountAnonymizedByTeam(pseudo: string): MailContent {
-    return renderMail("Ton compte Orasso est supprimé", [
-      `Bonjour ${pseudo},`,
-      "L'équipe Orasso a supprimé ton compte : ton pseudo, ton adresse, tes coordonnées, tes véhicules et leurs photos sont effacés.",
-      "L'historique des événements auxquels tu as participé reste chez les organisateurs, sans ton nom (« Compte supprimé »).",
-      "Pour toute question, écris à contact@orasso.fr.",
-    ]);
+    return renderMail(
+      "Ton compte Orasso est supprimé",
+      [
+        `Bonjour ${pseudo},`,
+        "L'équipe Orasso a supprimé ton compte : ton pseudo, ton adresse, tes coordonnées, tes véhicules et leurs photos sont effacés.",
+        "L'historique des événements auxquels tu as participé reste chez les organisateurs, sans ton nom (« Compte supprimé »).",
+        "Pour toute question, écris à contact@orasso.fr.",
+      ],
+      undefined,
+      { footer: "deleted" },
+    );
   },
 };

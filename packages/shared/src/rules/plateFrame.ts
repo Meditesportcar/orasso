@@ -31,3 +31,74 @@ export function nextPlateFrame(existing: readonly PlateRect[]): PlateRect {
   const shift = existing.length * 0.06;
   return movePlateFrame(DEFAULT_PLATE_FRAME, shift, -shift);
 }
+
+// Lot 59c (retour de Damien sur l'APK d'essai) : cadre orientable. `angle` en degrés, rotation autour du centre du
+// cadre dans le repère de la photo en pixels (sens horaire à l'écran) ; le rectangle `x, y, w, h` reste celui du cadre
+// avant rotation (toujours dans la photo). Les écarts sont donnés en pixels de la photo affichée (`W × H`) : la photo
+// est montrée à son format, une rotation à l'écran est donc la même sur la photo.
+
+/** En deçà de cet angle (degrés), le cadre se remet droit : on retrouve facilement l'horizontale. */
+export const PLATE_ANGLE_SNAP = 2;
+/** Distance (px à l'écran) entre le haut du cadre et la poignée qui le tourne. */
+export const PLATE_ROTATE_HANDLE_OFFSET = 26;
+
+const rad = (deg: number) => (deg * Math.PI) / 180;
+
+/** Pose l'angle du cadre : borné à ±90°, arrondi au dixième, remis droit (sans `angle`) sous `PLATE_ANGLE_SNAP`. */
+export function rotatePlateFrame(r: PlateRect, angle: number): PlateRect {
+  const { angle: _previous, ...rest } = r;
+  const a = Math.round(clamp(angle, -90, 90) * 10) / 10;
+  return Math.abs(a) < PLATE_ANGLE_SNAP ? rest : { ...rest, angle: a };
+}
+
+/**
+ * Tourne le cadre par sa poignée, posée `offset` px au-dessus du milieu de son bord haut (ou au-dessous du bord bas,
+ * `below`, quand le cadre est collé en haut de la photo : lot 59c, tour 2) : l'angle suit la direction du centre du cadre
+ * vers le doigt (écart `dx, dy` en px depuis le début du geste ; `H` : hauteur de la photo affichée).
+ */
+export function dragRotatePlateFrame(
+  start: PlateRect,
+  dx: number,
+  dy: number,
+  H: number,
+  offset = PLATE_ROTATE_HANDLE_OFFSET,
+  below = false,
+): PlateRect {
+  const a0 = rad(start.angle ?? 0);
+  const side = below ? -1 : 1;
+  const reach = ((start.h * H) / 2 + offset) * side;
+  const vx = reach * Math.sin(a0) + dx;
+  const vy = -reach * Math.cos(a0) + dy;
+  if (Math.hypot(vx, vy) < 1) return start;
+  return rotatePlateFrame(start, (Math.atan2(side * vx, -side * vy) * 180) / Math.PI);
+}
+
+/**
+ * Agrandit ou réduit le cadre par son coin bas droit, en suivant ses axes s'il est tourné : le coin haut gauche (tourné)
+ * reste en place. Borné à la taille minimale et à la photo (le cadre avant rotation reste dans l'image).
+ */
+export function resizeOrientedPlateFrame(start: PlateRect, dx: number, dy: number, W: number, H: number): PlateRect {
+  if (!start.angle) return resizePlateFrame(start, dx / W, dy / H);
+  const t = rad(start.angle);
+  const cos = Math.cos(t);
+  const sin = Math.sin(t);
+  const du = dx * cos + dy * sin;
+  const dv = -dx * sin + dy * cos;
+  const pw0 = start.w * W;
+  const ph0 = start.h * H;
+  const pw = clamp(pw0 + du, PLATE_FRAME_MIN_W * W, W);
+  const ph = clamp(ph0 + dv, PLATE_FRAME_MIN_H * H, H);
+  const hu = (pw - pw0) / 2;
+  const hv = (ph - ph0) / 2;
+  const cx = (start.x + start.w / 2) * W + hu * cos - hv * sin;
+  const cy = (start.y + start.h / 2) * H + hu * sin + hv * cos;
+  const w = pw / W;
+  const h = ph / H;
+  return {
+    x: round(clamp(cx / W - w / 2, 0, 1 - w)),
+    y: round(clamp(cy / H - h / 2, 0, 1 - h)),
+    w: round(w),
+    h: round(h),
+    angle: start.angle,
+  };
+}

@@ -368,6 +368,60 @@ describe("décision et badge presse", () => {
 describe("contenus", () => {
   const LINK = { kind: "link", title: "Le roll de minuit", url: "https://youtube.com/watch?v=x", platform: "youtube" };
 
+  it("fiche média : contenus paginés réservés aux connectés, mêmes champs que sur l'événement", async () => {
+    await accredited();
+    const profile = (await call(leo, "GET", "/me/media-profile")).json.profile;
+    const visitor = await signUp("Lecteur_Media");
+    const path = `/media/${profile.id}/contents`;
+    const contents = [];
+    for (let i = 0; i < 3; i++) {
+      const res = await call(leo, "POST", "/me/media-contents", {
+        ...LINK,
+        eventId: nocturneId,
+        title: `Reportage ${i}`,
+      });
+      expect(res.status).toBe(201);
+      contents.push(res.json);
+    }
+    expect((await call(null, "GET", path)).status).toBe(401);
+    expect((await call(visitor, "GET", `${path}?limit=0`)).status).toBe(400);
+    expect((await call(visitor, "GET", `${path}?cursor=invalide`)).status).toBe(400);
+    expect((await call(visitor, "GET", "/media/invalide/contents")).status).toBe(400);
+    expect((await call(visitor, "GET", "/media/00000000-0000-4000-8000-000000000001/contents")).status).toBe(404);
+    const first = await call(visitor, "GET", `${path}?limit=2`);
+    expect(first.status).toBe(200);
+    expect(first.json.items).toHaveLength(2);
+    expect(first.json.nextCursor).toBeTruthy();
+    const next = await call(visitor, "GET", `${path}?limit=2&cursor=${first.json.nextCursor}`);
+    expect(next.json.items).toHaveLength(1);
+    expect(next.json.nextCursor).toBeNull();
+    expect([...first.json.items, ...next.json.items]).toEqual(expect.arrayContaining(contents));
+    expect(new Set([...first.json.items, ...next.json.items].map((c) => c.id)).size).toBe(3);
+  });
+
+  it("fiche média : exclut les contenus retirés, sans accréditation, d'événements privés ou en brouillon", async () => {
+    const accreditation = await accredited();
+    const profile = (await call(leo, "GET", "/me/media-profile")).json.profile;
+    const path = `/media/${profile.id}/contents`;
+    const visible = await call(leo, "POST", "/me/media-contents", { ...LINK, eventId: nocturneId });
+    const removed = await call(leo, "POST", "/me/media-contents", { ...LINK, eventId: nocturneId });
+    await call(leo, "DELETE", `/me/media-contents/${removed.json.id}`);
+    // Une autre fiche n'est pas mélangée aux contenus demandés.
+    const other = await signUp("Autre_Media");
+    await accredited(other);
+    await call(other, "POST", "/me/media-contents", { ...LINK, eventId: nocturneId });
+    expect((await call(other, "GET", path)).json.items.map((c: { id: string }) => c.id)).toEqual([visible.json.id]);
+    await db.update(events).set({ admission: "invite_only" }).where(eq(events.id, nocturneId));
+    expect((await call(other, "GET", path)).json.items).toEqual([]);
+    await db.update(events).set({ admission: "filtered", status: "draft" }).where(eq(events.id, nocturneId));
+    expect((await call(other, "GET", path)).json.items).toEqual([]);
+    await db.update(events).set({ status: "published" }).where(eq(events.id, nocturneId));
+    await decide(nocturneId, accreditation.id, REFUSE_QUOTA);
+    expect((await call(other, "GET", path)).json.items).toEqual([]);
+    await db.update(mediaProfiles).set({ deletedAt: clock.now }).where(eq(mediaProfiles.id, profile.id));
+    expect((await call(other, "GET", path)).status).toBe(404);
+  });
+
   it("non accrédité : 403 ; accrédité : publié, modifié, retiré", async () => {
     await putProfile(leo);
     const refused = await call(leo, "POST", "/me/media-contents", { ...LINK, eventId: nocturneId });

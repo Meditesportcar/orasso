@@ -9,6 +9,7 @@ import { db } from "../db/client";
 import { emailOutbox } from "../db/schema";
 import { env } from "../env";
 import { now } from "./deps";
+import { type MailFooter, paragraphsHtml, renderShell, renderShellText } from "./mail-template";
 import { dataDir } from "./storage";
 
 /**
@@ -23,20 +24,24 @@ export type MailContent = {
   headers?: Record<string, string>;
 };
 
-const escapeHtml = (s: string) =>
-  s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-
-/** Gabarit HTML minimal commun à tous les e-mails (le design des e-mails viendra avec le site). */
-export function renderMail(title: string, paragraphs: string[], link?: { label: string; url: string }): MailContent {
-  const html = [
-    `<!doctype html><html lang="fr"><meta charset="utf-8"><title>${escapeHtml(title)}</title>`,
-    `<body style="font-family:Archivo,Arial,sans-serif;color:#17191C">`,
-    `<h1 style="font-size:20px">${escapeHtml(title)}</h1>`,
-    ...paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`),
-    link ? `<p><a href="${escapeHtml(link.url)}">${escapeHtml(link.label)}</a></p>` : "",
-    `<p style="color:#6B6F76;font-size:12px">Orasso</p></body></html>`,
-  ].join("\n");
-  const text = [title, "", ...paragraphs, link ? `${link.label} : ${link.url}` : "", "", "Orasso"].join("\n");
+/**
+ * Gabarit commun à tous les e-mails (lot 56, `mail-template.ts`) : l'affiche de nuit, le titre, le corps, le bouton
+ * principal (`link`, un lien de `PUBLIC_URL`), le code de secours (`options.code`) et le pied.
+ */
+export function renderMail(
+  title: string,
+  paragraphs: string[],
+  link?: { label: string; url: string },
+  options: { code?: string; footer?: MailFooter } = {},
+): MailContent {
+  const html = renderShell({
+    title,
+    bodyHtml: paragraphsHtml(paragraphs),
+    button: link,
+    code: options.code,
+    footer: options.footer,
+  });
+  const text = renderShellText({ title, paragraphs, button: link, code: options.code, footer: options.footer });
   return { subject: title, html, text };
 }
 

@@ -44,6 +44,7 @@ import { useLocalSearchParams } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Segments } from "@/ui/Segments";
 
 import { OliveContent } from "./Olive";
 import { V2Content } from "./V2";
@@ -162,11 +163,7 @@ function ThemeSwitch() {
   ];
   return (
     <View style={styles.switch}>
-      {options.map(([value, label]) => (
-        <Chip key={value} selected={preference === value} onPress={() => setPreference(value)}>
-          {label}
-        </Chip>
-      ))}
+      <Segments items={options.map(([id, label]) => ({ id, label }))} value={preference} onChange={setPreference} />
       <Text variant="meta" color={t.color.inkMuted}>
         thème actif : {theme}
       </Text>
@@ -378,11 +375,11 @@ export default function DesignSystemDemo() {
           {() => (
             <View style={styles.stack}>
               <ChipRow>
-                {["JDM", "Youngtimer", "Sportive", "Motos"].map((label) => (
-                  <Chip key={label} selected={chip === label} onPress={() => setChip(label)}>
-                    {label}
-                  </Chip>
-                ))}
+                <Segments
+                  items={["JDM", "Youngtimer", "Sportive", "Motos"].map((id) => ({ id, label: id }))}
+                  value={chip}
+                  onChange={setChip}
+                />
                 <Chip variant="accent">60 km</Chip>
                 <Chip variant="accent">Zone JDM</Chip>
                 <Chip variant="verified">Structure vérifiée</Chip>

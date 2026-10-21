@@ -1,7 +1,7 @@
 import type { EventCard, ProCard } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { eventPins, FRANCE_VIEW, pinsKey, proPins, viewFor } from "./mapPins";
+import { eventPins, FRANCE_VIEW, mapHeight, pinsKey, proPins, viewFor } from "./mapPins";
 
 const event = (over: Partial<EventCard>): EventCard =>
   ({
@@ -69,5 +69,16 @@ describe("vue de départ", () => {
     const a = eventPins([event({ id: "a" })]);
     const b = eventPins([event({ id: "a" }), event({ id: "b" })]);
     expect(pinsKey(a)).not.toBe(pinsKey(b));
+  });
+});
+
+describe("hauteur de la carte (lot 59c, tour 2)", () => {
+  it("55 % de l'écran, mais au moins 30 % de l'écran laissé à la page hors de la carte", () => {
+    expect(mapHeight(844)).toBe(441);
+    // Petit téléphone (390 × 700) : 340 px, il reste 210 px (30 %) de page hors des barres et de la carte.
+    expect(mapHeight(700)).toBe(340);
+    expect(700 - 150 - mapHeight(700)).toBeGreaterThanOrEqual(0.3 * 700);
+    expect(mapHeight(1400)).toBe(520);
+    expect(mapHeight(400)).toBe(280);
   });
 });

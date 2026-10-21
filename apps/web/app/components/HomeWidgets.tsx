@@ -49,7 +49,7 @@ export function PendingBlock({ items }: { items: MyApplication[] }) {
         <p className="hm-block__muted">{homeLabels.pendingEmpty}</p>
       ) : (
         items.map((a) => (
-          <a key={a.id} className="hm-line" href="/app/acces">
+          <a key={a.id} className="hm-line" href="/app/sorties">
             <span className="o-t-meta hm-line__date">{formatDayShort(a.event.startsAt)}</span>
             <span className="hm-line__body">
               <strong>{a.event.title}</strong>

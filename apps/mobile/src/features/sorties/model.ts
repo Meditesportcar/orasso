@@ -11,6 +11,8 @@ import {
   OFFER_DELAY_DAY,
   OFFER_DELAY_DEFAULT,
   OFFER_DELAY_EVE,
+  ticketIsPast,
+  ticketIsUpcoming,
   wallTime,
 } from "@orasso/shared";
 
@@ -36,17 +38,22 @@ export const liveApplications = (items: readonly MyApplication[] | null | undefi
 
 export type SortiesSegment = "upcoming" | "staff" | "past";
 
-/** Une mission staff est « à venir » tant que l'événement n'est pas fini. */
+// Lot 59c : mêmes règles que le site (`packages/shared/src/rules/sorties.ts`, lot 57).
+
+/**
+ * Une mission staff reste dans l'onglet Staff jusqu'à la fermeture du mode staff (`staffModeClosesAt`, J+1 : pointage
+ * de rattrapage), comme `/me/staff-events` ; ses actions suivent l'heure (`staffMissionActions`).
+ */
 export const staffUpcoming = (items: readonly MyStaffEvent[], now: Date) =>
-  items.filter((s) => new Date(s.event.endsAt) > now);
+  items.filter((s) => Date.parse(s.staffModeClosesAt) > now.getTime());
 
-/** Un billet du public est « à venir » s'il est encore valable et que l'événement n'est pas fini. */
+/** Billet « à venir » : valable, ou déjà contrôlé à l'entrée, tant que l'événement n'est pas fini (vote, carte). */
 export const ticketsUpcoming = (items: readonly MyTicket[], now: Date) =>
-  items.filter((x) => x.status === "valid" && new Date(x.event.endsAt) > now);
+  items.filter((x) => ticketIsUpcoming(x, now.getTime()));
 
-/** Billets passés : utilisés, ou d'un événement fini. */
+/** Billets passés : ceux d'un événement fini, quel que soit leur état. */
 export const ticketsPast = (items: readonly MyTicket[], now: Date) =>
-  items.filter((x) => x.status === "used" || new Date(x.event.endsAt) <= now);
+  items.filter((x) => ticketIsPast(x, now.getTime()));
 
 // --- Accès flottant ------------------------------------------------------------------------------------------------
 
@@ -104,15 +111,18 @@ export function applicationAccesses(apps: readonly MyApplication[] | null | unde
     }));
 }
 
+/** Billets valables : une fois contrôlé à l'entrée, le billet n'a plus besoin de la barre (comme une place retenue). */
 export function ticketAccesses(items: readonly MyTicket[] | null | undefined, now: Date): AccessItem[] {
-  return ticketsUpcoming(items ?? [], now).map((x) => ({
-    key: `ticket-${x.id}`,
-    kind: "ticket" as const,
-    startsAt: x.event.startsAt,
-    endsAt: x.event.endsAt,
-    title: x.event.title,
-    href: "/billets",
-  }));
+  return ticketsUpcoming(items ?? [], now)
+    .filter((x) => x.status === "valid")
+    .map((x) => ({
+      key: `ticket-${x.id}`,
+      kind: "ticket" as const,
+      startsAt: x.event.startsAt,
+      endsAt: x.event.endsAt,
+      title: x.event.title,
+      href: "/billets",
+    }));
 }
 
 /** Mission staff : « Je serai là » (présence non refusée) ; le mode staff s'ouvre la veille. */

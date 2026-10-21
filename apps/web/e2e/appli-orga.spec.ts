@@ -138,9 +138,9 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
 
   // --- Boîte : message groupé aux retenus ------------------------------------------------------------------------
   await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
-  await expect(page.getByRole("button", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("tab", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(page, "07-boite-participants-beton");
-  await page.getByRole("button", { name: "Groupés" }).click();
+  await page.getByRole("tab", { name: "Groupés" }).click();
   await page.getByTestId("orga-group-new").click();
   await pickOption(page, "Événement", /Salon Argelès/);
   await pickOption(page, "Destinataires", /Retenus/);
@@ -151,7 +151,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await page.getByTestId("orga-group-send").click();
   await expect(page.getByTestId("orga-group-row").first()).toContainText(text, { timeout: 30_000 });
   await shot(page, "09-boite-groupes-beton");
-  await page.getByRole("button", { name: /Staff/ }).click();
+  await page.getByRole("tab", { name: /Staff/ }).click();
   await expect(page.getByTestId("orga-staff-chat").first()).toBeVisible({ timeout: 20_000 });
   await shot(page, "10-boite-staff-beton");
 
@@ -211,7 +211,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await expect(s.page.getByTestId("orga-outlook-banner")).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "22-evenement-sable");
   await s.page.getByRole("button", { name: "Boîte", exact: true }).first().click();
-  await expect(s.page.getByRole("button", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
+  await expect(s.page.getByRole("tab", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "23-boite-sable");
   await s.page.getByRole("button", { name: "Fermer" }).first().click();
   await tab(s.page, "Équipe").click();

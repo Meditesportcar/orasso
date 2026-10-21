@@ -60,6 +60,11 @@ type Award = (entry: {
   applicationId: string;
 }) => Promise<unknown | null>;
 
+/** Invalidation de la grille après validation d'un changement de pointage ; aucune voix ni identité diffusée. */
+export function announceCandidatesChanged(eventId: string) {
+  realtime.publish(`event:${eventId}:votes`, "votes.candidates.changed", {});
+}
+
 /**
  * Véhicules pointés de l'événement (candidatures de véhicules entrées), du premier au dernier entré. Les comptes
  * supprimés (anonymisés) sortent du classement et du prix : ni points ni notification à un compte supprimé.

@@ -216,17 +216,17 @@ export function InboxScreen() {
         />
       }
     >
-      <ChipRow>
-        <Chip selected={segment === "participants"} onPress={() => setSegment("participants")}>
+      <ChipRow accessibilityRole="tablist">
+        <Chip accessibilityRole="tab" selected={segment === "participants"} onPress={() => setSegment("participants")}>
           {chipLabel(orgaLabels.segParticipants, s?.participantMessages)}
         </Chip>
-        <Chip selected={segment === "groups"} onPress={() => setSegment("groups")}>
+        <Chip accessibilityRole="tab" selected={segment === "groups"} onPress={() => setSegment("groups")}>
           {orgaLabels.segGroups}
         </Chip>
-        <Chip selected={segment === "staff"} onPress={() => setSegment("staff")}>
+        <Chip accessibilityRole="tab" selected={segment === "staff"} onPress={() => setSegment("staff")}>
           {chipLabel(orgaLabels.segStaff, s?.staffDiscussions)}
         </Chip>
-        <Chip selected={segment === "requests"} onPress={() => setSegment("requests")}>
+        <Chip accessibilityRole="tab" selected={segment === "requests"} onPress={() => setSegment("requests")}>
           {chipLabel(orgaLabels.segRequests, s?.staffRequests)}
         </Chip>
       </ChipRow>

@@ -140,6 +140,31 @@ export const mediaAppLabels = {
   viewsCount: (n: number) => plural(n, "vue"),
   openContent: "Ouvrir",
   uploadFailed: "Une photo n'a pas pu être envoyée. Réessaie.",
+  // Floutage des plaques à l'envoi d'une photo de galerie (D28, Damien le 21/10/2026) : proposé, jamais imposé.
+  addPhotosBlurTitle: "Flouter les plaques ?",
+  addPhotosBlurHint:
+    "Pose un cadre sur chaque plaque visible : Orasso la floute avant l'envoi, définitivement. Si tes photos sont déjà floutées, envoie-les telles quelles.",
+  addPhotosBlurSend: "Flouter et ajouter",
+  addPhotosPlainSend: "Envoyer sans flouter",
+  addPhotosBlurred: "Plaque floutée",
+  /** Relecture du lot 57 : publication bloquée tant qu'une photo est choisie ou en cours d'envoi. */
+  addPhotosSending: "Envoi de la photo en cours…",
+  addPhotosPending: "Ajoute ou retire la photo choisie avant de publier.",
+  /** Relecture du lot 57 : Explorer (panne de l'API distincte d'une recherche vide, pagination). */
+  exploreErrorTitle: "Les événements ne se chargent pas",
+  exploreErrorText: "Le service ne répond pas pour l'instant. Tes filtres sont gardés.",
+  exploreRetry: "Réessayer",
+  exploreMore: "Voir la suite",
+  /** Relecture du lot 57 (tour 2) : fiche média, contenus publiés (erreur de chargement, galerie complète). */
+  contentsErrorTitle: "Les contenus ne se chargent pas",
+  contentsErrorText: "Le service ne répond pas pour l'instant. Ce qui est déjà affiché est gardé.",
+  contentsRetry: "Réessayer",
+  galleryOpenPhoto: (n: number, total: number) => `Ouvrir la photo ${n} sur ${total}`,
+  galleryViewer: "Photos de la galerie",
+  galleryPrev: "Photo précédente",
+  galleryNext: "Photo suivante",
+  galleryClose: "Fermer",
+  galleryPosition: (n: number, total: number) => `${n} / ${total}`,
 
   // --- Profil média -----------------------------------------------------------------------------------------------------------
   profileTitle: "Profil média",

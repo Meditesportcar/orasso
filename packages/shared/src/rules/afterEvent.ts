@@ -35,7 +35,7 @@ export function thanksBlockedReason(
 
 /** Lien d'avis d'un présent : unique par candidature (le site redirige vers la feuille d'avis de l'appli). */
 export function reviewLink(baseUrl: string, applicationId: string): string {
-  return `${baseUrl}/app/acces?avis=${applicationId}`;
+  return `${baseUrl}/app/sorties?avis=${applicationId}`;
 }
 
 /** Lien profond de l'appli (même paramètre). */

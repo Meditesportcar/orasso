@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, seedReference, signUp, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { pool } from "../../db/client";
-import { BLUR_COLUMNS, BLUR_ROWS, blurPlateRegions, blurSigma, coveredBy, plateBox } from "./photos-blur";
+import { BLUR_COLUMNS, BLUR_ROWS, blurPlateRegions, blurSigma, coveredBy, plateBox, plateCorners } from "./photos-blur";
 
 afterAll(async () => {
   await pool.end();
@@ -166,6 +166,57 @@ async function zoneStats(image: Buffer, box: { left: number; top: number; width:
   return { spread: Math.sqrt(sq / data.length), jump };
 }
 
+describe("cadre orienté (lot 59c)", () => {
+  it("coins et zone englobante d'un cadre tourné", () => {
+    const r = { x: 0.25, y: 0.25, w: 0.5, h: 0.5, angle: 90 };
+    // 200 × 100 px tourné d'un quart de tour : 100 × 200 autour du même centre (200, 100).
+    const pts = plateCorners(r, 400, 200).map((p) => ({ x: Math.round(p.x) + 0, y: Math.round(p.y) + 0 }));
+    expect(pts).toEqual([
+      { x: 250, y: 0 },
+      { x: 250, y: 200 },
+      { x: 150, y: 200 },
+      { x: 150, y: 0 },
+    ]);
+    expect(plateBox(r, 400, 200)).toEqual({ left: 150, top: 0, width: 100, height: 200 });
+    // Sans angle (ou 0) : la zone de toujours.
+    expect(plateBox({ ...r, angle: 0 }, 400, 200)).toEqual({ left: 100, top: 50, width: 200, height: 100 });
+  });
+
+  it("un cadre tourné n'est couvert que par le même cadre", () => {
+    const tilted = { x: 0.2, y: 0.2, w: 0.3, h: 0.1, angle: 12 };
+    expect(coveredBy(tilted, [tilted])).toBe(true);
+    expect(coveredBy(tilted, [{ x: 0, y: 0, w: 1, h: 1 }])).toBe(false);
+    expect(coveredBy({ ...tilted, angle: 0 }, [tilted])).toBe(false);
+    expect(coveredBy({ x: 0.25, y: 0.25, w: 0.1, h: 0.05 }, [{ x: 0.2, y: 0.2, w: 0.4, h: 0.3, angle: 0 }])).toBe(true);
+  });
+
+  it("seul le quadrilatère est flouté, pas le reste de sa zone englobante", async () => {
+    const src = await checker();
+    const lossless = await sharp(src).webp({ lossless: true }).toBuffer();
+    // 160 × 40 px centré en (200, 100), tourné de 30° : zone englobante d'environ 159 × 115 px.
+    const rect = { x: 0.3, y: 0.4, w: 0.4, h: 0.2, angle: 30 };
+    const out = await blurPlateRegions(lossless, [rect]);
+    const before = await pixels(await sharp(src).webp({ quality: 80 }).toBuffer());
+    const after = await pixels(out.data);
+    // Au centre du cadre : flouté.
+    expect(diff(before, after, { left: 185, top: 90, width: 30, height: 20 })).toBeGreaterThan(40);
+    // Coins de la zone englobante, hors du quadrilatère : intacts (compression WebP seulement).
+    const box = plateBox(rect, 400, 200);
+    expect(diff(before, after, { left: box.left + 1, top: box.top + 1, width: 8, height: 8 })).toBeLessThan(8);
+    expect(
+      diff(before, after, { left: box.left + box.width - 9, top: box.top + box.height - 9, width: 8, height: 8 }),
+    ).toBeLessThan(8);
+  });
+
+  it("flou sans mosaïque : pas de marche franche d'un bloc à l'autre dans la zone", async () => {
+    const { image, rect } = await closeUpPlate();
+    const out = await blurPlateRegions(image, [{ ...rect, angle: -8 }]);
+    const after = await zoneStats(out.data, { left: 520, top: 650, width: 560, height: 80 });
+    expect(after.spread).toBeLessThan(25);
+    expect(after.jump).toBeLessThan(4);
+  });
+});
+
 describe("plaque prise de près (800 px)", () => {
   it("aucun détail récupérable : zone lisse, pas de saut d'une colonne à l'autre", async () => {
     const { image, rect } = await closeUpPlate();
@@ -210,6 +261,11 @@ describe("POST /me/vehicles/:id/photos (plateRects) et /photos/:photoId/blur", (
     const v = await call(u, "POST", "/me/vehicles", car());
     const src = await checker();
     expect((await upload(u, v.json.id, src, [{ x: 0.8, y: 0.1, w: 0.5, h: 0.2 }])).status).toBe(400);
+    // Lot 59c : angle de −90 à 90 degrés.
+    expect((await upload(u, v.json.id, src, [{ x: 0.3, y: 0.4, w: 0.4, h: 0.2, angle: 120 }])).status).toBe(400);
+    const tilted = await upload(u, v.json.id, src, [{ x: 0.3, y: 0.4, w: 0.4, h: 0.2, angle: -20 }]);
+    expect(tilted.status).toBe(201);
+    expect(((await tilted.json()) as { photos: { plateBlurred: boolean }[] }).photos[0]?.plateBlurred).toBe(true);
     const form = new FormData();
     form.append("photo", new File([new Uint8Array(src)], "auto.png", { type: "image/png" }));
     form.append("plateRects", "{pas du json");

@@ -1,11 +1,14 @@
 // QR de compte en grand (docs/02) : dynamique, il se redessine toutes les 60 s et fonctionne hors ligne, avec le secret
 // reçu à la connexion (gardé dans le trousseau sécurisé). Un pro le scanne pour une remise ; une capture prêtée expire
-// en une à deux minutes.
+// en une à deux minutes. Lot 59c : captures et enregistrement d'écran bloqués tant qu'il est ouvert (comme le QR
+// d'accès et le QR exposant, H4 du lot 48).
 
 import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { ACCOUNT_QR_STEP_SECONDS, type AccountQrSecret, gradeLabels } from "@orasso/shared";
+import { useIsFocused } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { ACCOUNT_CAPTURE_TEXT, CaptureNote, useBlockCapture } from "@/features/jour-j/QrExtras";
 import { accountQrAt, secondsLeft } from "@/lib/accountQr";
 import { loadAccountQrSecret, saveAccountQrSecret } from "@/lib/accountQrStore";
 import { api } from "@/lib/api";
@@ -23,6 +26,13 @@ export function AccountQrSheet({ visible, onClose }: { visible: boolean; onClose
   const [secret, setSecret] = useState<AccountQrSecret | null>(null);
   const [missing, setMissing] = useState(false);
   const [now, setNow] = useState(() => clockNow());
+  // Lot 59c, tour 2 : l'écran Profil reste monté quand on change d'onglet (ou au retour Android) ; la feuille se ferme
+  // dès qu'il n'est plus affiché, et le blocage des captures ne vaut que pendant qu'elle est vraiment à l'écran.
+  const focused = useIsFocused();
+  useEffect(() => {
+    if (visible && !focused) onClose();
+  }, [visible, focused, onClose]);
+  useBlockCapture(visible && focused, "account-qr");
 
   // Le secret vient du trousseau ; s'il manque (premier lancement après une mise à jour), on le redemande à l'API.
   useEffect(() => {
@@ -85,6 +95,7 @@ export function AccountQrSheet({ visible, onClose }: { visible: boolean; onClose
           <Text variant="bodyStrong" color={t.color.ink}>
             {me?.profile.pseudo} · {me ? gradeLabels[me.profile.grade] : ""}
           </Text>
+          <CaptureNote text={ACCOUNT_CAPTURE_TEXT} />
         </View>
       ) : (
         <Text variant="body" color={t.color.inkMuted}>

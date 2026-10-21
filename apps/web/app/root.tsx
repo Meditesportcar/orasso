@@ -1,6 +1,7 @@
 import { readThemeCookie, serverTheme, ThemeProvider, ThemeScript } from "@orasso/design-system/web";
 import "@orasso/design-system/web/styles.css";
 import "./styles/site.css";
+import "./styles/site-v2.css";
 import "./styles/dev-clock.css";
 import {
   isRouteErrorResponse,

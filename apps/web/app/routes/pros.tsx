@@ -108,7 +108,7 @@ export default function Pros({ loaderData }: Route.ComponentProps) {
       ) : (
         <div className="evs">
           <ProsMap pros={pros.items} />
-          <div className="s-grid s-grid--list" data-testid="pros-list">
+          <div className="w-cards" data-testid="pros-list">
             {pros.items.map((pro) => (
               <ProTile key={pro.slug} pro={pro} />
             ))}

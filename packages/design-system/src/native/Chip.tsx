@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect } from "react";
 import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { type ChipRole, chipPressableProps } from "./chipAccessibility";
 import { duration, easings } from "./motionHooks";
 import { Text } from "./text";
 import { angle, radius, spacing, useTheme } from "./theme";
@@ -24,6 +25,12 @@ export type ChipProps = {
   onPress?: () => void;
   style?: ViewStyle;
   accessibilityLabel?: string;
+  /**
+   * `button` (défaut) : action ou navigation, sans état annoncé. `toggle` : vraie bascule (filtre cumulable, `aria-pressed`).
+   * `tab` : onglet exclusif d'une liste d'onglets. `radio` : choix exclusif d'un réglage sans panneau.
+   * Les trois rôles à état agrandissent la cible tactile au jeton `touch` (segments et filtres) ; la puce, elle, ne bouge pas.
+   */
+  accessibilityRole?: ChipRole;
 };
 
 /** Une catégorie, un filtre ou un fait, en capitales étroites. */
@@ -36,6 +43,7 @@ export function Chip({
   onPress,
   style,
   accessibilityLabel,
+  accessibilityRole = "button",
 }: ChipProps) {
   const { t } = useTheme();
   const c = t.color;
@@ -93,13 +101,13 @@ export function Chip({
     </View>
   );
   if (!onPress) return body;
+  const press = chipPressableProps({ selected, role: accessibilityRole, onPress, accessibilityLabel });
   return (
     <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel={accessibilityLabel}
-      style={styles.press}
+      onPress={press.onPress}
+      {...press.a11y}
+      accessibilityLabel={press.accessibilityLabel}
+      style={press.targeted ? styles.press : styles.pressPlain}
     >
       {body}
     </Pressable>
@@ -107,10 +115,20 @@ export function Chip({
 }
 
 /** Une rangée de chips qui défile à l'horizontale ; la sélectionnée reste visible. */
-export function ChipRow({ children }: { children: ReactNode }) {
+export function ChipRow({
+  children,
+  accessibilityRole,
+  accessibilityLabel,
+}: {
+  children: ReactNode;
+  accessibilityRole?: "tablist" | "radiogroup";
+  accessibilityLabel?: string;
+}) {
   return (
     <ScrollView
       horizontal
+      accessibilityRole={accessibilityRole}
+      accessibilityLabel={accessibilityLabel}
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.row}
       style={styles.rowScroll}
@@ -121,7 +139,15 @@ export function ChipRow({ children }: { children: ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  press: { alignSelf: "flex-start" },
+  // Cible agrandie (segments, filtres) : la puce est centrée dans sa cible, elle ne grandit pas.
+  press: {
+    alignSelf: "flex-start",
+    alignItems: "center",
+    minHeight: spacing.touch,
+    minWidth: spacing.touch,
+    justifyContent: "center",
+  },
+  pressPlain: { alignSelf: "flex-start" },
   base: {
     flexDirection: "row",
     alignSelf: "flex-start",

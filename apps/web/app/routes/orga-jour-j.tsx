@@ -10,7 +10,14 @@ import type {
   MyStaffEvent,
   StaffAlertView,
 } from "@orasso/shared";
-import { distanceFromEntryLabel, eventDaysLabels, formatDayDate, liveLabels, localDate } from "@orasso/shared";
+import {
+  distanceFromEntryLabel,
+  eventDaysLabels,
+  formatDayDate,
+  liveLabels,
+  localDate,
+  orgaDriveLabels,
+} from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { now as clockNow } from "../lib/clock";
 import "../styles/staff.css";
@@ -159,6 +166,7 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
   // Lot 26 : liste d'un jour : « arrivé » ce jour-là (même règle que le direct) ; sinon, entrée enregistrée.
   const isIn = (i: CheckinListItem) => i.arrivedOnDay ?? Boolean(i.checkedInAt);
   const arrived = items.filter(isIn).length;
+  const drive = items.filter((i) => i.method === "drive" && isIn(i)).length;
   const shown = items.filter((i) => {
     if (filter === "arrived" && !isIn(i)) return false;
     if (filter === "expected" && isIn(i)) return false;
@@ -263,6 +271,12 @@ export default function OrgaJourJ({ loaderData }: Route.ComponentProps) {
               ]
         }
       />
+      {/* Lot 57 : rapport des pointages, entrées par l'accueil drive (lecture de plaque, lot 48). */}
+      {drive > 0 && (
+        <p className="o-t-caption" data-testid="drive-count">
+          {orgaDriveLabels.count(drive)}
+        </p>
+      )}
 
       {live && live.byZone.length > 0 && (
         <section className="orga__panel s-stack s-stack--tight" aria-label="Par zone">

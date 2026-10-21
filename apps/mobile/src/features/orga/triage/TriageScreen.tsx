@@ -129,9 +129,14 @@ export function TriageScreen() {
                 {event.title}
               </Button>
             ) : null}
-            <ChipRow>
+            <ChipRow accessibilityRole="tablist">
               {segments.map((s) => (
-                <Chip key={s.key} selected={segment === s.key} onPress={() => setSegment(s.key)}>
+                <Chip
+                  accessibilityRole="tab"
+                  key={s.key}
+                  selected={segment === s.key}
+                  onPress={() => setSegment(s.key)}
+                >
                   {s.label}
                 </Chip>
               ))}

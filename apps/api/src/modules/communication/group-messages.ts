@@ -496,7 +496,7 @@ export const groupMessagesService = {
               data: { eventId: event.id, ...(applicationId ? { applicationId } : {}) },
               link: {
                 label: afterEventLabels.thanksJournalAction,
-                path: applicationId ? `/app/acces?avis=${applicationId}` : `/e/${event.slug}`,
+                path: applicationId ? `/app/sorties?avis=${applicationId}` : `/e/${event.slug}`,
               },
             });
           }

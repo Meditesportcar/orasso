@@ -100,6 +100,7 @@ export const adminSections: AdminSection[] = [
     group: "queues",
     count: "newslettersScheduled",
   },
+  { id: "medias", label: N.media, route: "/(admin)/medias", group: "queues", count: "mediaToVerify" },
   { id: "utilisateurs", label: N.users, route: "/(admin)/utilisateurs", group: "registries" },
   { id: "structures", label: N.structures, route: "/(admin)/structures", group: "registries" },
   { id: "pros", label: N.pros, route: "/(admin)/pros", group: "registries" },

@@ -12,6 +12,8 @@ import {
   TextField,
 } from "@orasso/design-system/web";
 import {
+  type AudiencePrizeBoard,
+  audiencePrizeTexts,
   describeRecurrence,
   type EventOrganizer,
   type EventTicketing,
@@ -22,6 +24,10 @@ import {
   eventStatusLabels,
   invitationLabels,
   isBadWeather,
+  orgaPosterLabels,
+  orgaPrizeLabels,
+  posterStyleLabels,
+  posterStyles,
   RECURRENCE_MAX_COUNT,
   type RecurrenceRule,
   recurrenceOccurrences,
@@ -35,6 +41,7 @@ import { data, Form, redirect, useNavigation, useSearchParams } from "react-rout
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { formatDay, formatPrice, formatWhen } from "../lib/format";
+import { useLiveRevalidate } from "../lib/useLiveRevalidate";
 import type { Route } from "./+types/orga-evenement";
 
 export function meta() {
@@ -62,9 +69,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     event.status === "published"
       ? await api<EventWeather | null>(request, `/events/by-slug/${encodeURIComponent(event.slug)}/weather`)
       : null;
+  // Lot 57 : prix du public (classement en direct, ou résultats après le règlement) ; jamais bloquant.
+  const prize =
+    event.status === "published"
+      ? await api<AudiencePrizeBoard>(request, `/events/${params.eventId}/audience-prize`)
+      : null;
   return {
     event,
     weather: weather?.ok ? weather.data : null,
+    prize: prize?.ok ? prize.data : null,
+    posterDone: url.searchParams.get("affiche") === "1",
     ticketing: ticketing.ok ? ticketing.data : null,
     verified: structure.verified,
     created: url.searchParams.get("creee") === "1",
@@ -83,6 +97,21 @@ export async function action({ request, params }: Route.ActionArgs) {
     data({ error: res.error.message } satisfies Result, { status: res.status });
 
   switch (text("intent")) {
+    case "poster": {
+      // Lot 57 : régénérer l'affiche (même photo et même titre, style au choix) ; rendue par l'API (lot 47).
+      const settings = (await apiOrThrow<EventOrganizer>(request, `/events/${id}`)).posterSettings;
+      if (!settings) return data({ error: orgaPosterLabels.none } satisfies Result, { status: 400 });
+      const style = text("style");
+      const res = await api(request, `/events/${id}/poster/generate`, {
+        method: "POST",
+        json: {
+          photoKey: settings.photoKey,
+          style: (posterStyles as readonly string[]).includes(style) ? style : settings.style,
+          title: settings.title,
+        },
+      });
+      return res.ok ? redirect(`${back}?affiche=1`) : fail(res);
+    }
     case "publish": {
       const res = await api(request, `/events/${id}/publish`, { method: "POST" });
       return res.ok ? redirect(`${back}?publie=1`) : fail(res);
@@ -319,8 +348,101 @@ function Ticketing({ event, ticketing, base }: { event: EventOrganizer; ticketin
   );
 }
 
+/** Lot 57 : l'affiche générée (publication et story), « Régénérer » avec un style au choix, la story à télécharger. */
+function PosterPanel({ event, busy, done }: { event: EventOrganizer; busy: boolean; done: boolean }) {
+  const settings = event.posterSettings;
+  return (
+    <section className="orga__panel s-stack" aria-labelledby="affiche-title" data-testid="orga-poster">
+      <h2 id="affiche-title" className="s-h2">
+        {orgaPosterLabels.title}
+      </h2>
+      {done && (
+        <p className="s-notice s-notice--ok" role="status" data-testid="orga-poster-done">
+          {orgaPosterLabels.regenerated}
+        </p>
+      )}
+      {event.poster && settings ? (
+        <>
+          <p className="o-t-caption s-muted">{orgaPosterLabels.intro}</p>
+          <div className="ev-posters">
+            <figure className="ev-poster">
+              <img src={event.poster.postUrl} alt={`${orgaPosterLabels.post} : ${event.title}`} />
+              <figcaption className="o-t-caption">{orgaPosterLabels.post} · 4:5</figcaption>
+            </figure>
+            <figure className="ev-poster ev-poster--story">
+              <img src={event.poster.storyUrl} alt={`${orgaPosterLabels.story} : ${event.title}`} />
+              <figcaption className="o-t-caption">{orgaPosterLabels.story} · 9:16</figcaption>
+            </figure>
+          </div>
+          <Form method="post" className="s-row ev-poster-tools">
+            <input type="hidden" name="intent" value="poster" />
+            <SelectField
+              label={orgaPosterLabels.style}
+              name="style"
+              defaultValue={settings.style}
+              options={posterStyles.map((s) => ({ value: s, label: posterStyleLabels[s] }))}
+            />
+            <Button type="submit" variant="secondary" icon="undo" loading={busy} data-testid="orga-poster-regenerate">
+              {orgaPosterLabels.regenerate}
+            </Button>
+            <Button variant="secondary" icon="export" href={`/api/events/${event.id}/poster/story`}>
+              {orgaPosterLabels.downloadStory}
+            </Button>
+          </Form>
+        </>
+      ) : (
+        <p className="s-muted">{orgaPosterLabels.none}</p>
+      )}
+      {event.customPosterUrl && (
+        <p className="o-t-caption">
+          <a href={event.customPosterUrl} target="_blank" rel="noreferrer">
+            {orgaPosterLabels.custom}
+          </a>
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** Lot 57 : prix du public de l'événement, classement en direct puis résultats (gagnant) après le règlement de J+2. */
+function PrizePanel({ prize, slug }: { prize: AudiencePrizeBoard; slug: string }) {
+  return (
+    <section className="orga__panel s-stack" aria-labelledby="prix-title" data-testid="orga-prize">
+      <div className="s-row s-row--between">
+        <h2 id="prix-title" className="s-h2">
+          {orgaPrizeLabels.title}
+        </h2>
+        <Chip>
+          {prize.settled ? orgaPrizeLabels.results : prize.open ? orgaPrizeLabels.live : audiencePrizeTexts.closed}
+        </Chip>
+      </div>
+      {prize.settled && (
+        <p data-testid="orga-prize-winner">
+          <strong>{orgaPrizeLabels.winner}</strong> ·{" "}
+          {prize.winner ? `${prize.winner.vehicleLabel} · ${prize.winner.pseudo}` : orgaPrizeLabels.noWinner}
+        </p>
+      )}
+      {prize.entries.length === 0 ? (
+        <p className="s-muted">{orgaPrizeLabels.none}</p>
+      ) : (
+        <ol className="s-stack s-stack--tight">
+          {prize.entries.slice(0, 10).map((e) => (
+            <li key={e.applicationId} className="o-never-truncate">
+              {e.rank}. {e.vehicleLabel} · {e.pseudo} · {audiencePrizeTexts.votes(e.votes)}
+            </li>
+          ))}
+        </ol>
+      )}
+      <p className="o-t-caption s-muted">
+        {audiencePrizeTexts.votes(prize.total)} · {prize.vehicles} véhicules pointés ·{" "}
+        <a href={`/app/vote/${slug}`}>{orgaPrizeLabels.open}</a>
+      </p>
+    </section>
+  );
+}
+
 export default function OrgaEvenement({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, weather, ticketing, verified, created } = loaderData;
+  const { event, weather, ticketing, verified, created, prize, posterDone } = loaderData;
   const base = `/orga/${event.structure.slug}`;
   const busy = useNavigation().state !== "idle";
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -330,6 +452,8 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
   const isDraft = event.status === "draft";
   const justPublished = search.get("publie") === "1";
   const serie = search.get("serie");
+  // Classement en direct (relecture du lot 57) : rechargé sur le canal des votes, au plus toutes les 10 s, et après une reconnexion.
+  useLiveRevalidate(prize && !prize.settled ? `event:${event.id}:votes` : null, (m) => m.type === "votes.changed");
 
   return (
     <>
@@ -448,6 +572,9 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
       </section>
 
       {ticketing && event.status !== "cancelled" && <Ticketing event={event} ticketing={ticketing} base={base} />}
+
+      {event.status !== "cancelled" && <PosterPanel event={event} busy={busy} done={posterDone} />}
+      {prize && (prize.total > 0 || prize.settled || prize.open) && <PrizePanel prize={prize} slug={event.slug} />}
 
       {published && weather && (
         <section className="orga__panel s-stack" aria-label="Météo annoncée" data-testid="orga-weather">

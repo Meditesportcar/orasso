@@ -311,13 +311,13 @@ describe("remerciement", () => {
           .from(groupMessageRecipients)
           .where(and(eq(groupMessageRecipients.groupMessageId, gm!.id), eq(groupMessageRecipients.userId, who.u.id)));
         const [msg] = await db.select().from(messages).where(eq(messages.id, rec!.messageId!));
-        const link = `${env.PUBLIC_URL}/app/acces?avis=${who.application.id}`;
+        const link = `${env.PUBLIC_URL}/app/sorties?avis=${who.application.id}`;
         expect(msg?.body).toContain(link);
         expect(msg?.body).toContain(who.u.pseudo);
         links.add(link);
         // Une ligne du Journal avec le même lien, pas d'e-mail.
         const [journal] = await notificationsOf(who.u.id, "event_thanks");
-        expect(journal?.data).toMatchObject({ link: `/app/acces?avis=${who.application.id}` });
+        expect(journal?.data).toMatchObject({ link: `/app/sorties?avis=${who.application.id}` });
       }
       expect(links.size).toBe(3);
       // L'absent, la refusée et le staff n'ont rien reçu.
@@ -968,7 +968,7 @@ describe("lots précédents : le lien d'avis des messages groupés", () => {
     const rows = await db.select().from(messages).where(eq(messages.groupMessageId, sent.json.groupMessageId));
     expect(rows).toHaveLength(3);
     expect(rows.map((r) => r.body).sort()).toEqual(
-      [w.kenji, w.lea, w.zoe].map((x) => `Ton avis : ${env.PUBLIC_URL}/app/acces?avis=${x.application.id}`).sort(),
+      [w.kenji, w.lea, w.zoe].map((x) => `Ton avis : ${env.PUBLIC_URL}/app/sorties?avis=${x.application.id}`).sort(),
     );
     // Un message groupé ordinaire ne compte pas comme « remerciement envoyé ».
     expect((await db.select().from(events).where(eq(events.id, w.e.id)))[0]?.thanksSentAt).toBeNull();

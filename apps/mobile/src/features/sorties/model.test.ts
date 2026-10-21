@@ -9,6 +9,7 @@ import {
   liveApplications,
   nextAccessOf,
   staffAccesses,
+  staffUpcoming,
   ticketAccesses,
   ticketsPast,
   ticketsUpcoming,
@@ -37,6 +38,8 @@ const staff = (id: string, days: number, presence: MyStaffEvent["presence"], ope
   ({
     presence,
     staffModeOpen: open,
+    // Fermeture du mode staff à J+1 (`staffModeClosesAt` de l'API).
+    staffModeClosesAt: at(days + 1, 4),
     event: { id, slug: id, title: `Mission ${id}`, startsAt: at(days), endsAt: at(days, 4) },
   }) as unknown as MyStaffEvent;
 
@@ -128,11 +131,36 @@ describe("fenêtre de l'accès flottant : jours calendaires, de J-7 au lendemain
   });
 });
 
-describe("billets", () => {
-  it("à venir = valables et pas finis ; passés = utilisés ou finis", () => {
-    const list = [ticket("a", 2), ticket("b", -3), ticket("c", 2, "used")];
-    expect(ticketsUpcoming(list, NOW).map((x) => x.id)).toEqual(["a"]);
-    expect(ticketsPast(list, NOW).map((x) => x.id)).toEqual(["b", "c"]);
+describe("billets (lot 59c : règles du site, `rules/sorties`)", () => {
+  it("à venir = valables ou contrôlés, tant que l'événement n'est pas fini ; passés = événement fini", () => {
+    const list = [ticket("a", 2), ticket("b", -3), ticket("c", 2, "used"), ticket("d", 2, "cancelled")];
+    expect(ticketsUpcoming(list, NOW).map((x) => x.id)).toEqual(["a", "c"]);
+    expect(ticketsPast(list, NOW).map((x) => x.id)).toEqual(["b"]);
+  });
+
+  it("billet contrôlé pendant l'événement : encore à venir (vote), passé à la fin", () => {
+    // L'événement a commencé il y a une heure et finit dans trois.
+    const during = ticket("j", 0, "used");
+    const started = new Date(NOW.getTime() + 3_600_000);
+    expect(ticketsUpcoming([during], started).map((x) => x.id)).toEqual(["j"]);
+    expect(ticketsPast([during], started)).toEqual([]);
+    const ended = new Date(NOW.getTime() + 4 * 3_600_000);
+    expect(ticketsUpcoming([during], ended)).toEqual([]);
+    expect(ticketsPast([during], ended).map((x) => x.id)).toEqual(["j"]);
+  });
+
+  it("un billet contrôlé ne revient pas dans la barre d'accès", () => {
+    expect(ticketAccesses([ticket("c", 0, "used"), ticket("v", 0)], NOW).map((i) => i.key)).toEqual(["ticket-v"]);
+  });
+});
+
+describe("missions staff (lot 59c) : listées jusqu'à J+1, comme le site", () => {
+  it("après la fin de l'événement, la mission reste jusqu'à la fermeture du mode staff", () => {
+    const mission = staff("m", 0, "present", true);
+    const afterEnd = new Date(NOW.getTime() + 5 * 3_600_000);
+    expect(staffUpcoming([mission], afterEnd).map((s) => s.event.id)).toEqual(["m"]);
+    const closed = new Date(NOW.getTime() + DAY + 4 * 3_600_000);
+    expect(staffUpcoming([mission], closed)).toEqual([]);
   });
 });
 

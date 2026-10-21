@@ -63,6 +63,8 @@ export const photoOrderSchema = z.object({ photoIds: z.array(z.uuid()).min(1).ma
 /**
  * Floutage de plaque (lot 51) : rectangles normalisés 0–1 par rapport à la photo telle qu'elle est stockée (après
  * recadrage et orientation), 4 au plus par photo. Un rectangle qui sort de l'image est refusé (400).
+ * Lot 59c : `angle` facultatif, en degrés (−90 à 90), rotation du cadre autour de son centre dans le repère de la photo
+ * en pixels (plaque penchée) ; absent ou 0 = cadre droit.
  */
 export const MAX_PLATE_RECTS = 4;
 const PLATE_EPSILON = 1e-6;
@@ -72,6 +74,7 @@ export const plateRectSchema = z
     y: z.number().min(0).max(1),
     w: z.number().min(0.01).max(1),
     h: z.number().min(0.01).max(1),
+    angle: z.number().min(-90).max(90).optional(),
   })
   .refine((r) => r.x + r.w <= 1 + PLATE_EPSILON && r.y + r.h <= 1 + PLATE_EPSILON, {
     message: "Le cadre de la plaque sort de la photo",

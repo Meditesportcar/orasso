@@ -195,7 +195,7 @@ test("tri par glissement : 5 décisions, annulation, liste d'attente, prestatair
   await closeSheet(page);
 
   // --- Liste d'attente : réordonnée (Descendre), puis Retenir ---------------------------------------------------
-  await page.getByRole("button", { name: "Liste d'attente", exact: true }).click();
+  await page.getByRole("tab", { name: "Liste d'attente", exact: true }).click();
   await expect(page.getByTestId("waitlist-row").first()).toBeVisible({ timeout: 20_000 });
   const order = async () =>
     (
@@ -224,7 +224,7 @@ test("tri par glissement : 5 décisions, annulation, liste d'attente, prestatair
     .toBe(countBefore + 1);
 
   // --- Prestataires : une décision ---------------------------------------------------------------------------------
-  await page.getByRole("button", { name: /^Prestataires/ }).click();
+  await page.getByRole("tab", { name: /^Prestataires/ }).click();
   await expect(page.getByTestId("triage-vehicle")).toBeVisible({ timeout: 20_000 });
   await shot("08-prestataire-beton");
   const providerTitle = (await page.getByTestId("triage-vehicle").textContent()) ?? "";
@@ -236,7 +236,7 @@ test("tri par glissement : 5 décisions, annulation, liste d'attente, prestatair
     expect(await page.getByTestId("triage-vehicle").textContent()).not.toBe(providerTitle);
   }
 
-  await page.getByRole("button", { name: "En liste", exact: true }).click();
+  await page.getByRole("tab", { name: "En liste", exact: true }).click();
   await expect(page.getByTestId("triage-list-row").first()).toBeVisible({ timeout: 20_000 });
   await shot("09-mode-liste-beton");
 
@@ -300,7 +300,7 @@ test("tri : crew affiché avec ses autres candidatures", async ({ browser }) => 
   const withCrew = pending.data.items.find((i) => i.crew);
   expect(withCrew, "une candidature de crew en attente (seed : Roussillon Drift)").toBeTruthy();
   const { ctx, page } = await openApp(browser, "beton", "no-preference", "Expo Rivesaltes");
-  await page.getByRole("button", { name: "En liste", exact: true }).click();
+  await page.getByRole("tab", { name: "En liste", exact: true }).click();
   await page.getByTestId("triage-filters").click();
   await page.getByTestId("triage-filter-q").fill(withCrew?.applicant.pseudo ?? "");
   await page.getByTestId("triage-filters-apply").click();
@@ -310,7 +310,7 @@ test("tri : crew affiché avec ses autres candidatures", async ({ browser }) => 
   await page.screenshot({ path: `${DIR}/10-fiche-crew-beton.png` });
   await closeSheet(page);
   // Dans la file : la carte du crew porte son nom (les membres non confirmés ne sont jamais nommés).
-  await page.getByRole("button", { name: "Candidatures", exact: true }).click();
+  await page.getByRole("tab", { name: "Candidatures", exact: true }).click();
   await expect(page.getByTestId("triage-swipe")).toBeVisible({ timeout: 20_000 });
   await ctx.close();
 });
@@ -325,10 +325,10 @@ test("tri : thème Sable", async ({ browser }) => {
   await expect(page.getByTestId("triage-full-title")).toBeVisible();
   await page.screenshot({ path: `${DIR}/31-fiche-sable.png` });
   await closeSheet(page);
-  await page.getByRole("button", { name: "Liste d'attente", exact: true }).click();
+  await page.getByRole("tab", { name: "Liste d'attente", exact: true }).click();
   await expect(page.getByTestId("waitlist")).toBeVisible({ timeout: 20_000 });
   await page.screenshot({ path: `${DIR}/32-attente-sable.png` });
-  await page.getByRole("button", { name: "En liste", exact: true }).click();
+  await page.getByRole("tab", { name: "En liste", exact: true }).click();
   await expect(page.getByTestId("triage-list-row").first()).toBeVisible({ timeout: 20_000 });
   await page.screenshot({ path: `${DIR}/33-liste-sable.png` });
   await ctx.close();
@@ -339,7 +339,7 @@ export type { BrowserContext };
 test("mode liste : filtre « Jour » d'un événement sur plusieurs jours (lot 34)", async ({ browser }) => {
   test.setTimeout(300_000);
   const { ctx, page } = await openApp(browser, "sable", "no-preference", "Salon de printemps");
-  await page.getByRole("button", { name: "En liste", exact: true }).click();
+  await page.getByRole("tab", { name: "En liste", exact: true }).click();
   // La liste de l'événement choisi est la dernière montée (celle de l'événement par défaut reste derrière).
   const list = page.getByTestId("triage-list").filter({ visible: true }).last();
   await expect(list).toBeVisible({ timeout: 20_000 });

@@ -1,14 +1,27 @@
-import { Button, Chip, Plate, VehicleCard } from "@orasso/design-system/web";
-import { CONTACT_MESSAGE_MAX, gradeLabels, messagingLabels, socialLabels, type UserProfileView } from "@orasso/shared";
+import { Button, Chip, type IconName, Plate, VehicleCard } from "@orasso/design-system/web";
+import {
+  CONTACT_MESSAGE_MAX,
+  gradeLabels,
+  type MyCrew,
+  mediaAppLabels,
+  messagingLabels,
+  type PassportView,
+  type PersonaKind,
+  passportScreenTexts,
+  personaKindLabels,
+  socialLabels,
+  type UserProfileView,
+} from "@orasso/shared";
 import { Form, useNavigation } from "react-router";
 
 import { CrewRow } from "../components/Crews";
 import { FriendAction, PersonAvatar } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
-import { apiOrThrow } from "../lib/api.server";
+import { api, apiOrThrow, getMe } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
 import { friendAction } from "../lib/friends.server";
 import { isMessageIntent, type MessageActionData, messageAction } from "../lib/messaging.server";
+import "../styles/passport.css";
 import type { Route } from "./+types/profil";
 
 // Profil d'un autre (lot 17, ARCHITECTURE-SUITE § 2.2 et 2.5) : complet pour un compte public ou un ami, réduit
@@ -18,7 +31,38 @@ export function meta({ params }: Route.MetaArgs) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  return { profile: await apiOrThrow<UserProfileView>(request, `/users/${encodeURIComponent(params.pseudo)}`) };
+  const profile = await apiOrThrow<UserProfileView>(request, `/users/${encodeURIComponent(params.pseudo)}`);
+  if (profile.audience !== "self") return { profile, hub: null };
+  // Lot 57 (DA v2, `s-me`) : mon profil devient le hub, comme l'appli : passeport, crew, casquettes avec leur accès.
+  const [me, passport, crews] = await Promise.all([
+    getMe(request),
+    api<PassportView>(request, "/me/passport"),
+    api<MyCrew[]>(request, "/me/crews"),
+  ]);
+  const slugOf = new Map((me?.memberships ?? []).map((m) => [m.structureId, m.structureSlug]));
+  const casquettes = (me?.personas ?? [])
+    .filter((p) => p.kind !== "fan" && p.kind !== "visitor")
+    .map((p) => ({
+      kind: p.kind,
+      label: p.label,
+      href:
+        p.kind === "organizer"
+          ? `/orga/${slugOf.get(p.id) ?? ""}`
+          : p.kind === "pro"
+            ? `/pro/${me?.pro?.slug ?? ""}`
+            : p.kind === "provider"
+              ? "/app/prestataire"
+              : "/app/media",
+    }));
+  return {
+    profile,
+    hub: {
+      passport: passport.ok ? { total: passport.data.total, rare: passport.data.rare } : null,
+      crew: crews.ok ? (crews.data[0] ?? null) : null,
+      casquettes,
+      kinds: casquettes.map((c) => c.kind),
+    },
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -26,6 +70,64 @@ export async function action({ request }: Route.ActionArgs) {
   // Message (lot 18) : conversation entre amis, sinon demande de contact.
   if (isMessageIntent(String(form.get("intent") ?? ""))) return messageAction(request, form);
   return friendAction(request, form);
+}
+
+type Hub = NonNullable<Route.ComponentProps["loaderData"]["hub"]>;
+
+/** Lot 57 : le hub de Mon profil (`s-me`) côté site : passeport, crew, casquettes avec leur accès, un seul « Créer ». */
+function ProfileHub({ hub }: { hub: Hub }) {
+  const has = new Set(hub.kinds);
+  const all: { kind: string; href: string; label: string; icon: IconName }[] = [
+    { kind: "organizer", href: "/app/structure/nouvelle", label: "Une structure", icon: "flag" },
+    { kind: "pro", href: "/app/pro/nouvelle", label: "Une fiche pro", icon: "shop" },
+    { kind: "provider", href: "/app/prestataire", label: "Un profil prestataire", icon: "briefcase" },
+    { kind: "media", href: "/app/media/nouveau", label: mediaAppLabels.createTitle, icon: "press" },
+  ];
+  const create = all.filter((c) => !has.has(c.kind as PersonaKind));
+  return (
+    <section className="s-stack s-stack--tight" aria-label="Mon profil" data-testid="profile-hub">
+      <div className="pf-tiles">
+        <a className="s-card pf-tile" href="/app/passeport" data-testid="hub-passport">
+          <span className="o-t-label">{passportScreenTexts.tileTitle}</span>
+          <span>{passportScreenTexts.tile(hub.passport?.total ?? 0, hub.passport?.rare ?? 0)}</span>
+        </a>
+        <a className="s-card pf-tile" href={hub.crew ? `/c/${hub.crew.slug}` : "/app/crews"} data-testid="hub-crew">
+          <span className="o-t-label">Mon crew</span>
+          <span className="o-never-truncate">{hub.crew ? hub.crew.name : "Rejoins ou crée un crew"}</span>
+        </a>
+        <a className="s-card pf-tile" href="/app/sorties">
+          <span className="o-t-label">Mes sorties</span>
+          <span>Candidatures, billets, missions staff</span>
+        </a>
+      </div>
+      {hub.casquettes.length > 0 && (
+        <>
+          <h2 className="s-h2">Mes casquettes</h2>
+          <ul className="s-stack s-stack--tight pf-list" data-testid="hub-casquettes">
+            {hub.casquettes.map((c) => (
+              <li key={`${c.kind}-${c.href}`}>
+                <Button variant="secondary" icon="next" next href={c.href}>
+                  {`${personaKindLabels[c.kind]} · ${c.label}`}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {create.length > 0 && (
+        <details>
+          <summary className="o-t-label">Créer</summary>
+          <div className="s-row">
+            {create.map((c) => (
+              <Button key={c.href} variant="secondary" icon={c.icon} href={c.href}>
+                {c.label}
+              </Button>
+            ))}
+          </div>
+        </details>
+      )}
+    </section>
+  );
 }
 
 export default function Profil({ loaderData, actionData: rawAction }: Route.ComponentProps) {
@@ -57,9 +159,12 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
       )}
 
       {isSelf ? (
-        <Button variant="secondary" icon="profile" href="/app/moi">
-          Modifier mon profil
-        </Button>
+        <>
+          <Button variant="secondary" icon="profile" href="/app/moi">
+            Modifier mon profil
+          </Button>
+          {loaderData.hub && <ProfileHub hub={loaderData.hub} />}
+        </>
       ) : (
         <div className="s-row">
           <FriendAction

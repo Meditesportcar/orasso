@@ -4,6 +4,8 @@ import {
   afterEventLabels,
   assistanceTexts,
   badgeDaysLeft,
+  orgaNeedsLabels,
+  orgaPressLabels,
   type StructureOrganizer,
   type StructurePublic,
   type StructureSuspensionReason,
@@ -107,6 +109,16 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
               Candidatures
             </SideLink>
           )}
+          {eventBase && isOrganizer && (
+            <SideLink href={`${eventBase}/presse`} on={pathname.startsWith(`${eventBase}/presse`)}>
+              {orgaPressLabels.navLink}
+            </SideLink>
+          )}
+          {eventBase && isOrganizer && (
+            <SideLink href={`${eventBase}/prestataires`} on={pathname.startsWith(`${eventBase}/prestataires`)}>
+              {orgaNeedsLabels.navLink}
+            </SideLink>
+          )}
           {eventBase && (
             <SideLink href={`${eventBase}/jour-j`} on={pathname.startsWith(`${eventBase}/jour-j`)}>
               Jour J et après
@@ -136,7 +148,7 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
             </SideLink>
           )}
           <div className="orga__spacer" />
-          <a className="orga__link" href="/app/acces">
+          <a className="orga__link" href="/app/sorties">
             Mon compte · {pseudo}
           </a>
           <Form method="post" action="/deconnexion">

@@ -82,7 +82,7 @@ test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.locator('[data-step="3"]')).toBeVisible();
   await page.getByRole("button", { name: "Envoyer ma candidature" }).click();
-  await page.waitForURL(/\/app\/acces/);
+  await page.waitForURL(/\/app\/(acces|sorties)/);
   const card = page.getByTestId("application").first();
   await expect(card).toHaveAttribute("data-status", "pending");
   await expect(card).toContainText("En attente");
