@@ -137,6 +137,8 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await expect(page.getByTestId("orga-feed")).toContainText(announcement, { timeout: 20_000 });
 
   // --- Boîte : message groupé aux retenus ------------------------------------------------------------------------
+  // Lot C4a : la page d'un événement est un écran de flux sans barre ni Boîte : on revient à l'onglet.
+  await page.goBack();
   await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
   await expect(page.getByRole("tab", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(page, "07-boite-participants-beton");
@@ -210,6 +212,7 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   await s.page.getByTestId("orga-event-row").filter({ hasText: "Salon Argelès" }).click();
   await expect(s.page.getByTestId("orga-outlook-banner")).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "22-evenement-sable");
+  await s.page.goBack(); // Lot C4a : page d'événement en flux, sans Boîte.
   await s.page.getByRole("button", { name: "Boîte", exact: true }).first().click();
   await expect(s.page.getByRole("tab", { name: /Participants/ })).toBeVisible({ timeout: 20_000 });
   await shot(s.page, "23-boite-sable");
