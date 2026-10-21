@@ -72,7 +72,8 @@ export type DiscountCell = { key: string; label: string; percent: number };
 
 /**
  * Remises par grade en grands chiffres (`s-pro` : Rodage 5 % · Route 8 % · Sport 10 % · Circuit+ 15 %). Le grade
- * « Légende » ne s'ajoute que si sa remise diffère de celle de Circuit ; sinon « Circuit+ » les couvre tous les deux.
+ * « Circuit+ » n'apparaît que si Circuit et Légende ont toutes deux une remise, égale (le scan cherche le grade exact :
+ * une remise affichée pour un grade doit exister pour lui) ; sinon deux cases, ou une seule.
  * Un grade sans remise n'a pas de case.
  */
 export function discountCells(discounts: ProDiscounts): DiscountCell[] {
@@ -82,7 +83,7 @@ export function discountCells(discounts: ProDiscounts): DiscountCell[] {
   };
   const circuit = discounts.circuit;
   const legend = discounts.legende;
-  const merged = circuit !== undefined && (legend === undefined || legend === circuit);
+  const merged = circuit !== undefined && legend === circuit;
   return [
     ...cell("rodage"),
     ...cell("route"),

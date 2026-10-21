@@ -205,6 +205,10 @@ describe("fiche pro et stats", () => {
     const cells = discountCells({ route: 8, circuit: 12, legende: 15 });
     expect(cells.map((c) => c.label)).toEqual(["Route", "Circuit", "Légende"]);
   });
+  it("ne promet pas Circuit+ quand Légende n'a pas de remise (Circuit seul, ou Légende seule)", () => {
+    expect(discountCells({ circuit: 15 })).toEqual([{ key: "circuit", label: "Circuit", percent: 15 }]);
+    expect(discountCells({ legende: 15 })).toEqual([{ key: "legende", label: "Légende", percent: 15 }]);
+  });
   it("sépare les milliers par une espace insécable", () => {
     expect(formatCount(1284)).toBe("1 284");
     expect(formatCount(37)).toBe("37");
