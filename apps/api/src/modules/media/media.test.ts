@@ -469,6 +469,63 @@ describe("contenus", () => {
     });
     expect(ok.status).toBe(201);
     expect(ok.json.photos).toHaveLength(1);
+    // Réponse perdue après validation (lot 59d) : la reprise avec les mêmes clés rend le même contenu, sans doublon.
+    const again = await call(leo, "POST", "/me/media-contents", {
+      eventId: nocturneId,
+      kind: "gallery",
+      title: "La nuit des japonaises",
+      photoKeys: ["media-contents/a.webp"],
+    });
+    expect(again.status).toBe(201);
+    expect(again.json.id).toBe(ok.json.id);
+    expect((await call(leo, "GET", "/me/media-contents")).json).toHaveLength(1);
+  });
+
+  it("tour 2 : deux publications simultanées de la même galerie rendent le même contenu, sans 400 ni doublon", async () => {
+    await accredited();
+    const keys = ["media-contents/s1.webp", "media-contents/s2.webp", "media-contents/s3.webp"];
+    await db.insert(uploads).values(
+      keys.map((key) => ({
+        key,
+        userId: leo.id,
+        purpose: "media_content" as const,
+        width: 1600,
+        height: 900,
+        bytes: 100,
+      })),
+    );
+    const body = { eventId: nocturneId, kind: "gallery", title: "La nuit des japonaises", photoKeys: keys };
+    const [a, b] = await Promise.all([
+      call(leo, "POST", "/me/media-contents", body),
+      call(leo, "POST", "/me/media-contents", body),
+    ]);
+    expect([a.status, b.status]).toEqual([201, 201]);
+    expect(a.json.id).toBe(b.json.id);
+    expect((await call(leo, "GET", "/me/media-contents")).json).toHaveLength(1);
+  });
+
+  it("tour 2 : la reprise d'une galerie publiée passe avant la limite du jour (pas de 429)", async () => {
+    await accredited();
+    await db.insert(uploads).values({
+      key: "media-contents/r.webp",
+      userId: leo.id,
+      purpose: "media_content",
+      width: 1600,
+      height: 900,
+      bytes: 100,
+    });
+    const body = { eventId: nocturneId, kind: "gallery", title: "Galerie", photoKeys: ["media-contents/r.webp"] };
+    const first = await call(leo, "POST", "/me/media-contents", body);
+    expect(first.status).toBe(201);
+    // La limite du jour (20) est atteinte par d'autres publications.
+    for (let i = 1; i < 20; i++) {
+      const res = await call(leo, "POST", "/me/media-contents", { ...LINK, title: `Lien ${i}`, eventId: nocturneId });
+      expect(res.status).toBe(201);
+    }
+    expect((await call(leo, "POST", "/me/media-contents", { ...LINK, eventId: nocturneId })).status).toBe(429);
+    const again = await call(leo, "POST", "/me/media-contents", body);
+    expect(again.status).toBe(201);
+    expect(again.json.id).toBe(first.json.id);
   });
 
   it("mise en avant par l'organisation seulement ; page publique : mis en avant d'abord ; vues par session et heure", async () => {
