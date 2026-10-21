@@ -4,7 +4,7 @@
 // s'affiche sans réseau depuis la liste du téléphone. Thème au choix de l'utilisateur (D25b), fond immobile.
 // Lot C4a : mise en page de l'artefact (en-tête de flux sans grand titre, rôle sur carte crème, Scanner moutarde).
 
-import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   communicationLabels,
   staffHomeLabels as L,
@@ -150,29 +150,18 @@ export default function StaffHome() {
         </>
       }
       footer={
-        // Toujours en bas (artefact `.stf-bar`) : Alerte, Main courante, et la discussion du staff en bouton carré.
+        // Toujours en bas (artefact `.stf-bar`) : Alerte (rouge, à sa largeur), Main courante qui prend la place
+        // (libellé sur une ligne, jamais coupé), Discussion en icône seule.
         <View style={styles.row}>
-          <Button variant="alert" icon="bell" onPress={() => setSheet("alert")}>
-            {L.alert}
-          </Button>
-          <Button
-            variant="secondary"
-            icon="edit"
-            onPress={() => setSheet("incident")}
-            style={styles.flex}
-            testID="staff-logbook"
-          >
-            {L.logbook}
-          </Button>
-          <Pressable
+          <BarButton tone="alert" icon="bell" label={L.alert} onPress={() => setSheet("alert")} testID="staff-alert" />
+          <BarButton icon="edit" label={L.logbook} onPress={() => setSheet("incident")} grow testID="staff-logbook" />
+          <BarButton
+            icon="chat"
+            label={communicationLabels.staffDiscussion}
+            iconOnly
             onPress={() => router.push(`/staff/${id}/discussion`)}
-            accessibilityRole="button"
-            accessibilityLabel={communicationLabels.staffDiscussion}
             testID="staff-discussion"
-            style={({ pressed }) => [styles.square, { borderColor: c.ink, opacity: pressed ? 0.8 : 1 }]}
-          >
-            <Icon name="chat" size={22} color={c.ink} />
-          </Pressable>
+          />
         </View>
       }
     >
@@ -425,6 +414,55 @@ export default function StaffHome() {
   );
 }
 
+/**
+ * Bouton de la rangée du bas (artefact `.stf-bar .btn` : 50 px, rayon 14, libellé 13 px sur une ligne). Alerte en rouge
+ * à sa largeur, Main courante au trait qui prend la place restante, Discussion en icône seule (nom accessible gardé).
+ */
+function BarButton({
+  icon,
+  label,
+  onPress,
+  tone,
+  grow,
+  iconOnly,
+  testID,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  tone?: "alert";
+  grow?: boolean;
+  iconOnly?: boolean;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  const alert = tone === "alert";
+  const ink = alert ? c.nightInk : c.ink;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID={testID}
+      style={({ pressed }) => [
+        styles.barBtn,
+        grow ? styles.flex : null,
+        iconOnly ? styles.barIcon : null,
+        alert ? { backgroundColor: c.win, borderColor: c.win } : { backgroundColor: c.surface, borderColor: c.line },
+        { opacity: pressed ? 0.85 : 1 },
+      ]}
+    >
+      <Icon name={icon} size={18} color={ink} />
+      {iconOnly ? null : (
+        <Text variant="button" color={ink} style={styles.barText} numberOfLines={1} adjustsFontSizeToFit>
+          {label}
+        </Text>
+      )}
+    </Pressable>
+  );
+}
+
 // Mesures de l'artefact (`.stf`, `.stf-sync`, `.stf-role`, `.stf-here`, `.tz-card`, `.tz-bars`, `.stf-bar`).
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
@@ -432,7 +470,18 @@ const styles = StyleSheet.create({
   tiles: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   row: { flexDirection: "row", gap: space2, alignItems: "center" },
   flex: { flex: 1 },
-  square: { width: 50, height: 50, borderRadius: 14, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  barBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 50,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  barIcon: { width: 50, paddingHorizontal: 0 },
+  barText: { fontSize: 13, lineHeight: 16 },
   sync: { borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, gap: space2 },
   syncRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   syncActions: { flexDirection: "row", flexWrap: "wrap", gap: space3, paddingLeft: 24 },
