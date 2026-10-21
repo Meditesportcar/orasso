@@ -16,6 +16,7 @@ import {
   pendingLine,
   reviewTag,
   spotLine,
+  upcomingDetail,
 } from "./proPresta";
 
 const card = (over: Partial<MissionCard> = {}): MissionCard =>
@@ -116,6 +117,20 @@ describe("missions", () => {
   });
 });
 
+describe("détail du ticket « À venir »", () => {
+  it("montre le motif de refus dès le refus, sans attendre que l'événement soit passé", () => {
+    expect(upcomingDetail(app({ status: "refused", refusalNote: "Plus de place en restauration" }))).toBe(
+      "Plus de place en restauration",
+    );
+    expect(upcomingDetail(app({ status: "refused", refusalNote: null }))).toBeNull();
+  });
+  it("garde l'emplacement des retenues et l'attente des candidatures en cours", () => {
+    expect(upcomingDetail(app({ spot: { label: "C1", note: null } }))).toBe("Emplacement C1");
+    expect(upcomingDetail(app({ status: "pending" }))).toBe(pendingLine(app({ status: "pending" })));
+    expect(upcomingDetail(app({ status: "waitlisted" }))).toBeNull();
+  });
+});
+
 describe("candidatures", () => {
   it("range les statuts", () => {
     expect(candidatureKind({ status: "accepted" })).toBe("retained");
@@ -204,6 +219,10 @@ describe("fiche pro et stats", () => {
   it("sépare Circuit et Légende quand elles diffèrent, et saute un grade sans remise", () => {
     const cells = discountCells({ route: 8, circuit: 12, legende: 15 });
     expect(cells.map((c) => c.label)).toEqual(["Route", "Circuit", "Légende"]);
+  });
+  it("ne promet pas Circuit+ quand Légende n'a pas de remise (Circuit seul, ou Légende seule)", () => {
+    expect(discountCells({ circuit: 15 })).toEqual([{ key: "circuit", label: "Circuit", percent: 15 }]);
+    expect(discountCells({ legende: 15 })).toEqual([{ key: "legende", label: "Légende", percent: 15 }]);
   });
   it("sépare les milliers par une espace insécable", () => {
     expect(formatCount(1284)).toBe("1 284");
