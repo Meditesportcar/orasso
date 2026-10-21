@@ -66,7 +66,7 @@ test("écrans nouveaux du lot 34, deux thèmes à 390 px", async ({ browser }) =
 
     // Créer sa fiche pro depuis Mes casquettes.
     await v.page.goto("/accueil");
-    await v.page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+    await v.page.goto("/moi");
     await v.page.getByTestId("casquette-create-pro").click();
     await expect(v.page.getByTestId("pro-form")).toBeVisible({ timeout: 30_000 });
     await shot(v.page, "03-creer-fiche-pro", theme);
@@ -91,7 +91,7 @@ test("écrans nouveaux du lot 34, deux thèmes à 390 px", async ({ browser }) =
       (await apiCall(cookie, "POST", "/structures", { kind: "association", name, departments: ["66"] })).status,
     ).toBe(201);
     const o = await openApp(browser, email, theme);
-    await o.page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+    await o.page.goto("/moi");
     await o.page.getByTestId("casquette-organizer").filter({ hasText: name }).click();
     await o.page.waitForURL(/\/direct/, { timeout: 20_000 });
     await o.page.goto("/ma-structure");
@@ -102,7 +102,7 @@ test("écrans nouveaux du lot 34, deux thèmes à 390 px", async ({ browser }) =
 
     // Filtre « Jour » du mode liste (Salon de printemps, trois jours).
     const d = await openApp(browser, "damien@orasso.local", theme);
-    await d.page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+    await d.page.goto("/moi");
     await d.page.getByTestId("casquette-organizer").filter({ hasText: "MéditeSportCar" }).click();
     await d.page.waitForURL(/\/direct/, { timeout: 20_000 });
     await d.page.getByRole("tab", { name: "Tri", exact: true }).click();

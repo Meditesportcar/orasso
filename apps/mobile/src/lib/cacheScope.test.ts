@@ -16,8 +16,8 @@ vi.mock("expo-secure-store", () => ({
 
 import {
   accountGuard,
-  CACHE_KEY_PREFIXES,
   bindCacheScope,
+  CACHE_KEY_PREFIXES,
   cacheGetJson,
   cacheScope,
   cacheSetJson,
