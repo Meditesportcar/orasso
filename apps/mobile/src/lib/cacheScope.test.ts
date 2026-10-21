@@ -11,7 +11,20 @@ vi.mock("expo-secure-store", () => ({
   deleteItemAsync: async (key: string) => void store.delete(key),
 }));
 
-import { bindCacheScope, cacheGetJson, cacheScope, cacheSetJson, kvGetJson, kvKey, kvSetJson, purgeCaches } from "./kv";
+import {
+  accountGuard,
+  bindCacheScope,
+  cacheGetJson,
+  cacheScope,
+  cacheSetJson,
+  kvGet,
+  kvGetJson,
+  kvKey,
+  kvSet,
+  kvSetJson,
+  LEGACY_CACHE_KEYS,
+  purgeCaches,
+} from "./kv";
 
 const cacheKeysInStore = () => [...store.keys()].filter((k) => k.startsWith(kvKey("cache")));
 
@@ -94,5 +107,56 @@ describe("caches de lecture par compte", () => {
     await bindCacheScope("compte-a");
     await purgeCaches();
     expect(await kvGetJson("theme")).toBe("dark");
+  });
+
+  it("réponse tardive du compte A livrée après la connexion de B : B ne voit rien de A, son cache non plus", async () => {
+    await bindCacheScope("compte-a");
+    // La requête part sous A (c'est ce que font useApi et ApplicationsProvider).
+    const guard = accountGuard();
+    expect(guard.scope).toBe("compte-a");
+
+    // Déconnexion de A, connexion de B, pendant que la réponse est encore en route.
+    await purgeCaches();
+    await bindCacheScope("compte-b");
+    expect(guard.current()).toBe(false);
+
+    // La réponse arrive : l'écriture est refusée, le cache de B reste vide.
+    await cacheSetJson("applications.upcoming", [{ id: "privee-de-a" }], guard.scope);
+    expect(await cacheGetJson("applications.upcoming")).toBeNull();
+    expect(JSON.stringify([...store.entries()])).not.toContain("privee-de-a");
+  });
+
+  it("la garde reste valable tant que le compte est le même (reconnexion du même compte comprise)", async () => {
+    await bindCacheScope("compte-a");
+    const guard = accountGuard();
+    await purgeCaches();
+    await bindCacheScope("compte-a");
+    expect(guard.current()).toBe(true);
+    await cacheSetJson("my-pro", { name: "Garage A" }, guard.scope);
+    expect(await cacheGetJson("my-pro")).toEqual({ name: "Garage A" });
+  });
+
+  it("une requête lancée sans compte (écran public) reste valable après la connexion", async () => {
+    const guard = accountGuard();
+    expect(guard.scope).toBeNull();
+    await bindCacheScope("compte-a");
+    expect(guard.current()).toBe(true);
+  });
+});
+
+describe("anciennes clés de cache sans compte", () => {
+  it("sont effacées une seule fois, à la première liaison d'un compte", async () => {
+    for (const key of LEGACY_CACHE_KEYS) await kvSet(key, JSON.stringify({ ancien: "compte" }));
+    await kvSet("theme", "dark");
+
+    await bindCacheScope("compte-a");
+    for (const key of LEGACY_CACHE_KEYS) expect(await kvGet(key)).toBeNull();
+    expect(await kvGet("theme")).toBe("dark");
+
+    // Déjà fait : une clé réapparue plus tard n'est plus touchée (purge unique).
+    await kvSet("my-pro", "x");
+    await purgeCaches();
+    await bindCacheScope("compte-b");
+    expect(await kvGet("my-pro")).toBe("x");
   });
 });

@@ -7,7 +7,7 @@ import { AppState } from "react-native";
 
 import { api } from "./api";
 import { syncKits } from "./kits";
-import { cacheGetJson, cacheSetJson, kvGetJson, kvSetJson } from "./kv";
+import { accountGuard, cacheGetJson, cacheSetJson, kvGetJson, kvSetJson } from "./kv";
 import { accreditationAsApplication } from "./pressApplications";
 import { useSession } from "./session";
 
@@ -46,8 +46,9 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
   const pseudo = me?.profile.pseudo ?? "";
   const hasMedia = me?.personas?.some((p) => p.kind === "media") ?? false;
 
-  const detectAnnouncement = useCallback(async (apps: MyApplication[]) => {
+  const detectAnnouncement = useCallback(async (apps: MyApplication[], isCurrent: () => boolean) => {
     const stored = await kvGetJson<string[]>(ANNOUNCED_KEY);
+    if (!isCurrent()) return;
     const accepted = apps.filter((a) => a.status === "accepted");
     if (!stored) {
       // Premier chargement sur cet appareil : les places déjà retenues ne sont pas des nouveautés.
@@ -57,27 +58,31 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
     }
     announced.current ??= new Set(stored);
     const fresh = accepted.find((a) => !announced.current?.has(a.id));
-    if (fresh) setAnnouncement((current) => current ?? fresh);
+    if (fresh && isCurrent()) setAnnouncement((current) => current ?? fresh);
   }, []);
 
   const reload = useCallback(async () => {
     if (status !== "in") return;
+    // Compte du départ : une réponse tardive après un changement de compte est jetée en entier (état, cache, kits).
+    const guard = accountGuard();
     try {
       const [up, ps] = await Promise.all([api.applications("upcoming"), api.applications("past")]);
+      if (!guard.current()) return;
       setUpcoming(up);
       setPast(ps);
       setOffline(false);
-      void cacheSetJson(UPCOMING_KEY, up);
-      void cacheSetJson(PAST_KEY, ps);
-      await detectAnnouncement(up);
+      void cacheSetJson(UPCOMING_KEY, up, guard.scope);
+      void cacheSetJson(PAST_KEY, ps, guard.scope);
+      await detectAnnouncement(up, guard.current);
       // Lot 55 : le badge presse d'un média suit le même chemin que le QR d'un véhicule (kit enregistré, hors ligne).
       const accreditations = hasMedia
         ? (await api.myAccreditations("all").catch(() => [])).map(accreditationAsApplication)
         : [];
+      if (!guard.current()) return;
       setPress(accreditations.filter((a) => a.status === "accepted"));
-      void syncKits([...up, ...ps.filter((a) => a.status === "accepted"), ...accreditations], pseudo);
+      void syncKits([...up, ...ps.filter((a) => a.status === "accepted"), ...accreditations], pseudo, guard.current);
     } catch {
-      setOffline(true);
+      if (guard.current()) setOffline(true);
     } finally {
       setLoading(false);
     }
