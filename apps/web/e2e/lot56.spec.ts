@@ -99,6 +99,10 @@ test("pages publiques v2 : quatre pages, fiche, pros ; 390 px et bureau ; Béton
     ] as const) {
       const ctx = await browser.newContext({ viewport });
       const page = await ctx.newPage();
+      const hydration: string[] = [];
+      page.on("console", (m) => {
+        if (m.type() === "error" && /hydrat|descendant|nested/i.test(m.text())) hydration.push(m.text().slice(0, 200));
+      });
       await setTheme(page, theme);
       for (const [name, path] of PAGES) {
         const where = `${path} ${theme} ${label}`;
@@ -117,6 +121,7 @@ test("pages publiques v2 : quatre pages, fiche, pros ; 390 px et bureau ; Béton
         await expect(credits).toContainText("Victor Cazanave");
         await expect(credits).toContainText("Open-Meteo");
         await page.screenshot({ path: `${DIR}/${name}-${theme}-${label}.png`, fullPage: true });
+        expect(hydration, `${where} : erreurs d'hydratation`).toEqual([]);
       }
       await ctx.close();
     }

@@ -10,6 +10,15 @@ import { createEvent, login, MOBILE, setTheme, unique } from "./helpers";
 const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-44-captures/site";
 const THEMES = ["beton", "sable"] as const;
 
+/** Sur téléphone, la carte d'/evenements est repliée derrière « Carte » (lot 56) ; on clique après l'hydratation. */
+async function openMap(page: Page) {
+  const button = page.getByRole("button", { name: "Carte", exact: true });
+  await expect(async () => {
+    if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+    await expect(page.getByRole("button", { name: "Masquer la carte" })).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 30_000 });
+}
+
 /** La carte est rendue (canvas MapLibre) avec le style attendu. */
 async function mapReady(page: Page, testId: string, style: string) {
   const map = page.getByTestId(testId);
@@ -41,6 +50,7 @@ test("les trois cartes du site suivent le thème, glyphes du site, marqueurs v2"
     });
 
     await page.goto("/evenements");
+    await openMap(page);
     const events = await mapReady(page, "events-map", `orasso-${theme}`);
     await expect(events.locator('[data-testid="map-marker"], [data-testid="map-cluster"]').first()).toBeVisible();
     await expect(events).toContainText("OpenFreeMap");
@@ -77,6 +87,7 @@ test("repli : TileJSON d'OpenFreeMap coupé → tuiles raster OpenStreetMap", as
     if (m.text().includes("[carte]")) warnings.push(m.text());
   });
   await page.goto("/evenements");
+  await openMap(page);
   await mapReady(page, "events-map", "orasso-sable-raster");
   expect(warnings.join(" ")).toContain("repli raster OSM");
   await page.getByTestId("events-map").screenshot({ path: `${DIR}/carte-repli-raster-sable.png` });
@@ -96,6 +107,7 @@ test("une tuile isolée en échec ne fait pas basculer la carte sur le raster", 
     return route.continue();
   });
   await page.goto("/evenements");
+  await openMap(page);
   await mapReady(page, "events-map", "orasso-beton");
   await expect.poll(() => cut, { timeout: 30_000 }).toBe(1);
   await page.waitForTimeout(3000);
@@ -114,6 +126,7 @@ test("lieux confondus (un circuit, plusieurs dates) : la pastille ouvre la liste
   const page = await ctx.newPage();
   await setTheme(page, "beton");
   await page.goto(`/evenements?q=${encodeURIComponent(tag)}`);
+  await openMap(page);
   const map = await mapReady(page, "events-map", "orasso-beton");
   await expect(map).toHaveAttribute("data-count", "2");
   await map.getByTestId("map-cluster").click();

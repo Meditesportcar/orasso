@@ -90,7 +90,7 @@ export const LEGAL_PAGES = [
 /** Crédits des données affichées par le site : à garder identiques dans le pied et dans `/mentions-legales`. */
 export function DataCredits({ className }: { className?: string }) {
   return (
-    <p className={`w-credits o-t-credit${className ? ` ${className}` : ""}`} data-testid="data-credits">
+    <div className={`w-credits o-t-credit${className ? ` ${className}` : ""}`} data-testid="data-credits">
       {L.credits.map.before}{" "}
       <a href="https://openfreemap.org" target="_blank" rel="noreferrer">
         OpenFreeMap
@@ -111,7 +111,7 @@ export function DataCredits({ className }: { className?: string }) {
         </a>
         .
       </span>
-    </p>
+    </div>
   );
 }
 
