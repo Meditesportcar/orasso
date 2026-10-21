@@ -43,8 +43,11 @@ export function PhotoCarousel({
   label,
   certified = false,
   height,
+  fallback = null,
 }: {
   photos: { id: string; url: string }[];
+  /** Photo affichée quand la candidature n'en a aucune (lot C4a). */
+  fallback?: string | null;
   label: string;
   certified?: boolean;
   height: number;
@@ -64,6 +67,8 @@ export function PhotoCarousel({
           style={styles.fill}
           accessibilityLabel={`${label}. ${triageAppLabels.photoOf(index + 1, photos.length)}`}
         />
+      ) : fallback ? (
+        <Photo source={mediaSource(fallback)} style={styles.fill} accessibilityLabel={label} />
       ) : (
         <View style={[styles.fill, styles.noPhoto, { backgroundColor: t.color.plateChip }]}>
           <Text variant="meta" color={t.color.plateMuted}>
@@ -186,7 +191,15 @@ function AlertStrip({ alerts }: { alerts: ApplicationAlert[] }) {
 }
 
 /** Le corps de la carte (sans le geste) : la photo, le nom en entier, les faits. */
-export function CandidateCard({ item, photoHeight }: { item: ApplicationForTriage; photoHeight: number }) {
+export function CandidateCard({
+  item,
+  photoHeight,
+  fallbackPhoto = null,
+}: {
+  item: ApplicationForTriage;
+  photoHeight: number;
+  fallbackPhoto?: string | null;
+}) {
   const { t } = useTheme();
   const v = item.vehicle;
   const p = item.provider;
@@ -208,6 +221,7 @@ export function CandidateCard({ item, photoHeight }: { item: ApplicationForTriag
           label={titleOf(item)}
           certified={Boolean(v?.certified)}
           height={photoHeight}
+          fallback={fallbackPhoto}
         />
         {/* DA v2 (`s-otri`) : le nom en entier, contour couleur de la nuit, posé sur la grande photo. */}
         <View style={styles.overlay} pointerEvents="none">

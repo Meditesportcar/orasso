@@ -55,8 +55,11 @@ export function Deck({
   zones,
   onChanged,
   onProviderCount,
+  fallbackPhoto = null,
 }: {
   eventId: string;
+  /** Grande photo quand la candidature n'en a pas (photo de l'événement, sinon son affiche ; lot C4a). */
+  fallbackPhoto?: string | null;
   kind: ApplicationKind;
   zones: readonly EventZone[];
   /** Une décision est partie : l'écran recharge ses compteurs. */
@@ -251,7 +254,8 @@ export function Deck({
     else control.current?.exit(decision);
   };
 
-  const photoHeight = Math.max(130, Math.min(300, Math.round(areaHeight * 0.48)));
+  // Artefact `.tri .tph` : 230 px de photo, moins sur un petit écran.
+  const photoHeight = Math.max(130, Math.min(230, Math.round(areaHeight * 0.48)));
   const armedShown = state.armed.slice(-2).reverse();
   const hidden = state.armed.length - armedShown.length;
   const zoneNow = current ? (zonePick[current.id] ?? null) : null;
@@ -275,7 +279,7 @@ export function Deck({
             onRefuse={() => setRefusing(true)}
             testID="triage-swipe"
           >
-            <CandidateCard item={current} photoHeight={photoHeight} />
+            <CandidateCard item={current} photoHeight={photoHeight} fallbackPhoto={fallbackPhoto} />
           </SwipeCard>
         ) : (
           <Plate kind="note" testID="triage-empty">
