@@ -46,6 +46,8 @@ export function StepRail({
             key={label}
             onLayout={(e) => {
               offsets.current[i] = e.nativeEvent.layout.x;
+              // Première mesure du temps en cours : la frise le montre (la mesure arrive après le premier rendu).
+              if (i === index) scroll.current?.scrollTo({ x: Math.max(0, e.nativeEvent.layout.x - 60), animated: false });
             }}
             onPress={() => onPick(i)}
             disabled={disabled || !done}

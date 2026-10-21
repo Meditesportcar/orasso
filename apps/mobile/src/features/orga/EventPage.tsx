@@ -650,5 +650,5 @@ const styles = StyleSheet.create({
   actionBlock: { gap: space2, padding: 14, borderRadius: 18, marginTop: space2 },
   actionTitle: { fontSize: 15, lineHeight: 17, textTransform: "uppercase" },
   buttons: { gap: space2, marginTop: space2 },
-  entryButtons: { flexDirection: "row", gap: space2, marginTop: space1, marginBottom: space2 },
+  entryButtons: { flexDirection: "row", flexWrap: "wrap", gap: space2, marginTop: space1, marginBottom: space2 },
 });
