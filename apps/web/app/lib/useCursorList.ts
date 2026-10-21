@@ -19,29 +19,54 @@ export function initialListState<T>(first: CursorChunk<T>): CursorListState<T> {
 }
 
 /**
- * Resynchronise la liste avec le loader (lot 59d) : un nouveau chargement de la route (même recherche relancée,
- * revalidation) rend un nouvel objet `first` ; ses résultats remplacent la liste, pages accumulées comprises (elles
- * viennent d'un état du serveur dépassé). Même objet : l'état local (pages ajoutées) est conservé.
+ * Resynchronise la liste avec le loader (lot 59d, tour 2) : un nouveau chargement de la route rend un nouvel objet
+ * `first`. Même objet : l'état local est conservé. Autre curseur, liste vide ou une seule page affichée : on repart de
+ * la nouvelle page. Revalidation après des pages ajoutées (« Garder », demande d'accréditation…) : les éléments affichés
+ * sont mis à jour par `id` depuis la nouvelle première page, les nouveaux s'ajoutent en tête, les pages suivantes et le
+ * défilement sont gardés (la carte ne disparaît pas). Une revalidation en panne garde la liste affichée.
  */
-export function syncListState<T>(state: CursorListState<T>, first: CursorChunk<T>): CursorListState<T> {
-  return state.source === first ? state : initialListState(first);
+export function syncListState<T extends { id: string }>(
+  state: CursorListState<T>,
+  first: CursorChunk<T>,
+): CursorListState<T> {
+  if (state.source === first) return state;
+  const old = state.source;
+  const onePage = state.items.length === old.items.length && state.to === (old.failed ? old.cursor : old.next);
+  if (first.cursor !== old.cursor || state.items.length === 0 || (onePage && !first.failed)) {
+    return initialListState(first);
+  }
+  if (first.failed) return { ...state, source: first };
+  const fresh = new Map(first.items.map((item) => [item.id, item]));
+  const shown = new Set(state.items.map((item) => item.id));
+  const added = first.items.filter((item) => !shown.has(item.id));
+  return { ...state, source: first, items: [...added, ...state.items.map((item) => fresh.get(item.id) ?? item)] };
+}
+
+/** Ajoute une page à la liste sans doublon (un élément repoussé à la page suivante par une revalidation). */
+export function appendPage<T extends { id: string }>(items: T[], page: T[]): T[] {
+  const shown = new Set(items.map((item) => item.id));
+  return [...items, ...page.filter((item) => !shown.has(item.id))];
 }
 
 /** Une page de résultats telle que la renvoie le loader de la route. `cursor` : celui qui l'a demandée ("" = la première). */
 export type CursorChunk<T> = { items: T[]; next: string | null; failed: boolean; cursor: string };
 
-export function useCursorList<T, D>(
+export function useCursorList<T extends { id: string }, D>(
   first: CursorChunk<T>,
   href: (cursor: string) => string,
   pick: (data: D) => CursorChunk<T> | undefined,
 ) {
   const fetcher = useFetcher<D>();
   const [raw, setState] = useState(() => initialListState(first));
+  const asked = useRef<string | null>(null);
   // Calculé pendant le rendu : aucun affichage de l'ancienne liste entre le nouveau loader et la resynchronisation.
   const state = syncListState(raw, first);
-  if (state !== raw) setState(state);
+  if (state !== raw) {
+    // Une page demandée avant la revalidation est ignorée à son arrivée (pas de page en double).
+    asked.current = null;
+    setState(state);
+  }
   const { items, to, failed } = state;
-  const asked = useRef<string | null>(null);
   const pickRef = useRef(pick);
   pickRef.current = pick;
 
@@ -54,7 +79,7 @@ export function useCursorList<T, D>(
       setState((cur) => ({ ...cur, failed: true }));
       return;
     }
-    setState((cur) => ({ ...cur, items: [...cur.items, ...chunk.items], to: chunk.next, failed: false }));
+    setState((cur) => ({ ...cur, items: appendPage(cur.items, chunk.items), to: chunk.next, failed: false }));
   }, [fetcher.data, fetcher.state]);
 
   const load = () => {
