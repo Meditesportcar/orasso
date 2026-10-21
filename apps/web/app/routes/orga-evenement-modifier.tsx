@@ -29,6 +29,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     api<VehicleMake[]>(request, "/vehicle-reference/makes"),
   ]);
   if (event.structure.id !== structure.id) throw new Response("Événement introuvable.", { status: 404 });
+  const wanted = eventWizardStepOf(new URL(request.url).searchParams.get("temps"));
   return {
     structure: {
       id: structure.id,
@@ -38,19 +39,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       verified: structure.verified,
     },
     event,
-    // Lot 53 : un brouillon rouvre au premier temps incomplet (sinon « Tout est prêt ») ; `?temps=lieu` choisit le temps.
-    initialStep: eventResumeStep(
-      initialEventDraft(new Date(), event),
-      event.status === "draft",
-      eventWizardStepOf(new URL(request.url).searchParams.get("temps")),
-    ),
+    // Lot 53 : un brouillon rouvre au premier temps incomplet (jamais après l'affiche s'il n'en a pas ; le navigateur
+    // affine avec le temps atteint) ; `?temps=lieu` choisit le temps.
+    initialStep: eventResumeStep(initialEventDraft(new Date(), event), event.status === "draft", wanted),
+    stepWanted: wanted !== null,
     categories: categories.ok ? categories.data : [],
     makes: makes.ok ? makes.data : [],
   };
 }
 
 export default function ModifierEvenement({ loaderData }: Route.ComponentProps) {
-  const { structure, event, categories, makes, initialStep } = loaderData;
+  const { structure, event, categories, makes, initialStep, stepWanted } = loaderData;
   return (
     <>
       <div className="orga__head">
@@ -70,6 +69,7 @@ export default function ModifierEvenement({ loaderData }: Route.ComponentProps) 
         makes={makes}
         event={event}
         initialStep={initialStep}
+        stepWanted={stepWanted}
       />
     </>
   );

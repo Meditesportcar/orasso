@@ -1,14 +1,15 @@
 // Temps 7 (`s-create` data-cs 6) : « Ton affiche » — photo (`POST /me/uploads purpose=event_poster_photo`), Post 4:5 /
 // Story 9:16, rail des huit styles (vignettes rendues par `POST /posters/preview`), aperçu en direct (débounce 300 ms,
 // 540 px), titre de 34 caractères au plus, affiche perso en plus. L'affiche est rendue par l'API à l'enregistrement.
-import { Chip, ChipRow, Icon, TextField } from "@orasso/design-system/web";
+import { Button, Chip, ChipRow, Icon, TextField } from "@orasso/design-system/web";
 import {
+  createPreviewCache,
   draftStart,
   POSTER_DEFAULT_STYLE,
   POSTER_TITLE_MAX,
   type PosterFormat,
   type PosterSettings,
-  type PosterStyle,
+  posterPreviewKey,
   posterStyleLabels,
   posterStyles,
   posterTexts,
@@ -19,7 +20,13 @@ import type { StepProps } from "./types";
 
 type Ctx = { structureId: string; structureName: string };
 
-/** Rend un aperçu (PNG) et donne son adresse locale, ou `null` si l'API refuse. */
+/**
+ * Rendus déjà faits, pour toute la visite (relecture du lot 53) : la bascule Post / Story et le retour sur le temps ne
+ * redemandent pas les huit vignettes (`POST /posters/preview` est limité à 60 rendus par minute).
+ */
+const rendered = createPreviewCache<string>(64, (url) => URL.revokeObjectURL(url));
+
+/** Rend un aperçu (PNG) et donne son adresse locale (gardée en cache), ou `null` si l'API refuse. */
 async function renderPreview(
   poster: PosterSettings,
   d: StepProps["d"],
@@ -27,24 +34,29 @@ async function renderPreview(
   format: PosterFormat,
   width: number,
 ): Promise<string | null> {
-  const date = draftStart(d) ?? new Date().toISOString();
+  const body = {
+    ...poster,
+    title: poster.title.trim() || d.title.trim().slice(0, POSTER_TITLE_MAX) || "—",
+    date: draftStart(d) ?? new Date().toISOString(),
+    place: d.city.slice(0, 80),
+    structureName: ctx.structureName,
+    structureId: ctx.structureId,
+    format,
+    width,
+  };
+  const key = posterPreviewKey(body);
+  const known = rendered.get(key);
+  if (known) return known;
   const res = await fetch("/api/posters/preview", {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      ...poster,
-      title: poster.title.trim() || d.title.trim().slice(0, POSTER_TITLE_MAX) || "—",
-      date,
-      place: d.city.slice(0, 80),
-      structureName: ctx.structureName,
-      structureId: ctx.structureId,
-      format,
-      width,
-    }),
+    body: JSON.stringify(body),
   }).catch(() => null);
   if (!res?.ok) return null;
-  return URL.createObjectURL(await res.blob());
+  const url = URL.createObjectURL(await res.blob());
+  rendered.set(key, url);
+  return url;
 }
 
 export function PosterStep({
@@ -79,30 +91,31 @@ export function PosterStep({
     setD((p) => ({ ...p, poster: { ...(p.poster ?? poster), ...change } }));
   const [format, setFormat] = useState<PosterFormat>("post");
   const [preview, setPreview] = useState<string | null>(null);
-  const [thumbs, setThumbs] = useState<Partial<Record<PosterStyle, string>>>({});
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [photo, setPhoto] = useState<string | null>(photoUrl);
   const [error, setError] = useState<string | null>(null);
-  const urls = useRef<string[]>([]);
+  // Rendu refusé (limite atteinte, réseau) : dit, avec de quoi réessayer (`retry` relance les deux rendus).
+  const [refused, setRefused] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const photoUrls = useRef<string[]>([]);
   useEffect(
     () => () => {
-      for (const u of urls.current) URL.revokeObjectURL(u);
+      for (const u of photoUrls.current) URL.revokeObjectURL(u);
     },
     [],
   );
-  const keep = (u: string | null) => {
-    if (u) urls.current.push(u);
-    return u;
-  };
 
   // Aperçu en direct : 300 ms après la dernière saisie.
-  const key = `${poster.photoKey}|${poster.style}|${poster.title}|${format}|${d.startsAt}|${d.city}`;
+  const key = `${poster.photoKey}|${poster.style}|${poster.title}|${format}|${d.startsAt}|${d.city}|${retry}`;
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` résume ce qui change l'aperçu.
   useEffect(() => {
     let alive = true;
     const timer = setTimeout(() => {
       void renderPreview(poster, d, ctx, format, 540).then((u) => {
-        if (alive) setPreview(keep(u));
+        if (!alive) return;
+        if (u) setPreview(u);
+        else setRefused(true);
       });
     }, 300);
     return () => {
@@ -110,7 +123,8 @@ export function PosterStep({
       clearTimeout(timer);
     };
   }, [key]);
-  // Vignettes du rail : refaites quand la photo ou le format change (pas à chaque lettre du titre : limite de l'API).
+  // Vignettes du rail : refaites quand la photo ou le format change (pas à chaque lettre du titre : limite de l'API) ;
+  // celles déjà rendues viennent du cache.
   // biome-ignore lint/correctness/useExhaustiveDependencies: la photo et le format suffisent.
   useEffect(() => {
     let alive = true;
@@ -119,7 +133,8 @@ export function PosterStep({
         for (const style of posterStyles) {
           const u = await renderPreview({ ...poster, style }, d, ctx, format, 180);
           if (!alive) return;
-          setThumbs((t) => ({ ...t, [style]: keep(u) ?? undefined }));
+          if (!u) return setRefused(true);
+          setThumbs((t) => ({ ...t, [`${format}:${style}`]: u }));
         }
       })();
     }, 300);
@@ -127,7 +142,7 @@ export function PosterStep({
       alive = false;
       clearTimeout(timer);
     };
-  }, [poster.photoKey, format]);
+  }, [poster.photoKey, format, retry]);
 
   async function pickPhoto(file: File | undefined) {
     if (!file) return;
@@ -145,7 +160,9 @@ export function PosterStep({
       return setError(body?.error?.message ?? "La photo n'a pas pu être envoyée.");
     }
     const { key: photoKey } = (await res.json()) as { key: string };
-    setPhoto(keep(URL.createObjectURL(file)));
+    const local = URL.createObjectURL(file);
+    photoUrls.current.push(local);
+    setPhoto(local);
     patch({ photoKey });
   }
 
@@ -187,6 +204,21 @@ export function PosterStep({
           <span className="wz-genprev__wait" />
         )}
       </div>
+      {refused ? (
+        <div className="s-notice s-row" role="alert" data-testid="wizard-poster-refused">
+          <span className="s-grow">{W.posterPreviewFailed}</span>
+          <Button
+            variant="secondary"
+            icon="undo"
+            onClick={() => {
+              setRefused(false);
+              setRetry((n) => n + 1);
+            }}
+          >
+            {W.posterPreviewRetry}
+          </Button>
+        </div>
+      ) : null}
       <span className="o-t-label s-label">
         {posterTexts.style} · {posterTexts.stylesCount}
       </span>
@@ -200,7 +232,11 @@ export function PosterStep({
             onClick={() => patch({ style })}
             data-testid={`wizard-style-${style}`}
           >
-            {thumbs[style] ? <img src={thumbs[style]} alt="" /> : <span className="wz-tpl__wait" />}
+            {thumbs[`${format}:${style}`] ? (
+              <img src={thumbs[`${format}:${style}`]} alt="" />
+            ) : (
+              <span className="wz-tpl__wait" />
+            )}
             <span>{posterStyleLabels[style]}</span>
           </button>
         ))}

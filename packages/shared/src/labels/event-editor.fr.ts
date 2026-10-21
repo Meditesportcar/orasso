@@ -407,6 +407,7 @@ export const wizardV2Labels = {
   rulesWhatLast: "le règlement de ton dernier événement",
   posterPreviewFailed: "Les aperçus n'ont pas pu être rendus (limite atteinte ou réseau) : réessaie dans une minute.",
   posterPreviewRetry: "Réessayer",
+  quitDraftBody: "Ta saisie reste sur ce téléphone : tu la retrouves en rouvrant ce brouillon.",
   missionDay: (n: number) => (n === 1 ? "Installation le lendemain" : `Installation ${n} jours plus tard`),
 } as const;
 

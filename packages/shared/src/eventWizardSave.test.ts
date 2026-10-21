@@ -110,7 +110,9 @@ const need = (over: Partial<EventNeedView> = {}): EventNeedView => ({
 
 describe("réconciliation après un enregistrement", () => {
   it("reprend les métiers ajoutés par une mission (deux enregistrements de suite ne les retirent pas)", () => {
-    const sent = filled({ needs: [{ trade: "food_truck", quantity: "1", power: "none", water: false, frontageM: "", installTime: "" }] });
+    const sent = filled({
+      needs: [{ trade: "food_truck", quantity: "1", power: "none", water: false, frontageM: "", installTime: "" }],
+    });
     // L'API ajoute le métier de la mission aux prestataires attendus (`ensureVendorType`).
     const server = serverDraft(savedEvent(sent, { vendorTypes: ["Food truck"] }), [need()]);
     const { draft, pristine } = reconcileDraft({ sent, current: sent, server });
@@ -233,11 +235,12 @@ describe("missions sur plusieurs jours", () => {
 
 describe("créneaux après un changement d'horaires", () => {
   it("le créneau des exposants hors des nouveaux horaires est retiré avant d'enregistrer", () => {
-    const d = withArrivalSlot(
-      filled({ startsAt: "2026-11-08T19:00", endsAt: "2026-11-08T23:30" }),
-      "exhibitors",
-      { from: "18:30", to: "19:15", strict: true, note: null },
-    );
+    const d = withArrivalSlot(filled({ startsAt: "2026-11-08T19:00", endsAt: "2026-11-08T23:30" }), "exhibitors", {
+      from: "18:30",
+      to: "19:15",
+      strict: true,
+      note: null,
+    });
     // Horaires passés à 9 h – 13 h : le temps « Type » est valide, mais l'API refuserait le créneau de 18 h 30.
     const changed = { ...d, startsAt: "2026-11-08T09:00", endsAt: "2026-11-08T13:00" };
     expect(eventStepProblem("type", changed)).toBeNull();

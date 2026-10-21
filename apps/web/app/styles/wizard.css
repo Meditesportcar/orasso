@@ -89,7 +89,7 @@
   width: 40px;
   height: 40px;
   border-radius: var(--radius-pill);
-  background: var(--surface-sunken);
+  background: var(--surface-raised);
 }
 .wz-kind.is-on .wz-kind__icon {
   background: var(--accent);
@@ -114,7 +114,8 @@
   gap: var(--space-1);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--surface-sunken);
+  /* Clair en Sable, sombre en Béton : le texte à l'encre y reste lisible (relecture du lot 53). */
+  background: var(--surface-raised);
   color: var(--ink);
 }
 .wz-sum {
@@ -427,7 +428,9 @@
   display: flex;
   gap: var(--space-2);
   padding: var(--space-3) 0;
-  background: var(--surface-sunken);
+  /* Le fond de la page (clair en Sable, sombre en Béton), comme la barre du bas de l'appli : les boutons secondaires
+     y gardent leur contraste (relecture du lot 53 : --surface-sunken est sombre dans les deux thèmes). */
+  background: var(--ground);
   border-top: 1.5px solid var(--line);
 }
 .wz-cta--end {

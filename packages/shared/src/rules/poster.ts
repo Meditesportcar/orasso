@@ -163,6 +163,8 @@ export function createPreviewCache<T>(max = 64, drop?: (value: T) => void) {
 
 /** Clé d'un aperçu : tous les réglages qui changent le rendu. */
 export const posterPreviewKey = (input: Record<string, unknown>) =>
-  JSON.stringify(Object.keys(input)
-    .sort()
-    .map((k) => [k, input[k]]));
+  JSON.stringify(
+    Object.keys(input)
+      .sort()
+      .map((k) => [k, input[k]]),
+  );

@@ -43,7 +43,14 @@ export function TypeStep({
   formats,
   recurrenceLocked,
   seriesExists,
-}: StepProps & { formats: readonly EventFormat[]; recurrenceLocked: boolean; seriesExists: boolean }) {
+  draftOnly = false,
+}: StepProps & {
+  formats: readonly EventFormat[];
+  recurrenceLocked: boolean;
+  seriesExists: boolean;
+  /** Événement publié : « Récurrent » se choisit seulement sur un brouillon (relecture du lot 53). */
+  draftOnly?: boolean;
+}) {
   const kind = eventKindOf(d);
   const dates = kind === "rec" ? recurrenceDates(d) : [];
   const rec = d.recurrence;
@@ -81,6 +88,11 @@ export function TypeStep({
         ))}
       </div>
       {seriesExists ? <p className="s-notice">{W.recurrenceExisting}</p> : null}
+      {draftOnly && !seriesExists ? (
+        <p className="o-t-caption s-muted" data-testid="wizard-rec-draft-only">
+          {W.recurrenceDraftOnly}
+        </p>
+      ) : null}
 
       {kind !== "multi" && (
         <div className="wz-box s-stack s-stack--tight" data-testid="wizard-kind-options">

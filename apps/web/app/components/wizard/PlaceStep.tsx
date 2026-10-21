@@ -38,9 +38,11 @@ export function PlaceStep({ d, set, setD, vendorSuggestions }: StepProps & { ven
     const res = await apiFetch<{ match: Match | null }>(`/geocode?q=${encodeURIComponent(query)}`);
     setMatch(res.ok && res.data.match ? res.data.match : "none");
   }
+  // L'adresse change sans nouvelle suggestion : l'ancienne position ne vaut plus (l'API regéocode une adresse sans
+  // coordonnées ; sinon l'adresse et l'itinéraire désigneraient deux lieux). L'épingle se repose ensuite à la main.
   const editAddress = (key: "addressLine" | "postalCode" | "city", value: string) => {
     setMatch(null);
-    setD((p) => ({ ...p, [key]: value }));
+    setD((p) => ({ ...p, [key]: value, lat: null, lng: null }));
   };
   const setNeed = (i: number, patch: Partial<NeedDraft>) =>
     setD((p) => ({ ...p, needs: (p.needs ?? []).map((n, j) => (j === i ? { ...n, ...patch } : n)) }));
@@ -271,6 +273,7 @@ export function PlaceStep({ d, set, setD, vendorSuggestions }: StepProps & { ven
                     type="time"
                     value={n.installTime}
                     onChange={(e) => setNeed(i, { installTime: e.currentTarget.value })}
+                    help={n.installDay && n.installTime ? W.missionDay(n.installDay) : undefined}
                   />
                 </div>
                 <CheckboxField
