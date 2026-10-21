@@ -739,7 +739,8 @@ describe("Journal des amis", () => {
       deliverAfter: new Date(),
       deliveredAt: new Date(),
     };
-    const old = new Date(Date.now() - 10 * DAY);
+    // La fenêtre se calcule sur l'horloge figée du fichier (17/10), pas sur la vraie date.
+    const old = new Date(clock.now.getTime() - 10 * DAY);
     await db.insert(notifications).values([
       { ...base, type: "friend_request", title: "ancienne lue", createdAt: old, readAt: old },
       { ...base, type: "friend_request", title: "ancienne non lue", createdAt: old },
