@@ -20,7 +20,7 @@ export default [
     route("app/media", "routes/media.tsx"),
     route("app/media/nouveau", "routes/media-nouveau.tsx"),
     route("m/:id", "routes/m.tsx"),
-    route("prestataires/:id", "routes/prestataires.tsx"),
+    route("providers/:id", "routes/prestataires.tsx"),
     route("app/garage", "routes/garage.tsx"),
     route("app/garage/nouveau", "routes/garage-nouveau.tsx"),
     route("app/garage/:id", "routes/garage-vehicule.tsx"),

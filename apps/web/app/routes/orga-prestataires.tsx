@@ -12,7 +12,6 @@ import {
   type Page,
   providerPowerLabels,
   providerPowers,
-  providerReviewTexts,
   providerSelectableTypes,
   vendorTypeLabels,
 } from "@orasso/shared";
@@ -197,7 +196,7 @@ function Retained({
     <li className="s-card s-stack s-stack--tight" data-testid="need-retained" data-application={app.id}>
       <div className="s-row s-row--between">
         <strong className="o-never-truncate">{p.name}</strong>
-        <a href={`/prestataires/${p.id}`} className="o-t-caption">
+        <a href={`/providers/${p.id}`} className="o-t-caption">
           {L.seeVitrine}
         </a>
       </div>
@@ -398,7 +397,6 @@ export default function OrgaPrestataires({ loaderData, actionData }: Route.Compo
           </div>
         </Form>
       </section>
-      <p className="o-t-caption s-muted">{providerReviewTexts.windowClosed}</p>
     </>
   );
 }

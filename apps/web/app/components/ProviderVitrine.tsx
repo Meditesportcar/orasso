@@ -1,6 +1,6 @@
 // Vitrine d'un prestataire (lot 57, parité de l'appli du lot 54, prototype DA v2 `s-vitrine`) : métier, menu avec les
 // prix, besoins sur place, zone d'intervention et avis des organisateurs. Montrée au prestataire (« Vue organisateur »)
-// et aux organisations (`/prestataires/:id`).
+// et aux organisations (`/providers/:id`, même chemin que l'appli).
 import { Chip, ChipRow, Plate } from "@orasso/design-system/web";
 import {
   formatMenuPrice,
