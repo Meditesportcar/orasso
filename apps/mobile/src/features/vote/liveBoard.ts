@@ -107,9 +107,10 @@ export function createLoadTracker(): LoadTracker {
 type Gate = { request: () => void };
 
 /**
- * Abonnement confirmé au canal du vote. Le premier ne recharge que ce que l'ouverture n'a pas chargé (chargement
- * échoué ou absent, ex. écran ouvert hors ligne) : 150 téléphones ouverts au même signal ne doublent pas leurs
- * requêtes. Les suivants (reconnexion : des messages ont pu être manqués) rechargent toujours, par les portes.
+ * Abonnement confirmé au canal du vote. Le premier relit le classement une fois, après la fin du chargement
+ * d'ouverture (tour 3 : un vote entre la lecture et l'abonnement n'est pas perdu), et ne recharge la grille et mon vote
+ * que s'ils ont échoué (écran ouvert hors ligne) : 150 téléphones ouverts au même signal font une requête de plus,
+ * pas trois. Les suivants (reconnexion : des messages ont pu être manqués) rechargent tout, par les portes.
  */
 export function createVoteSubscription(
   gates: { board: Gate; list: Gate },
@@ -124,11 +125,12 @@ export function createVoteSubscription(
         gates.list.request();
         return;
       }
-      for (const key of ["board", "list"] as const) {
-        void loads[key].idle().then((ok) => {
-          if (!ok) gates[key].request();
-        });
-      }
+      // Le classement est toujours relu après l'ouverture (un vote arrivé entre sa lecture et l'abonnement n'est pas
+      // perdu ; une réponse plus ancienne est ignorée, le compteur ne recule pas). La grille et mon vote : sur échec.
+      void loads.board.idle().then(() => gates.board.request());
+      void loads.list.idle().then((ok) => {
+        if (!ok) gates.list.request();
+      });
     },
   };
 }

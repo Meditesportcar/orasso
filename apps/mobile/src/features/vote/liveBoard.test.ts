@@ -99,7 +99,7 @@ const flush = async () => {
 };
 
 describe("createVoteSubscription", () => {
-  it("ouverture réussie puis premier abonnement : aucune requête en double", async () => {
+  it("ouverture réussie puis premier abonnement : le classement relu une fois après l'ouverture, ni grille ni mon vote", async () => {
     const { board, list, loads, subscription } = setupSubscription();
     const openBoard = deferred<number>();
     const openMine = deferred<number>();
@@ -108,13 +108,41 @@ describe("createVoteSubscription", () => {
     const p2 = loads.list.track(() => openMine.promise);
     const p3 = loads.list.track(() => openGrid.promise);
     subscription.onSubscribed(); // ~100 ms après l'ouverture, les chargements sont encore en vol
+    await flush();
+    expect(board).not.toHaveBeenCalled(); // pas en même temps que la lecture d'ouverture
     openBoard.resolve(1);
     openMine.resolve(1);
     openGrid.resolve(1);
     await Promise.all([p1, p2, p3]);
     await flush();
-    expect(board).not.toHaveBeenCalled();
+    expect(board).toHaveBeenCalledTimes(1);
     expect(list).not.toHaveBeenCalled();
+  });
+
+  it("tour 3 : vote entre la lecture d'ouverture et l'abonnement, le compteur est à jour", async () => {
+    let server = 5;
+    const live = createLiveBoard<{ total: number }>();
+    let shownTotal = 0;
+    const readBoard = async () => {
+      const token = live.begin();
+      const fresh = { total: server };
+      await Promise.resolve();
+      const r = live.loaded(token, fresh);
+      shownTotal = r.live?.total ?? r.board.total;
+    };
+    const loads = { board: createLoadTracker(), list: createLoadTracker() };
+    const gates = {
+      board: createRefreshGate({ run: () => loads.board.track(readBoard), minMs: 10_000 }),
+      list: createRefreshGate({ run: async () => undefined, minMs: 10_000 }),
+    };
+    const subscription = createVoteSubscription(gates, loads);
+    await loads.board.track(readBoard); // ouverture : 5 voix
+    expect(shownTotal).toBe(5);
+    server = 6; // un vote, avant que l'abonnement soit confirmé : aucun message reçu
+    subscription.onSubscribed();
+    await flush();
+    await flush();
+    expect(shownTotal).toBe(6);
   });
 
   it("ouverture hors ligne puis retour du réseau : le premier abonnement recharge ce qui a échoué", async () => {
@@ -142,17 +170,24 @@ describe("createVoteSubscription", () => {
     expect(list).toHaveBeenCalledTimes(1);
   });
 
-  it("reconnexion : recharge toujours (messages manqués)", async () => {
-    const { board, list, loads, subscription } = setupSubscription();
-    await loads.board.track(() => Promise.resolve(1));
-    await loads.list.track(() => Promise.resolve(1));
-    subscription.onSubscribed();
-    await flush();
-    expect(board).not.toHaveBeenCalled();
-    subscription.onSubscribed();
-    await flush();
-    expect(board).toHaveBeenCalledTimes(1);
-    expect(list).toHaveBeenCalledTimes(1);
+  it("reconnexion : recharge toujours tout (messages manqués), par les portes", async () => {
+    vi.useFakeTimers();
+    try {
+      const { board, list, loads, subscription } = setupSubscription();
+      await loads.board.track(() => Promise.resolve(1));
+      await loads.list.track(() => Promise.resolve(1));
+      subscription.onSubscribed();
+      await flush();
+      expect(board).toHaveBeenCalledTimes(1);
+      expect(list).not.toHaveBeenCalled();
+      subscription.onSubscribed();
+      await flush();
+      expect(list).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(10_000); // le classement : à la fin de la fenêtre de sa porte
+      expect(board).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
