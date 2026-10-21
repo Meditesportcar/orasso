@@ -1,11 +1,11 @@
 // Autour du QR tournant (lot 48, prototype `s-qr`) : blocage des captures sur cet écran seulement, la note qui le dit,
 // « Comment ça marche sans réseau » (repliable), et l'itinéraire en un geste (Maps, Waze, Sur la carte).
-import { Button, Icon, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { allowScreenCaptureAsync, preventScreenCaptureAsync } from "expo-screen-capture";
 import { useEffect, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space2, space3 } = tokens.spacing;
 
 const CAPTURE_KEY = "jour-j-qr";
 
@@ -41,9 +41,9 @@ export const ACCOUNT_CAPTURE_TEXT =
 export function CaptureNote({ text = CAPTURE_TEXT }: { text?: string }) {
   const { t } = useTheme();
   return (
-    <View style={styles.lock} testID="qr-capture-note">
-      <Icon name="eyeOff" size={22} color={t.color.ink} />
-      <Text variant="caption" color={t.color.ink} style={styles.grow}>
+    <View style={[styles.lock, { backgroundColor: t.color.surfaceSunken }]} testID="qr-capture-note">
+      <Icon name="eyeOff" size={22} color={t.color.accent} />
+      <Text variant="caption" color={t.color.ink} style={[styles.grow, styles.lockText]}>
         {text}
       </Text>
     </View>
@@ -62,7 +62,7 @@ export function HowItWorks() {
   const c = t.color;
   const [open, setOpen] = useState(false);
   return (
-    <Plate style={styles.block}>
+    <View style={[styles.block, { backgroundColor: t.color.surfaceSunken }]}>
       <Pressable
         onPress={() => setOpen((o) => !o)}
         accessibilityRole="button"
@@ -70,24 +70,24 @@ export function HowItWorks() {
         style={styles.summary}
         testID="qr-how"
       >
-        <Text variant="bodyStrong" color={c.plateInk} style={styles.grow}>
+        <Text variant="bodyStrong" color={c.ink} style={[styles.grow, styles.summaryText]}>
           Comment ça marche sans réseau
         </Text>
-        <Icon name={open ? "up" : "down"} size={18} color={c.plateInk} />
+        <Icon name={open ? "up" : "down"} size={18} color={c.ink} />
       </Pressable>
       {open
         ? HOW.map((line, i) => (
             <View key={line} style={styles.step}>
-              <Text variant="bodyStrong" color={c.plateMuted}>
+              <Text variant="caption" color={c.inkMuted}>
                 {i + 1}.
               </Text>
-              <Text variant="body" color={c.plateInk} style={styles.grow}>
+              <Text variant="caption" color={c.inkMuted} style={styles.grow}>
                 {line}
               </Text>
             </View>
           ))
         : null}
-    </Plate>
+    </View>
   );
 }
 
@@ -111,37 +111,68 @@ function wazeUrl(d: Destination): string {
     : `https://waze.com/ul?q=${encodeURIComponent(d.address)}&navigate=yes`;
 }
 
-/** Maps, Waze, Sur la carte (la fiche de l'événement et sa carte). */
+/** Bouton `.gps` de l'artefact : encadré, 46 px, rayon 12, capitales 12 px. */
+function Gps({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.gps, { borderColor: c.line, opacity: pressed ? 0.8 : 1 }]}
+    >
+      <Icon name={icon} size={16} color={c.ink} />
+      <Text variant="button" color={c.ink} style={styles.gpsText} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** Maps, Waze, Sur la carte (`.gpsrow` : 1fr 1fr 1,25fr ; aucun libellé coupé, D34). */
 export function GpsRow({ destination, onMap }: { destination: Destination; onMap: () => void }) {
   return (
     <View style={styles.row}>
-      <Button
-        variant="rescue"
-        icon="place"
-        onPress={() => void Linking.openURL(mapsUrl(destination))}
-        style={styles.grow}
-      >
-        Maps
-      </Button>
-      <Button
-        variant="rescue"
-        icon="place"
-        onPress={() => void Linking.openURL(wazeUrl(destination))}
-        style={styles.grow}
-      >
-        Waze
-      </Button>
-      <Button variant="rescue" icon="explore" onPress={onMap} style={styles.grow}>
-        Sur la carte
-      </Button>
+      <View style={styles.grow}>
+        <Gps icon="place" label="Maps" onPress={() => void Linking.openURL(mapsUrl(destination))} />
+      </View>
+      <View style={styles.grow}>
+        <Gps icon="place" label="Waze" onPress={() => void Linking.openURL(wazeUrl(destination))} />
+      </View>
+      <View style={styles.wide}>
+        <Gps icon="explore" label="Sur la carte" onPress={onMap} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   grow: { flex: 1 },
-  lock: { flexDirection: "row", gap: space2, alignItems: "center", paddingHorizontal: space1 },
-  block: { gap: space2, padding: space3 },
+  // `.qr-lock`, `.qr-how` : encarts de rayon 14, padding 12 × 14.
+  lock: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    paddingVertical: space3,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+  },
+  lockText: { fontSize: 13.5, lineHeight: 18 },
+  summaryText: { fontSize: 14, fontWeight: "800" },
+  wide: { flex: 1.25 },
+  gps: {
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  gpsText: { fontSize: 12, lineHeight: 15 },
+  block: { gap: space2, paddingVertical: space3, paddingHorizontal: 14, borderRadius: 14 },
   summary: { flexDirection: "row", alignItems: "center", gap: space2, minHeight: 32 },
   step: { flexDirection: "row", gap: space2 },
   row: { flexDirection: "row", gap: space2 },

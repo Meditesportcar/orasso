@@ -26,7 +26,7 @@ export type QrPosterProps = {
   label: string;
 };
 
-const RING = 6;
+const RING = 5;
 const RADIUS = 14;
 
 /** Anneau sur le pourtour du QR : plein au nouveau code, vide quand le suivant arrive. */
@@ -85,7 +85,7 @@ export function QrPoster({ holder, value, rotating, size, label }: QrPosterProps
           <Text variant="label" color={c.posterMuted}>
             {holder.label}
           </Text>
-          <Text variant="zone" color={c.posterInk} testID="qr-holder-value">
+          <Text variant="numberNarrow" color={c.posterInk} style={styles.zone} testID="qr-holder-value">
             {holder.value}
           </Text>
         </View>
@@ -106,13 +106,16 @@ export function QrPoster({ holder, value, rotating, size, label }: QrPosterProps
       </View>
       {rotating ? (
         <View style={styles.foot} testID="qr-countdown">
-          <Text variant="meta" color={c.posterMuted}>
+          <Text variant="caption" color={c.posterInk} style={styles.footText}>
             Nouveau code dans
           </Text>
-          <Text variant="bodyStrong" color={c.posterInk} testID="qr-seconds">
-            {rotating.secondsLeft} s
+          <Text variant="caption" color={c.posterInk} style={styles.footText} testID="qr-seconds">
+            <Text variant="numberNarrow" color={c.posterInk} style={styles.seconds}>
+              {rotating.secondsLeft}
+            </Text>
+            {" s"}
           </Text>
-          <Text variant="meta" color={c.posterMuted} testID="qr-number">
+          <Text variant="caption" color={c.posterMuted} style={styles.footText} testID="qr-number">
             n° {formatCodeNumber(rotating.number)}
           </Text>
         </View>
@@ -125,12 +128,16 @@ export function QrPoster({ holder, value, rotating, size, label }: QrPosterProps
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: tokens.radius.radiusLg, padding: space4, gap: space3, alignItems: "stretch" },
+  // `.qrcard` : rayon 22, padding 16, écart 12.
+  card: { borderRadius: 22, padding: space4, gap: space3, alignItems: "stretch" },
+  zone: { fontSize: 72, lineHeight: 64 },
+  footText: { fontSize: 13, fontWeight: "600" },
+  seconds: { fontSize: 30, lineHeight: 30 },
   head: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", gap: space3 },
   headLeft: { gap: space1 },
   headRight: { flex: 1, gap: 0, alignItems: "flex-end" },
   right: { textAlign: "right" },
   qrBox: { alignSelf: "center", alignItems: "center", justifyContent: "center" },
-  foot: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: space2 },
+  foot: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space2 },
   credit: { alignSelf: "flex-end" },
 });
