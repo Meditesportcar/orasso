@@ -5,6 +5,28 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 
+/** État de la liste : la première page du loader (référence gardée pour détecter un nouveau chargement) et la suite. */
+export type CursorListState<T> = {
+  source: CursorChunk<T>;
+  items: T[];
+  /** Curseur de la prochaine page à charger (ou de la page qui a échoué) ; null : tout est chargé. */
+  to: string | null;
+  failed: boolean;
+};
+
+export function initialListState<T>(first: CursorChunk<T>): CursorListState<T> {
+  return { source: first, items: first.items, to: first.failed ? first.cursor : first.next, failed: first.failed };
+}
+
+/**
+ * Resynchronise la liste avec le loader (lot 59d) : un nouveau chargement de la route (même recherche relancée,
+ * revalidation) rend un nouvel objet `first` ; ses résultats remplacent la liste, pages accumulées comprises (elles
+ * viennent d'un état du serveur dépassé). Même objet : l'état local (pages ajoutées) est conservé.
+ */
+export function syncListState<T>(state: CursorListState<T>, first: CursorChunk<T>): CursorListState<T> {
+  return state.source === first ? state : initialListState(first);
+}
+
 /** Une page de résultats telle que la renvoie le loader de la route. `cursor` : celui qui l'a demandée ("" = la première). */
 export type CursorChunk<T> = { items: T[]; next: string | null; failed: boolean; cursor: string };
 
@@ -14,10 +36,11 @@ export function useCursorList<T, D>(
   pick: (data: D) => CursorChunk<T> | undefined,
 ) {
   const fetcher = useFetcher<D>();
-  const [items, setItems] = useState(first.items);
-  /** Curseur de la prochaine page à charger (ou de la page qui a échoué) ; null : tout est chargé. */
-  const [to, setTo] = useState<string | null>(first.failed ? first.cursor : first.next);
-  const [failed, setFailed] = useState(first.failed);
+  const [raw, setState] = useState(() => initialListState(first));
+  // Calculé pendant le rendu : aucun affichage de l'ancienne liste entre le nouveau loader et la resynchronisation.
+  const state = syncListState(raw, first);
+  if (state !== raw) setState(state);
+  const { items, to, failed } = state;
   const asked = useRef<string | null>(null);
   const pickRef = useRef(pick);
   pickRef.current = pick;
@@ -28,12 +51,10 @@ export function useCursorList<T, D>(
     if (!chunk || chunk.cursor !== asked.current) return;
     asked.current = null;
     if (chunk.failed) {
-      setFailed(true);
+      setState((cur) => ({ ...cur, failed: true }));
       return;
     }
-    setItems((current) => [...current, ...chunk.items]);
-    setTo(chunk.next);
-    setFailed(false);
+    setState((cur) => ({ ...cur, items: [...cur.items, ...chunk.items], to: chunk.next, failed: false }));
   }, [fetcher.data, fetcher.state]);
 
   const load = () => {

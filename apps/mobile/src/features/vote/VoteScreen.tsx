@@ -25,8 +25,8 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
-import { applyTop3, BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
 import { createLiveBoard, onVoteSubscribed } from "./liveBoard";
+import { applyTop3, BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
 import { createRefreshGate, type RefreshGate } from "./refreshGate";
 
 const { space1, space2, space3 } = tokens.spacing;

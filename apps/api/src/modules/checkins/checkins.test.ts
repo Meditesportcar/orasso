@@ -41,11 +41,8 @@ import {
   profiles,
   scanEvents,
 } from "../../db/schema";
-<<<<<<< HEAD
 import { mail } from "../../lib/mail";
-=======
 import { realtime } from "../../lib/realtime";
->>>>>>> lot-57-site-parite-v2
 import type { Viewer } from "../../lib/session";
 import { ed25519Verify } from "../../lib/signing";
 import { applicationsService } from "../applications/service";
