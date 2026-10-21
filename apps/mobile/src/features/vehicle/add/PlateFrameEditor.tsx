@@ -217,8 +217,21 @@ const styles = StyleSheet.create({
     borderRadius: HANDLE / 2,
   },
   // Poignée de rotation : centrée au-dessus du bord haut, reliée au cadre par une tige.
-  rotate: { right: undefined, bottom: undefined, left: "50%", marginLeft: -HANDLE / 2, top: -PLATE_ROTATE_HANDLE_OFFSET - HANDLE / 2 },
-  stem: { position: "absolute", left: "50%", marginLeft: -1, width: 2, top: -PLATE_ROTATE_HANDLE_OFFSET, height: PLATE_ROTATE_HANDLE_OFFSET },
+  rotate: {
+    right: undefined,
+    bottom: undefined,
+    left: "50%",
+    marginLeft: -HANDLE / 2,
+    top: -PLATE_ROTATE_HANDLE_OFFSET - HANDLE / 2,
+  },
+  stem: {
+    position: "absolute",
+    left: "50%",
+    marginLeft: -1,
+    width: 2,
+    top: -PLATE_ROTATE_HANDLE_OFFSET,
+    height: PLATE_ROTATE_HANDLE_OFFSET,
+  },
   badge: { position: "absolute", left: space2, top: space2 },
   hint: { marginTop: space2, alignSelf: "stretch" },
   pill: { paddingHorizontal: space2, paddingVertical: 4, borderRadius: tokens.radius.radiusPill },
