@@ -2,17 +2,20 @@
 // activités, présentation, adresse et zone d'intervention, contact, réseaux, horaires). Le logo, les photos, les remises
 // et le SIRET sont des blocs de la fiche. Un nouveau nom demande un nouveau contrôle du SIRET (règle de l'API).
 // Création (lot 34, parité D20) : le même formulaire, vide, depuis Moi > Mes casquettes ; la casquette Pro s'ouvre ensuite.
-import { Button, Chip, ChipRow, Plate, TextField, tokens } from "@orasso/design-system/native";
+// Lot 54 (DA v2) : les activités se cochent en tuiles (« touche pour cocher »), chaque champ montre un exemple de format,
+// et les champs sont un composant à part (`ProFicheFields`) que l'onglet Ma fiche pose dans son segment « Modifier ».
+import { Button, Plate, TextField, tokens } from "@orasso/design-system/native";
 import {
   proAppLabels as L,
+  type ProActivity,
   type ProCreate,
   proActivities,
   proActivityLabels,
   proAddressLabels,
+  proV2Labels,
   weekdayLabels,
   weekdays,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
 
@@ -20,10 +23,12 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
 import { emptyProForm, formOfPro, type ProFicheForm, proBody, socialNetworks, toggleActivity } from "@/lib/proForm";
+import { proActivityIcons } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useRun } from "@/lib/useRun";
 import { Feedback } from "@/ui/Feedback";
+import { IconTiles } from "@/ui/IconTiles";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { SectionTitle, TabScreen } from "@/ui/Screens";
@@ -64,8 +69,8 @@ function AddressCheck({ query, located }: { query: string; located: boolean }) {
   );
 }
 
-export function FicheForm({ create = false }: { create?: boolean } = {}) {
-  const router = useRouter();
+/** Les champs de la fiche : modification (onglet Ma fiche) ou création (depuis Créer). */
+export function ProFicheFields({ create = false }: { create?: boolean }) {
   const { refreshMe } = useSession();
   const { choose } = usePersona();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
@@ -116,33 +121,30 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
   }
 
   return (
-    <TabScreen title={create ? L.createTitle : L.editTitle} facts={create ? undefined : pro?.name}>
-      {create ? (
-        <Muted variant="body">{L.createIntro}</Muted>
-      ) : (
-        <Button variant="plate" icon="back" onPress={() => router.replace("/fiche")} fullWidth>
-          {L.editBack}
-        </Button>
-      )}
+    <>
       {create && pro ? <Notice>{L.createExists}</Notice> : null}
       {!create && !pro ? myPro.loading ? null : <Notice>{L.noPro}</Notice> : null}
       {form && (create ? !pro : pro) ? (
         <>
           <Plate style={styles.block} testID="pro-form">
-            <TextField label={L.name} value={form.name} onChangeText={(name) => edit({ name })} maxLength={80} />
-            <Muted variant="label">{L.activities}</Muted>
-            <ChipRow>
-              {proActivities.map((a) => (
-                <Chip
-                  key={a}
-                  surface="plate"
-                  selected={form.activities.includes(a)}
-                  onPress={() => edit({ activities: toggleActivity(form.activities, a) })}
-                >
-                  {proActivityLabels[a]}
-                </Chip>
-              ))}
-            </ChipRow>
+            <TextField
+              label={L.name}
+              value={form.name}
+              onChangeText={(name) => edit({ name })}
+              maxLength={80}
+              placeholder={proV2Labels.placeholders.name}
+            />
+            <Muted variant="label">{proV2Labels.activitiesEdit}</Muted>
+            <IconTiles
+              testID="pro-activities"
+              items={proActivities.map((a) => ({
+                key: a,
+                label: proActivityLabels[a],
+                icon: proActivityIcons[a],
+                checked: form.activities.includes(a),
+              }))}
+              onToggle={(a) => edit({ activities: toggleActivity(form.activities, a as ProActivity) })}
+            />
             <TextField
               label={L.description}
               value={form.description}
@@ -150,6 +152,7 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
               multiline
               maxLength={2000}
               style={{ minHeight: 96 }}
+              placeholder={proV2Labels.placeholders.description}
             />
           </Plate>
 
@@ -160,6 +163,7 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
               value={form.addressLine}
               onChangeText={(addressLine) => edit({ addressLine })}
               maxLength={200}
+              placeholder={proV2Labels.placeholders.address}
             />
             <TextField
               label={L.postalCode}
@@ -167,8 +171,15 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
               onChangeText={(postalCode) => edit({ postalCode })}
               keyboardType="number-pad"
               maxLength={10}
+              placeholder={proV2Labels.placeholders.postalCode}
             />
-            <TextField label={L.city} value={form.city} onChangeText={(city) => edit({ city })} maxLength={80} />
+            <TextField
+              label={L.city}
+              value={form.city}
+              onChangeText={(city) => edit({ city })}
+              maxLength={80}
+              placeholder={proV2Labels.placeholders.city}
+            />
             <AddressCheck
               query={[form.addressLine, form.postalCode, form.city].filter(Boolean).join(" ")}
               located={!pro?.city || pro.lat !== null}
@@ -179,6 +190,7 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
               value={form.zone}
               onChangeText={(zone) => edit({ zone })}
               autoCapitalize="characters"
+              placeholder={proV2Labels.placeholders.zone}
             />
           </Plate>
 
@@ -189,6 +201,7 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
               value={form.phone}
               onChangeText={(phone) => edit({ phone })}
               keyboardType="phone-pad"
+              placeholder={proV2Labels.placeholders.phone}
             />
             <TextField
               label={L.email}
@@ -197,6 +210,7 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              placeholder={proV2Labels.placeholders.email}
             />
             <TextField
               label={L.website}
@@ -205,6 +219,7 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
               keyboardType="url"
               autoCapitalize="none"
               autoCorrect={false}
+              placeholder={proV2Labels.placeholders.website}
             />
             {socialNetworks.map((n) => (
               <TextField
@@ -214,6 +229,7 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
                 onChangeText={(value) => edit({ socials: { ...form.socials, [n]: value } })}
                 autoCapitalize="none"
                 autoCorrect={false}
+                placeholder={n === "instagram" ? proV2Labels.placeholders.instagram : undefined}
               />
             ))}
           </Plate>
@@ -245,6 +261,16 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
           </Button>
         </>
       ) : null}
+    </>
+  );
+}
+
+/** Création de la fiche depuis Créer (lot 34) : le même formulaire, vide, dans un écran d'onglet. */
+export function FicheForm({ create = false }: { create?: boolean } = {}) {
+  return (
+    <TabScreen title={create ? L.createTitle : L.editTitle}>
+      {create ? <Muted variant="body">{L.createIntro}</Muted> : null}
+      <ProFicheFields create={create} />
     </TabScreen>
   );
 }

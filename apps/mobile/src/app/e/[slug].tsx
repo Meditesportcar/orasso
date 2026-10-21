@@ -221,7 +221,15 @@ export default function EventPage() {
           : action === "myApplication"
             ? { label: L.myApplication, icon: "qr" as const, onPress: () => router.navigate("/sorties") }
             : action === "myProviderApplication"
-              ? { label: L.myApplication, icon: "briefcase" as const, onPress: () => router.navigate("/candidatures") }
+              ? {
+                  label: L.myApplication,
+                  icon: "briefcase" as const,
+                  onPress: () =>
+                    router.navigate({
+                      pathname: "/candidatures",
+                      params: { open: (providerApps.data ?? []).find((a) => a.event.id === e.id)?.id ?? "" },
+                    }),
+                }
               : action === "book"
                 ? { label: L.bookEntry, icon: "ticket" as const, onPress: () => setBooking(true) }
                 : action === "requestAccreditation"
