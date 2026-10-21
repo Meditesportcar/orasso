@@ -19,16 +19,16 @@ type Theme = "beton" | "sable";
 /** Les barres (libellé de l'onglet → route attendue dans l'URL, grand titre attendu). */
 const BARS = {
   fan: [
-    ["Explorer", "explorer", "Explorer"],
+    ["Explorer", "explorer", null], // Lot C2a : pas de grand titre (artefact).
     ["Sorties", "sorties", "Mes sorties"],
-    ["Accueil", "accueil", "Accueil"],
+    ["Accueil", "accueil", null], // Lot C2a : la salutation en tient lieu.
     ["Garage", "garage", "Mon garage"],
     ["Profil", "profil", "Mon profil"],
   ],
   visitor: [
-    ["Explorer", "explorer", "Explorer"],
+    ["Explorer", "explorer", null],
     ["Sorties", "sorties", "Mes sorties"],
-    ["Accueil", "accueil", "Accueil"],
+    ["Accueil", "accueil", null],
     ["Passeport", "passeport", "Passeport"],
     ["Profil", "profil", "Mon profil"],
   ],

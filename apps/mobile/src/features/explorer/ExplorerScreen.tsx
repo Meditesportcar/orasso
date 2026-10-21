@@ -141,6 +141,7 @@ export function SheetHead({ title, onClose }: { title: string; onClose: () => vo
         accessibilityRole="button"
         accessibilityLabel="Fermer"
         style={[styles.closex, { backgroundColor: t.color.surface }]}
+        testID="sheet-close"
       >
         <Icon name="close" size={20} color={t.color.ink} />
       </Pressable>

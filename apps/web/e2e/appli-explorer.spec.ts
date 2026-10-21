@@ -69,7 +69,7 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
     await expect(page.getByTestId("crew-row").filter({ hasText: "Roussillon Drift" }).first()).toBeVisible({
       timeout: 30_000,
     });
-    await page.getByRole("button", { name: "Fermer" }).first().click();
+    await page.getByTestId("sheet-close").click();
 
     // --- Explorer v2 (lot 44) : position accordée → tout, du plus proche au plus loin -----------------------------
     await page.goto("/explorer");
