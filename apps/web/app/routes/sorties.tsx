@@ -30,7 +30,10 @@ import {
   refusalReasonLabels,
   sortiesLabels,
   staffHomeLabels,
+  staffMissionActions,
   staffRoleLabels,
+  ticketIsPast,
+  ticketIsUpcoming,
   type VehicleFull,
   voteScreenTexts,
 } from "@orasso/shared";
@@ -139,7 +142,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     past ? api<RecapListItem[]>(request, "/me/recaps") : null,
   ]);
   const t = nowMs();
-  const staff = (staffRes.ok ? staffRes.data : []).filter((s) => Date.parse(s.event.endsAt) > t);
+  // Relecture du lot 57 : on garde la fenêtre de l'API (jusqu'à J+1) ; les actions se ferment à `staffModeClosesAt`.
+  const staff = staffRes.ok ? staffRes.data : [];
   const slugOf = new Map(me.memberships.map((m) => [m.structureId, m.structureSlug]));
   const allTickets = tickets.ok ? tickets.data : [];
   return {
@@ -149,11 +153,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       | "past",
     staff: staff.map((s) => ({ ...s, structureSlug: slugOf.get(s.structure.id) ?? null })),
     recapReady: (recapsRes?.ok ? recapsRes.data : []).filter((r) => Date.parse(r.readyAt) <= t).map((r) => r.eventId),
-    tickets: allTickets.filter((x) =>
-      past
-        ? x.status === "used" || Date.parse(x.event.endsAt) <= t
-        : x.status === "valid" && Date.parse(x.event.endsAt) > t,
-    ),
+    // Relecture du lot 57 : le classement suit la fin de l'événement ; un billet contrôlé (`used`) reste « à venir »
+    // jusqu'à la fin (entrée vers le vote).
+    tickets: allTickets.filter((x) => (past ? ticketIsPast(x, t) : ticketIsUpcoming(x, t))),
     avis: avis ? { id: avis, found: applications.some((a) => a.id === avis) } : null,
     invitations,
     vehicles,
@@ -636,18 +638,20 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
                     <input type="hidden" name="intent" value="presence" />
                     <input type="hidden" name="eventId" value={s.event.id} />
                     <input type="hidden" name="present" value={s.presence === "present" ? "false" : "true"} />
-                    <Button
-                      type="submit"
-                      variant="secondary"
-                      icon={s.presence === "present" ? "check" : "staff"}
-                      loading={busy}
-                      data-testid="staff-presence"
-                      data-presence={s.presence}
-                    >
-                      {sortiesLabels.willBeThere}
-                    </Button>
+                    {staffMissionActions(s, nowMs()).presence && (
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        icon={s.presence === "present" ? "close" : "check"}
+                        loading={busy}
+                        data-testid="staff-presence"
+                        data-presence={s.presence}
+                      >
+                        {s.presence === "present" ? staffHomeLabels.notHere : sortiesLabels.willBeThere}
+                      </Button>
+                    )}
                   </Form>
-                  {s.structureSlug && (
+                  {s.structureSlug && staffMissionActions(s, nowMs()).staffMode && (
                     <Button
                       variant="secondary"
                       icon="staff"
