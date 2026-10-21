@@ -27,7 +27,7 @@ import {
   type PlateRect,
   vehicleWizardLabels as W,
 } from "@orasso/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
@@ -46,6 +46,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { PhotoGrid, UploadProgress, type UploadState, waitUploadParked } from "@/ui/PhotoGrid";
 import { TabScreen } from "@/ui/Screens";
+import { discardGalleryUploads, syncGalleryUploads, type UploadCache } from "./galleryUploads";
 import { contentCaption, groupByEvent, guessPlatform, normalizeUrl, totalViews } from "./model";
 
 const { space1, space2, space3, space6, space12 } = tokens.spacing;
@@ -205,6 +206,7 @@ function AddContentSheet({
   const [busy, setBusy] = useState(false);
   const [upload, setUpload] = useState<UploadState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const sent = useRef<UploadCache>(new Map());
 
   // Par défaut : le dernier événement commencé (on publie après coup), sinon le premier.
   const byRecent = [...events].sort((a, b) => b.startsAt.localeCompare(a.startsAt));
@@ -243,21 +245,32 @@ function AddContentSheet({
     setBusy(true);
     setError(null);
     try {
-      const keys: string[] = [];
+      let keys: string[] = [];
       if (kind === "gallery") {
-        for (const [i, { photo, rects }] of photos.entries()) {
-          setUpload({ current: i + 1, total: photos.length });
-          const form = new FormData();
-          form.append("purpose", "media_content");
-          if (rects.length) form.append("plateRects", JSON.stringify(rects));
-          if (Platform.OS === "web") {
-            const blob = await (await fetch(photo.uri)).blob();
-            form.append("file", new File([blob], `photo-${i + 1}.jpg`, { type: "image/jpeg" }));
-          } else {
-            form.append("file", { uri: photo.uri, name: `photo-${i + 1}.jpg`, type: "image/jpeg" } as unknown as Blob);
-          }
-          keys.push((await api.upload(form)).key);
-        }
+        // Les envois réussis sont gardés d'un essai à l'autre : une panne de publication ne renvoie pas les 30 photos.
+        keys = await syncGalleryUploads(
+          photos,
+          sent.current,
+          async ({ photo, rects }, i) => {
+            const form = new FormData();
+            form.append("purpose", "media_content");
+            if (rects.length) form.append("plateRects", JSON.stringify(rects));
+            if (Platform.OS === "web") {
+              const blob = await (await fetch(photo.uri)).blob();
+              form.append("file", new File([blob], `photo-${i + 1}.jpg`, { type: "image/jpeg" }));
+            } else {
+              form.append("file", {
+                uri: photo.uri,
+                name: `photo-${i + 1}.jpg`,
+                type: "image/jpeg",
+              } as unknown as Blob);
+            }
+            const { id, key } = await api.upload(form);
+            return { id, key };
+          },
+          (u) => api.deleteUpload(u.id),
+          (current, total) => setUpload({ current, total }),
+        );
         setUpload({ current: photos.length, total: photos.length, done: true });
         await waitUploadParked();
       }
@@ -269,6 +282,7 @@ function AddContentSheet({
         platform: kind === "link" ? platform : "other",
         photoKeys: keys,
       });
+      sent.current.clear();
       reset();
       onDone();
     } catch (e) {
@@ -280,7 +294,16 @@ function AddContentSheet({
   }
 
   return (
-    <AppSheet visible={visible} onClose={onClose} accessibilityLabel={L.addTitle} maxHeight={0.9}>
+    <AppSheet
+      visible={visible}
+      onClose={() => {
+        // Formulaire fermé sans publier : les envois gardés pour une reprise sont supprimés.
+        void discardGalleryUploads(sent.current, (u) => api.deleteUpload(u.id));
+        onClose();
+      }}
+      accessibilityLabel={L.addTitle}
+      maxHeight={0.9}
+    >
       <Text variant="title" color={t.color.ink}>
         {L.addTitle}
       </Text>
