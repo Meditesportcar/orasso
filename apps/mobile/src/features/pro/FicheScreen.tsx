@@ -206,7 +206,7 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
           </View>
           {/* Montée en permanence : changer de segment ne perd pas la saisie en cours. */}
           <View style={[styles.stack, mode !== "edit" && styles.hidden]} testID="pro-edit">
-            <ProFicheFields />
+            <ProFicheFields state={myPro} />
             {/* Lot 40 : Publier n'est plus un onglet (barre v2) ; on y arrive depuis Ma fiche. */}
             <Button
               variant="plate"
