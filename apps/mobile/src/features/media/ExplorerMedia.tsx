@@ -3,7 +3,8 @@
 // Carte, chaque événement dit l'état de l'accréditation ou propose de la demander, avec le temps de route estimé « ≈ 3 h »)
 // et Mon agenda (la semaine, « Cette semaine » / « Plus tard », les événements couverts et gardés). Tri, filtres, état
 // des accréditations et temps de route sont ceux de l'API (`GET /events`, lot 45) ; rien n'est recalculé ici.
-import { Button, Chip, ChipRow, EmptyState, Icon, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Lot C4b (artefact `s-agenda`) : segments en bloc (`.seg`), régions et filtres en puces `.tz-chip` (allumées en moutarde).
+import { Button, Chip, EmptyState, Icon, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventCard, eventFormatLabels, eventFormats, mediaAppLabels as L, regions } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
@@ -12,6 +13,7 @@ import { StyleSheet, TextInput, View } from "react-native";
 import { ExplorerMap } from "@/features/explorer/ExplorerMap";
 import { eventPins } from "@/features/explorer/mapPins";
 import { usePaged } from "@/features/explorer/usePaged";
+import { SegBlock, TzChip } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
 import { useApi } from "@/lib/useApi";
@@ -121,14 +123,15 @@ export function ExplorerMedia() {
         />
       }
     >
-      <ChipRow accessibilityRole="tablist">
-        <Chip accessibilityRole="tab" selected={segment === "search"} onPress={() => setSegment("search")}>
-          {L.segSearch}
-        </Chip>
-        <Chip accessibilityRole="tab" selected={segment === "agenda"} onPress={() => setSegment("agenda")}>
-          {L.segAgenda}
-        </Chip>
-      </ChipRow>
+      <SegBlock
+        testID="media-segments"
+        value={segment}
+        onChange={setSegment}
+        items={[
+          { id: "search", label: L.segSearch },
+          { id: "agenda", label: L.segAgenda },
+        ]}
+      />
 
       {error ? (
         <Notice tone="error" testID="media-error">
@@ -164,50 +167,42 @@ export function ExplorerMedia() {
             />
           </View>
           <Muted variant="label">{L.where}</Muted>
-          <ChipRow accessibilityRole="tablist">
-            <Chip accessibilityRole="tab" selected={filters.region === ""} onPress={() => set("region", "")}>
-              {L.allFrance}
-            </Chip>
+          <View style={styles.tzChips} accessibilityRole="radiogroup">
+            <TzChip label={L.allFrance} icon="explore" on={filters.region === ""} onPress={() => set("region", "")} />
             {regions.map((r) => (
-              <Chip
-                accessibilityRole="tab"
+              <TzChip
                 key={r.code}
-                selected={filters.region === r.code}
+                label={r.name}
+                on={filters.region === r.code}
                 onPress={() => set("region", filters.region === r.code ? "" : r.code)}
-              >
-                {r.name}
-              </Chip>
+              />
             ))}
-          </ChipRow>
+          </View>
           <Muted variant="label">{L.whatWhen}</Muted>
-          <ChipRow>
-            <View style={styles.formatTabs}>
-              {eventFormats.map((f) => (
-                <Chip
-                  accessibilityRole="toggle"
-                  key={f}
-                  selected={filters.format === f}
-                  onPress={() => set("format", filters.format === f ? "" : f)}
-                >
-                  {eventFormatLabels[f]}
-                </Chip>
-              ))}
-            </View>
-            <Chip
-              accessibilityRole="toggle"
-              selected={filters.thisMonth}
+          <View style={styles.tzChips}>
+            {eventFormats.map((f) => (
+              <TzChip
+                key={f}
+                kind="toggle"
+                label={eventFormatLabels[f]}
+                on={filters.format === f}
+                onPress={() => set("format", filters.format === f ? "" : f)}
+              />
+            ))}
+            <TzChip
+              kind="toggle"
+              label={L.thisMonth}
+              on={filters.thisMonth}
               onPress={() => set("thisMonth", !filters.thisMonth)}
-            >
-              {L.thisMonth}
-            </Chip>
-            <Chip
-              accessibilityRole="toggle"
-              selected={filters.openOnly}
+            />
+            <TzChip
+              kind="toggle"
+              label={L.openOnly}
+              icon={filters.openOnly ? "press" : undefined}
+              on={filters.openOnly}
               onPress={() => set("openOnly", !filters.openOnly)}
-            >
-              {L.openOnly}
-            </Chip>
-          </ChipRow>
+            />
+          </View>
 
           <View style={styles.countRow}>
             <Muted variant="caption" style={styles.fill}>
@@ -371,7 +366,7 @@ function AgendaLine({
 }
 
 const styles = StyleSheet.create({
-  formatTabs: { flexDirection: "row", gap: space2 },
+  tzChips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   fill: { flex: 1 },
   search: {
     flexDirection: "row",
