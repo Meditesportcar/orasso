@@ -61,6 +61,7 @@ import { api } from "@/lib/api";
 import { now } from "@/lib/clock";
 import { formatDay, formatDayHour, formatShortDate } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
+import { mediaSource } from "@/lib/media";
 import { imageForm, pickOneImage } from "@/lib/structureFiles";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -633,7 +634,7 @@ export function AfficheTemps(ctx: StepContext) {
   const [format, setFormat] = useState<PosterFormat>("post");
   const [preview, setPreview] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Partial<Record<PosterStyle, string>>>({});
-  const [photo, setPhoto] = useState<string | null>(event?.posterSettings?.photoUrl ?? null);
+  const [photo, setPhoto] = useState<string | null>(mediaSource(event?.posterSettings?.photoUrl)?.uri ?? null);
   const [sending, setSending] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const input = (p: PosterSettings, width: number) => ({
@@ -771,6 +772,7 @@ export function AfficheTemps(ctx: StepContext) {
 export function PretTemps(ctx: StepContext) {
   const { d, event, verified, editing, openStructure } = ctx;
   const { t } = useTheme();
+  const posterSource = mediaSource(event?.posterUrl);
   const start = draftStart(d);
   const tl = previewTimeline(d);
   const rows = [
@@ -785,9 +787,9 @@ export function PretTemps(ctx: StepContext) {
     <>
       <View style={styles.row}>
         <View style={[styles.readyPoster, styles.post]}>
-          {event?.posterUrl ? (
+          {posterSource ? (
             <Image
-              source={{ uri: event.posterUrl }}
+              source={posterSource}
               style={StyleSheet.absoluteFill}
               accessibilityLabel={W.posterPreviewAlt}
               testID="wizard-ready-poster"
