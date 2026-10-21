@@ -49,3 +49,34 @@ export function replayProfiles(personaKinds: readonly string[], mainProfile: Mai
 export function stepIndex(index: number, direction: 1 | -1, count: number): number {
   return Math.min(count - 1, Math.max(0, index + direction));
 }
+
+/**
+ * `text-wrap: balance` de l'artefact (titres des diapos) : le titre coupé en lignes de longueurs voisines, au même
+ * nombre de lignes qu'un retour à la ligne ordinaire. `maxChars` : nombre de caractères qui tiennent sur une ligne.
+ */
+export function balanceTitle(text: string, maxChars: number): string {
+  const words = text.split(" ");
+  if (text.length <= maxChars || words.length < 2) return text;
+  const lineLen = (ws: string[]) => ws.join(" ").length;
+  for (let lines = Math.ceil(text.length / maxChars); lines <= words.length; lines++) {
+    let best: string[][] | null = null;
+    let bestMax = Number.POSITIVE_INFINITY;
+    // Toutes les coupures possibles en `lines` lignes (titres courts : quelques mots).
+    const walk = (start: number, left: number, acc: string[][]) => {
+      if (left === 1) {
+        const all = [...acc, words.slice(start)];
+        const max = Math.max(...all.map(lineLen));
+        if (max <= maxChars && max < bestMax) {
+          bestMax = max;
+          best = all;
+        }
+        return;
+      }
+      for (let end = start + 1; end <= words.length - left + 1; end++)
+        walk(end, left - 1, [...acc, words.slice(start, end)]);
+    };
+    walk(0, lines, []);
+    if (best) return (best as string[][]).map((ws) => ws.join(" ")).join("\n");
+  }
+  return text;
+}

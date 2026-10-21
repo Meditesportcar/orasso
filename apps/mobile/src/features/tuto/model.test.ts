@@ -1,7 +1,7 @@
 import { mainProfiles, tutoArt, tutoLabels, tutoProfileNames, tutoSlides } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { parseTutoProfile, replayProfiles, stepIndex, tutoProfileOfPersona, tutoSeenKey } from "./model";
+import { balanceTitle, parseTutoProfile, replayProfiles, stepIndex, tutoProfileOfPersona, tutoSeenKey } from "./model";
 
 describe("les six tutos", () => {
   it("ont le nombre de diapos du prototype : 7, 6, 4, 6, 4, 4 (31)", () => {
@@ -87,5 +87,14 @@ describe("profils et navigation du tuto", () => {
     expect(stepIndex(0, -1, 7)).toBe(0);
     expect(stepIndex(0, 1, 7)).toBe(1);
     expect(stepIndex(6, 1, 7)).toBe(6);
+  });
+});
+
+describe("titres équilibrés (text-wrap: balance)", () => {
+  it("coupe en lignes voisines, au même nombre de lignes", () => {
+    expect(balanceTitle("Tu trouves un rasso", 16)).toBe("Tu trouves\nun rasso");
+    expect(balanceTitle("Des points et des souvenirs", 16)).toBe("Des points et\ndes souvenirs");
+    expect(balanceTitle("Tes points t'ouvrent des remises", 16)).toBe("Tes points\nt'ouvrent\ndes remises");
+    expect(balanceTitle("Court", 16)).toBe("Court");
   });
 });
