@@ -20,7 +20,11 @@ export function migrationsFingerprint(dir = migrationsFolder): string {
     for (const entry of readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const rel = `${prefix}${entry.name}`;
       if (entry.isDirectory()) walk(join(current, entry.name), `${rel}/`);
-      else hash.update(`${rel}\0`).update(readFileSync(join(current, entry.name))).update("\0");
+      else
+        hash
+          .update(`${rel}\0`)
+          .update(readFileSync(join(current, entry.name)))
+          .update("\0");
     }
   };
   walk(dir, "");
