@@ -1,25 +1,19 @@
-// Assistant de création et de modification d'un événement dans l'appli (lot 35b, D20), page de l'événement (publier,
-// dupliquer, récurrence) et invitations complètes. Mêmes textes que l'assistant du site (`EventWizard.tsx`), découpés
-// pour un écran de téléphone : une étape par écran.
+// Assistant de création et de modification d'un événement (site et appli, lot 53 : huit temps de `s-create`), page de
+// l'événement (publier, dupliquer, récurrence) et invitations complètes. Mêmes textes sur le site (`EventWizard.tsx`)
+// et dans l'appli (`features/orga/wizard`).
+import type { EventWizardStep } from "../eventWizard";
 
-/** Étapes de l'assistant de l'appli : celles du site, la première découpée en trois écrans (format, dates, lieu). */
-export const appWizardSteps = [
-  "format",
-  "dates",
-  "lieu",
-  "vehicules",
-  "places",
-  "prestataires",
-  "public",
-  "admission",
-  "criteres",
-  "avant-premiere",
-  "reglement",
-  "infos",
-  "zones",
-  "billetterie",
-] as const;
-export type AppWizardStep = (typeof appWizardSteps)[number];
+/** Nom court de chaque temps (barre de progression, « Étape 2 sur 8 · Lieu »). */
+export const eventStepLabels: Record<EventWizardStep, string> = {
+  type: "Type",
+  lieu: "Lieu",
+  arrivees: "Arrivées",
+  criteres: "Critères",
+  "avant-premiere": "Avant-première",
+  reglement: "Règlement",
+  affiche: "Affiche",
+  publier: "Tout est prêt",
+};
 
 export const eventEditorLabels = {
   newTitle: "Nouvel événement",
@@ -27,22 +21,7 @@ export const eventEditorLabels = {
   create: "Créer un événement",
   edit: "Modifier",
   stepOf: (n: number, total: number, label: string) => `Étape ${n} sur ${total} · ${label}`,
-  steps: {
-    format: "Format",
-    dates: "Dates",
-    lieu: "Lieu",
-    vehicules: "Véhicules",
-    places: "Places",
-    prestataires: "Prestataires",
-    public: "Public",
-    admission: "Admission",
-    criteres: "Critères",
-    "avant-premiere": "Avant-première",
-    reglement: "Règlement",
-    infos: "Infos",
-    zones: "Zones",
-    billetterie: "Billetterie",
-  } satisfies Record<AppWizardStep, string>,
+  steps: eventStepLabels,
   next: "Suivant",
   back: "Retour",
   cancel: "Annuler",
@@ -267,3 +246,181 @@ export const eventEditorLabels = {
   lockedInvitations: "Inscriptions verrouillées : les invitations ne sont plus possibles.",
   publishToInvite: "Publie l'événement pour inviter.",
 } as const;
+
+/**
+ * Assistant en huit temps (lot 53) : textes du prototype DA v2 (`s-create`, `data-cs="0"` à `"7"`), au « tu », sans
+ * genre. Les volets « Public et places », « Sur place » et « Public » regroupent les étapes de l'ancien assistant
+ * (véhicules, places, prestataires, zones, missions, entrée du public, billetterie) sans rien retirer.
+ */
+export const wizardV2Labels = {
+  flowSub: (structure: string) => `${structure} · enregistré à chaque étape`,
+  close: "Fermer",
+  continue: "Continuer",
+  previous: "Étape précédente",
+
+  // (1) Type.
+  typeTitle: "C'est quel genre ?",
+  typeIntro: "Le format préremplit les options. Tout reste modifiable.",
+  howOften: "Combien de fois ?",
+  kinds: {
+    one: { title: "Ponctuel", hint: "Une date, un soir ou une journée" },
+    rec: { title: "Récurrent", hint: "Le même rendez-vous, plusieurs dates" },
+    multi: { title: "Plusieurs jours", hint: "Un week-end, un salon" },
+  },
+  date: "Date",
+  start: "Début",
+  end: "Fin",
+  returns: "Revient",
+  nthChips: { 1: "Le 1er", 2: "Le 2e", 3: "Le 3e", 4: "Le 4e", [-1]: "Le dernier" } as Record<number, string>,
+  weekdayChips: ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"] as const,
+  eachMonth: "de chaque mois",
+  from: "De",
+  to: "À",
+  nextDates: "Prochaines dates",
+  until: "Jusqu'au",
+  untilValue: (date: string) => `${date}, puis à reconduire`,
+  recurrenceCount: "Nombre de dates après la première",
+  recurrenceExisting: "Cette série existe déjà : ses dates se modifient une à une, depuis Événements.",
+  eventTitle: "Titre",
+  eventDescription: "Description et programme",
+  placesPanel: "Public et places",
+  placesPanelHint: "Véhicules admis, nombre de places",
+
+  // (2) Lieu.
+  placeTitle: "Où ça se passe ?",
+  placeIntro: "Obligatoire pour publier. Déplace l'épingle pour viser l'entrée exacte.",
+  search: "Adresse",
+  searchPlaceholder: "ex. Port de Canet",
+  searchButton: "Chercher",
+  suggestionsNone: "Aucune adresse trouvée : complète l'adresse et la ville, puis place l'épingle à la main.",
+  coords: (lat: number, lng: number) =>
+    `${Math.abs(lat).toFixed(4).replace(".", ",")} ${lat >= 0 ? "N" : "S"} · ${Math.abs(lng).toFixed(4).replace(".", ",")} ${lng >= 0 ? "E" : "O"}`,
+  pinMissing: "Pas encore d'épingle : cherche l'adresse, ou touche la carte à l'endroit de l'entrée.",
+  entrance: "Précision pour l'entrée (facultatif)",
+  entrancePlaceholder: "ex. Entrée par le quai Nord, barrière levée à 18 h",
+  onSitePanel: "Sur place",
+  onSitePanelHint: "Zones, prestataires attendus, missions",
+  missionsTitle: "Missions",
+  missionsIntro:
+    "Ce que tu cherches : un food truck, un photographe… Les prestataires voient la mission, ce que tu fournis, et candidatent dessus.",
+  missionTrade: "Métier",
+  missionQuantity: "Combien",
+  missionPower: "Électricité fournie",
+  missionWater: "Eau sur place",
+  missionFrontage: "Façade (mètres)",
+  missionInstall: "Installation à partir de",
+  missionAdd: "Ajouter une mission",
+  missionRemove: "Retirer",
+  mission: (n: number) => `Mission ${n}`,
+
+  // (3) Arrivées.
+  arrivalsTitle: "Les arrivées",
+  arrivalsIntro:
+    "Un créneau pour les exposants, un pour le public. Les retenus le reçoivent dans leurs consignes et confirment l'avoir vu.",
+  arrivalsNone: "Pas de créneau",
+  arrivalsSet: "Fixer un créneau",
+  advisedHint: "Recommandé : une indication, personne n'est refusé en arrivant plus tard.",
+  exhibitorSees: "Ce que voit l'exposant en candidatant",
+  exhibitorSeesBody: "Il coche « J'ai vu » et peut laisser une note : « J'arriverai vers 19 h 30 à cause du travail ».",
+  exhibitorSeesNone: "Aucun créneau : l'exposant ne voit pas d'horaire d'arrivée.",
+  publicPanel: "Public",
+  publicPanelHint: "Entrée du public, billets",
+  ticketsTitle: "Billetterie visiteurs",
+
+  // (4) Critères.
+  criteriaTitle: "Qui peut venir ?",
+  criteriaIntro: "Trois questions, dans l'ordre. Laisse vide pour tout accepter.",
+  admission: "Admission",
+  q1: "Quelles origines ?",
+  q2: "Quels styles ?",
+  q3: "Des marques en particulier ?",
+  makesPlaceholder: "ex. Porsche, Nissan",
+  makesNone: "Aucune : toutes les marques des origines choisies.",
+  criteriaMore: "Précisions (facultatif)",
+
+  // (5) Avant-première.
+  previewTitle: "Avant-première",
+  previewIntro: "Récompense tes abonnés : ils candidatent avant tout le monde.",
+  previewSwitch: "Tes abonnés peuvent candidater en avance",
+  followers: (n: number, structure: string) => `${n} abonné${n > 1 ? "s" : ""} à ${structure}`,
+  previewLead: "Combien de temps avant",
+  openSubscribers: "Ouverture aux abonnés",
+  openEveryone: "Ouverture à tous",
+  timelineSubscribers: "abonnés",
+  timelineEveryone: "tout le monde",
+  morePanel: "Hauts grades et verrouillage",
+
+  // (6) Règlement.
+  rulesTitle: "Le règlement",
+  rulesIntro: "Écris sur autant de lignes que tu veux. Il s'affiche tel quel sur la page de l'événement.",
+  rulesOrasso: "Modèle Orasso",
+  rulesLast: "Reprendre le dernier",
+  rulesLastNone: "Aucun règlement précédent à reprendre.",
+  rulesInserted: "Modèle inséré",
+  rulesTaken: (title: string) => `Règlement repris de « ${title} »`,
+  rulesCount: (lines: number, chars: number) =>
+    `${lines} ligne${lines > 1 ? "s" : ""} · ${chars} caractère${chars > 1 ? "s" : ""}`,
+
+  // (7) Affiche.
+  posterTitle: "Ton affiche",
+  posterPhotoPick: "Choisir une photo",
+  posterPhotoChange: "Changer de photo",
+  posterNoPhoto: "Sans photo, l'affiche prend le style Minimal aux couleurs du format.",
+  posterSending: "Envoi de la photo…",
+  posterPreviewAlt: "Aperçu de l'affiche",
+  posterTitleField: "Titre sur l'affiche",
+  posterOwnTitle: "Tu as déjà ton affiche ?",
+  posterOwnHint: "Ajoute-la en plus. Elle s'affiche dans le détail de l'événement.",
+  posterOwnChosen: (name: string) => `Affiche perso choisie : ${name}`,
+
+  // (8) Tout est prêt.
+  readyTitle: "Tout est prêt",
+  readyIntro: "Vérifie, puis choisis.",
+  publish: "Publier",
+  draft: "Brouillon",
+  preview: "Aperçu",
+  recapExhibitors: (n: number) => `${n} exposant${n > 1 ? "s" : ""}`,
+  recapNoLimit: "Places sans limite",
+  recapPreview: (date: string) => `Avant-première ${date}`,
+  recapNoPreview: "Sans avant-première",
+  recapRecurrence: (n: number) => `${n} date${n > 1 ? "s" : ""} de plus, en brouillon`,
+} as const;
+
+/** Modèles de règlement (`s-create` : « Modèle Nocturne », « Modèle Expo » ; le modèle d'Orasso reste proposé). */
+export const rulesTemplates = [
+  {
+    id: "nocturne",
+    label: "Modèle Nocturne",
+    text: [
+      "Départs au pas, aucun burn ni rupteur : exclusion immédiate.",
+      "Musique coupée après 22 h, par respect pour les riverains.",
+      "Chacun repart avec ses déchets, des sacs sont prévus à l'entrée.",
+      "Les mineurs viennent accompagnés.",
+    ].join("\n"),
+  },
+  {
+    id: "expo",
+    label: "Modèle Expo",
+    text: [
+      "Arrivée dans le créneau indiqué ; le placement suit les consignes du staff.",
+      "Moteurs coupés dans l'enceinte, aucune démonstration sonore.",
+      "Le véhicule reste exposé jusqu'à la fermeture, sauf accord de l'organisation.",
+      "Chacun repart avec ses déchets.",
+    ].join("\n"),
+  },
+] as const;
+
+/**
+ * Origines du critère « Quelles origines ? » (codes ISO des pays des marques), dans l'ordre du prototype : chip au
+ * singulier, forme de la phrase récapitulative au pluriel.
+ */
+export const criteriaOrigins = [
+  { code: "JP", chip: "Japonaise", plural: "japonaises" },
+  { code: "DE", chip: "Allemande", plural: "allemandes" },
+  { code: "FR", chip: "Française", plural: "françaises" },
+  { code: "IT", chip: "Italienne", plural: "italiennes" },
+  { code: "US", chip: "Américaine", plural: "américaines" },
+  { code: "GB", chip: "Britannique", plural: "britanniques" },
+  { code: "SE", chip: "Suédoise", plural: "suédoises" },
+  { code: "ES", chip: "Espagnole", plural: "espagnoles" },
+] as const;

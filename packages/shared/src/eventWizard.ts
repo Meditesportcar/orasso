@@ -9,10 +9,15 @@ import type { DayAccess, EventAdmission, EventFormat, EventPublicAccess, Vehicle
 import type { Grade } from "./grades";
 import { arrivalProblems } from "./labels/arrival.fr";
 import { eventAddressRequired } from "./labels/corrections.fr";
+import { criteriaOrigins } from "./labels/event-editor.fr";
 import { defaultEventRules } from "./labels/events.fr";
-import { type Arrivals, validateArrivals } from "./rules/arrival";
+import { EVENT_NEED_MAX_QUANTITY, type ProviderPower, type VendorTypeCode } from "./provider";
+import { type ArrivalSlot, type Arrivals, arrivalInstant, validateArrivals } from "./rules/arrival";
+import { POSTER_TITLE_MAX } from "./rules/poster";
+import { nthWeekdayOfMonth, RECURRENCE_MAX_COUNT, type RecurrenceRule, recurrenceOccurrences } from "./rules/recurrence";
 import { fromWallTime, wallTime } from "./rules/time";
 import type { EventOrganizer, EventZone, PosterSettings } from "./schemas/event";
+import type { EventNeedView } from "./schemas/provider";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -37,22 +42,28 @@ export function fromWallInput(value: string): string | null {
   return fromWallTime({ year, month, day, hour, minute }).toISOString();
 }
 
-/** Les étapes de l'assistant du site, dans l'ordre (docs/02 « Espace organisateur »). */
+/**
+ * Les huit temps de l'assistant, site et appli (lot 53, `s-create`, V13). Ils regroupent les douze étapes d'avant sans
+ * rien retirer : format, dates, titre, description, véhicules et places → `type` ; adresse, zones, prestataires
+ * attendus et missions → `lieu` ; créneaux, entrée du public et billetterie → `arrivees` ; admission et critères →
+ * `criteres` ; ouverture, avant-première, hauts grades et verrouillage → `avant-premiere` ; règlement et consignes →
+ * `reglement` ; affiche générée et affiche perso → `affiche` ; récapitulatif → `publier`.
+ */
 export const eventWizardSteps = [
-  "format",
-  "vehicules",
-  "places",
-  "prestataires",
-  "public",
-  "admission",
+  "type",
+  "lieu",
+  "arrivees",
   "criteres",
   "avant-premiere",
   "reglement",
-  "infos",
-  "zones",
-  "billetterie",
+  "affiche",
+  "publier",
 ] as const;
 export type EventWizardStep = (typeof eventWizardSteps)[number];
+
+/** Temps d'après son nom (adresse `?temps=lieu`), `null` s'il n'existe pas. */
+export const eventWizardStepOf = (value: string | null | undefined): EventWizardStep | null =>
+  (eventWizardSteps as readonly string[]).includes(value ?? "") ? (value as EventWizardStep) : null;
 
 /** Pays proposés au critère « Origine » (codes ISO à deux lettres). */
 export const criteriaCountries = [
@@ -70,6 +81,26 @@ export type ZoneDraft = { id?: string; code: string; name: string; capacity: str
 
 /** Un jour d'un événement sur plusieurs jours (lot 26) : date, heures de Paris, capacité facultative. */
 export type DayDraft = { date: string; startTime: string; endTime: string; capacity: string };
+
+/**
+ * Une mission (besoin `event_needs`, lot 46) saisie dans le volet « Sur place » : métier, nombre, ce que l'organisation
+ * fournit, façade (mètres) et heure d'installation (« HH:MM », le jour de l'événement).
+ */
+export type NeedDraft = {
+  id?: string;
+  trade: VendorTypeCode;
+  quantity: string;
+  power: ProviderPower;
+  water: boolean;
+  frontageM: string;
+  installTime: string;
+};
+
+/**
+ * Récurrence choisie au temps 1 (« Revient le 1er dimanche de chaque mois ») : créée une seule fois, à la fin de
+ * l'assistant, par `POST /events/:id/recurrence` (les dates suivantes naissent en brouillon).
+ */
+export type RecurrenceDraft = { nth: number; weekday: number; count: number };
 
 /** Le brouillon de l'assistant : des chaînes pour les champs saisis, comme dans un formulaire. */
 export type EventDraft = {
@@ -114,12 +145,18 @@ export type EventDraft = {
   instructions: string;
   zones: ZoneDraft[];
   /**
-   * Lot 47 : créneaux d'arrivée des exposants et du public (« HH:MM »). Facultatif : absent, rien n'est envoyé ; l'étape
-   * qui les saisit (« Les arrivées ») vient avec l'assistant à 8 temps (lot 53).
+   * Lot 47 : créneaux d'arrivée des exposants et du public (« HH:MM »). Facultatif : absent, rien n'est envoyé ; saisis au
+   * temps « Les arrivées » (lot 53).
    */
   arrivals?: Arrivals;
   /** Lot 47 : affiche générée (photo envoyée, style, titre de 34 caractères au plus). Facultatif comme `arrivals`. */
   poster?: PosterSettings | null;
+  /** Lot 53 : « Précision pour l'entrée (facultatif) » (absent des brouillons d'avant). */
+  entranceNote?: string;
+  /** Lot 53 : missions du volet « Sur place » (absentes des brouillons d'avant). */
+  needs?: NeedDraft[];
+  /** Lot 53 : « Récurrent » au temps 1 ; `null` ou absent = ponctuel ou plusieurs jours. */
+  recurrence?: RecurrenceDraft | null;
 };
 
 /** Brouillon neuf (valeurs par défaut des docs) ou prérempli depuis un événement existant (modification). */
@@ -162,6 +199,9 @@ export function initialEventDraft(now: Date, event?: EventOrganizer): EventDraft
       rulesText: defaultEventRules,
       instructions: "",
       zones: [],
+      entranceNote: "",
+      needs: [],
+      recurrence: null,
     };
   }
   return {
@@ -214,6 +254,9 @@ export function initialEventDraft(now: Date, event?: EventOrganizer): EventDraft
       capacity: z.capacity ? String(z.capacity) : "",
     })),
     arrivals: event.arrivals,
+    entranceNote: event.entranceNote ?? "",
+    needs: [],
+    recurrence: null,
     poster: event.posterSettings
       ? {
           photoKey: event.posterSettings.photoKey,
@@ -308,47 +351,112 @@ export function withCopyOpening(d: EventDraft, leadMs: number, now: Date): Event
   return opens === d.registrationsOpenAt ? d : { ...d, registrationsOpenAt: opens };
 }
 
-/** Le problème qui empêche de quitter une étape, ou `null`. Mêmes règles sur le site et dans l'appli. */
+/** Véhicules admis : au moins un type. */
+export function eventVehiclesProblem(d: Pick<EventDraft, "vehicleTypes">): string | null {
+  return d.vehicleTypes.length === 0 ? "Coche au moins un type de véhicule." : null;
+}
+
+/** Places : sans limite, ou un nombre supérieur à zéro. */
+export function eventCapacityProblem(d: Pick<EventDraft, "unlimited" | "capacity">): string | null {
+  return !d.unlimited && !(Number(d.capacity) > 0) ? "Indique un nombre de places supérieur à zéro." : null;
+}
+
+/** Entrée payante hors Orasso par lien : une adresse https. */
+export function eventTicketLinkProblem(
+  d: Pick<EventDraft, "publicAccess" | "paymentMode" | "externalTicketUrl">,
+): string | null {
+  return d.publicAccess === "paid_external" && d.paymentMode === "link" && !/^https?:\/\//i.test(d.externalTicketUrl)
+    ? "Indique l'adresse de ta billetterie (https://…)."
+    : null;
+}
+
+/** Zones : un code de 1 à 4 lettres ou chiffres, un nom, pas deux fois le même code. */
+export function eventZonesProblem(d: Pick<EventDraft, "zones">): string | null {
+  const codes = d.zones.map((z) => z.code.trim().toUpperCase());
+  if (d.zones.some((z) => !/^[A-Z0-9]{1,4}$/.test(z.code.trim().toUpperCase()) || !z.name.trim())) {
+    return "Chaque zone a un code de 1 à 4 lettres ou chiffres et un nom.";
+  }
+  return new Set(codes).size === codes.length ? null : "Deux zones ont le même code.";
+}
+
+/** Missions : un nombre de 1 à 9, une façade de 1 à 30 m ou vide, une heure « HH:MM » ou vide. */
+export function eventNeedsProblem(d: Pick<EventDraft, "needs">): string | null {
+  for (const n of d.needs ?? []) {
+    const q = Number(n.quantity);
+    if (!Number.isInteger(q) || q < 1 || q > EVENT_NEED_MAX_QUANTITY) {
+      return `Mission : un nombre de 1 à ${EVENT_NEED_MAX_QUANTITY}.`;
+    }
+    const f = n.frontageM.trim();
+    if (f && !(Number.isInteger(Number(f)) && Number(f) >= 1 && Number(f) <= 30)) {
+      return "Mission : une façade de 1 à 30 mètres, ou rien.";
+    }
+    if (n.installTime.trim() && !/^([01]\d|2[0-3]):[0-5]\d$/.test(n.installTime.trim())) {
+      return "Mission : une heure d'installation au format HH:MM, ou rien.";
+    }
+  }
+  return null;
+}
+
+/** Récurrence : un rang (1er à 4e, dernier), un jour, de 1 à 12 dates après la première. */
+export function eventRecurrenceProblem(d: Pick<EventDraft, "recurrence" | "multiDay">): string | null {
+  const r = d.recurrence;
+  if (!r) return null;
+  if (d.multiDay) return "Un événement sur plusieurs jours ne se répète pas : choisis Ponctuel ou Récurrent.";
+  if (![1, 2, 3, 4, -1].includes(r.nth) || r.weekday < 0 || r.weekday > 6) return "Choisis quand l'événement revient.";
+  return Number.isInteger(r.count) && r.count >= 1 && r.count <= RECURRENCE_MAX_COUNT
+    ? null
+    : `De 1 à ${RECURRENCE_MAX_COUNT} dates après la première.`;
+}
+
+/** Affiche générée : un titre de 1 à 34 caractères. */
+export function eventPosterProblem(d: Pick<EventDraft, "poster">): string | null {
+  const title = d.poster?.title.trim() ?? null;
+  if (title === null) return null;
+  if (!title) return "Donne un titre à l'affiche.";
+  return title.length > POSTER_TITLE_MAX ? `Titre de l'affiche : ${POSTER_TITLE_MAX} caractères au plus.` : null;
+}
+
+/** Le problème qui empêche de quitter un temps, ou `null`. Mêmes règles sur le site et dans l'appli. */
 export function eventStepProblem(step: EventWizardStep, d: EventDraft): string | null {
   switch (step) {
-    case "format":
-      return eventTitleProblem(d) ?? eventDatesProblem(d) ?? eventAddressProblem(d);
-    case "vehicules":
-      return d.vehicleTypes.length === 0 ? "Coche au moins un type de véhicule." : null;
-    case "places":
-      return !d.unlimited && !(Number(d.capacity) > 0) ? "Indique un nombre de places supérieur à zéro." : null;
-    case "public":
-      return d.publicAccess === "paid_external" &&
-        d.paymentMode === "link" &&
-        !/^https?:\/\//i.test(d.externalTicketUrl)
-        ? "Indique l'adresse de ta billetterie (https://…)."
-        : null;
+    case "type":
+      return (
+        eventTitleProblem(d) ??
+        eventDatesProblem(d) ??
+        eventRecurrenceProblem(d) ??
+        eventVehiclesProblem(d) ??
+        eventCapacityProblem(d)
+      );
+    case "lieu":
+      return eventAddressProblem(d) ?? eventZonesProblem(d) ?? eventNeedsProblem(d);
+    case "arrivees":
+      return eventArrivalsProblem(d) ?? eventTicketLinkProblem(d);
     case "avant-premiere":
       return eventOpeningProblem(d);
-    case "zones": {
-      const codes = d.zones.map((z) => z.code.trim().toUpperCase());
-      if (d.zones.some((z) => !/^[A-Z0-9]{1,4}$/.test(z.code.trim().toUpperCase()) || !z.name.trim())) {
-        return "Chaque zone a un code de 1 à 4 lettres ou chiffres et un nom.";
-      }
-      return new Set(codes).size === codes.length ? null : "Deux zones ont le même code.";
-    }
+    case "affiche":
+      return eventPosterProblem(d);
     default:
       return null;
   }
 }
 
-/** Les critères n'existent qu'en admission sur filtration. */
-export const eventStepSkipped = (step: EventWizardStep, d: Pick<EventDraft, "admission">) =>
-  step === "criteres" && d.admission !== "filtered";
-
-/** Première étape en défaut avant l'enregistrement : `{ step, problem }`, ou `null` si tout est bon. */
+/** Premier temps en défaut avant l'enregistrement : `{ step, problem }`, ou `null` si tout est bon. */
 export function firstEventProblem(d: EventDraft): { step: EventWizardStep; problem: string } | null {
   for (const step of eventWizardSteps) {
-    if (eventStepSkipped(step, d)) continue;
     const problem = eventStepProblem(step, d);
     if (problem) return { step, problem };
   }
   return null;
+}
+
+/**
+ * Le temps où rouvrir un brouillon (lot 53, « un brouillon rouvre l'assistant à son étape ») : le premier temps en
+ * défaut, sinon « Tout est prêt ». Un événement publié rouvre sur le temps demandé, sinon sur le premier.
+ */
+export function eventResumeStep(d: EventDraft, draft: boolean, wanted?: EventWizardStep | null): EventWizardStep {
+  if (wanted) return wanted;
+  if (!draft) return "type";
+  return firstEventProblem(d)?.step ?? "publier";
 }
 
 /** Jours triés (lot 26). */
@@ -472,6 +580,7 @@ export function eventPayload(d: EventDraft, editingMultiDay = false) {
     lockOffsetMinutes: Number(d.lockOffsetMinutes),
     rulesText: d.rulesText.trim() || null,
     instructions: d.instructions.trim() || null,
+    entranceNote: d.entranceNote?.trim() || null,
     vendorTypes: d.vendorTypes,
     shopEnabled: d.shopEnabled,
     // Lot 47 : envoyés seulement quand le brouillon les porte (sinon l'API garde ce qui est enregistré).
@@ -533,3 +642,173 @@ export const lockOffsetOptions = [
   { value: "360", label: "6 h avant" },
   { value: "1440", label: "24 h avant" },
 ] as const;
+
+// --- Assistant en huit temps (lot 53) ---------------------------------------------------------------------------
+
+/** Ponctuel, récurrent ou plusieurs jours (« Combien de fois ? »). */
+export type EventKind = "one" | "rec" | "multi";
+
+export const eventKindOf = (d: Pick<EventDraft, "multiDay" | "recurrence">): EventKind =>
+  d.multiDay ? "multi" : d.recurrence ? "rec" : "one";
+
+/** Récurrence par défaut : le 1er dimanche de chaque mois, six dates de plus. */
+export const defaultRecurrence: RecurrenceDraft = { nth: 1, weekday: 0, count: 6 };
+
+/** Date (« AAAA-MM-JJ ») de la première occurrence de la règle à partir de `from` (heure de Paris), ou `null`. */
+export function firstRecurrenceDate(r: RecurrenceDraft, from: Date): string | null {
+  const w = wallTime(from);
+  for (let i = 0; i < 14; i++) {
+    const month = ((w.month - 1 + i) % 12) + 1;
+    const year = w.year + Math.floor((w.month - 1 + i) / 12);
+    const day = nthWeekdayOfMonth(year, month, r.nth, r.weekday);
+    if (day === null || (i === 0 && day < w.day)) continue;
+    return `${year}-${pad(month)}-${pad(day)}`;
+  }
+  return null;
+}
+
+/**
+ * Passe d'un type à l'autre : « Plusieurs jours » prérempli comme avant (`withMultiDay`) ; « Récurrent » cale le début
+ * sur la première date de la règle, aux heures déjà saisies (19:00 – 23:30 par défaut).
+ */
+export function withEventKind(d: EventDraft, kind: EventKind, now: Date): EventDraft {
+  if (kind === "multi") return withMultiDay({ ...d, recurrence: null }, true, now);
+  const single = { ...d, multiDay: false };
+  if (kind === "one") return { ...single, recurrence: null };
+  return withRecurrence(single, d.recurrence ?? defaultRecurrence, now);
+}
+
+/** Change la règle et recale le début et la fin sur sa première date (heures gardées). */
+export function withRecurrence(d: EventDraft, r: RecurrenceDraft, now: Date): EventDraft {
+  const date = firstRecurrenceDate(r, now);
+  const start = d.startsAt.slice(11, 16) || "19:00";
+  const end = d.endsAt.slice(11, 16) || "23:30";
+  return date ? { ...d, recurrence: r, startsAt: `${date}T${start}`, endsAt: `${date}T${end}` } : { ...d, recurrence: r };
+}
+
+/** Règle envoyée à `POST /events/:id/recurrence`. */
+export const recurrenceRuleOf = (r: RecurrenceDraft): RecurrenceRule => ({
+  kind: "monthly_nth_weekday",
+  nth: r.nth,
+  weekday: r.weekday,
+  count: r.count,
+});
+
+/** Toutes les dates de la série (la première comprise), pour « Prochaines dates » et « Jusqu'au ». */
+export function recurrenceDates(d: EventDraft): Date[] {
+  const start = fromWallInput(d.startsAt);
+  const end = fromWallInput(d.endsAt);
+  if (!d.recurrence || !start || !end) return [];
+  return [
+    new Date(start),
+    ...recurrenceOccurrences(new Date(start), new Date(end), recurrenceRuleOf(d.recurrence)).map((o) => o.startsAt),
+  ];
+}
+
+/** Frise de l'avant-première : ouverture aux abonnés (si avant-première), ouverture à tous, début. */
+export function previewTimeline(d: EventDraft): { subscribers: string | null; everyone: string | null; start: string | null } {
+  const everyone = fromWallInput(d.registrationsOpenAt);
+  const hours = Number(d.previewHours);
+  return {
+    subscribers: everyone && hours > 0 ? new Date(Date.parse(everyone) - hours * 3_600_000).toISOString() : null,
+    everyone,
+    start: draftStart(d),
+  };
+}
+
+/** « 4 lignes · 231 caractères » : lignes non vides et caractères du règlement. */
+export function rulesCount(text: string): { lines: number; chars: number } {
+  return { lines: text.split("\n").filter((l) => l.trim()).length, chars: text.trim().length };
+}
+
+/** Créneau par défaut quand on en fixe un : exposants 18:30 – 19:15 strict, public 19:30 – 23:00 recommandé. */
+export function defaultArrivalSlot(which: keyof Arrivals): ArrivalSlot {
+  return which === "exhibitors"
+    ? { from: "18:30", to: "19:15", strict: true, note: null }
+    : { from: "19:30", to: "23:00", strict: false, note: null };
+}
+
+/** Pose, modifie (`patch`) ou retire (`null`) un créneau du brouillon. */
+export function withArrivalSlot(d: EventDraft, which: keyof Arrivals, slot: ArrivalSlot | null): EventDraft {
+  const arrivals: Arrivals = { exhibitors: d.arrivals?.exhibitors ?? null, public: d.arrivals?.public ?? null };
+  return { ...d, arrivals: { ...arrivals, [which]: slot } };
+}
+
+const lowerStyle = (label: string) => (label === label.toUpperCase() ? label : label.toLowerCase());
+const joinFr = (items: string[], word: "et" | "ou") =>
+  items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} ${word} ${items[items.length - 1]}`;
+
+/**
+ * Phrase récapitulative des trois questions (`s-create`, « Qui peut venir ? ») : « Tu acceptes les japonaises et les
+ * allemandes, de style JDM ou sportive, toutes marques. » Une question laissée vide accepte tout.
+ */
+export function summaryOfCriteria(criteria: {
+  countries: readonly string[];
+  styles: readonly string[];
+  makes: readonly string[];
+}): string {
+  const origins = criteriaOrigins
+    .filter((o) => criteria.countries.includes(o.code))
+    .map((o) => `les ${o.plural}`);
+  const who = origins.length ? joinFr(origins, "et") : "tous les véhicules";
+  const styles = criteria.styles.length ? `de style ${joinFr(criteria.styles.map(lowerStyle), "ou")}` : "tous styles";
+  const makes = criteria.makes.length ? `de marque ${joinFr([...criteria.makes], "ou")}` : "toutes marques";
+  return `Tu acceptes ${who}, ${styles}, ${makes}.`;
+}
+
+/** Missions enregistrées → lignes du volet « Sur place ». */
+export function needsFromSaved(saved: readonly EventNeedView[]): NeedDraft[] {
+  return [...saved]
+    .sort((a, b) => a.position - b.position)
+    .map((n) => ({
+      id: n.id,
+      trade: n.trade,
+      quantity: String(n.quantity),
+      power: n.power,
+      water: n.water,
+      frontageM: n.frontageM === null ? "" : String(n.frontageM),
+      installTime: n.installAt ? toWallInput(n.installAt).slice(11, 16) : "",
+    }));
+}
+
+/** Une mission telle que l'API l'attend (`eventNeedSchema`). */
+export type NeedPayload = {
+  trade: VendorTypeCode;
+  quantity: number;
+  power: ProviderPower;
+  water: boolean;
+  frontageM: number | null;
+  installAt: string | null;
+  position: number;
+};
+
+/**
+ * Missions à retirer, modifier et créer par rapport aux missions enregistrées (comme `zoneChanges`). L'heure
+ * d'installation se place le jour de l'événement (après minuit pour une nocturne, comme les créneaux d'arrivée).
+ */
+export function needChanges(
+  saved: readonly Pick<EventNeedView, "id">[],
+  d: EventDraft,
+): { remove: string[]; update: { id: string; need: NeedPayload }[]; create: NeedPayload[] } {
+  const needs = d.needs ?? [];
+  const start = draftStart(d);
+  const kept = new Set(needs.map((n) => n.id).filter(Boolean));
+  const remove = saved.filter((n) => !kept.has(n.id)).map((n) => n.id);
+  const update: { id: string; need: NeedPayload }[] = [];
+  const create: NeedPayload[] = [];
+  for (const [position, n] of needs.entries()) {
+    const at = start && n.installTime.trim() ? arrivalInstant(n.installTime.trim(), new Date(start)) : null;
+    const need: NeedPayload = {
+      trade: n.trade,
+      quantity: Number(n.quantity),
+      power: n.power,
+      water: n.water,
+      frontageM: n.frontageM.trim() ? Number(n.frontageM) : null,
+      installAt: at ? at.toISOString() : null,
+      position,
+    };
+    if (n.id) update.push({ id: n.id, need });
+    else create.push(need);
+  }
+  return { remove, update, create };
+}

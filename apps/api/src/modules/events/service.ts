@@ -112,6 +112,7 @@ async function publicView(e: EventRow, s: StructureRow, showInstructions: boolea
     isLocked: isLocked(e, t),
     rulesText: e.rulesText,
     instructions: showInstructions ? e.instructions : null,
+    entranceNote: e.entranceNote,
     acceptedCount: counters.accepted,
   };
 }
@@ -204,6 +205,7 @@ function copyValues(e: EventRow) {
     lockOffsetMinutes: e.lockOffsetMinutes,
     rulesText: e.rulesText,
     instructions: e.instructions,
+    entranceNote: e.entranceNote,
     vendorTypes: e.vendorTypes,
     shopEnabled: e.shopEnabled,
     dayAccess: e.dayAccess,
