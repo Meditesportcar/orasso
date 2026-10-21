@@ -1705,6 +1705,15 @@ Relectures Opus et Codex du correctif 53c, 9 points, tous corrigés. Fichiers : 
 - **Zones** : un 409 sur une zone de même code, à la création, compte comme fait (zone déjà créée par un essai dont la relecture a échoué) ; la relecture la rattache par son code.
 - **Échec du chargement des missions** : seul l'enregistrement sur le serveur est bloqué ; la saisie reste gardée sur l'appareil (site et appli). « Recharger les missions » ne relance que leur chargement (ni restauration de la saisie gardée, ni changement de temps).
 - **Photo** : le choix d'une photo est inactif pendant l'envoi, et la réponse d'un envoi dépassé est ignorée.
+
+### 21/10/2026 — Correctif 53c, tour 3
+Régressions du tour 2 relevées par Opus et Codex, 6 points, tous corrigés ; pas de nouvelle migration.
+- **Mission retirée pendant son envoi** : les missions créées par un envoi deviennent connues de la saisie ; retirée entre-temps, elle ne revient pas et l'enregistrement suivant la supprime.
+- **Rattachement par clé à d'anciennes valeurs** (réponse perdue, puis mission modifiée avant le nouvel essai) : la saisie est gardée avec l'identifiant du serveur ; l'enregistrement envoie aussitôt un PATCH quand la mission rendue par `POST` diffère de ce qui a été envoyé (`createdNeedDiffers`), et la saisie reste « à enregistrer » tant qu'elle diffère. Une création dite refusée n'est tenue pour faite que si la mission du serveur a les valeurs envoyées.
+- **PATCH refusé** d'une mission enregistrée : la valeur saisie et le refus sont gardés (la récupération par clé ne vaut que pour les créations).
+- **Zones** : plus de 409 pris pour un succès. Les zones créées avant une panne de relecture prennent leur identifiant (`afterZoneWrites`) et sont mises à jour au nouvel essai (nom ou capacité corrigés entre-temps compris) ; un 409 (zone de ce code créée ailleurs) reste un refus visible.
+- **Appli, « Recharger les missions »** : l'enregistrement reste bloqué jusqu'à une réponse réussie ; la réponse d'un chargement dépassé (ou d'un écran quitté) est ignorée.
+- **Clé de création** : rendue seulement dans les vues de l'organisation (`GET /events/:id/needs`, création, modification) ; absente de `GET /missions`, de la vue du prestataire et de la page publique.
 ## À revoir avec Damien — liste consolidée (lot 34)
 
 Une seule liste, ordonnée, de tout ce que les lots 15 à 35d (et 34) ont laissé à décider. Rien ne bloque : la solution décrite est appliquée (D16). Les points antérieurs (A1 à A14, lots 02 à 14) restent dans leurs sections plus haut ; ceux qui sont réglés depuis sont signalés à la fin.

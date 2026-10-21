@@ -351,9 +351,11 @@ test("appli : « Recharger les missions » ne débloque l'enregistrement qu'apr�
   await expect(v(page, "wizard-needs-failed")).toBeVisible({ timeout: 30_000 });
   mode = "hold";
   await page.getByRole("button", { name: "Recharger les missions" }).click();
-  // Réponse retenue : rien ne s'enregistre encore.
-  await page.waitForTimeout(800);
-  await expect(v(page, "wizard-next")).toBeDisabled();
+  // Réponse retenue : rien ne s'enregistre encore, à aucun moment.
+  for (let i = 0; i < 6; i++) {
+    expect(await v(page, "wizard-next").isEnabled()).toBe(false);
+    await page.waitForTimeout(300);
+  }
   mode = "pass";
   release();
   await expect(v(page, "wizard-next")).toBeEnabled({ timeout: 30_000 });
