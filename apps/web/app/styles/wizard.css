@@ -122,6 +122,19 @@
   border-left: 4px solid var(--accent);
   font-weight: 650;
 }
+/* Les règles sur « span » les moins spécifiques viennent d'abord (noDescendingSpecificity) : même rendu, d'autres éléments. */
+.wz-switch span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+  pointer-events: none;
+}
+.wz-tl span {
+  color: var(--ink-muted);
+  font-size: var(--type-meta-size);
+}
 .wz-panel {
   border: 1.5px solid var(--line);
   border-radius: var(--radius-md);
@@ -135,6 +148,8 @@
   padding: var(--space-3) var(--space-4);
   cursor: pointer;
 }
+.wz-sugg__item > span,
+.wz-own > span,
 .wz-panel > summary > span {
   display: grid;
 }
@@ -164,9 +179,6 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-}
-.wz-sugg__item > span {
-  display: grid;
 }
 .wz-mapbox {
   position: relative;
@@ -227,14 +239,6 @@
   opacity: 0;
   cursor: pointer;
 }
-.wz-switch span {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: var(--radius-pill);
-  background: var(--line);
-  pointer-events: none;
-}
 .wz-switch span::after {
   content: "";
   position: absolute;
@@ -282,10 +286,6 @@
 .wz-tl li.is-on {
   border-top-color: var(--accent);
 }
-.wz-tl span {
-  color: var(--ink-muted);
-  font-size: var(--type-meta-size);
-}
 .wz-genhead {
   display: flex;
   align-items: center;
@@ -320,9 +320,6 @@
 }
 .wz-phadd {
   flex: 1;
-}
-.wz-own > span {
-  display: grid;
 }
 .wz-phadd input,
 .wz-own input {
@@ -380,6 +377,11 @@
   border: 2px solid transparent;
   background: var(--surface-sunken);
 }
+.wz-ready__poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .wz-tpl.is-on img,
 .wz-tpl.is-on .wz-tpl__wait {
   border-color: var(--accent);
@@ -397,11 +399,6 @@
   overflow: hidden;
   background: var(--surface-sunken);
   box-shadow: var(--shadow-poster);
-}
-.wz-ready__poster img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 .wz-recap {
   display: grid;
