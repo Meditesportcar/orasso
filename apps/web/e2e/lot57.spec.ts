@@ -326,7 +326,8 @@ test("média : profil de Léo, accréditations, contenu avec floutage proposé ;
     await page.goto("/app/media?onglet=contenus");
     const form = page.getByTestId("media-content-form");
     await form.getByLabel("Événement").selectOption({ label: "Nocturne de Canet" });
-    await form.getByLabel("Titre").fill(`Galerie ${unique()}`);
+    const galleryTitle = `Galerie ${unique()}`;
+    await form.getByLabel("Titre").fill(galleryTitle);
     await form.getByText("Galerie", { exact: true }).click();
     const picker = page.getByTestId("media-gallery-picker");
     await picker.getByLabel("Choisir des photos").setInputFiles({
@@ -347,6 +348,13 @@ test("média : profil de Léo, accréditations, contenu avec floutage proposé ;
     await both(page, "media-contenus-ajout", theme);
     await form.getByRole("button", { name: "Publier" }).click();
     await expect(page.getByTestId("media-done")).toContainText("Contenu publié");
+    // Relecture : le contenu publié a bien ses deux photos (une floutée, une envoyée telle quelle).
+    const mine = await apiCall<{ title: string; kind: string; photos: unknown[] }[]>(
+      await login("leo@orasso.local"),
+      "GET",
+      "/me/media-contents",
+    );
+    expect(mine.data.find((c) => c.title === galleryTitle)?.photos).toHaveLength(2);
     await both(page, "media-contenus", theme);
 
     await page.goto("/app/media?onglet=agenda");
@@ -401,4 +409,139 @@ test("administration : vérification d'un profil média (deux thèmes)", async (
     expect(Boolean(mine.data.profile.verifiedAt)).toBe(theme === "beton");
     await ctx.close();
   }
+});
+
+test("sorties : billet contrôlé encore « à venir », staff « Je serai là » puis « Pas là » (relecture)", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const damien = await login("damien@orasso.local");
+  const kenji = await login("kenji@orasso.local");
+  const s = unique();
+  const event = await createEvent(damien, { title: `Sorties relue ${s}`, publicAccess: "free_reservation" });
+
+  // Billet du public : valable, puis contrôlé à l'entrée avant la fin de l'événement. Il reste dans « À venir »
+  // (avec l'entrée vers le vote), jamais dans « Passées ».
+  const ticketing = await apiCall(damien, "PUT", `/events/${event.id}/ticketing`, {
+    enabled: true,
+    capacity: 10,
+    priceCents: null,
+    name: "Entrée",
+  });
+  expect(ticketing.status, JSON.stringify(ticketing.data)).toBe(200);
+  const reserved = await apiCall<{ payload: string }[]>(kenji, "POST", `/events/${event.id}/tickets/reserve`, {
+    quantity: 1,
+  });
+  expect(reserved.status, JSON.stringify(reserved.data)).toBe(201);
+  const k = await open(browser, "beton", "kenji@orasso.local");
+  await k.page.goto("/app/sorties");
+  const ticket = k.page.getByTestId("sorties-ticket").filter({ hasText: event.title });
+  await expect(ticket).toHaveAttribute("data-status", "valid");
+  const checked = await apiCall(damien, "POST", `/events/${event.id}/tickets/check`, {
+    payload: reserved.data[0]?.payload,
+  });
+  expect(checked.status, JSON.stringify(checked.data)).toBe(200);
+  await k.page.reload();
+  await expect(ticket).toHaveAttribute("data-status", "used");
+  await k.page.goto("/app/sorties?vue=passes");
+  await expect(k.page.getByTestId("sorties-ticket").filter({ hasText: event.title })).toHaveCount(0);
+  await k.ctx.close();
+
+  // Staff : « Je serai là » devient « Pas là » (mêmes mots que l'appli), puis revient.
+  const j = await open(browser, "beton", "julie@orasso.local");
+  await j.page.goto("/app/sorties?vue=staff");
+  const mission = j.page.getByTestId("staff-ticket").filter({ hasText: event.title });
+  const presence = mission.getByTestId("staff-presence");
+  await expect(presence).toContainText("Je serai là");
+  await presence.click();
+  await expect(presence).toHaveAttribute("data-presence", "present");
+  await expect(presence).toContainText("Pas là");
+  await presence.click();
+  await expect(presence).not.toHaveAttribute("data-presence", "present");
+  await expect(presence).toContainText("Je serai là");
+  await j.ctx.close();
+});
+
+test("média : envoi d'une photo retardé, aperçu flouté, Explorer au-delà de 30 et panne affichée (relecture)", async ({
+  browser,
+}) => {
+  test.setTimeout(600_000);
+  const damien = await login("damien@orasso.local");
+  const tag = `Pagination ${unique()}`;
+  for (let i = 0; i < 31; i++) await createEvent(damien, { title: `${tag} ${String(i).padStart(2, "0")}` });
+  const { ctx, page } = await open(browser, "beton", "leo@orasso.local");
+
+  // Explorer : 31 événements, 30 d'abord, « Voir la suite » garde les filtres et ajoute le dernier.
+  await page.goto(`/app/media?onglet=explorer&q=${encodeURIComponent(tag)}`);
+  await expect(page.getByTestId("media-event")).toHaveCount(30);
+  await expect(page.getByTestId("media-results")).toContainText("30+");
+  await page.getByTestId("media-explorer-more").click();
+  await expect(page).toHaveURL(/pages=2/);
+  await expect(page.getByTestId("media-event")).toHaveCount(31);
+  await expect(page.getByTestId("media-explorer-more")).toHaveCount(0);
+  await expect(page.getByLabel("Rechercher un événement")).toHaveValue(tag);
+
+  // Panne : une demande refusée par l'API n'est pas « aucun résultat » ; « Réessayer » relance avec les mêmes filtres.
+  await page.goto(`/app/media?onglet=explorer&q=${"x".repeat(100)}`);
+  await expect(page.getByTestId("media-explorer-error")).toBeVisible();
+  await expect(page.getByText("Rien par ici")).toHaveCount(0);
+  await expect(page.getByTestId("media-explorer-retry")).toHaveAttribute("href", /q=x{100}/);
+  await page.goto(`/app/media?onglet=explorer&q=${encodeURIComponent(tag)}`);
+  await expect(page.getByTestId("media-explorer-error")).toHaveCount(0);
+
+  // Galerie : « Publier » reste bloqué pendant l'envoi retardé d'une photo.
+  await page.route("**/api/me/uploads", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await route.continue();
+  });
+  await page.goto("/app/media?onglet=contenus");
+  const form = page.getByTestId("media-content-form");
+  await form.getByLabel("Titre").fill(`Galerie retardée ${unique()}`);
+  await form.getByText("Galerie", { exact: true }).click();
+  const picker = page.getByTestId("media-gallery-picker");
+  const publish = page.getByTestId("media-publish");
+  await picker.getByLabel("Choisir des photos").setInputFiles({
+    name: "lente.png",
+    mimeType: "image/png",
+    buffer: await checkerPhoto(),
+  });
+  // Photo choisie, pas encore ajoutée : on ne publie pas.
+  await expect(publish).toBeDisabled();
+  await picker.getByRole("button", { name: "Poser un cadre" }).click();
+  await picker.getByTestId("media-photo-blur").click();
+  await expect(picker.getByTestId("media-photo-sending")).toBeVisible();
+  await expect(publish).toBeDisabled();
+  // Envoyée : l'aperçu montre les cadres pixellisés (image dessinée), « Publier » se libère.
+  await expect(picker.getByText("Plaque floutée", { exact: true })).toBeVisible({ timeout: 30_000 });
+  const preview = picker.getByTestId("media-gallery-sent").locator("img").first();
+  expect(await preview.getAttribute("src")).toMatch(/^data:image\/jpeg/);
+  await expect(publish).toBeEnabled();
+  await ctx.close();
+});
+
+test("accès refusés : staff sur Presse (403), non connecté sur /m/:id et /providers/:id (relecture)", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const leo = await login("leo@orasso.local");
+  const sofia = await login("sofia@orasso.local");
+  const event = await createEvent(damien, { title: `Accès refusés ${unique()}` });
+
+  // Julie est du staff de la structure : la page Presse est réservée à l'organisation.
+  const j = await open(browser, "beton", "julie@orasso.local");
+  const denied = await j.page.goto(`/orga/meditesportcar/e/${event.id}/presse`);
+  expect(denied?.status()).toBe(403);
+  await j.ctx.close();
+
+  // Sans connexion : la fiche d'un média et la vitrine d'un prestataire renvoient vers la connexion.
+  const media = await apiCall<{ profile: { id: string } | null }>(leo, "GET", "/me/media-profile");
+  const provider = await apiCall<{ profile: { id: string } | null }>(sofia, "GET", "/me/provider-profile");
+  const anon = await browser.newContext({ viewport: WIDE });
+  const page = await anon.newPage();
+  for (const path of [`/m/${media.data.profile?.id}`, `/providers/${provider.data.profile?.id}`]) {
+    await page.goto(path);
+    await expect(page, path).toHaveURL(/\/connexion/);
+  }
+  await anon.close();
 });
