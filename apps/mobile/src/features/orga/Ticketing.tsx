@@ -27,7 +27,7 @@ import { formOf, isStructureOwner, isTicketed, stripeStep, type TicketingForm, t
 import { useApi } from "@/lib/useApi";
 import { Feedback } from "@/ui/Feedback";
 import { Notice } from "@/ui/Notice";
-import { SectionTitle, TabScreen } from "@/ui/Screens";
+import { FlowScreen, SectionTitle } from "@/ui/Screens";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { OrgaFailure, TwoFactorGate, useOrga } from "./OrgaGate";
 
@@ -135,9 +135,10 @@ export function Ticketing({ eventId }: { eventId: string }) {
 
   const open = tk?.block === null;
   return (
-    <TabScreen
+    <FlowScreen
       title={L.title}
       facts={e?.title ?? structureName}
+      onClose={() => (router.canGoBack() ? router.back() : router.replace(`/evenement/${eventId}`))}
       onRefresh={async () => {
         await Promise.all([event.reload(), ticketing.reload()]);
       }}
@@ -311,7 +312,7 @@ export function Ticketing({ eventId }: { eventId: string }) {
           ) : null}
         </>
       ) : null}
-    </TabScreen>
+    </FlowScreen>
   );
 }
 

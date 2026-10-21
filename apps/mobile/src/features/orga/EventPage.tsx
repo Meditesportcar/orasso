@@ -31,7 +31,7 @@ import {
   wizardEndLabels,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { FeedEntry } from "@/features/communication/EventFeed";
@@ -44,7 +44,7 @@ import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { SectionTitle, TabScreen } from "@/ui/Screens";
+import { FlowScreen, SectionTitle } from "@/ui/Screens";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { NewAnnouncementSheet } from "./NewAnnouncementSheet";
 import { OrgaFailure, useOrga } from "./OrgaGate";
@@ -156,9 +156,10 @@ export function EventPage({
   const instructionsText = instructions ?? e?.instructions ?? "";
 
   return (
-    <TabScreen
-      title={orgaLabels.eventsTitle}
-      facts={e?.title ?? structureName}
+    <FlowScreen
+      title={e?.title ?? orgaLabels.eventsTitle}
+      facts={structureName}
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/evenements"))}
       onRefresh={reloadAll}
       overlays={
         <>
@@ -530,11 +531,12 @@ export function EventPage({
             </>
           ) : null}
 
-          <View style={styles.buttons}>
+          {/* Lot C4a (ECARTS § 5.2) : les actions rangées en trois blocs, Avant / Le jour J / Après, au lieu de huit boutons. */}
+          <ActionBlock title={orgaV2Labels.eventBlockBefore} testID="orga-block-before">
             {/* Tri par glissement (lot 23), seulement s'il y a des candidatures à trier. */}
             {e.status === "published" && counters && counters.pending > 0 ? (
               <Button
-                variant="plate"
+                variant="secondary"
                 icon="check"
                 onPress={() => router.push({ pathname: "/tri", params: { event: eventId } })}
                 fullWidth
@@ -545,7 +547,7 @@ export function EventPage({
             ) : null}
             {/* Invitations nominatives (lot 25). */}
             <Button
-              variant="plate"
+              variant="secondary"
               icon="entry"
               onPress={() => router.push(`/evenement/${eventId}/inviter`)}
               fullWidth
@@ -556,7 +558,7 @@ export function EventPage({
             {/* Billetterie des visiteurs (lot 35c) : billets, places, prix, compte de paiement. */}
             {e.status !== "cancelled" ? (
               <Button
-                variant="plate"
+                variant="secondary"
                 icon="qr"
                 onPress={() => router.push(`/evenement/${eventId}/billetterie`)}
                 fullWidth
@@ -565,40 +567,15 @@ export function EventPage({
                 {ticketingAppLabels.open}
               </Button>
             ) : null}
-            {/* Bilan et « Remercier les présents » (lot 27), une fois l'événement commencé. */}
-            <Button
-              variant="plate"
-              icon="list"
-              disabled={e.status !== "published"}
-              onPress={() => router.push(`/evenement/${eventId}/bilan`)}
-              fullWidth
-              testID="orga-report"
-            >
-              {afterEventLabels.reportTitle} · {afterEventLabels.thanksTitle}
-            </Button>
             {e.status !== "cancelled" ? (
               <Button
-                variant="plate"
+                variant="secondary"
                 icon="incident"
                 onPress={() => router.push(`/evenement/${eventId}/modifier`)}
                 fullWidth
                 testID="orga-edit"
               >
                 {EL.edit}
-              </Button>
-            ) : null}
-            <Button variant="plate" icon="add" onPress={() => setSheet("duplicate")} fullWidth testID="orga-duplicate">
-              {EL.duplicate}
-            </Button>
-            {e.status === "published" ? (
-              <Button
-                variant="plate"
-                icon="share"
-                onPress={() => router.push(`/e/${e.slug}`)}
-                fullWidth
-                testID="orga-public-page"
-              >
-                {EL.publicPage}
               </Button>
             ) : null}
             {upcoming ? (
@@ -613,15 +590,65 @@ export function EventPage({
                 {orgaLabels.cancelEvent}
               </Button>
             ) : null}
-          </View>
+          </ActionBlock>
+          {e.status === "published" ? (
+            <ActionBlock title={orgaV2Labels.eventBlockDay} testID="orga-block-day">
+              <Button
+                variant="secondary"
+                icon="share"
+                onPress={() => router.push(`/e/${e.slug}`)}
+                fullWidth
+                testID="orga-public-page"
+              >
+                {EL.publicPage}
+              </Button>
+            </ActionBlock>
+          ) : null}
+          <ActionBlock title={orgaV2Labels.eventBlockAfter} testID="orga-block-after">
+            {/* Bilan et « Remercier les présents » (lot 27), une fois l'événement commencé. */}
+            <Button
+              variant="secondary"
+              icon="list"
+              disabled={e.status !== "published"}
+              onPress={() => router.push(`/evenement/${eventId}/bilan`)}
+              fullWidth
+              testID="orga-report"
+            >
+              {afterEventLabels.reportTitle} · {afterEventLabels.thanksTitle}
+            </Button>
+            <Button
+              variant="secondary"
+              icon="add"
+              onPress={() => setSheet("duplicate")}
+              fullWidth
+              testID="orga-duplicate"
+            >
+              {EL.duplicate}
+            </Button>
+          </ActionBlock>
         </>
       ) : null}
-    </TabScreen>
+    </FlowScreen>
+  );
+}
+
+/** Un bloc d'actions de la page (carte de l'artefact : titre italique, boutons empilés). */
+function ActionBlock({ title, testID, children }: { title: string; testID?: string; children: ReactNode }) {
+  const { t } = useTheme();
+  return (
+    <View style={[styles.actionBlock, { backgroundColor: t.color.surface }]} testID={testID}>
+      <Text variant="posterS" color={t.color.ink} style={styles.actionTitle}>
+        {title}
+      </Text>
+      {children}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
+  actionBlock: { gap: space2, padding: 14, borderRadius: 18, marginTop: space2 },
+  actionTitle: { fontSize: 15, lineHeight: 17, textTransform: "uppercase" },
   buttons: { gap: space2, marginTop: space2 },
   entryButtons: { flexDirection: "row", gap: space2, marginTop: space1, marginBottom: space2 },
 });

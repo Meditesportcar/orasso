@@ -169,6 +169,10 @@ export const orgaV2Labels = {
   // Croix des feuilles : un nom distinct du voile « Fermer » (qui ferme toute feuille).
   closePerson: "Fermer la fiche du membre",
   closeRequests: "Fermer les demandes",
+  // Page d'un événement : les actions en trois blocs (lot C4a).
+  eventBlockBefore: "Avant l'événement",
+  eventBlockDay: "Le jour J",
+  eventBlockAfter: "Après",
   presenceConfirmed: (present: number, total: number) =>
     `${present} présence${present > 1 ? "s" : ""} confirmée${present > 1 ? "s" : ""} sur ${total}`,
 
