@@ -147,10 +147,12 @@ export default function Boite() {
             {
               id: "messages",
               label: unreadMessages ? `${messagingLabels.messages} · ${unreadMessages}` : messagingLabels.messages,
+              testID: "inbox-messages",
             },
             {
               id: "requests",
               label: requests ? `${messagingLabels.requests} · ${requests}` : messagingLabels.requests,
+              testID: "inbox-requests",
             },
           ]}
         />
