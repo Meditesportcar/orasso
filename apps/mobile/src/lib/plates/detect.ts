@@ -94,13 +94,64 @@ export function orientedPlateRect(
   const h = Math.min(1, Math.max(0.01, ((v1 - v0) * (1 + grow)) / imageHeight));
   const clamp = (n: number, max: number) => Math.min(max, Math.max(0, n));
   const round = (n: number) => Math.round(n * 10000) / 10000;
-  return {
+  const rect: PlateRect = {
     x: round(clamp(cx / imageWidth - w / 2, 1 - w)),
     y: round(clamp(cy / imageHeight - h / 2, 1 - h)),
     w: round(w),
     h: round(h),
     angle,
   };
+  // Lot 59c, tour 2 (relectures) : près d'un bord, le cadre borné à la photo est décalé et peut laisser un bout de plaque
+  // dehors (l'API ne floute que le quadrilatère). Toute la partie visible de la plaque doit rester dans le cadre ; sinon
+  // cadre droit englobant (`null` : l'appelant prend `toPlateRect`).
+  return corners.every((quad) => frameCovers(rect, imageWidth, imageHeight, clipToImage(quad, imageWidth, imageHeight)))
+    ? rect
+    : null;
+}
+
+type Pt = { x: number; y: number };
+
+/** Partie d'un polygone convexe (coins d'un mot) qui est dans la photo (Sutherland–Hodgman sur ses quatre bords). */
+export function clipToImage(poly: readonly Pt[], width: number, height: number): Pt[] {
+  const edges: [(p: Pt) => number, (a: Pt, b: Pt) => Pt][] = [
+    [(p) => p.x, (a, b) => ({ x: 0, y: a.y + ((b.y - a.y) * (0 - a.x)) / (b.x - a.x) })],
+    [(p) => width - p.x, (a, b) => ({ x: width, y: a.y + ((b.y - a.y) * (width - a.x)) / (b.x - a.x) })],
+    [(p) => p.y, (a, b) => ({ x: a.x + ((b.x - a.x) * (0 - a.y)) / (b.y - a.y), y: 0 })],
+    [(p) => height - p.y, (a, b) => ({ x: a.x + ((b.x - a.x) * (height - a.y)) / (b.y - a.y), y: height })],
+  ];
+  let out: Pt[] = [...poly];
+  for (const [inside, cut] of edges) {
+    const input = out;
+    out = [];
+    for (let i = 0; i < input.length; i++) {
+      const cur = input[i] as Pt;
+      const prev = input[(i + input.length - 1) % input.length] as Pt;
+      const curIn = inside(cur) >= 0;
+      const prevIn = inside(prev) >= 0;
+      if (curIn) {
+        if (!prevIn) out.push(cut(prev, cur));
+        out.push(cur);
+      } else if (prevIn) out.push(cut(prev, cur));
+    }
+    if (!out.length) break;
+  }
+  return out;
+}
+
+/** Tous les points (en pixels) sont-ils dans le cadre, tourné de son angle autour de son centre ? (aucune marge) */
+export function frameCovers(rect: PlateRect, width: number, height: number, points: readonly Pt[]): boolean {
+  const t = ((rect.angle ?? 0) * Math.PI) / 180;
+  const cos = Math.cos(t);
+  const sin = Math.sin(t);
+  const cx = (rect.x + rect.w / 2) * width;
+  const cy = (rect.y + rect.h / 2) * height;
+  const hw = (rect.w * width) / 2 + 1e-6;
+  const hh = (rect.h * height) / 2 + 1e-6;
+  return points.every((p) => {
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    return Math.abs(dx * cos + dy * sin) <= hw && Math.abs(-dx * sin + dy * cos) <= hh;
+  });
 }
 
 /**
