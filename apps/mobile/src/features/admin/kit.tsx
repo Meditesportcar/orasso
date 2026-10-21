@@ -19,6 +19,7 @@ import { createContext, type ReactNode, useCallback, useContext, useState } from
 import { Pressable, StyleSheet, View } from "react-native";
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { TwoFactorGate } from "@/features/orga/OrgaGate";
+import { AngledTag, SegBlock } from "@/features/pro/kit";
 import { type AdminRole, adminRoleOf } from "@/lib/adminModel";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -282,18 +283,17 @@ export function LinkRow({
         <Text variant="bodyStrong" color={t.color.plateInk} style={styles.grow}>
           {label}
         </Text>
-        {count !== undefined && count > 0 ? (
-          <Chip surface="plate" variant="accent">
-            {String(count)}
-          </Chip>
-        ) : null}
+        {count !== undefined && count > 0 ? <AngledTag tone="acc">{String(count)}</AngledTag> : null}
         <Icon name={icon} size={18} color={t.color.plateInk} />
       </Plate>
     </Pressable>
   );
 }
 
-/** Rangée de filtres (une puce choisie à la fois). */
+/**
+ * Rangée de filtres (un choix à la fois). Lot C4b (style du socle de l'artefact, l'administration est hors artefact) :
+ * jusqu'à trois choix, le bloc de segments `.seg` ; au-delà, les puces du système, qui passent à la ligne.
+ */
 export function Filters<T extends string>({
   value,
   options,
@@ -303,6 +303,7 @@ export function Filters<T extends string>({
   options: readonly { id: T; label: string }[];
   onChange: (id: T) => void;
 }) {
+  if (options.length <= 3) return <SegBlock value={value} items={options} onChange={onChange} />;
   return (
     <ChipRow accessibilityRole="tablist">
       {options.map((o) => (
