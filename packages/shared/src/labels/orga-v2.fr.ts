@@ -157,6 +157,16 @@ export const orgaV2Labels = {
     super_staff: "Pointe les entrées et tranche en cas de recours.",
   },
   rolesCheckinIntro: "Seuls Accueil et scan, Contrôle et Super staff pointent les entrées.",
+  // Lot C4a : grappe de l'artefact (bulle « +N » des demandes, feuille `sh-req`, feuille `sh-person`).
+  requestsBubble: (n: number) => `${n} demande${n > 1 ? "s" : ""} pour rejoindre l'équipe`,
+  requestsSheetIntro:
+    "Accepter fait entrer dans l'équipe. Les rôles se donnent ensuite événement par événement, selon les présences confirmées.",
+  inviteBubble: "Inviter quelqu'un dans l'équipe",
+  roleFor: (title: string) => `Rôle pour ${title}`,
+  roleNone: "Aucun",
+  roleMore: "Plus d'options",
+  actionRemoveShort: "Retirer",
+  presenceConfirmed: (present: number, total: number) => `${present} présence${present > 1 ? "s" : ""} confirmée${present > 1 ? "s" : ""} sur ${total}`,
 
   // --- Structure (s-ostruct) ----------------------------------------------------------------------------------------
   structVerified: "Structure validée",

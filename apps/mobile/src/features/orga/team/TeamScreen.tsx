@@ -3,7 +3,7 @@
 // message, gérer, retirer). Dessous, « Rôles pour <événement> » : quatre rôles avec les présences confirmées d'abord.
 // Accepter une demande fait entrer sans rôle (lot 36) : les rôles se donnent pour un événement. Depuis le lot 48,
 // seuls Accueil et scan, Contrôle et Super staff pointent les entrées : chaque rôle dit ce qu'il permet.
-import { Button, Chip, Counters, Plate, SelectField, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Chip, Icon, Plate, SelectField, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type EventStaffMember,
   orgaManageLabels as L,
@@ -15,16 +15,15 @@ import {
   staffRoleLabels,
   structureRoleLabels,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { MessageButton } from "@/features/boite/MessageButton";
 import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { canRemind, groupEvents, isTwoFactorError, pickCurrentEvent, staffSummary } from "@/lib/orga";
-import { boardRoles, historyOf, holdersOf, withRole } from "@/lib/orgaV2";
+import { boardRoles, bubbleSize, historyOf, holdersOf, packBubbles, requestBubbleSpot, withRole } from "@/lib/orgaV2";
 import { useSession } from "@/lib/session";
 import { emitTeamChanged } from "@/lib/teamBadge";
 import { canManageMember, isSuspended, memberGroups, myRoleIn } from "@/lib/teamModel";
@@ -36,17 +35,18 @@ import { Notice } from "@/ui/Notice";
 import { SectionTitle, TabScreen } from "@/ui/Screens";
 import { ConfirmSheet } from "../ConfirmSheet";
 import { OrgaFailure, useOrga } from "../OrgaGate";
-import { Bubble } from "./Bubble";
+import { Bubble, RequestBubble } from "./Bubble";
 import { failWith } from "./fail";
 import { RolePicker } from "./RolePicker";
 import { AcceptSheet, InviteSheet, MemberSheet } from "./TeamSheets";
 
 const { space1, space2, space3 } = tokens.spacing;
+/** Hauteur de la grappe (artefact `.bubbles` : 310 px). */
+const CLOUD_HEIGHT = 310;
 
 export function TeamScreen() {
   const { t } = useTheme();
   const c = t.color;
-  const router = useRouter();
   const { me } = useSession();
   const { structureId } = useOrga();
   const at = useNow(60_000);
@@ -85,6 +85,8 @@ export function TeamScreen() {
   const [managing, setManaging] = useState<StructureMember | null>(null);
   const [removing, setRemoving] = useState<StructureMember | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
+  const [cloudWidth, setCloudWidth] = useState(0);
   const [giving, setGiving] = useState<StructureMember | null>(null);
   const [adding, setAdding] = useState<StaffRole | null>(null);
   // Retrait d'un rôle d'un toucher : annulable quelques secondes.
@@ -123,6 +125,7 @@ export function TeamScreen() {
     setRemoving(null);
     setDeclining(null);
     setInviting(false);
+    setRequestsOpen(false);
     setGiving(null);
     setAdding(null);
     setSheetError(null);
@@ -255,6 +258,18 @@ export function TeamScreen() {
   const openedStaff = opened ? list.find((m) => m.userId === opened.userId) : undefined;
   const addable = adding ? list.filter((m) => !m.roles.includes(adding)) : [];
   const summary = staffSummary(list);
+  const reqSpot = requestBubbleSpot(cloudWidth, CLOUD_HEIGHT);
+  const layout = useMemo(
+    () => packBubbles(bubbles.map((m) => bubbleSize(historyOf(histories, m.userId).eventsHeld)), cloudWidth, CLOUD_HEIGHT, reqSpot),
+    // reqSpot ne dépend que de cloudWidth.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bubbles, histories, cloudWidth],
+  );
+  /** Pastille de rôle d'une bulle : les trois premières lettres de son premier rôle pour l'événement choisi. */
+  const badgeOf = (userId: string) => {
+    const role = list.find((m) => m.userId === userId)?.roles[0];
+    return role ? staffRoleLabels[role].slice(0, 3) : null;
+  };
   const toRemind = event ? list.filter((m) => canRemind(m, event.startsAt, at)) : [];
 
   return (
@@ -323,7 +338,7 @@ export function TeamScreen() {
             }}
           />
 
-          {/* Un toucher sur une bulle : historique et actions. */}
+          {/* Un toucher sur une bulle : feuille `sh-person` (rôle pour l'événement, historique, message, retirer). */}
           <AppSheet
             visible={opened !== null && giving === null && removing === null && managing === null}
             onClose={() => setOpened(null)}
@@ -332,54 +347,82 @@ export function TeamScreen() {
             {opened && openedHistory ? (
               <>
                 <View style={styles.sheetHead}>
-                  <Bubble pseudo={opened.pseudo} kind={opened.role} held={openedHistory.eventsHeld} />
-                  <View style={styles.grow}>
-                    <Text variant="title" color={c.ink}>
-                      {opened.pseudo}
-                    </Text>
-                    <Muted variant="caption">
-                      {structureRoleLabels[opened.role]} · {L2.historyHeld(openedHistory.eventsHeld)}
-                    </Muted>
-                  </View>
+                  <Bubble userId={opened.userId} pseudo={opened.pseudo} held={openedHistory.eventsHeld} size={44} />
+                  <Text variant="title" color={c.ink} style={styles.grow}>
+                    {opened.pseudo}
+                  </Text>
+                  <Button variant="close" label={L2.close} onPress={() => setOpened(null)} />
                 </View>
-                <SectionTitle>{L2.historyTitle}</SectionTitle>
+                <View style={styles.tagRow}>
+                  <View style={[styles.tag, { backgroundColor: c.ink }]}>
+                    <Text variant="label" color={c.ground} style={styles.tagText}>
+                      {structureRoleLabels[opened.role]}
+                    </Text>
+                  </View>
+                  <Muted variant="caption">{L2.historyHeld(openedHistory.eventsHeld)}</Muted>
+                </View>
+                {event && openedStaff && opened.role === "staff" ? (
+                  <>
+                    <Muted variant="label">{L2.roleFor(event.title)}</Muted>
+                    <View style={styles.chips}>
+                      {boardRoles.map((role) => (
+                        <Chip
+                          key={role}
+                          selected={openedStaff.roles.includes(role)}
+                          accessibilityRole="toggle"
+                          onPress={() =>
+                            busy === null &&
+                            void setRole(
+                              opened.userId,
+                              withRole(openedStaff.roles, role, !openedStaff.roles.includes(role)),
+                              openedStaff.canDecide,
+                              openedStaff.roles.includes(role) ? L2.rolesRemoved : L2.rolesGiven,
+                            )
+                          }
+                        >
+                          {staffRoleLabels[role]}
+                        </Chip>
+                      ))}
+                      <Chip
+                        selected={openedStaff.roles.length === 0}
+                        onPress={() =>
+                          busy === null && openedStaff.roles.length > 0
+                            ? void setRole(opened.userId, [], openedStaff.canDecide, L2.rolesRemoved)
+                            : undefined
+                        }
+                      >
+                        {L2.roleNone}
+                      </Chip>
+                    </View>
+                    {sheetError ? <Notice tone="error">{sheetError}</Notice> : null}
+                  </>
+                ) : null}
+                <Muted variant="label">{L2.historyTitle}</Muted>
                 {openedHistory.events.length === 0 ? (
                   <Muted variant="body">{L2.historyNone}</Muted>
                 ) : (
-                  openedHistory.events.map((h) => (
-                    <Plate key={h.eventId} style={styles.row} testID="team-history-row">
-                      <Text variant="bodyStrong" color={c.plateInk}>
-                        {h.title}
-                      </Text>
-                      <Text variant="caption" color={c.plateMuted}>
-                        {formatDay(h.startsAt)} ·{" "}
-                        {h.roles === null
-                          ? L2.roleNotNoted
-                          : h.roles.map((r) => staffRoleLabels[r]).join(" · ") || L.teamRolesNone}
-                        {" · "}
-                        {staffPresenceLabels[h.presence]}
-                      </Text>
-                    </Plate>
-                  ))
+                  <View style={[styles.hist, { borderColor: c.line }]}>
+                    {openedHistory.events.map((h) => (
+                      <View key={h.eventId} style={styles.histRow} testID="team-history-row">
+                        <View style={[styles.histDot, { backgroundColor: c.accent }]} />
+                        <Text variant="bodyStrong" color={c.ink}>
+                          {h.title}
+                        </Text>
+                        <Muted variant="caption">
+                          {formatDay(h.startsAt)} ·{" "}
+                          {h.roles === null
+                            ? L2.roleNotNoted
+                            : h.roles.map((r) => staffRoleLabels[r]).join(" · ") || L.teamRolesNone}
+                          {" · "}
+                          {staffPresenceLabels[h.presence]}
+                        </Muted>
+                      </View>
+                    ))}
+                  </View>
                 )}
-                <SectionTitle>{L2.actionsTitle}</SectionTitle>
-                {opened.role === "staff" ? (
-                  <Button
-                    variant="plate"
-                    icon="staff"
-                    onPress={() => {
-                      setSheetError(null);
-                      setGiving(opened);
-                    }}
-                    fullWidth
-                    testID="team-give-role"
-                  >
-                    {L2.actionGiveRole}
-                  </Button>
-                ) : null}
                 {event && openedStaff && canRemind(openedStaff, event.startsAt, at) ? (
                   <Button
-                    variant="plate"
+                    variant="secondary"
                     icon="bell"
                     loading={busy === opened.userId}
                     disabled={busy !== null}
@@ -391,15 +434,27 @@ export function TeamScreen() {
                   </Button>
                 ) : null}
                 <MessageButton userId={opened.userId} pseudo={opened.pseudo} />
+                {opened.role === "staff" ? (
+                  <Button
+                    variant="plate"
+                    icon="staff"
+                    onPress={() => {
+                      setSheetError(null);
+                      setGiving(opened);
+                    }}
+                    fullWidth
+                    testID="team-give-role"
+                  >
+                    {L2.roleMore}
+                  </Button>
+                ) : null}
                 {canManageMember(viewer, opened) ? (
-                  <>
+                  <View style={styles.buttons}>
                     <Button
                       variant="plate"
                       icon="list"
-                      onPress={() => {
-                        setManaging(opened);
-                      }}
-                      fullWidth
+                      onPress={() => setManaging(opened)}
+                      style={styles.grow}
                       testID="team-bubble-manage"
                     >
                       {L2.actionManage}
@@ -412,18 +467,99 @@ export function TeamScreen() {
                         setSheetError(null);
                         setRemoving(opened);
                       }}
-                      fullWidth
                       testID="team-bubble-remove"
                     >
-                      {L2.actionRemove}
+                      {L2.actionRemoveShort}
                     </Button>
-                  </>
+                  </View>
                 ) : null}
-                <Button variant="plate" icon="close" onPress={() => setOpened(null)} fullWidth>
-                  {L2.close}
-                </Button>
               </>
             ) : null}
+          </AppSheet>
+
+          {/* La bulle « +N » : feuille `sh-req` (demandes, invitations envoyées, inviter). */}
+          <AppSheet
+            visible={requestsOpen && accepting === null && declining === null && removing === null && !inviting}
+            onClose={() => setRequestsOpen(false)}
+            accessibilityLabel={L2.requestsBubble(groups.requests.length)}
+          >
+            <View style={styles.sheetHead}>
+              <Text variant="title" color={c.ink} style={styles.grow}>
+                {groups.requests.length > 0 ? L2.requestsBubble(groups.requests.length) : L.invite}
+              </Text>
+              <Button variant="close" label={L2.close} onPress={() => setRequestsOpen(false)} />
+            </View>
+            {groups.requests.map((m) => (
+              <View key={m.userId} style={[styles.oldrow, { borderColor: c.line }]} testID="team-request">
+                <Text variant="bodyStrong" color={c.ink} style={styles.grow}>
+                  {m.pseudo}
+                </Text>
+                <Button
+                  variant="primary"
+                  icon="check"
+                  onPress={() => {
+                    setNotice(null);
+                    setAccepting(m);
+                  }}
+                  testID="team-request-accept"
+                >
+                  {L.requestAccept}
+                </Button>
+                <Button
+                  variant="close"
+                  label={L.requestDecline}
+                  onPress={() => {
+                    setNotice(null);
+                    setSheetError(null);
+                    setDeclining(m);
+                  }}
+                  testID="team-request-decline"
+                />
+              </View>
+            ))}
+            {groups.requests.length > 0 ? <Muted variant="caption">{L2.requestsSheetIntro}</Muted> : null}
+            {groups.invited.length > 0 ? (
+              <>
+                <Muted variant="label">{L.teamInvitedTitle(groups.invited.length)}</Muted>
+                {groups.invited.map((m) => (
+                  <View key={m.userId} style={[styles.oldrow, { borderColor: c.line }]} testID="team-invited">
+                    <View style={styles.grow}>
+                      <Text variant="bodyStrong" color={c.ink}>
+                        {m.pseudo}
+                      </Text>
+                      <Muted variant="caption">
+                        {structureRoleLabels[m.role]}
+                        {m.staffRoles.length > 0 ? ` · ${m.staffRoles.map((r) => staffRoleLabels[r]).join(", ")}` : ""}
+                      </Muted>
+                    </View>
+                    {canManageMember(viewer, m) ? (
+                      <Button
+                        variant="close"
+                        label={L.teamInvitedRemove}
+                        onPress={() => {
+                          setNotice(null);
+                          setSheetError(null);
+                          setRemoving(m);
+                        }}
+                        testID="team-invited-remove"
+                      />
+                    ) : null}
+                  </View>
+                ))}
+              </>
+            ) : null}
+            <Button
+              variant="secondary"
+              icon="add"
+              onPress={() => {
+                setNotice(null);
+                setInviting(true);
+              }}
+              fullWidth
+              testID="team-invite"
+            >
+              {L.invite}
+            </Button>
           </AppSheet>
 
           {/* « Donner un rôle pour un événement » depuis la feuille d'une bulle. */}
@@ -499,147 +635,139 @@ export function TeamScreen() {
         </Button>
       ) : null}
 
-      {groups.requests.length > 0 ? (
-        <>
-          <SectionTitle>{L.teamRequestsTitle(groups.requests.length)}</SectionTitle>
-          <Muted variant="caption">{L2.requestsIntro}</Muted>
-          {groups.requests.map((m) => (
-            <Plate key={m.userId} style={styles.row} testID="team-request">
-              <View style={styles.line}>
-                <Text variant="bodyStrong" color={c.plateInk} style={styles.grow}>
-                  {m.pseudo}
-                </Text>
-                <Chip surface="plate">{L.requestPending}</Chip>
-              </View>
-              <View style={styles.buttons}>
-                <Button
-                  variant="plate"
-                  icon="check"
-                  onPress={() => {
-                    setNotice(null);
-                    setAccepting(m);
-                  }}
-                  style={styles.grow}
-                  testID="team-request-accept"
+      {/* La grappe `.bubbles` : carte de 310 px, bulles posées librement, « +N » en bas à droite. */}
+      <View
+        style={[styles.bubbles, { backgroundColor: c.surface }]}
+        onLayout={(e) => setCloudWidth(Math.round(e.nativeEvent.layout.width))}
+        testID="team-bubbles"
+      >
+        {bubbles.length === 0 ? (
+          <Muted variant="body" style={styles.cloudEmpty}>
+            {members.loading ? "Chargement…" : L.teamMembersEmpty}
+          </Muted>
+        ) : null}
+        {cloudWidth > 0
+          ? bubbles.map((m, i) => {
+              const spot = layout[i];
+              if (!spot) return null;
+              return (
+                <View
+                  key={m.userId}
+                  style={[styles.placed, { left: spot.x - spot.size / 2, top: spot.y - spot.size / 2 }]}
                 >
-                  {L.requestAccept}
-                </Button>
-                <Button
-                  variant="plate"
-                  tone="dashed"
-                  icon="close"
-                  onPress={() => {
-                    setNotice(null);
-                    setSheetError(null);
-                    setDeclining(m);
-                  }}
-                  style={styles.grow}
-                  testID="team-request-decline"
-                >
-                  {L.requestDecline}
-                </Button>
-              </View>
-            </Plate>
-          ))}
-        </>
-      ) : null}
-
+                  <Bubble
+                    userId={m.userId}
+                    pseudo={m.pseudo}
+                    held={historyOf(histories, m.userId).eventsHeld}
+                    size={spot.size}
+                    badge={badgeOf(m.userId)}
+                    onPress={() => {
+                      setNotice(null);
+                      setOpened(m);
+                    }}
+                    testID="team-bubble"
+                  />
+                </View>
+              );
+            })
+          : null}
+        {cloudWidth > 0 ? (
+          <View
+            style={[
+              styles.placed,
+              { left: reqSpot.x - reqSpot.size / 2 - 6, top: reqSpot.y - reqSpot.size / 2 - 6 },
+            ]}
+          >
+            <RequestBubble
+              count={groups.requests.length}
+              onPress={() => {
+                setNotice(null);
+                setRequestsOpen(true);
+              }}
+              label={groups.requests.length > 0 ? L2.requestsBubble(groups.requests.length) : L2.inviteBubble}
+              testID="team-requests-bubble"
+            />
+          </View>
+        ) : null}
+      </View>
       <Muted variant="caption" testID="team-bubbles-hint">
         {L2.bubblesHint}
       </Muted>
-      {bubbles.length === 0 ? (
-        <Muted variant="body">{members.loading ? "Chargement…" : L.teamMembersEmpty}</Muted>
-      ) : (
-        <View style={styles.cloud} testID="team-bubbles">
-          {bubbles.map((m) => (
-            <Bubble
-              key={m.userId}
-              pseudo={m.pseudo}
-              kind={m.role}
-              held={historyOf(histories, m.userId).eventsHeld}
-              onPress={() => {
-                setNotice(null);
-                setOpened(m);
-              }}
-              testID="team-bubble"
-            />
-          ))}
-        </View>
-      )}
-      <Button
-        variant="primary"
-        icon="add"
-        onPress={() => {
-          setNotice(null);
-          setInviting(true);
-        }}
-        fullWidth
-        testID="team-invite"
-      >
-        {L.invite}
-      </Button>
 
-      {groups.invited.length > 0 ? (
-        <>
-          <SectionTitle>{L.teamInvitedTitle(groups.invited.length)}</SectionTitle>
-          {groups.invited.map((m) => (
-            <Plate key={m.userId} style={styles.row} testID="team-invited">
-              <Text variant="bodyStrong" color={c.plateInk}>
-                {m.pseudo}
-              </Text>
-              <Text variant="caption" color={c.plateMuted}>
-                {structureRoleLabels[m.role]}
-                {m.staffRoles.length > 0 ? ` · ${m.staffRoles.map((r) => staffRoleLabels[r]).join(", ")}` : ""}
-              </Text>
-              {canManageMember(viewer, m) ? (
-                <Button
-                  variant="plate"
-                  icon="close"
-                  onPress={() => {
-                    setNotice(null);
-                    setSheetError(null);
-                    setRemoving(m);
-                  }}
-                  fullWidth
-                  testID="team-invited-remove"
-                >
-                  {L.teamInvitedRemove}
-                </Button>
-              ) : null}
-            </Plate>
-          ))}
-        </>
-      ) : null}
-
-      {event ? <SectionTitle>{L2.rolesFor(event.title)}</SectionTitle> : null}
       {choices.length === 0 ? (
         <Muted variant="body">{events.loading ? "Chargement…" : L2.rolesNoEvent}</Muted>
       ) : (
-        <SelectField
-          label={orgaLabels.staffEventPicker}
-          value={eventId ?? ""}
-          onValueChange={setPicked}
-          options={choices.map((e) => ({ value: e.id, label: `${e.title} · ${formatDay(e.startsAt)}` }))}
-        />
+        <>
+          <View style={styles.secH}>
+            <Text variant="posterS" color={c.ink} style={styles.secTitle}>
+              {event ? L2.rolesFor(event.title) : L2.rolesPresentFirst}
+            </Text>
+            <Muted variant="caption" style={styles.secRight}>
+              {list.length > 0 ? L2.presenceConfirmed(summary.present, list.length) : L2.rolesPresentFirst}
+            </Muted>
+          </View>
+          {choices.length > 1 ? (
+            <SelectField
+              label={orgaLabels.staffEventPicker}
+              value={eventId ?? ""}
+              onValueChange={setPicked}
+              options={choices.map((e) => ({ value: e.id, label: `${e.title} · ${formatDay(e.startsAt)}` }))}
+            />
+          ) : null}
+        </>
       )}
       {event ? (
         <>
-          <Counters
-            items={[
-              { value: summary.present, label: L2.presentCount },
-              { value: summary.absent, label: L2.absentCount },
-              { value: summary.unknown, label: L2.unansweredCount },
-            ]}
-            active={summary.unknown > 0 ? 2 : undefined}
-          />
-          {summary.neverAnswered > 0 ? (
-            <Muted variant="caption">
-              {orgaLabels.staffNever} : {summary.neverAnswered}
-            </Muted>
-          ) : null}
+          <View style={styles.rolesb}>
+            {boardRoles.map((role) => (
+              <View
+                key={role}
+                style={[styles.role, { backgroundColor: c.surface, borderColor: c.line }]}
+                testID={`team-role-${role}`}
+              >
+                <View style={styles.grow}>
+                  <Text variant="bodyStrong" color={c.ink}>
+                    {staffRoleLabels[role]}
+                  </Text>
+                  <Muted variant="caption">{L2.roleHints[role]}</Muted>
+                  <Muted variant="caption" style={styles.allows}>
+                    {L2.roleAllows[role]}
+                  </Muted>
+                </View>
+                <View style={styles.avs}>
+                  {holdersOf(list, role).map((m) => (
+                    <View key={m.userId} style={[styles.av, { borderColor: c.surface }]} testID="team-role-holder">
+                      <Bubble
+                        userId={m.userId}
+                        pseudo={m.pseudo}
+                        held={historyOf(histories, m.userId).eventsHeld}
+                        size={32}
+                        dim={m.presence !== "present"}
+                        label={L2.removeRoleLabel(staffRoleLabels[role], m.pseudo)}
+                        disabled={busy !== null}
+                        onPress={() => void removeRole(m, role)}
+                      />
+                    </View>
+                  ))}
+                  <Pressable
+                    onPress={() => {
+                      setSheetError(null);
+                      setAdding(role);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${L2.rolesAddMember} : ${staffRoleLabels[role]}`}
+                    testID={`team-role-add-${role}`}
+                    style={[styles.avAdd, { backgroundColor: c.surface, borderColor: c.line }]}
+                  >
+                    <Icon name="add" size={16} color={c.ink} />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
           {toRemind.length > 0 ? (
             <Button
-              variant="plate"
+              variant="secondary"
               icon="bell"
               loading={busy === "all"}
               disabled={busy !== null}
@@ -650,102 +778,8 @@ export function TeamScreen() {
               {L.remindAll(toRemind.length)}
             </Button>
           ) : null}
-          <Muted variant="caption">{L2.rolesCheckinIntro}</Muted>
-          {boardRoles.map((role) => (
-            <Plate key={role} style={styles.row} testID={`team-role-${role}`}>
-              <View style={styles.line}>
-                <View style={styles.grow}>
-                  <Text variant="bodyStrong" color={c.plateInk}>
-                    {staffRoleLabels[role]}
-                  </Text>
-                  <Text variant="caption" color={c.plateMuted}>
-                    {L2.roleHints[role]}
-                  </Text>
-                </View>
-                <Button
-                  variant="plate"
-                  icon="add"
-                  onPress={() => {
-                    setSheetError(null);
-                    setAdding(role);
-                  }}
-                  accessibilityLabel={`${L2.rolesAddMember} : ${staffRoleLabels[role]}`}
-                  testID={`team-role-add-${role}`}
-                >
-                  {L2.add}
-                </Button>
-              </View>
-              <Text variant="caption" color={c.plateMuted}>
-                {L2.roleAllows[role]}
-              </Text>
-              <View style={styles.holders}>
-                {holdersOf(list, role).length === 0 ? (
-                  <Text variant="caption" color={c.plateMuted}>
-                    {L2.rolesNobody}
-                  </Text>
-                ) : null}
-                {holdersOf(list, role).map((m) => (
-                  <View key={m.userId} style={styles.holder} testID="team-role-holder">
-                    <Bubble
-                      pseudo={m.pseudo}
-                      kind="staff"
-                      held={historyOf(histories, m.userId).eventsHeld}
-                      size={44}
-                      mark={m.presence === "present"}
-                      label={L2.removeRoleLabel(staffRoleLabels[role], m.pseudo)}
-                      disabled={busy !== null}
-                      onPress={() => void removeRole(m, role)}
-                    />
-                    <Text variant="meta" color={c.plateMuted}>
-                      {m.presence === "present"
-                        ? L2.rolesPresent
-                        : m.presence === "absent"
-                          ? L2.rolesAbsent
-                          : L2.rolesPending}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </Plate>
-          ))}
-          <Button
-            variant="plate"
-            icon="staff"
-            next
-            onPress={() => router.push(`/staff/${event.id}`)}
-            fullWidth
-            testID="orga-staff-mode"
-          >
-            {orgaLabels.staffModeOpen}
-          </Button>
-          <Muted variant="caption">{orgaLabels.staffModeHint}</Muted>
         </>
       ) : null}
-
-      <SectionTitle>{L.teamStructureSection}</SectionTitle>
-      <Button variant="plate" icon="flag" next onPress={() => router.push("/bannis")} fullWidth testID="team-nav-bans">
-        {L.bansOpen}
-      </Button>
-      <Button
-        variant="plate"
-        icon="chat"
-        next
-        onPress={() => router.push("/modeles")}
-        fullWidth
-        testID="team-nav-templates"
-      >
-        {L.templatesOpen}
-      </Button>
-      <Button
-        variant="plate"
-        icon="incident"
-        next
-        onPress={() => router.push("/notes")}
-        fullWidth
-        testID="team-nav-notes"
-      >
-        {L.notesOpen}
-      </Button>
     </TabScreen>
   );
 }
@@ -828,14 +862,26 @@ const styles = StyleSheet.create({
   line: { flexDirection: "row", alignItems: "center", gap: space2 },
   grow: { flex: 1, gap: space1 },
   buttons: { flexDirection: "row", gap: space2, marginTop: space1 },
-  cloud: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space3,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: space3,
-  },
+  bubbles: { height: CLOUD_HEIGHT, borderRadius: 24, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.40)" },
+  cloudEmpty: { padding: space3 },
+  placed: { position: "absolute" },
+  secH: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: space2 },
+  secTitle: { flex: 1, fontSize: 16, fontStyle: "italic", textTransform: "uppercase" },
+  secRight: { flexShrink: 1, textAlign: "right" },
+  rolesb: { gap: 8 },
+  role: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 16, borderWidth: 1 },
+  allows: { fontSize: 12 },
+  avs: { flexDirection: "row", alignItems: "center", paddingLeft: 8 },
+  av: { marginLeft: -8, borderRadius: 18, borderWidth: 2 },
+  avAdd: { marginLeft: -8, width: 32, height: 32, borderRadius: 16, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  tagRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space2 },
+  tag: { height: 22, justifyContent: "center", paddingHorizontal: 9, borderRadius: 4, transform: [{ skewX: "-8deg" }] },
+  tagText: { transform: [{ skewX: "8deg" }] },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  hist: { marginLeft: 8, paddingLeft: 14, borderLeftWidth: 2, gap: space3 },
+  histRow: { gap: 2 },
+  histDot: { position: "absolute", left: -20, top: 5, width: 10, height: 10, borderRadius: 5 },
+  oldrow: { flexDirection: "row", alignItems: "center", gap: space2, paddingVertical: space2, borderBottomWidth: 1 },
   sheetHead: { flexDirection: "row", alignItems: "center", gap: space3 },
   holders: { flexDirection: "row", flexWrap: "wrap", gap: space3 },
   holder: { alignItems: "center", gap: space1 },

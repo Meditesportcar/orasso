@@ -323,6 +323,14 @@ export function StructureScreen() {
             onPress={() => router.push("/bannis")}
             testID="tile-bans"
           />
+          {/* Lot C4a : les notes internes quittent l'Équipe pour la Structure (ECARTS § 5.2). */}
+          <TileButton
+            icon="incident"
+            title={L.notesOpen}
+            hint={L.notesOpenHint}
+            onPress={() => router.push("/notes")}
+            testID="tile-notes"
+          />
           <TileButton
             icon="ticket"
             title={L2.tilePayments}

@@ -164,9 +164,13 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
 
   // Le point de l'onglet Staff : une demande attend.
   await tab(page, "Équipe").click();
+  // Lot C4a : les demandes sont derrière la bulle « +N » de la grappe (feuille `sh-req` de l'artefact).
+  await expect(page.getByRole("button", { name: /demandes? pour rejoindre l'équipe/ })).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.getByTestId("team-requests-bubble").click();
   const request = page.getByTestId("team-request").filter({ hasText: pseudo });
   await expect(request).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(/Demandes reçues · \d+/)).toBeVisible();
   await shot(page, "01-equipe-demandes-beton");
 
   // La notification de la demande ouvre l'écran Équipe (lien profond, depuis le Journal) : on part d'un autre onglet.
@@ -176,6 +180,7 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   await page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
   await page.getByTestId("inbox-journal").click();
   await page.getByTestId("journal-item").filter({ hasText: "Demande pour rejoindre le staff" }).first().click();
+  await page.getByTestId("team-requests-bubble").click();
   await expect(page.getByTestId("team-request").filter({ hasText: pseudo })).toBeVisible({ timeout: 30_000 });
   await expect(page).toHaveURL(/\/equipe/);
 
@@ -215,7 +220,8 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   expect((await members()).find((m) => m.pseudo === pseudo)).toBeUndefined();
 
   // --- 5. Il crée un modèle ------------------------------------------------------------------------------------
-  await page.getByTestId("team-nav-templates").click();
+  // Lot C4a : les modèles se rangent dans la Boîte de l'organisateur (plus de lien depuis l'Équipe).
+  await go(page, "/modeles");
   await expect(page.getByTestId("template-new")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("template-new").click();
   const templateName = `Rappel d'arrivée ${Date.now() % 100000}`;
@@ -398,6 +404,7 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   await tab(b.page, "Équipe").click();
   await expect(b.page.getByTestId("team-bubble").first()).toBeVisible({ timeout: 30_000 });
   await shot(b.page, "20-equipe-sable");
+  await b.page.getByTestId("team-requests-bubble").click();
   await b.page.getByTestId("team-invite").click();
   await shot(b.page, "21-inviter-sable");
   await b.page.keyboard.press("Escape");
@@ -450,6 +457,7 @@ test("une demande de staff refusée disparaît de l'Équipe et le compteur retom
   const a = await openApp(browser, "damien@orasso.local", "beton");
   await chooseOrganizer(a.page, "MéditeSportCar");
   await tab(a.page, "Équipe").click();
+  await a.page.getByTestId("team-requests-bubble").click();
   const request = a.page.getByTestId("team-request").filter({ hasText: pseudo });
   await expect(request).toBeVisible({ timeout: 30_000 });
   await request.getByTestId("team-request-decline").click();

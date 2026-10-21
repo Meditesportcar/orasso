@@ -3,19 +3,24 @@ import { type ApplicationForTriage, type EventNeedView, type EventOrganizer, org
 import { describe, expect, it } from "vitest";
 
 import {
+  AVATAR_COLORS,
+  avatarColor,
   BUBBLE_FULL_AT,
   BUBBLE_MAX,
   BUBBLE_MIN,
   boardRoles,
   bubbleInitials,
+  bubbleName,
   bubbleSize,
   draftMissing,
   historyOf,
   holdersOf,
   missionGroups,
   nextReminder,
+  packBubbles,
   publishedStatus,
   reminderText,
+  requestBubbleSpot,
   withRole,
 } from "./orgaV2";
 
@@ -97,12 +102,35 @@ describe("statut d'un événement publié", () => {
 });
 
 describe("bulles", () => {
-  it("la taille suit les événements tenus, de 44 à 88 px", () => {
+  it("la taille suit les événements tenus, de 36 à 96 px", () => {
     expect(bubbleSize(0)).toBe(BUBBLE_MIN);
     expect(bubbleSize(BUBBLE_FULL_AT)).toBe(BUBBLE_MAX);
     expect(bubbleSize(99)).toBe(BUBBLE_MAX);
-    expect(bubbleSize(5)).toBe(66);
+    expect(bubbleSize(10)).toBe(66);
     expect(bubbleSize(-3)).toBe(BUBBLE_MIN);
+  });
+  it("la grappe pose les bulles sans chevauchement, dans la carte et hors de la bulle « +N »", () => {
+    const sizes = [96, 74, 68, 60, 54, 50, 44, 40, 36];
+    const reserved = requestBubbleSpot(358, 310);
+    const placed = packBubbles(sizes, 358, 310, reserved);
+    expect(placed).toHaveLength(sizes.length);
+    const all = [reserved, ...placed];
+    for (const [i, a] of all.entries()) {
+      expect(a.x - a.size / 2).toBeGreaterThanOrEqual(0);
+      expect(a.x + a.size / 2).toBeLessThanOrEqual(358);
+      expect(a.y - a.size / 2).toBeGreaterThanOrEqual(0);
+      expect(a.y + a.size / 2).toBeLessThanOrEqual(310);
+      for (const b of all.slice(i + 1)) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual((a.size + b.size) / 2);
+    }
+  });
+  it("une grande équipe tient dans la carte (tailles réduites)", () => {
+    const placed = packBubbles(Array.from({ length: 40 }, () => 96), 358, 310, null);
+    expect(placed).toHaveLength(40);
+  });
+  it("la couleur d'avatar est stable, le prénom vient du pseudo", () => {
+    expect(avatarColor("u1")).toBe(avatarColor("u1"));
+    expect(AVATAR_COLORS).toContain(avatarColor("u2"));
+    expect(bubbleName("Lucie_Pia")).toBe("Lucie");
   });
   it("les initiales", () => {
     expect(bubbleInitials("Sarah_66")).toBe("SA");

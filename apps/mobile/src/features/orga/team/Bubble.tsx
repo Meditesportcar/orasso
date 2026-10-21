@@ -1,35 +1,38 @@
-// Bulle d'un membre de l'équipe (DA v2, lot 52, prototype `s-ostaff`) : un rond de 44 à 88 px dont la taille suit le
-// nombre d'événements tenus (`bubbleSize`), les initiales du pseudo, une pastille de rôle au coin. Un toucher l'ouvre.
-import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { orgaV2Labels as L, type StructureRole } from "@orasso/shared";
+// Bulle d'un membre de l'équipe (artefact DA v2, `s-ostaff`, classes `.bub`, `.bub small`, `.bub .rb`, `.avs span`) :
+// un rond plein à la couleur d'avatar du membre, initiales crème en Archivo large 900 (taille / 3,6), le prénom en
+// petites capitales sous les initiales des grandes bulles (> 58 px), la pastille de rôle moutarde au coin (trois
+// lettres). La taille suit le nombre d'événements tenus (`bubbleSize`, 36 à 96 px). Un toucher l'ouvre.
+import { Text, tokens, useTheme } from "@orasso/design-system/native";
+import { orgaV2Labels as L } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { bubbleInitials, bubbleSize } from "@/lib/orgaV2";
+import { AVATAR_INK, avatarColor, bubbleInitials, bubbleName, bubbleSize } from "@/lib/orgaV2";
 
 const { radiusPill } = tokens.radius;
 
-const roleIcon = { owner: "badge", co_organizer: "grade", staff: "staff" } as const;
-
 export function Bubble({
+  userId,
   pseudo,
-  kind,
   held,
   onPress,
   size,
-  mark,
+  badge,
+  dim,
   label,
   disabled,
   testID,
 }: {
+  userId: string;
   pseudo: string;
-  kind: StructureRole;
-  /** Événements tenus : la taille de la bulle. */
+  /** Événements tenus : la taille de la bulle et le nom accessible. */
   held: number;
   onPress?: () => void;
-  /** Taille imposée (rangée de rôles) au lieu de celle de l'engagement. */
+  /** Taille imposée (grappe réduite, rangée d'avatars `.avs`, en-tête de feuille). */
   size?: number;
-  /** Petite marque en haut à droite (présence confirmée). */
-  mark?: boolean;
+  /** Pastille de rôle `.rb` (trois lettres du rôle pour l'événement choisi). */
+  badge?: string | null;
+  /** Présence pas encore confirmée : avatar estompé dans les rangées de rôles. */
+  dim?: boolean;
   /** Nom accessible, quand l'action n'est pas « ouvrir la fiche » (retirer un rôle). */
   label?: string;
   disabled?: boolean;
@@ -38,7 +41,7 @@ export function Bubble({
   const { t } = useTheme();
   const c = t.color;
   const diameter = size ?? bubbleSize(held);
-  const pastille = Math.max(16, Math.round(diameter * 0.3));
+  const fontSize = Math.round(diameter / 3.6);
   return (
     <Pressable
       onPress={onPress}
@@ -46,47 +49,95 @@ export function Bubble({
       accessibilityRole={onPress ? "button" : "text"}
       accessibilityLabel={label ?? L.bubbleLabel(pseudo, held)}
       testID={testID}
-      style={[styles.hit, { width: diameter, height: diameter }]}
+      style={({ pressed }) => [
+        styles.round,
+        {
+          width: diameter,
+          height: diameter,
+          backgroundColor: avatarColor(userId),
+          opacity: dim ? 0.55 : 1,
+          transform: [{ scale: pressed ? 0.94 : 1 }],
+        },
+        diameter > 40 ? styles.shadow : null,
+      ]}
     >
-      <View
-        style={[
-          styles.round,
-          { width: diameter, height: diameter, backgroundColor: c.plate, borderColor: c.plateEdge },
-        ]}
-      >
-        <Text
-          variant="bodyStrong"
-          color={c.plateInk}
-          style={{ fontSize: Math.round(diameter * 0.3), lineHeight: Math.round(diameter * 0.36) }}
-        >
-          {bubbleInitials(pseudo)}
+      <Text variant="bodyStrong" color={AVATAR_INK} style={[styles.initials, { fontSize, lineHeight: fontSize * 1.1 }]}>
+        {bubbleInitials(pseudo)}
+      </Text>
+      {diameter > 58 ? (
+        <Text variant="meta" color={AVATAR_INK} style={styles.name} numberOfLines={1}>
+          {bubbleName(pseudo)}
+        </Text>
+      ) : null}
+      {badge ? (
+        <View style={[styles.badge, { backgroundColor: c.accent }]} accessibilityElementsHidden>
+          <Text variant="meta" color={c.accentInk} style={styles.badgeText}>
+            {badge}
+          </Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+/** La bulle « +N » des demandes (ou « + » pour inviter) : anneau d'encre, pointillés moutarde décalés de 4 px (`.bub.req`). */
+export function RequestBubble({
+  count,
+  size = 56,
+  onPress,
+  label,
+  testID,
+}: {
+  count: number;
+  size?: number;
+  onPress: () => void;
+  label: string;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID={testID}
+      style={({ pressed }) => [
+        styles.reqOuter,
+        { width: size + 12, height: size + 12, borderColor: c.accent, transform: [{ scale: pressed ? 0.94 : 1 }] },
+      ]}
+    >
+      <View style={[styles.round, { width: size, height: size, borderWidth: 2, borderColor: c.ink }]}>
+        <Text variant="bodyStrong" color={c.ink} style={styles.reqText}>
+          {count > 0 ? `+${count}` : "+"}
         </Text>
       </View>
-      <View
-        style={[
-          styles.pastille,
-          { width: pastille, height: pastille, backgroundColor: c.plateChip, borderColor: c.plateEdge },
-        ]}
-        accessibilityElementsHidden
-      >
-        <Icon name={roleIcon[kind]} size={Math.round(pastille * 0.6)} color={c.plateInk} />
-      </View>
-      {mark ? <View style={[styles.mark, { backgroundColor: c.accent }]} accessibilityElementsHidden /> : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  hit: { alignItems: "center", justifyContent: "center" },
-  round: { borderRadius: radiusPill, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  pastille: {
+  round: { borderRadius: radiusPill, alignItems: "center", justifyContent: "center" },
+  shadow: { boxShadow: "0 8px 18px rgba(0,0,0,0.25)" },
+  initials: { fontWeight: "900", textAlign: "center" },
+  name: { fontSize: 10, letterSpacing: 0.4, textTransform: "uppercase", opacity: 0.85, maxWidth: "86%" },
+  badge: {
     position: "absolute",
     right: -2,
     bottom: -2,
-    borderRadius: radiusPill,
-    borderWidth: 1,
+    height: 22,
+    paddingHorizontal: 7,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
   },
-  mark: { position: "absolute", right: 2, top: 2, width: 10, height: 10, borderRadius: radiusPill },
+  badgeText: { fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  reqOuter: {
+    borderRadius: radiusPill,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reqText: { fontSize: 15, fontWeight: "900" },
 });
