@@ -10,7 +10,10 @@
 import "../styles/wizard.css";
 import { Button } from "@orasso/design-system/web";
 import {
+  afterNeedWrites,
+  afterZoneWrites,
   type Category,
+  createdNeedDiffers,
   draftStart,
   type EventDraft,
   type EventNeedView,
@@ -26,8 +29,10 @@ import {
   firstEventProblem,
   hasRefusals,
   initialEventDraft,
+  type NeedDraft,
   needChanges,
   needsFromSaved,
+  noNeedWrites,
   noRefusals,
   parseWizardMemo,
   posterTexts,
@@ -45,7 +50,11 @@ import {
   withArrivalsInHours,
   withCopyOpening,
   withDefaultPoster,
+  withLoadedNeeds,
+  withNeedKeys,
+  withServerNeeds,
   wizardEndLabels,
+  type ZoneWrites,
   zoneChanges,
 } from "@orasso/shared";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -148,6 +157,11 @@ export function EventWizard(props: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ownPoster, setOwnPoster] = useState<File | null>(null);
+  // Envoi de la photo de l'affiche (temps 7), tenu ici (correctif 53c) : on ne poursuit pas avant sa fin, et son
+  // erreur ne disparaît pas avec l'étape.
+  const [photoSending, setPhotoSending] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const halted = busy || photoSending;
   const step = eventWizardSteps[index] ?? "type";
   const last = index === eventWizardSteps.length - 1;
   const set = <K extends keyof EventDraft>(key: K, value: EventDraft[K]) => setD((prev) => ({ ...prev, [key]: value }));
@@ -170,21 +184,34 @@ export function EventWizard(props: Props) {
   const dirty = !sameDraft(d, pristine.current);
 
   // Missions enregistrées (lot 46) : chargées pour le volet « Sur place », avant de reprendre une saisie gardée.
-  const [needsReady, setNeedsReady] = useState(!event);
+  // Correctif 53c : elles rejoignent la saisie quels que soient les autres champs (`withLoadedNeeds` : une mission
+  // inconnue de la saisie est ajoutée, une mission déjà dans la saisie garde ses modifications), et rien ne
+  // s'enregistre sur le serveur tant qu'elles ne sont pas chargées. Échec : message, « Recharger les missions », qui ne
+  // relance que ce chargement ; la saisie reste gardée dans le navigateur.
+  const [needsState, setNeedsState] = useState<"loading" | "ok" | "failed">(event ? "loading" : "ok");
+  const [needsAttempt, setNeedsAttempt] = useState(0);
+  const loadedNeeds = useRef<NeedDraft[] | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `needsAttempt` relance le chargement (« Recharger »).
   useEffect(() => {
     if (!event) return;
+    let alive = true;
+    setNeedsState((s) => (s === "ok" ? s : "loading"));
     void apiFetch<EventNeedView[]>(`/events/${event.id}/needs`).then((res) => {
-      if (res.ok) {
-        setSavedNeeds(res.data);
-        // Hors de la fonction de mise à jour (React peut l'appeler deux fois) : elle reste sans effet de bord.
-        const before = pristine.current;
-        const next = { ...before, needs: needsFromSaved(res.data, event.startsAt) };
-        pristine.current = next;
-        setD((p) => (sameDraft(p, before) ? next : p));
-      }
-      setNeedsReady(true);
+      if (!alive) return;
+      if (!res.ok) return setNeedsState("failed");
+      const loaded = needsFromSaved(res.data, event.startsAt);
+      loadedNeeds.current = loaded;
+      setSavedNeeds(res.data);
+      pristine.current = withServerNeeds(pristine.current, loaded);
+      setD((p) => withLoadedNeeds(p, loaded));
+      setNeedsState("ok");
     });
-  }, [event]);
+    return () => {
+      alive = false;
+    };
+  }, [event, needsAttempt]);
+  /** Message qui empêche d'enregistrer tant que les missions manquent, ou `null`. */
+  const needsBlock = needsState === "loading" ? W.needsLoading : needsState === "failed" ? W.needsFailed : null;
 
   // Mémoire du brouillon (temps atteint, récurrence) : relue à l'ouverture, écrite à chaque temps.
   const memo = useRef<WizardMemo>({ reached: -1, recurrence: null });
@@ -226,14 +253,21 @@ export function EventWizard(props: Props) {
   const [restored, setRestored] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const leaving = useRef(false);
+  // Relue une fois, dès que le chargement des missions a abouti ou échoué (« Recharger les missions » ne la relit pas) ;
+  // les missions chargées y sont fusionnées : une saisie gardée ne supprime jamais une mission qu'elle ne connaissait
+  // pas (ajoutée ailleurs, ou saisie gardée d'avant le correctif 53c).
+  const restoredFrom = useRef<string | null>(null);
+  const needsSettled = needsState !== "loading";
   useEffect(() => {
-    if (!needsReady) return;
+    if (!needsSettled || restoredFrom.current === storageKey) return;
+    restoredFrom.current = storageKey;
     const raw = readStorage(storageKey);
     if (!raw) return;
     try {
       const stored = JSON.parse(raw) as StoredWizard;
-      if (sameDraft(stored.draft, pristine.current)) return;
-      setD(stored.draft);
+      const draft = loadedNeeds.current ? withLoadedNeeds(stored.draft, loadedNeeds.current) : stored.draft;
+      if (sameDraft(draft, pristine.current)) return;
+      setD(draft);
       // `?temps=` prime ; un index écrit avec l'ancien découpage (douze étapes) est ignoré.
       const kept = storedStepIndex(stored.steps, stored.index);
       if (!props.stepWanted && kept !== null) setIndex(kept);
@@ -241,12 +275,12 @@ export function EventWizard(props: Props) {
     } catch {
       // Saisie gardée abîmée : ignorée.
     }
-  }, [storageKey, props.stepWanted, needsReady]);
+  }, [storageKey, props.stepWanted, needsSettled]);
   useEffect(() => {
-    if (saving || !needsReady) return;
+    if (saving || !needsSettled || restoredFrom.current !== storageKey) return;
     const timer = setTimeout(() => writeStorage(storageKey, dirty ? storedWizard(d, index) : null), 300);
     return () => clearTimeout(timer);
-  }, [d, index, dirty, saving, storageKey, needsReady]);
+  }, [d, index, dirty, saving, storageKey, needsSettled]);
   useEffect(() => {
     if (!dirty || saving) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -271,11 +305,19 @@ export function EventWizard(props: Props) {
    * réconcilie la saisie (`reconcileDraft`). `event` : l'événement enregistré, ou `null` si quelque chose a été refusé
    * (erreur affichée, saisie refusée gardée) ; `created` : identifiant d'un brouillon créé par cet appel.
    */
-  async function persist(sent: EventDraft): Promise<Saved> {
+  async function persist(input: EventDraft): Promise<Saved> {
     const fail = (failure: string, created: string | null): Saved => {
       setError(failure);
       return { event: null, created, failure };
     };
+    // Missions pas encore chargées : sans elles, l'enregistrement ne peut pas les comparer (correctif 53c).
+    if (needsBlock) return fail(needsBlock, null);
+    // Chaque nouvelle mission reçoit sa clé de création avant de partir (création idempotente, correctif 53c).
+    const sent = withNeedKeys(input);
+    if (sent !== input) {
+      latest.current = sent;
+      setD(sent);
+    }
     const wasMultiDay = (saved?.days.length ?? 0) > 1;
     if (saved && wasMultiDay && !sent.multiDay) {
       const back = await apiFetch(`/events/${saved.id}/days`, { method: "PUT", json: eventDaysPayload(sent) });
@@ -308,21 +350,38 @@ export function EventWizard(props: Props) {
       const r = await apiFetch(`/events/${id}/zones/${z.id}`, { method: "PATCH", json: z.zone });
       if (!r.ok) refused.zones.push(z.zone.position);
     }
+    // Zones créées, gardées si la suite échoue : le nouvel essai les met à jour au lieu de les recréer (tour 3). Un 409
+    // (zone de ce code déjà là, créée ailleurs) reste un refus visible.
+    const zoneWrites: ZoneWrites = { created: [] };
     for (const zone of zones.create) {
-      if (!(await apiFetch(`/events/${id}/zones`, { method: "POST", json: zone })).ok)
-        refused.zones.push(zone.position);
+      const r = await apiFetch<{ id: string }>(`/events/${id}/zones`, { method: "POST", json: zone });
+      if (r.ok) zoneWrites.created.push({ position: zone.position, id: r.data.id });
+      else refused.zones.push(zone.position);
     }
     const needs = needChanges(savedNeeds, sent);
+    // Écritures réussies, gardées si la suite échoue : un nouvel essai ne recrée pas les mêmes missions (correctif 53c).
+    const writes = noNeedWrites();
     for (const n of needs.remove) {
-      if (!(await apiFetch(`/events/${id}/needs/${n}`, { method: "DELETE" })).ok) refused.removals += 1;
+      if ((await apiFetch(`/events/${id}/needs/${n}`, { method: "DELETE" })).ok) writes.removed.push(n);
+      else refused.removals += 1;
     }
     for (const n of needs.update) {
       const r = await apiFetch(`/events/${id}/needs/${n.id}`, { method: "PATCH", json: n.need });
       if (!r.ok) refused.needs.push(n.need.position);
     }
     for (const need of needs.create) {
-      if (!(await apiFetch(`/events/${id}/needs`, { method: "POST", json: need })).ok)
+      const r = await apiFetch<EventNeedView>(`/events/${id}/needs`, { method: "POST", json: need });
+      if (!r.ok) {
         refused.needs.push(need.position);
+        continue;
+      }
+      writes.created.push({ position: need.position, need: r.data });
+      // Clé déjà connue : l'API a rendu la mission d'un essai précédent, peut-être avec d'anciennes valeurs (tour 3).
+      if (createdNeedDiffers(r.data, need)) {
+        const { clientKey: _key, ...values } = need;
+        const p = await apiFetch(`/events/${id}/needs/${r.data.id}`, { method: "PATCH", json: values });
+        if (!p.ok) refused.needs.push(need.position);
+      }
     }
     if (ownPoster) {
       const form = new FormData();
@@ -342,21 +401,28 @@ export function EventWizard(props: Props) {
     ]);
     if (!fresh.ok || !freshNeeds.ok) {
       setSaved(res.data);
+      // Les missions créées gardent leur identifiant, les supprimées sortent des enregistrées : le nouvel essai repart
+      // de là (ni doublon, ni suppression renvoyée).
+      const after = afterNeedWrites({ savedNeeds, sent, current: latest.current, writes });
+      const draft = afterZoneWrites(sent, after.draft, zoneWrites);
+      setSavedNeeds(after.savedNeeds);
+      latest.current = draft;
+      setD(draft);
       // Relecture impossible : rien n'est marqué enregistré, la saisie reste à renvoyer.
       return fail(!fresh.ok ? fresh.error.message : !freshNeeds.ok ? freshNeeds.error.message : "", created);
     }
     setSaved(fresh.data);
     setSavedNeeds(freshNeeds.data);
-    const { draft, pristine: kept } = reconcileDraft({
+    const reconciled = reconcileDraft({
       sent,
       current: latest.current,
       server: serverDraft(fresh.data, freshNeeds.data),
       refused,
     });
-    pristine.current = kept;
-    latest.current = draft;
-    setD(draft);
-    if (hasRefusals(refused)) return fail(refusalMessage(sent, refused), created);
+    pristine.current = reconciled.pristine;
+    latest.current = reconciled.draft;
+    setD(reconciled.draft);
+    if (hasRefusals(reconciled.refused)) return fail(refusalMessage(sent, reconciled.refused), created);
     return { event: fresh.data, created, failure: null };
   }
 
@@ -380,9 +446,11 @@ export function EventWizard(props: Props) {
 
   async function go(delta: 1 | -1) {
     if (busy) return;
+    if (photoSending) return setError(W.posterStillSending);
     setError(null);
     setNotice(null);
     if (delta === -1) return setIndex((i) => Math.max(0, i - 1));
+    if (needsBlock && isDraft && (saved || step !== "type")) return setError(needsBlock);
     let sent = d;
     const problem = eventStepProblem(step, sent);
     if (problem) return setError(problem);
@@ -419,6 +487,8 @@ export function EventWizard(props: Props) {
 
   async function finish(mode: "draft" | "publish" | "preview" | "save") {
     if (busy) return;
+    if (photoSending) return setError(W.posterStillSending);
+    if (needsBlock) return setError(needsBlock);
     // Publier exige aussi l'affiche ; « Brouillon », « Aperçu » et un événement publié, non.
     const invalid = mode === "publish" ? eventPublishProblem(d) : firstEventProblem(d);
     if (invalid) {
@@ -488,6 +558,10 @@ export function EventWizard(props: Props) {
         photoUrl={saved?.posterSettings?.photoUrl ?? null}
         ownPoster={ownPoster}
         setOwnPoster={setOwnPoster}
+        sending={photoSending}
+        setSending={setPhotoSending}
+        photoError={photoError}
+        setPhotoError={setPhotoError}
       />
     );
   else body = <ReadyStep d={d} posterUrl={saved?.posterUrl ?? null} />;
@@ -543,6 +617,20 @@ export function EventWizard(props: Props) {
           </h2>
           <p className="s-muted">{intro}</p>
         </header>
+        {needsState === "failed" ? (
+          <div
+            className="s-notice s-notice--alert s-stack s-stack--tight"
+            role="alert"
+            data-testid="wizard-needs-failed"
+          >
+            <span>{W.needsFailed}</span>
+            <div className="s-row">
+              <Button variant="secondary" icon="undo" onClick={() => setNeedsAttempt((n) => n + 1)}>
+                {W.needsRetry}
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {notice ? (
           <p className="s-notice" role="status" data-testid="wizard-notice">
             {notice}
@@ -573,8 +661,8 @@ export function EventWizard(props: Props) {
             <Button
               icon="send"
               onClick={() => void finish("publish")}
-              loading={busy}
-              disabled={!verified || busy}
+              loading={halted}
+              disabled={!verified || halted}
               data-testid="wizard-publish"
               fullWidth
             >
@@ -585,7 +673,7 @@ export function EventWizard(props: Props) {
                 variant="secondary"
                 icon="back"
                 onClick={() => void go(-1)}
-                disabled={busy}
+                disabled={halted}
                 aria-label={W.previous}
               >
                 {eventStepLabels[eventWizardSteps[index - 1] ?? "type"]}
@@ -594,7 +682,7 @@ export function EventWizard(props: Props) {
                 variant="secondary"
                 icon="calendar"
                 onClick={() => void finish("draft")}
-                disabled={busy}
+                disabled={halted}
                 data-testid="wizard-keep-draft"
               >
                 {W.draft}
@@ -603,7 +691,7 @@ export function EventWizard(props: Props) {
                 variant="secondary"
                 icon="eye"
                 onClick={() => void finish("preview")}
-                disabled={busy}
+                disabled={halted}
                 data-testid="wizard-preview"
               >
                 {W.preview}
@@ -617,25 +705,25 @@ export function EventWizard(props: Props) {
                 variant="secondary"
                 icon="back"
                 onClick={() => void go(-1)}
-                disabled={busy}
+                disabled={halted}
                 data-testid="wizard-back"
               >
                 Retour
               </Button>
             ) : (
-              <Button variant="secondary" icon="close" href={`/orga/${structureSlug}`} disabled={busy}>
+              <Button variant="secondary" icon="close" href={`/orga/${structureSlug}`} disabled={halted}>
                 Annuler
               </Button>
             )}
             {last ? (
-              <Button icon="check" onClick={() => void finish("save")} loading={busy} data-testid="wizard-save">
+              <Button icon="check" onClick={() => void finish("save")} loading={halted} data-testid="wizard-save">
                 Enregistrer les modifications
               </Button>
             ) : (
               <Button
                 icon="next"
                 onClick={() => void go(1)}
-                loading={busy}
+                loading={halted}
                 data-testid="wizard-next"
                 className="s-grow"
               >

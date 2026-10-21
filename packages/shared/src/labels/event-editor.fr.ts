@@ -409,6 +409,12 @@ export const wizardV2Labels = {
   posterPreviewRetry: "Réessayer",
   quitDraftBody: "Ta saisie reste sur ce téléphone : tu la retrouves en rouvrant ce brouillon.",
   missionDay: (n: number) => (n === 1 ? "Installation le lendemain" : `Installation ${n} jours plus tard`),
+
+  // Correctif 53c (21/10/2026).
+  needsLoading: "Les missions de l'événement se chargent : attends un instant avant d'enregistrer.",
+  needsFailed: "Les missions de l'événement n'ont pas pu être chargées : rien n'est enregistré tant qu'elles manquent.",
+  needsRetry: "Recharger les missions",
+  posterStillSending: "La photo de l'affiche s'envoie encore : attends la fin de l'envoi.",
 } as const;
 
 /** Modèles de règlement (`s-create` : « Modèle Nocturne », « Modèle Expo » ; le modèle d'Orasso reste proposé). */

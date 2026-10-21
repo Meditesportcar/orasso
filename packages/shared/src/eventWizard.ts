@@ -105,6 +105,12 @@ export type NeedDraft = {
    * 2e jour d'un événement sur deux jours reste le 2e jour) ; il suit l'événement si sa date change.
    */
   installDay?: number;
+  /**
+   * Correctif 53c : clé de création (UUID) d'une mission pas encore enregistrée, posée avant l'envoi et gardée pendant
+   * les modifications. L'API ne crée qu'une mission par clé et par événement : un nouvel essai après une réponse
+   * perdue retrouve la mission déjà créée au lieu d'en créer une seconde.
+   */
+  clientKey?: string;
 };
 
 /**
@@ -166,6 +172,12 @@ export type EventDraft = {
   entranceNote?: string;
   /** Lot 53 : missions du volet « Sur place » (absentes des brouillons d'avant). */
   needs?: NeedDraft[];
+  /**
+   * Correctif 53c : identifiants des missions enregistrées que la saisie connaît. Une mission n'est supprimée que si la
+   * saisie la connaissait et que l'organisateur l'a retirée ; une mission du serveur inconnue de la saisie (ajoutée
+   * ailleurs, ou saisie gardée avant son chargement) y est ajoutée. Absent : rien de connu, donc rien à supprimer.
+   */
+  knownNeedIds?: string[];
   /** Lot 53 : « Récurrent » au temps 1 ; `null` ou absent = ponctuel ou plusieurs jours. */
   recurrence?: RecurrenceDraft | null;
   /**
@@ -903,8 +915,30 @@ export function needsFromSaved(saved: readonly EventNeedView[], start?: string |
         frontageM: n.frontageM === null ? "" : String(n.frontageM),
         installTime,
         ...(installDay ? { installDay } : {}),
+        ...(n.clientKey ? { clientKey: n.clientKey } : {}),
       };
     });
+}
+
+/** Clé de création d'une mission (UUID v4) ; `crypto.randomUUID` quand il existe. */
+export function newClientKey(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  const hex = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16));
+  hex[12] = "4";
+  hex[16] = ((Number.parseInt(hex[16] ?? "0", 16) & 0x3) | 0x8).toString(16);
+  const s = hex.join("");
+  return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
+}
+
+/**
+ * Avant d'envoyer (correctif 53c) : chaque mission pas encore enregistrée reçoit sa clé de création, une fois pour
+ * toutes. Rend le même brouillon s'il n'y avait rien à poser. `makeKey` : générateur (l'appli passe celui d'Expo).
+ */
+export function withNeedKeys(d: EventDraft, makeKey: () => string = newClientKey): EventDraft {
+  const needs = d.needs ?? [];
+  if (!needs.some((n) => !n.id && !n.clientKey)) return d;
+  return { ...d, needs: needs.map((n) => (n.id || n.clientKey ? n : { ...n, clientKey: makeKey() })) };
 }
 
 /** Une mission telle que l'API l'attend (`eventNeedSchema`). */
@@ -916,6 +950,8 @@ export type NeedPayload = {
   frontageM: number | null;
   installAt: string | null;
   position: number;
+  /** Création seulement : clé de création (correctif 53c). */
+  clientKey?: string;
 };
 
 /**
@@ -939,7 +975,8 @@ function changedNeed(saved: Partial<EventNeedView> | undefined, need: NeedPayloa
 /**
  * Missions à retirer, modifier (seulement si elles ont changé) et créer par rapport aux missions enregistrées (comme
  * `zoneChanges`). L'heure d'installation se place le jour de l'événement (après minuit pour une nocturne, comme les
- * créneaux d'arrivée).
+ * créneaux d'arrivée). Correctif 53c : seule une mission **connue** de la saisie (`knownNeedIds`) et retirée par
+ * l'organisateur est supprimée ; une mission enregistrée que la saisie ne connaît pas n'est jamais supprimée.
  */
 export function needChanges(
   saved: readonly (Pick<EventNeedView, "id"> & Partial<EventNeedView>)[],
@@ -948,7 +985,8 @@ export function needChanges(
   const needs = d.needs ?? [];
   const start = draftStart(d);
   const kept = new Set(needs.map((n) => n.id).filter(Boolean));
-  const remove = saved.filter((n) => !kept.has(n.id)).map((n) => n.id);
+  const known = new Set(d.knownNeedIds ?? []);
+  const remove = saved.filter((n) => known.has(n.id) && !kept.has(n.id)).map((n) => n.id);
   const update: { id: string; need: NeedPayload }[] = [];
   const create: NeedPayload[] = [];
   for (const [position, n] of needs.entries()) {
@@ -962,7 +1000,7 @@ export function needChanges(
       installAt: at ? at.toISOString() : null,
       position,
     };
-    if (!n.id) create.push(need);
+    if (!n.id) create.push(n.clientKey ? { ...need, clientKey: n.clientKey } : need);
     else if (
       changedNeed(
         saved.find((s) => s.id === n.id),
@@ -981,8 +1019,15 @@ const draftOnlyKeys = ["recurrence", "datesBeforeRecurrence"] as const satisfies
 
 /** L'événement enregistré vu comme un brouillon (ce que le serveur garde vraiment), missions comprises. */
 export function serverDraft(event: EventOrganizer, needs: readonly EventNeedView[]): EventDraft {
-  return { ...initialEventDraft(new Date(event.startsAt), event), needs: needsFromSaved(needs, event.startsAt) };
+  const rows = needsFromSaved(needs, event.startsAt);
+  return {
+    ...initialEventDraft(new Date(event.startsAt), event),
+    needs: rows,
+    knownNeedIds: knownIdsOf(rows),
+  };
 }
+
+const knownIdsOf = (rows: readonly NeedDraft[]) => rows.map((n) => n.id).filter((id): id is string => Boolean(id));
 
 /**
  * Ce que l'API a refusé pendant un enregistrement : lignes du brouillon envoyé (index = `position` du corps), nombre de
@@ -1036,6 +1081,19 @@ function rowsAfterSave<T extends { id?: string }>(
  * Lignes après l'enregistrement, avec la saisie faite pendant l'envoi : inchangée, la version relue ; modifiée, la
  * saisie est gardée (une ligne créée garde son nouvel identifiant, pour ne pas être créée deux fois).
  */
+/** Deux missions aux mêmes valeurs (métier, nombre, électricité, eau, façade, installation), identifiants à part. */
+function sameNeedContent(a: NeedDraft, b: NeedDraft): boolean {
+  return (
+    a.trade === b.trade &&
+    Number(a.quantity) === Number(b.quantity) &&
+    a.power === b.power &&
+    a.water === b.water &&
+    a.frontageM.trim() === b.frontageM.trim() &&
+    a.installTime.trim() === b.installTime.trim() &&
+    (a.installDay ?? 0) === (b.installDay ?? 0)
+  );
+}
+
 function mergeRows<T extends { id?: string }>(sent: readonly T[], current: readonly T[], next: (T | null)[]): T[] {
   if (current === sent || same(current, sent)) return next.filter((r): r is T => r !== null);
   return current.map((row, i) => {
@@ -1061,7 +1119,7 @@ export function reconcileDraft(input: {
   /** L'événement relu (`serverDraft`). */
   server: EventDraft;
   refused?: SaveRefusals;
-}): { draft: EventDraft; pristine: EventDraft } {
+}): { draft: EventDraft; pristine: EventDraft; refused: SaveRefusals } {
   const { sent, current, server } = input;
   const refused = input.refused ?? noRefusals();
   const zones = rowsAfterSave(
@@ -1070,26 +1128,159 @@ export function reconcileDraft(input: {
     new Set(refused.zones),
     (a, b) => a.code.trim().toUpperCase() === b.code,
   );
-  const needs = rowsAfterSave(
-    sent.needs ?? [],
-    server.needs ?? [],
-    new Set(refused.needs),
-    (a, b) => a.trade === b.trade,
+  // Correctif 53c : une **création** dite refusée (ligne sans identifiant) dont la clé est sur le serveur a bien eu
+  // lieu (réponse perdue). Une modification refusée d'une mission enregistrée reste refusée (tour 3).
+  // Seulement si la mission du serveur a les valeurs envoyées : sinon la saisie n'est pas enregistrée telle quelle.
+  const sentNeeds = sent.needs ?? [];
+  const refusedNeeds = new Set(
+    refused.needs.filter((i) => {
+      const row = sentNeeds[i];
+      const twin = row && !row.id && row.clientKey && server.needs?.find((n) => n.clientKey === row.clientKey);
+      return !(row && twin && sameNeedContent(row, twin));
+    }),
   );
+  const needs = rowsAfterSave(sentNeeds, server.needs ?? [], refusedNeeds, (a, b) =>
+    a.clientKey || b.clientKey ? a.clientKey === b.clientKey : a.trade === b.trade,
+  ).map((row, i) => {
+    // Rattachée par sa clé à une mission créée avec d'autres valeurs (réponse perdue, puis modifiée avant le nouvel
+    // essai) : la saisie envoyée est gardée avec l'identifiant, elle reste à enregistrer (un PATCH repart, tour 3).
+    const before = sentNeeds[i];
+    if (!row || !before || before.id || !row.id || sameNeedContent(before, row)) return row;
+    return { ...before, id: row.id };
+  });
   const draft: EventDraft = { ...server };
   const own = draft as Record<string, unknown>;
   for (const key of Object.keys(current) as (keyof EventDraft)[]) {
-    if (key === "zones" || key === "needs") continue;
+    if (key === "zones" || key === "needs" || key === "knownNeedIds") continue;
     const local = (draftOnlyKeys as readonly string[]).includes(key);
     if (local || !same(current[key], sent[key])) own[key] = current[key];
   }
   draft.zones = mergeRows(sent.zones, current.zones, zones);
-  draft.needs = mergeRows(sent.needs ?? [], current.needs ?? [], needs);
+  // Missions du serveur que la saisie ne connaissait pas (créées ailleurs, deuxième onglet) : ajoutées, jamais perdues.
+  const merged = withLoadedNeeds(
+    {
+      ...draft,
+      needs: mergeRows(sentNeeds, current.needs ?? [], needs),
+      // Les missions créées par cet envoi sont connues : retirées pendant l'envoi, elles ne reviennent pas (tour 3).
+      knownNeedIds: [
+        ...new Set([
+          ...(sent.knownNeedIds ?? []),
+          ...(current.knownNeedIds ?? []),
+          ...knownIdsOf(needs.filter((n): n is NeedDraft => n !== null)),
+        ]),
+      ],
+    },
+    server.needs ?? [],
+  );
+  draft.needs = merged.needs;
+  draft.knownNeedIds = knownIdsOf(server.needs ?? []);
   const pristine: EventDraft = { ...server };
   for (const key of draftOnlyKeys) {
     if (current[key] !== undefined) (pristine as Record<string, unknown>)[key] = current[key];
   }
-  return { draft, pristine };
+  // Ce qui reste vraiment refusé (une création dont la réponse s'est perdue mais qui existe n'en fait plus partie).
+  return { draft, pristine, refused: { ...refused, needs: refused.needs.filter((i) => refusedNeeds.has(i)) } };
+}
+
+// --- Missions chargées après l'ouverture, écritures gardées après une panne (correctif 53c) ----------------------
+
+/**
+ * Missions enregistrées (`loaded`) fusionnées dans une saisie **quels que soient ses autres champs** (missions chargées
+ * après l'ouverture, saisie gardée restaurée, relecture après un enregistrement, page rechargée) :
+ * - une mission que la saisie a déjà (même identifiant) garde la version de la saisie (modifications non enregistrées) ;
+ * - une ligne sans identifiant dont la clé de création est sur le serveur prend son identifiant (réponse perdue) ;
+ * - une mission connue (`knownNeedIds`) absente de la saisie a été retirée par l'organisateur : elle le reste ;
+ * - une mission inconnue de la saisie est ajoutée à la fin (jamais supprimée faute d'avoir été vue).
+ * Les missions chargées deviennent connues. Appliquée deux fois, elle donne le même résultat.
+ */
+export function withLoadedNeeds(current: EventDraft, loaded: readonly NeedDraft[]): EventDraft {
+  const known = new Set(current.knownNeedIds ?? []);
+  const needs = (current.needs ?? []).map((n) => {
+    if (n.id || !n.clientKey) return n;
+    const twin = loaded.find((l) => l.clientKey === n.clientKey);
+    return twin?.id ? { ...n, id: twin.id } : n;
+  });
+  const present = new Set(needs.map((n) => n.id).filter(Boolean));
+  const added = loaded.filter((l) => l.id && !present.has(l.id) && !known.has(l.id));
+  return {
+    ...current,
+    needs: [...needs, ...added],
+    knownNeedIds: [...new Set([...known, ...knownIdsOf(loaded)])],
+  };
+}
+
+/**
+ * Écritures de missions réussies pendant un enregistrement interrompu ensuite (relecture finale en échec, réseau) :
+ * créations (`position` : ligne du brouillon envoyé, `need` : la mission créée, avec son identifiant) et suppressions.
+ */
+export type NeedWrites = { created: { position: number; need: EventNeedView }[]; removed: string[] };
+
+export const noNeedWrites = (): NeedWrites => ({ created: [], removed: [] });
+
+/**
+ * Avant de retenter un enregistrement interrompu : les missions créées prennent leur identifiant dans la saisie (elles
+ * ne seront pas recréées) et rejoignent les missions enregistrées ; les missions supprimées en sortent (la suppression
+ * n'est pas renvoyée). `sent` : le brouillon envoyé ; `current` : la saisie au retour (tapée pendant l'envoi comprise).
+ */
+export function afterNeedWrites(input: {
+  savedNeeds: readonly EventNeedView[];
+  sent: EventDraft;
+  current: EventDraft;
+  writes: NeedWrites;
+}): { savedNeeds: EventNeedView[]; draft: EventDraft } {
+  const { sent, current, writes } = input;
+  const removed = new Set(writes.removed);
+  const savedNeeds = [...input.savedNeeds.filter((n) => !removed.has(n.id)), ...writes.created.map((c) => c.need)];
+  const needs = [...(current.needs ?? [])];
+  const claimed = new Set<number>();
+  for (const { position, need } of writes.created) {
+    const row = sent.needs?.[position];
+    if (!row) continue;
+    // Par la clé de création (stable même si la ligne a été modifiée pendant l'envoi) ; à défaut, ligne identique.
+    const j = needs.findIndex(
+      (n, k) => !claimed.has(k) && !n.id && (row.clientKey ? n.clientKey === row.clientKey : same(n, row)),
+    );
+    if (j < 0) continue;
+    claimed.add(j);
+    needs[j] = { ...needs[j], id: need.id } as NeedDraft;
+  }
+  const knownNeedIds = [...new Set([...(current.knownNeedIds ?? []), ...writes.created.map((c) => c.need.id)])];
+  return { savedNeeds, draft: { ...current, needs, knownNeedIds } };
+}
+
+/**
+ * Une mission rendue par `POST /events/:id/needs` diffère-t-elle de ce qui a été envoyé ? (Clé déjà connue : l'API rend
+ * la mission créée par un essai précédent, peut-être avec d'anciennes valeurs ; on la met alors à jour aussitôt.) La
+ * position n'est pas comparée (l'API la range à la fin).
+ */
+export function createdNeedDiffers(view: Partial<EventNeedView>, sent: NeedPayload): boolean {
+  // Réponse sans les valeurs (incomplète) : rien à comparer.
+  if (view.trade === undefined) return false;
+  return changedNeed({ ...view, position: sent.position }, sent);
+}
+
+/** Zones créées pendant un enregistrement interrompu ensuite (`position` : ligne du brouillon envoyé). */
+export type ZoneWrites = { created: { position: number; id: string }[] };
+
+/**
+ * Avant de retenter un enregistrement interrompu (tour 3 du correctif 53c) : chaque zone créée prend son identifiant
+ * dans la saisie (rattachée par son code), pour être mise à jour au nouvel essai au lieu d'être recréée (409).
+ */
+export function afterZoneWrites(sent: EventDraft, current: EventDraft, writes: ZoneWrites): EventDraft {
+  const code = (z: ZoneDraft) => z.code.trim().toUpperCase();
+  const zones = [...current.zones];
+  for (const { position, id } of writes.created) {
+    const row = sent.zones[position];
+    if (!row) continue;
+    const j = zones.findIndex((z) => !z.id && code(z) === code(row));
+    if (j >= 0) zones[j] = { ...(zones[j] as ZoneDraft), id };
+  }
+  return { ...current, zones };
+}
+
+/** Les missions telles que le serveur les garde (état « enregistré » de l'assistant), toutes connues. */
+export function withServerNeeds(d: EventDraft, loaded: readonly NeedDraft[]): EventDraft {
+  return { ...d, needs: [...loaded], knownNeedIds: knownIdsOf(loaded) };
 }
 
 /** Deux brouillons identiques (l'ordre des champs ne compte pas ; un champ absent vaut un champ `undefined`). */

@@ -118,6 +118,11 @@ export const eventNeedSchema = z.object({
   /** Arrivée et installation (« arrivée 16 h »). */
   installAt: z.iso.datetime({ offset: true }).nullish(),
   notes: optionalText(300),
+  /**
+   * Correctif 53c : clé de création (UUID) posée par l'assistant. Une seule mission par clé et par événement : la même
+   * clé renvoyée (nouvel essai après une réponse perdue) rend la mission déjà créée.
+   */
+  clientKey: z.uuid().optional(),
 });
 export type EventNeedInput = z.infer<typeof eventNeedSchema>;
 
@@ -336,6 +341,8 @@ export type EventNeedView = {
   installAt: string | null;
   notes: string | null;
   position: number;
+  /** Correctif 53c : clé de création donnée par l'assistant (`null` pour une mission créée sans clé). */
+  clientKey?: string | null;
 };
 
 /** Une carte de `GET /missions` (`s-missions`). */
@@ -383,7 +390,7 @@ export type ProviderReviewsSummary = {
 export type ProviderPublicWithReviews = ProviderPublic & { reviews: ProviderReviewsSummary };
 
 /** Ce que cherche un événement (fiche publique, sans les candidats). */
-export type EventNeedPublic = Omit<EventNeedView, "filled" | "notes" | "position">;
+export type EventNeedPublic = Omit<EventNeedView, "filled" | "notes" | "position" | "clientKey">;
 
 /** Candidature retenue sur un besoin, vue par l'organisation (`GET /events/:id/needs`). */
 export type NeedRetainedProvider = {

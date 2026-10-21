@@ -11,6 +11,8 @@
 // L'API garde ses règles (structure suspendue, double authentification, 423 après le début, 409 `day_in_use`).
 import { Button, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  afterNeedWrites,
+  afterZoneWrites,
   type CategoryOption,
   draftStart,
   type EventDraft,
@@ -25,6 +27,7 @@ import {
   hasRefusals,
   initialEventDraft,
   eventEditorLabels as L,
+  type NeedDraft,
   needsFromSaved,
   posterTexts,
   reconcileDraft,
@@ -39,8 +42,12 @@ import {
   withArrivalsInHours,
   withCopyOpening,
   withDefaultPoster,
+  withLoadedNeeds,
+  withNeedKeys,
+  withServerNeeds,
   wizardEndLabels,
 } from "@orasso/shared";
+import { randomUUID } from "expo-crypto";
 import { useNavigation, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -137,6 +144,10 @@ export function EventWizard({
   const [busy, setBusy] = useState(false);
   const [poster, setPosterState] = useState<PickedPhoto | null>(null);
   const [keptPoster, setKeptPoster] = useState<PickedPhoto | null>(null);
+  // Envoi de la photo de l'affiche (temps 7), tenu ici (correctif 53c) : on ne poursuit pas avant sa fin.
+  const [photoSending, setPhotoSending] = useState<number | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const halted = busy || photoSending !== null;
   const [quitting, setQuitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(initialNotice ?? null);
   // La saisie gardée est relue une fois avant d'écrire quoi que ce soit (sinon on l'écraserait).
@@ -167,25 +178,57 @@ export function EventWizard({
   );
 
   // À l'ouverture : missions enregistrées (lot 46), mémoire du brouillon, puis saisie gardée sur le téléphone.
+  // Correctif 53c : les missions rejoignent la saisie quels que soient les autres champs (`withLoadedNeeds` : une
+  // mission inconnue de la saisie est ajoutée, une mission déjà dans la saisie garde ses modifications), y compris une
+  // saisie gardée restaurée. Tant qu'elles ne sont pas chargées, rien ne s'enregistre sur le serveur ; la saisie reste
+  // gardée sur le téléphone. Échec : message et « Recharger les missions », qui ne relance que ce chargement.
+  const [needsState, setNeedsState] = useState<"loading" | "ok" | "failed">(event ? "loading" : "ok");
+  const needsFailed = needsState === "failed";
+  // Enregistrer sur le serveur : ouverture faite et missions chargées avec succès (tour 3 : pas pendant un rechargement).
+  const canSave = loaded && needsState === "ok";
+  // Chaque chargement a son tour : la réponse d'un chargement dépassé (ou d'un écran quitté) est ignorée.
+  const needsTurn = useRef(0);
+  const fetchNeeds = useCallback(async (ev: EventOrganizer): Promise<NeedDraft[] | null | undefined> => {
+    const turn = ++needsTurn.current;
+    setNeedsState("loading");
+    const list = await api.eventNeeds(ev.id).catch(() => null);
+    if (turn !== needsTurn.current) return undefined;
+    if (!list) {
+      setNeedsState("failed");
+      return null;
+    }
+    const loadedNeeds = needsFromSaved(list, ev.startsAt);
+    setSavedNeeds(list);
+    pristine.current = withServerNeeds(pristine.current, loadedNeeds);
+    setDraft((p) => withLoadedNeeds(p, loadedNeeds));
+    setNeedsState("ok");
+    return loadedNeeds;
+  }, []);
+  useEffect(
+    () => () => {
+      needsTurn.current += 1;
+    },
+    [],
+  );
+  async function reloadNeeds() {
+    if (event) await fetchNeeds(event);
+  }
   useEffect(() => {
     let alive = true;
     void (async () => {
+      let loadedNeeds: NeedDraft[] | null = null;
       if (event) {
-        const list = await api.eventNeeds(event.id).catch(() => null);
+        loadedNeeds = (await fetchNeeds(event)) ?? null;
         if (!alive) return;
-        if (list) {
-          setSavedNeeds(list);
-          pristine.current = { ...pristine.current, needs: needsFromSaved(list, event.startsAt) };
-          setDraft(pristine.current);
-        }
         if (event.status === "draft") {
           const stored = await loadWizardMemo(event.id);
           if (!alive) return;
           if (stored) {
             memo.current = stored;
             if (stored.recurrence && !event.recurrenceRule && !event.parentEventId) {
-              pristine.current = { ...pristine.current, recurrence: stored.recurrence };
-              setDraft(pristine.current);
+              const recurrence = stored.recurrence;
+              pristine.current = { ...pristine.current, recurrence };
+              setDraft((p) => (p.recurrence ? p : { ...p, recurrence }));
             }
             if (!initialStep && stored.reached >= 0) {
               setIndex(eventWizardSteps.indexOf(eventResumeStep(pristine.current, true, null, stored.reached)));
@@ -196,8 +239,10 @@ export function EventWizard({
       if (!event || event.status === "draft") {
         const stored = await loadEventDraft(structureId, event?.id);
         if (!alive) return;
-        if (stored && !sameDraft(stored.draft, pristine.current)) {
-          setDraft(stored.draft);
+        // Missions chargées fusionnées : une saisie gardée ne supprime jamais une mission qu'elle ne connaissait pas.
+        const restored = stored && loadedNeeds ? withLoadedNeeds(stored.draft, loadedNeeds) : stored?.draft;
+        if (stored && restored && !sameDraft(restored, pristine.current)) {
+          setDraft(restored);
           if (!initialStep) {
             setIndex(stored.step ?? eventWizardSteps.indexOf(eventResumeStep(stored.draft, true, null, null)));
           }
@@ -212,7 +257,7 @@ export function EventWizard({
     return () => {
       alive = false;
     };
-  }, [event, structureId, initialStep]);
+  }, [event, structureId, initialStep, fetchNeeds]);
 
   // Saisie gardée sur le téléphone : une création dès qu'elle vaut la peine, un brouillon tant qu'il n'est pas
   // synchronisé (effacée quand la saisie est enregistrée).
@@ -314,7 +359,19 @@ export function EventWizard({
    * Enregistre `sent` (voir `saveEvent`), puis réconcilie la saisie avec l'état relu du serveur. `event` : l'événement
    * enregistré, ou `null` si quelque chose a été refusé (erreur affichée, saisie refusée gardée).
    */
-  async function persist(sent: EventDraft, validate: boolean | "publish"): Promise<Saved> {
+  async function persist(input: EventDraft, validate: boolean | "publish"): Promise<Saved> {
+    // Missions pas encore chargées : l'enregistrement ne peut pas les comparer (correctif 53c).
+    if (!canSave) {
+      const failure = needsFailed ? W.needsFailed : W.needsLoading;
+      setError(failure);
+      return { event: null, created: null, failure };
+    }
+    // Chaque nouvelle mission reçoit sa clé de création avant de partir (création idempotente, correctif 53c).
+    const sent = withNeedKeys(input, randomUUID);
+    if (sent !== input) {
+      latest.current = sent;
+      setDraft(sent);
+    }
     const form = poster ? await imageForm(poster, "poster", "affiche.jpg") : null;
     const res = await saveEvent(api, {
       structureId,
@@ -326,6 +383,19 @@ export function EventWizard({
       validate,
     });
     if (!res.ok) {
+      // Missions écrites avant la panne : identifiants repris, suppressions faites retirées (correctif 53c).
+      if (res.needWrites) {
+        const after = afterNeedWrites({ savedNeeds, sent, current: latest.current, writes: res.needWrites });
+        setSavedNeeds(after.savedNeeds);
+        latest.current = after.draft;
+        setDraft(after.draft);
+      }
+      // Zones créées avant la panne : identifiants repris, le nouvel essai les met à jour (tour 3).
+      if (res.zoneWrites?.created.length) {
+        const draft = afterZoneWrites(sent, latest.current, res.zoneWrites);
+        latest.current = draft;
+        setDraft(draft);
+      }
       // Temps invalide ou jours refusés : on y retourne ; une panne (réseau…) laisse sur le temps courant.
       if (res.step) setIndex(eventWizardSteps.indexOf(res.step));
       setError(res.error);
@@ -339,17 +409,17 @@ export function EventWizard({
       setPosterState(null);
       setKeptPoster(null);
     }
-    const { draft, pristine: kept } = reconcileDraft({
+    const reconciled = reconcileDraft({
       sent,
       current: latest.current,
       server: serverDraft(res.event, res.needs),
       refused: res.refused,
     });
-    pristine.current = kept;
-    latest.current = draft;
-    setDraft(draft);
-    if (hasRefusals(res.refused)) {
-      const failure = refusalMessage(sent, res.refused);
+    pristine.current = reconciled.pristine;
+    latest.current = reconciled.draft;
+    setDraft(reconciled.draft);
+    if (hasRefusals(reconciled.refused)) {
+      const failure = refusalMessage(sent, reconciled.refused);
       setError(failure);
       return { event: null, created, failure };
     }
@@ -383,6 +453,7 @@ export function EventWizard({
 
   async function go(delta: 1 | -1) {
     if (busy) return;
+    if (photoSending !== null) return setError(W.posterStillSending);
     setError(null);
     setNotice(null);
     if (delta === -1) return setIndex((i) => Math.max(0, i - 1));
@@ -436,6 +507,7 @@ export function EventWizard({
   /** Fin de l'assistant : Publier, Brouillon, Aperçu (brouillon) ou « Enregistrer les modifications » (publié). */
   async function finish(mode: "draft" | "publish" | "preview" | "save") {
     if (busy) return;
+    if (photoSending !== null) return setError(W.posterStillSending);
     setBusy(true);
     setError(null);
     try {
@@ -498,6 +570,10 @@ export function EventWizard({
     vendorSuggestions,
     poster,
     setPoster,
+    photoSending,
+    setPhotoSending,
+    photoError,
+    setPhotoError,
     openStructure: () => router.push("/(orga)/structure"),
   };
   const Screen = SCREENS[step];
@@ -520,8 +596,8 @@ export function EventWizard({
             <View style={styles.end}>
               <Button
                 icon="send"
-                loading={busy}
-                disabled={busy || !loaded || !canPublish}
+                loading={halted}
+                disabled={halted || !canSave || !canPublish}
                 onPress={() => void finish("publish")}
                 testID="wizard-publish"
               >
@@ -531,7 +607,7 @@ export function EventWizard({
                 <Button
                   variant="secondary"
                   icon="back"
-                  disabled={busy}
+                  disabled={halted}
                   onPress={() => void go(-1)}
                   accessibilityLabel={W.previous}
                   testID="wizard-back"
@@ -541,7 +617,7 @@ export function EventWizard({
                 <Button
                   variant="secondary"
                   icon="calendar"
-                  disabled={busy || !loaded}
+                  disabled={halted || !canSave}
                   onPress={() => void finish("draft")}
                   style={styles.grow}
                   testID="wizard-save"
@@ -551,7 +627,7 @@ export function EventWizard({
                 <Button
                   variant="secondary"
                   icon="eye"
-                  disabled={busy || !loaded}
+                  disabled={halted || !canSave}
                   onPress={() => void finish("preview")}
                   testID="wizard-preview"
                 >
@@ -565,22 +641,22 @@ export function EventWizard({
                 <Button
                   variant="secondary"
                   icon="back"
-                  disabled={busy}
+                  disabled={halted}
                   onPress={() => void go(-1)}
                   testID="wizard-back"
                 >
                   {L.back}
                 </Button>
               ) : (
-                <Button variant="secondary" icon="close" disabled={busy} onPress={close} testID="wizard-cancel">
+                <Button variant="secondary" icon="close" disabled={halted} onPress={close} testID="wizard-cancel">
                   {L.cancel}
                 </Button>
               )}
               {last ? (
                 <Button
                   icon="check"
-                  loading={busy}
-                  disabled={busy || !loaded}
+                  loading={halted}
+                  disabled={halted || !canSave}
                   onPress={() => void finish("save")}
                   style={styles.grow}
                   testID="wizard-save"
@@ -590,8 +666,8 @@ export function EventWizard({
               ) : (
                 <Button
                   icon="next"
-                  loading={busy}
-                  disabled={busy || !loaded}
+                  loading={halted}
+                  disabled={halted || !canSave}
                   onPress={() => void go(1)}
                   style={styles.grow}
                   testID="wizard-next"
@@ -631,6 +707,14 @@ export function EventWizard({
         </Muted>
         <Muted variant="body">{intro}</Muted>
       </View>
+      {needsFailed ? (
+        <View style={styles.resume} testID="wizard-needs-failed">
+          <Notice tone="error">{W.needsFailed}</Notice>
+          <Button variant="plate" icon="undo" onPress={() => void reloadNeeds()}>
+            {W.needsRetry}
+          </Button>
+        </View>
+      ) : null}
       {notice ? <Notice testID="wizard-notice">{notice}</Notice> : null}
       {resumed && index === (resumed.step ?? index) ? (
         <View style={styles.resume} testID="wizard-resumed">

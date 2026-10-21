@@ -67,6 +67,10 @@ export function PosterStep({
   photoUrl,
   ownPoster,
   setOwnPoster,
+  sending,
+  setSending,
+  photoError: error,
+  setPhotoError: setError,
 }: StepProps & {
   structureId: string;
   structureName: string;
@@ -74,6 +78,14 @@ export function PosterStep({
   photoUrl: string | null;
   ownPoster: File | null;
   setOwnPoster: (file: File | null) => void;
+  /**
+   * Envoi de la photo en cours et son erreur, tenus par l'assistant (correctif 53c) : « Continuer » et « Publier »
+   * attendent la fin de l'envoi, l'erreur reste affichée.
+   */
+  sending: boolean;
+  setSending: (sending: boolean) => void;
+  photoError: string | null;
+  setPhotoError: (error: string | null) => void;
 }) {
   const ctx = { structureId, structureName };
   const poster: PosterSettings = d.poster ?? {
@@ -89,9 +101,7 @@ export function PosterStep({
   const [format, setFormat] = useState<PosterFormat>("post");
   const [preview, setPreview] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
-  const [sending, setSending] = useState(false);
   const [photo, setPhoto] = useState<string | null>(photoUrl);
-  const [error, setError] = useState<string | null>(null);
   // Rendu refusé (limite atteinte, réseau) : dit, avec de quoi réessayer (`retry` relance les deux rendus).
   const [refused, setRefused] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -141,26 +151,36 @@ export function PosterStep({
     };
   }, [poster.photoKey, format, retry]);
 
+  // Un seul envoi à la fois (le choix est inactif pendant l'envoi) ; la réponse d'un envoi dépassé est ignorée.
+  const upload = useRef(0);
   async function pickPhoto(file: File | undefined) {
-    if (!file) return;
+    if (!file || sending) return;
+    const turn = ++upload.current;
     setSending(true);
     setError(null);
-    const form = new FormData();
-    form.set("purpose", "event_poster_photo");
-    form.set("file", file);
-    const res = await fetch("/api/me/uploads", { method: "POST", body: form, credentials: "same-origin" }).catch(
-      () => null,
-    );
-    setSending(false);
-    if (!res?.ok) {
-      const body = (await res?.json().catch(() => null)) as { error?: { message?: string } } | null;
-      return setError(body?.error?.message ?? "La photo n'a pas pu être envoyée.");
+    // « Envoi fini » seulement une fois la clé posée dans le brouillon : « Continuer » ne part jamais sans elle.
+    try {
+      const form = new FormData();
+      form.set("purpose", "event_poster_photo");
+      form.set("file", file);
+      const res = await fetch("/api/me/uploads", { method: "POST", body: form, credentials: "same-origin" }).catch(
+        () => null,
+      );
+      if (turn !== upload.current) return;
+      if (!res?.ok) {
+        const body = (await res?.json().catch(() => null)) as { error?: { message?: string } } | null;
+        return setError(body?.error?.message ?? "La photo n'a pas pu être envoyée.");
+      }
+      const sent = (await res.json().catch(() => null)) as { key?: string } | null;
+      if (turn !== upload.current) return;
+      if (!sent?.key) return setError("La photo n'a pas pu être envoyée.");
+      const local = URL.createObjectURL(file);
+      photoUrls.current.push(local);
+      setPhoto(local);
+      patch({ photoKey: sent.key });
+    } finally {
+      if (turn === upload.current) setSending(false);
     }
-    const { key: photoKey } = (await res.json()) as { key: string };
-    const local = URL.createObjectURL(file);
-    photoUrls.current.push(local);
-    setPhoto(local);
-    patch({ photoKey });
   }
 
   return (
@@ -184,6 +204,7 @@ export function PosterStep({
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
+            disabled={sending}
             onChange={(e) => void pickPhoto(e.currentTarget.files?.[0])}
           />
         </label>

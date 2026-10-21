@@ -320,9 +320,13 @@ describe("corps envoyés à l'API", () => {
         },
         { trade: "photographer", quantity: "1", power: "none", water: false, frontageM: "", installTime: "" },
       ],
+      // Correctif 53c : n1 était connue de la saisie, et retirée.
+      knownNeedIds: ["n1", "n2"],
     });
     const out = needChanges([{ id: "n1" }, { id: "n2" }], d);
     expect(out.remove).toEqual(["n1"]);
+    // Inconnue de la saisie : jamais supprimée.
+    expect(needChanges([{ id: "n1" }, { id: "n2" }], { ...d, knownNeedIds: undefined }).remove).toEqual([]);
     expect(out.update[0]).toEqual({
       id: "n2",
       need: {

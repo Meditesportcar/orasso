@@ -110,6 +110,31 @@ beforeEach(async () => {
 });
 
 describe("besoins de l'organisateur", () => {
+  it("correctif 53c : la même clé de création deux fois ne crée qu'une mission (réponse perdue puis nouvel essai)", async () => {
+    const clientKey = randomUUID();
+    const first = await addNeed(nocturneId, { clientKey });
+    const again = await addNeed(nocturneId, { clientKey, quantity: 2 });
+    expect(again.id).toBe(first.id);
+    const list = await call(orga, "GET", `/events/${nocturneId}/needs`);
+    expect(list.json).toHaveLength(1);
+    expect(list.json[0]).toMatchObject({ clientKey, quantity: 1 });
+    // Une autre clé, ou pas de clé, crée bien une autre mission ; la même clé sur un autre événement aussi.
+    expect((await addNeed(nocturneId, { clientKey: randomUUID() })).id).not.toBe(first.id);
+    await addNeed(nocturneId);
+    expect((await addNeed(rivesaltesId, { clientKey })).id).not.toBe(first.id);
+    expect((await call(orga, "GET", `/events/${nocturneId}/needs`)).json).toHaveLength(3);
+    // La page publique ne montre pas la clé.
+    const pub = await call(null, "GET", "/events/by-slug/nocturne/needs");
+    expect(pub.status).toBe(200);
+    for (const n of pub.json as Record<string, unknown>[]) expect(n).not.toHaveProperty("clientKey");
+    // Ni les missions vues par un prestataire (`GET /missions`, tour 3).
+    const missions = await call(sofia, "GET", "/missions");
+    expect(missions.status).toBe(200);
+    const seen = (missions.json.items as { needs: Record<string, unknown>[] }[]).flatMap((m) => m.needs);
+    expect(seen.length).toBeGreaterThan(0);
+    for (const n of seen) expect(n).not.toHaveProperty("clientKey");
+  });
+
   it("créer, lister, modifier, supprimer ; le métier rejoint les types attendus ; 403 aux autres", async () => {
     const created = await call(orga, "POST", `/events/${nocturneId}/needs`, {
       trade: "food_truck",

@@ -4,6 +4,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  afterNeedWrites,
+  afterZoneWrites,
+  createdNeedDiffers,
   type EventDraft,
   eventArrivalsProblem,
   eventPayload,
@@ -12,8 +15,11 @@ import {
   eventStepProblem,
   eventWizardSteps,
   initialEventDraft,
+  type NeedDraft,
   needChanges,
   needsFromSaved,
+  newClientKey,
+  noNeedWrites,
   noRefusals,
   parseWizardMemo,
   reconcileDraft,
@@ -27,8 +33,11 @@ import {
   withArrivalsInHours,
   withDefaultPoster,
   withEventKind,
+  withLoadedNeeds,
   withMultiDay,
+  withNeedKeys,
   withSingleDate,
+  zoneChanges,
 } from "./eventWizard";
 import { defaultEventRules } from "./labels/events.fr";
 import { createPreviewCache, posterPreviewKey } from "./rules/poster";
@@ -288,5 +297,186 @@ describe("aperçus d'affiche", () => {
     expect(dropped).toEqual(["u2"]);
     expect(cache.get(k("jdm"))).toBeUndefined();
     expect(posterPreviewKey({ a: 1, b: 2 })).toBe(posterPreviewKey({ b: 2, a: 1 }));
+  });
+});
+
+// Correctif 53c : une mission n'est supprimée que si la saisie la connaissait et que l'organisateur l'a retirée.
+const row = (over: Partial<NeedDraft> = {}): NeedDraft => ({
+  trade: "food_truck",
+  quantity: "1",
+  power: "none",
+  water: false,
+  frontageM: "",
+  installTime: "",
+  ...over,
+});
+const n2 = need({ id: "n2", trade: "photographer", position: 1 });
+
+describe("missions chargées après l'ouverture (correctif 53c)", () => {
+  it("rejoignent la saisie même si un autre champ a changé : l'enregistrement suivant ne les supprime pas", () => {
+    const typed = { ...filled(), title: "Titre tapé avant le chargement" };
+    const loaded = needsFromSaved([need(), n2], null);
+    const merged = withLoadedNeeds(typed, loaded);
+    expect(merged.title).toBe("Titre tapé avant le chargement");
+    expect(merged.needs?.map((n) => n.id)).toEqual(["n1", "n2"]);
+    expect(merged.knownNeedIds).toEqual(["n1", "n2"]);
+    expect(needChanges([need(), n2], merged).remove).toEqual([]);
+    // Appliquée deux fois, même résultat ; une ligne ajoutée entre-temps est gardée.
+    const added = { ...typed, needs: [row({ trade: "barber" })] };
+    const twice = withLoadedNeeds(withLoadedNeeds(added, loaded), loaded);
+    expect(twice.needs?.map((n) => n.id ?? n.trade)).toEqual(["barber", "n1", "n2"]);
+  });
+
+  it("ne remplace pas une mission modifiée et pas encore enregistrée (rechargement sans démontage)", () => {
+    const opened = withLoadedNeeds(filled(), needsFromSaved([need()], null));
+    const edited = { ...opened, needs: [{ ...(opened.needs?.[0] as NeedDraft), quantity: "3" }] };
+    const again = withLoadedNeeds(edited, needsFromSaved([need()], null));
+    expect(again.needs?.[0]?.quantity).toBe("3");
+    expect(needChanges([need()], again).update).toHaveLength(1);
+  });
+});
+
+describe("saisie gardée restaurée (correctif 53c)", () => {
+  it("une saisie gardée d'avant le correctif (missions vides, rien de connu) ne supprime rien", () => {
+    const stored = { ...filled(), title: "Gardée", needs: [] };
+    const restored = withLoadedNeeds(stored, needsFromSaved([need(), n2], null));
+    expect(restored.title).toBe("Gardée");
+    expect(restored.needs?.map((n) => n.id)).toEqual(["n1", "n2"]);
+    expect(needChanges([need(), n2], restored).remove).toEqual([]);
+  });
+
+  it("une mission retirée dans la saisie gardée le reste ; une mission ajoutée ailleurs depuis revient", () => {
+    // Gardée sur le téléphone : n1 connue, retirée par l'organisateur (pas encore synchronisé).
+    const stored = { ...filled(), needs: [], knownNeedIds: ["n1"] };
+    // Pendant ce temps, n2 a été ajoutée depuis le site.
+    const restored = withLoadedNeeds(stored, needsFromSaved([need(), n2], null));
+    expect(restored.needs?.map((n) => n.id)).toEqual(["n2"]);
+    expect(needChanges([need(), n2], restored).remove).toEqual(["n1"]);
+  });
+});
+
+describe("deux onglets (correctif 53c)", () => {
+  it("la mission créée dans A n'est pas supprimée par les enregistrements de B", () => {
+    // B a ouvert l'événement sans mission ; A en crée une (n2) ; B change le titre et enregistre.
+    const opened = withLoadedNeeds(filled(), []);
+    const sent = { ...opened, title: "Renommé par B" };
+    const { draft } = reconcileDraft({ sent, current: sent, server: serverDraft(savedEvent(sent), [n2]) });
+    expect(draft.needs?.map((n) => n.id)).toEqual(["n2"]);
+    // Deuxième enregistrement de B : n2 n'est ni supprimée, ni recréée.
+    expect(needChanges([n2], draft)).toMatchObject({ remove: [], create: [] });
+  });
+
+  it("une mission que B a retirée pendant l'enregistrement n'est pas ramenée", () => {
+    const sent = withLoadedNeeds(filled(), needsFromSaved([need()], null));
+    const current = { ...sent, needs: [] };
+    const { draft } = reconcileDraft({ sent, current, server: serverDraft(savedEvent(sent), [need()]) });
+    expect(draft.needs).toEqual([]);
+    expect(needChanges([need()], draft).remove).toEqual(["n1"]);
+  });
+});
+
+describe("clé de création (correctif 53c)", () => {
+  it("chaque nouvelle mission reçoit une clé, une seule fois ; la création l'envoie", () => {
+    let i = 0;
+    const make = () => `00000000-0000-4000-8000-00000000000${++i}`;
+    const d = { ...filled(), needs: [row(), row({ id: "n1" })] };
+    const keyed = withNeedKeys(d, make);
+    expect(keyed.needs?.[0]?.clientKey).toBe("00000000-0000-4000-8000-000000000001");
+    expect(keyed.needs?.[1]?.clientKey).toBeUndefined();
+    expect(withNeedKeys(keyed, make)).toBe(keyed);
+    expect(needChanges([], keyed).create[0]?.clientKey).toBe("00000000-0000-4000-8000-000000000001");
+    expect(newClientKey()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it("modifiée pendant l'envoi puis relecture en panne : elle prend son identifiant par sa clé, rien n'est recréé", () => {
+    const sent = { ...filled(), needs: [row({ clientKey: "k1" })] };
+    const current = { ...sent, needs: [row({ clientKey: "k1", quantity: "2" })] };
+    const writes = { ...noNeedWrites(), created: [{ position: 0, need: need({ id: "n7", clientKey: "k1" }) }] };
+    const { savedNeeds, draft } = afterNeedWrites({ savedNeeds: [], sent, current, writes });
+    expect(draft.needs?.[0]).toMatchObject({ id: "n7", quantity: "2" });
+    const again = needChanges(savedNeeds, draft);
+    expect(again).toMatchObject({ remove: [], create: [] });
+    expect(again.update).toHaveLength(1);
+  });
+
+  it("réponse perdue (création dite refusée, mais sur le serveur) : la relecture la rattache par sa clé", () => {
+    const sent = { ...filled(), needs: [row({ clientKey: "k1" })] };
+    const server = serverDraft(savedEvent(sent), [need({ id: "n7", clientKey: "k1" })]);
+    const refused = { ...noRefusals(), needs: [0] };
+    const { draft } = reconcileDraft({ sent, current: sent, server, refused });
+    expect(draft.needs?.map((n) => n.id)).toEqual(["n7"]);
+    expect(needChanges([need({ id: "n7", clientKey: "k1" })], draft)).toMatchObject({ remove: [], create: [] });
+  });
+});
+
+describe("panne après l'écriture des missions (correctif 53c)", () => {
+  it("une mission créée prend son identifiant : le nouvel essai ne la recrée pas", () => {
+    const sent = filled({ needs: [row()] });
+    expect(needChanges([], sent).create).toHaveLength(1);
+    const writes = { ...noNeedWrites(), created: [{ position: 0, need: need({ id: "n7" }) }] };
+    const { savedNeeds, draft } = afterNeedWrites({ savedNeeds: [], sent, current: sent, writes });
+    expect(draft.needs?.[0]?.id).toBe("n7");
+    expect(needChanges(savedNeeds, draft)).toMatchObject({ remove: [], create: [] });
+  });
+
+  it("une mission supprimée n'est pas supprimée deux fois ; la saisie tapée pendant l'envoi est gardée", () => {
+    const sent = filled({ needs: [], knownNeedIds: ["n1"] });
+    const current = { ...sent, title: "Changé pendant l'envoi" };
+    const writes = { ...noNeedWrites(), removed: ["n1"] };
+    const { savedNeeds, draft } = afterNeedWrites({ savedNeeds: [need()], sent, current, writes });
+    expect(savedNeeds).toEqual([]);
+    expect(draft.title).toBe("Changé pendant l'envoi");
+    expect(needChanges(savedNeeds, draft).remove).toEqual([]);
+  });
+});
+
+describe("correctif 53c, tour 3", () => {
+  it("mission ajoutée puis retirée pendant son envoi : elle ne revient pas, l'enregistrement suivant la supprime", () => {
+    const sent = { ...withLoadedNeeds(filled(), []), needs: [row({ clientKey: "k1" })] };
+    const current = { ...sent, needs: [] };
+    const server = serverDraft(savedEvent(sent), [need({ id: "n7", clientKey: "k1" })]);
+    const { draft } = reconcileDraft({ sent, current, server });
+    expect(draft.needs).toEqual([]);
+    expect(needChanges([need({ id: "n7", clientKey: "k1" })], draft).remove).toEqual(["n7"]);
+  });
+
+  it("rattachée par sa clé à une mission créée avec d'autres valeurs : la saisie est gardée, un PATCH repart", () => {
+    // Réponse perdue (quantité 1 créée), puis quantité passée à 3 avant le nouvel essai ; l'API rend la mission à 1.
+    const sent = { ...filled(), needs: [row({ clientKey: "k1", quantity: "3" })] };
+    const created = need({ id: "n7", clientKey: "k1", quantity: 1 });
+    const { draft, pristine } = reconcileDraft({
+      sent,
+      current: sent,
+      server: serverDraft(savedEvent(sent), [created]),
+    });
+    expect(draft.needs?.[0]).toMatchObject({ id: "n7", quantity: "3" });
+    expect(sameDraft(draft, pristine)).toBe(false);
+    expect(needChanges([created], draft).update[0]).toMatchObject({ id: "n7", need: { quantity: 3 } });
+    // Et l'enregistrement le voit dès la réponse du POST.
+    expect(
+      createdNeedDiffers(created, needChanges([], { ...sent, needs: [row({ quantity: "3" })] }).create[0] as never),
+    ).toBe(true);
+    expect(createdNeedDiffers(created, needChanges([], { ...sent, needs: [row()] }).create[0] as never)).toBe(false);
+  });
+
+  it("une modification refusée d'une mission enregistrée (avec clé) reste dans la saisie, avec son refus", () => {
+    const saved = need({ id: "n7", clientKey: "k1", quantity: 1 });
+    const opened = withLoadedNeeds(filled(), needsFromSaved([saved], null));
+    const sent = { ...opened, needs: [{ ...(opened.needs?.[0] as NeedDraft), quantity: "3" }] };
+    const refused = { ...noRefusals(), needs: [0] };
+    const out = reconcileDraft({ sent, current: sent, server: serverDraft(savedEvent(sent), [saved]), refused });
+    expect(out.draft.needs?.[0]).toMatchObject({ id: "n7", quantity: "3" });
+    expect(out.refused.needs).toEqual([0]);
+    expect(sameDraft(out.draft, out.pristine)).toBe(false);
+  });
+
+  it("zones créées avant une panne de relecture : elles prennent leur identifiant (mises à jour, pas recréées)", () => {
+    const sent = { ...filled(), zones: [{ code: "a", name: "Allée", capacity: "" }] };
+    const current = { ...sent, zones: [{ code: "A", name: "Allée nord", capacity: "40" }] };
+    const draft = afterZoneWrites(sent, current, { created: [{ position: 0, id: "z9" }] });
+    expect(draft.zones).toEqual([{ id: "z9", code: "A", name: "Allée nord", capacity: "40" }]);
+    const changes = zoneChanges([], draft.zones);
+    expect(changes.create).toEqual([]);
+    expect(changes.update[0]).toMatchObject({ id: "z9", zone: { name: "Allée nord", capacity: 40 } });
   });
 });
