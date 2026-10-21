@@ -3,7 +3,7 @@
 // public, invitations reçues), « Staff » (missions de l'exposant : « Je serai là », mode staff), « Passées » (carnet de
 // route : pointage, points, avis, malus). Les candidatures sont lues dans le cache du téléphone (lisibles hors ligne).
 
-import { Button, Chip, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   afterEventLabels,
   type ContestStatus,
@@ -40,7 +40,7 @@ import { formatPrice } from "@/features/tickets/TicketsBlock";
 import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
-import { dayCountdown, formatDay, formatDayHour, formatDuration, formatShortDate } from "@/lib/format";
+import { dayCountdown, formatDayHour, formatDuration, formatShortDate } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
@@ -51,7 +51,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { Segments } from "@/ui/Segments";
-import { ApplicationStatusTag, StatusTag } from "@/ui/StatusTag";
+import { ApplicationTag, SkewTag, SmallButton } from "./bits";
 import {
   arrivalPhrase,
   liveApplications,
@@ -326,9 +326,15 @@ export function SortiesScreen() {
             />
           ) : null}
 
-          {canWithdrawAny ? <Muted variant="body">{sortiesLabels.withdrawHelp}</Muted> : null}
+          {canWithdrawAny ? (
+            <Muted variant="caption" style={styles.help}>
+              {sortiesLabels.withdrawHelp}
+            </Muted>
+          ) : null}
           {upcomingTickets.some((x) => x.priceCents == null) ? (
-            <Muted variant="body">{sortiesLabels.giveBackHelp}</Muted>
+            <Muted variant="caption" style={styles.help}>
+              {sortiesLabels.giveBackHelp}
+            </Muted>
           ) : null}
         </>
       ) : null}
@@ -372,7 +378,6 @@ export function SortiesScreen() {
             <PastTicket
               key={app.id}
               app={app}
-              now={now}
               rank={ranks[app.event.id] ?? null}
               recapReady={recapReady.has(app.event.id)}
               onRecap={() => router.push(`/recap/${app.event.id}`)}
@@ -390,22 +395,19 @@ export function SortiesScreen() {
               testID="ticket-past-public"
               dim
               date={x.event.startsAt}
-              badge={<Chip surface="plate">{x.status === "used" ? "Entrée enregistrée" : "Terminé"}</Chip>}
+              badge={<SkewTag tone="line">{x.status === "used" ? "Entrée enregistrée" : "Terminé"}</SkewTag>}
               title={x.event.title}
               detail={sortiesLabels.publicTicketLine(x.name)}
               onPressTitle={() => router.push(`/e/${x.event.slug}`)}
             >
               {x.status === "used" && recapReady.has(x.event.id) ? (
-                <Button
-                  variant="plate"
+                <SmallButton
                   icon="list"
-                  next
                   onPress={() => router.push(`/recap/${x.event.id}`)}
-                  fullWidth
                   testID="ticket-public-recap"
                 >
                   {recapScreenTexts.seeRecap}
-                </Button>
+                </SmallButton>
               ) : null}
             </Ticket>
           ))}
@@ -495,7 +497,8 @@ function ApplicationTicket({
     <Ticket
       testID="ticket-application"
       date={app.day?.startsAt ?? app.event.startsAt}
-      badge={<ApplicationStatusTag app={app} />}
+      badge={<ApplicationTag app={app} />}
+      highlight={primary}
       lead={lead}
       title={app.event.title}
       detail={detail.length ? upperFirst(detail.join(" · ")) : undefined}
@@ -504,45 +507,38 @@ function ApplicationTicket({
     >
       {awaiting ? (
         <>
-          <Button
-            variant="plate"
-            icon="check"
-            disabled={busy}
-            onPress={onConfirmCrew}
-            fullWidth
-            testID="crew-confirm-open"
-          >
+          <SmallButton icon="check" disabled={busy} onPress={onConfirmCrew} testID="crew-confirm-open">
             {crewLabels.confirmVenue}
-          </Button>
-          <Button variant="plate" tone="dashed" icon="close" loading={busy} onPress={onDeclineCrew} fullWidth>
+          </SmallButton>
+          <SmallButton kind="g" icon="close" disabled={busy} onPress={onDeclineCrew}>
             {crewLabels.notComing}
-          </Button>
+          </SmallButton>
         </>
       ) : null}
       {offered ? (
         <>
-          <Button variant={primaryOffer ? "primary" : "plate"} icon="check" loading={busy} onPress={onAccept} fullWidth>
+          <SmallButton kind={primaryOffer ? "p" : "s"} icon="check" disabled={busy} onPress={onAccept}>
             J'accepte la place
-          </Button>
-          <Button variant="plate" tone="dashed" icon="close" disabled={busy} onPress={onDecline} fullWidth>
+          </SmallButton>
+          <SmallButton kind="g" icon="close" disabled={busy} onPress={onDecline}>
             Laisser
-          </Button>
+          </SmallButton>
         </>
       ) : null}
       {app.status === "accepted" && !app.checkedInAt ? (
-        <Button variant={primary ? "primary" : "plate"} icon="qr" next onPress={onJourJ} fullWidth testID="ticket-qr">
+        <SmallButton kind={primary ? "p" : "s"} icon="qr" onPress={onJourJ} testID="ticket-qr">
           {sortiesLabels.myQr}
-        </Button>
+        </SmallButton>
       ) : null}
       {voting ? (
-        <Button variant="plate" icon="badge" next onPress={onVote} fullWidth testID="ticket-vote">
+        <SmallButton icon="badge" onPress={onVote} testID="ticket-vote">
           {voteScreenTexts.open}
-        </Button>
+        </SmallButton>
       ) : null}
       {canWithdraw && !app.checkedInAt ? (
-        <Button variant="plate" tone="dashed" icon="close" disabled={busy} onPress={onWithdraw} fullWidth>
+        <SmallButton kind="g" icon="close" disabled={busy} onPress={onWithdraw} testID="ticket-withdraw">
           {sortiesLabels.withdraw}
-        </Button>
+        </SmallButton>
       ) : null}
     </Ticket>
   );
@@ -579,24 +575,29 @@ function TicketOfPublic({
     <Ticket
       testID="ticket-public"
       date={ticket.event.startsAt}
-      badge={<Chip surface="plate">{ticket.status === "used" ? "Entrée enregistrée" : "Billet"}</Chip>}
+      badge={
+        <SkewTag tone={ticket.status === "used" ? "line" : "acc"}>
+          {ticket.status === "used" ? "Entrée enregistrée" : "Billet"}
+        </SkewTag>
+      }
+      highlight={primary}
       lead={dayCountdown(ticket.event.startsAt, now)}
       title={ticket.event.title}
       detail={upperFirst(detail)}
       onPressTitle={onOpen}
     >
-      <Button variant={primary ? "primary" : "plate"} icon="ticket" next onPress={onShow} fullWidth testID="my-tickets">
+      <SmallButton kind={primary ? "p" : "s"} icon="qr" onPress={onShow} testID="my-tickets">
         {sortiesLabels.myTicket}
-      </Button>
+      </SmallButton>
       {voting ? (
-        <Button variant="plate" icon="badge" next onPress={onVote} fullWidth testID="ticket-vote">
+        <SmallButton icon="badge" onPress={onVote} testID="ticket-vote">
           {voteScreenTexts.open}
-        </Button>
+        </SmallButton>
       ) : null}
       {ticket.priceCents == null && ticket.status === "valid" ? (
-        <Button variant="plate" tone="dashed" icon="undo" onPress={onGiveBack} fullWidth testID="ticket-give-back">
+        <SmallButton kind="g" icon="undo" onPress={onGiveBack} testID="ticket-give-back">
           {ticketAppLabels.giveBack}
-        </Button>
+        </SmallButton>
       ) : null}
     </Ticket>
   );
@@ -633,17 +634,18 @@ function StaffTicket({
     <Ticket
       testID="ticket-staff"
       date={item.event.startsAt}
-      badge={<Chip surface="plate">{roles || "Staff"}</Chip>}
+      badge={<SkewTag>{roles ? `Staff · ${roles}` : "Staff"}</SkewTag>}
+      staff
       lead={staffPresenceLabels[item.presence]}
       title={item.event.title}
       detail={`${formatDayHour(item.event.startsAt)} · ${item.structure.name}`}
       notes={notes}
     >
       {actions.presence ? (
-        <Button
-          variant="plate"
+        <SmallButton
+          kind={present ? "s" : "k"}
           icon={present ? "close" : "check"}
-          loading={busy}
+          disabled={busy}
           onPress={async () => {
             setBusy(true);
             setFailed(null);
@@ -657,20 +659,19 @@ function StaffTicket({
               setBusy(false);
             }
           }}
-          fullWidth
         >
           {present ? "Pas là" : sortiesLabels.willBeThere}
-        </Button>
+        </SmallButton>
       ) : null}
       {item.staffModeOpen && actions.staffMode ? (
-        <Button variant="plate" icon="qr" onPress={onOpen} next fullWidth>
+        <SmallButton icon="qr" onPress={onOpen}>
           Mode staff
-        </Button>
+        </SmallButton>
       ) : null}
       {present && now >= new Date(item.event.startsAt) && now < new Date(item.event.endsAt) ? (
-        <Button variant="plate" icon="badge" onPress={onVote} next fullWidth testID="staff-vote">
+        <SmallButton icon="badge" onPress={onVote} testID="staff-vote">
           {voteScreenTexts.open}
-        </Button>
+        </SmallButton>
       ) : null}
     </Ticket>
   );
@@ -679,7 +680,6 @@ function StaffTicket({
 /** Une sortie passée : pointage, points, avis, malus, prix du public. */
 function PastTicket({
   app,
-  now,
   rank,
   recapReady,
   onRecap,
@@ -688,7 +688,6 @@ function PastTicket({
   onOpen,
 }: {
   app: MyApplication;
-  now: Date;
   rank: { rank: number; of: number } | null;
   recapReady: boolean;
   onRecap: () => void;
@@ -700,8 +699,7 @@ function PastTicket({
   const c = t.color;
   let result: string;
   let badge: "onsite" | "cancelled" | null = null;
-  let chip: string | null = null;
-  // Le carnet est une plaque graphite : couleurs de texte faites pour le graphite (`plateText`).
+  // Le résultat en étiquette (artefact : « Pointé · +40 pts »).
   if (app.event.status === "cancelled") {
     result = "Événement annulé";
     badge = "cancelled";
@@ -710,13 +708,10 @@ function PastTicket({
     badge = "onsite";
   } else if (app.pointsPending) {
     result = POINTS_PENDING_LABEL;
-    chip = "Pointage en attente";
   } else if (app.withdrawnAfterLock || app.malus) {
     result = app.points !== null ? `Absent · ${signed(app.points)} pts` : "Absent";
-    chip = "Absent";
   } else {
     result = "Terminé";
-    chip = "Terminé";
   }
   const contest = app.malus;
   const notes: string[] = [];
@@ -729,32 +724,31 @@ function PastTicket({
       testID="ticket-past"
       dim
       date={app.event.startsAt}
-      badge={badge ? <StatusTag status={badge} /> : <Chip surface="plate">{chip}</Chip>}
+      badge={<SkewTag tone={badge === "cancelled" ? "win" : "line"}>{result}</SkewTag>}
       title={app.event.title}
-      detail={result}
       notes={notes}
       onPressTitle={onOpen}
     >
       {contest?.contestStatus ? (
         <View style={styles.chipLine}>
-          <Chip surface="plate">{contestStatusLabels[contest.contestStatus as ContestStatus] ?? "Contesté"}</Chip>
+          <SkewTag tone="line">{contestStatusLabels[contest.contestStatus as ContestStatus] ?? "Contesté"}</SkewTag>
         </View>
       ) : contest?.canContest ? (
-        <Button variant="plate" icon="chat" onPress={onContest} fullWidth>
+        <SmallButton icon="chat" onPress={onContest}>
           Contester le malus
-        </Button>
+        </SmallButton>
       ) : null}
       {app.review?.given ? (
         <View style={styles.chipLine}>
-          <Chip surface="plate">Avis donné</Chip>
+          <SkewTag tone="line">Avis donné</SkewTag>
           <Text variant="bodyStrong" color={c.accent} accessibilityLabel={starsLabel(app.review.given.rating)}>
             {"★".repeat(app.review.given.rating)}
           </Text>
         </View>
       ) : app.review?.canReview ? (
-        <Button variant="plate" icon="chat" onPress={onReview} fullWidth>
+        <SmallButton icon="chat" onPress={onReview}>
           Laisser un avis
-        </Button>
+        </SmallButton>
       ) : null}
       {app.review?.given?.reply ? (
         <Text variant="meta" color={c.plateMuted} style={styles.reply}>
@@ -762,9 +756,9 @@ function PastTicket({
         </Text>
       ) : null}
       {recapReady && app.checkedInAt ? (
-        <Button variant="plate" icon="list" next onPress={onRecap} fullWidth testID="ticket-recap">
+        <SmallButton icon="list" onPress={onRecap} testID="ticket-recap">
           {recapScreenTexts.seeRecap}
-        </Button>
+        </SmallButton>
       ) : null}
     </Ticket>
   );
@@ -773,4 +767,5 @@ function PastTicket({
 const styles = StyleSheet.create({
   chipLine: { flexDirection: "row", alignItems: "center", gap: space2 },
   reply: { textTransform: "none" },
+  help: { textAlign: "center" },
 });
