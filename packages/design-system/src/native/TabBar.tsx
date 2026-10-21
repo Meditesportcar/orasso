@@ -105,7 +105,7 @@ function TabEntry({
             <Icon name={tab.icon} size={30} color={active ? c.accent : c.barInk} />
           )}
         </View>
-        <Text variant="tab" color={ink} numberOfLines={1} style={styles.label}>
+        <Text variant="tab" color={ink} style={styles.label}>
           {tab.label}
         </Text>
       </Pressable>
@@ -120,7 +120,7 @@ function TabEntry({
       style={styles.tab}
     >
       <TabIcon tab={tab} active={active} moved={moved} ink={ink} />
-      <Text variant="tab" color={ink} numberOfLines={1} style={styles.label}>
+      <Text variant="tab" color={ink} style={styles.label}>
         {tab.label}
       </Text>
       {active ? (

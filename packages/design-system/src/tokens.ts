@@ -81,6 +81,9 @@ export const tokens = {
       "avatar8": "#a3261f",
       "avatar9": "#3d4f7a",
       "avatarInk": "#f3ebdd",
+      "cardLine": "rgba(243,235,221,0.08)",
+      "vitrineFrom": "#d4552a",
+      "vitrineTo": "#8f1d22",
       "stampInk66": "#ff6a5f",
       "stampInk34": "#b48ce6",
       "stampInk31": "#f3ebdd",
@@ -159,6 +162,9 @@ export const tokens = {
       "avatar8": "#a3261f",
       "avatar9": "#3d4f7a",
       "avatarInk": "#f3ebdd",
+      "cardLine": "rgba(19,20,23,0.12)",
+      "vitrineFrom": "#d4552a",
+      "vitrineTo": "#8f1d22",
       "stampInk66": "#c8322b",
       "stampInk34": "#6b3fa0",
       "stampInk31": "#131417",
@@ -1422,6 +1428,36 @@ export const tokensV2Overlay = [
       "sable": "#f3ebdd"
     },
     "why": "initiales sur un fond d’avatar (.avatar de l’artefact)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "card-line",
+    "value": {
+      "beton": "rgba(243,235,221,0.08)",
+      "sable": "rgba(19,20,23,0.12)"
+    },
+    "why": "filet des cartes (--card-line de l’artefact)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "vitrine-from",
+    "value": {
+      "beton": "#d4552a",
+      "sable": "#d4552a"
+    },
+    "why": "dégradé des vitrines de prestataire, début (artefact : #d4552a → #8f1d22)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "vitrine-to",
+    "value": {
+      "beton": "#8f1d22",
+      "sable": "#8f1d22"
+    },
+    "why": "dégradé des vitrines de prestataire, fin"
   },
   {
     "kind": "added",

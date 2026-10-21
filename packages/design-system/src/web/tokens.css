@@ -192,6 +192,9 @@
   --avatar-8: #a3261f;
   --avatar-9: #3d4f7a;
   --avatar-ink: #f3ebdd;
+  --card-line: rgba(243,235,221,0.08);
+  --vitrine-from: #d4552a;
+  --vitrine-to: #8f1d22;
   --stamp-ink-66: #ff6a5f;
   --stamp-ink-34: #b48ce6;
   --stamp-ink-31: #f3ebdd;
@@ -305,6 +308,9 @@
   --avatar-8: #a3261f;
   --avatar-9: #3d4f7a;
   --avatar-ink: #f3ebdd;
+  --card-line: rgba(19,20,23,0.12);
+  --vitrine-from: #d4552a;
+  --vitrine-to: #8f1d22;
   --stamp-ink-66: #c8322b;
   --stamp-ink-34: #6b3fa0;
   --stamp-ink-31: #131417;

@@ -146,6 +146,17 @@ export const iconShapes = {
   camera: [p("M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"), c(12, 13.5, 3.5)], // photo, prestataire
   // « … » (`#i-dots` de l'artefact : trois points au trait de 3,4) : cercles de rayon 0,7 au trait de 2 = 3,4 de diamètre.
   more: [c(5, 12, 0.7), c(12, 12, 0.7), c(19, 12, 0.7)], // plus d'actions
+  spark: [p("M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6")], // nouveauté, `#i-spark`
+  star: [p("M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.3L12 17.5 6.5 20.4l1-6.3L3 9.7l6.2-.9z")], // avis, `#i-star`
+  truck: [
+    p("M2 17V7a1 1 0 0 1 1-1h11v11"),
+    p("M14 10h4l3 3.5V17h-2"),
+    p("M5 9h6v3H5z"),
+    p("M4 6l1.2-2h8.6L15 6"),
+    c(6.5, 17.5, 1.8),
+    c(17, 17.5, 1.8),
+    p("M8.3 17.5h6.9"),
+  ], // food truck, prestataire, `#i-truck`
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;

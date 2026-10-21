@@ -39,11 +39,7 @@ export function NightScene() {
     </G>
   );
   return (
-    <View
-      pointerEvents="none"
-      style={StyleSheet.absoluteFill}
-      aria-hidden
-    >
+    <View pointerEvents="none" style={StyleSheet.absoluteFill} aria-hidden>
       <Svg width="100%" height="100%" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
         <Defs>
           <LinearGradient id="hn-sky" x1="0" y1="0" x2="0" y2="1">

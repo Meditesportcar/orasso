@@ -538,6 +538,30 @@
           "sable": "#f3ebdd"
         },
         "usage": "initiales sur un fond d’avatar (.avatar de l’artefact)"
+      },
+      {
+        "name": "card-line",
+        "value": {
+          "beton": "rgba(243,235,221,0.08)",
+          "sable": "rgba(19,20,23,0.12)"
+        },
+        "usage": "filet des cartes (--card-line de l’artefact)"
+      },
+      {
+        "name": "vitrine-from",
+        "value": {
+          "beton": "#d4552a",
+          "sable": "#d4552a"
+        },
+        "usage": "dégradé des vitrines de prestataire, début (artefact : #d4552a → #8f1d22)"
+      },
+      {
+        "name": "vitrine-to",
+        "value": {
+          "beton": "#8f1d22",
+          "sable": "#8f1d22"
+        },
+        "usage": "dégradé des vitrines de prestataire, fin"
       }
     ],
     "stamp-ink": [
