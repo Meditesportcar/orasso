@@ -53,10 +53,9 @@ export function PlateFrameEditor({
   return (
     <View style={styles.outer} onLayout={(e) => setOuter(e.nativeEvent.layout.width)}>
       <View style={[styles.editor, { width: box.w, height: box.h }]} testID={testID}>
-        {/* Lot 59c, tour 2 : l'arrondi coupe la photo seule ; les poignées des cadres peuvent dépasser. */}
-        <View style={styles.clip}>
-          <Photo source={source} style={StyleSheet.absoluteFill} />
-        </View>
+        {/* Lot 59c, tour 2 : la photo coupe ce qui la dépasse (cadre tourné contre un bord) ; la poignée de rotation
+            passe sous un cadre collé en haut (`rotateHandleBelow`) pour rester dans la photo et se toucher. */}
+        <Photo source={source} style={StyleSheet.absoluteFill} />
         {box.w > 0
           ? rects.map((r, i) => (
               <FrameBox
@@ -214,16 +213,7 @@ export function PhotoBadge({ children, accent = false }: { children: ReactNode; 
 
 const styles = StyleSheet.create({
   outer: { width: "100%", alignItems: "center" },
-  editor: { borderRadius: tokens.radius.radiusMd },
-  clip: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    borderRadius: tokens.radius.radiusMd,
-    overflow: "hidden",
-  },
+  editor: { borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
   frame: { position: "absolute", borderWidth: 2, borderRadius: 6 },
   grab: { cursor: "grab" } as object,
   handle: {

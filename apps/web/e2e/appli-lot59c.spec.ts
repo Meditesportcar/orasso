@@ -188,6 +188,8 @@ test("ajout d'un véhicule : les poignées du cadre tournent et agrandissent (le
   await page.goto("/vehicule/nouveau");
   await afterOpening(page);
   const next = () => page.getByTestId("vehicle-step-next").click();
+  await page.getByLabel("Marque ou modèle").fill("toyota");
+  await page.getByRole("radio", { name: "Toyota", exact: false }).first().click();
   await page.getByRole("radio", { name: "Supra", exact: false }).first().click();
   await page.getByRole("radio", { name: "Mk5", exact: false }).first().click();
   await next();

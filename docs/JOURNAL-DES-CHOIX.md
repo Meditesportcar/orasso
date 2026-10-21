@@ -1704,11 +1704,21 @@ Source : retours de Damien sur l'APK `e5d24e9` (21/10, `relais/orasso/retours-da
 #### À vérifier sur le téléphone (APK suivant)
 - Carte : glisser, pincer et zoomer sans que la page bouge ; toucher une étiquette ou une pastille ouvre la fiche et la page défile jusqu'à elle (Android : `Marker onPress`). Si la page vole encore le premier geste, le blocage arrive trop tard (un rendu React) : passer par un geste natif.
 - QR de compte : capture d'écran refusée (Android) ; plaque détectée penchée : cadre orienté ; rotation du cadre au doigt.
-- Poignée de rotation d'un cadre collé en haut de la photo : elle dépasse de la photo ; dans l'appli (photo à coins arrondis, `overflow: hidden`), elle est coupée et ne se touche plus : descendre le cadre, le tourner, le remonter. Sur le site, elle dépasse et reste utilisable.
+- Poignée de rotation d'un cadre collé en haut de la photo : dans l'appli, elle passe sous le cadre (tour 2) ; sur le site, elle dépasse de la photo et reste utilisable.
 
 #### À revoir avec Damien (lot 59c)
 - L'entrée « Mon profil et mes casquettes » sur l'accueil de l'Administration est un ajout (pas dans le prototype) ; même question pour l'organisateur, dont la barre n'a pas non plus d'onglet Profil (seule la pastille au logo de la structure y mène).
 - Flou : grille fixe agrandie en bicubique puis flou gaussien (un flou gaussien seul, à rayon modéré, peut se déconvoluer) ; le rendu est un flou doux qui garde les teintes de la zone.
+
+### 21/10/2026 — Lot 59c, tour 2 (relectures d'Opus et de Codex)
+Six points (`relais/orasso/corrections-59c2.md`), tous corrigés, chacun avec un test.
+- **Plaque penchée au bord de la photo (bloquant)** : le cadre orienté, borné à la photo, pouvait être décalé et laisser un bout de plaque hors du quadrilatère flouté (plaque 200 × 40 à 45° près d'un bord : ~15 px). Désormais, la partie de chaque mot qui est dans la photo (`clipToImage`) doit être entièrement dans le cadre orienté (`frameCovers`, sans marge) ; sinon cadre droit englobant agrandi de 15 % (`toPlateRect`), qui ne laisse rien dehors. Tests : chaque bord et chaque coin, ±30, 45, 60 et 89°, contrôle indépendant sur 41 × 41 points de la plaque (`detect.test.ts`).
+- **Poignées du cadre (appli)** : le cadre (déplacement) prenait le doigt en phase de capture, avant ses poignées : rotation et agrandissement impossibles au doigt. Seules les poignées capturent (`plateGestures.ts`, `capturesGesture`). Un cadre collé en haut de la photo a sa poignée de rotation **sous** lui (`rotateHandleBelow`, `dragRotatePlateFrame(…, below)`) : elle reste dans la photo et se touche. La photo garde ses coins arrondis et coupe ce qui la dépasse (un cadre tourné contre un bord). Recette : `appli-lot59c.spec.ts` (rotation, agrandissement, poignée dessous).
+- **Page bloquée après un geste sur la carte** : la carte suit les identifiants des doigts posés sur elle (`ui/scrollHold.ts`) ; un doigt resté ailleurs ne garde plus la page bloquée ; la carte démontée la rend ; filet de sécurité sur la page elle-même (plus aucun doigt = défilement rendu).
+- **QR de compte** : la feuille se ferme quand l'écran Profil n'est plus affiché (onglet, retour Android) et le blocage des captures ne vaut que feuille ouverte et écran affiché.
+- **Défilement vers la fiche** : rien sur la fiche d'un événement (`reveal={false}`) ; un groupe plus haut que la page est aligné par son haut (`revealOffset`).
+- **Hauteur de la carte** : 55 % de l'écran, 520 px au plus, mais au moins 30 % de l'écran laissé à la page hors des barres et de la carte, 280 px au moins (441 px sur 844, 340 px sur 700). **À juger sur l'APK.**
+- Recettes de non-régression des autres lots lancées avec un dossier de captures temporaire (plus de captures d'autres lots réécrites dans le relais).
 
 ## À revoir avec Damien — liste consolidée (lot 34)
 
