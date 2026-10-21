@@ -1527,7 +1527,7 @@ Fichiers : `features/vehicle/{ShareSheet,shareSheetKey}.ts(x)`, `lib/{shareVehic
 
 #### À revoir avec Damien (lot 50)
 - Les trois styles de la story (Nuit, Sable, Néon) et le rendu des tampons : à juger sur le téléphone au lot 58.
-- « C'était la <titre> » : le « la » est faux pour « Béziers Night » ; formule sans genre à choisir.
+- « C'était la <titre> » : réglé par les corrections du lot 50, « Ta sortie : <titre> » (sans accord ; voir ci-dessus).
 - Zone de la voiture sur la carte du vote : demande une ligne de plus dans l'API du lot 49 (non faite : hors périmètre).
 - Une seule étoile pour tous les rares : une forme par genre de rare (pleine lune, prix du public…) serait possible.
 
