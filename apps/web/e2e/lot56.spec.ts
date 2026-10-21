@@ -3,13 +3,14 @@ import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { loginInBrowser, MOBILE, setTheme, signUpApi, unique } from "./helpers";
+import { RELAIS, RELAIS } from "./relais";
 
 // Lot 56 : site public v2 (accueil, événements, organisateurs, professionnels, fiche événement, annuaire des pros), en-tête
 // et pied, cartes avec affiche, crédits des données, e-mails v2. Quatre pages + fiche + pros, à 390 px et 1280 px, dans les
 // deux thèmes ; l'audit du système sur chacune ; aucune carte sans affiche ni gabarit ; la phrase à trous (département) ; le
 // bandeau des dates ; les crédits ; l'e-mail de vérification rendu depuis `.data/mail`. Captures dans le relais.
 // Prérequis : API et site lancés sur la base seedée.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/Dams/.claude/relais/orasso/lot-56-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-56-captures/site`;
 const MAIL_DIR = resolve(import.meta.dirname, "../../..", process.env.DATA_DIR ?? ".data", "mail");
 const DESKTOP = { width: 1280, height: 900 } as const;
 const THEMES = ["beton", "sable"] as const;
