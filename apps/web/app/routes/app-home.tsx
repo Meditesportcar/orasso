@@ -141,8 +141,8 @@ export default function AppHome({ loaderData, actionData }: Route.ComponentProps
           status={next.status === "accepted" ? "retained" : "pending"}
           action={
             next.status === "accepted"
-              ? { label: "Voir mon accès", icon: "qr", next: true, href: "/app/acces" }
-              : { label: homeLabels.seeAccess, icon: "wait", next: true, href: "/app/acces" }
+              ? { label: "Voir mon accès", icon: "qr", next: true, href: "/app/sorties" }
+              : { label: homeLabels.seeAccess, icon: "wait", next: true, href: "/app/sorties" }
           }
           data-testid="next-access"
         />

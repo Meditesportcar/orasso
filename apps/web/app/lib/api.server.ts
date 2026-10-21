@@ -96,7 +96,7 @@ export function loginUrl(request: Request): string {
 }
 
 /** Retour après connexion : chemin interne uniquement (jamais d'adresse externe). */
-export function safeReturn(value: string | null | undefined, fallback = "/app/acces"): string {
+export function safeReturn(value: string | null | undefined, fallback = "/app/sorties"): string {
   if (!value?.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return fallback;
   return value;
 }

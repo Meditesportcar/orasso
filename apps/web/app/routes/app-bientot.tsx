@@ -17,7 +17,7 @@ export default function Bientot() {
         Cette section arrive bientôt sur le site. Pour l'instant, tout se passe dans Accès et Garage.
       </p>
       <div className="s-row">
-        <Button variant="primary" icon="qr" href="/app/acces">
+        <Button variant="primary" icon="qr" href="/app/sorties">
           Mes accès
         </Button>
         <Button variant="secondary" icon="vehicle" href="/app/garage">
