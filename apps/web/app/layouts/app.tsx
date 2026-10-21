@@ -138,7 +138,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         {near && (
           <a className="near" href={near.href} data-testid="near-access">
             <span className="near__day">
-              <b className="o-t-poster-l">{near.countdown}</b>
+              <b className="o-t-label">{near.countdown}</b>
               <small className="o-t-credit">{near.weekday}</small>
             </span>
             <span className="near__text">

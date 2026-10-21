@@ -79,7 +79,8 @@ export function nearAccessOf(
   const next = nearestAccess(items, now);
   if (!next) return null;
   return {
-    countdown: nearCountdown(next.startsAt, now),
+    // Dans le bloc étroit de la carte, « Aujourd'hui » devient « Auj. » (le J-6 de l'artefact tient sur quatre signes).
+    countdown: nearCountdown(next.startsAt, now).replace("Aujourd'hui", "Auj."),
     weekday: nearWeekday(next.startsAt),
     title: next.title,
     line: next.line,
