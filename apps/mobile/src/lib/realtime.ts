@@ -12,6 +12,7 @@ import { reconnectDelay, tokenProtocol, wsUrlOf } from "./realtimeModel";
 
 export type ChannelEvent = { channel: string; type: string; payload: unknown };
 type Handler = (event: ChannelEvent) => void;
+type SubscribedHandler = () => void;
 
 type NativeWebSocket = new (
   url: string,
@@ -23,6 +24,7 @@ class RealtimeClient {
   private socket: WebSocket | null = null;
   private token: string | null = null;
   private readonly handlers = new Map<string, Set<Handler>>();
+  private readonly subscribedHandlers = new Map<string, Set<SubscribedHandler>>();
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private paused = false;
@@ -30,7 +32,7 @@ class RealtimeClient {
   private appStateBound = false;
 
   /** S'abonne à un canal ; renvoie la fonction de désabonnement. */
-  subscribe(channel: string, handler: Handler): () => void {
+  subscribe(channel: string, handler: Handler, onSubscribed?: SubscribedHandler): () => void {
     let set = this.handlers.get(channel);
     const first = !set;
     if (!set) {
@@ -38,6 +40,11 @@ class RealtimeClient {
       this.handlers.set(channel, set);
     }
     set.add(handler);
+    if (onSubscribed) {
+      const subs = this.subscribedHandlers.get(channel) ?? new Set<SubscribedHandler>();
+      subs.add(onSubscribed);
+      this.subscribedHandlers.set(channel, subs);
+    }
     this.stopped = false;
     this.bindAppState();
     if (getSessionToken() !== this.token) this.reconnectNow();
@@ -47,8 +54,10 @@ class RealtimeClient {
       const current = this.handlers.get(channel);
       if (!current) return;
       current.delete(handler);
+      if (onSubscribed) this.subscribedHandlers.get(channel)?.delete(onSubscribed);
       if (current.size === 0) {
         this.handlers.delete(channel);
+        this.subscribedHandlers.delete(channel);
         if (this.socket?.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify({ type: "unsubscribe", channel }));
         }
@@ -61,6 +70,7 @@ class RealtimeClient {
   stop() {
     this.stopped = true;
     this.handlers.clear();
+    this.subscribedHandlers.clear();
     this.close();
   }
 
@@ -131,7 +141,12 @@ class RealtimeClient {
         return;
       }
       if (!message.channel || typeof message.type !== "string") return;
-      if (message.type === "subscribed" || message.type === "forbidden" || message.type === "revoked") return;
+      if (message.type === "subscribed") {
+        // Abonnement confirmé (y compris après une reconnexion) : les écrans rechargent ce qu'ils ont pu manquer.
+        for (const fn of [...(this.subscribedHandlers.get(message.channel) ?? [])]) fn();
+        return;
+      }
+      if (message.type === "forbidden" || message.type === "revoked") return;
       const set = this.handlers.get(message.channel);
       if (!set) return;
       for (const handler of [...set])
@@ -163,11 +178,17 @@ export const realtime = new RealtimeClient();
  * Abonnement d'un écran à un canal (`conversation:{id}`, `user:{id}`) tant qu'il est monté. Le canal `user:{id}` est
  * ouvert d'office par le serveur pour la connexion ; on s'y « abonne » ici seulement pour recevoir ses messages.
  */
-export function useChannel(channel: string | null, handler: Handler) {
+export function useChannel(channel: string | null, handler: Handler, onSubscribed?: SubscribedHandler) {
   const ref = useRef(handler);
   ref.current = handler;
+  const subscribedRef = useRef(onSubscribed);
+  subscribedRef.current = onSubscribed;
   useEffect(() => {
     if (!channel) return;
-    return realtime.subscribe(channel, (event) => ref.current(event));
+    return realtime.subscribe(
+      channel,
+      (event) => ref.current(event),
+      () => subscribedRef.current?.(),
+    );
   }, [channel]);
 }

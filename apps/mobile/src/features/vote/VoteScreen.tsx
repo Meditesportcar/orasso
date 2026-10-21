@@ -6,7 +6,6 @@ import { EmptyState, Icon, OutlinedText, Photo, Text, tokens, useTheme } from "@
 import {
   type AudienceCandidate,
   type AudiencePrizeBoard,
-  type AudiencePrizeEntry,
   type AudiencePrizeMine,
   type AudienceVotesChanged,
   audiencePrizeTexts,
@@ -26,7 +25,8 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
-import { applyTop3, barPercent, gridOrder, isOwn, myRank, reloadDelay, voteView } from "./model";
+import { applyTop3, BOARD_RELOAD_MS, barPercent, gridOrder, isOwn, myRank, voteView } from "./model";
+import { createRefreshGate, type RefreshGate } from "./refreshGate";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -64,44 +64,62 @@ export function VoteScreen() {
   // classement complet n'est rechargé qu'au plus toutes les 10 s (et au retour au premier plan) : un message par
   // seconde et par téléphone ferait des dizaines de requêtes par seconde pendant un vote de 150 personnes.
   const [live, setLive] = useState<AudienceVotesChanged | null>(null);
-  const reload = board.reload;
-  const lastReload = useRef<number | null>(null);
-  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reloadBoard = useCallback(() => {
-    pending.current = null;
-    lastReload.current = Date.now();
-    void reload();
-  }, [reload]);
-  const scheduleReload = useCallback(() => {
-    if (pending.current) return;
-    const wait = reloadDelay(lastReload.current, Date.now());
-    if (wait === 0) reloadBoard();
-    else pending.current = setTimeout(reloadBoard, wait);
-  }, [reloadBoard]);
-  useChannel(id ? `event:${id}:votes` : null, (event) => {
-    // Un pointage change la liste des candidats (relecture du lot 57) : la grille et mon droit de voter se rechargent.
-    if (event.type === "votes.candidates.changed") {
-      void candidates.reload();
-      void mine.reload();
-      return;
-    }
-    if (event.type !== "votes.changed") return;
-    setLive(event.payload as AudienceVotesChanged);
-    scheduleReload();
-  });
+  // Deux rechargements regroupés (`refreshGate`) : le classement, et la grille avec mon droit de voter. Chacun au plus
+  // toutes les 10 s, jamais deux à la fois, avec un dernier rafraîchissement garanti après une rafale.
+  const reloaders = useRef({ board: board.reload, candidates: candidates.reload, mine: mine.reload });
+  reloaders.current = { board: board.reload, candidates: candidates.reload, mine: mine.reload };
+  const gates = useRef<{ board: RefreshGate; list: RefreshGate } | null>(null);
+  if (!gates.current) {
+    gates.current = {
+      board: createRefreshGate({ run: () => reloaders.current.board(), minMs: BOARD_RELOAD_MS }),
+      list: createRefreshGate({
+        run: () => Promise.all([reloaders.current.candidates(), reloaders.current.mine()]),
+        minMs: BOARD_RELOAD_MS,
+      }),
+    };
+  }
+  const scheduleReload = useCallback(() => gates.current?.board.request(), []);
+  const scheduleListReload = useCallback(() => gates.current?.list.request(), []);
+  const subscribedOnce = useRef(false);
+  useChannel(
+    id ? `event:${id}:votes` : null,
+    (event) => {
+      // Un pointage change la liste des candidats (relecture du lot 57) : la grille et mon droit de voter se rechargent.
+      if (event.type === "votes.candidates.changed") {
+        scheduleListReload();
+        return;
+      }
+      if (event.type !== "votes.changed") return;
+      setLive(event.payload as AudienceVotesChanged);
+      scheduleReload();
+    },
+    () => {
+      // Abonnement confirmé : la première fois, les données viennent d'être chargées ; ensuite c'est une reconnexion,
+      // et des messages ont pu être manqués pendant la coupure.
+      if (!subscribedOnce.current) {
+        subscribedOnce.current = true;
+        return;
+      }
+      scheduleReload();
+      scheduleListReload();
+    },
+  );
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         scheduleReload();
-        void candidates.reload();
+        scheduleListReload();
       }
     });
-    return () => {
-      sub.remove();
-      if (pending.current) clearTimeout(pending.current);
-    };
-  }, [scheduleReload, candidates.reload]);
-  // Le total et le top 3 du message, reportés sur le classement chargé.
+    return () => sub.remove();
+  }, [scheduleReload, scheduleListReload]);
+  useEffect(
+    () => () => {
+      gates.current?.board.dispose();
+      gates.current?.list.dispose();
+    },
+    [],
+  ); // Le total et le top 3 du message, reportés sur le classement chargé.
   const shown: AudiencePrizeBoard | null = board.data
     ? {
         ...board.data,
