@@ -105,6 +105,12 @@ export type NeedDraft = {
    * 2e jour d'un événement sur deux jours reste le 2e jour) ; il suit l'événement si sa date change.
    */
   installDay?: number;
+  /**
+   * Correctif 53c : clé de création (UUID) d'une mission pas encore enregistrée, posée avant l'envoi et gardée pendant
+   * les modifications. L'API ne crée qu'une mission par clé et par événement : un nouvel essai après une réponse
+   * perdue retrouve la mission déjà créée au lieu d'en créer une seconde.
+   */
+  clientKey?: string;
 };
 
 /**
@@ -166,6 +172,12 @@ export type EventDraft = {
   entranceNote?: string;
   /** Lot 53 : missions du volet « Sur place » (absentes des brouillons d'avant). */
   needs?: NeedDraft[];
+  /**
+   * Correctif 53c : identifiants des missions enregistrées que la saisie connaît. Une mission n'est supprimée que si la
+   * saisie la connaissait et que l'organisateur l'a retirée ; une mission du serveur inconnue de la saisie (ajoutée
+   * ailleurs, ou saisie gardée avant son chargement) y est ajoutée. Absent : rien de connu, donc rien à supprimer.
+   */
+  knownNeedIds?: string[];
   /** Lot 53 : « Récurrent » au temps 1 ; `null` ou absent = ponctuel ou plusieurs jours. */
   recurrence?: RecurrenceDraft | null;
   /**
@@ -903,8 +915,30 @@ export function needsFromSaved(saved: readonly EventNeedView[], start?: string |
         frontageM: n.frontageM === null ? "" : String(n.frontageM),
         installTime,
         ...(installDay ? { installDay } : {}),
+        ...(n.clientKey ? { clientKey: n.clientKey } : {}),
       };
     });
+}
+
+/** Clé de création d'une mission (UUID v4) ; `crypto.randomUUID` quand il existe. */
+export function newClientKey(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  const hex = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16));
+  hex[12] = "4";
+  hex[16] = ((Number.parseInt(hex[16] ?? "0", 16) & 0x3) | 0x8).toString(16);
+  const s = hex.join("");
+  return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
+}
+
+/**
+ * Avant d'envoyer (correctif 53c) : chaque mission pas encore enregistrée reçoit sa clé de création, une fois pour
+ * toutes. Rend le même brouillon s'il n'y avait rien à poser. `makeKey` : générateur (l'appli passe celui d'Expo).
+ */
+export function withNeedKeys(d: EventDraft, makeKey: () => string = newClientKey): EventDraft {
+  const needs = d.needs ?? [];
+  if (!needs.some((n) => !n.id && !n.clientKey)) return d;
+  return { ...d, needs: needs.map((n) => (n.id || n.clientKey ? n : { ...n, clientKey: makeKey() })) };
 }
 
 /** Une mission telle que l'API l'attend (`eventNeedSchema`). */
@@ -916,6 +950,8 @@ export type NeedPayload = {
   frontageM: number | null;
   installAt: string | null;
   position: number;
+  /** Création seulement : clé de création (correctif 53c). */
+  clientKey?: string;
 };
 
 /**
@@ -939,7 +975,8 @@ function changedNeed(saved: Partial<EventNeedView> | undefined, need: NeedPayloa
 /**
  * Missions à retirer, modifier (seulement si elles ont changé) et créer par rapport aux missions enregistrées (comme
  * `zoneChanges`). L'heure d'installation se place le jour de l'événement (après minuit pour une nocturne, comme les
- * créneaux d'arrivée).
+ * créneaux d'arrivée). Correctif 53c : seule une mission **connue** de la saisie (`knownNeedIds`) et retirée par
+ * l'organisateur est supprimée ; une mission enregistrée que la saisie ne connaît pas n'est jamais supprimée.
  */
 export function needChanges(
   saved: readonly (Pick<EventNeedView, "id"> & Partial<EventNeedView>)[],
@@ -948,7 +985,8 @@ export function needChanges(
   const needs = d.needs ?? [];
   const start = draftStart(d);
   const kept = new Set(needs.map((n) => n.id).filter(Boolean));
-  const remove = saved.filter((n) => !kept.has(n.id)).map((n) => n.id);
+  const known = new Set(d.knownNeedIds ?? []);
+  const remove = saved.filter((n) => known.has(n.id) && !kept.has(n.id)).map((n) => n.id);
   const update: { id: string; need: NeedPayload }[] = [];
   const create: NeedPayload[] = [];
   for (const [position, n] of needs.entries()) {
@@ -962,7 +1000,7 @@ export function needChanges(
       installAt: at ? at.toISOString() : null,
       position,
     };
-    if (!n.id) create.push(need);
+    if (!n.id) create.push(n.clientKey ? { ...need, clientKey: n.clientKey } : need);
     else if (
       changedNeed(
         saved.find((s) => s.id === n.id),
@@ -981,8 +1019,15 @@ const draftOnlyKeys = ["recurrence", "datesBeforeRecurrence"] as const satisfies
 
 /** L'événement enregistré vu comme un brouillon (ce que le serveur garde vraiment), missions comprises. */
 export function serverDraft(event: EventOrganizer, needs: readonly EventNeedView[]): EventDraft {
-  return { ...initialEventDraft(new Date(event.startsAt), event), needs: needsFromSaved(needs, event.startsAt) };
+  const rows = needsFromSaved(needs, event.startsAt);
+  return {
+    ...initialEventDraft(new Date(event.startsAt), event),
+    needs: rows,
+    knownNeedIds: knownIdsOf(rows),
+  };
 }
+
+const knownIdsOf = (rows: readonly NeedDraft[]) => rows.map((n) => n.id).filter((id): id is string => Boolean(id));
 
 /**
  * Ce que l'API a refusé pendant un enregistrement : lignes du brouillon envoyé (index = `position` du corps), nombre de
@@ -1061,7 +1106,7 @@ export function reconcileDraft(input: {
   /** L'événement relu (`serverDraft`). */
   server: EventDraft;
   refused?: SaveRefusals;
-}): { draft: EventDraft; pristine: EventDraft } {
+}): { draft: EventDraft; pristine: EventDraft; refused: SaveRefusals } {
   const { sent, current, server } = input;
   const refused = input.refused ?? noRefusals();
   const zones = rowsAfterSave(
@@ -1070,39 +1115,67 @@ export function reconcileDraft(input: {
     new Set(refused.zones),
     (a, b) => a.code.trim().toUpperCase() === b.code,
   );
-  const needs = rowsAfterSave(
-    sent.needs ?? [],
-    server.needs ?? [],
-    new Set(refused.needs),
-    (a, b) => a.trade === b.trade,
+  // Correctif 53c : une création dite refusée dont la clé est sur le serveur a bien eu lieu (réponse perdue).
+  const serverKeys = new Set((server.needs ?? []).map((n) => n.clientKey).filter(Boolean));
+  const sentNeeds = sent.needs ?? [];
+  const refusedNeeds = new Set(
+    refused.needs.filter((i) => !(sentNeeds[i]?.clientKey && serverKeys.has(sentNeeds[i]?.clientKey))),
+  );
+  const needs = rowsAfterSave(sentNeeds, server.needs ?? [], refusedNeeds, (a, b) =>
+    a.clientKey || b.clientKey ? a.clientKey === b.clientKey : a.trade === b.trade,
   );
   const draft: EventDraft = { ...server };
   const own = draft as Record<string, unknown>;
   for (const key of Object.keys(current) as (keyof EventDraft)[]) {
-    if (key === "zones" || key === "needs") continue;
+    if (key === "zones" || key === "needs" || key === "knownNeedIds") continue;
     const local = (draftOnlyKeys as readonly string[]).includes(key);
     if (local || !same(current[key], sent[key])) own[key] = current[key];
   }
   draft.zones = mergeRows(sent.zones, current.zones, zones);
-  draft.needs = mergeRows(sent.needs ?? [], current.needs ?? [], needs);
+  // Missions du serveur que la saisie ne connaissait pas (créées ailleurs, deuxième onglet) : ajoutées, jamais perdues.
+  const merged = withLoadedNeeds(
+    {
+      ...draft,
+      needs: mergeRows(sentNeeds, current.needs ?? [], needs),
+      knownNeedIds: [...new Set([...(sent.knownNeedIds ?? []), ...(current.knownNeedIds ?? [])])],
+    },
+    server.needs ?? [],
+  );
+  draft.needs = merged.needs;
+  draft.knownNeedIds = knownIdsOf(server.needs ?? []);
   const pristine: EventDraft = { ...server };
   for (const key of draftOnlyKeys) {
     if (current[key] !== undefined) (pristine as Record<string, unknown>)[key] = current[key];
   }
-  return { draft, pristine };
+  // Ce qui reste vraiment refusé (une création dont la réponse s'est perdue mais qui existe n'en fait plus partie).
+  return { draft, pristine, refused: { ...refused, needs: refused.needs.filter((i) => refusedNeeds.has(i)) } };
 }
 
 // --- Missions chargées après l'ouverture, écritures gardées après une panne (correctif 53c) ----------------------
 
 /**
- * Missions enregistrées, arrivées après l'ouverture de l'assistant : ajoutées à la saisie **quels que soient les autres
- * champs** (un titre tapé avant leur arrivée ne les fait pas oublier, sinon l'enregistrement suivant les supprimerait).
- * Les lignes déjà connues (avec identifiant) sont remplacées par la version chargée ; une ligne ajoutée entre-temps
- * (sans identifiant) est gardée après elles. Appliquée deux fois, elle donne le même résultat.
+ * Missions enregistrées (`loaded`) fusionnées dans une saisie **quels que soient ses autres champs** (missions chargées
+ * après l'ouverture, saisie gardée restaurée, relecture après un enregistrement, page rechargée) :
+ * - une mission que la saisie a déjà (même identifiant) garde la version de la saisie (modifications non enregistrées) ;
+ * - une ligne sans identifiant dont la clé de création est sur le serveur prend son identifiant (réponse perdue) ;
+ * - une mission connue (`knownNeedIds`) absente de la saisie a été retirée par l'organisateur : elle le reste ;
+ * - une mission inconnue de la saisie est ajoutée à la fin (jamais supprimée faute d'avoir été vue).
+ * Les missions chargées deviennent connues. Appliquée deux fois, elle donne le même résultat.
  */
 export function withLoadedNeeds(current: EventDraft, loaded: readonly NeedDraft[]): EventDraft {
-  const typed = (current.needs ?? []).filter((n) => !n.id);
-  return { ...current, needs: [...loaded, ...typed] };
+  const known = new Set(current.knownNeedIds ?? []);
+  const needs = (current.needs ?? []).map((n) => {
+    if (n.id || !n.clientKey) return n;
+    const twin = loaded.find((l) => l.clientKey === n.clientKey);
+    return twin?.id ? { ...n, id: twin.id } : n;
+  });
+  const present = new Set(needs.map((n) => n.id).filter(Boolean));
+  const added = loaded.filter((l) => l.id && !present.has(l.id) && !known.has(l.id));
+  return {
+    ...current,
+    needs: [...needs, ...added],
+    knownNeedIds: [...new Set([...known, ...knownIdsOf(loaded)])],
+  };
 }
 
 /**
@@ -1132,12 +1205,21 @@ export function afterNeedWrites(input: {
   for (const { position, need } of writes.created) {
     const row = sent.needs?.[position];
     if (!row) continue;
-    const j = needs.findIndex((n, k) => !claimed.has(k) && !n.id && same(n, row));
+    // Par la clé de création (stable même si la ligne a été modifiée pendant l'envoi) ; à défaut, ligne identique.
+    const j = needs.findIndex(
+      (n, k) => !claimed.has(k) && !n.id && (row.clientKey ? n.clientKey === row.clientKey : same(n, row)),
+    );
     if (j < 0) continue;
     claimed.add(j);
     needs[j] = { ...needs[j], id: need.id } as NeedDraft;
   }
-  return { savedNeeds, draft: { ...current, needs } };
+  const knownNeedIds = [...new Set([...(current.knownNeedIds ?? []), ...writes.created.map((c) => c.need.id)])];
+  return { savedNeeds, draft: { ...current, needs, knownNeedIds } };
+}
+
+/** Les missions telles que le serveur les garde (état « enregistré » de l'assistant), toutes connues. */
+export function withServerNeeds(d: EventDraft, loaded: readonly NeedDraft[]): EventDraft {
+  return { ...d, needs: [...loaded], knownNeedIds: knownIdsOf(loaded) };
 }
 
 /** Deux brouillons identiques (l'ordre des champs ne compte pas ; un champ absent vaut un champ `undefined`). */

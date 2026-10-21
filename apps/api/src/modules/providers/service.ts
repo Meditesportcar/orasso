@@ -591,7 +591,7 @@ export const providersService = {
       const accepted = a.status === "accepted";
       return {
         ...applicationBase(a, e, t, rankOf, enteredAt),
-        need: need ? needView(need, filled.get(need.id) ?? 0) : null,
+        need: need ? { ...needView(need, filled.get(need.id) ?? 0), clientKey: undefined } : null,
         spot: accepted && a.spotLabel ? { label: a.spotLabel, note: a.spotNote } : null,
         installAt: need?.installAt?.toISOString() ?? null,
         power: (need?.power as ProviderPower | undefined) ?? null,

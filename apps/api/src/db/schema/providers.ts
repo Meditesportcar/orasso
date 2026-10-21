@@ -103,10 +103,13 @@ export const eventNeeds = pgTable(
     installAt: tstz("install_at"),
     notes: text("notes"),
     position: smallint("position").notNull().default(0),
+    /** Correctif 53c : clé de création de l'assistant (une mission par clé et par événement), `null` sans clé. */
+    clientKey: uuid("client_key"),
     ...timestamps,
   },
   (t) => [
     index("event_needs_event_idx").on(t.eventId, t.position),
+    uniqueIndex("event_needs_client_key_unique").on(t.eventId, t.clientKey),
     index("event_needs_trade_idx").on(t.trade),
     check("event_needs_quantity_check", sql`${t.quantity} between 1 and 9`),
     check("event_needs_frontage_check", sql`${t.frontageM} is null or ${t.frontageM} between 1 and 30`),

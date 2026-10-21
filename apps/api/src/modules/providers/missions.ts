@@ -163,6 +163,15 @@ export const missionsService = {
     return withTx(async (tx, after) => {
       const locked = await eventsRepo.lockForUpdate(tx, eventId);
       assertNeedsEditable(locked);
+      // Correctif 53c : même clé de création (nouvel essai après une réponse perdue) = la mission déjà créée. Le verrou
+      // de l'événement range les créations l'une après l'autre ; l'index unique `(event_id, client_key)` en répond.
+      if (input.clientKey) {
+        const [existing] = await tx
+          .select()
+          .from(eventNeeds)
+          .where(and(eq(eventNeeds.eventId, eventId), eq(eventNeeds.clientKey, input.clientKey)));
+        if (existing) return needView(existing, (await filledByNeed([existing.id], tx)).get(existing.id) ?? 0);
+      }
       const [agg] = await tx
         .select({ maxPos: max(eventNeeds.position) })
         .from(eventNeeds)
@@ -179,6 +188,7 @@ export const missionsService = {
           installAt: input.installAt ? new Date(input.installAt) : null,
           notes: input.notes,
           position: (agg?.maxPos ?? -1) + 1,
+          clientKey: input.clientKey ?? null,
         })
         .returning();
       if (!row) throw new Error("Besoin non enregistré");
@@ -230,7 +240,9 @@ export const missionsService = {
     if (!event || event.status === "draft" || event.admission === "invite_only") {
       throw notFound("Événement introuvable");
     }
-    return (await needViewsOfEvent(event.id)).map(({ filled: _f, notes: _n, position: _p, ...rest }) => rest);
+    return (await needViewsOfEvent(event.id)).map(
+      ({ filled: _f, notes: _n, position: _p, clientKey: _k, ...rest }) => rest,
+    );
   },
 
   // --- Missions du prestataire -----------------------------------------------------------------------------------

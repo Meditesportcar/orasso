@@ -57,6 +57,7 @@ export function needView(row: NeedRow, filled: number): EventNeedView {
     installAt: row.installAt?.toISOString() ?? null,
     notes: row.notes,
     position: row.position,
+    clientKey: row.clientKey,
   };
 }
 
