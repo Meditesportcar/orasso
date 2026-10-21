@@ -26,15 +26,13 @@ import { requirePlatformRole } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, notFound, validation } from "../../lib/errors";
 import { MAIL_PROTECTED_RESERVE, type MailContent, mail, startOfBusinessDay } from "../../lib/mail";
+import { escapeHtml, INK, MUSTARD, renderShell } from "../../lib/mail-template";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
 import { unsubscribeOneClickUrl, unsubscribeUrl, verifyUnsubscribeToken } from "../../lib/unsubscribe";
 import { audit } from "./audit";
 
 type Row = typeof newsletters.$inferSelect;
-
-const escapeHtml = (s: string) =>
-  s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 /**
  * E-mail de la newsletter : Markdown réduit (échappé), pied obligatoire avec le lien de désinscription (page du site),
@@ -45,14 +43,13 @@ export function newsletterMail(
   bodyMd: string,
   links: { page: string; oneClick: string },
 ): MailContent {
-  const html = [
-    `<!doctype html><html lang="fr"><meta charset="utf-8"><title>${escapeHtml(subject)}</title>`,
-    `<body style="font-family:Archivo,Arial,sans-serif;color:#17191C">`,
-    markdownToHtml(bodyMd),
-    `<hr><p style="color:#6B6F76;font-size:12px">${escapeHtml(newsletterTexts.footer)} `,
-    `<a href="${escapeHtml(links.page)}">${escapeHtml(newsletterTexts.unsubscribeLink)}</a></p>`,
-    `<p style="color:#6B6F76;font-size:12px">Orasso</p></body></html>`,
-  ].join("\n");
+  // Gabarit commun (lot 56) ; le pied obligatoire garde le lien de désinscription.
+  const html = renderShell({
+    title: subject,
+    bodyHtml: `<div style="font-family:Archivo,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;color:${INK}">${markdownToHtml(bodyMd)}</div>`,
+    footer: "newsletter",
+    footerHtml: `<a href="${escapeHtml(links.page)}" style="color:${MUSTARD}">${escapeHtml(newsletterTexts.unsubscribeLink)}</a>`,
+  });
   const text = [
     markdownToText(bodyMd),
     "",

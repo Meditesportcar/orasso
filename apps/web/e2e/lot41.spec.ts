@@ -45,7 +45,7 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(page.getByTestId("dept-summary")).toContainText("+1");
     await expect(page.getByTestId("dept-66")).toHaveClass(/is-favorite/);
     // Crédit CC BY 4.0 sous la carte, avec le lien vers la licence.
-    const credit = page.getByTestId("france-credit");
+    const credit = page.getByRole("region", { name: "Ton coin" }).getByTestId("france-credit");
     await expect(credit).toBeVisible();
     await expect(credit).toHaveText("Carte : Victor Cazanave, CC BY 4.0");
     await expect(credit.getByRole("link", { name: "CC BY 4.0" })).toHaveAttribute(

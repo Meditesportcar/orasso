@@ -4,7 +4,7 @@
 // grades, droits, anti-abus, concurrence, anonymisation, et le scénario du critère de fin. Routes en cookie ET porteur.
 import { fromWallTime, HOUR, INVITATIONS_PER_STRUCTURE_PER_DAY } from "@orasso/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
@@ -31,6 +31,7 @@ import {
   user,
   vehicles,
 } from "../../db/schema";
+import { mail } from "../../lib/mail";
 import { accountService } from "../account/service";
 import { applicationsService } from "../applications/service";
 import { highGradePreview } from "../events/high-grade";
@@ -287,6 +288,7 @@ describe("lien par e-mail", () => {
   for (const mode of MODES) {
     it(`adresse sans compte : e-mail, page publique, inscription, rattachement, acceptation (${mode})`, async () => {
       const { damien, s, e } = await setup({ admission: "invite_only" });
+      const send = vi.spyOn(mail, "send");
       const sent = await req(damien, "POST", `/events/${e.id}/invitations`, { emails: ["Sarah@Exemple.test"] }, mode);
       expect(sent.json.created).toBe(1);
       const [row] = await db.select().from(eventInvitations).where(eq(eventInvitations.eventId, e.id));
@@ -294,6 +296,12 @@ describe("lien par e-mail", () => {
       await new Promise((r) => setTimeout(r, 50));
       const out = await db.query.emailOutbox.findFirst({ where: eq(emailOutbox.to, "sarah@exemple.test") });
       expect(out?.template).toBe("event_invitation");
+      // La personne n'a pas de compte : le pied ne dit pas le contraire (relecture du lot 56).
+      const sentMail = send.mock.calls.find(([template]) => template === "event_invitation")?.[2];
+      send.mockRestore();
+      expect(sentMail?.html).toContain("Tu reçois cet e-mail parce qu'on t'a invité sur Orasso.");
+      expect(sentMail?.html).not.toContain("parce que tu as un compte");
+      expect(sentMail?.text).not.toContain("parce que tu as un compte");
 
       const pub = await req(null, "GET", `/invitation-evenement/${row!.token}`);
       expect(pub.status).toBe(200);

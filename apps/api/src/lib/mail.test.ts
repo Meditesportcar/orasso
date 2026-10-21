@@ -1,12 +1,15 @@
 // Corps envoyé à l'API Brevo (lot 15) : expéditeur du sous-domaine dédié, réponses vers contact@orasso.fr. Aucun appel
 // réseau : `fetch` est simulé.
+import { mailLabels, newsletterTexts } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import { db, pool } from "../db/client";
 import { emailOutbox } from "../db/schema";
 
+import { securityMails } from "../modules/security/mails";
 import { brevoPayload, deliverBrevo, isReservedAddress, mail, parseMailbox, renderMail, setBrevoFetch } from "./mail";
+import { escapeHtml } from "./mail-template";
 
 const content = renderMail("Ton mot de passe a été changé", ["Bonjour,"]);
 
@@ -106,5 +109,71 @@ describe("adresses non routables en transport Brevo", () => {
     expect(JSON.parse(calls[0] ?? "{}").to).toEqual([{ email: real }]);
     const sent = await db.query.emailOutbox.findFirst({ where: eq(emailOutbox.to, real) });
     expect(sent).toMatchObject({ transport: "brevo", status: "sent" });
+  });
+});
+
+describe("gabarit commun des e-mails (lot 56)", () => {
+  it("chaque type d'envoi : affiche de nuit, titre, pied ; le bouton quand il y a un lien", async () => {
+    const { mailSamples } = await import("../modules/dev-mail/samples");
+    const samples = mailSamples();
+    expect(samples.length).toBeGreaterThanOrEqual(8);
+    expect(samples.filter((s) => s.hasButton).length).toBeGreaterThanOrEqual(6);
+    for (const s of samples) {
+      expect(s.content.html, s.id).toContain("/mail/affiche-nuit.jpg");
+      expect(s.content.html, s.id).toContain(escapeHtml(s.content.subject));
+      expect(s.content.text, s.id).toContain("Orasso");
+      expect(s.content.html, s.id).toContain("contact@orasso.fr");
+      if (s.hasButton) {
+        // Le bouton : un lien « LIBELLÉ → » moutarde vers PUBLIC_URL, avec son lien de repli en clair.
+        const href = /<a href="(https?:\/\/[^"]+)"[^>]*>[^<]+ &rarr;<\/a>/.exec(s.content.html)?.[1];
+        expect(href, s.id).toMatch(/^https?:\/\//);
+        expect(s.content.html, s.id).toContain("#e9b824");
+        expect(s.content.html, s.id).toContain(mailLabels.fallback);
+        expect(s.content.text, s.id).toContain(href ? href.replaceAll("&amp;", "&") : "?");
+      } else {
+        expect(s.content.html, s.id).not.toContain("&rarr;");
+      }
+    }
+  });
+
+  it("le pied dit la vérité sur le destinataire : compte, invitation, compte supprimé", async () => {
+    const { mailSamples } = await import("../modules/dev-mail/samples");
+    for (const s of mailSamples()) {
+      const footer =
+        s.id === "account_deleted"
+          ? mailLabels.footerDeleted
+          : s.id === "newsletter"
+            ? newsletterTexts.footer
+            : mailLabels.footer;
+      expect(s.content.html, s.id).toContain(footer);
+      expect(s.content.text, s.id).toContain(footer);
+    }
+    const invited = renderMail("Invitation", ["x"], undefined, { footer: "invitation" });
+    expect(invited.html).toContain(mailLabels.footerInvitation);
+    expect(invited.text).toContain(mailLabels.footerInvitation);
+    for (const m of [invited, securityMails.accountAnonymizedByTeam("Kenji_66")]) {
+      expect(m.html).not.toContain(mailLabels.footer);
+      expect(m.text).not.toContain(mailLabels.footer);
+    }
+    expect(securityMails.accountAnonymizedByTeam("Kenji_66").html).toContain(mailLabels.footerDeleted);
+    expect(renderMail("Sans option", ["x"]).html).toContain(mailLabels.footer);
+  });
+
+  it("le code de secours s'affiche en grand, échappé, dans le HTML et le texte", () => {
+    const m = renderMail(
+      "Ton code",
+      ["Garde-le."],
+      { label: "Ouvrir", url: "https://orasso.fr/app" },
+      { code: "K7Q2-<M9>" },
+    );
+    expect(m.html).toContain("Code de secours");
+    expect(m.html).toContain("K7Q2-&lt;M9&gt;");
+    expect(m.text).toContain("Code de secours : K7Q2-<M9>");
+  });
+
+  it("le texte du titre et du corps est échappé", () => {
+    const m = renderMail("A <b>", ["x & y"]);
+    expect(m.html).toContain("A &lt;b&gt;");
+    expect(m.html).toContain("x &amp; y");
   });
 });

@@ -28,6 +28,7 @@ import { checkinsRoutes } from "./modules/checkins/routes";
 import { communicationRoutes } from "./modules/communication/routes";
 import { crewsRoutes } from "./modules/crews/routes";
 import { devClockRoutes } from "./modules/dev-clock/routes";
+import { devMailRoutes } from "./modules/dev-mail/routes";
 import { posterRoutes } from "./modules/events/poster/routes";
 import { eventsRoutes } from "./modules/events/routes";
 import { eventsService } from "./modules/events/service";
@@ -211,6 +212,7 @@ app.route("/", moderationRoutes);
 app.route("/", homeRoutes);
 app.route("/", afterEventRoutes);
 app.route("/", devClockRoutes);
+app.route("/", devMailRoutes);
 // Lot 49 : passeport, prix du public, récap.
 app.route("/", passportRoutes);
 app.route("/", audiencePrizeRoutes);

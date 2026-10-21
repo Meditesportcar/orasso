@@ -13,6 +13,8 @@ export type Audit = {
   truncated: string[];
   horizontalScroll: boolean;
   unoutlinedOnPhoto: string[];
+  /** Mots coupés en plein mot (retour à la ligne ou césure au milieu d'un mot) : jamais dans un titre. */
+  brokenWords: string[];
 };
 
 export async function auditPage(page: Page): Promise<Audit> {
@@ -55,6 +57,26 @@ export async function auditPage(page: Page): Promise<Audit> {
         .filter((el) => getComputedStyle(el).textOverflow === "ellipsis" && el.scrollWidth > el.clientWidth + 1)
         .map(label),
       horizontalScroll: document.documentElement.scrollWidth > window.innerWidth + 1,
+      brokenWords: (() => {
+        const out = new Set<string>();
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        const range = document.createRange();
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const parent = node.parentElement;
+          if (!parent || !visible(parent) || parent.closest("svg, script, style, iframe")) continue;
+          if (parent.closest(".o-visually-hidden, .maplibregl-map")) continue;
+          const text = node.textContent ?? "";
+          for (const m of text.matchAll(/[\p{L}\p{N}']{4,}/gu)) {
+            range.setStart(node, m.index ?? 0);
+            range.setEnd(node, (m.index ?? 0) + m[0].length);
+            const tops = new Set(
+              [...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top / 3)),
+            );
+            if (tops.size > 1) out.add(m[0]);
+          }
+        }
+        return [...out].slice(0, 10);
+      })(),
       unoutlinedOnPhoto: [...document.querySelectorAll(".o-cover, [data-onbg]")]
         .flatMap((zone) => [zone, ...zone.querySelectorAll("*")])
         .filter((el) => visible(el) && !el.closest("svg"))

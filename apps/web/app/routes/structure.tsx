@@ -240,7 +240,7 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
         {upcoming.length === 0 ? (
           <p className="s-notice">Aucun événement à venir pour l'instant. Suis la structure pour être prévenu.</p>
         ) : (
-          <div className="s-grid" data-testid="structure-upcoming">
+          <div className="w-cards" data-testid="structure-upcoming">
             {upcoming.map((event) => (
               <EventTile key={event.id} event={event} showStructure={false} />
             ))}
@@ -253,7 +253,7 @@ export default function StructurePage({ loaderData, actionData }: Route.Componen
           <h2 id="so-past" className="s-h2 s-head">
             Événements passés
           </h2>
-          <div className="s-grid" data-testid="structure-past">
+          <div className="w-cards" data-testid="structure-past">
             {past.map((event) => (
               <EventTile key={event.id} event={event} showStructure={false} />
             ))}

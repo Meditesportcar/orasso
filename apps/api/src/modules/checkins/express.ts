@@ -95,6 +95,7 @@ export const expressService = {
           "Lien valable 24 h.",
         ],
         { label: "M'inscrire", url },
+        { footer: "invitation" },
       ),
       { eventId, inviteId: row.id },
     );

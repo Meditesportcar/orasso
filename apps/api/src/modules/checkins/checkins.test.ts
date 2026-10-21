@@ -12,7 +12,7 @@ import {
   type ScanBatchItem,
 } from "@orasso/shared";
 import { and, count, eq, sql } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
@@ -41,6 +41,7 @@ import {
   profiles,
   scanEvents,
 } from "../../db/schema";
+import { mail } from "../../lib/mail";
 import type { Viewer } from "../../lib/session";
 import { ed25519Verify } from "../../lib/signing";
 import { applicationsService } from "../applications/service";
@@ -485,10 +486,17 @@ describe("terrain : alertes et main courante", () => {
 describe("inscription express", () => {
   it("lien par e-mail, compte + véhicule + QR + entrée express, session ouverte", async () => {
     const ref = await db.query.vehicleModels.findFirst();
+    const send = vi.spyOn(mail, "send");
     const invite = await call(julie, "POST", `/events/${eventId}/express-invites`, { email: "Nouveau@Exemple.fr" });
     expect(invite.status).toBe(201);
     const mails = await db.query.emailOutbox.findMany({ where: eq(emailOutbox.template, "express_invite") });
     expect(mails.map((m) => m.to)).toEqual(["nouveau@exemple.fr"]);
+    // La personne n'a pas de compte : le pied ne dit pas le contraire (relecture du lot 56).
+    const sentMail = send.mock.calls.find(([template]) => template === "express_invite")?.[2];
+    send.mockRestore();
+    expect(sentMail?.html).toContain("Tu reçois cet e-mail parce qu'on t'a invité sur Orasso.");
+    expect(sentMail?.html).not.toContain("parce que tu as un compte");
+    expect(sentMail?.text).not.toContain("parce que tu as un compte");
     const token = invite.json.url.split("/express/")[1];
     expect((await call(null, "GET", `/express/${token}`)).json).toMatchObject({
       used: false,

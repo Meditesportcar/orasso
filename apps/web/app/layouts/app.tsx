@@ -68,7 +68,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   return (
     <Ground variant="site" animated fixed>
       <div className="app">
-        <SiteHeader>
+        <SiteHeader nav={false}>
           {loaderData.orga && <a href={`/orga/${loaderData.orga}`}>Organisateur</a>}
           {loaderData.pro && <a href={`/pro/${loaderData.pro}`}>Pro</a>}
           {loaderData.provider && <a href="/app/prestataire">Prestataire</a>}
@@ -100,6 +100,16 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             {loaderData.unread > 0 && (
               <span className="s-bell__count o-t-credit" data-testid="bell-count">
                 {loaderData.unread}
+                <span className="o-visually-hidden"> non lus</span>
+              </span>
+            )}
+          </span>
+          {/* Boîte (lot 56) : messages et demandes, avec sa pastille de non lus. */}
+          <span className="s-bell">
+            <AppBarAction icon="inbox" label="Boîte" href="/app/boite" on={pathname.startsWith("/app/boite")} />
+            {loaderData.unreadInbox > 0 && (
+              <span className="s-bell__count o-t-credit" data-testid="inbox-count">
+                {loaderData.unreadInbox}
                 <span className="o-visually-hidden"> non lus</span>
               </span>
             )}

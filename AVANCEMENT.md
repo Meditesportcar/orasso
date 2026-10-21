@@ -10,6 +10,7 @@
 - **À faire** : vérification et déploiement de la vague 5, puis lots 53 et 56 (vague 6), 57 (vague 7), 58 (recette finale, APK v2, vague 8).
 - **Reprendre** par la section « POINT DE REPRISE (20/10, pause) » du journal du relais (`~/.claude/relais/orasso/JOURNAL.md`) : ordre exact, réglages du `.env` de l'intégration (`CORS_ORIGINS=http://localhost:8399`, `DEV_CLOCK=on`, `DEV_SKIP_2FA=true`) et points à revoir avec Damien.
 - **Lancer le projet** : inchangé (voir plus bas, « Lancer le projet sur ce PC (Windows) » ; sur le nouveau PC, adapter les chemins).
+- **Lot 56 (branche `lot-56-site-public-v2`, non fusionné)** : site public v2 terminé : en-tête et pied (crédits des données), accueil (bandeau des dates, éventail, bandes), `/evenements` en phrase à trous avec cartes à affiche, `/organisateurs` (six temps, mur des huit styles), `/professionnels` (remises, offre fondateur), fiche événement (affiche en vedette, créneaux d'arrivée, contenus des médias), e-mails v2 (`mail-template.ts`, aperçu `/_mail`). Aucune migration. Recette : `apps/web/e2e/lot56.spec.ts`. Images statiques à régénérer si les gabarits d'affiche changent : `pnpm --filter @orasso/api site:assets`.
 
 ## Terminé
 
