@@ -10,7 +10,8 @@
 
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type HomeData, type HomeNudgeKind, homeLabels, homeProfileLabels, type MyApplication } from "@orasso/shared";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback } from "react";
 import { StyleSheet, View } from "react-native";
 import { useMyPosition } from "@/features/explorer/useMyPosition";
 import { NudgeCard } from "@/features/home/HomeWidgets";
@@ -20,6 +21,7 @@ import { arrivalPhrase, liveApplications, ticketsUpcoming } from "@/features/sor
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { dayCountdown, formatDay, formatHour } from "@/lib/format";
+import { kvGet, kvSet } from "@/lib/kv";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
@@ -98,6 +100,31 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     .filter((e) => new Date(e.startsAt).getTime() - now.getTime() < MONTH_MS)
     .slice(0, 8);
   const stamps = (passport.data?.pages ?? []).flatMap((p) => p.stamps).slice(-3);
+
+  // D34 : le jour J, le QR d'accès (ou le billet) s'affiche d'office à l'ouverture de l'Accueil, une fois par jour et par
+  // place (fermé, il ne revient pas en boucle ; il reste à un geste par la carte et l'accès flottant).
+  const todayTarget =
+    next && next.status === "accepted" && !next.checkedInAt && dayCountdown(next.event.startsAt, now) === "Aujourd'hui"
+      ? { key: next.id, href: `/jour-j/${next.id}` }
+      : ticket && dayCountdown(ticket.event.startsAt, now) === "Aujourd'hui"
+        ? { key: ticket.id, href: "/billets" }
+        : null;
+  const todayKey = todayTarget ? `jourj-auto:${todayTarget.key}:${now.toISOString().slice(0, 10)}` : null;
+  const todayHref = todayTarget?.href ?? null;
+  useFocusEffect(
+    useCallback(() => {
+      if (!todayKey || !todayHref) return;
+      let cancelled = false;
+      void kvGet(todayKey).then((seen) => {
+        if (cancelled || seen) return;
+        void kvSet(todayKey, "1");
+        router.push(todayHref as never);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [todayKey, todayHref, router]),
+  );
 
   function nudgeAction(kind: HomeNudgeKind) {
     if (kind === "add_vehicle") router.push("/vehicule/nouveau");

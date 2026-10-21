@@ -146,8 +146,8 @@ function JourJScreen() {
     kit?.checkedInAt && (!kit.multiDay || kit.day || localDate(new Date(kit.checkedInAt), tz) === localDate(now, tz)),
   );
   const state = kit && span ? jourJState(span, now, entered, tz) : null;
-  // Les captures ne sont bloquées que tant que le QR est à l'écran.
-  useBlockCapture(state === "open");
+  // Captures bloquées dès que le QR est à l'écran (D34 : consultable avant le jour J, quel que soit l'état « early » ou « open »).
+  useBlockCapture(state !== null && state !== "closed");
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
   const offline = !online || refreshFailed;
