@@ -166,7 +166,8 @@ export const orgaV2Labels = {
   roleNone: "Aucun",
   roleMore: "Plus d'options",
   actionRemoveShort: "Retirer",
-  presenceConfirmed: (present: number, total: number) => `${present} présence${present > 1 ? "s" : ""} confirmée${present > 1 ? "s" : ""} sur ${total}`,
+  presenceConfirmed: (present: number, total: number) =>
+    `${present} présence${present > 1 ? "s" : ""} confirmée${present > 1 ? "s" : ""} sur ${total}`,
 
   // --- Structure (s-ostruct) ----------------------------------------------------------------------------------------
   structVerified: "Structure validée",

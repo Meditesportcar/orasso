@@ -2,8 +2,9 @@
 // en mémoire en tête, mon rôle donné par la structure et « Je suis là », grandes tuiles selon mes rôles (Scanner, Liste,
 // Placement, Contrôle des billets), entrés par zone, et toujours en bas : Alerte, Main courante, Discussion. Tout
 // s'affiche sans réseau depuis la liste du téléphone. Thème au choix de l'utilisateur (D25b), fond immobile.
+// Lot C4a : mise en page de l'artefact (en-tête de flux sans grand titre, rôle sur carte crème, Scanner moutarde).
 
-import { BigTitle, Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Icon, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   communicationLabels,
   staffHomeLabels as L,
@@ -15,7 +16,7 @@ import {
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { AlertSheet } from "@/features/staff/AlertSheet";
 import { recordAlert, recordIncident } from "@/features/staff/actions";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
@@ -125,7 +126,7 @@ export default function StaffHome() {
   return (
     <FlowScreen
       title={L.title}
-      facts={startsAt ? formatDayHour(startsAt) : undefined}
+      facts={startsAt ? `${title} · ${formatDayHour(startsAt)}` : title}
       onClose={close}
       still
       overlays={
@@ -149,13 +150,13 @@ export default function StaffHome() {
         </>
       }
       footer={
-        // Toujours en bas (docs/02, prototype) : l'alerte, la main courante et la discussion du staff (lot 20, en ligne).
+        // Toujours en bas (artefact `.stf-bar`) : Alerte, Main courante, et la discussion du staff en bouton carré.
         <View style={styles.row}>
-          <Button variant="alert" icon="alert" onPress={() => setSheet("alert")} style={styles.flex}>
+          <Button variant="alert" icon="alert" onPress={() => setSheet("alert")}>
             {L.alert}
           </Button>
           <Button
-            variant="rescue"
+            variant="secondary"
             icon="incident"
             onPress={() => setSheet("incident")}
             style={styles.flex}
@@ -163,95 +164,125 @@ export default function StaffHome() {
           >
             {L.logbook}
           </Button>
-          <Button
-            variant="rescue"
-            icon="chat"
+          <Pressable
             onPress={() => router.push(`/staff/${id}/discussion`)}
-            style={styles.flex}
-            testID="staff-discussion"
+            accessibilityRole="button"
             accessibilityLabel={communicationLabels.staffDiscussion}
+            testID="staff-discussion"
+            style={({ pressed }) => [styles.square, { borderColor: c.ink, opacity: pressed ? 0.8 : 1 }]}
           >
-            {L.discussion}
-          </Button>
+            <Icon name="chat" size={22} color={c.ink} />
+          </Pressable>
         </View>
       }
     >
-      <BigTitle title={title} />
-
       {error ? <Notice tone="error">{error}</Notice> : null}
       {TRUST_MISSING ? <Notice tone="error">{TRUST_MISSING}</Notice> : null}
       {closed ? (
         <Notice>Mode staff fermé depuis J+1 : la liste et les coordonnées ont été effacées de ce téléphone.</Notice>
       ) : null}
 
-      <Plate style={styles.block} testID="staff-sync">
+      {/* `.stf-sync` : point moutarde, heure de synchro, inscrits en mémoire ; la synchro manuelle reste, discrète. */}
+      <View style={[styles.sync, { backgroundColor: c.surface }]} testID="staff-sync">
         <View style={styles.syncRow}>
-          <View style={[styles.dot, { backgroundColor: state ? c.accent : c.plateMuted }]} />
+          <View
+            style={[
+              styles.dot,
+              state
+                ? { backgroundColor: c.accent, boxShadow: `0 0 0 5px ${c.accent}40` }
+                : { backgroundColor: c.inkFaint },
+            ]}
+          />
           <View style={styles.flex}>
-            <Text variant="bodyStrong" color={c.plateInk}>
+            <Text variant="bodyStrong" color={c.ink}>
               {state ? L.synced(hourFr(state.meta.syncedAt)) : state === null ? L.neverSynced : "Lecture de la liste…"}
             </Text>
-            <Text variant="caption" color={c.plateMuted}>
-              {state ? L.inMemory(inMemory) : L.syncFirst}
-            </Text>
+            <Muted variant="caption">{state ? L.inMemory(inMemory) : L.syncFirst}</Muted>
             {pending.length > 0 ? (
-              <Text variant="caption" color={c.plateInk} testID="staff-pending">
+              <Text variant="caption" color={c.ink} testID="staff-pending">
                 {`${pending.length} envoi${pending.length > 1 ? "s" : ""} en attente : ils partent au retour du réseau`}
               </Text>
             ) : null}
           </View>
         </View>
         {syncMessage ? (
-          <Text variant="body" color={syncMessage.error ? c.plateInk : c.plateMuted}>
+          <Text variant="caption" color={syncMessage.error ? c.ink : c.inkMuted}>
             {syncMessage.error ? `Attention : ${syncMessage.text}` : syncMessage.text}
           </Text>
         ) : null}
-        <View style={styles.row}>
-          <Button variant="plate" icon="list" loading={syncing} onPress={() => void sync(true)} style={styles.flex}>
-            Synchroniser la liste
-          </Button>
+        <View style={styles.syncActions}>
+          <Pressable
+            onPress={() => void sync(true)}
+            disabled={syncing}
+            accessibilityRole="button"
+            testID="staff-sync-now"
+            style={styles.link}
+          >
+            <Icon name="list" size={16} color={c.accentText} />
+            <Text variant="bodyStrong" color={c.accentText} style={styles.linkText}>
+              {syncing ? "Synchronisation…" : "Synchroniser la liste"}
+            </Text>
+          </Pressable>
           {pending.length > 0 ? (
-            <Button variant="plate" icon="export" onPress={() => userId && void flushNow(userId)} style={styles.flex}>
-              {`Envoyer · ${pending.length}`}
-            </Button>
+            <Pressable onPress={() => userId && void flushNow(userId)} accessibilityRole="button" style={styles.link}>
+              <Icon name="export" size={16} color={c.accentText} />
+              <Text variant="bodyStrong" color={c.accentText} style={styles.linkText}>
+                {`Envoyer · ${pending.length}`}
+              </Text>
+            </Pressable>
           ) : null}
         </View>
-      </Plate>
+      </View>
 
-      <Plate style={styles.block} testID="staff-role">
-        <View style={styles.roleRow}>
-          <View style={styles.flex}>
-            <Text variant="label" color={c.plateMuted}>
-              {L.role}
+      {/* `.stf-role` : carte crème (noire en Sable), « Je suis là » en pilule moutarde une fois confirmé. */}
+      <View style={[styles.role, { backgroundColor: c.poster }]} testID="staff-role">
+        <View style={styles.flex}>
+          <Text variant="label" color={c.posterMuted}>
+            {L.role}
+          </Text>
+          <Text variant="posterS" color={c.posterInk} style={styles.roleTitle}>
+            {roles.map((r) => staffRoleLabels[r]).join(" · ") || "Staff"}
+          </Text>
+          {mine ? (
+            <Text variant="caption" color={c.posterMuted}>
+              {L.givenBy(mine.structure.name)}
             </Text>
-            <Text variant="bodyStrong" color={c.plateInk}>
-              {roles.map((r) => staffRoleLabels[r]).join(" · ") || "Staff"}
-            </Text>
-            {mine ? (
-              <Text variant="caption" color={c.plateMuted}>
-                {L.givenBy(mine.structure.name)}
-              </Text>
-            ) : null}
-          </View>
-          {/* Un organisateur qui ouvre le mode staff n'est pas dans « Où je suis staff » : pas de présence (lot 22). */}
-          {organizerView ? null : (
-            <Button
-              variant="plate"
-              icon={currentPresence === "present" ? "check" : "close"}
-              tone={currentPresence === "present" ? "default" : "dashed"}
-              onPress={() => {
-                if (!userId) return;
-                const next = currentPresence !== "present";
-                setPresence(next ? "present" : "absent");
-                void record(id, userId, "presence", { present: next });
-              }}
-              testID="staff-presence"
-            >
-              {currentPresence === "present" ? L.here : currentPresence === "absent" ? L.notHere : L.here}
-            </Button>
-          )}
+          ) : null}
         </View>
-      </Plate>
+        {/* Un organisateur qui ouvre le mode staff n'est pas dans « Où je suis staff » : pas de présence (lot 22). */}
+        {organizerView ? null : (
+          <Pressable
+            onPress={() => {
+              if (!userId) return;
+              const next = currentPresence !== "present";
+              setPresence(next ? "present" : "absent");
+              void record(id, userId, "presence", { present: next });
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: currentPresence === "present" }}
+            testID="staff-presence"
+            style={[
+              styles.here,
+              currentPresence === "present"
+                ? { backgroundColor: c.accent, borderColor: c.accent }
+                : { borderColor: c.posterInk },
+            ]}
+          >
+            <Icon
+              name={currentPresence === "absent" ? "close" : "check"}
+              size={16}
+              color={currentPresence === "present" ? c.accentInk : c.posterInk}
+            />
+            <Text
+              variant="bodyStrong"
+              color={currentPresence === "present" ? c.accentInk : c.posterInk}
+              style={styles.hereText}
+            >
+              {currentPresence === "absent" ? L.notHere : L.here}
+            </Text>
+          </Pressable>
+        )}
+      </View>
 
       {state ? (
         <View style={styles.tiles}>
@@ -294,34 +325,32 @@ export default function StaffHome() {
       ) : null}
 
       {count ? (
-        <Plate style={styles.block} testID="staff-counters">
+        <View style={[styles.tz, { backgroundColor: c.ground }]} testID="staff-counters">
           <View style={styles.between}>
-            <Text variant="label" color={c.plateMuted}>
+            <Text variant="label" color={c.inkMuted}>
               {L.entered}
             </Text>
-            <Text variant="caption" color={c.plateMuted}>
-              {L.enteredOf(count.arrived, count.expected)}
-            </Text>
+            <Muted variant="caption">{L.enteredOf(count.arrived, count.expected)}</Muted>
           </View>
           {zones.map((z) => (
             <View key={z.code ?? "none"} style={styles.zoneRow}>
-              <Text variant="bodyStrong" color={c.plateInk} style={styles.zoneName}>
+              <Text variant="label" color={c.inkMuted} style={styles.zoneName} numberOfLines={1}>
                 {z.name}
               </Text>
-              <View style={[styles.bar, { backgroundColor: c.plateLine }]}>
+              <View style={[styles.bar, { backgroundColor: c.line }]}>
                 <View
                   style={[
                     styles.barFill,
-                    { backgroundColor: c.plateInk, width: `${Math.round((100 * z.arrived) / z.expected)}%` },
+                    { backgroundColor: c.accent, width: `${Math.round((100 * z.arrived) / z.expected)}%` },
                   ]}
                 />
               </View>
-              <Text variant="caption" color={c.plateMuted}>
+              <Text variant="label" color={c.ink} style={styles.zoneCount}>
                 {z.arrived}/{z.expected}
               </Text>
             </View>
           ))}
-        </Plate>
+        </View>
       ) : null}
 
       <Muted variant="caption">{L.closesNote}</Muted>
@@ -396,17 +425,42 @@ export default function StaffHome() {
   );
 }
 
+// Mesures de l'artefact (`.stf`, `.stf-sync`, `.stf-role`, `.stf-here`, `.tz-card`, `.tz-bars`, `.stf-bar`).
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
-  tiles: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  row: { flexDirection: "row", gap: space2 },
+  tiles: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  row: { flexDirection: "row", gap: space2, alignItems: "center" },
   flex: { flex: 1 },
-  syncRow: { flexDirection: "row", alignItems: "center", gap: space2 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  roleRow: { flexDirection: "row", alignItems: "center", gap: space3 },
+  square: { width: 50, height: 50, borderRadius: 14, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  sync: { borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, gap: space2 },
+  syncRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  syncActions: { flexDirection: "row", flexWrap: "wrap", gap: space3, paddingLeft: 24 },
+  link: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32 },
+  linkText: { fontSize: 13 },
+  dot: { width: 12, height: 12, borderRadius: 6 },
+  role: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 16 },
+  roleTitle: { fontSize: 17, lineHeight: 19, textTransform: "uppercase", marginTop: 3 },
+  here: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 38,
+    paddingHorizontal: 14,
+    borderRadius: 19,
+    borderWidth: 2,
+  },
+  hereText: { fontSize: 13 },
+  tz: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 7,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.40)",
+  },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
   zoneRow: { flexDirection: "row", alignItems: "center", gap: space2 },
-  zoneName: { minWidth: 88 },
+  zoneName: { width: 72 },
+  zoneCount: { width: 44, textAlign: "right" },
   bar: { flex: 1, height: 8, borderRadius: 4, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 4 },
 });

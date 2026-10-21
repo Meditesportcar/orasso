@@ -118,7 +118,14 @@ export function DirectNext({
 const styles = StyleSheet.create({
   wrap: { gap: space2 + 2 },
   big: { flexDirection: "row", gap: 10 },
-  bigCard: { flex: 1, minWidth: 0, borderRadius: 20, padding: 14, gap: space1, boxShadow: "0 8px 24px rgba(0,0,0,0.40)" },
+  bigCard: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 20,
+    padding: 14,
+    gap: space1,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.40)",
+  },
   num: { fontSize: 64, lineHeight: 62 },
   numSmall: { fontSize: 24, lineHeight: 28 },
   card: { borderRadius: 18, padding: 14, gap: space2, boxShadow: "0 8px 24px rgba(0,0,0,0.40)" },

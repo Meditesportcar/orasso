@@ -32,7 +32,7 @@ import { useNow } from "@/lib/useNow";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { SectionTitle, TabScreen } from "@/ui/Screens";
+import { TabScreen } from "@/ui/Screens";
 import { ConfirmSheet } from "../ConfirmSheet";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 import { Bubble, RequestBubble } from "./Bubble";
@@ -260,9 +260,13 @@ export function TeamScreen() {
   const summary = staffSummary(list);
   const reqSpot = requestBubbleSpot(cloudWidth, CLOUD_HEIGHT);
   const layout = useMemo(
-    () => packBubbles(bubbles.map((m) => bubbleSize(historyOf(histories, m.userId).eventsHeld)), cloudWidth, CLOUD_HEIGHT, reqSpot),
-    // reqSpot ne dépend que de cloudWidth.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () =>
+      packBubbles(
+        bubbles.map((m) => bubbleSize(historyOf(histories, m.userId).eventsHeld)),
+        cloudWidth,
+        CLOUD_HEIGHT,
+        requestBubbleSpot(cloudWidth, CLOUD_HEIGHT),
+      ),
     [bubbles, histories, cloudWidth],
   );
   /** Pastille de rôle d'une bulle : les trois premières lettres de son premier rôle pour l'événement choisi. */
@@ -673,10 +677,7 @@ export function TeamScreen() {
           : null}
         {cloudWidth > 0 ? (
           <View
-            style={[
-              styles.placed,
-              { left: reqSpot.x - reqSpot.size / 2 - 6, top: reqSpot.y - reqSpot.size / 2 - 6 },
-            ]}
+            style={[styles.placed, { left: reqSpot.x - reqSpot.size / 2 - 6, top: reqSpot.y - reqSpot.size / 2 - 6 }]}
           >
             <RequestBubble
               count={groups.requests.length}
@@ -873,7 +874,15 @@ const styles = StyleSheet.create({
   allows: { fontSize: 12 },
   avs: { flexDirection: "row", alignItems: "center", paddingLeft: 8 },
   av: { marginLeft: -8, borderRadius: 18, borderWidth: 2 },
-  avAdd: { marginLeft: -8, width: 32, height: 32, borderRadius: 16, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  avAdd: {
+    marginLeft: -8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   tagRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space2 },
   tag: { height: 22, justifyContent: "center", paddingHorizontal: 9, borderRadius: 4, transform: [{ skewX: "-8deg" }] },
   tagText: { transform: [{ skewX: "8deg" }] },

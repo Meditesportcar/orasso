@@ -120,11 +120,17 @@ describe("bulles", () => {
       expect(a.x + a.size / 2).toBeLessThanOrEqual(358);
       expect(a.y - a.size / 2).toBeGreaterThanOrEqual(0);
       expect(a.y + a.size / 2).toBeLessThanOrEqual(310);
-      for (const b of all.slice(i + 1)) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual((a.size + b.size) / 2);
+      for (const b of all.slice(i + 1))
+        expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual((a.size + b.size) / 2);
     }
   });
   it("une grande équipe tient dans la carte (tailles réduites)", () => {
-    const placed = packBubbles(Array.from({ length: 40 }, () => 96), 358, 310, null);
+    const placed = packBubbles(
+      Array.from({ length: 40 }, () => 96),
+      358,
+      310,
+      null,
+    );
     expect(placed).toHaveLength(40);
   });
   it("la couleur d'avatar est stable, le prénom vient du pseudo", () => {
