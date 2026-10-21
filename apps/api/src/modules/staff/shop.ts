@@ -225,7 +225,7 @@ export const shopService = {
         out.push(await storedScan(tx, done.row));
       }
       if (deviceId) await tx.update(devices).set({ lastSeenAt: receivedAt }).where(eq(devices.id, deviceId));
-      if (accepted > 0) after(() => void publishLive(eventId));
+      if (accepted > 0) after(() => void publishLive(eventId).catch(() => {})); // poussée facultative : un événement supprimé entre-temps ne doit rien lever
       return out;
     });
     return { results };
@@ -268,7 +268,7 @@ export const shopService = {
         out.push({ id: item.id, applied: Boolean(row) });
         if (row) applied++;
       }
-      if (applied > 0) after(() => void publishLive(eventId));
+      if (applied > 0) after(() => void publishLive(eventId).catch(() => {})); // poussée facultative : un événement supprimé entre-temps ne doit rien lever
       return out;
     });
     return { results, total: await shopService.visitorTotal(eventId) };
