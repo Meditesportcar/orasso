@@ -1,3 +1,6 @@
+// Mes sorties (DA v2, prototype `s-sorties`, lot 57 ; ex-`acces.tsx`, `/app/acces` redirige ici) : les candidatures,
+// billets et missions staff sont des tickets. Trois segments comme l'appli : À venir, Staff, Passées (carnet de route,
+// récap et prix du public).
 import { Button, Chip, Plate, StatusBadge } from "@orasso/design-system/web";
 import {
   type AccessPass,
@@ -17,12 +20,19 @@ import {
   type MyApplication,
   type MyPoints,
   type MyReview,
+  type MyStaffEvent,
   type MyTicket,
   POINTS_PENDING_LABEL,
   REVIEW_MAX_RATING,
+  type RecapListItem,
   type ReceivedInvitation,
+  recapScreenTexts,
   refusalReasonLabels,
+  sortiesLabels,
+  staffHomeLabels,
+  staffRoleLabels,
   type VehicleFull,
+  voteScreenTexts,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { data, Form, useNavigate, useNavigation, useRevalidator } from "react-router";
@@ -41,11 +51,11 @@ import { formatDateTime, formatWhen } from "../lib/format";
 import { invitationAction, isInvitationIntent, myActiveVehicles } from "../lib/invitations.server";
 import { badgeFor } from "../lib/status";
 import { useChannel } from "../lib/useChannel";
-import type { Route } from "./+types/acces";
+import type { Route } from "./+types/sorties";
 import "../styles/after-event.css";
 
 export function meta() {
-  return [{ title: "Accès · Orasso" }, { name: "robots", content: "noindex" }];
+  return [{ title: "Sorties · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -123,7 +133,27 @@ export async function loader({ request }: Route.LoaderArgs) {
   const invitationsRes = past ? null : await api<ReceivedInvitation[]>(request, "/me/event-invitations");
   const invitations = invitationsRes?.ok ? invitationsRes.data : [];
   const vehicles: VehicleFull[] = invitations.some((i) => !i.vehicle) ? await myActiveVehicles(request) : [];
+  // Lot 57 (DA v2, `s-sorties`) : missions staff et récaps, comme les segments « Staff » et « Passées » de l'appli.
+  const [staffRes, recapsRes] = await Promise.all([
+    api<MyStaffEvent[]>(request, "/me/staff-events"),
+    past ? api<RecapListItem[]>(request, "/me/recaps") : null,
+  ]);
+  const t = nowMs();
+  const staff = (staffRes.ok ? staffRes.data : []).filter((s) => Date.parse(s.event.endsAt) > t);
+  const slugOf = new Map(me.memberships.map((m) => [m.structureId, m.structureSlug]));
+  const allTickets = tickets.ok ? tickets.data : [];
   return {
+    view: (url.searchParams.get("vue") === "staff" && !avis ? "staff" : past ? "past" : "upcoming") as
+      | "upcoming"
+      | "staff"
+      | "past",
+    staff: staff.map((s) => ({ ...s, structureSlug: slugOf.get(s.structure.id) ?? null })),
+    recapReady: (recapsRes?.ok ? recapsRes.data : []).filter((r) => Date.parse(r.readyAt) <= t).map((r) => r.eventId),
+    tickets: allTickets.filter((x) =>
+      past
+        ? x.status === "used" || Date.parse(x.event.endsAt) <= t
+        : x.status === "valid" && Date.parse(x.event.endsAt) > t,
+    ),
     avis: avis ? { id: avis, found: applications.some((a) => a.id === avis) } : null,
     invitations,
     vehicles,
@@ -155,6 +185,16 @@ export async function action({ request }: Route.ActionArgs) {
   if (isCrewIntent(intent)) {
     const res = await crewAction(request, form);
     return data({ error: res.data.crewError, ok: res.data.crewOk ?? null }, { status: res.init?.status ?? 200 });
+  }
+  // Lot 57 : « Je serai là » d'une mission staff (segment Staff, comme l'appli).
+  if (intent === "presence") {
+    const eventId = String(form.get("eventId") ?? "");
+    const res = await api(request, `/events/${encodeURIComponent(eventId)}/staff/me/presence`, {
+      method: "PUT",
+      json: { present: String(form.get("present")) === "true" },
+    });
+    if (!res.ok) return data({ error: res.error.message }, { status: res.status });
+    return data({ error: null });
   }
   const id = String(form.get("applicationId") ?? "");
   if (!id) return data({ error: "Candidature inconnue." }, { status: 400 });
@@ -193,6 +233,7 @@ function ApplicationCard({
   notes,
   past,
   focused = false,
+  recapReady = false,
 }: {
   app: MyApplication;
   pass?: AccessPass;
@@ -204,6 +245,8 @@ function ApplicationCard({
   past: boolean;
   /** Ouverte par un lien d'avis : amenée à l'écran (lot 27). */
   focused?: boolean;
+  /** Lot 57 : récap prêt (le lendemain, 10 h). */
+  recapReady?: boolean;
 }) {
   const busy = useNavigation().state !== "idle";
   const card = useRef<HTMLElement>(null);
@@ -361,6 +404,22 @@ function ApplicationCard({
           )}
           {app.malus && <MalusBlock app={app} malus={app.malus} busy={busy} />}
           {app.review && <ReviewBlock app={app} review={app.review} busy={busy} />}
+          {recapReady && (
+            <div>
+              <Button variant="secondary" icon="list" next href={`/app/recap/${app.event.id}`} data-testid="recap-link">
+                {recapScreenTexts.seeRecap}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Lot 57 : prix du public, ouvert à un véhicule pointé jusqu'à la fin de l'événement (l'API tranche). */}
+      {!past && app.status === "accepted" && app.checkedInAt && Date.parse(app.event.endsAt) > nowMs() && (
+        <div>
+          <Button variant="secondary" icon="badge" next href={`/app/vote/${app.event.slug}`} data-testid="vote-link">
+            {voteScreenTexts.open}
+          </Button>
         </div>
       )}
 
@@ -510,6 +569,10 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
     ticketCount,
     invitations,
     vehicles,
+    view,
+    staff,
+    recapReady,
+    tickets,
   } = loaderData;
   const busy = useNavigation().state !== "idle";
   const okMessage = actionData && "ok" in actionData ? actionData.ok : null;
@@ -528,15 +591,83 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
   return (
     // `data-live` : canal temps réel ouvert (les recettes attendent qu'il le soit avant une offre en direct, lot 34).
     <div className="s-stack" data-testid="acces" data-live={live.connected ? "on" : "off"}>
-      <h1 className="s-title">Accès</h1>
+      <h1 className="s-title">Mes sorties</h1>
       <div className="s-tabs" role="tablist">
-        <Chip selected={!past} onClick={() => navigate("/app/acces")}>
+        <Chip selected={view === "upcoming"} onClick={() => navigate("/app/sorties")}>
           À venir
         </Chip>
-        <Chip selected={past} onClick={() => navigate("/app/acces?vue=passes")}>
-          Passés · carnet de route
+        <Chip
+          selected={view === "staff"}
+          onClick={() => navigate("/app/sorties?vue=staff")}
+          data-testid="sorties-staff-tab"
+        >
+          Staff · {staff.length}
+        </Chip>
+        <Chip selected={view === "past"} onClick={() => navigate("/app/sorties?vue=passes")}>
+          Passées · carnet de route
         </Chip>
       </div>
+
+      {view === "staff" && (
+        <section className="s-stack" aria-label="Staff" data-testid="sorties-staff">
+          {staff.length === 0 ? (
+            <div className="s-notice">
+              <strong>{sortiesLabels.emptyStaffTitle}</strong> {sortiesLabels.emptyStaffText}
+            </div>
+          ) : (
+            staff.map((s) => (
+              <article key={s.event.id} className="s-card acc" data-testid="staff-ticket">
+                <div className="s-stack s-stack--tight">
+                  <div className="s-label o-t-label">{eventFormatLabels[s.event.format]}</div>
+                  <h2 className="s-h2">
+                    <a href={`/e/${s.event.slug}`}>{s.event.title}</a>
+                  </h2>
+                  <div className="o-t-meta s-muted">
+                    {formatWhen(s.event.startsAt, s.event.endsAt)}
+                    {s.event.city ? ` · ${s.event.city}` : ""}
+                  </div>
+                  <p className="o-t-caption">
+                    {s.roles.map((r) => staffRoleLabels[r]).join(" · ")} ·{" "}
+                    {sortiesLabels.staffRoleGiven(s.structure.name)}
+                  </p>
+                </div>
+                <div className="s-row">
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="presence" />
+                    <input type="hidden" name="eventId" value={s.event.id} />
+                    <input type="hidden" name="present" value={s.presence === "present" ? "false" : "true"} />
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      icon={s.presence === "present" ? "check" : "staff"}
+                      loading={busy}
+                      data-testid="staff-presence"
+                      data-presence={s.presence}
+                    >
+                      {sortiesLabels.willBeThere}
+                    </Button>
+                  </Form>
+                  {s.structureSlug && (
+                    <Button
+                      variant="secondary"
+                      icon="staff"
+                      next
+                      href={`/orga/${s.structureSlug}/e/${s.event.id}/jour-j`}
+                    >
+                      {staffHomeLabels.title}
+                    </Button>
+                  )}
+                  {s.presence === "present" && Date.parse(s.event.startsAt) - 3 * 3_600_000 <= nowMs() && (
+                    <Button variant="secondary" icon="badge" next href={`/app/vote/${s.event.slug}`}>
+                      {voteScreenTexts.open}
+                    </Button>
+                  )}
+                </div>
+              </article>
+            ))
+          )}
+        </section>
+      )}
 
       {sent && <p className="s-notice s-notice--ok">Candidature envoyée. L'organisateur te répond ici.</p>}
       {avis && !avis.found && (
@@ -544,7 +675,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
           {afterEventLabels.reviewLinkInvalid}
         </p>
       )}
-      {!past && ticketCount > 0 && (
+      {view === "upcoming" && ticketCount > 0 && (
         <p className="s-notice" data-testid="tickets-link">
           Tu as {ticketCount} billet{ticketCount > 1 ? "s" : ""} de visiteur.{" "}
           <a href="/app/billets">Voir mes billets</a>
@@ -561,7 +692,7 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
         </p>
       )}
 
-      {!past && invitations.length > 0 && (
+      {view === "upcoming" && invitations.length > 0 && (
         <section className="s-stack" aria-labelledby="invitations-title" data-testid="received-invitations">
           <h2 id="invitations-title" className="s-h2">
             {invitationLabels.received}
@@ -587,13 +718,13 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
         </Plate>
       )}
 
-      {applications.length === 0 ? (
+      {view !== "staff" && applications.length === 0 && tickets.length === 0 ? (
         <p className="s-notice">
           {past
             ? "Aucun événement passé pour l'instant."
             : "Aucune candidature à venir. Trouve un événement et candidate avec un véhicule."}
         </p>
-      ) : (
+      ) : view !== "staff" ? (
         applications.map((app) => (
           <ApplicationCard
             key={app.id}
@@ -606,9 +737,45 @@ export default function Acces({ loaderData, actionData }: Route.ComponentProps) 
             notes={notes[app.id]}
             past={past}
             focused={avis?.id === app.id}
+            recapReady={recapReady.includes(app.event.id)}
           />
         ))
-      )}
+      ) : null}
+
+      {/* Lot 57 : les billets du public sont des tickets de Sorties, comme dans l'appli (QR dans « Mes billets »). */}
+      {view !== "staff" &&
+        tickets.map((x) => (
+          <article key={x.id} className="s-card acc" data-testid="sorties-ticket" data-status={x.status}>
+            <div className="s-stack s-stack--tight">
+              <div className="s-label o-t-label">{sortiesLabels.myTicket}</div>
+              <h2 className="s-h2">
+                <a href={`/e/${x.event.slug}`}>{x.event.title}</a>
+              </h2>
+              <div className="o-t-meta s-muted">
+                {formatWhen(x.event.startsAt, x.event.endsAt)}
+                {x.event.city ? ` · ${x.event.city}` : ""}
+              </div>
+              <p className="o-t-caption">{sortiesLabels.publicTicketLine(x.name)}</p>
+            </div>
+            <div className="s-row">
+              {!past && (
+                <Button variant="secondary" icon="ticket" next href="/app/billets">
+                  {sortiesLabels.myTicket}
+                </Button>
+              )}
+              {x.status === "used" && Date.parse(x.event.endsAt) > nowMs() && (
+                <Button variant="secondary" icon="badge" next href={`/app/vote/${x.event.slug}`}>
+                  {voteScreenTexts.open}
+                </Button>
+              )}
+              {past && x.status === "used" && recapReady.includes(x.event.id) && (
+                <Button variant="secondary" icon="list" next href={`/app/recap/${x.event.id}`}>
+                  {recapScreenTexts.seeRecap}
+                </Button>
+              )}
+            </div>
+          </article>
+        ))}
     </div>
   );
 }
