@@ -242,7 +242,7 @@ for (const home of HOMES) {
       if (home.choose) {
         await choose(page, home.choose);
       }
-      await expect(page.getByRole("heading", { name: "Accueil", exact: true })).toBeVisible({ timeout: 30_000 });
+      // Lot C4b (D33) : l'artefact n'a pas de grand titre sur l'Accueil, la salutation en tient lieu.
       await expect(page.getByTestId("home-greeting")).toBeVisible({ timeout: 30_000 });
       for (const text of home.texts) {
         await expect(page.getByText(text).first(), `« ${String(text)} »`).toBeVisible({ timeout: 30_000 });

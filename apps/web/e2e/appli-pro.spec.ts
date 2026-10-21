@@ -84,10 +84,11 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
 
     // Fiche, Publier, Stats (onglets de la casquette).
     await page.goto("/fiche");
-    // Lot 54 : l'abonnement et les remises sont dans le segment « Modifier ma fiche ».
+    // Lot 54 : les remises sont dans le segment « Modifier ma fiche » ; lot C4b : l'abonnement dans « Publications ».
     await page.getByText("Modifier ma fiche", { exact: true }).click();
-    await expect(page.getByTestId("pro-subscription")).toHaveText("Gratuit jusqu'au 21 juin 2027");
     await expect(page.getByText("Remises par grade").locator("visible=true").first()).toBeVisible();
+    await page.getByText("Publications", { exact: true }).click();
+    await expect(page.getByTestId("pro-subscription")).toHaveText("Gratuit jusqu'au 21 juin 2027");
     const body = (await page.locator("body").textContent()) ?? "";
     expect(body).not.toMatch(/€|\bprix\b|stripe|checkout/i);
     await expect(page.getByRole("button", { name: /payer|acheter|souscrire|s'abonner/i })).toHaveCount(0);
@@ -95,6 +96,7 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
 
     // Lot 40 : Publier n'est plus un onglet ; on y arrive depuis Ma fiche.
     await page.getByRole("tab", { name: "Ma fiche", exact: true }).click();
+    await page.getByText("Publications", { exact: true }).click();
     await page.getByTestId("pro-new-post").click();
     await expect(page.getByTestId("pro-posts-counter")).toBeVisible({ timeout: 30_000 });
     if (first) {
