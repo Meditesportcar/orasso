@@ -1637,6 +1637,46 @@ Source : relecture complémentaire de Codex sur le lot 54 (`9e3eb15..d76780d`), 
 #### À revoir avec Damien (lot 54b)
 - Photos du prestataire sur sa fiche publique : le prototype `s-vitrine` n'en montrait pas, c'est un ajout décidé par le coordinateur (titre repris du pro, « Réalisations ») ; le garder, le renommer, ou retirer le champ photos du formulaire ?
 
+### 21/10/2026 — Site : parité des fonctions nouvelles de la DA v2 (lot 57)
+Source : D20 (parité site / appli), D23 (fonctions **validées par Damien dans le prototype DA v2, 19/10/2026** : `s-sorties`, `s-passport`, `s-vote`, `s-recap`, `s-share`, `s-me`, `s-agenda`, `s-accred`, `s-contenus`, `s-missions`, `s-pcand`, `s-vitrine`, `s-otri`), D26 (pas de carte de presse), D28 (floutage des galeries média proposé, au choix du média). Fichiers : `apps/web/app/routes/{sorties,acces,passeport,vote,recap,media,media-nouveau,m,prestataire,prestataires,orga-presse,orga-prestataires}.tsx`, `routes/admin/medias.tsx`, `components/{PassportStamp,MediaGalleryPicker,ProviderVitrine}.tsx`, `ShareButtons.tsx` (`ShareCard`), `styles/{passport,media}.css`, `packages/shared/src/rules/stampArt.ts`, `labels/orga-site-v2.fr.ts`, `apps/api/src/modules/uploads/`.
+
+| Fonction (lot d'origine) | Appli | Site |
+|---|---|---|
+| Sorties en tickets : candidatures, billets, missions staff, passées (43) | onglet Sorties (`/acces`) | `/app/sorties` (`/app/acces` → 301) |
+| Passeport et tampons (49, 50) | `/mon-passeport`, onglet Passeport du visiteur | `/app/passeport` |
+| Prix du public : vote, classement en direct (49, 50) | `/vote/[id]` | `/app/vote/:slug` |
+| Récap (49, 50) | `/recap/[id]` | `/app/recap/:eventId` |
+| Carte à partager story, trois styles (50) | feuille du véhicule | `/app/garage/:id` (« Carte à partager ») |
+| Mon profil en hub : passeport, crew, casquettes, Créer (40) | onglet Profil | `/u/<mon pseudo>` (hub) |
+| Média : profil, accréditations, badge presse, consignes (45, 55) | `(media)/presse`, `media/nouveau` | `/app/media`, `/app/media/nouveau` |
+| Média : Explorer national, demande d'accréditation, agenda (45, 55) | `(media)/explorer` | `/app/media?onglet=explorer`, `?onglet=agenda` |
+| Média : contenus (lien, galerie) et floutage proposé (45, 55, D28) | `(media)/contenus` | `/app/media?onglet=contenus` |
+| Fiche d'un média (45) | — | `/m/:id` |
+| Prestataire : missions, candidatures (emplacement, avis), vitrine (46, 54) | `(provider)/*` | `/app/prestataire` |
+| Vitrine d'un prestataire (46, 54) | `/providers/[id]` | `/providers/:id` |
+| Organisateur : réglages presse, demandes, mise en avant (45, 52) | Tri › Presse | `/orga/:s/e/:id/presse` (`?onglet=presse` du tri y mène) |
+| Organisateur : besoins, candidatures par besoin, emplacement, avis (46, 52) | Tri › Prestataires (`MissionsPanel`) | `/orga/:s/e/:id/prestataires` |
+| Note d'arrivée au tri (47, 52) | carte du tri | `TriageFile` (« Note ») |
+| Affiche générée : voir, régénérer, story (47) | assistant (53) | `/orga/:s/e/:id` (bloc « Affiche ») |
+| Prix du public côté organisateur (49, 52) | Direct | `/orga/:s/e/:id` (bloc « Prix du public ») |
+| Accueil drive (48) | mode staff | rapport du jour J (`orga-jour-j`, entrées « drive ») ; la lecture de plaque reste dans l'appli |
+| Vérification d'un profil média (45, D26) | `(admin)/medias` (ajouté au lot 57) | `/admin/medias` (+ compteur `mediaToVerify` de l'accueil) |
+| Points du prix du public (49, réglage `points.audience_prize`) | Paramètres (ajouté au lot 57) | `/admin/reglages` (ajouté au lot 57) |
+
+- **Ce qui diffère du téléphone, et pourquoi** : pas de tampon qui tombe à l'écran au scan ni d'animation de carte (geste de l'appli) ; pas de lecture de plaque (accueil drive) ni de détection automatique de plaque (ML Kit) : le floutage se fait à la main (cadres, outils du lot 51) ; la carte à partager se télécharge (pas de feuille de partage du système) ; le badge presse et le QR de stand s'affichent comme le QR d'accès (code tournant, `RotatingQr`) ; la presse et les missions ont chacune leur page dans l'espace organisateur (barre latérale) au lieu d'un segment du tri ; le segment « Presse » du tri du site renvoie vers la page Presse.
+- **Tampon** : le dessin du lot 50 (`features/passport/stampModel.ts` de l'appli, pur) est **déplacé** dans `packages/shared/src/rules/stampArt.ts` (avec son test) : l'appli l'importe de `@orasso/shared`, le site le dessine en SVG (`PassportStamp`) avec les mêmes jetons d'encre (`--stamp-ink-<dept>`) ; une seule source, pas de composant dans le système de design (zone gelée).
+- **Adresses** : `/app/vote/:slug` (slug, comme le reste du site) ; `/m/:id` (l'API n'expose pas de slug de média et `GET /media/:id` est réservé aux connectés : la fiche vit dans l'espace connecté) ; `/providers/:id`, même chemin que l'appli.
+- **D28** (Damien, 21/10/2026 : « je lui proposerai l'option de pouvoir flouter ou non ») : à l'envoi d'une photo de galerie, le site propose le cadre (« Flouter et ajouter ») et « Envoyer sans flouter », sans blocage ni avertissement. **API** : `POST /me/uploads` accepte un champ `plateRects` (JSON) pour `purpose = media_content` seulement, et floute avec `blurPlateRegions` (lot 51) avant tout stockage, irréversible ; test `uploads/uploads-blur.test.ts`. C'est la seule extension de l'API du lot avec la ligne `mediaToVerify` de `GET /admin/overview`.
+- **Textes de l'espace organisateur** (presse, missions, affiche, prix du public, drive) : le prototype ne les montre pas ; écrits au « tu », sans genre, dans `labels/orga-site-v2.fr.ts`. Les textes du média, du prestataire, du passeport, du vote et du récap sont ceux des écrans de l'appli (lots 49, 50, 54, 55), repris tels quels.
+- **Refus d'une accréditation** : la raison est obligatoire sur le site ; elle part comme motif « Autre » avec sa note (`refusal_note`), envoyée au média.
+- **Affiche** : « Régénérer » garde la photo et le titre réglés dans l'assistant et laisse choisir le style ; la story se télécharge (`GET /events/:id/poster/story`). Changer la photo ou le titre reste dans l'assistant (lot 53).
+- **Onglet Sorties de la barre du site** : libellé « Sorties » (lien `/app/sorties`) ; les autres liens vers `/app/acces` (fiche publique, en-tête, e-mails) passent par la redirection permanente.
+
+#### À revoir avec Damien (lot 57)
+- Fiche d'un média : réservée aux connectés et sans liste de ses contenus (aucune route de l'API ne les liste par média) ; une page publique `/m/<slug>` demanderait un slug et une route nouvelle.
+- Textes de l'espace organisateur écrits faute d'écran dans le prototype (presse, missions, affiche) : à relire.
+- D28 côté appli : le floutage proposé à l'envoi d'une galerie n'est fait que sur le site (l'API est prête : champ `plateRects` de `POST /me/uploads`) ; l'écran Contenus de l'appli (lot 55) reste à brancher.
+
 ### 21/10/2026 — Assistant de création en huit temps, site et appli (lot 53)
 
 Validé par Damien dans le prototype DA v2, 19/10/2026 (`s-create`, V13, H9 appliquée par défaut) : l'assistant de création passe de douze étapes à **huit temps** — type, lieu, arrivées, critères, avant-première, règlement, affiche, « Tout est prêt » (Publier / Brouillon / Aperçu) — sur le site (`EventWizard.tsx` + `components/wizard/*`) et dans l'appli (`features/orga/wizard/Temps.tsx`, D20). Aucune information retirée ; correspondance des douze étapes :
@@ -1766,3 +1806,34 @@ Une seule liste, ordonnée, de tout ce que les lots 15 à 35d (et 34) ont laiss�
 
 **11. Ajoutés au lot 54 (pro et prestataire v2, 20/10/2026)**
 48. « Autour du 66 » au lieu d'une ville, pas de « Vérifié » sur la vitrine, pas d'échéance de réponse ni de délai en liste d'attente prestataire, icônes des tuiles approchées du jeu existant.
+
+### 21/10/2026 — Corrections du lot 57, partie API (Codex)
+
+- **A1 — Envois et galerie.** Quota global d'envois non rattachés porté à 40 (`MEDIA_GALLERY_MAX_PHOTOS + 10`). Limite horaire ajoutée pour `media_content` : 60 photos ; la règle générique de 30 envois reste inchangée pour ses autres utilisateurs. `POST /api/me/uploads` ajoute `id` (UUID déjà présent dans le nom du fichier). `DELETE /api/me/uploads/:id` : connexion obligatoire, auteur et fichier non rattaché seulement, 404 sinon, 204 après effacement du fichier et de la ligne. Verrou de ligne partagé avec le rattachement ; aucune migration.
+- **A2 — Vote.** Le pointage validé (manuel, plaque, lot de scans, inscription express, présence reconnue après contestation) publie `votes.candidates.changed`, payload `{}`, sur `event:{id}:votes`, dont les droits restent ceux du vote. Aucun classement ni identifiant dans l'invalidation. `announceCandidatesChanged` peut être rappelée après validation d'un retrait. Il n'existe pas de route ni de service d'annulation de pointage côté API : aucun nouveau parcours d'annulation inventé ; le test de retrait exerce la fonction après une suppression transactionnelle en base.
+- **A3 — Sans genre.** Libellés partagés « Pointage à… », « Arrivée… », « où tu as un pointage » ; commentaire de schéma, commentaire du récap et assertion e2e `appli-lot50` alignés. Les écrans consomment déjà les libellés partagés.
+- **A4 — Administration.** Test de `mediaToVerify` : profils actifs non vérifiés seulement, évolution après vérification puis retrait de vérification ; droits de l'accueil déjà couverts par la suite admin.
+- **A5 — Liens.** Tous les liens de sortie émis par l'API vont vers `/app/sorties`, rappel de synchronisation vers `/app/sorties?vue=staff`. `reviewLink` partagé conserve son contrat et ses paramètres en visant Sorties ; tests API des remerciements et test partagé alignés. L'e2e `apres-evenement` contient encore des attentes `/app/acces?avis=` à adapter par l'agent d'interface (hors périmètre d'édition Codex).
+- **A6 — Fiche média et contenus.** `GET /api/media/:id/contents?limit=20&cursor=<uuid>` réservé aux connectés comme la fiche, réponse `{items: MediaContentView[], nextCursor: string|null}`. Schéma Zod partagé, limite de 1 à 100, curseur UUID validé. Tri stable par identifiant décroissant, sans promesse d'ordre chronologique. Même sérialisation que les contenus d'événement ; contenus supprimés, profils supprimés, événements privés ou en brouillon et accréditations non retenues exclus.
+- **Périmètre et effets de bord.** Recherches globales des constantes, services, types, événements, libellés, routes et liens, y compris site, e2e et appli ; consommateurs existants de `UploadResult` conservés par ajout de `id`. Aucun écran site/appli modifié, seul l'e2e de texte A3 est touché. Ni migration ni modification d'`AVANCEMENT.md`.
+- **Relais interface.** B5 : garder `id` renvoyé à l'envoi et appeler le DELETE au retrait, 30 photos par galerie. B8 : recharger la grille sur `votes.candidates.changed` et après reconnexion, conserver `votes.changed` pour le classement. B14 : lire la nouvelle route de contenus avec sa pagination et afficher les champs existants, dont `photos`.
+- **Vérifications.** Types API et shared : OK. Tests shared : 404/404. Commande API ciblée demandée : 160/161, unique échec préexistant de `admin/assistance-settings-newsletter.test.ts` (« refusé sans UNSUBSCRIBE_SECRET ») : le sous-processus `tsx` plante avant de charger la configuration sur `os.userInfo()`, `uv_os_get_passwd ENOMEM`, reproduit hors Vitest avec un simple sous-processus Node. PostgreSQL local `localhost:54393` est joignable. Après les derniers ajouts, suites checkins/passport/after-event : 83/83. Biome sur les 34 fichiers TypeScript/TSX modifiés : zéro erreur et zéro avertissement ; `git diff --check` : OK. E2E et recette mobile non exécutés (relais interface).
+
+### 21/10/2026 — Corrections des relectures du lot 57 (21/10/2026)
+
+Méthode D30 : partie A (API et `packages/shared`) par Codex (entrée ci-dessus), partie B (interface et recette, site et appli) par l'agent Sonnet, puis fusion de `codex-57-api`.
+
+- **B1 à B3 — Mes sorties.** « Je serai là » devient « Pas là » (icône « close ») quand la présence est posée, comme l'appli. L'accès Staff garde la fenêtre de l'API (jusqu'à J+1) : « Je serai là » jusqu'à la fin, « Mode staff » jusqu'à `staffModeClosesAt`. Un billet du public contrôlé (`used`) reste « À venir » jusqu'à la fin de l'événement. Règles dans `packages/shared/src/rules/sorties.ts` (testées, y compris juste après la fin et à J+1). Choix : l'écran de l'appli (`features/sorties/model.ts`) a les mêmes filtres (`staffUpcoming`, `ticketsUpcoming`) : non modifié ici (hors périmètre du brief), à reprendre.
+- **B4, B5, B6 — Galerie du site.** « Publier » est bloqué tant qu'une photo est choisie ou en cours d'envoi (seulement en mode Galerie). Retirer une photo appelle `DELETE /api/me/uploads/:id`. L'aperçu d'une photo floutée est redessiné dans le navigateur (cadres pixellisés), l'original n'est plus montré.
+- **B7 — Appli.** Les photos d'une galerie de contenu média passent par l'éditeur du cadre du lot 51 (cadres proposés par l'appareil ou posés à la main, « Envoyer sans flouter » au choix, D28), avant l'envoi avec `plateRects`. L'éditeur remplace le formulaire dans la feuille (pas de feuille dans la feuille).
+- **B8, B11 — Direct.** Nouveau crochet `useLiveRevalidate` (rechargement limité à une fois toutes les 10 s, et après reconnexion) : grille du vote (`votes.candidates.changed`), classement de l'organisateur (`votes.changed`). L'écran de vote de l'appli recharge aussi la grille sur le nouvel événement et au retour au premier plan.
+- **B9, B10 — Explorer média.** Pagination « Voir la suite » (paramètre `pages`, 30 par page, filtres gardés) ; une réponse d'erreur de l'API affiche « Les événements ne se chargent pas » et « Réessayer », distinct de « Rien par ici ». Test de l'erreur par une requête que l'API refuse (recherche de 100 caractères) : un vrai 503 ne s'intercepte pas depuis le navigateur (chargement côté serveur).
+- **B12, B13, B15.** Contenus presse dédoublonnés par `id`. Écran `medias` ajouté à la barre de l'administration de l'appli. Liens `/app/acces` du site remplacés par `/app/sorties` (sauf `layouts/public.tsx` et `routes/home.tsx`, lot 56) ; l'ancienne adresse redirige toujours.
+- **B14.** `/m/:id` montre les contenus publiés du média (nouvelle route `GET /media/:id/contents`, 20 par page). Recette : deux photos du contenu publié, accès refusés (staff sur Presse 403, non connecté sur `/m/:id` et `/providers/:id`), envoi retardé, pagination, vote avec arrivée tardive.
+
+### 21/10/2026 — Lot 57, relecture Codex des corrections (tour 2, points 1 à 6)
+
+- **1 — Galerie de l'appli.** Les envois réussis sont gardés par photo et zones floutées (`features/media/galleryUploads.ts`) et réutilisés à l'essai suivant : une panne de publication après 30 photos n'en renvoie aucune. Un envoi dont la photo a été retirée est supprimé (`DELETE /me/uploads/:id`, nouveau `api.deleteUpload`), de même que tout ce qui reste quand le formulaire est fermé sans publier.
+- **2, 3 — Vote de l'appli.** `features/vote/refreshGate.ts` regroupe les rechargements : au plus un toutes les 10 s, jamais deux à la fois, un dernier garanti après une rafale. Deux portes : classement (`votes.changed`) et grille + droit de voter (`votes.candidates.changed`). Le client temps réel (`lib/realtime.ts`) accepte un rappel « abonnement confirmé » : à chaque reconnexion (pas au premier abonnement), candidats, droits et classement sont rechargés ; idem au retour au premier plan.
+- **4 — Fiche média.** Nouveau `components/PhotoGallery.tsx` (le composant du même nom cité par le brief n'existait pas) : grille de toutes les photos + visionneuse modale (précédent, suivant, flèches, Échap).
+- **5, 6 — « Voir la suite » et panne.** Fiche média et Explorer avancent au curseur de l'API (`?cursor=`, crochet `lib/useCursorList.ts`) au lieu de relire un nombre de pages plafonné à 10 ; la liste déjà chargée est gardée, une panne affiche « Réessayer » qui relance la même page. Sans script, le lien ouvre la page suivante seule. Choix : `?taille=` (1 à 20) sur la fiche média pour alléger la page, utilisé par la recette pour franchir la 10e page sans créer 200 contenus.

@@ -283,6 +283,6 @@ test("double authentification : activation et connexion avec un code TOTP", asyn
   await expect(page.getByRole("alert")).toBeVisible();
   await fillCode(page, "Code", secret);
   await page.getByRole("button", { name: /Vérifier|Valider|Confirmer/ }).click();
-  await page.waitForURL(/\/app\/acces/);
+  await page.waitForURL(/\/app\/(acces|sorties)/);
   await ctx.close();
 });

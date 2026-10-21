@@ -5,15 +5,13 @@
 // tampon rejoint alors sa page (`emitStamped`, que le passeport écoute). La forme de la chute suit le tampon reçu. Réduction des animations : le tampon posé, fondu de 120 ms.
 
 import { StampDrop, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type PassportStamp, passportTexts, stampSentence } from "@orasso/shared";
+import { dropShapeOf, inkTokenKey, type PassportStamp, passportTexts, STAMP_GOLD, stampSentence } from "@orasso/shared";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
-
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { emitStamped } from "./stampBus";
-import { dropShapeOf, inkTokenKey, STAMP_GOLD } from "./stampModel";
 
 const { space3, space4 } = tokens.spacing;
 

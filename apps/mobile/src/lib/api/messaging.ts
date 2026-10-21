@@ -33,4 +33,5 @@ export const messagingApi = {
   acceptContact: (id: string) => request<ContactAcceptResult>(`/api/contact-requests/${id}/accept`, { method: "POST" }),
   declineContact: (id: string) => request<unknown>(`/api/contact-requests/${id}/decline`, { method: "POST" }),
   upload: (form: FormData) => request<UploadResult>("/api/me/uploads", { method: "POST", form, timeout: 60_000 }),
+  deleteUpload: (id: string) => request<unknown>(`/api/me/uploads/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };

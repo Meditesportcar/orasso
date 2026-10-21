@@ -1,0 +1,138 @@
+/* Passeport, prix du public, récap (lot 57, parité avec l'appli du lot 50). Jetons seulement. */
+
+/* Pages de tampons : papier ligné, deux pages côte à côte sur bureau, une seule sur téléphone. */
+.pp-pages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-6);
+}
+.pp-page {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.pp-page__box {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  background-image: repeating-linear-gradient(180deg, transparent 0 27px, var(--line) 27px 28px);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.pp-page__spot {
+  position: absolute;
+  display: block;
+}
+.pp-page__spot svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.pp-stamp__text {
+  font-family: var(--font-narrow);
+  font-weight: 700;
+}
+.pp-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-3);
+}
+.pp-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Prix du public : grille des véhicules pointés et classement en direct. */
+.vote-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr));
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.vote-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.vote-card[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: var(--neon-accent);
+}
+.vote-card:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.vote-card__photo {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.vote-rank {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.vote-rank li {
+  display: grid;
+  grid-template-columns: 3ch minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.vote-bar {
+  display: block;
+  height: 4px;
+  margin-top: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* Récap : chiffres en grand. */
+.recap-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: var(--space-3);
+}
+.recap-figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Mon profil (hub, `s-me`) : tuiles passeport, crew, sorties. */
+.pf-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: var(--space-3);
+}
+.pf-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--ink);
+  text-decoration: none;
+}
+.pf-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}

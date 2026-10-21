@@ -43,7 +43,7 @@ import type { Viewer } from "../../lib/session";
 import { getPointsConfig } from "../../lib/settings";
 import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { reportService } from "../after-event/report";
-import { audiencePrizeService } from "../audience-prize/service";
+import { announceCandidatesChanged, audiencePrizeService } from "../audience-prize/service";
 import { eventsRepo } from "../events/repo";
 import { notificationsService } from "../notifications/service";
 import { passportService } from "../passport/service";
@@ -181,7 +181,7 @@ async function decideContest(
       if (input.checkin) {
         const app = await tx.query.applications.findFirst({ where: eq(applications.id, contest.applicationId) });
         if (app?.status === "accepted") {
-          await tx
+          const added = await tx
             .insert(checkins)
             .values({
               applicationId: app.id,
@@ -192,7 +192,9 @@ async function decideContest(
               zoneId: app.zoneId,
               note: `Contestation acceptée${input.note ? ` : ${input.note}` : ""}`,
             })
-            .onConflictDoNothing();
+            .onConflictDoNothing()
+            .returning({ id: checkins.id });
+          if (added.length) after(() => announceCandidatesChanged(app.eventId));
           // Lot 49 : la présence reconnue donne son tampon (le règlement est déjà passé).
           await passportService.lateEntry(tx, { applicationId: app.id, eventId: app.eventId, at: event.startsAt });
         }

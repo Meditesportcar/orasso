@@ -265,3 +265,38 @@
   gap: var(--space-2);
   align-items: center;
 }
+
+/* Lot 57 : carte à partager (story 9:16), avec les zones masquées par Instagram (14 % en haut, 20 % en bas). */
+.g-share {
+  position: relative;
+  margin: 0;
+  width: min(100%, 270px);
+  aspect-ratio: 9 / 16;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-sunken);
+}
+.g-share img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.g-share__safe {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--scrim);
+  color: var(--night-ink);
+}
+.g-share__safe--top {
+  top: 0;
+  height: 14%;
+}
+.g-share__safe--bottom {
+  bottom: 0;
+  height: 20%;
+}

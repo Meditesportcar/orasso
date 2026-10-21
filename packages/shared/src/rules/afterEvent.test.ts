@@ -35,7 +35,7 @@ describe("bilan et remerciement", () => {
     );
   });
   it("le lien d'avis est unique par candidature et le texte le contient toujours", () => {
-    expect(reviewLink("https://dev.orasso.fr", "abc")).toBe("https://dev.orasso.fr/app/acces?avis=abc");
+    expect(reviewLink("https://dev.orasso.fr", "abc")).toBe("https://dev.orasso.fr/app/sorties?avis=abc");
     expect(ensureReviewLink("Merci !")).toContain("{{review_link}}");
     expect(ensureReviewLink("Merci {{ review_link }}")).toBe("Merci {{ review_link }}");
   });

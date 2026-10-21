@@ -117,7 +117,7 @@ export default function Billets({ loaderData, actionData }: Route.ComponentProps
         </div>
       )}
       <p className="o-t-caption s-muted">
-        <a href="/app/acces">Retour à mes accès</a>
+        <a href="/app/sorties">Retour à mes accès</a>
       </p>
     </div>
   );

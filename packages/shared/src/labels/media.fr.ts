@@ -43,7 +43,7 @@ export const mediaLabels = {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     if (!h) return `${m} min de route`;
-    return m ? `${h} h ${String(m).padStart(2, "0")}` : `${h} h de route`;
+    return m ? `${h} h ${String(m).padStart(2, "0")} de route` : `${h} h de route`;
   },
   coverage: (contents: number, views: number) =>
     `Couvert · ${contents} contenu${contents > 1 ? "s" : ""} · ${views.toLocaleString("fr-FR")} vues depuis la page de l'événement`,

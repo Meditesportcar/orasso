@@ -379,12 +379,12 @@ test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre 
     const thumbs = content.getByTestId("media-gallery").locator("li");
     await expect(thumbs).toHaveCount(2);
     await thumbs.first().locator("a").click();
-    const viewer = page.getByTestId("gallery-viewer");
+    const viewer = page.getByTestId("media-gallery-viewer");
     await expect(viewer).toBeVisible();
     // L'ouverture compte une consultation du contenu, une seule par page.
     await expect.poll(() => views.length).toBe(1);
     expect(views[0]).toContain(`/api/media-contents/${contentId}/view`);
-    await expect(viewer.locator("img.w-gallery__big")).toBeVisible();
+    await expect(viewer.getByTestId("media-gallery-current")).toBeVisible();
     await expect(viewer).toContainText("1 / 2");
     await viewer.getByRole("button", { name: "Suivante" }).click();
     await expect(viewer).toContainText("2 / 2");
@@ -430,7 +430,7 @@ test("fiche événement : la consultation de galerie est retentée après un éc
     await page.waitForLoadState("networkidle");
     const content = page.getByTestId("media-content").filter({ hasText: "Galerie retentée E2E" });
     const thumbs = content.getByTestId("media-gallery").locator("li");
-    const viewer = page.getByTestId("gallery-viewer");
+    const viewer = page.getByTestId("media-gallery-viewer");
     await thumbs.first().locator("a").click();
     await expect(viewer).toBeVisible();
     await expect.poll(() => calls).toBe(1);

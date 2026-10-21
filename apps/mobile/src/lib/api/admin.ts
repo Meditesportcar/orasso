@@ -24,6 +24,7 @@ import type {
   ClockMilestone,
   ClockStatus,
   MalusContestView,
+  MediaProfileView,
   NewsletterAudience,
   NewsletterView,
   OtherVehicleGroup,
@@ -176,6 +177,11 @@ export const adminApi = {
 
   adminPros: (filter: "to_verify" | "all", q: string) =>
     request<AdminProRow[]>(`/api/admin/pros${qs({ filter, q: q || undefined })}`),
+  // Lot 57 : profils média à vérifier (D26 : vérification du profil, sans carte de presse).
+  adminMedia: (pendingOnly: boolean) =>
+    request<MediaProfileView[]>(`/api/admin/media${qs({ pending: pendingOnly ? "1" : "0" })}`),
+  verifyMedia: (id: string, verified: boolean) =>
+    request<MediaProfileView>(`/api/admin/media/${id}/verify`, { method: "POST", body: { verified } }),
   verifyPro: (id: string, verified: boolean, note: string) =>
     request<unknown>(`/api/admin/pros/${id}/verify`, { method: "POST", body: { verified, note } }),
 

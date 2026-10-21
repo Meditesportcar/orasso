@@ -36,7 +36,9 @@ export const overviewService = {
         (select count(*) from malus_contests where status = 'escalated')::int as "malusContestsEscalated",
         (select count(*) from sanctions where contest_status = 'pending')::int as "sanctionsContested",
         (select count(*) from assistance_requests where status = 'open')::int as "assistanceOpen",
-        (select count(*) from newsletters where status in ('scheduled', 'sending'))::int as "newslettersScheduled"
+        (select count(*) from newsletters where status in ('scheduled', 'sending'))::int as "newslettersScheduled",
+        (select count(*) from media_profiles where deleted_at is null and press_card_verified_at is null)::int
+          as "mediaToVerify"
     `);
     const row = res.rows[0];
     if (!row) throw new Error("Compteurs indisponibles");

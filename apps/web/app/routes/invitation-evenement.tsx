@@ -64,7 +64,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         },
         { status: res.status },
       );
-    return redirect(`/app/acces${intent === "invitation_accept" ? "" : "?invitation=refusee"}`);
+    return redirect(`/app/sorties${intent === "invitation_accept" ? "" : "?invitation=refusee"}`);
   }
   // Inscription depuis le lien : le compte est créé, puis l'invitation lui est rattachée (même adresse e-mail).
   const result = await signUpFromForm(request, form);

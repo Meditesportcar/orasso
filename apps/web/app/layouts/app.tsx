@@ -39,7 +39,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 const HREFS: Record<string, string> = {
   home: "/app",
   explore: "/app/explorer",
-  access: "/app/acces",
+  access: "/app/sorties",
   garage: "/app/garage",
   inbox: "/app/boite",
 };
@@ -62,6 +62,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   });
   const tabs: TabItem[] = legacyTabSets.fan.map((tab) => ({
     ...tab,
+    // Lot 57 : l'onglet Accès devient Sorties (DA v2, `s-sorties`).
+    label: tab.id === "access" ? "Sorties" : tab.label,
     href: HREFS[tab.id],
     dot: tab.id === "inbox" && loaderData.unreadInbox > 0,
   }));

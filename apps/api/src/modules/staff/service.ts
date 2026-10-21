@@ -204,7 +204,7 @@ async function remindPending(
         eventId: event.id,
         eventStartsAt: event.startsAt,
         data: { eventId: event.id, screen: "staff" },
-        link: { label: "Répondre", path: "/app/acces" },
+        link: { label: "Répondre", path: "/app/sorties" },
       });
       sent++;
     }
@@ -430,7 +430,7 @@ export const staffService = {
         eventId: event.id,
         eventStartsAt: event.startsAt,
         data: { eventId: event.id, screen: "staff" },
-        link: { label: "Ouvrir le mode staff", path: "/app/acces" },
+        link: { label: "Ouvrir le mode staff", path: "/app/sorties?vue=staff" },
       });
     }
   },

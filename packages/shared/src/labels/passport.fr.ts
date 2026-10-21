@@ -104,8 +104,8 @@ export const audiencePrizeTexts = {
   openUntil: (closesAt: Date, timeZone?: string) => `vote ouvert jusqu'à ${frHour(closesAt, timeZone)}`,
   closed: "Vote clos",
   notOpen: "Le vote ouvre au premier pointage, dès deux véhicules sur place.",
-  /** « Tu as été pointé à 19 h 02 » */
-  checkedInAt: (at: Date, timeZone?: string) => `Tu as été pointé à ${frHour(at, timeZone)}`,
+  /** « Pointage à 19 h 02 » */
+  checkedInAt: (at: Date, timeZone?: string) => `Pointage à ${frHour(at, timeZone)}`,
   oneVote: "Une voix, une seule",
   /** « Pas pour toi-même. Le gagnant reçoit le badge et 50 points. » */
   rules: (points: number) => `Pas pour toi-même. Le gagnant reçoit le badge et ${points} points.`,
@@ -129,11 +129,11 @@ export const audiencePrizeTexts = {
 };
 
 export const recapTexts = {
-  /** « Arrivé dimanche à 10 h, automatiquement » */
+  /** « Arrivée dimanche à 10 h, automatiquement » */
   arrived: (at: Date, timeZone?: string) => {
     const w = wallTime(at, timeZone);
     const weekday = weekdayNames[new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay()] ?? "";
-    return `Arrivé ${weekday} à ${frHour(at, timeZone)}, automatiquement`;
+    return `Arrivée ${weekday} à ${frHour(at, timeZone)}, automatiquement`;
   },
   vehicles: "Véhicules",
   myEvening: "Ta soirée",
@@ -197,7 +197,7 @@ export const passportScreenTexts = {
   votesTitle: "Prix du public",
   votesNone: "Aucun vote ouvert pour toi en ce moment : il ouvre à ton pointage ou à l'entrée de ton billet.",
   recapsTitle: "Récaps",
-  recapsNone: "Ton récap arrive le lendemain de chaque événement où tu as été pointé.",
+  recapsNone: "Ton récap arrive le lendemain de chaque événement où tu as un pointage.",
 };
 
 export const voteScreenTexts = {

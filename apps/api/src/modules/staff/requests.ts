@@ -208,7 +208,7 @@ export const staffRequestsService = {
         title: "Demande de staff acceptée",
         body: `« ${structure.name} » t'a accepté dans son équipe. Tes rôles te sont donnés pour chaque événement, dans l'onglet Accès.`,
         data: { structureId, screen: "acces" },
-        link: { label: "Ouvrir mon accès", path: "/app/acces" },
+        link: { label: "Ouvrir mon accès", path: "/app/sorties" },
       });
       after(() => {
         inboxService.publish(userId);

@@ -22,6 +22,7 @@ export const adminNavLabels = {
   settings: "Réglages",
   newsletter: "Newsletter",
   sponsored: "Sponsorisés",
+  media: "Médias",
 } as const;
 
 /** Tuiles de l'accueil : une file, son compteur, sa page. */
@@ -37,6 +38,7 @@ export const adminOverviewTiles: { key: keyof AdminOverview; label: string; href
   { key: "sanctionsContested", label: "Contestations de sanction", href: "/admin/sanctions" },
   { key: "assistanceOpen", label: "Demandes d'aide", href: "/admin/assistance" },
   { key: "newslettersScheduled", label: "Newsletters planifiées", href: "/admin/newsletter" },
+  { key: "mediaToVerify", label: "Médias à vérifier", href: "/admin/medias" },
 ];
 
 export const adminSettingLabels: Record<AdminSettingKey, string> = {

@@ -32,5 +32,7 @@ export default [
     route("reglages", "routes/admin/reglages.tsx"),
     route("newsletter", "routes/admin/newsletter.tsx"),
     route("sponsorises", "routes/admin/sponsorises.tsx"),
+    // Lot 57 : profils média à vérifier (D26, sans carte de presse).
+    route("medias", "routes/admin/medias.tsx"),
   ]),
 ] satisfies RouteConfig;

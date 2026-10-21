@@ -1,14 +1,16 @@
 import { Chip, Counters } from "@orasso/design-system/web";
-import type {
-  ApplicationForTriage,
-  Category,
-  EventCounters,
-  EventCrewFilter,
-  EventOrganizer,
-  Page,
+import {
+  type ApplicationForTriage,
+  type Category,
+  type EventCounters,
+  type EventCrewFilter,
+  type EventOrganizer,
+  orgaV2Labels,
+  type Page,
+  type PressSettingsView,
 } from "@orasso/shared";
 import { useEffect, useState } from "react";
-import { useRevalidator } from "react-router";
+import { redirect, useRevalidator } from "react-router";
 
 import { ProviderTriage } from "../components/ProviderTriage";
 import { TriageFile } from "../components/TriageFile";
@@ -53,6 +55,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const canDecide = Boolean(membership && (membership.role !== "staff" || membership.canDecide));
   const isOrganizer = Boolean(membership && membership.role !== "staff");
 
+  // Lot 57 : le segment « Presse » du tri (`s-otri`) vit dans la page Presse de l'événement (demandes, réglages,
+  // contenus) ; l'ancienne adresse `?onglet=presse` y mène.
+  if (url.searchParams.get("onglet") === "presse") {
+    throw redirect(`/orga/${encodeURIComponent(params.structure)}/e/${encodeURIComponent(eventId)}/presse`);
+  }
+  const press = isOrganizer ? await api<PressSettingsView>(request, `/events/${eventId}/press-settings`) : null;
+  const pressPending = press?.ok ? press.data.counts.pending : null;
   // Prestataires (lot 21) : une file à part, hors capacité (`?onglet=prestataires`).
   const tab: Tab = url.searchParams.get("onglet") === "prestataires" ? "prestataires" : "vehicules";
   const providers = await allPages(request, `/events/${eventId}/applications?kind=provider&sort=created_at`);
@@ -77,6 +86,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       isOrganizer,
       providers,
       providersPending,
+      pressPending,
       file: [] as ApplicationForTriage[],
       list: [] as ApplicationForTriage[],
       nextHref: null as string | null,
@@ -135,6 +145,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     isOrganizer,
     providers: [] as ApplicationForTriage[],
     providersPending,
+    pressPending,
     file,
     list: list.items,
     nextHref: list.nextCursor ? `?${nextParams}` : null,
@@ -155,6 +166,7 @@ export default function OrgaCandidatures({ loaderData }: Route.ComponentProps) {
     isOrganizer,
     providers,
     providersPending,
+    pressPending,
     file,
     list,
     nextHref,
@@ -186,6 +198,13 @@ export default function OrgaCandidatures({ loaderData }: Route.ComponentProps) {
           Prestataires · {providersPending}
         </Chip>
       </a>
+      {pressPending !== null && (
+        <a href="?onglet=presse" data-testid="triage-press-tab">
+          <Chip surface="plate">
+            {orgaV2Labels.segPress} · {pressPending}
+          </Chip>
+        </a>
+      )}
     </nav>
   );
 

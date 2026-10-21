@@ -423,7 +423,7 @@ export const structuresService = {
           title: "Demande de staff acceptée",
           body: `« ${s.name} » t'a accepté dans son staff. Ton accès et tes rôles sont dans l'onglet Accès.`,
           data: { structureId: id, screen: "acces" },
-          link: { label: "Ouvrir mon accès", path: "/app/acces" },
+          link: { label: "Ouvrir mon accès", path: "/app/sorties" },
         });
         after(() => {
           inboxService.publish(target.userId);
