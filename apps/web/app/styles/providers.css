@@ -68,3 +68,27 @@
 .is-highlight {
   outline: 2px solid var(--ink);
 }
+
+/* Lot 57 : vitrine v2 (menu, métiers) et besoins d'une mission. */
+.pv-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.pv-menu li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.pv-trades {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+  gap: var(--space-1) var(--space-3);
+}
+.pv-need {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
