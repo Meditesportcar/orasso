@@ -388,6 +388,14 @@
   margin: 0 auto;
   padding: var(--space-6) var(--space-4) calc(var(--bar-tabs) + var(--space-12));
 }
+/* Compteur de la Boîte : pastille moutarde à plat, sans néon (un seul néon par écran ; le lot C1 le retire du système de design). */
+.app__bar .o-appbar__count {
+  box-shadow: none;
+}
+/* Place de l'accès flottant : le bas de la page ne passe pas dessous. */
+.app__body--near {
+  padding-bottom: calc(var(--bar-tabs) + var(--space-12) + 72px);
+}
 .app__tabs {
   position: fixed;
   left: 0;
@@ -432,9 +440,10 @@
   min-inline-size: 44px;
 }
 .near__day b {
-  font-size: var(--type-poster-l-size);
-  font-weight: var(--type-poster-l-weight);
   line-height: 0.9;
+}
+.near__day small {
+  text-transform: uppercase;
 }
 .near__text {
   flex: 1;

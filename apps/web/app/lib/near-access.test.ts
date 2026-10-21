@@ -1,14 +1,17 @@
-import { fromWallTime, type MyApplication } from "@orasso/shared";
+import { fromWallTime, type MyApplication, type MyStaffEvent, type MyTicket } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { countdownOf, inNearWindow, nearAccessOf } from "./near-access";
+import { nearAccessOf } from "./near-access";
 
 const at = (month: number, day: number, hour = 10) => fromWallTime({ year: 2026, month, day, hour, minute: 0 });
-const app = (over: Partial<MyApplication["event"]>, status: MyApplication["status"] = "accepted") =>
+const app = (over: Partial<MyApplication> = {}, ev: Partial<MyApplication["event"]> = {}) =>
   ({
     id: "a",
-    status,
+    status: "accepted",
     checkedInAt: null,
+    day: null,
+    zone: { code: "JDM", name: "JDM" },
+    arrival: { from: "18:30", to: "19:15", strict: true, note: null },
     event: {
       id: "e",
       slug: "e",
@@ -18,44 +21,61 @@ const app = (over: Partial<MyApplication["event"]>, status: MyApplication["statu
       endsAt: at(10, 24, 23).toISOString(),
       city: "Canet",
       status: "published",
-      ...over,
+      ...ev,
     },
+    ...over,
   }) as MyApplication;
 
 describe("accès flottant du site", () => {
-  it("de J-7 (dès 0 h) au lendemain de la fin", () => {
-    const start = at(10, 24, 19);
-    const end = at(10, 24, 23);
-    expect(inNearWindow(start, end, at(10, 16, 23))).toBe(false); // J-8
-    expect(inNearWindow(start, end, at(10, 17, 0))).toBe(true); // J-7 à 0 h
-    expect(inNearWindow(start, end, at(10, 25, 12))).toBe(true); // J+1
-    expect(inNearWindow(start, end, at(10, 26, 0))).toBe(false); // J+2
-  });
-
-  it("compte à rebours : J-6, Demain, Aujourd'hui, J+1", () => {
-    const start = at(10, 24, 19);
-    expect(countdownOf(start, at(10, 18, 12))).toBe("J-6");
-    expect(countdownOf(start, at(10, 23, 12))).toBe("Demain");
-    expect(countdownOf(start, at(10, 24, 12))).toBe("Aujourd'hui");
-    expect(countdownOf(start, at(10, 25, 12))).toBe("J+1");
-  });
-
-  it("seulement une place retenue, pas encore entrée, d'un événement publié ; la plus proche d'abord", () => {
-    const now = at(10, 20);
-    expect(nearAccessOf([app({}, "pending")], now)).toBeNull();
-    expect(nearAccessOf([{ ...app({}), checkedInAt: now.toISOString() }], now)).toBeNull();
-    expect(nearAccessOf([app({ status: "cancelled" })], now)).toBeNull();
-    const later = app({
-      title: "Plus tard",
-      startsAt: at(10, 26, 19).toISOString(),
-      endsAt: at(10, 26, 23).toISOString(),
-    });
-    expect(nearAccessOf([later, app({})], now)).toEqual({
-      day: "24",
-      month: "oct.",
+  it("candidature retenue : contenu de l'artefact (J-6, sam., zone, heure d'arrivée)", () => {
+    expect(nearAccessOf({ applications: [app()] }, at(10, 18))).toEqual({
+      countdown: "J-6",
+      weekday: "sam.",
       title: "Nocturne de Canet",
-      countdown: "J-4",
+      line: "Retenue · zone JDM · 18 h 30",
+      href: "/app/sorties",
     });
-    expect(nearAccessOf([app({})], at(10, 5))).toBeNull();
+  });
+
+  it("seulement une place retenue, pas encore entrée, d'un événement publié", () => {
+    const now = at(10, 20);
+    expect(nearAccessOf({ applications: [app({ status: "pending" })] }, now)).toBeNull();
+    expect(nearAccessOf({ applications: [app({ checkedInAt: now.toISOString() })] }, now)).toBeNull();
+    expect(nearAccessOf({ applications: [app({}, { status: "cancelled" })] }, now)).toBeNull();
+    expect(nearAccessOf({ applications: [app()] }, at(10, 5))).toBeNull();
+  });
+
+  it("jour choisi d'un festival : le dimanche, vu le samedi, c'est « Demain »", () => {
+    const festival = app(
+      {
+        day: {
+          id: "d",
+          date: "2026-10-25",
+          startsAt: at(10, 25, 10).toISOString(),
+          endsAt: at(10, 25, 18).toISOString(),
+        },
+      },
+      { startsAt: at(10, 23, 10).toISOString(), endsAt: at(10, 25, 18).toISOString() },
+    );
+    expect(nearAccessOf({ applications: [festival] }, at(10, 24, 12))?.countdown).toBe("Demain");
+  });
+
+  it("J+1 : visible le lendemain de la fin", () => {
+    expect(nearAccessOf({ applications: [app()] }, at(10, 25, 9))?.countdown).toBe("J+1");
+    expect(nearAccessOf({ applications: [app()] }, at(10, 26, 0))).toBeNull();
+  });
+
+  it("billets et missions staff, le plus proche d'abord", () => {
+    const ticket = {
+      id: "t",
+      status: "valid",
+      event: { startsAt: at(10, 22, 19).toISOString(), endsAt: at(10, 22, 23).toISOString(), title: "Cars & Coffee" },
+    } as MyTicket;
+    const staff = {
+      presence: "absent",
+      event: { id: "s", startsAt: at(10, 21, 9).toISOString(), endsAt: at(10, 21, 12).toISOString(), title: "Staff" },
+    } as MyStaffEvent;
+    const r = nearAccessOf({ applications: [app()], tickets: [ticket], staff: [staff] }, at(10, 20));
+    expect(r).toMatchObject({ title: "Cars & Coffee", line: "Billet · entrée public · 19 h", href: "/app/billets" });
   });
 });

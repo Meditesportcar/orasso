@@ -1,5 +1,11 @@
 import { AppBar, Ground, Icon, TabBar, type TabItem, tabSets, useTheme } from "@orasso/design-system/web";
-import { type MyApplication, moderationLabels, reportReasonLabels } from "@orasso/shared";
+import {
+  type MyApplication,
+  type MyStaffEvent,
+  type MyTicket,
+  moderationLabels,
+  reportReasonLabels,
+} from "@orasso/shared";
 import { useEffect } from "react";
 import { Form, Outlet, useLocation, useRevalidator } from "react-router";
 
@@ -18,15 +24,28 @@ import type { Route } from "./+types/app";
 // Profil (`/app/moi`) : « chaque fonction à un seul endroit ».
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
-  // Accès flottant : la place retenue la plus proche (J-7 à J+1). Une lecture qui échoue ne bloque pas l'espace.
-  const apps = await api<MyApplication[]>(request, "/me/applications?scope=upcoming");
+  // Accès flottant : l'accès le plus proche (J-7 à J+1) parmi mes places retenues (à venir et finies depuis moins d'un
+  // jour), mes billets et mes missions staff, comme l'appli. Une lecture qui échoue ne bloque pas l'espace.
+  const [upcoming, past, tickets, staff] = await Promise.all([
+    api<MyApplication[]>(request, "/me/applications?scope=upcoming"),
+    api<MyApplication[]>(request, "/me/applications?scope=past"),
+    api<MyTicket[]>(request, "/me/tickets"),
+    api<MyStaffEvent[]>(request, "/me/staff-events"),
+  ]);
   return {
     userId: me.user.id,
     // La casquette de base décide de la barre : visiteur sans véhicule, exposant sinon (comme l'appli).
     base: me.personas.some((p) => p.kind === "visitor") ? ("visitor" as const) : ("fan" as const),
     // Pastille de la Boîte (lots 18 et C5) : conversations avec du non lu, demandes en attente, notifications non lues.
     unreadInbox: me.unreadInbox + me.counts.unreadNotifications,
-    near: apps.ok ? nearAccessOf(apps.data, now()) : null,
+    near: nearAccessOf(
+      {
+        applications: [...(upcoming.ok ? upcoming.data : []), ...(past.ok ? past.data : [])],
+        tickets: tickets.ok ? tickets.data : null,
+        staff: staff.ok ? staff.data : null,
+      },
+      now(),
+    ),
     emailVerified: me.user.emailVerified,
     // Lot 32 : compte suspendu (lecture seule) : bandeau avec le motif et « Contester ».
     suspension: me.suspension,
@@ -75,7 +94,9 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   // Un onglet absent de la barre de la casquette (Passeport d'un exposant, Garage d'un visiteur) tombe sur Profil.
   const raw = activeTab(pathname);
   const tab = raw === "" || tabs.some((t) => t.id === raw) ? raw : "profile";
-  const near = loaderData.near;
+  // Écrans de flux (création, vote, récap : `.is-flow` de l'artefact) : ni accès flottant ni place réservée.
+  const isFlow = /\/(nouveau|nouvelle)(\/|$)|^\/app\/(vote|recap)\//.test(pathname);
+  const near = loaderData.near && !isFlow && tab !== "home" && tab !== "outings" ? loaderData.near : null;
   return (
     <Ground variant="site" animated fixed>
       <div className="app">
@@ -88,7 +109,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           inboxOn={tab === ""}
           inboxCount={loaderData.unreadInbox}
         />
-        <div className="app__body">
+        <div className={near ? "app__body app__body--near" : "app__body"}>
           {!loaderData.emailVerified && (
             <Form method="post" action="/app/moi" className="s-notice s-row s-row--between" data-testid="verify-banner">
               <span>Vérifie ton e-mail : un lien de confirmation t'a été envoyé à l'inscription.</span>
@@ -114,19 +135,19 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             <ThemeSwitch />
           </div>
         </div>
-        {near && tab !== "home" && tab !== "outings" && (
-          <a className="near" href="/app/sorties" data-testid="near-access">
-            <span className="near__day o-t-credit">
-              <b>{near.day}</b>
-              <small>{near.month}</small>
+        {near && (
+          <a className="near" href={near.href} data-testid="near-access">
+            <span className="near__day">
+              <b className="o-t-poster-l">{near.countdown}</b>
+              <small className="o-t-credit">{near.weekday}</small>
             </span>
             <span className="near__text">
               <strong className="o-t-label">{near.title}</strong>
-              <span className="o-t-caption">{near.countdown}</span>
+              <span className="o-t-caption">{near.line}</span>
             </span>
             <span className="near__qr o-t-button">
               <Icon name="qr" size={18} />
-              Mon accès
+              QR
             </span>
           </a>
         )}

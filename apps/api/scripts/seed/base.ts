@@ -309,14 +309,14 @@ export async function seedBase(hash: string) {
     generated.push({ person, vehicles });
   }
 
-  // Nocturne de Canet : dans 2 jours, 19:00–23:00.
+  // Nocturne de Canet : dans 6 jours (J-6, prochain accès de Kenji comme l'artefact), 19:00–23:00.
   const nocturne = await createEvent(structure.id, damien.id, {
     title: "Nocturne de Canet",
     slug: "nocturne-de-canet-2026",
     format: "night",
     description: "La nocturne de l'automne sur le port : JDM, youngtimers et sportives, jusqu'à 23 h.",
-    startsAt: parisAt(2, 19),
-    endsAt: parisAt(2, 23),
+    startsAt: parisAt(6, 19),
+    endsAt: parisAt(6, 23),
     addressLine: "Parking du port",
     postalCode: "66140",
     city: "Canet-en-Roussillon",

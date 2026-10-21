@@ -132,6 +132,7 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
   const busy = useNavigation().state !== "idle";
   const err = (scope: string) => (actionData?.scope === scope ? actionData.error : null);
   // Mes casquettes (lot C5, artefact `s-profil`) : le seul endroit du site d'où l'on passe à une autre casquette.
+  const isVisitor = me.personas.some((p) => p.kind === "visitor");
   const hats = [
     ...me.memberships
       .filter((m) => m.status === "active")
@@ -170,19 +171,36 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           <h2 id="casquettes-titre" className="s-h2">
             Mes casquettes
           </h2>
-          <ul className="s-stack">
+          <div className="s-stack">
             {hats.map((h) => (
-              <li key={h.key}>
-                <Button href={h.href} variant="secondary" icon="next">
-                  {personaKindLabels[h.kind as PersonaKind]} · {h.label}
-                </Button>
-              </li>
+              <Button key={h.key} href={h.href} variant="secondary" icon="next">
+                {personaKindLabels[h.kind as PersonaKind]} · {h.label}
+              </Button>
             ))}
-          </ul>
+          </div>
         </section>
       )}
 
-      <section className={hats.length ? "s-section" : "s-section s-section--first"} aria-labelledby="profil-titre">
+      {isVisitor && (
+        <section
+          className={hats.length ? "s-section" : "s-section s-section--first"}
+          aria-labelledby="garage-titre"
+          data-testid="garage-link"
+        >
+          <h2 id="garage-titre" className="s-h2">
+            Mon garage
+          </h2>
+          <p className="s-muted">Tes véhicules archivés, l'ajout d'un véhicule et ton QR de compte.</p>
+          <Button href="/app/garage" variant="secondary" icon="vehicle">
+            Ouvrir mon garage
+          </Button>
+        </section>
+      )}
+
+      <section
+        className={hats.length || isVisitor ? "s-section" : "s-section s-section--first"}
+        aria-labelledby="profil-titre"
+      >
         <h2 id="profil-titre" className="s-h2">
           Profil
         </h2>
