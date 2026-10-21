@@ -240,5 +240,7 @@ describe("parcours n° 1, seconde moitié", () => {
     expect(await pts(nina.u)).toBe(0);
     const journal = (await call(nina.u, "GET", "/me/notifications")).json.items.map((n: { type: string }) => n.type);
     expect(journal).toEqual(expect.arrayContaining(["application_accepted", "malus_applied", "contest_decided"]));
-  });
+    // Un seul scénario long (vérification hors ligne dans un autre processus) : sous charge il dépassait les 20 s par
+    // défaut ; la comparaison ci-dessus ne dépend déjà pas de l'ordre, c'est le délai qui était instable.
+  }, 120_000);
 });
