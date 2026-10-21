@@ -13,14 +13,14 @@ const CAPTURE_KEY = "jour-j-qr";
  * Captures et enregistrement d'écran bloqués tant que l'écran du QR est ouvert (Android : FLAG_SECURE ; iOS : écran
  * masqué à l'enregistrement). Rien sur le web (recette) : le module n'y existe pas.
  */
-export function useBlockCapture(active: boolean) {
+export function useBlockCapture(active: boolean, key = CAPTURE_KEY) {
   useEffect(() => {
     if (!active || Platform.OS === "web") return;
-    preventScreenCaptureAsync(CAPTURE_KEY).catch(() => undefined);
+    preventScreenCaptureAsync(key).catch(() => undefined);
     return () => {
-      allowScreenCaptureAsync(CAPTURE_KEY).catch(() => undefined);
+      allowScreenCaptureAsync(key).catch(() => undefined);
     };
-  }, [active]);
+  }, [active, key]);
 }
 
 /**
@@ -32,13 +32,19 @@ const CAPTURE_TEXT =
     ? "Enregistrement d'écran masqué sur cet écran. Une capture ou une photo du code est périmée en moins d'une minute."
     : "Captures et enregistrement d'écran bloqués sur cet écran. Une photo du code est périmée en moins d'une minute.";
 
-export function CaptureNote() {
+/** Lot 59c : QR de compte (retour de Damien sur l'APK d'essai) ; il se redessine toutes les 60 s. */
+export const ACCOUNT_CAPTURE_TEXT =
+  Platform.OS === "ios"
+    ? "Enregistrement d'écran masqué sur cet écran. Une capture du code est périmée en une à deux minutes."
+    : "Captures et enregistrement d'écran bloqués sur cet écran. Une photo du code est périmée en une à deux minutes.";
+
+export function CaptureNote({ text = CAPTURE_TEXT }: { text?: string }) {
   const { t } = useTheme();
   return (
     <View style={styles.lock} testID="qr-capture-note">
       <Icon name="eyeOff" size={22} color={t.color.ink} />
       <Text variant="caption" color={t.color.ink} style={styles.grow}>
-        {CAPTURE_TEXT}
+        {text}
       </Text>
     </View>
   );
