@@ -75,6 +75,32 @@ describe("syncListState", () => {
     expect(next).toMatchObject({ to: "c2", failed: false });
   });
 
+  it("tour 3 : réponse vide après plusieurs pages, la liste se vide", () => {
+    const first = chunk([card("a")], "c1");
+    const state = { ...initialListState(first), items: [card("a"), card("b"), card("c")], to: "c3" };
+    const next = syncListState(state, chunk([]));
+    expect(next.items).toEqual([]);
+    expect(next.to).toBeNull();
+  });
+
+  it("tour 3 : nouvelles cartes sans raccord avec les anciennes, on repart de la nouvelle page et de son curseur", () => {
+    const first = chunk([card("a")], "c1");
+    const state = { ...initialListState(first), items: [card("a"), card("b"), card("c")], to: "c3" };
+    const next = syncListState(state, chunk([card("n1"), card("n2")], "n2c"));
+    expect(ids(next.items)).toEqual(["n1", "n2"]);
+    expect(next.to).toBe("n2c");
+  });
+
+  it("tour 3 : liste épuisée puis nouvelle suite, « Voir la suite » revient sur le curseur de la nouvelle page", () => {
+    const first = chunk([card("a"), card("b")], "c1");
+    const state = { ...initialListState(first), items: [card("a"), card("b"), card("c")], to: null };
+    const next = syncListState(state, chunk([card("z"), card("a")], "z2"));
+    expect(ids(next.items)).toEqual(["z", "a", "b", "c"]);
+    expect(next.to).toBe("z2");
+    // La page suivante rend des cartes déjà affichées : pas de doublon.
+    expect(ids(appendPage(next.items, [card("b"), card("c"), card("d")]))).toEqual(["z", "a", "b", "c", "d"]);
+  });
+
   it("première page en échec : « Réessayer » repart de son curseur", () => {
     const failed: CursorChunk<Card> = { items: [], next: null, failed: true, cursor: "c9" };
     expect(initialListState(failed)).toMatchObject({ failed: true, to: "c9" });

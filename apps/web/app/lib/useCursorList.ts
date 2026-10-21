@@ -19,11 +19,13 @@ export function initialListState<T>(first: CursorChunk<T>): CursorListState<T> {
 }
 
 /**
- * Resynchronise la liste avec le loader (lot 59d, tour 2) : un nouveau chargement de la route rend un nouvel objet
- * `first`. Même objet : l'état local est conservé. Autre curseur, liste vide ou une seule page affichée : on repart de
- * la nouvelle page. Revalidation après des pages ajoutées (« Garder », demande d'accréditation…) : les éléments affichés
- * sont mis à jour par `id` depuis la nouvelle première page, les nouveaux s'ajoutent en tête, les pages suivantes et le
- * défilement sont gardés (la carte ne disparaît pas). Une revalidation en panne garde la liste affichée.
+ * Resynchronise la liste avec le loader (lot 59d, tours 2 et 3) : un nouveau chargement de la route rend un nouvel
+ * objet `first`. Même objet : l'état local est conservé. Autre curseur, liste affichée vide, une seule page affichée,
+ * nouvelle première page vide, ou nouvelle page sans aucun `id` commun avec les cartes affichées (elle ne raccorde
+ * pas : des résultats intermédiaires seraient perdus) : on repart de la nouvelle page et de son curseur. Sinon
+ * (« Garder », demande d'accréditation…) : les cartes affichées sont mises à jour par `id`, les nouvelles s'ajoutent en
+ * tête, les pages suivantes et le défilement sont gardés ; une liste qui était épuisée reprend `first.next` (les
+ * doublons sont écartés à l'ajout). Une revalidation en panne garde la liste affichée.
  */
 export function syncListState<T extends { id: string }>(
   state: CursorListState<T>,
@@ -36,10 +38,12 @@ export function syncListState<T extends { id: string }>(
     return initialListState(first);
   }
   if (first.failed) return { ...state, source: first };
-  const fresh = new Map(first.items.map((item) => [item.id, item]));
   const shown = new Set(state.items.map((item) => item.id));
+  if (!first.items.some((item) => shown.has(item.id))) return initialListState(first);
+  const fresh = new Map(first.items.map((item) => [item.id, item]));
   const added = first.items.filter((item) => !shown.has(item.id));
-  return { ...state, source: first, items: [...added, ...state.items.map((item) => fresh.get(item.id) ?? item)] };
+  const items = [...added, ...state.items.map((item) => fresh.get(item.id) ?? item)];
+  return { ...state, source: first, items, to: state.to === null && !state.failed ? first.next : state.to };
 }
 
 /** Ajoute une page à la liste sans doublon (un élément repoussé à la page suivante par une revalidation). */
