@@ -166,6 +166,9 @@ export const orgaV2Labels = {
   roleNone: "Aucun",
   roleMore: "Plus d'options",
   actionRemoveShort: "Retirer",
+  // Croix des feuilles : un nom distinct du voile « Fermer » (qui ferme toute feuille).
+  closePerson: "Fermer la fiche du membre",
+  closeRequests: "Fermer les demandes",
   presenceConfirmed: (present: number, total: number) =>
     `${present} présence${present > 1 ? "s" : ""} confirmée${present > 1 ? "s" : ""} sur ${total}`,
 

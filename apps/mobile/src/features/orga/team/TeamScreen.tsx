@@ -369,7 +369,7 @@ export function TeamScreen() {
                   <Text variant="title" color={c.ink} style={styles.grow}>
                     {opened.pseudo}
                   </Text>
-                  <Button variant="close" label={L2.close} onPress={() => setOpened(null)} />
+                  <Button variant="close" label={L2.closePerson} onPress={() => setOpened(null)} />
                 </View>
                 <View style={styles.tagRow}>
                   <View style={[styles.tag, { backgroundColor: c.ink }]}>
@@ -504,7 +504,7 @@ export function TeamScreen() {
               <Text variant="title" color={c.ink} style={styles.grow}>
                 {groups.requests.length > 0 ? L2.requestsBubble(groups.requests.length) : L.invite}
               </Text>
-              <Button variant="close" label={L2.close} onPress={() => setRequestsOpen(false)} />
+              <Button variant="close" label={L2.closeRequests} onPress={() => setRequestsOpen(false)} />
             </View>
             {groups.requests.map((m) => (
               <View key={m.userId} style={[styles.oldrow, { borderColor: c.line }]} testID="team-request">
