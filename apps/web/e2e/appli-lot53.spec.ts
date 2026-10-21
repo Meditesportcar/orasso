@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, MOBILE, SEED_PASSWORD, samplePhoto, unique } from "./helpers";
 import { auditApp } from "./helpers/lot43";
+import { RELAIS } from "./relais";
 
 // Lot 53, côté appli (version web de recette) : l'assistant de création en huit temps (`s-create`, parité D20 avec le
 // site) — type, lieu avec épingle posée sur la carte, arrivées, critères en trois questions, avant-première, règlement,
@@ -9,7 +10,7 @@ import { auditApp } from "./helpers/lot43";
 // Deux thèmes, captures à 390 px. Lancer avec APP_URL=http://localhost:8381 (Metro derrière
 // `apps/mobile/scripts/web-isolated.mjs`), API seedée.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/Dams/.claude/relais/orasso/lot-53-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-53-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 20_000 });
 

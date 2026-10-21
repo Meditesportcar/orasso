@@ -2,12 +2,13 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { apiCall, login, loginInBrowser, MOBILE, samplePhoto, setTheme, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 53, côté site : l'assistant de création en huit temps (`s-create`) — type, lieu avec épingle, arrivées, critères
 // en trois questions, avant-première, règlement, affiche générée, « Tout est prêt » (Publier / Brouillon / Aperçu).
 // Enregistré à chaque temps ; un brouillon rouvre au bon temps. Deux thèmes, téléphone (390 px) et bureau.
 // Prérequis : API et site lancés sur la base seedée (damien@orasso.local, MéditeSportCar vérifiée).
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/Dams/.claude/relais/orasso/lot-53-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-53-captures/site`;
 mkdirSync(DIR, { recursive: true });
 const DESKTOP = { width: 1280, height: 900 } as const;
 
