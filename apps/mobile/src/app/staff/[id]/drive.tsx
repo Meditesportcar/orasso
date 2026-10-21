@@ -9,6 +9,8 @@ import {
   AppBar,
   Button,
   Ground,
+  Icon,
+  type IconName,
   Plate,
   ScanResult,
   Text,
@@ -21,7 +23,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { NativeModules, Platform, StyleSheet, View } from "react-native";
+import { NativeModules, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { pointEntry } from "@/features/staff/actions";
 import { ExpressSheet } from "@/features/staff/ExpressSheet";
@@ -36,7 +38,7 @@ import { deleteLocalPhoto } from "@/lib/staff/photo";
 import { newId } from "@/lib/staff/runtime";
 import { useStaffEvent } from "@/lib/staff/useStaff";
 
-const { space2, space3 } = tokens.spacing;
+const { space1, space2, space3 } = tokens.spacing;
 /** Une photo toutes les 900 ms quand aucune lecture n'est en cours (docs : résultat en une seconde). */
 const EVERY_MS = 900;
 /** ML Kit est-il dans ce build ? (Web, Expo Go, ancien APK : non → saisie de la plaque au clavier.) */
@@ -171,13 +173,17 @@ export default function Drive() {
         safeTop={insets.top}
       />
 
+      {/* Artefact `.offl` : pastille « hors ligne » cerclée de moutarde. */}
       <View style={styles.status}>
-        <Text variant="caption" color={c.ink} testID="drive-offline">
-          {L.offline(inMemory, count?.arrived ?? 0)}
-        </Text>
+        <View style={[styles.offl, { backgroundColor: c.night, borderColor: c.accent }]}>
+          <View style={[styles.offlDot, { backgroundColor: c.accent }]} />
+          <Text variant="bodyStrong" color={c.nightInk} style={styles.offlText} testID="drive-offline">
+            {L.offline(inMemory, count?.arrived ?? 0)}
+          </Text>
+        </View>
       </View>
 
-      <View style={[styles.camera, { backgroundColor: c.night, borderRadius: tokens.radius.radiusLg }]}>
+      <View style={[styles.camera, { backgroundColor: c.night }]}>
         {cameraOk && focused ? (
           <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" animateShutter={false} />
         ) : null}
@@ -252,22 +258,10 @@ export default function Drive() {
           {L.next}
         </Button>
         <View style={styles.row}>
-          <Button variant="rescue" height={72} icon="search" onPress={() => setSheet("search")} style={styles.flex}>
-            {L.searchOrPseudo}
-          </Button>
-          <Button variant="rescue" height={72} icon="express" onPress={() => setSheet("express")} style={styles.flex}>
-            {L.express}
-          </Button>
-          <Button
-            variant="rescue"
-            height={72}
-            dashed
-            icon="skip"
-            onPress={() => router.push(`/staff/${id}/liste?rapide=1`)}
-            style={styles.flex}
-          >
-            {L.noScan}
-          </Button>
+          {/* Artefact `.dr-fb` : trois issues de secours en tuiles crème (noires en Sable), icône au-dessus. */}
+          <RescueTile icon="search" label={L.searchOrPseudo} onPress={() => setSheet("search")} />
+          <RescueTile icon="express" label={L.express} onPress={() => setSheet("express")} />
+          <RescueTile icon="skip" label={L.noScan} onPress={() => router.push(`/staff/${id}/liste?rapide=1`)} />
         </View>
       </View>
 
@@ -305,11 +299,58 @@ export default function Drive() {
   );
 }
 
+/** Une issue de secours du drive (`.dr-fb button`). */
+function RescueTile({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const { t } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.tile, { backgroundColor: t.color.poster, opacity: pressed ? 0.85 : 1 }]}
+    >
+      <Icon name={icon} size={26} color={t.color.posterInk} />
+      <Text variant="button" color={t.color.posterInk} style={styles.tileText}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   flex: { flex: 1 },
-  status: { paddingHorizontal: space3, paddingTop: space2 },
-  camera: { flex: 1, marginHorizontal: space3, marginTop: space2, overflow: "hidden", justifyContent: "flex-end" },
+  status: { paddingHorizontal: space3, paddingTop: space2, flexDirection: "row" },
+  offl: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 28,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  offlDot: { width: 8, height: 8, borderRadius: 4 },
+  offlText: { fontSize: 12, flexShrink: 1 },
+  tile: {
+    flex: 1,
+    minHeight: 72,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    padding: space1,
+  },
+  tileText: { fontSize: 11, textAlign: "center", textTransform: "uppercase" },
+  // Artefact `.cam` : rayon 22.
+  camera: {
+    flex: 1,
+    marginHorizontal: space3,
+    marginTop: space2,
+    overflow: "hidden",
+    justifyContent: "flex-end",
+    borderRadius: 22,
+  },
   aim: {
     position: "absolute",
     top: 0,
