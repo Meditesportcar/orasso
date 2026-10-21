@@ -3,7 +3,7 @@
 // jour, V8), le tampon dessiné, l'avis à donner, et « Partager » (texte et lien de l'événement). Ouvert par la
 // notification `event_recap_ready`, par « Voir le récap » des Sorties, ou par la notification du prix du public.
 
-import { Button, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, type IconName, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   formatDayDate,
   frDuration,
@@ -18,15 +18,18 @@ import { type ReactNode, useState } from "react";
 import { Share, StyleSheet, View } from "react-native";
 
 import { siteUrl } from "@/api";
+import { heroPoster } from "@/features/explorer/poster";
+import { PosterSurface, SmButton } from "@/features/passionne/kit";
 import { Stamp } from "@/features/passport/Stamp";
 import { ReviewSheet, type ReviewTarget } from "@/features/ReviewSheet";
 import { api } from "@/lib/api";
+import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space1, space2, space3, space4 } = tokens.spacing;
 
 export function RecapScreen() {
   const router = useRouter();
@@ -103,21 +106,43 @@ function RecapBody({ view, onShare, onReview }: { view: RecapView; onShare: () =
     next,
   );
   const rank = view.audienceRank;
+  // Lot C2b (artefact `.rc-hero`) : l'image de l'événement en tête de la carte crème (l'affiche générée tant que
+  // l'API ne sert pas la photo source, lot C5), qui fond dans la carte ; date et titre remontent dessus.
+  const event = useApi(() => api.eventBySlug(view.event.slug), [view.event.slug]);
+  const image = event.data ? heroPoster(event.data) : null;
   return (
     <>
-      <View style={[styles.hero, { backgroundColor: c.poster }]} testID="recap-hero">
-        <Text variant="label" color={c.posterMuted}>
-          {day.charAt(0).toUpperCase() + day.slice(1)}
-        </Text>
-        <Text variant="posterXl" color={c.posterInk}>
-          {recapScreenTexts.was(view.event.title)}
-        </Text>
-        {view.myArrival ? (
-          <Text variant="caption" color={c.posterMuted} testID="recap-arrived">
-            {recapTexts.arrived(new Date(view.myArrival))}
+      <PosterSurface style={styles.hero} testID="recap-hero">
+        <View style={styles.photo}>
+          <Photo
+            source={mediaSource(image)}
+            placeholder={`linear-gradient(160deg, ${c.surfaceRaised} 0%, ${c.night} 100%)`}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.fade} pointerEvents="none">
+            <Photo
+              placeholder={`linear-gradient(180deg, ${c.poster}00 0%, ${c.poster} 100%)`}
+              style={StyleSheet.absoluteFill}
+            />
+          </View>
+        </View>
+        <View style={styles.heroBody}>
+          <Text variant="label" color={c.posterMuted}>
+            {day.charAt(0).toUpperCase() + day.slice(1)}
           </Text>
-        ) : null}
-      </View>
+          <Text variant="posterXl" color={c.posterInk} style={styles.heroTitle}>
+            {recapScreenTexts.was(view.event.title)}
+          </Text>
+          {view.myArrival ? (
+            <Text variant="caption" color={c.posterMuted} testID="recap-arrived">
+              {recapTexts.arrived(new Date(view.myArrival))}
+            </Text>
+          ) : null}
+        </View>
+        <Text variant="credit" color={c.posterMuted} style={styles.credit}>
+          Orasso
+        </Text>
+      </PosterSurface>
 
       <View style={styles.nums}>
         <Tile label={recapTexts.vehicles} testID="recap-vehicles">
@@ -179,17 +204,13 @@ function RecapBody({ view, onShare, onReview }: { view: RecapView; onShare: () =
       </View>
 
       <View style={styles.actions}>
-        <View style={styles.grow}>
-          <Button variant="primary" icon="share" onPress={onShare} fullWidth testID="recap-share">
-            {recapTexts.share}
-          </Button>
-        </View>
+        <SmButton kind="p" big icon="share" onPress={onShare} style={styles.grow} testID="recap-share">
+          {recapTexts.share}
+        </SmButton>
         {onReview ? (
-          <View style={styles.grow}>
-            <Button variant="secondary" icon="grade" onPress={onReview} fullWidth testID="recap-review">
-              {recapTexts.review}
-            </Button>
-          </View>
+          <SmButton kind="s" big icon="grade" onPress={onReview} style={styles.grow} testID="recap-review">
+            {recapTexts.review}
+          </SmButton>
         ) : null}
       </View>
     </>
@@ -211,7 +232,11 @@ function Tile({
   return (
     <View
       testID={testID}
-      style={[styles.tile, wide ? styles.wide : null, { backgroundColor: t.color.surface, borderColor: t.color.line }]}
+      style={[
+        styles.tile,
+        wide ? styles.wide : null,
+        { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
+      ]}
     >
       <Text variant="label" color={t.color.inkMuted}>
         {label}
@@ -234,7 +259,10 @@ function Big({ children }: { children: string }) {
 function Moment({ icon, children, testID }: { icon: IconName; children: ReactNode; testID?: string }) {
   const { t } = useTheme();
   return (
-    <View testID={testID} style={[styles.moment, { backgroundColor: t.color.surface, borderColor: t.color.line }]}>
+    <View
+      testID={testID}
+      style={[styles.moment, { backgroundColor: t.color.surface, borderColor: t.color.surfaceRaised }]}
+    >
       <Icon name={icon} size={20} color={t.color.accentText} />
       <View style={styles.momentText}>{children}</View>
     </View>
@@ -242,11 +270,16 @@ function Moment({ icon, children, testID }: { icon: IconName; children: ReactNod
 }
 
 const styles = StyleSheet.create({
-  hero: { borderRadius: 24, padding: space3, gap: space1 },
+  hero: { borderRadius: 24, overflow: "hidden" },
+  photo: { height: 200 },
+  fade: { position: "absolute", left: 0, right: 0, bottom: 0, height: "70%" },
+  heroBody: { marginTop: -50, paddingHorizontal: space4, paddingBottom: space4 + 2, gap: space2 },
+  heroTitle: { fontSize: 34, lineHeight: 32 },
+  credit: { position: "absolute", right: space3, bottom: space2 },
   nums: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  tile: { flexBasis: "47%", flexGrow: 1, borderRadius: 18, borderWidth: 1, padding: space3, gap: space1 },
+  tile: { flexBasis: "47%", flexGrow: 1, borderRadius: 18, padding: space3 + 2, gap: space1 },
   wide: { flexBasis: "100%" },
-  big: { fontSize: 54, lineHeight: 56 },
+  big: { fontSize: 54, lineHeight: 48 },
   rankRow: { flexDirection: "row", alignItems: "baseline", gap: space2 },
   stamp: { marginLeft: "auto" },
   moments: { gap: space2 },
@@ -259,6 +292,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   momentText: { flex: 1, gap: 2 },
-  actions: { flexDirection: "row", gap: space2 },
-  grow: { flex: 1 },
+  actions: { flexDirection: "row", gap: space2 + 2 },
+  grow: { flex: 1, alignSelf: "stretch" },
 });
