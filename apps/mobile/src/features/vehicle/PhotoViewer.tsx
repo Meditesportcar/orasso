@@ -1,10 +1,10 @@
 // Photos d'un véhicule en plein écran (lot 31) : on glisse d'une photo à l'autre, ✕ ferme. `reportable` (lot 32,
 // véhicule d'un autre) : « Signaler » la photo affichée (la visionneuse se ferme, la feuille s'ouvre à la racine).
 
-import { Button, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { moderationLabels, type VehiclePhoto } from "@orasso/shared";
 import { useEffect, useState } from "react";
-import { FlatList, Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { FlatList, Image, Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { openReport } from "@/features/ReportSheet";
@@ -46,9 +46,12 @@ export function PhotoViewer({
             onMomentumScrollEnd={(e) => setIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
             renderItem={({ item, index }) => (
               <View style={{ width, height, justifyContent: "center" }}>
-                <Photo
+                {/* L'image entière dans l'écran (portrait, panorama) : jamais recadrée, même sans dimensions fiables. */}
+                <Image
                   source={mediaSource(item.url)}
-                  style={{ width, height: width * (item.height / Math.max(1, item.width)) }}
+                  resizeMode="contain"
+                  style={{ width, height }}
+                  accessibilityRole="image"
                   accessibilityLabel={`Photo ${index + 1} sur ${photos.length}`}
                 />
               </View>
