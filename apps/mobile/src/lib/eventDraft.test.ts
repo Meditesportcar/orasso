@@ -290,7 +290,7 @@ describe("panne après l'écriture des missions (correctif 53c)", () => {
 });
 
 describe("zones et clés de création (correctif 53c, tour 2)", () => {
-  it("zone déjà créée par un essai précédent (409) : comptée comme faite, pas comme refusée", async () => {
+  it("zone : un 409 (zone de ce code créée ailleurs) reste un refus ; une zone créée avant une panne est rendue (tour 3)", async () => {
     const event = { id: "e1", days: [], zones: [] } as unknown as EventOrganizer;
     const { client } = fakeClient({ addZone: apiError(409, "La zone A existe déjà") });
     const res = await saveEvent(client, {
@@ -300,7 +300,17 @@ describe("zones et clés de création (correctif 53c, tour 2)", () => {
       createdId: null,
       poster: null,
     });
-    expect(res).toMatchObject({ ok: true, refused: { zones: [] } });
+    expect(res).toMatchObject({ ok: true, refused: { zones: [0] } });
+    // Créée, puis relecture en panne : la zone créée est rendue pour être mise à jour au nouvel essai.
+    const broken = fakeClient({ orgEvent: apiError(0, "Pas de réseau.") });
+    const res3 = await saveEvent(broken.client, {
+      structureId: S,
+      draft: draft({ zones: [{ code: "A", name: "Alpha", capacity: "" }] }),
+      event,
+      createdId: null,
+      poster: null,
+    });
+    expect(res3).toMatchObject({ ok: false, zoneWrites: { created: [{ position: 0, id: "e1" }] } });
     // Un autre refus de zone reste un refus.
     const other = fakeClient({ addZone: apiError(429, "Trop de modifications") });
     const res2 = await saveEvent(other.client, {
@@ -341,5 +351,40 @@ describe("zones et clés de création (correctif 53c, tour 2)", () => {
     expect(calls.find((c) => c.name === "addNeed")?.args[1]).toMatchObject({
       clientKey: "11111111-1111-4111-8111-000000000001",
     });
+  });
+});
+
+describe("clé déjà connue, valeurs changées entre deux essais (correctif 53c, tour 3)", () => {
+  it("l'API rend l'ancienne mission : un PATCH part aussitôt avec la saisie", async () => {
+    const event = { id: "e1", days: [], zones: [] } as unknown as EventOrganizer;
+    const { client, calls } = fakeClient();
+    const stale = { id: "n7", trade: "photographer", quantity: 1, power: "none", water: false, frontageM: null };
+    (client as { addNeed: unknown }).addNeed = async (...args: unknown[]) => {
+      calls.push({ name: "addNeed", args });
+      return { ...stale, installAt: null, position: 0 };
+    };
+    const res = await saveEvent(client, {
+      structureId: S,
+      draft: draft({
+        needs: [
+          {
+            trade: "photographer",
+            quantity: "3",
+            power: "none",
+            water: false,
+            frontageM: "",
+            installTime: "",
+            clientKey: "11111111-1111-4111-8111-000000000002",
+          },
+        ],
+      }),
+      event,
+      createdId: null,
+      poster: null,
+    });
+    expect(res.ok).toBe(true);
+    expect(calls.map((c) => c.name)).toEqual(["updateEvent", "addNeed", "updateNeed", "orgEvent"]);
+    expect(calls[2]?.args.slice(1)).toEqual(["n7", expect.objectContaining({ quantity: 3 })]);
+    expect(calls[2]?.args[2]).not.toHaveProperty("clientKey");
   });
 });

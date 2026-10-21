@@ -12,6 +12,7 @@
 import { Button, tokens, useTheme } from "@orasso/design-system/native";
 import {
   afterNeedWrites,
+  afterZoneWrites,
   type CategoryOption,
   draftStart,
   type EventDraft,
@@ -181,32 +182,44 @@ export function EventWizard({
   // mission inconnue de la saisie est ajoutée, une mission déjà dans la saisie garde ses modifications), y compris une
   // saisie gardée restaurée. Tant qu'elles ne sont pas chargées, rien ne s'enregistre sur le serveur ; la saisie reste
   // gardée sur le téléphone. Échec : message et « Recharger les missions », qui ne relance que ce chargement.
-  const [needsFailed, setNeedsFailed] = useState(false);
-  // Enregistrer sur le serveur : ouverture faite et missions chargées.
-  const canSave = loaded && !needsFailed;
-  const fetchNeeds = useCallback(async (ev: EventOrganizer): Promise<NeedDraft[] | null> => {
+  const [needsState, setNeedsState] = useState<"loading" | "ok" | "failed">(event ? "loading" : "ok");
+  const needsFailed = needsState === "failed";
+  // Enregistrer sur le serveur : ouverture faite et missions chargées avec succès (tour 3 : pas pendant un rechargement).
+  const canSave = loaded && needsState === "ok";
+  // Chaque chargement a son tour : la réponse d'un chargement dépassé (ou d'un écran quitté) est ignorée.
+  const needsTurn = useRef(0);
+  const fetchNeeds = useCallback(async (ev: EventOrganizer): Promise<NeedDraft[] | null | undefined> => {
+    const turn = ++needsTurn.current;
+    setNeedsState("loading");
     const list = await api.eventNeeds(ev.id).catch(() => null);
-    if (!list) return null;
+    if (turn !== needsTurn.current) return undefined;
+    if (!list) {
+      setNeedsState("failed");
+      return null;
+    }
     const loadedNeeds = needsFromSaved(list, ev.startsAt);
     setSavedNeeds(list);
     pristine.current = withServerNeeds(pristine.current, loadedNeeds);
     setDraft((p) => withLoadedNeeds(p, loadedNeeds));
+    setNeedsState("ok");
     return loadedNeeds;
   }, []);
+  useEffect(
+    () => () => {
+      needsTurn.current += 1;
+    },
+    [],
+  );
   async function reloadNeeds() {
-    if (!event) return;
-    setNeedsFailed(false);
-    if (!(await fetchNeeds(event))) setNeedsFailed(true);
+    if (event) await fetchNeeds(event);
   }
   useEffect(() => {
     let alive = true;
     void (async () => {
       let loadedNeeds: NeedDraft[] | null = null;
       if (event) {
-        setNeedsFailed(false);
-        loadedNeeds = await fetchNeeds(event);
+        loadedNeeds = (await fetchNeeds(event)) ?? null;
         if (!alive) return;
-        if (!loadedNeeds) setNeedsFailed(true);
         if (event.status === "draft") {
           const stored = await loadWizardMemo(event.id);
           if (!alive) return;
@@ -376,6 +389,12 @@ export function EventWizard({
         setSavedNeeds(after.savedNeeds);
         latest.current = after.draft;
         setDraft(after.draft);
+      }
+      // Zones créées avant la panne : identifiants repris, le nouvel essai les met à jour (tour 3).
+      if (res.zoneWrites?.created.length) {
+        const draft = afterZoneWrites(sent, latest.current, res.zoneWrites);
+        latest.current = draft;
+        setDraft(draft);
       }
       // Temps invalide ou jours refusés : on y retourne ; une panne (réseau…) laisse sur le temps courant.
       if (res.step) setIndex(eventWizardSteps.indexOf(res.step));

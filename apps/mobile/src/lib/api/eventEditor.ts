@@ -6,6 +6,7 @@ import type {
   EventDaysPut,
   EventNeedView,
   EventOrganizer,
+  EventZone,
   NeedPayload,
   RecurrenceRule,
   ZonePayload,
@@ -24,7 +25,7 @@ export const eventEditorApi = {
   putEventDays: (eventId: string, body: Partial<EventDaysPut>) =>
     request<unknown>(`/api/events/${eventId}/days`, { method: "PUT", body, timeout: 30_000 }),
   addZone: (eventId: string, zone: ZonePayload) =>
-    request<unknown>(`/api/events/${eventId}/zones`, { method: "POST", body: zone }),
+    request<EventZone>(`/api/events/${eventId}/zones`, { method: "POST", body: zone }),
   updateZone: (eventId: string, zoneId: string, zone: ZonePayload) =>
     request<unknown>(`/api/events/${eventId}/zones/${zoneId}`, { method: "PATCH", body: zone }),
   deleteZone: (eventId: string, zoneId: string) =>
