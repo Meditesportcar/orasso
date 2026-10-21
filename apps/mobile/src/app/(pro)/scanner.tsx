@@ -3,7 +3,7 @@
 // remise du pro pour ce grade, rien d'autre. Le code HOTP de 60 s est vérifié par l'API (réservée aux pros, limitée) ;
 // chaque remise lue est comptée dans les statistiques. Ce n'est PAS le QR d'accès tournant du jour J (lot 48) : le
 // pointage est réservé aux rôles staff de pointage. Aucun paiement dans l'appli.
-import { Button, Chip, Plate, ScanResult, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Credit, Plate, ScanResult, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { proV2Labels } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
@@ -11,6 +11,7 @@ import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
+import { AngledTag } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { type ProScan, proScanOf } from "@/lib/pro";
@@ -103,6 +104,9 @@ export default function ProScanner() {
             <View pointerEvents="none" style={styles.aim}>
               <View style={[styles.frame, { borderColor: t.color.accent }]} />
             </View>
+            <View pointerEvents="none" style={styles.credit}>
+              <Credit />
+            </View>
             <View pointerEvents="none" style={styles.caption}>
               <Text variant="label" color={t.color.nightInk} style={styles.center}>
                 {cameraOk
@@ -124,20 +128,19 @@ export default function ProScanner() {
           {result ? (
             <View testID="pro-scan-result" accessibilityLabel={result.state === "ok" ? "Scan valide" : "Scan refusé"}>
               {result.state === "ok" ? (
-                <Plate style={styles.last}>
+                // Lot C4b (artefact `s-pscan`) : `.card.p.row`, grade en étiquette inclinée rouge (`.tag.win`).
+                <View style={[styles.last, { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard }]}>
                   <Avatar pseudo={result.pseudo} size={40} />
                   <View style={styles.lastText}>
-                    <Text variant="bodyStrong" color={t.color.plateInk}>
+                    <Text variant="bodyStrong" color={t.color.ink}>
                       {proV2Labels.lastScan(result.pseudo)}
                     </Text>
-                    <Text variant="caption" color={t.color.plateMuted} testID="pro-scan-discount">
+                    <Text variant="caption" color={t.color.inkMuted} testID="pro-scan-discount">
                       {proV2Labels.lastScanDetail(result.grade, result.percent)}
                     </Text>
                   </View>
-                  <Chip surface="plate" selected>
-                    {result.grade}
-                  </Chip>
-                </Plate>
+                  <AngledTag tone="win">{result.grade}</AngledTag>
+                </View>
               ) : (
                 <ScanResult key={result.key} state="refused" reason={result.reason} animated={false} sound={false} />
               )}
@@ -193,11 +196,19 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   camera: { width: "100%", aspectRatio: 1, overflow: "hidden", justifyContent: "flex-end" },
   aim: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
-  frame: { width: "62%", aspectRatio: 1, borderWidth: space1, borderRadius: tokens.radius.radiusLg },
+  // `.qrbox` : 62 %, rayon 20, filet moutarde de 3 px.
+  frame: { width: "62%", aspectRatio: 1, borderWidth: 3, borderRadius: 20 },
+  credit: { position: "absolute", right: space3, bottom: space3 },
   caption: { padding: space3 },
   center: { textAlign: "center" },
   permission: { position: "absolute", top: space3, left: space3, right: space3 },
-  last: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3 },
+  last: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space3,
+    padding: tokens.spacing.space4,
+    borderRadius: tokens.radius.radiusLg,
+  },
   lastText: { flex: 1, minWidth: 0, gap: 2 },
   history: { gap: space1, padding: space3 },
   historyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },

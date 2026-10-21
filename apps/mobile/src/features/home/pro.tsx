@@ -1,25 +1,28 @@
 // Accueil du pro (lot 43, prototype `s-home` pro) : remises et vues de la semaine, Scanner un QR de compte, événements près
 // de l'atelier (avec « N de tes clients y vont »), passionnés du coin, derniers scans. Le client scanné n'est jamais
 // gardé (statistiques seulement) : les derniers scans disent le grade et la remise, pas la personne.
+// Lot C4b (artefact `s-home` pro) : pas de grand titre, deux tuiles `.dir-big` (la première crème), titres de section
+// italiques (`.sec-h`), listes `.tz-it` à souche datée, « Stats › » en lien moutarde, remise en étiquette inclinée.
 
-import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type Grade, gradeLabels, homeLabels, homeProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
-
+import { AngledTag, DirBig, MiniDate, RoundInitials, SecH, TzRow } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
 import { usePersona } from "@/lib/persona";
+import { formatCount } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
-import { BigPair, Greeting, ListRow, QuietNote, SectionHead, TutoTile } from "./parts";
+import { Greeting, QuietNote, TutoTile } from "./parts";
 import { todayLine } from "./today";
 
-const { space2, space3, space4 } = tokens.spacing;
+const { space2, space4 } = tokens.spacing;
 
 export function ProHome() {
   const { t } = useTheme();
@@ -32,30 +35,31 @@ export function ProHome() {
   const name = me?.profile.firstName ?? me?.profile.pseudo ?? "";
 
   return (
-    <TabScreen title={homeLabels.title} onRefresh={async () => void (await home.reload())}>
+    <TabScreen onRefresh={async () => void (await home.reload())}>
       <Greeting line={todayLine(now, pro?.name ?? me?.pro?.name ?? null)} name={name} />
 
       {home.error && !home.data ? <Notice>{homeLabels.loadFailed}</Notice> : null}
 
       {pro ? (
         <>
-          <BigPair
+          <DirBig
+            testID="home-pair"
             items={[
-              { value: pro.discountsThisWeek, label: homeProfileLabels.discountsThisWeek },
-              { value: pro.profileViews, label: homeProfileLabels.profileViews },
+              { value: formatCount(pro.discountsThisWeek), label: homeProfileLabels.discountsThisWeek },
+              { value: formatCount(pro.profileViews), label: homeProfileLabels.profileViews },
             ]}
           />
           <Button variant="primary" icon="qr" onPress={() => goTab("scanner")} fullWidth testID="home-scan-account-qr">
             {homeProfileLabels.scanAccountQr}
           </Button>
 
-          <SectionHead title={homeProfileLabels.eventsNearWorkshop} />
+          <SecH title={homeProfileLabels.eventsNearWorkshop} />
           {pro.nearbyEventsWithClients.length > 0 ? (
             pro.nearbyEventsWithClients.map((e) => (
-              <ListRow
+              <TzRow
                 key={e.event.id}
                 testID="home-pro-event"
-                date={e.event.startsAt}
+                leading={<MiniDate iso={e.event.startsAt} />}
                 title={e.event.title}
                 caption={[e.event.city, e.clientsGoing > 0 ? homeProfileLabels.clientsGoing(e.clientsGoing) : null]
                   .filter(Boolean)
@@ -67,35 +71,35 @@ export function ProHome() {
             <Muted variant="body">Aucun événement à venir près de ton atelier pour le moment.</Muted>
           )}
 
-          <SectionHead title={homeProfileLabels.fansNearbyTitle} />
-          <Plate style={styles.fans} testID="home-fans">
-            <Text variant="numberNarrow" color={t.color.plateInk}>
-              {pro.fansNearby.toLocaleString("fr-FR")}
-            </Text>
-            <View style={styles.fansText}>
-              <Text variant="caption" color={t.color.plateMuted}>
+          <SecH title={homeProfileLabels.fansNearbyTitle} />
+          <View
+            style={[styles.fans, { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard }]}
+            testID="home-fans"
+          >
+            <View style={styles.fansRow}>
+              <Text variant="numberNarrow" color={t.color.ink} style={styles.fansNum}>
+                {formatCount(pro.fansNearby)}
+              </Text>
+              <Text variant="caption" color={t.color.inkMuted} style={styles.fansCap}>
                 {homeProfileLabels.fansNearby(pro.fansNearby)}
               </Text>
-              <Text variant="bodyStrong" color={t.color.plateInk}>
-                {homeProfileLabels.favoritedBy(pro.favoritedBy)}
-              </Text>
             </View>
-          </Plate>
+            <Text variant="caption" color={t.color.inkMuted}>
+              {homeProfileLabels.favoritedBy(pro.favoritedBy)}
+            </Text>
+          </View>
 
-          <SectionHead
-            title={homeProfileLabels.lastScans}
-            link={homeProfileLabels.stats}
-            onLink={() => goTab("stats")}
-          />
+          <SecH title={homeProfileLabels.lastScans} link={homeProfileLabels.stats} onLink={() => goTab("stats")} />
           {pro.lastScans.length > 0 ? (
             pro.lastScans.map((s) => (
-              <ListRow
+              // Le client scanné n'est pas gardé : le rond porte les initiales du grade, pas celles de la personne.
+              <TzRow
                 key={`${s.usedAt}-${s.grade}`}
                 testID="home-pro-scan"
-                leading={<Chip surface="plate">{gradeLabels[s.grade as Grade] ?? s.grade}</Chip>}
-                title={`Remise de ${s.percent} %`}
+                leading={<RoundInitials text={(gradeLabels[s.grade as Grade] ?? s.grade).slice(0, 2).toUpperCase()} />}
+                title={`Grade ${gradeLabels[s.grade as Grade] ?? s.grade}`}
                 caption={formatDayHour(s.usedAt)}
-                trailing={<Chip surface="plate">{`−${s.percent} %`}</Chip>}
+                trailing={<AngledTag tone="acc">{`−${s.percent} %`}</AngledTag>}
               />
             ))
           ) : (
@@ -115,6 +119,9 @@ export function ProHome() {
 }
 
 const styles = StyleSheet.create({
-  fans: { flexDirection: "row", alignItems: "center", gap: space4, padding: space4 },
-  fansText: { flex: 1, gap: space2 },
+  // `.card.p` : carte, rayon 18, 16 px.
+  fans: { borderRadius: tokens.radius.radiusLg, padding: space4, gap: 10 },
+  fansRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
+  fansNum: { fontSize: 44, lineHeight: 42 },
+  fansCap: { flexShrink: 1, textAlign: "right" },
 });
