@@ -4,6 +4,7 @@
 //   shadow, ground-fx, bar-fx). Un nom absent de la base (dérivé du générateur, ex. surface-field) est ajouté.
 // - `added.color` ajoute des jetons ; `added.stamp-ink` devient `stamp-ink-<département>` + `stamp-ink-default`
 //   (= le jeton nommé, `win`) ; `added.type` ajoute un style de texte copié d'un style de base.
+// - `type.tokens` (lot C1) remplace des propriétés d'un style de texte de la base (valeurs de l'artefact DA v2).
 // Utilisé par generate-tokens.mjs et par src/tokens.test.ts : les deux voient exactement les mêmes valeurs.
 
 import { readFileSync } from "node:fs";
@@ -43,6 +44,21 @@ export function mergeTokens(base, overlay) {
       }
       changes.push({ kind: "changed", group, name: entry.name, before, value: { ...token.value }, why: entry.why });
     }
+  }
+
+  // Lot C1 (D33) : un style de texte de la base prend les valeurs de l'artefact (taille, graisse, largeur…).
+  for (const entry of overlay.type?.tokens ?? []) {
+    const style = json.type.groups.flatMap((g) => g.styles).find((s) => s.name === entry.name);
+    if (!style) throw new Error(`surcouche : style de texte inconnu ${entry.name}`);
+    const before = { ...style };
+    const { name: _name, why, ...props } = entry;
+    for (const [key, value] of Object.entries(props)) {
+      if (!["fontSize", "lineHeight", "fontWeight", "letterSpacing", "fontStretch"].includes(key)) {
+        throw new Error(`surcouche : propriété de texte inconnue ${key} (${entry.name})`);
+      }
+      style[key] = value;
+    }
+    changes.push({ kind: "changed", group: "type", name: entry.name, before, value: props, why });
   }
 
   const added = overlay.added ?? {};

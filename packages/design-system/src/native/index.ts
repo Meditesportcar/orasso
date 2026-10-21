@@ -5,12 +5,13 @@ export * from "../france";
 export { DepartmentChecklist, type DepartmentChecklistProps } from "../france/DepartmentChecklistNative";
 export { FranceMap, FranceMapCredit, type FranceMapProps } from "../france/FranceMapNative";
 export * from "../icons";
+export { initialsOf } from "../initials";
 export * from "../labels";
 export * from "../map";
 export { ClusterPin, EventPin, MePin, ProPin } from "../map/native";
 export * from "../motion";
 export { THEME_IDS, type ThemeId, tokens, tokensV2Overlay } from "../tokens";
-export { AppBar, AppBarAction, type AppBarPersona, type AppBarProps } from "./AppBar";
+export { APP_BAR_HEIGHT, AppBar, AppBarAction, type AppBarPersona, type AppBarProps } from "./AppBar";
 export { BigTitle, type BigTitleProps, bigTitleSize } from "./BigTitle";
 export {
   type BrandTone,
@@ -24,6 +25,7 @@ export { Button, type ButtonProps } from "./Button";
 export { Chip, type ChipProps, ChipRow } from "./Chip";
 export { type CounterItem, Counters, type CountersProps } from "./Counters";
 export { Cover, type CoverProps } from "./Cover";
+export { useFlowChrome, useTabBarHidden } from "./chrome";
 export {
   CheckboxField,
   type CheckboxFieldProps,
@@ -33,6 +35,7 @@ export {
   TextField,
   type TextFieldProps,
 } from "./Field";
+export { archivoAt } from "./fontFamily";
 export { archivoFonts, useOrassoFonts } from "./fonts";
 export { Ground, type GroundProps } from "./Ground";
 export { Icon, type IconProps } from "./Icon";
@@ -55,10 +58,19 @@ export * from "./olive";
 export { Photo, type PhotoProps } from "./Photo";
 export { Plate, type PlateProps } from "./Plate";
 export { PosterCard, type PosterCardProps, type PosterStatus } from "./PosterCard";
+export { NightScene, OrgLogo, type OrgLogoProps, PosterHero, type PosterHeroProps, Tag } from "./PosterHero";
 export { ScanResult, type ScanResultProps } from "./ScanResult";
 export { StatusBadge, type StatusBadgeProps } from "./StatusBadge";
 export { playScanSound, scanSoundFiles } from "./scanSounds";
-export { TAB_OVERHANG, TabBar, type TabBarProps, type TabItem } from "./TabBar";
+export {
+  TAB_BAR_HEIGHT,
+  TAB_BAR_INSET,
+  TAB_BAR_SPACE,
+  TAB_OVERHANG,
+  TabBar,
+  type TabBarProps,
+  type TabItem,
+} from "./TabBar";
 export { Text, type TextProps, textStyle, textStyles } from "./text";
 export {
   angle,

@@ -1,4 +1,6 @@
-/* AppBar : l'en-tête en métal brossé. Voir docs/design-system/components/AppBar. */
+/* AppBar : l'en-tête. Voir docs/design-system/components/AppBar.
+   Lot C1 (D33) : `.appbar` de l'artefact DA v2 (58 px, fond --bar uni, filet bas 2 px --bar-line, boutons .abtn
+   38 px) ; en flux, `.flowbar` (titre italique et ✕ carré posés sur le fond, sans barre). */
 
 .o-appbar {
   position: relative;
@@ -6,14 +8,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  height: var(--bar-top);
-  padding: 12px 18px 0;
-  background: var(--bar-gradient);
+  height: 58px;
+  padding: 0 12px 0 14px;
+  background: var(--bar);
   color: var(--bar-ink);
-  border-bottom: var(--bar-edge-header) solid var(--bar-edge);
-  box-shadow: var(--shadow-bar-top);
-  text-shadow: var(--emboss-bar);
-  overflow: hidden;
+  border-bottom: 2px solid var(--bar-edge);
 }
 .o-appbar--bleed {
   margin-inline: calc(var(--space-4) * -1);
@@ -72,11 +71,11 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   padding: 0;
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius-chip);
+  border: 1.5px solid var(--bar-control-edge);
+  border-radius: 12px;
   background: transparent;
   color: var(--bar-ink);
   text-decoration: none;
@@ -107,14 +106,21 @@
 }
 .o-appbar__count {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 16px;
-  padding: 2px 4px;
-  border-radius: var(--radius-pill);
+  top: -5px;
+  right: -5px;
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
   background: var(--accent);
   color: var(--accent-ink);
-  box-shadow: var(--neon-accent);
+  font-size: 10.5px;
+  font-weight: 800;
+  font-stretch: 100%;
+  letter-spacing: 0;
+  box-shadow: 0 0 0 2px var(--bar);
   text-align: center;
   text-shadow: none;
 }
@@ -135,7 +141,7 @@
 /* Barre « tab » (DA v2, lot 38) : le logotype toujours à gauche, 128 px (112 px sous 360 px), puis la pastille de
    casquette ; Recherche et Boîte calées à droite. Le titre de la page est un BigTitle sous la barre. */
 .o-appbar--tab {
-  padding-inline: 16px 12px;
+  padding-inline: 14px 12px;
 }
 .o-appbar__logo {
   flex: none;
@@ -145,21 +151,80 @@
     width: 112px;
   }
 }
+/* `.capchip` : logo rond 22 px (ou initiales sur moutarde) et nom de la casquette. */
 .o-appbar__persona {
-  display: inline-grid;
+  display: inline-flex;
   flex: none;
-  place-items: center;
-  width: 30px;
+  align-items: center;
+  gap: 6px;
   height: 30px;
-  overflow: hidden;
-  border: 1.5px solid var(--line);
-  border-radius: 50%;
-  background: var(--night);
+  padding: 0 10px 0 4px;
+  border-radius: 999px;
+  background: var(--bar-chip);
   color: var(--bar-ink);
-  text-shadow: none;
+  font-stretch: 100%;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
-.o-appbar__persona > img {
+.o-appbar__persona.is-round {
+  padding-right: 4px;
+}
+.o-appbar__persona-logo {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 8.5px;
+  font-weight: 900;
+  font-stretch: 75%;
+}
+.o-appbar__persona-logo > img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  background: var(--night);
+}
+
+/* Écran de flux : `.flowbar` de l'artefact, posée sur le fond. */
+.o-appbar--flow,
+.o-appbar--page {
+  height: auto;
+  padding: 12px var(--space-4) 10px;
+  background: transparent;
+  color: var(--ink);
+  border-bottom: 0;
+}
+.o-appbar--flow .o-appbar__title,
+.o-appbar--page .o-appbar__title,
+.o-appbar--flow .o-appbar__title.has-facts {
+  font-size: 16px;
+  line-height: 1.05;
+  font-style: italic;
+}
+.o-appbar--flow .o-appbar__facts,
+.o-appbar--page .o-appbar__facts {
+  color: var(--ink-muted);
+  font-stretch: 100%;
+  font-weight: 400;
+  font-size: 12.5px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.o-appbar--flow .o-appbar__close {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--plate-line);
+}
+.o-appbar--flow .o-appbar__counter {
+  background: var(--accent);
+  color: var(--accent-ink);
 }

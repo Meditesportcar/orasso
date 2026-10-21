@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import type { IconName } from "../../icons";
-import { Logo, Monogram } from "./Brand";
+import { initialsOf } from "../../initials";
+import { Logo } from "./Brand";
 import { Button } from "./Button";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
-import { Brush } from "./Textures";
 
 type ActionProps = {
   icon: IconName;
@@ -44,8 +44,11 @@ export function AppBarAction({ icon, label, onClick, href, on = false, count, ch
   );
 }
 
-/** Pastille de casquette à côté du logotype (DA v2) : logo rond de la structure, ou son initiale. */
-export type AppBarPersona = { logoUrl: string | null; label: string };
+/**
+ * Pastille de casquette à côté du logotype (`.capchip` de l'artefact) : logo rond de la structure (ou ses initiales)
+ * et le nom de la casquette (`role`, « Organisateur ») ; sans `role`, le rond seul.
+ */
+export type AppBarPersona = { logoUrl: string | null; label: string; role?: string };
 
 export type AppBarProps = {
   /**
@@ -93,7 +96,8 @@ export type AppBarProps = {
 };
 
 /**
- * L'en-tête : 64 px de métal brossé bordé d'un filet moutarde. La marque est toujours le premier élément à
+ * L'en-tête (lot C1 : `.appbar` de l'artefact, 58 px de barre unie bordée d'un filet moutarde ; en flux, la
+ * `.flowbar` posée sur le fond). La marque est toujours le premier élément à
  * gauche (même O, même place d'un écran à l'autre) ; la navigation « Fermer » est toujours à droite.
  */
 export function AppBar({
@@ -127,17 +131,20 @@ export function AppBar({
     const hasClose = Boolean(onClose || closeHref);
     return (
       <header className={cx("o-appbar", "o-appbar--tab", bleed && "o-appbar--bleed", className)}>
-        <Brush />
-        <Logo width={128} className="o-appbar__logo" />
+        <Logo width={118} className="o-appbar__logo" />
         {persona && (
-          <span className="o-appbar__persona" title={persona.label}>
-            {persona.logoUrl ? (
-              <img src={persona.logoUrl} alt={persona.label} />
-            ) : (
-              <span className="o-t-label" role="img" aria-label={persona.label}>
-                {persona.label.trim().charAt(0).toUpperCase()}
-              </span>
-            )}
+          // Lot C1 : la pastille `.capchip` de l'artefact (logo rond ou initiales sur moutarde, nom de la casquette).
+          <span className={cx("o-appbar__persona", !persona.role && "is-round")} title={persona.label}>
+            <span className="o-appbar__persona-logo">
+              {persona.logoUrl ? (
+                <img src={persona.logoUrl} alt={persona.label} />
+              ) : (
+                <span role="img" aria-label={persona.label}>
+                  {initialsOf(persona.label)}
+                </span>
+              )}
+            </span>
+            {persona.role ? <span className="o-appbar__persona-role">{persona.role}</span> : null}
           </span>
         )}
         <span className="o-appbar__spacer" />
@@ -159,8 +166,7 @@ export function AppBar({
   const showTabActions = kind !== "flow";
   return (
     <header className={cx("o-appbar", `o-appbar--${kind}`, bleed && "o-appbar--bleed", className)}>
-      <Brush />
-      {kind === "home" ? <Logo width={128} /> : <Monogram />}
+      {kind === "home" ? <Logo width={118} /> : null}
       {kind === "home" ? (
         <span className="o-appbar__spacer" />
       ) : (

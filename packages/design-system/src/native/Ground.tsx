@@ -18,7 +18,7 @@ import { useTheme } from "./theme";
 export type GroundProps = Omit<ViewProps, "children"> & {
   /**
    * `screen` : fond d'un écran de téléphone ; `site` : marquage au pas de 200 px, halo resserré ; `battle` (DA v2) :
-   * lampe à sodium et contre-jour (Béton) ou fond uni (Sable), avec les meutes de drift.
+   * lampe à sodium et contre-jour (Béton) ou fond uni (Sable), avec les meutes de drift. Par défaut depuis le lot C1.
    */
   variant?: "screen" | "site" | "battle";
   /**
@@ -110,7 +110,8 @@ function BattleFx({ still, paused }: { still: boolean; paused: boolean }) {
  * un écran n'a pas le droit de modifier son fond.
  */
 export function Ground({
-  variant = "screen",
+  // Lot C1 (D33, écart R1) : le fond de l'artefact (`.app::before`, lampe et dégradé, sans marquage) par défaut.
+  variant = "battle",
   animated = false,
   still = false,
   paused = false,

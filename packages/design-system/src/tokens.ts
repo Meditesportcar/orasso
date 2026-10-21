@@ -17,14 +17,14 @@ export const tokens = {
       "bar": "#08090b",
       "barInk": "#f3ebdd",
       "barMuted": "#8f897d",
-      "barEdge": "rgba(233,184,36,0.45)",
+      "barEdge": "rgba(233,184,36,0.55)",
       "surface": "#262930",
       "surfaceRaised": "#30333b",
       "surfaceSunken": "#23262d",
-      "plate": "#2b2e36",
+      "plate": "#262930",
       "plateInk": "#f3ebdd",
-      "plateMuted": "#afa89c",
-      "plateLine": "#565b66",
+      "plateMuted": "#aaa397",
+      "plateLine": "rgba(243,235,221,0.14)",
       "plateEdge": "transparent",
       "plateChip": "rgba(243,235,221,0.4)",
       "line": "#565b66",
@@ -33,7 +33,7 @@ export const tokens = {
       "inkFaint": "#7a7468",
       "poster": "#f3ebdd",
       "posterInk": "#131417",
-      "posterMuted": "#6b6660",
+      "posterMuted": "#5b554b",
       "night": "#131417",
       "nightInk": "#f3ebdd",
       "accent": "#e9b824",
@@ -49,7 +49,7 @@ export const tokens = {
       "statusOnsite": "#f3ebdd",
       "statusCancelled": "#c8322b",
       "statusUncertain": "#e9b824",
-      "scrim": "#131417cc",
+      "scrim": "rgba(0,0,0,0.6)",
       "photoFade": "#2b2e36",
       "brandCredit": "rgba(233,184,36,0.7)",
       "brandCreditLight": "#8a6200",
@@ -60,6 +60,30 @@ export const tokens = {
       "mapSea": "#0f1216",
       "mapRoad": "#f3ebdd",
       "mapLabel": "#c9c1b2",
+      "barControlEdge": "rgba(243,235,221,0.18)",
+      "barShellEdge": "rgba(243,235,221,0.06)",
+      "barChip": "rgba(243,235,221,0.1)",
+      "photoInk": "#f3ebdd",
+      "sceneSkyTop": "#070a12",
+      "sceneSkyBottom": "#1a2233",
+      "sceneGround": "#121317",
+      "sceneCar": "#d4552a",
+      "sceneWindow": "#0e1116",
+      "sceneWheel": "#0b0c0e",
+      "sceneRim": "#9a9a9a",
+      "avatar1": "#7a2412",
+      "avatar2": "#2f5fb8",
+      "avatar3": "#565b66",
+      "avatar4": "#6b3fa0",
+      "avatar5": "#b8441d",
+      "avatar6": "#8a6200",
+      "avatar7": "#131417",
+      "avatar8": "#a3261f",
+      "avatar9": "#3d4f7a",
+      "avatarInk": "#f3ebdd",
+      "cardLine": "rgba(243,235,221,0.08)",
+      "vitrineFrom": "#d4552a",
+      "vitrineTo": "#8f1d22",
       "stampInk66": "#ff6a5f",
       "stampInk34": "#b48ce6",
       "stampInk31": "#f3ebdd",
@@ -78,19 +102,19 @@ export const tokens = {
       "surface": "#f7f1e3",
       "surfaceRaised": "#efe6d1",
       "surfaceSunken": "#23262d",
-      "plate": "rgba(43,46,54,0.92)",
-      "plateInk": "#f3ebdd",
-      "plateMuted": "#c9c2b4",
-      "plateLine": "rgba(243,235,221,0.15)",
-      "plateEdge": "rgba(243,235,221,0.12)",
-      "plateChip": "rgba(243,235,221,0.4)",
+      "plate": "#f7f1e3",
+      "plateInk": "#131417",
+      "plateMuted": "#4f493f",
+      "plateLine": "rgba(19,20,23,0.16)",
+      "plateEdge": "transparent",
+      "plateChip": "rgba(19,20,23,0.28)",
       "line": "#8f8773",
       "ink": "#131417",
       "inkMuted": "#4f493f",
       "inkFaint": "#655d50",
       "poster": "#131417",
       "posterInk": "#f3ebdd",
-      "posterMuted": "#9c958a",
+      "posterMuted": "#b9b1a2",
       "night": "#131417",
       "nightInk": "#f3ebdd",
       "accent": "#e9b824",
@@ -106,7 +130,7 @@ export const tokens = {
       "statusOnsite": "#131417",
       "statusCancelled": "#c8322b",
       "statusUncertain": "#e9b824",
-      "scrim": "#131417b3",
+      "scrim": "rgba(19,20,23,0.45)",
       "photoFade": "#2b2e36",
       "brandCredit": "rgba(233,184,36,0.7)",
       "brandCreditLight": "#8a6200",
@@ -117,38 +141,66 @@ export const tokens = {
       "mapSea": "#aebbbd",
       "mapRoad": "#2a2723",
       "mapLabel": "#3d3830",
+      "barControlEdge": "rgba(243,235,221,0.18)",
+      "barShellEdge": "rgba(243,235,221,0.06)",
+      "barChip": "rgba(243,235,221,0.1)",
+      "photoInk": "#f3ebdd",
+      "sceneSkyTop": "#070a12",
+      "sceneSkyBottom": "#1a2233",
+      "sceneGround": "#121317",
+      "sceneCar": "#d4552a",
+      "sceneWindow": "#0e1116",
+      "sceneWheel": "#0b0c0e",
+      "sceneRim": "#9a9a9a",
+      "avatar1": "#7a2412",
+      "avatar2": "#2f5fb8",
+      "avatar3": "#565b66",
+      "avatar4": "#6b3fa0",
+      "avatar5": "#b8441d",
+      "avatar6": "#8a6200",
+      "avatar7": "#131417",
+      "avatar8": "#a3261f",
+      "avatar9": "#3d4f7a",
+      "avatarInk": "#f3ebdd",
+      "cardLine": "rgba(19,20,23,0.12)",
+      "vitrineFrom": "#d4552a",
+      "vitrineTo": "#8f1d22",
       "stampInk66": "#c8322b",
       "stampInk34": "#6b3fa0",
       "stampInk31": "#131417",
       "stampInk11": "#2f5fb8",
       "stampInkDefault": "#b42b24",
-      "statusWaitlistOnPlate": "#7fa6ff"
+      "statusWaitlistOnPlate": "#2f5fb8"
     }
   },
   "shadow": {
     "beton": {
-      "shadowCard": "0 8px 24px rgba(0,0,0,0.40)",
-      "shadowPoster": "0 18px 40px rgba(0,0,0,0.50)",
-      "shadowSheet": "0 -12px 40px rgba(0,0,0,0.55)",
-      "shadowBarTop": "0 6px 18px rgba(0,0,0,0.45)",
+      "shadowCard": "0 10px 26px rgba(0,0,0,0.45)",
+      "shadowPoster": "0 24px 60px rgba(0,0,0,0.6)",
+      "shadowSheet": "0 -14px 40px rgba(0,0,0,0.4)",
+      "shadowBarTop": "none",
       "shadowBarBottom": "0 -8px 24px rgba(0,0,0,0.50)",
       "embossBar": "none",
       "neonAccent": "inset 0 0 0 1px rgba(255,220,120,0.60), 0 0 26px rgba(233,184,36,0.55), 0 6px 14px rgba(0,0,0,0.35)",
       "neonAccentSoft": "0 0 10px rgba(233,184,36,0.40)",
       "neonWin": "0 0 16px rgba(200,50,43,0.60)",
-      "neonScan": "inset 0 0 0 1px rgba(255,220,120,0.60), 0 0 34px rgba(233,184,36,0.65), 0 6px 14px rgba(0,0,0,0.35)"
+      "neonScan": "inset 0 0 0 1px rgba(255,220,120,0.60), 0 0 34px rgba(233,184,36,0.65), 0 6px 14px rgba(0,0,0,0.35)",
+      "shadowTabbar": "0 14px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(243,235,221,0.08)",
+      "shadowOButton": "0 -6px 16px rgba(0,0,0,0.25)"
     },
     "sable": {
-      "shadowCard": "0 8px 24px rgba(40,30,10,0.22)",
-      "shadowPoster": "0 18px 40px rgba(20,15,5,0.40)",
-      "shadowSheet": "0 -12px 40px rgba(20,15,5,0.35)",
-      "shadowBarTop": "0 6px 18px rgba(0,0,0,0.28)",
+      "shadowCard": "0 10px 24px rgba(60,45,15,0.16)",
+      "shadowPoster": "0 22px 48px rgba(50,35,10,0.28)",
+      "shadowSheet": "0 -14px 40px rgba(0,0,0,0.4)",
+      "shadowBarTop": "none",
       "shadowBarBottom": "0 -8px 24px rgba(0,0,0,0.30)",
       "embossBar": "none",
       "neonAccent": "inset 0 0 0 1px rgba(255,220,120,0.60), 0 8px 18px rgba(0,0,0,0.25)",
       "neonAccentSoft": "0 2px 6px rgba(0,0,0,0.15)",
       "neonWin": "0 6px 14px rgba(200,50,43,0.35)",
-      "neonScan": "inset 0 0 0 1px rgba(255,220,120,0.60), 0 10px 24px rgba(0,0,0,0.30)"
+      "neonScan": "inset 0 0 0 1px rgba(255,220,120,0.60), 0 10px 24px rgba(0,0,0,0.30)",
+      "shadowTabbar": "0 14px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(243,235,221,0.08)",
+      "shadowOButton": "0 -6px 16px rgba(0,0,0,0.25)"
     }
   },
   "groundFx": {
@@ -156,7 +208,7 @@ export const tokens = {
       "halo": "radial-gradient(ellipse 70% 50% at 95% -10%, rgba(233,184,36,0.85), rgba(233,184,36,0.30) 40%, transparent 68%)",
       "reflet": "radial-gradient(ellipse 60% 42% at -12% 108%, rgba(255,246,225,0.42), rgba(255,246,225,0.10) 45%, transparent 65%)",
       "faisceau": "linear-gradient(170deg, transparent 0 36%, rgba(255,246,225,0.14) 36% 56%, transparent 56%)",
-      "marquage": "repeating-linear-gradient(170deg, transparent 0 104px, rgba(243,235,221,0.18) 104px 112px)",
+      "marquage": "none",
       "vignette": "radial-gradient(ellipse 130% 90% at 55% 25%, #17191e 0, #101216 62%, #050608 125%)",
       "battleLamp": "radial-gradient(ellipse 74% 34% at 104% -4%, rgba(255,204,92,0.55), transparent 100%)",
       "battleSpill": "radial-gradient(ellipse 100% 58% at 100% 0%, rgba(233,184,36,0.22), transparent 72%)",
@@ -167,7 +219,7 @@ export const tokens = {
       "halo": "none",
       "reflet": "none",
       "faisceau": "linear-gradient(170deg, transparent 0 36%, rgba(19,20,23,0.16) 36% 56%, transparent 56%)",
-      "marquage": "repeating-linear-gradient(170deg, transparent 0 104px, rgba(19,20,23,0.30) 104px 112px)",
+      "marquage": "none",
       "vignette": "radial-gradient(ellipse 130% 90% at 55% 25%, #e8dfca 0, #ddd2b8 62%, #c9bc9b 125%)",
       "battleLamp": "none",
       "battleSpill": "none",
@@ -180,7 +232,7 @@ export const tokens = {
       "halo": "radial-gradient(ellipse 46% 60% at 94% 0%, rgba(233,184,36,0.85), rgba(233,184,36,0.30) 40%, transparent 68%)",
       "reflet": "radial-gradient(ellipse 60% 42% at -12% 108%, rgba(255,246,225,0.42), rgba(255,246,225,0.10) 45%, transparent 65%)",
       "faisceau": "linear-gradient(170deg, transparent 0 36%, rgba(255,246,225,0.14) 36% 56%, transparent 56%)",
-      "marquage": "repeating-linear-gradient(170deg, transparent 0 190px, rgba(243,235,221,0.18) 190px 200px)",
+      "marquage": "none",
       "vignette": "radial-gradient(ellipse 130% 90% at 55% 25%, #17191e 0, #101216 62%, #050608 125%)",
       "battleLamp": "radial-gradient(ellipse 74% 34% at 104% -4%, rgba(255,204,92,0.55), transparent 100%)",
       "battleSpill": "radial-gradient(ellipse 100% 58% at 100% 0%, rgba(233,184,36,0.22), transparent 72%)",
@@ -190,7 +242,7 @@ export const tokens = {
       "halo": "none",
       "reflet": "none",
       "faisceau": "linear-gradient(170deg, transparent 0 36%, rgba(19,20,23,0.16) 36% 56%, transparent 56%)",
-      "marquage": "repeating-linear-gradient(170deg, transparent 0 190px, rgba(19,20,23,0.30) 190px 200px)",
+      "marquage": "none",
       "vignette": "radial-gradient(ellipse 82% 62% at 50% 26%, #e8dfca 0, #ddd2b8 62%, #c9bc9b 125%)",
       "battleLamp": "none",
       "battleSpill": "none",
@@ -365,22 +417,22 @@ export const tokens = {
     },
     "button": {
       "family": "display",
-      "fontSize": 15,
+      "fontSize": 14,
       "lineHeight": 18,
       "fontWeight": 900,
       "fontStyle": "normal",
       "letterSpacing": 0.02,
-      "fontStretch": null,
+      "fontStretch": "118%",
       "sample": "MODE JOUR J"
     },
     "tab": {
       "family": "display",
-      "fontSize": 9,
+      "fontSize": 9.5,
       "lineHeight": 11,
-      "fontWeight": 900,
+      "fontWeight": 800,
       "fontStyle": "normal",
-      "letterSpacing": 0.04,
-      "fontStretch": null,
+      "letterSpacing": 0.03,
+      "fontStretch": "115%",
       "sample": "ACCÈS"
     },
     "label": {
@@ -389,18 +441,18 @@ export const tokens = {
       "lineHeight": 14,
       "fontWeight": 700,
       "fontStyle": "normal",
-      "letterSpacing": 0.1,
-      "fontStretch": null,
+      "letterSpacing": 0.09,
+      "fontStretch": "75%",
       "sample": "PROCHAIN ACCÈS · J-2"
     },
     "meta": {
       "family": "narrow",
-      "fontSize": 12,
+      "fontSize": 12.5,
       "lineHeight": 15,
       "fontWeight": 700,
       "fontStyle": "normal",
-      "letterSpacing": 0.08,
-      "fontStretch": null,
+      "letterSpacing": 0.05,
+      "fontStretch": "75%",
       "sample": "SAM 17 OCT · 19 H · ZONE JDM"
     },
     "zone": {
@@ -420,7 +472,7 @@ export const tokens = {
       "fontWeight": 700,
       "fontStyle": "normal",
       "letterSpacing": 0.14,
-      "fontStretch": null,
+      "fontStretch": "75%",
       "sample": "ORASSO"
     },
     "body": {
@@ -470,7 +522,7 @@ export const tokens = {
       "fontWeight": 800,
       "fontStyle": "normal",
       "letterSpacing": -0.02,
-      "fontStretch": "62.5%",
+      "fontStretch": "62%",
       "sample": "116"
     }
   }
@@ -663,6 +715,132 @@ export const tokensV2Overlay = [
   },
   {
     "kind": "changed",
+    "group": "color",
+    "name": "plate",
+    "before": {
+      "beton": "#2b2e36",
+      "sable": "rgba(43,46,54,0.92)"
+    },
+    "value": {
+      "beton": "#262930",
+      "sable": "#f7f1e3"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .card (--card) : la plaque est la carte du thème, claire en Sable (écart R4 de l'audit)"
+  },
+  {
+    "kind": "changed",
+    "group": "color",
+    "name": "plate-ink",
+    "before": {
+      "beton": "#f3ebdd",
+      "sable": "#f3ebdd"
+    },
+    "value": {
+      "beton": "#f3ebdd",
+      "sable": "#131417"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, encre de .card (--ink)"
+  },
+  {
+    "kind": "changed",
+    "group": "color",
+    "name": "plate-muted",
+    "before": {
+      "beton": "#afa89c",
+      "sable": "#c9c2b4"
+    },
+    "value": {
+      "beton": "#aaa397",
+      "sable": "#4f493f"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, --muted"
+  },
+  {
+    "kind": "changed",
+    "group": "color",
+    "name": "plate-line",
+    "before": {
+      "beton": "#565b66",
+      "sable": "rgba(243,235,221,0.15)"
+    },
+    "value": {
+      "beton": "rgba(243,235,221,0.14)",
+      "sable": "rgba(19,20,23,0.16)"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, --line"
+  },
+  {
+    "kind": "changed",
+    "group": "color",
+    "name": "plate-edge",
+    "before": {
+      "beton": "transparent",
+      "sable": "rgba(243,235,221,0.12)"
+    },
+    "value": {
+      "beton": "transparent",
+      "sable": "transparent"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .card sans bord"
+  },
+  {
+    "kind": "changed",
+    "group": "color",
+    "name": "plate-chip",
+    "before": {
+      "beton": "rgba(243,235,221,0.4)",
+      "sable": "rgba(243,235,221,0.4)"
+    },
+    "value": {
+      "beton": "rgba(243,235,221,0.4)",
+      "sable": "rgba(19,20,23,0.28)"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, contour sur carte claire en Sable (--field-line)"
+  },
+  {
+    "kind": "changed",
+    "group": "color",
+    "name": "poster-muted",
+    "before": {
+      "beton": "#6b6660",
+      "sable": "#9c958a"
+    },
+    "value": {
+      "beton": "#5b554b",
+      "sable": "#b9b1a2"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, --poster-muted"
+  },
+  {
+    "kind": "changed",
+    "group": "color",
+    "name": "bar-edge",
+    "before": {
+      "beton": "rgba(233,184,36,0.45)",
+      "sable": "#e9b824"
+    },
+    "value": {
+      "beton": "rgba(233,184,36,0.55)",
+      "sable": "#e9b824"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, --bar-line"
+  },
+  {
+    "kind": "changed",
+    "group": "color",
+    "name": "scrim",
+    "before": {
+      "beton": "#131417cc",
+      "sable": "#131417b3"
+    },
+    "value": {
+      "beton": "rgba(0,0,0,0.6)",
+      "sable": "rgba(19,20,23,0.45)"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, --scrim (voile des feuilles)"
+  },
+  {
+    "kind": "changed",
     "group": "shadow",
     "name": "emboss-bar",
     "before": {
@@ -674,6 +852,84 @@ export const tokensV2Overlay = [
       "sable": "none"
     },
     "why": "pas de gaufrage clair sur la barre nuit"
+  },
+  {
+    "kind": "changed",
+    "group": "shadow",
+    "name": "shadow-card",
+    "before": {
+      "beton": "0 8px 24px rgba(0,0,0,0.40)",
+      "sable": "0 8px 24px rgba(40,30,10,0.22)"
+    },
+    "value": {
+      "beton": "0 10px 26px rgba(0,0,0,0.45)",
+      "sable": "0 10px 24px rgba(60,45,15,0.16)"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, --shadow"
+  },
+  {
+    "kind": "changed",
+    "group": "shadow",
+    "name": "shadow-poster",
+    "before": {
+      "beton": "0 18px 40px rgba(0,0,0,0.50)",
+      "sable": "0 18px 40px rgba(20,15,5,0.40)"
+    },
+    "value": {
+      "beton": "0 24px 60px rgba(0,0,0,0.6)",
+      "sable": "0 22px 48px rgba(50,35,10,0.28)"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, --shadow-lg"
+  },
+  {
+    "kind": "changed",
+    "group": "shadow",
+    "name": "shadow-sheet",
+    "before": {
+      "beton": "0 -12px 40px rgba(0,0,0,0.55)",
+      "sable": "0 -12px 40px rgba(20,15,5,0.35)"
+    },
+    "value": {
+      "beton": "0 -14px 40px rgba(0,0,0,0.4)",
+      "sable": "0 -14px 40px rgba(0,0,0,0.4)"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .sheet"
+  },
+  {
+    "kind": "changed",
+    "group": "shadow",
+    "name": "shadow-bar-top",
+    "before": {
+      "beton": "0 6px 18px rgba(0,0,0,0.45)",
+      "sable": "0 6px 18px rgba(0,0,0,0.28)"
+    },
+    "value": {
+      "beton": "none",
+      "sable": "none"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .appbar unie, sans ombre"
+  },
+  {
+    "kind": "changed",
+    "group": "shadow",
+    "name": "shadow-tabbar",
+    "before": {},
+    "value": {
+      "beton": "0 14px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(243,235,221,0.08)",
+      "sable": "0 14px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(243,235,221,0.08)"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .tabbar flottante"
+  },
+  {
+    "kind": "changed",
+    "group": "shadow",
+    "name": "shadow-o-button",
+    "before": {},
+    "value": {
+      "beton": "0 -6px 16px rgba(0,0,0,0.25)",
+      "sable": "0 -6px 16px rgba(0,0,0,0.25)"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .obtn (le O de la barre)"
   },
   {
     "kind": "changed",
@@ -752,6 +1008,20 @@ export const tokensV2Overlay = [
   },
   {
     "kind": "changed",
+    "group": "ground-fx",
+    "name": "marquage",
+    "before": {
+      "beton": "repeating-linear-gradient(170deg, transparent 0 104px, rgba(243,235,221,0.18) 104px 112px)",
+      "sable": "repeating-linear-gradient(170deg, transparent 0 104px, rgba(19,20,23,0.30) 104px 112px)"
+    },
+    "value": {
+      "beton": "none",
+      "sable": "none"
+    },
+    "why": "lot C1 (D33) : artefact DA v2 : aucun marquage, fond net à lueur (écart R1 de l'audit)"
+  },
+  {
+    "kind": "changed",
     "group": "bar-fx",
     "name": "bar-gradient",
     "before": {
@@ -791,6 +1061,103 @@ export const tokensV2Overlay = [
       "sable": "feTurbulence type=fractalNoise baseFrequency=\"0.012 0.9\" numOctaves=3 stitchTiles=stitch"
     },
     "why": "brossage de la barre nuit, comme en Béton"
+  },
+  {
+    "kind": "changed",
+    "group": "type",
+    "name": "button",
+    "before": {
+      "name": "button",
+      "fontSize": "15px",
+      "lineHeight": "18px",
+      "fontWeight": 900,
+      "letterSpacing": "0.02em",
+      "sample": "MODE JOUR J",
+      "usage": "Libellé des boutons (12 à 14 px pour les boutons secondaires en rangée, 11 px pour les gros boutons du staff). font-stretch 125 %, uppercase, droit."
+    },
+    "value": {
+      "fontSize": "14px",
+      "fontStretch": "118%"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .btn : 118 % 900 14 px"
+  },
+  {
+    "kind": "changed",
+    "group": "type",
+    "name": "tab",
+    "before": {
+      "name": "tab",
+      "fontSize": "9px",
+      "lineHeight": "11px",
+      "fontWeight": 900,
+      "letterSpacing": "0.04em",
+      "sample": "ACCÈS",
+      "usage": "Libellé d'onglet sous son icône de 22 px. font-stretch 125 %, uppercase, droit."
+    },
+    "value": {
+      "fontSize": "9.5px",
+      "fontWeight": 800,
+      "letterSpacing": "0.03em",
+      "fontStretch": "115%"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .tab : 115 % 800 9,5 px"
+  },
+  {
+    "kind": "changed",
+    "group": "type",
+    "name": "label",
+    "before": {
+      "name": "label",
+      "fontSize": "11px",
+      "lineHeight": "14px",
+      "fontWeight": 700,
+      "letterSpacing": "0.1em",
+      "sample": "PROCHAIN ACCÈS · J-2",
+      "usage": "Étiquette au-dessus d'un bloc, statut, catégorie. uppercase, couleur ink-muted (plate-muted sur plaque)."
+    },
+    "value": {
+      "letterSpacing": "0.09em",
+      "fontStretch": "75%"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .t-label : 75 % 700 11 px"
+  },
+  {
+    "kind": "changed",
+    "group": "type",
+    "name": "meta",
+    "before": {
+      "name": "meta",
+      "fontSize": "12px",
+      "lineHeight": "15px",
+      "fontWeight": 700,
+      "letterSpacing": "0.08em",
+      "sample": "SAM 17 OCT · 19 H · ZONE JDM",
+      "usage": "Date, heure, distance, zone : la ligne de faits sous un titre. uppercase."
+    },
+    "value": {
+      "fontSize": "12.5px",
+      "letterSpacing": "0.05em",
+      "fontStretch": "75%"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .t-meta : 75 % 700 12,5 px"
+  },
+  {
+    "kind": "changed",
+    "group": "type",
+    "name": "credit",
+    "before": {
+      "name": "credit",
+      "fontSize": "9px",
+      "lineHeight": "11px",
+      "fontWeight": 700,
+      "letterSpacing": "0.14em",
+      "sample": "ORASSO",
+      "usage": "La signature de marque en bas à droite de l'objet principal de l'écran. uppercase, brand-credit ou brand-credit-light. Une seule par écran."
+    },
+    "value": {
+      "fontStretch": "75%"
+    },
+    "why": "lot C1 (D33) : artefact DA v2, .credit : 75 % 700 9 px"
   },
   {
     "kind": "added",
@@ -855,6 +1222,246 @@ export const tokensV2Overlay = [
   {
     "kind": "added",
     "group": "color",
+    "name": "bar-control-edge",
+    "value": {
+      "beton": "rgba(243,235,221,0.18)",
+      "sable": "rgba(243,235,221,0.18)"
+    },
+    "why": "contour des boutons de l'en-tête (.abtn de l'artefact)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "bar-shell-edge",
+    "value": {
+      "beton": "rgba(243,235,221,0.06)",
+      "sable": "rgba(243,235,221,0.06)"
+    },
+    "why": "bord de la barre d'onglets flottante (.tabbar)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "bar-chip",
+    "value": {
+      "beton": "rgba(243,235,221,0.1)",
+      "sable": "rgba(243,235,221,0.1)"
+    },
+    "why": "fond de la pastille « Organisateur » de l'en-tête (.capchip)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "photo-ink",
+    "value": {
+      "beton": "#f3ebdd",
+      "sable": "#f3ebdd"
+    },
+    "why": "texte posé sur une photo (compte à rebours de la carte d'Accueil, .hn-cd)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "scene-sky-top",
+    "value": {
+      "beton": "#070a12",
+      "sable": "#070a12"
+    },
+    "why": "repli sans photo : ciel de nuit (carPhoto « nuit » de l'artefact)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "scene-sky-bottom",
+    "value": {
+      "beton": "#1a2233",
+      "sable": "#1a2233"
+    },
+    "why": "repli sans photo : bas du ciel"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "scene-ground",
+    "value": {
+      "beton": "#121317",
+      "sable": "#121317"
+    },
+    "why": "repli sans photo : sol"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "scene-car",
+    "value": {
+      "beton": "#d4552a",
+      "sable": "#d4552a"
+    },
+    "why": "repli sans photo : carrosserie (Supra de l'artefact)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "scene-window",
+    "value": {
+      "beton": "#0e1116",
+      "sable": "#0e1116"
+    },
+    "why": "repli sans photo : vitres"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "scene-wheel",
+    "value": {
+      "beton": "#0b0c0e",
+      "sable": "#0b0c0e"
+    },
+    "why": "repli sans photo : pneus"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "scene-rim",
+    "value": {
+      "beton": "#9a9a9a",
+      "sable": "#9a9a9a"
+    },
+    "why": "repli sans photo : jantes"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-1",
+    "value": {
+      "beton": "#7a2412",
+      "sable": "#7a2412"
+    },
+    "why": "fond d’avatar n° 1 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-2",
+    "value": {
+      "beton": "#2f5fb8",
+      "sable": "#2f5fb8"
+    },
+    "why": "fond d’avatar n° 2 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-3",
+    "value": {
+      "beton": "#565b66",
+      "sable": "#565b66"
+    },
+    "why": "fond d’avatar n° 3 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-4",
+    "value": {
+      "beton": "#6b3fa0",
+      "sable": "#6b3fa0"
+    },
+    "why": "fond d’avatar n° 4 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-5",
+    "value": {
+      "beton": "#b8441d",
+      "sable": "#b8441d"
+    },
+    "why": "fond d’avatar n° 5 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-6",
+    "value": {
+      "beton": "#8a6200",
+      "sable": "#8a6200"
+    },
+    "why": "fond d’avatar n° 6 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-7",
+    "value": {
+      "beton": "#131417",
+      "sable": "#131417"
+    },
+    "why": "fond d’avatar n° 7 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-8",
+    "value": {
+      "beton": "#a3261f",
+      "sable": "#a3261f"
+    },
+    "why": "fond d’avatar n° 8 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-9",
+    "value": {
+      "beton": "#3d4f7a",
+      "sable": "#3d4f7a"
+    },
+    "why": "fond d’avatar n° 9 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-ink",
+    "value": {
+      "beton": "#f3ebdd",
+      "sable": "#f3ebdd"
+    },
+    "why": "initiales sur un fond d’avatar (.avatar de l’artefact)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "card-line",
+    "value": {
+      "beton": "rgba(243,235,221,0.08)",
+      "sable": "rgba(19,20,23,0.12)"
+    },
+    "why": "filet des cartes (--card-line de l’artefact)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "vitrine-from",
+    "value": {
+      "beton": "#d4552a",
+      "sable": "#d4552a"
+    },
+    "why": "dégradé des vitrines de prestataire, début (artefact : #d4552a → #8f1d22)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "vitrine-to",
+    "value": {
+      "beton": "#8f1d22",
+      "sable": "#8f1d22"
+    },
+    "why": "dégradé des vitrines de prestataire, fin"
+  },
+  {
+    "kind": "added",
+    "group": "color",
     "name": "stamp-ink-66",
     "value": {
       "beton": "#ff6a5f",
@@ -907,9 +1514,9 @@ export const tokensV2Overlay = [
     "group": "type",
     "name": "number-narrow",
     "value": {
-      "fontStretch": "62.5%",
+      "fontStretch": "62%",
       "basedOn": "number"
     },
-    "why": "Chiffres des cartes véhicule, compteurs, souches de date : Archivo à 62,5 % de largeur (v2)."
+    "why": "Chiffres des cartes, compteurs, souches de date, compte à rebours : Archivo à 62 % de largeur (.t-num de l'artefact)."
   }
 ] as const;
