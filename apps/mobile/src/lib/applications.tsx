@@ -7,7 +7,7 @@ import { AppState } from "react-native";
 
 import { api } from "./api";
 import { syncKits } from "./kits";
-import { kvGetJson, kvSetJson } from "./kv";
+import { cacheGetJson, cacheSetJson, kvGetJson, kvSetJson } from "./kv";
 import { accreditationAsApplication } from "./pressApplications";
 import { useSession } from "./session";
 
@@ -67,8 +67,8 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
       setUpcoming(up);
       setPast(ps);
       setOffline(false);
-      void kvSetJson(UPCOMING_KEY, up);
-      void kvSetJson(PAST_KEY, ps);
+      void cacheSetJson(UPCOMING_KEY, up);
+      void cacheSetJson(PAST_KEY, ps);
       await detectAnnouncement(up);
       // Lot 55 : le badge presse d'un média suit le même chemin que le QR d'un véhicule (kit enregistré, hors ligne).
       const accreditations = hasMedia
@@ -96,8 +96,8 @@ export function ApplicationsProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       const [cachedUp, cachedPast] = await Promise.all([
-        kvGetJson<MyApplication[]>(UPCOMING_KEY),
-        kvGetJson<MyApplication[]>(PAST_KEY),
+        cacheGetJson<MyApplication[]>(UPCOMING_KEY),
+        cacheGetJson<MyApplication[]>(PAST_KEY),
       ]);
       if (cancelled) return;
       setUpcoming((current) => current ?? cachedUp);

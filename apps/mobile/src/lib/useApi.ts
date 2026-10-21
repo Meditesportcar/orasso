@@ -4,7 +4,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiRequestError } from "./http";
-import { kvGetJson, kvSetJson } from "./kv";
+import { cacheGetJson, cacheScope, cacheSetJson } from "./kv";
 
 type Options = {
   /** Mémorise la réponse dans le trousseau (profil, candidatures) : visible hors ligne. */
@@ -42,16 +42,18 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
   }, []);
 
   // Valeur du cache, affichée avant la réponse de l'API.
+  // Le cache est rangé sous le compte connecté (`kv.ts`) : un autre compte ne le lit jamais.
+  const account = cacheScope();
   useEffect(() => {
     if (!cacheKey) return;
     let cancelled = false;
-    kvGetJson<T>(cacheKey).then((cached) => {
+    cacheGetJson<T>(cacheKey).then((cached) => {
       if (!cancelled && cached) setData((current) => current ?? cached);
     });
     return () => {
       cancelled = true;
     };
-  }, [cacheKey]);
+  }, [cacheKey, account]);
 
   const reload = useCallback(async (): Promise<T | null> => {
     if (!enabled) return null;
@@ -61,7 +63,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
       setData(fresh);
       setError(null);
       setOffline(false);
-      if (cacheKey) void kvSetJson(cacheKey, fresh);
+      if (cacheKey) void cacheSetJson(cacheKey, fresh);
       return fresh;
     } catch (e) {
       if (!alive.current) return null;
