@@ -355,6 +355,8 @@ export type AdminOverview = {
   sanctionsContested: number;
   assistanceOpen: number;
   newslettersScheduled: number;
+  /** Lot 57 : profils média à vérifier (D26 : vérification du profil, pas de carte de presse). */
+  mediaToVerify: number;
 };
 
 export type AdminAuditRow = {

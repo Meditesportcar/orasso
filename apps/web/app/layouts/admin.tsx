@@ -29,6 +29,8 @@ const adminSections: AdminSection[] = [
   { href: "/admin/structures", label: N.structures },
   { href: "/admin/badges", label: N.badges, count: "badgesExpiring" },
   { href: "/admin/pros", label: N.pros, count: "prosToVerify" },
+  // Lot 57 : profils média à vérifier (D26).
+  { href: "/admin/medias", label: N.media, count: "mediaToVerify" },
   { href: "/admin/vehicules", label: N.vehicles, count: "otherVehicles" },
   { href: "/admin/journal", label: N.audit },
   { href: "/admin/reglages", label: N.settings },
