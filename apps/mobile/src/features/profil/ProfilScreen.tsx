@@ -1,9 +1,11 @@
-// Mon profil, le hub (lot 40, prototype `s-me` ; « la bulle en haut à droite disparaît, ce qu'elle contenait vit ici ») :
-// en-tête (avatar, pseudo, grade, département, Mon QR de compte), carte de saison, Mon passeport, Mon crew, Mes
-// casquettes avec leurs accès rapides et un seul bouton Créer, puis les réglages en tuiles (chacune ouvre
-// `reglages/<section>`), Aide et Se déconnecter. Partagé par l'onglet Profil des cinq casquettes qui en ont un.
-// Zones marquées pour les lots suivants : tuto (42), passeport (50), profil média (55).
-import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Mon profil, le hub (lot 40, prototype `s-me` ; reproduit fidèlement au lot C2b) : pas de grand titre, l'en-tête
+// `.me-head` en tient lieu (avatar incliné, pseudo, grade en étiquette, Mon QR de compte), la carte de saison (qui ouvre
+// l'historique des points), les invitations Mon passeport (trois tampons) et Mon crew, Mes casquettes en lignes `.cap`,
+// Créer, puis les réglages en tuiles (chacune ouvre `reglages/<section>`), Aide et Se déconnecter.
+// Retirés (audit § 5.2) : la ligne « Historique des points » (= toucher la carte de saison), « Mes véhicules archivés »
+// (Garage seulement), l'aide « Appui long sur le logo », « Devenir staff » (= ligne « Où je suis staff » sans mission) et
+// le bouton « Mon profil de base » (= la ligne de casquette).
+import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { gradeLabels, passportScreenTexts } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -12,17 +14,19 @@ import { AccountQrSheet } from "@/features/AccountQrSheet";
 import { PendingCard } from "@/features/arrivee/PendingCard";
 import { EmailBanner } from "@/features/moi/EmailBanner";
 import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
+import { CrewDot, initialsOf, Nudge, SmButton, Tag } from "@/features/passionne/kit";
+import { Stamp } from "@/features/passport/Stamp";
 import { api } from "@/lib/api";
 import { usePersona } from "@/lib/persona";
-import { isBaseKind, tabHref } from "@/lib/personaModel";
+import { isBaseKind, personaKindLabels, tabHref } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
-import { Avatar } from "@/ui/Avatar";
-import { SectionTitle, TabScreen } from "@/ui/Screens";
+import { TabScreen } from "@/ui/Screens";
+import { SecHead } from "@/ui/SecHead";
 
-import { CreateSheet, HubRow, PersonaRows, RowIcon, SeasonCard, SettingTile } from "./parts";
+import { CreateSheet, HeadAvatar, PersonaRows, SeasonCard, SettingTile } from "./parts";
 
-const { space2, space3 } = tokens.spacing;
+const { space1, space2, space3 } = tokens.spacing;
 
 const visibilityCaption = { public: "Profil public, nom privé", private: "Profil privé, nom privé" } as const;
 
@@ -30,16 +34,13 @@ export function ProfilScreen() {
   const { t, preference } = useTheme();
   const router = useRouter();
   const { me, refreshMe, signOut } = useSession();
-  const { persona, active, choose, base: basePersona } = usePersona();
+  const { persona, active } = usePersona();
   const [sheet, setSheet] = useState<"qr" | "create" | "staff" | null>(null);
   const close = () => setSheet(null);
   const base = isBaseKind(persona.kind);
 
   const points = useApi(() => api.points(), [], { cacheKey: "points" });
   const crews = useApi(() => api.myCrews(), [], { cacheKey: "my-crews", enabled: base });
-  // Lot 40 : les véhicules archivés (vendus, souvenirs, accidentés) restent joignables sans onglet Garage.
-  const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base });
-  const archived = vehicles.data?.filter((v) => v.status !== "active").length ?? 0;
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
   // Lot 50 : le passeport compte ses tampons (la saison en cours).
   const passport = useApi(() => api.passport(), [], { cacheKey: "passport.now", enabled: base });
@@ -47,6 +48,7 @@ export function ProfilScreen() {
   const profile = me?.profile;
   const department = profile?.departments[0];
   const crew = crews.data?.[0];
+  const lastStamps = (passport.data?.pages.flatMap((p) => p.stamps) ?? []).slice(-3);
   const theme = preference === "sable" ? "Sable" : preference === "auto" ? "Automatique" : "Béton";
   const preferencesCaption = [
     `Thème ${theme}`,
@@ -58,16 +60,8 @@ export function ProfilScreen() {
 
   return (
     <TabScreen
-      title="Mon profil"
       onRefresh={async () => {
-        await Promise.all([
-          refreshMe(),
-          points.reload(),
-          crews.reload(),
-          staff.reload(),
-          vehicles.reload(),
-          passport.reload(),
-        ]);
+        await Promise.all([refreshMe(), points.reload(), crews.reload(), staff.reload(), passport.reload()]);
       }}
       overlays={
         <>
@@ -80,103 +74,106 @@ export function ProfilScreen() {
       <EmailBanner />
       <PendingCard where="profil" />
 
-      {/* En-tête : avatar, pseudo, grade, département ; QR de compte (ou Ma fiche pour le pro). */}
+      {/* En-tête `.me-head` : avatar incliné, pseudo, grade en étiquette, puis Mon QR de compte (Ma fiche pour le pro). */}
       <View style={styles.head} testID="profil-head">
-        <Avatar
+        <HeadAvatar
           url={base ? profile?.avatarUrl : active.logoUrl}
-          pseudo={base ? profile?.pseudo : active.label}
-          size={72}
+          name={(base ? profile?.pseudo : active.label) ?? "?"}
         />
         <View style={styles.headText}>
-          <Text variant="posterM" color={t.color.ink}>
+          <Text variant="posterL" color={t.color.ink} style={styles.pseudo}>
             {profile?.pseudo ?? ""}
           </Text>
           <View style={styles.headTags}>
-            {profile ? <Chip selected>{gradeLabels[profile.grade]}</Chip> : null}
-            {!base ? <Chip>{active.label}</Chip> : null}
-            {department ? (
-              <Text variant="meta" color={t.color.inkMuted}>
-                {`Département ${department}`}
-              </Text>
-            ) : null}
+            {base && profile ? (
+              <Tag kind="win">{gradeLabels[profile.grade]}</Tag>
+            ) : (
+              <Tag kind="line">{personaKindLabels[persona.kind]}</Tag>
+            )}
+            <Text variant="caption" color={t.color.inkMuted} style={styles.headCaption}>
+              {base ? (department ? `Département ${department}` : "Passionné") : active.label}
+            </Text>
           </View>
+          {persona.kind === "pro" ? (
+            <SmButton kind="s" icon="briefcase" onPress={() => router.navigate("/(pro)/fiche")}>
+              Ma fiche
+            </SmButton>
+          ) : (
+            <SmButton kind="s" icon="qr" onPress={() => setSheet("qr")} testID="profil-account-qr">
+              Mon QR de compte
+            </SmButton>
+          )}
         </View>
       </View>
-      {persona.kind === "pro" ? (
-        <Button variant="secondary" icon="plate" onPress={() => router.navigate("/(pro)/fiche")} fullWidth>
-          Ma fiche
-        </Button>
-      ) : (
-        <Button variant="secondary" icon="qr" onPress={() => setSheet("qr")} fullWidth testID="profil-account-qr">
-          Mon QR de compte
-        </Button>
-      )}
 
       {base && profile ? (
-        <>
-          <SeasonCard points={profile.pointsSeason} grade={gradeLabels[profile.grade]} data={points.data ?? null} />
-          {/* L'historique des points (ex-écran Moi) : dernières lignes, malus et pointages en attente. */}
-          <HubRow
-            lead={<RowIcon name="grade" />}
-            title="Historique des points"
-            caption={
-              points.data?.entries[0]
-                ? `Dernière ligne : ${points.data.entries[0].event?.title ?? "points"} · ${
-                    points.data.entries[0].points > 0 ? "+" : ""
-                  }${points.data.entries[0].points}`.replace("-", "−")
-                : "Pointages, bonus et malus de la saison"
-            }
-            onPress={() => router.push("/reglages/points")}
-            testID="profil-points"
-          />
-        </>
+        <SeasonCard
+          points={profile.pointsSeason}
+          grade={gradeLabels[profile.grade]}
+          data={points.data ?? null}
+          onPress={() => router.push("/reglages/points")}
+        />
       ) : null}
 
-      {/* lot 50 : la tuile ouvre le passeport (l'onglet du visiteur, sinon l'écran) et compte les tampons. */}
+      {/* `.nudge` Mon passeport : le compte des tampons et les trois derniers, qui se chevauchent. */}
       {base ? (
-        <HubRow
-          lead={<RowIcon name="stamp" />}
-          title={passportScreenTexts.tileTitle}
-          caption={
-            passport.data
-              ? passportScreenTexts.tile(passport.data.total, passport.data.rare)
-              : "Tes tampons d'événements"
-          }
+        <Nudge
           onPress={() => router.navigate((tabHref(persona.kind, "passeport") ?? "/mon-passeport") as never)}
           testID="profil-passport"
-        />
+          accessibilityLabel={passportScreenTexts.tileTitle}
+          trailing={
+            lastStamps.length > 0 ? (
+              <View style={styles.stamps}>
+                {lastStamps.map((s, i) => (
+                  <View key={s.id} style={i > 0 ? styles.stampOver : null}>
+                    <Stamp stamp={s} size={58} />
+                  </View>
+                ))}
+              </View>
+            ) : undefined
+          }
+        >
+          <Text variant="label" color={t.color.inkMuted}>
+            {passportScreenTexts.tileTitle}
+          </Text>
+          <Text variant="bodyStrong" color={t.color.ink} style={styles.nudgeStrong}>
+            {passport.data
+              ? passportScreenTexts.tile(passport.data.total, passport.data.rare)
+              : "Tes tampons d'événements"}
+          </Text>
+        </Nudge>
       ) : null}
 
-      {base && archived > 0 ? (
-        <HubRow
-          lead={<RowIcon name="vehicle" />}
-          title="Mes véhicules archivés"
-          caption={`${archived} · vendus, souvenirs, accidentés`}
-          onPress={() => router.push("/vehicules-archives")}
-          testID="profil-archived"
-        />
-      ) : null}
-
+      {/* `.nudge` Mon crew : rond moutarde aux initiales, nom et membres. */}
       {base ? (
-        <HubRow
-          lead={<RowIcon name="staff" />}
-          title={crew ? `Mon crew · ${crew.name}` : "Mon crew"}
-          caption={crew ? `${crew.membersCount} membre${crew.membersCount > 1 ? "s" : ""}` : "Crée ou rejoins un crew"}
+        <Nudge
           onPress={() => router.push(crew ? `/crew/${crew.slug}` : "/crew/nouveau")}
           testID="profil-crew"
-        />
+          accessibilityLabel={crew ? `Mon crew, ${crew.name}` : "Mon crew, crée ou rejoins un crew"}
+        >
+          <View style={styles.crewRow}>
+            <CrewDot initials={crew ? initialsOf(crew.name, 2) : "+"} size={46} />
+            <View style={styles.crewText}>
+              <Text variant="label" color={t.color.inkMuted}>
+                Mon crew
+              </Text>
+              <Text variant="bodyStrong" color={t.color.ink} style={styles.nudgeStrong}>
+                {crew
+                  ? `${crew.name} · ${crew.membersCount} membre${crew.membersCount > 1 ? "s" : ""}`
+                  : "Crée ou rejoins un crew"}
+              </Text>
+            </View>
+          </View>
+        </Nudge>
       ) : null}
 
-      <SectionTitle>Mes casquettes</SectionTitle>
-      <Text variant="caption" color={t.color.inkMuted}>
-        Une barre d'onglets par casquette. Appui long sur le logo Orasso : retour à ton profil de base.
-      </Text>
+      <SecHead title="Mes casquettes" hint="Une barre d'onglets par casquette" />
       <PersonaRows staffEvents={staff.data ?? []} onStaffRequest={() => setSheet("staff")} />
-      <Button variant="secondary" icon="add" fullWidth onPress={() => setSheet("create")} testID="profil-create">
+      <SmButton kind="k" big wide icon="add" onPress={() => setSheet("create")} testID="profil-create">
         Créer
-      </Button>
+      </SmButton>
 
-      <SectionTitle>Réglages</SectionTitle>
+      <SecHead title="Réglages" />
       <View style={styles.tiles}>
         <SettingTile
           icon="bell"
@@ -223,11 +220,11 @@ export function ProfilScreen() {
       </View>
       {/* « Revoir le tuto » est dans l'Aide (lot 42). */}
       <View style={styles.footerRow}>
-        <Button variant="plate" icon="chat" onPress={() => router.push("/reglages/aide")} testID="profil-help">
+        <SmButton kind="g" icon="chat" onPress={() => router.push("/reglages/aide")} testID="profil-help">
           Aide
-        </Button>
-        <Button
-          variant="plate"
+        </SmButton>
+        <SmButton
+          kind="g"
           icon="back"
           onPress={async () => {
             await signOut();
@@ -236,30 +233,23 @@ export function ProfilScreen() {
           testID="profil-sign-out"
         >
           Se déconnecter
-        </Button>
+        </SmButton>
       </View>
-      {!base ? (
-        <Plate kind="note">
-          <Text variant="caption" color={t.color.plateMuted}>
-            {`Tu es dans ta casquette ${active.label}. Ton passeport, ta saison et ton crew sont dans ton profil de base.`}
-          </Text>
-          <Button
-            variant="plate"
-            icon="profile"
-            onPress={() => choose(basePersona, tabHref(basePersona.kind, "profil") ?? undefined)}
-          >
-            Mon profil de base
-          </Button>
-        </Plate>
-      ) : null}
     </TabScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: "row", alignItems: "center", gap: space3 },
-  headText: { flex: 1, gap: space2, alignItems: "flex-start" },
-  headTags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space2 },
+  head: { flexDirection: "row", alignItems: "center", gap: space3 + 2 },
+  headText: { flex: 1, gap: space1 + 2, alignItems: "flex-start" },
+  pseudo: { fontSize: 26, lineHeight: 25 },
+  headTags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space1 + 2 },
+  headCaption: { flexShrink: 1 },
+  nudgeStrong: { marginTop: space1 },
+  stamps: { flexDirection: "row", paddingLeft: space3 + 2 },
+  stampOver: { marginLeft: -14 },
+  crewRow: { flexDirection: "row", alignItems: "center", gap: space3 },
+  crewText: { flex: 1, minWidth: 0 },
   tiles: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   footerRow: { flexDirection: "row", justifyContent: "space-between", gap: space2 },
 });
