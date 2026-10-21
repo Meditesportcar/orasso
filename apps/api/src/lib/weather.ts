@@ -146,7 +146,12 @@ function openMeteo(): WeatherProvider {
         forecast_days: "8",
         wind_speed_unit: "kmh",
       });
-      const res = await (fetchImpl ?? fetch)(`https://api.open-meteo.com/v1/forecast?${params}`, {
+      // Double garde : même si la configuration est modifiée après le démarrage, aucun stub en production.
+      const endpoint =
+        env.NODE_ENV !== "production" && env.METEO_URL ? env.METEO_URL : "https://api.open-meteo.com/v1/forecast";
+      const url = new URL(endpoint);
+      for (const [key, value] of params) url.searchParams.set(key, value);
+      const res = await (fetchImpl ?? fetch)(url.toString(), {
         headers: { accept: "application/json", "user-agent": env.WEATHER_USER_AGENT },
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });

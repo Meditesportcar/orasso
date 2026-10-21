@@ -1,58 +1,66 @@
-// Brouillon de l'assistant d'événement gardé sur le téléphone (lot 35b) : un fichier JSON par structure dans le dossier
-// de l'appli (`expo-file-system`, déjà présent ; le trousseau limite la taille d'une valeur et le règlement seul la
-// dépasse), `localStorage` dans le navigateur (recette web). Lecture ou écriture qui échoue : ignorée, l'assistant
-// marche sans brouillon gardé. Le brouillon est effacé à l'enregistrement de l'événement.
-// Affiche (lot 34) : copiée à côté du brouillon (le cache du sélecteur d'images peut être vidé par le système) ; dans le
-// navigateur, gardée seulement si c'est une adresse `data:` assez petite pour `localStorage`.
+// Brouillons privés de l'assistant : cache du compte (lot 54b), purgé à la déconnexion.
+// Sur appareil, le gros JSON et l'affiche restent dans des fichiers propres au compte : seule leur référence passe
+// dans le trousseau, dont les valeurs sont limitées. Sans référence de cache, ces fichiers ne sont jamais relus.
+// Les anciennes clés sans propriétaire ne sont pas reprises. Échec de stockage : l'assistant reste utilisable.
 import { parseWizardMemo, serializeWizardMemo, type WizardMemo } from "@orasso/shared";
 import { File, Paths } from "expo-file-system";
 import { Platform } from "react-native";
 
 import { parseStoredDraft, type StoredDraft, type StoredPoster, serializeDraft } from "./eventDraft";
-import { kvDel, kvGet, kvKey, kvSet } from "./kv";
+import { accountGuard, cacheGetJson, cacheSetJson, kvKey } from "./kv";
 
+type DraftAccount = ReturnType<typeof accountGuard>;
 const isWeb = Platform.OS === "web";
-// Une création pas encore enregistrée : une saisie par structure ; un événement qui a un identifiant (brouillon créé,
-// ou modification) : une saisie par événement, gardée tant qu'elle n'est pas synchronisée (relecture du lot 53).
 const keyOf = (structureId: string, eventId?: string | null) =>
-  kvKey(`event-draft-${structureId}${eventId ? `-${eventId}` : ""}`);
-const fileOf = (structureId: string, eventId?: string | null) =>
-  new File(Paths.document, `${keyOf(structureId, eventId)}.json`);
-const posterFileOf = (structureId: string, eventId?: string | null) =>
-  new File(Paths.document, `${keyOf(structureId, eventId)}-poster.jpg`);
+  `event-draft-${structureId}${eventId ? `-${eventId}` : ""}`;
+const fileOf = (scope: string, key: string) => new File(Paths.document, `${kvKey(`draft.${scope}.${key}`)}.json`);
+const posterFileOf = (scope: string, key: string) =>
+  new File(Paths.document, `${kvKey(`draft.${scope}.${key}`)}-poster.jpg`);
+const active = (account: DraftAccount) => Boolean(account.scope && account.current());
 /** Au-delà, l'affiche n'est pas gardée dans le navigateur (quota de `localStorage`). */
 const WEB_POSTER_MAX_CHARS = 1_500_000;
 
-/**
- * Garde l'affiche choisie avec le brouillon et renvoie la photo à enregistrer dans le brouillon (`null` : pas gardée,
- * ou affiche retirée). Échec : `null`, l'affiche reste choisie pour cette session seulement.
- */
 export async function keepEventDraftPoster(
   structureId: string,
   photo: StoredPoster | null,
   eventId?: string | null,
+  account = accountGuard(),
 ): Promise<StoredPoster | null> {
+  if (!active(account)) return null;
   try {
     if (isWeb) return photo?.uri.startsWith("data:") && photo.uri.length <= WEB_POSTER_MAX_CHARS ? photo : null;
-    const dest = posterFileOf(structureId, eventId);
+    const dest = posterFileOf(account.scope as string, keyOf(structureId, eventId));
     if (photo && photo.uri === dest.uri) return photo;
     if (dest.exists) dest.delete();
     if (!photo) return null;
     await new File(photo.uri).copy(dest);
+    if (!active(account)) {
+      if (dest.exists) dest.delete();
+      return null;
+    }
     return { ...photo, uri: dest.uri };
   } catch {
     return null;
   }
 }
 
-export async function loadEventDraft(structureId: string, eventId?: string | null): Promise<StoredDraft | null> {
+export async function loadEventDraft(
+  structureId: string,
+  eventId?: string | null,
+  account = accountGuard(),
+): Promise<StoredDraft | null> {
+  if (!active(account)) return null;
   try {
-    if (isWeb) return parseStoredDraft(globalThis.localStorage?.getItem(keyOf(structureId, eventId)) ?? null);
-    const file = fileOf(structureId, eventId);
-    if (!file.exists) return null;
-    const stored = parseStoredDraft(await file.text());
-    // Copie de l'affiche disparue (dossier vidé) : le brouillon revient sans elle plutôt que d'échouer à l'envoi.
-    if (stored?.poster && !new File(stored.poster.uri).exists) return { ...stored, poster: null };
+    const value = await cacheGetJson<string | { file: true }>(keyOf(structureId, eventId));
+    if (!active(account) || !value) return null;
+    let raw: string | null = typeof value === "string" ? value : null;
+    if (!isWeb && typeof value !== "string") {
+      const file = fileOf(account.scope as string, keyOf(structureId, eventId));
+      if (file.exists) raw = await file.text();
+    }
+    if (!active(account)) return null;
+    const stored = parseStoredDraft(raw);
+    if (!isWeb && stored?.poster && !new File(stored.poster.uri).exists) return { ...stored, poster: null };
     return stored;
   } catch {
     return null;
@@ -63,43 +71,72 @@ export async function saveEventDraft(
   structureId: string,
   value: Omit<StoredDraft, "v">,
   eventId?: string | null,
+  account = accountGuard(),
 ): Promise<void> {
+  if (!active(account)) return;
   try {
     const raw = serializeDraft(value);
+    const key = keyOf(structureId, eventId);
     if (isWeb) {
-      globalThis.localStorage?.setItem(keyOf(structureId, eventId), raw);
+      await cacheSetJson(key, raw, account.scope);
       return;
     }
-    const file = fileOf(structureId, eventId);
+    const file = fileOf(account.scope as string, key);
     if (!file.exists) file.create();
     file.write(raw);
+    await cacheSetJson(key, { file: true }, account.scope);
   } catch {
     // Ignoré : voir l'en-tête.
   }
 }
 
-export async function clearEventDraft(structureId: string, eventId?: string | null): Promise<void> {
+export async function clearEventDraft(
+  structureId: string,
+  eventId?: string | null,
+  account = accountGuard(),
+): Promise<void> {
+  if (!active(account)) return;
   try {
-    if (isWeb) {
-      globalThis.localStorage?.removeItem(keyOf(structureId, eventId));
-      return;
-    }
-    const file = fileOf(structureId, eventId);
+    const key = keyOf(structureId, eventId);
+    // Pas de cacheDel : une valeur nulle reste indexée et sera effacée par purgeCaches.
+    await cacheSetJson(key, null, account.scope);
+    if (isWeb || !active(account)) return;
+    const file = fileOf(account.scope as string, key);
     if (file.exists) file.delete();
-    const poster = posterFileOf(structureId, eventId);
+    const poster = posterFileOf(account.scope as string, key);
     if (poster.exists) poster.delete();
   } catch {
     // Ignoré : voir l'en-tête.
   }
 }
 
-/** Mémoire de l'assistant pour un brouillon (temps atteint, récurrence) : petite, dans le stockage clé/valeur. */
 const memoKey = (eventId: string) => `event-wizard-memo-${eventId}`;
 
-export const loadWizardMemo = async (eventId: string): Promise<WizardMemo | null> =>
-  parseWizardMemo(await kvGet(memoKey(eventId)));
+export async function loadWizardMemo(eventId: string, account = accountGuard()): Promise<WizardMemo | null> {
+  if (!active(account)) return null;
+  const raw = await cacheGetJson<string>(memoKey(eventId));
+  return active(account) ? parseWizardMemo(raw) : null;
+}
 
-export async function saveWizardMemo(eventId: string, memo: WizardMemo | null): Promise<void> {
-  if (memo) await kvSet(memoKey(eventId), serializeWizardMemo(memo));
-  else await kvDel(memoKey(eventId));
+export async function saveWizardMemo(
+  eventId: string,
+  memo: WizardMemo | null,
+  account = accountGuard(),
+): Promise<void> {
+  if (!active(account)) return;
+  await cacheSetJson(memoKey(eventId), memo ? serializeWizardMemo(memo) : null, account.scope);
+}
+
+/** Lie aussi les minuteries et les callbacks de démontage au compte qui a ouvert l'assistant. */
+export function eventDraftStoreForAccount(account = accountGuard()) {
+  return {
+    loadEventDraft: (structureId: string, eventId?: string | null) => loadEventDraft(structureId, eventId, account),
+    saveEventDraft: (structureId: string, value: Omit<StoredDraft, "v">, eventId?: string | null) =>
+      saveEventDraft(structureId, value, eventId, account),
+    clearEventDraft: (structureId: string, eventId?: string | null) => clearEventDraft(structureId, eventId, account),
+    keepEventDraftPoster: (structureId: string, photo: StoredPoster | null, eventId?: string | null) =>
+      keepEventDraftPoster(structureId, photo, eventId, account),
+    loadWizardMemo: (eventId: string) => loadWizardMemo(eventId, account),
+    saveWizardMemo: (eventId: string, memo: WizardMemo | null) => saveWizardMemo(eventId, memo, account),
+  };
 }

@@ -90,6 +90,8 @@ const schema = z.object({
    * redémarrer l'API suffit : aucun changement de code ni de l'appli.
    */
   WEATHER_PROVIDER: z.enum(["open-meteo", "met-norway", "off"]).default("open-meteo"),
+  /** Recettes locales : URL complète du stub Open-Meteo ; vide = fournisseur habituel. Interdite en production. */
+  METEO_URL: optional.pipe(z.url().optional()),
   /** `User-Agent` envoyé aux fournisseurs : obligatoire et identifiant pour MET Norway (nom de l'appli + contact). */
   WEATHER_USER_AGENT: z.string().default("Orasso/0.1 contact@orasso.fr"),
   /**
@@ -143,6 +145,10 @@ if (parsed.data.NODE_ENV === "production" && parsed.data.DEV_SKIP_2FA) {
 }
 if (parsed.data.NODE_ENV === "production" && parsed.data.DEV_CLOCK) {
   console.error("Configuration invalide : DEV_CLOCK est interdit en production.");
+  process.exit(1);
+}
+if (parsed.data.NODE_ENV === "production" && parsed.data.METEO_URL) {
+  console.error("Configuration invalide : METEO_URL est interdit en production.");
   process.exit(1);
 }
 if (parsed.data.NODE_ENV === "production" && (!parsed.data.QR_SIGNING_KEYS || !parsed.data.QR_SIGNING_ACTIVE_KID)) {
