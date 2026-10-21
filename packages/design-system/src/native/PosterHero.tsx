@@ -39,31 +39,30 @@ export function NightScene() {
     </G>
   );
   return (
-    <Svg
-      width="100%"
-      height="100%"
-      viewBox="0 0 400 300"
-      preserveAspectRatio="xMidYMid slice"
+    <View
+      pointerEvents="none"
       style={StyleSheet.absoluteFill}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <Defs>
-        <LinearGradient id="hn-sky" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={c.sceneSkyTop} />
-          <Stop offset="1" stopColor={c.sceneSkyBottom} />
-        </LinearGradient>
-        <RadialGradient id="hn-glow" cx="360" cy="20" r="160" gradientUnits="userSpaceOnUse">
-          <Stop offset="0" stopColor={c.accent} stopOpacity={0.55} />
-          <Stop offset="1" stopColor={c.accent} stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Rect width={400} height={300} fill="url(#hn-sky)" />
-      <Circle cx={360} cy={20} r={160} fill="url(#hn-glow)" />
-      <Rect x={0} y={180} width={400} height={120} fill={c.sceneGround} />
-      {car(118, 1, false)}
-      {car(330, 0.22, true)}
-    </Svg>
+      <Svg width="100%" height="100%" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+        <Defs>
+          <LinearGradient id="hn-sky" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={c.sceneSkyTop} />
+            <Stop offset="1" stopColor={c.sceneSkyBottom} />
+          </LinearGradient>
+          <RadialGradient id="hn-glow" cx="360" cy="20" r="160" gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={c.accent} stopOpacity={0.55} />
+            <Stop offset="1" stopColor={c.accent} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect width={400} height={300} fill="url(#hn-sky)" />
+        <Circle cx={360} cy={20} r={160} fill="url(#hn-glow)" />
+        <Rect x={0} y={180} width={400} height={120} fill={c.sceneGround} />
+        {car(118, 1, false)}
+        {car(330, 0.22, true)}
+      </Svg>
+    </View>
   );
 }
 
@@ -173,6 +172,9 @@ export type PosterHeroProps = {
   /** Rangée d'itinéraires (Maps, Waze, Sur la carte). */
   gps?: { label: string; icon: IconName; onPress: () => void; testID?: string }[];
   testID?: string;
+  /** Identifiants du compte à rebours et de l'heure (par défaut `<testID>-countdown`, `<testID>-hour`). */
+  countdownTestID?: string;
+  hourTestID?: string;
 };
 
 export function PosterHero({
@@ -190,6 +192,8 @@ export function PosterHero({
   action,
   gps = [],
   testID = "poster-hero",
+  countdownTestID = `${testID}-countdown`,
+  hourTestID = `${testID}-hour`,
 }: PosterHeroProps) {
   const { t } = useTheme();
   const c = t.color;
@@ -236,7 +240,7 @@ export function PosterHero({
             color={c.photoInk}
             style={styles.cdBig}
             containerStyle={styles.cdWrap}
-            testID={`${testID}-countdown`}
+            testID={countdownTestID}
           >
             {countdown}
           </OutlinedText>
@@ -247,6 +251,7 @@ export function PosterHero({
             color={c.photoInk}
             style={styles.cdSmall}
             containerStyle={styles.cdWrap}
+            testID={hourTestID}
           >
             {hourLabel}
           </OutlinedText>

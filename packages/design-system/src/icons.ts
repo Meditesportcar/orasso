@@ -131,6 +131,19 @@ export const iconShapes = {
   gallery: [r(3, 4, 18, 16, 2), c(9, 10, 2), p("M21 16l-5-5-9 9")], // Contenus (média), Vitrine
   badge: [c(12, 9, 6), p("M8.5 14L7 21l5-3 5 3-1.5-7")], // Structure (badge vérifié)
   o: [p("M12 4c5 0 9 3.6 9 8s-4 8-9 8-9-3.6-9-8 4-8 9-8z"), p("M8.5 13l7-2.5")], // le O (onglet central, sans la marque)
+  // Lot C1 : symboles de l'artefact DA v2 (`#i-edit`, `#i-lock`…), tracés repris tels quels (grille 24, trait 2).
+  edit: [p("M4 20h4L19 9l-4-4L4 16zM14 6l4 4")], // modifier (crayon)
+  lock: [r(5, 11, 14, 10, 2), p("M8 11V8a4 4 0 0 1 8 0v3")], // sécurité, cadenas
+  shield: [p("M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"), p("M9 12l2 2 4-4")], // confidentialité
+  gear: [
+    c(12, 12, 3),
+    p("M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"),
+  ], // réglages
+  help: [c(12, 12, 9), p("M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17h.01")], // aide
+  logout: [p("M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 8l-4 4 4 4M6 12h10")], // se déconnecter
+  trophy: [p("M8 4h8v5a4 4 0 0 1-8 0zM8 6H4a3 3 0 0 0 4 4M16 6h4a3 3 0 0 1-4 4M12 13v4M8 21h8M9 17h6")], // prix du public
+  copy: [r(8, 8, 13, 13, 2), p("M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3")], // dupliquer, copier
+  camera: [p("M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"), c(12, 13.5, 3.5)], // photo, prestataire
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;

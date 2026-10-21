@@ -125,6 +125,8 @@ export function HeroCard({
   return (
     <PosterHero
       testID={testID}
+      countdownTestID="home-countdown"
+      hourTestID="home-hour"
       photoUrl={photoUrl}
       posterUrl={posterUrl}
       weekday={cap(WEEKDAY_FMT.format(date))}

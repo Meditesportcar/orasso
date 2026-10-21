@@ -458,6 +458,86 @@
           "sable": "#9a9a9a"
         },
         "usage": "repli sans photo : jantes"
+      },
+      {
+        "name": "avatar-1",
+        "value": {
+          "beton": "#7a2412",
+          "sable": "#7a2412"
+        },
+        "usage": "fond d’avatar n° 1 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-2",
+        "value": {
+          "beton": "#2f5fb8",
+          "sable": "#2f5fb8"
+        },
+        "usage": "fond d’avatar n° 2 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-3",
+        "value": {
+          "beton": "#565b66",
+          "sable": "#565b66"
+        },
+        "usage": "fond d’avatar n° 3 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-4",
+        "value": {
+          "beton": "#6b3fa0",
+          "sable": "#6b3fa0"
+        },
+        "usage": "fond d’avatar n° 4 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-5",
+        "value": {
+          "beton": "#b8441d",
+          "sable": "#b8441d"
+        },
+        "usage": "fond d’avatar n° 5 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-6",
+        "value": {
+          "beton": "#8a6200",
+          "sable": "#8a6200"
+        },
+        "usage": "fond d’avatar n° 6 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-7",
+        "value": {
+          "beton": "#131417",
+          "sable": "#131417"
+        },
+        "usage": "fond d’avatar n° 7 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-8",
+        "value": {
+          "beton": "#a3261f",
+          "sable": "#a3261f"
+        },
+        "usage": "fond d’avatar n° 8 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-9",
+        "value": {
+          "beton": "#3d4f7a",
+          "sable": "#3d4f7a"
+        },
+        "usage": "fond d’avatar n° 9 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-ink",
+        "value": {
+          "beton": "#f3ebdd",
+          "sable": "#f3ebdd"
+        },
+        "usage": "initiales sur un fond d’avatar (.avatar de l’artefact)"
       }
     ],
     "stamp-ink": [

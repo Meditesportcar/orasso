@@ -105,7 +105,7 @@ function TabEntry({
             <Icon name={tab.icon} size={30} color={active ? c.accent : c.barInk} />
           )}
         </View>
-        <Text variant="tab" color={ink} numberOfLines={1} style={styles.centerLabel}>
+        <Text variant="tab" color={ink} numberOfLines={1} style={styles.label}>
           {tab.label}
         </Text>
       </Pressable>
@@ -120,7 +120,7 @@ function TabEntry({
       style={styles.tab}
     >
       <TabIcon tab={tab} active={active} moved={moved} ink={ink} />
-      <Text variant="tab" color={ink} numberOfLines={1}>
+      <Text variant="tab" color={ink} numberOfLines={1} style={styles.label}>
         {tab.label}
       </Text>
       {active ? (
@@ -198,7 +198,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  centerLabel: { textAlign: "center" },
+  // `.tab { white-space: nowrap }` : un libellé long (Événements, Structure) déborde un peu de sa colonne, sans
+  // jamais être coupé ; la boîte du texte est plus large que l'onglet et centrée sur lui.
+  label: { width: 96, textAlign: "center" },
   indicator: {
     position: "absolute",
     bottom: 7,

@@ -71,6 +71,16 @@ export const tokens = {
       "sceneWindow": "#0e1116",
       "sceneWheel": "#0b0c0e",
       "sceneRim": "#9a9a9a",
+      "avatar1": "#7a2412",
+      "avatar2": "#2f5fb8",
+      "avatar3": "#565b66",
+      "avatar4": "#6b3fa0",
+      "avatar5": "#b8441d",
+      "avatar6": "#8a6200",
+      "avatar7": "#131417",
+      "avatar8": "#a3261f",
+      "avatar9": "#3d4f7a",
+      "avatarInk": "#f3ebdd",
       "stampInk66": "#ff6a5f",
       "stampInk34": "#b48ce6",
       "stampInk31": "#f3ebdd",
@@ -139,6 +149,16 @@ export const tokens = {
       "sceneWindow": "#0e1116",
       "sceneWheel": "#0b0c0e",
       "sceneRim": "#9a9a9a",
+      "avatar1": "#7a2412",
+      "avatar2": "#2f5fb8",
+      "avatar3": "#565b66",
+      "avatar4": "#6b3fa0",
+      "avatar5": "#b8441d",
+      "avatar6": "#8a6200",
+      "avatar7": "#131417",
+      "avatar8": "#a3261f",
+      "avatar9": "#3d4f7a",
+      "avatarInk": "#f3ebdd",
       "stampInk66": "#c8322b",
       "stampInk34": "#6b3fa0",
       "stampInk31": "#131417",
@@ -1302,6 +1322,106 @@ export const tokensV2Overlay = [
       "sable": "#9a9a9a"
     },
     "why": "repli sans photo : jantes"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-1",
+    "value": {
+      "beton": "#7a2412",
+      "sable": "#7a2412"
+    },
+    "why": "fond d’avatar n° 1 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-2",
+    "value": {
+      "beton": "#2f5fb8",
+      "sable": "#2f5fb8"
+    },
+    "why": "fond d’avatar n° 2 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-3",
+    "value": {
+      "beton": "#565b66",
+      "sable": "#565b66"
+    },
+    "why": "fond d’avatar n° 3 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-4",
+    "value": {
+      "beton": "#6b3fa0",
+      "sable": "#6b3fa0"
+    },
+    "why": "fond d’avatar n° 4 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-5",
+    "value": {
+      "beton": "#b8441d",
+      "sable": "#b8441d"
+    },
+    "why": "fond d’avatar n° 5 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-6",
+    "value": {
+      "beton": "#8a6200",
+      "sable": "#8a6200"
+    },
+    "why": "fond d’avatar n° 6 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-7",
+    "value": {
+      "beton": "#131417",
+      "sable": "#131417"
+    },
+    "why": "fond d’avatar n° 7 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-8",
+    "value": {
+      "beton": "#a3261f",
+      "sable": "#a3261f"
+    },
+    "why": "fond d’avatar n° 8 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-9",
+    "value": {
+      "beton": "#3d4f7a",
+      "sable": "#3d4f7a"
+    },
+    "why": "fond d’avatar n° 9 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "avatar-ink",
+    "value": {
+      "beton": "#f3ebdd",
+      "sable": "#f3ebdd"
+    },
+    "why": "initiales sur un fond d’avatar (.avatar de l’artefact)"
   },
   {
     "kind": "added",
