@@ -49,6 +49,7 @@ import { EventFeed } from "../components/EventFeed";
 import { EventMap } from "../components/EventMap";
 import { PosterFace } from "../components/EventTile";
 import { ContactOrganizer } from "../components/Messaging";
+import { PhotoGallery } from "../components/PhotoGallery";
 import { ReportDialog } from "../components/ReportDialog";
 import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
@@ -597,6 +598,7 @@ function EventPage({
                         Voir le contenu
                       </a>
                     )}
+                    {c.photos.length > 0 && <PhotoGallery title={c.title} photos={c.photos} />}
                   </span>
                 </li>
               ))}

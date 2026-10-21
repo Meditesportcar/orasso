@@ -1,5 +1,13 @@
 import { Button } from "@orasso/design-system/web";
-import { departments, type EventCard, eventFormats, fromWallTime, siteLabels as L, type Page } from "@orasso/shared";
+import {
+  type Category,
+  departments,
+  type EventCard,
+  eventFormats,
+  fromWallTime,
+  siteLabels as L,
+  type Page,
+} from "@orasso/shared";
 
 import { EventTile } from "../components/EventTile";
 import { MapPanel } from "../components/MapPanel";
@@ -34,10 +42,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     : "";
   const filters = {
     format: (eventFormats as readonly string[]).includes(get("format")) ? get("format") : "",
-    categoryId: get("categorie"),
+    categoryId: /^[0-9a-f-]{36}$/i.test(get("categorie")) ? get("categorie") : "",
     department: (departments as readonly string[]).includes(get("departement")) ? get("departement") : "",
-    from: /^\d{4}-\d{2}-\d{2}$/.test(get("du")) ? get("du") : "",
-    to: /^\d{4}-\d{2}-\d{2}$/.test(get("au")) ? get("au") : "",
+    // Une fenêtre « quand » remplace les dates libres : elles ne sont alors ni appliquées ni montrées.
+    from: !when && /^\d{4}-\d{2}-\d{2}$/.test(get("du")) ? get("du") : "",
+    to: !when && /^\d{4}-\d{2}-\d{2}$/.test(get("au")) ? get("au") : "",
     q: get("q").slice(0, 80),
     city: city?.id ?? "",
     radius: (filterRadii as readonly number[]).includes(radiusAsked) ? radiusAsked : DEFAULT_RADIUS,
@@ -45,7 +54,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
   const params = new URLSearchParams({ limit: String(PAGE) });
   if (filters.format) params.set("format", filters.format);
-  if (/^[0-9a-f-]{36}$/i.test(filters.categoryId)) params.set("categoryId", filters.categoryId);
+  if (filters.categoryId) params.set("categoryId", filters.categoryId);
   if (filters.department) params.set("department", filters.department);
   const range = filters.when ? whenRange(filters.when, nowMs()) : null;
   const from = range?.from ?? dayBound(filters.from, false);
@@ -62,9 +71,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const cursor = get("suite");
   if (cursor) params.set("cursor", cursor);
-  const events = await api<Page<EventCard>>(request, `/events?${params}`);
+  const [events, categories] = await Promise.all([
+    api<Page<EventCard>>(request, `/events?${params}`),
+    api<Category[]>(request, "/vehicle-reference/categories"),
+  ]);
   return {
     events: events.ok ? events.data : { items: [], nextCursor: null },
+    categories: categories.ok ? categories.data : [],
     filters,
     view: get("vue") === "liste" ? ("liste" as const) : ("affiches" as const),
     unavailable: !events.ok,
@@ -89,9 +102,16 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export default function Evenements({ loaderData }: Route.ComponentProps) {
-  const { events, filters, view, unavailable } = loaderData;
+  const { events, categories, filters, view, unavailable } = loaderData;
   const active = Boolean(
-    filters.format || filters.department || filters.city || filters.when || filters.q || filters.from || filters.to,
+    filters.format ||
+      filters.categoryId ||
+      filters.department ||
+      filters.city ||
+      filters.when ||
+      filters.q ||
+      filters.from ||
+      filters.to,
   );
   // Les paramètres de la page, pour les liens (vue, page suivante).
   const query = (extra: Record<string, string>) => {
@@ -114,7 +134,7 @@ export default function Evenements({ loaderData }: Route.ComponentProps) {
     return `/evenements${text ? `?${text}` : ""}`;
   };
   const nextHref = events.nextCursor ? query({ suite: events.nextCursor, vue: view === "liste" ? "liste" : "" }) : null;
-  const count = L.events.count(events.items.length);
+  const count = L.events.shown(events.items.length);
 
   return (
     <div className="w-events">
@@ -122,6 +142,10 @@ export default function Evenements({ loaderData }: Route.ComponentProps) {
       <PhraseFilter
         values={{
           format: filters.format,
+          categoryId: filters.categoryId,
+          from: filters.from,
+          to: filters.to,
+          categories,
           department: filters.department,
           city: filters.city,
           radius: filters.radius,
@@ -135,7 +159,7 @@ export default function Evenements({ loaderData }: Route.ComponentProps) {
         <div className="s-stack">
           <div className="w-bar">
             <span data-testid="events-count">
-              <strong>{events.nextCursor ? `${count} et plus` : count}</strong>
+              <strong>{count}</strong>
               {filters.city ? L.events.sortedNear : L.events.sortedDate}
             </span>
             <span className="w-bar__views">

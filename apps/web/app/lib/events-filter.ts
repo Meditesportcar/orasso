@@ -28,8 +28,7 @@ export type FilterWhen = (typeof filterWhens)[number];
 export const cityById = (id: string): FilterCity | undefined => filterCities.find((c) => c.id === id);
 
 /**
- * Fenêtre de dates (heure de Paris) : « ce week-end » (samedi 0 h → dimanche 23 h 59, ou aujourd'hui → dimanche si on
- * y est), « ce mois-ci » (maintenant → fin du mois), « le mois prochain ».
+ * Fenêtre de dates (heure de Paris) : « ce week-end » (le plus tard de samedi 0 h et de maintenant → dimanche 23 h 59), « ce mois-ci » (maintenant → fin du mois), « le mois prochain ».
  */
 export function whenRange(when: FilterWhen, nowMs: number): { from: string; to: string } {
   const now = wallTime(new Date(nowMs));
@@ -40,8 +39,12 @@ export function whenRange(when: FilterWhen, nowMs: number): { from: string; to: 
     const toSaturday = weekday === 0 ? -1 : weekday === 6 ? 0 : 6 - weekday;
     const saturday = new Date(Date.UTC(now.year, now.month - 1, now.day + toSaturday));
     const sunday = new Date(Date.UTC(now.year, now.month - 1, now.day + toSaturday + 1));
+    // Le début ne remonte jamais avant maintenant : l'API garde les événements dont la fin est après `from`, un
+    // dimanche soir ne doit pas ramener ceux de samedi.
+    const saturdayStart = at(saturday.getUTCFullYear(), saturday.getUTCMonth() + 1, saturday.getUTCDate(), 0, 0);
+    const nowIso = new Date(nowMs).toISOString();
     return {
-      from: at(saturday.getUTCFullYear(), saturday.getUTCMonth() + 1, saturday.getUTCDate(), 0, 0),
+      from: saturdayStart > nowIso ? saturdayStart : nowIso,
       to: at(sunday.getUTCFullYear(), sunday.getUTCMonth() + 1, sunday.getUTCDate(), 23, 59),
     };
   }

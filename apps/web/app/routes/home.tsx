@@ -4,6 +4,7 @@ import { departments, type EventCard, siteLabels as L, type Page, proPitchDiscou
 import { EventTile, PosterFace } from "../components/EventTile";
 import { Qr } from "../components/Qr";
 import { api, getMe, originOf } from "../lib/api.server";
+import { nowMs } from "../lib/clock";
 import type { Route } from "./+types/home";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -48,7 +49,7 @@ const SHORT = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", day: 
 /** « Samedi » dans la semaine qui vient, sinon « 1er nov. » (comme le bandeau du prototype). */
 function tickerDay(iso: string): string {
   const at = new Date(iso);
-  const days = (at.getTime() - Date.now()) / 86_400_000;
+  const days = (at.getTime() - nowMs()) / 86_400_000;
   if (days < 7) {
     const name = DAY.format(at);
     return name.charAt(0).toUpperCase() + name.slice(1);
@@ -150,7 +151,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <section className="w w-sec" aria-labelledby="next-title">
         <div className="w-sec__head">
           <div>
-            <span className="o-t-label w-kicker">{city ? L.home.around(city) : "Dans toute la France"}</span>
+            <span className="o-t-label w-kicker">{city ? L.home.around(city) : L.home.everywhere}</span>
             <h2 id="next-title" className="o-t-poster-l">
               {L.home.weekendAndAfter}
             </h2>
@@ -160,6 +161,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <Icon name="next" size={16} />
           </a>
         </div>
+        {department && !nearFound && items.length > 0 && (
+          <p className="s-notice" data-testid="home-none-near">
+            {L.home.noneNear(department)}
+          </p>
+        )}
         {items.length === 0 ? (
           <p className="s-notice">{L.home.noEvents}</p>
         ) : (

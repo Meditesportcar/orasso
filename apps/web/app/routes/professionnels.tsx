@@ -1,6 +1,5 @@
 import { Button, Icon, type IconName, Outlined } from "@orasso/design-system/web";
 import {
-  discountForGrade,
   gradeLabels,
   grades,
   siteLabels as L,
@@ -14,6 +13,7 @@ import {
 } from "@orasso/shared";
 
 import { api, getMe, originOf } from "../lib/api.server";
+import { proPitchCard } from "../lib/pro-pitch";
 import type { Route } from "./+types/professionnels";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -77,10 +77,7 @@ const initials = (name: string) =>
 export default function Professionnels({ loaderData }: Route.ComponentProps) {
   const P = L.pros;
   const { sample } = loaderData;
-  // Remises affichées : celles du pro d'exemple si elles existent, sinon l'exemple de présentation.
-  const real = sample ? grades.some((g) => discountForGrade(sample.discounts, g) > 0) : false;
-  const pct = (g: (typeof grades)[number]) =>
-    real && sample ? discountForGrade(sample.discounts, g) : proPitchDiscounts[g];
+  const card = proPitchCard(sample);
   return (
     <div className="s-home">
       <section className="w w-hero" aria-labelledby="pro-title">
@@ -115,19 +112,29 @@ export default function Professionnels({ loaderData }: Route.ComponentProps) {
                 </span>
                 <div>
                   <b className="o-t-poster-s w-pro-card__name">{sample?.name ?? "Atelier Têt Detailing"}</b>
-                  <span className="s-verified o-t-label">{P.validated}</span>
+                  {card.fictional ? (
+                    <span className="s-verified o-t-label" data-testid="pro-sample-fictional">
+                      {P.fictional}
+                    </span>
+                  ) : (
+                    card.badge && <span className="s-verified o-t-label">{P.validated}</span>
+                  )}
                 </div>
               </div>
-              <div className="w-discounts">
-                {grades
-                  .filter((g) => g !== "legende")
-                  .map((g) => (
+              {card.discounts.length > 0 ? (
+                <div className="w-discounts">
+                  {card.discounts.map(({ grade: g, percent }) => (
                     <div key={g} className={g === "sport" ? "is-top" : undefined}>
                       <span className="o-t-label">{gradeLabels[g]}</span>
-                      <b className="o-t-number-narrow">{pct(g)} %</b>
+                      <b className="o-t-number-narrow">{percent} %</b>
                     </div>
                   ))}
-              </div>
+                </div>
+              ) : (
+                <p className="o-t-meta" data-testid="pro-sample-nodiscount">
+                  {P.noDiscount}
+                </p>
+              )}
             </div>
           </div>
         </div>

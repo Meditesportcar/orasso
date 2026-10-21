@@ -1,5 +1,5 @@
 import { Button, Icon, OLoader, Outlined } from "@orasso/design-system/web";
-import { type EventCard, siteLabels as L, type Page, sitePosterWall } from "@orasso/shared";
+import { type EventCard, siteLabels as L, type Page, posterStyleLabels, sitePosterWall } from "@orasso/shared";
 
 import { api, originOf } from "../lib/api.server";
 import type { Route } from "./+types/organisateurs";
@@ -96,7 +96,14 @@ export default function Organisateurs({ loaderData }: Route.ComponentProps) {
         </div>
         <div className="w-wall w-wall--eight" data-testid="poster-wall">
           {sitePosterWall.map((style) => (
-            <img key={style} src={`/styles/${style}.png`} alt="" loading="lazy" width={540} height={675} />
+            <img
+              key={style}
+              src={`/styles/${style}.png`}
+              alt={posterStyleLabels[style]}
+              loading="lazy"
+              width={540}
+              height={675}
+            />
           ))}
         </div>
       </section>
@@ -111,7 +118,7 @@ export default function Organisateurs({ loaderData }: Route.ComponentProps) {
             <p>{O.finalText}</p>
           </div>
           <Button variant="secondary" icon="add" href="/app/structure/nouvelle">
-            {O.create}
+            {O.finalCta}
           </Button>
         </section>
       </div>

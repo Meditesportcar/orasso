@@ -1,7 +1,7 @@
 // Carte d'`/evenements` (lot 56) : à droite sur un bureau, repliée sur un téléphone (bouton « Carte »). Le conteneur
 // est monté seulement quand la carte est ouverte : MapLibre ne charge rien pour qui ne la regarde pas.
 import { Button } from "@orasso/design-system/web";
-import type { EventCard } from "@orasso/shared";
+import { type EventCard, siteLabels as L } from "@orasso/shared";
 import { useEffect, useState } from "react";
 
 import { EventsMap } from "./EventsMap";
@@ -23,7 +23,7 @@ export function MapPanel({ events }: { events: EventCard[] }) {
     <div className="w-split__map">
       {!wide && (
         <Button variant="secondary" icon="place" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-          {open ? "Masquer la carte" : "Carte"}
+          {open ? L.events.hideMap : L.events.map}
         </Button>
       )}
       {open && <EventsMap events={events} />}

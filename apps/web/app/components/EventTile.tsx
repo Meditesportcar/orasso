@@ -1,5 +1,6 @@
 import { Chip, Icon, StatusBadge } from "@orasso/design-system/web";
 import { type EventCard, eventFormatLabels } from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
 
 import { formatTime } from "../lib/format";
 
@@ -7,6 +8,7 @@ const TZ = "Europe/Paris";
 const weekdayFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, weekday: "short" });
 const monthFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, month: "short" });
 const dayNumFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, day: "numeric" });
+const longDateFmt = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
 
 /** Souche de la carte (prototype `sdate`) : « sam. » / « 24 » / « oct. ». */
 export function stubOf(iso: string): { weekday: string; day: string; month: string } {
@@ -20,11 +22,40 @@ export function stubOf(iso: string): { weekday: string; day: string; month: stri
 
 /**
  * Affiche de la carte (DA v2, lot 56) : l'affiche générée (Post 4:5, lot 47), jamais l'affiche perso de
- * l'organisateur ; sans affiche générée, le gabarit « Minimal » sur l'aplat de l'affiche. Jamais de rectangle vide.
+ * l'organisateur ; sans affiche générée, ou si l'image ne charge pas (stockage en panne), le gabarit « Minimal » sur
+ * l'aplat de l'affiche. Jamais de rectangle vide. `onFail` prévient la carte pour qu'elle pose la souche datée.
  */
-export function PosterFace({ event }: { event: Pick<EventCard, "generatedPosterUrl" | "format" | "title"> }) {
-  if (event.generatedPosterUrl) {
-    return <img className="w-card__img" src={event.generatedPosterUrl} alt="" loading="lazy" decoding="async" />;
+export function PosterFace({
+  event,
+  onFail,
+}: {
+  event: Pick<EventCard, "generatedPosterUrl" | "format" | "title">;
+  onFail?: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const img = useRef<HTMLImageElement>(null);
+  const fail = () => {
+    setFailed(true);
+    onFail?.();
+  };
+  // L'erreur peut précéder l'hydratation (rendu serveur) : on la relit une fois le composant monté.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: lecture unique au montage et au changement d'adresse
+  useEffect(() => {
+    const el = img.current;
+    if (el?.complete && el.naturalWidth === 0) fail();
+  }, [event.generatedPosterUrl]);
+  if (event.generatedPosterUrl && !failed) {
+    return (
+      <img
+        ref={img}
+        className="w-card__img"
+        src={event.generatedPosterUrl}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        onError={fail}
+      />
+    );
   }
   return (
     <span className="w-card__minimal" data-testid="poster-minimal">
@@ -68,12 +99,15 @@ export function EventTile({
   const where = [event.city, event.department].filter(Boolean).join(" · ");
   const stub = stubOf(event.startsAt);
   const taken = takenOf(event);
+  // Affiche en échec de chargement : la carte pose la souche datée du gabarit « Minimal ».
+  const [posterFailed, setPosterFailed] = useState(false);
+  const drawsDate = Boolean(event.generatedPosterUrl) && !posterFailed;
   return (
     <article className={`w-card s-pcard w-card--${layout}`} data-testid="event-tile">
       <a className="w-card__link" href={`/e/${event.slug}`}>
         <span className="w-card__poster" aria-hidden="true">
-          <PosterFace event={event} />
-          {!event.generatedPosterUrl && (
+          <PosterFace event={event} onFail={() => setPosterFailed(true)} />
+          {!drawsDate && (
             <span className="w-card__stub">
               <small className="o-t-label">{stub.weekday}</small>
               <b className="o-t-number-narrow">{stub.day}</b>
@@ -83,6 +117,7 @@ export function EventTile({
         </span>
         <span className="w-card__body">
           <span className="o-t-label w-card__format">
+            <span className="o-visually-hidden">{longDateFmt.format(new Date(event.startsAt))}, </span>
             {eventFormatLabels[event.format]} · {formatTime(event.startsAt)}
           </span>
           <h3 className="w-card__title o-t-poster-s">{event.title}</h3>

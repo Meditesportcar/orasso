@@ -9,7 +9,7 @@ import {
   FranceMapCredit,
   Icon,
 } from "@orasso/design-system/web";
-import { eventFormatLabels, eventFormats, siteLabels as L } from "@orasso/shared";
+import { type Category, eventFormatLabels, eventFormats, siteLabels as L } from "@orasso/shared";
 import { useRef } from "react";
 import { Form, useSubmit } from "react-router";
 
@@ -17,6 +17,10 @@ import { filterCities, filterRadii } from "../lib/events-filter";
 
 export type PhraseValues = {
   format: string;
+  categoryId: string;
+  categories: Category[];
+  from: string;
+  to: string;
   department: string;
   city: string;
   radius: number;
@@ -113,6 +117,45 @@ function DepartmentPick({ value }: { value: string }) {
   );
 }
 
+/**
+ * Les critères hors phrase, toujours visibles : catégorie et dates libres (« du / au »). Un lien partagé qui les porte
+ * les montre donc, et le formulaire les garde. Une fenêtre « quand » remplace les dates libres : elles se masquent.
+ */
+function MoreFilters({ values }: { values: PhraseValues }) {
+  const submit = useSubmit();
+  const onChange = (e: { currentTarget: { form: HTMLFormElement | null } }) =>
+    submit(e.currentTarget.form, { method: "get" });
+  return (
+    <div className="w-more" data-testid="more-filters">
+      <span className="o-t-label">{L.events.moreFilters}</span>
+      {values.categories.length > 0 && (
+        <Pick
+          label={L.events.category}
+          name="categorie"
+          value={values.categoryId}
+          set={Boolean(values.categoryId)}
+          options={[
+            { value: "", label: L.events.allCategories },
+            ...values.categories.map((c) => ({ value: c.id, label: c.label })),
+          ]}
+        />
+      )}
+      {!values.when && (
+        <>
+          <label className="w-date o-t-meta">
+            <span>{L.events.dateFrom}</span>
+            <input type="date" name="du" defaultValue={values.from} max={values.to || undefined} onChange={onChange} />
+          </label>
+          <label className="w-date o-t-meta">
+            <span>{L.events.dateTo}</span>
+            <input type="date" name="au" defaultValue={values.to} min={values.from || undefined} onChange={onChange} />
+          </label>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function PhraseFilter({ values }: { values: PhraseValues }) {
   return (
     <Form method="get" className="w w-phrase" data-testid="events-filters" aria-label="Filtres">
@@ -177,6 +220,7 @@ export function PhraseFilter({ values }: { values: PhraseValues }) {
       <Button type="submit" variant="secondary" icon="search">
         {L.events.apply}
       </Button>
+      <MoreFilters values={values} />
     </Form>
   );
 }
