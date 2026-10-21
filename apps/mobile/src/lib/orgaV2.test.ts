@@ -3,8 +3,8 @@ import { type ApplicationForTriage, type EventNeedView, type EventOrganizer, org
 import { describe, expect, it } from "vitest";
 
 import {
-  AVATAR_COLORS,
-  avatarColor,
+  AVATAR_TOKENS,
+  avatarToken,
   BUBBLE_FULL_AT,
   BUBBLE_MAX,
   BUBBLE_MIN,
@@ -141,8 +141,8 @@ describe("bulles", () => {
     expect(placed).toHaveLength(40);
   });
   it("la couleur d'avatar est stable, le prénom vient du pseudo", () => {
-    expect(avatarColor("u1")).toBe(avatarColor("u1"));
-    expect(AVATAR_COLORS).toContain(avatarColor("u2"));
+    expect(avatarToken("u1")).toBe(avatarToken("u1"));
+    expect(AVATAR_TOKENS).toContain(avatarToken("u2"));
     expect(bubbleName("Lucie_Pia")).toBe("Lucie");
   });
   it("les initiales", () => {

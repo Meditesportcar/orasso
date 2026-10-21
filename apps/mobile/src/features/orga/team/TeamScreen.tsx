@@ -3,7 +3,7 @@
 // message, gérer, retirer). Dessous, « Rôles pour <événement> » : quatre rôles avec les présences confirmées d'abord.
 // Accepter une demande fait entrer sans rôle (lot 36) : les rôles se donnent pour un événement. Depuis le lot 48,
 // seuls Accueil et scan, Contrôle et Super staff pointent les entrées : chaque rôle dit ce qu'il permet.
-import { Button, Chip, Icon, Plate, SelectField, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Chip, Icon, Plate, SelectField, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type EventStaffMember,
   orgaManageLabels as L,
@@ -372,11 +372,7 @@ export function TeamScreen() {
                   <Button variant="close" label={L2.closePerson} onPress={() => setOpened(null)} />
                 </View>
                 <View style={styles.tagRow}>
-                  <View style={[styles.tag, { backgroundColor: c.ink }]}>
-                    <Text variant="label" color={c.ground} style={styles.tagText}>
-                      {structureRoleLabels[opened.role]}
-                    </Text>
-                  </View>
+                  <Tag>{structureRoleLabels[opened.role]}</Tag>
                   <Muted variant="caption">{L2.historyHeld(openedHistory.eventsHeld)}</Muted>
                 </View>
                 {event && openedStaff && opened.role === "staff" ? (
@@ -897,8 +893,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tagRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space2 },
-  tag: { height: 22, justifyContent: "center", paddingHorizontal: 9, borderRadius: 4, transform: [{ skewX: "-8deg" }] },
-  tagText: { transform: [{ skewX: "8deg" }] },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   hist: { marginLeft: 8, paddingLeft: 14, borderLeftWidth: 2, gap: space3 },
   histRow: { gap: 2 },

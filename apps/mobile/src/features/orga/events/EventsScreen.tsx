@@ -3,7 +3,7 @@
 // retenues, à trier) et, pour un brouillon, ce qui lui manque. Les anciens événements sont derrière « … » : on peut les
 // dupliquer ; la copie arrive sur la page du nouvel événement, qui explique l'invitation des retenus de l'édition
 // précédente. Aucune règle métier ici (dates, publication, duplication : l'API).
-import { Button, Chip, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Chip, Photo, Plate, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventCard, type EventOrganizer, orgaV2Labels as L, orgaLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
@@ -74,26 +74,6 @@ function Counts({ counters: c }: { counters: EventCard["counters"] }) {
   );
 }
 
-/** Étiquette inclinée de l'artefact (`.tag.acc` moutarde ou `.tag.line` au trait). */
-function Tag({ children, accent }: { children: string; accent: boolean }) {
-  const { t } = useTheme();
-  const c = t.color;
-  return (
-    <View
-      style={[
-        styles.tag,
-        accent
-          ? { backgroundColor: c.accent }
-          : { borderWidth: 1.5, borderColor: c.ink, backgroundColor: "transparent" },
-      ]}
-    >
-      <Text variant="label" color={accent ? c.accentInk : c.ink} style={styles.tagText}>
-        {children}
-      </Text>
-    </View>
-  );
-}
-
 /** La vignette de la carte : l'affiche générée, sinon le gabarit « Minimal » (jamais l'affiche personnelle). */
 function Thumb({ event }: { event: EventCard }) {
   const { t } = useTheme();
@@ -124,7 +104,9 @@ function ProgressCard({ event, at, onPress }: { event: EventCard; at: Date; onPr
       <Thumb event={event} />
       <View style={styles.headText}>
         <View style={styles.chips}>
-          <Tag accent={soon || event.outlook === "uncertain"}>{publishedStatus(event.startsAt, event.endsAt, at)}</Tag>
+          <Tag tone={soon || event.outlook === "uncertain" ? "acc" : "line"}>
+            {publishedStatus(event.startsAt, event.endsAt, at)}
+          </Tag>
         </View>
         <Text variant="posterS" color={c.ink} style={styles.oevTitle}>
           {event.title}
@@ -339,15 +321,6 @@ const styles = StyleSheet.create({
   thumb: { width: 76, aspectRatio: 4 / 5, borderRadius: 10, overflow: "hidden" },
   oev: { flexDirection: "row", gap: 12, padding: 10, borderRadius: 18, marginBottom: space2 },
   oevTitle: { fontSize: 15, lineHeight: 17, textTransform: "uppercase", marginTop: 2 },
-  tag: {
-    alignSelf: "flex-start",
-    height: 22,
-    justifyContent: "center",
-    paddingHorizontal: 9,
-    borderRadius: 4,
-    transform: [{ skewX: "-8deg" }],
-  },
-  tagText: { fontSize: 11, transform: [{ skewX: "8deg" }] },
   counts: { flexDirection: "row", gap: 6, marginTop: 4 },
   count: { flex: 1 },
   countValue: { fontSize: 26, lineHeight: 26, fontWeight: "800" },

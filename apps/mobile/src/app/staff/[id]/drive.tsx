@@ -230,7 +230,11 @@ export default function Drive() {
           </Plate>
         ) : last ? (
           <View style={styles.lastCard}>
-            <ScanResult {...resultProps(last)} settled animated={false} sound={false} />
+            {last.state === "ok" ? (
+              <DriveOk result={last} />
+            ) : (
+              <ScanResult {...resultProps(last)} settled animated={false} sound={false} />
+            )}
           </View>
         ) : null}
       </View>
@@ -299,6 +303,47 @@ export default function Drive() {
   );
 }
 
+/**
+ * Dernier pointage réussi (artefact `.dr-res`) : carte moutarde lumineuse, « Retenue · zone », la zone en chiffres
+ * étroits de 64 px, le pseudo et le véhicule à droite, l'heure du pointage (le drive pointe seul : pas de bouton).
+ */
+function DriveOk({ result }: { result: ShownResult }) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <View
+      style={[styles.ok, { backgroundColor: c.accent, boxShadow: `0 0 34px ${c.accent}8c` }]}
+      testID="drive-result-ok"
+    >
+      <Text variant="label" color={c.accentInk}>
+        {L.resultKicker}
+      </Text>
+      <View style={styles.okRow}>
+        <Text variant="numberNarrow" color={c.accentInk} style={styles.okZone} numberOfLines={1}>
+          {result.zone ?? "—"}
+        </Text>
+        <View style={styles.okWho}>
+          {result.pseudo ? (
+            <Text variant="bodyStrong" color={c.accentInk} style={styles.right}>
+              {result.pseudo}
+            </Text>
+          ) : null}
+          {result.vehicle ? (
+            <Text variant="body" color={c.accentInk} style={styles.right}>
+              {result.vehicle}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      {result.time ? (
+        <Text variant="caption" color={c.accentInk}>
+          {L.resultPointed(result.time)}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 /** Une issue de secours du drive (`.dr-fb button`). */
 function RescueTile({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
   const { t } = useTheme();
@@ -330,6 +375,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
   },
+  ok: { borderRadius: 22, padding: 16, gap: 6 },
+  okRow: { flexDirection: "row", alignItems: "flex-end", gap: space2 },
+  okZone: { fontSize: 64, lineHeight: 64, fontWeight: "800", flexShrink: 1 },
+  okWho: { flex: 1, alignItems: "flex-end" },
+  right: { textAlign: "right" },
   offlDot: { width: 8, height: 8, borderRadius: 4 },
   offlText: { fontSize: 12, flexShrink: 1 },
   tile: {

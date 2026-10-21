@@ -6,7 +6,7 @@ import { Text, tokens, useTheme } from "@orasso/design-system/native";
 import { orgaV2Labels as L } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { AVATAR_INK, avatarColor, bubbleInitials, bubbleName, bubbleSize } from "@/lib/orgaV2";
+import { avatarToken, bubbleInitials, bubbleName, bubbleSize } from "@/lib/orgaV2";
 
 const { radiusPill } = tokens.radius;
 
@@ -54,18 +54,22 @@ export function Bubble({
         {
           width: diameter,
           height: diameter,
-          backgroundColor: avatarColor(userId),
+          backgroundColor: c[avatarToken(userId)],
           opacity: dim ? 0.55 : 1,
           transform: [{ scale: pressed ? 0.94 : 1 }],
         },
         diameter > 40 ? styles.shadow : null,
       ]}
     >
-      <Text variant="bodyStrong" color={AVATAR_INK} style={[styles.initials, { fontSize, lineHeight: fontSize * 1.1 }]}>
+      <Text
+        variant="bodyStrong"
+        color={c.avatarInk}
+        style={[styles.initials, { fontSize, lineHeight: fontSize * 1.1 }]}
+      >
         {bubbleInitials(pseudo)}
       </Text>
       {diameter > 58 ? (
-        <Text variant="meta" color={AVATAR_INK} style={styles.name} numberOfLines={1}>
+        <Text variant="meta" color={c.avatarInk} style={styles.name} numberOfLines={1}>
           {bubbleName(pseudo)}
         </Text>
       ) : null}

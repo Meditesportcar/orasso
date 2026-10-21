@@ -73,28 +73,25 @@ export function bubbleSize(eventsHeld: number): number {
   return Math.round(BUBBLE_MIN + ((BUBBLE_MAX - BUBBLE_MIN) * n) / BUBBLE_FULL_AT);
 }
 
-/**
- * Couleurs d'avatar de l'artefact (`TEAM` de `s-ostaff`), avec l'encre crème posée dessus. Valeurs reprises telles
- * quelles (D33) : elles iront dans les jetons `avatar-*` du socle (lot C1) à la fusion (journal des choix, lot C4a).
- */
-export const AVATAR_COLORS = [
-  "#7a2412",
-  "#2f5fb8",
-  "#565b66",
-  "#6b3fa0",
-  "#b8441d",
-  "#8a6200",
-  "#131417",
-  "#a3261f",
-  "#3d4f7a",
+/** Les neuf jetons d'avatar du socle (`avatar-1` à `avatar-9`, relevés de l'artefact), encre `avatar-ink` dessus. */
+export const AVATAR_TOKENS = [
+  "avatar1",
+  "avatar2",
+  "avatar3",
+  "avatar4",
+  "avatar5",
+  "avatar6",
+  "avatar7",
+  "avatar8",
+  "avatar9",
 ] as const;
-export const AVATAR_INK = "#f3ebdd";
+export type AvatarToken = (typeof AVATAR_TOKENS)[number];
 
-/** La couleur d'avatar d'un membre : stable d'une ouverture à l'autre (dérivée de son identifiant). */
-export function avatarColor(userId: string): string {
+/** Le jeton d'avatar d'un membre : stable d'une ouverture à l'autre (dérivé de son identifiant). */
+export function avatarToken(userId: string): AvatarToken {
   let h = 0;
   for (const ch of userId) h = (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length] ?? AVATAR_COLORS[0];
+  return AVATAR_TOKENS[h % AVATAR_TOKENS.length] ?? "avatar1";
 }
 
 /** Une bulle posée dans la grappe : centre (x, y) et diamètre, en points. */
