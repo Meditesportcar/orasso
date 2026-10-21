@@ -238,6 +238,7 @@ test("utilisateur : sorties, passeport, vote, récap, carte à partager, hub (de
     expect(res.status, JSON.stringify(res.data)).toBe(201);
   }
   const beziers = await eventBySlug(kenji, "beziers-night-2026");
+  let candidatesCount = 3;
 
   for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme, "kenji@orasso.local");
@@ -266,13 +267,27 @@ test("utilisateur : sorties, passeport, vote, récap, carte à partager, hub (de
 
     // Prix du public : la grille, sa propre voiture grisée, un vote, le classement.
     await page.goto(`/app/vote/${event.slug}`);
-    await expect(page.getByTestId("vote-candidate")).toHaveCount(3);
+    await expect(page.getByTestId("vote-candidate")).toHaveCount(candidatesCount);
     await page
       .getByTestId("vote-candidate")
       .filter({ hasText: pilots[theme === "beton" ? 0 : 1]?.pseudo ?? "" })
       .click();
     await expect(page.getByTestId("vote-saved")).toContainText("Vote enregistré · tu peux le changer jusqu'à");
     await expect(page.getByTestId("vote-candidate").filter({ hasText: "C'est toi" })).toBeDisabled();
+    // Relecture : un pointage sans aucun vote entre-temps ajoute le véhicule à la grille ouverte (rechargement en direct).
+    if (theme === "beton") {
+      const late = `Charlie_${s}`;
+      const lateCookie = await signUpApi(late);
+      const lateApp = await applyApi(lateCookie, event.id, await addVehicleApi(lateCookie, randomPlate()));
+      await decideApi(damien, event.id, lateApp, "accept");
+      const lateCheck = await apiCall(damien, "POST", `/events/${event.id}/checkins`, {
+        applicationId: lateApp,
+        method: "manual",
+      });
+      expect(lateCheck.status, JSON.stringify(lateCheck.data)).toBe(201);
+      candidatesCount = 4;
+      await expect(page.getByTestId("vote-candidate")).toHaveCount(4, { timeout: 30_000 });
+    }
     await both(page, "vote", theme);
 
     // Récap de Béziers Night (prix du public décerné) ; résultats du vote.
@@ -352,6 +367,16 @@ test("média : profil de Léo, accréditations, contenu avec floutage proposé ;
       "/me/media-contents",
     );
     expect(mine.data.find((c) => c.title === galleryTitle)?.photos).toHaveLength(2);
+    // La fiche du média (connecté) liste ses contenus publiés, galerie comprise (deux photos).
+    const profile = await apiCall<{ profile: { id: string } | null }>(
+      await login("leo@orasso.local"),
+      "GET",
+      "/me/media-profile",
+    );
+    await page.goto(`/m/${profile.data.profile?.id}`);
+    const published = page.getByTestId("media-public-content").filter({ hasText: galleryTitle });
+    await expect(published).toBeVisible();
+    await expect(published.locator("img")).toHaveCount(2);
     await both(page, "media-contenus", theme);
 
     await page.goto("/app/media?onglet=agenda");
@@ -513,6 +538,11 @@ test("média : envoi d'une photo retardé, aperçu flouté, Explorer au-delà de
   const preview = picker.getByTestId("media-gallery-sent").locator("img").first();
   expect(await preview.getAttribute("src")).toMatch(/^data:image\/jpeg/);
   await expect(publish).toBeEnabled();
+  // Photo retirée : son envoi est supprimé côté serveur (il occupait le quota des envois en attente).
+  const deleted = page.waitForResponse((r) => r.url().includes("/api/me/uploads/") && r.request().method() === "DELETE");
+  await picker.getByRole("button", { name: "Retirer cette photo" }).click();
+  expect((await deleted).status()).toBe(204);
+  await expect(picker.getByTestId("media-gallery-sent")).toHaveCount(0);
   await ctx.close();
 });
 

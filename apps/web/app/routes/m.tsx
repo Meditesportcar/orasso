@@ -6,11 +6,13 @@ import {
   instagramHandle,
   instagramUrl,
   mediaAppLabels as L,
+  type MediaContentView,
   type MediaPublic,
   mediaFormatLabels,
+  type Page,
 } from "@orasso/shared";
 
-import { apiOrThrow, requireMe } from "../lib/api.server";
+import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import "../styles/media.css";
 import type { Route } from "./+types/m";
 
@@ -20,7 +22,23 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   await requireMe(request);
-  return { media: await apiOrThrow<MediaPublic>(request, `/media/${encodeURIComponent(params.id)}`) };
+  const id = encodeURIComponent(params.id);
+  const media = await apiOrThrow<MediaPublic>(request, `/media/${id}`);
+  // Contenus publiés (relecture du lot 57) : 20 par page, « Voir la suite » ajoute la page suivante (`pages`).
+  const pages = Math.min(10, Math.max(1, Math.floor(Number(new URL(request.url).searchParams.get("pages"))) || 1));
+  const contents: MediaContentView[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < pages; i++) {
+    const res = await api<Page<MediaContentView>>(
+      request,
+      `/media/${id}/contents?limit=20${cursor ? `&cursor=${cursor}` : ""}`,
+    );
+    if (!res.ok) break;
+    contents.push(...res.data.items);
+    cursor = res.data.nextCursor;
+    if (!cursor) break;
+  }
+  return { media, contents, hasMore: Boolean(cursor), pages };
 }
 
 export default function MediaPage({ loaderData }: Route.ComponentProps) {
@@ -63,6 +81,54 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
           </Button>
         )}
       </div>
+      {loaderData.contents.length > 0 && (
+        <section className="s-stack" aria-labelledby="m-contents" data-testid="media-public-contents">
+          <h2 id="m-contents" className="s-h2">
+            {L.contents} · {loaderData.contents.length}
+            {loaderData.hasMore ? "+" : ""}
+          </h2>
+          {loaderData.contents.map((c) => (
+            <article key={c.id} className="s-card s-stack s-stack--tight" data-testid="media-public-content">
+              <div className="o-t-label s-label">
+                {L.kindOf(c)} · <a href={`/e/${c.event.slug}`}>{c.event.title}</a>
+              </div>
+              <h3 className="s-h2 o-never-truncate">
+                {c.url ? (
+                  <a href={c.url} target="_blank" rel="noreferrer">
+                    {c.title}
+                  </a>
+                ) : (
+                  c.title
+                )}
+              </h3>
+              {c.kind === "gallery" && c.photos.length > 0 && (
+                <>
+                  <ul className="md-thumbs">
+                    {c.photos.slice(0, 6).map((p) => (
+                      <li key={p.key}>
+                        <img src={p.url} alt="" loading="lazy" />
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="o-t-caption s-muted">{L.galleryStats(c.photos.length)}</div>
+                </>
+              )}
+            </article>
+          ))}
+          {loaderData.hasMore && (
+            <div>
+              <Button
+                variant="secondary"
+                icon="down"
+                href={`/m/${m.id}?pages=${loaderData.pages + 1}`}
+                data-testid="media-public-more"
+              >
+                {L.exploreMore}
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

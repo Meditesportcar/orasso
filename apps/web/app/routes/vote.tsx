@@ -69,7 +69,7 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
   // qui revient après une coupure la recharge aussi (relecture du lot 57).
   const { connected } = useLiveRevalidate(
     `event:${event.id}:votes`,
-    (m) => m.type === "votes.changed" || m.type === "candidates.changed",
+    (m) => m.type === "votes.changed" || m.type === "votes.candidates.changed",
     {
       onMessage: (m) => {
         const total = (m.payload as { total?: number } | null)?.total;

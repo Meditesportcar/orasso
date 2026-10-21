@@ -94,7 +94,7 @@ test("après l'événement : bilan, note interne, remerciement, avis par le lien
   await expect(page.getByTestId("ae-report")).toContainText("Bilan provisoire");
 
   // 3. Remerciement : confirmation, puis « envoyé le … » ; une seule fois.
-  await expect(page.getByTestId("ae-thanks-preview")).toContainText("/app/acces?avis=");
+  await expect(page.getByTestId("ae-thanks-preview")).toContainText("/app/sorties?avis=");
   await page.getByTestId("ae-thanks-send").click();
   await expect(page.getByTestId("ae-thanks")).toContainText("Il ne part qu'une fois");
   await page.getByTestId("ae-thanks-confirm").click();
@@ -120,7 +120,7 @@ test("après l'événement : bilan, note interne, remerciement, avis par le lien
     "GET",
     `/conversations/${conversations.data.items[0]?.id}/messages`,
   );
-  const link = `/app/acces?avis=${present.applicationId}`;
+  const link = `/app/sorties?avis=${present.applicationId}`;
   expect(messages.data.items.map((m) => m.body).join("\n")).toContain(link);
 
   const ctxP = await context(browser, present.cookie);

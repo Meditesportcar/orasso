@@ -79,13 +79,22 @@ export function VoteScreen() {
     else pending.current = setTimeout(reloadBoard, wait);
   }, [reloadBoard]);
   useChannel(id ? `event:${id}:votes` : null, (event) => {
+    // Un pointage change la liste des candidats (relecture du lot 57) : la grille et mon droit de voter se rechargent.
+    if (event.type === "votes.candidates.changed") {
+      void candidates.reload();
+      void mine.reload();
+      return;
+    }
     if (event.type !== "votes.changed") return;
     setLive(event.payload as AudienceVotesChanged);
     scheduleReload();
   });
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") scheduleReload();
+      if (state === "active") {
+        scheduleReload();
+        void candidates.reload();
+      }
     });
     return () => {
       sub.remove();

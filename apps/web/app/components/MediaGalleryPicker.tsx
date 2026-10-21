@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { FileField } from "./Fields";
 import { PlateFrame } from "./PlateFrame";
 
-type Sent = { key: string; preview: string; blurred: boolean };
+type Sent = { id: string; key: string; preview: string; blurred: boolean };
 
 /**
  * Aperçu d'une photo floutée (relecture du lot 57) : la photo, avec les cadres de plaque pixellisés, comme le fera
@@ -74,12 +74,12 @@ export function MediaGalleryPicker({ onPendingChange }: { onPendingChange?: (pen
     setError(null);
     try {
       const res = await fetch("/api/me/uploads", { method: "POST", body, credentials: "same-origin" });
-      const json = (await res.json().catch(() => null)) as { key?: string; error?: { message?: string } } | null;
+      const json = (await res.json().catch(() => null)) as { id?: string; key?: string; error?: { message?: string } } | null;
       if (!res.ok || !json?.key) {
         setError(json?.error?.message ?? L.uploadFailed);
         return;
       }
-      const key = json.key;
+      const { key, id } = json;
       let preview = file.url;
       if (rects) {
         try {
@@ -88,7 +88,7 @@ export function MediaGalleryPicker({ onPendingChange }: { onPendingChange?: (pen
           preview = "";
         }
       }
-      setSent((all) => [...all, { key, preview, blurred: Boolean(rects) }]);
+      setSent((all) => [...all, { id: id ?? "", key, preview, blurred: Boolean(rects) }]);
       setFile(null);
       const picker = input.current?.querySelector<HTMLInputElement>('input[type="file"]');
       if (picker) picker.value = "";
@@ -96,6 +96,17 @@ export function MediaGalleryPicker({ onPendingChange }: { onPendingChange?: (pen
       setError(L.uploadFailed);
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Photo retirée : elle sort du formulaire et son envoi est supprimé (il occupait le quota des envois en attente). */
+  async function remove(s: Sent) {
+    setSent((all) => all.filter((x) => x.key !== s.key));
+    if (!s.id) return;
+    try {
+      await fetch(`/api/me/uploads/${encodeURIComponent(s.id)}`, { method: "DELETE", credentials: "same-origin" });
+    } catch {
+      // Hors ligne : l'envoi non rattaché expire de lui-même sous 24 h.
     }
   }
 
@@ -115,7 +126,7 @@ export function MediaGalleryPicker({ onPendingChange }: { onPendingChange?: (pen
                 type="button"
                 variant="secondary"
                 icon="close"
-                onClick={() => setSent((all) => all.filter((x) => x.key !== s.key))}
+                onClick={() => void remove(s)}
               >
                 {L.addPhotosRemove}
               </Button>
