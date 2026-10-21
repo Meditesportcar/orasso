@@ -25,6 +25,7 @@ import {
   swipeRotation,
   swipeState,
   toggleId,
+  defaultTriageEvent,
   triageEvents,
   UNDO_DELAY_MS,
   waitlistIds,
@@ -297,5 +298,15 @@ describe("événements à trier", () => {
       at,
     );
     expect(list.map((x) => x.id)).toEqual(["soon", "late"]);
+  });
+});
+
+describe("événement par défaut du tri (lot C4a)", () => {
+  it("le prochain avec des candidatures à trier, sinon le premier", () => {
+    const today = { id: "today", counters: { pending: 0 } };
+    const later = { id: "later", counters: { pending: 3 } };
+    expect(defaultTriageEvent([today, later])?.id).toBe("later");
+    expect(defaultTriageEvent([today, { id: "x", counters: { pending: 0 } }])?.id).toBe("today");
+    expect(defaultTriageEvent([])).toBeUndefined();
   });
 });

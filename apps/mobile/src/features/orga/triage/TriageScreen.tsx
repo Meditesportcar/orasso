@@ -12,7 +12,7 @@ import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
 import { api } from "@/lib/api";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
-import { COUNTER_ACTIVE, counterCells, triageEvents } from "@/lib/triage";
+import { COUNTER_ACTIVE, counterCells, defaultTriageEvent, triageEvents } from "@/lib/triage";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { TabTitle } from "@/ui/TabTitle";
@@ -55,7 +55,9 @@ export function TriageScreen() {
   });
   const choices = useMemo(() => triageEvents(events.data ?? [], at), [events.data, at]);
   const eventId =
-    choices.find((e) => e.id === picked)?.id ?? choices.find((e) => e.id === params.event)?.id ?? choices[0]?.id;
+    choices.find((e) => e.id === picked)?.id ??
+    choices.find((e) => e.id === params.event)?.id ??
+    defaultTriageEvent(choices)?.id;
   const event = choices.find((e) => e.id === eventId) ?? null;
 
   const counters = useApi(() => api.triageCounters(eventId ?? ""), [eventId], {
