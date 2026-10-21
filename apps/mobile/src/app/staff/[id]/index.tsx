@@ -152,12 +152,12 @@ export default function StaffHome() {
       footer={
         // Toujours en bas (artefact `.stf-bar`) : Alerte, Main courante, et la discussion du staff en bouton carré.
         <View style={styles.row}>
-          <Button variant="alert" icon="alert" onPress={() => setSheet("alert")}>
+          <Button variant="alert" icon="bell" onPress={() => setSheet("alert")}>
             {L.alert}
           </Button>
           <Button
             variant="secondary"
-            icon="incident"
+            icon="edit"
             onPress={() => setSheet("incident")}
             style={styles.flex}
             testID="staff-logbook"

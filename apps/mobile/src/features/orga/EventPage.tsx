@@ -570,7 +570,7 @@ export function EventPage({
             {e.status !== "cancelled" ? (
               <Button
                 variant="secondary"
-                icon="incident"
+                icon="edit"
                 onPress={() => router.push(`/evenement/${eventId}/modifier`)}
                 fullWidth
                 testID="orga-edit"
@@ -618,7 +618,7 @@ export function EventPage({
             </Button>
             <Button
               variant="secondary"
-              icon="add"
+              icon="copy"
               onPress={() => setSheet("duplicate")}
               fullWidth
               testID="orga-duplicate"

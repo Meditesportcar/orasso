@@ -261,6 +261,43 @@ export function Deck({
   const zoneNow = current ? (zonePick[current.id] ?? null) : null;
   const fullItem = fullFor ? (state.queue.find((q) => q.id === fullFor) ?? null) : null;
 
+  // Lot C4a (artefact `.tri-act`) : les trois décisions sont dans la carte, sous les faits.
+  const decisions = (
+    <View style={styles.row}>
+      <Button
+        variant="plate"
+        tone="dashed"
+        icon="close"
+        disabled={busy}
+        onPress={() => press("refuse")}
+        style={styles.grow}
+        testID="triage-refuse"
+      >
+        {triageAppLabels.refuse}
+      </Button>
+      <Button
+        variant="plate"
+        tone="wait"
+        icon="wait"
+        disabled={busy}
+        onPress={() => press("waitlist")}
+        style={styles.grow}
+        testID="triage-waitlist"
+      >
+        {triageAppLabels.waitlist}
+      </Button>
+      <Button
+        variant="primary"
+        icon="check"
+        disabled={busy}
+        onPress={() => press("accept")}
+        style={styles.grow}
+        testID="triage-accept"
+      >
+        {triageAppLabels.accept}
+      </Button>
+    </View>
+  );
   return (
     <View style={styles.fill}>
       {offline ? <Notice tone="error">{triageAppLabels.offlineBanner}</Notice> : null}
@@ -279,7 +316,7 @@ export function Deck({
             onRefuse={() => setRefusing(true)}
             testID="triage-swipe"
           >
-            <CandidateCard item={current} photoHeight={photoHeight} fallbackPhoto={fallbackPhoto} />
+            <CandidateCard item={current} photoHeight={photoHeight} fallbackPhoto={fallbackPhoto} actions={decisions} />
           </SwipeCard>
         ) : (
           <Plate kind="note" testID="triage-empty">
@@ -323,43 +360,6 @@ export function Deck({
       ))}
       {hidden > 0 ? <Muted variant="caption">{triageAppLabels.armedMore(hidden)}</Muted> : null}
 
-      <View style={styles.row}>
-        <Button
-          variant="plate"
-          tone="dashed"
-          icon="close"
-          layout="column"
-          disabled={busy}
-          onPress={() => press("refuse")}
-          style={styles.grow}
-          testID="triage-refuse"
-        >
-          {triageAppLabels.refuse}
-        </Button>
-        <Button
-          variant="plate"
-          tone="wait"
-          icon="wait"
-          layout="column"
-          disabled={busy}
-          onPress={() => press("waitlist")}
-          style={styles.grow}
-          testID="triage-waitlist"
-        >
-          {triageAppLabels.waitlist}
-        </Button>
-        <Button
-          variant="primary"
-          icon="check"
-          layout="column"
-          disabled={busy}
-          onPress={() => press("accept")}
-          style={styles.grow}
-          testID="triage-accept"
-        >
-          {triageAppLabels.accept}
-        </Button>
-      </View>
       <View style={styles.row}>
         <Button
           variant="plate"

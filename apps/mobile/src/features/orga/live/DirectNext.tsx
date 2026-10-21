@@ -63,7 +63,7 @@ export function DirectNext({
           </Text>
           <Button
             variant="primary"
-            icon="check"
+            icon="cards"
             onPress={() => router.push({ pathname: "/tri", params: { event: event.id } })}
             testID="orga-direct-sort"
           >
