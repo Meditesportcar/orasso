@@ -1,21 +1,18 @@
 // Fin de l'arrivée : le profil choisi mène à sa barre. Un Pro, un Organisateur, un Prestataire ou un Média crée sa casquette par les
 // écrans de création existants ; un Exposant sans véhicule ajoute sa voiture ; « Plus tard » ouvre l'appli sur la barre
 // visiteur, avec une carte « Termine ta fiche » (Accueil, Mon profil).
-import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button } from "@orasso/design-system/native";
 import { pendingLabels } from "@orasso/shared";
 import { Redirect, useRouter } from "expo-router";
-import { StyleSheet, View } from "react-native";
 
-import { ArriveeScreen } from "@/features/arrivee/ArriveeScreen";
+import { ArriveeScreen, ObHead } from "@/features/arrivee/ArriveeScreen";
 import { arriveeStore, useArrivee } from "@/features/arrivee/model";
 import { usePendingCasquette } from "@/features/arrivee/PendingCard";
 import { pendingPath } from "@/features/arrivee/pending";
-import { Muted } from "@/ui/Muted";
-
-const { space2 } = tokens.spacing;
+import { T, useArt } from "@/features/tuto/art";
 
 export default function ArriveeCasquette() {
-  const { t } = useTheme();
+  const a = useArt();
   const router = useRouter();
   const { next } = useArrivee();
   const kind = usePendingCasquette();
@@ -29,6 +26,7 @@ export default function ArriveeCasquette() {
   return (
     <ArriveeScreen
       step={2}
+      onClose={() => leave(next ?? "/")}
       footer={
         <>
           <Button variant="primary" icon="next" fullWidth onPress={() => leave(path)}>
@@ -40,15 +38,10 @@ export default function ArriveeCasquette() {
         </>
       }
     >
-      <View style={styles.head}>
-        <Text variant="posterL" color={t.color.ink} accessibilityRole="header">
-          {text.title}
-        </Text>
-        <Muted variant="body">{text.caption}</Muted>
-        <Muted variant="caption">{pendingLabels.barNote}</Muted>
-      </View>
+      <ObHead title={text.title} text={text.caption} />
+      <T k="cap" color={a.muted}>
+        {pendingLabels.barNote}
+      </T>
     </ArriveeScreen>
   );
 }
-
-const styles = StyleSheet.create({ head: { gap: space2 } });

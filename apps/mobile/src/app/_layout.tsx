@@ -90,7 +90,7 @@ function Shell() {
     if (status !== "out" || onboarded === null || !navigation?.key) return;
     const root = segments[0] as string | undefined;
     if (root && PUBLIC_ROOTS.has(root)) return;
-    router.replace(onboarded ? "/auth" : "/arrivee/profil");
+    router.replace(onboarded ? "/auth" : "/arrivee");
   }, [status, onboarded, segments, router, navigation?.key]);
 
   // Chaque casquette a son groupe de routes : si l'URL est dans celui d'une autre (retour arrière, lien profond),
@@ -183,8 +183,9 @@ function Shell() {
       {/* Lot 32 : feuille « Signaler », une pour toute l'appli. */}
       {status === "in" ? <ReportSheetHost /> : null}
       {status === "in" ? <StaffBackground /> : null}
-      {/* Lot 39 (V12) : la battle en tandem de 3 s à chaque lancement (fondu de 120 ms si animations réduites). */}
-      {opening ? (
+      {/* Lot 39 (V12) : la battle en tandem de 3 s à chaque lancement (fondu de 120 ms si animations réduites). Lot C3 :
+          pas au premier lancement, où l'accueil (`/arrivee`, artefact `s-splash`) joue lui-même la battle autour du O. */}
+      {opening && onboarded !== false ? (
         <View style={StyleSheet.absoluteFill}>
           <OpeningBattle onDone={() => setOpening(false)} />
         </View>

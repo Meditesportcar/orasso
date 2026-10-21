@@ -46,7 +46,7 @@ export const arriveeLabels = {
     email: "E-mail",
     password: "Mot de passe",
   },
-  credit: "Carte : Victor Cazanave, CC BY 4.0",
+  credit: "Carte : svg-maps, Victor Cazanave (CC BY 4.0)",
   list: { open: "Choisir dans une liste", close: "Masquer la liste", label: "Liste des départements" },
   errors: {
     mainProfile: "Choisis ton profil.",
