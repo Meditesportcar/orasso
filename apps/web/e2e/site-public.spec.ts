@@ -406,11 +406,15 @@ test("accueil v2 : titre, bandeau des dates, événements, entrées, boutiques v
   );
   await expect(page.getByRole("link", { name: "Voir l'offre pro" })).toHaveAttribute("href", "/professionnels");
   await expect(page.getByRole("link", { name: "Google Play" }).first()).toHaveAttribute("href", "/appli");
-  // Département choisi : les événements de ce département, sinon les prochains de France.
+  // Département choisi : les événements de ce département (« Autour de … »), sinon l'avis puis les prochains de France.
   await page.goto("/?departement=66");
-  await expect(page.getByTestId("home-events")).toBeVisible();
+  await expect(page.getByText(/^Autour de /)).toBeVisible();
+  await expect(page.getByTestId("home-none-near")).toHaveCount(0);
+  await expect(page.getByTestId("home-events").getByTestId("event-tile").first()).toBeVisible();
   await page.goto("/?departement=2A");
-  await expect(page.getByTestId("home-events")).toBeVisible();
+  await expect(page.getByText("Aucun événement à venir dans le 2A")).toBeVisible();
+  await expect(page.getByText("Dans toute la France")).toBeVisible();
+  await expect(page.getByTestId("home-events").getByTestId("event-tile").first()).toBeVisible();
 });
 
 test("audit du système de design sur les pages publiques (deux thèmes, bureau et 390 px)", async ({

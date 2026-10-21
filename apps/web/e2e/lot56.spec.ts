@@ -85,6 +85,7 @@ async function audit(page: Page, where: string) {
   expect(a.truncated, `${where} : texte tronqué`).toEqual([]);
   expect(a.horizontalScroll, `${where} : défilement horizontal`).toBe(false);
   expect(a.unoutlinedOnPhoto, `${where} : texte sur photo sans contour`).toEqual([]);
+  expect(a.brokenWords, `${where} : mot coupé en plein mot`).toEqual([]);
 }
 
 test("pages publiques v2 : quatre pages, fiche, pros ; 390 px et bureau ; Béton et Sable ; captures", async ({
@@ -108,7 +109,7 @@ test("pages publiques v2 : quatre pages, fiche, pros ; 390 px et bureau ; Béton
         const where = `${path} ${theme} ${label}`;
         await page.goto(path);
         await page.waitForLoadState("networkidle");
-        await expect(page.locator("h1"), `${where} : un h1`).toHaveCount(name === "annuaire-pros" ? 1 : 1);
+        await expect(page.locator("h1"), `${where} : un h1`).toHaveCount(1);
         await audit(page, where);
         await noHorizontalScroll(page, where);
         await noEmptyPoster(page, where);
@@ -216,6 +217,16 @@ test("organisateurs et professionnels : six temps, mur des huit styles, remises,
   await page.goto("/organisateurs");
   await expect(page.getByTestId("orga-steps").locator("li")).toHaveCount(6);
   const wall = page.getByTestId("poster-wall").locator("img");
+  expect(await wall.evaluateAll((imgs) => imgs.map((i) => i.getAttribute("alt")))).toEqual([
+    "Néon",
+    "Suisse",
+    "Rétro",
+    "JDM",
+    "Billet",
+    "Magazine",
+    "Minimal",
+    "Damier",
+  ]);
   await expect(wall).toHaveCount(8);
   await page.waitForLoadState("networkidle");
   for (let i = 0; i < 8; i++) {
@@ -223,7 +234,8 @@ test("organisateurs et professionnels : six temps, mur des huit styles, remises,
     await img.scrollIntoViewIfNeeded();
     await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
   }
-  await expect(page.getByRole("link", { name: "Créer ma structure" }).first()).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Créer ma structure" })).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "Créer ma structure" })).toHaveAttribute(
     "href",
     "/app/structure/nouvelle",
   );
@@ -308,6 +320,30 @@ test("/_mail : aperçu de chaque type d'e-mail (développement) avec le bouton e
   await page.goto("/_mail");
   const samples = page.getByTestId("mail-sample");
   expect(await samples.count()).toBeGreaterThanOrEqual(8);
+  // Chaque aperçu est vérifié : le pied annoncé pour son type, le bouton pour ceux qui ont un lien.
+  const frames = await page
+    .locator("[data-testid='mail-sample'] iframe")
+    .evaluateAll((els) =>
+      els.map((el) => ({ title: el.getAttribute("title") ?? "", html: el.getAttribute("srcdoc") ?? "" })),
+    );
+  expect(frames.length).toBe(await samples.count());
+  let withButton = 0;
+  for (const f of frames) {
+    expect(f.html, f.title).toContain("/mail/affiche-nuit.jpg");
+    const footer =
+      f.title === "Compte supprimé"
+        ? "pour confirmer la suppression de ton compte Orasso"
+        : f.title === "Newsletter"
+          ? "parce que tu as accepté la newsletter Orasso"
+          : "parce que tu as un compte Orasso";
+    expect(f.html, f.title).toContain(footer);
+    if (/&rarr;<\/a>/.test(f.html)) {
+      withButton++;
+      expect(f.html, f.title).toContain("#e9b824");
+    }
+  }
+  expect(withButton, "aperçus avec un bouton").toBeGreaterThanOrEqual(7);
+  expect(frames.map((f) => f.title)).not.toContain("Avec un code de secours");
   await page.screenshot({ path: `${DIR}/apercu-emails.png`, fullPage: false });
 });
 
