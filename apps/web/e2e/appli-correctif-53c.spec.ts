@@ -279,3 +279,83 @@ test("appli : missions en échec de chargement, la saisie reste sur le télépho
   expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(title);
   await ctx.close();
 });
+
+// --- Tour 3 ------------------------------------------------------------------------------------------------------
+
+test("appli : réponse de création perdue, le nouvel essai ne recrée pas la mission (clé de création)", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { damien, id } = await appliDraft(`Appli perdue ${unique()}`);
+  const { ctx, page } = await open(browser);
+  await signInOrganizer(page);
+  await page.goto(`/evenement/${id}/modifier?temps=lieu`);
+  await expect(v(page, "wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  await expect(v(page, "wizard-next")).toBeEnabled({ timeout: 30_000 });
+  await v(page, "wizard-panel-onsite-toggle").click();
+  await v(page, "wizard-mission-add").click();
+  // Le serveur crée la mission, la réponse ne revient pas ; la relecture finale échoue aussi.
+  let lost = false;
+  let readFailed = false;
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    const method = route.request().method();
+    if (method === "POST" && !lost) {
+      lost = true;
+      await route.fetch();
+      return route.abort("connectionreset");
+    }
+    if (method === "GET" && lost && !readFailed) {
+      readFailed = true;
+      return route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "unavailable", message: "Relecture impossible." } }),
+      });
+    }
+    return route.continue();
+  });
+  await v(page, "wizard-next").click();
+  await expect.poll(() => readFailed, { timeout: 30_000 }).toBe(true);
+  await expect(v(page, "wizard-next")).toBeEnabled({ timeout: 30_000 });
+  await expect(v(page, "wizard-step")).toContainText("Lieu");
+  expect((await apiCall<unknown[]>(damien, "GET", `/events/${id}/needs`)).data).toHaveLength(1);
+  await v(page, "wizard-next").click();
+  await expect(v(page, "wizard-step")).toContainText("Arrivées", { timeout: 30_000 });
+  expect((await apiCall<unknown[]>(damien, "GET", `/events/${id}/needs`)).data).toHaveLength(1);
+  await ctx.close();
+});
+
+test("appli : « Recharger les missions » ne débloque l'enregistrement qu'après la réponse", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const { id } = await appliDraft(`Appli recharge ${unique()}`, ["food_truck"]);
+  const { ctx, page } = await open(browser);
+  await signInOrganizer(page);
+  let mode: "fail" | "hold" | "pass" = "fail";
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    if (route.request().method() !== "GET" || mode === "pass") return route.continue();
+    if (mode === "hold") {
+      await held;
+      return route.continue();
+    }
+    return route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "unavailable", message: "Indisponible." } }),
+    });
+  });
+  await page.goto(`/evenement/${id}/modifier?temps=type`);
+  await expect(v(page, "wizard-needs-failed")).toBeVisible({ timeout: 30_000 });
+  mode = "hold";
+  await page.getByRole("button", { name: "Recharger les missions" }).click();
+  // Réponse retenue : rien ne s'enregistre encore.
+  await page.waitForTimeout(800);
+  await expect(v(page, "wizard-next")).toBeDisabled();
+  mode = "pass";
+  release();
+  await expect(v(page, "wizard-next")).toBeEnabled({ timeout: 30_000 });
+  await ctx.close();
+});

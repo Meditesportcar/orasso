@@ -328,11 +328,40 @@ test("zone créée puis relecture en panne : le nouvel essai ne la dit pas refus
   });
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.getByTestId("wizard-error")).toContainText("Relecture impossible");
+  // Tour 3 : le nom corrigé entre les deux essais est bien enregistré (la zone est mise à jour, pas recréée).
+  await page.getByLabel("Nom", { exact: true }).fill("Zone JDM nord");
   await page.getByRole("button", { name: "Continuer" }).click();
   await expect(page.getByTestId("wizard-step")).toContainText("Arrivées", { timeout: 30_000 });
   await expect(page.getByTestId("wizard-error")).toHaveCount(0);
-  const ev = await apiCall<{ zones: { code: string }[] }>(damien, "GET", `/events/${id}`);
-  expect(ev.data.zones.map((z) => z.code)).toEqual(["JDM"]);
+  const ev = await apiCall<{ zones: { code: string; name: string }[] }>(damien, "GET", `/events/${id}`);
+  expect(ev.data.zones.map((z) => [z.code, z.name])).toEqual([["JDM", "Zone JDM nord"]]);
+  await ctx.close();
+});
+
+test("zone de même code créée ailleurs : le conflit reste visible (pas pris pour la sienne)", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Conflit ${unique()}`);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  await openWizard(page, id, "lieu");
+  await page.getByText("Sur place", { exact: true }).click();
+  await page.getByRole("button", { name: "Ajouter une zone" }).click();
+  await page.getByLabel("Code", { exact: true }).fill("JDM");
+  await page.getByLabel("Nom", { exact: true }).fill("Ma zone");
+  // Pendant ce temps, une zone JDM est créée ailleurs (autre onglet, autre membre).
+  const other = await apiCall(damien, "POST", `/events/${id}/zones`, {
+    code: "JDM",
+    name: "Leur zone",
+    capacity: null,
+  });
+  expect(other.status).toBe(201);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-error")).toContainText("sauf la zone JDM");
+  await expect(page.getByTestId("wizard-step")).toContainText("Lieu");
+  const ev = await apiCall<{ zones: { name: string }[] }>(damien, "GET", `/events/${id}`);
+  expect(ev.data.zones.map((z) => z.name)).toEqual(["Leur zone"]);
   await ctx.close();
 });
 
