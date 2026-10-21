@@ -113,7 +113,8 @@ export function Button(props: ButtonProps) {
       box = {
         backgroundColor: c.plate,
         borderWidth: 1.5,
-        borderColor: wait ? c.statusWaitlistOnPlate : withAlpha(c.plateInk, 0.5),
+        // Lot C1 : .btn-s de l'artefact (fond de carte, filet --line).
+        borderColor: wait ? c.statusWaitlistOnPlate : c.plateLine,
         borderStyle: tone === "dashed" ? "dashed" : "solid",
       };
       break;

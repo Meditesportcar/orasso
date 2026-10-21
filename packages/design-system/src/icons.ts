@@ -33,7 +33,11 @@ export const iconShapes = {
   vehicle: [p("M3 13l2-5h14l2 5v6H3z"), c(7, 17, 1.5), c(17, 17, 1.5)], // véhicule
   home: [p("M4 11l8-7 8 7v9H4z")], // accueil
   explore: [c(12, 12, 8), p("M15 9l-2 6-4 2 2-6z")], // explorer
-  inbox: [p("M4 6h16v10H8l-4 4z")], // boîte
+  // Boîte : le bac à courrier de l'artefact DA v2 (`#i-inbox`, lot C1) ; l'ancien tracé était une bulle (= chat).
+  // Itinéraire et carte (`#i-nav`, `#i-map` de l'artefact, lot C1) : la rangée d'itinéraires de la carte d'Accueil.
+  nav: [p("M3 11l18-8-8 18-2-8z")],
+  map: [p("M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"), p("M9 4v14M15 6v14")],
+  inbox: [p("M3 13l3-8h12l3 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"), p("M3 13h5l1 3h6l1-3h5")], // boîte
   search: [c(11, 11, 7), p("M20 20l-4-4")], // recherche
   bell: [p("M6 17V11a6 6 0 0112 0v6l2 2H4z"), p("M10 21h4")], // cloche
   next: [p("M5 12h14M13 6l6 6-6 6")], // suivant
