@@ -669,8 +669,7 @@ export function AfficheTemps(ctx: StepContext) {
   const [refused, setRefused] = useState(false);
   const [retry, setRetry] = useState(0);
   const [photo, setPhoto] = useState<string | null>(mediaSource(event?.posterSettings?.photoUrl)?.uri ?? null);
-  const [sending, setSending] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { photoSending: sending, setPhotoSending: setSending, photoError: error, setPhotoError: setError } = ctx;
   const input = (p: PosterSettings, width: number) => ({
     ...p,
     title: p.title.trim() || d.title.trim().slice(0, POSTER_TITLE_MAX) || "—",
@@ -733,6 +732,7 @@ export function AfficheTemps(ctx: StepContext) {
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      // Tenu par l'assistant : se termine même si on a quitté le temps entre-temps.
       setTimeout(() => setSending(null), 400);
     }
   }

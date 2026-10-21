@@ -1,7 +1,9 @@
 // Lot 35b (lot 53 : huit temps, règles du site) : l'assistant d'événement de l'appli garde le brouillon d'une création
 // et enregistre dans le même ordre que le site (événement, jours, zones, missions, affiche perso), puis relit.
 import {
+  afterNeedWrites,
   type EventDraft,
+  type EventNeedView,
   type EventOrganizer,
   eventStepProblem,
   eventWizardSteps,
@@ -236,5 +238,52 @@ describe("enregistrement", () => {
     expect(await saveEvent(client, { ...input, validate: "publish" })).toMatchObject({ ok: false, step: "affiche" });
     expect(calls).toHaveLength(0);
     expect((await saveEvent(client, { ...input, validate: true })).ok).toBe(true);
+  });
+});
+
+describe("panne après l'écriture des missions (correctif 53c)", () => {
+  it("la relecture échoue après la création : le nouvel essai ne recrée pas la mission", async () => {
+    const event = { id: "e1", days: [], zones: [] } as unknown as EventOrganizer;
+    const row = {
+      trade: "photographer" as const,
+      quantity: "1",
+      power: "none" as const,
+      water: false,
+      frontageM: "",
+      installTime: "",
+    };
+    const sent = draft({ needs: [row] });
+    const created = { id: "n7", trade: "photographer", quantity: 1, position: 0 } as unknown as EventNeedView;
+    const first = fakeClient({ orgEvent: apiError(0, "Pas de réseau.") });
+    (first.client as { addNeed: unknown }).addNeed = async () => created;
+    const res = await saveEvent(first.client, {
+      structureId: S,
+      draft: sent,
+      event,
+      savedNeeds: [],
+      createdId: null,
+      poster: null,
+    });
+    expect(res).toMatchObject({ ok: false, step: null });
+    if (res.ok) return;
+    expect(res.needWrites?.created).toEqual([{ position: 0, need: created }]);
+    // L'assistant reporte la création avant de retenter (`afterNeedWrites`).
+    const after = afterNeedWrites({
+      savedNeeds: [],
+      sent,
+      current: sent,
+      writes: res.needWrites ?? { created: [], removed: [] },
+    });
+    const second = fakeClient();
+    const again = await saveEvent(second.client, {
+      structureId: S,
+      draft: after.draft,
+      event,
+      savedNeeds: after.savedNeeds,
+      createdId: null,
+      poster: null,
+    });
+    expect(again.ok).toBe(true);
+    expect(second.calls.map((c) => c.name)).not.toContain("addNeed");
   });
 });

@@ -16,7 +16,9 @@ import {
   eventPayload,
   eventPublishProblem,
   firstEventProblem,
+  type NeedWrites,
   needChanges,
+  noNeedWrites,
   noRefusals,
   type SaveRefusals,
   zoneChanges,
@@ -59,9 +61,11 @@ export type SaveResult =
   | { ok: true; event: EventOrganizer; needs: EventNeedView[]; refused: SaveRefusals }
   /**
    * `step` : le temps à rouvrir (temps invalide, jours refusés), `null` pour rester sur le temps courant ; `error` :
-   * l'erreur de l'API (message, double authentification) ou un texte ; `createdId` : événement créé par cet appel.
+   * l'erreur de l'API (message, double authentification) ou un texte ; `createdId` : événement créé par cet appel ;
+   * `needWrites` : missions créées ou supprimées avant la panne (correctif 53c), à reporter avant de retenter
+   * (`afterNeedWrites`) pour ne pas les recréer.
    */
-  | { ok: false; step: EventWizardStep | null; error: unknown; createdId: string | null };
+  | { ok: false; step: EventWizardStep | null; error: unknown; createdId: string | null; needWrites?: NeedWrites };
 
 /**
  * Une réponse de l'API qui refuse (pas une panne réseau, `status` 0 de `ApiRequestError`) : on peut renvoyer au temps
@@ -106,6 +110,7 @@ export async function saveEvent(client: EventEditorApi, input: SaveInput): Promi
   }
 
   const refused = noRefusals();
+  const writes = noNeedWrites();
   const zones = zoneChanges(event?.zones ?? [], d.zones);
   const needs = needChanges(input.savedNeeds ?? [], d);
   const removal = () => {
@@ -121,13 +126,23 @@ export async function saveEvent(client: EventEditorApi, input: SaveInput): Promi
       call: () => client.addZone(saved.id, zone),
       refuse: () => void refused.zones.push(zone.position),
     })),
-    ...needs.remove.map((id) => ({ call: () => client.deleteNeed(saved.id, id), refuse: removal })),
+    ...needs.remove.map((id) => ({
+      call: async () => {
+        await client.deleteNeed(saved.id, id);
+        writes.removed.push(id);
+      },
+      refuse: removal,
+    })),
     ...needs.update.map((n) => ({
       call: () => client.updateNeed(saved.id, n.id, n.need),
       refuse: () => void refused.needs.push(n.need.position),
     })),
+    // Chaque création réussie est gardée avec son identifiant : si la suite échoue, le nouvel essai ne la refait pas.
     ...needs.create.map((need) => ({
-      call: () => client.addNeed(saved.id, need),
+      call: async () => {
+        const created = await client.addNeed(saved.id, need);
+        writes.created.push({ position: need.position, need: created });
+      },
       refuse: () => void refused.needs.push(need.position),
     })),
   ];
@@ -150,7 +165,7 @@ export async function saveEvent(client: EventEditorApi, input: SaveInput): Promi
     const [fresh, freshNeeds] = await Promise.all([client.orgEvent(saved.id), client.eventNeeds(saved.id)]);
     return { ok: true, event: fresh, needs: freshNeeds, refused };
   } catch (error) {
-    // Relecture impossible : rien n'est marqué enregistré, la saisie reste à renvoyer.
-    return { ok: false, step: null, error, createdId };
+    // Relecture impossible : rien n'est marqué enregistré, la saisie reste à renvoyer (sauf les missions déjà écrites).
+    return { ok: false, step: null, error, createdId, needWrites: writes };
   }
 }

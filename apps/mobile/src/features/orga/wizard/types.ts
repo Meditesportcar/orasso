@@ -24,6 +24,14 @@ export type StepContext = {
   /** Affiche perso choisie (envoyée avec l'événement). */
   poster: PickedPhoto | null;
   setPoster: (photo: PickedPhoto | null) => void;
+  /**
+   * Envoi de la photo de l'affiche (progression 0 à 1, `null` hors envoi) et son erreur, tenus par l'assistant
+   * (correctif 53c) : « Continuer » et « Publier » attendent la fin de l'envoi, l'erreur ne disparaît pas avec le temps.
+   */
+  photoSending: number | null;
+  setPhotoSending: (progress: number | null) => void;
+  photoError: string | null;
+  setPhotoError: (error: string | null) => void;
   openStructure: () => void;
 };
 
