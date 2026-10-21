@@ -228,6 +228,16 @@ for (const theme of THEMES) {
     expect(a.buttonsWithoutIcon).toEqual([]);
     await shot(page, "prestataire-public-photos", theme);
 
+    // Toucher une photo : la visionneuse s'ouvre sur un cadre plein écran (plus de 4:3 imposé, image entière en `contain`), puis se ferme.
+    await grid.getByRole("button").first().click();
+    const full = page.getByRole("img", { name: /^Photo 1 sur \d+$/ }).first();
+    await expect(full).toBeVisible({ timeout: 10_000 });
+    const fullBox = await full.boundingBox();
+    expect(fullBox?.height ?? 0, "cadre plein écran, pas un 4:3 imposé").toBeGreaterThan((fullBox?.width ?? 1) * 1.2);
+    await shot(page, "prestataire-public-visionneuse", theme);
+    await page.getByRole("button", { name: "Fermer la photo" }).click();
+    await expect(full).toHaveCount(0);
+
     // Sans photo, rien n'est affiché : un prestataire sans photo n'a pas la section.
     const bare = await sql<{ id: string }>(
       "select id from provider_profiles where id not in (select provider_id from provider_photos) limit 1",
@@ -241,3 +251,61 @@ for (const theme of THEMES) {
     await ctx.close();
   });
 }
+
+// Réponse en retard : une requête lancée sous le compte A dont la réponse arrive après la connexion de B (réseau lent
+// sur un parking). L'appli n'est pas rechargée entre les deux comptes : le fournisseur des candidatures reste monté.
+test("Caches de lecture : la réponse tardive d'un compte déconnecté n'est ni affichée ni enregistrée pour le suivant", async ({
+  browser,
+}) => {
+  test.setTimeout(300_000);
+  const { ctx, page } = await open(browser, "beton");
+  // La réponse est lue tout de suite par le serveur (sous la session de A) mais n'est livrée à l'appli que plus tard.
+  type Held = { continue: () => Promise<void> };
+  const held: Held[] = [];
+  let hold = false;
+  await page.route("**/api/me/applications**", async (route) => {
+    if (!hold) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    held.push({ continue: () => route.fulfill({ response }) });
+  });
+
+  // A (Nina, des places à venir) se connecte ; sa liste est chargée normalement.
+  await signIn(page, "nina@orasso.local");
+  await expect(page.getByRole("button", { name: "Mon accès" }).first()).toBeVisible({ timeout: 30_000 });
+
+  // Une nouvelle lecture part sous A (retour au premier plan), mais la réponse est retenue sur le réseau.
+  hold = true;
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect.poll(() => held.length, { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
+  hold = false;
+
+  // Déconnexion de A puis connexion de B (Sofia, aucune place à venir), sans recharger l'appli.
+  await page.getByRole("tab", { name: "Profil", exact: true }).first().click();
+  await page.getByTestId("profil-sign-out").click();
+  await page.waitForURL(/auth/, { timeout: 30_000 });
+  await page.getByLabel("E-mail").fill("sofia@orasso.local");
+  await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
+  await page.getByRole("button", { name: "Me connecter" }).click();
+  await page.waitForURL(/accueil/, { timeout: 60_000 });
+  await expect.poll(async () => (await cacheKeys(page)).some((k) => k.endsWith(".applications.upcoming"))).toBe(true);
+
+  // La réponse de A arrive enfin.
+  for (const route of held) await route.continue();
+  await page.waitForTimeout(2_500);
+
+  // B ne voit rien de A, et le cache de B ne contient rien de A.
+  await expect(page.getByRole("button", { name: "Mon accès" })).toHaveCount(0);
+  const stored = await page.evaluate(() =>
+    Object.entries(localStorage)
+      .filter(([k]) => /^orasso\.cache\..*\.applications\./.test(k))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n"),
+  );
+  expect(stored).not.toContain("Canet");
+  expect(stored).toContain(".applications.past=[]");
+  expect(stored).toContain(".applications.upcoming=[]");
+  await ctx.close();
+});
