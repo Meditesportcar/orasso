@@ -6,6 +6,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { clearAccountQrSecret, saveAccountQrSecret } from "./accountQrStore";
 import { api, authApi } from "./api";
 import { ApiRequestError, setSessionToken } from "./http";
+import "./eventDraftStore"; // enregistre le nettoyage des fichiers de brouillon à chaque purge de compte
 import { clearKits } from "./kits";
 import { bindCacheScope, kvDel, kvGet, kvGetJson, kvSet, kvSetJson, purgeCaches } from "./kv";
 import { realtime } from "./realtime";

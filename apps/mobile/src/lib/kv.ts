@@ -150,10 +150,15 @@ function serial<T>(task: () => Promise<T>): Promise<T> {
 /** Compte dont les caches sont lus et écrits en ce moment (`null` : personne n'est lié). */
 export const cacheScope = () => cacheScopeId;
 
+const scopeDropHandlers: ((scope: string) => Promise<void>)[] = [];
+/** Un module qui garde des fichiers par compte (brouillons) y déclare son nettoyage : appelé à chaque purge d'un compte. */
+export const onCacheScopeDropped = (handler: (scope: string) => Promise<void>) => void scopeDropHandlers.push(handler);
+
 async function dropScope(scope: string): Promise<void> {
   const keys = (await kvGetJson<string[]>(indexKeyOf(scope))) ?? [];
   await Promise.all(keys.map((key) => kvDel(cacheKeyOf(scope, key))));
   await kvDel(indexKeyOf(scope));
+  await Promise.all(scopeDropHandlers.map((handler) => handler(scope).catch(() => undefined)));
   // Purge par préfixe : filet si l'index du compte est perdu ou incomplet (clé à identifiant écrite mais non listée).
   // Le trousseau ne se liste pas : seul le stockage du navigateur (recette web) peut être balayé.
   if (isWeb) {

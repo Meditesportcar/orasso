@@ -7,7 +7,7 @@ import { apiCall, login, loginInBrowser } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Météo (lot 59a). API ET Playwright : WEATHER_PROVIDER=open-meteo et
-// METEO_URL=http://127.0.0.1:18591/v1/forecast (ou autre port local libre). Cette spec sert le stub et rafraîchit
+// METEO_URL=http://127.0.0.1:<METEO_STUB_PORT>/v1/forecast (METEO_STUB_PORT : 18591 par défaut, un port par lot). Cette spec sert le stub et rafraîchit
 // réellement le cache de Nocturne ; la météo du Salon Argelès reste celle du seed. Aucun fournisseur Internet.
 // Captures dans les deux thèmes, au
 // bureau et sur téléphone (390 px) : `CAPTURES=1 pnpm --filter @orasso/web exec playwright test meteo`.
@@ -22,11 +22,18 @@ let unavailable = false;
 let calls = 0;
 let fixture: unknown;
 
+// Sans le stub déclaré dans l'environnement (API et Playwright), la spec ne sort pas sur le réseau : elle est ignorée.
+test.skip(
+  !process.env.METEO_URL,
+  "Météo : poser WEATHER_PROVIDER=open-meteo et METEO_URL=http://127.0.0.1:<port>/v1/forecast (API et Playwright), METEO_STUB_PORT = ce port",
+);
+const STUB_PORT = Number(process.env.METEO_STUB_PORT ?? 18591);
+
 test.beforeAll(async () => {
   const endpoint = new URL(process.env.METEO_URL ?? "http://configuration-manquante.invalid");
   expect(endpoint.protocol, "stub HTTP local obligatoire").toBe("http:");
   expect(endpoint.hostname, "METEO_URL doit viser le stub sur 127.0.0.1").toBe("127.0.0.1");
-  expect(endpoint.port, "port explicite du stub").not.toBe("");
+  expect(endpoint.port, "METEO_URL doit porter le port de METEO_STUB_PORT (18591 par défaut)").toBe(String(STUB_PORT));
   const event = await nocturne(await login("damien@orasso.local"));
   // Jours du seed, sans date fixe ; midi UTC évite les changements d'heure pour cette liste calendaire.
   const date = (at: string) => new Date(at).toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
@@ -59,7 +66,7 @@ test.beforeAll(async () => {
   });
   await new Promise<void>((resolve, reject) => {
     stub?.once("error", reject);
-    stub?.listen(Number(endpoint.port), endpoint.hostname, resolve);
+    stub?.listen(STUB_PORT, endpoint.hostname, resolve);
   });
 });
 

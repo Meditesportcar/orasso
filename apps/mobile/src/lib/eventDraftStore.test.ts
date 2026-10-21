@@ -47,6 +47,20 @@ vi.mock("expo-file-system", () => ({
       device.files.set(dest.uri, device.files.get(this.uri) ?? "image");
     }
   },
+  Directory: class {
+    uri: string;
+    constructor(...parts: string[]) {
+      this.uri = parts.join("/");
+    }
+    list() {
+      return [...device.files.keys()]
+        .filter((uri) => uri.startsWith(`${this.uri}/`))
+        .map((uri) => ({
+          name: uri.slice(this.uri.length + 1),
+          delete: () => void device.files.delete(uri),
+        }));
+    }
+  },
 }));
 
 const value = () => ({
@@ -173,4 +187,56 @@ describe.each(["web", "ios"])("brouillons privés (%s)", (os) => {
       release();
       expect(await pending).toBeNull();
     });
+});
+
+describe("brouillons privés sur appareil (fichiers)", () => {
+  let kv: typeof import("./kv");
+  let drafts: typeof import("./eventDraftStore");
+  beforeEach(async () => {
+    vi.resetModules();
+    device.os = "ios";
+    device.storage.clear();
+    device.files.clear();
+    device.read = null;
+    kv = await import("./kv");
+    drafts = await import("./eventDraftStore");
+  });
+
+  it("effacer puis enregistrer sans attendre : la dernière saisie est gardée et lisible", async () => {
+    await kv.bindCacheScope("a");
+    await drafts.saveEventDraft("structure", value());
+    const clearing = drafts.clearEventDraft("structure");
+    const saving = drafts.saveEventDraft("structure", {
+      ...value(),
+      draft: { ...value().draft, title: "Dernière saisie" },
+    });
+    await Promise.all([clearing, saving]);
+    expect(await drafts.loadEventDraft("structure")).toMatchObject({ draft: { title: "Dernière saisie" } });
+  });
+
+  it("enregistrer puis effacer sans attendre : plus de brouillon, ni fichier", async () => {
+    await kv.bindCacheScope("a");
+    await Promise.all([drafts.saveEventDraft("structure", value()), drafts.clearEventDraft("structure")]);
+    expect(await drafts.loadEventDraft("structure")).toBeNull();
+    expect([...device.files.keys()]).toEqual([]);
+  });
+
+  it("déconnexion : les fichiers du compte (JSON, affiche) et les anciens fichiers sans compte sont supprimés", async () => {
+    await kv.bindCacheScope("a");
+    await drafts.saveEventDraft("structure", value());
+    await drafts.keepEventDraftPoster("structure", { uri: "file:///cache/photo.jpg", width: 1, height: 1 });
+    device.files.set("file:///documents/orasso.event-draft-structure.json", "{}");
+    device.files.set("file:///documents/orasso.autre-fichier.json", "{}");
+    expect([...device.files.keys()].filter((k) => k.includes("draft")).length).toBeGreaterThanOrEqual(3);
+    await kv.purgeCaches(); // même appel que clearSession
+    expect([...device.files.keys()].filter((k) => k.includes("draft"))).toEqual([]);
+    expect(device.files.has("file:///documents/orasso.autre-fichier.json")).toBe(true);
+  });
+
+  it("changement direct de compte sans déconnexion : les fichiers de A sont supprimés", async () => {
+    await kv.bindCacheScope("a");
+    await drafts.saveEventDraft("structure", value());
+    await kv.bindCacheScope("b");
+    expect([...device.files.keys()].filter((k) => k.includes("draft.a."))).toEqual([]);
+  });
 });

@@ -3,11 +3,11 @@
 // dans le trousseau, dont les valeurs sont limitées. Sans référence de cache, ces fichiers ne sont jamais relus.
 // Les anciennes clés sans propriétaire ne sont pas reprises. Échec de stockage : l'assistant reste utilisable.
 import { parseWizardMemo, serializeWizardMemo, type WizardMemo } from "@orasso/shared";
-import { File, Paths } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import { Platform } from "react-native";
 
 import { parseStoredDraft, type StoredDraft, type StoredPoster, serializeDraft } from "./eventDraft";
-import { accountGuard, cacheGetJson, cacheSetJson, kvKey } from "./kv";
+import { accountGuard, cacheGetJson, cacheSetJson, kvKey, onCacheScopeDropped } from "./kv";
 
 type DraftAccount = ReturnType<typeof accountGuard>;
 const isWeb = Platform.OS === "web";
@@ -17,6 +17,40 @@ const fileOf = (scope: string, key: string) => new File(Paths.document, `${kvKey
 const posterFileOf = (scope: string, key: string) =>
   new File(Paths.document, `${kvKey(`draft.${scope}.${key}`)}-poster.jpg`);
 const active = (account: DraftAccount) => Boolean(account.scope && account.current());
+/**
+ * Les écritures d'un même brouillon (fichier + référence de cache) passent une par une : effacer puis enregistrer sans
+ * attendre ne laisse jamais une référence vers un fichier supprimé (la dernière demande gagne).
+ */
+const chains = new Map<string, Promise<unknown>>();
+function serialized<T>(scope: string | null, key: string, task: () => Promise<T>): Promise<T> {
+  const id = `${scope}|${key}`;
+  const run = (chains.get(id) ?? Promise.resolve()).then(task, task);
+  const tail = run.catch(() => undefined);
+  chains.set(id, tail);
+  void tail.then(() => {
+    if (chains.get(id) === tail) chains.delete(id);
+  });
+  return run;
+}
+
+/** Fichiers de brouillon du compte (JSON et affiche) et, une fois par purge, ceux d'avant les caches par compte. */
+async function purgeDraftFiles(scope: string): Promise<void> {
+  if (isWeb) return;
+  const mine = kvKey(`draft.${scope}.`);
+  const legacy = kvKey("event-draft-");
+  for (const entry of new Directory(Paths.document).list()) {
+    const name = entry.name ?? "";
+    if (name.startsWith(mine) || (name.startsWith(legacy) && name.endsWith(".json"))) {
+      try {
+        entry.delete();
+      } catch {
+        // Ignoré : voir l'en-tête.
+      }
+    }
+  }
+}
+onCacheScopeDropped(purgeDraftFiles);
+
 /** Au-delà, l'affiche n'est pas gardée dans le navigateur (quota de `localStorage`). */
 const WEB_POSTER_MAX_CHARS = 1_500_000;
 
@@ -25,6 +59,16 @@ export async function keepEventDraftPoster(
   photo: StoredPoster | null,
   eventId?: string | null,
   account = accountGuard(),
+): Promise<StoredPoster | null> {
+  if (!active(account)) return null;
+  return serialized(account.scope, keyOf(structureId, eventId), () => keepPoster(structureId, photo, eventId, account));
+}
+
+async function keepPoster(
+  structureId: string,
+  photo: StoredPoster | null,
+  eventId: string | null | undefined,
+  account: DraftAccount,
 ): Promise<StoredPoster | null> {
   if (!active(account)) return null;
   try {
@@ -74,6 +118,16 @@ export async function saveEventDraft(
   account = accountGuard(),
 ): Promise<void> {
   if (!active(account)) return;
+  return serialized(account.scope, keyOf(structureId, eventId), () => writeDraft(structureId, value, eventId, account));
+}
+
+async function writeDraft(
+  structureId: string,
+  value: Omit<StoredDraft, "v">,
+  eventId: string | null | undefined,
+  account: DraftAccount,
+): Promise<void> {
+  if (!active(account)) return;
   try {
     const raw = serializeDraft(value);
     const key = keyOf(structureId, eventId);
@@ -94,6 +148,15 @@ export async function clearEventDraft(
   structureId: string,
   eventId?: string | null,
   account = accountGuard(),
+): Promise<void> {
+  if (!active(account)) return;
+  return serialized(account.scope, keyOf(structureId, eventId), () => removeDraft(structureId, eventId, account));
+}
+
+async function removeDraft(
+  structureId: string,
+  eventId: string | null | undefined,
+  account: DraftAccount,
 ): Promise<void> {
   if (!active(account)) return;
   try {

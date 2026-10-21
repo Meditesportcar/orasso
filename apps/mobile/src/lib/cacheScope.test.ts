@@ -198,8 +198,9 @@ describe("clés de cache à identifiant (registre des préfixes)", () => {
     walk(root);
     const missing: string[] = [];
     for (const file of files) {
-      // `cacheKey: \`prefixe${id}\`` : la partie fixe avant la première interpolation est le préfixe.
-      for (const match of readFileSync(file, "utf8").matchAll(/cacheKey:\s*`([^`$]*)\$\{/g)) {
+      // `cacheKey: \`prefixe${id}\`` (aussi dans un ternaire) ou `cacheSetJson(\`prefixe${id}\`` : la partie fixe
+      // avant la première interpolation est le préfixe.
+      for (const match of readFileSync(file, "utf8").matchAll(/(?:cacheKey:[^\n`]*|cacheSetJson\(\s*)`([^`$]*)\$\{/g)) {
         const prefix = match[1] ?? "";
         if (!CACHE_KEY_PREFIXES.some((known) => prefix.startsWith(known))) missing.push(`${file} : « ${prefix} »`);
       }
