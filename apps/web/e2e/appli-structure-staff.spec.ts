@@ -564,6 +564,7 @@ test("structure non vérifiée : logo et justificatifs depuis l'appli, structure
   await chooseOrganizer(tram.page, "Tramontane Auto Club");
   await tab(tram.page, "Équipe").click();
   await expect(tram.page.getByText("Structure suspendue", { exact: false }).first()).toBeVisible({ timeout: 30_000 });
+  await tram.page.getByTestId("team-requests-bubble").click(); // Lot C4a : « Inviter » est dans la feuille de la bulle « +N ».
   await tram.page.getByTestId("team-invite").click();
   await tram.page.getByTestId("team-invite-who").fill("Kenji_66");
   await tram.page.getByTestId("team-invite-send").click();

@@ -37,8 +37,8 @@ export function DirectNext({
     <View style={styles.wrap} testID="orga-direct-next">
       <Muted variant="label">{L.directNext(formatDay(event.startsAt))}</Muted>
       {/* `.dir-big` : retenus sur carte crème, à trier sur carte, côte à côte. */}
-      <View style={styles.big}>
-        <View style={[styles.bigCard, { backgroundColor: c.poster }]} testID="orga-direct-retained">
+      <View style={styles.big} testID="orga-direct-retained">
+        <View style={[styles.bigCard, { backgroundColor: c.poster }]}>
           <Text variant="label" color={c.posterMuted}>
             {L.directRetained}
           </Text>
