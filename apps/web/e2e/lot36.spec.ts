@@ -1,13 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, test } from "@playwright/test";
 import { apiCall, createPublishedPro, login, loginInBrowser, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 36 : corrections des retours de Damien côté site — adresse obligatoire, fin d'assistant à trois choix (Aperçu,
 // Publier), saisie gardée et garde avant de quitter, raison d'une candidature impossible, page « l'appli », liens de
 // l'appli (assetlinks.json), vérification de l'adresse d'une fiche pro. Captures (Béton et Sable, 390 px) dans le relais.
 // Prérequis : API et site lancés sur la base seedée (damien@orasso.local, MéditeSportCar vérifiée).
 
-const DIR = process.env.LOT36_CAPTURES ?? "C:/Users/DELL/.claude/relais/orasso/lot-36-captures/site";
+const DIR = process.env.LOT36_CAPTURES ?? `${RELAIS}/lot-36-captures/site`;
 mkdirSync(DIR, { recursive: true });
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 

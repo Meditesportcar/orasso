@@ -2,13 +2,14 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { loginInBrowser, MOBILE, setTheme, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 38 : socle de la DA v2 côté site — recette /_ds (section v2) dans les deux thèmes avec l'audit (contour sur photo
 // et sur fond), grands titres sur une ligne à 390 et 360 px, thème jamais imposé dans les espaces organisateur et pro,
 // thème Automatique par le soleil (horloge Playwright). Captures (390 px) dans le relais.
 // Prérequis : API et site lancés sur la base seedée (damien@orasso.local, garage-narbonne@orasso.local).
 
-const DIR = process.env.LOT38_CAPTURES ?? "C:/Users/DELL/.claude/relais/orasso/lot-38-captures/site";
+const DIR = process.env.LOT38_CAPTURES ?? `${RELAIS}/lot-38-captures/site`;
 mkdirSync(DIR, { recursive: true });
 
 async function phone(

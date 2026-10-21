@@ -2,11 +2,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { apiCall, login, loginInBrowser } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Météo (lot 28). Prérequis : base locale avec le seed (prévisions factices : « Nocturne de Canet » mauvaise,
 // « Salon Argelès » bonne) et `WEATHER_PROVIDER=off` (aucun appel à un fournisseur). Captures dans les deux thèmes, au
 // bureau et sur téléphone (390 px) : `CAPTURES=1 pnpm --filter @orasso/web exec playwright test meteo`.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-28-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-28-captures`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const NOCTURNE = "nocturne-de-canet-2026";
 

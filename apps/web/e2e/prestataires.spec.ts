@@ -2,11 +2,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { apiCall, createEvent, login, loginInBrowser, samplePhoto, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 21 : prestataires. Parcours (Léa crée son profil, candidate, l'organisateur la retient dans l'onglet
 // « Prestataires », elle apparaît sur la page de l'événement) et captures dans les deux thèmes, au bureau et sur
 // téléphone (`CAPTURES=1`). Prérequis : site et API lancés sur la base locale avec le seed.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-21-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-21-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const VIEWS = [
   { id: "bureau", width: 1280, height: 900 },

@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { apiCall, login, samplePhoto, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Messagerie et Boîte (lot 18) sur le site, critère de fin : A écrit à son ami B, B voit le message arriver sans
 // recharger, A voit « Lu par B » ; image visible des deux, adresse privée refusée sans session ; C (non ami) envoie
@@ -9,7 +10,7 @@ import { apiCall, login, samplePhoto, signUpApi, unique } from "./helpers";
 // Damien répond depuis /app/boite. Avec CAPTURES=1 : Boîte, Demandes, conversation dans les deux thèmes, au bureau et
 // à 390 px, avec le contrôle automatique du système de design.
 // Prérequis : site et API lancés (DEV_SKIP_2FA=true comme le reste de la recette) sur la base locale avec le seed.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-18-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-18-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const VIEWS = [
   { id: "bureau", width: 1280, height: 900 },

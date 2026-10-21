@@ -12,6 +12,7 @@ import {
   signUpApi,
   unique,
 } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Communication de l'organisateur (lot 20) sur le site, critère de fin : Damien publie une annonce avec « prévenir les
 // inscrits » depuis /orga/meditesportcar/communication, elle apparaît sur la page publique sans compte ; il envoie les
@@ -19,7 +20,7 @@ import {
 // destinataire » dans l'historique) ; les discussions du staff s'ouvrent. Avec CAPTURES=1 : onglets de l'espace
 // (Sable imposé) et page publique (deux thèmes), au bureau et à 390 px, avec le contrôle du système de design.
 // Prérequis : site et API lancés (DEV_SKIP_2FA=true comme le reste de la recette) sur la base locale avec le seed.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-20-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-20-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const VIEWS = [
   { id: "bureau", width: 1280, height: 900 },

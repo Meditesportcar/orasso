@@ -1,6 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import pg from "pg";
 import { apiCall, login, SEED_PASSWORD, SIGNUP_EXTRAS } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Appli dans le navigateur (lot 22) : casquette Organisateur. Damien bascule vers MéditeSportCar : le Direct du « Salon
 // Argelès » monte en direct quand Julie (mode staff, autre onglet) scanne un QR ; page événement (Incertain → bandeau et
@@ -8,7 +10,7 @@ import { apiCall, login, SEED_PASSWORD, SIGNUP_EXTRAS } from "./helpers";
 // Lancer avec APP_URL=http://localhost:<relais> (Metro derrière apps/mobile/scripts/web-isolated.mjs, EXPO_PUBLIC_API_URL,
 // EXPO_PUBLIC_SITE_URL et CORS_ORIGINS posés). Captures dans les deux thèmes.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-22-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-22-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";
@@ -156,6 +158,15 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   // --- Staff : relance d'un membre sans réponse, puis mode staff ------------------------------------------------
   // Lot 40 : la Boîte est hors de la barre d'onglets ; ✕ ramène aux onglets.
   await page.getByRole("button", { name: "Fermer" }).first().click();
+  // Les recettes de l'horloge (avancée puis remise à zéro) laissent des relances datées dans le futur : sans correction,
+  // aucun bouton « Relancer » (une relance de moins d'une heure est refusée). On les ramène à la veille.
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  await db.query(
+    "UPDATE event_staff SET last_reminded_at = now() - interval '1 day' WHERE event_id = $1 AND last_reminded_at > now()",
+    [nocturne?.id],
+  );
+  await db.end();
   await tab(page, "Équipe").click();
   await pickOption(page, "Événement", /Nocturne de Canet/);
   // Lot 52 : l'équipe en bulles ; un toucher ouvre la feuille du membre, qui propose « Relancer » (sans réponse, pas le jour J).

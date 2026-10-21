@@ -16,10 +16,11 @@ import {
   simulateSettle,
   unique,
 } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Captures des écrans du site dans les deux thèmes et sur téléphone (390 px) : `CAPTURES=1 pnpm test:e2e captures`.
 // Dossier : CAPTURES_DIR, ou celui du relais du chantier.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-07-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-07-captures`;
 test.skip(!process.env.CAPTURES, "Captures : lancer avec CAPTURES=1");
 
 const VIEWS = [

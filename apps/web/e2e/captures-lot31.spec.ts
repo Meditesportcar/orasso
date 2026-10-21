@@ -3,11 +3,12 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import pg from "pg";
 import { type Audit, auditPage } from "./audit";
 import { addVehicleApi, apiCall, type Cookie, login, randomPlate, samplePhoto } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Captures du lot 31 (garage et certification) dans les deux thèmes, au bureau et sur téléphone (390 px), avec le
 // contrôle automatique du système de design : `CAPTURES=1 pnpm --filter @orasso/web exec playwright test captures-lot31`.
 // Prérequis : base locale avec le seed ; l'API et le site lancés.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-31-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-31-captures`;
 test.skip(!process.env.CAPTURES, "Captures : lancer avec CAPTURES=1");
 
 const API = `http://localhost:${process.env.API_PORT ?? 3001}`;

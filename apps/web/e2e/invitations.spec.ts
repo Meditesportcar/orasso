@@ -13,13 +13,14 @@ import {
   signUpApi,
   unique,
 } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Invitations nominatives et événement privé (lot 25) sur le site, critère de fin : l'organisateur crée un événement
 // « Sur invitation », invite Kenji (pseudo) et une adresse e-mail depuis `/orga/…/invitations` ; Kenji accepte dans
 // Accès avec sa voiture (retenu, QR) ; un non-invité ne voit ni la liste ni la page ; l'adresse e-mail s'inscrit par le
 // lien reçu et accepte avec un véhicule. Avec CAPTURES=1 : écrans du lot dans les deux thèmes, au bureau et à 390 px,
 // avec le contrôle du système de design. Prérequis : site et API lancés (DEV_SKIP_2FA=true) sur la base avec le seed.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-25-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-25-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const MAIL_DIR = resolve(import.meta.dirname, "../../..", process.env.DATA_DIR ?? ".data", "mail");
 const VIEWS = [

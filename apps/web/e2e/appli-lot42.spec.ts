@@ -3,6 +3,7 @@ import { tokens } from "@orasso/design-system";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { MOBILE, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 import { auditApp } from "./helpers/lot43";
+import { RELAIS } from "./relais";
 
 // Lot 42, côté appli (version web de recette) : les six tutos par profil, au « tu » (31 diapos : exposant 7, visiteur 6,
 // pro 4, organisateur 6, prestataire 4, média 4). Chaque tuto défile avec le bon nombre de points, le texte de sa
@@ -11,7 +12,7 @@ import { auditApp } from "./helpers/lot43";
 // règles du système de design ; captures à 390 px (chaque diapo de l'exposant, une diapo par autre profil).
 // Lancer avec APP_URL=http://localhost:8271 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-42-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-42-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

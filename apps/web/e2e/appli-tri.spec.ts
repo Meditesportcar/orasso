@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, type BrowserContext, expect, type Locator, type Page, test } from "@playwright/test";
 import { apiCall, decideApi, login, SEED_PASSWORD } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Appli dans le navigateur (lot 23) : tri par glissement de la casquette Organisateur. Damien trie la « Nocturne de
 // Canet » (seed : 27 à trier) à la souris : 5 décisions par glissement ou bouton (dont un refus motivé et une liste
@@ -8,7 +9,7 @@ import { apiCall, decideApi, login, SEED_PASSWORD } from "./helpers";
 // mode liste (3 refus en masse). Puis réduction des animations (aucune translation) et sans réseau.
 // Lancer avec APP_URL=http://localhost:<relais> (voir appli-orga.spec.ts). Captures dans les deux thèmes.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-23-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-23-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

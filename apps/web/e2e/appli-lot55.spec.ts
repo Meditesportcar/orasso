@@ -3,6 +3,7 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import { MOBILE, SEED_PASSWORD } from "./helpers";
 import { auditApp } from "./helpers/lot43";
 import { sql } from "./helpers/lot48";
+import { RELAIS } from "./relais";
 
 // Lot 55, côté appli (version web de recette) : la casquette Média. Léo (Sud Cars) a trois onglets remplis : Explorer
 // (Chercher partout en France avec « Accréditation ouverte », région, temps de route estimé, demande d'accréditation par
@@ -14,7 +15,7 @@ import { sql } from "./helpers/lot48";
 // Lancer avec APP_URL=http://localhost:8401 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée. Les
 // tests modifient la base (demandes, contenus, profil créé) : relancer `pnpm db:seed --reset` avant de rejouer.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-55-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-55-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 20_000 });
 

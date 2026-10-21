@@ -1,10 +1,7 @@
-import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
-import { type Browser, expect, type Page, test } from "@playwright/test";
-import { apiCall, login, MOBILE, SEED_PASSWORD } from "./helpers";
-import { auditApp } from "./helpers/lot43";
+import { expect, test } from "@playwright/test";
+import { apiCall, login } from "./helpers";
 import { sql } from "./helpers/lot48";
+import { closeSheet, open, rules, shot, signIn, THEMES, tab, toOrganizer } from "./helpers/lot52";
 
 // Lot 52, côté appli (version web de recette) : la casquette Organisateur en DA v2. Cinq onglets : Événements (créer,
 // brouillon qui dit ce qui manque, anciens derrière « … », duplication et invitation expliquée), Tri (grande photo, note
@@ -12,84 +9,11 @@ import { sql } from "./helpers/lot48";
 // Équipe (bulles de tailles différentes, historique et actions, rôles par événement), Structure (sceau tournant et
 // pastille au O quand elle est validée, message clair quand elle est en vérification). Deux thèmes, captures à 390 px,
 // audit des règles du système de design sur chaque écran.
-// Lancer avec APP_URL=http://localhost:8371 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée. Le
-// dernier test avance l'horloge simulée (DEV_CLOCK=on) : relancer `pnpm db:seed --reset` ensuite.
+// Lancer avec APP_URL=http://localhost:8371 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée. Le Direct
+// hors événement (horloge avancée) est dans `appli-zz-horloge-direct.spec.ts`, qui passe en dernier.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-52-captures/appli";
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 20_000 });
-
-type Theme = "beton" | "sable";
-const THEMES: Theme[] = ["beton", "sable"];
-
-async function open(browser: Browser, theme: Theme, reducedMotion: "reduce" | "no-preference" = "no-preference") {
-  const ctx = await browser.newContext({ viewport: MOBILE, baseURL: APP, reducedMotion });
-  const page = await ctx.newPage();
-  await page.goto("/");
-  await page.evaluate((t) => {
-    localStorage.setItem("orasso.onboarded", "1");
-    localStorage.setItem("orasso.theme", t);
-  }, theme);
-  return { ctx, page };
-}
-
-async function afterOpening(page: Page) {
-  const skip = page.getByTestId("opening-skip");
-  if (await skip.isVisible().catch(() => false))
-    await skip.click({ position: { x: 40, y: 600 } }).catch(() => undefined);
-  await expect(page.getByTestId("opening-battle")).toHaveCount(0, { timeout: 8_000 });
-}
-
-async function signIn(page: Page, email: string) {
-  await page.goto("/auth");
-  await afterOpening(page);
-  await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
-  await page.getByRole("button", { name: "Me connecter" }).click();
-  await page.waitForURL(/accueil/, { timeout: 60_000 });
-}
-
-/** Casquette Organisateur (la première structure de la liste, ou celle dont le nom est donné). */
-async function toOrganizer(page: Page, structure?: string) {
-  await page.goto("/moi");
-  await afterOpening(page);
-  const tile = page.getByTestId("casquette-organizer");
-  await (structure ? tile.filter({ hasText: structure }) : tile).first().click();
-  await page.waitForURL(/\/direct/, { timeout: 60_000 });
-}
-
-async function tab(page: Page, label: string) {
-  await page.getByRole("tab", { name: label, exact: true }).click();
-  await page.waitForTimeout(500);
-}
-
-async function shot(page: Page, name: string, theme: Theme) {
-  mkdirSync(DIR, { recursive: true });
-  await page.waitForTimeout(900);
-  await page.screenshot({ path: `${DIR}/${name}-${theme}.png` });
-}
-
-/** Règles du système de design à l'écran : un seul primaire, un seul néon, icône partout, pas de vert, pas de défilement horizontal. */
-async function rules(page: Page, theme: Theme, name: string) {
-  await page.waitForTimeout(1200);
-  const a = await auditApp(page, theme);
-  expect(a.primaryButtons, `${name} : un seul bouton principal (${a.primaryLabels.join(" | ")})`).toBeLessThanOrEqual(
-    1,
-  );
-  expect(a.neon, `${name} : un seul néon (${a.neonLabels.join(" | ")})`).toBeLessThanOrEqual(1);
-  expect(a.buttonsWithoutIcon, `${name} : tout bouton porte une icône`).toEqual([]);
-  expect(a.greens, `${name} : pas de vert`).toEqual([]);
-  expect(a.horizontalScroll, `${name} : pas de défilement horizontal`).toBe(false);
-  expect(a.unoutlinedOnPhoto, `${name} : texte sur photo en contour`).toEqual([]);
-}
-
-async function closeSheet(page: Page) {
-  await page
-    .getByRole("button", { name: "Fermer", exact: true })
-    .last()
-    .click({ position: { x: 60, y: 15 } });
-  await page.waitForTimeout(400);
-}
 
 for (const theme of THEMES) {
   test(`Événements : créer, brouillon avec ce qui manque, anciens derrière « … », duplication (${theme})`, async ({
@@ -450,44 +374,4 @@ test("Structure : le sceau reste immobile quand les animations sont réduites", 
   await page.waitForTimeout(1500);
   expect(await angle()).toBe(first);
   await ctx.close();
-});
-
-test("Direct hors événement : prochain événement, à trier, zones, équipe (horloge avancée, en dernier)", async ({
-  browser,
-}) => {
-  test.setTimeout(300_000);
-  // Le Salon Argelès a lieu « aujourd'hui » dans le seed : on avance l'horloge de développement après sa fin.
-  const apiDir = resolve(import.meta.dirname, "../../api");
-  const clock = (...args: string[]) =>
-    execFileSync(process.execPath, ["--import", "tsx", "scripts/dev-clock.ts", ...args], {
-      cwd: apiDir,
-      stdio: "pipe",
-      timeout: 120_000,
-    });
-  clock("to", "2026-10-21T09:00");
-  try {
-    for (const theme of THEMES) {
-      const { ctx, page } = await open(browser, theme);
-      await signIn(page, "damien@orasso.local");
-      await toOrganizer(page, "MéditeSportCar");
-      const next = page.getByTestId("orga-direct-next");
-      await expect(next).toBeVisible({ timeout: 60_000 });
-      await expect(next).toContainText("Prochain · ");
-      await expect(page.getByTestId("orga-direct-retained")).toContainText("Retenus");
-      await expect(page.getByTestId("orga-direct-retained")).toContainText(/Demain|J-\d+/);
-      await expect(page.getByTestId("orga-direct-retained")).toContainText("À trier");
-      await expect(page.getByTestId("orga-direct-sort")).toBeVisible();
-      await expect(next).toContainText("Retenus par zone");
-      await expect(page.getByTestId("orga-direct-team")).toContainText("Équipe : ");
-      await expect(page.getByTestId("orga-direct-team-see")).toBeVisible();
-      await rules(page, theme, "Direct · prochain");
-      await shot(page, "direct-prochain", theme);
-      // « Trier » ouvre le Tri sur cet événement.
-      await page.getByTestId("orga-direct-sort").click();
-      await expect(page).toHaveURL(/\/tri/, { timeout: 30_000 });
-      await ctx.close();
-    }
-  } finally {
-    clock("reset");
-  }
 });

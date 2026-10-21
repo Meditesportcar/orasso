@@ -17,6 +17,7 @@ import {
 } from "./helpers";
 import { auditApp } from "./helpers/lot43";
 import { sql } from "./helpers/lot48";
+import { RELAIS } from "./relais";
 
 // Lot 50, côté appli (version web de recette) : passeport (les 9 tampons de Kenji sur deux pages, dont 1 rare ; le
 // tampon qui tombe au pointage, sur le passeport et sur l'écran jour J), prix du public (vote ouvert avec le
@@ -26,7 +27,7 @@ import { sql } from "./helpers/lot48";
 // Lancer avec APP_URL=http://localhost:8351 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée
 // (`DEV_CLOCK` inutile : les dates de l'événement de recette sont reculées en base, puis `simulateSettle`).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-50-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-50-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

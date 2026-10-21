@@ -10,6 +10,7 @@ import {
   signUpApi,
   unique,
 } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Social (lot 17) dans l'appli, version web de recette (`expo start --web` derrière `apps/mobile/scripts/web-isolated.mjs`) :
 // Explorer > Personnes et crews, profil d'un autre, fiche d'un véhicule d'un autre et propriétaires près de chez moi,
@@ -17,7 +18,7 @@ import {
 // Mes amis, Journal avec avatars. Deux thèmes à 390 px.
 // Lancer avec APP_URL=http://localhost:8141 (CORS_ORIGINS de l'API = même origine).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-17-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-17-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 async function shot(page: Page, name: string) {

@@ -1,13 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Recette du mode staff hors ligne dans l'appli (navigateur, lot 12) : Julie (scan) synchronise la liste du Salon du
 // seed, le réseau est coupé (navigateur hors ligne), elle lit un QR valide et un QR falsifié, la lecture part en file,
 // puis le réseau revient et la file se vide seule ; l'organisateur voit l'entrée.
 // Lancer avec APP_URL=http://localhost:8111 (Metro derrière apps/mobile/scripts/web-isolated.mjs).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-12-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-12-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 test("mode staff hors ligne : synchro, scan sans réseau, file envoyée au retour", async ({ browser }) => {

@@ -3,6 +3,7 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { apiCall, type Cookie, MOBILE, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 import { checkerPhoto, inner, type Rect, regionSpread, storedPhoto } from "./helpers/lot51";
+import { RELAIS } from "./relais";
 
 // Lot 51, côté appli (version web de recette) : ajout de véhicule en cinq étapes (la carte se construit en haut),
 // « Autre » sans saisie libre, catégories grisées avec la raison, photo avec cadre de plaque posé à la main (pas de
@@ -10,7 +11,7 @@ import { checkerPhoto, inner, type Rect, regionSpread, storedPhoto } from "./hel
 // (pixels lus via l'API), garage v2 et modification par les mêmes étapes. Deux thèmes, captures à 390 px.
 // Lancer avec APP_URL=http://localhost:8361 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-51-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-51-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

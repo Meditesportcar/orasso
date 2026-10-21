@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, SEED_PASSWORD, samplePhoto, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Rôle boutique et compléments du jour J dans l'appli, dans le navigateur (lot 24) : un passionné demande à devenir
 // staff, l'organisateur l'accepte avec le rôle boutique ; dans le mode staff du « Salon Argelès » il scanne un billet
@@ -11,7 +12,7 @@ import { apiCall, login, loginInBrowser, SEED_PASSWORD, samplePhoto, signUpApi, 
 // EXPO_PUBLIC_SITE_URL et CORS_ORIGINS posés) ; le site et l'API tournent sur la base locale du seed.
 const APP = process.env.APP_URL;
 const SITE = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.WEB_PORT ?? 5173}`;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-24-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-24-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Inject = (x: string) => void;
