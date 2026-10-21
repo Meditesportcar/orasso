@@ -133,7 +133,7 @@ function FrameBox({
             ? movePlateFrame(start.current, g.dx / W, g.dy / H)
             : kind === "resize"
               ? resizeOrientedPlateFrame(start.current, g.dx, g.dy, W, H)
-              : dragRotatePlateFrame(start.current, g.dx, g.dy, W, H);
+              : dragRotatePlateFrame(start.current, g.dx, g.dy, H);
         current.current = next;
         x.value = next.x;
         y.value = next.y;

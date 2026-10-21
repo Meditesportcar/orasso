@@ -112,7 +112,7 @@ export function PlateFrame({
         ? movePlateFrame(d.start, dx / width, dy / height)
         : d.kind === "resize"
           ? resizeOrientedPlateFrame(d.start, dx, dy, width, height)
-          : dragRotatePlateFrame(d.start, dx, dy, width, height);
+          : dragRotatePlateFrame(d.start, dx, dy, height);
     setRects((all) => all.map((r, i) => (i === d.index ? next : r)));
   };
   const end = () => {

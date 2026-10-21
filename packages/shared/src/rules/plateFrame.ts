@@ -53,13 +53,12 @@ export function rotatePlateFrame(r: PlateRect, angle: number): PlateRect {
 
 /**
  * Tourne le cadre par sa poignée, posée `offset` px au-dessus du milieu de son bord haut : l'angle suit la direction du
- * centre du cadre vers le doigt (écart `dx, dy` en px depuis le début du geste).
+ * centre du cadre vers le doigt (écart `dx, dy` en px depuis le début du geste ; `H` : hauteur de la photo affichée).
  */
 export function dragRotatePlateFrame(
   start: PlateRect,
   dx: number,
   dy: number,
-  W: number,
   H: number,
   offset = PLATE_ROTATE_HANDLE_OFFSET,
 ): PlateRect {

@@ -48,11 +48,11 @@ describe("cadre orientable (lot 59c)", () => {
   it("la poignée tourne le cadre autour de son centre", () => {
     // Photo 400 × 200 : cadre de 200 × 20 px, poignée à 10 + 26 = 36 px au-dessus du centre.
     // Doigt déplacé de 36 px vers la droite et 36 vers le bas : poignée à droite du centre, quart de tour.
-    expect(dragRotatePlateFrame(r, 36, 36, 400, 200).angle).toBe(90);
+    expect(dragRotatePlateFrame(r, 36, 36, 200).angle).toBe(90);
     // Vers la gauche, à 45° : −45°.
-    expect(dragRotatePlateFrame(r, -36, 0, 400, 200).angle).toBe(-45);
+    expect(dragRotatePlateFrame(r, -36, 0, 200).angle).toBe(-45);
     // Geste minuscule : rien ne bouge.
-    expect(dragRotatePlateFrame(r, 0, 0.5, 400, 200)).toEqual(r);
+    expect(dragRotatePlateFrame(r, 0, 0.5, 200)).toEqual(r);
   });
 
   it("le coin agrandit le long des axes du cadre tourné, coin opposé fixe", () => {
