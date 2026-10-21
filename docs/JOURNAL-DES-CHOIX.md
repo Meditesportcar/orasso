@@ -1759,6 +1759,7 @@ Six points (`relais/orasso/corrections-59c2.md`), tous corrigés, chacun avec un
 - **Défilement vers la fiche** : rien sur la fiche d'un événement (`reveal={false}`) ; un groupe plus haut que la page est aligné par son haut (`revealOffset`).
 - **Hauteur de la carte** : 55 % de l'écran, 520 px au plus, mais au moins 30 % de l'écran laissé à la page hors des barres et de la carte, 280 px au moins (441 px sur 844, 340 px sur 700). **À juger sur l'APK.**
 - Recettes de non-régression des autres lots lancées avec un dossier de captures temporaire (plus de captures d'autres lots réécrites dans le relais).
+- **Reste (robustesse, lot 58)** : la poignée de rotation est masquée quand le cadre est haut et collé en haut d'une petite photo (`plateGestures.ts:26`, relecture Codex 59c2) ; pas de test des appels natifs du blocage de capture du QR de compte.
 
 ## À revoir avec Damien — liste consolidée (lot 34)
 
