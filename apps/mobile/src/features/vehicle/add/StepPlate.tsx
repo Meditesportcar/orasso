@@ -48,20 +48,32 @@ export function StepPlate({
     <>
       <StepHead title={L.plateTitle} text={L.plateText} />
       {unavailable ? <StepNote icon="plate">{L.noDetection}</StepNote> : null}
-      <ChipRow accessibilityRole="tablist">
-        {/* Relecture : sans détection possible ici (web, Expo Go), « Automatique » ne promet rien qu'on ne fait pas. */}
-        {unavailable ? null : (
-          <Chip accessibilityRole="tab" selected={!manual} onPress={() => onMode("auto")} accessibilityLabel={L.auto}>
-            {L.auto}
+      <View style={styles.modeRow}>
+        <ChipRow accessibilityRole="radiogroup" accessibilityLabel={L.plateTitle}>
+          {/* Relecture : sans détection possible ici (web, Expo Go), « Automatique » ne promet rien qu'on ne fait pas. */}
+          {unavailable ? null : (
+            <Chip
+              accessibilityRole="radio"
+              selected={!manual}
+              onPress={() => onMode("auto")}
+              accessibilityLabel={L.auto}
+            >
+              {L.auto}
+            </Chip>
+          )}
+          <Chip
+            accessibilityRole="radio"
+            selected={manual}
+            onPress={() => onMode("manual")}
+            accessibilityLabel={L.manual}
+          >
+            {L.manual}
           </Chip>
-        )}
-        <Chip accessibilityRole="tab" selected={manual} onPress={() => onMode("manual")} accessibilityLabel={L.manual}>
-          {L.manual}
-        </Chip>
+        </ChipRow>
         <Muted variant="meta" testID="plate-blur-count">
           {L.blurredCount(total)}
         </Muted>
-      </ChipRow>
+      </View>
       {photo ? (
         <>
           <PlateFrameEditor
@@ -172,6 +184,7 @@ export function StepPlate({
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: space2 },
+  modeRow: { flexDirection: "row", alignItems: "center", gap: space2 },
   grow: { flex: 1, textAlign: "center" },
   stack: { gap: space2 },
 });
