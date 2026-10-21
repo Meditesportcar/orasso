@@ -138,25 +138,25 @@ test("créer un événement d'un jour depuis l'appli, le publier, le dupliquer, 
   await chooseOrganizer(page, "MéditeSportCar");
   await tab(page, "Événements").click();
   await v(page, "orga-create-event").click();
-  await stepIs(page, "Format");
+  // Lot 53 : huit temps (type, lieu, arrivées, critères, avant-première, règlement, affiche, tout est prêt).
+  await stepIs(page, "Type");
   await shot(page, "01-assistant-format-beton");
-
-  // Format, puis dates (un jour), puis lieu.
   await v(page, "wizard-formats").getByText("Nocturne", { exact: true }).click();
   await v(page, "wizard-title").fill(title);
   await v(page, "wizard-description").fill("Rendez-vous sur le port, café offert.");
-  await next(page);
-  await stepIs(page, "Dates");
-  await v(page, "wizard-start-date").fill("2026-12-06");
+  await v(page, "wizard-date").fill("2026-12-06");
   await v(page, "wizard-start-time").fill("18h");
-  await v(page, "wizard-end-date").fill("2026-12-06");
-  await v(page, "wizard-end-time").fill("8");
-  await v(page, "wizard-end-time").blur();
-  await next(page);
-  // Fin avant le début : la règle du site s'affiche, on reste sur l'écran.
-  await expect(page.getByText("La fin doit suivre le début.").filter({ visible: true })).toBeVisible();
-  await shot(page, "02-assistant-dates-erreur-beton");
+  await v(page, "wizard-start-time").blur();
   await v(page, "wizard-end-time").fill("23:30");
+  await v(page, "wizard-end-time").blur();
+  // Volet « Public et places » : véhicules et places (la règle du site s'affiche sans nombre).
+  await v(page, "wizard-panel-places-toggle").click();
+  await page.getByRole("checkbox", { name: "Moto" }).filter({ visible: true }).click();
+  await v(page, "wizard-capacity-mode").getByText("Avec une limite").click();
+  await next(page);
+  await expect(page.getByText("Indique un nombre de places supérieur à zéro.").filter({ visible: true })).toBeVisible();
+  await shot(page, "02-assistant-dates-erreur-beton");
+  await v(page, "wizard-capacity").fill("40");
   await next(page);
   await stepIs(page, "Lieu");
   await v(page, "wizard-address").fill("Quai Georges Pompidou");
@@ -166,43 +166,36 @@ test("créer un événement d'un jour depuis l'appli, le publier, le dupliquer, 
   await expect(v(page, "wizard-address-status")).not.toHaveText("Recherche…", { timeout: 20_000 });
   await shot(page, "03-assistant-lieu-beton");
 
-  // Le brouillon survit à une sortie : l'assistant rouvert reprend la saisie.
+  // Avant l'adresse, la saisie reste sur le téléphone : l'assistant rouvert la reprend.
   await page.waitForTimeout(800);
   await go(page, "/nouvel-evenement");
   await expect(v(page, "wizard-resumed")).toBeVisible({ timeout: 20_000 });
   await stepIs(page, "Lieu");
   await expect(v(page, "wizard-city")).toHaveValue("Canet-en-Roussillon");
   await shot(page, "04-assistant-brouillon-repris-beton");
-
-  await next(page);
-  await stepIs(page, "Véhicules");
-  await page.getByRole("checkbox", { name: "Moto" }).filter({ visible: true }).click();
-  await next(page);
-  await stepIs(page, "Places");
-  await v(page, "wizard-capacity-mode").getByText("Avec une limite").click();
-  await next(page);
-  await expect(page.getByText("Indique un nombre de places supérieur à zéro.").filter({ visible: true })).toBeVisible();
-  await v(page, "wizard-capacity").fill("40");
-  await next(page);
-  await stepIs(page, "Prestataires");
+  // Volet « Sur place » : prestataires attendus et zones ; « Continuer » enregistre le brouillon.
+  await v(page, "wizard-panel-onsite-toggle").click();
   await page.getByRole("checkbox", { name: "Food truck" }).filter({ visible: true }).click();
+  await v(page, "wizard-zone-add").click();
+  await v(page, "wizard-zone-0-code").fill("a");
+  await v(page, "wizard-zone-0-name").fill("Alpha");
+  await v(page, "wizard-zone-0-capacity").fill("20");
+  await shot(page, "07-assistant-zones-beton");
   await next(page);
-  await stepIs(page, "Public");
-  await next(page);
-  await stepIs(page, "Admission");
+  await stepIs(page, "Arrivées");
   await next(page);
   await stepIs(page, "Critères");
   await v(page, "wizard-categories").getByText("JDM", { exact: true }).click();
   await v(page, "wizard-makes-search").fill("Toyo");
-  await page.getByRole("checkbox", { name: "Toyota" }).filter({ visible: true }).click();
+  await page.getByText("Toyota", { exact: true }).filter({ visible: true }).first().click();
   await shot(page, "05-assistant-criteres-beton");
   await next(page);
   await stepIs(page, "Avant-première");
   await next(page);
   await stepIs(page, "Règlement");
-  await next(page);
-  await stepIs(page, "Infos");
   await v(page, "wizard-instructions").fill("Entrée par le parking nord.");
+  await next(page);
+  await stepIs(page, "Affiche");
   const chooser = page.waitForEvent("filechooser");
   await v(page, "wizard-poster-pick").click();
   (await chooser).setFiles({ name: "affiche.png", mimeType: "image/png", buffer: samplePhoto([200, 140, 30]) });
@@ -211,14 +204,7 @@ test("créer un événement d'un jour depuis l'appli, le publier, le dupliquer, 
   });
   await shot(page, "06-assistant-affiche-beton");
   await next(page);
-  await stepIs(page, "Zones");
-  await v(page, "wizard-zone-add").click();
-  await v(page, "wizard-zone-0-code").fill("a");
-  await v(page, "wizard-zone-0-name").fill("Alpha");
-  await v(page, "wizard-zone-0-capacity").fill("20");
-  await shot(page, "07-assistant-zones-beton");
-  await next(page);
-  await stepIs(page, "Billetterie");
+  await stepIs(page, "Tout est prêt");
   await expect(v(page, "wizard-recap")).toContainText(title);
   await shot(page, "08-assistant-recapitulatif-beton");
   await v(page, "wizard-save").click();
@@ -253,10 +239,10 @@ test("créer un événement d'un jour depuis l'appli, le publier, le dupliquer, 
   });
   await shot(page, "12-copie-assistant-beton");
 
-  // La copie passe à plusieurs jours (trois jours, accès au choix).
-  await next(page);
-  await stepIs(page, "Dates");
-  await page.getByRole("checkbox", { name: "Plusieurs jours" }).filter({ visible: true }).click();
+  // La copie passe à plusieurs jours (trois jours, accès au choix) : elle rouvre sur le temps « Type ».
+  await go(page, `/evenement/${copyId}/modifier?temps=type`);
+  await stepIs(page, "Type");
+  await v(page, "wizard-kind-multi").click();
   await expect(v(page, "wizard-day")).toHaveCount(2);
   await v(page, "wizard-day-0-date").fill("2027-01-09");
   await v(page, "wizard-day-1-date").fill("2027-01-10");
@@ -264,9 +250,11 @@ test("créer un événement d'un jour depuis l'appli, le publier, le dupliquer, 
   await expect(v(page, "wizard-day")).toHaveCount(3);
   await v(page, "wizard-days").getByText("Par jour", { exact: true }).click();
   await shot(page, "13-copie-plusieurs-jours-beton");
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 8; i++) {
     if (await v(page, "wizard-save").count()) break;
+    const before = (await v(page, "wizard-step").textContent()) ?? "";
     await next(page);
+    await expect(v(page, "wizard-step")).not.toHaveText(before, { timeout: 30_000 });
   }
   await v(page, "wizard-save").click();
   await page.waitForURL(new RegExp(`/evenement/${copyId}(\\?|$)`), { timeout: 30_000 });
@@ -404,33 +392,23 @@ test("thème Sable, structure suspendue et passionné sans accès", async ({ bro
   await v(page, "orga-create-event").click();
   // Un brouillon reste peut-être d'un passage précédent : on repart de zéro.
   if (await v(page, "wizard-restart").count()) await v(page, "wizard-restart").click();
-  await stepIs(page, "Format");
+  await stepIs(page, "Type");
   await v(page, "wizard-title").fill("Rasso Sable");
   await shot(page, "31-assistant-format-sable");
-  await next(page);
-  await page.getByRole("checkbox", { name: "Plusieurs jours" }).filter({ visible: true }).click();
+  await v(page, "wizard-kind-multi").click();
   await shot(page, "32-assistant-plusieurs-jours-sable");
-  await page.getByRole("checkbox", { name: "Plusieurs jours" }).filter({ visible: true }).click();
-  await v(page, "wizard-start-date").fill("2026-12-20");
+  await v(page, "wizard-kind-one").click();
+  await v(page, "wizard-date").fill("2026-12-20");
   await v(page, "wizard-start-time").fill("10:00");
-  await v(page, "wizard-end-date").fill("2026-12-20");
   await v(page, "wizard-end-time").fill("12:00");
+  await v(page, "wizard-end-time").blur();
   await next(page);
+  await stepIs(page, "Lieu");
   await shot(page, "33-assistant-lieu-sable");
-  // Lot 36 : adresse et ville obligatoires.
+  // Lot 36 : adresse et ville obligatoires. On ne va pas plus loin : sans « Continuer », rien n'est enregistré.
   await v(page, "wizard-address").fill("Plage du Racou");
   await v(page, "wizard-city").fill("Argelès-sur-Mer");
-  for (const label of ["Véhicules", "Places", "Prestataires", "Public", "Admission", "Critères"]) {
-    await next(page);
-    await stepIs(page, label);
-    if (label === "Critères" || label === "Public") await shot(page, `34-assistant-${label.toLowerCase()}-sable`);
-  }
-  for (const label of ["Avant-première", "Règlement", "Infos", "Zones", "Billetterie"]) {
-    await next(page);
-    await stepIs(page, label);
-  }
-  await shot(page, "35-assistant-recapitulatif-sable");
-  // Quitter : le brouillon reste sur le téléphone (confirmation), puis on l'efface pour les prochains passages.
+  await shot(page, "35-assistant-recapitulatif-sable"); // Quitter : le brouillon reste sur le téléphone (confirmation), puis on l'efface pour les prochains passages.
   await v(page, "wizard-back").click();
   await page.getByRole("button", { name: "Fermer" }).filter({ visible: true }).first().click();
   await shot(page, "36-assistant-quitter-sable");
@@ -456,7 +434,7 @@ test("thème Sable, structure suspendue et passionné sans accès", async ({ bro
     await page.waitForTimeout(1500);
     await shot(page, "40-inviter-sable");
     await go(page, `/evenement/${published.id}/modifier`);
-    await stepIs(page, "Format");
+    await stepIs(page, "Type");
     await shot(page, "41-modifier-sable");
   }
   await ctx.close();
@@ -469,20 +447,15 @@ test("thème Sable, structure suspendue et passionné sans accès", async ({ bro
   await go(tram.page, "/nouvel-evenement");
   if (await v(tram.page, "wizard-restart").count()) await v(tram.page, "wizard-restart").click();
   await v(tram.page, "wizard-title").fill("Sortie hivernale");
-  await next(tram.page);
-  await v(tram.page, "wizard-start-date").fill("2027-01-17");
+  await v(tram.page, "wizard-date").fill("2027-01-17");
   await v(tram.page, "wizard-start-time").fill("09:00");
-  await v(tram.page, "wizard-end-date").fill("2027-01-17");
   await v(tram.page, "wizard-end-time").fill("12:00");
+  await v(tram.page, "wizard-end-time").blur();
   await next(tram.page);
-  // Lot 36 : adresse et ville obligatoires.
+  // Lot 36 : adresse et ville obligatoires ; « Continuer » enregistre le brouillon, et l'API refuse.
   await v(tram.page, "wizard-address").fill("Place de la Loge");
   await v(tram.page, "wizard-city").fill("Perpignan");
-  for (let i = 0; i < 14; i++) {
-    if (await v(tram.page, "wizard-save").count()) break;
-    await next(tram.page);
-  }
-  await v(tram.page, "wizard-save").click();
+  await next(tram.page);
   await expect(
     tram.page.getByText("Structure suspendue", { exact: false }).filter({ visible: true }).first(),
   ).toBeVisible({

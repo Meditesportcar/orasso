@@ -1538,6 +1538,39 @@ Source : prototype DA v2 **validé par Damien dans le prototype DA v2, 19/10/202
 - Pas de « réponse avant le … » ni de délai pour accepter en liste d'attente : l'API ne promet ni l'un ni l'autre à un prestataire (le prototype montrait « 12 h »).
 - Icônes des tuiles : formes approchées du jeu existant ; veux-tu des pictogrammes dédiés (étincelle, clé, camion) ajoutés au système de design ?
 
+### 21/10/2026 — Assistant de création en huit temps, site et appli (lot 53)
+
+Validé par Damien dans le prototype DA v2, 19/10/2026 (`s-create`, V13, H9 appliquée par défaut) : l'assistant de création passe de douze étapes à **huit temps** — type, lieu, arrivées, critères, avant-première, règlement, affiche, « Tout est prêt » (Publier / Brouillon / Aperçu) — sur le site (`EventWizard.tsx` + `components/wizard/*`) et dans l'appli (`features/orga/wizard/Temps.tsx`, D20). Aucune information retirée ; correspondance des douze étapes :
+
+| étape d'avant | temps (lot 53) | où |
+|---|---|---|
+| format (format, titre, description, dates, plusieurs jours) | 1 Type | haut du temps ; « Combien de fois ? » Ponctuel / Récurrent / Plusieurs jours |
+| véhicules, places | 1 Type | volet « Public et places » |
+| format (adresse) | 2 Lieu | recherche, carte à épingle déplaçable, « Précision pour l'entrée » |
+| zones, prestataires | 2 Lieu | volet « Sur place » (+ missions `event_needs`, lot 46) |
+| public, billetterie (contrôle des billets) | 3 Arrivées | volet « Public » (« Billetterie visiteurs » seulement si activée) |
+| admission, critères | 4 Critères | admission en tête, puis les trois questions (sur sélection) |
+| avant-première (ouverture, avant-première, hauts grades, verrouillage) | 5 Avant-première | interrupteur, frise ; volet « Hauts grades et verrouillage » |
+| règlement, infos (consignes) | 6 Règlement | modèles, « Reprendre le dernier », consignes aux retenus |
+| infos (affiche) | 7 Affiche | affiche générée (lot 47) + affiche perso « Tu as déjà ton affiche ? » |
+| (récapitulatif de billetterie) | 8 Tout est prêt | vignette, récapitulatif, trois choix |
+
+Choix (non écrits dans les docs) :
+- **Admission au temps 4** (« Qui peut venir ? ») : le prototype n'en parle pas ; c'est la question qui précède les critères, et les trois questions ne s'affichent qu'en admission sur sélection. Plus aucun temps n'est sauté (`eventStepSkipped` retiré).
+- **« Quels styles ? » = les catégories** du référentiel, sans celles qui ne disent qu'une origine (Allemande, Française…, couvertes par la première question ; `styleCategories`). Origines : les pays de `criteria.countries`, chips au singulier du prototype (Japonaise…). Phrase récapitulative : `summaryOfCriteria` ; question laissée vide = « tous les véhicules / tous styles / toutes marques ».
+- **Enregistré à chaque temps** : un brouillon est enregistré sur le serveur à chaque « Continuer » dès le temps 2 (l'API exige l'adresse pour créer) ; avant, la saisie reste dans le navigateur / sur le téléphone, comme au lot 36. Un événement publié ne s'enregistre qu'à la fin (« Enregistrer les modifications »), pour ne pas prévenir les inscrits à chaque temps.
+- **Un brouillon rouvre au premier temps incomplet** (`firstEventProblem`), sinon sur « Tout est prêt » : pas de colonne « étape » (le brouillon est un `EventDraft`). `?temps=lieu` ouvre un temps précis (site et appli).
+- **Récurrent** : « Revient le 1er / 2e / 3e / 4e / dernier <jour> de chaque mois », De / À, nombre de dates après la première (1 à 12, 6 par défaut), « Prochaines dates » et « Jusqu'au » calculés ; la série est créée **une seule fois, à la fin** (`POST /events/:id/recurrence`, dates suivantes en brouillons), depuis l'événement complet. Les sept jours de la semaine sont proposés (le prototype montrait samedi et dimanche).
+- **Précision pour l'entrée** : nouvelle colonne `events.entrance_note` (160 caractères, publique comme l'adresse), migration `0050_entrance-note` (à régénérer, B1) ; renvoyée par l'API (`entranceNote`). Son affichage sur la fiche publique (site, lot 56) et dans l'appli (fiche, lot 44/55) reste à faire.
+- **Épingle** : site, une épingle MapLibre à glisser ou un toucher sur la carte (`EventMap draggablePin`) ; téléphone, épingle fixe au centre et carte qui glisse dessous (`PinMap.tsx`, plus robuste au doigt) ; navigateur de recette, comme le site (`PinMap.web.tsx`). Sans adresse trouvée, la carte part de Perpignan.
+- **Affiche** : style par défaut « Minimal » (sans photo, l'affiche prend ce style) ; aperçu à 540 px (débounce 300 ms), vignettes du rail à 180 px refaites seulement quand la photo ou le format change (limite de l'API, 60 aperçus / min) ; l'affiche est rendue par l'API à l'enregistrement du temps (réglages envoyés dans `PATCH`).
+- **Modèles de règlement** : « Modèle Orasso » (existant), « Modèle Nocturne » (texte du prototype, sans la mention propre au port de Canet), « Modèle Expo » (écrit pour le lot) ; « Reprendre le dernier » = règlement du dernier événement de la structure qui en a un.
+- **Missions** : seules les missions modifiées sont renvoyées (l'API limite les écritures de prestataires à 60 / h).
+
+#### À revoir avec Damien (lot 53)
+- H9 : huit temps appliqués tels que le prototype ; à revoir au lot 58.
+- Créneaux d'arrivée : pas de note de l'organisateur saisie dans l'assistant (le champ existe dans l'API ; le prototype n'en montre pas).
+- Le recadrage de la photo d'affiche est celui du générateur (`cover`) : pas de choix du cadrage par l'organisateur.
 ## À revoir avec Damien — liste consolidée (lot 34)
 
 Une seule liste, ordonnée, de tout ce que les lots 15 à 35d (et 34) ont laissé à décider. Rien ne bloque : la solution décrite est appliquée (D16). Les points antérieurs (A1 à A14, lots 02 à 14) restent dans leurs sections plus haut ; ceux qui sont réglés depuis sont signalés à la fin.

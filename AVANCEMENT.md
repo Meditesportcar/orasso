@@ -70,6 +70,8 @@
 
 - Vague 5 : la branche `lot-52-orga-v2` attend la relecture indépendante (D27) et la fusion du coordinateur (aucune migration ; fichiers partagés : `packages/shared` (`roles.ts`, `labels.fr.ts`, `labels/shop.fr.ts`, `schemas/index.ts`), `apps/api/src/modules/staff/routes.ts`, `scripts/seed.ts`). Le lot 53 remplace l'assistant derrière « Créer un événement » et « Reprendre ».
 
+- Vague 6 : la branche `lot-53-assistant-huit-temps` (assistant de création en huit temps, site et appli) attend la relecture indépendante (D27) et la fusion du coordinateur (migration `0050_entrance-note`, parent `0049_rotating-qr`, à régénérer, règle B1 ; fichiers partagés : `apps/web/app/components/EventMap.tsx` (prop `draggablePin`), `apps/mobile/src/lib/orgaV2.ts` (règles par champ), `apps/api/src/modules/events/service.ts` et `schemas/event.ts` (`entranceNote`), recettes `lot36`, `multi-jours`, `site-public`, `appli-evenements`). Reste : afficher la précision d'entrée sur les fiches (lots 56 / 57).
+
 ## Prochaine étape
 
 1. **Coordinateur** : fusionner les lots de la vague 2 (39, 40, 45, 46), tests, build, déploiement de fin de vague 2.

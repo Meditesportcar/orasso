@@ -91,7 +91,9 @@ for (const [theme, desktop] of [
     await expect(map.locator("canvas")).toBeVisible({ timeout: 30_000 });
     await map.click({ position: { x: 140, y: 120 } });
     await expect(page.getByTestId("wizard-coords")).toContainText(/N · .* E/);
-    await page.getByLabel("Précision pour l'entrée (facultatif)").fill("Entrée par le quai Nord, barrière levée à 18 h");
+    await page
+      .getByLabel("Précision pour l'entrée (facultatif)")
+      .fill("Entrée par le quai Nord, barrière levée à 18 h");
     await page.getByText("Sur place", { exact: true }).click();
     await page.getByTestId("wizard-mission-add").click();
     await page.getByLabel("Installation à partir de").fill("16:00");
@@ -126,11 +128,14 @@ for (const [theme, desktop] of [
     await next(page, "Affiche");
 
     // (7) Affiche : photo, style, titre, aperçu rendu par l'API.
-    await page.getByTestId("wizard-poster-photo").locator("input").setInputFiles({
-      name: "photo.jpg",
-      mimeType: "image/jpeg",
-      buffer: samplePhoto([40, 60, 120]),
-    });
+    await page
+      .getByTestId("wizard-poster-photo")
+      .locator("input")
+      .setInputFiles({
+        name: "photo.jpg",
+        mimeType: "image/jpeg",
+        buffer: samplePhoto([40, 60, 120]),
+      });
     await page.getByTestId("wizard-style-jdm").click();
     await page.getByLabel("Titre sur l'affiche").fill("Nocturne de Canet");
     await expect(page.getByTestId("wizard-poster-preview")).toBeVisible({ timeout: 30_000 });
@@ -191,7 +196,9 @@ for (const [theme, desktop] of [
         `/structures/${structureId}/events`,
       );
       const full = await Promise.all(
-        after.data.map((e) => apiCall<{ parentEventId: string | null }>(damien, "GET", `/events/${(e as { id: string }).id}`)),
+        after.data.map((e) =>
+          apiCall<{ parentEventId: string | null }>(damien, "GET", `/events/${(e as { id: string }).id}`),
+        ),
       );
       expect(full.filter((e) => e.data.parentEventId === id)).toHaveLength(2);
     } else if (!desktop) {

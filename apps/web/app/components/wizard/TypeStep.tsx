@@ -42,7 +42,8 @@ export function TypeStep({
   setD,
   formats,
   recurrenceLocked,
-}: StepProps & { formats: readonly EventFormat[]; recurrenceLocked: boolean }) {
+  seriesExists,
+}: StepProps & { formats: readonly EventFormat[]; recurrenceLocked: boolean; seriesExists: boolean }) {
   const kind = eventKindOf(d);
   const dates = kind === "rec" ? recurrenceDates(d) : [];
   const rec = d.recurrence;
@@ -64,7 +65,7 @@ export function TypeStep({
             type="button"
             aria-pressed={kind === k}
             className={kind === k ? "wz-kind is-on" : "wz-kind"}
-            disabled={recurrenceLocked && k !== kind}
+            disabled={recurrenceLocked && k === "rec" && kind !== "rec"}
             onClick={() => setD((p) => withEventKind(p, k, clockNow()))}
             data-testid={`wizard-kind-${k}`}
           >
@@ -79,7 +80,7 @@ export function TypeStep({
           </button>
         ))}
       </div>
-      {recurrenceLocked ? <p className="s-notice">{W.recurrenceExisting}</p> : null}
+      {seriesExists ? <p className="s-notice">{W.recurrenceExisting}</p> : null}
 
       {kind !== "multi" && (
         <div className="wz-box s-stack s-stack--tight" data-testid="wizard-kind-options">

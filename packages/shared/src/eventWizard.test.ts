@@ -354,6 +354,27 @@ describe("corps envoyés à l'API", () => {
     expect(back).toEqual([d.needs?.[0]]);
   });
 
+  it("missions : une mission inchangée n'est pas renvoyée (l'API limite les écritures)", () => {
+    const saved = {
+      id: "n1",
+      trade: "food_truck" as const,
+      tradeLabel: "Food truck",
+      quantity: 2,
+      filled: 0,
+      remaining: 2,
+      power: "a16" as const,
+      water: true,
+      frontageM: 6,
+      installAt: "2026-11-08T15:00:00.000Z",
+      notes: null,
+      position: 0,
+    };
+    const d = filled({ startsAt: "2026-11-08T19:00", endsAt: "2026-11-08T23:30", needs: needsFromSaved([saved]) });
+    expect(needChanges([saved], d)).toEqual({ remove: [], update: [], create: [] });
+    const more = { ...d, needs: d.needs?.map((n) => ({ ...n, quantity: "3" })) };
+    expect(needChanges([saved], more).update).toHaveLength(1);
+  });
+
   it("préremplit la modification depuis l'événement enregistré", () => {
     const event = {
       format: "night",

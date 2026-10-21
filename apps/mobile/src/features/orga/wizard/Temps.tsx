@@ -130,9 +130,9 @@ export function TypeTemps(ctx: StepContext) {
           <Pressable
             key={k}
             onPress={() => setD((p) => withEventKind(p, k, now()))}
-            disabled={locked && k !== kind}
+            disabled={locked && k === "rec" && kind !== "rec"}
             accessibilityRole="button"
-            accessibilityState={{ selected: kind === k, disabled: locked && k !== kind }}
+            accessibilityState={{ selected: kind === k, disabled: locked && k === "rec" && kind !== "rec" }}
             style={[styles.kind, { borderColor: kind === k ? t.color.accent : t.color.line }]}
             testID={`wizard-kind-${k}`}
           >
@@ -145,7 +145,7 @@ export function TypeTemps(ctx: StepContext) {
           </Pressable>
         ))}
       </Group>
-      {locked ? <Notice>{W.recurrenceExisting}</Notice> : null}
+      {ctx.event?.recurrenceRule ? <Notice>{W.recurrenceExisting}</Notice> : null}
       {kind === "multi" ? (
         <DatesStep {...ctx} />
       ) : (

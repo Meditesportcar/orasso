@@ -817,11 +817,30 @@ export type NeedPayload = {
 };
 
 /**
- * Missions à retirer, modifier et créer par rapport aux missions enregistrées (comme `zoneChanges`). L'heure
- * d'installation se place le jour de l'événement (après minuit pour une nocturne, comme les créneaux d'arrivée).
+ * Une mission a-t-elle changé ? Sans ses valeurs enregistrées (seul l'identifiant est connu), on la renvoie. L'API
+ * limite les écritures (`proWrite`) : l'assistant, qui enregistre à chaque temps, n'envoie que ce qui change.
+ */
+function changedNeed(saved: Partial<EventNeedView> | undefined, need: NeedPayload): boolean {
+  if (!saved || saved.trade === undefined) return true;
+  const at = (iso: string | null | undefined) => (iso ? new Date(iso).getTime() : null);
+  return (
+    saved.trade !== need.trade ||
+    saved.quantity !== need.quantity ||
+    saved.power !== need.power ||
+    saved.water !== need.water ||
+    (saved.frontageM ?? null) !== need.frontageM ||
+    at(saved.installAt) !== at(need.installAt) ||
+    saved.position !== need.position
+  );
+}
+
+/**
+ * Missions à retirer, modifier (seulement si elles ont changé) et créer par rapport aux missions enregistrées (comme
+ * `zoneChanges`). L'heure d'installation se place le jour de l'événement (après minuit pour une nocturne, comme les
+ * créneaux d'arrivée).
  */
 export function needChanges(
-  saved: readonly Pick<EventNeedView, "id">[],
+  saved: readonly (Pick<EventNeedView, "id"> & Partial<EventNeedView>)[],
   d: EventDraft,
 ): { remove: string[]; update: { id: string; need: NeedPayload }[]; create: NeedPayload[] } {
   const needs = d.needs ?? [];
@@ -841,8 +860,14 @@ export function needChanges(
       installAt: at ? at.toISOString() : null,
       position,
     };
-    if (n.id) update.push({ id: n.id, need });
-    else create.push(need);
+    if (!n.id) create.push(need);
+    else if (
+      changedNeed(
+        saved.find((s) => s.id === n.id),
+        need,
+      )
+    )
+      update.push({ id: n.id, need });
   }
   return { remove, update, create };
 }

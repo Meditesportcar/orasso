@@ -390,7 +390,7 @@ export function EventWizard({
   return (
     <FlowScreen
       title={editing ? L.editTitle : L.newTitle}
-      facts={structure.data?.name ? W.flowSub(structure.data.name) : event?.title}
+      facts={structure.data?.name ?? event?.title}
       onClose={close}
       footer={
         <>

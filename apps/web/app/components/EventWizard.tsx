@@ -299,6 +299,7 @@ export function EventWizard(props: Props) {
         {...stepProps}
         formats={formats}
         recurrenceLocked={Boolean(saved?.recurrenceRule || saved?.parentEventId)}
+        seriesExists={Boolean(saved?.recurrenceRule)}
       />
     );
   else if (step === "lieu") body = <PlaceStep {...stepProps} vendorSuggestions={vendorSuggestions} />;
