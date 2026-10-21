@@ -11,6 +11,7 @@ import { apiCall, createEvent, login, SEED_PASSWORD, SIGNUP_EXTRAS, signUpApi, u
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? "../../docs/recette/suite/appli";
 test.skip(!APP, "Appli : lancer avec APP_URL");
+test.use({ actionTimeout: 20_000 });
 
 type Theme = "beton" | "sable";
 const THEMES: Theme[] = ["beton", "sable"];
@@ -66,7 +67,8 @@ test("écrans nouveaux du lot 34, deux thèmes à 390 px", async ({ browser }) =
 
     // Créer sa fiche pro depuis Mes casquettes.
     await v.page.goto("/accueil");
-    await v.page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+    await v.page.goto("/moi");
+    await v.page.getByTestId("profil-create").click();
     await v.page.getByTestId("casquette-create-pro").click();
     await expect(v.page.getByTestId("pro-form")).toBeVisible({ timeout: 30_000 });
     await shot(v.page, "03-creer-fiche-pro", theme);
@@ -91,10 +93,11 @@ test("écrans nouveaux du lot 34, deux thèmes à 390 px", async ({ browser }) =
       (await apiCall(cookie, "POST", "/structures", { kind: "association", name, departments: ["66"] })).status,
     ).toBe(201);
     const o = await openApp(browser, email, theme);
-    await o.page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+    await o.page.goto("/moi");
     await o.page.getByTestId("casquette-organizer").filter({ hasText: name }).click();
     await o.page.waitForURL(/\/direct/, { timeout: 20_000 });
-    await o.page.goto("/ma-structure");
+    await o.page.goto("/structure");
+    await o.page.getByTestId("tile-verification").click();
     await expect(o.page.getByTestId("orga-verification-add-pdf")).toBeVisible({ timeout: 30_000 });
     await o.page.getByTestId("orga-verification-add-pdf").scrollIntoViewIfNeeded();
     await shot(o.page, "04-justificatif-pdf", theme);
@@ -102,13 +105,13 @@ test("écrans nouveaux du lot 34, deux thèmes à 390 px", async ({ browser }) =
 
     // Filtre « Jour » du mode liste (Salon de printemps, trois jours).
     const d = await openApp(browser, "damien@orasso.local", theme);
-    await d.page.getByRole("button", { name: "Moi et mes casquettes" }).click();
+    await d.page.goto("/moi");
     await d.page.getByTestId("casquette-organizer").filter({ hasText: "MéditeSportCar" }).click();
     await d.page.waitForURL(/\/direct/, { timeout: 20_000 });
     await d.page.getByRole("tab", { name: "Tri", exact: true }).click();
     await d.page.getByTestId("triage-event-picker").click();
     await d.page.getByTestId("triage-event-choice").filter({ hasText: "Salon de printemps" }).click();
-    await d.page.getByRole("tab", { name: "Liste", exact: true }).click();
+    await d.page.getByRole("tab", { name: "En liste", exact: true }).click();
     const list = d.page.getByTestId("triage-list").filter({ visible: true }).last();
     await list.getByTestId("triage-filters").click();
     await expect(d.page.getByRole("combobox", { name: "Jour" })).toBeVisible({ timeout: 20_000 });

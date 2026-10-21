@@ -6,7 +6,8 @@ import { RELAIS } from "./relais";
 
 // Accueil complet (lot 30) sur le site, avec Kenji (département 66). Prérequis : base locale avec le seed (garage favori,
 // deux emplacements sponsorisés, cache factice du lavage et du carburant), API lancée avec `OVERPASS_URL=off`,
-// `FUEL_API_URL=off` et `WEATHER_PROVIDER=off` (aucun appel à une source externe). Captures dans les deux thèmes, au
+// `FUEL_API_URL=off` et `WEATHER_PROVIDER=off` (ou `open-meteo` avec `METEO_URL` vers le stub local de meteo.spec.ts).
+// Aucun appel à une source externe. Captures dans les deux thèmes, au
 // bureau et sur téléphone (390 px) : `CAPTURES=1 pnpm --filter @orasso/web exec playwright test accueil`.
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-30-captures/site`;
 const TITLES = ["pending", "nearby", "weather", "agenda", "favorite_garage", "wash", "fuel"] as const;

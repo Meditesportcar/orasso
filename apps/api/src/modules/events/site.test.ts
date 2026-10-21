@@ -27,6 +27,7 @@ import {
   structures,
   structureVerificationDocuments,
 } from "../../db/schema";
+import { env } from "../../env";
 import { setGeocodeFetch } from "../../lib/geocode";
 import { setRegistryFetch } from "../../lib/registry";
 import type { Viewer } from "../../lib/session";
@@ -48,8 +49,11 @@ let ref: Awaited<ReturnType<typeof seedReference>>;
 let orga: TestUser;
 let orgaV: Viewer;
 let admin: TestUser;
+const previousGeocoderUrl = env.GEOCODER_URL;
 
 beforeEach(async () => {
+  // Les deux cas de géocodage injectent leur fetch : `off` dans le .env ne doit pas les désactiver.
+  env.GEOCODER_URL = "https://geocoder.test";
   await resetDb();
   useClock(paris(6, 10, 10));
   ref = await seedReference();
@@ -59,6 +63,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  env.GEOCODER_URL = previousGeocoderUrl;
   setRegistryFetch(null);
   setGeocodeFetch(null);
 });

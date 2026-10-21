@@ -1,5 +1,8 @@
 // Lot 54b : les caches de lecture (useApi, candidatures) sont propres au compte connecté. Le trousseau est simulé par
 // une table en mémoire qui survit à l'« appli » (comme le trousseau d'un vrai appareil).
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const store = new Map<string, string>();
@@ -14,6 +17,7 @@ vi.mock("expo-secure-store", () => ({
 import {
   accountGuard,
   bindCacheScope,
+  CACHE_KEY_PREFIXES,
   cacheGetJson,
   cacheScope,
   cacheSetJson,
@@ -158,5 +162,49 @@ describe("anciennes clés de cache sans compte", () => {
     await purgeCaches();
     await bindCacheScope("compte-b");
     expect(await kvGet("my-pro")).toBe("x");
+  });
+});
+
+describe("clés de cache à identifiant (registre des préfixes)", () => {
+  it("une clé à identifiant posée sous le compte A n'est lisible ni après la déconnexion, ni par B", async () => {
+    await bindCacheScope("compte-a");
+    await cacheSetJson("feed.salon-argeles", { prive: "de-a" });
+    await cacheSetJson("orga-events-structure-1", [{ id: "e1" }]);
+    expect(await cacheGetJson("feed.salon-argeles")).toEqual({ prive: "de-a" });
+
+    await purgeCaches();
+    expect(await cacheGetJson("feed.salon-argeles")).toBeNull();
+    expect(JSON.stringify([...store.entries()])).not.toContain("de-a");
+
+    await bindCacheScope("compte-b");
+    expect(await cacheGetJson("feed.salon-argeles")).toBeNull();
+    expect(await cacheGetJson("orga-events-structure-1")).toBeNull();
+    // Même si A se reconnecte : sa déconnexion a tout effacé.
+    await purgeCaches();
+    await bindCacheScope("compte-a");
+    expect(await cacheGetJson("feed.salon-argeles")).toBeNull();
+  });
+
+  it("tout cacheKey à identifiant du code a son préfixe dans le registre", () => {
+    const root = fileURLToPath(new URL("..", import.meta.url));
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(entry.name) && !/\.test\./.test(entry.name)) files.push(path);
+      }
+    };
+    walk(root);
+    const missing: string[] = [];
+    for (const file of files) {
+      // `cacheKey: \`prefixe${id}\`` (aussi dans un ternaire) ou `cacheSetJson(\`prefixe${id}\`` : la partie fixe
+      // avant la première interpolation est le préfixe.
+      for (const match of readFileSync(file, "utf8").matchAll(/(?:cacheKey:[^\n`]*|cacheSetJson\(\s*)`([^`$]*)\$\{/g)) {
+        const prefix = match[1] ?? "";
+        if (!CACHE_KEY_PREFIXES.some((known) => prefix.startsWith(known))) missing.push(`${file} : « ${prefix} »`);
+      }
+    }
+    expect(missing).toEqual([]);
   });
 });

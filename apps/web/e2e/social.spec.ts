@@ -115,7 +115,18 @@ test("social : profils selon l'audience, recherche, demande d'ami, acceptation, 
   // Journal de Léa : l'actualité de son ami Kenji (retenues du seed), jamais plus de sept jours en arrière sauf non lues.
   const lea = await browser.newPage();
   await loginInBrowser(lea, "lea@orasso.local", undefined, "/app/journal");
-  await expect(lea.getByTestId("journal-item").filter({ hasText: "Kenji_66 va à" }).first()).toBeVisible();
+  // Les specs précédentes ajoutent des entrées au Journal de Léa : on cherche l'entrée attendue à travers la pagination
+  // (« Plus ancien ») au lieu de supposer qu'elle est sur la première page.
+  const kenjiEntry = lea.getByTestId("journal-item").filter({ hasText: "Kenji_66 va à" });
+  for (let pageNo = 0; pageNo < 50; pageNo++) {
+    await expect(lea.getByTestId("journal")).toBeVisible();
+    if ((await kenjiEntry.count()) > 0) break;
+    const older = lea.getByRole("link", { name: "Plus ancien" });
+    if ((await older.count()) === 0) break;
+    await older.click();
+    await lea.waitForLoadState("networkidle");
+  }
+  await expect(kenjiEntry.first()).toBeVisible();
   await lea.close();
   await bravoPage.close();
   await page.close();
