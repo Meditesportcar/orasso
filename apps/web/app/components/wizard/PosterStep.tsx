@@ -61,7 +61,6 @@ async function renderPreview(
 
 export function PosterStep({
   d,
-  set,
   setD,
   structureId,
   structureName,
@@ -82,10 +81,8 @@ export function PosterStep({
     style: POSTER_DEFAULT_STYLE,
     title: d.title.trim().slice(0, POSTER_TITLE_MAX),
   };
-  // Le temps de l'affiche pose ses réglages : l'affiche sera rendue à l'enregistrement.
-  useEffect(() => {
-    if (!d.poster) set("poster", poster);
-  });
+  // Les réglages sont posés en touchant à l'affiche, ou en quittant le temps (`withDefaultPoster`) : l'affiche est rendue
+  // à l'enregistrement.
   // Toujours sur le dernier état (une photo qui finit de s'envoyer ne remet pas l'ancien style).
   const patch = (change: Partial<PosterSettings>) =>
     setD((p) => ({ ...p, poster: { ...(p.poster ?? poster), ...change } }));

@@ -44,6 +44,7 @@ import {
   type WizardMemo,
   withArrivalsInHours,
   withCopyOpening,
+  withDefaultPoster,
   wizardEndLabels,
   zoneChanges,
 } from "@orasso/shared";
@@ -175,12 +176,11 @@ export function EventWizard(props: Props) {
     void apiFetch<EventNeedView[]>(`/events/${event.id}/needs`).then((res) => {
       if (res.ok) {
         setSavedNeeds(res.data);
-        const needs = needsFromSaved(res.data, event.startsAt);
-        setD((p) => {
-          const untouched = sameDraft(p, pristine.current);
-          pristine.current = { ...pristine.current, needs };
-          return untouched ? pristine.current : p;
-        });
+        // Hors de la fonction de mise à jour (React peut l'appeler deux fois) : elle reste sans effet de bord.
+        const before = pristine.current;
+        const next = { ...before, needs: needsFromSaved(res.data, event.startsAt) };
+        pristine.current = next;
+        setD((p) => (sameDraft(p, before) ? next : p));
       }
       setNeedsReady(true);
     });
@@ -386,6 +386,12 @@ export function EventWizard(props: Props) {
     let sent = d;
     const problem = eventStepProblem(step, sent);
     if (problem) return setError(problem);
+    // Quitter « Ton affiche » sans y avoir touché pose ses réglages par défaut (jamais au seul affichage du temps).
+    if (step === "affiche" && !sent.poster) {
+      sent = withDefaultPoster(sent);
+      setD(sent);
+      latest.current = sent;
+    }
     // Horaires changés avant « Les arrivées » : un créneau devenu hors horaires ferait tout refuser.
     if (step !== "arrivees") {
       const fixed = withArrivalsInHours(sent);

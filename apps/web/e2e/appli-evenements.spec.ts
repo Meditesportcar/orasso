@@ -209,7 +209,7 @@ test("créer un événement d'un jour depuis l'appli, le publier, le dupliquer, 
   await shot(page, "08-assistant-recapitulatif-beton");
   await v(page, "wizard-save").click();
 
-  await page.waitForURL(/\/evenement\/[0-9a-f-]{36}/, { timeout: 30_000 });
+  await page.waitForURL(/\/evenement\/[0-9a-f-]{36}(\?|$)/, { timeout: 30_000 });
   const eventId = /\/evenement\/([0-9a-f-]{36})/.exec(page.url())?.[1] ?? "";
   await expect(page.getByText("Brouillon enregistré.").filter({ visible: true })).toBeVisible({ timeout: 20_000 });
   const created = (await apiCall<Ev>(damien, "GET", `/events/${eventId}`)).data;

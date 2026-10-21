@@ -652,16 +652,14 @@ export function ReglementTemps(ctx: StepContext) {
 // --- (7) Affiche ------------------------------------------------------------------------------------------------
 
 export function AfficheTemps(ctx: StepContext) {
-  const { d, set, setD, structureId, structureName, event } = ctx;
+  const { d, setD, structureId, structureName, event } = ctx;
   const { t } = useTheme();
   const poster: PosterSettings = d.poster ?? {
     photoKey: null,
     style: POSTER_DEFAULT_STYLE,
     title: d.title.trim().slice(0, POSTER_TITLE_MAX),
   };
-  useEffect(() => {
-    if (!d.poster) set("poster", poster);
-  });
+  // Les réglages sont posés en touchant à l'affiche, ou en quittant le temps (`withDefaultPoster`).
   const patch = (change: Partial<PosterSettings>) =>
     setD((p) => ({ ...p, poster: { ...(p.poster ?? poster), ...change } }));
   const [format, setFormat] = useState<PosterFormat>("post");

@@ -13,7 +13,7 @@ import { criteriaOrigins, wizardV2Labels } from "./labels/event-editor.fr";
 import { defaultEventRules } from "./labels/events.fr";
 import { EVENT_NEED_MAX_QUANTITY, type ProviderPower, type VendorTypeCode } from "./provider";
 import { type ArrivalSlot, type Arrivals, arrivalInstant, validateArrivals } from "./rules/arrival";
-import { POSTER_TITLE_MAX } from "./rules/poster";
+import { POSTER_DEFAULT_STYLE, POSTER_TITLE_MAX } from "./rules/poster";
 import {
   nthWeekdayOfMonth,
   RECURRENCE_MAX_COUNT,
@@ -437,6 +437,19 @@ export function eventRecurrenceProblem(d: Pick<EventDraft, "recurrence" | "multi
   return Number.isInteger(r.count) && r.count >= 1 && r.count <= RECURRENCE_MAX_COUNT
     ? null
     : `De 1 à ${RECURRENCE_MAX_COUNT} dates après la première.`;
+}
+
+/**
+ * Réglages d'affiche par défaut (style Minimal, titre de l'événement), posés quand on quitte le temps « Ton affiche »
+ * sans y avoir touché : jamais au simple affichage du temps (relecture du lot 53 : un brouillon rouvert un instant sur
+ * l'affiche n'en a pas pour autant).
+ */
+export function withDefaultPoster(d: EventDraft): EventDraft {
+  if (d.poster) return d;
+  return {
+    ...d,
+    poster: { photoKey: null, style: POSTER_DEFAULT_STYLE, title: d.title.trim().slice(0, POSTER_TITLE_MAX) },
+  };
 }
 
 /** Affiche générée : un titre de 1 à 34 caractères. */

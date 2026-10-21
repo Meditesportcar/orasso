@@ -25,6 +25,7 @@ import {
   storedStepIndex,
   withArrivalSlot,
   withArrivalsInHours,
+  withDefaultPoster,
   withEventKind,
   withMultiDay,
   withSingleDate,
@@ -194,6 +195,9 @@ describe("temps où rouvrir un brouillon", () => {
     expect(eventResumeStep(left, true, "reglement", 2)).toBe("reglement");
     expect(eventPublishProblem(left)).toEqual({ step: "affiche", problem: "Choisis ton affiche avant de publier." });
     expect(eventPublishProblem({ ...left, poster: POSTER })).toBeNull();
+    // Les réglages par défaut ne sont posés qu'en quittant le temps de l'affiche.
+    expect(withDefaultPoster(left).poster).toEqual({ photoKey: null, style: "minimal", title: "Rasso du port" });
+    expect(withDefaultPoster({ ...left, poster: { ...POSTER, style: "jdm" } }).poster?.style).toBe("jdm");
   });
 
   it("un index gardé sur l'ancien découpage (douze étapes) est ignoré", () => {

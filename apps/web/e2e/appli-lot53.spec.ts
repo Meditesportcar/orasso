@@ -114,6 +114,8 @@ for (const theme of ["beton", "sable"] as const) {
     await v(page, "wizard-mission-add").click();
     await shot(page, "02-lieu", theme);
     await next(page, "Arrivées");
+    // Le brouillon existe : l'écran devient celui de sa modification (rouvrir ne crée pas de doublon).
+    await expect(page).toHaveURL(/\/evenement\/[0-9a-f-]{36}\/modifier/);
 
     // (3) Arrivées.
     await v(page, "arrival-exhibitors-set").click();
@@ -186,7 +188,7 @@ for (const theme of ["beton", "sable"] as const) {
 
     // Brouillon : garde-le, puis il rouvre sur « Tout est prêt » ; `?temps=` choisit le temps.
     await v(page, "wizard-save").click();
-    await page.waitForURL(/\/evenement\/[0-9a-f-]{36}/, { timeout: 60_000 });
+    await page.waitForURL(/\/evenement\/[0-9a-f-]{36}(\?|$)/, { timeout: 60_000 });
     await page.goto(`/evenement/${id}/modifier`);
     await expect(v(page, "wizard-step")).toContainText("Tout est prêt", { timeout: 30_000 });
     await page.goto(`/evenement/${id}/modifier?temps=reglement`);
@@ -194,3 +196,69 @@ for (const theme of ["beton", "sable"] as const) {
     await ctx.close();
   });
 }
+
+test("appli, relecture : hors réseau sur son temps, saisie gardée, série en échec sans publication", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const damien = await login("damien@orasso.local");
+  const me = await apiCall<{ memberships: { structureId: string; structureSlug: string }[] }>(damien, "GET", "/me");
+  const structureId = me.data.memberships.find((m) => m.structureSlug === "meditesportcar")?.structureId;
+  const date = parisDay(45);
+  const created = await apiCall<{ id: string }>(damien, "POST", `/structures/${structureId}/events`, {
+    title: `Appli relue ${unique()}`,
+    format: "night",
+    startsAt: new Date(`${date}T17:00:00Z`).toISOString(),
+    endsAt: new Date(`${date}T21:30:00Z`).toISOString(),
+    addressLine: "Place de la Loge",
+    city: "Perpignan",
+    lat: 42.6986,
+    lng: 2.8956,
+    admittedVehicleTypes: ["car"],
+    admission: "open",
+    publicAccess: "free",
+    registrationsOpenAt: new Date().toISOString(),
+    previewHours: 0,
+    poster: { photoKey: null, style: "minimal", title: "Appli relue" },
+  });
+  expect(created.status, JSON.stringify(created.data)).toBe(201);
+  const id = created.data.id;
+  const { ctx, page } = await open(browser, "sable");
+  await signInOrganizer(page);
+
+  // Hors réseau au temps « Règlement » : « Continuer » laisse sur ce temps, la saisie reste sur le téléphone.
+  await page.goto(`/evenement/${id}/modifier?temps=reglement`);
+  await expect(v(page, "wizard-step")).toContainText("Règlement", { timeout: 30_000 });
+  await v(page, "wizard-rules").fill("Règlement tapé hors réseau.");
+  await page.route(`**/api/events/${id}`, (route) =>
+    route.request().method() === "PATCH" ? route.abort("internetdisconnected") : route.continue(),
+  );
+  await v(page, "wizard-next").click();
+  await expect(v(page, "wizard-step")).toContainText("Règlement");
+  await page.waitForTimeout(800);
+  await page.unroute(`**/api/events/${id}`);
+  await page.goto(`/evenement/${id}/modifier?temps=reglement`);
+  await expect(v(page, "wizard-resumed")).toBeVisible({ timeout: 30_000 });
+  await expect(v(page, "wizard-rules")).toHaveValue("Règlement tapé hors réseau.");
+  await next(page, "Affiche");
+
+  // Récurrent, puis la série échoue à la fin : rien n'est publié, la règle reste, l'erreur le dit.
+  await page.goto(`/evenement/${id}/modifier?temps=type`);
+  await expect(v(page, "wizard-step")).toContainText("Type", { timeout: 30_000 });
+  await v(page, "wizard-kind-rec").click();
+  await next(page, "Lieu");
+  await page.goto(`/evenement/${id}/modifier?temps=publier`);
+  await expect(v(page, "wizard-step")).toContainText("Tout est prêt", { timeout: 30_000 });
+  await page.route(`**/api/events/${id}/recurrence`, (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "internal", message: "Panne simulée" } }),
+    }),
+  );
+  await v(page, "wizard-publish").click();
+  await expect(v(page, "wizard-error")).toContainText("Les dates suivantes n'ont pas été créées");
+  await shot(page, "relecture-serie-en-echec", "sable");
+  expect((await apiCall<{ status: string }>(damien, "GET", `/events/${id}`)).data.status).toBe("draft");
+  await ctx.close();
+});

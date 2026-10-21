@@ -91,7 +91,8 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   expect(docRes.headers()["content-type"]).toContain("application/pdf");
   await card.getByLabel(/Note/).fill("Statuts reçus, structure sérieuse.");
   await card.getByRole("button", { name: "Valider" }).click();
-  await expect(admin.getByTestId("admin-empty")).toBeVisible();
+  // La file n'est pas forcément vide (seed du lot 52 : une structure « en vérification ») : la carte validée en sort.
+  await expect(card).toHaveCount(0);
   // Le justificatif n'est lisible ni sans connexion ni par le propriétaire.
   const anon = await browser.newContext();
   expect((await anon.request.get(docHref)).status()).toBe(401);
@@ -176,7 +177,7 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   await expect(step).toContainText("Tout est prêt");
   await expect(owner.getByTestId("wizard-recap")).toContainText(eventTitle);
   await owner.getByRole("button", { name: "Brouillon" }).click();
-  await owner.waitForURL(/\/orga\/[^/]+\/e\/[0-9a-f-]{36}/);
+  await owner.waitForURL(/\/orga\/[^/]+\/e\/[0-9a-f-]{36}(\?|$)/);
   const eventId = new URL(owner.url()).pathname.split("/")[4] ?? "";
   await expect(owner.getByTestId("event-title")).toHaveText(eventTitle);
   await expect(owner.getByTestId("event-status")).toHaveText("Brouillon");

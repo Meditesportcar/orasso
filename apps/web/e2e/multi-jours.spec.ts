@@ -88,7 +88,7 @@ test("plusieurs jours : assistant, page publique, candidature pour un jour, AccÃ
   }
   await expect(o.getByTestId("wizard-step")).toContainText("Tout est prÃªt");
   await o.getByRole("button", { name: "Brouillon" }).click();
-  await o.waitForURL(/\/orga\/meditesportcar\/e\/[0-9a-f-]{36}/);
+  await o.waitForURL(/\/orga\/meditesportcar\/e\/[0-9a-f-]{36}(\?|$)/);
   const eventId = /\/e\/([0-9a-f-]{36})/.exec(o.url())?.[1] ?? "";
   const saved = await apiCall<{
     days: { id: string; date: string; capacity: number | null }[];
