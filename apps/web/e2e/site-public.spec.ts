@@ -40,7 +40,7 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   await loginInBrowser(owner, email, SEED_PASSWORD, "/organisateurs");
 
   // --- 1. Créer la structure -------------------------------------------------------------------------------------
-  await owner.getByRole("link", { name: "Créer ma structure" }).click();
+  await owner.getByRole("link", { name: "Créer ma structure" }).first().click();
   await expect(owner.getByTestId("structure-form")).toBeVisible();
   await owner.getByLabel("Nom", { exact: true }).fill(structureName);
   await owner.getByLabel("Description").fill("Club de voitures anciennes de la côte catalane.");

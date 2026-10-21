@@ -1420,3 +1420,42 @@
 .w-discounts .is-top .o-t-label {
   color: var(--win-ink);
 }
+
+/* Fiche : les rangées de pastilles passent à la ligne (pas de défilement), et sur téléphone en Sable la pastille de
+   statut et le libellé de la vedette montent sur une petite plaque graphite (README du système, « la plaque graphite »). */
+.ev .o-chip-row {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+@media (max-width: 760px) {
+  [data-theme="sable"] .ev__feature-text .o-chip--accent,
+  [data-theme="sable"] .ev__feature-text .s-label {
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--plate-edge);
+    border-radius: var(--radius-sm);
+    background: var(--plate);
+    color: var(--plate-ink);
+    box-shadow: none;
+  }
+  [data-theme="sable"] .ev__feature-text .s-label a {
+    color: var(--accent);
+  }
+}
+
+/* Organisateurs : le téléphone factice tient dans sa boîte, l'affiche rétrécit sur téléphone. */
+.w-orga-phone {
+  width: 266px;
+}
+.w-orga-phone__choices span {
+  padding-inline: 6px;
+}
+@media (max-width: 559px) {
+  .w-orga-phone {
+    left: 0;
+  }
+  .w-orga-poster {
+    top: 0;
+    right: 0;
+    width: 130px;
+  }
+}

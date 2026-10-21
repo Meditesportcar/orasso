@@ -59,11 +59,12 @@ async function noHorizontalScroll(page: Page, where: string) {
     const de = document.documentElement;
     if (de.scrollWidth > de.clientWidth) out.push(`html ${de.scrollWidth}>${de.clientWidth}`);
     if (document.body.scrollWidth > document.body.clientWidth) out.push("body");
-    for (const el of document.querySelectorAll("header, header *, footer, footer *, main, main > *")) {
+    for (const el of document.querySelectorAll("header, header *, footer, footer *, main, main *")) {
       const e = el as HTMLElement;
       if (
         e.clientWidth > 1 &&
         !e.classList.contains("o-visually-hidden") &&
+        !e.closest(".w-ticker, .maplibregl-map") &&
         e.scrollWidth > e.clientWidth + 1 &&
         getComputedStyle(e).overflowX !== "visible"
       ) {
