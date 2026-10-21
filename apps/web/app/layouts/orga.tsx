@@ -4,6 +4,8 @@ import {
   afterEventLabels,
   assistanceTexts,
   badgeDaysLeft,
+  orgaNeedsLabels,
+  orgaPressLabels,
   type StructureOrganizer,
   type StructurePublic,
   type StructureSuspensionReason,
@@ -105,6 +107,16 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
           {eventBase && isOrganizer && (
             <SideLink href={`${eventBase}/candidatures`} on={pathname.startsWith(`${eventBase}/candidatures`)}>
               Candidatures
+            </SideLink>
+          )}
+          {eventBase && isOrganizer && (
+            <SideLink href={`${eventBase}/presse`} on={pathname.startsWith(`${eventBase}/presse`)}>
+              {orgaPressLabels.navLink}
+            </SideLink>
+          )}
+          {eventBase && isOrganizer && (
+            <SideLink href={`${eventBase}/prestataires`} on={pathname.startsWith(`${eventBase}/prestataires`)}>
+              {orgaNeedsLabels.navLink}
             </SideLink>
           )}
           {eventBase && (

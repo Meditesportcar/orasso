@@ -14,6 +14,9 @@ export default [
     // Lot 27 : après l'événement (bilan, remerciement, export tracé, édition suivante).
     route("e/:eventId/apres", "routes/orga-apres.tsx"),
     route("e/:eventId/billets", "routes/orga-billets.tsx"),
+    // Lot 57 (DA v2) : presse (accréditations, contenus) et missions des prestataires (besoins, emplacement, avis).
+    route("e/:eventId/presse", "routes/orga-presse.tsx"),
+    route("e/:eventId/prestataires", "routes/orga-prestataires.tsx"),
     // Lot 24 : staff (membres, rôles, invitations, demandes, présences et relances).
     route("staff", "routes/orga-staff.tsx"),
     // Lot 25 : invitations nominatives.
