@@ -38,6 +38,7 @@ let kenji: TestUser;
 let kenjiV: Viewer;
 let eventId: string;
 let applicationId: string;
+let ref: Awaited<ReturnType<typeof seedReference>>;
 
 const form = (vehicleIds: string[]) => ({
   vehicleIds,
@@ -63,7 +64,7 @@ async function publishedKeys() {
 beforeEach(async () => {
   await resetDb();
   useClock(paris(6, 10, 10));
-  const ref = await seedReference();
+  ref = await seedReference();
   orga = await signUp("Damien_66", { twoFactor: true });
   orgaV = await viewerOf(orga);
   const structureId = (await createStructure(orga.id)).id;
@@ -94,6 +95,25 @@ describe("QR d'inscription", () => {
     const other = await signUp("Lea_11");
     expect((await call(other, "GET", `/applications/${applicationId}/pass`)).status).toBe(404);
     expect((await call(orga, "GET", `/applications/${applicationId}/pass`)).status).toBe(404);
+  });
+
+  it("consultable dès la validation (D34) : QR, secret OR2 et signature valides bien avant la veille", async () => {
+    // L'événement est le 20 juin à 18 h, nous sommes le 10 juin : plus de neuf jours avant, bien avant J-1.
+    await applicationsService.decide(orgaV, eventId, applicationId, ACCEPT);
+    const res = await call(kenji, "GET", `/applications/${applicationId}/pass`);
+    expect(res.status).toBe(200);
+    expect(res.json.payload).toMatch(/^OR1[A-Z2-7]{138}$/);
+    // Un secret par pass pour le QR tournant OR2, envoyé à son seul titulaire.
+    expect(res.json.otpSecret).toBeTruthy();
+    expect(Buffer.from(res.json.otpSecret, "base64url")).toHaveLength(32);
+    expect(verifyPassPayload(res.json.payload, await publishedKeys(), ed25519Verify)).toMatchObject({ ok: true });
+    // Un autre pass n'a pas le même secret.
+    const other = await signUp("Lea_11");
+    const v = await createVehicle(other.id, ref);
+    const [app2] = await applicationsService.apply(await viewerOf(other), eventId, form([v.id]));
+    await applicationsService.decide(orgaV, eventId, app2?.id ?? "", ACCEPT);
+    const res2 = await call(other, "GET", `/applications/${app2?.id}/pass`);
+    expect(res2.json.otpSecret).not.toBe(res.json.otpSecret);
   });
 
   it("révoqué au désistement, à la retenue annulée et à l'annulation de l'événement", async () => {

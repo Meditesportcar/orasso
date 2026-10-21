@@ -271,8 +271,8 @@ for (const theme of THEMES) {
       .getByTestId("media-badge")
       .click();
     await page.waitForURL(/jour-j\//, { timeout: 30_000 });
-    // Le kit du badge est enregistré sur le téléphone ; le mode s'ouvre la veille, l'écran dit l'événement.
-    await expect(page.getByText("Ton QR est prêt", { exact: true })).toBeVisible({ timeout: 30_000 });
+    // Le kit du badge est enregistré sur le téléphone ; le badge est consultable dès l'accréditation (D34).
+    await expect(page.getByTestId("qr-countdown")).toBeVisible({ timeout: 30_000 });
     await shot(page, "badge-presse", theme);
     await page.goBack();
     await expect(page.getByRole("tab", { name: "Presse", exact: true })).toBeVisible({ timeout: 30_000 });
