@@ -351,6 +351,13 @@
       "when": 1792442859474,
       "tag": "0049_rotating-qr",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1792569958175,
+      "tag": "0050_entrance-note",
+      "breakpoints": true
     }
   ]
 }

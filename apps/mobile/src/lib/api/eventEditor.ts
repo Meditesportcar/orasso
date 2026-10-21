@@ -2,7 +2,7 @@
 // appelle déjà (`EventWizard.tsx`, `orga-evenement.tsx`), avec les corps calculés par le modèle partagé
 // (`eventPayload`, `eventDaysPayload`, `zoneChanges`). Aucune règle ici : structure suspendue, double authentification,
 // événement commencé (423), jour qui a des candidatures (409 `day_in_use`) sont décidés par l'API.
-import type { EventDaysPut, EventOrganizer, RecurrenceRule, ZonePayload } from "@orasso/shared";
+import type { EventDaysPut, EventOrganizer, NeedPayload, RecurrenceRule, ZonePayload } from "@orasso/shared";
 
 import { request } from "../http";
 
@@ -22,6 +22,13 @@ export const eventEditorApi = {
     request<unknown>(`/api/events/${eventId}/zones/${zoneId}`, { method: "PATCH", body: zone }),
   deleteZone: (eventId: string, zoneId: string) =>
     request<unknown>(`/api/events/${eventId}/zones/${zoneId}`, { method: "DELETE" }),
+  // Lot 53 : missions (besoins `event_needs`, lot 46) saisies dans le volet « Sur place » de l'assistant.
+  addNeed: (eventId: string, need: NeedPayload) =>
+    request<unknown>(`/api/events/${eventId}/needs`, { method: "POST", body: need }),
+  updateNeed: (eventId: string, needId: string, need: NeedPayload) =>
+    request<unknown>(`/api/events/${eventId}/needs/${needId}`, { method: "PATCH", body: need }),
+  deleteNeed: (eventId: string, needId: string) =>
+    request<unknown>(`/api/events/${eventId}/needs/${needId}`, { method: "DELETE" }),
   uploadPoster: (eventId: string, form: FormData) =>
     request<unknown>(`/api/events/${eventId}/poster`, { method: "POST", form, timeout: 60_000 }),
   geocode: (q: string) => request<{ match: GeocodeMatch | null }>(`/api/geocode?q=${encodeURIComponent(q)}`),

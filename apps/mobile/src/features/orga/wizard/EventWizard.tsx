@@ -1,23 +1,44 @@
-// Assistant de création et de modification d'un événement dans l'appli (lot 35b, décision D20 : tout se gère depuis
-// l'appli). Mêmes étapes, champs, valeurs par défaut et validations que le site (`apps/web/.../EventWizard.tsx`, modèle
-// commun `@orasso/shared` `eventWizard.ts`), une étape par écran : barre de progression, « Suivant » en bouton
-// principal, « Retour » à côté. La première étape du site (format, dates, lieu) tient en trois écrans.
-// Création : le brouillon est gardé sur le téléphone à chaque saisie et repris au retour (« Recommencer » l'efface).
-// Modification : préremplie depuis l'événement ; l'API garde ses règles (structure suspendue, double authentification,
-// 423 après le début, 409 `day_in_use`) et l'appli affiche son message.
+// Assistant de création et de modification d'un événement dans l'appli (lot 35b, D20 ; lot 53 : les huit temps de
+// `s-create`, comme le site) : type, lieu avec épingle, arrivées, critères, avant-première, règlement, affiche, « Tout
+// est prêt » (Publier / Brouillon / Aperçu). Barre de progression, « Continuer » en bouton principal collant.
+// Un brouillon est enregistré à chaque temps dès que l'adresse est connue (l'API l'exige) ; un événement publié
+// s'enregistre à la fin. Après chaque enregistrement, la saisie est réconciliée avec l'état relu du serveur, champ par
+// champ (`reconcileDraft`) : rien n'est marqué enregistré qui ne l'est pas. Dès que le brouillon existe, l'écran devient
+// celui de sa modification (`/evenement/<id>/modifier?temps=…`).
+// La saisie d'un brouillon reste sur le téléphone tant qu'elle n'est pas synchronisée (une par création, puis une par
+// événement), et reprise au retour (« Recommencer » l'efface) ; le téléphone retient aussi, par brouillon, le temps le
+// plus avancé atteint et la récurrence choisie (`WizardMemo`). Hors réseau, l'assistant reste sur son temps.
+// L'API garde ses règles (structure suspendue, double authentification, 423 après le début, 409 `day_in_use`).
 import { Button, tokens, useTheme } from "@orasso/design-system/native";
 import {
-  appWizardSteps,
   type CategoryOption,
   draftStart,
   type EventDraft,
   type EventFormat,
+  type EventNeedView,
   type EventOrganizer,
+  type EventWizardStep,
+  eventResumeStep,
+  eventStepLabels,
+  eventStepProblem,
+  eventWizardSteps,
+  hasRefusals,
   initialEventDraft,
   eventEditorLabels as L,
+  needsFromSaved,
+  posterTexts,
+  reconcileDraft,
+  recurrenceRuleOf,
+  refusalMessage,
+  sameDraft,
+  serverDraft,
   type VehicleMake,
   vendorTypeLabels,
+  wizardV2Labels as W,
+  type WizardMemo,
+  withArrivalsInHours,
   withCopyOpening,
+  withDefaultPoster,
   wizardEndLabels,
 } from "@orasso/shared";
 import { useNavigation, useRouter } from "expo-router";
@@ -26,8 +47,15 @@ import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { now } from "@/lib/clock";
-import { appStepProblem, draftWorthKeeping, moveStep, progressOf, type StoredDraft } from "@/lib/eventDraft";
-import { clearEventDraft, keepEventDraftPoster, loadEventDraft, saveEventDraft } from "@/lib/eventDraftStore";
+import { draftWorthKeeping, type StoredDraft } from "@/lib/eventDraft";
+import {
+  clearEventDraft,
+  keepEventDraftPoster,
+  loadEventDraft,
+  loadWizardMemo,
+  saveEventDraft,
+  saveWizardMemo,
+} from "@/lib/eventDraftStore";
 import { saveEvent } from "@/lib/eventSave";
 import { formatStamp } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
@@ -40,53 +68,90 @@ import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { ConfirmSheet } from "../ConfirmSheet";
 import { OrgaFailure, useOrga } from "../OrgaGate";
-import { InfoStep, PreviewStep, RulesStep, TicketingStep, ZonesStep } from "./StepsHow";
-import { DatesStep, FormatStep, PlaceStep } from "./StepsWhat";
-import { AdmissionStep, CriteriaStep, PlacesStep, PublicStep, VehiclesStep, VendorsStep } from "./StepsWho";
+import {
+  AfficheTemps,
+  ArriveesTemps,
+  AvantTemps,
+  CriteresTemps,
+  LieuTemps,
+  PretTemps,
+  ReglementTemps,
+  TypeTemps,
+} from "./Temps";
 import type { StepContext } from "./types";
 
 const { space1, space2 } = tokens.spacing;
 
-const SCREENS: Record<(typeof appWizardSteps)[number], (ctx: StepContext) => ReactNode> = {
-  format: FormatStep,
-  dates: DatesStep,
-  lieu: PlaceStep,
-  vehicules: VehiclesStep,
-  places: PlacesStep,
-  prestataires: VendorsStep,
-  public: PublicStep,
-  admission: AdmissionStep,
-  criteres: CriteriaStep,
-  "avant-premiere": PreviewStep,
-  reglement: RulesStep,
-  infos: InfoStep,
-  zones: ZonesStep,
-  billetterie: TicketingStep,
+const SCREENS: Record<EventWizardStep, (ctx: StepContext) => ReactNode> = {
+  type: TypeTemps,
+  lieu: LieuTemps,
+  arrivees: ArriveesTemps,
+  criteres: CriteresTemps,
+  "avant-premiere": AvantTemps,
+  reglement: ReglementTemps,
+  affiche: AfficheTemps,
+  publier: PretTemps,
 };
 
-export function EventWizard({ event, notice: initialNotice }: { event?: EventOrganizer; notice?: string | null }) {
+const HEADS: Record<EventWizardStep, [string, string]> = {
+  type: [W.typeTitle, W.typeIntro],
+  lieu: [W.placeTitle, W.placeIntro],
+  arrivees: [W.arrivalsTitle, W.arrivalsIntro],
+  criteres: [W.criteriaTitle, W.criteriaIntro],
+  "avant-premiere": [W.previewTitle, W.previewIntro],
+  reglement: [W.rulesTitle, W.rulesIntro],
+  affiche: [W.posterTitle, posterTexts.intro],
+  publier: [W.readyTitle, W.readyIntro],
+};
+
+/** Résultat d'un enregistrement : `created`, un brouillon créé par cet appel ; `failure`, ce qui a été refusé. */
+type Saved = { event: EventOrganizer | null; created: string | null; failure: unknown };
+
+export function EventWizard({
+  event,
+  notice: initialNotice,
+  initialStep,
+}: {
+  event?: EventOrganizer;
+  notice?: string | null;
+  /** Lot 53 : temps où ouvrir (`?temps=`, prime sur tout) ; sans lui, un brouillon rouvre où on l'a laissé. */
+  initialStep?: EventWizardStep | null;
+}) {
   const { t } = useTheme();
   const router = useRouter();
   const { structureId } = useOrga();
   const editing = Boolean(event);
+  const [saved, setSaved] = useState<EventOrganizer | undefined>(event);
+  const [savedNeeds, setSavedNeeds] = useState<EventNeedView[]>([]);
   const [d, setDraft] = useState<EventDraft>(() => initialEventDraft(now(), event));
-  const [index, setIndex] = useState(0);
+  // Toujours la dernière saisie (rendue), y compris celle tapée pendant un enregistrement.
+  const latest = useRef(d);
+  latest.current = d;
+  const [index, setIndex] = useState(() =>
+    eventWizardSteps.indexOf(
+      event ? eventResumeStep(initialEventDraft(now(), event), event.status === "draft", initialStep) : "type",
+    ),
+  );
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [poster, setPosterState] = useState<PickedPhoto | null>(null);
-  // Affiche gardée avec le brouillon d'une création (lot 34) : copie faite à part, écrite avec le brouillon.
   const [keptPoster, setKeptPoster] = useState<PickedPhoto | null>(null);
   const [quitting, setQuitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(initialNotice ?? null);
-  // Création : le brouillon gardé est relu une fois avant d'écrire quoi que ce soit (sinon on l'écraserait).
-  const [loaded, setLoaded] = useState(editing);
+  // La saisie gardée est relue une fois avant d'écrire quoi que ce soit (sinon on l'écraserait).
+  const [loaded, setLoaded] = useState(false);
   const [resumed, setResumed] = useState<StoredDraft | null>(null);
-  const pristine = useRef(JSON.stringify(d));
-  // Garde avant de quitter (lot 36) : enregistrement réussi, sortie confirmée, action de navigation retenue.
-  const saved = useRef(false);
+  // Ce qui est vraiment enregistré : la saisie en diffère tant que quelque chose reste à envoyer.
+  const pristine = useRef<EventDraft>(d);
+  const done = useRef(false);
   const leaving = useRef(false);
   const pendingLeave = useRef<(() => void) | null>(null);
+  const memo = useRef<WizardMemo>({ reached: -1, recurrence: null });
+  const isDraft = !saved || saved.status === "draft";
+  // Un brouillon (création ou brouillon rouvert) garde sa saisie sur le téléphone ; un événement publié, non.
+  const keepOnDevice = isDraft;
+  const dirty = !sameDraft(d, pristine.current);
 
   const structure = useApi(() => api.orgStructure(structureId), [structureId]);
   const refs = useApi<{ categories: CategoryOption[]; makes: VehicleMake[] }>(
@@ -101,64 +166,109 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     { cacheKey: "wizard-references" },
   );
 
+  // À l'ouverture : missions enregistrées (lot 46), mémoire du brouillon, puis saisie gardée sur le téléphone.
   useEffect(() => {
-    if (editing) return;
     let alive = true;
-    void loadEventDraft(structureId).then((stored) => {
-      if (!alive) return;
-      if (stored) {
-        setDraft(stored.draft);
-        setIndex(stored.step);
-        setCreatedId(stored.createdId);
-        setPosterState(stored.poster ?? null);
-        setKeptPoster(stored.poster ?? null);
-        setResumed(stored);
+    void (async () => {
+      if (event) {
+        const list = await api.eventNeeds(event.id).catch(() => null);
+        if (!alive) return;
+        if (list) {
+          setSavedNeeds(list);
+          pristine.current = { ...pristine.current, needs: needsFromSaved(list, event.startsAt) };
+          setDraft(pristine.current);
+        }
+        if (event.status === "draft") {
+          const stored = await loadWizardMemo(event.id);
+          if (!alive) return;
+          if (stored) {
+            memo.current = stored;
+            if (stored.recurrence && !event.recurrenceRule && !event.parentEventId) {
+              pristine.current = { ...pristine.current, recurrence: stored.recurrence };
+              setDraft(pristine.current);
+            }
+            if (!initialStep && stored.reached >= 0) {
+              setIndex(eventWizardSteps.indexOf(eventResumeStep(pristine.current, true, null, stored.reached)));
+            }
+          }
+        }
+      }
+      if (!event || event.status === "draft") {
+        const stored = await loadEventDraft(structureId, event?.id);
+        if (!alive) return;
+        if (stored && !sameDraft(stored.draft, pristine.current)) {
+          setDraft(stored.draft);
+          if (!initialStep) {
+            setIndex(stored.step ?? eventWizardSteps.indexOf(eventResumeStep(stored.draft, true, null, null)));
+          }
+          setCreatedId(stored.createdId);
+          setPosterState(stored.poster ?? null);
+          setKeptPoster(stored.poster ?? null);
+          setResumed(stored);
+        }
       }
       setLoaded(true);
-    });
+    })();
     return () => {
       alive = false;
     };
-  }, [editing, structureId]);
+  }, [event, structureId, initialStep]);
 
-  // Chaque saisie d'une création est gardée sur le téléphone (un court délai pour ne pas écrire à chaque lettre ; la
-  // dernière saisie est écrite aussi quand l'écran se ferme).
+  // Saisie gardée sur le téléphone : une création dès qu'elle vaut la peine, un brouillon tant qu'il n'est pas
+  // synchronisé (effacée quand la saisie est enregistrée).
   const pending = useRef<(() => void) | null>(null);
+  const eventId = saved?.id ?? null;
   useEffect(() => {
-    if (editing || !loaded || !draftWorthKeeping(d)) return;
+    if (!keepOnDevice || !loaded) return;
+    const keep = eventId ? dirty || Boolean(keptPoster) : draftWorthKeeping(d);
     const write = () => {
       pending.current = null;
-      void saveEventDraft(structureId, {
-        draft: d,
-        step: index,
-        createdId,
-        savedAt: now().toISOString(),
-        poster: keptPoster,
-      });
+      if (!keep) {
+        if (eventId) void clearEventDraft(structureId, eventId);
+        return;
+      }
+      void saveEventDraft(
+        structureId,
+        { draft: d, step: index, createdId, savedAt: now().toISOString(), poster: keptPoster },
+        eventId,
+      );
     };
     pending.current = write;
     const timer = setTimeout(write, 400);
     return () => clearTimeout(timer);
-  }, [editing, loaded, d, index, createdId, structureId, keptPoster]);
+  }, [keepOnDevice, loaded, d, dirty, index, createdId, structureId, keptPoster, eventId]);
+  useEffect(() => () => pending.current?.(), []);
+
+  // Mémoire du brouillon : temps le plus avancé atteint, récurrence (jusqu'à la création de la série).
+  useEffect(() => {
+    if (saved?.status !== "draft" || !loaded) return;
+    const next: WizardMemo = {
+      reached: Math.max(memo.current.reached, index),
+      recurrence: saved.recurrenceRule ? null : (d.recurrence ?? null),
+    };
+    if (
+      next.reached === memo.current.reached &&
+      JSON.stringify(next.recurrence) === JSON.stringify(memo.current.recurrence)
+    )
+      return;
+    memo.current = next;
+    void saveWizardMemo(saved.id, next);
+  }, [saved, loaded, index, d.recurrence]);
 
   const setPoster = useCallback(
     (photo: PickedPhoto | null) => {
       setPosterState(photo);
-      if (editing) return;
-      void keepEventDraftPoster(structureId, photo).then(setKeptPoster);
+      if (!keepOnDevice) return;
+      void keepEventDraftPoster(structureId, photo, eventId).then(setKeptPoster);
     },
-    [editing, structureId],
+    [keepOnDevice, structureId, eventId],
   );
-  useEffect(() => () => pending.current?.(), []);
 
   // Lot 36 : copie d'un événement encore en brouillon : l'ouverture des candidatures suit le début.
   const isCopy = Boolean(event?.parentEventId) && event?.status === "draft";
-  // Brouillon (création ou modification) : Publier, Garder en brouillon, Aperçu ; un événement publié s'enregistre.
-  const isDraft = !event || event.status === "draft";
   const set = useCallback(<K extends keyof EventDraft>(key: K, value: EventDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }, []);
-  // Quand le début d'une copie change (un jour ou plusieurs), l'ouverture garde le délai de l'original.
   const copyLead = isCopy && event ? Date.parse(event.startsAt) - Date.parse(event.registrationsOpenAt) : null;
   const start = draftStart(d);
   const lastStart = useRef(start);
@@ -169,11 +279,8 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
   }, [copyLead, start]);
   const setD = useCallback((update: (prev: EventDraft) => EventDraft) => setDraft(update), []);
 
-  const step = appWizardSteps[index] ?? "format";
-  const last = index === appWizardSteps.length - 1;
-  const progress = progressOf(index, d);
-  // Lot 33 : formats et types de prestataires proposés par l'administration (repli sur les constantes partagées) ;
-  // le format d'un événement existant reste proposé, comme sur le site.
+  const step = eventWizardSteps[index] ?? "type";
+  const last = index === eventWizardSteps.length - 1;
   const formatsOn = useEventFormats();
   const formats = useMemo<EventFormat[]>(
     () => (formatsOn.includes(d.format) ? formatsOn : [...formatsOn, d.format]),
@@ -187,41 +294,138 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     const pendingAction = pendingLeave.current;
     pendingLeave.current = null;
     if (pendingAction) return pendingAction();
-    return router.canGoBack() ? router.back() : router.replace(event ? `/evenement/${event.id}` : "/evenements");
+    return router.canGoBack() ? router.back() : router.replace(saved ? `/evenement/${saved.id}` : "/evenements");
   };
-  const dirty = JSON.stringify(d) !== pristine.current;
-  const close = () => (dirty || (!editing && draftWorthKeeping(d)) ? setQuitting(true) : leave());
+  const close = () => (dirty || (keepOnDevice && draftWorthKeeping(d)) ? setQuitting(true) : leave());
 
-  // Lot 36 : une modification non enregistrée n'est plus perdue en quittant l'écran par un autre chemin (retour Android,
-  // geste, lien) : la même confirmation que « Fermer ». (Une création est déjà gardée sur le téléphone.)
+  // Lot 36 : une modification non enregistrée n'est plus perdue en quittant l'écran par un autre chemin.
   const navigation = useNavigation();
   useEffect(() => {
-    if (!editing || !dirty) return;
+    if (keepOnDevice || !dirty) return;
     return navigation.addListener("beforeRemove", (e) => {
-      if (leaving.current || saved.current) return;
+      if (leaving.current || done.current) return;
       e.preventDefault();
       pendingLeave.current = () => navigation.dispatch(e.data.action);
       setQuitting(true);
     });
-  }, [navigation, editing, dirty]);
+  }, [navigation, keepOnDevice, dirty]);
 
-  function go(delta: 1 | -1) {
-    if (delta === 1) {
-      const problem = appStepProblem(step, d);
-      if (problem) return setError(problem);
+  /**
+   * Enregistre `sent` (voir `saveEvent`), puis réconcilie la saisie avec l'état relu du serveur. `event` : l'événement
+   * enregistré, ou `null` si quelque chose a été refusé (erreur affichée, saisie refusée gardée).
+   */
+  async function persist(sent: EventDraft, validate: boolean | "publish"): Promise<Saved> {
+    const form = poster ? await imageForm(poster, "poster", "affiche.jpg") : null;
+    const res = await saveEvent(api, {
+      structureId,
+      draft: sent,
+      event: saved,
+      savedNeeds,
+      createdId,
+      poster: form,
+      validate,
+    });
+    if (!res.ok) {
+      // Temps invalide ou jours refusés : on y retourne ; une panne (réseau…) laisse sur le temps courant.
+      if (res.step) setIndex(eventWizardSteps.indexOf(res.step));
+      setError(res.error);
+      if (res.createdId) setCreatedId(res.createdId);
+      return { event: null, created: saved ? null : res.createdId, failure: res.error };
     }
+    const created = saved ? null : res.event.id;
+    setSaved(res.event);
+    setSavedNeeds(res.needs);
+    if (poster && !res.refused.poster) {
+      setPosterState(null);
+      setKeptPoster(null);
+    }
+    const { draft, pristine: kept } = reconcileDraft({
+      sent,
+      current: latest.current,
+      server: serverDraft(res.event, res.needs),
+      refused: res.refused,
+    });
+    pristine.current = kept;
+    latest.current = draft;
+    setDraft(draft);
+    if (hasRefusals(res.refused)) {
+      const failure = refusalMessage(sent, res.refused);
+      setError(failure);
+      return { event: null, created, failure };
+    }
+    return { event: res.event, created, failure: null };
+  }
+
+  /** Le brouillon vient d'être créé : l'écran devient celui de sa modification (sa saisie gardée sous son identifiant). */
+  async function handOff(id: string, at: EventWizardStep, failure: unknown) {
+    pending.current = null;
+    const draft = latest.current;
+    const photo = keptPoster ? await keepEventDraftPoster(structureId, keptPoster, id) : null;
+    if (!sameDraft(draft, pristine.current) || photo) {
+      await saveEventDraft(
+        structureId,
+        { draft, step: eventWizardSteps.indexOf(at), createdId: null, savedAt: now().toISOString(), poster: photo },
+        id,
+      );
+    }
+    await clearEventDraft(structureId);
+    await saveWizardMemo(id, {
+      reached: Math.max(memo.current.reached, eventWizardSteps.indexOf(at)),
+      recurrence: draft.recurrence ?? null,
+    });
+    done.current = true;
+    leaving.current = true;
+    router.replace({
+      pathname: "/evenement/[id]/modifier",
+      params: { id, temps: at, ...(failure ? { avert: errorMessage(failure) } : {}) },
+    });
+  }
+
+  async function go(delta: 1 | -1) {
+    if (busy) return;
     setError(null);
     setNotice(null);
-    setIndex((i) => moveStep(i, delta, d));
+    if (delta === -1) return setIndex((i) => Math.max(0, i - 1));
+    let sent = d;
+    const problem = eventStepProblem(step, sent);
+    if (problem) return setError(problem);
+    // Quitter « Ton affiche » sans y avoir touché pose ses réglages par défaut (jamais au seul affichage du temps).
+    if (step === "affiche" && !sent.poster) {
+      sent = withDefaultPoster(sent);
+      latest.current = sent;
+      setDraft(sent);
+    }
+    // Horaires changés avant « Les arrivées » : un créneau devenu hors horaires ferait tout refuser.
+    if (step !== "arrivees") {
+      const fixed = withArrivalsInHours(sent);
+      if (fixed.cleared.length) {
+        sent = fixed.draft;
+        latest.current = sent;
+        setDraft(sent);
+        setNotice(W.arrivalsCleared(fixed.cleared.map((w) => W.arrivalsClearedWho[w]).join(" et ")));
+      }
+    }
+    const nextStep = eventWizardSteps[Math.min(index + 1, eventWizardSteps.length - 1)] ?? "publier";
+    if (isDraft && (saved || step !== "type")) {
+      setBusy(true);
+      try {
+        const out = await persist(sent, false);
+        if (out.created) return void (await handOff(out.created, out.event ? nextStep : step, out.failure));
+        if (!out.event) return;
+      } finally {
+        setBusy(false);
+      }
+    }
+    setIndex((i) => Math.min(i + 1, eventWizardSteps.length - 1));
   }
 
   async function restart() {
     pending.current = null;
-    await clearEventDraft(structureId);
-    const fresh = initialEventDraft(now());
-    pristine.current = JSON.stringify(fresh);
+    await clearEventDraft(structureId, eventId);
+    const fresh = eventId ? pristine.current : initialEventDraft(now());
+    pristine.current = fresh;
     setDraft(fresh);
-    setIndex(0);
+    if (!eventId) setIndex(0);
     setCreatedId(null);
     setPosterState(null);
     setKeptPoster(null);
@@ -229,37 +433,41 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     setError(null);
   }
 
-  /**
-   * Lot 36 : fin de l'assistant d'un brouillon, trois choix. `draft` : enregistrer et garder en brouillon ;
-   * `publish` : enregistrer puis publier ; `preview` : enregistrer puis ouvrir la page publique en lecture.
-   */
-  async function save(mode: "draft" | "publish" | "preview" = "draft") {
+  /** Fin de l'assistant : Publier, Brouillon, Aperçu (brouillon) ou « Enregistrer les modifications » (publié). */
+  async function finish(mode: "draft" | "publish" | "preview" | "save") {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      const form = poster ? await imageForm(poster, "poster", "affiche.jpg") : null;
-      const res = await saveEvent(api, { structureId, draft: d, event, createdId, poster: form });
-      if (!res.ok) {
-        setIndex(res.index);
-        setError(res.error);
-        if (res.createdId) setCreatedId(res.createdId);
-        return;
+      // Publier exige aussi l'affiche ; « Brouillon », « Aperçu » et un événement publié, non.
+      const { event: s } = await persist(d, mode === "publish" ? "publish" : true);
+      if (!s) return;
+      // Récurrent : la série naît une seule fois, en brouillons, à partir de l'événement complet. Si elle échoue, on
+      // s'arrête (rien n'est publié), la règle reste gardée et l'état du serveur est relu : « Publier » la retente.
+      if (d.recurrence && !s.recurrenceRule && !s.parentEventId) {
+        try {
+          await api.createRecurrence(s.id, recurrenceRuleOf(d.recurrence));
+        } catch (e) {
+          const again = await api.orgEvent(s.id).catch(() => null);
+          if (again) setSaved(again);
+          setError(W.seriesFailed(errorMessage(e)));
+          return;
+        }
       }
-      if (!editing) {
-        pending.current = null;
-        await clearEventDraft(structureId);
-      }
-      pristine.current = JSON.stringify(d);
-      saved.current = true;
-      const warnings = [...res.warnings];
-      let fait = editing ? "modifie" : "cree";
+      done.current = true;
+      pending.current = null;
+      await clearEventDraft(structureId, s.id);
       if (mode === "preview") {
-        router.replace({ pathname: "/e/[slug]", params: { slug: res.event.slug } });
+        router.replace({ pathname: "/e/[slug]", params: { slug: s.slug } });
         return;
       }
+      // « Brouillon » : « Brouillon enregistré. » (le brouillon a déjà un identifiant depuis le temps 2).
+      let fait = mode === "draft" ? "cree" : "modifie";
+      const warnings: string[] = [];
       if (mode === "publish") {
         try {
-          await api.publishEvent(res.event.id);
+          await api.publishEvent(s.id);
+          await saveWizardMemo(s.id, null);
           fait = "publie";
         } catch (e) {
           warnings.push(errorMessage(e));
@@ -267,7 +475,7 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
       }
       router.replace({
         pathname: "/evenement/[id]",
-        params: { id: res.event.id, fait, ...(warnings.length ? { avert: warnings.join(" ") } : {}) },
+        params: { id: s.id, fait, ...(warnings.length ? { avert: warnings.join(" ") } : {}) },
       });
     } finally {
       setBusy(false);
@@ -279,8 +487,11 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     set,
     setD,
     editing,
-    event,
+    event: saved,
     verified: structure.data?.verified ?? true,
+    structureId,
+    structureName: structure.data?.name ?? "",
+    followers: structure.data?.followersCount ?? null,
     categories: refs.data?.categories ?? [],
     makes: refs.data?.makes ?? [],
     formats,
@@ -290,92 +501,113 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
     openStructure: () => router.push("/(orga)/structure"),
   };
   const Screen = SCREENS[step];
+  const [title, intro] = HEADS[step];
+  const canPublish = structure.data?.verified ?? false;
 
   return (
     <FlowScreen
       title={editing ? L.editTitle : L.newTitle}
-      facts={event?.title}
+      facts={structure.data?.name ?? event?.title}
       onClose={close}
       footer={
         <>
           <View style={styles.progress} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            {Array.from({ length: progress.total }, (_, i) => (
-              <View
-                key={`p${i.toString()}`}
-                style={[styles.segment, { backgroundColor: i < progress.n ? t.color.accent : t.color.line }]}
-              />
+            {eventWizardSteps.map((s, i) => (
+              <View key={s} style={[styles.segment, { backgroundColor: i <= index ? t.color.accent : t.color.line }]} />
             ))}
           </View>
-          {/* Dernière étape : le libellé « Enregistrer le brouillon » prend toute la largeur, « Retour » dessous. */}
-          <View style={last ? styles.actionsLast : styles.actions}>
-            {index > 0 ? (
+          {last && isDraft ? (
+            <View style={styles.end}>
               <Button
-                variant="secondary"
-                icon="back"
-                onPress={() => go(-1)}
-                style={last ? undefined : styles.grow}
-                testID="wizard-back"
+                icon="send"
+                loading={busy}
+                disabled={busy || !loaded || !canPublish}
+                onPress={() => void finish("publish")}
+                testID="wizard-publish"
               >
-                {L.back}
+                {W.publish}
               </Button>
-            ) : (
-              <Button variant="secondary" icon="close" onPress={close} style={styles.grow} testID="wizard-cancel">
-                {L.cancel}
-              </Button>
-            )}
-            {last && isDraft ? (
-              <>
+              <View style={styles.actions}>
                 <Button
                   variant="secondary"
-                  icon="eye"
-                  disabled={busy || !loaded}
-                  onPress={() => void save("preview")}
-                  testID="wizard-preview"
+                  icon="back"
+                  disabled={busy}
+                  onPress={() => void go(-1)}
+                  accessibilityLabel={W.previous}
+                  testID="wizard-back"
                 >
-                  {wizardEndLabels.preview}
+                  {L.back}
                 </Button>
                 <Button
                   variant="secondary"
                   icon="calendar"
                   disabled={busy || !loaded}
-                  onPress={() => void save("draft")}
+                  onPress={() => void finish("draft")}
+                  style={styles.grow}
                   testID="wizard-save"
                 >
-                  {wizardEndLabels.keepDraft}
+                  {W.draft}
                 </Button>
+                <Button
+                  variant="secondary"
+                  icon="eye"
+                  disabled={busy || !loaded}
+                  onPress={() => void finish("preview")}
+                  testID="wizard-preview"
+                >
+                  {W.preview}
+                </Button>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.actions}>
+              {index > 0 ? (
+                <Button
+                  variant="secondary"
+                  icon="back"
+                  disabled={busy}
+                  onPress={() => void go(-1)}
+                  testID="wizard-back"
+                >
+                  {L.back}
+                </Button>
+              ) : (
+                <Button variant="secondary" icon="close" disabled={busy} onPress={close} testID="wizard-cancel">
+                  {L.cancel}
+                </Button>
+              )}
+              {last ? (
                 <Button
                   icon="check"
                   loading={busy}
-                  disabled={busy || !loaded || !(structure.data?.verified ?? false)}
-                  onPress={() => void save("publish")}
-                  testID="wizard-publish"
+                  disabled={busy || !loaded}
+                  onPress={() => void finish("save")}
+                  style={styles.grow}
+                  testID="wizard-save"
                 >
-                  {wizardEndLabels.publish}
+                  {L.saveChanges}
                 </Button>
-              </>
-            ) : last ? (
-              <Button
-                icon="check"
-                loading={busy}
-                disabled={busy || !loaded}
-                onPress={() => void save()}
-                testID="wizard-save"
-              >
-                {L.saveChanges}
-              </Button>
-            ) : (
-              <Button icon="next" disabled={!loaded} onPress={() => go(1)} style={styles.grow} testID="wizard-next">
-                {L.next}
-              </Button>
-            )}
-          </View>
+              ) : (
+                <Button
+                  icon="next"
+                  loading={busy}
+                  disabled={busy || !loaded}
+                  onPress={() => void go(1)}
+                  style={styles.grow}
+                  testID="wizard-next"
+                >
+                  {W.continue}
+                </Button>
+              )}
+            </View>
+          )}
         </>
       }
       overlays={
         <ConfirmSheet
           visible={quitting}
           title={L.quitTitle}
-          body={editing ? L.quitEditBody : L.quitBody}
+          body={keepOnDevice ? (eventId ? W.quitDraftBody : L.quitBody) : L.quitEditBody}
           confirmLabel={L.quitConfirm}
           confirmIcon="back"
           cancelLabel={L.quitKeep}
@@ -391,10 +623,16 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
       }
     >
       <Muted variant="label" testID="wizard-step">
-        {L.stepOf(progress.n, progress.total, L.steps[step])}
+        {L.stepOf(index + 1, eventWizardSteps.length, eventStepLabels[step])}
       </Muted>
-      {notice ? <Notice>{notice}</Notice> : null}
-      {resumed && index === resumed.step ? (
+      <View style={styles.head}>
+        <Muted variant="title" testID="wizard-title-head">
+          {title}
+        </Muted>
+        <Muted variant="body">{intro}</Muted>
+      </View>
+      {notice ? <Notice testID="wizard-notice">{notice}</Notice> : null}
+      {resumed && index === (resumed.step ?? index) ? (
         <View style={styles.resume} testID="wizard-resumed">
           <Notice>{L.draftResume(resumed.draft.title, formatStamp(resumed.savedAt))}</Notice>
           <Button variant="plate" icon="undo" onPress={() => void restart()} testID="wizard-restart">
@@ -403,9 +641,15 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
         </View>
       ) : null}
       <Screen {...ctx} />
-      {typeof error === "string" ? <Notice tone="error">{error}</Notice> : <OrgaFailure error={error} />}
-      {!editing && step === "format" && !resumed ? <Muted variant="caption">{L.draftKept}</Muted> : null}
-      {isCopy && step === "dates" ? <Notice testID="wizard-copy">{wizardEndLabels.copyNotice}</Notice> : null}
+      {typeof error === "string" ? (
+        <Notice tone="error" testID="wizard-error">
+          {error}
+        </Notice>
+      ) : (
+        <OrgaFailure error={error} />
+      )}
+      {keepOnDevice && !eventId && step === "type" && !resumed ? <Muted variant="caption">{L.draftKept}</Muted> : null}
+      {isCopy && step === "type" ? <Notice testID="wizard-copy">{wizardEndLabels.copyNotice}</Notice> : null}
     </FlowScreen>
   );
 }
@@ -413,8 +657,9 @@ export function EventWizard({ event, notice: initialNotice }: { event?: EventOrg
 const styles = StyleSheet.create({
   progress: { flexDirection: "row", gap: space1 },
   segment: { flex: 1, height: 4 },
-  actions: { flexDirection: "row", gap: space2 },
-  actionsLast: { flexDirection: "column-reverse", gap: space2 },
+  actions: { flexDirection: "row", gap: space2, flexWrap: "wrap" },
+  end: { gap: space2 },
   grow: { flex: 1 },
   resume: { gap: space2 },
+  head: { gap: space1 },
 });

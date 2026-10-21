@@ -7,10 +7,13 @@ import {
   type EventOrganizer,
   type EventStaffMember,
   eventAddressProblem,
+  eventCapacityProblem,
   eventDatesProblem,
   eventOpeningProblem,
-  eventStepProblem,
+  eventTicketLinkProblem,
   eventTitleProblem,
+  eventVehiclesProblem,
+  eventZonesProblem,
   fromWallTime,
   initialEventDraft,
   isEventDay,
@@ -28,7 +31,7 @@ const M = orgaV2Labels.missing;
 
 /**
  * Ce qui manque à un brouillon avant de pouvoir le publier, dans l'ordre des étapes de l'assistant : « adresse »,
- * « affiche »… Vide quand rien ne manque ; une structure non vérifiée ne peut pas publier : « la vérification de ta structure ». Mêmes règles que l'assistant (`eventStepProblem` et ses voisines).
+ * « affiche »… Vide quand rien ne manque ; une structure non vérifiée ne peut pas publier : « la vérification de ta structure ». Mêmes règles que l'assistant (`eventVehiclesProblem` et ses voisines).
  */
 export function draftMissing(event: EventOrganizer, at: Date, structureVerified = true): string[] {
   const d = initialEventDraft(at, event);
@@ -36,11 +39,11 @@ export function draftMissing(event: EventOrganizer, at: Date, structureVerified 
   if (eventTitleProblem(d)) out.push(M.title);
   if (eventDatesProblem(d)) out.push(M.dates);
   if (eventAddressProblem(d)) out.push(M.address);
-  if (eventStepProblem("vehicules", d)) out.push(M.vehicles);
-  if (eventStepProblem("places", d)) out.push(M.places);
-  if (eventStepProblem("public", d)) out.push(M.link);
+  if (eventVehiclesProblem(d)) out.push(M.vehicles);
+  if (eventCapacityProblem(d)) out.push(M.places);
+  if (eventTicketLinkProblem(d)) out.push(M.link);
   if (eventOpeningProblem(d)) out.push(M.opening);
-  if (eventStepProblem("zones", d)) out.push(M.zones);
+  if (eventZonesProblem(d)) out.push(M.zones);
   if (!event.posterUrl && !event.customPosterUrl) out.push(M.poster);
   // docs/01 : la publication est réservée aux structures vérifiées (l'API la refuse sinon).
   if (!structureVerified) out.push(M.verification);
