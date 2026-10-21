@@ -11,10 +11,7 @@ import {
   type OutgoingPlateTransferView,
   type PlateTransferView,
   plateTransferLabels,
-  SHARE_SIZES,
-  type ShareFormat,
-  shareFormatLabels,
-  shareFormats,
+  shareSheetLabels,
   type VehicleDetail,
   type VehicleHistoryItem,
   vehicleStatusLabels,
@@ -25,6 +22,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 
 import { TextAreaField } from "../components/Fields";
 import { PhotoWithPlate, PlateFrame, plateDecisionError } from "../components/PlateFrame";
+import { ShareCard } from "../components/ShareButtons";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime, formatDay } from "../lib/format";
 import type { Route } from "./+types/garage-vehicule";
@@ -137,9 +135,6 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
   return data({ error: "Action inconnue.", done: null }, { status: 400 });
 }
-
-const shareHref = (id: string, format: ShareFormat, version: string) =>
-  `/api/me/vehicles/${encodeURIComponent(id)}/share-image?format=${format}&download=1&v=${encodeURIComponent(version)}`;
 
 export default function VehiclePage({ loaderData, actionData }: Route.ComponentProps) {
   const { vehicle: v, history, categories, answerBy } = loaderData;
@@ -380,19 +375,10 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
 
       <section className="s-stack s-stack--tight" aria-labelledby="partage">
         <h2 id="partage" className="s-h2">
-          Partager sur Instagram
+          {shareSheetLabels.title}
         </h2>
-        <p className="s-muted">
-          Une fiche prête à publier, avec la photo de couverture, le nom du véhicule et tes chiffres clés. Jamais la
-          plaque.
-        </p>
-        <div className="s-row" data-testid="share-links">
-          {shareFormats.map((f) => (
-            <Button key={f} variant="secondary" icon="share" href={shareHref(v.id, f, v.shareVersion)}>
-              {shareFormatLabels[f]} · {SHARE_SIZES[f].width}×{SHARE_SIZES[f].height}
-            </Button>
-          ))}
-        </div>
+        {/* Lot 57 : carte à partager (trois styles, aperçu de la story, téléchargement), comme l'appli. */}
+        <ShareCard vehicleId={v.id} version={v.shareVersion} />
       </section>
 
       <section className="s-stack s-stack--tight" aria-labelledby="historique">
