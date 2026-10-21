@@ -282,7 +282,31 @@ export default function EventPage() {
       onClose={close}
       onRefresh={event.reload}
       overlays={
-        <CandSheet event={e} visible={cand} onClose={() => setCand(false)} onSent={() => void event.reload()} />
+        <>
+          <CandSheet event={e} visible={cand} onClose={() => setCand(false)} onSent={() => void event.reload()} />
+          <ApplySheet
+            eventTitle={applying ? e.title : null}
+            onClose={() => setApplying(false)}
+            onSend={async (message) => {
+              await api.applyAsProvider(e.id, { rulesAccepted: true, message });
+              setApplying(false);
+              setProviderSent(true);
+              void refreshMe();
+            }}
+          />
+          <RequestSheet
+            target={mediaTarget}
+            defaultFormats={mediaProfile.data?.formats ?? []}
+            onClose={() => setMediaTarget(null)}
+            onSent={() => void event.reload()}
+          />
+          <AppSheet visible={booking} onClose={() => setBooking(false)} accessibilityLabel={L.bookEntry}>
+            <Text variant="title" color={t.color.ink}>
+              {L.bookEntry}
+            </Text>
+            {booking ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
+          </AppSheet>
+        </>
       }
       footer={footer}
       testID="event-page"
@@ -385,28 +409,6 @@ export default function EventPage() {
       {reviews.data && (reviews.data.count > 0 || new Date(e.endsAt).getTime() <= nowMs()) ? (
         <Reviews data={reviews.data} reportable={status === "in"} />
       ) : null}
-      <ApplySheet
-        eventTitle={applying ? e.title : null}
-        onClose={() => setApplying(false)}
-        onSend={async (message) => {
-          await api.applyAsProvider(e.id, { rulesAccepted: true, message });
-          setApplying(false);
-          setProviderSent(true);
-          void refreshMe();
-        }}
-      />
-      <RequestSheet
-        target={mediaTarget}
-        defaultFormats={mediaProfile.data?.formats ?? []}
-        onClose={() => setMediaTarget(null)}
-        onSent={() => void event.reload()}
-      />
-      <AppSheet visible={booking} onClose={() => setBooking(false)} accessibilityLabel={L.bookEntry}>
-        <Text variant="title" color={t.color.ink}>
-          {L.bookEntry}
-        </Text>
-        {booking ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
-      </AppSheet>
     </PosterFlow>
   );
 }

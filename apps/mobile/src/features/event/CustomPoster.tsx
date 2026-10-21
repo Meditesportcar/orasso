@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Image, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { AppSheet } from "@/ui/AppSheet";
+import { Overlay } from "@/ui/Overlay";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -37,20 +38,23 @@ export function CustomPoster({ url, structureName }: { url: string; structureNam
           <Icon name="next" size={20} color={t.color.ink} />
         </View>
       </Pressable>
-      <AppSheet visible={open} onClose={() => setOpen(false)} accessibilityLabel={L.customPoster} maxHeight={0.92}>
-        <Text variant="title" color={t.color.ink}>
-          {L.customPoster}
-        </Text>
-        <Image
-          source={{ uri: url }}
-          style={[styles.full, { height: height * 0.6 }]}
-          resizeMode="contain"
-          accessibilityLabel={`${L.customPoster} : ${structureName}`}
-        />
-        <Text variant="meta" color={t.color.inkMuted}>
-          {L.customPosterSheet}
-        </Text>
-      </AppSheet>
+      {/* Lot C2b : la feuille va dans la zone des feuilles de l'écran, au-dessus du bouton fixe. */}
+      <Overlay>
+        <AppSheet visible={open} onClose={() => setOpen(false)} accessibilityLabel={L.customPoster} maxHeight={0.92}>
+          <Text variant="title" color={t.color.ink}>
+            {L.customPoster}
+          </Text>
+          <Image
+            source={{ uri: url }}
+            style={[styles.full, { height: height * 0.6 }]}
+            resizeMode="contain"
+            accessibilityLabel={`${L.customPoster} : ${structureName}`}
+          />
+          <Text variant="meta" color={t.color.inkMuted}>
+            {L.customPosterSheet}
+          </Text>
+        </AppSheet>
+      </Overlay>
     </>
   );
 }

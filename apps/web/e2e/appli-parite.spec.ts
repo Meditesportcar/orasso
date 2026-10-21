@@ -655,10 +655,13 @@ test("garage : certification demandée, plaque d'un autre membre = transfert lan
   for (const theme of THEMES) {
     const { ctx, page } = await openApp(browser, email, theme);
     await page.goto(`/vehicule/${mine}`);
-    await expect(page.getByTestId("vehicle-edit-open")).toBeVisible({ timeout: 30_000 });
+    // Lot C2b : modifier la fiche, certification et suppression sont dans le menu « … » de la page.
+    await expect(page.getByTestId("vehicle-menu")).toBeVisible({ timeout: 30_000 });
     const first = theme === "sable";
     if (first) {
       // Certification : message facultatif, demande envoyée.
+      await page.getByTestId("vehicle-menu").click();
+      await page.getByTestId("vehicle-cert-open").click();
       await page.getByTestId("certification-message").fill("Voiture d'origine, carnet complet.");
       await reveal(page, page.getByTestId("certification-request"));
       await shot(page, "11-garage-certification", theme);
@@ -674,6 +677,8 @@ test("garage : certification demandée, plaque d'un autre membre = transfert lan
       await expect(page.getByText("Ce véhicule n'a pas encore participé à un événement.")).toBeVisible();
 
       // Modifier la fiche : couleur, description.
+      await page.goto(`/vehicule/${mine}`);
+      await page.getByTestId("vehicle-menu").click({ timeout: 30_000 });
       await page.getByTestId("vehicle-edit-open").click();
       await page.getByLabel("Couleur").fill("Rouge Calypso");
       await shot(page, "12-garage-modifier", theme);
@@ -685,6 +690,7 @@ test("garage : certification demandée, plaque d'un autre membre = transfert lan
 
       // Transfert de plaque lancé depuis l'appli : la plaque est celle d'un autre membre.
       await page.goto(`/vehicule/${spare}`);
+      await page.getByTestId("vehicle-menu").click({ timeout: 30_000 });
       await page.getByTestId("vehicle-edit-open").click();
       await page.getByTestId("vehicle-plate").fill(takenPlate);
       await page.getByTestId("vehicle-save").click();
@@ -699,12 +705,14 @@ test("garage : certification demandée, plaque d'un autre membre = transfert lan
       expect(incoming.data.incoming).toHaveLength(1);
       await shot(page, "13-garage-transfert", theme);
       // En attente : la plaque ne se change plus.
+      await page.getByTestId("vehicle-menu").click();
       await page.getByTestId("vehicle-edit-open").click();
       await expect(page.getByTestId("vehicle-plate")).not.toBeEditable();
       await page.getByRole("button", { name: "Annuler" }).click();
 
       // Suppression avec confirmation.
       await page.goto(`/vehicule/${toDelete}`);
+      await page.getByTestId("vehicle-menu").click({ timeout: 30_000 });
       await page.getByTestId("vehicle-delete").click();
       await expect(page.getByText("Supprimer ce véhicule ?")).toBeVisible();
       await page.getByTestId("orga-confirm").click();
