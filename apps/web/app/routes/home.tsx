@@ -5,6 +5,7 @@ import { EventTile, PosterFace } from "../components/EventTile";
 import { Qr } from "../components/Qr";
 import { api, getMe, originOf } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
+import { nearOutcome } from "../lib/events-filter";
 import type { Route } from "./+types/home";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -15,11 +16,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   const raw = asked ?? me?.profile.departments[0] ?? "";
   const department = (departments as readonly string[]).includes(raw) ? raw : "";
   const near = department ? await api<Page<EventCard>>(request, `/events?limit=6&department=${department}`) : null;
+  const outcome = nearOutcome(near && { ok: near.ok, count: near.ok ? near.data.items.length : 0 });
   const all = !near?.ok || near.data.items.length === 0 ? await api<Page<EventCard>>(request, "/events?limit=6") : null;
   const items = (near?.ok && near.data.items.length > 0 ? near.data.items : all?.ok ? all.data.items : []).slice(0, 6);
   return {
     department,
-    nearFound: Boolean(near?.ok && near.data.items.length > 0),
+    nearFound: outcome === "found",
+    // Résultat vide (avis « aucun événement dans le … ») ≠ appel en erreur (aucun avis : on ne sait pas).
+    nearEmpty: outcome === "empty",
     items,
     appHref: "/appli",
     origin: originOf(request),
@@ -112,7 +116,7 @@ function Stores({ href }: { href: string }) {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { department, items, nearFound, appHref } = loaderData;
+  const { department, items, nearFound, nearEmpty, appHref } = loaderData;
   const city = department && nearFound ? (items[0]?.city ?? null) : null;
   const fan = items.slice(0, 3);
   return (
@@ -161,7 +165,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <Icon name="next" size={16} />
           </a>
         </div>
-        {department && !nearFound && items.length > 0 && (
+        {department && nearEmpty && items.length > 0 && (
           <p className="s-notice" data-testid="home-none-near">
             {L.home.noneNear(department)}
           </p>

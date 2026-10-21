@@ -30,13 +30,17 @@ export function PosterFace({
   onFail,
 }: {
   event: Pick<EventCard, "generatedPosterUrl" | "format" | "title">;
-  onFail?: () => void;
+  onFail?: (url: string) => void;
 }) {
-  const [failed, setFailed] = useState(false);
+  // L'échec est celui d'une adresse précise : une affiche régénérée (autre adresse) est de nouveau chargée.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const img = useRef<HTMLImageElement>(null);
+  const url = event.generatedPosterUrl;
+  const failed = url !== null && failedUrl === url;
   const fail = () => {
-    setFailed(true);
-    onFail?.();
+    if (!url) return;
+    setFailedUrl(url);
+    onFail?.(url);
   };
   // L'erreur peut précéder l'hydratation (rendu serveur) : on la relit une fois le composant monté.
   // biome-ignore lint/correctness/useExhaustiveDependencies: lecture unique au montage et au changement d'adresse
@@ -44,18 +48,8 @@ export function PosterFace({
     const el = img.current;
     if (el?.complete && el.naturalWidth === 0) fail();
   }, [event.generatedPosterUrl]);
-  if (event.generatedPosterUrl && !failed) {
-    return (
-      <img
-        ref={img}
-        className="w-card__img"
-        src={event.generatedPosterUrl}
-        alt=""
-        loading="lazy"
-        decoding="async"
-        onError={fail}
-      />
-    );
+  if (url && !failed) {
+    return <img ref={img} className="w-card__img" src={url} alt="" loading="lazy" decoding="async" onError={fail} />;
   }
   return (
     <span className="w-card__minimal" data-testid="poster-minimal">
@@ -100,13 +94,13 @@ export function EventTile({
   const stub = stubOf(event.startsAt);
   const taken = takenOf(event);
   // Affiche en échec de chargement : la carte pose la souche datée du gabarit « Minimal ».
-  const [posterFailed, setPosterFailed] = useState(false);
-  const drawsDate = Boolean(event.generatedPosterUrl) && !posterFailed;
+  const [failedPoster, setFailedPoster] = useState<string | null>(null);
+  const drawsDate = Boolean(event.generatedPosterUrl) && failedPoster !== event.generatedPosterUrl;
   return (
     <article className={`w-card s-pcard w-card--${layout}`} data-testid="event-tile">
       <a className="w-card__link" href={`/e/${event.slug}`}>
         <span className="w-card__poster" aria-hidden="true">
-          <PosterFace event={event} onFail={() => setPosterFailed(true)} />
+          <PosterFace event={event} onFail={setFailedPoster} />
           {!drawsDate && (
             <span className="w-card__stub">
               <small className="o-t-label">{stub.weekday}</small>

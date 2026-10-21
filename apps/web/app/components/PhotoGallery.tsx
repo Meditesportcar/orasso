@@ -3,11 +3,29 @@
 import { Button } from "@orasso/design-system/web";
 import { useRef, useState } from "react";
 
-export function PhotoGallery({ title, photos }: { title: string; photos: { key: string; url: string }[] }) {
+export function PhotoGallery({
+  contentId,
+  title,
+  photos,
+}: {
+  /** Identifiant du contenu média : l'ouverture de la galerie compte une consultation (comme l'appli). */
+  contentId: string;
+  title: string;
+  photos: { key: string; url: string }[];
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [index, setIndex] = useState(0);
+  const counted = useRef(false);
   const open = (i: number) => {
     setIndex(i);
+    // Une consultation par ouverture de page ; l'API déduplique par session et par heure et ignore le média lui-même.
+    if (!counted.current) {
+      counted.current = true;
+      void fetch(`/api/media-contents/${encodeURIComponent(contentId)}/view`, {
+        method: "POST",
+        credentials: "same-origin",
+      }).catch(() => undefined);
+    }
     dialog.current?.showModal();
   };
   const current = photos[index];

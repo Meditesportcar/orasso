@@ -1,7 +1,7 @@
 import { siteLabels } from "@orasso/shared";
 import { expect, test } from "@playwright/test";
 import pg from "pg";
-import { whenRange } from "../app/lib/events-filter";
+import { categoryOptions, nearOutcome, whenRange } from "../app/lib/events-filter";
 import { proPitchCard } from "../app/lib/pro-pitch";
 import { apiCall, setTheme } from "./helpers";
 
@@ -62,6 +62,31 @@ test.describe("parties pures", () => {
     expect(fiction.fictional).toBe(true);
     expect(fiction.badge).toBe(false);
     expect(fiction.discounts.map((d) => d.percent)).toEqual([5, 8, 10, 15]);
+  });
+
+  test("menu de catégorie : la catégorie active reste choisissable, listée ou non, référentiel en échec ou non", () => {
+    const labels = { all: "toutes", unlisted: "non listée", unavailable: "indisponible" };
+    const list = [{ id: "a", label: "JDM" }];
+    expect(categoryOptions(list, "", false, labels)).toEqual([
+      { value: "", label: "toutes" },
+      { value: "a", label: "JDM" },
+    ]);
+    // Catégorie désactivée (absente du référentiel qui répond) : gardée, marquée « non listée ».
+    expect(categoryOptions(list, "z", false, labels).at(-1)).toEqual({ value: "z", label: "non listée" });
+    // Référentiel en échec : la catégorie active reste là, marquée « liste indisponible ».
+    expect(categoryOptions([], "z", true, labels)).toEqual([
+      { value: "", label: "toutes" },
+      { value: "z", label: "indisponible" },
+    ]);
+    // Référentiel en échec sans catégorie active : rien à montrer que « toutes ».
+    expect(categoryOptions([], "", true, labels)).toHaveLength(1);
+  });
+
+  test("accueil : un appel départemental en erreur (503) n'est pas un résultat vide", () => {
+    expect(nearOutcome(null)).toBe("none");
+    expect(nearOutcome({ ok: false, count: 0 })).toBe("failed");
+    expect(nearOutcome({ ok: true, count: 0 })).toBe("empty");
+    expect(nearOutcome({ ok: true, count: 3 })).toBe("found");
   });
 
   test("compteur : « N événements affichés »", () => {
@@ -149,6 +174,101 @@ test.describe("/evenements", () => {
     await expect(page.getByTestId("pick-categorie")).toHaveValue("");
   });
 
+  test("Retour / Suivant du navigateur : catégorie et dates suivent les critères rétablis", async ({ page }) => {
+    const categories = await apiCall<{ id: string; label: string }[]>(null, "GET", "/vehicle-reference/categories");
+    const category = categories.data[0];
+    if (!category) throw new Error("Aucune catégorie dans le seed");
+    const from = iso(new Date(Date.now() - 86_400_000));
+    const to = iso(new Date(Date.now() + 400 * 86_400_000));
+    const otherTo = iso(new Date(Date.now() + 200 * 86_400_000));
+    await setTheme(page, "beton");
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`/evenements?categorie=${category.id}&du=${from}&au=${to}`);
+    await page.waitForLoadState("networkidle");
+    const pick = page.getByTestId("pick-categorie");
+    const dateTo = page.getByLabel("Jusqu'au");
+    await expect(pick).toHaveValue(category.id);
+    // 1) La catégorie est retirée, 2) la date de fin change.
+    await pick.selectOption("");
+    await page.waitForURL((u) => !u.searchParams.get("categorie"));
+    await dateTo.fill(otherTo);
+    await page.waitForURL((u) => u.searchParams.get("au") === otherTo);
+    await expect(dateTo).toHaveValue(otherTo);
+    // Retour : la date de fin d'avant, la catégorie toujours retirée.
+    await page.goBack();
+    await page.waitForURL((u) => u.searchParams.get("au") === to && !u.searchParams.get("categorie"));
+    await expect(dateTo).toHaveValue(to);
+    await expect(pick).toHaveValue("");
+    // Retour encore : la catégorie revient.
+    await page.goBack();
+    await page.waitForURL((u) => u.searchParams.get("categorie") === category.id);
+    await expect(pick).toHaveValue(category.id);
+    await expect(dateTo).toHaveValue(to);
+    // Suivant : la catégorie repart, les champs suivent.
+    await page.goForward();
+    await page.waitForURL((u) => !u.searchParams.get("categorie"));
+    await expect(pick).toHaveValue("");
+    // La soumission suivante part des critères affichés (date de fin d'avant, pas celle modifiée).
+    await page.getByTestId("pick-format").selectOption("exhibition");
+    await page.waitForURL(/format=exhibition/);
+    expect(new URL(page.url()).searchParams.get("au")).toBe(to);
+  });
+
+  test("catégorie du lien absente du référentiel : affichée, gardée par les autres filtres", async ({ page }) => {
+    const ghost = "00000000-0000-4000-8000-000000000000";
+    await setTheme(page, "beton");
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`/evenements?categorie=${ghost}`);
+    await page.waitForLoadState("networkidle");
+    const pick = page.getByTestId("pick-categorie");
+    await expect(pick).toHaveValue(ghost);
+    await expect(pick.locator("option:checked")).toHaveText(siteLabels.events.categoryUnlisted);
+    await expect(page.getByRole("link", { name: "Réinitialiser" })).toBeVisible();
+    await page.getByTestId("pick-format").selectOption("exhibition");
+    await page.waitForURL(/format=exhibition/);
+    expect(new URL(page.url()).searchParams.get("categorie")).toBe(ghost);
+    await expect(page.getByTestId("pick-categorie")).toHaveValue(ghost);
+  });
+
+  test("affiche en échec puis remplacée par une adresse valide, sans démontage de la carte", async ({ page }) => {
+    const list = await apiCall<{ items: { id: string; generatedPosterUrl: string | null }[] }>(
+      null,
+      "GET",
+      "/events?limit=20",
+    );
+    const withPoster = list.data.items.filter((e) => e.generatedPosterUrl);
+    const broken = withPoster[0]?.generatedPosterUrl;
+    const fixed = withPoster.find((e) => e.generatedPosterUrl !== broken)?.generatedPosterUrl;
+    if (!broken || !fixed) throw new Error("Deux affiches générées différentes attendues dans le seed");
+    await page.route(`**${broken}`, (route) => route.abort());
+    await setTheme(page, "beton");
+    await page.setViewportSize(DESKTOP);
+    await page.goto("/evenements");
+    await page.waitForLoadState("networkidle");
+    const tile = page
+      .getByTestId("event-tile")
+      .filter({ has: page.getByTestId("poster-minimal") })
+      .first();
+    await expect(tile).toBeVisible();
+    await expect(tile.locator(".w-card__stub")).toBeVisible();
+    await tile.evaluate((el) => el.setAttribute("data-same-node", "1"));
+    // La navigation suivante (même carte, même clé) revient avec une autre adresse d'affiche.
+    await page.route("**/*.data*", async (route) => {
+      const res = await route.fetch();
+      const body = (await res.text()).split(broken).join(fixed);
+      await route.fulfill({
+        status: res.status(),
+        headers: { "content-type": res.headers()["content-type"] ?? "text/x-script" },
+        body,
+      });
+    });
+    await page.getByRole("button", { name: siteLabels.events.apply }).click();
+    const same = page.locator('[data-same-node="1"]');
+    await expect(same.locator(`img.w-card__img[src="${fixed}"]`)).toBeVisible();
+    await expect(same.getByTestId("poster-minimal")).toHaveCount(0);
+    await expect(same.locator(".w-card__stub")).toHaveCount(0);
+  });
+
   test("le compteur dit « affichés » et suit les cartes de la page", async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto("/evenements");
@@ -213,8 +333,13 @@ test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre 
     contentId = inserted.rows[0]?.id ?? "";
     await setTheme(page, "beton");
     await page.setViewportSize(DESKTOP);
+    const views: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && /\/api\/media-contents\/[^/]+\/view$/.test(r.url())) views.push(r.url());
+    });
     await page.goto(`/e/${slug}`);
     await page.waitForLoadState("networkidle");
+    expect(views).toHaveLength(0);
     const content = page.getByTestId("media-content").filter({ hasText: "Galerie sans lien E2E" });
     await expect(content).toBeVisible();
     const thumbs = content.getByTestId("media-gallery").locator("li");
@@ -222,12 +347,18 @@ test("fiche événement : une galerie sans adresse montre ses photos et s'ouvre 
     await thumbs.first().locator("a").click();
     const viewer = page.getByTestId("gallery-viewer");
     await expect(viewer).toBeVisible();
+    // L'ouverture compte une consultation du contenu, une seule par page.
+    await expect.poll(() => views.length).toBe(1);
+    expect(views[0]).toContain(`/api/media-contents/${contentId}/view`);
     await expect(viewer.locator("img.w-gallery__big")).toBeVisible();
     await expect(viewer).toContainText("1 / 2");
     await viewer.getByRole("button", { name: "Suivante" }).click();
     await expect(viewer).toContainText("2 / 2");
     await viewer.getByRole("button", { name: "Fermer" }).click();
     await expect(viewer).toBeHidden();
+    await thumbs.nth(1).locator("a").click();
+    await expect(viewer).toBeVisible();
+    expect(views).toHaveLength(1);
   } finally {
     if (contentId) await client.query("delete from media_contents where id = $1", [contentId]);
     await client.end();

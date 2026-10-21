@@ -598,7 +598,7 @@ function EventPage({
                         Voir le contenu
                       </a>
                     )}
-                    {c.photos.length > 0 && <PhotoGallery title={c.title} photos={c.photos} />}
+                    {c.photos.length > 0 && <PhotoGallery contentId={c.id} title={c.title} photos={c.photos} />}
                   </span>
                 </li>
               ))}
