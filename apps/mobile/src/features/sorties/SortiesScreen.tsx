@@ -19,6 +19,7 @@ import {
   refusalReasonLabels,
   seasonYear,
   sortiesLabels,
+  staffMissionActions,
   staffPresenceLabels,
   staffRequestLabels,
   staffRoleLabels,
@@ -578,7 +579,7 @@ function TicketOfPublic({
     <Ticket
       testID="ticket-public"
       date={ticket.event.startsAt}
-      badge={<Chip surface="plate">Billet</Chip>}
+      badge={<Chip surface="plate">{ticket.status === "used" ? "Entrée enregistrée" : "Billet"}</Chip>}
       lead={dayCountdown(ticket.event.startsAt, now)}
       title={ticket.event.title}
       detail={upperFirst(detail)}
@@ -592,7 +593,7 @@ function TicketOfPublic({
           {voteScreenTexts.open}
         </Button>
       ) : null}
-      {ticket.priceCents == null ? (
+      {ticket.priceCents == null && ticket.status === "valid" ? (
         <Button variant="plate" tone="dashed" icon="undo" onPress={onGiveBack} fullWidth testID="ticket-give-back">
           {ticketAppLabels.giveBack}
         </Button>
@@ -621,6 +622,8 @@ function StaffTicket({
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const present = item.presence === "present";
+  // Lot 59c : après la fin, plus de « Je serai là » ; le mode staff reste ouvert jusqu'à J+1 (`staffModeClosesAt`).
+  const actions = staffMissionActions(item, now.getTime());
   const roles = item.roles.map((r) => staffRoleLabels[r]).join(" · ");
   const notes = [sortiesLabels.staffRoleGiven(item.structure.name)];
   if (!item.staffModeOpen) notes.push(sortiesLabels.staffModeOpensEve(formatDayHour(item.staffModeOpensAt)));
@@ -636,28 +639,30 @@ function StaffTicket({
       detail={`${formatDayHour(item.event.startsAt)} · ${item.structure.name}`}
       notes={notes}
     >
-      <Button
-        variant="plate"
-        icon={present ? "close" : "check"}
-        loading={busy}
-        onPress={async () => {
-          setBusy(true);
-          setFailed(null);
-          try {
-            await api.setPresence(item.event.id, !present);
-            onChanged();
-          } catch (e) {
-            // Hors ligne : la présence reste comme avant, et on le dit.
-            setFailed(`Présence non enregistrée : ${errorMessage(e)}`);
-          } finally {
-            setBusy(false);
-          }
-        }}
-        fullWidth
-      >
-        {present ? "Pas là" : sortiesLabels.willBeThere}
-      </Button>
-      {item.staffModeOpen ? (
+      {actions.presence ? (
+        <Button
+          variant="plate"
+          icon={present ? "close" : "check"}
+          loading={busy}
+          onPress={async () => {
+            setBusy(true);
+            setFailed(null);
+            try {
+              await api.setPresence(item.event.id, !present);
+              onChanged();
+            } catch (e) {
+              // Hors ligne : la présence reste comme avant, et on le dit.
+              setFailed(`Présence non enregistrée : ${errorMessage(e)}`);
+            } finally {
+              setBusy(false);
+            }
+          }}
+          fullWidth
+        >
+          {present ? "Pas là" : sortiesLabels.willBeThere}
+        </Button>
+      ) : null}
+      {item.staffModeOpen && actions.staffMode ? (
         <Button variant="plate" icon="qr" onPress={onOpen} next fullWidth>
           Mode staff
         </Button>

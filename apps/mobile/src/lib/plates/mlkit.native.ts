@@ -5,7 +5,7 @@ import { NativeModules } from "react-native";
 
 import type { TextLineResult } from "./mlkit";
 
-export type { TextFrame, TextLineResult } from "./mlkit";
+export type { TextCorners, TextFrame, TextLineResult } from "./mlkit";
 
 export async function recognizeText(uri: string): Promise<TextLineResult[] | null> {
   // Sans module natif (Expo Go, ancien APK), le paquet lève une erreur à l'appel : on ne l'importe même pas.
@@ -17,7 +17,8 @@ export async function recognizeText(uri: string): Promise<TextLineResult[] | nul
       block.lines.map((line) => ({
         text: line.text,
         frame: line.frame,
-        elements: line.elements.map((e) => ({ text: e.text, frame: e.frame })),
+        corners: line.cornerPoints,
+        elements: line.elements.map((e) => ({ text: e.text, frame: e.frame, corners: e.cornerPoints })),
       })),
     );
   } catch {

@@ -2,15 +2,18 @@
 // (souris ou doigt, Pointer Events), 4 cadres au plus. Les cadres, normalisés 0–1, partent dans un champ caché (JSON)
 // avec le formulaire ; l'API floute la photo stockée, définitivement. Pas de détection automatique sur le site : elle
 // vit dans l'appli (ML Kit sur le téléphone). À réutiliser par le lot 57 (parité du garage).
+// Lot 59c : le cadre se tourne par une poignée au-dessus de son bord haut (plaque penchée) ; l'API floute au flou
+// gaussien le quadrilatère tourné.
 import { Button } from "@orasso/design-system/web";
 import {
   DEFAULT_PLATE_FRAME,
+  dragRotatePlateFrame,
   vehicleWizardLabels as L,
   MAX_PLATE_RECTS,
   movePlateFrame,
   nextPlateFrame,
   type PlateRect,
-  resizePlateFrame,
+  resizeOrientedPlateFrame,
 } from "@orasso/shared";
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 
@@ -69,6 +72,8 @@ export function plateDecisionError(form: FormData): string | null {
   return rects || form.get("noPlate") === "on" ? null : L.noPlateIssue(1).replace(/^Photo 1 : /, "Photo : ");
 }
 
+type Gesture = "move" | "resize" | "rotate";
+
 export function PlateFrame({
   src,
   alt,
@@ -85,9 +90,9 @@ export function PlateFrame({
 }) {
   const [rects, setRects] = useState<PlateRect[]>(initial);
   const box = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ index: number; kind: "move" | "resize"; x: number; y: number; start: PlateRect } | null>(null);
+  const drag = useRef<{ index: number; kind: Gesture; x: number; y: number; start: PlateRect } | null>(null);
 
-  const begin = (index: number, kind: "move" | "resize") => (e: ReactPointerEvent<HTMLElement>) => {
+  const begin = (index: number, kind: Gesture) => (e: ReactPointerEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();
     const start = rects[index];
@@ -100,9 +105,14 @@ export function PlateFrame({
     const el = box.current;
     if (!d || !el) return;
     const { width, height } = el.getBoundingClientRect();
-    const dx = (e.clientX - d.x) / width;
-    const dy = (e.clientY - d.y) / height;
-    const next = d.kind === "move" ? movePlateFrame(d.start, dx, dy) : resizePlateFrame(d.start, dx, dy);
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    const next =
+      d.kind === "move"
+        ? movePlateFrame(d.start, dx / width, dy / height)
+        : d.kind === "resize"
+          ? resizeOrientedPlateFrame(d.start, dx, dy, width, height)
+          : dragRotatePlateFrame(d.start, dx, dy, height);
     setRects((all) => all.map((r, i) => (i === d.index ? next : r)));
   };
   const end = () => {
@@ -120,7 +130,14 @@ export function PlateFrame({
             className="g-plate__frame"
             role="presentation"
             data-testid="site-plate-frame"
-            style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` }}
+            data-angle={r.angle ?? 0}
+            style={{
+              left: `${r.x * 100}%`,
+              top: `${r.y * 100}%`,
+              width: `${r.w * 100}%`,
+              height: `${r.h * 100}%`,
+              transform: r.angle ? `rotate(${r.angle}deg)` : undefined,
+            }}
             onPointerDown={begin(i, "move")}
             onPointerMove={move}
             onPointerUp={end}
@@ -129,8 +146,20 @@ export function PlateFrame({
             <span
               className="g-plate__handle"
               role="presentation"
+              title={L.resizeFrame}
               data-testid="site-plate-handle"
               onPointerDown={begin(i, "resize")}
+              onPointerMove={move}
+              onPointerUp={end}
+              onPointerCancel={end}
+            />
+            <span className="g-plate__stem" aria-hidden="true" />
+            <span
+              className="g-plate__handle g-plate__handle--rotate"
+              role="presentation"
+              title={L.rotateFrame}
+              data-testid="site-plate-rotate"
+              onPointerDown={begin(i, "rotate")}
               onPointerMove={move}
               onPointerUp={end}
               onPointerCancel={end}
@@ -156,6 +185,7 @@ export function PlateFrame({
           </Button>
         ) : null}
       </div>
+      {rects.length ? <p className="o-t-caption">{L.frameHint}</p> : null}
       <p className="o-t-caption">{L.irreversible}</p>
     </div>
   );

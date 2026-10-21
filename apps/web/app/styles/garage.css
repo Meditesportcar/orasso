@@ -205,7 +205,8 @@
   position: relative;
   max-width: 520px;
   border-radius: var(--radius-md);
-  overflow: hidden;
+  /* Lot 59c : la poignée de rotation dépasse au-dessus d'un cadre posé en haut de la photo ; l'arrondi passe à l'image. */
+  overflow: visible;
   touch-action: none;
   user-select: none;
   background: var(--surface-sunken);
@@ -214,6 +215,7 @@
   display: block;
   width: 100%;
   height: auto;
+  border-radius: var(--radius-md);
 }
 .g-plate__frame {
   position: absolute;
@@ -233,6 +235,25 @@
   border-radius: 50%;
   background: var(--accent);
   cursor: nwse-resize;
+}
+/* Lot 59c : poignée de rotation, centrée au-dessus du bord haut du cadre (26 px, PLATE_ROTATE_HANDLE_OFFSET). */
+.g-plate__handle--rotate {
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  top: -35px;
+  margin-left: -9px;
+  cursor: grab;
+}
+.g-plate__stem {
+  position: absolute;
+  left: 50%;
+  top: -26px;
+  width: 2px;
+  height: 26px;
+  margin-left: -1px;
+  background: var(--accent);
+  pointer-events: none;
 }
 .g-plate__badge {
   position: absolute;

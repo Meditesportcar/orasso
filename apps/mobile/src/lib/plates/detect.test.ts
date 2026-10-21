@@ -1,6 +1,14 @@
+import type { PlateRect } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { detectPlates, looksLikePlate, normalizePlateText, platesFromLines, toPlateRect } from "./detect";
+import {
+  detectPlates,
+  looksLikePlate,
+  normalizePlateText,
+  orientedPlateRect,
+  platesFromLines,
+  toPlateRect,
+} from "./detect";
 import type { TextFrame, TextLineResult } from "./mlkit";
 
 const frame = (left: number, top: number, width: number, height: number): TextFrame => ({ left, top, width, height });
@@ -84,5 +92,138 @@ describe("rectangles proposés", () => {
   it("sans ML Kit (web, tests) : null, l'écran passe à la main", async () => {
     expect(await detectPlates("file:///photo.jpg", 1200, 900)).toBeNull();
     expect(await detectPlates("file:///photo.jpg", 0, 0)).toBeNull();
+  });
+});
+
+describe("plaque penchée : cadre orienté par les coins de ML Kit (lot 59c)", () => {
+  /** Coins d'un rectangle de `w × h` centré en (cx, cy), tourné de `deg` degrés. */
+  const rotated = (cx: number, cy: number, w: number, h: number, deg: number) => {
+    const t = (deg * Math.PI) / 180;
+    const pts: [number, number][] = [
+      [-w / 2, -h / 2],
+      [w / 2, -h / 2],
+      [w / 2, h / 2],
+      [-w / 2, h / 2],
+    ];
+    return pts.map(([dx, dy]) => ({
+      x: cx + dx * Math.cos(t) - dy * Math.sin(t),
+      y: cy + dx * Math.sin(t) + dy * Math.cos(t),
+    }));
+  };
+
+  it("angle du bord haut, taille dans le repère tourné, agrandie de 15 %", () => {
+    const r = orientedPlateRect([rotated(500, 400, 200, 40, 10)], 1000, 800);
+    expect(r?.angle).toBe(10);
+    expect(r?.w).toBeCloseTo(0.23, 3);
+    expect(r?.h).toBeCloseTo(0.0575, 3);
+    // Centre conservé.
+    expect(((r?.x ?? 0) + (r?.w ?? 0) / 2) * 1000).toBeCloseTo(500, 0);
+    expect(((r?.y ?? 0) + (r?.h ?? 0) / 2) * 800).toBeCloseTo(400, 0);
+  });
+
+  it("presque droite (moins de 2°) ou coins absents : cadre droit", () => {
+    expect(orientedPlateRect([rotated(500, 400, 200, 40, 1)], 1000, 800)).toBeNull();
+    expect(orientedPlateRect([], 1000, 800)).toBeNull();
+  });
+
+  it("trois mots penchés : un seul cadre orienté qui les contient tous", () => {
+    const deg = -12;
+    const t = (deg * Math.PI) / 180;
+    const elements = (
+      [
+        ["GA", 420],
+        ["662", 500],
+        ["KS", 580],
+      ] as const
+    ).map(([text, along]) => {
+      const corners = rotated(500 + (along - 500) * Math.cos(t), 600 + (along - 500) * Math.sin(t), 60, 40, deg);
+      const xs = corners.map((p) => p.x);
+      const ys = corners.map((p) => p.y);
+      const left = Math.min(...xs);
+      const top = Math.min(...ys);
+      return { text, corners, frame: frame(left, top, Math.max(...xs) - left, Math.max(...ys) - top) };
+    });
+    const rects = platesFromLines([{ text: "GA 662 KS", elements }], 1000, 1000);
+    expect(rects).toHaveLength(1);
+    expect(rects[0]?.angle).toBe(-12);
+    // 220 px le long de la plaque (de 390 à 610), agrandis de 15 %.
+    expect(rects[0]?.w).toBeCloseTo(0.253, 2);
+  });
+});
+
+describe("plaque penchée au bord de la photo : toute la plaque visible reste dans le cadre (lot 59c, tour 2)", () => {
+  const W = 1000;
+  const H = 800;
+  const quad = (cx: number, cy: number, w: number, h: number, deg: number) => {
+    const t = (deg * Math.PI) / 180;
+    const pts: [number, number][] = [
+      [-w / 2, -h / 2],
+      [w / 2, -h / 2],
+      [w / 2, h / 2],
+      [-w / 2, h / 2],
+    ];
+    return pts.map(([dx, dy]) => ({
+      x: cx + dx * Math.cos(t) - dy * Math.sin(t),
+      y: cy + dx * Math.sin(t) + dy * Math.cos(t),
+    }));
+  };
+  /** Contrôle indépendant : 41 × 41 points de la plaque, ceux qui sont dans la photo doivent être dans le cadre. */
+  const uncovered = (r: PlateRect, cx: number, cy: number, w: number, h: number, deg: number) => {
+    const t = (deg * Math.PI) / 180;
+    const a = ((r.angle ?? 0) * Math.PI) / 180;
+    const fx = (r.x + r.w / 2) * W;
+    const fy = (r.y + r.h / 2) * H;
+    let out = 0;
+    for (let i = 0; i <= 40; i++) {
+      for (let j = 0; j <= 40; j++) {
+        const dx = (i / 40 - 0.5) * w;
+        const dy = (j / 40 - 0.5) * h;
+        const x = cx + dx * Math.cos(t) - dy * Math.sin(t);
+        const y = cy + dx * Math.sin(t) + dy * Math.cos(t);
+        if (x < 0 || y < 0 || x > W || y > H) continue;
+        const u = (x - fx) * Math.cos(a) + (y - fy) * Math.sin(a);
+        const v = -(x - fx) * Math.sin(a) + (y - fy) * Math.cos(a);
+        if (Math.abs(u) > (r.w * W) / 2 + 1e-6 || Math.abs(v) > (r.h * H) / 2 + 1e-6) out++;
+      }
+    }
+    return out;
+  };
+  const detect = (cx: number, cy: number, deg: number) => {
+    const corners = quad(cx, cy, 200, 40, deg);
+    const xs = corners.map((p) => p.x);
+    const ys = corners.map((p) => p.y);
+    const left = Math.min(...xs);
+    const top = Math.min(...ys);
+    const f = frame(left, top, Math.max(...xs) - left, Math.max(...ys) - top);
+    const rects = platesFromLines([{ text: "GA-662-KS", elements: [{ text: "GA-662-KS", frame: f, corners }] }], W, H);
+    expect(rects).toHaveLength(1);
+    return rects[0] as PlateRect;
+  };
+
+  it("cas des relectures : 200 × 40 centrée en (90, 100), 45°", () => {
+    expect(uncovered(detect(90, 100, 45), 90, 100, 200, 40, 45)).toBe(0);
+  });
+
+  const places: [string, number, number][] = [
+    ["bord gauche", 60, 400],
+    ["bord droit", 940, 400],
+    ["bord haut", 500, 25],
+    ["bord bas", 500, 775],
+    ["coin haut gauche", 70, 40],
+    ["coin haut droit", 930, 40],
+    ["coin bas gauche", 70, 760],
+    ["coin bas droit", 930, 760],
+    ["au milieu", 500, 400],
+  ];
+  for (const [where, cx, cy] of places) {
+    for (const deg of [30, 45, 60, 89, -30, -45, -60, -89]) {
+      it(`${where}, ${deg}° : aucun point de la plaque hors du cadre`, () => {
+        expect(uncovered(detect(cx, cy, deg), cx, cy, 200, 40, deg)).toBe(0);
+      });
+    }
+  }
+
+  it("au milieu, le cadre reste orienté", () => {
+    expect(detect(500, 400, 30).angle).toBe(30);
   });
 });

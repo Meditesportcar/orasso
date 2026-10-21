@@ -17,6 +17,9 @@ export const adminAppLabels = {
   homeModeratorTitle: "Modération",
   homeModeratorHint: "Ta file : les signalements à traiter.",
   queuesTitle: "Files à traiter",
+  // Lot 59c (retour de Damien sur l'APK d'essai) : la barre de l'Administration n'a pas d'onglet Profil.
+  personasTitle: "Casquettes",
+  switchPersona: "Mon profil et mes casquettes",
   registriesTitle: "Registres",
   settingsTitle: "Réglages et envois",
   moderatorOnly: "Ton rôle de modérateur donne accès à la file des signalements.",
