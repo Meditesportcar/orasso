@@ -1601,6 +1601,46 @@ Source : relecture complémentaire de Codex sur le lot 54 (`9e3eb15..d76780d`), 
 
 #### À revoir avec Damien (lot 54b)
 - Photos du prestataire sur sa fiche publique : le prototype `s-vitrine` n'en montrait pas, c'est un ajout décidé par le coordinateur (titre repris du pro, « Réalisations ») ; le garder, le renommer, ou retirer le champ photos du formulaire ?
+
+### 21/10/2026 — Site : parité des fonctions nouvelles de la DA v2 (lot 57)
+Source : D20 (parité site / appli), D23 (fonctions **validées par Damien dans le prototype DA v2, 19/10/2026** : `s-sorties`, `s-passport`, `s-vote`, `s-recap`, `s-share`, `s-me`, `s-agenda`, `s-accred`, `s-contenus`, `s-missions`, `s-pcand`, `s-vitrine`, `s-otri`), D26 (pas de carte de presse), D28 (floutage des galeries média proposé, au choix du média). Fichiers : `apps/web/app/routes/{sorties,acces,passeport,vote,recap,media,media-nouveau,m,prestataire,prestataires,orga-presse,orga-prestataires}.tsx`, `routes/admin/medias.tsx`, `components/{PassportStamp,MediaGalleryPicker,ProviderVitrine}.tsx`, `ShareButtons.tsx` (`ShareCard`), `styles/{passport,media}.css`, `packages/shared/src/rules/stampArt.ts`, `labels/orga-site-v2.fr.ts`, `apps/api/src/modules/uploads/`.
+
+| Fonction (lot d'origine) | Appli | Site |
+|---|---|---|
+| Sorties en tickets : candidatures, billets, missions staff, passées (43) | onglet Sorties (`/acces`) | `/app/sorties` (`/app/acces` → 301) |
+| Passeport et tampons (49, 50) | `/mon-passeport`, onglet Passeport du visiteur | `/app/passeport` |
+| Prix du public : vote, classement en direct (49, 50) | `/vote/[id]` | `/app/vote/:slug` |
+| Récap (49, 50) | `/recap/[id]` | `/app/recap/:eventId` |
+| Carte à partager story, trois styles (50) | feuille du véhicule | `/app/garage/:id` (« Carte à partager ») |
+| Mon profil en hub : passeport, crew, casquettes, Créer (40) | onglet Profil | `/u/<mon pseudo>` (hub) |
+| Média : profil, accréditations, badge presse, consignes (45, 55) | `(media)/presse`, `media/nouveau` | `/app/media`, `/app/media/nouveau` |
+| Média : Explorer national, demande d'accréditation, agenda (45, 55) | `(media)/explorer` | `/app/media?onglet=explorer`, `?onglet=agenda` |
+| Média : contenus (lien, galerie) et floutage proposé (45, 55, D28) | `(media)/contenus` | `/app/media?onglet=contenus` |
+| Fiche d'un média (45) | — | `/m/:id` |
+| Prestataire : missions, candidatures (emplacement, avis), vitrine (46, 54) | `(provider)/*` | `/app/prestataire` |
+| Vitrine d'un prestataire (46, 54) | `/providers/[id]` | `/providers/:id` |
+| Organisateur : réglages presse, demandes, mise en avant (45, 52) | Tri › Presse | `/orga/:s/e/:id/presse` (`?onglet=presse` du tri y mène) |
+| Organisateur : besoins, candidatures par besoin, emplacement, avis (46, 52) | Tri › Prestataires (`MissionsPanel`) | `/orga/:s/e/:id/prestataires` |
+| Note d'arrivée au tri (47, 52) | carte du tri | `TriageFile` (« Note ») |
+| Affiche générée : voir, régénérer, story (47) | assistant (53) | `/orga/:s/e/:id` (bloc « Affiche ») |
+| Prix du public côté organisateur (49, 52) | Direct | `/orga/:s/e/:id` (bloc « Prix du public ») |
+| Accueil drive (48) | mode staff | rapport du jour J (`orga-jour-j`, entrées « drive ») ; la lecture de plaque reste dans l'appli |
+| Vérification d'un profil média (45, D26) | `(admin)/medias` (ajouté au lot 57) | `/admin/medias` (+ compteur `mediaToVerify` de l'accueil) |
+| Points du prix du public (49, réglage `points.audience_prize`) | Paramètres (ajouté au lot 57) | `/admin/reglages` (ajouté au lot 57) |
+
+- **Ce qui diffère du téléphone, et pourquoi** : pas de tampon qui tombe à l'écran au scan ni d'animation de carte (geste de l'appli) ; pas de lecture de plaque (accueil drive) ni de détection automatique de plaque (ML Kit) : le floutage se fait à la main (cadres, outils du lot 51) ; la carte à partager se télécharge (pas de feuille de partage du système) ; le badge presse et le QR de stand s'affichent comme le QR d'accès (code tournant, `RotatingQr`) ; la presse et les missions ont chacune leur page dans l'espace organisateur (barre latérale) au lieu d'un segment du tri ; le segment « Presse » du tri du site renvoie vers la page Presse.
+- **Tampon** : le dessin du lot 50 (`features/passport/stampModel.ts` de l'appli, pur) est **déplacé** dans `packages/shared/src/rules/stampArt.ts` (avec son test) : l'appli l'importe de `@orasso/shared`, le site le dessine en SVG (`PassportStamp`) avec les mêmes jetons d'encre (`--stamp-ink-<dept>`) ; une seule source, pas de composant dans le système de design (zone gelée).
+- **Adresses** : `/app/vote/:slug` (slug, comme le reste du site) ; `/m/:id` (l'API n'expose pas de slug de média et `GET /media/:id` est réservé aux connectés : la fiche vit dans l'espace connecté) ; `/providers/:id`, même chemin que l'appli.
+- **D28** (Damien, 21/10/2026 : « je lui proposerai l'option de pouvoir flouter ou non ») : à l'envoi d'une photo de galerie, le site propose le cadre (« Flouter et ajouter ») et « Envoyer sans flouter », sans blocage ni avertissement. **API** : `POST /me/uploads` accepte un champ `plateRects` (JSON) pour `purpose = media_content` seulement, et floute avec `blurPlateRegions` (lot 51) avant tout stockage, irréversible ; test `uploads/uploads-blur.test.ts`. C'est la seule extension de l'API du lot avec la ligne `mediaToVerify` de `GET /admin/overview`.
+- **Textes de l'espace organisateur** (presse, missions, affiche, prix du public, drive) : le prototype ne les montre pas ; écrits au « tu », sans genre, dans `labels/orga-site-v2.fr.ts`. Les textes du média, du prestataire, du passeport, du vote et du récap sont ceux des écrans de l'appli (lots 49, 50, 54, 55), repris tels quels.
+- **Refus d'une accréditation** : la raison est obligatoire sur le site ; elle part comme motif « Autre » avec sa note (`refusal_note`), envoyée au média.
+- **Affiche** : « Régénérer » garde la photo et le titre réglés dans l'assistant et laisse choisir le style ; la story se télécharge (`GET /events/:id/poster/story`). Changer la photo ou le titre reste dans l'assistant (lot 53).
+- **Onglet Sorties de la barre du site** : libellé « Sorties » (lien `/app/sorties`) ; les autres liens vers `/app/acces` (fiche publique, en-tête, e-mails) passent par la redirection permanente.
+
+#### À revoir avec Damien (lot 57)
+- Fiche d'un média : réservée aux connectés et sans liste de ses contenus (aucune route de l'API ne les liste par média) ; une page publique `/m/<slug>` demanderait un slug et une route nouvelle.
+- Textes de l'espace organisateur écrits faute d'écran dans le prototype (presse, missions, affiche) : à relire.
+- D28 côté appli : le floutage proposé à l'envoi d'une galerie n'est fait que sur le site (l'API est prête : champ `plateRects` de `POST /me/uploads`) ; l'écran Contenus de l'appli (lot 55) reste à brancher.
 ## À revoir avec Damien — liste consolidée (lot 34)
 
 Une seule liste, ordonnée, de tout ce que les lots 15 à 35d (et 34) ont laissé à décider. Rien ne bloque : la solution décrite est appliquée (D16). Les points antérieurs (A1 à A14, lots 02 à 14) restent dans leurs sections plus haut ; ceux qui sont réglés depuis sont signalés à la fin.
