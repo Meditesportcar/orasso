@@ -54,20 +54,31 @@ function isCurrent(pathname: string, href: string): boolean {
  * soulignée d'une barre moutarde en biais), puis les liens du compte (`children`) et « Télécharger l'appli » (`download`,
  * seulement sur les pages publiques ; en secondaire, le bouton principal de l'écran étant celui de la page).
  */
-export function SiteHeader({ children, download = false }: { children?: ReactNode; download?: boolean }) {
+export function SiteHeader({
+  children,
+  download = false,
+  nav = true,
+}: {
+  children?: ReactNode;
+  download?: boolean;
+  /** Les quatre entrées publiques ; absentes dans l'espace connecté (logo, recherche, cloche, Boîte y suffisent). */
+  nav?: boolean;
+}) {
   const { pathname } = useLocation();
   return (
     <header className="s-bar s-header w-head" data-bar>
       <a className="s-header__brand" href="/" aria-label="Orasso, accueil">
         <Logo width={128} />
       </a>
-      <nav className="w-nav o-t-button" aria-label="Site">
-        {NAV.map((item) => (
-          <a key={item.href} href={item.href} aria-current={isCurrent(pathname, item.href) ? "page" : undefined}>
-            {item.label}
-          </a>
-        ))}
-      </nav>
+      {nav && (
+        <nav className="w-nav o-t-button" aria-label="Site">
+          {NAV.map((item) => (
+            <a key={item.href} href={item.href} aria-current={isCurrent(pathname, item.href) ? "page" : undefined}>
+              {item.label}
+            </a>
+          ))}
+        </nav>
+      )}
       <nav className="s-nav w-account o-t-button" aria-label="Compte">
         {children}
         {download && (

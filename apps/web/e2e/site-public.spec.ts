@@ -91,7 +91,8 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   expect(docRes.headers()["content-type"]).toContain("application/pdf");
   await card.getByLabel(/Note/).fill("Statuts reçus, structure sérieuse.");
   await card.getByRole("button", { name: "Valider" }).click();
-  await expect(admin.getByTestId("admin-empty")).toBeVisible();
+  // La file peut garder d'autres structures du seed (Écurie du Vallespir) : la carte validée disparaît.
+  await expect(card).toHaveCount(0);
   // Le justificatif n'est lisible ni sans connexion ni par le propriétaire.
   const anon = await browser.newContext();
   expect((await anon.request.get(docHref)).status()).toBe(401);

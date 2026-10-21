@@ -68,7 +68,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   return (
     <Ground variant="site" animated fixed>
       <div className="app">
-        <SiteHeader>
+        <SiteHeader nav={false}>
           {loaderData.orga && <a href={`/orga/${loaderData.orga}`}>Organisateur</a>}
           {loaderData.pro && <a href={`/pro/${loaderData.pro}`}>Pro</a>}
           {loaderData.provider && <a href="/app/prestataire">Prestataire</a>}

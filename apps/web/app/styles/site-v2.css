@@ -278,6 +278,7 @@
   height: 320px;
 }
 .w-fan__card {
+  container-type: inline-size;
   position: absolute;
   width: 36%;
   max-width: 190px;
@@ -357,6 +358,7 @@
   color: inherit;
 }
 .w-card__poster {
+  container-type: inline-size;
   position: relative;
   display: block;
   aspect-ratio: 4 / 5;
@@ -1458,4 +1460,23 @@
     right: 0;
     width: 130px;
   }
+}
+
+/* En-tête de l'espace connecté sur téléphone : les liens du compte passent à la ligne, jamais de défilement de page. */
+@media (max-width: 899px) {
+  .w-head .w-account {
+    flex: 1 1 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-width: 0;
+    gap: var(--space-2) var(--space-4);
+  }
+}
+
+/* Gabarit « Minimal » : le titre suit la largeur de l'affiche (jamais un mot coupé en deux sur une petite carte). */
+.w-card__minimal-title {
+  font-size: clamp(8px, 7.5cqw, 24px);
+  line-height: 1;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }

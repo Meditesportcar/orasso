@@ -2,7 +2,7 @@ import { mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { MOBILE, setTheme, signUpApi, unique } from "./helpers";
+import { loginInBrowser, MOBILE, setTheme, signUpApi, unique } from "./helpers";
 
 // Lot 56 : site public v2 (accueil, événements, organisateurs, professionnels, fiche événement, annuaire des pros), en-tête
 // et pied, cartes avec affiche, crédits des données, e-mails v2. Quatre pages + fiche + pros, à 390 px et 1280 px, dans les
@@ -309,4 +309,18 @@ test("/_mail : aperçu de chaque type d'e-mail (développement) avec le bouton e
   const samples = page.getByTestId("mail-sample");
   expect(await samples.count()).toBeGreaterThanOrEqual(8);
   await page.screenshot({ path: `${DIR}/apercu-emails.png`, fullPage: false });
+});
+
+test("en-tête de l'espace connecté : ni défilement horizontal ni recouvrement, 390 et 1280 px", async ({ browser }) => {
+  for (const viewport of [MOBILE, DESKTOP]) {
+    const ctx = await browser.newContext({ viewport });
+    const page = await ctx.newPage();
+    await setTheme(page, "beton");
+    await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/acces");
+    await page.waitForLoadState("networkidle");
+    await noHorizontalScroll(page, `/app/acces ${viewport.width}`);
+    // La recherche reste cliquable : rien ne la recouvre.
+    await page.getByTestId("site-search").getByRole("button").click({ trial: true });
+    await ctx.close();
+  }
 });
