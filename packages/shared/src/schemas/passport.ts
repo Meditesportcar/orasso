@@ -89,7 +89,7 @@ export type AudiencePrizeMine = {
   reason: "vote_closed" | "vote_not_open" | "not_checked_in" | null;
   open: boolean;
   closesAt: string;
-  /** « Tu as été pointé à 19 h 02 » (ou heure du billet scanné). */
+  /** « Pointage à 19 h 02 » (ou heure du billet scanné). */
   checkedInAt: string | null;
   votedFor: string | null;
   votedAt: string | null;
@@ -97,7 +97,7 @@ export type AudiencePrizeMine = {
   ownApplicationIds: string[];
 };
 
-/** Canal `event:{id}:votes`, événement `votes.changed`. */
+/** Canal `event:{id}:votes`, événement `votes.changed` ; `votes.candidates.changed` invalide la grille (payload vide). */
 export type AudienceVotesChanged = { total: number; top3: { applicationId: string; votes: number; rank: number }[] };
 
 // --- Récap -------------------------------------------------------------------------------------------------------

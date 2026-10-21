@@ -14,6 +14,7 @@ import {
   type MediaAccreditationView,
   type MediaAgenda,
   type MediaContentCreate,
+  type MediaContentsQuery,
   type MediaContentUpdate,
   type MediaContentView,
   type MediaEventBrief,
@@ -23,10 +24,11 @@ import {
   type MediaPublic,
   mediaLabels,
   mediaProfileIssue,
+  type Page,
   type PressSettingsInput,
   type PressSettingsView,
 } from "@orasso/shared";
-import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -263,6 +265,34 @@ export const mediaService = {
     const p = await db.query.mediaProfiles.findFirst({ where: eq(mediaProfiles.id, id) });
     if (!p || p.deletedAt) throw notFound("Média introuvable");
     return publicView(p);
+  },
+
+  /** Mêmes champs et règles de publication que les contenus publics d'un événement. */
+  async publicForMedia(id: string, q: MediaContentsQuery): Promise<Page<MediaContentView>> {
+    await this.getPublic(id);
+    const rows = await db
+      .select({ c: mediaContents, e: events, m: mediaProfiles })
+      .from(mediaContents)
+      .innerJoin(events, eq(events.id, mediaContents.eventId))
+      .innerJoin(mediaProfiles, eq(mediaProfiles.id, mediaContents.mediaProfileId))
+      .where(
+        and(
+          eq(mediaContents.mediaProfileId, id),
+          isNull(mediaContents.deletedAt),
+          isNull(mediaProfiles.deletedAt),
+          ne(events.status, "draft"),
+          ne(events.admission, "invite_only"),
+          accreditedSql,
+          q.cursor ? lt(mediaContents.id, q.cursor) : undefined,
+        ),
+      )
+      .orderBy(desc(mediaContents.id))
+      .limit(q.limit + 1);
+    const items = rows.slice(0, q.limit);
+    return {
+      items: items.map(({ c, e, m }) => contentView(c, e, m)),
+      nextCursor: rows.length > q.limit ? (items.at(-1)?.c.id ?? null) : null,
+    };
   },
 
   // --- Accréditations -------------------------------------------------------------------------------------------------

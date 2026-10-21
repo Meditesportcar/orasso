@@ -3,13 +3,19 @@
 // message, d'incident et de rapport (jamais servies par `/api/files`). Le fichier attend d'être rattaché (une seule
 // fois, par son auteur) ; ceux jamais rattachés sont effacés après 24 h.
 import { randomUUID } from "node:crypto";
-import { type PlateRect, privateUploadPurposes, type UploadPurpose, type UploadResult } from "@orasso/shared";
-import { and, count, eq, isNull, lt, sql } from "drizzle-orm";
+import {
+  MEDIA_GALLERY_MAX_PHOTOS,
+  type PlateRect,
+  privateUploadPurposes,
+  type UploadPurpose,
+  type UploadResult,
+} from "@orasso/shared";
+import { and, count, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import sharp from "sharp";
 
 import { uploads } from "../../db/schema";
 import { now } from "../../lib/deps";
-import { AppError, forbidden, validation } from "../../lib/errors";
+import { AppError, forbidden, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
@@ -19,7 +25,7 @@ import { blurPlateRegions } from "../vehicles/photos-blur";
 
 export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 /** Fichiers envoyés mais pas encore rattachés, par personne (bornés sous verrou). */
-export const MAX_PENDING_UPLOADS = 20;
+export const MAX_PENDING_UPLOADS = MEDIA_GALLERY_MAX_PHOTOS + 10;
 /** Un fichier jamais rattaché est effacé après ce délai. */
 export const PENDING_UPLOAD_TTL_MS = 24 * 3_600_000;
 /** Formats lus (décodage réel par sharp, pas l'extension). */
@@ -91,7 +97,7 @@ export const uploadsService = {
     if (v.profile.suspendedUntil && v.profile.suspendedUntil > now()) {
       throw forbidden("Ton compte est suspendu : lecture seule.");
     }
-    rateLimit("fileUpload", v.user.id);
+    rateLimit(purpose === "media_content" ? "mediaFileUpload" : "fileUpload", v.user.id);
     // Photo d'annonce (lot 20) : seulement un organisateur qui peut publier.
     if (purpose === "announcement") await requireAnnouncementUploader(v);
     if (file.size === 0) throw validation("Fichier vide");
@@ -100,7 +106,8 @@ export const uploadsService = {
     // Lot 57 (D28) : plaques floutées sur l'image recompressée, avant tout stockage (aucun original gardé).
     const image = plateRects?.length ? await blurPlateRegions(webp.data, plateRects) : webp;
     const folder = FOLDER[purpose];
-    const key = `${isPrivatePurpose(purpose) ? "private/" : ""}${folder}/${randomUUID()}.webp`;
+    const id = randomUUID();
+    const key = `${isPrivatePurpose(purpose) ? "private/" : ""}${folder}/${id}.webp`;
     let expired: string[] = [];
     await storage.put(key, image.data);
     try {
@@ -130,7 +137,26 @@ export const uploadsService = {
       throw error;
     }
     for (const old of expired) await storage.remove(old).catch(() => undefined);
-    return { key, width: image.info.width, height: image.info.height };
+    return { id, key, width: image.info.width, height: image.info.height };
+  },
+
+  /** UUID déjà présent dans le nom du fichier : aucune colonne ni migration nécessaire. */
+  async remove(v: Viewer, id: string): Promise<void> {
+    const keys = (Object.entries(FOLDER) as [UploadPurpose, string][]).map(
+      ([purpose, folder]) => `${isPrivatePurpose(purpose) ? "private/" : ""}${folder}/${id}.webp`,
+    );
+    await withTx(async (tx) => {
+      // Même verrou que l'envoi ; DELETE et consume se départagent aussi par le verrou de ligne PostgreSQL.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`uploads:${v.user.id}`}))`);
+      const [row] = await tx
+        .select()
+        .from(uploads)
+        .where(and(inArray(uploads.key, keys), eq(uploads.userId, v.user.id), isNull(uploads.consumedAt)))
+        .for("update");
+      if (!row) throw notFound("Envoi introuvable");
+      await storage.remove(row.key);
+      await tx.delete(uploads).where(eq(uploads.key, row.key));
+    });
   },
 
   /**

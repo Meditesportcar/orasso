@@ -3,11 +3,11 @@ import { Hono } from "hono";
 
 import { validation } from "../../lib/errors";
 import { type AppEnv, requireUser } from "../../lib/session";
-import { parse } from "../../lib/validate";
+import { parse, uuidParam } from "../../lib/validate";
 import { uploadsService } from "./service";
 
 export const uploadsRoutes = new Hono<AppEnv>()
-  // `POST /me/uploads` (multipart : `purpose`, `file`, et `plateRects` facultatif) → `{key, width, height}`.
+  // `POST /me/uploads` (multipart : `purpose`, `file`, et `plateRects` facultatif) → `{id, key, width, height}`.
   .post("/me/uploads", async (c) => {
     const v = await requireUser(c);
     const form = await c.req.parseBody();
@@ -28,4 +28,8 @@ export const uploadsRoutes = new Hono<AppEnv>()
       plateRects = parse(plateRectsSchema, raw);
     }
     return c.json(await uploadsService.upload(v, purpose, file, plateRects), 201);
+  })
+  .delete("/me/uploads/:id", async (c) => {
+    await uploadsService.remove(await requireUser(c), uuidParam(c, "id"));
+    return c.body(null, 204);
   });

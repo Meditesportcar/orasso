@@ -1,5 +1,5 @@
 // Récap (lot 49, ARCHITECTURE-DA-V2 § 5.5, V8, prototype DA v2 `s-recap`) : calculé à la demande, jamais stocké.
-// « Arrivé dimanche à 10 h, automatiquement » : la tâche `event.recap` (fin + 1 jour à 10 h, heure de l'événement)
+// « Arrivée dimanche à 10 h, automatiquement » : la tâche `event.recap` (fin + 1 jour à 10 h, heure de l'événement)
 // prévient les pointés et les billets scannés ; les points y sont projetés (participation, staff, prix du public),
 // puis acquis après le règlement de J+2 : le même écran se met à jour.
 import {

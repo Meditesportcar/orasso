@@ -278,7 +278,7 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
     await expect(page).toHaveURL(/vote\//, { timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "Prix du public", exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Une voix, une seule", { exact: true })).toBeVisible();
-    await expect(page.getByText(/^Tu as été pointé à \d+ h/)).toBeVisible();
+    await expect(page.getByText(/^Pointage à \d+ h/)).toBeVisible();
     await expect(page.getByText("Pas pour toi-même. Le gagnant reçoit le badge et 50 points.")).toBeVisible();
     // Quatre voitures : la mienne grisée « C'est toi », trois à choisir.
     await expect(page.getByTestId("vote-card")).toHaveCount(3, { timeout: 30_000 });
