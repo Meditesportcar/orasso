@@ -456,7 +456,7 @@ export function EventWizard(props: Props) {
           : `/orga/${structureSlug}/e/${s.id}?erreur=${encodeURIComponent(published.error.message)}`,
       );
     }
-    window.location.assign(`/orga/${structureSlug}/e/${s.id}${event ? "" : "?creee=1"}`);
+    window.location.assign(`/orga/${structureSlug}/e/${s.id}${mode === "draft" ? "?creee=1" : ""}`);
   }
 
   const [title, intro] = HEADS[step];

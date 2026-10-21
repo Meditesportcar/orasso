@@ -258,7 +258,8 @@ test("créer un événement d'un jour depuis l'appli, le publier, le dupliquer, 
   }
   await v(page, "wizard-save").click();
   await page.waitForURL(new RegExp(`/evenement/${copyId}(\\?|$)`), { timeout: 30_000 });
-  await expect(page.getByText("Modifications enregistrées.").filter({ visible: true })).toBeVisible({
+  // Lot 53 (relecture) : « Brouillon » dit « Brouillon enregistré. », que le brouillon soit neuf ou rouvert.
+  await expect(page.getByText("Brouillon enregistré.").filter({ visible: true })).toBeVisible({
     timeout: 20_000,
   });
   const copy = (await apiCall<Ev>(damien, "GET", `/events/${copyId}`)).data;

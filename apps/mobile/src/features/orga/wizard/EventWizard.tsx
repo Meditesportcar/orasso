@@ -461,7 +461,8 @@ export function EventWizard({
         router.replace({ pathname: "/e/[slug]", params: { slug: s.slug } });
         return;
       }
-      let fait = editing ? "modifie" : "cree";
+      // « Brouillon » : « Brouillon enregistré. » (le brouillon a déjà un identifiant depuis le temps 2).
+      let fait = mode === "draft" ? "cree" : "modifie";
       const warnings: string[] = [];
       if (mode === "publish") {
         try {
