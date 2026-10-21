@@ -11,11 +11,11 @@ import {
   type EventPublic,
   voteScreenTexts,
 } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
-import { data, Form, useNavigation, useRevalidator } from "react-router";
+import { useEffect, useState } from "react";
+import { data, Form, useNavigation } from "react-router";
 
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
-import { useChannel } from "../lib/useChannel";
+import { useLiveRevalidate } from "../lib/useLiveRevalidate";
 import "../styles/passport.css";
 import type { Route } from "./+types/vote";
 
@@ -63,25 +63,20 @@ export async function action({ request }: Route.ActionArgs) {
 export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
   const { event, board, mine, candidates } = loaderData;
   const busy = useNavigation().state !== "idle";
-  const revalidator = useRevalidator();
-  // Classement en direct : un message `votes.changed` recharge la page, au plus une fois toutes les 10 s.
-  const last = useRef(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [liveTotal, setLiveTotal] = useState(board.total);
   useEffect(() => setLiveTotal(board.total), [board.total]);
-  useEffect(() => () => clearTimeout(timer.current ?? undefined), []);
-  const { connected } = useChannel(`event:${event.id}:votes`, (m) => {
-    if (m.type !== "votes.changed") return;
-    const total = (m.payload as { total?: number } | null)?.total;
-    if (typeof total === "number") setLiveTotal(total);
-    if (timer.current) return;
-    const wait = Math.max(0, last.current + 10_000 - Date.now());
-    timer.current = setTimeout(() => {
-      timer.current = null;
-      last.current = Date.now();
-      revalidator.revalidate();
-    }, wait);
-  });
+  // Classement et grille en direct : un message utile recharge la page, au plus une fois toutes les 10 s, et le canal
+  // qui revient après une coupure la recharge aussi (relecture du lot 57).
+  const { connected } = useLiveRevalidate(
+    `event:${event.id}:votes`,
+    (m) => m.type === "votes.changed" || m.type === "candidates.changed",
+    {
+      onMessage: (m) => {
+        const total = (m.payload as { total?: number } | null)?.total;
+        if (m.type === "votes.changed" && typeof total === "number") setLiveTotal(total);
+      },
+    },
+  );
 
   const own = new Set(mine.ownApplicationIds);
   const myEntry = board.entries.find((e) => own.has(e.applicationId));

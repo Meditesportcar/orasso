@@ -107,7 +107,9 @@ export default function OrgaPresse({ loaderData, actionData }: Route.ComponentPr
   const busy = useNavigation().state !== "idle";
   const pending = requests.filter((r) => r.status === "pending");
   const decided = requests.filter((r) => r.status !== "pending");
-  const contents = requests.flatMap((r) => r.contents);
+  // Un même média peut avoir plusieurs demandes historiques pour l'événement (désistement puis nouvelle demande) : l'API
+  // rattache les mêmes contenus à chacune, on les compte une fois (relecture du lot 57).
+  const contents = [...new Map(requests.flatMap((r) => r.contents).map((c) => [c.id, c])).values()];
   return (
     <>
       <div className="orga__head">

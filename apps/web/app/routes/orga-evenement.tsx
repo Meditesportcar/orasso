@@ -41,6 +41,7 @@ import { data, Form, redirect, useNavigation, useSearchParams } from "react-rout
 import { Weather } from "../components/Weather";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { formatDay, formatPrice, formatWhen } from "../lib/format";
+import { useLiveRevalidate } from "../lib/useLiveRevalidate";
 import type { Route } from "./+types/orga-evenement";
 
 export function meta() {
@@ -451,6 +452,8 @@ export default function OrgaEvenement({ loaderData, actionData }: Route.Componen
   const isDraft = event.status === "draft";
   const justPublished = search.get("publie") === "1";
   const serie = search.get("serie");
+  // Classement en direct (relecture du lot 57) : rechargé sur le canal des votes, au plus toutes les 10 s, et après une reconnexion.
+  useLiveRevalidate(prize && !prize.settled ? `event:${event.id}:votes` : null, (m) => m.type === "votes.changed");
 
   return (
     <>
