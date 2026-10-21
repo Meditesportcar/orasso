@@ -352,7 +352,7 @@ export const announcementsService = {
         eventId: e.id,
         eventStartsAt: e.startsAt,
         data: { eventId: e.id },
-        link: { label: "Ouvrir mes accès", path: "/app/acces" },
+        link: { label: "Ouvrir mes accès", path: "/app/sorties" },
       });
       after(() => notificationsService.kick());
       if (!entry) throw new Error("Consignes non enregistrées");

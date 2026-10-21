@@ -70,7 +70,7 @@ export function ReceivedInvitationCard({
       </details>
       {blocked && (
         <p className="s-notice">
-          {L.noEligibleVehicle} <a href="/app/garage/nouveau?retour=%2Fapp%2Facces">{L.addVehicle}</a>
+          {L.noEligibleVehicle} <a href="/app/garage/nouveau?retour=%2Fapp%2Fsorties">{L.addVehicle}</a>
         </p>
       )}
       <Form method="post" className="inv-card__actions">

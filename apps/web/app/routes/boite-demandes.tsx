@@ -186,7 +186,7 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
                     {invitationLabels.validUntil(formatDateTime(i.event.lockAt))}
                   </span>
                 </div>
-                <Button variant="secondary" icon="entry" href="/app/acces">
+                <Button variant="secondary" icon="entry" href="/app/sorties">
                   {invitationLabels.openAccess}
                 </Button>
               </li>
@@ -213,7 +213,7 @@ export default function Demandes({ loaderData, actionData }: Route.ComponentProp
                     {crewLabels.confirmBefore(formatDateTime(c.confirmBefore))}
                   </span>
                 </div>
-                <Button variant="secondary" icon="qr" href="/app/acces">
+                <Button variant="secondary" icon="qr" href="/app/sorties">
                   {crewLabels.confirmVenue}
                 </Button>
               </li>

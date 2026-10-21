@@ -5,7 +5,14 @@
 // puis rejoint sa page.
 
 import { Chip, ChipRow, EmptyState, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type PassportStamp, type PassportView, passportScreenTexts, passportTexts } from "@orasso/shared";
+import {
+  PAGE_BOX,
+  type PassportStamp,
+  type PassportView,
+  passportScreenTexts,
+  passportTexts,
+  stampPlacement,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -18,7 +25,6 @@ import {
   View,
 } from "react-native";
 import Svg, { Line } from "react-native-svg";
-
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
@@ -27,7 +33,6 @@ import { FlowScreen, TabScreen } from "@/ui/Screens";
 import { PassportLinks } from "./PassportLinks";
 import { Stamp } from "./Stamp";
 import { useStampedListener } from "./stampBus";
-import { PAGE_BOX, stampPlacement } from "./stampModel";
 
 const { space1, space2, space3 } = tokens.spacing;
 

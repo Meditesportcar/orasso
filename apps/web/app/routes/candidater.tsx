@@ -30,7 +30,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ["pending", "accepted", "waitlisted", "offered"].includes(a.status),
   );
   if (active.length && (event.days.length === 0 || active.some((a) => a.eventDayId === null))) {
-    throw redirect("/app/acces");
+    throw redirect("/app/sorties");
   }
   const [structure, vehicles] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
@@ -160,7 +160,7 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
     };
     const res = await apiFetch<MyApplication[]>(`/events/${event.id}/applications`, { method: "POST", json: body });
     if (res.ok) {
-      navigate("/app/acces?candidature=envoyee");
+      navigate("/app/sorties?candidature=envoyee");
       return;
     }
     setBusy(false);

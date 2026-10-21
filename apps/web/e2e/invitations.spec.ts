@@ -132,7 +132,7 @@ test("événement privé : invitations par pseudo et par e-mail, acceptation ave
   await addVehicleApi(eCookie, randomPlate());
   await pageE.reload();
   await pageE.getByTestId("invitation-accept").click();
-  await pageE.waitForURL(/\/app\/acces/);
+  await pageE.waitForURL(/\/app\/(acces|sorties)/);
   await expect(pageE.locator('[data-testid="application"][data-status="accepted"]')).toContainText(event.title);
 
   const list = await apiCall<{ status: string }[]>(organizer, "GET", `/events/${event.id}/invitations`);

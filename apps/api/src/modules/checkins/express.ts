@@ -35,6 +35,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
 import { accessService, passPayload } from "../access/service";
+import { announceCandidatesChanged } from "../audience-prize/service";
 import { daysRepo } from "../events/days";
 import { eventsRepo } from "../events/repo";
 import { passportService } from "../passport/service";
@@ -230,6 +231,7 @@ export const expressService = {
       // Lot 49 : tampon de participation, comme tout pointage.
       await passportService.stampCheckin(tx, { applicationId: app.id, eventId: event.id, at: t });
       after(() => realtime.publish(`event:${event.id}:access`, "access.changed", { applicationIds: [app.id] }));
+      after(() => announceCandidatesChanged(event.id));
       return { applicationId: app.id, pass };
     });
     return {

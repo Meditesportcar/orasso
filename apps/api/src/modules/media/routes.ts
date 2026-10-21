@@ -6,6 +6,7 @@ import {
   accreditationsQuerySchema,
   mediaContentCreateSchema,
   mediaContentFeatureSchema,
+  mediaContentsQuerySchema,
   mediaContentUpdateSchema,
   mediaLogoSchema,
   mediaProfileSchema,
@@ -65,6 +66,11 @@ export const mediaRoutes = new Hono<AppEnv>()
   .get("/media/:id", async (c) => {
     await requireUser(c);
     return c.json(await mediaService.getPublic(uuidParam(c, "id")));
+  })
+  .get("/media/:id/contents", async (c) => {
+    await requireUser(c);
+    c.header("cache-control", "no-store");
+    return c.json(await mediaService.publicForMedia(uuidParam(c, "id"), query(c, mediaContentsQuerySchema)));
   })
   // Agenda et événements gardés.
   .get("/me/media/agenda", async (c) => {

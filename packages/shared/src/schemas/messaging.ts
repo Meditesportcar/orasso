@@ -133,4 +133,4 @@ export type InboxRequestCounts = {
 /** Pastille de la Boîte : conversations qui ont du non lu, et demandes en attente par sorte. */
 export type InboxSummary = { unreadMessages: number; requests: InboxRequestCounts };
 
-export type UploadResult = { key: string; width: number; height: number };
+export type UploadResult = { id: string; key: string; width: number; height: number };

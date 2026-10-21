@@ -175,7 +175,7 @@ export default function Express({ loaderData, actionData }: Route.ComponentProps
       <div className="s-narrow s-stack">
         <h1 className="s-title">Lien déjà utilisé</h1>
         <p className="s-lead">Ce lien a déjà servi à créer un compte. Connecte-toi pour retrouver ton accès.</p>
-        <Button variant="primary" icon="entry" href="/connexion?retour=%2Fapp%2Facces" fullWidth>
+        <Button variant="primary" icon="entry" href="/connexion?retour=%2Fapp%2Fsorties" fullWidth>
           Se connecter
         </Button>
       </div>

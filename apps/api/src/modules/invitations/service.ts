@@ -337,8 +337,8 @@ async function createInTx(
       title: L.notifTitle,
       body: L.notifBody(s.name, e.title),
       eventId: e.id,
-      data: { eventId: e.id, invitationId: row.id, link: "/app/acces" },
-      link: { label: L.openAccess, path: "/app/acces" },
+      data: { eventId: e.id, invitationId: row.id, link: "/app/sorties" },
+      link: { label: L.openAccess, path: "/app/sorties" },
     });
   }
   const mails = rows.filter((r) => !r.userId && r.email);

@@ -35,9 +35,10 @@ import {
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { settingsStore } from "../../lib/settings";
+import { withTx } from "../../lib/tx";
 import { accountService } from "../account/service";
 import { applicationsService } from "../applications/service";
-import { audiencePrizeService } from "../audience-prize/service";
+import { announceCandidatesChanged, audiencePrizeService } from "../audience-prize/service";
 import { checkinsService } from "../checkins/service";
 import { scheduleEventJobs } from "../events/jobs";
 import { notificationsService } from "../notifications/service";
@@ -330,13 +331,46 @@ describe("passeport : contestation", () => {
     await pointsService.settleEvent(eventId);
     expect(await stampsOf(p.marc.u.id)).toHaveLength(0);
     const contest = await pointsService.contest(p.marc.v, p.marc.applicationId, "J'étais là, le QR ne passait pas.");
-    await pointsService.decide(orgaV, contest.id, { decision: "accept", note: null, checkin: true });
+    const ws = listen(`event:${eventId}:votes`);
+    try {
+      await pointsService.decide(orgaV, contest.id, { decision: "accept", note: null, checkin: true });
+      expect(ws.messages).toEqual([
+        { channel: `event:${eventId}:votes`, type: "votes.candidates.changed", payload: {} },
+      ]);
+    } finally {
+      ws.stop();
+    }
     // Les rares sont réévalués : c'est sa première sortie.
     expect((await stampsOf(p.marc.u.id)).map((s) => s.kind).sort()).toEqual(["first_outing", "participation"]);
   });
 });
 
 describe("prix du public", () => {
+  it("invalide les candidats au pointage sans vote, puis après retrait d'une entrée, sans divulguer le classement", async () => {
+    const channel = `event:${eventId}:votes`;
+    expect(await realtime.canSubscribe(julie.id, channel)).toBe(true);
+    const ws = listen(channel);
+    try {
+      await checkin(p.kenji, paris(10, 17, 19, 2));
+      expect(ws.messages).toEqual([{ type: "votes.candidates.changed", channel, payload: {} }]);
+      await checkin(p.lea, paris(10, 17, 19, 10));
+      expect(ws.messages).toHaveLength(2);
+      expect((await call(julie, "GET", `/events/${eventId}/audience-prize/candidates`)).json.items).toHaveLength(2);
+      await checkin(p.lea, paris(10, 17, 19, 11));
+      expect(ws.messages).toHaveLength(2); // Pointage idempotent : aucun changement de liste.
+      // Aucun parcours d'annulation API aujourd'hui : contrat réutilisable après une suppression validée.
+      await withTx(async (tx, after) => {
+        await tx.delete(checkins).where(eq(checkins.applicationId, p.lea.applicationId));
+        after(() => announceCandidatesChanged(eventId));
+      });
+      expect(ws.messages).toHaveLength(3);
+      expect(ws.messages.at(-1)).toMatchObject({ type: "votes.candidates.changed", payload: {} });
+      expect((await call(julie, "GET", `/events/${eventId}/audience-prize/candidates`)).json.items).toHaveLength(1);
+    } finally {
+      ws.stop();
+    }
+  });
+
   it("qui peut voter : pointé, billet, staff présent ; une voix modifiable ; pas pour soi ; fenêtre", async () => {
     clock.set(paris(10, 17, 18, 30));
     await staffService.setPresence(julieV, eventId, true);

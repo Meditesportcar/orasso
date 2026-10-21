@@ -115,7 +115,6 @@ export function ProviderTriage({
         {FILTERS.map((f) => (
           <Chip
             key={f.id}
-            surface="plate"
             selected={status === f.id}
             variant={status === f.id ? "accent" : "default"}
             onClick={() => setStatus(f.id)}

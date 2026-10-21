@@ -58,7 +58,7 @@ export default function ProLayout({ loaderData }: Route.ComponentProps) {
             Ma fiche publique
           </a>
           <div className="orga__spacer" />
-          <a className="orga__link" href="/app/acces">
+          <a className="orga__link" href="/app/sorties">
             Mon compte · {pseudo}
           </a>
           <Form method="post" action="/deconnexion">

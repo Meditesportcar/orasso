@@ -124,7 +124,7 @@ async function labelOf(app: ApplicationRow, tx: Tx): Promise<string> {
 }
 
 const eventLink = (e: EventRow) => ({ label: "Voir l'événement", path: `/e/${e.slug}` });
-const accessLinkDefault = { label: "Ouvrir mes accès", path: "/app/acces" };
+const accessLinkDefault = { label: "Ouvrir mes accès", path: "/app/sorties" };
 const accessLink = accessLinkDefault;
 
 /** Rang affiché dans la liste d'attente (1 = prochain servi). */

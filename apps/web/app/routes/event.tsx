@@ -49,7 +49,7 @@ import { EventFeed } from "../components/EventFeed";
 import { EventMap } from "../components/EventMap";
 import { PosterFace } from "../components/EventTile";
 import { ContactOrganizer } from "../components/Messaging";
-import { PhotoGallery } from "../components/PhotoGallery";
+import { EventPhotoGallery } from "../components/EventPhotoGallery";
 import { ReportDialog } from "../components/ReportDialog";
 import { ShareButtons } from "../components/ShareButtons";
 import { Stars } from "../components/Stars";
@@ -346,11 +346,11 @@ function PrivateEvent({ connected }: { connected: boolean }) {
         <h1 className="s-title s-title--xl">{invitationLabels.privateEvent}</h1>
         <p className="s-muted">{invitationLabels.privateEventHint}</p>
         {connected ? (
-          <Button variant="primary" icon="entry" href="/app/acces">
+          <Button variant="primary" icon="entry" href="/app/sorties">
             {invitationLabels.openAccess}
           </Button>
         ) : (
-          <Button variant="primary" icon="profile" href="/connexion?retour=%2Fapp%2Facces">
+          <Button variant="primary" icon="profile" href="/connexion?retour=%2Fapp%2Fsorties">
             {invitationLabels.linkSignIn}
           </Button>
         )}
@@ -598,7 +598,7 @@ function EventPage({
                         Voir le contenu
                       </a>
                     )}
-                    {c.photos.length > 0 && <PhotoGallery contentId={c.id} title={c.title} photos={c.photos} />}
+                    {c.photos.length > 0 && <EventPhotoGallery contentId={c.id} title={c.title} photos={c.photos} />}
                   </span>
                 </li>
               ))}
@@ -696,7 +696,7 @@ function EventPage({
                   </div>
                 );
               })}
-              <Button variant="primary" icon="qr" href="/app/acces" fullWidth>
+              <Button variant="primary" icon="qr" href="/app/sorties" fullWidth>
                 Voir mon accès
               </Button>
               {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
@@ -732,7 +732,7 @@ function EventPage({
           ) : event.admission === "invite_only" ? (
             <div className="s-stack s-stack--tight" data-testid="invite-only">
               <p className="o-t-caption s-muted">{invitationLabels.invitationRequired}</p>
-              <Button variant="primary" icon="entry" href="/app/acces" fullWidth>
+              <Button variant="primary" icon="entry" href="/app/sorties" fullWidth>
                 {invitationLabels.openAccess}
               </Button>
             </div>

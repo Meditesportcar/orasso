@@ -199,7 +199,7 @@ async function notifyAccepted(
         eventId: e.id,
         eventStartsAt: e.startsAt,
         data: scope.dayId ? { eventId: e.id, dayId: scope.dayId } : { eventId: e.id },
-        link: { label: "Ouvrir mes accès", path: "/app/acces" },
+        link: { label: "Ouvrir mes accès", path: "/app/sorties" },
       });
     }
     after(() => notificationsService.kick());

@@ -41,7 +41,11 @@ import {
   profiles,
   scanEvents,
 } from "../../db/schema";
+<<<<<<< HEAD
 import { mail } from "../../lib/mail";
+=======
+import { realtime } from "../../lib/realtime";
+>>>>>>> lot-57-site-parite-v2
 import type { Viewer } from "../../lib/session";
 import { ed25519Verify } from "../../lib/signing";
 import { applicationsService } from "../applications/service";
@@ -451,6 +455,7 @@ describe("synchronisation du staff", () => {
       where: and(eq(notifications.type, "staff_sync_reminder"), eq(notifications.eventId, eventId)),
     });
     expect(reminders.map((n) => n.userId)).toEqual([julie.id]); // Théo a dit « pas là »
+    expect(reminders[0]?.data).toMatchObject({ link: "/app/sorties?vue=staff" });
   });
 
   it("rôles ajustés pour l'événement par l'équipe organisatrice", async () => {
@@ -516,7 +521,16 @@ describe("inscription express", () => {
     expect(
       (await call(null, "POST", `/express/${token}`, { ...body, password: "court-123", termsAccepted: true })).status,
     ).toBe(400);
-    const res = await call(null, "POST", `/express/${token}`, { ...body, termsAccepted: true });
+    const messages: unknown[] = [];
+    const socket = { send: (data: string) => messages.push(JSON.parse(data)) };
+    realtime.subscribe(`event:${eventId}:votes`, socket);
+    let res: Awaited<ReturnType<typeof call>>;
+    try {
+      res = await call(null, "POST", `/express/${token}`, { ...body, termsAccepted: true });
+    } finally {
+      realtime.unsubscribeAll(socket);
+    }
+    expect(messages).toEqual([{ channel: `event:${eventId}:votes`, type: "votes.candidates.changed", payload: {} }]);
     expect(res.status).toBe(201);
     expect(res.json.passPayload).toMatch(/^OR1/);
     const entry = await db.query.checkins.findFirst({ where: eq(checkins.applicationId, res.json.applicationId) });

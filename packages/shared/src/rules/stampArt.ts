@@ -1,20 +1,17 @@
 // Dessin d'un tampon du passeport (lot 50, prototype DA v2 `stampSvg`) : la forme, le texte, l'usure. Aucune dépendance
 // native : tout est calculé ici, de façon déterministe, pour que le même tampon se redessine toujours à l'identique
-// (même `seed`, même tampon : sur la page, dans le récap, après un rechargement).
+// (même `seed`, même tampon : sur la page, dans le récap, après un rechargement). Lot 57 : déplacé de l'appli
+// (`features/passport/stampModel.ts`) vers `shared`, pour que le site dessine exactement le même tampon.
 //   forme     : rond (rassemblement), rectangle (expo, salon, portes ouvertes), octogone (nocturne, avec sa lune),
 //               tasse (cars & coffee), étoile à 24 pointes (rare) ;
 //   encre     : jeton `stamp-ink-<département>` ou `stamp-ink-default` ; les rares en dorure (dégradé or) ;
 //   usure     : angle −14° à +14°, pression (opacité de 70 à 100 %), bavure (copie de l'encre un peu plus large et
 //               décalée), éclats de papier (points de la couleur de la page, d'autant plus nombreux que la pression est
 //               faible). React Native n'a pas `feTurbulence` : pas de filtre, mêmes effets par des formes.
-import {
-  type PassportStamp,
-  type StampInk,
-  type StampShape,
-  stampKindLabels,
-  stampWear,
-  wallTime,
-} from "@orasso/shared";
+import { stampKindLabels } from "../labels/passport.fr";
+import type { PassportStamp } from "../schemas/passport";
+import { type StampInk, type StampShape, stampWear } from "./stamps";
+import { wallTime } from "./time";
 
 /** Dorure des rares : dégradé or (écart 6 du README du système de design, couleurs du prototype). */
 export const STAMP_GOLD = { from: "#b8860b", mid: "#f1d27a", to: "#9a6d06" } as const;

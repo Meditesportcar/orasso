@@ -54,6 +54,7 @@ const overview: AdminOverview = {
   sanctionsContested: 1,
   assistanceOpen: 1,
   newslettersScheduled: 0,
+  mediaToVerify: 0,
 };
 
 describe("rôles et casquette Administration", () => {

@@ -30,6 +30,7 @@ export * from "./labels/moderation.fr";
 export * from "./labels/notifications.fr";
 export * from "./labels/orga.fr";
 export * from "./labels/orga-manage.fr";
+export * from "./labels/orga-site-v2.fr";
 export * from "./labels/orga-v2.fr";
 export * from "./labels/parity.fr";
 export * from "./labels/passport.fr";

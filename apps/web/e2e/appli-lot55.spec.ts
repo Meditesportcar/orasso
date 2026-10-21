@@ -1,8 +1,9 @@
-import { mkdirSync } from "node:fs";
+﻿import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { MOBILE, SEED_PASSWORD } from "./helpers";
 import { auditApp } from "./helpers/lot43";
 import { sql } from "./helpers/lot48";
+import { checkerPhoto } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
 // Lot 55, côté appli (version web de recette) : la casquette Média. Léo (Sud Cars) a trois onglets remplis : Explorer
@@ -315,6 +316,48 @@ for (const theme of THEMES) {
     await page.getByTestId("media-edit-save").click();
     await expect(page.getByText(new RegExp(`Nocturne, le reportage ${theme}`))).toBeVisible({ timeout: 30_000 });
     await shot(page, "contenus-apres", theme);
+
+    // Relecture du lot 57 (D28) : le floutage des plaques est proposé à chaque photo d'une galerie (cadre posé à la main
+    // ici, proposé par l'appareil sur le téléphone), jamais imposé : « Envoyer sans flouter » passe.
+    // Les champs de chaque envoi, relevés dans le navigateur (le corps multipart n'est pas lisible depuis Playwright).
+    await page.evaluate(() => {
+      const w = window as unknown as { __uploads: string[][] };
+      w.__uploads = [];
+      const original = window.fetch;
+      window.fetch = (input, init) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes("/api/me/uploads") && init?.body instanceof FormData) w.__uploads.push([...init.body.keys()]);
+        return original(input, init);
+      };
+    });
+    await page.getByTestId("media-add").click();
+    const sheet = page.getByLabel("Ajouter un contenu");
+    await sheet.getByText("Nocturne de Canet", { exact: true }).click();
+    await page.getByLabel("Titre").fill(`Galerie de la nuit ${theme}`);
+    await sheet.getByText("Galerie", { exact: true }).click();
+    for (const [i, name] of ["nocturne-1.png", "nocturne-2.png"].entries()) {
+      const chooser = page.waitForEvent("filechooser");
+      await page.getByTestId("media-pick").click();
+      await (await chooser).setFiles({ name, mimeType: "image/png", buffer: checkerPhoto() });
+      await expect(page.getByTestId("media-blur-editor")).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText("Flouter les plaques ?", { exact: true })).toBeVisible();
+      if (i === 0) {
+        await expect(page.getByTestId("media-blur-confirm")).toBeDisabled();
+        await page.getByTestId("media-blur-add").click();
+        await shot(page, "contenus-floutage", theme);
+        await page.getByTestId("media-blur-confirm").click();
+      } else {
+        await page.getByTestId("media-blur-plain").click();
+      }
+    }
+    await expect(page.getByTestId("media-blur-editor")).toHaveCount(0);
+    await expect(page.getByText(/2 sur 30/)).toBeVisible();
+    await page.getByTestId("media-publish").click();
+    await expect(page.getByText(new RegExp(`Galerie · Galerie de la nuit ${theme}`))).toBeVisible({ timeout: 60_000 });
+    const uploads = await page.evaluate(() => (window as unknown as { __uploads: string[][] }).__uploads);
+    expect(uploads).toHaveLength(2);
+    expect(uploads[0]).toContain("plateRects");
+    expect(uploads[1]).not.toContain("plateRects");
 
     // --- Profil : la ligne de la casquette ----------------------------------------------------------------------------------
     await tab(page, "Profil");

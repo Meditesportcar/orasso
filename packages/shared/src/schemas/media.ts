@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import type { ApplicationStatus } from "../application";
 import { departmentSchema, type EventFormat } from "../enums";
-import { isoDate, optionalText } from "./common";
+import { isoDate, optionalText, pageQuery } from "./common";
 
 /** Adresse web : http ou https seulement (jamais javascript:, data:…). */
 const httpUrl = z.url().refine((u) => /^https?:\/\//i.test(u), "Adresse en http ou https");
@@ -114,6 +114,10 @@ export const mediaContentUpdateSchema = z.object({
 export type MediaContentUpdate = z.infer<typeof mediaContentUpdateSchema>;
 
 export const mediaContentFeatureSchema = z.object({ featured: z.boolean() });
+
+/** `GET /media/:id/contents` : pagination stable par identifiant décroissant. */
+export const mediaContentsQuerySchema = pageQuery.extend({ cursor: z.uuid().optional() });
+export type MediaContentsQuery = z.infer<typeof mediaContentsQuerySchema>;
 
 // --- Vues -------------------------------------------------------------------------------------------------------------
 
