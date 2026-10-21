@@ -56,11 +56,11 @@ export function ProsSegment({
         </Chip>
       </ChipRow>
       <View style={styles.sortline}>
-        <Text variant="meta" color={t.color.inkMuted} style={styles.sortText}>
+        <Text variant="caption" color={t.color.inkMuted} style={styles.sortText}>
           {line}
         </Text>
         {list.items ? (
-          <Text variant="meta" color={t.color.inkMuted}>
+          <Text variant="caption" color={t.color.inkMuted}>
             {L.results(items.length, list.hasMore)}
           </Text>
         ) : null}
