@@ -107,7 +107,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     next && next.status === "accepted" && !next.checkedInAt && dayCountdown(next.event.startsAt, now) === "Aujourd'hui"
       ? { key: next.id, href: `/jour-j/${next.id}` }
       : ticket && dayCountdown(ticket.event.startsAt, now) === "Aujourd'hui"
-        ? { key: ticket.id, href: "/billets" }
+        ? { key: ticket.id, href: `/billet/${ticket.id}` }
         : null;
   const todayKey = todayTarget ? `jourj-auto:${todayTarget.key}:${now.toISOString().slice(0, 10)}` : null;
   const todayHref = todayTarget?.href ?? null;
@@ -194,7 +194,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
             : homeProfileLabels.publicOpening(formatHour(ticket.event.startsAt)),
         },
       ]}
-      action={{ label: homeProfileLabels.myTicket, icon: "qr", onPress: () => router.push("/billets") }}
+      action={{ label: homeProfileLabels.myTicket, icon: "qr", onPress: () => router.push(`/billet/${ticket.id}`) }}
       destination={{
         lat: ticket.location?.lat ?? null,
         lng: ticket.location?.lng ?? null,

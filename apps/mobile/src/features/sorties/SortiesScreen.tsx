@@ -309,7 +309,7 @@ export function SortiesScreen() {
               now={now}
               primary={!offerId && !firstAccepted && i === 0}
               onOpen={() => router.push(`/e/${x.event.slug}`)}
-              onShow={() => router.push("/billets")}
+              onShow={() => router.push(`/billet/${x.id}`)}
               onGiveBack={() => setGiving(x)}
               onVote={() => router.push(`/vote/${x.event.id}?titre=${encodeURIComponent(x.event.title)}`)}
             />

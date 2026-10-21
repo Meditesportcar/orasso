@@ -173,6 +173,11 @@ test("Sorties : un billet gratuit (visiteur) se montre et se rend ; vide = le O 
     // Pas de segment Staff pour un visiteur.
     await expect(page.getByTestId("sorties-segments").getByText(/^Staff/)).toHaveCount(0);
     await shot(page, `sorties-visiteur-${theme}`);
+    // Lot C2a : « Mon billet » ouvre la variante visiteur de `s-qr` (Entrée · Public), plus la liste `/billets`.
+    await page.getByTestId("my-tickets").first().click();
+    await expect(page).toHaveURL(/\/billet\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+    await expect(page.getByTestId("qr-holder-value")).toHaveText("Public", { timeout: 30_000 });
+    await shot(page, `billet-visiteur-${theme}`);
     await ctx.close();
   }
   // Un compte neuf : rien de prévu, l'état vide du O vivant et un seul bouton principal.

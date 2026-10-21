@@ -13,10 +13,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 
-import { CrewSearch } from "@/features/crews/CrewSearch";
 import { EventsSegment } from "@/features/explorer/EventsSegment";
+import { PeopleSheetBody } from "@/features/explorer/PeopleSheet";
 import { ProsSegment } from "@/features/explorer/ProsSegment";
-import { PeopleSearch } from "@/features/social/PeopleSearch";
 import { SmallButton } from "@/features/sorties/bits";
 import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
@@ -75,11 +74,7 @@ export function ExplorerScreen() {
       overlays={
         <AppSheet visible={people} onClose={() => setPeople(false)} accessibilityLabel={explorerLabels.segmentPeople}>
           <SheetHead title={explorerLabels.segmentPeople} onClose={() => setPeople(false)} />
-          <PeopleSearch
-            key={`s|${q}`}
-            initialQ={q}
-            renderCrews={(criteria) => <CrewSearch q={criteria.q} department={criteria.department} />}
-          />
+          <PeopleSheetBody key={`s|${q}`} initialQ={q} />
         </AppSheet>
       }
     >

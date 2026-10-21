@@ -124,4 +124,9 @@ export type ExplorerMapProps = {
    * n'y montre que lui et le toucher ne fait rien (lot 59c, tour 2).
    */
   reveal?: boolean;
+  /**
+   * Lot C2a : carte plein écran (`s-map`, `/carte`) : la carte prend toute la place, sans cadre ; `children` se pose
+   * par-dessus, en bas (l'aperçu flottant).
+   */
+  fill?: boolean;
 };
