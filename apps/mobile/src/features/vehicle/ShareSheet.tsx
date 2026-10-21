@@ -2,8 +2,11 @@
 // rendue par l'API avec les zones sûres d'Instagram (rien d'important dans les 14 % du haut ni les 20 % du bas), un
 // aperçu, le bouton « Voir les zones masquées par Instagram » qui recouvre ces bandes, « En story » (feuille de partage
 // du système, avec le PNG) et « Image » (publication 1:1). Jamais la plaque.
+// Lot C2b : l'artefact en fait un écran de flux (`/vehicule/<id>/partager`, ouvert depuis le Garage) ; le contenu
+// (`ShareBody`) est commun à l'écran et à la feuille qui reste en fin d'ajout de véhicule. Segments `.seg`, aperçu
+// `.story` 300 px rayon 18, bouton fantôme pour les zones masquées, « En story » moutarde + « Image » bordé.
 
-import { Button, Chip, ChipRow, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   shareSheetLabels as L,
   SHARE_SAFE,
@@ -14,7 +17,7 @@ import {
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
-
+import { Seg, SmButton } from "@/features/passionne/kit";
 import { errorMessage } from "@/lib/http";
 import {
   type PreparedShare,
@@ -28,8 +31,8 @@ import { shareSheetKey } from "./shareSheetKey";
 
 const { space1, space2 } = tokens.spacing;
 
-/** Largeur de l'aperçu (hauteur : 16/9 de plus). */
-const PREVIEW_WIDTH = 220;
+/** Largeur de l'aperçu (`.story` : min(100 %, 300 px) ; hauteur : 16/9 de plus). */
+const PREVIEW_WIDTH = 300;
 
 /**
  * La feuille repart de zéro quand le véhicule ou sa version change (relecture du lot 50) : après le floutage d'une
@@ -42,20 +45,28 @@ export function ShareSheet(props: {
   visible: boolean;
   onClose: () => void;
 }) {
-  return <ShareSheetBody key={shareSheetKey(props.vehicleId, props.version)} {...props} />;
+  return (
+    <AppSheet visible={props.visible} onClose={props.onClose} accessibilityLabel={L.title}>
+      <ShareBody key={shareSheetKey(props.vehicleId, props.version)} {...props} sheet />
+    </AppSheet>
+  );
 }
 
-function ShareSheetBody({
+/** Le contenu de la carte à partager (écran de flux ou feuille). `visible` : l'aperçu se prépare seulement à l'écran. */
+export function ShareBody({
   vehicleId,
   version,
   visible,
   onClose,
+  sheet,
 }: {
   vehicleId: string;
   /** `VehicleFull.shareVersion`. */
   version: string;
   visible: boolean;
   onClose: () => void;
+  /** Dans la feuille : titre et bouton Fermer (l'écran de flux a les siens dans sa barre). */
+  sheet?: boolean;
 }) {
   const { t } = useTheme();
   const [style, setStyle] = useState<ShareStyle>("night");
@@ -111,26 +122,30 @@ function ShareSheetBody({
 
   const height = Math.round((PREVIEW_WIDTH * 16) / 9);
   return (
-    <AppSheet visible={visible} onClose={onClose} accessibilityLabel={L.title}>
-      <Text variant="title" color={t.color.ink}>
-        {L.title}
-      </Text>
-      <Text variant="body" color={t.color.inkMuted}>
-        {L.subtitle}. {L.help}
-      </Text>
-      <View testID="share-styles">
-        <ChipRow accessibilityRole="radiogroup" accessibilityLabel={L.title}>
-          {shareStyles.map((s) => (
-            <Chip accessibilityRole="radio" key={s} selected={s === style} onPress={() => setStyle(s)}>
-              {shareStyleLabels[s]}
-            </Chip>
-          ))}
-        </ChipRow>
-      </View>
+    <View style={styles.body}>
+      {sheet ? (
+        <View>
+          <Text variant="posterM" color={t.color.ink}>
+            {L.title}
+          </Text>
+          <Text variant="caption" color={t.color.inkMuted}>
+            {L.subtitle}
+          </Text>
+        </View>
+      ) : null}
+      <Seg
+        testID="share-styles"
+        options={shareStyles.map((s) => ({ value: s, label: shareStyleLabels[s] }))}
+        value={style}
+        onChange={setStyle}
+      />
 
       <View
         testID="share-preview"
-        style={[styles.preview, { width: PREVIEW_WIDTH, height, backgroundColor: t.color.surfaceSunken }]}
+        style={[
+          styles.preview,
+          { width: PREVIEW_WIDTH, height, backgroundColor: t.color.night, boxShadow: t.shadow.shadowPoster },
+        ]}
       >
         {story ? (
           <Image
@@ -172,34 +187,38 @@ function ShareSheetBody({
         ) : null}
       </View>
 
-      <Button variant="plate" icon="eye" onPress={() => setShowSafe((s) => !s)} fullWidth testID="share-safe-toggle">
+      <SmButton
+        kind="g"
+        icon="eye"
+        onPress={() => setShowSafe((s) => !s)}
+        style={styles.safeToggle}
+        testID="share-safe-toggle"
+      >
         {showSafe ? L.hideSafe : L.showSafe}
-      </Button>
+      </SmButton>
       <View style={styles.row}>
-        <View style={styles.grow}>
-          <Button
-            variant="primary"
-            icon="share"
-            loading={busy === "story"}
-            disabled={!story || (busy !== null && busy !== "story")}
-            onPress={() => void send("story")}
-            fullWidth
-            testID="share-story"
-          >
-            {L.story}
-          </Button>
-        </View>
-        <Button
-          variant="secondary"
+        <SmButton
+          kind="p"
+          big
+          icon="share"
+          disabled={!story || busy !== null}
+          onPress={() => void send("story")}
+          style={styles.grow}
+          testID="share-story"
+        >
+          {busy === "story" ? L.loading : L.story}
+        </SmButton>
+        <SmButton
+          kind="s"
+          big
           icon="gallery"
-          loading={busy === "post"}
-          disabled={busy !== null && busy !== "post"}
+          disabled={busy !== null}
           onPress={() => void send("post")}
           accessibilityLabel={`${L.image} · ${shareFormatLabels.post}`}
           testID="share-post"
         >
           {L.image}
-        </Button>
+        </SmButton>
       </View>
       {outcome === "saved" ? (
         <Text variant="caption" color={t.color.inkMuted}>
@@ -216,15 +235,19 @@ function ShareSheetBody({
           {error}
         </Text>
       ) : null}
-      <Button variant="plate" icon="back" onPress={onClose} fullWidth>
-        Fermer
-      </Button>
-    </AppSheet>
+      {sheet ? (
+        <Button variant="plate" icon="back" onPress={onClose} fullWidth>
+          Fermer
+        </Button>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  preview: { alignSelf: "center", borderRadius: 14, overflow: "hidden" },
+  body: { gap: space2 + 6 },
+  preview: { alignSelf: "center", maxWidth: "100%", borderRadius: 18, overflow: "hidden" },
+  safeToggle: { alignSelf: "center" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: space1 },
   band: {
     position: "absolute",
@@ -237,6 +260,6 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     gap: space2,
   },
-  row: { flexDirection: "row", gap: space2 },
-  grow: { flex: 1 },
+  row: { flexDirection: "row", gap: space2 + 2 },
+  grow: { flex: 1, alignSelf: "stretch" },
 });
