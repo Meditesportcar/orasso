@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import pg from "pg";
 import { apiCall, login, SEED_PASSWORD, SIGNUP_EXTRAS } from "./helpers";
 import { RELAIS } from "./relais";
 
@@ -157,6 +158,15 @@ test("casquette Organisateur : Direct en direct, Événements, Boîte, Staff", a
   // --- Staff : relance d'un membre sans réponse, puis mode staff ------------------------------------------------
   // Lot 40 : la Boîte est hors de la barre d'onglets ; ✕ ramène aux onglets.
   await page.getByRole("button", { name: "Fermer" }).first().click();
+  // Les recettes de l'horloge (avancée puis remise à zéro) laissent des relances datées dans le futur : sans correction,
+  // aucun bouton « Relancer » (une relance de moins d'une heure est refusée). On les ramène à la veille.
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  await db.query(
+    "UPDATE event_staff SET last_reminded_at = now() - interval '1 day' WHERE event_id = $1 AND last_reminded_at > now()",
+    [nocturne?.id],
+  );
+  await db.end();
   await tab(page, "Équipe").click();
   await pickOption(page, "Événement", /Nocturne de Canet/);
   // Lot 52 : l'équipe en bulles ; un toucher ouvre la feuille du membre, qui propose « Relancer » (sans réponse, pas le jour J).
