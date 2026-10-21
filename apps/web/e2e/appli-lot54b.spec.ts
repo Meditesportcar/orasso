@@ -83,7 +83,9 @@ async function expectSegment(page: Page, name: string | RegExp, selected: boolea
   expect(box?.height ?? 0, `segment ${name} : au moins le jeton touch (48 px)`).toBeGreaterThanOrEqual(47.5);
 }
 
-test("Caches de lecture : un autre compte sur le même appareil ne lit jamais ceux du précédent", async ({ browser }) => {
+test("Caches de lecture : un autre compte sur le même appareil ne lit jamais ceux du précédent", async ({
+  browser,
+}) => {
   test.setTimeout(300_000);
   const { ctx, page } = await open(browser, "beton");
 
@@ -151,9 +153,10 @@ for (const theme of THEMES) {
     await page.getByRole("tab", { name: "Modifier ma fiche" }).click();
     await expect(page.getByTestId("pro-activities")).toBeVisible({ timeout: 20_000 });
     await expectSegment(page, "Modifier ma fiche", true);
-    const labels = await page.getByTestId("pro-activities").getByRole("checkbox").evaluateAll((els) =>
-      els.map((e) => e.getAttribute("aria-label") ?? ""),
-    );
+    const labels = await page
+      .getByTestId("pro-activities")
+      .getByRole("checkbox")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""));
     const label = labels.find((l) => l && !before.includes(l)) ?? "";
     expect(label).not.toBe("");
     await page.getByTestId("pro-activities").getByRole("checkbox", { name: label }).click();
@@ -189,11 +192,13 @@ for (const theme of THEMES) {
     const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
     // Trois photos de teintes différentes (le seed n'en a pas), ajoutées comme le fait le formulaire.
     const missing = Math.max(0, 3 - (profile.data.profile.photos?.length ?? 0));
-    for (const rgb of ([
-      [138, 74, 42],
-      [60, 90, 140],
-      [200, 160, 40],
-    ] as [number, number, number][]).slice(0, missing)) {
+    for (const rgb of (
+      [
+        [138, 74, 42],
+        [60, 90, 140],
+        [200, 160, 40],
+      ] as [number, number, number][]
+    ).slice(0, missing)) {
       const form = new FormData();
       form.set("photo", new Blob([new Uint8Array(samplePhoto(rgb))], { type: "image/png" }), "photo.png");
       const res = await fetch(`${API}/api/me/provider-profile/photos`, {

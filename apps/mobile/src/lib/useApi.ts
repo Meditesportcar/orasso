@@ -45,7 +45,7 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
   // Le cache est rangé sous le compte connecté (`kv.ts`) : un autre compte ne le lit jamais.
   const account = cacheScope();
   useEffect(() => {
-    if (!cacheKey) return;
+    if (!cacheKey || !account) return;
     let cancelled = false;
     cacheGetJson<T>(cacheKey).then((cached) => {
       if (!cancelled && cached) setData((current) => current ?? cached);

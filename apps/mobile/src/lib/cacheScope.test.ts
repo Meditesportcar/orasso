@@ -11,16 +11,7 @@ vi.mock("expo-secure-store", () => ({
   deleteItemAsync: async (key: string) => void store.delete(key),
 }));
 
-import {
-  bindCacheScope,
-  cacheGetJson,
-  cacheScope,
-  cacheSetJson,
-  kvGetJson,
-  kvKey,
-  kvSetJson,
-  purgeCaches,
-} from "./kv";
+import { bindCacheScope, cacheGetJson, cacheScope, cacheSetJson, kvGetJson, kvKey, kvSetJson, purgeCaches } from "./kv";
 
 const cacheKeysInStore = () => [...store.keys()].filter((k) => k.startsWith(kvKey("cache")));
 
