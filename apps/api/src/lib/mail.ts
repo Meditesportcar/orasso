@@ -9,7 +9,7 @@ import { db } from "../db/client";
 import { emailOutbox } from "../db/schema";
 import { env } from "../env";
 import { now } from "./deps";
-import { paragraphsHtml, renderShell, renderShellText } from "./mail-template";
+import { type MailFooter, paragraphsHtml, renderShell, renderShellText } from "./mail-template";
 import { dataDir } from "./storage";
 
 /**
@@ -32,15 +32,16 @@ export function renderMail(
   title: string,
   paragraphs: string[],
   link?: { label: string; url: string },
-  options: { code?: string } = {},
+  options: { code?: string; footer?: MailFooter } = {},
 ): MailContent {
   const html = renderShell({
     title,
     bodyHtml: paragraphsHtml(paragraphs),
     button: link,
     code: options.code,
+    footer: options.footer,
   });
-  const text = renderShellText({ title, paragraphs, button: link, code: options.code });
+  const text = renderShellText({ title, paragraphs, button: link, code: options.code, footer: options.footer });
   return { subject: title, html, text };
 }
 

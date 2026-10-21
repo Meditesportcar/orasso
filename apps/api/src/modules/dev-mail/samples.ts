@@ -55,17 +55,6 @@ export function mailSamples(): MailSample[] {
       true,
     ],
     [
-      "backup_code",
-      "Avec un code de secours",
-      renderMail(
-        "Ton code de secours",
-        ["Garde ce code : il remplace ton second facteur une seule fois."],
-        { label: "Ouvrir la sécurité de mon compte", url: url("/app/securite") },
-        { code: "K7Q2-M9XD" },
-      ),
-      true,
-    ],
-    [
       "newsletter",
       "Newsletter",
       newsletterMail("Les rassos de novembre", "Du **nouveau** ce mois-ci : la carte, les affiches, le passeport.", {

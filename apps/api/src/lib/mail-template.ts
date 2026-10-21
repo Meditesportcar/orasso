@@ -3,16 +3,16 @@
 // Link, il ouvre l'appli si elle est installée, lot 36), le code de secours en grand quand il y en a un, un pied sobre.
 // Tout est en tables et en styles en ligne (les clients de messagerie ignorent les feuilles de style). Les couleurs sont
 // celles des jetons Béton (`docs/design-system/tokens.json`) : un e-mail n'a pas de variables CSS.
-import { mailLabels } from "@orasso/shared";
+import { mailLabels, newsletterTexts } from "@orasso/shared";
 
 import { env } from "../env";
 
 const NIGHT = "#0b0c0e";
 const GROUND = "#131417";
 const PAPER = "#f3ebdd";
-const INK = "#131417";
+export const INK = "#131417";
 const MUTED = "#5b554b";
-const MUSTARD = "#e9b824";
+export const MUSTARD = "#e9b824";
 const FONT = "Archivo,'Segoe UI',Helvetica,Arial,sans-serif";
 const FONT_NARROW = "'Archivo Narrow',Archivo,'Arial Narrow',Arial,sans-serif";
 
@@ -21,6 +21,17 @@ export const escapeHtml = (s: string) =>
 
 /** Adresse de l'image d'en-tête : servie par le site (`apps/web/public/mail/affiche-nuit.jpg`). */
 export const mailBannerUrl = () => `${env.PUBLIC_URL}/mail/affiche-nuit.jpg`;
+
+/** Pied du message : selon à qui part l'envoi (titulaire d'un compte, personne invitée sans compte, compte supprimé). */
+export type MailFooter = "account" | "invitation" | "deleted" | "newsletter";
+
+const footerTexts: Record<MailFooter, string> = {
+  account: mailLabels.footer,
+  invitation: mailLabels.footerInvitation,
+  deleted: mailLabels.footerDeleted,
+  newsletter: newsletterTexts.footer,
+};
+const footerText = (footer: MailFooter = "account") => footerTexts[footer];
 
 export type MailShell = {
   title: string;
@@ -31,6 +42,8 @@ export type MailShell = {
   code?: string;
   /** Pied supplémentaire déjà échappé (désinscription de la newsletter). */
   footerHtml?: string;
+  /** Pied d'identification du destinataire (défaut : titulaire d'un compte). */
+  footer?: MailFooter;
 };
 
 /** Le bouton moutarde : un lien en forme de bouton, avec un fond de repli pour Outlook. */
@@ -56,7 +69,7 @@ function codeHtml(code: string): string {
 }
 
 /** La page complète d'un e-mail. */
-export function renderShell({ title, bodyHtml, button, code, footerHtml }: MailShell): string {
+export function renderShell({ title, bodyHtml, button, code, footerHtml, footer }: MailShell): string {
   const fallback = button
     ? `<p style="margin:12px 0 0;font-family:${FONT};font-size:12px;line-height:1.5;color:${MUTED}">${escapeHtml(mailLabels.fallback)}<br>` +
       `<a href="${escapeHtml(button.url)}" style="color:${MUTED};word-break:break-all">${escapeHtml(button.url)}</a></p>`
@@ -80,7 +93,7 @@ export function renderShell({ title, bodyHtml, button, code, footerHtml }: MailS
     `</td></tr>`,
     `<tr><td style="background:${GROUND};border-radius:0 0 10px 10px;padding:20px 32px;font-family:${FONT};font-size:12px;line-height:1.6;color:#a39d91">`,
     `<strong style="color:${PAPER}">Orasso</strong> &middot; ${escapeHtml(mailLabels.tagline)}<br>`,
-    `${escapeHtml(mailLabels.footer)} ${escapeHtml(mailLabels.footerContact)}`,
+    `${escapeHtml(footerText(footer))} ${escapeHtml(mailLabels.footerContact)}`,
     footerHtml ? `<br>${footerHtml}` : "",
     `</td></tr>`,
     `</table></td></tr></table></body></html>`,
@@ -103,12 +116,14 @@ export function renderShellText({
   button,
   code,
   extra,
+  footer,
 }: {
   title: string;
   paragraphs: string[];
   button?: { label: string; url: string };
   code?: string;
   extra?: string[];
+  footer?: MailFooter;
 }): string {
   return [
     title,
@@ -118,7 +133,7 @@ export function renderShellText({
     code ? `${mailLabels.backupCode} : ${code}` : "",
     "",
     "Orasso",
-    mailLabels.footer,
+    footerText(footer),
     mailLabels.footerContact,
     ...(extra ?? []),
   ]

@@ -26,7 +26,7 @@ import { requirePlatformRole } from "../../lib/access";
 import { now } from "../../lib/deps";
 import { conflict, notFound, validation } from "../../lib/errors";
 import { MAIL_PROTECTED_RESERVE, type MailContent, mail, startOfBusinessDay } from "../../lib/mail";
-import { escapeHtml, renderShell } from "../../lib/mail-template";
+import { escapeHtml, INK, MUSTARD, renderShell } from "../../lib/mail-template";
 import type { Viewer } from "../../lib/session";
 import { withTx } from "../../lib/tx";
 import { unsubscribeOneClickUrl, unsubscribeUrl, verifyUnsubscribeToken } from "../../lib/unsubscribe";
@@ -46,8 +46,9 @@ export function newsletterMail(
   // Gabarit commun (lot 56) ; le pied obligatoire garde le lien de désinscription.
   const html = renderShell({
     title: subject,
-    bodyHtml: `<div style="font-family:Archivo,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;color:#131417">${markdownToHtml(bodyMd)}</div>`,
-    footerHtml: `${escapeHtml(newsletterTexts.footer)} <a href="${escapeHtml(links.page)}" style="color:#e9b824">${escapeHtml(newsletterTexts.unsubscribeLink)}</a>`,
+    bodyHtml: `<div style="font-family:Archivo,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.55;color:${INK}">${markdownToHtml(bodyMd)}</div>`,
+    footer: "newsletter",
+    footerHtml: `<a href="${escapeHtml(links.page)}" style="color:${MUSTARD}">${escapeHtml(newsletterTexts.unsubscribeLink)}</a>`,
   });
   const text = [
     markdownToText(bodyMd),

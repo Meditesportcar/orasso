@@ -352,6 +352,7 @@ async function createInTx(
           L.mailSubject(e.title),
           [L.mailIntro(s.name, e.title, formatDateTime(e.startsAt)), ...(row.message ? [row.message] : []), L.mailHow],
           { label: L.mailCta, url: `${env.PUBLIC_URL}/invitation-evenement/${row.token}` },
+          { footer: "invitation" },
         ),
         { eventId: e.id, invitationId: row.id },
       );
