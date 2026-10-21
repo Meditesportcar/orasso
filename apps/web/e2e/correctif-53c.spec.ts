@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, type Route, test } from "@playwright/test";
 import { apiCall, login, loginInBrowser, MOBILE, samplePhoto, unique } from "./helpers";
 
 // Correctif 53c, côté site : l'assistant de création (lot 53) ne supprime plus les missions chargées après une première
@@ -180,6 +180,8 @@ test("photo de l'affiche en cours d'envoi : on attend sa fin avant de poursuivre
   // Pendant l'envoi, ni « Continuer » ni « Retour ».
   await expect(page.getByTestId("wizard-next")).toBeDisabled();
   await expect(page.getByTestId("wizard-back")).toBeDisabled();
+  // Ni une deuxième photo pendant l'envoi (tour 2 : elle libérait « Continuer » avant la fin du second envoi).
+  await expect(page.getByTestId("wizard-poster-photo").locator("input")).toBeDisabled();
   release();
   await expect(page.getByTestId("wizard-next")).toBeEnabled({ timeout: 30_000 });
   await page.unroute("**/api/me/uploads");
@@ -187,5 +189,183 @@ test("photo de l'affiche en cours d'envoi : on attend sa fin avant de poursuivre
   await expect(page.getByTestId("wizard-step")).toContainText("Tout est prêt", { timeout: 30_000 });
   const ev = await apiCall<{ posterSettings: { photoKey: string | null } | null }>(damien, "GET", `/events/${id}`);
   expect(ev.data.posterSettings?.photoKey).toBeTruthy();
+  await ctx.close();
+});
+
+// --- Tour 2 (relectures du correctif 53c) ------------------------------------------------------------------------
+
+const unavailable = (route: Route) =>
+  route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({ error: { code: "unavailable", message: "Relecture impossible." } }),
+  });
+
+test("saisie gardée d'avant le correctif (sans les missions) : la reprendre ne supprime aucune mission", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Gardée ${unique()}`, ["food_truck", "photographer"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  await openWizard(page, id, "type");
+  await page.getByLabel("Titre").fill(`Gardée bis ${unique()}`);
+  await page.waitForTimeout(800);
+  // La saisie gardée devient celle d'une version d'avant : missions vides, aucune mission connue.
+  const changed = await page.evaluate((eventId) => {
+    for (const k of Object.keys(localStorage)) {
+      if (!k.startsWith("orasso-wizard:") || !k.endsWith(eventId)) continue;
+      const stored = JSON.parse(localStorage.getItem(k) ?? "{}");
+      stored.draft.needs = [];
+      delete stored.draft.knownNeedIds;
+      localStorage.setItem(k, JSON.stringify(stored));
+      return true;
+    }
+    return false;
+  }, id);
+  expect(changed).toBe(true);
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
+  await expect(page.getByTestId("wizard-restored")).toBeVisible();
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect(await needsOf(damien, id)).toHaveLength(2);
+  await page.getByText("Sur place", { exact: true }).click();
+  await expect(page.getByTestId("mission-row")).toHaveCount(2);
+  await ctx.close();
+});
+
+test("deux onglets : la mission créée dans le premier n'est pas supprimée par le second", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Onglets ${unique()}`);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const a = await ctx.newPage();
+  await loginInBrowser(a, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  const b = await ctx.newPage();
+  await openWizard(a, id, "lieu");
+  await openWizard(b, id, "lieu");
+  await expect(b.getByTestId("wizard-step")).toContainText("Lieu");
+  // A ajoute une mission et enregistre.
+  await a.getByText("Sur place", { exact: true }).click();
+  await a.getByTestId("wizard-mission-add").click();
+  await a.getByRole("button", { name: "Continuer" }).click();
+  await expect(a.getByTestId("wizard-step")).toContainText("Arrivées", { timeout: 30_000 });
+  expect(await needsOf(damien, id)).toHaveLength(1);
+  // B, qui ne la connaissait pas, enregistre deux fois.
+  await b.getByRole("button", { name: "Continuer" }).click();
+  await expect(b.getByTestId("wizard-step")).toContainText("Arrivées", { timeout: 30_000 });
+  await b.getByTestId("wizard-back").click();
+  await b.getByRole("button", { name: "Continuer" }).click();
+  await expect(b.getByTestId("wizard-step")).toContainText("Arrivées", { timeout: 30_000 });
+  expect(await needsOf(damien, id)).toHaveLength(1);
+  await ctx.close();
+});
+
+test("réponse perdue après la création d'une mission : le nouvel essai ne la recrée pas (clé de création)", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Perdue ${unique()}`);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  await openWizard(page, id, "lieu");
+  await page.getByText("Sur place", { exact: true }).click();
+  await page.getByTestId("wizard-mission-add").click();
+  // Le serveur crée la mission, mais sa réponse ne revient pas ; la relecture finale échoue aussi.
+  let lost = false;
+  let readFailed = false;
+  await page.route(`**/api/events/${id}/needs`, async (route) => {
+    const method = route.request().method();
+    if (method === "POST" && !lost) {
+      lost = true;
+      await route.fetch();
+      return route.abort("connectionreset");
+    }
+    if (method === "GET" && lost && !readFailed) {
+      readFailed = true;
+      return unavailable(route);
+    }
+    return route.continue();
+  });
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-error")).toBeVisible();
+  await expect(page.getByTestId("wizard-step")).toContainText("Lieu");
+  expect(await needsOf(damien, id)).toHaveLength(1);
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-step")).toContainText("Arrivées", { timeout: 30_000 });
+  expect(await needsOf(damien, id)).toHaveLength(1);
+  await ctx.close();
+});
+
+test("zone créée puis relecture en panne : le nouvel essai ne la dit pas refusée", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Zone ${unique()}`);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  await openWizard(page, id, "lieu");
+  await page.getByText("Sur place", { exact: true }).click();
+  await page.getByRole("button", { name: "Ajouter une zone" }).click();
+  await page.getByLabel("Code", { exact: true }).fill("JDM");
+  await page.getByLabel("Nom", { exact: true }).fill("Zone JDM");
+  let posted = false;
+  let readFailed = false;
+  await page.route(`**/api/events/${id}/zones`, async (route) => {
+    if (route.request().method() === "POST") posted = true;
+    return route.continue();
+  });
+  await page.route(`**/api/events/${id}`, async (route) => {
+    if (route.request().method() === "GET" && posted && !readFailed) {
+      readFailed = true;
+      return unavailable(route);
+    }
+    return route.continue();
+  });
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-error")).toContainText("Relecture impossible");
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-step")).toContainText("Arrivées", { timeout: 30_000 });
+  await expect(page.getByTestId("wizard-error")).toHaveCount(0);
+  const ev = await apiCall<{ zones: { code: string }[] }>(damien, "GET", `/events/${id}`);
+  expect(ev.data.zones.map((z) => z.code)).toEqual(["JDM"]);
+  await ctx.close();
+});
+
+test("missions en échec de chargement : la saisie reste gardée ; « Recharger » ne relance que les missions", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const damien = await login("damien@orasso.local");
+  const id = await draftEvent(damien, `Échec ${unique()}`, ["food_truck"]);
+  const ctx = await browser.newContext({ viewport: MOBILE });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, "damien@orasso.local", undefined, "/orga/meditesportcar");
+  await page.route(`**/api/events/${id}/needs`, (route) =>
+    route.request().method() === "GET" ? unavailable(route) : route.continue(),
+  );
+  await openWizard(page, id, "type");
+  await expect(page.getByTestId("wizard-needs-failed")).toBeVisible();
+  const title = `Hors missions ${unique()}`;
+  await page.getByLabel("Titre").fill(title);
+  await page.waitForTimeout(800);
+  // Fermé puis rouvert, toujours sans missions : la saisie est là.
+  await page.goto(`/orga/meditesportcar/e/${id}/modifier?temps=type`);
+  await expect(page.getByTestId("wizard-restored")).toBeVisible();
+  await expect(page.getByLabel("Titre")).toHaveValue(title);
+  // « Recharger les missions » : les missions arrivent, la saisie et le temps restent.
+  await page.unroute(`**/api/events/${id}/needs`);
+  await page.getByRole("button", { name: "Recharger les missions" }).click();
+  await expect(page.getByTestId("wizard-needs-failed")).toHaveCount(0);
+  await expect(page.getByLabel("Titre")).toHaveValue(title);
+  await expect(page.getByTestId("wizard-step")).toContainText("Type");
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expect(page.getByTestId("wizard-step")).toContainText("Lieu", { timeout: 30_000 });
+  expect(await needsOf(damien, id)).toHaveLength(1);
+  expect((await apiCall<{ title: string }>(damien, "GET", `/events/${id}`)).data.title).toBe(title);
   await ctx.close();
 });
