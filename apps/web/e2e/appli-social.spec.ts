@@ -29,7 +29,9 @@ async function shot(page: Page, name: string) {
 test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Journal", async ({ browser }) => {
   test.setTimeout(600_000);
   mkdirSync(DIR, { recursive: true });
-  const s = unique();
+  // Le pseudo est limité à 24 caractères : « BravoApp_sable_ » en prend 15, le suffixe en garde 9 au plus. Avec le suffixe entier,
+  // le compteur de `unique()` (qui grimpe au fil d'une longue recette) le rendait trop long et l'API tronquait le pseudo.
+  const s = unique().slice(-9);
   const charlie = `CharlieApp_${s}`;
   const charlieCookie = await signUpApi(charlie);
   await addVehicleApi(charlieCookie, randomPlate());
