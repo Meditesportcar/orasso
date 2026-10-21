@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   afterNeedWrites,
+  afterZoneWrites,
+  createdNeedDiffers,
   type EventDraft,
   eventArrivalsProblem,
   eventPayload,
@@ -35,6 +37,7 @@ import {
   withMultiDay,
   withNeedKeys,
   withSingleDate,
+  zoneChanges,
 } from "./eventWizard";
 import { defaultEventRules } from "./labels/events.fr";
 import { createPreviewCache, posterPreviewKey } from "./rules/poster";
@@ -424,5 +427,56 @@ describe("panne après l'écriture des missions (correctif 53c)", () => {
     expect(savedNeeds).toEqual([]);
     expect(draft.title).toBe("Changé pendant l'envoi");
     expect(needChanges(savedNeeds, draft).remove).toEqual([]);
+  });
+});
+
+describe("correctif 53c, tour 3", () => {
+  it("mission ajoutée puis retirée pendant son envoi : elle ne revient pas, l'enregistrement suivant la supprime", () => {
+    const sent = { ...withLoadedNeeds(filled(), []), needs: [row({ clientKey: "k1" })] };
+    const current = { ...sent, needs: [] };
+    const server = serverDraft(savedEvent(sent), [need({ id: "n7", clientKey: "k1" })]);
+    const { draft } = reconcileDraft({ sent, current, server });
+    expect(draft.needs).toEqual([]);
+    expect(needChanges([need({ id: "n7", clientKey: "k1" })], draft).remove).toEqual(["n7"]);
+  });
+
+  it("rattachée par sa clé à une mission créée avec d'autres valeurs : la saisie est gardée, un PATCH repart", () => {
+    // Réponse perdue (quantité 1 créée), puis quantité passée à 3 avant le nouvel essai ; l'API rend la mission à 1.
+    const sent = { ...filled(), needs: [row({ clientKey: "k1", quantity: "3" })] };
+    const created = need({ id: "n7", clientKey: "k1", quantity: 1 });
+    const { draft, pristine } = reconcileDraft({
+      sent,
+      current: sent,
+      server: serverDraft(savedEvent(sent), [created]),
+    });
+    expect(draft.needs?.[0]).toMatchObject({ id: "n7", quantity: "3" });
+    expect(sameDraft(draft, pristine)).toBe(false);
+    expect(needChanges([created], draft).update[0]).toMatchObject({ id: "n7", need: { quantity: 3 } });
+    // Et l'enregistrement le voit dès la réponse du POST.
+    expect(
+      createdNeedDiffers(created, needChanges([], { ...sent, needs: [row({ quantity: "3" })] }).create[0] as never),
+    ).toBe(true);
+    expect(createdNeedDiffers(created, needChanges([], { ...sent, needs: [row()] }).create[0] as never)).toBe(false);
+  });
+
+  it("une modification refusée d'une mission enregistrée (avec clé) reste dans la saisie, avec son refus", () => {
+    const saved = need({ id: "n7", clientKey: "k1", quantity: 1 });
+    const opened = withLoadedNeeds(filled(), needsFromSaved([saved], null));
+    const sent = { ...opened, needs: [{ ...(opened.needs?.[0] as NeedDraft), quantity: "3" }] };
+    const refused = { ...noRefusals(), needs: [0] };
+    const out = reconcileDraft({ sent, current: sent, server: serverDraft(savedEvent(sent), [saved]), refused });
+    expect(out.draft.needs?.[0]).toMatchObject({ id: "n7", quantity: "3" });
+    expect(out.refused.needs).toEqual([0]);
+    expect(sameDraft(out.draft, out.pristine)).toBe(false);
+  });
+
+  it("zones créées avant une panne de relecture : elles prennent leur identifiant (mises à jour, pas recréées)", () => {
+    const sent = { ...filled(), zones: [{ code: "a", name: "Allée", capacity: "" }] };
+    const current = { ...sent, zones: [{ code: "A", name: "Allée nord", capacity: "40" }] };
+    const draft = afterZoneWrites(sent, current, { created: [{ position: 0, id: "z9" }] });
+    expect(draft.zones).toEqual([{ id: "z9", code: "A", name: "Allée nord", capacity: "40" }]);
+    const changes = zoneChanges([], draft.zones);
+    expect(changes.create).toEqual([]);
+    expect(changes.update[0]).toMatchObject({ id: "z9", zone: { name: "Allée nord", capacity: 40 } });
   });
 });

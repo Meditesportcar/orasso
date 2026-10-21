@@ -127,6 +127,12 @@ describe("besoins de l'organisateur", () => {
     const pub = await call(null, "GET", "/events/by-slug/nocturne/needs");
     expect(pub.status).toBe(200);
     for (const n of pub.json as Record<string, unknown>[]) expect(n).not.toHaveProperty("clientKey");
+    // Ni les missions vues par un prestataire (`GET /missions`, tour 3).
+    const missions = await call(sofia, "GET", "/missions");
+    expect(missions.status).toBe(200);
+    const seen = (missions.json.items as { needs: Record<string, unknown>[] }[]).flatMap((m) => m.needs);
+    expect(seen.length).toBeGreaterThan(0);
+    for (const n of seen) expect(n).not.toHaveProperty("clientKey");
   });
 
   it("créer, lister, modifier, supprimer ; le métier rejoint les types attendus ; 403 aux autres", async () => {

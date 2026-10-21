@@ -1081,6 +1081,19 @@ function rowsAfterSave<T extends { id?: string }>(
  * Lignes après l'enregistrement, avec la saisie faite pendant l'envoi : inchangée, la version relue ; modifiée, la
  * saisie est gardée (une ligne créée garde son nouvel identifiant, pour ne pas être créée deux fois).
  */
+/** Deux missions aux mêmes valeurs (métier, nombre, électricité, eau, façade, installation), identifiants à part. */
+function sameNeedContent(a: NeedDraft, b: NeedDraft): boolean {
+  return (
+    a.trade === b.trade &&
+    Number(a.quantity) === Number(b.quantity) &&
+    a.power === b.power &&
+    a.water === b.water &&
+    a.frontageM.trim() === b.frontageM.trim() &&
+    a.installTime.trim() === b.installTime.trim() &&
+    (a.installDay ?? 0) === (b.installDay ?? 0)
+  );
+}
+
 function mergeRows<T extends { id?: string }>(sent: readonly T[], current: readonly T[], next: (T | null)[]): T[] {
   if (current === sent || same(current, sent)) return next.filter((r): r is T => r !== null);
   return current.map((row, i) => {
@@ -1115,15 +1128,26 @@ export function reconcileDraft(input: {
     new Set(refused.zones),
     (a, b) => a.code.trim().toUpperCase() === b.code,
   );
-  // Correctif 53c : une création dite refusée dont la clé est sur le serveur a bien eu lieu (réponse perdue).
-  const serverKeys = new Set((server.needs ?? []).map((n) => n.clientKey).filter(Boolean));
+  // Correctif 53c : une **création** dite refusée (ligne sans identifiant) dont la clé est sur le serveur a bien eu
+  // lieu (réponse perdue). Une modification refusée d'une mission enregistrée reste refusée (tour 3).
+  // Seulement si la mission du serveur a les valeurs envoyées : sinon la saisie n'est pas enregistrée telle quelle.
   const sentNeeds = sent.needs ?? [];
   const refusedNeeds = new Set(
-    refused.needs.filter((i) => !(sentNeeds[i]?.clientKey && serverKeys.has(sentNeeds[i]?.clientKey))),
+    refused.needs.filter((i) => {
+      const row = sentNeeds[i];
+      const twin = row && !row.id && row.clientKey && server.needs?.find((n) => n.clientKey === row.clientKey);
+      return !(row && twin && sameNeedContent(row, twin));
+    }),
   );
   const needs = rowsAfterSave(sentNeeds, server.needs ?? [], refusedNeeds, (a, b) =>
     a.clientKey || b.clientKey ? a.clientKey === b.clientKey : a.trade === b.trade,
-  );
+  ).map((row, i) => {
+    // Rattachée par sa clé à une mission créée avec d'autres valeurs (réponse perdue, puis modifiée avant le nouvel
+    // essai) : la saisie envoyée est gardée avec l'identifiant, elle reste à enregistrer (un PATCH repart, tour 3).
+    const before = sentNeeds[i];
+    if (!row || !before || before.id || !row.id || sameNeedContent(before, row)) return row;
+    return { ...before, id: row.id };
+  });
   const draft: EventDraft = { ...server };
   const own = draft as Record<string, unknown>;
   for (const key of Object.keys(current) as (keyof EventDraft)[]) {
@@ -1137,7 +1161,14 @@ export function reconcileDraft(input: {
     {
       ...draft,
       needs: mergeRows(sentNeeds, current.needs ?? [], needs),
-      knownNeedIds: [...new Set([...(sent.knownNeedIds ?? []), ...(current.knownNeedIds ?? [])])],
+      // Les missions créées par cet envoi sont connues : retirées pendant l'envoi, elles ne reviennent pas (tour 3).
+      knownNeedIds: [
+        ...new Set([
+          ...(sent.knownNeedIds ?? []),
+          ...(current.knownNeedIds ?? []),
+          ...knownIdsOf(needs.filter((n): n is NeedDraft => n !== null)),
+        ]),
+      ],
     },
     server.needs ?? [],
   );
@@ -1215,6 +1246,36 @@ export function afterNeedWrites(input: {
   }
   const knownNeedIds = [...new Set([...(current.knownNeedIds ?? []), ...writes.created.map((c) => c.need.id)])];
   return { savedNeeds, draft: { ...current, needs, knownNeedIds } };
+}
+
+/**
+ * Une mission rendue par `POST /events/:id/needs` diffère-t-elle de ce qui a été envoyé ? (Clé déjà connue : l'API rend
+ * la mission créée par un essai précédent, peut-être avec d'anciennes valeurs ; on la met alors à jour aussitôt.) La
+ * position n'est pas comparée (l'API la range à la fin).
+ */
+export function createdNeedDiffers(view: Partial<EventNeedView>, sent: NeedPayload): boolean {
+  // Réponse sans les valeurs (incomplète) : rien à comparer.
+  if (view.trade === undefined) return false;
+  return changedNeed({ ...view, position: sent.position }, sent);
+}
+
+/** Zones créées pendant un enregistrement interrompu ensuite (`position` : ligne du brouillon envoyé). */
+export type ZoneWrites = { created: { position: number; id: string }[] };
+
+/**
+ * Avant de retenter un enregistrement interrompu (tour 3 du correctif 53c) : chaque zone créée prend son identifiant
+ * dans la saisie (rattachée par son code), pour être mise à jour au nouvel essai au lieu d'être recréée (409).
+ */
+export function afterZoneWrites(sent: EventDraft, current: EventDraft, writes: ZoneWrites): EventDraft {
+  const code = (z: ZoneDraft) => z.code.trim().toUpperCase();
+  const zones = [...current.zones];
+  for (const { position, id } of writes.created) {
+    const row = sent.zones[position];
+    if (!row) continue;
+    const j = zones.findIndex((z) => !z.id && code(z) === code(row));
+    if (j >= 0) zones[j] = { ...(zones[j] as ZoneDraft), id };
+  }
+  return { ...current, zones };
 }
 
 /** Les missions telles que le serveur les garde (état « enregistré » de l'assistant), toutes connues. */

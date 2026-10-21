@@ -43,7 +43,11 @@ export async function filledByNeed(needIds: readonly string[], ex: Executor = db
   return out;
 }
 
-export function needView(row: NeedRow, filled: number): EventNeedView {
+/**
+ * Vue d'un besoin. `withKey` : la clé de création de l'assistant (correctif 53c), pour l'organisation seulement ; jamais
+ * dans les vues des prestataires ni de la page publique.
+ */
+export function needView(row: NeedRow, filled: number, withKey = false): EventNeedView {
   return {
     id: row.id,
     trade: row.trade as VendorTypeCode,
@@ -57,7 +61,7 @@ export function needView(row: NeedRow, filled: number): EventNeedView {
     installAt: row.installAt?.toISOString() ?? null,
     notes: row.notes,
     position: row.position,
-    clientKey: row.clientKey,
+    ...(withKey ? { clientKey: row.clientKey } : {}),
   };
 }
 
@@ -72,7 +76,7 @@ export async function needViewsOfEvent(eventId: string, ex: Executor = db): Prom
     rows.map((r) => r.id),
     ex,
   );
-  return rows.map((r) => needView(r, filled.get(r.id) ?? 0));
+  return rows.map((r) => needView(r, filled.get(r.id) ?? 0, true));
 }
 
 /** Besoins d'un événement vus par l'organisation : qui occupe chaque besoin (retenus), emplacement, avis donné. */

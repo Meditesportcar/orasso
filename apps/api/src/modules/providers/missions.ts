@@ -170,7 +170,7 @@ export const missionsService = {
           .select()
           .from(eventNeeds)
           .where(and(eq(eventNeeds.eventId, eventId), eq(eventNeeds.clientKey, input.clientKey)));
-        if (existing) return needView(existing, (await filledByNeed([existing.id], tx)).get(existing.id) ?? 0);
+        if (existing) return needView(existing, (await filledByNeed([existing.id], tx)).get(existing.id) ?? 0, true);
       }
       const [agg] = await tx
         .select({ maxPos: max(eventNeeds.position) })
@@ -194,7 +194,7 @@ export const missionsService = {
       if (!row) throw new Error("Besoin non enregistré");
       await ensureVendorType(tx, locked, input.trade);
       after(() => realtime.publish(`event:${eventId}:triage`, "needs.changed", { eventId }));
-      return needView(row, 0);
+      return needView(row, 0, true);
     });
   },
 
@@ -216,7 +216,7 @@ export const missionsService = {
       if (!row) throw notFound("Besoin introuvable");
       if (input.trade) await ensureVendorType(tx, locked, input.trade);
       after(() => realtime.publish(`event:${eventId}:triage`, "needs.changed", { eventId }));
-      return needView(row, (await filledByNeed([row.id], tx)).get(row.id) ?? 0);
+      return needView(row, (await filledByNeed([row.id], tx)).get(row.id) ?? 0, true);
     });
   },
 
