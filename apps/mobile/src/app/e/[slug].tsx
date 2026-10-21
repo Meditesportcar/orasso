@@ -281,6 +281,9 @@ export default function EventPage() {
       hero={<EventHero event={e} />}
       onClose={close}
       onRefresh={event.reload}
+      overlays={
+        <CandSheet event={e} visible={cand} onClose={() => setCand(false)} onSent={() => void event.reload()} />
+      }
       footer={footer}
       testID="event-page"
     >
@@ -398,7 +401,6 @@ export default function EventPage() {
         onClose={() => setMediaTarget(null)}
         onSent={() => void event.reload()}
       />
-      <CandSheet event={e} visible={cand} onClose={() => setCand(false)} onSent={() => void event.reload()} />
       <AppSheet visible={booking} onClose={() => setBooking(false)} accessibilityLabel={L.bookEntry}>
         <Text variant="title" color={t.color.ink}>
           {L.bookEntry}

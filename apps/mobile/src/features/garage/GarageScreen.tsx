@@ -3,7 +3,7 @@
 // photos, plaque floutée : deux minutes. » en pointillés, et une ligne « Archivés » en bas. Retirés (audit § 5.2) : les
 // crews (Mon profil › Mon crew), les demandes de transfert de plaque (Boîte › Demandes). « Partager sa carte » ouvre
 // l'écran de flux `/vehicule/<id>/partager`. Un garage vide montre l'état vide du O.
-import { Button, EmptyState, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, EmptyState, Icon, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { vehicleWizardLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -58,7 +58,7 @@ export function GarageScreen() {
           testID="garage-add"
           style={[styles.add, { borderColor: t.color.line }]}
         >
-          <Icon name="o" size={56} color={t.color.inkMuted} />
+          <Monogram size={56} />
           <View style={styles.addText}>
             <Text variant="bodyStrong" color={t.color.ink} style={styles.addTitle}>
               {L.addVehicle}

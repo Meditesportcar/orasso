@@ -6,7 +6,7 @@
 // sorties ». Gardés de l'ancien flux (docs/01, audit § 2) : la case du règlement, sur une ligne, et le choix du jour
 // d'un événement sur plusieurs jours. Ni suivi de la structure ni newsletter cochés d'office : le bouton « Suivre » de
 // la fiche s'en charge.
-import { Chip, ChipRow, Icon, Photo, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, ChipRow, Icon, Monogram, Photo, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   ARRIVAL_NOTE_MAX,
   type ArrivalSlot,
@@ -200,7 +200,7 @@ export function CandSheet({
 
       {done ? (
         <View style={styles.done} testID="cand-done">
-          <Icon name="o" size={120} color={c.accent} />
+          <Monogram size={120} />
           <Text variant="posterL" color={c.ink} style={styles.center}>
             {done.retained ? "Tu es retenu" : "Candidature envoyée"}
           </Text>
@@ -230,6 +230,7 @@ export function CandSheet({
         <View style={styles.stack} testID="cand-sheet">
           {crew ? (
             <Seg
+              cmode
               testID="cand-mode"
               value={mode}
               onChange={setMode}

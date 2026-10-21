@@ -95,13 +95,16 @@ export function PillO({ children }: { children: string }) {
   );
 }
 
-/** `.seg` : segments en bloc, fond `--card-2`, segment actif à l'encre. */
+/** `.seg` : segments en bloc, fond `--card-2`, segment actif à l'encre. `cmode` : variante `.cmode` de la feuille de
+ * candidature (fond carte, segment actif sur le fond de page avec ombre, 40 px). */
 export function Seg<T extends string>({
   options,
   value,
   onChange,
   testID,
+  cmode,
 }: {
+  cmode?: boolean;
   options: { value: T; label: string; lead?: ReactNode; icon?: IconName }[];
   value: T;
   onChange: (v: T) => void;
@@ -109,17 +112,28 @@ export function Seg<T extends string>({
 }) {
   const { t } = useTheme();
   return (
-    <View style={[styles.seg, { backgroundColor: t.color.surfaceRaised }]} accessibilityRole="tablist" testID={testID}>
+    <View
+      style={[styles.seg, { backgroundColor: cmode ? t.color.surface : t.color.surfaceRaised }, cmode && styles.cmode]}
+      accessibilityRole="tablist"
+      testID={testID}
+    >
       {options.map((o) => {
         const on = o.value === value;
-        const color = on ? t.color.ground : t.color.inkMuted;
+        const color = on ? (cmode ? t.color.ink : t.color.ground) : t.color.inkMuted;
         return (
           <Pressable
             key={o.value}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
             onPress={() => onChange(o.value)}
-            style={[styles.segBtn, on && { backgroundColor: t.color.ink }]}
+            style={[
+              styles.segBtn,
+              cmode && styles.cmodeBtn,
+              on &&
+                (cmode
+                  ? { backgroundColor: t.color.ground, boxShadow: t.shadow.shadowCard }
+                  : { backgroundColor: t.color.ink }),
+            ]}
             testID={testID ? `${testID}-${o.value}` : undefined}
           >
             {o.lead}
@@ -251,7 +265,11 @@ export function CrewDot({ initials, size = 40 }: { initials: string; size?: numb
   const { t } = useTheme();
   return (
     <View style={[styles.dot, { width: size, height: size, backgroundColor: t.color.accent }]}>
-      <Text variant="posterS" color={t.color.accentInk} style={{ fontSize: Math.round(size * 0.36) }}>
+      <Text
+        variant="numberNarrow"
+        color={t.color.accentInk}
+        style={{ fontSize: Math.round(size * 0.38), lineHeight: Math.round(size * 0.42) }}
+      >
         {initials}
       </Text>
     </View>
@@ -346,6 +364,8 @@ const styles = StyleSheet.create({
     gap: space1 + 2,
   },
   segText: { fontSize: 13 },
+  cmode: { padding: 4, gap: 4 },
+  cmodeBtn: { height: 40, borderRadius: 10 },
   sm: {
     minHeight: 40,
     paddingHorizontal: space3,

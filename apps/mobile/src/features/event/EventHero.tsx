@@ -1,5 +1,5 @@
 // Tête de la fiche événement (lot 44 ; reproduite au lot C2b d'après `.ev-hero` de `s-event`) : pleine largeur, 4:5,
-// 470 px au plus, fond de barre ; l'affiche générée commence à 62 px du haut (place de la pastille O et de la croix
+// fond de barre ; l'affiche générée (entière, 4:5) commence à 62 px du haut (place de la pastille O et de la croix
 // flottantes) et fond vers le fond de page sur ses 14 % du bas. Sans affiche générée, le gabarit « Minimal » (jamais
 // de rectangle vide).
 import { Photo, useTheme } from "@orasso/design-system/native";
@@ -38,7 +38,7 @@ export function EventHero({ event }: { event: EventPublic }) {
 }
 
 const styles = StyleSheet.create({
-  hero: { width: "100%", aspectRatio: 4 / 5, maxHeight: 470, overflow: "hidden" },
-  poster: { position: "absolute", top: 62, left: 0, right: 0, bottom: 0, overflow: "hidden" },
+  hero: { width: "100%", paddingTop: 62, overflow: "hidden" },
+  poster: { width: "100%", aspectRatio: 4 / 5, overflow: "hidden" },
   fade: { position: "absolute", left: 0, right: 0, bottom: 0, height: "14%" },
 });
