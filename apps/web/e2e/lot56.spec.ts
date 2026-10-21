@@ -22,18 +22,57 @@ const PAGES: [string, string][] = [
   ["annuaire-pros", "/pros"],
 ];
 
-/** Chaque carte a une affiche : l'image générée ou le gabarit « Minimal », avec une taille réelle. */
+/** Fait défiler la page de haut en bas : les images paresseuses se chargent (captures et contrôles de rendu). */
+async function loadLazy(page: Page) {
+  await page.evaluate(async () => {
+    const step = Math.max(300, window.innerHeight / 2);
+    for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
+      window.scrollTo(0, y);
+      await new Promise((r) => setTimeout(r, 60));
+    }
+    window.scrollTo(0, 0);
+  });
+  await page.waitForLoadState("networkidle");
+}
+
+/** Chaque carte a une affiche : l'image générée chargée (taille réelle) ou le gabarit « Minimal », jamais un aplat vide. */
 async function noEmptyPoster(page: Page, where: string) {
+  await loadLazy(page);
   const empties = await page.evaluate(() =>
-    [...document.querySelectorAll(".s-pcard .w-card__poster")]
+    [...document.querySelectorAll(".s-pcard .w-card__poster, .w-fan__card")]
       .filter((poster) => {
         const r = poster.getBoundingClientRect();
-        const content = poster.querySelector("img, [data-testid='poster-minimal'], .w-card__minimal");
-        return r.width < 40 || r.height < 40 || !content;
+        const img = poster.querySelector("img");
+        const minimal = poster.querySelector("[data-testid='poster-minimal'], .w-card__minimal");
+        const loaded = img ? img.complete && img.naturalWidth > 0 : false;
+        return r.width < 40 || r.height < 40 || !(loaded || minimal);
       })
-      .map((p) => p.parentElement?.textContent?.slice(0, 40) ?? ""),
+      .map((p) => p.textContent?.slice(0, 40) ?? p.getAttribute("aria-label") ?? ""),
   );
   expect(empties, `${where} : cartes sans affiche`).toEqual([]);
+}
+
+/** Aucun défilement horizontal : la page, le corps et chaque conteneur de l'en-tête et du pied tiennent dans leur largeur. */
+async function noHorizontalScroll(page: Page, where: string) {
+  const over = await page.evaluate(() => {
+    const out: string[] = [];
+    const de = document.documentElement;
+    if (de.scrollWidth > de.clientWidth) out.push(`html ${de.scrollWidth}>${de.clientWidth}`);
+    if (document.body.scrollWidth > document.body.clientWidth) out.push("body");
+    for (const el of document.querySelectorAll("header, header *, footer, footer *, main, main > *")) {
+      const e = el as HTMLElement;
+      if (
+        e.clientWidth > 1 &&
+        !e.classList.contains("o-visually-hidden") &&
+        e.scrollWidth > e.clientWidth + 1 &&
+        getComputedStyle(e).overflowX !== "visible"
+      ) {
+        out.push(`${e.tagName.toLowerCase()}.${e.className} ${e.scrollWidth}>${e.clientWidth}`);
+      }
+    }
+    return out;
+  });
+  expect(over, `${where} : défilement horizontal`).toEqual([]);
 }
 
 async function audit(page: Page, where: string) {
@@ -66,6 +105,7 @@ test("pages publiques v2 : quatre pages, fiche, pros ; 390 px et bureau ; Béton
         await page.waitForLoadState("networkidle");
         await expect(page.locator("h1"), `${where} : un h1`).toHaveCount(name === "annuaire-pros" ? 1 : 1);
         await audit(page, where);
+        await noHorizontalScroll(page, where);
         await noEmptyPoster(page, where);
         // En-tête et pied : navigation, logo, crédits des données, thème au choix.
         await expect(page.getByRole("navigation", { name: "Site" })).toBeVisible();
@@ -171,7 +211,9 @@ test("organisateurs et professionnels : six temps, mur des huit styles, remises,
   await expect(page.getByTestId("orga-steps").locator("li")).toHaveCount(6);
   const wall = page.getByTestId("poster-wall").locator("img");
   await expect(wall).toHaveCount(8);
-  for (const img of await wall.all()) {
+  await page.waitForLoadState("networkidle");
+  for (let i = 0; i < 8; i++) {
+    const img = wall.nth(i);
     await img.scrollIntoViewIfNeeded();
     await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
   }
@@ -184,6 +226,28 @@ test("organisateurs et professionnels : six temps, mur des huit styles, remises,
   await expect(page.getByTestId("pro-discounts")).toContainText("20 %");
   await expect(page.getByTestId("pro-founders")).toContainText("Gratuit jusqu'au 21 juin 2027");
   await expect(page.getByTestId("pro-sample")).toBeVisible();
+});
+
+test("liens internes de l'en-tête, du pied et des pages publiques : aucun 404", async ({ page, request }) => {
+  const hrefs = new Set<string>();
+  for (const [, path] of PAGES) {
+    await page.goto(path);
+    for (const href of await page.locator("a[href]").evaluateAll((as) => as.map((a) => a.getAttribute("href") ?? ""))) {
+      if (href.startsWith("/") && !href.startsWith("//") && !href.startsWith("/app/") && !href.startsWith("/api/")) {
+        hrefs.add(href.split("#")[0] ?? href);
+      }
+    }
+  }
+  expect(hrefs.size).toBeGreaterThan(8);
+  for (const href of hrefs) {
+    const res = await request.get(href, { maxRedirects: 5 });
+    expect(res.status(), `${href} répond`).toBeLessThan(400);
+  }
+  // Les liens vers l'espace connecté renvoient vers la connexion (redirection), jamais 404.
+  for (const href of ["/app/structure/nouvelle"]) {
+    const res = await request.get(href, { maxRedirects: 5 });
+    expect(res.status(), `${href} répond`).toBeLessThan(400);
+  }
 });
 
 test("mentions légales : crédits des données ; pied identique sur toutes les pages", async ({ page }) => {

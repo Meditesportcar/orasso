@@ -2,7 +2,7 @@
 // affiche »). Nocturne de Canet : exposants 18 h 30 – 19 h 15 (strict, « Entrée côté capitainerie. Après 19 h 15,
 // préviens l'équipe. »), public dès 19 h 30 (conseillé, « Parking visiteurs avenue de la Méditerranée. ») ; deux
 // candidatures avec une note d'arrivée. Tous les événements du seed reçoivent une affiche générée (styles variés,
-// photo d'un véhicule du seed pour un sur deux, sinon aplat) : toutes les cartes ont une vignette. Idempotent : un
+// photo d'un véhicule du seed pour chacun, un style sans photo n'étant qu'un aplat sombre) : toutes les cartes ont une vignette. Idempotent : un
 // événement qui a déjà une affiche générée n'est pas refait.
 import { POSTER_TITLE_MAX, type PosterSettings, posterStyles } from "@orasso/shared";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
@@ -84,7 +84,7 @@ export async function seedPosters() {
     const style = e.slug === NOCTURNE_SLUG ? "neon" : posterStyles[i % posterStyles.length];
     if (!style) continue;
     let photoKey: string | null = null;
-    const source = i % 2 === 0 ? photos[i % Math.max(1, photos.length)]?.key : undefined;
+    const source = photos[i % Math.max(1, photos.length)]?.key;
     const data = source ? await storage.get(source) : null;
     if (data) {
       // Copie sous le dossier des photos d'affiche (comme un envoi `event_poster_photo`).

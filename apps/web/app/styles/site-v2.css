@@ -490,9 +490,6 @@
   flex: none;
   width: 96px;
 }
-.w-card--row .w-card__stub b {
-  font-size: 22px;
-}
 .w-card--row .w-card__minimal {
   padding: var(--space-1);
 }
@@ -534,11 +531,6 @@
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
-}
-.w-stripe li svg {
-  flex: none;
-  margin-top: 2px;
-  color: var(--accent-text);
 }
 .w-stripe__vis {
   position: relative;
@@ -679,9 +671,6 @@
 }
 .w-discounts .is-top {
   background: var(--win);
-  color: var(--win-ink);
-}
-.w-discounts .is-top .o-t-label {
   color: var(--win-ink);
 }
 @media (min-width: 900px) {
@@ -1097,11 +1086,6 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-1);
 }
-.w-pro-card .w-discounts > div {
-  padding: var(--space-2);
-  justify-items: center;
-  box-shadow: inset 0 0 0 1px var(--line);
-}
 .w-pro-card .w-discounts b {
   font-size: 30px;
 }
@@ -1311,4 +1295,128 @@
 }
 .s-main .w-fan__card {
   color: var(--poster-ink);
+}
+
+/* Recette 2 (lot 56) : en-tête étroit sans défilement, affiches en éventail sans chevauchement, souche seulement sans affiche */
+.w-small.o-button {
+  white-space: nowrap;
+}
+@media (max-width: 899px) {
+  .w-nav {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0 var(--space-3);
+    overflow: visible;
+    font-size: 13px;
+  }
+  .w-account {
+    margin-left: auto;
+  }
+}
+/* Sous 560 px, « Télécharger l'appli » ne tient pas à côté du logo : les boutiques de l'accueil et /appli restent. */
+@media (max-width: 559px) {
+  .w-account .w-small {
+    display: none;
+  }
+}
+.w-fan {
+  height: 320px;
+}
+.s-main .w-fan__card {
+  width: 31%;
+  max-width: none;
+}
+.w-fan__card:nth-child(1) {
+  left: 0;
+  top: 30px;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+  transform: rotate(-4deg);
+}
+.w-fan__card:nth-child(2) {
+  left: 34.5%;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+  transform: rotate(2deg);
+}
+.w-fan__card:nth-child(3) {
+  left: 69%;
+  top: 50px;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+  transform: rotate(5deg);
+}
+.w-fan__o {
+  left: 50%;
+  top: auto;
+  bottom: 0;
+  z-index: 1;
+  width: 110px;
+  transform: translateX(-50%);
+  background: none;
+}
+@media (min-width: 900px) {
+  .w-fan {
+    height: 440px;
+  }
+}
+@media (min-width: 900px) {
+  .s-header.w-head {
+    padding: 0 32px;
+    gap: var(--space-4);
+  }
+  .w-nav {
+    gap: var(--space-4);
+    overflow: visible;
+    font-size: 13px;
+  }
+}
+@media (min-width: 1200px) {
+  .s-header.w-head {
+    padding: 0 48px;
+    gap: var(--space-6);
+  }
+}
+@media (max-width: 1099px) {
+  .w-account .w-small {
+    display: none;
+  }
+}
+@media (min-width: 900px) and (max-width: 999px) {
+  .s-header.w-head {
+    padding: 0 20px;
+    gap: var(--space-3);
+  }
+  .w-nav {
+    gap: var(--space-3);
+  }
+}
+.w-orga-phone__choices span {
+  font-size: 11px;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+/* Règles à spécificité élevée, en fin de feuille (lint : pas de spécificité décroissante) */
+.w-card--row .w-card__stub b {
+  font-size: 22px;
+}
+.w-stripe li svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-text);
+}
+.w-pro-card .w-discounts > div {
+  padding: var(--space-2);
+  justify-items: center;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.w-discounts .is-top .o-t-label {
+  color: var(--win-ink);
 }

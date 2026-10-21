@@ -142,7 +142,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </a>
           ))}
           <div className="w-fan__o">
-            <OLoader size={150} label={null} />
+            <OLoader size={110} label={null} />
           </div>
         </div>
       </section>

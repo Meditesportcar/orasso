@@ -49,8 +49,8 @@ const initials = (name: string) =>
     .join("");
 
 /**
- * Une carte d'événement dans les listes publiques (accueil, `/evenements`, page d'une structure) : l'affiche avec sa
- * souche date, le titre, le logo de la structure, le lieu et la jauge des places. Tout est un lien.
+ * Une carte d'événement dans les listes publiques (accueil, `/evenements`, page d'une structure) : l'affiche (la date y est déjà dessinée ; la
+ * souche date ne s'ajoute que sur le gabarit « Minimal »), le titre, le logo de la structure, le lieu et la jauge des places. Tout est un lien.
  * `layout="row"` : la vue Liste d'`/evenements`, l'affiche en petit à gauche.
  */
 export function EventTile({
@@ -73,11 +73,13 @@ export function EventTile({
       <a className="w-card__link" href={`/e/${event.slug}`}>
         <span className="w-card__poster" aria-hidden="true">
           <PosterFace event={event} />
-          <span className="w-card__stub">
-            <small className="o-t-label">{stub.weekday}</small>
-            <b className="o-t-number-narrow">{stub.day}</b>
-            <small className="o-t-label">{stub.month}</small>
-          </span>
+          {!event.generatedPosterUrl && (
+            <span className="w-card__stub">
+              <small className="o-t-label">{stub.weekday}</small>
+              <b className="o-t-number-narrow">{stub.day}</b>
+              <small className="o-t-label">{stub.month}</small>
+            </span>
+          )}
         </span>
         <span className="w-card__body">
           <span className="o-t-label w-card__format">

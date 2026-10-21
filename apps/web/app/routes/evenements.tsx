@@ -1,4 +1,4 @@
-import { Button, Icon } from "@orasso/design-system/web";
+import { Button } from "@orasso/design-system/web";
 import { departments, type EventCard, eventFormats, fromWallTime, siteLabels as L, type Page } from "@orasso/shared";
 
 import { EventTile } from "../components/EventTile";
