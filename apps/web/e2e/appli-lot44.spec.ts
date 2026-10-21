@@ -211,15 +211,15 @@ test("fiche v2 : affiche, créneaux, actions selon le profil, fermé, pas encore
     }
 
     if (theme === "beton") {
-      // Candidature : « Continuer » reste grisé tant que la case du créneau n'est pas cochée.
+      // Candidature (lot C2b : feuille unique `sh-cand`, l'ancien chemin `/candidater` l'ouvre) : « Envoyer » reste
+      // grisé tant que la case du créneau n'est pas cochée.
       await page.goto(`/candidater/${NOCTURNE}`);
-      await page.getByRole("checkbox").first().click({ timeout: 30_000 });
-      await page.getByRole("button", { name: "Continuer" }).click();
-      await page.getByRole("checkbox", { name: /J'ai lu le règlement/ }).click();
+      await expect(page.getByTestId("cand-sheet")).toBeVisible({ timeout: 30_000 });
+      await page.getByTestId("cand-rules").click();
       await expect(page.getByTestId("arrival-seen")).toBeVisible();
-      await expect(page.getByRole("button", { name: "Continuer" })).toBeDisabled();
+      await expect(page.getByTestId("cand-send")).toBeDisabled();
       await page.getByRole("checkbox", { name: /J'ai vu le créneau d'arrivée/ }).click();
-      await expect(page.getByRole("button", { name: "Continuer" })).toBeEnabled();
+      await expect(page.getByTestId("cand-send")).toBeEnabled();
       await shot(page, "candidature-case-creneau-beton");
     }
     await ctx.close();

@@ -82,25 +82,26 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     await k.page.getByTestId("people-q").fill(`Roussillon ${s}`);
     await expect(k.page.getByTestId("crew-row").first()).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `02-explorer-crews-${theme}`);
-    await k.page.goto("/garage");
-    await expect(k.page.getByTestId("garage-crews")).toBeVisible();
-    await shot(k.page, `03-garage-${theme}`);
+    // Lot C2b : le crew vit dans Mon profil (« Mon crew »), plus dans le Garage.
+    await k.page.goto("/profil");
+    await expect(k.page.getByTestId("profil-crew")).toBeVisible({ timeout: 30_000 });
+    await shot(k.page, `03-profil-crew-${theme}`);
     await k.page.goto("/accueil");
     await k.page.getByRole("button", { name: "Boîte", exact: true }).first().click();
     await k.page.getByLabel("Demandes").click();
     await expect(k.page.getByTestId("request-crew-request")).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `04-demandes-chef-${theme}`);
 
-    await k.page.goto(`/e/${event.slug}`);
-    await k.page.getByTestId("register-crew").click();
-    await k.page.waitForURL(/crew\/inscription/);
+    // Lot C2b : l'inscription du crew est le mode « Avec <crew> » de la feuille de candidature.
+    await k.page.goto(`/e/${event.slug}?candidater=1`);
+    await k.page.getByTestId("cand-mode-crew").click({ timeout: 30_000 });
     await expect(k.page.getByTestId("crew-pick")).toHaveCount(2, { timeout: 20_000 });
-    for (const pick of await k.page.getByTestId("crew-pick").all()) await pick.getByRole("checkbox").click();
-    await k.page.getByRole("checkbox", { name: /pour ma propre candidature/ }).click();
-    await expect(k.page.getByTestId("crew-registration-recap")).toContainText(lea);
+    for (const pick of await k.page.getByTestId("crew-pick").all()) await pick.click();
+    await k.page.getByTestId("cand-rules").click();
+    await expect(k.page.getByTestId("cand-crew")).toContainText(lea);
     await shot(k.page, `05-inscription-crew-${theme}`);
-    await k.page.getByTestId("crew-registration-send").click();
-    await expect(k.page.getByTestId("crew-registration-member")).toHaveCount(2, { timeout: 20_000 });
+    await k.page.getByTestId("cand-send").click();
+    await expect(k.page.getByTestId("cand-done")).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `06-inscription-envoyee-${theme}`);
     await k.ctx.close();
 
