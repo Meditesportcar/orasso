@@ -60,7 +60,7 @@ test("plusieurs jours : assistant, page publique, candidature pour un jour, Acc�
     await expect(salon).toHaveAttribute("aria-pressed", "true", { timeout: 1_000 });
   }).toPass({ timeout: 20_000 });
   await o.getByLabel("Titre").fill(title);
-  await o.getByLabel("Plusieurs jours").check({ force: true });
+  await o.getByTestId("wizard-kind-multi").click();
   const days = o.getByTestId("wizard-days");
   await expect(days.getByLabel("Date")).toHaveCount(2);
   await o.getByRole("button", { name: "Ajouter un jour" }).click();
@@ -72,12 +72,22 @@ test("plusieurs jours : assistant, page publique, candidature pour un jour, Acc�
   }
   await days.getByLabel("Places ce jour (facultatif)").nth(1).fill("2");
   await o.getByRole("button", { name: "Au choix : tout l'événement ou un jour" }).click();
+  // Lot 53 : l'adresse a son temps (le deuxième), puis on va jusqu'à « Tout est prêt ».
+  await o.getByRole("button", { name: "Continuer" }).click();
+  await expect(o.getByTestId("wizard-step")).toContainText("Lieu");
   await o.getByLabel("Adresse", { exact: true }).fill("Parc des expositions");
   await o.getByLabel("Ville").fill("Perpignan");
   await o.getByLabel("Code postal").fill("66000");
-  for (let i = 0; i < 11; i++) await o.getByRole("button", { name: "Suivant" }).click();
-  await expect(o.getByTestId("wizard-step")).toContainText("Billetterie");
-  await o.getByRole("button", { name: "Garder en brouillon" }).click();
+  // Chaque « Continuer » enregistre : on attend le temps suivant avant de recliquer.
+  for (let i = 0; i < 8; i++) {
+    const more = o.getByRole("button", { name: "Continuer" });
+    if (!(await more.isVisible())) break;
+    const before = (await o.getByTestId("wizard-step").textContent()) ?? "";
+    await more.click();
+    await expect(o.getByTestId("wizard-step")).not.toHaveText(before, { timeout: 30_000 });
+  }
+  await expect(o.getByTestId("wizard-step")).toContainText("Tout est prêt");
+  await o.getByRole("button", { name: "Brouillon" }).click();
   await o.waitForURL(/\/orga\/meditesportcar\/e\/[0-9a-f-]{36}/);
   const eventId = /\/e\/([0-9a-f-]{36})/.exec(o.url())?.[1] ?? "";
   const saved = await apiCall<{

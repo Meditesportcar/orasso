@@ -20,7 +20,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     api<VehicleMake[]>(request, "/vehicle-reference/makes"),
   ]);
   return {
-    structure: { id: structure.id, slug: structure.slug, verified: structure.verified },
+    structure: {
+      id: structure.id,
+      slug: structure.slug,
+      name: structure.name,
+      followers: structure.followersCount ?? null,
+      verified: structure.verified,
+    },
     categories: categories.ok ? categories.data : [],
     makes: makes.ok ? makes.data : [],
   };
@@ -39,6 +45,8 @@ export default function NouvelEvenement({ loaderData }: Route.ComponentProps) {
       <EventWizard
         structureId={structure.id}
         structureSlug={structure.slug}
+        structureName={structure.name}
+        followers={structure.followers}
         verified={structure.verified}
         categories={categories}
         makes={makes}

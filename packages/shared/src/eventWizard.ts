@@ -14,7 +14,12 @@ import { defaultEventRules } from "./labels/events.fr";
 import { EVENT_NEED_MAX_QUANTITY, type ProviderPower, type VendorTypeCode } from "./provider";
 import { type ArrivalSlot, type Arrivals, arrivalInstant, validateArrivals } from "./rules/arrival";
 import { POSTER_TITLE_MAX } from "./rules/poster";
-import { nthWeekdayOfMonth, RECURRENCE_MAX_COUNT, type RecurrenceRule, recurrenceOccurrences } from "./rules/recurrence";
+import {
+  nthWeekdayOfMonth,
+  RECURRENCE_MAX_COUNT,
+  type RecurrenceRule,
+  recurrenceOccurrences,
+} from "./rules/recurrence";
 import { fromWallTime, wallTime } from "./rules/time";
 import type { EventOrganizer, EventZone, PosterSettings } from "./schemas/event";
 import type { EventNeedView } from "./schemas/provider";
@@ -683,7 +688,23 @@ export function withRecurrence(d: EventDraft, r: RecurrenceDraft, now: Date): Ev
   const date = firstRecurrenceDate(r, now);
   const start = d.startsAt.slice(11, 16) || "19:00";
   const end = d.endsAt.slice(11, 16) || "23:30";
-  return date ? { ...d, recurrence: r, startsAt: `${date}T${start}`, endsAt: `${date}T${end}` } : { ...d, recurrence: r };
+  return date ? withSingleDate({ ...d, recurrence: r }, { date, start, end }) : { ...d, recurrence: r };
+}
+
+/**
+ * Ponctuel ou récurrent : une date, une heure de début, une heure de fin (« Début 19:00 › Fin 23:30 »). Une fin à une
+ * heure plus petite que le début passe minuit (nocturne) : elle tombe le lendemain.
+ */
+export function withSingleDate(d: EventDraft, change: { date?: string; start?: string; end?: string }): EventDraft {
+  const date = change.date ?? d.startsAt.slice(0, 10);
+  const start = change.start ?? d.startsAt.slice(11, 16);
+  const end = change.end ?? d.endsAt.slice(11, 16);
+  const endDate = date && start && end && end <= start ? nextDate(date) : date;
+  return {
+    ...d,
+    startsAt: date || start ? `${date}T${start}` : "",
+    endsAt: date || end ? `${endDate}T${end}` : "",
+  };
 }
 
 /** Règle envoyée à `POST /events/:id/recurrence`. */
@@ -706,7 +727,11 @@ export function recurrenceDates(d: EventDraft): Date[] {
 }
 
 /** Frise de l'avant-première : ouverture aux abonnés (si avant-première), ouverture à tous, début. */
-export function previewTimeline(d: EventDraft): { subscribers: string | null; everyone: string | null; start: string | null } {
+export function previewTimeline(d: EventDraft): {
+  subscribers: string | null;
+  everyone: string | null;
+  start: string | null;
+} {
   const everyone = fromWallInput(d.registrationsOpenAt);
   const hours = Number(d.previewHours);
   return {
@@ -747,13 +772,22 @@ export function summaryOfCriteria(criteria: {
   styles: readonly string[];
   makes: readonly string[];
 }): string {
-  const origins = criteriaOrigins
-    .filter((o) => criteria.countries.includes(o.code))
-    .map((o) => `les ${o.plural}`);
+  const origins = criteriaOrigins.filter((o) => criteria.countries.includes(o.code)).map((o) => `les ${o.plural}`);
   const who = origins.length ? joinFr(origins, "et") : "tous les véhicules";
   const styles = criteria.styles.length ? `de style ${joinFr(criteria.styles.map(lowerStyle), "ou")}` : "tous styles";
   const makes = criteria.makes.length ? `de marque ${joinFr([...criteria.makes], "ou")}` : "toutes marques";
   return `Tu acceptes ${who}, ${styles}, ${makes}.`;
+}
+
+/**
+ * Catégories proposées à « Quels styles ? » : toutes, sauf celles qui ne disent qu'une origine (« Allemande »,
+ * « Française »… : la première question les couvre) ; une catégorie déjà choisie reste affichée.
+ */
+export function styleCategories<T extends { id: string; label: string }>(
+  categories: readonly T[],
+  selected: readonly string[],
+): T[] {
+  return categories.filter((c) => selected.includes(c.id) || !criteriaOrigins.some((o) => o.chip === c.label));
 }
 
 /** Missions enregistrées → lignes du volet « Sur place ». */

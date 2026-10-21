@@ -1,4 +1,12 @@
-import type { Category, EventOrganizer, StructureOrganizer, VehicleMake } from "@orasso/shared";
+import {
+  type Category,
+  type EventOrganizer,
+  eventResumeStep,
+  eventWizardStepOf,
+  initialEventDraft,
+  type StructureOrganizer,
+  type VehicleMake,
+} from "@orasso/shared";
 
 import { EventWizard } from "../components/EventWizard";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
@@ -22,15 +30,27 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
   if (event.structure.id !== structure.id) throw new Response("Événement introuvable.", { status: 404 });
   return {
-    structure: { id: structure.id, slug: structure.slug, verified: structure.verified },
+    structure: {
+      id: structure.id,
+      slug: structure.slug,
+      name: structure.name,
+      followers: structure.followersCount ?? null,
+      verified: structure.verified,
+    },
     event,
+    // Lot 53 : un brouillon rouvre au premier temps incomplet (sinon « Tout est prêt ») ; `?temps=lieu` choisit le temps.
+    initialStep: eventResumeStep(
+      initialEventDraft(new Date(), event),
+      event.status === "draft",
+      eventWizardStepOf(new URL(request.url).searchParams.get("temps")),
+    ),
     categories: categories.ok ? categories.data : [],
     makes: makes.ok ? makes.data : [],
   };
 }
 
 export default function ModifierEvenement({ loaderData }: Route.ComponentProps) {
-  const { structure, event, categories, makes } = loaderData;
+  const { structure, event, categories, makes, initialStep } = loaderData;
   return (
     <>
       <div className="orga__head">
@@ -43,10 +63,13 @@ export default function ModifierEvenement({ loaderData }: Route.ComponentProps) 
         key={event.id}
         structureId={structure.id}
         structureSlug={structure.slug}
+        structureName={structure.name}
+        followers={structure.followers}
         verified={structure.verified}
         categories={categories}
         makes={makes}
         event={event}
+        initialStep={initialStep}
       />
     </>
   );

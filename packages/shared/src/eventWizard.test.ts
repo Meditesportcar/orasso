@@ -122,7 +122,14 @@ describe("huit temps (lot 53)", () => {
         }),
       ),
     ).toMatch(/même code/);
-    const need = { trade: "food_truck" as const, quantity: "1", power: "none" as const, water: false, frontageM: "", installTime: "" };
+    const need = {
+      trade: "food_truck" as const,
+      quantity: "1",
+      power: "none" as const,
+      water: false,
+      frontageM: "",
+      installTime: "",
+    };
     expect(eventStepProblem("lieu", filled({ needs: [need] }))).toBeNull();
     expect(eventStepProblem("lieu", filled({ needs: [{ ...need, quantity: "0" }] }))).toMatch(/de 1 à 9/);
     expect(eventStepProblem("lieu", filled({ needs: [{ ...need, frontageM: "40" }] }))).toMatch(/façade/);
@@ -180,9 +187,9 @@ describe("huit temps (lot 53)", () => {
 
   it("premier temps en défaut, et temps où rouvrir un brouillon", () => {
     expect(firstEventProblem(filled())).toBeNull();
-    expect(firstEventProblem(filled({ vehicleTypes: [], zones: [{ code: "", name: "", capacity: "" }] }))).toMatchObject(
-      { step: "type" },
-    );
+    expect(
+      firstEventProblem(filled({ vehicleTypes: [], zones: [{ code: "", name: "", capacity: "" }] })),
+    ).toMatchObject({ step: "type" });
     // Brouillon sans adresse : il rouvre au lieu.
     const noAddress = filled({ addressLine: "", city: "" });
     expect(firstEventProblem(noAddress)).toMatchObject({ step: "lieu", problem: expect.stringMatching(/adresse/i) });
@@ -221,7 +228,9 @@ describe("critères en trois questions", () => {
     expect(summaryOfCriteria({ countries: [], styles: [], makes: [] })).toBe(
       "Tu acceptes tous les véhicules, tous styles, toutes marques.",
     );
-    expect(summaryOfCriteria({ countries: ["FR", "IT", "GB"], styles: ["Youngtimer"], makes: ["Porsche", "Nissan"] })).toBe(
+    expect(
+      summaryOfCriteria({ countries: ["FR", "IT", "GB"], styles: ["Youngtimer"], makes: ["Porsche", "Nissan"] }),
+    ).toBe(
       "Tu acceptes les françaises, les italiennes et les britanniques, de style youngtimer, de marque Porsche ou Nissan.",
     );
   });
@@ -297,7 +306,15 @@ describe("corps envoyés à l'API", () => {
       startsAt: "2026-11-08T19:00",
       endsAt: "2026-11-08T23:30",
       needs: [
-        { id: "n2", trade: "food_truck", quantity: "2", power: "a16", water: true, frontageM: "6", installTime: "16:00" },
+        {
+          id: "n2",
+          trade: "food_truck",
+          quantity: "2",
+          power: "a16",
+          water: true,
+          frontageM: "6",
+          installTime: "16:00",
+        },
         { trade: "photographer", quantity: "1", power: "none", water: false, frontageM: "", installTime: "" },
       ],
     });
