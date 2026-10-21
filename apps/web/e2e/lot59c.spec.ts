@@ -70,7 +70,9 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     // Centre du cadre : flouté ; coin de la photo, loin du cadre : net.
     const c = { x: r.x + r.w * 0.4, y: r.y + r.h * 0.35, w: r.w * 0.2, h: r.h * 0.3 };
     expect(await regionSpread(stored, c), "centre du cadre : flouté").toBeLessThan(25);
-    expect(await regionSpread(stored, { x: 0.02, y: 0.02, w: 0.15, h: 0.15 }), "loin du cadre : net").toBeGreaterThan(60);
+    expect(await regionSpread(stored, { x: 0.02, y: 0.02, w: 0.15, h: 0.15 }), "loin du cadre : net").toBeGreaterThan(
+      60,
+    );
     await ctx.close();
   });
 }
