@@ -73,7 +73,14 @@ export async function action({ request }: Route.ActionArgs) {
     return res.ok ? redirect("/admin/reglages?fait=1") : fail(text("key"), res);
   }
   if (intent === "points") {
-    for (const key of ["points.participation", "points.staff", "points.referral", "points.malus"]) {
+    // Lot 57 : les points du prix du public (lot 49) se règlent aussi depuis le site.
+    for (const key of [
+      "points.participation",
+      "points.staff",
+      "points.referral",
+      "points.malus",
+      "points.audience_prize",
+    ]) {
       const res = await put(request, key, Number(text(key)));
       if (!res.ok) return fail("points", res);
     }
@@ -205,7 +212,15 @@ export default function AdminSettings({ loaderData, actionData }: Route.Componen
         </h2>
         <p className="s-notice">{adminTexts.pointsWarning}</p>
         <div className="adm-grid">
-          {(["points.participation", "points.staff", "points.referral", "points.malus"] as const).map((key) => (
+          {(
+            [
+              "points.participation",
+              "points.staff",
+              "points.referral",
+              "points.malus",
+              "points.audience_prize",
+            ] as const
+          ).map((key) => (
             <TextField
               key={key}
               label={adminSettingLabels[key]}
