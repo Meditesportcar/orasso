@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { apiCall, login, MOBILE, SEED_PASSWORD, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 41, côté appli (version web de recette) : le flux d'arrivée. « Tu viens comment ? » (six profils, barre d'onglets
 // du profil choisi), « Ton coin » (carte de France : toucher le 66 puis le 11 → puce « 66 · favori » et « +1 », crédit
@@ -10,7 +11,7 @@ import { apiCall, login, MOBILE, SEED_PASSWORD, unique } from "./helpers";
 // dans les deux thèmes, audit des règles du système, captures à 390 px (exposant et média).
 // Lancer avec APP_URL=http://localhost:8261 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API lancée.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-41-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-41-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 mkdirSync(DIR, { recursive: true });
 

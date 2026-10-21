@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Messagerie et Boîte (lot 18) : l'appli en version web de recette (`expo start --web` derrière
 // `apps/mobile/scripts/web-isolated.mjs`) face au site. A (appli) écrit à son ami B (site) : B reçoit sans recharger,
@@ -9,7 +10,7 @@ import { apiCall, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 // non-ami. Deux thèmes à 390 px. Lancer avec APP_URL=http://localhost:8191 (CORS_ORIGINS de l'API = même origine).
 const APP = process.env.APP_URL;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-18-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-18-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 async function shot(page: Page, name: string) {

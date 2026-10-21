@@ -2,13 +2,14 @@ import { createHmac } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { apiCall, login, SEED_PASSWORD, samplePhoto, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 16, côté appli (version web de recette) : Moi complet (profil, aperçu public, notifications par type, public /
 // privé, secteur, rayon, mot de passe, double authentification, appareils, QR de compte, suppression du compte),
 // casquettes (feuille « Mes casquettes », bascule vers (orga) et (pro), appui long, mémorisation) et « Mot de passe
 // oublié ». Lancer avec APP_URL=http://localhost:8161 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-16-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-16-captures`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 /** Code TOTP (RFC 6238, 6 chiffres, 30 s) d'un secret base32. */

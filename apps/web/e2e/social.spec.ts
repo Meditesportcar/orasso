@@ -2,12 +2,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { addVehicleApi, apiCall, deliverNow, login, loginInBrowser, randomPlate, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Social (lot 17) sur le site : profil d'un autre (public / privé / ami), véhicule d'un autre, recherche de personnes
 // dans Explorer, demande d'ami et acceptation, Journal avec l'actualité des amis, cloche. Avec CAPTURES=1, captures dans
 // les deux thèmes, au bureau et sur téléphone, avec le contrôle automatique du système de design.
 // Prérequis : site et API lancés sur la base locale avec le seed (Kenji ↔ Léa amis, Nina → Damien en attente, Marc privé).
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-17-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-17-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const VIEWS = [
   { id: "bureau", width: 1280, height: 900 },

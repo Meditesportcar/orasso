@@ -2,12 +2,13 @@ import { createHmac } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { apiCall, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 15 : connexion à l'appli d'un compte qui a la double authentification (navigateur, recette web) — mot de passe,
 // puis étape « code » (code de secours ici), session qui prouve le second facteur. Deux thèmes à 390 px.
 // Lancer avec APP_URL=http://localhost:8151 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-15-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-15-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 /** Code TOTP (RFC 6238, 6 chiffres, 30 s) d'un secret base32 d'URI otpauth. */

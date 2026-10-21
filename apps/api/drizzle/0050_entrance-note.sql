@@ -1,0 +1,1 @@
+ALTER TABLE "events" ADD COLUMN "entrance_note" text;

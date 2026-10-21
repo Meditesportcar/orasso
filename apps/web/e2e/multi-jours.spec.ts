@@ -2,13 +2,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { addVehicleApi, apiCall, login, randomPlate, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Événements sur plusieurs jours (lot 26) sur le site : l'organisateur crée un événement de trois jours dans
 // l'assistant (« Plusieurs jours », horaires, places d'un jour, accès au choix) ; la page publique montre les jours ;
 // un passionné candidate pour le jour 2 (choix du jour), sa carte Accès porte le jour ; le tri a la colonne et le filtre
 // « Jour » ; le jour J a son sélecteur de jour. Avec CAPTURES=1 : captures Béton / Sable, bureau et 390 px, audit du
 // système de design. Prérequis : site et API lancés (DEV_SKIP_2FA=true) sur la base avec le seed.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-26-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-26-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const VIEWS = [
   { id: "bureau", width: 1280, height: 900 },
@@ -60,7 +61,7 @@ test("plusieurs jours : assistant, page publique, candidature pour un jour, Acc�
     await expect(salon).toHaveAttribute("aria-pressed", "true", { timeout: 1_000 });
   }).toPass({ timeout: 20_000 });
   await o.getByLabel("Titre").fill(title);
-  await o.getByLabel("Plusieurs jours").check({ force: true });
+  await o.getByTestId("wizard-kind-multi").click();
   const days = o.getByTestId("wizard-days");
   await expect(days.getByLabel("Date")).toHaveCount(2);
   await o.getByRole("button", { name: "Ajouter un jour" }).click();
@@ -72,13 +73,23 @@ test("plusieurs jours : assistant, page publique, candidature pour un jour, Acc�
   }
   await days.getByLabel("Places ce jour (facultatif)").nth(1).fill("2");
   await o.getByRole("button", { name: "Au choix : tout l'événement ou un jour" }).click();
+  // Lot 53 : l'adresse a son temps (le deuxième), puis on va jusqu'à « Tout est prêt ».
+  await o.getByRole("button", { name: "Continuer" }).click();
+  await expect(o.getByTestId("wizard-step")).toContainText("Lieu");
   await o.getByLabel("Adresse", { exact: true }).fill("Parc des expositions");
   await o.getByLabel("Ville").fill("Perpignan");
   await o.getByLabel("Code postal").fill("66000");
-  for (let i = 0; i < 11; i++) await o.getByRole("button", { name: "Suivant" }).click();
-  await expect(o.getByTestId("wizard-step")).toContainText("Billetterie");
-  await o.getByRole("button", { name: "Garder en brouillon" }).click();
-  await o.waitForURL(/\/orga\/meditesportcar\/e\/[0-9a-f-]{36}/);
+  // Chaque « Continuer » enregistre : on attend le temps suivant avant de recliquer.
+  for (let i = 0; i < 8; i++) {
+    const more = o.getByRole("button", { name: "Continuer" });
+    if (!(await more.isVisible())) break;
+    const before = (await o.getByTestId("wizard-step").textContent()) ?? "";
+    await more.click();
+    await expect(o.getByTestId("wizard-step")).not.toHaveText(before, { timeout: 30_000 });
+  }
+  await expect(o.getByTestId("wizard-step")).toContainText("Tout est prêt");
+  await o.getByRole("button", { name: "Brouillon" }).click();
+  await o.waitForURL(/\/orga\/meditesportcar\/e\/[0-9a-f-]{36}(\?|$)/);
   const eventId = /\/e\/([0-9a-f-]{36})/.exec(o.url())?.[1] ?? "";
   const saved = await apiCall<{
     days: { id: string; date: string; capacity: number | null }[];

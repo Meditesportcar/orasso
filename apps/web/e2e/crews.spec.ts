@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { addVehicleApi, apiCall, createEvent, login, randomPlate, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Crews et inscription en crew (lot 19) sur le site, critère de fin : Kenji crée son crew, Léa demande à le rejoindre,
 // Kenji accepte depuis sa Boîte, Léa écrit dans la discussion, Kenji inscrit le crew (Léa + Nina) à un événement, Léa
@@ -9,7 +10,7 @@ import { addVehicleApi, apiCall, createEvent, login, randomPlate, signUpApi, uni
 // Avec CAPTURES=1 : fiche du crew (chef et visiteur), mes crews, inscription en crew, confirmation de venue, demandes,
 // tri, recherche de crews, dans les deux thèmes, au bureau et à 390 px, avec le contrôle du système de design.
 // Prérequis : site et API lancés (DEV_SKIP_2FA=true comme le reste de la recette) sur la base locale avec le seed.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-19-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-19-captures/site`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 const VIEWS = [
   { id: "bureau", width: 1280, height: 900 },

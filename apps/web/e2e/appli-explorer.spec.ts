@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { apiCall, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Recherche de premier niveau et Explorer (lot 29) dans l'appli, version web de recette (`expo start --web`) :
 // recherche depuis la barre du haut (« Supra », « Rivesaltes »), Explorer (lot 44 : du plus proche au plus loin, « Mes
@@ -8,7 +9,7 @@ import { apiCall, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 // pro, lien depuis la page d'un événement. La carte stylée est vérifiée par `appli-lot44.spec.ts`.
 // Lancer avec APP_URL=http://localhost:<port de Metro> (CORS_ORIGINS de l'API = même origine).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-29-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-29-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 async function shot(page: Page, name: string) {

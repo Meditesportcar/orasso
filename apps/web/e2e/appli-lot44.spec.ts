@@ -14,6 +14,7 @@ import {
   signUpApi,
   unique,
 } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 44, côté appli (version web de recette) : Explorer v2 (position refusée → repli sur le 66, tout du plus proche au
 // plus loin, filtres repliés, carte stylée rendue : canvas et style `orasso-<thème>`) et fiche événement v2 (affiche en
@@ -21,7 +22,7 @@ import {
 // candidature refusée sans la case « J'ai vu le créneau d'arrivée ». Deux thèmes, captures à 390 px.
 // Lancer avec APP_URL=http://localhost:8291 (relais isolé devant Metro), API et site seedés (glyphes servis par le site).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-44-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-44-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

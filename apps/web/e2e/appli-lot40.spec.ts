@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { addVehicleApi, MOBILE, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Lot 40, côté appli (version web de recette) : navigation v2. Les six casquettes du seed (exposant Kenji, visiteur
 // Paul sans véhicule, organisateur Damien, pro garage@, prestataire Paul, média Léo du lot 45) : chaque onglet de chaque
@@ -10,7 +11,7 @@ import { addVehicleApi, MOBILE, randomPlate, SEED_PASSWORD, signUpApi, unique } 
 // onglets, visiteur → exposant sans redémarrer.
 // Lancer avec APP_URL=http://localhost:8251 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-40-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-40-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

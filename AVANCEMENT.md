@@ -1,6 +1,6 @@
 # Avancement
 
-À lire au début de chaque session, à mettre à jour à la fin. Réécrit le 19/10/2026 au lot 38 (ouverture du chantier « Intégration de la DA v2 ») : l'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\DELL\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+À lire au début de chaque session, à mettre à jour à la fin. Réécrit le 19/10/2026 au lot 38 (ouverture du chantier « Intégration de la DA v2 ») : l'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
 
 ## État au 20/10/2026 : chantier DA v2 en pause (changement de PC)
 
@@ -74,6 +74,7 @@
 
 - Vague 5 : la branche `lot-52-orga-v2` attend la relecture indépendante (D27) et la fusion du coordinateur (aucune migration ; fichiers partagés : `packages/shared` (`roles.ts`, `labels.fr.ts`, `labels/shop.fr.ts`, `schemas/index.ts`), `apps/api/src/modules/staff/routes.ts`, `scripts/seed.ts`). Le lot 53 remplace l'assistant derrière « Créer un événement » et « Reprendre ».
 
+- Vague 6 : la branche `lot-53-assistant-huit-temps` (assistant de création en huit temps, site et appli) attend la relecture indépendante (D27) et la fusion du coordinateur (migration `0050_entrance-note`, parent `0049_rotating-qr`, à régénérer, règle B1 ; fichiers partagés : `apps/web/app/components/EventMap.tsx` (prop `draggablePin`), `apps/mobile/src/lib/orgaV2.ts` (règles par champ), `apps/api/src/modules/events/service.ts` et `schemas/event.ts` (`entranceNote`), recettes `lot36`, `multi-jours`, `site-public`, `appli-evenements`). Corrections des deux relectures faites le 21/10 (22 points : réconciliation après chaque enregistrement, adresse de modification dès la création, temps atteint et récurrence gardés sur l'appareil, Publier exige l'affiche, appli hors réseau, Sable lisible ; voir le journal des choix). Reste : précision d'entrée sur la fiche publique du site (lot 57) ; épingle native par geste à vérifier sur l'APK (lot 58).
 - Vague 5 : la branche `lot-55-media` attend la relecture indépendante (D27) et la fusion du coordinateur (aucune migration ; fichiers partagés : `apps/mobile/src/lib/applications.tsx`, `app/jour-j/[id].tsx`, `app/e/[slug].tsx`, `app/_layout.tsx`, `features/profil/parts.tsx` (zone média, sans toucher à celle du lot 50), `lib/api/index.ts`, `packages/shared` (`labels.fr.ts`, `labels/arrivee.fr.ts`, `schemas/media.ts`), `apps/api/src/modules/media/*` (D26 : route `/admin/media/:id/verify`), `scripts/seed/media.ts`). À fusionner après le lot 50.
 
 ## Prochaine étape
@@ -146,7 +147,7 @@ bash deploy/deploy.sh logs api   # journaux (api, web ou db)
 bash deploy/deploy.sh rollback   # version précédente
 ```
 
-Seul ce qui est commité part. Migrations appliquées au démarrage de l'API ; seed de démonstration lancé à chaque déploiement si `db:seed` existe. Le VPS est partagé avec d'autres sites en production : lire `deploy/README.md` avant d'y toucher (nginx, secrets, sauvegarde, restauration). Identifiants du site : `C:\Users\DELL\.claude\relais\orasso\secrets-dev.txt`.
+Seul ce qui est commité part. Migrations appliquées au démarrage de l'API ; seed de démonstration lancé à chaque déploiement si `db:seed` existe. Le VPS est partagé avec d'autres sites en production : lire `deploy/README.md` avant d'y toucher (nginx, secrets, sauvegarde, restauration). Identifiants du site : `C:\Users\Dams\.claude\relais\orasso\secrets-dev.txt`.
 
 
 

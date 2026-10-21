@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, deliverNow, login, SEED_PASSWORD, samplePhoto, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Administration dans l'appli (lot 35d, décision D20), dans le navigateur. Parcours de la fiche : super admin vérifie une
 // structure ; décide d'un signalement puis d'une sanction ; réinitialise la double authentification d'un compte avec
@@ -9,7 +10,7 @@ import { apiCall, deliverNow, login, SEED_PASSWORD, samplePhoto, signUpApi, uniq
 // les mêmes écrans en Sable, avec le contrôle des règles du système de design sur chaque capture.
 // Lancer avec APP_URL=http://localhost:<relais> (Metro, EXPO_PUBLIC_API_URL, EXPO_PUBLIC_SITE_URL et CORS_ORIGINS posés).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-35d-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-35d-captures`;
 const API = `http://localhost:${process.env.API_PORT ?? 3001}`;
 const WEB = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
 test.skip(!APP, "Appli : lancer avec APP_URL");

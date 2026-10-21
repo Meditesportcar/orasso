@@ -2,12 +2,13 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { apiCall, login, loginInBrowser } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Accueil complet (lot 30) sur le site, avec Kenji (département 66). Prérequis : base locale avec le seed (garage favori,
 // deux emplacements sponsorisés, cache factice du lavage et du carburant), API lancée avec `OVERPASS_URL=off`,
 // `FUEL_API_URL=off` et `WEATHER_PROVIDER=off` (aucun appel à une source externe). Captures dans les deux thèmes, au
 // bureau et sur téléphone (390 px) : `CAPTURES=1 pnpm --filter @orasso/web exec playwright test accueil`.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-30-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-30-captures/site`;
 const TITLES = ["pending", "nearby", "weather", "agenda", "favorite_garage", "wash", "fuel"] as const;
 
 type Home = {

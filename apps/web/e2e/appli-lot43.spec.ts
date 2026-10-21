@@ -13,6 +13,7 @@ import {
   unique,
 } from "./helpers";
 import { auditApp, createEventIn } from "./helpers/lot43";
+import { RELAIS } from "./relais";
 
 // Lot 43, côté appli (version web de recette) : Sorties en tickets, Accueil par profil (exposant, visiteur, pro,
 // prestataire, média), accès flottant dès J-7. Comptes du seed : Kenji (exposant : un ticket par statut, retenue, en
@@ -20,7 +21,7 @@ import { auditApp, createEventIn } from "./helpers/lot43";
 // Sofia (prestataire, emplacement B2), Léo (média accrédité). Captures à 390 px dans les deux thèmes.
 // Lancer avec APP_URL=http://localhost:8281 (Metro derrière `apps/mobile/scripts/web-isolated.mjs`), API seedée.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-43-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-43-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";

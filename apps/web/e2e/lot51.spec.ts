@@ -3,11 +3,12 @@ import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { apiCall, type Cookie, loginInBrowser, randomPlate, setTheme, signUpApi, unique } from "./helpers";
 import { checkerPhoto, inner, type Rect, regionSpread, storedPhoto } from "./helpers/lot51";
+import { RELAIS } from "./relais";
 
 // Lot 51, côté site : floutage de la plaque à la main (pas de détection automatique sur le site). Ajout d'un véhicule
 // avec un cadre posé sur la photo choisie, puis floutage après coup d'une photo déjà en ligne depuis la page du
 // véhicule ; la photo stockée est floutée dans le cadre et nette ailleurs (pixels lus via l'API). Deux thèmes.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-51-captures/site";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-51-captures/site`;
 const WIDE = { width: 1280, height: 900 } as const;
 
 type Theme = "beton" | "sable";

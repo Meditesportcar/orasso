@@ -1,12 +1,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { SEED_PASSWORD } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Recette de l'appli dans un navigateur (`expo start --web` derrière `apps/mobile/scripts/web-isolated.mjs`), lot 12 :
 // carnet de route, feuille « Ton avis », avis sur la page de l'événement, points de Moi, dans les deux thèmes à 390 px.
 // Lancer avec APP_URL=http://localhost:8111 APP_EMAIL=<passionné pointé> APP_EVENT=<slug de l'événement passé>.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-12-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-12-captures/appli`;
 test.skip(!APP || !process.env.APP_EMAIL, "Appli : lancer avec APP_URL et APP_EMAIL");
 
 async function shot(page: Page, name: string) {

@@ -101,7 +101,7 @@ describe("assistant d'événement", () => {
   it("adresse et ville obligatoires (étape Format du site, schéma de l'API)", () => {
     expect(eventAddressProblem(draft())).toBeNull();
     expect(eventAddressProblem({ ...draft(), addressLine: " " })).toMatch(/adresse/);
-    expect(eventStepProblem("format", { ...draft(), city: "" })).toMatch(/ville/);
+    expect(eventStepProblem("lieu", { ...draft(), city: "" })).toMatch(/ville/);
     const body = {
       title: "Rasso",
       format: "gathering",

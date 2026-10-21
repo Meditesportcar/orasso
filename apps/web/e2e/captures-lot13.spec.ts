@@ -2,11 +2,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { apiCall, login, randomPlate, SEED_PASSWORD, samplePhoto, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Captures du lot 13 (site public, structure, création d'événement, express, administration) dans les deux thèmes,
 // au bureau et sur téléphone (390 px), avec le contrôle automatique du système de design :
 // `CAPTURES=1 pnpm --filter @orasso/web exec playwright test captures-lot13`.
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-13-captures";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-13-captures`;
 test.skip(!process.env.CAPTURES, "Captures : lancer avec CAPTURES=1");
 
 const API = `http://localhost:${process.env.API_PORT ?? 3001}`;
@@ -202,23 +203,9 @@ test("captures du site public, de la structure et de la création d'événement"
       await shot(o, theme, view.id, "14-orga-evenement-brouillon");
       await o.goto(`/orga/${structure.slug}/nouvel-evenement`);
       await o.waitForLoadState("networkidle");
-      await shot(o, theme, view.id, "15-assistant-1-format");
-      await o.getByLabel("Titre").fill("Rassemblement d'exemple");
-      await o.getByLabel("Début").fill("2026-12-05T18:00");
-      await o.getByLabel("Fin").fill("2026-12-05T23:00");
-      for (let i = 0; i < 3; i++) await o.getByRole("button", { name: "Suivant" }).click();
-      await shot(o, theme, view.id, "16-assistant-4-prestataires");
-      for (let i = 0; i < 3; i++) await o.getByRole("button", { name: "Suivant" }).click();
-      await shot(o, theme, view.id, "17-assistant-7-criteres");
-      for (let i = 0; i < 3; i++) await o.getByRole("button", { name: "Suivant" }).click();
-      await shot(o, theme, view.id, "18-assistant-10-infos");
-      await o.getByRole("button", { name: "Suivant" }).click();
-      await o.getByRole("button", { name: "Ajouter une zone" }).click();
-      await o.getByLabel("Code").fill("JDM");
-      await o.getByLabel("Nom", { exact: true }).fill("Zone JDM");
-      await shot(o, theme, view.id, "19-assistant-11-zones");
-      await o.getByRole("button", { name: "Suivant" }).click();
-      await shot(o, theme, view.id, "19b-assistant-12-billetterie");
+      // Lot 53 : l'assistant est en huit temps ; ils sont tous capturés par `lot53.spec.ts` (site, deux thèmes, 390 px
+      // et bureau). Ici, seulement son ouverture.
+      await shot(o, theme, view.id, "15-assistant-1-type");
       await o.context().close();
     }
   }

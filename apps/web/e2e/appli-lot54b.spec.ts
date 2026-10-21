@@ -3,6 +3,7 @@ import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, login, MOBILE, SEED_PASSWORD, samplePhoto } from "./helpers";
 import { auditApp } from "./helpers/lot43";
 import { sql } from "./helpers/lot48";
+import { RELAIS } from "./relais";
 
 // Lot 54b, côté appli (version web de recette) : les six corrections complémentaires du lot 54.
 //  1. caches de lecture propres au compte : changement de compte sur le même appareil, déconnexion ;
@@ -12,7 +13,7 @@ import { sql } from "./helpers/lot48";
 // Les points 2 (« Circuit+ ») et 3 (motif de refus) sont couverts par `proPresta.test.ts`.
 // Lancer avec APP_URL=http://localhost:8441 (relais `apps/mobile/scripts/web-isolated.mjs`), API seedée.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/Dams/.claude/relais/orasso/lot-54b-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-54b-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 test.use({ actionTimeout: 20_000 });
 

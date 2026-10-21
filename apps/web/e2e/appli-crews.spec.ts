@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { addVehicleApi, apiCall, createEvent, login, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Crews (lot 19) dans l'appli en version web de recette (`expo start --web` derrière
 // `apps/mobile/scripts/web-isolated.mjs`) : fiche du crew (chef), Explorer « Personnes et crews », en-tête du Garage,
@@ -8,7 +9,7 @@ import { addVehicleApi, apiCall, createEvent, login, randomPlate, SEED_PASSWORD,
 // Boîte > Demandes (venue à confirmer, demande reçue par le chef). Deux thèmes à 390 px.
 // Lancer avec APP_URL=http://localhost:<relais> (CORS_ORIGINS de l'API = même origine).
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-19-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-19-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 async function shot(page: Page, name: string) {
@@ -70,7 +71,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     // Kenji (chef) : fiche, Explorer, Garage, Boîte > Demandes, puis inscription en crew depuis l'événement.
     const k = await appLogin(browser, kenji, theme);
     k.page.on("console", (m) => {
-      if (m.type() === "error") errors.push(m.text().slice(0, 200));
+      if (m.type() === "error") errors.push(`${m.text().slice(0, 200)} @ ${m.location().url}`);
     });
     await k.page.goto(`/crew/${crew.slug}`);
     await expect(k.page.getByTestId("crew-pending-request")).toBeVisible({ timeout: 30_000 });
@@ -106,7 +107,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     // Léa : Boîte > Demandes (venue à confirmer), puis Accès → feuille de confirmation.
     const l = await appLogin(browser, lea, theme);
     l.page.on("console", (m) => {
-      if (m.type() === "error") errors.push(m.text().slice(0, 200));
+      if (m.type() === "error") errors.push(`${m.text().slice(0, 200)} @ ${m.location().url}`);
     });
     await l.page.goto("/accueil");
     await l.page.getByRole("button", { name: "Boîte", exact: true }).first().click();

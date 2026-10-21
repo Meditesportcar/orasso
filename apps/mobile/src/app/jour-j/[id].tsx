@@ -317,6 +317,11 @@ export default function JourJ() {
         <Text variant="bodyStrong" color={c.plateInk}>
           {place || kit.event.title}
         </Text>
+        {kit.event.entranceNote ? (
+          <Text variant="meta" color={c.plateInk} testID="jour-j-entrance">
+            {kit.event.entranceNote}
+          </Text>
+        ) : null}
         <Text variant="meta" color={c.plateMuted}>
           {formatDay(kit.event.startsAt, tz)} · {formatHour(kit.event.startsAt, tz)} –{" "}
           {formatHour(kit.event.endsAt, tz)}

@@ -1,6 +1,6 @@
 // Assistant d'événement de l'appli (lot 35b) : les trois écrans de la première étape du site — format et titre, dates
 // (un jour ou plusieurs, lot 26), lieu (recherche d'adresse par le géocodeur de l'API, ou position du téléphone).
-import { Button, CheckboxField, Plate, Text, TextField, useTheme } from "@orasso/design-system/native";
+import { Button, Plate, Text, TextField, useTheme } from "@orasso/design-system/native";
 import {
   dayAccesses,
   dayAccessLabels,
@@ -8,7 +8,6 @@ import {
   eventFormatLabels,
   eventEditorLabels as L,
   withAddedDay,
-  withMultiDay,
 } from "@orasso/shared";
 import * as Location from "expo-location";
 import { useState } from "react";
@@ -18,7 +17,7 @@ import { api } from "@/lib/api";
 import { now } from "@/lib/clock";
 import { errorMessage } from "@/lib/http";
 import { Muted } from "@/ui/Muted";
-import { Choices, DateField, DateTimeFields, Group, TimeField, wizardStyles } from "./fields";
+import { Choices, DateField, Group, TimeField, wizardStyles } from "./fields";
 import type { StepContext } from "./types";
 
 export function FormatStep({ d, set, formats }: StepContext) {
@@ -51,17 +50,13 @@ export function FormatStep({ d, set, formats }: StepContext) {
   );
 }
 
+/** Lot 53 : les jours d'un événement « Plusieurs jours » (temps « Type ») ; ponctuel et récurrent sont dans `Temps.tsx`. */
 export function DatesStep({ d, set, setD }: StepContext) {
   const { t } = useTheme();
   const updateDay = (i: number, patch: Partial<StepContext["d"]["days"][number]>) =>
     setD((p) => ({ ...p, days: p.days.map((x, j) => (j === i ? { ...x, ...patch } : x)) }));
   return (
     <>
-      <CheckboxField
-        label={eventDaysLabels.multiDay}
-        checked={d.multiDay}
-        onChange={(multiDay) => setD((p) => withMultiDay(p, multiDay, now()))}
-      />
       {d.multiDay ? (
         <View style={wizardStyles.block} testID="wizard-days">
           {d.days.map((day, i) => (
@@ -124,24 +119,7 @@ export function DatesStep({ d, set, setD }: StepContext) {
             onChange={(a) => set("dayAccess", a)}
           />
         </View>
-      ) : (
-        <>
-          <DateTimeFields
-            dateLabel={L.startDate}
-            timeLabel={L.startTime}
-            value={d.startsAt}
-            onChange={(v) => set("startsAt", v)}
-            testID="wizard-start"
-          />
-          <DateTimeFields
-            dateLabel={L.endDate}
-            timeLabel={L.endTime}
-            value={d.endsAt}
-            onChange={(v) => set("endsAt", v)}
-            testID="wizard-end"
-          />
-        </>
-      )}
+      ) : null}
       <Muted variant="caption">{L.datesHint}</Muted>
     </>
   );

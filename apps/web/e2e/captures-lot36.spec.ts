@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { type Audit, auditPage } from "./audit";
 import { apiCall, login, SEED_PASSWORD, unique } from "./helpers";
+import { RELAIS } from "./relais";
 
 // Captures des écrans touchés par le lot 36 dans l'appli (navigateur, 390 px, Béton et Sable) et contrôle du système de
 // design dans le DOM (pas de vert, rien de tronqué, pas de défilement horizontal) : case des conditions générales à
@@ -9,7 +10,7 @@ import { apiCall, login, SEED_PASSWORD, unique } from "./helpers";
 // aperçu d'un brouillon, lien de vérification de l'e-mail ouvert dans l'appli.
 // Lancer avec APP_URL (relais isolé devant `expo start --web`) et CAPTURES_DIR.
 const APP = process.env.APP_URL;
-const DIR = process.env.CAPTURES_DIR ?? "C:/Users/DELL/.claude/relais/orasso/lot-36-captures/appli";
+const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-36-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
 
 type Theme = "beton" | "sable";
