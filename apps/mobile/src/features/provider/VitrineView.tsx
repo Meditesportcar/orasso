@@ -3,7 +3,7 @@
 // gabarit pour l'onglet Vitrine (mon aperçu) et la fiche publique d'un prestataire (`/providers/[id]`).
 // Lot C4b : pièces de l'artefact — puces `.tz-chips`, menu `.vit-menu` (une ligne par plat, prix étroit moutarde),
 // besoins en `.acts-g`, zone en puces allumées, avis en `.tz-card` (logo de la structure en initiales).
-import { departmentChoices, departmentLabel, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { departmentChoices, departmentLabel, OrgLogo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   formatMenuPrice,
   type ProviderPublic,
@@ -16,7 +16,7 @@ import {
 import { StyleSheet, View } from "react-native";
 
 import { ActGrid, AngledTag, SecH, TzChip } from "@/features/pro/kit";
-import { formatRating, frontageIcon, initialsOf, monthYear, powerIcon, waterIcon } from "@/lib/proPresta";
+import { formatRating, frontageIcon, monthYear, powerIcon, waterIcon } from "@/lib/proPresta";
 import { Muted } from "@/ui/Muted";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -121,12 +121,8 @@ export function VitrineView({
               style={[styles.review, { backgroundColor: t.color.ground, boxShadow: t.shadow.shadowCard }]}
             >
               <View style={styles.reviewHead}>
-                {/* `.orglogo` : 36 px, rayon 10, initiales moutarde sur l'encre. */}
-                <View style={[styles.orgLogo, { backgroundColor: t.color.ink }]}>
-                  <Text variant="numberNarrow" color={t.color.accentText} style={styles.orgLogoText}>
-                    {initialsOf(r.structureName)}
-                  </Text>
-                </View>
+                {/* `.orglogo` du socle (lot C1) : initiales moutarde sur l'encre. */}
+                <OrgLogo name={r.structureName} />
                 <View style={styles.reviewWho}>
                   <Text variant="bodyStrong" color={t.color.ink} style={styles.reviewName}>
                     {r.structureName}
@@ -173,7 +169,5 @@ const styles = StyleSheet.create({
   reviewWho: { flex: 1, minWidth: 0, gap: space1 },
   reviewName: { fontSize: 13.5 },
   reviewMeta: { fontSize: 11.5 },
-  orgLogo: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  orgLogoText: { fontSize: 13 },
   quote: { fontStyle: "italic", lineHeight: 18 },
 });

@@ -2,7 +2,7 @@
 // Média, en attendant les composants du socle (lot C1). Chaque pièce porte le nom de sa classe dans l'artefact
 // (`.seg`, `.acts-g`, `.pill-o`, `.pro-logo`, `.disc`) et en recopie les valeurs ; les couleurs viennent des jetons.
 // À la fusion, `SegBlock` se remplace par le `Seg` du socle s'il en a un (consigné au journal des choix, lot C4b).
-import { Icon, type IconName, Monogram, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, type IconName, Monogram, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 
@@ -86,7 +86,7 @@ export function ActGrid({
               styles.act,
               on
                 ? { backgroundColor: c.ink }
-                : { backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, boxShadow: undefined },
+                : { backgroundColor: c.surface, borderWidth: 1, borderColor: c.cardLine, boxShadow: undefined },
             ]}
           >
             <Icon name={item.icon} size={24} color={on ? c.accent : c.accentText} />
@@ -134,8 +134,7 @@ export function ValidatedPill({ label, testID }: { label: string; testID?: strin
 
 /**
  * `.pro-logo` : logo carré à coins de 20, initiales en chiffres étroits (62 %, 900, 30 px) sur une couleur d'avatar,
- * ou l'image du logo quand il existe. La couleur est celle de l'artefact (#2f5fb8), prise dans les jetons en attendant
- * un jeton `avatar-*` du socle.
+ * ou l'image du logo quand il existe. Couleur : jeton `avatar-2` du socle (#2f5fb8 de l'artefact).
  */
 export function SquareLogo({
   initials,
@@ -151,12 +150,18 @@ export function SquareLogo({
   label?: string;
 }) {
   const { t } = useTheme();
-  const fill = tone === "blue" ? tokens.color.sable.stampInk11 : tokens.color.beton.win;
   const box = { width: size, height: size, borderRadius: size * 0.27, boxShadow: t.shadow.shadowCard };
   return url ? (
     <Photo source={mediaSource(url)} style={{ ...styles.logoBox, ...box }} accessibilityLabel={label} />
   ) : (
-    <View style={[styles.logoBox, box, { backgroundColor: fill }]} accessibilityLabel={label}>
+    <View style={[styles.logoBox, box, { backgroundColor: t.color.avatar2 }]} accessibilityLabel={label}>
+      {/* Vitrine : le dégradé de l'artefact, jetons `vitrine-from` → `vitrine-to` du socle. */}
+      {tone === "red" ? (
+        <Photo
+          placeholder={`linear-gradient(135deg, ${t.color.vitrineFrom} 0%, ${t.color.vitrineTo} 100%)`}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       <Text variant="numberNarrow" color={t.color.nightInk} style={{ fontSize: size * 0.4, lineHeight: size * 0.5 }}>
         {initials}
       </Text>
@@ -177,7 +182,9 @@ export function DiscGrid({ items, testID }: { items: readonly DiscTile[]; testID
           key={d.key}
           style={[
             styles.discTile,
-            d.top ? { backgroundColor: c.win } : { backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+            d.top
+              ? { backgroundColor: c.win }
+              : { backgroundColor: c.surface, borderWidth: 1, borderColor: c.cardLine },
           ]}
           accessibilityLabel={d.top ? `${d.label}, ton grade : ${d.value}` : `${d.label} : ${d.value}`}
         >
@@ -274,19 +281,18 @@ export function AngledTag({
 }) {
   const { t } = useTheme();
   const c = t.color;
-  const bg = {
-    acc: c.accent,
-    win: c.win,
-    line: "transparent",
-    wait: c.statusWaitlist,
-    ink: c.ink,
-  }[tone];
-  const fg = { acc: c.accentInk, win: c.winInk, line: c.ink, wait: c.nightInk, ink: c.ground }[tone];
+  // Encre, moutarde et contour : le `Tag` du socle (lot C1). Rouge (`.win`) et bleu (`.wait`) : pas encore au socle.
+  if (tone !== "win" && tone !== "wait") {
+    return (
+      <Tag tone={tone} testID={testID}>
+        {children}
+      </Tag>
+    );
+  }
+  const bg = tone === "win" ? c.win : c.statusWaitlist;
+  const fg = tone === "win" ? c.winInk : c.nightInk;
   return (
-    <View
-      style={[styles.tag, { backgroundColor: bg }, tone === "line" && { borderWidth: 1.5, borderColor: c.ink }]}
-      testID={testID}
-    >
+    <View style={[styles.tag, { backgroundColor: bg }]} testID={testID}>
       <Text variant="meta" color={fg} style={[styles.unskew, styles.tagText]}>
         {children}
       </Text>
@@ -321,7 +327,9 @@ export function TzChip({
     <View
       style={[
         styles.tzChip,
-        on ? { backgroundColor: c.accent } : { backgroundColor: c.surfaceRaised, borderWidth: 1, borderColor: c.line },
+        on
+          ? { backgroundColor: c.accent }
+          : { backgroundColor: c.surfaceRaised, borderWidth: 1, borderColor: c.cardLine },
       ]}
     >
       {icon ? <Icon name={icon} size={16} color={ink} /> : null}
@@ -412,12 +420,7 @@ export function TzRow({
 /** `.tz-av` : rond de 36 px, initiales étroites ; couleur prise dans les jetons. */
 export function RoundInitials({ text, tone = "red" }: { text: string; tone?: "red" | "blue" | "ink" }) {
   const { t } = useTheme();
-  const bg =
-    tone === "red"
-      ? tokens.color.beton.win
-      : tone === "blue"
-        ? tokens.color.sable.stampInk11
-        : tokens.color.beton.surfaceRaised;
+  const bg = tone === "red" ? t.color.avatar5 : tone === "blue" ? t.color.avatar2 : t.color.avatar3;
   return (
     <View style={[styles.av, { backgroundColor: bg }]}>
       <Text variant="meta" color={t.color.nightInk} style={styles.avText}>

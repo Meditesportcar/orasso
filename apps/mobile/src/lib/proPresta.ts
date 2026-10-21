@@ -29,7 +29,7 @@ import { dayCountdown, formatShortDate } from "./format";
 export const proActivityIcons: Record<ProActivity, IconName> = {
   garage: "vehicle",
   preparation: "up",
-  detailing: "wash",
+  detailing: "spark",
   covering: "gallery",
   parts: "shop",
   tyres: "explore",
@@ -37,12 +37,12 @@ export const proActivityIcons: Record<ProActivity, IconName> = {
   tint: "weatherClear",
   upholstery: "cards",
   audio: "live",
-  inspection: "check",
+  inspection: "shield",
   other: "add",
 };
 
 export const tradeIcons: Record<VendorTypeCode, IconName> = {
-  food_truck: "shop",
+  food_truck: "truck",
   barber: "profile",
   tattoo: "incident",
   photographer: "gallery",

@@ -93,10 +93,10 @@ export function VitrineScreen() {
         <>
           {p ? (
             <>
-              {/* Dégradé de l'artefact (#d4552a → #8f1d22 → #131417) : les rouges des jetons en attendant `vitrine-gradient`. */}
+              {/* `.vit-hero` : dégradé de l'artefact, jetons `vitrine-from` → `vitrine-to` du socle, puis la nuit. */}
               <View style={styles.hero} testID="vitrine-hero">
                 <Photo
-                  placeholder={`linear-gradient(135deg, ${tokens.color.beton.win} 0%, ${tokens.color.sable.winText} 70%, ${t.color.night} 100%)`}
+                  placeholder={`linear-gradient(135deg, ${t.color.vitrineFrom} 0%, ${t.color.vitrineTo} 70%, ${t.color.night} 100%)`}
                   style={StyleSheet.absoluteFill}
                 />
                 <View style={styles.heroIcon}>

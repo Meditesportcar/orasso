@@ -198,7 +198,7 @@ export function ExplorerMedia() {
             <TzChip
               kind="toggle"
               label={L.openOnly}
-              icon={filters.openOnly ? "press" : undefined}
+              icon={filters.openOnly ? "camera" : undefined}
               on={filters.openOnly}
               onPress={() => set("openOnly", !filters.openOnly)}
             />

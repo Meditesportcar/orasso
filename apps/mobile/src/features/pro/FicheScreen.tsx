@@ -206,7 +206,7 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
               {hasPosition ? (
                 <Button
                   variant="primary"
-                  icon="place"
+                  icon="nav"
                   style={styles.grow}
                   onPress={() =>
                     void Linking.openURL(
@@ -224,7 +224,7 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
                   {proV2Labels.goThere}
                 </Button>
               ) : null}
-              <Button variant="secondary" icon="heart" onPress={() => setPreviewNote(true)} testID="pro-favorite">
+              <Button variant="secondary" icon="star" onPress={() => setPreviewNote(true)} testID="pro-favorite">
                 {proV2Labels.favorite}
               </Button>
             </View>
