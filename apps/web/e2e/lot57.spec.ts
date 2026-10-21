@@ -39,20 +39,20 @@ async function shot(page: Page, name: string, theme: Theme) {
 }
 
 /**
- * Néons de la page hors de la pastille centrale de la barre d'onglets du site (`.o-tabbar__tab.is-center`, barre v1 de
- * l'espace connecté, toujours en néon) : avec elle, toute page de `/app` qui a un bouton principal compterait deux néons.
+ * Néons de la page hors de la pastille centrale de la barre d'onglets du site (barre de l'espace connecté, toujours en néon) : avec elle, toute page de `/app` qui a un bouton principal compterait deux néons.
  * Écart signalé au coordinateur (barre du site, lot 56 / 58).
  */
 async function neonsOutsideTabBar(page: Page, total: number): Promise<number> {
+  // Lot C5 : barre v2 (le O du milieu) ; tout néon posé dans la barre d'onglets compte pour celui de la barre.
   const center = await page.evaluate(() => {
-    const el = document.querySelector(".o-tabbar__tab.is-center");
-    if (!el || el.getBoundingClientRect().width === 0) return 0;
     const probe = document.createElement("div");
     probe.style.boxShadow = "var(--neon-accent)";
     document.body.appendChild(probe);
     const neon = getComputedStyle(probe).boxShadow;
     probe.remove();
-    return getComputedStyle(el).boxShadow === neon ? 1 : 0;
+    // Le compteur de la Boîte (AppBar du système de design, comme dans l'appli et l'artefact) est une pastille moutarde.
+    const owned = [...document.querySelectorAll(".o-tabbar, .o-tabbar *, .o-appbar__count")];
+    return owned.filter((el) => getComputedStyle(el).boxShadow === neon).length;
   });
   return total - center;
 }
