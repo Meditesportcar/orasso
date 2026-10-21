@@ -1,7 +1,9 @@
 // La vitrine d'un prestataire telle que la voit l'organisateur (DA v2, lot 54, prototype `s-vitrine` « Vue organisateur ») :
 // métier, spécialité, équipe, menu avec les prix, besoins sur place, zone d'intervention, avis des organisateurs. Un seul
 // gabarit pour l'onglet Vitrine (mon aperçu) et la fiche publique d'un prestataire (`/providers/[id]`).
-import { Chip, departmentChoices, departmentLabel, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Lot C4b : pièces de l'artefact — puces `.tz-chips`, menu `.vit-menu` (une ligne par plat, prix étroit moutarde),
+// besoins en `.acts-g`, zone en puces allumées, avis en `.tz-card` (logo de la structure en initiales).
+import { departmentChoices, departmentLabel, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   formatMenuPrice,
   type ProviderPublic,
@@ -13,10 +15,9 @@ import {
 } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
-import { formatRating, frontageIcon, monthYear, powerIcon, tradeIcons, waterIcon } from "@/lib/proPresta";
-import { IconTiles } from "@/ui/IconTiles";
+import { ActGrid, AngledTag, SecH, TzChip } from "@/features/pro/kit";
+import { formatRating, frontageIcon, initialsOf, monthYear, powerIcon, waterIcon } from "@/lib/proPresta";
 import { Muted } from "@/ui/Muted";
-import { SecHead } from "@/ui/SecHead";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -52,61 +53,59 @@ export function VitrineView({
 
   return (
     <View style={styles.stack} testID="vitrine-view">
-      <IconTiles
-        testID="vitrine-identity-tiles"
-        items={[
-          ...vitrine.trades.map((code) => ({ key: code, label: vendorTypeLabels[code], icon: tradeIcons[code] })),
-          ...(vitrine.tagline ? [{ key: "tagline", label: vitrine.tagline, icon: "badge" as const }] : []),
-          ...(vitrine.teamSize
-            ? [{ key: "team", label: vitrineTexts.teamSize(vitrine.teamSize), icon: "crew" as const }]
-            : []),
-        ]}
-      />
+      <View style={styles.chips} testID="vitrine-identity-tiles">
+        {vitrine.trades.map((code) => (
+          <TzChip key={code} label={vendorTypeLabels[code]} />
+        ))}
+        {vitrine.tagline ? <TzChip label={vitrine.tagline} /> : null}
+        {vitrine.teamSize ? <TzChip label={vitrineTexts.teamSize(vitrine.teamSize)} /> : null}
+      </View>
 
-      <SecHead
+      <SecH
         title={vitrineTexts.menuTitle}
         hint={vitrine.menuRange ? vitrineTexts.menuRange(vitrine.menuRange.min, vitrine.menuRange.max) : undefined}
       />
       {vitrine.menu.length ? (
-        <Plate style={styles.menu} testID="vitrine-menu-list">
+        <View style={[styles.menu, { backgroundColor: t.color.surface }]} testID="vitrine-menu-list">
           {vitrine.menu.map((item, i) => (
             <View
               // biome-ignore lint/suspicious/noArrayIndexKey: deux plats peuvent porter le même nom, la liste est affichée telle quelle
               key={`${item.label}-${i}`}
-              style={[styles.menuRow, i > 0 && { borderTopWidth: 1, borderTopColor: t.color.plateLine }]}
+              style={[
+                styles.menuRow,
+                i > 0 && { borderTopWidth: 1, borderStyle: "dashed", borderTopColor: t.color.line },
+              ]}
             >
-              <Text variant="bodyStrong" color={t.color.plateInk} style={styles.menuLabel}>
+              <Text variant="bodyStrong" color={t.color.ink} style={styles.menuLabel}>
                 {item.label}
               </Text>
-              <Text variant="bodyStrong" color={t.color.plateInk}>
+              <Text variant="numberNarrow" color={t.color.accentText} style={styles.menuPrice}>
                 {formatMenuPrice(item.priceCents)}
               </Text>
             </View>
           ))}
-        </Plate>
+        </View>
       ) : (
         <Muted variant="body">{proV2Labels.menuNone}</Muted>
       )}
 
       {needs.length ? (
         <>
-          <SecHead title={vitrineTexts.needsTitle} />
-          <IconTiles items={needs} testID="vitrine-needs" />
+          <SecH title={vitrineTexts.needsTitle} />
+          <ActGrid items={needs} testID="vitrine-needs" />
         </>
       ) : null}
 
-      <SecHead title={vitrineTexts.zoneTitle} hint={vitrineTexts.radius(vitrine.radiusKm)} />
+      <SecH title={vitrineTexts.zoneTitle} hint={vitrineTexts.radius(vitrine.radiusKm)} />
       {places.length ? (
         <View style={styles.chips} testID="vitrine-zone">
           {places.map((p) => (
-            <Chip key={p.code} selected>
-              {p.label}
-            </Chip>
+            <TzChip key={p.code} label={p.label} on />
           ))}
         </View>
       ) : null}
 
-      <SecHead
+      <SecH
         title={providerReviewTexts.sectionTitle}
         hint={
           reviews?.average !== null && reviews?.average !== undefined
@@ -117,26 +116,33 @@ export function VitrineView({
       {reviews && reviews.latest.length ? (
         <View style={styles.stack} testID="vitrine-reviews">
           {reviews.latest.map((r) => (
-            <Plate key={r.id} style={styles.review}>
+            <View
+              key={r.id}
+              style={[styles.review, { backgroundColor: t.color.ground, boxShadow: t.shadow.shadowCard }]}
+            >
               <View style={styles.reviewHead}>
+                {/* `.orglogo` : 36 px, rayon 10, initiales moutarde sur l'encre. */}
+                <View style={[styles.orgLogo, { backgroundColor: t.color.ink }]}>
+                  <Text variant="numberNarrow" color={t.color.accentText} style={styles.orgLogoText}>
+                    {initialsOf(r.structureName)}
+                  </Text>
+                </View>
                 <View style={styles.reviewWho}>
-                  <Text variant="bodyStrong" color={t.color.plateInk}>
+                  <Text variant="bodyStrong" color={t.color.ink} style={styles.reviewName}>
                     {r.structureName}
                   </Text>
-                  <Text variant="caption" color={t.color.plateMuted}>
+                  <Text variant="caption" color={t.color.inkMuted} style={styles.reviewMeta}>
                     {`${r.eventTitle} · ${monthYear(r.eventEndsAt)}`}
                   </Text>
                 </View>
-                <Chip surface="plate" selected>
-                  {`${formatRating(r.rating)}/5`}
-                </Chip>
+                <AngledTag tone="acc">{`${formatRating(r.rating)}/5`}</AngledTag>
               </View>
               {r.comment ? (
-                <Text variant="body" color={t.color.plateInk}>
+                <Text variant="caption" color={t.color.ink} style={styles.quote}>
                   {`« ${r.comment} »`}
                 </Text>
               ) : null}
-            </Plate>
+            </View>
           ))}
         </View>
       ) : (
@@ -147,18 +153,27 @@ export function VitrineView({
 }
 
 const styles = StyleSheet.create({
-  stack: { gap: space3 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  menu: { padding: space3, gap: 0 },
+  stack: { gap: 16 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  // `.vit-menu` : rayon 14, une ligne par plat (11 × 14 px), filet pointillé entre deux plats.
+  menu: { borderRadius: 14, overflow: "hidden" },
   menuRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "baseline",
     justifyContent: "space-between",
-    gap: space3,
-    paddingVertical: space2,
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
   },
-  menuLabel: { flex: 1, minWidth: 0 },
-  review: { gap: space2, padding: space3 },
-  reviewHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
+  menuLabel: { flex: 1, minWidth: 0, fontSize: 14 },
+  menuPrice: { fontSize: 20, lineHeight: 22 },
+  // `.tz-card` : fond, rayon 14, 12 × 14 px.
+  review: { gap: space2, paddingVertical: space3, paddingHorizontal: 14, borderRadius: 14 },
+  reviewHead: { flexDirection: "row", alignItems: "center", gap: 10 },
   reviewWho: { flex: 1, minWidth: 0, gap: space1 },
+  reviewName: { fontSize: 13.5 },
+  reviewMeta: { fontSize: 11.5 },
+  orgLogo: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  orgLogoText: { fontSize: 13 },
+  quote: { fontStyle: "italic", lineHeight: 18 },
 });
