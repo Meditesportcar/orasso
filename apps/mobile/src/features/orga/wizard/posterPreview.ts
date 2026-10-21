@@ -1,6 +1,6 @@
 // Aperçu de l'affiche dans l'appli (lot 53) : `POST /posters/preview` rend un PNG (rien n'est écrit) ; on le montre
 // par une adresse `data:` (le client JSON de l'appli ne lit pas les images).
-import type { PosterFormat, PosterSettings } from "@orasso/shared";
+import { createPreviewCache, type PosterFormat, type PosterSettings, posterPreviewKey } from "@orasso/shared";
 import { Platform } from "react-native";
 
 import { apiUrl } from "@/api";
@@ -34,8 +34,17 @@ export type PreviewInput = PosterSettings & {
   width: number;
 };
 
-/** Adresse `data:image/png` de l'aperçu, ou `null` si l'API refuse (limite, réseau). */
+/**
+ * Rendus déjà faits (relecture du lot 53) : la bascule Post / Story et le retour sur le temps ne redemandent pas les
+ * huit vignettes (`POST /posters/preview` est limité à 60 rendus par minute).
+ */
+const rendered = createPreviewCache<string>(48);
+
+/** Adresse `data:image/png` de l'aperçu (gardée en cache), ou `null` si l'API refuse (limite, réseau). */
 export async function posterPreview(input: PreviewInput): Promise<string | null> {
+  const key = posterPreviewKey(input);
+  const known = rendered.get(key);
+  if (known) return known;
   const path = "/api/posters/preview";
   const headers: Record<string, string> = { "content-type": "application/json" };
   const token = getSessionToken();
@@ -44,7 +53,9 @@ export async function posterPreview(input: PreviewInput): Promise<string | null>
   try {
     const res = await fetch(apiUrl(path), { method: "POST", headers, body: JSON.stringify(input) });
     if (!res.ok) return null;
-    return `data:image/png;base64,${toBase64(new Uint8Array(await res.arrayBuffer()))}`;
+    const url = `data:image/png;base64,${toBase64(new Uint8Array(await res.arrayBuffer()))}`;
+    rendered.set(key, url);
+    return url;
   } catch {
     return null;
   }

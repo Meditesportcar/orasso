@@ -24,6 +24,8 @@ import {
 import { type EventEditorApi, saveEvent } from "./eventSave";
 
 const NOW = new Date("2026-10-17T08:00:00Z");
+/** Comme `ApiRequestError` (`status` 0 : pas de réponse), sans charger React Native. */
+const apiError = (status: number, message: string) => Object.assign(new Error(message), { status });
 const S = "11111111-1111-4111-8111-111111111111";
 
 const draft = (over: Partial<EventDraft> = {}): EventDraft => ({
@@ -67,6 +69,8 @@ describe("brouillon gardé sur le téléphone", () => {
     expect(parseStoredDraft(serializeDraft({ draft: draft(), step: 99, createdId: "e1", savedAt: "x" }))).toMatchObject(
       { step: eventWizardSteps.length - 1, createdId: "e1" },
     );
+    // Index écrit avec l'ancien découpage (douze étapes, sans `steps`) : ignoré, l'assistant rouvre au temps calculé.
+    expect(parseStoredDraft(JSON.stringify({ v: 1, draft: draft(), step: 9, savedAt: "x" }))?.step).toBeNull();
   });
 
   it("garde l'affiche choisie (lot 34) ; une affiche abîmée est ignorée", () => {
@@ -84,14 +88,15 @@ describe("brouillon gardé sur le téléphone", () => {
   });
 });
 
-function fakeClient(fail: Partial<Record<keyof EventEditorApi, boolean>> = {}) {
+function fakeClient(fail: Partial<Record<keyof EventEditorApi, boolean | Error>> = {}) {
   const calls: { name: string; args: unknown[] }[] = [];
   const saved = { id: "e1", days: [], zones: [] } as unknown as EventOrganizer;
   const make =
     (name: keyof EventEditorApi) =>
     async (...args: unknown[]) => {
       calls.push({ name, args });
-      if (fail[name]) throw new Error(`${name} refusé`);
+      const f = fail[name];
+      if (f) throw f instanceof Error ? f : new Error(`${name} refusé`);
       return saved;
     };
   const client = {
@@ -142,7 +147,7 @@ describe("enregistrement", () => {
 
   it("jours refusés à la création : l'événement créé passe en modification (pas de second POST)", async () => {
     const multi = withMultiDay(draft(), true, NOW);
-    const first = fakeClient({ putEventDays: true });
+    const first = fakeClient({ putEventDays: apiError(409, "Ce jour a des candidatures.") });
     const res = await saveEvent(first.client, { structureId: S, draft: multi, createdId: null, poster: null });
     expect(res).toMatchObject({ ok: false, step: "type", createdId: "e1" });
     const second = fakeClient();
@@ -191,10 +196,45 @@ describe("enregistrement", () => {
     });
   });
 
-  it("affiche refusée : l'événement est enregistré, avec un avertissement", async () => {
+  it("affiche refusée : l'événement est enregistré, l'affiche est dite refusée (gardée pour la renvoyer)", async () => {
     const { client } = fakeClient({ uploadPoster: true });
     const res = await saveEvent(client, { structureId: S, draft: draft(), createdId: null, poster: new FormData() });
-    expect(res.ok).toBe(true);
-    if (res.ok) expect(res.warnings[0]).toMatch(/affiche/);
+    expect(res).toMatchObject({ ok: true, refused: { poster: true, zones: [], needs: [] } });
+  });
+
+  it("zone et mission refusées : rendues par leur ligne, l'enregistrement continue (relecture du lot 53)", async () => {
+    const { client, calls } = fakeClient({ addZone: true, addNeed: true });
+    const res = await saveEvent(client, {
+      structureId: S,
+      draft: draft({
+        zones: [{ code: "A", name: "Alpha", capacity: "" }],
+        needs: [{ trade: "photographer", quantity: "1", power: "none", water: false, frontageM: "", installTime: "" }],
+      }),
+      event: { id: "e1", days: [], zones: [] } as unknown as EventOrganizer,
+      createdId: null,
+      poster: null,
+    });
+    expect(res).toMatchObject({ ok: true, refused: { zones: [0], needs: [0], removals: 0, poster: false } });
+    expect(calls.map((c) => c.name)).toEqual(["updateEvent", "addZone", "addNeed", "orgEvent"]);
+  });
+
+  it("hors réseau : l'assistant reste sur son temps (relecture du lot 53)", async () => {
+    const offline = apiError(0, "Pas de réseau.");
+    const event = { id: "e1", days: [], zones: [] } as unknown as EventOrganizer;
+    const patch = fakeClient({ updateEvent: offline });
+    const res = await saveEvent(patch.client, { structureId: S, draft: draft(), event, createdId: null, poster: null });
+    expect(res).toMatchObject({ ok: false, step: null, createdId: null });
+    const days = fakeClient({ putEventDays: offline });
+    const multi = withMultiDay(draft(), true, NOW);
+    const res2 = await saveEvent(days.client, { structureId: S, draft: multi, createdId: null, poster: null });
+    expect(res2).toMatchObject({ ok: false, step: null, createdId: "e1" });
+  });
+
+  it("Publier exige l'affiche ; « Brouillon », non", async () => {
+    const { client, calls } = fakeClient();
+    const input = { structureId: S, draft: draft(), createdId: null, poster: null };
+    expect(await saveEvent(client, { ...input, validate: "publish" })).toMatchObject({ ok: false, step: "affiche" });
+    expect(calls).toHaveLength(0);
+    expect((await saveEvent(client, { ...input, validate: true })).ok).toBe(true);
   });
 });

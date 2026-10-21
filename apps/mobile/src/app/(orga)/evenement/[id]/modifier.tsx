@@ -11,14 +11,19 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
-function Editor({ eventId, copy, temps }: { eventId: string; copy: boolean; temps?: string }) {
+function Editor({ eventId, copy, temps, avert }: { eventId: string; copy: boolean; temps?: string; avert?: string }) {
   const router = useRouter();
   const { structureId } = useOrga();
   const event = useApi(() => api.orgEvent(eventId), [eventId]);
   const e = event.data;
   if (e && e.structure.id === structureId && e.status !== "cancelled") {
     return (
-      <EventWizard key={e.id} event={e} notice={copy ? L.duplicated : null} initialStep={eventWizardStepOf(temps)} />
+      <EventWizard
+        key={e.id}
+        event={e}
+        notice={avert ?? (copy ? L.duplicated : null)}
+        initialStep={eventWizardStepOf(temps)}
+      />
     );
   }
   return (
@@ -36,12 +41,18 @@ function Editor({ eventId, copy, temps }: { eventId: string; copy: boolean; temp
 
 export default function ModifierEvenement() {
   // Lot 53 : `?temps=lieu` rouvre sur un temps ; sans lui, un brouillon rouvre au premier temps incomplet.
-  const { id, copie, temps } = useLocalSearchParams<{ id: string; copie?: string; temps?: string }>();
+  // `avert` : ce que l'enregistrement qui vient de créer le brouillon a vu refuser (relecture du lot 53).
+  const { id, copie, temps, avert } = useLocalSearchParams<{
+    id: string;
+    copie?: string;
+    temps?: string;
+    avert?: string;
+  }>();
   // Rendu seulement à l'écran : chaque ouverture relit l'événement (jamais un formulaire périmé).
   const focused = useIsFocused();
   return (
     <OrgaGate title={L.editTitle}>
-      {focused ? <Editor key={id} eventId={id} copy={copie === "1"} temps={temps} /> : null}
+      {focused ? <Editor key={id} eventId={id} copy={copie === "1"} temps={temps} avert={avert} /> : null}
     </OrgaGate>
   );
 }

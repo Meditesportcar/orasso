@@ -39,6 +39,8 @@ export type AccessKit = {
     outlook: EventOutlook;
     cancelled: boolean;
     instructions: string | null;
+    /** Lot 53 : précision pour l'entrée (absente des kits enregistrés avant). */
+    entranceNote?: string | null;
   };
   /**
    * `payload` : ancien QR statique `OR1`, plus affiché depuis le lot 48 (gardé pour un ancien client, retiré au lot 58).
@@ -133,6 +135,7 @@ export async function refreshKit(app: MyApplication, pseudo: string): Promise<Ac
       outlook: event.outlook,
       cancelled: event.status === "cancelled",
       instructions: event.instructions,
+      entranceNote: event.entranceNote ?? null,
     },
     pass: { passId: pass.passId, payload: pass.payload, issuedAt: pass.issuedAt, eventNo: pass.eventNo },
     holder: { kind: pass.kind, spotLabel: pass.spotLabel, mediaName: pass.mediaName },

@@ -2,7 +2,7 @@
 // propre au téléphone autour du modèle partagé (`@orasso/shared`, `eventWizard.ts`). Chaque temps valide avec les mêmes
 // règles que le site (`eventStepProblem`). Le brouillon d'une création est gardé sur le téléphone (voir
 // `eventDraftStore.ts`) : ce fichier dit comment il s'écrit et se relit.
-import { type EventDraft, eventWizardSteps } from "@orasso/shared";
+import { type EventDraft, eventWizardSteps, storedStepIndex } from "@orasso/shared";
 
 /** « AAAA-MM-JJTHH:MM » → « AAAA-MM-JJ » (vide si absent ; une saisie en cours reste telle quelle). */
 export const datePart = (value: string) => value.split("T")[0] ?? "";
@@ -32,7 +32,11 @@ export function normalizeTime(value: string): string {
 export type StoredDraft = {
   v: 1;
   draft: EventDraft;
-  step: number;
+  /**
+   * Temps où la saisie a été laissée ; `null` s'il a été écrit avec un autre découpage (les douze étapes d'avant le
+   * lot 53) : l'assistant rouvre alors au temps calculé (`eventResumeStep`).
+   */
+  step: number | null;
   /** Événement déjà créé dont l'enregistrement des jours ou des zones a échoué : la suite passe en modification. */
   createdId: string | null;
   savedAt: string;
@@ -53,7 +57,8 @@ const posterOf = (value: unknown): StoredPoster | null => {
     : null;
 };
 
-export const serializeDraft = (value: Omit<StoredDraft, "v">) => JSON.stringify({ v: 1, ...value });
+export const serializeDraft = (value: Omit<StoredDraft, "v">) =>
+  JSON.stringify({ v: 1, steps: eventWizardSteps.length, ...value });
 
 /** Relit un brouillon gardé ; `null` s'il est absent, d'une autre version ou abîmé. */
 export function parseStoredDraft(raw: string | null): StoredDraft | null {
@@ -64,7 +69,7 @@ export function parseStoredDraft(raw: string | null): StoredDraft | null {
     const d = value.draft as Partial<EventDraft> | undefined;
     if (!d || typeof d.title !== "string" || !Array.isArray(d.vehicleTypes) || !Array.isArray(d.zones)) return null;
     if (!Array.isArray(d.days) || typeof d.format !== "string") return null;
-    const step = Number.isInteger(value.step) ? Math.min(Math.max(value.step ?? 0, 0), eventWizardSteps.length - 1) : 0;
+    const step = storedStepIndex((value as { steps?: unknown }).steps, value.step);
     return {
       v: 1,
       draft: d as EventDraft,

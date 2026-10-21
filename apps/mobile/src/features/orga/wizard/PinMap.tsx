@@ -1,6 +1,7 @@
 // Carte à épingle de l'assistant sur téléphone (lot 53) : MapLibre natif au style Orasso (comme l'Explorer, lot 44),
-// épingle moutarde fixe au centre, la carte glisse dessous ; à chaque arrêt, le centre devient la position de
-// l'événement (« Déplace l'épingle pour viser l'entrée exacte »). Le rendu navigateur est dans `PinMap.web.tsx`.
+// épingle moutarde fixe au centre, la carte glisse dessous ; à chaque arrêt après un geste, le centre devient la position
+// de l'événement (« Déplace l'épingle pour viser l'entrée exacte ») ; jamais à l'ouverture ni quand la carte se recentre
+// seule sur l'adresse trouvée (relecture du lot 53 ; à vérifier sur l'APK au lot 58). Le rendu navigateur est dans `PinMap.web.tsx`.
 import { Camera, type CameraRef, Map as MapView, type ViewStateChangeEvent } from "@maplibre/maplibre-react-native";
 import { chooseMapStyle, tokens, useTheme } from "@orasso/design-system/native";
 import { useEffect, useMemo, useRef } from "react";
@@ -9,12 +10,14 @@ import Svg, { Circle, Path } from "react-native-svg";
 
 import { mapGlyphsOrigin, mapTilesUrl } from "@/features/explorer/mapPins";
 import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
-import { DEFAULT_PIN, type PinMapProps } from "./pinMapTypes";
+import { DEFAULT_PIN, type PinMapProps, pinFromRegion, type RegionChange } from "./pinMapTypes";
 
 export function PinMap({ lat, lng, onMove, label }: PinMapProps) {
   const { theme, t } = useTheme();
   useTabSwipeDisabled();
   const camera = useRef<CameraRef>(null);
+  // Un geste de l'utilisateur a commencé le mouvement en cours (seul un geste pose une position).
+  const gesture = useRef(false);
   const last = useRef<{ lat: number; lng: number } | null>(lat !== null && lng !== null ? { lat, lng } : null);
   const style = useMemo(
     () => chooseMapStyle(theme, { glyphsOrigin: mapGlyphsOrigin(), tilesUrl: mapTilesUrl() }, true),
@@ -38,11 +41,15 @@ export function PinMap({ lat, lng, onMove, label }: PinMapProps) {
         attribution
         touchRotate={false}
         touchPitch={false}
+        onRegionWillChange={(e: { nativeEvent: ViewStateChangeEvent }) => {
+          gesture.current = Boolean(e.nativeEvent.userInteraction);
+        }}
         onRegionDidChange={(e: { nativeEvent: ViewStateChangeEvent }) => {
-          const center = (e.nativeEvent as unknown as { center: [number, number] }).center;
-          if (!center) return;
-          last.current = { lat: center[1], lng: center[0] };
-          onMove(center[1], center[0]);
+          const pos = pinFromRegion(e.nativeEvent as unknown as RegionChange, gesture.current);
+          gesture.current = false;
+          if (!pos) return;
+          last.current = pos;
+          onMove(pos.lat, pos.lng);
         }}
       >
         <Camera

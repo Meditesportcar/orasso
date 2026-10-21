@@ -10,3 +10,18 @@ export type PinMapProps = {
   onMove: (lat: number, lng: number) => void;
   label: string;
 };
+
+/** Ce que la carte native dit d'un mouvement (`onRegionWillChange` / `onRegionDidChange` de MapLibre). */
+export type RegionChange = { center?: readonly number[] | null; userInteraction?: boolean | null };
+
+/**
+ * Position retenue à la fin d'un mouvement de la carte (relecture du lot 53) : seulement après un geste de
+ * l'utilisateur (`userInteraction` au début ou à la fin du mouvement) ; l'ouverture sur le centre par défaut et les
+ * déplacements programmés (adresse trouvée) ne posent jamais de position.
+ */
+export function pinFromRegion(change: RegionChange | null | undefined, gestureStarted: boolean) {
+  const center = change?.center;
+  if (!center || center.length < 2 || !(gestureStarted || change?.userInteraction)) return null;
+  const [lng, lat] = center as [number, number];
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}

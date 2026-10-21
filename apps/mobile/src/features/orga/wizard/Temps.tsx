@@ -32,7 +32,6 @@ import {
   POSTER_TITLE_MAX,
   type PosterFormat,
   type PosterSettings,
-  type PosterStyle,
   posterStyleLabels,
   posterStyles,
   posterTexts,
@@ -44,6 +43,7 @@ import {
   RECURRENCE_MAX_COUNT,
   recurrenceDates,
   rulesCount,
+  rulesReplaceNeedsConfirm,
   rulesTemplates,
   styleCategories,
   summaryOfCriteria,
@@ -122,7 +122,10 @@ export function TypeTemps(ctx: StepContext) {
   const kind = eventKindOf(d);
   const rec = d.recurrence;
   const dates = kind === "rec" ? recurrenceDates(d) : [];
-  const locked = Boolean(ctx.event?.recurrenceRule || ctx.event?.parentEventId);
+  // « Récurrent » se choisit sur un brouillon seulement (relecture du lot 53 : sur un événement publié, la date bougerait
+  // et tous les inscrits seraient prévenus).
+  const published = Boolean(ctx.event && ctx.event.status !== "draft");
+  const locked = Boolean(ctx.event?.recurrenceRule || ctx.event?.parentEventId || published);
   return (
     <>
       <FormatStep {...ctx} />
@@ -147,6 +150,11 @@ export function TypeTemps(ctx: StepContext) {
         ))}
       </Group>
       {ctx.event?.recurrenceRule ? <Notice>{W.recurrenceExisting}</Notice> : null}
+      {published && !ctx.event?.recurrenceRule ? (
+        <Muted variant="caption" testID="wizard-rec-draft-only">
+          {W.recurrenceDraftOnly}
+        </Muted>
+      ) : null}
       {kind === "multi" ? (
         <DatesStep {...ctx} />
       ) : (
@@ -283,6 +291,11 @@ function MissionsEditor({ d, setD }: StepContext) {
             onChange={(v) => update(i, { installTime: v })}
             testID={`wizard-mission-${i}-install`}
           />
+          {n.installDay && n.installTime ? (
+            <Text variant="meta" color={t.color.plateMuted}>
+              {W.missionDay(n.installDay)}
+            </Text>
+          ) : null}
           <CheckboxField label={W.missionWater} checked={n.water} onChange={(v) => update(i, { water: v })} />
           <Button
             variant="plate"
@@ -564,14 +577,22 @@ export function AvantTemps(ctx: StepContext) {
 
 // --- (6) Règlement ----------------------------------------------------------------------------------------------
 
+type Replacement = { text: string; what: string; note: string };
+
 export function ReglementTemps(ctx: StepContext) {
   const { d, set, structureId, event } = ctx;
   const [note, setNote] = useState<string | null>(null);
+  const [asking, setAsking] = useState<Replacement | null>(null);
   const count = rulesCount(d.rulesText);
-  const insert = (text: string) => {
-    set("rulesText", text);
-    setNote(W.rulesInserted);
+  const apply = (r: Replacement) => {
+    set("rulesText", r.text);
+    setNote(r.note);
+    setAsking(null);
   };
+  // Un règlement déjà saisi n'est pas remplacé sans le demander (relecture du lot 53).
+  const offer = (r: Replacement) => (rulesReplaceNeedsConfirm(d.rulesText, r.text) ? setAsking(r) : apply(r));
+  const insert = (text: string, label: string) =>
+    offer({ text, what: W.rulesWhatTemplate(label), note: W.rulesInserted });
   async function takeLast() {
     try {
       const list = (await api.structureEvents(structureId))
@@ -580,8 +601,7 @@ export function ReglementTemps(ctx: StepContext) {
       for (const e of list) {
         const full = await api.orgEvent(e.id);
         if (full.rulesText?.trim()) {
-          set("rulesText", full.rulesText);
-          return setNote(W.rulesTaken(full.title));
+          return offer({ text: full.rulesText, what: W.rulesWhatLast, note: W.rulesTaken(full.title) });
         }
       }
       setNote(W.rulesLastNone);
@@ -592,14 +612,27 @@ export function ReglementTemps(ctx: StepContext) {
   return (
     <>
       <View style={styles.chips}>
-        <Chip onPress={() => insert(defaultEventRules)}>{W.rulesOrasso}</Chip>
+        <Chip onPress={() => insert(defaultEventRules, W.rulesOrasso)}>{W.rulesOrasso}</Chip>
         {rulesTemplates.map((tpl) => (
-          <Chip key={tpl.id} onPress={() => insert(tpl.text)}>
+          <Chip key={tpl.id} onPress={() => insert(tpl.text, tpl.label)}>
             {tpl.label}
           </Chip>
         ))}
         <Chip onPress={() => void takeLast()}>{W.rulesLast}</Chip>
       </View>
+      {asking ? (
+        <View style={styles.gap1} testID="wizard-rules-replace">
+          <Notice>{`${W.rulesReplaceTitle} ${W.rulesReplaceBody(asking.what)}`}</Notice>
+          <View style={wizardStyles.row}>
+            <Button variant="secondary" icon="check" onPress={() => apply(asking)} testID="wizard-rules-replace-yes">
+              {W.rulesReplaceConfirm}
+            </Button>
+            <Button variant="secondary" icon="close" onPress={() => setAsking(null)}>
+              {W.rulesReplaceKeep}
+            </Button>
+          </View>
+        </View>
+      ) : null}
       {note ? <Muted variant="caption">{note}</Muted> : null}
       <TextField
         label={L.rules}
@@ -633,7 +666,10 @@ export function AfficheTemps(ctx: StepContext) {
     setD((p) => ({ ...p, poster: { ...(p.poster ?? poster), ...change } }));
   const [format, setFormat] = useState<PosterFormat>("post");
   const [preview, setPreview] = useState<string | null>(null);
-  const [thumbs, setThumbs] = useState<Partial<Record<PosterStyle, string>>>({});
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  // Rendu refusé (limite atteinte, réseau) : dit, avec de quoi réessayer (`retry` relance les rendus).
+  const [refused, setRefused] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [photo, setPhoto] = useState<string | null>(mediaSource(event?.posterSettings?.photoUrl)?.uri ?? null);
   const [sending, setSending] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -649,12 +685,16 @@ export function AfficheTemps(ctx: StepContext) {
   });
   const latest = useRef(input);
   latest.current = input;
-  const key = `${poster.photoKey}|${poster.style}|${poster.title}|${format}`;
+  const key = `${poster.photoKey}|${poster.style}|${poster.title}|${format}|${retry}`;
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` résume ce qui change l'aperçu (débounce 300 ms).
   useEffect(() => {
     let alive = true;
     const timer = setTimeout(() => {
-      void posterPreview(latest.current(poster, 540)).then((u) => alive && setPreview(u));
+      void posterPreview(latest.current(poster, 540)).then((u) => {
+        if (!alive) return;
+        if (u) setPreview(u);
+        else setRefused(true);
+      });
     }, 300);
     return () => {
       alive = false;
@@ -669,7 +709,8 @@ export function AfficheTemps(ctx: StepContext) {
         for (const style of posterStyles) {
           const u = await posterPreview(latest.current({ ...poster, style }, 180));
           if (!alive) return;
-          if (u) setThumbs((x) => ({ ...x, [style]: u }));
+          if (!u) return setRefused(true);
+          setThumbs((x) => ({ ...x, [`${format}:${style}`]: u }));
         }
       })();
     }, 300);
@@ -677,7 +718,7 @@ export function AfficheTemps(ctx: StepContext) {
       alive = false;
       clearTimeout(timer);
     };
-  }, [poster.photoKey, format]);
+  }, [poster.photoKey, format, retry]);
 
   async function pick() {
     setError(null);
@@ -730,6 +771,21 @@ export function AfficheTemps(ctx: StepContext) {
           />
         ) : null}
       </View>
+      {refused ? (
+        <View style={styles.gap1} testID="wizard-poster-refused">
+          <Notice tone="error">{W.posterPreviewFailed}</Notice>
+          <Button
+            variant="secondary"
+            icon="undo"
+            onPress={() => {
+              setRefused(false);
+              setRetry((n) => n + 1);
+            }}
+          >
+            {W.posterPreviewRetry}
+          </Button>
+        </View>
+      ) : null}
       <Muted variant="label">{`${posterTexts.style} · ${posterTexts.stylesCount}`}</Muted>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
         {posterStyles.map((style) => (
@@ -748,7 +804,9 @@ export function AfficheTemps(ctx: StepContext) {
                 { borderColor: poster.style === style ? t.color.accent : "transparent", backgroundColor: t.color.line },
               ]}
             >
-              {thumbs[style] ? <Image source={{ uri: thumbs[style] }} style={StyleSheet.absoluteFill} /> : null}
+              {thumbs[`${format}:${style}`] ? (
+                <Image source={{ uri: thumbs[`${format}:${style}`] }} style={StyleSheet.absoluteFill} />
+              ) : null}
             </View>
             <Text variant="caption">{posterStyleLabels[style]}</Text>
           </Pressable>

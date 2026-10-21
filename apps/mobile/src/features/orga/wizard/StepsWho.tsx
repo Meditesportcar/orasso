@@ -1,8 +1,7 @@
 // Assistant d'événement de l'appli (lot 35b) : véhicules admis, places, prestataires attendus, entrée du public, mode
-// d'admission et critères (catégories, origine, marques en liste blanche, précisions). Mêmes champs que le site.
-import { Button, CheckboxField, Chip, Plate, Text, TextField, useTheme } from "@orasso/design-system/native";
+// d'admission. Mêmes champs que le site. Les critères (trois questions) sont dans `Temps.tsx` (lot 53).
+import { Button, CheckboxField, TextField } from "@orasso/design-system/native";
 import {
-  criteriaCountries,
   eventAdmissionLabels,
   eventPublicAccessLabels,
   eventEditorLabels as L,
@@ -10,11 +9,10 @@ import {
   vehicleTypeLabels,
   vehicleTypes,
 } from "@orasso/shared";
-import { useMemo, useState } from "react";
-import { View } from "react-native";
+import { useState } from "react";
 
 import { Muted } from "@/ui/Muted";
-import { Choices, Group, MultiChoices, wizardStyles } from "./fields";
+import { Choices, Group } from "./fields";
 import { type StepContext, toggle } from "./types";
 
 export function VehiclesStep({ d, set }: StepContext) {
@@ -178,86 +176,6 @@ export function AdmissionStep({ d, set }: StepContext) {
             ? L.admissionInvite
             : L.admissionFiltered}
       </Muted>
-    </>
-  );
-}
-
-/** Marques : beaucoup trop pour des pastilles ; une recherche, les marques retenues en tête. */
-function MakesPicker({ d, set, makes }: StepContext) {
-  const { t } = useTheme();
-  const [q, setQ] = useState("");
-  const list = useMemo(() => makes.filter((m) => m.name !== "Autre"), [makes]);
-  const chosen = list.filter((m) => d.makeIds.includes(m.id));
-  const needle = q.trim().toLowerCase();
-  const found = needle
-    ? list.filter((m) => !d.makeIds.includes(m.id) && m.name.toLowerCase().includes(needle)).slice(0, 12)
-    : [];
-  return (
-    <Group label={L.makes} testID="wizard-makes">
-      {chosen.length > 0 ? (
-        <Plate style={wizardStyles.block}>
-          <Text variant="caption" color={t.color.plateMuted}>
-            {L.makesChosen(chosen.length)}
-          </Text>
-          <View style={wizardStyles.row}>
-            {chosen.map((m) => (
-              <Chip
-                key={m.id}
-                surface="plate"
-                selected
-                onPress={() => set("makeIds", toggle(d.makeIds, m.id))}
-                accessibilityLabel={m.name}
-              >
-                {m.name}
-              </Chip>
-            ))}
-          </View>
-        </Plate>
-      ) : null}
-      <TextField label={L.makesSearch} value={q} onChangeText={setQ} autoCorrect={false} testID="wizard-makes-search" />
-      {found.map((m) => (
-        <CheckboxField
-          key={m.id}
-          label={m.name}
-          checked={false}
-          onChange={() => {
-            set("makeIds", toggle(d.makeIds, m.id));
-            setQ("");
-          }}
-        />
-      ))}
-    </Group>
-  );
-}
-
-export function CriteriaStep(ctx: StepContext) {
-  const { d, set, categories } = ctx;
-  return (
-    <>
-      <Muted variant="body">{L.criteriaIntro}</Muted>
-      <MultiChoices
-        label={L.categories}
-        options={categories.map((c) => ({ value: c.id, label: c.label }))}
-        values={d.categoryIds}
-        onToggle={(id) => set("categoryIds", toggle(d.categoryIds, id))}
-        testID="wizard-categories"
-      />
-      <MultiChoices
-        label={L.countries}
-        options={criteriaCountries.map(([code, label]) => ({ value: code, label }))}
-        values={d.countries}
-        onToggle={(code) => set("countries", toggle(d.countries, code))}
-      />
-      <MakesPicker {...ctx} />
-      <TextField
-        label={L.criteriaText}
-        value={d.criteriaText}
-        onChangeText={(v) => set("criteriaText", v)}
-        multiline
-        tall
-        maxLength={1000}
-        help={L.criteriaTextHint}
-      />
     </>
   );
 }
