@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { detectPlates, looksLikePlate, normalizePlateText, platesFromLines, toPlateRect } from "./detect";
+import {
+  detectPlates,
+  looksLikePlate,
+  normalizePlateText,
+  orientedPlateRect,
+  platesFromLines,
+  toPlateRect,
+} from "./detect";
 import type { TextFrame, TextLineResult } from "./mlkit";
 
 const frame = (left: number, top: number, width: number, height: number): TextFrame => ({ left, top, width, height });
@@ -84,5 +91,61 @@ describe("rectangles proposés", () => {
   it("sans ML Kit (web, tests) : null, l'écran passe à la main", async () => {
     expect(await detectPlates("file:///photo.jpg", 1200, 900)).toBeNull();
     expect(await detectPlates("file:///photo.jpg", 0, 0)).toBeNull();
+  });
+});
+
+describe("plaque penchée : cadre orienté par les coins de ML Kit (lot 59c)", () => {
+  /** Coins d'un rectangle de `w × h` centré en (cx, cy), tourné de `deg` degrés. */
+  const rotated = (cx: number, cy: number, w: number, h: number, deg: number) => {
+    const t = (deg * Math.PI) / 180;
+    const pts: [number, number][] = [
+      [-w / 2, -h / 2],
+      [w / 2, -h / 2],
+      [w / 2, h / 2],
+      [-w / 2, h / 2],
+    ];
+    return pts.map(([dx, dy]) => ({
+      x: cx + dx * Math.cos(t) - dy * Math.sin(t),
+      y: cy + dx * Math.sin(t) + dy * Math.cos(t),
+    }));
+  };
+
+  it("angle du bord haut, taille dans le repère tourné, agrandie de 15 %", () => {
+    const r = orientedPlateRect([rotated(500, 400, 200, 40, 10)], 1000, 800);
+    expect(r?.angle).toBe(10);
+    expect(r?.w).toBeCloseTo(0.23, 3);
+    expect(r?.h).toBeCloseTo(0.0575, 3);
+    // Centre conservé.
+    expect(((r?.x ?? 0) + (r?.w ?? 0) / 2) * 1000).toBeCloseTo(500, 0);
+    expect(((r?.y ?? 0) + (r?.h ?? 0) / 2) * 800).toBeCloseTo(400, 0);
+  });
+
+  it("presque droite (moins de 2°) ou coins absents : cadre droit", () => {
+    expect(orientedPlateRect([rotated(500, 400, 200, 40, 1)], 1000, 800)).toBeNull();
+    expect(orientedPlateRect([], 1000, 800)).toBeNull();
+  });
+
+  it("trois mots penchés : un seul cadre orienté qui les contient tous", () => {
+    const deg = -12;
+    const t = (deg * Math.PI) / 180;
+    const elements = (
+      [
+        ["GA", 420],
+        ["662", 500],
+        ["KS", 580],
+      ] as const
+    ).map(([text, along]) => {
+      const corners = rotated(500 + (along - 500) * Math.cos(t), 600 + (along - 500) * Math.sin(t), 60, 40, deg);
+      const xs = corners.map((p) => p.x);
+      const ys = corners.map((p) => p.y);
+      const left = Math.min(...xs);
+      const top = Math.min(...ys);
+      return { text, corners, frame: frame(left, top, Math.max(...xs) - left, Math.max(...ys) - top) };
+    });
+    const rects = platesFromLines([{ text: "GA 662 KS", elements }], 1000, 1000);
+    expect(rects).toHaveLength(1);
+    expect(rects[0]?.angle).toBe(-12);
+    // 220 px le long de la plaque (de 390 à 610), agrandis de 15 %.
+    expect(rects[0]?.w).toBeCloseTo(0.253, 2);
   });
 });

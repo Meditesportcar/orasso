@@ -86,6 +86,10 @@ export const vehicleWizardLabels = {
   placeFrame: "Place le cadre sur la plaque",
   addFrame: "Poser un cadre",
   removeFrame: "Retirer le cadre",
+  // Lot 59c : poignées du cadre (lecteurs d'écran), cadre orientable.
+  rotateFrame: "Tourner le cadre",
+  resizeFrame: "Agrandir le cadre",
+  frameHint: "Glisse le cadre sur la plaque, agrandis-le par son coin, tourne-le par sa poignée du haut.",
   detecting: "On cherche la plaque…",
   noPlateFound: "Aucune plaque repérée, passe à la main si besoin",
   noDetection: "Pas de repérage automatique ici : place le cadre à la main.",

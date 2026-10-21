@@ -1,11 +1,11 @@
 // Détection de plaque sur l'appareil (lot 51, ARCHITECTURE-DA-V2 § 5.6, H3) : ML Kit lit le texte de la photo choisie,
 // on garde les blocs dont le texte ressemble à une plaque française (SIV « AB-123-CD », FNI « 1234 AB 66 ») et on
-// propose leurs rectangles, agrandis de 15 %, normalisés 0–1. Rien ne part au serveur : la personne confirme le cadre
-// et seul le rectangle est envoyé avec la photo, qui est floutée par l'API. Web et Expo Go : pas de ML Kit, `null`
-// (l'écran passe « À la main »).
+// propose leurs rectangles, agrandis de 15 %, normalisés 0–1, orientés comme la plaque (coins de ML Kit, lot 59c). Rien
+// ne part au serveur : la personne confirme le cadre et seul le rectangle est envoyé avec la photo, qui est floutée par
+// l'API. Web et Expo Go : pas de ML Kit, `null` (l'écran passe « À la main »).
 import type { PlateRect } from "@orasso/shared";
 
-import { recognizeText, type TextFrame, type TextLineResult } from "./mlkit";
+import { recognizeText, type TextCorners, type TextFrame, type TextLineResult } from "./mlkit";
 import { normalizePlateText, plateReadings } from "./recognize";
 
 /** Agrandissement du rectangle détecté : la plaque entière, bords compris, est floutée. */
@@ -55,12 +55,60 @@ export function toPlateRect(frame: TextFrame, imageWidth: number, imageHeight: n
   return { x: round(x0), y: round(y0), w: round(Math.max(0.01, x1 - x0)), h: round(Math.max(0.01, y1 - y0)) };
 }
 
+/** Angle (degrés) sous lequel une plaque lue est considérée droite : cadre sans rotation, comme avant le lot 59c. */
+export const PLATE_TILT_MIN = 2;
+
+/**
+ * Lot 59c : cadre orienté à partir des coins de ML Kit (plaque penchée). L'angle est celui du bord haut du premier mot
+ * (du haut gauche au haut droit) ; le cadre est la plus petite boîte, dans ce repère tourné, qui contient tous les coins,
+ * agrandie de `grow` autour de son centre ; le rectangle avant rotation reste dans la photo (décalé si besoin).
+ * `null` si l'angle est sous `PLATE_TILT_MIN` (ou au-delà de 60°, lecture douteuse) : on garde le cadre droit.
+ */
+export function orientedPlateRect(
+  corners: readonly TextCorners[],
+  imageWidth: number,
+  imageHeight: number,
+  grow = PLATE_GROW,
+): PlateRect | null {
+  const [a, b] = corners[0] ?? [];
+  const points = corners.flat();
+  if (!a || !b || points.length < 4) return null;
+  const raw = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+  if (!Number.isFinite(raw) || Math.abs(raw) < PLATE_TILT_MIN || Math.abs(raw) > 60) return null;
+  const angle = Math.round(raw * 10) / 10;
+  const t = (angle * Math.PI) / 180;
+  const cos = Math.cos(t);
+  const sin = Math.sin(t);
+  // Coordonnées dans le repère du cadre (rotation inverse), puis centre ramené dans celui de la photo.
+  const us = points.map((p) => p.x * cos + p.y * sin);
+  const vs = points.map((p) => -p.x * sin + p.y * cos);
+  const u0 = Math.min(...us);
+  const u1 = Math.max(...us);
+  const v0 = Math.min(...vs);
+  const v1 = Math.max(...vs);
+  const cu = (u0 + u1) / 2;
+  const cv = (v0 + v1) / 2;
+  const cx = cu * cos - cv * sin;
+  const cy = cu * sin + cv * cos;
+  const w = Math.min(1, Math.max(0.01, ((u1 - u0) * (1 + grow)) / imageWidth));
+  const h = Math.min(1, Math.max(0.01, ((v1 - v0) * (1 + grow)) / imageHeight));
+  const clamp = (n: number, max: number) => Math.min(max, Math.max(0, n));
+  const round = (n: number) => Math.round(n * 10000) / 10000;
+  return {
+    x: round(clamp(cx / imageWidth - w / 2, 1 - w)),
+    y: round(clamp(cy / imageHeight - h / 2, 1 - h)),
+    w: round(w),
+    h: round(h),
+    angle,
+  };
+}
+
 /**
  * Rectangles des plaques repérées dans les lignes lues. Dans chaque ligne, on essaie les suites de 1 à 4 mots
  * consécutifs (une plaque est souvent lue en trois mots) ; la suite la plus longue qui ressemble à une plaque gagne.
  */
 export function platesFromLines(lines: TextLineResult[], imageWidth: number, imageHeight: number): PlateRect[] {
-  const found: TextFrame[] = [];
+  const found: { frame: TextFrame; corners: TextCorners[] }[] = [];
   for (const line of lines) {
     const words = line.elements.filter((e) => e.frame);
     let matched = false;
@@ -68,15 +116,26 @@ export function platesFromLines(lines: TextLineResult[], imageWidth: number, ima
       for (let start = 0; start + size <= words.length; start++) {
         const run = words.slice(start, start + size);
         if (looksLikePlate(run.map((w) => w.text).join(""))) {
-          found.push(union(run.map((w) => w.frame as TextFrame)));
+          const corners = run.flatMap((w) => (w.corners?.length === 4 ? [w.corners] : []));
+          found.push({
+            frame: union(run.map((w) => w.frame as TextFrame)),
+            corners: corners.length === run.length ? corners : [],
+          });
           matched = true;
           break;
         }
       }
     }
-    if (!matched && line.frame && looksLikePlate(line.text)) found.push(line.frame);
+    if (!matched && line.frame && looksLikePlate(line.text))
+      found.push({ frame: line.frame, corners: line.corners?.length === 4 ? [line.corners] : [] });
   }
-  return found.slice(0, 4).map((f) => toPlateRect(f, imageWidth, imageHeight));
+  return found
+    .slice(0, 4)
+    .map(
+      (f) =>
+        (f.corners.length ? orientedPlateRect(f.corners, imageWidth, imageHeight) : null) ??
+        toPlateRect(f.frame, imageWidth, imageHeight),
+    );
 }
 
 /**

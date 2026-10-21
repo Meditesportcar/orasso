@@ -1,8 +1,17 @@
 // Photo et cadres de plaque (lot 51, prototype `s-vadd` étape 5) : en mode Automatique, les cadres proposés par la
 // détection sont montrés ; à la main, chaque cadre se déplace et s'agrandit par son coin (PanResponder, comme le curseur :
 // même geste au téléphone et dans le navigateur ; position suivie par Reanimated pendant le geste, posée au lâcher).
+// Lot 59c : le cadre se tourne par une poignée au-dessus de son bord haut (plaque penchée) ; un cadre détecté arrive
+// déjà orienté (coins de ML Kit).
 import { Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { movePlateFrame, type PlateRect, resizePlateFrame } from "@orasso/shared";
+import {
+  dragRotatePlateFrame,
+  vehicleWizardLabels as L,
+  movePlateFrame,
+  PLATE_ROTATE_HANDLE_OFFSET,
+  type PlateRect,
+  resizeOrientedPlateFrame,
+} from "@orasso/shared";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type ImageSourcePropType, PanResponder, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
@@ -10,6 +19,8 @@ import { EDITOR_MAX_HEIGHT, fitPhoto } from "./model";
 
 const { space2 } = tokens.spacing;
 const HANDLE = 22;
+/** Cible tactile des poignées : 22 px visibles, 46 px au doigt. */
+const HIT = { top: 12, bottom: 12, left: 12, right: 12 };
 
 export function PlateFrameEditor({
   source,
@@ -35,6 +46,7 @@ export function PlateFrameEditor({
 }) {
   // Relecture du lot 51 : la photo est montrée entière, à son vrai format (9:16, panorama…) ; le cadre est donc posé
   // sur l'image réelle, sans recadrage qui décalerait ses coordonnées.
+  const { t } = useTheme();
   const [outer, setOuter] = useState(0);
   const box = fitPhoto(width, height, outer, EDITOR_MAX_HEIGHT);
   return (
@@ -55,6 +67,11 @@ export function PlateFrameEditor({
           : null}
         {badge ? <View style={styles.badge}>{badge}</View> : null}
       </View>
+      {editable && rects.length > 0 ? (
+        <Text variant="caption" color={t.color.inkMuted} style={styles.hint}>
+          {L.frameHint}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -75,6 +92,7 @@ function FrameBox({
   const y = useSharedValue(rect.y);
   const w = useSharedValue(rect.w);
   const h = useSharedValue(rect.h);
+  const angle = useSharedValue(rect.angle ?? 0);
   const bw = useSharedValue(box.w);
   const bh = useSharedValue(box.h);
   useEffect(() => {
@@ -82,7 +100,8 @@ function FrameBox({
     y.value = rect.y;
     w.value = rect.w;
     h.value = rect.h;
-  }, [rect, x, y, w, h]);
+    angle.value = rect.angle ?? 0;
+  }, [rect, x, y, w, h, angle]);
   useEffect(() => {
     bw.value = box.w;
     bh.value = box.h;
@@ -94,7 +113,7 @@ function FrameBox({
   const start = useRef(rect);
   const current = useRef(rect);
 
-  const responder = (kind: "move" | "resize") =>
+  const responder = (kind: "move" | "resize" | "rotate") =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => latest.current.editable,
       onStartShouldSetPanResponderCapture: () => latest.current.editable,
@@ -112,24 +131,29 @@ function FrameBox({
         const next =
           kind === "move"
             ? movePlateFrame(start.current, g.dx / W, g.dy / H)
-            : resizePlateFrame(start.current, g.dx / W, g.dy / H);
+            : kind === "resize"
+              ? resizeOrientedPlateFrame(start.current, g.dx, g.dy, W, H)
+              : dragRotatePlateFrame(start.current, g.dx, g.dy, W, H);
         current.current = next;
         x.value = next.x;
         y.value = next.y;
         w.value = next.w;
         h.value = next.h;
+        angle.value = next.angle ?? 0;
       },
       onPanResponderRelease: () => latest.current.onCommit(current.current),
       onPanResponderTerminate: () => latest.current.onCommit(current.current),
     });
   const move = useRef(responder("move")).current;
   const resize = useRef(responder("resize")).current;
+  const rotate = useRef(responder("rotate")).current;
 
   const style = useAnimatedStyle(() => ({
     left: x.value * bw.value,
     top: y.value * bh.value,
     width: w.value * bw.value,
     height: h.value * bh.value,
+    transform: [{ rotate: `${angle.value}deg` }],
   }));
 
   return (
@@ -145,12 +169,23 @@ function FrameBox({
       ]}
     >
       {editable ? (
-        <View
-          {...resize.panHandlers}
-          accessibilityLabel="Agrandir le cadre"
-          testID="plate-frame-handle"
-          style={[styles.handle, { backgroundColor: t.color.accent }]}
-        />
+        <>
+          <View
+            {...resize.panHandlers}
+            accessibilityLabel={L.resizeFrame}
+            testID="plate-frame-handle"
+            hitSlop={HIT}
+            style={[styles.handle, { backgroundColor: t.color.accent }]}
+          />
+          <View pointerEvents="none" style={[styles.stem, { backgroundColor: t.color.accent }]} />
+          <View
+            {...rotate.panHandlers}
+            accessibilityLabel={L.rotateFrame}
+            testID="plate-frame-rotate"
+            hitSlop={HIT}
+            style={[styles.handle, styles.rotate, { backgroundColor: t.color.accent }]}
+          />
+        </>
       ) : null}
     </Animated.View>
   );
@@ -181,6 +216,10 @@ const styles = StyleSheet.create({
     height: HANDLE,
     borderRadius: HANDLE / 2,
   },
+  // Poignée de rotation : centrée au-dessus du bord haut, reliée au cadre par une tige.
+  rotate: { right: undefined, bottom: undefined, left: "50%", marginLeft: -HANDLE / 2, top: -PLATE_ROTATE_HANDLE_OFFSET - HANDLE / 2 },
+  stem: { position: "absolute", left: "50%", marginLeft: -1, width: 2, top: -PLATE_ROTATE_HANDLE_OFFSET, height: PLATE_ROTATE_HANDLE_OFFSET },
   badge: { position: "absolute", left: space2, top: space2 },
+  hint: { marginTop: space2, alignSelf: "stretch" },
   pill: { paddingHorizontal: space2, paddingVertical: 4, borderRadius: tokens.radius.radiusPill },
 });
