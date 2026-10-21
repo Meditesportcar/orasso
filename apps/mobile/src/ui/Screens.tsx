@@ -2,7 +2,7 @@
 // gestes) sont passées à l'en-tête et à la barre d'onglets, comme le demande le README du système de design.
 import { AppBar, Button, Ground, OliveActivityProvider, tokens, useTheme } from "@orasso/design-system/native";
 import { useFocusEffect, useIsFocused, useRouter } from "expo-router";
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -13,6 +13,7 @@ import { useInInbox } from "./InboxScope";
 import { JournalSheet } from "./JournalSheet";
 import { KeyboardSafe } from "./KeyboardSafe";
 import { OverlayProvider, OverlaySlot } from "./Overlay";
+import { type ScrollAssist, ScrollAssistContext } from "./ScrollAssist";
 import { TabTitle } from "./TabTitle";
 import { TopBar } from "./TopBar";
 
@@ -132,14 +133,44 @@ export function FlowScreen({
 function Body({ children, onRefresh }: { children: ReactNode; onRefresh?: () => Promise<unknown> }) {
   const { t } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
+  // Lot 59c : une carte tient la page pendant ses gestes (`ScrollAssist`).
+  const [held, setHeld] = useState(false);
+  const scroll = useRef<ScrollView>(null);
+  const offset = useRef(0);
+  const assist = useMemo<ScrollAssist>(
+    () => ({
+      hold: (on) => setHeld(on),
+      reveal: (view) => {
+        // Après le rendu de la fiche : on mesure la page et la vue à l'écran, puis on défile de ce qui dépasse en bas.
+        setTimeout(() => {
+          const page = scroll.current?.getNativeScrollRef();
+          if (!page || !view) return;
+          page.measureInWindow((_px, py, _pw, ph) => {
+            view.measureInWindow((_x, y, _w, h) => {
+              const overflow = y + h - (py + ph);
+              if (overflow > 0) scroll.current?.scrollTo({ y: offset.current + overflow + space3, animated: true });
+            });
+          });
+        }, 80);
+      },
+    }),
+    [],
+  );
   return (
     <ScrollView
+      ref={scroll}
       style={styles.fill}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      scrollEnabled={!held}
+      scrollEventThrottle={32}
+      onScroll={(e) => {
+        offset.current = e.nativeEvent.contentOffset.y;
+      }}
       refreshControl={
         onRefresh ? (
           <RefreshControl
+            enabled={!held}
             refreshing={refreshing}
             tintColor={t.color.accent}
             onRefresh={async () => {
@@ -154,7 +185,7 @@ function Body({ children, onRefresh }: { children: ReactNode; onRefresh?: () => 
         ) : undefined
       }
     >
-      {children}
+      <ScrollAssistContext.Provider value={assist}>{children}</ScrollAssistContext.Provider>
     </ScrollView>
   );
 }

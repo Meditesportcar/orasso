@@ -3,6 +3,10 @@
 // datées des événements, plaques des pros, pastilles des groupes (lieux confondus : la liste de leurs événements),
 // point « toi » (position de l'appareil, jamais envoyée par la carte). Repli raster OpenStreetMap décidé par la
 // demande du TileJSON (délai 3 s, gardée pour la session). Le rendu navigateur est dans `ExplorerMap.web.tsx`.
+// Lot 59c (retours de l'APK d'essai) : la carte tient la page pendant ses gestes (défilement et « tirer pour recharger »
+// coupés, `ScrollAssist`) : glisser et pincer ne se font plus voler ; elle est plus haute (55 % de l'écran). Sur
+// Android, les vues React d'un `Marker` sont dessinées par la carte et ne reçoivent pas le toucher : c'est l'`onPress`
+// du `Marker` (repéré par la carte) qui ouvre la fiche, puis la page défile jusqu'à elle.
 import {
   Camera,
   type CameraRef,
@@ -29,12 +33,24 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { type GestureResponderEvent, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
-import { type ExplorerMapProps, type MapPin, mapGlyphsOrigin, mapTilesUrl, pinsKey, viewFor } from "./mapPins";
+import { useScrollAssist } from "@/ui/ScrollAssist";
+import {
+  type ExplorerMapProps,
+  type MapPin,
+  mapGlyphsOrigin,
+  mapHeight,
+  mapTilesUrl,
+  pinsKey,
+  viewFor,
+} from "./mapPins";
 
 const { space3 } = tokens.spacing;
+
+/** Un même toucher peut arriver deux fois (le `Marker` et sa vue sur iOS) : on n'en garde qu'un par demi-seconde. */
+const PRESS_DEDUPE_MS = 500;
 
 /** Vrai : la carte s'affiche ici. */
 export const mapSupported = true;
@@ -62,6 +78,22 @@ export function ExplorerMap({ pins, me, selectedId, onSelect, onSelectGroup, chi
     };
   }, [vectorOk]);
   const camera = useRef<CameraRef>(null);
+  const assist = useScrollAssist();
+  const { height: screenHeight } = useWindowDimensions();
+  const below = useRef<View>(null);
+  const lastPress = useRef({ id: "", at: 0 });
+  /** Toucher d'une étiquette ou d'une pastille : une seule fois, puis la fiche (sous la carte) est montrée. */
+  const press = (id: string, action: () => void, reveal = true) => {
+    const at = Date.now();
+    if (lastPress.current.id === id && at - lastPress.current.at < PRESS_DEDUPE_MS) return;
+    lastPress.current = { id, at };
+    action();
+    if (reveal) assist?.reveal(below.current);
+  };
+  // Un doigt sur la carte : la page ne défile plus ; le dernier doigt levé la rend.
+  const release = (e: GestureResponderEvent) => {
+    if (e.nativeEvent.touches.length === 0) assist?.hold(false);
+  };
   // Lot 40 : la carte garde le geste horizontal (pas de glissement vers l'onglet voisin).
   useTabSwipeDisabled();
   const view = useMemo(() => viewFor(pins), [pins]);
@@ -76,7 +108,12 @@ export function ExplorerMap({ pins, me, selectedId, onSelect, onSelectGroup, chi
 
   return (
     <View style={styles.wrap} testID="explorer-map">
-      <View style={[styles.map, { borderColor: t.color.line }]}>
+      <View
+        style={[styles.map, { borderColor: t.color.line, height: mapHeight(screenHeight) }]}
+        onTouchStart={() => assist?.hold(true)}
+        onTouchEnd={release}
+        onTouchCancel={() => assist?.hold(false)}
+      >
         {/* La clé remet la caméra sur les nouvelles épingles quand les filtres changent. */}
         {vectorOk === undefined ? null : (
           <MapView
@@ -104,25 +141,34 @@ export function ExplorerMap({ pins, me, selectedId, onSelect, onSelectGroup, chi
             />
             {groups.map((g) => {
               const first = g.items[0] as MapPin;
-              return (
-                <Marker key={g.id} id={g.id} lngLat={[g.lng, g.lat]} anchor="bottom">
-                  {g.items.length > 1 ? (
-                    <ClusterPin
-                      count={g.items.length}
-                      onPress={() =>
-                        isStacked(g, zoom) && onSelectGroup
+              const stacked = g.items.length > 1;
+              const listGroup = stacked && isStacked(g, zoom) && Boolean(onSelectGroup);
+              const open = stacked
+                ? () =>
+                    press(
+                      g.id,
+                      () =>
+                        listGroup && onSelectGroup
                           ? onSelectGroup(g.items as MapPin[])
-                          : camera.current?.flyTo({ center: [g.lng, g.lat], zoom: Math.min(zoom + 2, GROUP_MAX_ZOOM) })
-                      }
-                    />
+                          : camera.current?.flyTo({
+                              center: [g.lng, g.lat],
+                              zoom: Math.min(zoom + 2, GROUP_MAX_ZOOM),
+                            }),
+                      listGroup,
+                    )
+                : () => press(g.id, () => onSelect(first));
+              return (
+                <Marker key={g.id} id={g.id} lngLat={[g.lng, g.lat]} anchor="bottom" onPress={open}>
+                  {stacked ? (
+                    <ClusterPin count={g.items.length} onPress={open} />
                   ) : first.kind === "pro" ? (
-                    <ProPin label={first.label} accessibilityLabel={first.title} onPress={() => onSelect(first)} />
+                    <ProPin label={first.label} accessibilityLabel={first.title} onPress={open} />
                   ) : (
                     <EventPin
                       label={first.label}
                       hot={first.id === selectedId}
                       accessibilityLabel={first.title}
-                      onPress={() => onSelect(first)}
+                      onPress={open}
                     />
                   )}
                 </Marker>
@@ -136,12 +182,15 @@ export function ExplorerMap({ pins, me, selectedId, onSelect, onSelectGroup, chi
           </MapView>
         )}
       </View>
-      {children}
+      <View ref={below} collapsable={false} style={styles.below}>
+        {children}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { gap: space3 },
-  map: { height: 420, borderRadius: tokens.radius.radiusMd, overflow: "hidden", borderWidth: 1 },
+  map: { borderRadius: tokens.radius.radiusMd, overflow: "hidden", borderWidth: 1 },
+  below: { gap: space3 },
 });

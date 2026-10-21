@@ -1,15 +1,17 @@
 // Carte de l'Explorer dans un navigateur (recette de l'appli, react-native-web ; lot 44) : MapLibre GL JS au même style
 // Orasso que le téléphone et le site (thème suivi en direct, sans rotation, repli raster), mêmes marqueurs. Aucune
 // importation de `@maplibre/maplibre-react-native` ici : le module natif ne se charge pas dans un navigateur.
+// Lot 59c : même hauteur que sur le téléphone, et la page défile jusqu'à la fiche de l'étiquette touchée.
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@orasso/design-system/map/map.css";
 import { createOrassoMap, mapCssVars, type OrassoMap, placePins, type WebPin } from "@orasso/design-system/map/web";
 import { tokens, useTheme } from "@orasso/design-system/native";
 import { explorerV2Labels } from "@orasso/shared";
 import { useEffect, useRef } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 
-import { type ExplorerMapProps, type MapPin, mapGlyphsOrigin, mapTilesUrl, viewFor } from "./mapPins";
+import { useScrollAssist } from "@/ui/ScrollAssist";
+import { type ExplorerMapProps, type MapPin, mapGlyphsOrigin, mapHeight, mapTilesUrl, viewFor } from "./mapPins";
 
 const { space3 } = tokens.spacing;
 type MapLibre = typeof import("maplibre-gl");
@@ -31,6 +33,11 @@ export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children }: Exp
   const byId = useRef(new Map<string, MapPin>());
   const latest = useRef({ pins, me });
   latest.current = { pins, me };
+  const { height: screenHeight } = useWindowDimensions();
+  const below = useRef<View>(null);
+  const assist = useScrollAssist();
+  const assistRef = useRef(assist);
+  assistRef.current = assist;
 
   const webPins = (list: MapPin[]): WebPin[] => [
     ...list.map((p) => ({ id: p.id, kind: p.kind, lat: p.lat, lng: p.lng, label: p.label, title: p.title })),
@@ -63,11 +70,14 @@ export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children }: Exp
       placed.current = placePins(maplibre, created.map, webPins(latest.current.pins), {
         onSelect: (pin) => {
           const p = byId.current.get(pin.id);
-          if (p) onSelectRef.current(p);
+          if (!p) return;
+          onSelectRef.current(p);
+          assistRef.current?.reveal(below.current);
         },
         onGroup: (group) => {
           const list = group.map((g) => byId.current.get(g.id)).filter((p): p is MapPin => Boolean(p));
           onGroupRef.current?.(list);
+          assistRef.current?.reveal(below.current);
         },
       });
     })().catch((e: unknown) => console.error("[carte] la carte n'a pas pu s'afficher", e));
@@ -91,7 +101,7 @@ export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children }: Exp
 
   return (
     <View style={styles.wrap} testID="explorer-map">
-      <View style={[styles.map, { borderColor: t.color.line }]}>
+      <View style={[styles.map, { borderColor: t.color.line, height: mapHeight(screenHeight) }]}>
         <section
           ref={box}
           aria-label={explorerV2Labels.mapLabel}
@@ -99,12 +109,15 @@ export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children }: Exp
           style={{ position: "absolute", inset: 0, ...(mapCssVars(theme) as Record<string, string>) }}
         />
       </View>
-      {children}
+      <View ref={below} style={styles.below}>
+        {children}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { gap: space3 },
-  map: { height: 420, borderRadius: tokens.radius.radiusMd, overflow: "hidden", borderWidth: 1 },
+  map: { borderRadius: tokens.radius.radiusMd, overflow: "hidden", borderWidth: 1 },
+  below: { gap: space3 },
 });

@@ -98,6 +98,9 @@ export function mapGlyphsOrigin(): string | null {
 /** Adresse des tuiles vectorielles remplacée pour la recette du repli (`EXPO_PUBLIC_MAP_TILES_URL`). */
 export const mapTilesUrl = (): string | null => process.env.EXPO_PUBLIC_MAP_TILES_URL || null;
 
+/** Hauteur de la carte : 55 % de l'écran, entre 360 et 520 px (420 avant le lot 59c, trop petite au téléphone). */
+export const mapHeight = (screenHeight: number) => Math.round(Math.min(520, Math.max(360, screenHeight * 0.55)));
+
 /** Propriétés communes de la carte (téléphone et navigateur). */
 export type ExplorerMapProps = {
   pins: MapPin[];
