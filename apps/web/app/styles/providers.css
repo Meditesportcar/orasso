@@ -92,3 +92,8 @@
   padding-top: var(--space-2);
   border-top: 1px solid var(--line);
 }
+/* Un besoin dans l'espace organisateur : sur le fond, comme le tri (les pastilles du tri sont faites pour lui). */
+.pv-need-block {
+  padding-top: var(--space-4);
+  border-top: 2px solid var(--line);
+}

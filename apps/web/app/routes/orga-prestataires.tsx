@@ -288,7 +288,7 @@ export default function OrgaPrestataires({ loaderData, actionData }: Route.Compo
         {needs.map((n) => {
           const items = byNeed(n.id);
           return (
-            <article key={n.id} className="orga__panel s-stack" data-testid="need" data-trade={n.trade}>
+            <article key={n.id} className="s-stack pv-need-block" data-testid="need" data-trade={n.trade}>
               <div className="s-row s-row--between">
                 <h3 className="s-h2">{orgaV2Labels.missionPlaces(n.tradeLabel, n.filled, n.quantity)}</h3>
                 <ChipRow>
@@ -359,7 +359,7 @@ export default function OrgaPrestataires({ loaderData, actionData }: Route.Compo
       </section>
 
       {free.length > 0 && (
-        <section className="orga__panel s-stack" aria-labelledby="needs-free" data-testid="needs-free">
+        <section className="s-stack pv-need-block" aria-labelledby="needs-free" data-testid="needs-free">
           <h2 id="needs-free" className="s-h2">
             {L.freeTitle}
           </h2>
