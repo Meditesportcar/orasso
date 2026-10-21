@@ -140,6 +140,13 @@ export const mediaAppLabels = {
   viewsCount: (n: number) => plural(n, "vue"),
   openContent: "Ouvrir",
   uploadFailed: "Une photo n'a pas pu être envoyée. Réessaie.",
+  // Floutage des plaques à l'envoi d'une photo de galerie (D28, Damien le 21/10/2026) : proposé, jamais imposé.
+  addPhotosBlurTitle: "Flouter les plaques ?",
+  addPhotosBlurHint:
+    "Pose un cadre sur chaque plaque visible : Orasso la floute avant l'envoi, définitivement. Si tes photos sont déjà floutées, envoie-les telles quelles.",
+  addPhotosBlurSend: "Flouter et ajouter",
+  addPhotosPlainSend: "Envoyer sans flouter",
+  addPhotosBlurred: "Plaque floutée",
 
   // --- Profil média -----------------------------------------------------------------------------------------------------------
   profileTitle: "Profil média",
