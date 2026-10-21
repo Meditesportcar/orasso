@@ -3,7 +3,7 @@
 // posés à la main, outils du lot 51, flou appliqué par l'API, irréversible), mais au choix du média : « Envoyer sans
 // flouter » passe sans blocage ni avertissement. Les clés envoyées partent dans le champ caché `photoKeys` (JSON).
 import { Button, Chip } from "@orasso/design-system/web";
-import { mediaAppLabels as L, MEDIA_GALLERY_MAX_PHOTOS, vehicleWizardLabels } from "@orasso/shared";
+import { mediaAppLabels as L, MEDIA_GALLERY_MAX_PHOTOS, type PlateRect, vehicleWizardLabels } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
 
 import { FileField } from "./Fields";
@@ -11,7 +11,41 @@ import { PlateFrame } from "./PlateFrame";
 
 type Sent = { key: string; preview: string; blurred: boolean };
 
-export function MediaGalleryPicker() {
+/**
+ * Aperçu d'une photo floutée (relecture du lot 57) : la photo, avec les cadres de plaque pixellisés, comme le fera
+ * l'API. Sert uniquement à l'écran ; l'original ne part jamais sans flou quand des cadres sont posés.
+ */
+async function blurredPreview(src: string, rects: PlateRect[]): Promise<string> {
+  const img = new Image();
+  img.src = src;
+  await img.decode();
+  const scale = Math.min(1, 640 / Math.max(img.naturalWidth, img.naturalHeight));
+  const width = Math.max(1, Math.round(img.naturalWidth * scale));
+  const height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return src;
+  ctx.drawImage(img, 0, 0, width, height);
+  const small = document.createElement("canvas");
+  const sctx = small.getContext("2d");
+  if (!sctx) return src;
+  for (const r of rects) {
+    const x = Math.round(r.x * width);
+    const y = Math.round(r.y * height);
+    const w = Math.max(1, Math.round(r.w * width));
+    const h = Math.max(1, Math.round(r.h * height));
+    small.width = Math.max(1, Math.round(w / 12));
+    small.height = Math.max(1, Math.round(h / 12));
+    sctx.drawImage(canvas, x, y, w, h, 0, 0, small.width, small.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(small, 0, 0, small.width, small.height, x, y, w, h);
+  }
+  return canvas.toDataURL("image/jpeg", 0.8);
+}
+
+export function MediaGalleryPicker({ onPendingChange }: { onPendingChange?: (pending: boolean) => void }) {
   const [sent, setSent] = useState<Sent[]>([]);
   const [file, setFile] = useState<{ file: File; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -19,6 +53,9 @@ export function MediaGalleryPicker() {
   const frame = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLDivElement>(null);
   useEffect(() => () => (file ? URL.revokeObjectURL(file.url) : undefined), [file]);
+  // « Publier » reste bloqué tant qu'une photo est choisie sans être ajoutée, ou en cours d'envoi (relecture du lot 57).
+  const pending = busy || file !== null;
+  useEffect(() => onPendingChange?.(pending), [pending, onPendingChange]);
 
   async function send(blur: boolean) {
     if (!file) return;
@@ -43,7 +80,15 @@ export function MediaGalleryPicker() {
         return;
       }
       const key = json.key;
-      setSent((all) => [...all, { key, preview: file.url, blurred: Boolean(rects) }]);
+      let preview = file.url;
+      if (rects) {
+        try {
+          preview = await blurredPreview(file.url, JSON.parse(rects) as PlateRect[]);
+        } catch {
+          preview = "";
+        }
+      }
+      setSent((all) => [...all, { key, preview, blurred: Boolean(rects) }]);
       setFile(null);
       const picker = input.current?.querySelector<HTMLInputElement>('input[type="file"]');
       if (picker) picker.value = "";
@@ -64,7 +109,7 @@ export function MediaGalleryPicker() {
         <ul className="md-thumbs md-thumbs--edit" data-testid="media-gallery-sent">
           {sent.map((s) => (
             <li key={s.key}>
-              <img src={s.preview} alt="" />
+              {s.preview ? <img src={s.preview} alt="" /> : null}
               {s.blurred && <Chip variant="accent">{L.addPhotosBlurred}</Chip>}
               <Button
                 type="button"
@@ -127,6 +172,16 @@ export function MediaGalleryPicker() {
             </Button>
           </div>
         </section>
+      )}
+      {busy && (
+        <p className="o-t-caption s-muted" role="status" data-testid="media-photo-sending">
+          {L.addPhotosSending}
+        </p>
+      )}
+      {!busy && file && (
+        <p className="o-t-caption s-muted" data-testid="media-photo-pending">
+          {L.addPhotosPending}
+        </p>
       )}
       {error && (
         <p className="s-error" role="alert">

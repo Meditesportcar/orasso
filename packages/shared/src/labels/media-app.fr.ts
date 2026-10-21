@@ -147,6 +147,14 @@ export const mediaAppLabels = {
   addPhotosBlurSend: "Flouter et ajouter",
   addPhotosPlainSend: "Envoyer sans flouter",
   addPhotosBlurred: "Plaque floutée",
+  /** Relecture du lot 57 : publication bloquée tant qu'une photo est choisie ou en cours d'envoi. */
+  addPhotosSending: "Envoi de la photo en cours…",
+  addPhotosPending: "Ajoute ou retire la photo choisie avant de publier.",
+  /** Relecture du lot 57 : Explorer (panne de l'API distincte d'une recherche vide, pagination). */
+  exploreErrorTitle: "Les événements ne se chargent pas",
+  exploreErrorText: "Le service ne répond pas pour l'instant. Tes filtres sont gardés.",
+  exploreRetry: "Réessayer",
+  exploreMore: "Voir la suite",
 
   // --- Profil média -----------------------------------------------------------------------------------------------------------
   profileTitle: "Profil média",

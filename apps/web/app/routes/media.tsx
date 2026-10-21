@@ -20,6 +20,7 @@ import {
   type Page,
   regions,
 } from "@orasso/shared";
+import { useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { TextAreaField } from "../components/Fields";
@@ -59,6 +60,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     past: [] as MediaAccreditationView[],
     passes: {} as Record<string, AccessPass>,
     events: [] as EventCard[],
+    eventsFailed: false,
+    hasMore: false,
+    pages: 1,
     filters: { region: "", q: "", open: true },
     contents: [] as MediaContentView[],
     accredited: [] as { id: string; title: string }[],
@@ -89,8 +93,27 @@ export async function loader({ request }: Route.LoaderArgs) {
     if (open) params.set("accreditationOpen", "1");
     if (regions.some((r) => r.code === region)) params.set("region", region);
     if (q) params.set("q", q);
-    const res = await api<Page<EventCard>>(request, `/events?${params}`);
-    out.events = res.ok ? res.data.items : [];
+    // Relecture du lot 57 : pagination qui garde les filtres (`pages` = nombre de pages déjà montrées), et panne de
+    // l'API distincte d'une recherche vide.
+    const pages = Math.min(10, Math.max(1, Math.floor(Number(url.searchParams.get("pages"))) || 1));
+    const items: EventCard[] = [];
+    let cursor: string | null = null;
+    let failed = false;
+    for (let i = 0; i < pages; i++) {
+      if (cursor) params.set("cursor", cursor);
+      const res = await api<Page<EventCard>>(request, `/events?${params}`);
+      if (!res.ok) {
+        failed = true;
+        break;
+      }
+      items.push(...res.data.items);
+      cursor = res.data.nextCursor;
+      if (!cursor) break;
+    }
+    out.events = items;
+    out.eventsFailed = failed;
+    out.hasMore = Boolean(cursor) && !failed;
+    out.pages = pages;
     out.filters = { region, q, open };
   } else if (tab === "contenus") {
     const [contents, all] = await Promise.all([
@@ -103,6 +126,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     out.agenda = await apiOrThrow<MediaAgenda>(request, "/me/media/agenda");
   }
   return out;
+}
+
+/** Adresse de l'Explorer avec ses filtres et le nombre de pages montrées (pagination et « Réessayer »). */
+function explorerHref(filters: { region: string; q: string; open: boolean }, pages: number): string {
+  const params = new URLSearchParams({ onglet: "explorer", q: filters.q });
+  if (filters.region) params.set("region", filters.region);
+  if (filters.open) params.set("ouverte", "1");
+  if (pages > 1) params.set("pages", String(pages));
+  return `/app/media?${params}`;
 }
 
 const text = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
@@ -290,6 +322,65 @@ function AccreditationCard({
   );
 }
 
+/** Formulaire d'un contenu (lien ou galerie). « Publier » reste bloqué tant qu'une photo est en cours d'envoi. */
+function ContentForm({ accredited, busy }: { accredited: { id: string; title: string }[]; busy: boolean }) {
+  const [kind, setKind] = useState<"link" | "gallery">("link");
+  const [photoPending, setPhotoPending] = useState(false);
+  const blocked = kind === "gallery" && photoPending;
+  return (
+    <Form method="post" className="s-card s-form" data-testid="media-content-form">
+      <input type="hidden" name="intent" value="content" />
+      <SelectField
+        label={L.addEvent}
+        name="eventId"
+        options={accredited.map((e) => ({ value: e.id, label: e.title }))}
+      />
+      <TextField label={L.addTitleField} help={L.addTitleHelp} name="title" required maxLength={80} />
+      <fieldset className="s-stack s-stack--tight">
+        <legend className="o-t-label">{L.addKind}</legend>
+        <label className="o-check">
+          <input
+            type="radio"
+            name="kind"
+            value="link"
+            checked={kind === "link"}
+            onChange={() => setKind("link")}
+            className="md-radio"
+          />{" "}
+          {L.kindOf({ kind: "link", platform: "other" })}
+        </label>
+        <label className="o-check">
+          <input
+            type="radio"
+            name="kind"
+            value="gallery"
+            checked={kind === "gallery"}
+            onChange={() => setKind("gallery")}
+            className="md-radio"
+          />{" "}
+          Galerie
+        </label>
+      </fieldset>
+      <div className="md-kind md-kind--link s-stack s-stack--tight">
+        <TextField label={L.addUrl} help={L.addUrlHelp} name="url" type="url" />
+        <SelectField
+          label={L.addPlatform}
+          name="platform"
+          options={mediaPlatforms.map((x) => ({ value: x, label: mediaPlatformLabels[x] }))}
+        />
+      </div>
+      <div className="md-kind md-kind--gallery">
+        <MediaGalleryPicker onPendingChange={setPhotoPending} />
+      </div>
+      <div>
+        <Button type="submit" icon="send" loading={busy} disabled={blocked} data-testid="media-publish">
+          {L.addPublish}
+        </Button>
+      </div>
+    </Form>
+  );
+}
+
 function RequestForm({ event, busy }: { event: EventCard; busy: boolean }) {
   return (
     <details className="md-request" data-testid="media-request">
@@ -424,12 +515,29 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
               </Button>
             </div>
           </Form>
-          <p className="o-t-caption s-muted">{L.results(d.events.length, false, d.filters.open)}</p>
-          {d.events.length === 0 ? (
-            <Plate className="s-stack s-stack--tight">
-              <strong>{L.emptyTitle}</strong>
-              <p>{L.emptyText}</p>
+          {d.eventsFailed && (
+            <Plate className="s-stack s-stack--tight" role="alert" data-testid="media-explorer-error">
+              <strong>{L.exploreErrorTitle}</strong>
+              <p>{L.exploreErrorText}</p>
+              <div>
+                <Button icon="undo" href={explorerHref(d.filters, d.pages)} data-testid="media-explorer-retry">
+                  {L.exploreRetry}
+                </Button>
+              </div>
             </Plate>
+          )}
+          {!(d.eventsFailed && d.events.length === 0) && (
+            <p className="o-t-caption s-muted" data-testid="media-results">
+              {L.results(d.events.length, d.hasMore, d.filters.open)}
+            </p>
+          )}
+          {d.events.length === 0 ? (
+            d.eventsFailed ? null : (
+              <Plate className="s-stack s-stack--tight">
+                <strong>{L.emptyTitle}</strong>
+                <p>{L.emptyText}</p>
+              </Plate>
+            )
           ) : (
             d.events.map((e) => {
               const acc = e.accreditation;
@@ -476,6 +584,18 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
               );
             })
           )}
+          {d.hasMore && (
+            <div>
+              <Button
+                variant="secondary"
+                icon="down"
+                href={explorerHref(d.filters, d.pages + 1)}
+                data-testid="media-explorer-more"
+              >
+                {L.exploreMore}
+              </Button>
+            </div>
+          )}
         </section>
       )}
 
@@ -488,41 +608,7 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
             {d.accredited.length === 0 ? (
               <p className="s-notice">{L.needAccreditation}</p>
             ) : (
-              <Form key={d.contents.length} method="post" className="s-card s-form" data-testid="media-content-form">
-                <input type="hidden" name="intent" value="content" />
-                <SelectField
-                  label={L.addEvent}
-                  name="eventId"
-                  options={d.accredited.map((e) => ({ value: e.id, label: e.title }))}
-                />
-                <TextField label={L.addTitleField} help={L.addTitleHelp} name="title" required maxLength={80} />
-                <fieldset className="s-stack s-stack--tight">
-                  <legend className="o-t-label">{L.addKind}</legend>
-                  <label className="o-check">
-                    <input type="radio" name="kind" value="link" defaultChecked className="md-radio" />{" "}
-                    {L.kindOf({ kind: "link", platform: "other" })}
-                  </label>
-                  <label className="o-check">
-                    <input type="radio" name="kind" value="gallery" className="md-radio" /> Galerie
-                  </label>
-                </fieldset>
-                <div className="md-kind md-kind--link s-stack s-stack--tight">
-                  <TextField label={L.addUrl} help={L.addUrlHelp} name="url" type="url" />
-                  <SelectField
-                    label={L.addPlatform}
-                    name="platform"
-                    options={mediaPlatforms.map((x) => ({ value: x, label: mediaPlatformLabels[x] }))}
-                  />
-                </div>
-                <div className="md-kind md-kind--gallery">
-                  <MediaGalleryPicker />
-                </div>
-                <div>
-                  <Button type="submit" icon="send" loading={busy}>
-                    {L.addPublish}
-                  </Button>
-                </div>
-              </Form>
+              <ContentForm key={d.contents.length} accredited={d.accredited} busy={busy} />
             )}
           </section>
           <section className="s-stack" aria-labelledby="md-contents">
