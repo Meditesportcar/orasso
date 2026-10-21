@@ -1901,3 +1901,11 @@ Méthode D30 : partie A (API et `packages/shared`) par Codex (entrée ci-dessus)
 - **Journal** : entrées des corrections du lot 57 et des segments accessibles gardées toutes les deux, dans cet ordre.
 - **Sable sur téléphone** : la règle de la plaque graphite (`site.css`, boutons secondaires crème dans `.s-plated`) rattrapait la visionneuse de la fiche événement (crème sur crème, défaut déjà présent côté `integration`, vu sur les captures) ; `media.css` rend aux boutons de la visionneuse l'encre de sa surface.
 - **« Événement introuvable » (`publishLive`)** : déjà corrigé par `outillage-tests-api-paralleles` (d8ff3e3 : 404 de l'événement supprimé ignoré, autres erreurs journalisées par `withTx`) ; absent de la suite API complète du candidat, aucune correction de plus.
+
+## Lot 59a, tour 2 (corrections de la relecture) — 21/10/2026
+
+- **Brouillons de l'assistant** : les opérations d'un même brouillon (fichier + référence de cache : enregistrer, effacer, garder l'affiche) passent par une file par compte et par brouillon ; effacer puis enregistrer sans attendre garde la dernière saisie (avant : référence vers un fichier supprimé). Ici le dernier appel gagne, c'est l'ordre des demandes.
+- **Fichiers de brouillon à la déconnexion** : `kv.ts` expose `onCacheScopeDropped` ; `eventDraftStore` y déclare la suppression des fichiers `orasso.draft.<compte>.*` (JSON et affiche) et des anciens `orasso.event-draft-*.json` sans compte, à chaque purge d'un compte (déconnexion ou changement direct de compte). `session.tsx` importe le store pour que le nettoyage soit enregistré même si l'assistant n'a pas été ouvert depuis le démarrage.
+- **Garde des préfixes** : le test lit aussi les `cacheKey` en ternaire (`jour-j/[id].tsx` : `feed.`) et les `cacheSetJson(\`…${id}\`)` directs. Les clés construites dans une variable (`event-draft-`, `event-wizard-memo-`) restent déclarées à la main.
+- **Météo** : `METEO_STUB_PORT` (18591 par défaut) donne le port du stub ; sans `METEO_URL` la spec est ignorée avec un message. `env-worktree.cjs` (hors dépôt) pose `WEATHER_PROVIDER`, `METEO_URL` et `METEO_STUB_PORT` = port de l'API + 7.
+- **Fusion d'`integration`** : deux conflits, le journal (les deux côtés gardés) et `captures-lot34.spec.ts` (le segment « Liste » devenu onglet, version d'`integration`).
