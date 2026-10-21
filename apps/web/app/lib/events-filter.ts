@@ -57,3 +57,27 @@ export function whenRange(when: FilterWhen, nowMs: number): { from: string; to: 
     to: at(last.getUTCFullYear(), last.getUTCMonth() + 1, last.getUTCDate(), 23, 59),
   };
 }
+
+/**
+ * Options du menu « Catégorie » : la catégorie active du lien reste toujours choisissable, même absente du référentiel
+ * (désactivée) ou quand le référentiel est indisponible ; sinon le formulaire la perdrait ou afficherait « toutes ».
+ */
+export function categoryOptions(
+  categories: { id: string; label: string }[],
+  activeId: string,
+  failed: boolean,
+  labels: { all: string; unlisted: string; unavailable: string },
+): { value: string; label: string }[] {
+  const options = [{ value: "", label: labels.all }, ...categories.map((c) => ({ value: c.id, label: c.label }))];
+  if (activeId && !categories.some((c) => c.id === activeId)) {
+    options.push({ value: activeId, label: failed ? labels.unavailable : labels.unlisted });
+  }
+  return options;
+}
+
+/** Issue de l'appel « autour de » de l'accueil : un échec n'est pas un résultat vide (pas d'avis « aucun événement »). */
+export function nearOutcome(near: { ok: boolean; count: number } | null): "none" | "found" | "empty" | "failed" {
+  if (!near) return "none";
+  if (!near.ok) return "failed";
+  return near.count > 0 ? "found" : "empty";
+}

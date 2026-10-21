@@ -10,15 +10,17 @@ import {
   Icon,
 } from "@orasso/design-system/web";
 import { type Category, eventFormatLabels, eventFormats, siteLabels as L } from "@orasso/shared";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Form, useSubmit } from "react-router";
 
-import { filterCities, filterRadii } from "../lib/events-filter";
+import { categoryOptions, filterCities, filterRadii } from "../lib/events-filter";
 
 export type PhraseValues = {
   format: string;
   categoryId: string;
   categories: Category[];
+  /** Le référentiel des catégories n'a pas répondu : la catégorie active reste affichée, avec un avis. */
+  categoriesFailed: boolean;
   from: string;
   to: string;
   department: string;
@@ -28,6 +30,20 @@ export type PhraseValues = {
   q: string;
   view: string;
 };
+
+/**
+ * Valeur d'un champ qui suit les critères du loader : saisie locale, mais remise aux critères dès qu'ils changent
+ * (Retour / Suivant du navigateur, lien partagé), pour que les champs ne contredisent jamais les résultats.
+ */
+function useSynced(value: string): [string, (next: string) => void] {
+  const [state, setState] = useState(value);
+  const [seen, setSeen] = useState(value);
+  if (seen !== value) {
+    setSeen(value);
+    setState(value);
+  }
+  return [state, setState];
+}
 
 /** Un trou de la phrase : un menu natif habillé en pastille (clavier et lecteur d'écran gratuits). */
 function Pick({
@@ -44,13 +60,17 @@ function Pick({
   options: { value: string; label: string }[];
 }) {
   const submit = useSubmit();
+  const [current, setCurrent] = useSynced(value);
   return (
     <label className={`w-pick o-t-button${set ? " is-set" : ""}`}>
       <span className="o-visually-hidden">{label}</span>
       <select
         name={name}
-        defaultValue={value}
-        onChange={(e) => submit(e.currentTarget.form, { method: "get" })}
+        value={current}
+        onChange={(e) => {
+          setCurrent(e.currentTarget.value);
+          submit(e.currentTarget.form, { method: "get" });
+        }}
         data-testid={`pick-${name}`}
       >
         {options.map((o) => (
@@ -78,7 +98,7 @@ function DepartmentPick({ value }: { value: string }) {
   };
   return (
     <>
-      <input ref={hidden} type="hidden" name="departement" defaultValue={value} />
+      <input ref={hidden} type="hidden" name="departement" key={value} defaultValue={value} />
       <span className={`w-pick o-t-button${value ? " is-set" : ""}`}>
         <button
           type="button"
@@ -123,32 +143,59 @@ function DepartmentPick({ value }: { value: string }) {
  */
 function MoreFilters({ values }: { values: PhraseValues }) {
   const submit = useSubmit();
+  const [from, setFrom] = useSynced(values.from);
+  const [to, setTo] = useSynced(values.to);
   const onChange = (e: { currentTarget: { form: HTMLFormElement | null } }) =>
     submit(e.currentTarget.form, { method: "get" });
+  const options = categoryOptions(values.categories, values.categoryId, values.categoriesFailed, {
+    all: L.events.allCategories,
+    unlisted: L.events.categoryUnlisted,
+    unavailable: L.events.categoryUnavailable,
+  });
   return (
     <div className="w-more" data-testid="more-filters">
       <span className="o-t-label">{L.events.moreFilters}</span>
-      {values.categories.length > 0 && (
+      {options.length > 1 && (
         <Pick
           label={L.events.category}
           name="categorie"
           value={values.categoryId}
           set={Boolean(values.categoryId)}
-          options={[
-            { value: "", label: L.events.allCategories },
-            ...values.categories.map((c) => ({ value: c.id, label: c.label })),
-          ]}
+          options={options}
         />
+      )}
+      {values.categoriesFailed && (
+        <span className="o-t-caption" role="status" data-testid="categories-failed">
+          {L.events.categoriesFailed}
+        </span>
       )}
       {!values.when && (
         <>
           <label className="w-date o-t-meta">
             <span>{L.events.dateFrom}</span>
-            <input type="date" name="du" defaultValue={values.from} max={values.to || undefined} onChange={onChange} />
+            <input
+              type="date"
+              name="du"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => {
+                setFrom(e.currentTarget.value);
+                onChange(e);
+              }}
+            />
           </label>
           <label className="w-date o-t-meta">
             <span>{L.events.dateTo}</span>
-            <input type="date" name="au" defaultValue={values.to} min={values.from || undefined} onChange={onChange} />
+            <input
+              type="date"
+              name="au"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => {
+                setTo(e.currentTarget.value);
+                onChange(e);
+              }}
+            />
           </label>
         </>
       )}
@@ -157,6 +204,7 @@ function MoreFilters({ values }: { values: PhraseValues }) {
 }
 
 export function PhraseFilter({ values }: { values: PhraseValues }) {
+  const [q, setQ] = useSynced(values.q);
   return (
     <Form method="get" className="w w-phrase" data-testid="events-filters" aria-label="Filtres">
       <span>{L.events.iSearch}</span>
@@ -213,7 +261,8 @@ export function PhraseFilter({ values }: { values: PhraseValues }) {
         className="w-search o-t-meta"
         type="search"
         name="q"
-        defaultValue={values.q}
+        value={q}
+        onChange={(e) => setQ(e.currentTarget.value)}
         placeholder={L.events.searchPlaceholder}
         maxLength={80}
       />

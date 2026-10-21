@@ -78,6 +78,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     events: events.ok ? events.data : { items: [], nextCursor: null },
     categories: categories.ok ? categories.data : [],
+    categoriesFailed: !categories.ok,
     filters,
     view: get("vue") === "liste" ? ("liste" as const) : ("affiches" as const),
     unavailable: !events.ok,
@@ -102,7 +103,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export default function Evenements({ loaderData }: Route.ComponentProps) {
-  const { events, categories, filters, view, unavailable } = loaderData;
+  const { events, categories, categoriesFailed, filters, view, unavailable } = loaderData;
   const active = Boolean(
     filters.format ||
       filters.categoryId ||
@@ -146,6 +147,7 @@ export default function Evenements({ loaderData }: Route.ComponentProps) {
           from: filters.from,
           to: filters.to,
           categories,
+          categoriesFailed,
           department: filters.department,
           city: filters.city,
           radius: filters.radius,
