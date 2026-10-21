@@ -144,6 +144,8 @@ export const iconShapes = {
   trophy: [p("M8 4h8v5a4 4 0 0 1-8 0zM8 6H4a3 3 0 0 0 4 4M16 6h4a3 3 0 0 1-4 4M12 13v4M8 21h8M9 17h6")], // prix du public
   copy: [r(8, 8, 13, 13, 2), p("M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3")], // dupliquer, copier
   camera: [p("M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"), c(12, 13.5, 3.5)], // photo, prestataire
+  // « … » (`#i-dots` de l'artefact : trois points au trait de 3,4) : cercles de rayon 0,7 au trait de 2 = 3,4 de diamètre.
+  more: [c(5, 12, 0.7), c(12, 12, 0.7), c(19, 12, 0.7)], // plus d'actions
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;
