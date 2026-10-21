@@ -278,6 +278,8 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
     await page.getByTestId("jourj-vote").click();
     await expect(page).toHaveURL(/vote\//, { timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "Prix du public", exact: true })).toBeVisible({ timeout: 30_000 });
+    // Lot C2b : déjà voté (deuxième thème), l'écran montre le classement ; « Changer mon vote » rouvre la grille.
+    if (round > 0) await page.getByTestId("vote-change").click({ timeout: 30_000 });
     await expect(page.getByText("Une voix, une seule", { exact: true })).toBeVisible();
     await expect(page.getByText(/^Pointage à \d+ h/)).toBeVisible();
     await expect(page.getByText("Pas pour toi-même. Le gagnant reçoit le badge et 50 points.")).toBeVisible();
