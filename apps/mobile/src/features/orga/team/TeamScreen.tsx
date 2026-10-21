@@ -23,7 +23,16 @@ import { api } from "@/lib/api";
 import { formatDay } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { canRemind, groupEvents, isTwoFactorError, pickCurrentEvent, staffSummary } from "@/lib/orga";
-import { boardRoles, bubbleSize, historyOf, holdersOf, packBubbles, requestBubbleSpot, withRole } from "@/lib/orgaV2";
+import {
+  boardRoles,
+  bubbleSize,
+  cloudSizes,
+  historyOf,
+  holdersOf,
+  packBubbles,
+  requestBubbleSpot,
+  withRole,
+} from "@/lib/orgaV2";
 import { useSession } from "@/lib/session";
 import { emitTeamChanged } from "@/lib/teamBadge";
 import { canManageMember, isSuspended, memberGroups, myRoleIn } from "@/lib/teamModel";
@@ -262,10 +271,15 @@ export function TeamScreen() {
   const layout = useMemo(
     () =>
       packBubbles(
-        bubbles.map((m) => bubbleSize(historyOf(histories, m.userId).eventsHeld)),
+        cloudSizes(
+          bubbles.map((m) => bubbleSize(historyOf(histories, m.userId).eventsHeld)),
+          cloudWidth,
+          CLOUD_HEIGHT,
+        ),
         cloudWidth,
         CLOUD_HEIGHT,
         requestBubbleSpot(cloudWidth, CLOUD_HEIGHT),
+        14,
       ),
     [bubbles, histories, cloudWidth],
   );
@@ -440,7 +454,7 @@ export function TeamScreen() {
                 <MessageButton userId={opened.userId} pseudo={opened.pseudo} />
                 {opened.role === "staff" ? (
                   <Button
-                    variant="plate"
+                    variant="secondary"
                     icon="staff"
                     onPress={() => {
                       setSheetError(null);
@@ -455,7 +469,7 @@ export function TeamScreen() {
                 {canManageMember(viewer, opened) ? (
                   <View style={styles.buttons}>
                     <Button
-                      variant="plate"
+                      variant="secondary"
                       icon="list"
                       onPress={() => setManaging(opened)}
                       style={styles.grow}
@@ -464,8 +478,7 @@ export function TeamScreen() {
                       {L2.actionManage}
                     </Button>
                     <Button
-                      variant="plate"
-                      tone="dashed"
+                      variant="secondary"
                       icon="close"
                       onPress={() => {
                         setSheetError(null);

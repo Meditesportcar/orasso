@@ -4,7 +4,7 @@
 // s'affiche sans réseau depuis la liste du téléphone. Thème au choix de l'utilisateur (D25b), fond immobile.
 // Lot C4a : mise en page de l'artefact (en-tête de flux sans grand titre, rôle sur carte crème, Scanner moutarde).
 
-import { Button, Icon, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   communicationLabels,
   staffHomeLabels as L,
@@ -334,7 +334,7 @@ export default function StaffHome() {
           </View>
           {zones.map((z) => (
             <View key={z.code ?? "none"} style={styles.zoneRow}>
-              <Text variant="label" color={c.inkMuted} style={styles.zoneName} numberOfLines={1}>
+              <Text variant="caption" color={c.inkMuted} style={styles.zoneName} numberOfLines={1}>
                 {z.name}
               </Text>
               <View style={[styles.bar, { backgroundColor: c.line }]}>
@@ -356,18 +356,18 @@ export default function StaffHome() {
       <Muted variant="caption">{L.closesNote}</Muted>
 
       {consent === "undetermined" ? (
-        <Plate style={styles.block} testID="staff-location-ask">
-          <Text variant="label" color={c.plateMuted}>
+        <View style={[styles.block, styles.card, { backgroundColor: c.surface }]} testID="staff-location-ask">
+          <Text variant="label" color={c.inkMuted}>
             Position de l'alerte
           </Text>
-          <Text variant="body" color={c.plateInk}>
+          <Text variant="body" color={c.ink}>
             Quand tu touches « Alerte », ta position peut partir avec elle pour que le staff te retrouve. Elle n'est lue
             qu'à ce moment-là, jamais suivie, et effacée dès l'alerte close.
           </Text>
-          <Button variant="plate" icon="place" onPress={() => void askLocationConsent().then(setConsent)} fullWidth>
+          <Button variant="secondary" icon="place" onPress={() => void askLocationConsent().then(setConsent)} fullWidth>
             Autoriser la position
           </Button>
-        </Plate>
+        </View>
       ) : consent === "denied" ? (
         <Muted variant="meta">
           Position refusée : l'alerte part sans position (réglage du téléphone pour l'autoriser).
@@ -377,41 +377,41 @@ export default function StaffHome() {
       {ticketDupes.length > 0 ? (
         <>
           <SectionTitle>Rapport · billets</SectionTitle>
-          <Plate style={styles.block}>
+          <View style={[styles.block, styles.card, { backgroundColor: c.surface }]}>
             {ticketDupes.map((d) => (
-              <Text key={d.ticketId} variant="body" color={c.plateInk}>
+              <Text key={d.ticketId} variant="body" color={c.ink}>
                 Doublon · billet déjà utilisé à {d.usedAt ? clock(d.usedAt) : "—"} (autre téléphone)
                 {d.count > 1 ? ` · ×${d.count}` : ""}
               </Text>
             ))}
-          </Plate>
+          </View>
         </>
       ) : null}
 
       {duplicates.length > 0 || refusedByServer.length > 0 || failed.length > 0 ? (
         <>
           <SectionTitle>Rapport · réponses du serveur</SectionTitle>
-          <Plate style={styles.block}>
+          <View style={[styles.block, styles.card, { backgroundColor: c.surface }]}>
             {duplicates.map((l) => (
-              <Text key={l.key} variant="body" color={c.plateInk}>
+              <Text key={l.key} variant="body" color={c.ink}>
                 Doublon · {pseudoOf(l.passId, l.applicationId) ?? "véhicule"} déjà entré à {l.at ? clock(l.at) : "—"}
                 {l.otherDevice ? " (autre téléphone)" : ""}
                 {l.count > 1 ? ` · ×${l.count}` : ""}
               </Text>
             ))}
             {refusedByServer.map((l) => (
-              <Text key={l.key} variant="body" color={c.plateInk}>
+              <Text key={l.key} variant="body" color={c.ink}>
                 {l.result === "unknown" ? "Inconnu du serveur" : "Refusé par le serveur"} ·{" "}
                 {pseudoOf(l.passId, l.applicationId) ?? "QR"} · {l.at ? clock(l.at) : "—"}
                 {l.count > 1 ? ` · ×${l.count}` : ""}
               </Text>
             ))}
             {failed.map((a) => (
-              <Text key={a.id} variant="body" color={c.plateInk}>
+              <Text key={a.id} variant="body" color={c.ink}>
                 {a.kind === "express" ? `Express ${String(a.payload.email)}` : "Envoi"} : {String(a.result?.error)}
               </Text>
             ))}
-          </Plate>
+          </View>
         </>
       ) : null}
 
@@ -428,6 +428,7 @@ export default function StaffHome() {
 // Mesures de l'artefact (`.stf`, `.stf-sync`, `.stf-role`, `.stf-here`, `.tz-card`, `.tz-bars`, `.stf-bar`).
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
+  card: { borderRadius: 16 },
   tiles: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   row: { flexDirection: "row", gap: space2, alignItems: "center" },
   flex: { flex: 1 },
@@ -459,7 +460,7 @@ const styles = StyleSheet.create({
   },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
   zoneRow: { flexDirection: "row", alignItems: "center", gap: space2 },
-  zoneName: { width: 72 },
+  zoneName: { width: 84, fontSize: 11.5, fontWeight: "800" },
   zoneCount: { width: 44, textAlign: "right" },
   bar: { flex: 1, height: 8, borderRadius: 4, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 4 },

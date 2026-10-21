@@ -164,6 +164,18 @@ function findSpot(
   return null;
 }
 
+/**
+ * Tailles affichées dans la grappe : les tailles d'engagement agrandies d'un même facteur pour que les bulles couvrent
+ * environ 28 % de la carte, comme dans l'artefact (une petite équipe peu active ne doit pas tenir dans un coin). Les
+ * écarts entre membres sont gardés ; aucune bulle ne dépasse 96 px.
+ */
+export function cloudSizes(sizes: readonly number[], width: number, height: number): number[] {
+  const area = sizes.reduce((s, d) => s + (Math.PI * d * d) / 4, 0);
+  if (area === 0 || width <= 0) return [...sizes];
+  const scale = Math.min(2.2, Math.max(1, Math.sqrt((0.28 * width * height) / area)));
+  return sizes.map((d) => Math.min(BUBBLE_MAX, Math.round(d * scale)));
+}
+
 /** La place de la bulle « +N » (demandes) ou « + » (inviter) : 56 px, en bas à droite de la grappe. */
 export function requestBubbleSpot(width: number, height: number): PlacedBubble {
   return { x: width * 0.92 - 4, y: height * 0.86 - 4, size: 56 };

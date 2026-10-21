@@ -12,6 +12,7 @@ import {
   bubbleInitials,
   bubbleName,
   bubbleSize,
+  cloudSizes,
   draftMissing,
   historyOf,
   holdersOf,
@@ -123,6 +124,12 @@ describe("bulles", () => {
       for (const b of all.slice(i + 1))
         expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual((a.size + b.size) / 2);
     }
+  });
+  it("une petite équipe peu active est agrandie, sans dépasser 96 px", () => {
+    const sizes = cloudSizes([45, 39, 36], 358, 310);
+    expect(sizes[0]).toBeGreaterThan(45);
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(BUBBLE_MAX);
+    expect(sizes[0]).toBeGreaterThan(sizes[2] ?? 0);
   });
   it("une grande équipe tient dans la carte (tailles réduites)", () => {
     const placed = packBubbles(
