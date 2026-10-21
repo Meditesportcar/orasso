@@ -4,15 +4,16 @@
 // du jour J, les prestataires présents, puis l'action principale selon le profil ; fermé, la raison et quoi faire.
 // Ouverte sans compte ; « Candidater » demande de se connecter puis revient exactement ici. Découpée en
 // `features/event/*`.
+// Lot C2b (artefact `s-event`) : écran à affiche sans barre du haut (`PosterFlow` : pastille O et croix flottantes),
+// règlement en texte sous son titre, et la candidature dans une seule feuille (`CandSheet`, `sh-cand`) au lieu du
+// flux de trois écrans et de l'écran « Inscrire mon crew » (le mode « Avec <crew> » est dans la feuille).
 
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
-  crewLabels,
   dayAccessLabels,
   eventAcceptsVendorType,
   eventAdmissionLabels,
   eventDaysLabels,
-  eventFormatLabels,
   formatDayDate,
   invitationLabels,
   eventPageLabels as L,
@@ -23,18 +24,20 @@ import {
   wizardEndLabels,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 import { ContactOrganizerButton } from "@/features/boite/MessageButton";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { ArrivalSlots } from "@/features/event/ArrivalSlots";
 import { eventAction, type ProfileKind } from "@/features/event/action";
+import { CandSheet } from "@/features/event/CandSheet";
 import { CustomPoster } from "@/features/event/CustomPoster";
 import { Info, ProvidersPresent, Reviews } from "@/features/event/EventExtras";
 import { EventFactsGrid, EventTitle, OrganizerRow } from "@/features/event/EventFacts";
 import { EventGatePlate } from "@/features/event/EventGate";
 import { EventHero } from "@/features/event/EventHero";
 import { MediaContents } from "@/features/event/MediaContents";
+import { PosterFlow } from "@/features/event/PosterFlow";
 import { RequestSheet, type RequestTarget } from "@/features/media/RequestSheet";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { ReportButton } from "@/features/ReportSheet";
@@ -51,6 +54,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
+import { SecHead } from "@/ui/SecHead";
 
 const { space1, space3 } = tokens.spacing;
 const OPEN_STATUSES = ["pending", "accepted", "waitlisted", "offered", "awaiting_member"];
@@ -58,7 +62,7 @@ const OPEN_STATUSES = ["pending", "accepted", "waitlisted", "offered", "awaiting
 export default function EventPage() {
   const { t } = useTheme();
   const router = useRouter();
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const { slug, candidater } = useLocalSearchParams<{ slug: string; candidater?: string }>();
   const { status, me, refreshMe } = useSession();
   const { persona, goTab } = usePersona();
   const event = useApi(() => api.eventBySlug(slug), [slug, status], { enabled: status !== "loading" });
@@ -91,9 +95,11 @@ export default function EventPage() {
   const providerProfile = useApi(async () => (await api.providerProfile()).profile, [status, hasPro, hasProvider], {
     enabled: status === "in" && (hasPro || hasProvider),
   });
-  // Inscription en crew (lot 19) : proposée au chef d'un crew.
-  const crews = useApi(() => api.myCrews(), [status], { enabled: status === "in" });
-  const leadsCrew = (crews.data ?? []).some((c) => c.role === "leader");
+  // La feuille de candidature (lot C2b) ; `?candidater=1` l'ouvre (retour de connexion, ancien lien `/candidater`).
+  const [cand, setCand] = useState(false);
+  useEffect(() => {
+    if (candidater && status === "in") setCand(true);
+  }, [candidater, status]);
   const [applying, setApplying] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerSent, setProviderSent] = useState(false);
@@ -204,8 +210,8 @@ export default function EventPage() {
 
   const apply = () =>
     status === "in"
-      ? router.push(`/candidater/${e.slug}`)
-      : router.push({ pathname: "/auth", params: { mode: "signup", next: `/candidater/${e.slug}` } });
+      ? setCand(true)
+      : router.push({ pathname: "/auth", params: { mode: "signup", next: `/e/${e.slug}?candidater=1` } });
 
   const primary =
     action === "triage"
@@ -271,19 +277,20 @@ export default function EventPage() {
   ) : null;
 
   return (
-    <FlowScreen title={eventFormatLabels[e.format]} onClose={close} onRefresh={event.reload} footer={footer}>
+    <PosterFlow
+      hero={<EventHero event={e} />}
+      onClose={close}
+      onRefresh={event.reload}
+      footer={footer}
+      testID="event-page"
+    >
       {e.status === "draft" ? (
         <Notice tone="error" testID="draft-preview">
           {wizardEndLabels.previewBanner}
         </Notice>
       ) : null}
-      <EventHero event={e} />
       <EventTitle event={e} />
-      {mine.length > 0 ? (
-        <Notice>
-          Tu as candidaté : {mine.length > 1 ? `${mine.length} candidatures` : "ta candidature est dans Sorties"}.
-        </Notice>
-      ) : cancelled ? (
+      {cancelled ? (
         <Notice tone="error">Cet événement est annulé.</Notice>
       ) : inviteOnly ? (
         <Notice>{invitationLabels.invitationRequired}</Notice>
@@ -309,17 +316,6 @@ export default function EventPage() {
           Candidater pour un autre jour
         </Button>
       ) : null}
-      {leadsCrew && !cancelled && !e.isLocked && !notYetOpen && e.admission !== "invite_only" ? (
-        <Button
-          variant="secondary"
-          icon="crew"
-          fullWidth
-          testID="register-crew"
-          onPress={() => router.push({ pathname: "/crew/inscription", params: { event: e.slug } })}
-        >
-          {crewLabels.registerCrew}
-        </Button>
-      ) : null}
 
       {(e.days?.length ?? 0) > 1 ? (
         <Plate style={styles.info} testID="event-days">
@@ -343,7 +339,14 @@ export default function EventPage() {
         {e.maxVehiclesPerUser > 1 ? ` · ${e.maxVehiclesPerUser} véhicules par personne au plus` : ""}
         {preview ? `\n${preview}` : ""}
       </Info>
-      {e.rulesText ? <Info label={L.rules}>{e.rulesText}</Info> : null}
+      {e.rulesText ? (
+        <>
+          <SecHead title={L.rules} />
+          <Text variant="body" color={t.color.inkMuted} style={styles.rules} testID="event-rules">
+            {e.rulesText}
+          </Text>
+        </>
+      ) : null}
       {weather.data ? <WeatherWidget summary={weather.data.summary} attribution={weather.data.attribution} /> : null}
       {/* Lot 34 (parité D20) : billets du public réservés dans l'appli, comme sur la page du site. */}
       {!cancelled ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
@@ -395,16 +398,18 @@ export default function EventPage() {
         onClose={() => setMediaTarget(null)}
         onSent={() => void event.reload()}
       />
+      <CandSheet event={e} visible={cand} onClose={() => setCand(false)} onSent={() => void event.reload()} />
       <AppSheet visible={booking} onClose={() => setBooking(false)} accessibilityLabel={L.bookEntry}>
         <Text variant="title" color={t.color.ink}>
           {L.bookEntry}
         </Text>
         {booking ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
       </AppSheet>
-    </FlowScreen>
+    </PosterFlow>
   );
 }
 
 const styles = StyleSheet.create({
   info: { gap: space1, padding: space3 },
+  rules: { fontSize: 14, lineHeight: 21.7 },
 });
