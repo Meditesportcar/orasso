@@ -19,7 +19,7 @@ import { and, count, eq, inArray, sql, TransactionRollbackError } from "drizzle-
 import { db } from "../../db/client";
 import { devices, profiles, ticketScans, tickets, ticketTypes, visitorEntries } from "../../db/schema";
 import { now } from "../../lib/deps";
-import { notFound, validation } from "../../lib/errors";
+import { AppError, notFound, validation } from "../../lib/errors";
 import { rateLimit } from "../../lib/rateLimit";
 import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
@@ -144,7 +144,21 @@ async function arbitrate(
 
 async function publishLive(eventId: string) {
   const { checkinsService } = await import("../checkins/service");
-  realtime.publish(`event:${eventId}:live`, "live", await checkinsService.liveCounters(eventId));
+  let counters: Awaited<ReturnType<typeof checkinsService.liveCounters>>;
+  try {
+    counters = await checkinsService.liveCounters(eventId);
+  } catch (error) {
+    // L'événement peut avoir été supprimé après validation ; les autres erreurs remontent à withTx (journal).
+    if (
+      error instanceof AppError &&
+      error.status === 404 &&
+      error.code === "not_found" &&
+      error.message === "Événement introuvable"
+    )
+      return;
+    throw error;
+  }
+  realtime.publish(`event:${eventId}:live`, "live", counters);
 }
 
 export const shopService = {
@@ -225,7 +239,7 @@ export const shopService = {
         out.push(await storedScan(tx, done.row));
       }
       if (deviceId) await tx.update(devices).set({ lastSeenAt: receivedAt }).where(eq(devices.id, deviceId));
-      if (accepted > 0) after(() => void publishLive(eventId).catch(() => {})); // poussée facultative : un événement supprimé entre-temps ne doit rien lever
+      if (accepted > 0) after(() => publishLive(eventId));
       return out;
     });
     return { results };
@@ -268,7 +282,7 @@ export const shopService = {
         out.push({ id: item.id, applied: Boolean(row) });
         if (row) applied++;
       }
-      if (applied > 0) after(() => void publishLive(eventId).catch(() => {})); // poussée facultative : un événement supprimé entre-temps ne doit rien lever
+      if (applied > 0) after(() => publishLive(eventId));
       return out;
     });
     return { results, total: await shopService.visitorTotal(eventId) };

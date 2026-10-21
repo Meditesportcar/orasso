@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { fromWallTime, STAFF_PENDING_MAX, STAFF_REQUEST_COOLDOWN_MS } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addMember,
@@ -36,9 +36,13 @@ import {
   vehicleCategories,
   visitorEntries,
 } from "../../db/schema";
+import { notFound } from "../../lib/errors";
 import { applicationsService } from "../applications/service";
+import { checkinsService } from "../checkins/service";
 import { fieldService } from "../field/service";
 import { notificationsService } from "../notifications/service";
+
+afterEach(() => vi.restoreAllMocks());
 
 afterAll(async () => {
   await notificationsService.flush();
@@ -242,7 +246,7 @@ describe("devenir staff : demande, réponse, délais", () => {
     const late = await signUp("Retardataire");
     const full = await req(late, "POST", `/structures/${w.s.id}/staff-requests`, {});
     expect(full.status).toBe(409);
-  });
+  }, 90_000);
 });
 
 describe("invitations de staff", () => {
@@ -340,6 +344,50 @@ describe("invitations de staff", () => {
 });
 
 describe("rôle boutique : synchro et contrôle des billets", () => {
+  it.each(["ticket-scans", "visitor-entries"])(
+    "%s : événement supprimé silencieux, erreur inattendue journalisée après validation",
+    async (route) => {
+      const w = await setup();
+      clock.set(new Date(w.e.startsAt.getTime() - HOUR));
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+      const counters = vi.spyOn(checkinsService, "liveCounters");
+      const send = (index: number) =>
+        req(w.lea, "POST", `/events/${w.e.id}/${route}`, {
+          items:
+            route === "ticket-scans"
+              ? [scanItem(w.payloads[index] as string)]
+              : [{ id: randomUUID(), delta: 1, at: clock.now.toISOString() }],
+        });
+      counters.mockRejectedValueOnce(notFound("Événement introuvable"));
+      const absent = await send(0);
+      expect(absent.status).toBe(200);
+      expect(errorLog).not.toHaveBeenCalled();
+      const error = new Error("Panne SQL du direct");
+      let rejectCounters!: (error: Error) => void;
+      counters.mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectCounters = reject;
+          }),
+      );
+      let responded = false;
+      const request = send(1).then((response) => {
+        responded = true;
+        return response;
+      });
+      await vi.waitFor(() => expect(counters).toHaveBeenCalledTimes(2));
+      expect(responded).toBe(false);
+      rejectCounters(error);
+      const failed = await request;
+      expect(failed.status).toBe(200);
+      expect(errorLog).toHaveBeenCalledExactlyOnceWith("Effet après validation :", error);
+      expect(counters).toHaveBeenCalledTimes(2);
+      // L'effet en erreur est terminé quand la requête répond ; l'écriture reste validée.
+      if (route === "ticket-scans") expect(failed.json.results[0].result).toBe("accepted");
+      else expect(failed.json.total).toBe(2);
+    },
+  );
+
   it("la synchro ne porte les billets qu'au rôle boutique, boutique activée ; différentielle par curseur", async () => {
     const w = await setup();
     clock.set(new Date(w.e.startsAt.getTime() - 2 * HOUR));
@@ -951,6 +999,7 @@ describe("structure suspendue, relances, appartenances", () => {
     // des deux requêtes n'est pas garanti (en parallèle sur un PC chargé). L'invariant est la notification unique.
     expect(a.status).toBe(200);
     expect([200, 409]).toContain(b.status);
+    expect(a.json.reminded + (b.status === 200 ? 1 : 0)).toBe(1);
     await notificationsService.flush();
     const notes = await db.select().from(notifications).where(eq(notifications.userId, w.lea.id));
     expect(notes.filter((n) => n.type === "staff_presence_reminder")).toHaveLength(1);

@@ -8,5 +8,6 @@ const poolId = process.env.VITEST_POOL_ID ?? "1";
 const { worker } = databaseNames(testUrl, poolId);
 process.env.DATABASE_URL = withDatabase(testUrl, worker);
 process.env.DATA_DIR = `.data/test/${poolId}`;
+process.env.UPLOADS_DIR = `${process.env.DATA_DIR}/storage`;
 // Déjà créée par global-setup (simple vérification d'empreinte) ; recréée ici si le nombre de processus dépasse la prévision.
 await ensureDatabases(testUrl, [poolId]);
