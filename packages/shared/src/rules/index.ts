@@ -16,6 +16,7 @@ export * from "./misc";
 export * from "./missions";
 export * from "./moderation";
 export * from "./moon";
+export * from "./nearAccess";
 export * from "./notifications";
 export * from "./password";
 export * from "./plateFrame";

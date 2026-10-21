@@ -1,16 +1,27 @@
 import { Button, Chip } from "@orasso/design-system/web";
-import { type NotificationFamily, notificationFamilyLabels, socialLabels } from "@orasso/shared";
+import {
+  type ContactRequestView,
+  type ConversationPage,
+  type ConversationSummary,
+  type FriendRequestView,
+  type InboxSummary,
+  messagingLabels,
+  type NotificationFamily,
+  notificationFamilyLabels,
+  socialLabels,
+} from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
+import { ConversationRow, InboxSegments } from "../components/Messaging";
 import { PersonAvatar } from "../components/People";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
 import type { Route } from "./+types/journal";
 
 // Journal (lot 17, ARCHITECTURE-SUITE § 2.4) : le fil d'actualité des amis et les notifications, dans un seul fil
-// chronologique. 7 jours en arrière, sauf ce qui n'a pas été lu.
+// chronologique. 7 jours en arrière, sauf ce qui n'a pas été lu. Lot C5 : c'est le segment « Tout » de la Boîte.
 export function meta() {
-  return [{ title: "Journal · Orasso" }, { name: "robots", content: "noindex" }];
+  return [{ title: "Boîte · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
 type JournalItem = {
@@ -26,11 +37,33 @@ type JournalItem = {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const cursor = new URL(request.url).searchParams.get("suite");
-  const page = await apiOrThrow<{ items: JournalItem[]; nextCursor: string | null }>(
-    request,
-    `/me/notifications?limit=30${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
-  );
-  return page;
+  const [page, summary, conversations, friends, contacts] = await Promise.all([
+    apiOrThrow<{ items: JournalItem[]; nextCursor: string | null }>(
+      request,
+      `/me/notifications?limit=30${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    ),
+    apiOrThrow<InboxSummary>(request, "/me/inbox/summary"),
+    // « Tout » réunit messages, demandes et notifications (`sh-inbox`) : les plus récents de chaque sorte.
+    api<ConversationPage>(request, "/me/conversations?limit=10"),
+    api<{ items: FriendRequestView[] }>(request, "/me/friends/requests?direction=in"),
+    api<{ items: ContactRequestView[] }>(request, "/me/contact-requests"),
+  ]);
+  return {
+    ...page,
+    summary,
+    conversations: conversations.ok ? conversations.data.items : [],
+    requests: [
+      ...(friends.ok ? friends.data.items : []).map((r) => ({
+        id: `friend-${r.id}`,
+        at: r.createdAt,
+        pseudo: r.person.pseudo,
+        text: "veut devenir ton ami",
+      })),
+      ...(contacts.ok ? contacts.data.items : [])
+        .filter((r) => r.direction === "in")
+        .map((r) => ({ id: `contact-${r.id}`, at: r.createdAt, pseudo: r.person.pseudo, text: "veut te contacter" })),
+    ],
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -50,13 +83,19 @@ const pathOf = (item: JournalItem): string | null => {
 };
 
 export default function Journal({ loaderData, actionData }: Route.ComponentProps) {
-  const { items, nextCursor } = loaderData;
+  const { items, nextCursor, summary, conversations, requests } = loaderData;
   const busy = useNavigation().state !== "idle";
   const unread = items.filter((i) => !i.readAt).length;
   return (
     <div className="s-narrow s-stack" data-testid="journal">
+      <h1 className="s-title">{messagingLabels.inbox}</h1>
+      <InboxSegments
+        active="all"
+        messages={summary.unreadMessages}
+        requests={Object.values(summary.requests).reduce((a, b) => a + b, 0)}
+      />
       <div className="s-row s-row--between">
-        <h1 className="s-title">{socialLabels.journal}</h1>
+        <h2 className="s-h2">{socialLabels.journal}</h2>
         {unread > 0 && (
           <Form method="post">
             <input type="hidden" name="intent" value="read_all" />
@@ -70,6 +109,32 @@ export default function Journal({ loaderData, actionData }: Route.ComponentProps
         <p className="s-error" role="alert">
           {actionData.error}
         </p>
+      )}
+      {(conversations.length > 0 || requests.length > 0) && (
+        <ul className="s-convos" data-testid="inbox-all">
+          {[
+            ...conversations.map((c: ConversationSummary) => ({
+              at: c.lastMessage?.at ?? "",
+              node: <ConversationRow key={c.id} c={c} />,
+            })),
+            ...requests.map((r) => ({
+              at: r.at,
+              node: (
+                <li key={r.id}>
+                  <a className="s-convo" href="/app/boite/demandes" data-testid="inbox-request">
+                    <div className="s-convo__main">
+                      <strong>{r.pseudo}</strong>
+                      <span className="s-muted">{r.text}</span>
+                    </div>
+                    <Chip>{messagingLabels.requests}</Chip>
+                  </a>
+                </li>
+              ),
+            })),
+          ]
+            .sort((a, b) => b.at.localeCompare(a.at))
+            .map((x) => x.node)}
+        </ul>
       )}
       {items.length === 0 ? (
         <p className="s-notice">{socialLabels.journalEmpty}</p>

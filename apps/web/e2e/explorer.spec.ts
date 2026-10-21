@@ -52,9 +52,12 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
   await loginInBrowser(page, `${pseudo.toLowerCase()}@e2e.orasso.test`, undefined, "/app/explorer");
 
   // --- Recherche de premier niveau depuis l'en-tête -------------------------------------------------------------------
-  await page.getByTestId("site-search").getByRole("searchbox").fill("Supra");
-  await page.getByTestId("site-search").getByRole("button").click();
-  await expect(page).toHaveURL(/\/app\/explorer\?q=Supra/);
+  // Lot C5 : la loupe de l'AppBar ouvre le champ de recherche de l'Explorer (plus de champ dans l'en-tête).
+  await page.getByRole("link", { name: "Rechercher", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/explorer\?segment=resultats/);
+  await page.locator('#explorer-form input[name="q"]').fill("Supra");
+  await page.locator("#explorer-form").getByRole("button", { name: "Rechercher" }).click();
+  await expect(page).toHaveURL(/\/app\/explorer\?.*q=Supra/);
   const vehicles = page.getByTestId("group-vehicles");
   await expect(vehicles).toBeVisible();
   await expect(vehicles.getByTestId("vehicle-hit").first()).toContainText("Toyota Supra");

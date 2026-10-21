@@ -29,7 +29,7 @@ import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { serverSkewAt } from "@/lib/clock";
 import { formatDay, formatDayHour, formatDuration, formatHour, formatStamp } from "@/lib/format";
-import { jourJOpensAt, jourJState } from "@/lib/jourj";
+import { jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, loadOtpSecret, refreshKit } from "@/lib/kits";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
@@ -155,7 +155,7 @@ export default function JourJ() {
         <Notice tone="error">
           {app && app.status !== "accepted"
             ? "Cette place n'est plus valide : il n'y a plus de QR à présenter."
-            : "Ce QR n'est pas encore enregistré sur ce téléphone. Ouvre l'appli une fois avec du réseau (idéalement la veille) : il sera gardé pour le jour J."}
+            : "Ce QR n'est pas encore enregistré sur ce téléphone. Ouvre l'appli une fois avec du réseau : il sera gardé pour le jour J."}
         </Notice>
       </FlowScreen>
     );
@@ -241,17 +241,7 @@ export default function JourJ() {
         )}
       </Plate>
 
-      {state === "early" ? (
-        <Plate kind="note" style={styles.block}>
-          <Text variant="posterM" color={c.plateInk}>
-            Ton QR est prêt
-          </Text>
-          <Text variant="body" color={c.plateMuted}>
-            Il est enregistré sur ce téléphone et fonctionnera sans réseau. Le mode jour J s'ouvre la veille, le{" "}
-            {formatDayHour(jourJOpensAt(span, tz), tz)}.
-          </Text>
-        </Plate>
-      ) : state === "closed" ? (
+      {state === "closed" ? (
         <Plate kind="note" style={styles.block}>
           <Text variant="posterM" color={c.plateInk}>
             {kit.checkedInAt ? "Entrée enregistrée" : "Mode jour J terminé"}

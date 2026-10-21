@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { accountQrAt, hmacSha1, secondsLeft } from "./accountQr";
 import { authOriginHeader, pickCookie } from "./api/cookies";
 import { breakTitle, dayCountdown, formatDay, formatDayHour, formatDuration, formatHour } from "./format";
-import { jourJClosesAt, jourJOpensAt, jourJState } from "./jourj";
+import { jourJClosesAt, jourJState } from "./jourj";
 import { qrMatrix, qrPath, qrViewBox } from "./qr";
 import { mergeWeather, temperatureRange } from "./weather";
 
@@ -88,27 +88,28 @@ describe("QR d'inscription", () => {
   });
 });
 
-describe("Mode jour J : fenêtre d'ouverture", () => {
+describe("QR d'accès : fenêtre de consultation (D34)", () => {
   // Nocturne de Canet : samedi 17 octobre 2026, 19 h – 23 h (heure de Paris, UTC+2).
   const event = { startsAt: "2026-10-17T17:00:00Z", endsAt: "2026-10-17T21:00:00Z" };
 
-  it("s'ouvre la veille à 00 h et se ferme à J+1 00 h", () => {
-    expect(jourJOpensAt(event).toISOString()).toBe("2026-10-15T22:00:00.000Z");
+  it("se ferme à J+1 00 h", () => {
     expect(jourJClosesAt(event).toISOString()).toBe("2026-10-17T22:00:00.000Z");
   });
 
-  it("trois états : pas encore, ouvert, fermé (par l'heure ou par le scan)", () => {
-    expect(jourJState(event, new Date("2026-10-15T21:59:00Z"), false)).toBe("early");
-    expect(jourJState(event, new Date("2026-10-15T22:00:00Z"), false)).toBe("open");
+  it("consultable dès la validation : ouvert des semaines avant, la veille et le jour J", () => {
+    expect(jourJState(event, new Date("2026-09-20T10:00:00Z"), false)).toBe("open");
+    expect(jourJState(event, new Date("2026-10-15T21:59:00Z"), false)).toBe("open");
     expect(jourJState(event, new Date("2026-10-17T16:00:00Z"), false)).toBe("open");
+  });
+
+  it("fermé après l'entrée enregistrée ou à J+1", () => {
     expect(jourJState(event, new Date("2026-10-17T16:00:00Z"), true)).toBe("closed");
     expect(jourJState(event, new Date("2026-10-17T22:00:00Z"), false)).toBe("closed");
   });
 
   it("gère le changement d'heure (fin octobre)", () => {
     const winter = { startsAt: "2026-10-25T10:00:00Z", endsAt: "2026-10-25T14:00:00Z" };
-    // La veille 24 oct 00 h = UTC+2 → 23 oct 22:00Z ; J+1 26 oct 00 h = UTC+1 → 25 oct 23:00Z.
-    expect(jourJOpensAt(winter).toISOString()).toBe("2026-10-23T22:00:00.000Z");
+    // J+1 26 oct 00 h = UTC+1 → 25 oct 23:00Z.
     expect(jourJClosesAt(winter).toISOString()).toBe("2026-10-25T23:00:00.000Z");
   });
 });

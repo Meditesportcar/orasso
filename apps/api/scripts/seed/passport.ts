@@ -39,7 +39,13 @@ async function seasonId(date: Date) {
 }
 
 /** Tampon posé directement (sans notification : ce sont des souvenirs, pas des nouveautés). */
-async function stamp(userId: string, event: EventRow, kind: StampKind, at: Date, applicationId: string | null = null) {
+export async function stamp(
+  userId: string,
+  event: EventRow,
+  kind: StampKind,
+  at: Date,
+  applicationId: string | null = null,
+) {
   await db
     .insert(t.passportStamps)
     .values({
