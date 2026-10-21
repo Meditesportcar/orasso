@@ -97,7 +97,14 @@ export const LEGACY_CACHE_KEYS = [
   "ref.makes",
   "public-settings",
 ];
-const LEGACY_CACHE_PREFIXES = [
+
+/**
+ * Registre des préfixes des clés de cache à identifiant (`feed.<slug>`, `orga-events-<id>`, `recap.<id>`…), qu'on ne
+ * peut pas énumérer à l'avance. Tout nouveau `cacheKey` construit avec un identifiant déclare son préfixe ici (le test
+ * `cacheScope.test.ts` échoue sinon). Ils servent à la purge par préfixe : au changement de compte et à la
+ * déconnexion (`purgeCaches`), même si l'index du compte est perdu, et au balayage des clés d'avant le lot 54b.
+ */
+export const CACHE_KEY_PREFIXES = [
   "feed.",
   "stand-pass-",
   "vehicle-history-",
@@ -106,7 +113,8 @@ const LEGACY_CACHE_PREFIXES = [
   "missions-",
   "passport.",
   "recap.",
-];
+  "home-",
+] as const;
 
 async function purgeLegacyCaches(): Promise<void> {
   if (await kvGet(LEGACY_PURGED_KEY)) return;
@@ -114,7 +122,7 @@ async function purgeLegacyCaches(): Promise<void> {
   if (isWeb) {
     try {
       const storage = globalThis.localStorage;
-      const prefixes = LEGACY_CACHE_PREFIXES.map((prefix) => kvKey(prefix));
+      const prefixes = CACHE_KEY_PREFIXES.map((prefix) => kvKey(prefix));
       for (const name of Object.keys(storage)) {
         if (prefixes.some((prefix) => name.startsWith(prefix))) storage.removeItem(name);
       }
@@ -144,6 +152,19 @@ async function dropScope(scope: string): Promise<void> {
   const keys = (await kvGetJson<string[]>(indexKeyOf(scope))) ?? [];
   await Promise.all(keys.map((key) => kvDel(cacheKeyOf(scope, key))));
   await kvDel(indexKeyOf(scope));
+  // Purge par préfixe : filet si l'index du compte est perdu ou incomplet (clé à identifiant écrite mais non listée).
+  // Le trousseau ne se liste pas : seul le stockage du navigateur (recette web) peut être balayé.
+  if (isWeb) {
+    try {
+      const storage = globalThis.localStorage;
+      const prefixes = CACHE_KEY_PREFIXES.map((prefix) => kvKey(cacheKeyOf(scope, prefix)));
+      for (const name of Object.keys(storage)) {
+        if (prefixes.some((prefix) => name.startsWith(prefix))) storage.removeItem(name);
+      }
+    } catch {
+      // Ignoré : voir l'en-tête.
+    }
+  }
 }
 
 /**
