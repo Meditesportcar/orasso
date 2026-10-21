@@ -32,6 +32,14 @@ describe("temps réel de l'appli", () => {
     expect(appLinkOf("https://exemple.com")).toBeNull();
   });
 
+  it("liens du récap et du passeport (lot 50)", () => {
+    const id = "8f8e2f0a-1c1c-4c4c-8a8a-0123456789ab";
+    expect(appLinkOf(`/app/recap/${id}`)).toBe(`/recap/${id}`);
+    expect(appLinkOf("/app/recap/abc")).toBeNull();
+    expect(appLinkOf("/app/passeport")).toBe("/mon-passeport");
+    expect(appLinkOf("/app/passeport/../acces")).toBeNull();
+  });
+
   it("lien d'avis d'un remerciement vers la feuille d'avis de l'onglet Accès (lot 27)", () => {
     const id = "8f8e2f0a-1c1c-4c4c-8a8a-0123456789ab";
     expect(appLinkOf(`/app/acces?avis=${id}`)).toBe(`/acces?avis=${id}`);

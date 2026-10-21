@@ -205,6 +205,7 @@ async function myTicketsOf(userId: string, onlyEventId?: string): Promise<MyTick
     priceCents: o.amountCents > 0 ? Math.round(o.amountCents / o.quantity) : null,
     testMode: o.testMode,
     event: {
+      id: e.id,
       slug: e.slug,
       title: e.title,
       startsAt: e.startsAt.toISOString(),

@@ -411,6 +411,23 @@ describe("fiche Instagram", () => {
     });
     const postMeta = await sharp(Buffer.from(await post.arrayBuffer())).metadata();
     expect([postMeta.width, postMeta.height]).toEqual([1080, 1080]);
+    // Story v2 (lot 50) : trois styles, même taille ; style inconnu refusé.
+    for (const style of ["night", "sand", "neon"]) {
+      const res = await app.request(`/api/me/vehicles/${v.id}/share-image?format=story&style=${style}`, {
+        headers: { cookie: u.cookie },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-disposition")).toContain(`orasso-story-${style}.png`);
+      const m = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+      expect([m.width, m.height]).toEqual([1080, 1920]);
+    }
+    expect(
+      (
+        await app.request(`/api/me/vehicles/${v.id}/share-image?format=story&style=rose`, {
+          headers: { cookie: u.cookie },
+        })
+      ).status,
+    ).toBe(400);
     // Format inconnu, véhicule d'un autre, visiteur sans compte.
     expect(
       (await app.request(`/api/me/vehicles/${v.id}/share-image?format=carre`, { headers: { cookie: u.cookie } }))

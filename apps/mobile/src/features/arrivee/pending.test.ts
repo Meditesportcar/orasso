@@ -17,12 +17,12 @@ describe("le profil choisi mène à sa barre", () => {
     expect(pendingCasquette("visitor", ["visitor"], 0)).toBeNull();
     expect(pendingCasquette(null, ["visitor"], 0)).toBeNull();
   });
-  it("chaque tâche pointe vers un écran de création existant (le média attend le lot 55)", () => {
+  it("chaque tâche pointe vers un écran de création existant ", () => {
     expect(pendingPath).toEqual({
       pro: "/pro-nouvelle",
       organizer: "/structure/nouvelle",
       provider: "/prestataire/nouveau",
-      media: null,
+      media: "/media/nouveau",
       vehicle: "/vehicule/nouveau",
     });
   });

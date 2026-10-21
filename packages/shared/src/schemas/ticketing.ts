@@ -68,6 +68,7 @@ export type MyTicket = {
   priceCents: number | null;
   testMode: boolean;
   event: {
+    id: string;
     slug: string;
     title: string;
     startsAt: string;

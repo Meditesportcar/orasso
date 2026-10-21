@@ -42,6 +42,7 @@ export function vehiclePublic(v: VehicleWithAll): VehiclePublic {
     })),
     status: v.status,
     certified: Boolean(v.certifiedAt),
+    audiencePrizes: v.audiencePrizes,
   };
 }
 

@@ -6,12 +6,12 @@ import type { MainProfile } from "@orasso/shared";
 
 export type PendingKind = "pro" | "organizer" | "provider" | "media" | "vehicle";
 
-/** L'écran de création existant de chaque casquette (`null` : le profil média arrive au lot 55). */
-export const pendingPath: Record<PendingKind, string | null> = {
+/** L'écran de création existant de chaque casquette (le profil média : lot 55). */
+export const pendingPath: Record<PendingKind, string> = {
   pro: "/pro-nouvelle",
   organizer: "/structure/nouvelle",
   provider: "/prestataire/nouveau",
-  media: null,
+  media: "/media/nouveau",
   vehicle: "/vehicule/nouveau",
 };
 

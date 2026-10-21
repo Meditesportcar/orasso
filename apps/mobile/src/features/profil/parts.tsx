@@ -1,15 +1,16 @@
 // Morceaux de Mon profil (lot 40, prototype `s-me`) : les casquettes avec leurs accès rapides (ex-feuille « Mes
 // casquettes » de la barre du haut, supprimée), la feuille « Créer » (un seul bouton pour structure, fiche pro,
-// prestataire ; média au lot 55), la carte de saison et les tuiles de réglages.
+// prestataire, profil média), la carte de saison et les tuiles de réglages.
 import { Chip, Icon, type IconName, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { adminAppLabels, gradeLabels, type MyPoints, type MyStaffEvent } from "@orasso/shared";
+import { adminAppLabels, gradeLabels, type MyPoints, type MyStaffEvent, mediaAppLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-
+import { api } from "@/lib/api";
 import { usePersona } from "@/lib/persona";
 import { type AppPersonaEntry, isActive, personaKindLabels, personaOfEntry, tabHref } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
+import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
@@ -101,6 +102,12 @@ export function PersonaRows({
   const { me } = useSession();
   const { persona, entries, choose, base } = usePersona();
   const pseudo = me?.profile.pseudo;
+  // Lot 55 : la ligne du profil média dit s'il est vérifié ; lu seulement quand la casquette existe.
+  const hasMedia = entries.some((e) => e.kind === "media");
+  const mediaProfile = useApi(async () => (await api.myMediaProfile()).profile, [hasMedia], {
+    enabled: hasMedia,
+    cacheKey: "media-profile",
+  });
 
   const open = (entry: AppPersonaEntry, route: string) => {
     const next = personaOfEntry(entry);
@@ -192,14 +199,33 @@ export function PersonaRows({
                 testID="casquette-quick-showcase"
               />
             ) : null}
+            {/* lot 55 : profil média (modifier), accréditations, contenus. */}
             {entry.kind === "media" ? (
-              <HubRow
-                lead={<RowIcon name="gallery" />}
-                title="Mes contenus"
-                caption="Galeries et liens mis en avant"
-                onPress={() => open(entry, "contenus")}
-                testID="casquette-quick-contents"
-              />
+              <>
+                <HubRow
+                  lead={<RowIcon name="profile" />}
+                  title={mediaAppLabels.casquetteEdit}
+                  caption={mediaAppLabels.casquetteEditCaption(
+                    mediaProfile.data ? mediaProfile.data.verifiedAt !== null : null,
+                  )}
+                  onPress={() => router.push("/media/modifier")}
+                  testID="casquette-quick-media-profile"
+                />
+                <HubRow
+                  lead={<RowIcon name="press" />}
+                  title={mediaAppLabels.casquettePress}
+                  caption={mediaAppLabels.casquettePressCaption}
+                  onPress={() => open(entry, "presse")}
+                  testID="casquette-quick-press"
+                />
+                <HubRow
+                  lead={<RowIcon name="gallery" />}
+                  title="Mes contenus"
+                  caption="Galeries et liens mis en avant"
+                  onPress={() => open(entry, "contenus")}
+                  testID="casquette-quick-contents"
+                />
+              </>
             ) : null}
           </View>
         );
@@ -257,7 +283,13 @@ const CREATIONS = [
     icon: "shop",
     path: "/prestataire/nouveau",
   },
-  // lot 55 : « Un profil média ».
+  {
+    kind: "media",
+    title: mediaAppLabels.createTitle,
+    caption: mediaAppLabels.createCaption,
+    icon: "press",
+    path: "/media/nouveau",
+  },
 ] as const;
 
 /** La feuille « Créer » (prototype `sh-create`). */

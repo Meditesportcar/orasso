@@ -23,7 +23,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
-
+import { StampArrival } from "@/features/passport/StampArrival";
 import { ReportSheetHost } from "@/features/ReportSheet";
 import { StaffBackground } from "@/features/staff/StaffBackground";
 import { adminLinkOf } from "@/lib/adminModel";
@@ -59,7 +59,7 @@ function Shell() {
   useEffect(() => {
     setPosition(firstDepartment ? profilePosition([firstDepartment]) : null);
   }, [firstDepartment, setPosition]);
-  const { persona, backToBase, choose } = usePersona();
+  const { persona, backToBase, choose, entries } = usePersona();
   const router = useRouter();
   const segments = useSegments();
   const navigation = useRootNavigationState();
@@ -115,6 +115,16 @@ function Shell() {
     if (status === "in") void registerThisDevice();
   }, [status]);
 
+  // Cible d'une notification média reçue avant le chargement des casquettes (démarrage à froid), ouverte dès qu'elles sont là.
+  const pendingMedia = useRef<string | null>(null);
+  useEffect(() => {
+    const media = entries.find((e) => e.kind === "media");
+    if (!pendingMedia.current || !media) return;
+    const target = pendingMedia.current;
+    pendingMedia.current = null;
+    choose({ kind: "media", mediaProfileId: media.id }, target);
+  }, [entries, choose]);
+
   // Toucher une notification ouvre l'onglet Sorties de la casquette de base (quelle que soit la casquette active) ou
   // l'écran de son lien.
   useEffect(() => {
@@ -123,6 +133,16 @@ function Shell() {
       // Décision sur une candidature de prestataire (lot 21) : l'écran Candidatures de la casquette Prestataire.
       if (response.notification.request.content.data?.screen === "provider_applications") {
         choose({ kind: "provider" }, "/(provider)/candidatures");
+        return;
+      }
+      // Décision sur une accréditation presse, contenu mis en avant (lot 55) : Presse ou Contenus de la casquette Média.
+      const screen = response.notification.request.content.data?.screen;
+      if (screen === "media_accreditations" || screen === "media_contents") {
+        const target = screen === "media_contents" ? "/(media)/contenus" : "/(media)/presse";
+        const media = entries.find((e) => e.kind === "media");
+        if (media) choose({ kind: "media", mediaProfileId: media.id }, target);
+        // Démarrage à froid : les casquettes ne sont pas encore lues ; on garde la cible, jamais l'écran d'Accès (passionné).
+        else pendingMedia.current = target;
         return;
       }
       // Demande pour devenir staff (lot 35a) : l'écran Équipe de la structure, sous la casquette Organisateur.
@@ -144,7 +164,7 @@ function Shell() {
       else router.navigate("/acces");
     });
     return () => sub.remove();
-  }, [router, backToBase, choose]);
+  }, [router, backToBase, choose, entries]);
 
   return (
     <View style={[styles.fill, { backgroundColor: ground }]}>
@@ -158,6 +178,8 @@ function Shell() {
         )}
       </NavigationThemeProvider>
       <AnnouncementSheet />
+      {/* Lot 50 : le tampon du passeport qui tombe au pointage, au-dessus de tout écran et de ses feuilles. */}
+      {status === "in" ? <StampArrival /> : null}
       {/* Lot 32 : feuille « Signaler », une pour toute l'appli. */}
       {status === "in" ? <ReportSheetHost /> : null}
       {status === "in" ? <StaffBackground /> : null}

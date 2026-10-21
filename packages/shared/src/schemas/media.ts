@@ -31,8 +31,8 @@ const formatsSchema = z
   .refine((f) => new Set(f).size === f.length, "Formats en double");
 
 /**
- * Profil média (`PUT /me/media-profile`). `pressCardNumber` : privé (AS-V6), jamais renvoyé hors du titulaire et de
- * l'administration. `departments` vide = toute la France.
+ * Profil média (`PUT /me/media-profile`). Pas de numéro de carte de presse (D26, AS-V6 tranchée). `departments` vide =
+ * toute la France.
  */
 export const mediaProfileSchema = z.object({
   name: z.string().trim().min(2, "Nom trop court").max(60),
@@ -41,7 +41,6 @@ export const mediaProfileSchema = z.object({
   website: emptyToNull(httpUrl.max(200)),
   instagram: optionalText(100),
   youtube: emptyToNull(httpUrl.max(200)),
-  pressCardNumber: optionalText(40),
   departments: z.array(departmentSchema).max(101).default([]),
 });
 export type MediaProfileInput = z.infer<typeof mediaProfileSchema>;
@@ -118,7 +117,7 @@ export const mediaContentFeatureSchema = z.object({ featured: z.boolean() });
 
 // --- Vues -------------------------------------------------------------------------------------------------------------
 
-/** Profil vu par son titulaire (et l'administration) : seule vue qui porte la carte de presse. */
+/** Profil vu par son titulaire et l'administration. */
 export type MediaProfileView = {
   id: string;
   name: string;
@@ -128,15 +127,15 @@ export type MediaProfileView = {
   instagram: string | null;
   youtube: string | null;
   logoUrl: string | null;
-  pressCardNumber: string | null;
-  pressCardVerifiedAt: string | null;
+  /** Vérification du profil média par l'administration (D26). */
+  verifiedAt: string | null;
   departments: string[];
   /** Ce qui manque pour demander une accréditation (`null` = complet). */
   issue: string | null;
   createdAt: string;
 };
 
-/** Fiche publique (connectés, organisation) : jamais la carte de presse, seulement « vérifiée ». */
+/** Fiche publique (connectés, organisation) : seulement « vérifié » oui ou non. */
 export type MediaPublic = {
   id: string;
   name: string;
@@ -147,7 +146,7 @@ export type MediaPublic = {
   youtube: string | null;
   logoUrl: string | null;
   departments: string[];
-  pressCardVerified: boolean;
+  verified: boolean;
 };
 
 export type MediaEventBrief = {
@@ -178,6 +177,8 @@ export type MediaAccreditationView = {
   event: MediaEventBrief;
   /** Badge presse : le pass d'accès (QR par `GET /applications/:id/pass`) ; `null` tant qu'il n'est pas émis. */
   pass: { id: string; valid: boolean } | null;
+  /** Entrée enregistrée le jour J (scan du badge) ; `null` avant. */
+  checkedInAt: string | null;
   /** Consignes de l'organisation : seulement une fois accrédité. */
   briefing: PressBriefing | null;
   /** « Couvert · 3 vidéos · 1 840 vues depuis la page de l'événement ». */
