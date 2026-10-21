@@ -5,7 +5,7 @@
 // Retirés (audit § 5.2) : la ligne « Historique des points » (= toucher la carte de saison), « Mes véhicules archivés »
 // (Garage seulement), l'aide « Appui long sur le logo », « Devenir staff » (= ligne « Où je suis staff » sans mission) et
 // le bouton « Mon profil de base » (= la ligne de casquette).
-import { Text, tokens, useTheme } from "@orasso/design-system/native";
+import { initialsOf, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { gradeLabels, passportScreenTexts } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -14,7 +14,7 @@ import { AccountQrSheet } from "@/features/AccountQrSheet";
 import { PendingCard } from "@/features/arrivee/PendingCard";
 import { EmailBanner } from "@/features/moi/EmailBanner";
 import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
-import { CrewDot, initialsOf, Nudge, SmButton, Tag } from "@/features/passionne/kit";
+import { CrewDot, Nudge, SmButton, TagWin } from "@/features/passionne/kit";
 import { Stamp } from "@/features/passport/Stamp";
 import { api } from "@/lib/api";
 import { usePersona } from "@/lib/persona";
@@ -86,9 +86,9 @@ export function ProfilScreen() {
           </Text>
           <View style={styles.headTags}>
             {base && profile ? (
-              <Tag kind="win">{gradeLabels[profile.grade]}</Tag>
+              <TagWin>{gradeLabels[profile.grade]}</TagWin>
             ) : (
-              <Tag kind="line">{personaKindLabels[persona.kind]}</Tag>
+              <Tag tone="line">{personaKindLabels[persona.kind]}</Tag>
             )}
             <Text variant="caption" color={t.color.inkMuted} style={styles.headCaption}>
               {base ? (department ? `Département ${department}` : "Passionné") : active.label}
@@ -152,7 +152,7 @@ export function ProfilScreen() {
           accessibilityLabel={crew ? `Mon crew, ${crew.name}` : "Mon crew, crée ou rejoins un crew"}
         >
           <View style={styles.crewRow}>
-            <CrewDot initials={crew ? initialsOf(crew.name, 2) : "+"} size={46} />
+            <CrewDot initials={crew ? initialsOf(crew.name).slice(0, 2) : "+"} size={46} />
             <View style={styles.crewText}>
               <Text variant="label" color={t.color.inkMuted}>
                 Mon crew
@@ -183,21 +183,21 @@ export function ProfilScreen() {
           testID="reglage-notifications"
         />
         <SettingTile
-          icon="list"
+          icon="gear"
           title="Préférences"
           caption={preferencesCaption}
           onPress={() => router.push("/reglages/preferences")}
           testID="reglage-preferences"
         />
         <SettingTile
-          icon="eyeOff"
+          icon="shield"
           title="Sécurité"
           caption="Mot de passe, appareils"
           onPress={() => router.push("/reglages/securite")}
           testID="reglage-securite"
         />
         <SettingTile
-          icon="eye"
+          icon="lock"
           title="Confidentialité"
           caption={profile ? visibilityCaption[profile.visibility] : "Profil public, nom privé"}
           onPress={() => router.push("/reglages/confidentialite")}
@@ -220,12 +220,12 @@ export function ProfilScreen() {
       </View>
       {/* « Revoir le tuto » est dans l'Aide (lot 42). */}
       <View style={styles.footerRow}>
-        <SmButton kind="g" icon="chat" onPress={() => router.push("/reglages/aide")} testID="profil-help">
+        <SmButton kind="g" icon="help" onPress={() => router.push("/reglages/aide")} testID="profil-help">
           Aide
         </SmButton>
         <SmButton
           kind="g"
-          icon="back"
+          icon="logout"
           onPress={async () => {
             await signOut();
             router.replace("/auth");

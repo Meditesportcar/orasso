@@ -6,14 +6,14 @@
 // avec discussion et invitation en boutons carrés, rail des membres, « Demandes · Toi seul les vois ». « Sorties
 // ensemble » et « Le garage du crew » attendent les données de l'API (lot C5, consigné au journal). La gestion du chef
 // (retirer, logo, dissoudre) reste, rangée en bas.
-import { Photo, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { initialsOf, Photo, Tag, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { CREW_REQUEST_MESSAGE_MAX, crewLabels, gradeLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { PosterFlow } from "@/features/event/PosterFlow";
-import { CrewDot, initialsOf, SmButton, Tag } from "@/features/passionne/kit";
+import { CrewDot, SmButton } from "@/features/passionne/kit";
 import { ReportButton } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
 import { pickAvatar } from "@/lib/avatar";
@@ -157,7 +157,7 @@ export default function CrewScreen() {
               <Photo source={mediaSource(v.logoUrl)} style={StyleSheet.absoluteFill} />
             </View>
           ) : (
-            <CrewDot initials={initialsOf(v.name, 2)} size={84} />
+            <CrewDot initials={initialsOf(v.name).slice(0, 2)} size={84} />
           )}
         </View>
         <View style={styles.idText}>
@@ -170,8 +170,8 @@ export default function CrewScreen() {
         </View>
       </View>
       <View style={styles.tags}>
-        {leader ? <Tag kind="acc">Tu es responsable</Tag> : null}
-        {v.leader && !leader ? <Tag kind="line">{crewLabels.leaderOf(v.leader.pseudo)}</Tag> : null}
+        {leader ? <Tag tone="acc">Tu es responsable</Tag> : null}
+        {v.leader && !leader ? <Tag tone="line">{crewLabels.leaderOf(v.leader.pseudo)}</Tag> : null}
       </View>
       {v.description ? (
         <Text variant="body" color={c.inkMuted}>
@@ -298,7 +298,7 @@ export default function CrewScreen() {
                 <Text variant="caption" color={c.inkMuted} style={styles.memberSub}>
                   {gradeLabels[m.grade]}
                 </Text>
-                {m.role === "leader" ? <Tag kind="acc">Responsable</Tag> : null}
+                {m.role === "leader" ? <Tag tone="acc">Responsable</Tag> : null}
               </Pressable>
             ))}
           </ScrollView>

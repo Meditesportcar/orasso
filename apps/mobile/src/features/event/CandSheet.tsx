@@ -6,7 +6,18 @@
 // sorties ». Gardés de l'ancien flux (docs/01, audit § 2) : la case du règlement, sur une ligne, et le choix du jour
 // d'un événement sur plusieurs jours. Ni suivi de la structure ni newsletter cochés d'office : le bouton « Suivre » de
 // la fiche s'en charge.
-import { Chip, ChipRow, Icon, Monogram, Photo, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  Chip,
+  ChipRow,
+  Icon,
+  initialsOf,
+  Monogram,
+  Photo,
+  Text,
+  TextField,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
 import {
   ARRIVAL_NOTE_MAX,
   type ArrivalSlot,
@@ -23,7 +34,7 @@ import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { arrivalBody } from "@/features/arrival/ArrivalSeen";
-import { CheckBox, CrewDot, initialsOf, Seg, SmButton } from "@/features/passionne/kit";
+import { CheckBox, CrewDot, Seg, SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { errorMessage } from "@/lib/http";
@@ -239,7 +250,7 @@ export function CandSheet({
                 {
                   value: "crew",
                   label: `Avec ${crew.name}`,
-                  lead: <CrewDot initials={initialsOf(crew.name, 2)} size={22} />,
+                  lead: <CrewDot initials={initialsOf(crew.name).slice(0, 2)} size={22} />,
                 },
               ]}
             />
@@ -353,10 +364,7 @@ export function CandSheet({
                         router.push(`/vehicule/${v.id}`);
                       } else toggleVehicle(v.id);
                     }}
-                    style={[
-                      styles.candVeh,
-                      { backgroundColor: c.surface, borderColor: on ? c.accent : c.surfaceRaised },
-                    ]}
+                    style={[styles.candVeh, { backgroundColor: c.surface, borderColor: on ? c.accent : c.cardLine }]}
                     testID="cand-vehicle"
                   >
                     <View style={styles.cvPh}>

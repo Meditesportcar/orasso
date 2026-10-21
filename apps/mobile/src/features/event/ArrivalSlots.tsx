@@ -1,10 +1,10 @@
 // Créneaux d'arrivée de la fiche v2 (lot 44, `s-event` ; données du lot 47) : deux plaques distinctes, exposants (avec
 // véhicule, sur l'aplat de l'affiche) et public, l'horaire en grands chiffres, Strict ou Conseillé, la note.
-import { Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type ArrivalSlot, type Arrivals, eventPageLabels as L } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
-import { Num, Tag } from "@/features/passionne/kit";
+import { Num } from "@/features/passionne/kit";
 import { SecHead } from "@/ui/SecHead";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -24,7 +24,7 @@ function Slot({ title, slot, mine }: { title: string; slot: ArrivalSlot; mine: b
       <Num size={30} color={ink}>
         {slotTime(slot)}
       </Num>
-      <Tag kind={slot.strict ? "acc" : "line"} onPoster={mine}>
+      <Tag tone={slot.strict ? "acc" : "line"} on={mine ? "poster" : "card"}>
         {slot.strict ? L.strict : L.advised}
       </Tag>
       {slot.note ? (

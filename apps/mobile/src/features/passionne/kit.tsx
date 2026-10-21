@@ -1,6 +1,7 @@
 // Petites pièces de l'artefact DA v2 reproduites pour les écrans du passionné (lot C2b) : `.card`, `.tag`, `.seg`,
-// `.btn.sm`, `.nudge`, `.check`, `.cr-mini`, `.orglogo`, `.t-num`. Le socle (lot C1) prépare les mêmes composants
-// dans `packages/design-system` ; ces versions locales s'y rangeront à la fusion (consigné au journal des choix).
+// `.btn.sm`, `.nudge`, `.check`, `.cr-mini`, `.pill-o`, `.t-num`, et `.tag.win`. Depuis la fusion du socle C1,
+// l'étiquette (`Tag`), le logo d'organisateur (`OrgLogo`), les initiales (`initialsOf`), `SecHead`, les icônes et les
+// jetons viennent du socle ; ces pièces-ci n'y existent pas encore (consigné au journal des choix).
 // Valeurs relevées dans `.claude/prototype-v2/index.html` (feuille de style principale).
 import { Icon, type IconName, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
 import type { ReactNode } from "react";
@@ -58,22 +59,15 @@ export function PosterSurface({
   );
 }
 
-export type TagKind = "ink" | "acc" | "line" | "win";
-
-/** `.tag` : étiquette inclinée de −8°, Archivo étroite 800 11 px en capitales. */
-export function Tag({ kind = "ink", children, onPoster }: { kind?: TagKind; children: string; onPoster?: boolean }) {
+/**
+ * `.tag.win` : l'étiquette rouge (grade du profil, véhicule archivé). Le `Tag` du socle (lot C1) n'a que les tons
+ * encre, moutarde et contour ; celui-ci le complète en attendant un `tone="win"` dans le socle.
+ */
+export function TagWin({ children }: { children: string }) {
   const { t } = useTheme();
-  const ink = onPoster ? t.color.posterInk : t.color.ink;
-  const bg = onPoster ? t.color.poster : t.color.ground;
-  const look: Record<TagKind, { box: ViewStyle; color: string }> = {
-    ink: { box: { backgroundColor: ink }, color: bg },
-    acc: { box: { backgroundColor: t.color.accent }, color: t.color.accentInk },
-    line: { box: { borderWidth: 1.5, borderColor: ink }, color: ink },
-    win: { box: { backgroundColor: t.color.win }, color: t.color.winInk },
-  };
   return (
-    <View style={[styles.tag, look[kind].box]}>
-      <Text variant="label" color={look[kind].color} style={styles.tagText}>
+    <View style={[styles.tag, { backgroundColor: t.color.win }]}>
+      <Text variant="label" color={t.color.winInk} style={styles.tagText}>
         {children}
       </Text>
     </View>
@@ -276,18 +270,6 @@ export function CrewDot({ initials, size = 40 }: { initials: string; size?: numb
   );
 }
 
-/** `.orglogo` (repli sans image) : 36 px, rayon 10, fond encre, initiales moutarde. */
-export function OrgInitials({ name, size = 36 }: { name: string; size?: number }) {
-  const { t } = useTheme();
-  return (
-    <View style={[styles.org, { width: size, height: size, backgroundColor: t.color.ink }]}>
-      <Text variant="label" color={t.color.accent} style={styles.orgText}>
-        {initialsOf(name, 3)}
-      </Text>
-    </View>
-  );
-}
-
 /** `.t-num` : chiffres étroits 800 (62 % dans l'artefact ; instance la plus étroite embarquée en attendant le C1). */
 export function Num({
   children,
@@ -310,21 +292,6 @@ export function Num({
       {children}
     </Text>
   );
-}
-
-/** Initiales (capitales, sans accents de liaison) : « MéditeSportCar » → « MSC », « Têt Nights » → « TN ». */
-export function initialsOf(name: string, max: number): string {
-  const words = name.split(/[\s_\-·]+/).filter(Boolean);
-  if (words.length >= 2) {
-    return words
-      .slice(0, max)
-      .map((w) => w[0] ?? "")
-      .join("")
-      .toUpperCase();
-  }
-  const caps = name.match(/\p{Lu}/gu) ?? [];
-  if (caps.length >= 2) return caps.slice(0, max).join("");
-  return name.slice(0, 2).toUpperCase();
 }
 
 const styles = StyleSheet.create({
@@ -400,6 +367,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dot: { borderRadius: radiusPill, alignItems: "center", justifyContent: "center" },
-  org: { borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  orgText: { fontSize: 13, letterSpacing: 0.26 },
 });

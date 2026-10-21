@@ -2,7 +2,7 @@
 // « Validée », abonnés, Suivre) ; les quatre faits : Quand, Où (« voir la carte » → la carte stylée), Exposants
 // (places restantes), Public. Lot C2b : reproduits d'après `s-event` (`.tag` inclinées, `.orgrow` avec logo rond
 // ou initiales moutarde, `.pill-o` « Validée », `.btn.sm` Suivre ; `.fact` sur la carte, chiffres étroits 34 px).
-import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, OrgLogo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type EventPublic,
   eventFormatLabels,
@@ -12,10 +12,10 @@ import {
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { type ReactNode, useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { ExplorerMap } from "@/features/explorer/ExplorerMap";
 import { eventPins } from "@/features/explorer/mapPins";
-import { Num, OrgInitials, PillO, SmButton, Tag } from "@/features/passionne/kit";
+import { Num, PillO, SmButton } from "@/features/passionne/kit";
 import { formatDay, formatHour } from "@/lib/format";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -26,8 +26,8 @@ export function EventTitle({ event }: { event: EventPublic }) {
   return (
     <View style={styles.titleBlock}>
       <View style={styles.tags}>
-        <Tag kind="acc">{eventFormatLabels[event.format]}</Tag>
-        {free ? <Tag kind="line">{L.free}</Tag> : null}
+        <Tag tone="acc">{eventFormatLabels[event.format]}</Tag>
+        {free ? <Tag tone="line">{L.free}</Tag> : null}
       </View>
       <Text variant="posterL" color={t.color.ink} accessibilityRole="header" style={styles.title}>
         {event.title}
@@ -65,11 +65,7 @@ export function OrganizerRow({
         style={styles.orgLink}
         testID="event-organizer"
       >
-        {logo ? (
-          <Image source={{ uri: logo }} style={[styles.orgLogo, styles.round]} accessibilityIgnoresInvertColors />
-        ) : (
-          <OrgInitials name={event.structure.name} size={44} />
-        )}
+        <OrgLogo name={event.structure.name} logoUrl={logo} size={44} />
         <View style={styles.orgText}>
           <Text variant="bodyStrong" color={t.color.ink} style={styles.strong}>
             {event.structure.name}
@@ -116,7 +112,7 @@ function Fact({
     <View
       style={[
         styles.fact,
-        { backgroundColor: t.color.surface, borderColor: t.color.surfaceRaised },
+        { backgroundColor: t.color.surface, borderColor: t.color.cardLine },
         inside && styles.factInside,
       ]}
       testID={testID}
@@ -210,14 +206,6 @@ const styles = StyleSheet.create({
   strong: { fontFamily: "Archivo-ExtraBold" },
   org: { flexDirection: "row", alignItems: "center", gap: space2 + 2, padding: space2 + 2, borderRadius: 16 },
   orgLink: { flex: 1, flexDirection: "row", alignItems: "center", gap: space2 },
-  orgLogo: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  round: { borderRadius: 22 },
   orgText: { flex: 1, gap: space1 },
   orgMeta: { flexDirection: "row", alignItems: "center", gap: space1 + 2, flexWrap: "wrap", marginTop: 3 },
   factsWrap: { gap: space2 },

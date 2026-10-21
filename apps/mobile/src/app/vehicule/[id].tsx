@@ -4,7 +4,7 @@
 // affiche (photo de couverture pleine largeur, étiquettes inclinées, nom, trois chiffres étroits) et range ses actions
 // comme le demande l'audit (§ 5.2) : un seul crayon (l'assistant prérempli), le partage reste au Garage, et le reste
 // (modifier la fiche, certification, vendu / souvenir / accidenté, supprimer) passe dans le menu « … ».
-import { Chip, ChipRow, Icon, Photo, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, ChipRow, Icon, Photo, Tag, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   applicationStatusLabels,
   certificationConditions,
@@ -26,7 +26,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { PosterFlow } from "@/features/event/PosterFlow";
 import { trimLine } from "@/features/garage/GarageCard";
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
-import { Card, Num, SmButton, Tag } from "@/features/passionne/kit";
+import { Card, Num, SmButton, TagWin } from "@/features/passionne/kit";
 import { HubRow, RowIcon } from "@/features/profil/parts";
 import { ArchiveSheet } from "@/features/vehicle/ArchiveSheet";
 import { BlurSheet, type BlurTarget } from "@/features/vehicle/add/BlurSheet";
@@ -215,7 +215,7 @@ export default function VehiculeFiche() {
         </Text>
         {cert.certified ? (
           <>
-            <Tag kind="acc">Certifié</Tag>
+            <Tag tone="acc">Certifié</Tag>
             <Text variant="body" color={c.ink}>
               {`Certifié depuis le ${cert.certifiedAt ? formatDay(cert.certifiedAt) : ""}. Elle se perd si la fiche technique est modifiée, ou après six mois sans événement.`}
             </Text>
@@ -357,11 +357,11 @@ export default function VehiculeFiche() {
     >
       {/* `.veh .vb` : étiquettes, nom entier, sous-ligne, trois chiffres, le crayon et « … ». */}
       <View style={styles.tags}>
-        {v.certified ? <Tag kind="acc">Certifié</Tag> : null}
-        {archived ? <Tag kind="win">{vehicleStatusLabels[v.status]}</Tag> : null}
-        {v.plateTransfer ? <Tag kind="acc">{plateTransferLabels.pending}</Tag> : null}
+        {v.certified ? <Tag tone="acc">Certifié</Tag> : null}
+        {archived ? <TagWin>{vehicleStatusLabels[v.status]}</TagWin> : null}
+        {v.plateTransfer ? <Tag tone="acc">{plateTransferLabels.pending}</Tag> : null}
         {v.categories.map((cat, i) => (
-          <Tag key={cat.id} kind={i === 0 ? "ink" : "line"}>
+          <Tag key={cat.id} tone={i === 0 ? "ink" : "line"}>
             {cat.label}
           </Tag>
         ))}
@@ -390,7 +390,7 @@ export default function VehiculeFiche() {
         <SmButton
           kind="s"
           big
-          icon="list"
+          icon="edit"
           style={styles.grow}
           onPress={() => router.push(`/vehicule/${v.id}/modifier`)}
           testID="vehicle-wizard-open"
@@ -400,7 +400,7 @@ export default function VehiculeFiche() {
         <SmButton
           kind="s"
           big
-          icon="cards"
+          icon="more"
           onPress={() => setMenu(true)}
           accessibilityLabel="Plus d'actions"
           testID="vehicle-menu"
@@ -516,7 +516,7 @@ export default function VehiculeFiche() {
                 {formatDay(h.startsAt)}
               </Text>
             </View>
-            <Tag kind={h.attended ? "acc" : "line"}>
+            <Tag tone={h.attended ? "acc" : "line"}>
               {h.attended
                 ? "Présent"
                 : (applicationStatusLabels[h.status as keyof typeof applicationStatusLabels] ?? h.status)}

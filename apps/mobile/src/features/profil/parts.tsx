@@ -1,11 +1,11 @@
 // Morceaux de Mon profil (lot 40, prototype `s-me` ; reproduits fidèlement au lot C2b) : les casquettes `.cap`, la
 // feuille « Créer » `sh-create`, la carte de saison `.grade`, les tuiles de réglages `.mtile` et l'en-tête `.me-head`.
-import { Icon, type IconName, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, type IconName, OrgLogo, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { adminAppLabels, gradeLabels, type MyPoints, type MyStaffEvent, mediaAppLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Num, OrgInitials } from "@/features/passionne/kit";
+import { Num } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
@@ -15,7 +15,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 
 const { space1, space2, space3 } = tokens.spacing;
-const { radiusLg, radiusPill } = tokens.radius;
+const { radiusLg } = tokens.radius;
 
 /**
  * Une ligne `.cap` (prototype `s-me`) : carré d'icône 44 px, titre 800, sous-titre en casse normale, et à droite une
@@ -87,18 +87,9 @@ export function RowIcon({ name }: { name: IconName }) {
   );
 }
 
-/** Le logo d'une casquette (structure, fiche pro…) : rond avec l'image, sinon initiales moutarde sur l'encre. */
+/** Le logo d'une casquette (structure, fiche pro…) : `OrgLogo` du socle (rond avec l'image, sinon initiales). */
 function EntryLogo({ entry }: { entry: AppPersonaEntry }) {
-  const { t } = useTheme();
-  const source = mediaSource(entry.logoUrl);
-  if (source) {
-    return (
-      <View style={[styles.logoRound, { backgroundColor: t.color.night }]}>
-        <Photo source={source} style={styles.logoImg} />
-      </View>
-    );
-  }
-  return <OrgInitials name={entry.label} size={44} />;
+  return <OrgLogo name={entry.label} logoUrl={mediaSource(entry.logoUrl)?.uri ?? null} size={44} />;
 }
 
 /** Le nom d'une casquette dans la liste (prototype `s-me`). */
@@ -279,7 +270,7 @@ const CREATIONS = [
     kind: "provider",
     title: "Un profil prestataire",
     caption: "Food truck, photographe, barbier : candidater aux événements",
-    icon: "shop",
+    icon: "camera",
     path: "/prestataire/nouveau",
     tone: "accent",
   },
@@ -417,7 +408,7 @@ export function SettingTile({
       accessibilityRole="button"
       accessibilityLabel={`${title}, ${caption}`}
       onPress={onPress}
-      style={[styles.tile, { backgroundColor: t.color.surface, borderColor: t.color.surfaceRaised }]}
+      style={[styles.tile, { backgroundColor: t.color.surface, borderColor: t.color.cardLine }]}
       testID={testID}
     >
       <Icon name={icon} size={24} color={t.color.ink} />
@@ -469,8 +460,6 @@ const styles = StyleSheet.create({
   rowTitle: { fontFamily: "Archivo-ExtraBold" },
   rowCaption: { fontSize: 12.5, lineHeight: 17 },
   icon: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  logoRound: { width: 44, height: 44, borderRadius: radiusPill, overflow: "hidden" },
-  logoImg: { width: 44, height: 44 },
   cnt: {
     minWidth: 26,
     height: 26,

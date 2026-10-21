@@ -259,10 +259,7 @@ function Big({ children }: { children: string }) {
 function Moment({ icon, children, testID }: { icon: IconName; children: ReactNode; testID?: string }) {
   const { t } = useTheme();
   return (
-    <View
-      testID={testID}
-      style={[styles.moment, { backgroundColor: t.color.surface, borderColor: t.color.surfaceRaised }]}
-    >
+    <View testID={testID} style={[styles.moment, { backgroundColor: t.color.surface, borderColor: t.color.cardLine }]}>
       <Icon name={icon} size={20} color={t.color.accentText} />
       <View style={styles.momentText}>{children}</View>
     </View>

@@ -3,12 +3,12 @@
 // trait), nom entier en Archivo large italique 22 px (jamais tronqué), sous-ligne étroite « 3.0 · 2021 · blanche »,
 // trois chiffres étroits séparés par des pointillés (ch / kg / événements), « Partager sa carte » et le crayon.
 // Cartes suivantes `.veh.sm` : vignette de 120 px à gauche, une étiquette, nom 15 px, sous-ligne.
-import { Chip, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { vehicleWizardLabels as L, plateTransferLabels, type VehicleFull } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { Num, SmButton, Tag } from "@/features/passionne/kit";
+import { Num, SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
@@ -72,7 +72,7 @@ export function GarageCard({
           <Photo source={photo} placeholder={placeholder} style={StyleSheet.absoluteFill} />
         </View>
         <View style={styles.smBody}>
-          {vehicle.categories[0] ? <Tag kind="line">{vehicle.categories[0].label}</Tag> : null}
+          {vehicle.categories[0] ? <Tag tone="line">{vehicle.categories[0].label}</Tag> : null}
           <Text variant="posterM" color={c.ink} style={styles.smName} testID="garage-card-name">
             {vehicle.label}
           </Text>
@@ -117,7 +117,7 @@ export function GarageCard({
           {vehicle.categories.length ? (
             <View style={styles.tags}>
               {vehicle.categories.map((cat, i) => (
-                <Tag key={cat.id} kind={i === 0 ? "ink" : "line"}>
+                <Tag key={cat.id} tone={i === 0 ? "ink" : "line"}>
                   {cat.label}
                 </Tag>
               ))}
@@ -156,7 +156,7 @@ export function GarageCard({
         </SmButton>
         <SmButton
           kind="s"
-          icon="list"
+          icon="edit"
           onPress={() => router.push(`/vehicule/${vehicle.id}/modifier`)}
           accessibilityLabel={L.editVehicle}
           testID="garage-edit"

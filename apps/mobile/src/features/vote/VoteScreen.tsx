@@ -6,7 +6,7 @@
 // direct (`.board` : rang, nom, barre, voix ; le premier sur l'aplat crème) remplace la grille, « Changer mon vote »
 // la rouvre jusqu'à la fin.
 
-import { EmptyState, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { EmptyState, Icon, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type AudienceCandidate,
   type AudiencePrizeBoard,
@@ -20,7 +20,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
 
-import { Num, PosterSurface, SmButton, Tag } from "@/features/passionne/kit";
+import { Num, PosterSurface, SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { errorMessage } from "@/lib/http";
@@ -221,7 +221,7 @@ export function VoteScreen() {
             kind="p"
             big
             wide
-            icon="grade"
+            icon="trophy"
             disabled={!pick || busy !== null}
             onPress={() => pick && void vote(pick)}
             testID="vote-cta"
@@ -334,7 +334,7 @@ function Grid({
               />
               {own ? <View style={[StyleSheet.absoluteFill, { backgroundColor: `${c.night}8c` }]} /> : null}
               <View style={styles.tag}>
-                <Tag kind={own ? "line" : "ink"}>{own ? "Toi" : voteScreenTexts.number(i + 1)}</Tag>
+                <Tag tone={own ? "line" : "ink"}>{own ? "Toi" : voteScreenTexts.number(i + 1)}</Tag>
               </View>
               {chosen ? (
                 <View style={[styles.check, { backgroundColor: c.accent }]}>
@@ -406,7 +406,7 @@ function Ranking({
             key={e.applicationId}
             style={[
               styles.row,
-              { backgroundColor: first ? c.poster : c.surface, borderColor: own ? c.accent : c.surfaceRaised },
+              { backgroundColor: first ? c.poster : c.surface, borderColor: own ? c.accent : c.cardLine },
               own && styles.rowMe,
             ]}
             testID="vote-board-row"
@@ -420,7 +420,7 @@ function Ranking({
                   {e.vehicleLabel}
                 </Text>
                 {board.winner?.applicationId === e.applicationId ? (
-                  <Tag kind="acc">{voteScreenTexts.winner}</Tag>
+                  <Tag tone="acc">{voteScreenTexts.winner}</Tag>
                 ) : null}
               </View>
               <Text variant="caption" color={first ? c.posterMuted : c.inkMuted} style={styles.cardSub}>
