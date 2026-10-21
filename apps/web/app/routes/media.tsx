@@ -488,7 +488,7 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
             {d.accredited.length === 0 ? (
               <p className="s-notice">{L.needAccreditation}</p>
             ) : (
-              <Form method="post" className="s-card s-form" data-testid="media-content-form">
+              <Form key={d.contents.length} method="post" className="s-card s-form" data-testid="media-content-form">
                 <input type="hidden" name="intent" value="content" />
                 <SelectField
                   label={L.addEvent}
