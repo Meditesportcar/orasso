@@ -370,6 +370,8 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
     await chooseCasquette(page, "pro");
     const first = theme === "sable";
     await page.goto("/fiche");
+    // Lot 54 : Ma fiche s'ouvre sur « Vue passionné » ; modification, abonnement et remises sont dans « Modifier ma fiche ».
+    await page.getByText("Modifier ma fiche", { exact: true }).click();
     await expect(page.getByTestId("pro-edit")).toBeVisible({ timeout: 30_000 });
 
     // Abonnement et emplacements sponsorisés : consultation seulement, jamais de paiement.
@@ -382,7 +384,6 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
 
     if (first) {
       // Modifier la fiche.
-      await page.getByTestId("pro-edit").click();
       await expect(page.getByTestId("pro-form")).toBeVisible();
       await page.getByLabel("Présentation").fill("Entretien, préparation et detailing, sur rendez-vous.");
       await page.getByLabel("Téléphone").fill("04 68 11 22 33");
@@ -405,8 +406,6 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
       await page.getByLabel("Zone d'intervention").fill("66, nimportequoi");
       await page.getByTestId("pro-form-save").click();
       await expect(page.getByText(/Zone d'intervention : codes de département/)).toBeVisible();
-      await page.getByRole("button", { name: "Retour à la fiche" }).click();
-      await page.waitForURL(/\/fiche/);
 
       // Remise.
       await page.getByTestId("pro-discounts-edit").click();

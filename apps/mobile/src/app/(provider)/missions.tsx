@@ -1,8 +1,6 @@
-// Onglet Missions (lot 40 : « Bientôt » ; l'écran arrive au lot 54).
-import { Soon } from "@/ui/Soon";
+// Onglet Missions (lot 40 : fichier d'onglet ; lot 54 : l'écran vit dans `features/provider/MissionsScreen`).
+import { MissionsScreen } from "@/features/provider/MissionsScreen";
 
 export default function Missions() {
-  return (
-    <Soon title="Missions">Les événements qui cherchent un food truck, une animation ou un stand arrivent ici.</Soon>
-  );
+  return <MissionsScreen />;
 }

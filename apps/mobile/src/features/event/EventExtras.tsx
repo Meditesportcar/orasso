@@ -2,6 +2,7 @@
 // présents, les avis des participants pointés.
 import { Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventReviews, instagramHandle } from "@orasso/shared";
+import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 
@@ -33,6 +34,7 @@ type Provider = {
 
 export function ProvidersPresent({ providers, reportable }: { providers: Provider[]; reportable: boolean }) {
   const { t } = useTheme();
+  const router = useRouter();
   return (
     <Plate style={styles.info} testID="providers-present">
       <Text variant="label" color={t.color.plateMuted}>
@@ -41,7 +43,13 @@ export function ProvidersPresent({ providers, reportable }: { providers: Provide
       {providers.map((p) => (
         <View key={p.id} style={styles.provider} testID="provider-present">
           <View style={styles.providerText}>
-            <Text variant="bodyStrong" color={t.color.plateInk}>
+            {/* Lot 54 : la vitrine du prestataire (menu, besoins, avis des organisateurs), pour un compte connecté : l'API la réserve aux connectés. */}
+            <Text
+              variant="bodyStrong"
+              color={t.color.plateInk}
+              accessibilityRole={reportable ? "link" : undefined}
+              onPress={reportable ? () => router.push(`/providers/${p.id}`) : undefined}
+            >
               {p.name}
             </Text>
             <Text variant="meta" color={t.color.plateMuted}>
