@@ -17,6 +17,7 @@ import {
   simulateSettle,
   unique,
 } from "./helpers";
+import { sql } from "./helpers/lot48";
 import { checkerPhoto } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
@@ -581,18 +582,16 @@ test("média : fiche avec galerie complète, suite au curseur au-delà de la 10e
   });
   expect(gallery.status).toBe(201);
   created.push(gallery.data.id);
-  for (let i = 0; i < 12; i++) {
-    const link = await apiCall<{ id: string }>(leo, "POST", "/me/media-contents", {
-      eventId: nocturne.id,
-      kind: "link",
-      title: `Lien ${String(i).padStart(2, "0")} ${unique()}`,
-      url: "https://example.org/article",
-      platform: "website",
-      photoKeys: [],
-    });
-    expect(link.status).toBe(201);
-    created.push(link.data.id);
-  }
+  // Les 12 liens sont posés en base : l'API limite à 20 publications par jour et par média (`mediaContent`).
+  const linkTag = `Lien ${unique()}`;
+  const links = await sql<{ id: string }>(
+    `insert into media_contents (media_profile_id, event_id, kind, title, url, platform, published_at)
+     select $1, $2, 'link', $3 || ' ' || lpad(g::text, 2, '0'), 'https://example.org/article', 'website',
+            now() - (g || ' minutes')::interval
+     from generate_series(1, 12) g returning id`,
+    [mediaId, nocturne.id, linkTag],
+  );
+  expect(links).toHaveLength(12);
   const all = await apiCall<unknown[]>(leo, "GET", "/me/media-contents");
   const total = all.data.length;
   expect(total).toBeGreaterThan(11);
@@ -604,11 +603,11 @@ test("média : fiche avec galerie complète, suite au curseur au-delà de la 10e
     const card = page.getByTestId("media-public-content").filter({ hasText: galleryTitle });
     await expect(card.getByTestId("media-gallery-photo")).toHaveCount(8);
     await card.getByTestId("media-gallery-photo").nth(7).click();
-    await expect(page.getByTestId("media-gallery-position")).toHaveText("8 / 8");
-    await page.getByRole("button", { name: "Photo suivante" }).click();
-    await expect(page.getByTestId("media-gallery-position")).toHaveText("1 / 8");
+    await expect(card.getByTestId("media-gallery-position")).toHaveText("8 / 8");
+    await card.getByRole("button", { name: "Photo suivante" }).click();
+    await expect(card.getByTestId("media-gallery-position")).toHaveText("1 / 8");
     await page.keyboard.press("Escape");
-    await expect(page.getByTestId("media-gallery-viewer")).toBeHidden();
+    await expect(card.getByTestId("media-gallery-viewer")).toBeHidden();
 
     // Suite au curseur, un contenu par page : on franchit la 10e page sans reboucler, sans doublon.
     await page.goto(`/m/${mediaId}?taille=1`);
@@ -631,6 +630,7 @@ test("média : fiche avec galerie complète, suite au curseur au-delà de la 10e
     await ctx.close();
   } finally {
     for (const id of created) await apiCall(leo, "DELETE", `/me/media-contents/${id}`);
+    await sql("delete from media_contents where id = any($1::uuid[])", [links.map((l) => l.id)]);
   }
 });
 test("accès refusés : staff sur Presse (403), non connecté sur /m/:id et /providers/:id (relecture)", async ({
