@@ -111,7 +111,7 @@ test("écrans nouveaux du lot 34, deux thèmes à 390 px", async ({ browser }) =
     await d.page.getByRole("tab", { name: "Tri", exact: true }).click();
     await d.page.getByTestId("triage-event-picker").click();
     await d.page.getByTestId("triage-event-choice").filter({ hasText: "Salon de printemps" }).click();
-    await d.page.getByRole("tab", { name: "Liste", exact: true }).click();
+    await d.page.getByRole("tab", { name: "En liste", exact: true }).click();
     const list = d.page.getByTestId("triage-list").filter({ visible: true }).last();
     await list.getByTestId("triage-filters").click();
     await expect(d.page.getByRole("combobox", { name: "Jour" })).toBeVisible({ timeout: 20_000 });
