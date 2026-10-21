@@ -48,13 +48,7 @@ export function SegBlock<T extends string>({
             style={styles.segHit}
           >
             <View style={[styles.segBtn, on && { backgroundColor: c.ink }]}>
-              <Text
-                variant="bodyStrong"
-                color={on ? c.ground : c.inkMuted}
-                style={styles.segText}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-              >
+              <Text variant="bodyStrong" color={on ? c.ground : c.inkMuted} style={styles.segText}>
                 {s.label}
               </Text>
             </View>
@@ -190,7 +184,7 @@ export function DiscGrid({ items, testID }: { items: readonly DiscTile[]; testID
           <Text variant="label" color={d.top ? c.winInk : c.inkMuted} style={styles.discLabel}>
             {d.label}
           </Text>
-          <Text variant="numberNarrow" color={d.top ? c.winInk : c.ink} style={styles.discValue} numberOfLines={1}>
+          <Text variant="numberNarrow" color={d.top ? c.winInk : c.ink} style={styles.discValue}>
             {d.value}
           </Text>
         </View>
@@ -224,14 +218,7 @@ export function DirBig({
             <Text variant="label" color={me ? c.posterMuted : c.inkMuted}>
               {it.label}
             </Text>
-            <Text
-              variant="numberNarrow"
-              color={me ? c.posterInk : c.ink}
-              style={styles.dirNum}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              testID={it.testID}
-            >
+            <Text variant="numberNarrow" color={me ? c.posterInk : c.ink} style={styles.dirNum} testID={it.testID}>
               {it.value}
             </Text>
           </View>
@@ -300,7 +287,7 @@ export function AngledTag({
       style={[styles.tag, { backgroundColor: bg }, tone === "line" && { borderWidth: 1.5, borderColor: c.ink }]}
       testID={testID}
     >
-      <Text variant="meta" color={fg} style={[styles.unskew, styles.tagText]} numberOfLines={1}>
+      <Text variant="meta" color={fg} style={[styles.unskew, styles.tagText]}>
         {children}
       </Text>
     </View>
@@ -442,9 +429,23 @@ export function RoundInitials({ text, tone = "red" }: { text: string; tone?: "re
 
 const styles = StyleSheet.create({
   seg: { flexDirection: "row", padding: 3, borderRadius: 14, gap: 2 },
-  segHit: { flex: 1, minWidth: 0, height: tokens.spacing.touch, marginVertical: -SEG_SLOP, justifyContent: "center" },
-  segBtn: { height: SEG_H, borderRadius: 11, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
-  segText: { fontSize: 13, textAlign: "center" },
+  segHit: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: tokens.spacing.touch,
+    marginVertical: -SEG_SLOP,
+    justifyContent: "center",
+  },
+  // Un libellé trop long passe sur deux lignes (jamais coupé) : le segment grandit.
+  segBtn: {
+    minHeight: SEG_H,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  segText: { fontSize: 13, lineHeight: 15, textAlign: "center" },
   acts: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   // Trois colonnes : (100 % − 2 × 8 px) / 3.
   actCell: { width: "31.6%", flexGrow: 1 },
@@ -494,7 +495,7 @@ const styles = StyleSheet.create({
   secLinkText: { fontSize: 13 },
   tag: {
     alignSelf: "flex-start",
-    height: 22,
+    minHeight: 22,
     paddingHorizontal: 9,
     borderRadius: 4,
     justifyContent: "center",

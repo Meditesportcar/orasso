@@ -168,7 +168,8 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
                 items={cells.map((cell) => ({
                   key: cell.key,
                   label: cell.label,
-                  value: `${cell.percent} %`,
+                  // Espace insécable : « 10 % » ne se coupe jamais entre le chiffre et le signe.
+                  value: `${cell.percent} %`,
                   top: cell.key === top,
                 }))}
               />
