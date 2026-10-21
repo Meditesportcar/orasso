@@ -1,6 +1,6 @@
-// Blocs de l'Accueil du passionnÃ© (lot C2a, artefact DA v2 `s-home`), reproduits d'aprÃ¨s le HTML et le CSS de
-// l'artefact : intitulÃ© de section `.sec-h`, carte mÃ©tÃ©o `.wx`, mini-tickets `.stat-strip` / `.mini-t`, incitation
-// `.nudge`, rail d'affiches `.rail` / `.mp`. Les cartes prennent `--card` (= jeton `surface`), rayon 16 Ã  18.
+// Blocs de l'Accueil du passionné (lot C2a, artefact DA v2 `s-home`), reproduits d'après le HTML et le CSS de
+// l'artefact : intitulé de section `.sec-h`, carte météo `.wx`, mini-tickets `.stat-strip` / `.mini-t`, incitation
+// `.nudge`, rail d'affiches `.rail` / `.mp`. Les cartes prennent `--card` (= jeton `surface`), rayon 16 à 18.
 import { Icon, type IconName, Photo, Text, tokens, useTheme, weatherIcons } from "@orasso/design-system/native";
 import { type EventCard, homeProfileLabels, type MyWeather, weatherCodeLabels } from "@orasso/shared";
 import type { ReactNode } from "react";
@@ -10,7 +10,7 @@ import { temperatureRange } from "@/lib/weather";
 
 const { space2, space3, space4 } = tokens.spacing;
 
-/** `.greet` : Ã©tiquette du jour, Â« Salut Kenji Â» en affiche 32 px, et l'aide au glissement entre onglets Ã  droite. */
+/** `.greet` : étiquette du jour, « Salut Kenji » en affiche 32 px, et l'aide au glissement entre onglets à droite. */
 export function Greet({ line, name }: { line: string; name: string }) {
   const { t } = useTheme();
   const c = t.color;
@@ -24,7 +24,7 @@ export function Greet({ line, name }: { line: string; name: string }) {
           {homeProfileLabels.greeting(name)}
         </Text>
       </View>
-      <View accessibilityLabel="Glisse Ã  gauche ou Ã  droite pour changer d'onglet" style={styles.swipe}>
+      <View accessibilityLabel="Glisse à gauche ou à droite pour changer d'onglet" style={styles.swipe}>
         <Icon name="back" size={14} color={c.inkMuted} />
         <Icon name="next" size={14} color={c.inkMuted} />
       </View>
@@ -32,7 +32,7 @@ export function Greet({ line, name }: { line: string; name: string }) {
   );
 }
 
-/** `.sec-h` : titre italique large 16 px, lien moutarde Â« Tout voir â€º Â» Ã  droite. */
+/** `.sec-h` : titre italique large 16 px, lien moutarde « Tout voir › » à droite. */
 export function SecH({
   title,
   link,
@@ -63,7 +63,7 @@ export function SecH({
   );
 }
 
-/** `.wx` : pastille d'icÃ´ne 64 px sur `--accent-soft`, lieu et jour en gras, grand chiffre, pied en pointillÃ©s. */
+/** `.wx` : pastille d'icône 64 px sur `--accent-soft`, lieu et jour en gras, grand chiffre, pied en pointillés. */
 export function WeatherCard({
   weather,
   place,
@@ -76,10 +76,10 @@ export function WeatherCard({
   const { t, theme } = useTheme();
   const c = t.color;
   const s = weather.summary;
-  // `--accent-soft` de l'artefact : moutarde Ã  16 % (BÃ©ton) ou 26 % (Sable).
+  // `--accent-soft` de l'artefact : moutarde à 16 % (Béton) ou 26 % (Sable).
   const accentSoft = `${c.accent}${theme === "sable" ? "42" : "29"}`;
   const label = weatherCodeLabels[s.code];
-  const title = weather.kind === "event" ? "MÃ©tÃ©o prÃ©vue sur place le jour J" : "MÃ©tÃ©o du jour";
+  const title = weather.kind === "event" ? "Météo prévue sur place le jour J" : "Météo du jour";
   const line = [place, when].filter(Boolean).join(", ");
   return (
     <View
@@ -102,7 +102,7 @@ export function WeatherCard({
         ) : null}
         <View style={styles.wxBig}>
           <Text variant="numberNarrow" color={c.ink} style={styles.wxNum}>
-            {`${Math.round(s.tempMax)}Â°`}
+            {`${Math.round(s.tempMax)}°`}
           </Text>
           <Text variant="caption" color={c.inkMuted} style={styles.fill}>
             {label}
@@ -128,7 +128,7 @@ export function WeatherCard({
   );
 }
 
-/** `.mini-t` : petit ticket (Ã©tiquette, titre italique 13 px, une ligne 12 px). */
+/** `.mini-t` : petit ticket (étiquette, titre italique 13 px, une ligne 12 px). */
 export function MiniTicket({
   tag,
   title,
@@ -147,7 +147,7 @@ export function MiniTicket({
   return (
     <Pressable
       onPress={onPress}
-      accessibilityRole="button"
+      accessibilityRole="link"
       accessibilityLabel={title}
       testID={testID}
       style={[styles.mini, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
@@ -165,12 +165,12 @@ export function MiniTicket({
   );
 }
 
-/** `.stat-strip` : deux colonnes Ã©gales. */
+/** `.stat-strip` : deux colonnes égales. */
 export function MiniStrip({ children }: { children: ReactNode }) {
   return <View style={styles.strip}>{children}</View>;
 }
 
-/** `.nudge` : carte d'incitation, une pastille ou des tampons Ã  gauche ou Ã  droite, chevron. */
+/** `.nudge` : carte d'incitation, une pastille ou des tampons à gauche ou à droite, chevron. */
 export function Nudge({
   label,
   text,
@@ -228,7 +228,7 @@ const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
   timeZone: "Europe/Paris",
 });
 
-/** `.rail` d'affiches `.mp` (150 Ã— 188, corps : titre italique, date Â· distance). */
+/** `.rail` d'affiches `.mp` (150 × 188, corps : titre italique, date · distance). */
 export function PosterRail({
   events,
   onOpen,
@@ -248,12 +248,12 @@ export function PosterRail({
     >
       {events.map((e) => {
         const day = DAY_FMT.format(new Date(e.startsAt)).replace(/\./g, "");
-        const dist = typeof e.distanceKm === "number" ? ` Â· ${Math.round(e.distanceKm)} km` : "";
+        const dist = typeof e.distanceKm === "number" ? ` · ${Math.round(e.distanceKm)} km` : "";
         return (
           <Pressable
             key={e.id}
             onPress={() => onOpen(e.slug)}
-            accessibilityRole="button"
+            accessibilityRole="link"
             accessibilityLabel={e.title}
             style={[styles.mp, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
             testID="home-rail-item"
@@ -268,7 +268,7 @@ export function PosterRail({
               ) : null}
             </View>
             <View style={styles.mpBody}>
-              <Text variant="posterS" color={c.ink} style={styles.mpTitle} numberOfLines={2}>
+              <Text variant="posterS" color={c.ink} style={styles.mpTitle}>
                 {e.title}
               </Text>
               <Text variant="caption" color={c.inkMuted} style={styles.mpCap}>

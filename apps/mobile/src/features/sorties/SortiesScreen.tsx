@@ -156,6 +156,8 @@ export function SortiesScreen() {
   // sinon le premier billet.
   const offerId = live.find((a) => a.status === "offered")?.id;
   const firstAccepted = offerId ? undefined : live.find((a) => a.status === "accepted" && !a.checkedInAt)?.id;
+  // Le ticket crème de l'artefact (`.tk.me`) : ta prochaine place retenue, même quand une place libérée prend le bouton principal.
+  const meId = live.find((a) => a.status === "accepted" && !a.checkedInAt)?.id;
   const history = (past ?? []).filter((a) => a.status === "accepted" || a.withdrawnAfterLock);
   const upcomingTickets = ticketsUpcoming(tickets.data ?? [], now);
   const pastTickets = ticketsPast(tickets.data ?? [], now);
@@ -287,6 +289,7 @@ export function SortiesScreen() {
               now={now}
               busy={busyId === app.id}
               primary={app.id === firstAccepted}
+              highlight={app.id === meId}
               primaryOffer={app.id === offerId}
               onOpen={() => router.push(`/e/${app.event.slug}`)}
               onJourJ={() => router.push(`/jour-j/${app.id}`)}
@@ -427,6 +430,7 @@ function ApplicationTicket({
   busy,
   primary,
   primaryOffer,
+  highlight,
   onOpen,
   onJourJ,
   onVote,
@@ -443,6 +447,8 @@ function ApplicationTicket({
   primary?: boolean;
   /** La place libérée à accepter porte le bouton principal de l'écran (elle expire). */
   primaryOffer?: boolean;
+  /** Ticket crème (`.tk.me`). */
+  highlight?: boolean;
   onOpen: () => void;
   onJourJ: () => void;
   /** Lot 50 : le vote du prix du public, pendant l'événement, pour qui est pointé. */
@@ -498,7 +504,7 @@ function ApplicationTicket({
       testID="ticket-application"
       date={app.day?.startsAt ?? app.event.startsAt}
       badge={<ApplicationTag app={app} />}
-      highlight={primary}
+      highlight={highlight}
       lead={lead}
       title={app.event.title}
       detail={detail.length ? upperFirst(detail.join(" · ")) : undefined}

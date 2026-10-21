@@ -4,7 +4,8 @@ import { apiCall, login, SEED_PASSWORD } from "./helpers";
 import { RELAIS } from "./relais";
 
 // Accueil complet (lot 30) dans l'appli, version web de recette (`expo start --web`), avec Kenji (département 66) :
-// blocs, carte « Sponsorisé », réorganisation enregistrée et relue après rechargement, captures Béton / Sable.
+// lot C2a : l'Accueil de l'artefact DA v2 (carte, météo, mini-tickets, rail d'affiches, Passeport), sans les blocs
+// réglables, le sponsorisé ni « Réorganiser » ; captures Béton / Sable.
 // Prérequis : seed du lot 30, API avec `OVERPASS_URL=off`, `FUEL_API_URL=off`, `WEATHER_PROVIDER=off`.
 // Pour une suite avec meteo.spec.ts : `open-meteo` avec `METEO_URL` vers son stub local convient aussi.
 // Lancer avec APP_URL=http://localhost:<port de Metro> (CORS_ORIGINS de l'API = même origine).
@@ -33,7 +34,7 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${DIR}/${name}.png`, fullPage: true });
 }
 
-test("appli : Accueil complet, réorganisation enregistrée", async ({ browser }) => {
+test("appli : Accueil du passionné (artefact DA v2), sans le fourre-tout", async ({ browser }) => {
   test.setTimeout(300_000);
   mkdirSync(DIR, { recursive: true });
   const cookie = await login("kenji@orasso.local");
@@ -46,38 +47,26 @@ test("appli : Accueil complet, réorganisation enregistrée", async ({ browser }
     page.on("console", (m) => {
       if (m.type() === "error") errors.push(m.text().slice(0, 200));
     });
-    await expect(page.getByTestId("widget-nearby")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("nearby-radius")).toContainText("Rayon : 50 km");
-    await expect(page.getByTestId("nearby-event").first()).toBeVisible();
-    await expect(page.getByTestId("widget-garage")).toContainText("Garage du Port");
-    await expect(page.getByTestId("widget-wash")).toContainText("OpenStreetMap");
-    await expect(page.getByTestId("widget-fuel")).toContainText("data.economie.gouv.fr");
-    // Tirage pondéré avec une graine (personne + jour) : l'un ou l'autre emplacement du seed selon la date (lot 34).
-    await expect(page.getByTestId("sponsored-card")).toContainText(/Polish avant saison|Covering sur mesure/);
-    await expect(page.getByText("Sponsorisé", { exact: true })).toBeVisible();
+    // Lot C2a (artefact DA v2 `s-home`) : la salutation, la carte du prochain événement, puis seulement la météo, les
+    // autres sorties en mini-tickets, « Tu es staff », le rail « Autour du 66 ce mois-ci » et le Passeport.
+    await expect(page.getByTestId("home-greeting")).toContainText(/Salut Kenji/i, { timeout: 30_000 });
+    await expect(page.getByTestId("home-hero")).toBeVisible();
+    await expect(page.getByTestId("home-rail-item").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Autour du 66 ce mois-ci", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("home-passport")).toContainText("Passeport Orasso");
+    // Le fourre-tout retiré (audit § 5.2) : blocs réglables, sponsorisé, Réorganiser, grand titre.
+    for (const id of [
+      "widget-nearby",
+      "widget-garage",
+      "widget-wash",
+      "widget-fuel",
+      "sponsored-card",
+      "open-reorder",
+    ]) {
+      await expect(page.getByTestId(id), id).toHaveCount(0);
+    }
+    await expect(page.getByRole("heading", { name: "Accueil", exact: true })).toHaveCount(0);
     await shot(page, `01-accueil-${theme}`);
-
-    // Réorganiser : Carburant remonte avant Lavage, Lavage masqué ; relu après rechargement.
-    await page.getByTestId("open-reorder").click();
-    await page.getByTestId("up-fuel").click();
-    await expect
-      .poll(async () =>
-        (await apiCall<{ widgets: { order: string[] } }>(cookie, "GET", "/me/home")).data.widgets.order.indexOf("fuel"),
-      )
-      .toBe(6);
-    await page.getByTestId("toggle-wash").click();
-    await shot(page, `02-reorganiser-${theme}`);
-    await expect
-      .poll(
-        async () => (await apiCall<{ widgets: { hidden: string[] } }>(cookie, "GET", "/me/home")).data.widgets.hidden,
-      )
-      .toEqual(["wash"]);
-    await page.getByTestId("reorder-done").click();
-    await page.reload();
-    await expect(page.getByTestId("widget-fuel")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("widget-wash")).toHaveCount(0);
-    await shot(page, `03-accueil-reorganise-${theme}`);
-    await apiCall(cookie, "PUT", "/me/home/widgets", { order: [], hidden: [] });
     await ctx.close();
   }
   expect(errors.filter((e) => !/favicon|WebSocket|ws:\/\//.test(e))).toEqual([]);

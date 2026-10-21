@@ -96,7 +96,7 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     await shot(page, `explorer-demande-${theme}`);
     await page.getByTestId("position-enable").click();
     await expect(page.getByTestId("sort-line")).toContainText("Position refusée : autour du 66", { timeout: 30_000 });
-    await expect(page.getByTestId("gps-button")).toContainText("66");
+    await expect(page.getByTestId("gps-button")).toContainText("Ma position"); // Lot C2a : libellé de l'artefact.
     await expect(page.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
     expect(await page.getByTestId("event-row").count()).toBeGreaterThan(3);
     const km = await distances(page);

@@ -125,7 +125,7 @@ test("Sorties de Kenji : trois segments, un ticket par statut (deux thèmes)", a
     await expect(page.getByText("J'accepte la place", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Retirer", exact: true }).first()).toBeVisible();
     // La souche : le jour de la semaine, le quantième et le mois.
-    await expect(tickets.first().getByText(/^(DIM|LUN|MAR|MER|JEU|VEN|SAM)$/)).toBeVisible();
+    await expect(tickets.first().getByText(/^(Dim|Lun|Mar|Mer|Jeu|Ven|Sam)\.$/)).toBeVisible(); // Lot C2a : « Sam. » (artefact)
     await expect(
       page.getByText("Empêché ? Retire-toi depuis le ticket : ta place part à la liste d'attente."),
     ).toBeVisible();
@@ -242,7 +242,10 @@ for (const home of HOMES) {
       if (home.choose) {
         await choose(page, home.choose);
       }
-      await expect(page.getByRole("heading", { name: "Accueil", exact: true })).toBeVisible({ timeout: 30_000 });
+      // Lot C2a (artefact DA v2) : pas de grand titre sur l'Accueil du passionné, la salutation en tient lieu.
+      const fan = /kenji|paul/.test(home.email);
+      if (fan) await expect(page.getByRole("heading", { name: "Accueil", exact: true })).toHaveCount(0);
+      else await expect(page.getByRole("heading", { name: "Accueil", exact: true })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("home-greeting")).toBeVisible({ timeout: 30_000 });
       for (const text of home.texts) {
         await expect(page.getByText(text).first(), `« ${String(text)} »`).toBeVisible({ timeout: 30_000 });
@@ -322,11 +325,13 @@ test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, 
   // À J-9 : rien ne flotte.
   const { ctx, page } = await open(browser, "beton");
   await signIn(page, far.email);
-  const proof = { Explorer: "Explorer", Garage: "Mon garage", Sorties: "Mes sorties" } as const;
+  const proof = { Garage: "Mon garage", Sorties: "Mes sorties" } as const;
   for (const tab of ["Explorer", "Garage", "Sorties"] as const) {
     await page.getByRole("tab", { name: tab, exact: true }).click();
     // D'abord la preuve que l'écran et ses données sont là, ensuite l'absence de la barre.
-    await expect(page.getByRole("heading", { name: proof[tab], exact: true })).toBeVisible({ timeout: 60_000 });
+    // Lot C2a : Explorer n'a plus de grand titre (artefact) ; sa preuve est son en-tête de recherche.
+    if (tab === "Explorer") await expect(page.getByTestId("explorer-head")).toBeVisible({ timeout: 60_000 });
+    else await expect(page.getByRole("heading", { name: proof[tab], exact: true })).toBeVisible({ timeout: 60_000 });
     if (tab === "Sorties")
       await expect(page.getByTestId("ticket-application").first()).toBeVisible({ timeout: 60_000 });
     await page.waitForLoadState("networkidle").catch(() => undefined);

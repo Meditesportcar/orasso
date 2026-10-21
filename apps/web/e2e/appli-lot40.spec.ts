@@ -221,9 +221,9 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await afterOpening(page);
     await page.getByRole("button", { name: "Boîte", exact: true }).first().click();
     await page.waitForURL(/\/boite$/, { timeout: 30_000 });
-    await expect(page.getByTestId("inbox-journal")).toBeVisible();
-    // Pas de barre d'onglets ici : seuls les deux segments de la Boîte (Messages, Demandes) sont des onglets.
-    await expect(page.getByRole("tab")).toHaveCount(2);
+    await expect(page.getByTestId("inbox-all")).toBeVisible();
+    // Pas de barre d'onglets ici : seuls les trois segments de la feuille Boîte (Tout, Messages, Demandes, lot C2a).
+    await expect(page.getByTestId("inbox-segments").getByRole("tab")).toHaveCount(3);
     await shot(page, `boite-${theme}`);
     // L'ancien onglet Accès mène à Sorties.
     await page.goto("/acces");

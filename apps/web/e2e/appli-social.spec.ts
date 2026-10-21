@@ -134,7 +134,7 @@ test("appli : personnes, profil, véhicule, demande d'ami, QR ami, Mes amis, Jou
     deliverNow(`${charlie.toLowerCase()}@e2e.orasso.test`);
     // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
     await page.goto("/boite");
-    await page.getByTestId("inbox-journal").click();
+    await page.getByTestId("inbox-all").click(); // Lot C2a : notifications dans « Tout » de la feuille Boîte.
     await expect(page.getByTestId("journal-item").filter({ hasText: "a accepté" }).first()).toBeVisible({
       timeout: 30_000,
     });

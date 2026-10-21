@@ -317,21 +317,14 @@ test("tuile « Nouveau » : jamais pour un compte créé avec l'arrivée (profil
   await ctx.close();
 });
 
-test("tuile « Découvre ce qu'il y a de nouveau » (ancien compte, sans profil choisi) : elle ouvre le tuto, puis disparaît de l'Accueil", async ({
+test("lot C2a : plus de tuile « Découvre ce qu'il y a de nouveau » sur l'Accueil du passionné (artefact DA v2), même pour un ancien compte", async ({
   browser,
 }) => {
   test.setTimeout(300_000);
-  mkdirSync(DIR, { recursive: true });
   const { ctx, page } = await open(browser, "beton", { seen: false });
   await signIn(page, "kenji@orasso.local");
-  const tile = page.getByTestId("home-tuto").filter({ visible: true });
-  await expect(tile).toBeVisible({ timeout: 30_000 });
-  await expect(tile).toContainText("Découvre ce qu'il y a de nouveau");
-  await shot(page, "accueil-tuile-nouveau-beton");
-  await tile.click();
-  await expect(page.getByTestId("tuto-exhibitor")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Passer" }).click();
-  await page.waitForURL(/accueil/, { timeout: 30_000 });
+  await expect(page.getByTestId("home-greeting")).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(2500);
   await expect(page.getByTestId("home-tuto").filter({ visible: true })).toHaveCount(0);
   await ctx.close();
 });

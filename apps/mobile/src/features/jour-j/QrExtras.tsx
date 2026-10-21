@@ -123,7 +123,7 @@ function Gps({ icon, label, onPress }: { icon: IconName; label: string; onPress:
       style={({ pressed }) => [styles.gps, { borderColor: c.line, opacity: pressed ? 0.8 : 1 }]}
     >
       <Icon name={icon} size={16} color={c.ink} />
-      <Text variant="button" color={c.ink} style={styles.gpsText} numberOfLines={1}>
+      <Text variant="meta" color={c.ink} style={styles.gpsText}>
         {label}
       </Text>
     </Pressable>
@@ -171,7 +171,8 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 4,
   },
-  gpsText: { fontSize: 12, lineHeight: 15 },
+  // Étroite (et non 110 % comme l'artefact) : « Sur la carte » tient entier à 390 px (D34, aucun libellé coupé).
+  gpsText: { fontSize: 12, lineHeight: 15, fontWeight: "800", textAlign: "center" },
   block: { gap: space2, paddingVertical: space3, paddingHorizontal: 14, borderRadius: 14 },
   summary: { flexDirection: "row", alignItems: "center", gap: space2, minHeight: 32 },
   step: { flexDirection: "row", gap: space2 },

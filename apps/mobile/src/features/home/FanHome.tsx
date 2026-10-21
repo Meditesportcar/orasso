@@ -73,7 +73,11 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   const next = exhibitor ? (data?.nextAccess ?? localNext ?? null) : null;
   const ticket = exhibitor ? null : (data?.nextTicket ?? null);
   // « Tes autres sorties » : deux mini-tickets (artefact `.stat-strip`), sans la sortie de la carte.
-  const otherTickets = ticketsUpcoming(myTickets.data ?? [], now).filter((x) => x.id !== ticket?.id);
+  // (ni un billet pour l'événement de la carte : l'exposant retenu qui a aussi un billet ne le voit pas deux fois).
+  const heroSlug = next?.event.slug ?? ticket?.event.slug;
+  const otherTickets = ticketsUpcoming(myTickets.data ?? [], now).filter(
+    (x) => x.id !== ticket?.id && x.event.slug !== heroSlug,
+  );
   const others = [
     ...live
       .filter((a) => a.id !== next?.id)
