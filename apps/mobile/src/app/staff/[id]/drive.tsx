@@ -258,7 +258,7 @@ export default function Drive() {
           {L.next}
         </Button>
         <View style={styles.row}>
-          {/* Artefact `.dr-fb` : trois issues de secours en tuiles crème (noires en Sable), icône au-dessus. */}
+          {/* Artefact `.dr-fb` : trois issues de secours en tuiles crème (dans les deux thèmes, comme l'artefact), icône au-dessus. */}
           <RescueTile icon="search" label={L.searchOrPseudo} onPress={() => setSheet("search")} />
           <RescueTile icon="express" label={L.express} onPress={() => setSheet("express")} />
           <RescueTile icon="skip" label={L.noScan} onPress={() => router.push(`/staff/${id}/liste?rapide=1`)} />
@@ -307,10 +307,10 @@ function RescueTile({ icon, label, onPress }: { icon: IconName; label: string; o
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.tile, { backgroundColor: t.color.poster, opacity: pressed ? 0.85 : 1 }]}
+      style={({ pressed }) => [styles.tile, { backgroundColor: t.color.nightInk, opacity: pressed ? 0.85 : 1 }]}
     >
-      <Icon name={icon} size={26} color={t.color.posterInk} />
-      <Text variant="button" color={t.color.posterInk} style={styles.tileText}>
+      <Icon name={icon} size={26} color={t.color.night} />
+      <Text variant="button" color={t.color.night} style={styles.tileText}>
         {label}
       </Text>
     </Pressable>
