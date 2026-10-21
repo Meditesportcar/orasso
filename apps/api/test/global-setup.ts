@@ -1,22 +1,14 @@
-// Crée la base de test si besoin et lui applique les migrations, une fois avant tous les tests.
-// L'URL est calculée par vitest.config.ts (DATABASE_URL du .env, nom suffixé de `_test`).
-import { fileURLToPath } from "node:url";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-import pg from "pg";
+// Mise en place globale, une fois avant tous les tests : base modèle migrée + une base clonée par processus prévu.
+// Le détail (empreinte des migrations, clones) est dans test/databases.ts ; le principe, en tête de vitest.config.ts.
+import type { TestProject } from "vitest/node";
 
-export default async function setup() {
-  const url = new URL(process.env.ORASSO_TEST_DATABASE_URL ?? "");
-  const name = url.pathname.slice(1);
-  const admin = new URL(url);
-  admin.pathname = "/postgres";
-  const client = new pg.Client({ connectionString: admin.toString() });
-  await client.connect();
-  const { rowCount } = await client.query("select 1 from pg_database where datname = $1", [name]);
-  if (!rowCount) await client.query(`create database "${name}"`);
-  await client.end();
+import { ensureDatabases } from "./databases";
 
-  const pool = new pg.Pool({ connectionString: url.toString() });
-  await migrate(drizzle(pool), { migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)) });
-  await pool.end();
+export default async function setup(project: TestProject) {
+  const configured = Number(project.config.maxWorkers);
+  const workers = Number.isFinite(configured) && configured > 0 ? configured : 4;
+  await ensureDatabases(
+    process.env.ORASSO_TEST_DATABASE_URL ?? "",
+    Array.from({ length: workers }, (_, i) => String(i + 1)),
+  );
 }
