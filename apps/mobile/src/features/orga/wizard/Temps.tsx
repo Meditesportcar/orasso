@@ -717,23 +717,28 @@ export function AfficheTemps(ctx: StepContext) {
     };
   }, [poster.photoKey, format, retry]);
 
+  // Un seul envoi à la fois (le bouton est inactif pendant l'envoi) ; la réponse d'un envoi dépassé est ignorée.
+  const upload = useRef(0);
   async function pick() {
+    if (sending !== null) return;
     setError(null);
     const picked = await pickOneImage();
     if (!picked) return;
+    const turn = ++upload.current;
     setSending(0);
     try {
       const form = await imageForm(picked, "file", "photo.jpg");
       form.append("purpose", "event_poster_photo");
       const { key: photoKey } = await api.upload(form);
+      if (turn !== upload.current) return;
       setSending(1);
       setPhoto(picked.uri);
       patch({ photoKey });
     } catch (e) {
-      setError(errorMessage(e));
+      if (turn === upload.current) setError(errorMessage(e));
     } finally {
       // Tenu par l'assistant : se termine même si on a quitté le temps entre-temps.
-      setTimeout(() => setSending(null), 400);
+      if (turn === upload.current) setTimeout(() => setSending(null), 400);
     }
   }
 
@@ -751,7 +756,13 @@ export function AfficheTemps(ctx: StepContext) {
       <View style={styles.row}>
         {photo ? <Image source={{ uri: photo }} style={[styles.photo, { borderColor: t.color.accent }]} /> : null}
         {sending !== null ? <SendProgress size={56} progress={sending} /> : null}
-        <Button variant="secondary" icon="gallery" onPress={() => void pick()} testID="wizard-poster-photo">
+        <Button
+          variant="secondary"
+          icon="gallery"
+          disabled={sending !== null}
+          onPress={() => void pick()}
+          testID="wizard-poster-photo"
+        >
           {photo ? W.posterPhotoChange : W.posterPhotoPick}
         </Button>
       </View>

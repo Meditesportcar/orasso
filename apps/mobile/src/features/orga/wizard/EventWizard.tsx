@@ -26,6 +26,7 @@ import {
   hasRefusals,
   initialEventDraft,
   eventEditorLabels as L,
+  type NeedDraft,
   needsFromSaved,
   posterTexts,
   reconcileDraft,
@@ -41,8 +42,11 @@ import {
   withCopyOpening,
   withDefaultPoster,
   withLoadedNeeds,
+  withNeedKeys,
+  withServerNeeds,
   wizardEndLabels,
 } from "@orasso/shared";
+import { randomUUID } from "expo-crypto";
 import { useNavigation, useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -173,25 +177,36 @@ export function EventWizard({
   );
 
   // À l'ouverture : missions enregistrées (lot 46), mémoire du brouillon, puis saisie gardée sur le téléphone.
-  // Correctif 53c : les missions rejoignent la saisie quels que soient les autres champs (rien de ce qui a été tapé
-  // avant leur arrivée n'est écrasé) ; tant qu'elles ne sont pas chargées, rien ne s'enregistre ni ne se garde sur le
-  // téléphone (`loaded` reste faux) : sans elles, l'enregistrement les prendrait pour des suppressions. Échec :
-  // message et « Recharger les missions » (`needsAttempt` relance l'ouverture).
+  // Correctif 53c : les missions rejoignent la saisie quels que soient les autres champs (`withLoadedNeeds` : une
+  // mission inconnue de la saisie est ajoutée, une mission déjà dans la saisie garde ses modifications), y compris une
+  // saisie gardée restaurée. Tant qu'elles ne sont pas chargées, rien ne s'enregistre sur le serveur ; la saisie reste
+  // gardée sur le téléphone. Échec : message et « Recharger les missions », qui ne relance que ce chargement.
   const [needsFailed, setNeedsFailed] = useState(false);
-  const [needsAttempt, setNeedsAttempt] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `needsAttempt` relance le chargement (« Recharger »).
+  // Enregistrer sur le serveur : ouverture faite et missions chargées.
+  const canSave = loaded && !needsFailed;
+  const fetchNeeds = useCallback(async (ev: EventOrganizer): Promise<NeedDraft[] | null> => {
+    const list = await api.eventNeeds(ev.id).catch(() => null);
+    if (!list) return null;
+    const loadedNeeds = needsFromSaved(list, ev.startsAt);
+    setSavedNeeds(list);
+    pristine.current = withServerNeeds(pristine.current, loadedNeeds);
+    setDraft((p) => withLoadedNeeds(p, loadedNeeds));
+    return loadedNeeds;
+  }, []);
+  async function reloadNeeds() {
+    if (!event) return;
+    setNeedsFailed(false);
+    if (!(await fetchNeeds(event))) setNeedsFailed(true);
+  }
   useEffect(() => {
     let alive = true;
     void (async () => {
+      let loadedNeeds: NeedDraft[] | null = null;
       if (event) {
         setNeedsFailed(false);
-        const list = await api.eventNeeds(event.id).catch(() => null);
+        loadedNeeds = await fetchNeeds(event);
         if (!alive) return;
-        if (!list) return setNeedsFailed(true);
-        const loadedNeeds = needsFromSaved(list, event.startsAt);
-        setSavedNeeds(list);
-        pristine.current = withLoadedNeeds(pristine.current, loadedNeeds);
-        setDraft((p) => withLoadedNeeds(p, loadedNeeds));
+        if (!loadedNeeds) setNeedsFailed(true);
         if (event.status === "draft") {
           const stored = await loadWizardMemo(event.id);
           if (!alive) return;
@@ -211,8 +226,10 @@ export function EventWizard({
       if (!event || event.status === "draft") {
         const stored = await loadEventDraft(structureId, event?.id);
         if (!alive) return;
-        if (stored && !sameDraft(stored.draft, pristine.current)) {
-          setDraft(stored.draft);
+        // Missions chargées fusionnées : une saisie gardée ne supprime jamais une mission qu'elle ne connaissait pas.
+        const restored = stored && loadedNeeds ? withLoadedNeeds(stored.draft, loadedNeeds) : stored?.draft;
+        if (stored && restored && !sameDraft(restored, pristine.current)) {
+          setDraft(restored);
           if (!initialStep) {
             setIndex(stored.step ?? eventWizardSteps.indexOf(eventResumeStep(stored.draft, true, null, null)));
           }
@@ -227,7 +244,7 @@ export function EventWizard({
     return () => {
       alive = false;
     };
-  }, [event, structureId, initialStep, needsAttempt]);
+  }, [event, structureId, initialStep, fetchNeeds]);
 
   // Saisie gardée sur le téléphone : une création dès qu'elle vaut la peine, un brouillon tant qu'il n'est pas
   // synchronisé (effacée quand la saisie est enregistrée).
@@ -329,12 +346,18 @@ export function EventWizard({
    * Enregistre `sent` (voir `saveEvent`), puis réconcilie la saisie avec l'état relu du serveur. `event` : l'événement
    * enregistré, ou `null` si quelque chose a été refusé (erreur affichée, saisie refusée gardée).
    */
-  async function persist(sent: EventDraft, validate: boolean | "publish"): Promise<Saved> {
-    // Missions pas encore chargées : elles passeraient pour des suppressions (correctif 53c).
-    if (!loaded) {
+  async function persist(input: EventDraft, validate: boolean | "publish"): Promise<Saved> {
+    // Missions pas encore chargées : l'enregistrement ne peut pas les comparer (correctif 53c).
+    if (!canSave) {
       const failure = needsFailed ? W.needsFailed : W.needsLoading;
       setError(failure);
       return { event: null, created: null, failure };
+    }
+    // Chaque nouvelle mission reçoit sa clé de création avant de partir (création idempotente, correctif 53c).
+    const sent = withNeedKeys(input, randomUUID);
+    if (sent !== input) {
+      latest.current = sent;
+      setDraft(sent);
     }
     const form = poster ? await imageForm(poster, "poster", "affiche.jpg") : null;
     const res = await saveEvent(api, {
@@ -367,17 +390,17 @@ export function EventWizard({
       setPosterState(null);
       setKeptPoster(null);
     }
-    const { draft, pristine: kept } = reconcileDraft({
+    const reconciled = reconcileDraft({
       sent,
       current: latest.current,
       server: serverDraft(res.event, res.needs),
       refused: res.refused,
     });
-    pristine.current = kept;
-    latest.current = draft;
-    setDraft(draft);
-    if (hasRefusals(res.refused)) {
-      const failure = refusalMessage(sent, res.refused);
+    pristine.current = reconciled.pristine;
+    latest.current = reconciled.draft;
+    setDraft(reconciled.draft);
+    if (hasRefusals(reconciled.refused)) {
+      const failure = refusalMessage(sent, reconciled.refused);
       setError(failure);
       return { event: null, created, failure };
     }
@@ -555,7 +578,7 @@ export function EventWizard({
               <Button
                 icon="send"
                 loading={halted}
-                disabled={halted || !loaded || !canPublish}
+                disabled={halted || !canSave || !canPublish}
                 onPress={() => void finish("publish")}
                 testID="wizard-publish"
               >
@@ -575,7 +598,7 @@ export function EventWizard({
                 <Button
                   variant="secondary"
                   icon="calendar"
-                  disabled={halted || !loaded}
+                  disabled={halted || !canSave}
                   onPress={() => void finish("draft")}
                   style={styles.grow}
                   testID="wizard-save"
@@ -585,7 +608,7 @@ export function EventWizard({
                 <Button
                   variant="secondary"
                   icon="eye"
-                  disabled={halted || !loaded}
+                  disabled={halted || !canSave}
                   onPress={() => void finish("preview")}
                   testID="wizard-preview"
                 >
@@ -614,7 +637,7 @@ export function EventWizard({
                 <Button
                   icon="check"
                   loading={halted}
-                  disabled={halted || !loaded}
+                  disabled={halted || !canSave}
                   onPress={() => void finish("save")}
                   style={styles.grow}
                   testID="wizard-save"
@@ -625,7 +648,7 @@ export function EventWizard({
                 <Button
                   icon="next"
                   loading={halted}
-                  disabled={halted || !loaded}
+                  disabled={halted || !canSave}
                   onPress={() => void go(1)}
                   style={styles.grow}
                   testID="wizard-next"
@@ -668,7 +691,7 @@ export function EventWizard({
       {needsFailed ? (
         <View style={styles.resume} testID="wizard-needs-failed">
           <Notice tone="error">{W.needsFailed}</Notice>
-          <Button variant="plate" icon="undo" onPress={() => setNeedsAttempt((n) => n + 1)}>
+          <Button variant="plate" icon="undo" onPress={() => void reloadNeeds()}>
             {W.needsRetry}
           </Button>
         </View>

@@ -122,8 +122,16 @@ export async function saveEvent(client: EventEditorApi, input: SaveInput): Promi
       call: () => client.updateZone(saved.id, z.id, z.zone),
       refuse: () => void refused.zones.push(z.zone.position),
     })),
+    // 409 : une zone de ce code existe déjà (créée par un essai précédent dont la relecture a échoué) : c'est fait ; la
+    // relecture la rattache à la saisie par son code (correctif 53c).
     ...zones.create.map((zone) => ({
-      call: () => client.addZone(saved.id, zone),
+      call: async () => {
+        try {
+          await client.addZone(saved.id, zone);
+        } catch (error) {
+          if ((error as { status?: unknown } | null)?.status !== 409) throw error;
+        }
+      },
       refuse: () => void refused.zones.push(zone.position),
     })),
     ...needs.remove.map((id) => ({

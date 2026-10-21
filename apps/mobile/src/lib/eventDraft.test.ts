@@ -183,6 +183,7 @@ describe("enregistrement", () => {
           { id: "n2", trade: "food_truck", quantity: "1", power: "none", water: false, frontageM: "", installTime: "" },
           { trade: "photographer", quantity: "2", power: "a16", water: true, frontageM: "4", installTime: "16:00" },
         ],
+        knownNeedIds: ["n1", "n2"],
       }),
       event: { id: "e1", days: [], zones: [] } as unknown as EventOrganizer,
       savedNeeds: [{ id: "n1" }, { id: "n2" }] as never,
@@ -285,5 +286,60 @@ describe("panne après l'écriture des missions (correctif 53c)", () => {
     });
     expect(again.ok).toBe(true);
     expect(second.calls.map((c) => c.name)).not.toContain("addNeed");
+  });
+});
+
+describe("zones et clés de création (correctif 53c, tour 2)", () => {
+  it("zone déjà créée par un essai précédent (409) : comptée comme faite, pas comme refusée", async () => {
+    const event = { id: "e1", days: [], zones: [] } as unknown as EventOrganizer;
+    const { client } = fakeClient({ addZone: apiError(409, "La zone A existe déjà") });
+    const res = await saveEvent(client, {
+      structureId: S,
+      draft: draft({ zones: [{ code: "A", name: "Alpha", capacity: "" }] }),
+      event,
+      createdId: null,
+      poster: null,
+    });
+    expect(res).toMatchObject({ ok: true, refused: { zones: [] } });
+    // Un autre refus de zone reste un refus.
+    const other = fakeClient({ addZone: apiError(429, "Trop de modifications") });
+    const res2 = await saveEvent(other.client, {
+      structureId: S,
+      draft: draft({ zones: [{ code: "A", name: "Alpha", capacity: "" }] }),
+      event,
+      createdId: null,
+      poster: null,
+    });
+    expect(res2).toMatchObject({ ok: true, refused: { zones: [0] } });
+  });
+
+  it("une mission inconnue de la saisie n'est jamais supprimée ; la création envoie sa clé", async () => {
+    const event = { id: "e1", days: [], zones: [] } as unknown as EventOrganizer;
+    const { client, calls } = fakeClient();
+    const res = await saveEvent(client, {
+      structureId: S,
+      draft: draft({
+        needs: [
+          {
+            trade: "photographer",
+            quantity: "1",
+            power: "none",
+            water: false,
+            frontageM: "",
+            installTime: "",
+            clientKey: "11111111-1111-4111-8111-000000000001",
+          },
+        ],
+      }),
+      event,
+      savedNeeds: [{ id: "n9" }] as never,
+      createdId: null,
+      poster: null,
+    });
+    expect(res.ok).toBe(true);
+    expect(calls.map((c) => c.name)).not.toContain("deleteNeed");
+    expect(calls.find((c) => c.name === "addNeed")?.args[1]).toMatchObject({
+      clientKey: "11111111-1111-4111-8111-000000000001",
+    });
   });
 });
