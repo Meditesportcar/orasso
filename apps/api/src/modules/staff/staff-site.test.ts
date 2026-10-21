@@ -947,7 +947,10 @@ describe("structure suspendue, relances, appartenances", () => {
       req(w.damien, "POST", `/events/${w.e.id}/staff/remind`, { userId: w.lea.id }),
       req(w.damien, "POST", `/events/${w.e.id}/staff/${w.lea.id}/remind`, undefined, "bearer"),
     ]);
-    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    // La route de fond rend toujours 200 ; l'alias rend 409 s'il perd la course, 200 s'il la gagne : l'ordre d'arrivée
+    // des deux requêtes n'est pas garanti (en parallèle sur un PC chargé). L'invariant est la notification unique.
+    expect(a.status).toBe(200);
+    expect([200, 409]).toContain(b.status);
     await notificationsService.flush();
     const notes = await db.select().from(notifications).where(eq(notifications.userId, w.lea.id));
     expect(notes.filter((n) => n.type === "staff_presence_reminder")).toHaveLength(1);
