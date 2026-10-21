@@ -105,6 +105,9 @@ async function start() {
   const { initdb, pg_ctl: pgCtl } = await binaries();
   if (!existsSync(join(dataDir, "PG_VERSION"))) await initCluster(initdb);
   if (!isRunning(pgCtl)) {
+    // Base locale de développement et de test : pas d'écriture forcée sur le disque à chaque enregistrement
+    // (fsync, synchronous_commit, full_page_writes). Les tests vont bien plus vite et le disque souffle.
+    // Une coupure brutale peut abîmer la base : on la recrée (start puis seed).
     const status = startDetached(pgCtl, [
       "start",
       "-D",
@@ -113,7 +116,7 @@ async function start() {
       logFile,
       "-w",
       "-o",
-      `-p ${port} -c listen_addresses=localhost`,
+      `-p ${port} -c listen_addresses=localhost -c fsync=off -c synchronous_commit=off -c full_page_writes=off`,
     ]);
     if (status !== 0) {
       console.error(`Échec du démarrage de PostgreSQL. Voir ${logFile}`);
