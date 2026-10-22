@@ -78,7 +78,8 @@
 .o-button--plate {
   background: var(--plate);
   color: var(--plate-ink);
-  border: 1.5px solid color-mix(in srgb, var(--plate-ink) 50%, transparent);
+  /* Lot C1 : .btn-s de l'artefact (fond de carte, filet --line). */
+  border: 1.5px solid var(--plate-line);
 }
 .o-button--plate.o-button--wait {
   border-color: var(--status-waitlist-on-plate);

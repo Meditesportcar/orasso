@@ -1,38 +1,34 @@
-/* TabBar : cinq onglets sur la barre (nuit dans les deux thèmes depuis la DA v2). Voir docs/design-system/components/TabBar. */
+/* TabBar : cinq onglets. Voir docs/design-system/components/TabBar.
+   Lot C1 (D33) : la `.tabbar` de l'artefact DA v2 : barre flottante de 66 px, rayon 22, fond `--bar` uni, ombre et
+   reflet intérieur ; onglets 115 % 800 9,5 px ; indicateur moutarde incliné sous l'onglet actif ; le O dans un rond
+   de 68 px qui déborde de 22 px. Le conteneur la pose (position fixed ou absolute, 10 px des bords). */
 
 .o-tabbar {
   position: relative;
-  isolation: isolate;
-  display: flex;
-  height: var(--bar-tabs);
-  background: var(--bar-gradient);
-  /* Filet moutarde de 2 px plein (README : « 2 px plein partout ailleurs » que sous l'en-tête Béton). */
-  border-top: 2px solid var(--accent);
-  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
-  box-shadow: var(--shadow-bar-bottom);
-  text-shadow: var(--emboss-bar);
-}
-/* Le brossage est clippé dans son propre cadre : l'onglet du milieu, lui, déborde de 16 px vers le haut. */
-.o-tabbar__metal {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  overflow: hidden;
-  border-radius: inherit;
-  pointer-events: none;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+  height: 66px;
+  border: 1px solid var(--bar-shell-edge);
+  border-radius: 22px;
+  background: var(--bar);
+  color: var(--bar-muted);
+  box-shadow: var(--shadow-tabbar);
 }
 .o-tabbar__tab {
+  position: relative;
   display: flex;
-  flex: 1;
+  height: 100%;
   min-width: 0;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
   padding: 0;
   border: 0;
   background: none;
   color: var(--bar-muted);
+  white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -45,6 +41,9 @@
   position: relative;
   display: inline-flex;
 }
+.o-tabbar__tab.is-active .o-tabbar__icon {
+  transform: translateY(-2px);
+}
 /* Pastille de notification : 8 px moutarde sur l'icône de la Boîte. */
 .o-tabbar__dot {
   position: absolute;
@@ -54,44 +53,47 @@
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: var(--neon-accent-soft);
+}
+/* `.tabind` : 26 × 4 moutarde, inclinée, sous l'onglet actif (jamais sous le O). */
+.o-tabbar__ind {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  width: 26px;
+  height: 4px;
+  margin-left: -13px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: skewX(-14deg);
+  pointer-events: none;
 }
 
-/* L'onglet du milieu : pastille inclinée à --skew-tab, débordant de 16 px vers le haut, en néon. */
+/* L'onglet du milieu : le rond `.obtn`, libellé en bas. */
 .o-tabbar__tab.is-center {
-  margin: -16px 6px 12px;
-  border-radius: 18px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  box-shadow: var(--neon-accent);
-  text-shadow: none;
-  transform: skewX(var(--skew-tab));
-}
-/* DA v2 : l'onglet du milieu porte le O (voiture garée) sur une pastille nuit bordée de moutarde, dans les deux thèmes ;
-   pastille de 68 px (prototype), le reste de la largeur va aux quatre autres onglets. */
-.o-tabbar__tab.is-center.is-o {
-  flex: 0 0 68px;
-  border: 2px solid var(--accent);
-  background: var(--night);
-  color: var(--accent);
-}
-/* Barres v2 : des libellés plus longs (Candidatures, Événements, Structure) sur cinq onglets de 390 px ; ils passent à
-   la largeur normale d'Archivo pour tenir sans se chevaucher (journal des choix, lot 38). */
-.o-tabbar:has(.is-o) .o-tabbar__tab {
-  font-stretch: var(--stretch-normal);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+  z-index: 2;
+  justify-content: flex-end;
+  padding-bottom: 9px;
 }
 .o-tabbar__o {
-  display: inline-flex;
-  transform: skewX(calc(var(--skew-tab) * -1));
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  display: grid;
+  width: 68px;
+  height: 68px;
+  margin-left: -34px;
+  place-items: center;
+  border: 2px solid var(--bar-edge);
+  border-radius: 50%;
+  background: var(--bar);
+  color: var(--bar-ink);
+  box-shadow: var(--shadow-o-button);
+}
+.o-tabbar__tab.is-center.is-active .o-tabbar__o {
+  border-color: var(--accent);
 }
 .o-tabbar__center-label {
   display: block;
-  transform: skewX(calc(var(--skew-tab) * -1));
-}
-.o-tabbar__tab.is-center > svg {
-  transform: skewX(calc(var(--skew-tab) * -1));
 }
 
 /* Changement d'onglet : le nouvel onglet se gare (base). */

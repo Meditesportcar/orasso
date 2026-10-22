@@ -24,7 +24,8 @@ export type GroundProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
  * Variante `battle` : vignette, contre-jour, lampe qui respire lentement, grain, puis les meutes (Olive.tsx).
  */
 export function Ground({
-  variant = "screen",
+  // Lot C1 (D33, écart R1) : le fond de l'artefact par défaut, comme le site public.
+  variant = "battle",
   animated = false,
   still = false,
   fixed = false,

@@ -17,20 +17,21 @@ test.skip(!APP, "Appli : lancer avec APP_URL");
 type Theme = "beton" | "sable";
 
 /** Les barres (libellé de l'onglet → route attendue dans l'URL, grand titre attendu). */
+// Lot C1 (artefact DA v2) : pas de grand titre sur Accueil, Explorer (exposant, visiteur) et Mon profil (null).
 const BARS = {
   fan: [
     ["Explorer", "explorer", null], // Lot C2a : pas de grand titre (artefact).
     ["Sorties", "sorties", "Mes sorties"],
     ["Accueil", "accueil", null], // Lot C2a : la salutation en tient lieu.
     ["Garage", "garage", "Mon garage"],
-    ["Profil", "profil", "Mon profil"],
+    ["Profil", "profil", null],
   ],
   visitor: [
     ["Explorer", "explorer", null],
     ["Sorties", "sorties", "Mes sorties"],
     ["Accueil", "accueil", null],
     ["Passeport", "passeport", "Passeport"],
-    ["Profil", "profil", "Mon profil"],
+    ["Profil", "profil", null],
   ],
   organizer: [
     ["Événements", "evenements", null],
@@ -42,23 +43,23 @@ const BARS = {
   pro: [
     ["Scanner", "scanner", "Scanner"],
     ["Ma fiche", "fiche", "Ma fiche"],
-    ["Accueil", "accueil", "Accueil"],
+    ["Accueil", "accueil", null],
     ["Stats", "stats", "Stats"],
-    ["Profil", "profil", "Mon profil"],
+    ["Profil", "profil", null],
   ],
   provider: [
     ["Missions", "missions", "Missions"],
     ["Candidatures", "candidatures", "Candidatures"],
-    ["Accueil", "accueil", "Accueil"],
+    ["Accueil", "accueil", null],
     ["Vitrine", "vitrine", "Ma vitrine"],
-    ["Profil", "profil", "Mon profil"],
+    ["Profil", "profil", null],
   ],
   media: [
     ["Explorer", "explorer", "Explorer"],
     ["Presse", "presse", "Accréditations"],
-    ["Accueil", "accueil", "Accueil"],
+    ["Accueil", "accueil", null],
     ["Contenus", "contenus", "Contenus"],
-    ["Profil", "profil", "Mon profil"],
+    ["Profil", "profil", null],
   ],
 } as const;
 
@@ -183,7 +184,7 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await page.goto("/moi");
     await afterOpening(page);
     await expect(page).toHaveURL(/\/profil/, { timeout: 30_000 });
-    await checkTab(page, "Mon profil");
+    await checkTab(page, null);
     for (const id of ["profil-head", "profil-season", "profil-passport", "profil-crew", "casquette-fan"]) {
       await expect(page.getByTestId(id).first()).toBeVisible();
     }

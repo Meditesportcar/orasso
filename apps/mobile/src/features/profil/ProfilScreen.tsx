@@ -58,7 +58,6 @@ export function ProfilScreen() {
 
   return (
     <TabScreen
-      title="Mon profil"
       onRefresh={async () => {
         await Promise.all([
           refreshMe(),

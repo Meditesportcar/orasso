@@ -2,73 +2,180 @@
   "version": "2",
   "basedOn": "docs/design-system/tokens.json v3.3",
   "date": "2026-10-19",
-  "note": "Surcouche DA v2 (lot 38, ARCHITECTURE-DA-V2 § 1) : valeurs relevées dans le prototype validé par Damien le 19/10/2026 (version 41). Une valeur ici remplace celle de tokens.json, thème par thème ; « added » ajoute des jetons absents de la base. Écarts datés dans docs/design-system/README.md, section « Ce qui a changé depuis le gel ». À fusionner dans un tokens.json v4 au re-gel, avec l'accord de Damien (H1).",
+  "note": "Surcouche DA v2 (lot 38, ARCHITECTURE-DA-V2 § 1) : valeurs relevées dans le prototype validé par Damien le 19/10/2026 (version 41). Une valeur ici remplace celle de tokens.json, thème par thème ; « added » ajoute des jetons absents de la base. Écarts datés dans docs/design-system/README.md, section « Ce qui a changé depuis le gel ». À fusionner dans un tokens.json v4 au re-gel, avec l'accord de Damien (H1). Lot C1 (21/10/2026, D33) : l'artefact DA v2 (version de l'audit visuel) prime ; plaques claires en Sable, barres unies, barre d'onglets flottante, largeurs d'Archivo de l'artefact.",
   "color": {
     "tokens": [
       {
         "name": "ground",
-        "value": { "beton": "#17191e", "sable": "#e8dfca" },
+        "value": {
+          "beton": "#17191e",
+          "sable": "#e8dfca"
+        },
         "why": "Sable papier clair (fond uni, v10) ; Béton plus profond (prototype --bg)"
       },
       {
         "name": "ground-center",
-        "value": { "beton": "#101216", "sable": "#ddd2b8" },
+        "value": {
+          "beton": "#101216",
+          "sable": "#ddd2b8"
+        },
         "why": "vignette du fond (prototype --bg-2) ; plus d'ombre graphite dans le coin en Sable"
       },
       {
         "name": "ground-deep",
-        "value": { "beton": "#050608", "sable": "#c9bc9b" },
+        "value": {
+          "beton": "#050608",
+          "sable": "#c9bc9b"
+        },
         "why": "bord de la vignette (prototype --bg-deep) ; Sable sans graphite"
       },
       {
         "name": "surface",
-        "value": { "beton": "#262930", "sable": "#f7f1e3" },
+        "value": {
+          "beton": "#262930",
+          "sable": "#f7f1e3"
+        },
         "why": "cartes claires en Sable : la plaque graphite devient facultative (prototype --card)"
       },
       {
         "name": "surface-raised",
-        "value": { "beton": "#30333b", "sable": "#efe6d1" },
+        "value": {
+          "beton": "#30333b",
+          "sable": "#efe6d1"
+        },
         "why": "carte surélevée (prototype --card-2)"
       },
       {
         "name": "surface-field",
-        "value": { "beton": "#1e2025", "sable": "#fffaf0" },
+        "value": {
+          "beton": "#1e2025",
+          "sable": "#fffaf0"
+        },
         "why": "champ de saisie (prototype --field ; dérivé du générateur remplacé)"
       },
       {
         "name": "ink-muted",
-        "value": { "beton": "#aaa397", "sable": "#4f493f" },
+        "value": {
+          "beton": "#aaa397",
+          "sable": "#4f493f"
+        },
         "why": "lisibilité Sable, contraste 4,5:1 (audit v40)"
       },
       {
         "name": "ink-faint",
-        "value": { "beton": "#7a7468", "sable": "#655d50" },
+        "value": {
+          "beton": "#7a7468",
+          "sable": "#655d50"
+        },
         "why": "lisibilité Sable (audit v40)"
       },
       {
         "name": "accent-text",
-        "value": { "sable": "#654800" },
+        "value": {
+          "sable": "#654800"
+        },
         "why": "moutarde lisible sur papier clair (audit v40)"
       },
       {
         "name": "win",
-        "value": { "sable": "#b42b24" },
+        "value": {
+          "sable": "#b42b24"
+        },
         "why": "rouge plus sombre sur papier clair (audit v40)"
       },
       {
         "name": "bar",
-        "value": { "sable": "#131417" },
+        "value": {
+          "sable": "#131417"
+        },
         "why": "barre nuit en Sable (au lieu du métal sable brossé)"
       },
       {
         "name": "bar-ink",
-        "value": { "sable": "#f3ebdd" },
+        "value": {
+          "sable": "#f3ebdd"
+        },
         "why": "encre crème sur la barre nuit"
       },
       {
         "name": "bar-muted",
-        "value": { "beton": "#8f897d", "sable": "#a39b8b" },
+        "value": {
+          "beton": "#8f897d",
+          "sable": "#a39b8b"
+        },
         "why": "onglets inactifs (prototype --bar-muted)"
+      },
+      {
+        "name": "plate",
+        "value": {
+          "beton": "#262930",
+          "sable": "#f7f1e3"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, .card (--card) : la plaque est la carte du thème, claire en Sable (écart R4 de l'audit)"
+      },
+      {
+        "name": "plate-ink",
+        "value": {
+          "beton": "#f3ebdd",
+          "sable": "#131417"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, encre de .card (--ink)"
+      },
+      {
+        "name": "plate-muted",
+        "value": {
+          "beton": "#aaa397",
+          "sable": "#4f493f"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, --muted"
+      },
+      {
+        "name": "plate-line",
+        "value": {
+          "beton": "rgba(243,235,221,0.14)",
+          "sable": "rgba(19,20,23,0.16)"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, --line"
+      },
+      {
+        "name": "plate-edge",
+        "value": {
+          "beton": "transparent",
+          "sable": "transparent"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, .card sans bord"
+      },
+      {
+        "name": "plate-chip",
+        "value": {
+          "beton": "rgba(243,235,221,0.4)",
+          "sable": "rgba(19,20,23,0.28)"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, contour sur carte claire en Sable (--field-line)"
+      },
+      {
+        "name": "poster-muted",
+        "value": {
+          "beton": "#5b554b",
+          "sable": "#b9b1a2"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, --poster-muted"
+      },
+      {
+        "name": "bar-edge",
+        "value": {
+          "beton": "rgba(233,184,36,0.55)",
+          "sable": "#e9b824"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, --bar-line"
+      },
+      {
+        "name": "scrim",
+        "value": {
+          "beton": "rgba(0,0,0,0.6)",
+          "sable": "rgba(19,20,23,0.45)"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, --scrim (voile des feuilles)"
       }
     ]
   },
@@ -76,8 +183,58 @@
     "tokens": [
       {
         "name": "emboss-bar",
-        "value": { "sable": "none" },
+        "value": {
+          "sable": "none"
+        },
         "why": "pas de gaufrage clair sur la barre nuit"
+      },
+      {
+        "name": "shadow-card",
+        "value": {
+          "beton": "0 10px 26px rgba(0,0,0,0.45)",
+          "sable": "0 10px 24px rgba(60,45,15,0.16)"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, --shadow"
+      },
+      {
+        "name": "shadow-poster",
+        "value": {
+          "beton": "0 24px 60px rgba(0,0,0,0.6)",
+          "sable": "0 22px 48px rgba(50,35,10,0.28)"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, --shadow-lg"
+      },
+      {
+        "name": "shadow-sheet",
+        "value": {
+          "beton": "0 -14px 40px rgba(0,0,0,0.4)",
+          "sable": "0 -14px 40px rgba(0,0,0,0.4)"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, .sheet"
+      },
+      {
+        "name": "shadow-bar-top",
+        "value": {
+          "beton": "none",
+          "sable": "none"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, .appbar unie, sans ombre"
+      },
+      {
+        "name": "shadow-tabbar",
+        "value": {
+          "beton": "0 14px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(243,235,221,0.08)",
+          "sable": "0 14px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(243,235,221,0.08)"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, .tabbar flottante"
+      },
+      {
+        "name": "shadow-o-button",
+        "value": {
+          "beton": "0 -6px 16px rgba(0,0,0,0.25)",
+          "sable": "0 -6px 16px rgba(0,0,0,0.25)"
+        },
+        "why": "lot C1 (D33) : artefact DA v2, .obtn (le O de la barre)"
       }
     ]
   },
@@ -85,12 +242,16 @@
     "tokens": [
       {
         "name": "halo",
-        "value": { "sable": "none" },
+        "value": {
+          "sable": "none"
+        },
         "why": "Sable en fond uni, sans ombre graphite (v10)"
       },
       {
         "name": "reflet",
-        "value": { "sable": "none" },
+        "value": {
+          "sable": "none"
+        },
         "why": "Sable en fond uni (v10)"
       },
       {
@@ -124,6 +285,14 @@
           "sable": "radial-gradient(ellipse 130% 90% at 55% 25%, #e8dfca 0, #ddd2b8 62%, #c9bc9b 125%)"
         },
         "why": "vignette du prototype (ground → ground-center → ground-deep)"
+      },
+      {
+        "name": "marquage",
+        "value": {
+          "beton": "none",
+          "sable": "none"
+        },
+        "why": "lot C1 (D33) : artefact DA v2 : aucun marquage, fond net à lueur (écart R1 de l'audit)"
       }
     ]
   },
@@ -131,12 +300,16 @@
     "tokens": [
       {
         "name": "bar-gradient",
-        "value": { "sable": "linear-gradient(180deg, #1c1d22 0%, #131417 55%, #0b0c0e 100%)" },
+        "value": {
+          "sable": "linear-gradient(180deg, #1c1d22 0%, #131417 55%, #0b0c0e 100%)"
+        },
         "why": "barre nuit en Sable"
       },
       {
         "name": "bar-brush",
-        "value": { "sable": "feColorMatrix chaud (0.95, 0.92, 0.85) α 0.5 · opacity 0.6 · mix-blend-mode screen" },
+        "value": {
+          "sable": "feColorMatrix chaud (0.95, 0.92, 0.85) α 0.5 · opacity 0.6 · mix-blend-mode screen"
+        },
         "why": "brossage de la barre nuit, comme en Béton"
       },
       {
@@ -152,32 +325,274 @@
     "color": [
       {
         "name": "plate-field",
-        "value": { "beton": "#363941", "sable": "#363941" },
+        "value": {
+          "beton": "#363941",
+          "sable": "#363941"
+        },
         "usage": "champ et fond graphite clair dans une plaque, sous plate-ink (ancienne valeur de surface-raised, devenue claire en Sable)"
       },
       {
         "name": "map-land",
-        "value": { "beton": "#1f2227", "sable": "#e6dcc4" },
+        "value": {
+          "beton": "#1f2227",
+          "sable": "#e6dcc4"
+        },
         "usage": "terre de la carte (style de carte Orasso, lot 44)"
       },
       {
         "name": "map-land-2",
-        "value": { "beton": "#262a30", "sable": "#dbcfb2" },
+        "value": {
+          "beton": "#262a30",
+          "sable": "#dbcfb2"
+        },
         "usage": "terre secondaire de la carte (parcs, zones)"
       },
-      { "name": "map-sea", "value": { "beton": "#0f1216", "sable": "#aebbbd" }, "usage": "mer et eau de la carte" },
-      { "name": "map-road", "value": { "beton": "#f3ebdd", "sable": "#2a2723" }, "usage": "routes de la carte" },
+      {
+        "name": "map-sea",
+        "value": {
+          "beton": "#0f1216",
+          "sable": "#aebbbd"
+        },
+        "usage": "mer et eau de la carte"
+      },
+      {
+        "name": "map-road",
+        "value": {
+          "beton": "#f3ebdd",
+          "sable": "#2a2723"
+        },
+        "usage": "routes de la carte"
+      },
       {
         "name": "map-label",
-        "value": { "beton": "#c9c1b2", "sable": "#3d3830" },
+        "value": {
+          "beton": "#c9c1b2",
+          "sable": "#3d3830"
+        },
         "usage": "noms de lieux de la carte"
+      },
+      {
+        "name": "bar-control-edge",
+        "value": {
+          "beton": "rgba(243,235,221,0.18)",
+          "sable": "rgba(243,235,221,0.18)"
+        },
+        "usage": "contour des boutons de l'en-tête (.abtn de l'artefact)"
+      },
+      {
+        "name": "bar-shell-edge",
+        "value": {
+          "beton": "rgba(243,235,221,0.06)",
+          "sable": "rgba(243,235,221,0.06)"
+        },
+        "usage": "bord de la barre d'onglets flottante (.tabbar)"
+      },
+      {
+        "name": "bar-chip",
+        "value": {
+          "beton": "rgba(243,235,221,0.1)",
+          "sable": "rgba(243,235,221,0.1)"
+        },
+        "usage": "fond de la pastille « Organisateur » de l'en-tête (.capchip)"
+      },
+      {
+        "name": "photo-ink",
+        "value": {
+          "beton": "#f3ebdd",
+          "sable": "#f3ebdd"
+        },
+        "usage": "texte posé sur une photo (compte à rebours de la carte d'Accueil, .hn-cd)"
+      },
+      {
+        "name": "scene-sky-top",
+        "value": {
+          "beton": "#070a12",
+          "sable": "#070a12"
+        },
+        "usage": "repli sans photo : ciel de nuit (carPhoto « nuit » de l'artefact)"
+      },
+      {
+        "name": "scene-sky-bottom",
+        "value": {
+          "beton": "#1a2233",
+          "sable": "#1a2233"
+        },
+        "usage": "repli sans photo : bas du ciel"
+      },
+      {
+        "name": "scene-ground",
+        "value": {
+          "beton": "#121317",
+          "sable": "#121317"
+        },
+        "usage": "repli sans photo : sol"
+      },
+      {
+        "name": "scene-car",
+        "value": {
+          "beton": "#d4552a",
+          "sable": "#d4552a"
+        },
+        "usage": "repli sans photo : carrosserie (Supra de l'artefact)"
+      },
+      {
+        "name": "scene-window",
+        "value": {
+          "beton": "#0e1116",
+          "sable": "#0e1116"
+        },
+        "usage": "repli sans photo : vitres"
+      },
+      {
+        "name": "scene-wheel",
+        "value": {
+          "beton": "#0b0c0e",
+          "sable": "#0b0c0e"
+        },
+        "usage": "repli sans photo : pneus"
+      },
+      {
+        "name": "scene-rim",
+        "value": {
+          "beton": "#9a9a9a",
+          "sable": "#9a9a9a"
+        },
+        "usage": "repli sans photo : jantes"
+      },
+      {
+        "name": "avatar-1",
+        "value": {
+          "beton": "#7a2412",
+          "sable": "#7a2412"
+        },
+        "usage": "fond d’avatar n° 1 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-2",
+        "value": {
+          "beton": "#2f5fb8",
+          "sable": "#2f5fb8"
+        },
+        "usage": "fond d’avatar n° 2 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-3",
+        "value": {
+          "beton": "#565b66",
+          "sable": "#565b66"
+        },
+        "usage": "fond d’avatar n° 3 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-4",
+        "value": {
+          "beton": "#6b3fa0",
+          "sable": "#6b3fa0"
+        },
+        "usage": "fond d’avatar n° 4 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-5",
+        "value": {
+          "beton": "#b8441d",
+          "sable": "#b8441d"
+        },
+        "usage": "fond d’avatar n° 5 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-6",
+        "value": {
+          "beton": "#8a6200",
+          "sable": "#8a6200"
+        },
+        "usage": "fond d’avatar n° 6 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-7",
+        "value": {
+          "beton": "#131417",
+          "sable": "#131417"
+        },
+        "usage": "fond d’avatar n° 7 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-8",
+        "value": {
+          "beton": "#a3261f",
+          "sable": "#a3261f"
+        },
+        "usage": "fond d’avatar n° 8 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-9",
+        "value": {
+          "beton": "#3d4f7a",
+          "sable": "#3d4f7a"
+        },
+        "usage": "fond d’avatar n° 9 (bulles d’équipe, avatars sans photo ; artefact DA v2, relevé du lot C4a)"
+      },
+      {
+        "name": "avatar-ink",
+        "value": {
+          "beton": "#f3ebdd",
+          "sable": "#f3ebdd"
+        },
+        "usage": "initiales sur un fond d’avatar (.avatar de l’artefact)"
+      },
+      {
+        "name": "card-line",
+        "value": {
+          "beton": "rgba(243,235,221,0.08)",
+          "sable": "rgba(19,20,23,0.12)"
+        },
+        "usage": "filet des cartes (--card-line de l’artefact)"
+      },
+      {
+        "name": "vitrine-from",
+        "value": {
+          "beton": "#d4552a",
+          "sable": "#d4552a"
+        },
+        "usage": "dégradé des vitrines de prestataire, début (artefact : #d4552a → #8f1d22)"
+      },
+      {
+        "name": "vitrine-to",
+        "value": {
+          "beton": "#8f1d22",
+          "sable": "#8f1d22"
+        },
+        "usage": "dégradé des vitrines de prestataire, fin"
       }
     ],
     "stamp-ink": [
-      { "department": "66", "value": { "beton": "#ff6a5f", "sable": "#c8322b" } },
-      { "department": "34", "value": { "beton": "#b48ce6", "sable": "#6b3fa0" } },
-      { "department": "31", "value": { "beton": "#f3ebdd", "sable": "#131417" } },
-      { "department": "11", "value": { "beton": "#7fa6ff", "sable": "#2f5fb8" } }
+      {
+        "department": "66",
+        "value": {
+          "beton": "#ff6a5f",
+          "sable": "#c8322b"
+        }
+      },
+      {
+        "department": "34",
+        "value": {
+          "beton": "#b48ce6",
+          "sable": "#6b3fa0"
+        }
+      },
+      {
+        "department": "31",
+        "value": {
+          "beton": "#f3ebdd",
+          "sable": "#131417"
+        }
+      },
+      {
+        "department": "11",
+        "value": {
+          "beton": "#7fa6ff",
+          "sable": "#2f5fb8"
+        }
+      }
     ],
     "stamp-ink-default": "win",
     "type": [
@@ -185,9 +600,45 @@
         "group": "Texte",
         "basedOn": "number",
         "name": "number-narrow",
-        "fontStretch": "62.5%",
+        "fontStretch": "62%",
         "sample": "116",
-        "usage": "Chiffres des cartes véhicule, compteurs, souches de date : Archivo à 62,5 % de largeur (v2)."
+        "usage": "Chiffres des cartes, compteurs, souches de date, compte à rebours : Archivo à 62 % de largeur (.t-num de l'artefact)."
+      }
+    ]
+  },
+  "type": {
+    "tokens": [
+      {
+        "name": "button",
+        "fontSize": "14px",
+        "fontStretch": "118%",
+        "why": "lot C1 (D33) : artefact DA v2, .btn : 118 % 900 14 px"
+      },
+      {
+        "name": "tab",
+        "fontSize": "9.5px",
+        "fontWeight": 800,
+        "letterSpacing": "0.03em",
+        "fontStretch": "115%",
+        "why": "lot C1 (D33) : artefact DA v2, .tab : 115 % 800 9,5 px"
+      },
+      {
+        "name": "label",
+        "letterSpacing": "0.09em",
+        "fontStretch": "75%",
+        "why": "lot C1 (D33) : artefact DA v2, .t-label : 75 % 700 11 px"
+      },
+      {
+        "name": "meta",
+        "fontSize": "12.5px",
+        "letterSpacing": "0.05em",
+        "fontStretch": "75%",
+        "why": "lot C1 (D33) : artefact DA v2, .t-meta : 75 % 700 12,5 px"
+      },
+      {
+        "name": "credit",
+        "fontStretch": "75%",
+        "why": "lot C1 (D33) : artefact DA v2, .credit : 75 % 700 9 px"
       }
     ]
   }
