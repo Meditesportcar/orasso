@@ -10,6 +10,7 @@ import * as t from "../../src/db/schema";
 import { withTx } from "../../src/lib/tx";
 import { accessService } from "../../src/modules/access/service";
 import { createAccount, createEvent, DAY, now, parisAt } from "./helpers";
+import { putRealPhoto } from "./photos";
 
 const QUOTA_NOTE = "Quota presse atteint : l'organisation te propose la prochaine édition.";
 
@@ -147,7 +148,23 @@ export async function seedMedia(hash: string) {
   await accreditation(expo, "refused", 3);
   await accreditation(beziers, "accepted", 12);
 
+  // Lot C6 : une galerie de vraies photos (JohnGRD Photographie) sur Béziers Night.
+  const galleryKeys: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    const key = `seed/media/beziers-night-${i}.webp`;
+    await putRealPhoto(key, "car", 4 + i * 3);
+    galleryKeys.push(key);
+  }
   await db.insert(t.mediaContents).values([
+    {
+      mediaProfileId: media.id,
+      eventId: beziers.id,
+      kind: "gallery",
+      title: "Béziers Night en images",
+      photoKeys: galleryKeys,
+      views: 280,
+      publishedAt: new Date(beziers.endsAt.getTime() + 1 * DAY),
+    },
     {
       mediaProfileId: media.id,
       eventId: beziers.id,
