@@ -21,7 +21,12 @@ import { mediaSource } from "@/lib/media";
 
 const { space1, space2, space3 } = tokens.spacing;
 
-export function EventTitle({ event }: { event: EventPublic }) {
+/** Lot M3 : aussi avec la seule carte de la liste (aperçu, sans description ni accès public). */
+export function EventTitle({
+  event,
+}: {
+  event: Pick<EventPublic, "format" | "title"> & Partial<Pick<EventPublic, "publicAccess" | "description">>;
+}) {
   const { t } = useTheme();
   const free = event.publicAccess === "free" || event.publicAccess === "free_reservation";
   return (

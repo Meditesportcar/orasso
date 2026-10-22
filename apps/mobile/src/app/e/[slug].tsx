@@ -47,16 +47,17 @@ import { TicketsBlock } from "@/features/tickets/TicketsBlock";
 import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
+import { eventPreview, takePosterRect, takePrefetchedEvent } from "@/lib/eventPreview";
 import { formatHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
-import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
+import { DETAIL_BLOCKS, Waiting } from "@/ui/Waiting";
 
 const { space1, space3 } = tokens.spacing;
 const OPEN_STATUSES = ["pending", "accepted", "waitlisted", "offered", "awaiting_member"];
@@ -77,8 +78,14 @@ export default function EventPage() {
   }>();
   const { status, me, refreshMe } = useSession();
   const { persona, goTab } = usePersona();
-  const event = useApi(() => api.eventBySlug(slug), [slug, status], { enabled: status !== "loading" });
+  // Lot M3 : reprend la lecture partie au toucher de la carte (Explorer, carte), sinon la lance.
+  const event = useApi(() => takePrefetchedEvent(slug) ?? api.eventBySlug(slug), [slug, status], {
+    enabled: status !== "loading",
+  });
   const e = event.data;
+  // Lot M3 : la carte touchée (aperçu immédiat) et la place de son affiche (transition, une seule fois).
+  const [cardPreview] = useState(() => eventPreview(slug));
+  const [posterFrom] = useState(() => takePosterRect(slug));
   const reviews = useApi(() => api.eventReviews(slug), [slug, status], { enabled: status !== "loading" });
   // Météo du jour J (lot 28) : seulement dans les 7 jours avant l'événement ; jamais bloquante.
   const weather = useApi(() => api.eventWeather(slug), [slug], { enabled: status !== "loading" });
@@ -132,9 +139,31 @@ export default function EventPage() {
   const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
 
   if (!e) {
+    // Lot M3 : en attendant la réponse, la fiche est déjà là avec la carte de la liste (affiche, titre, format), et des
+    // squelettes à la place du reste ; jamais d'écran vide. Sans carte connue (lien partagé), la tête en squelette.
+    if (!event.error && cardPreview) {
+      return (
+        <PosterFlow
+          hero={<EventHero event={cardPreview.card} from={posterFrom} />}
+          onClose={close}
+          liftHero
+          testID="event-page-preview"
+        >
+          <EventTitle event={cardPreview.card} />
+          <Waiting blocks={DETAIL_BLOCKS} label="Chargement de l'événement" />
+        </PosterFlow>
+      );
+    }
+    if (!event.error) {
+      return (
+        <FlowScreen title="Événement" onClose={close}>
+          <Waiting blocks={[320, ...DETAIL_BLOCKS]} label="Chargement de l'événement" testID="event-loading" />
+        </FlowScreen>
+      );
+    }
     return (
       <FlowScreen title="Événement" onClose={close}>
-        {event.error?.code === "invite_only" ? (
+        {event.error.code === "invite_only" ? (
           // Événement privé sur invitation (lot 25) : rien de l'événement pour qui n'est pas invité.
           <Plate style={styles.info} testID="private-event">
             <Text variant="title" color={t.color.plateInk}>
@@ -147,12 +176,10 @@ export default function EventPage() {
               {status === "in" ? invitationLabels.openAccess : invitationLabels.linkSignIn}
             </Button>
           </Plate>
-        ) : event.error ? (
+        ) : (
           <Notice tone="error">
             {event.error.status === 404 ? "Cet événement n'existe pas ou plus." : event.error.message}
           </Notice>
-        ) : (
-          <Muted variant="body">Chargement…</Muted>
         )}
       </FlowScreen>
     );
@@ -324,6 +351,7 @@ export default function EventPage() {
   return (
     <PosterFlow
       hero={<EventHero event={e} />}
+      liftHero
       onClose={close}
       onRefresh={event.reload}
       overlays={
