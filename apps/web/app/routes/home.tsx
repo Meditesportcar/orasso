@@ -1,4 +1,4 @@
-import { Button, Icon, OLoader, Outlined, StampDrop } from "@orasso/design-system/web";
+import { Button, Icon, LiveO, OLoader, Outlined, StampDrop } from "@orasso/design-system/web";
 import { departments, type EventCard, siteLabels as L, type Page, proPitchDiscounts } from "@orasso/shared";
 
 import { EventTile, PosterFace } from "../components/EventTile";
@@ -146,9 +146,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <PosterFace event={event} />
             </a>
           ))}
-          <div className="w-fan__o">
-            <OLoader size={110} label={null} />
-          </div>
+          {/* Artefact (s-web-home) : liveO(170, tandem, k .9) en boucle, fumée et traces en canvas. */}
+          <LiveO className="w-fan__o" size={170} mode="tandem" scale={0.9} />
         </div>
       </section>
 
