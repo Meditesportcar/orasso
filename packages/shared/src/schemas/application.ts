@@ -107,6 +107,9 @@ export type MyApplication = {
     endsAt: string;
     city: string | null;
     status: "draft" | "published" | "cancelled";
+    /** Lot C5 : affiche générée et photo de la voiture de l'affiche (billets de Sorties) ; absentes d'une copie ancienne. */
+    posterUrl?: string | null;
+    photoUrl?: string | null;
   };
   vehicle: { id: string; label: string } | null;
   /** Lot 26 : jour choisi d'un événement sur plusieurs jours (`null` = tout l'événement, ou événement d'un jour). */

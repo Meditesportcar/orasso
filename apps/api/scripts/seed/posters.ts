@@ -2,7 +2,7 @@
 // affiche »). Nocturne de Canet : exposants 18 h 30 – 19 h 15 (strict, « Entrée côté capitainerie. Après 19 h 15,
 // préviens l'équipe. »), public dès 19 h 30 (conseillé, « Parking visiteurs avenue de la Méditerranée. ») ; deux
 // candidatures avec une note d'arrivée. Tous les événements du seed reçoivent une affiche générée (styles variés,
-// photo d'un véhicule du seed pour chacun, un style sans photo n'étant qu'un aplat sombre) : toutes les cartes ont une vignette. Idempotent : un
+// photo de voiture réelle pour chacun (lot C5), un style sans photo n'étant qu'un aplat sombre) : toutes les cartes ont une vignette. Idempotent : un
 // événement qui a déjà une affiche générée n'est pas refait.
 import { POSTER_TITLE_MAX, type PosterSettings, posterStyles } from "@orasso/shared";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
@@ -11,6 +11,7 @@ import * as t from "../../src/db/schema";
 import { storage } from "../../src/lib/storage";
 import { arrivalColumns } from "../../src/modules/events/arrivals";
 import { POSTER_PHOTO_PREFIX, posterColumns, posterService } from "../../src/modules/events/poster/service";
+import { demoEventPhotos } from "./photos";
 
 const NOCTURNE_SLUG = "nocturne-de-canet-2026";
 
@@ -73,23 +74,19 @@ export async function seedPosters() {
     console.log("Affiches des événements déjà générées.");
     return;
   }
-  const photos = await db
-    .select({ key: t.vehiclePhotos.storageKey })
-    .from(t.vehiclePhotos)
-    .orderBy(asc(t.vehiclePhotos.storageKey))
-    .limit(40);
+  // Lot C5 (D34) : de vraies photos de voitures (celles de Damien, sinon les 7 de l'artefact), jamais le dégradé factice.
+  const photos = await demoEventPhotos();
   let made = 0;
   for (const [i, e] of todo.entries()) {
     // La Nocturne en Néon (style par défaut du prototype), les autres à tour de rôle.
     const style = e.slug === NOCTURNE_SLUG ? "neon" : posterStyles[i % posterStyles.length];
     if (!style) continue;
     let photoKey: string | null = null;
-    const source = photos[i % Math.max(1, photos.length)]?.key;
-    const data = source ? await storage.get(source) : null;
-    if (data) {
-      // Copie sous le dossier des photos d'affiche (comme un envoi `event_poster_photo`).
+    const photo = photos.length ? photos[i % photos.length] : undefined;
+    if (photo) {
+      // Sous le dossier des photos d'affiche (comme un envoi `event_poster_photo`).
       photoKey = `${POSTER_PHOTO_PREFIX}seed-${e.slug}.webp`;
-      await storage.put(photoKey, data);
+      await storage.put(photoKey, photo.data);
     }
     const settings: PosterSettings = { photoKey, style, title: posterTitleOf(e.title) };
     const [row] = await db.update(t.events).set(posterColumns(settings)).where(eq(t.events.id, e.id)).returning();

@@ -14,6 +14,12 @@ export type StructureRow = typeof structures.$inferSelect;
 export const eventPosterUrl = (e: Pick<EventRow, "posterPostKey" | "posterKey">) =>
   storage.url(e.posterPostKey ?? e.posterKey);
 
+/**
+ * Photo de la voiture de l'affiche (lot C5, `poster_photo_key`) : la photo source, que les cartes de l'artefact
+ * dessinent (carte d'Accueil, fiche, listes). `null` sans photo : on retombe alors sur l'affiche générée.
+ */
+export const eventPhotoUrl = (e: Pick<EventRow, "posterPhotoKey">) => storage.url(e.posterPhotoKey);
+
 export function card(
   e: EventRow,
   s: Pick<StructureRow, "id" | "slug" | "name" | "logoKey">,
@@ -32,6 +38,7 @@ export function card(
     lng: e.lng,
     posterUrl: eventPosterUrl(e),
     generatedPosterUrl: storage.url(e.posterPostKey),
+    photoUrl: eventPhotoUrl(e),
     status: e.status,
     outlook: e.outlook,
     structure: { id: s.id, slug: s.slug, name: s.name, logoUrl: storage.url(s.logoKey) },
