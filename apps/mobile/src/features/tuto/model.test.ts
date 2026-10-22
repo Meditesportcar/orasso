@@ -1,7 +1,15 @@
 import { mainProfiles, tutoArt, tutoLabels, tutoProfileNames, tutoSlides } from "@orasso/shared";
 import { describe, expect, it } from "vitest";
 
-import { parseTutoProfile, replayProfiles, stepIndex, tutoProfileOfPersona, tutoSeenKey } from "./model";
+import {
+  balanceTitle,
+  parseTutoProfile,
+  replayProfiles,
+  stepIndex,
+  titleCharsFor,
+  tutoProfileOfPersona,
+  tutoSeenKey,
+} from "./model";
 
 describe("les six tutos", () => {
   it("ont le nombre de diapos du prototype : 7, 6, 4, 6, 4, 4 (31)", () => {
@@ -87,5 +95,37 @@ describe("profils et navigation du tuto", () => {
     expect(stepIndex(0, -1, 7)).toBe(0);
     expect(stepIndex(0, 1, 7)).toBe(1);
     expect(stepIndex(6, 1, 7)).toBe(6);
+  });
+});
+
+describe("titres équilibrés (text-wrap: balance)", () => {
+  it("coupe en lignes voisines, au même nombre de lignes", () => {
+    expect(balanceTitle("Tu trouves un rasso", 16)).toBe("Tu trouves\nun rasso");
+    expect(balanceTitle("Des points et des souvenirs", 16)).toBe("Des points et\ndes souvenirs");
+    expect(balanceTitle("Tes points t'ouvrent des remises", 16)).toBe("Tes points\nt'ouvrent\ndes remises");
+    expect(balanceTitle("Court", 16)).toBe("Court");
+  });
+});
+
+describe("titres équilibrés à la largeur de l'appareil (360 px, police agrandie)", () => {
+  it("aucune ligne ne dépasse ce qui tient : pas de mot rejeté seul par un retour automatique", () => {
+    for (const [width, scale] of [
+      [390, 1],
+      [360, 1],
+      [360, 1.3],
+    ] as const) {
+      const max = titleCharsFor(width, scale);
+      for (const profile of mainProfiles)
+        for (const slide of tutoSlides[profile])
+          for (const line of balanceTitle(slide.title, max).split("\n"))
+            expect(line.length <= max || !line.includes(" "), `${slide.title} @ ${width}/${scale} : « ${line} »`).toBe(
+              true,
+            );
+    }
+  });
+  it("360 px tient moins de caractères que 390 px", () => {
+    expect(titleCharsFor(390, 1)).toBe(17);
+    expect(titleCharsFor(360, 1)).toBeLessThan(17);
+    expect(titleCharsFor(360, 1.3)).toBeLessThan(titleCharsFor(360, 1));
   });
 });

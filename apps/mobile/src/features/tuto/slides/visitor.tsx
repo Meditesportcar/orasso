@@ -1,174 +1,202 @@
-// Les six diapos du visiteur (prototype `s-tuto`, `data-tu="visiteur"`).
-import { StampDrop, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Les six diapos du visiteur (artefact `s-tuto`, `data-tu="visiteur"`) : tu trouves une expo, tu réserves ton entrée,
+// un scan un tampon, tu votes, tes points t'ouvrent des remises, tu retrouves ta bande.
+import { textStyles } from "@orasso/design-system/native";
 import { tutoArt } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
-import { EventOnMap } from "../illustrations/discover";
-import { QrTile, ScanBox } from "../illustrations/scan";
-import { GradesAndPros, SocialBand } from "../illustrations/season";
-import {
-  Art,
-  BarFill,
-  Between,
-  Card,
-  Count,
-  DateStub,
-  Enter,
-  FakeButton,
-  Grow,
-  Later,
-  Lbl,
-  Logo,
-  Nm,
-  Ph,
-  Row,
-  Sm,
-  Tag,
-} from "../kit";
+import { A, Bar, Count, useKey } from "../anim";
+import { DateMini, FILL, T, Tag, useArt } from "../art";
+import { ArtFrame, Btn, Card, Grow, Lbl, Nm, Ring, Row, Sm, Tz } from "../blocks";
+import { MscLogo, Photo, type PhotoKey, Stamp } from "../scenes";
+import { GradesAndPros, MapFind, PaperQr, Scanner, ScanOk, SocialBand } from "./common";
 
-const { space1, space2 } = tokens.spacing;
+const v = tutoArt.visitor;
 
-function Find() {
+function FindExpo() {
   return (
-    <Art label={tutoArt.alt.findPublic}>
-      <EventOnMap meta={tutoArt.eventMetaPublic} />
-    </Art>
+    <ArtFrame label={tutoArt.alt.findPublic}>
+      <MapFind meta={tutoArt.eventMetaPublic} />
+    </ArtFrame>
   );
 }
 
-/** Une entrée public en deux touches : le billet et son QR arrivent dans Sorties. */
+/** La fiche de la Nocturne, « Réserver mon entrée », puis le billet et son QR dans Sorties. */
 function Reserve() {
-  const { event, visitor } = tutoArt;
+  const a = useArt();
+  const e = tutoArt.event;
   return (
-    <Art label={visitor.reserve}>
-      <Enter kind="up" delay={150}>
-        <Card>
-          <Row>
-            <Logo initials="MSC" tone="accent" />
-            <Grow>
-              <Nm>{event.title}</Nm>
-              <Sm>{visitor.dates}</Sm>
-            </Grow>
-          </Row>
-          <Between>
-            <Sm>{visitor.publicEntry}</Sm>
-            <Nm>{visitor.free}</Nm>
-          </Between>
-        </Card>
-      </Enter>
-      <FakeButton icon="ticket" delay={950}>
-        {visitor.reserve}
-      </FakeButton>
-      <Enter kind="up" delay={1350}>
-        <Card>
-          <Row>
-            <DateStub weekday={event.weekday} day={event.day} month={event.month} />
-            <Grow>
-              <Nm>{event.title}</Nm>
-              <Sm>{visitor.ticketFor}</Sm>
-              <Sm>{visitor.inOutings}</Sm>
-            </Grow>
-            <QrTile size={56} delay={1850} label={tutoArt.alt.qrTicket} />
-          </Row>
-        </Card>
-      </Enter>
-    </Art>
-  );
-}
-
-/** Le QR passe au scan, « Scan OK », puis le tampon tombe dans le passeport. */
-function Stamp() {
-  const { t } = useTheme();
-  const { visitor } = tutoArt;
-  return (
-    <Art label={`${visitor.scanOk} · ${visitor.ticketFor}`}>
-      <ScanBox qrLabel={tutoArt.alt.qrTicket} laserAt={550}>
-        <Enter kind="fade" delay={1650} style={styles.grow}>
-          <Text variant="posterM" color={t.color.accent}>
-            {visitor.scanOk}
-          </Text>
-          <Sm>{visitor.ticketFor}</Sm>
-        </Enter>
-      </ScanBox>
-      <Enter kind="up" delay={1750}>
-        <Card style={styles.passport}>
-          <Lbl>{visitor.passport}</Lbl>
-          <View style={styles.stampSlot}>
-            <Later delay={2150}>
-              <StampDrop shape="round" seed={24} size={84} />
-            </Later>
-          </View>
-        </Card>
-      </Enter>
-    </Art>
-  );
-}
-
-/** Le prix du public : une voix, le classement bouge en direct. */
-function Vote() {
-  const { t } = useTheme();
-  const v = tutoArt.visitor;
-  return (
-    <Art label={v.voteKicker}>
-      <Between>
-        <Lbl>{v.voteKicker}</Lbl>
-        <Enter kind="pop" delay={200}>
-          <Tag>{v.oneVote}</Tag>
-        </Enter>
-      </Between>
-      {v.ranking.map((r, i) => (
-        <Enter key={r.name} kind="right" delay={150 + i * 120}>
+    <ArtFrame label={v.reserve}>
+      <Tz>
+        <A k="up" d={0.15}>
           <Card>
             <Row>
-              <Ph size={40} />
+              <MscLogo />
               <Grow>
-                <Nm>{r.name}</Nm>
-                <BarFill width={r.width} delay={600 + i * 120} />
+                <Nm>{e.title}</Nm>
+                <Sm>{v.dates}</Sm>
               </Grow>
-              <View style={styles.count}>
-                {i === 1 ? (
-                  <Count to={r.votes} from={38} delay={1450} dur={500} variant="posterS" color={t.color.accent} />
-                ) : (
-                  <Text variant="posterS" color={t.color.plateInk}>
-                    {r.votes}
-                  </Text>
-                )}
-              </View>
+            </Row>
+            <Row sb>
+              <T k="cap" color={a.muted}>
+                {v.publicEntry}
+              </T>
+              <Nm>{v.free}</Nm>
             </Row>
           </Card>
-        </Enter>
-      ))}
-      <Enter kind="pop" delay={2400} style={styles.self}>
-        <Tag kind="acc" icon="grade">
-          {v.yourVote}
-        </Tag>
-      </Enter>
-    </Art>
+        </A>
+        <Btn icon="ticket" press={0.95}>
+          {v.reserve}
+        </Btn>
+        <A k="up" d={1.35} style={[styles.ticket, { backgroundColor: a.card2, boxShadow: a.shadowLg }]}>
+          <View style={[styles.stub, { borderRightColor: a.line }]}>
+            <DateMini weekday={e.weekday} day={e.day} month={e.month} />
+          </View>
+          <Grow>
+            <Nm>{e.title}</Nm>
+            <Sm>{v.ticketFor}</Sm>
+            <Sm>{v.inOutings}</Sm>
+          </Grow>
+          <PaperQr d={1.85} label={tutoArt.alt.qrTicket} />
+        </A>
+      </Tz>
+    </ArtFrame>
+  );
+}
+
+/** Le lecteur lit le billet, « Scan OK », puis le tampon de la Nocturne tombe dans le passeport. */
+function ScanStamp() {
+  const a = useArt();
+  return (
+    <ArtFrame label={v.scanOk}>
+      <Tz>
+        <Scanner qrAt={0.2} laserAt={0.55} okAt={1.65}>
+          <ScanOk big={v.scanOk} lines={[v.ticketFor]} />
+        </Scanner>
+        <A k="up" d={1.75} style={[styles.pass, { backgroundColor: a.card2, boxShadow: `inset 0 0 0 1px ${a.line}` }]}>
+          <Lbl>{v.passport}</Lbl>
+          <A k="stamp" d={2.15} style={styles.passStamp}>
+            <Stamp spec="nocturne|66|Nocturne de Canet|24.10.26|0" size={112} />
+          </A>
+        </A>
+      </Tz>
+    </ArtFrame>
+  );
+}
+
+/** Le classement du prix du public : ta voix fait passer la Supra en tête. */
+function Vote() {
+  const a = useArt();
+  const [rx8, supra, gtr] = v.ranking;
+  const up = useKey(1.95, 0.5);
+  const upStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ translateY: -62 * (up.reduced ? 1 : up.p.value) }] };
+  });
+  const downStyle = useAnimatedStyle(() => {
+    "worklet";
+    return { transform: [{ translateY: 62 * (up.reduced ? 1 : up.p.value) }] };
+  });
+  const row = (r: (typeof v.ranking)[number] | undefined, m: PhotoKey, top: number, mine: boolean) => {
+    if (!r) return null;
+    return (
+      <View style={[styles.voteRow, { top, backgroundColor: a.bg, boxShadow: a.shadow }]}>
+        {mine ? <Ring d={1.15} /> : null}
+        <Photo m={m} style={styles.votePh} />
+        <View style={styles.voteBody}>
+          <T k="b" size={12.5} lh={16} color={a.ink} numberOfLines={1}>
+            {r.name}
+          </T>
+          {mine ? (
+            <Bar w={86} from={76} d={1.45} dur={0.5} height={7} />
+          ) : (
+            <Bar w={r.width} from={r.width} height={7} />
+          )}
+        </View>
+        {mine ? (
+          <Count
+            to={42}
+            from={38}
+            d={1.45}
+            dur={0.5}
+            style={[textStyles.numberNarrow, styles.em, { color: a.ink, letterSpacing: 0 }]}
+          />
+        ) : (
+          <T k="num" size={22} lh={24} color={a.ink} style={styles.em}>
+            {String(r.votes)}
+          </T>
+        )}
+      </View>
+    );
+  };
+  return (
+    <ArtFrame label={v.voteKicker}>
+      <Tz>
+        <Row sb>
+          <Lbl>{v.voteKicker}</Lbl>
+          <A k="tag" d={0.2}>
+            <Tag kind="line">{v.oneVote}</Tag>
+          </A>
+        </Row>
+        <View style={styles.vote}>
+          <Animated.View style={[FILL, downStyle]}>{row(rx8, "rx7", 0, false)}</Animated.View>
+          <Animated.View style={[FILL, upStyle]}>{row(supra, "supra", 62, true)}</Animated.View>
+          <View style={FILL}>{row(gtr, "s2000", 124, false)}</View>
+        </View>
+        <A k="tag" d={2.4} style={styles.center}>
+          <Tag kind="acc" icon="trophy">
+            {v.yourVote}
+          </Tag>
+        </A>
+      </Tz>
+    </ArtFrame>
   );
 }
 
 function Season() {
   return (
-    <Art label={tutoArt.grade.kicker}>
+    <ArtFrame label={tutoArt.grade.kicker}>
       <GradesAndPros />
-    </Art>
+    </ArtFrame>
   );
 }
 
 function Band() {
   return (
-    <Art label={tutoArt.social.kicker}>
+    <ArtFrame label={tutoArt.social.kicker}>
       <SocialBand crewAction="follow" />
-    </Art>
+    </ArtFrame>
   );
 }
 
-export const visitorSlides = [Find, Reserve, Stamp, Vote, Season, Band] as const;
+export const visitorSlides = [FindExpo, Reserve, ScanStamp, Vote, Season, Band] as const;
 
 const styles = StyleSheet.create({
-  grow: { flex: 1, minWidth: 0, gap: space1 },
-  passport: { gap: space2 },
-  stampSlot: { alignItems: "center", minHeight: 84 },
-  count: { minWidth: 36, alignItems: "flex-end" },
-  self: { alignSelf: "center" },
+  center: { alignSelf: "center" },
+  ticket: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+  },
+  stub: { borderRightWidth: 2, borderStyle: "dashed", paddingRight: 10 },
+  pass: { height: 150, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12 },
+  passStamp: { position: "absolute", left: "50%", top: "50%", marginLeft: -56, marginTop: -50 },
+  vote: { height: 178 },
+  voteRow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  votePh: { width: 46, height: 34, borderRadius: 8 },
+  voteBody: { flex: 1, minWidth: 0, gap: 5 },
+  em: { minWidth: 28, textAlign: "right", fontSize: 22, lineHeight: 24 },
 });

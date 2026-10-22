@@ -1,20 +1,38 @@
-// Connexion par e-mail + mot de passe. La création de compte n'est plus ici : elle passe par le flux d'arrivée
+// Connexion par e-mail + mot de passe (lot C3 : champs de l'artefact `.field` / `.inp` posés sur le fond, bouton
+// principal `.btn-p`, liens `.btn-g`). La création de compte n'est plus ici : elle passe par le flux d'arrivée
 // (`app/arrivee/`, lot 41 : profil, département, nom et prénom obligatoires). Google et Apple sont prévus par l'API mais
 // restent masqués ici tant que leurs identifiants n'existent pas (PLAN, H6) : aucun bouton qui ne marcherait pas.
 
-import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, TextField } from "@orasso/design-system/native";
 import { PASSWORD_MIN_LENGTH } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
+import { T, useArt } from "@/features/tuto/art";
+import { ArtIcon, type ArtIconName } from "@/features/tuto/icons";
 import { authErrorMessage } from "@/lib/http";
 import { kvSet } from "@/lib/kv";
 import { useSession } from "@/lib/session";
 
 import { TwoFactorStep } from "./TwoFactorStep";
 
-const { space3 } = tokens.spacing;
+/** Un lien de l'artefact (`.btn.btn-g`) : icône et capitales, sans fond ni bord. */
+function GhostLink({ icon, onPress, children }: { icon: ArtIconName; onPress: () => void; children: string }) {
+  const a = useArt();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.ghost, pressed ? styles.pressed : null]}
+    >
+      <ArtIcon name={icon} size={20} color={a.ink} />
+      <T k="btn" size={14} lh={17} color={a.ink}>
+        {children}
+      </T>
+    </Pressable>
+  );
+}
 
 export function AuthForm({
   onSwitchMode,
@@ -28,7 +46,7 @@ export function AuthForm({
   /** Ouvre la feuille « Mot de passe oublié » (écran d'auth). */
   onForgotPassword?: () => void;
 }) {
-  const { t } = useTheme();
+  const a = useArt();
   const { signIn, verifyTwoFactor } = useSession();
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -74,7 +92,7 @@ export function AuthForm({
   }
 
   return (
-    <Plate style={styles.plate}>
+    <View style={styles.form}>
       <TextField
         label="E-mail"
         value={email}
@@ -96,28 +114,37 @@ export function AuthForm({
         onSubmitEditing={() => ready && !busy && void submit()}
       />
       {error ? (
-        <Text variant="caption" color={t.color.winText} accessibilityRole="alert">
+        <T k="cap" color={a.winText} accessibilityRole="alert">
           {error}
-        </Text>
+        </T>
       ) : null}
       <View style={styles.actions}>
         <Button variant="primary" icon="entry" loading={busy} disabled={!ready} onPress={() => void submit()} fullWidth>
           Me connecter
         </Button>
         {onForgotPassword ? (
-          <Button variant="plate" icon="inbox" onPress={onForgotPassword} fullWidth>
+          <GhostLink icon="lock" onPress={onForgotPassword}>
             Mot de passe oublié ?
-          </Button>
+          </GhostLink>
         ) : null}
-        <Button variant="plate" icon="profile" onPress={onSwitchMode} fullWidth>
+        <GhostLink icon="user" onPress={onSwitchMode}>
           Créer un compte
-        </Button>
+        </GhostLink>
       </View>
-    </Plate>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  plate: { gap: space3, padding: 16 },
-  actions: { gap: 8, marginTop: 4 },
+  form: { gap: 18 },
+  actions: { gap: 8, marginTop: 6 },
+  ghost: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 40,
+    paddingVertical: 10,
+  },
+  pressed: { transform: [{ scale: 0.97 }] },
 });

@@ -1,24 +1,25 @@
-// « Qui es-tu ? » (prototype `s-nom`) : pseudo public ; prénom et nom obligatoires et privés ; e-mail, mot de passe,
-// conditions générales. Crée le compte (`POST /api/auth/sign-up/email`) puis ouvre le tuto (lot 42).
-import { Button, CheckboxField, Icon, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+// « Qui es-tu ? » (lot C3, artefact `s-nom`) : pseudo public ; prénom et nom côte à côte, obligatoires et privés ;
+// l'encart crème « Ton nom et ton prénom sont privés » (`.privacy`, cadenas sur carré moutarde). L'artefact s'arrête là ;
+// l'e-mail, le mot de passe et les conditions, nécessaires à la création du compte, suivent avec les mêmes champs.
+// Crée le compte (`POST /api/auth/sign-up/email`) puis ouvre le tuto.
+import { Button, CheckboxField, TextField } from "@orasso/design-system/native";
 import { arriveeLabels, expressLabels, namePrivacy, passwordHint, pseudoHint } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 
 import { siteUrl } from "@/api";
-import { ArriveeScreen } from "@/features/arrivee/ArriveeScreen";
+import { ArriveeScreen, ObHead } from "@/features/arrivee/ArriveeScreen";
 import { arriveeStore, identityReady, useArrivee } from "@/features/arrivee/model";
 import { pseudoRule, usePseudoCheck } from "@/features/arrivee/usePseudoCheck";
+import { T, useArt } from "@/features/tuto/art";
+import { ArtIcon } from "@/features/tuto/icons";
 import { authErrorMessage } from "@/lib/http";
 import { kvSet } from "@/lib/kv";
 import { useSession } from "@/lib/session";
-import { Muted } from "@/ui/Muted";
-
-const { space2, space3 } = tokens.spacing;
 
 export default function ArriveeIdentite() {
-  const { t } = useTheme();
+  const a = useArt();
   const router = useRouter();
   const { signUp } = useSession();
   const { profile: chosen, departments, identity } = useArrivee();
@@ -64,105 +65,110 @@ export default function ArriveeIdentite() {
   return (
     <ArriveeScreen
       step={2}
-      onBack={() => router.back()}
+      onClose={() => router.back()}
       footer={
         <Button variant="primary" icon="next" fullWidth loading={busy} disabled={!ready} onPress={() => void submit()}>
           {arriveeLabels.identity.submit}
         </Button>
       }
     >
-      <View style={styles.head}>
-        <Text variant="posterL" color={t.color.ink} accessibilityRole="header">
-          {arriveeLabels.identity.title}
-        </Text>
-        <Muted variant="body">{arriveeLabels.identity.text}</Muted>
+      <ObHead title={arriveeLabels.identity.title} text={arriveeLabels.identity.text} />
+      <TextField
+        label={arriveeLabels.identity.pseudo}
+        value={identity.pseudo}
+        onChangeText={(pseudo) => set({ pseudo })}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="username-new"
+        help={pseudoHelp}
+        error={pseudoError}
+        maxLength={24}
+      />
+      <View style={styles.names}>
+        <TextField
+          style={styles.name}
+          label={arriveeLabels.identity.firstName}
+          value={identity.firstName}
+          onChangeText={(firstName) => set({ firstName })}
+          autoComplete="given-name"
+          autoCorrect={false}
+          maxLength={60}
+        />
+        <TextField
+          style={styles.name}
+          label={arriveeLabels.identity.lastName}
+          value={identity.lastName}
+          onChangeText={(lastName) => set({ lastName })}
+          autoComplete="family-name"
+          autoCorrect={false}
+          maxLength={60}
+        />
       </View>
-      <Plate style={styles.plate}>
-        <TextField
-          label={arriveeLabels.identity.pseudo}
-          value={identity.pseudo}
-          onChangeText={(pseudo) => set({ pseudo })}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="username-new"
-          help={pseudoHelp}
-          error={pseudoError}
-          maxLength={24}
-        />
-        <View style={styles.names}>
-          <TextField
-            style={styles.name}
-            label={arriveeLabels.identity.firstName}
-            value={identity.firstName}
-            onChangeText={(firstName) => set({ firstName })}
-            autoComplete="given-name"
-            autoCorrect={false}
-            maxLength={60}
-          />
-          <TextField
-            style={styles.name}
-            label={arriveeLabels.identity.lastName}
-            value={identity.lastName}
-            onChangeText={(lastName) => set({ lastName })}
-            autoComplete="family-name"
-            autoCorrect={false}
-            maxLength={60}
-          />
+      <View style={[styles.privacy, { backgroundColor: a.poster }]} testID="name-privacy">
+        <View style={[styles.pi, { backgroundColor: a.accent }]}>
+          <ArtIcon name="lock" size={24} color={a.accentInk} />
         </View>
-        <View style={styles.privacy} testID="name-privacy">
-          <Icon name="profile" size={20} color={t.color.plateMuted} />
-          <View style={styles.privacyText}>
-            <Text variant="bodyStrong" color={t.color.plateInk}>
-              {arriveeLabels.identity.privacyTitle}
-            </Text>
-            <Text variant="caption" color={t.color.plateMuted}>
-              {`${arriveeLabels.identity.privacyShared} ${namePrivacy[profile]} ${arriveeLabels.identity.privacyEnd}`}
-            </Text>
-          </View>
+        <View style={styles.privacyText}>
+          <T k="b" size={15} lh={19} color={a.posterInk}>
+            {arriveeLabels.identity.privacyTitle}
+          </T>
+          <T k="body" size={13.5} lh={19.5} color={a.posterMuted}>
+            {`${arriveeLabels.identity.privacyShared} ${namePrivacy[profile]} ${arriveeLabels.identity.privacyEnd}`}
+          </T>
         </View>
-        <TextField
-          label={arriveeLabels.identity.email}
-          value={identity.email}
-          onChangeText={(email) => set({ email })}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          autoComplete="email"
-          inputMode="email"
-        />
-        <TextField
-          label={arriveeLabels.identity.password}
-          value={identity.password}
-          onChangeText={(password) => set({ password })}
-          secureTextEntry
-          revealable
-          autoCapitalize="none"
-          autoComplete="new-password"
-          help={passwordHint}
-        />
-        <CheckboxField label={expressLabels.terms} checked={identity.terms} onChange={(terms) => set({ terms })} />
-        <Button
-          variant="plate"
-          icon="next"
-          onPress={() => void Linking.openURL(siteUrl("/conditions")).catch(() => undefined)}
-        >
+      </View>
+      <TextField
+        label={arriveeLabels.identity.email}
+        value={identity.email}
+        onChangeText={(email) => set({ email })}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        autoComplete="email"
+        inputMode="email"
+      />
+      <TextField
+        label={arriveeLabels.identity.password}
+        value={identity.password}
+        onChangeText={(password) => set({ password })}
+        secureTextEntry
+        revealable
+        autoCapitalize="none"
+        autoComplete="new-password"
+        help={passwordHint}
+      />
+      <CheckboxField label={expressLabels.terms} checked={identity.terms} onChange={(terms) => set({ terms })} />
+      <Pressable
+        onPress={() => void Linking.openURL(siteUrl("/conditions")).catch(() => undefined)}
+        accessibilityRole="link"
+        style={styles.link}
+      >
+        <ArtIcon name="chr" size={16} color={a.ink} />
+        <T k="btn" size={12} lh={14} color={a.ink}>
           {expressLabels.termsLink}
-        </Button>
-        {error ? (
-          <Text variant="caption" color={t.color.winText} accessibilityRole="alert">
-            {error}
-          </Text>
-        ) : null}
-      </Plate>
+        </T>
+      </Pressable>
+      {error ? (
+        <T k="cap" color={a.winText} accessibilityRole="alert">
+          {error}
+        </T>
+      ) : null}
     </ArriveeScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  head: { gap: space2 },
-  plate: { gap: space3, padding: 16 },
-  names: { flexDirection: "row", gap: space2 },
+  names: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   name: { flex: 1 },
-  privacy: { flexDirection: "row", gap: space2, alignItems: "flex-start" },
-  privacyText: { flex: 1, gap: 2 },
+  privacy: { flexDirection: "row", gap: 12, padding: 16, borderRadius: 18 },
+  pi: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  privacyText: { flex: 1, gap: 4 },
+  link: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 40,
+    paddingHorizontal: 6,
+    alignSelf: "flex-start",
+  },
 });

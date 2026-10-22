@@ -7,7 +7,8 @@ import { landingOf } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
 
 // Point d'entrée : l'écran affiché dépend de la session (le fond reste vide le temps de la lire). Le premier
-// lancement (le flux d'arrivée) n'est jamais revu : une fois vu, la connexion est l'écran d'accueil du déconnecté.
+// lancement ouvre l'accueil (`/arrivee`, artefact `s-splash` : Commencer / J'ai déjà un compte) ; une fois le compte
+// créé ou ouvert, la connexion est l'écran d'accueil du déconnecté.
 export default function Index() {
   const { status } = useSession();
   const { ready, persona } = usePersona();
@@ -16,5 +17,5 @@ export default function Index() {
     void kvGet("onboarded").then((v) => setOnboarded(v === "1"));
   }, []);
   if (status === "loading" || onboarded === null || !ready) return null;
-  return <Redirect href={(status === "in" ? landingOf(persona) : onboarded ? "/auth" : "/arrivee/profil") as never} />;
+  return <Redirect href={(status === "in" ? landingOf(persona) : onboarded ? "/auth" : "/arrivee") as never} />;
 }

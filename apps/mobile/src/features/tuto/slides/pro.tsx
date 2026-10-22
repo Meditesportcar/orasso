@@ -1,139 +1,166 @@
-// Les quatre diapos du pro (prototype `s-tuto`, `data-tu="pro"`).
-import { Text, tokens, useTheme } from "@orasso/design-system/native";
+// Les quatre diapos du pro (artefact `s-tuto`, `data-tu="pro"`) : tu montes la fiche de ton atelier, les passionnés
+// du coin te trouvent, un scan la remise, tu vois ce que ça rapporte.
 import { tutoArt } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
-import { MiniMap } from "../illustrations/discover";
-import { ScanBox } from "../illustrations/scan";
-import { Art, Bars, Card, Chips, Count, Enter, Grow, Lbl, Logo, Nm, Row, Sm, Tag } from "../kit";
+import { A } from "../anim";
+import { Badge, FILL, SWATCH, T, Tag, useArt } from "../art";
+import { ArtFrame, Bars, Big, BigCount, Card, Chip, Chips, Grow, Lbl, Nm, Row, Sm, Tz } from "../blocks";
+import { MapMini } from "../scenes";
+import { DroppedPin, FloatCard, Scanner, ScanOk } from "./common";
 
-const { space1, space2 } = tokens.spacing;
+const p = tutoArt.pro;
 
-/** La fiche se remplit : logo, activités qui s'allument, remises par grade. */
+/** Fiche de l'atelier : logo, activités qui s'allument, remises par grade qui se remplissent. */
 function Sheet() {
-  const p = tutoArt.pro;
+  const a = useArt();
+  const on = [0.7, 0.85, undefined, 1];
   return (
-    <Art label={p.sheet.name}>
-      <Enter kind="up" delay={100}>
-        <Card>
-          <Row>
-            <Enter kind="pop" delay={350}>
-              <Logo initials={p.sheet.logo} tone="night" />
-            </Enter>
-            <Grow>
-              <Nm>{p.sheet.name}</Nm>
-              <Sm>{p.sheet.meta}</Sm>
-            </Grow>
-          </Row>
-        </Card>
-      </Enter>
-      <Chips items={p.chips} on={[0, 1, 3]} delay={700} />
-      <Enter kind="up" delay={1200}>
-        <Card>
-          <Lbl>{p.discounts}</Lbl>
-          <Bars rows={p.grades} delay={1500} />
-        </Card>
-      </Enter>
-    </Art>
+    <ArtFrame label={p.sheet.name}>
+      <Tz>
+        <A k="up" d={0.1}>
+          <Card>
+            <Row>
+              <A k="pop" d={0.35}>
+                <Badge initials={p.sheet.logo} color={a.avatarBlue} size={40} radius={11} font={16} />
+              </A>
+              <Grow>
+                <Nm>{p.sheet.name}</Nm>
+                <Sm>{p.sheet.meta}</Sm>
+              </Grow>
+            </Row>
+          </Card>
+        </A>
+        <Chips>
+          {p.chips.map((c, i) => (
+            <Chip key={c} on={on[i]}>
+              {c}
+            </Chip>
+          ))}
+        </Chips>
+        <A k="up" d={1.2}>
+          <Card>
+            <Lbl>{p.discounts}</Lbl>
+            <Bars rows={p.grades.map((g, i) => ({ ...g, d: 1.5 + i * 0.12 }))} />
+          </Card>
+        </A>
+      </Tz>
+    </ArtFrame>
   );
 }
 
-/** La fiche sur la carte, avec la remise du grade et « Garage favori ». */
+/** La fiche sur la carte d'Explorer, et un passionné en fait son garage favori. */
 function Found() {
-  const { found, sheet } = tutoArt.pro;
+  const a = useArt();
+  const dots: [string, string][] = [
+    ["22%", "30%"],
+    ["74%", "22%"],
+    ["30%", "58%"],
+  ];
   return (
-    <Art label={sheet.name}>
-      <MiniMap
-        dots={[
-          [22, 30],
-          [74, 22],
-          [30, 58],
-        ]}
-      />
-      <Enter kind="up" delay={500}>
-        <Card>
-          <Row>
-            <Logo initials={sheet.logo} tone="night" />
-            <Grow>
-              <Nm>{sheet.name}</Nm>
-              <Sm>{found.meta}</Sm>
-            </Grow>
-          </Row>
-        </Card>
-      </Enter>
-      <Enter kind="pop" delay={1100} style={styles.self}>
-        <Tag kind="acc" icon="heart">
-          {found.favorite}
-        </Tag>
-      </Enter>
-    </Art>
-  );
-}
-
-/** Un client montre son QR de compte : grade vérifié, remise affichée. */
-function Discount() {
-  const { t } = useTheme();
-  const s = tutoArt.pro.scan;
-  return (
-    <Art label={`${s.off} · ${s.verified}`}>
-      <ScanBox qrLabel={tutoArt.alt.qrAccount} laserAt={500}>
-        <Enter kind="fade" delay={1600} style={styles.grow}>
-          <Text variant="posterL" color={t.color.accent}>
-            {s.off}
-          </Text>
-          <Sm>{s.verified}</Sm>
-          <Sm>{s.client}</Sm>
-        </Enter>
-      </ScanBox>
-      <Enter kind="pop" delay={2100} style={styles.self}>
-        <Tag kind="line" icon="check">
-          {s.applied}
-        </Tag>
-      </Enter>
-    </Art>
-  );
-}
-
-/** Les statistiques du mois : vues, remises, remises par grade. */
-function Stats() {
-  const { t } = useTheme();
-  const s = tutoArt.pro.stats;
-  return (
-    <Art label={s.byGrade}>
-      <View style={styles.duo}>
-        <Enter kind="up" delay={100} style={styles.half}>
-          <Card>
-            <Lbl>{s.views}</Lbl>
-            <Count to={1284} delay={300} variant="posterL" color={t.color.plateInk} />
-          </Card>
-        </Enter>
-        <Enter kind="up" delay={200} style={styles.half}>
-          <Card>
-            <Lbl>{s.discounts}</Lbl>
-            <Count to={37} delay={400} variant="posterL" color={t.color.plateInk} />
-          </Card>
-        </Enter>
+    <ArtFrame label={p.found.favorite}>
+      <View style={FILL}>
+        <MapMini />
       </View>
-      <Enter kind="up" delay={500}>
-        <Card>
-          <Lbl>{s.byGrade}</Lbl>
-          <Bars rows={s.grades} delay={800} />
-        </Card>
-      </Enter>
-      <Enter kind="pop" delay={1600} style={styles.self}>
-        <Tag kind="line" icon="up">
-          {s.growth}
+      {dots.map(([left, top]) => (
+        <View
+          key={left}
+          style={[
+            styles.dot,
+            {
+              left: left as `${number}%`,
+              top: top as `${number}%`,
+              backgroundColor: a.faint,
+              boxShadow: `0 0 0 3px ${a.card}`,
+            },
+          ]}
+        />
+      ))}
+      <DroppedPin />
+      <FloatCard>
+        <Badge initials={p.sheet.logo} color={a.avatarBlue} size={40} radius={11} font={16} />
+        <View style={styles.grow}>
+          <T k="poster" size={13} lh={14} color={a.ink}>
+            {p.sheet.name}
+          </T>
+          <T k="cap" color={a.muted}>
+            {p.found.meta}
+          </T>
+        </View>
+      </FloatCard>
+      <A k="sent" d={1.5} dur={0.5} style={styles.fav}>
+        <Tag kind="acc" icon="star" height={30} size={12}>
+          {p.found.favorite}
         </Tag>
-      </Enter>
-    </Art>
+      </A>
+    </ArtFrame>
   );
 }
 
-export const proSlides = [Sheet, Found, Discount, Stats] as const;
+/** Le QR de compte d'un client passe : grade vérifié, la remise s'affiche. */
+function Scan() {
+  return (
+    <ArtFrame label={p.scan.applied}>
+      <Tz>
+        <Scanner qrAt={0.15} laserAt={0.5} okAt={1.6}>
+          <ScanOk big={p.scan.off} lines={[p.scan.verified, p.scan.client]} />
+        </Scanner>
+        <A k="tag" d={2.1} style={styles.center}>
+          <Tag kind="line" icon="check">
+            {p.scan.applied}
+          </Tag>
+        </A>
+      </Tz>
+    </ArtFrame>
+  );
+}
+
+/** Les statistiques : vues, remises, remises par grade. */
+function Stats() {
+  const s = p.stats;
+  return (
+    <ArtFrame label={s.byGrade}>
+      <Tz>
+        <View style={styles.duo}>
+          <A k="up" d={0.1} style={styles.grow}>
+            <Card>
+              <Lbl>{s.views}</Lbl>
+              <Big>
+                <BigCount to={1284} d={0.3} />
+              </Big>
+            </Card>
+          </A>
+          <A k="up" d={0.2} style={styles.grow}>
+            <Card>
+              <Lbl>{s.discounts}</Lbl>
+              <Big>
+                <BigCount to={37} d={0.4} />
+              </Big>
+            </Card>
+          </A>
+        </View>
+        <A k="up" d={0.5}>
+          <Card>
+            <Lbl>{s.byGrade}</Lbl>
+            <Bars rows={s.grades.map((g, i) => ({ ...g, d: 0.8 + i * 0.12 }))} />
+          </Card>
+        </A>
+        <A k="tag" d={1.6} style={styles.center}>
+          <Tag kind="line" icon="chart">
+            {s.growth}
+          </Tag>
+        </A>
+      </Tz>
+    </ArtFrame>
+  );
+}
+
+export const proSlides = [Sheet, Found, Scan, Stats] as const;
 
 const styles = StyleSheet.create({
-  self: { alignSelf: "center" },
-  grow: { flex: 1, minWidth: 0, gap: space1 },
-  duo: { flexDirection: "row", gap: space2 },
-  half: { flex: 1 },
+  grow: { flex: 1, minWidth: 0 },
+  center: { alignSelf: "center" },
+  duo: { flexDirection: "row", gap: 10 },
+  dot: { position: "absolute", width: 12, height: 12, marginLeft: -6, marginTop: -6, borderRadius: 6, opacity: 0.8 },
+  fav: { position: "absolute", top: 18, alignSelf: "center" },
 });

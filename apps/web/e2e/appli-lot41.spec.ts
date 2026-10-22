@@ -62,6 +62,13 @@ const TEXTS: Partial<
 async function fresh(browser: Browser, theme: Theme) {
   const ctx = await browser.newContext({ viewport: MOBILE, baseURL: APP });
   const page = await ctx.newPage();
+  // Lot C3, tour 2 : l'ouverture de 3 s ne doit jamais apparaître au premier lancement, même un instant (éclair).
+  await page.addInitScript(() => {
+    new MutationObserver(() => {
+      if (document.querySelector('[data-testid="opening-battle"]'))
+        (window as unknown as { openingSeen?: boolean }).openingSeen = true;
+    }).observe(document, { childList: true, subtree: true });
+  });
   await page.goto("/auth");
   // Premier lancement : rien d'enregistré (le thème seul est choisi), l'appli ouvre le flux d'arrivée.
   await page.evaluate((t) => {
@@ -69,8 +76,20 @@ async function fresh(browser: Browser, theme: Theme) {
     localStorage.setItem("orasso.theme", t);
   }, theme);
   await page.goto("/");
+  // Lot C3 (artefact `s-splash`) : le premier lancement ouvre l'accueil (battle autour du O, « Commencer », « J'ai déjà un
+  // compte »), sans l'ouverture de 3 s par-dessus ; « Commencer » ouvre « Tu viens comment ? ».
+  await page.waitForURL(/\/arrivee$/, { timeout: 30_000 });
+  await expect(
+    page.getByText("Les rassemblements et expos auto du coin, ta place réservée, ton entrée en un scan."),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("opening-battle")).toHaveCount(0);
+  expect(
+    await page.evaluate(() => (window as unknown as { openingSeen?: boolean }).openingSeen ?? false),
+    "aucun éclair de l'ouverture",
+  ).toBe(false);
+  await expect(page.getByRole("button", { name: "J'ai déjà un compte" })).toBeVisible();
+  await page.getByRole("button", { name: "Commencer" }).click();
   await page.waitForURL(/arrivee\/profil/, { timeout: 30_000 });
-  await skipOpening(page);
   return { ctx, page };
 }
 
@@ -137,13 +156,16 @@ async function runFlow(browser: Browser, profile: Profile, theme: Theme, capture
     await expect(page.getByText(`${texts.hint} Touche la carte pour ajouter ou retirer un département.`)).toBeVisible();
   }
   await expect(page.getByRole("button", { name: "Continuer" })).toBeDisabled();
+  // La carte est décorative pour le lecteur d'écran (chemin accessible : la liste) : rien n'y est annoncé.
+  await expect(page.getByTestId("department-map")).toHaveAttribute("aria-hidden", "true");
   await page.getByTestId("dept-66").click();
-  await expect(page.getByText(`66 · ${texts?.tag ?? "favori"}`)).toBeVisible();
+  // Lot C3 (artefact `.dchip.fav`) : le numéro dans sa pastille moutarde, puis « Pyrénées-Orientales · favori ».
+  await expect(page.getByText(`Pyrénées-Orientales · ${texts?.tag ?? "favori"}`)).toBeVisible();
   await expect(page.getByRole("button", { name: "Continuer" })).toBeEnabled();
   await page.getByTestId("dept-11").click();
   await expect(page.getByText("+1", { exact: true })).toBeVisible();
-  // Le crédit CC BY 4.0 est sous la carte.
-  await expect(page.getByText("Carte : Victor Cazanave, CC BY 4.0")).toBeVisible();
+  // Le crédit CC BY 4.0 est dans la carte, en bas à droite (texte de l'artefact).
+  await expect(page.getByText("Carte : svg-maps, Victor Cazanave (CC BY 4.0)")).toBeVisible();
   // Retoucher un département le retire.
   await page.getByTestId("dept-11").click();
   await expect(page.getByText("+1", { exact: true })).toHaveCount(0);
@@ -243,6 +265,9 @@ test("les six profils ont leur tuile, leur barre et leurs textes ; « J'ai déj�
     for (const label of labels)
       await expect(page.getByTestId("tab-preview").getByText(label, { exact: true }), `${key} ${label}`).toBeVisible();
   }
+  // « J'ai déjà un compte » est sur l'accueil (artefact) : la croix de « Tu viens comment ? » y revient.
+  await page.getByTestId("arrivee-close").click();
+  await page.waitForURL(/\/arrivee$/);
   await page.getByRole("button", { name: "J'ai déjà un compte" }).click();
   await page.waitForURL(/\/auth/);
   await expect(page.getByRole("button", { name: "Me connecter" })).toBeVisible();

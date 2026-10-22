@@ -32,6 +32,9 @@ async function skipOpening(page: Page) {
 test("liste des départements : rôle et état, outre-mer, premier = favori, 20 au plus", async ({ browser }) => {
   test.setTimeout(240_000);
   const { ctx, page } = await fresh(browser);
+  // Lot C3 : le premier lancement ouvre l'accueil (artefact `s-splash`), « Commencer » mène au choix du profil.
+  await page.waitForURL(/\/arrivee$/, { timeout: 30_000 });
+  await page.getByRole("button", { name: "Commencer" }).click();
   await page.waitForURL(/arrivee\/profil/, { timeout: 30_000 });
   await page.getByRole("button", { name: "Continuer" }).click();
   await page.waitForURL(/arrivee\/departement/);
@@ -42,7 +45,8 @@ test("liste des départements : rôle et état, outre-mer, premier = favori, 20 
   await expect(reunion).toHaveAttribute("aria-checked", "false");
   await reunion.click();
   await expect(reunion).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByText("974 · favori")).toBeVisible();
+  // Puce du favori (artefact `.dchip.fav`) : le numéro dans sa pastille, puis le nom et « favori ».
+  await expect(page.getByText("La Réunion · favori")).toBeVisible();
   const pyrenees = page.getByRole("checkbox", { name: "66 · Pyrénées-Orientales" });
   await pyrenees.click();
   await expect(pyrenees).toHaveAttribute("aria-checked", "true");
@@ -61,8 +65,9 @@ test("liste des départements : rôle et état, outre-mer, premier = favori, 20 
 });
 
 test("« J'ai déjà un compte » garde la destination (next)", async ({ browser }) => {
-  const { ctx, page } = await fresh(browser, "/arrivee/profil?next=%2Fe%2Fnocturne");
-  await expect(page.getByRole("heading", { name: "Tu viens comment ?" }).first()).toBeVisible({ timeout: 30_000 });
+  // Lot C3 : « J'ai déjà un compte » est sur l'accueil (artefact `s-splash`), plus sur « Tu viens comment ? ».
+  const { ctx, page } = await fresh(browser, "/arrivee?next=%2Fe%2Fnocturne");
+  await expect(page.getByRole("button", { name: "Commencer" })).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "J'ai déjà un compte" }).click();
   await page.waitForURL(/\/auth/);
   expect(decodeURIComponent(page.url())).toContain("next=/e/nocturne");
@@ -124,5 +129,32 @@ test("profil pro sans fiche : carte « Termine ta fiche » (Accueil, Mon profil)
     .getByRole("button", { name: "Créer ma fiche pro" })
     .click();
   await page.waitForURL(/pro-nouvelle/, { timeout: 30_000 });
+  await ctx.close();
+});
+
+test("événement partagé → inscription : « J'ai déjà un compte » sur le choix du profil, connexion, retour à l'événement (lot C3)", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  // « Candidater » sur un événement partagé ouvre /auth?mode=signup&next=… : le choix du profil garde un accès direct à la
+  // connexion, avec la destination, pour qui a déjà un compte.
+  const { ctx, page } = await fresh(browser, "/auth?mode=signup&next=%2Fe%2Fnocturne-de-canet-2026");
+  await page.waitForURL(/arrivee\/profil/, { timeout: 30_000 });
+  await page.getByTestId("arrivee-profil-compte").click();
+  await page.waitForURL(/\/auth/);
+  expect(decodeURIComponent(page.url())).toContain("next=/e/nocturne-de-canet-2026");
+  await page.getByLabel("E-mail").fill("kenji@orasso.local");
+  await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
+  await page.getByRole("button", { name: "Me connecter" }).click();
+  await page.waitForURL(/\/e\/nocturne-de-canet-2026/, { timeout: 60_000 });
+  await ctx.close();
+});
+
+test("choix du profil sans destination : pas de lien de connexion (il est sur l'accueil, comme l'artefact)", async ({
+  browser,
+}) => {
+  const { ctx, page } = await fresh(browser, "/arrivee/profil");
+  await expect(page.getByRole("heading", { name: "Tu viens comment ?" }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("arrivee-profil-compte")).toHaveCount(0);
   await ctx.close();
 });
