@@ -1,7 +1,15 @@
 // Écran de flux « à affiche » (lot C2b, prototype `s-event` et `s-crew`) : pas de barre du haut, la photo ou l'affiche
 // occupe toute la largeur en tête de la page, avec la pastille O et la croix flottantes (`.ev-float`) ; le contenu
 // remonte de 8 px sur l'image (`.ev-body`). Mêmes fond, zone des feuilles et action fixe en bas que `FlowScreen`.
-import { Ground, Icon, Monogram, OliveActivityProvider, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  Ground,
+  Icon,
+  Monogram,
+  OliveActivityProvider,
+  tokens,
+  useFlowChrome,
+  useTheme,
+} from "@orasso/design-system/native";
 import { useIsFocused } from "expo-router";
 import { type ReactNode, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -32,12 +40,14 @@ export function PosterFlow({
 }) {
   const { t } = useTheme();
   const focused = useIsFocused();
+  // Socle C1 : un écran de flux retire la barre d'onglets et l'accès flottant tant qu'il est affiché.
+  useFlowChrome(focused);
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   return (
     <OliveActivityProvider active={focused}>
       <OverlayProvider>
-        <Ground style={styles.fill}>
+        <Ground paused={!focused} style={styles.fill}>
           <KeyboardSafe style={styles.fill}>
             <ScrollView
               style={styles.fill}
