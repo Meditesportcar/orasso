@@ -114,7 +114,7 @@ export function AuthForm({
         onSubmitEditing={() => ready && !busy && void submit()}
       />
       {error ? (
-        <T k="cap" color={a.win} accessibilityRole="alert">
+        <T k="cap" color={a.winText} accessibilityRole="alert">
           {error}
         </T>
       ) : null}

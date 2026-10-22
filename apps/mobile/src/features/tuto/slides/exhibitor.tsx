@@ -1,6 +1,7 @@
 // Les sept diapos de l'exposant (artefact `s-tuto`, `data-tu="exposant"`), dans l'ordre : tu trouves, tu candidates,
 // ta voiture est retenue, on te guide jusqu'à ta place, points et souvenirs, remises, ta bande. Les textes (jour,
 // titre, paragraphe) sont dans `tutoSlides.exhibitor` ; ceux des illustrations dans `tutoArt`.
+import { useTheme } from "@orasso/design-system/native";
 import { tutoArt } from "@orasso/shared";
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
@@ -161,12 +162,19 @@ function Apply() {
 /** `.qrsweep` : la bande moutarde qui balaie le QR (3,2 s, en boucle). */
 function Sweep() {
   const a = useArt();
+  const { reducedMotion } = useTheme();
   const y = useSharedValue(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `y` est stable
   useEffect(() => {
+    // Mouvement réduit (appareil ou préférence Orasso) : pas de balayage, la bande reste en haut, immobile.
+    if (reducedMotion) {
+      cancelAnimation(y);
+      y.value = 0;
+      return;
+    }
     y.value = withRepeat(withTiming(1, { duration: 3200, easing: Easing.linear }), -1, false);
     return () => cancelAnimation(y);
-  }, []);
+  }, [reducedMotion]);
   const style = useAnimatedStyle(() => {
     "worklet";
     return { transform: [{ translateY: y.value * 99 }] };

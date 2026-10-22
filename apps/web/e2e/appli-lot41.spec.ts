@@ -62,6 +62,13 @@ const TEXTS: Partial<
 async function fresh(browser: Browser, theme: Theme) {
   const ctx = await browser.newContext({ viewport: MOBILE, baseURL: APP });
   const page = await ctx.newPage();
+  // Lot C3, tour 2 : l'ouverture de 3 s ne doit jamais apparaître au premier lancement, même un instant (éclair).
+  await page.addInitScript(() => {
+    new MutationObserver(() => {
+      if (document.querySelector('[data-testid="opening-battle"]'))
+        (window as unknown as { openingSeen?: boolean }).openingSeen = true;
+    }).observe(document, { childList: true, subtree: true });
+  });
   await page.goto("/auth");
   // Premier lancement : rien d'enregistré (le thème seul est choisi), l'appli ouvre le flux d'arrivée.
   await page.evaluate((t) => {
@@ -76,6 +83,10 @@ async function fresh(browser: Browser, theme: Theme) {
     page.getByText("Les rassemblements et expos auto du coin, ta place réservée, ton entrée en un scan."),
   ).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("opening-battle")).toHaveCount(0);
+  expect(
+    await page.evaluate(() => (window as unknown as { openingSeen?: boolean }).openingSeen ?? false),
+    "aucun éclair de l'ouverture",
+  ).toBe(false);
   await expect(page.getByRole("button", { name: "J'ai déjà un compte" })).toBeVisible();
   await page.getByRole("button", { name: "Commencer" }).click();
   await page.waitForURL(/arrivee\/profil/, { timeout: 30_000 });
@@ -145,6 +156,8 @@ async function runFlow(browser: Browser, profile: Profile, theme: Theme, capture
     await expect(page.getByText(`${texts.hint} Touche la carte pour ajouter ou retirer un département.`)).toBeVisible();
   }
   await expect(page.getByRole("button", { name: "Continuer" })).toBeDisabled();
+  // La carte est décorative pour le lecteur d'écran (chemin accessible : la liste) : rien n'y est annoncé.
+  await expect(page.getByTestId("department-map")).toHaveAttribute("aria-hidden", "true");
   await page.getByTestId("dept-66").click();
   // Lot C3 (artefact `.dchip.fav`) : le numéro dans sa pastille moutarde, puis « Pyrénées-Orientales · favori ».
   await expect(page.getByText(`Pyrénées-Orientales · ${texts?.tag ?? "favori"}`)).toBeVisible();

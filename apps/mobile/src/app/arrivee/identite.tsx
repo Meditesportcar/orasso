@@ -149,7 +149,7 @@ export default function ArriveeIdentite() {
         </T>
       </Pressable>
       {error ? (
-        <T k="cap" color={a.win} accessibilityRole="alert">
+        <T k="cap" color={a.winText} accessibilityRole="alert">
           {error}
         </T>
       ) : null}

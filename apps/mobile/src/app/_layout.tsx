@@ -80,10 +80,22 @@ function Shell() {
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
   useEffect(() => {
-    void kvGet("onboarded").then((v) => setOnboarded(v === "1"));
+    void kvGet("onboarded").then((v) => {
+      // Lot C3 : l'ouverture de 3 s se décide une fois, au lancement : jamais au tout premier (l'accueil `/arrivee` joue
+      // la battle), et une relecture plus tard (après l'inscription) ne la fait pas apparaître.
+      if (v !== "1") setOpening(false);
+      setOnboarded(v === "1");
+    });
     // Dernier décalage de l'horloge simulée connu (mode staff hors ligne) ; 0 et sans effet hors développement.
     void initClock();
   }, []);
+
+  // Le compte créé ou ouvert pose « onboarded » : relu à chaque changement de session, pour qu'une déconnexion après
+  // l'inscription mène à la connexion et non à l'accueil du premier lancement (relecture du lot C3).
+  useEffect(() => {
+    if (status === "loading") return;
+    void kvGet("onboarded").then((v) => setOnboarded(v === "1"));
+  }, [status]);
 
   // Déconnecté (ou jamais connecté) : seuls les écrans publics restent accessibles.
   useEffect(() => {
@@ -173,7 +185,7 @@ function Shell() {
       <ClockBanner />
       {/* Les écrans attendent la lecture de la session : sans jeton, leurs premières requêtes partiraient anonymes. */}
       <NavigationThemeProvider value={navigationTheme}>
-        {status === "loading" ? null : (
+        {status === "loading" || onboarded === null ? null : (
           <Stack screenOptions={{ headerShown: false, animation: "none", contentStyle: { backgroundColor: ground } }} />
         )}
       </NavigationThemeProvider>
@@ -185,7 +197,8 @@ function Shell() {
       {status === "in" ? <StaffBackground /> : null}
       {/* Lot 39 (V12) : la battle en tandem de 3 s à chaque lancement (fondu de 120 ms si animations réduites). Lot C3 :
           pas au premier lancement, où l'accueil (`/arrivee`, artefact `s-splash`) joue lui-même la battle autour du O. */}
-      {opening && onboarded !== false ? (
+      {/* Rien avant la lecture d'« onboarded » (pas d'éclair de l'ouverture au premier lancement, ni de l'écran ensuite). */}
+      {opening && onboarded === true ? (
         <View style={StyleSheet.absoluteFill}>
           <OpeningBattle onDone={() => setOpening(false)} />
         </View>

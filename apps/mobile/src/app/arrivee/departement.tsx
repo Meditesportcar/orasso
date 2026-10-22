@@ -59,9 +59,13 @@ export default function ArriveeDepartement() {
       }
     >
       <ObHead title={arriveeLabels.department.title} text={departmentWhy[profile]} />
+      {/* Décorative pour le lecteur d'écran (le chemin accessible est « Choisir dans une liste ») : rien n'y est annoncé. */}
       <View
         style={[styles.map, { backgroundColor: a.card, boxShadow: a.shadow }]}
-        accessibilityLabel={arriveeLabels.department.mapLabel}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        aria-hidden
+        testID="department-map"
       >
         <FranceMap selected={departments} favorite={first ?? null} onToggle={toggle} />
         <T k="body" size={9.5} lh={12} color={a.muted} style={styles.credit}>
@@ -108,7 +112,7 @@ export default function ArriveeDepartement() {
         {`${departmentHint[profile]} ${arriveeLabels.department.hint}`}
       </T>
       {limit ? (
-        <T k="cap" color={a.win} accessibilityRole="alert" testID="department-limit">
+        <T k="cap" color={a.winText} accessibilityRole="alert" testID="department-limit">
           {arriveeLabels.errors.tooMany}
         </T>
       ) : null}

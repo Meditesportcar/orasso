@@ -66,7 +66,9 @@ export function balanceTitle(text: string, maxChars: number): string {
       if (left === 1) {
         const all = [...acc, words.slice(start)];
         const max = Math.max(...all.map(lineLen));
-        if (max <= maxChars && max < bestMax) {
+        // Une ligne tient, ou c'est un mot seul trop long pour tenir (police très agrandie) : il ne se coupe pas mieux.
+        const fits = all.every((ws) => lineLen(ws) <= maxChars || ws.length === 1);
+        if (fits && max < bestMax) {
           bestMax = max;
           best = all;
         }
@@ -79,4 +81,12 @@ export function balanceTitle(text: string, maxChars: number): string {
     if (best) return (best as string[][]).map((ws) => ws.join(" ")).join("\n");
   }
   return text;
+}
+
+/** Largeur d'un caractère du titre d'une diapo (26 px, 125 %, 900) : 358 px pour 17 caractères, relevé sur les paires. */
+export const TITLE_CHAR_PX = 358 / 17;
+
+/** Caractères qui tiennent sur une ligne de titre, pour la largeur d'écran et la taille de police de l'appareil. */
+export function titleCharsFor(width: number, fontScale: number): number {
+  return Math.max(8, Math.floor((width - 32) / (TITLE_CHAR_PX * fontScale)));
 }

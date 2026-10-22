@@ -7,7 +7,7 @@
 import { Button, duration, Ground, useTheme } from "@orasso/design-system/native";
 import { type MainProfile, tutoLabels, tutoSlides } from "@orasso/shared";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -15,13 +15,8 @@ import { useTabSwipe } from "@/features/nav/useTabSwipe";
 
 import { T, useArt } from "./art";
 import { ArtIcon } from "./icons";
-import { balanceTitle, stepIndex } from "./model";
+import { balanceTitle, stepIndex, titleCharsFor } from "./model";
 import { tutoIllustrations } from "./slides";
-
-/**
- * Caractères d'un titre de diapo par ligne (26 px, 125 %, 900, sur 358 px de large : 17, comme l’artefact) : sert à l'équilibrage des lignes.
- */
-const TITLE_CHARS = 17;
 
 /** Les tirets de progression (`.tu-dots`) : 22 × 5, l'actif 36 px moutarde. */
 function Dots({ count, index }: { count: number; index: number }) {
@@ -81,6 +76,12 @@ export function TutoScreen({ profile, onDone }: { profile: MainProfile; onDone: 
   }
   const count = texts.length;
   const [index, setIndex] = useState(0);
+  // Le contenu défile seulement s'il dépasse (petit écran, police agrandie) : sinon tout tient, comme l'artefact.
+  const [stageH, setStageH] = useState(0);
+  const [contentH, setContentH] = useState(0);
+  // Retours à la ligne équilibrés calculés pour la largeur réelle et la taille de police de l'appareil.
+  const { width, fontScale } = useWindowDimensions();
+  const titleChars = titleCharsFor(width, fontScale);
   const last = index === count - 1;
 
   const go = (dir: 1 | -1) => {
@@ -121,7 +122,10 @@ export function TutoScreen({ profile, onDone }: { profile: MainProfile; onDone: 
           style={styles.stage}
           contentContainerStyle={styles.stageContent}
           showsVerticalScrollIndicator={false}
-          scrollEnabled={false}
+          scrollEnabled={contentH > stageH + 1}
+          onLayout={(e) => setStageH(e.nativeEvent.layout.height)}
+          onContentSizeChange={(_, h) => setContentH(h)}
+          testID="tuto-stage"
         >
           <SlideFade key={index}>
             <View testID={`tuto-slide-${index + 1}`} style={styles.slide}>
@@ -131,7 +135,7 @@ export function TutoScreen({ profile, onDone }: { profile: MainProfile; onDone: 
                   {text.day}
                 </T>
                 <T k="poster" size={26} lh={25} color={a.ink} style={styles.title} accessibilityRole="header">
-                  {balanceTitle(text.title, TITLE_CHARS)}
+                  {balanceTitle(text.title, titleChars)}
                 </T>
                 <T k="body" size={15} lh={22} color={a.muted}>
                   {text.text}

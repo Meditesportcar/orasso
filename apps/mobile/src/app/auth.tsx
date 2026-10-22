@@ -32,7 +32,11 @@ export default function Auth() {
         <View style={[styles.flowbar, { paddingTop: insets.top + 26 }]}>
           <View style={styles.fill} />
           <Pressable
-            onPress={() => (router.canGoBack() ? router.back() : router.replace("/arrivee"))}
+            onPress={() =>
+              router.canGoBack()
+                ? router.back()
+                : router.replace({ pathname: "/arrivee", params: next ? { next } : {} })
+            }
             accessibilityRole="button"
             accessibilityLabel="Fermer"
             testID="auth-close"

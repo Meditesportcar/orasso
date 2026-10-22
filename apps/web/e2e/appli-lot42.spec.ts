@@ -354,3 +354,35 @@ test("tuile « Découvre ce qu'il y a de nouveau » (ancien compte, sans profil 
   await expect(page.getByTestId("home-tuto").filter({ visible: true })).toHaveCount(0);
   await ctx.close();
 });
+
+test("petit écran (360 × 640) et texte agrandi : la diapo défile, rien n'est coupé (lot C3, tour 2)", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const { ctx, page } = await open(browser, "beton");
+  await signIn(page, "kenji@orasso.local");
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openTuto(page, "exhibitor");
+  for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Suivant" }).click();
+  await expect(page.getByRole("heading", { name: "Tes points t'ouvrent des remises", exact: true })).toBeVisible();
+  // Texte agrandi (équivalent de la police système agrandie) : le contenu dépasse, la zone de la diapo défile.
+  await page.addStyleTag({ content: '[data-testid="tuto-slide-6"] div[dir="auto"] { font-size: 130% !important; }' });
+  await page.setViewportSize({ width: 360, height: 560 });
+  await page.waitForTimeout(800);
+  // Le défilement est ouvert (avant : `scrollEnabled={false}`, le bas du texte devenait inaccessible au doigt).
+  expect(await page.getByTestId("tuto-stage").evaluate((el) => getComputedStyle(el).overflowY)).not.toBe("hidden");
+  const text = page.getByText(tutoLast("exhibitor-6"), { exact: true });
+  await text.scrollIntoViewIfNeeded();
+  await expect(text).toBeInViewport();
+  // Les actions restent à l'écran.
+  await expect(page.getByRole("button", { name: "Suivant" })).toBeInViewport();
+  await page.screenshot({ path: `${DIR}/petit-ecran-exhibitor-06-beton.png` });
+  await ctx.close();
+});
+
+function tutoLast(key: "exhibitor-6") {
+  return {
+    "exhibitor-6":
+      "Plus tu participes, plus ton grade monte. Tu trouves les pros du coin (garage, prépa, detailing) et tu montres ton QR de compte en boutique : la remise de ton grade s'applique.",
+  }[key];
+}

@@ -131,3 +131,30 @@ test("profil pro sans fiche : carte « Termine ta fiche » (Accueil, Mon profil)
   await page.waitForURL(/pro-nouvelle/, { timeout: 30_000 });
   await ctx.close();
 });
+
+test("événement partagé → inscription : « J'ai déjà un compte » sur le choix du profil, connexion, retour à l'événement (lot C3)", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  // « Candidater » sur un événement partagé ouvre /auth?mode=signup&next=… : le choix du profil garde un accès direct à la
+  // connexion, avec la destination, pour qui a déjà un compte.
+  const { ctx, page } = await fresh(browser, "/auth?mode=signup&next=%2Fe%2Fnocturne-de-canet-2026");
+  await page.waitForURL(/arrivee\/profil/, { timeout: 30_000 });
+  await page.getByTestId("arrivee-profil-compte").click();
+  await page.waitForURL(/\/auth/);
+  expect(decodeURIComponent(page.url())).toContain("next=/e/nocturne-de-canet-2026");
+  await page.getByLabel("E-mail").fill("kenji@orasso.local");
+  await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
+  await page.getByRole("button", { name: "Me connecter" }).click();
+  await page.waitForURL(/\/e\/nocturne-de-canet-2026/, { timeout: 60_000 });
+  await ctx.close();
+});
+
+test("choix du profil sans destination : pas de lien de connexion (il est sur l'accueil, comme l'artefact)", async ({
+  browser,
+}) => {
+  const { ctx, page } = await fresh(browser, "/arrivee/profil");
+  await expect(page.getByRole("heading", { name: "Tu viens comment ?" }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("arrivee-profil-compte")).toHaveCount(0);
+  await ctx.close();
+});

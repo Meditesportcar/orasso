@@ -5,13 +5,14 @@ import { Button, Icon, type IconName, tabSets } from "@orasso/design-system/nati
 import { arriveeLabels, type MainProfile } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { ArriveeScreen, ObHead } from "@/features/arrivee/ArriveeScreen";
 import { arriveeStore, profileTileOrder, tabSetOfProfile, useArrivee } from "@/features/arrivee/model";
 import { ProfileTile } from "@/features/arrivee/ProfileTile";
 import { A } from "@/features/tuto/anim";
 import { T, useArt } from "@/features/tuto/art";
+import { ArtIcon } from "@/features/tuto/icons";
 import { OMono } from "@/features/tuto/posters";
 
 /** `.tabprev` : la barre d'onglets du profil, en miniature (les onglets arrivent l'un après l'autre, 40 ms d'écart). */
@@ -63,17 +64,38 @@ export default function ArriveeProfil() {
   return (
     <ArriveeScreen
       step={0}
-      onClose={() => (router.canGoBack() ? router.back() : router.replace("/arrivee"))}
+      onClose={() =>
+        router.canGoBack() ? router.back() : router.replace({ pathname: "/arrivee", params: next ? { next } : {} })
+      }
       footer={
-        <Button
-          variant="primary"
-          icon="next"
-          fullWidth
-          disabled={!profile}
-          onPress={() => router.push("/arrivee/departement")}
-        >
-          {arriveeLabels.next}
-        </Button>
+        <>
+          <Button
+            variant="primary"
+            icon="next"
+            fullWidth
+            disabled={!profile}
+            onPress={() => router.push("/arrivee/departement")}
+          >
+            {arriveeLabels.next}
+          </Button>
+          {
+            // Arrivée d'un lien partagé (« Candidater » sur un événement → inscription) : qui a déjà un compte doit pouvoir
+            // se connecter sans repasser par l'accueil, en gardant la destination (relecture Codex du lot C3).
+            next ? (
+              <Pressable
+                onPress={() => router.replace({ pathname: "/auth", params: { next } })}
+                accessibilityRole="button"
+                testID="arrivee-profil-compte"
+                style={styles.ghost}
+              >
+                <ArtIcon name="user" size={20} color={a.ink} />
+                <T k="btn" size={14} lh={17} color={a.ink}>
+                  {arriveeLabels.alreadyAccount}
+                </T>
+              </Pressable>
+            ) : null
+          }
+        </>
       }
     >
       <ObHead title={arriveeLabels.profile.title} text={arriveeLabels.profile.text} />
@@ -98,4 +120,12 @@ const styles = StyleSheet.create({
   tabprev: { flexDirection: "row", borderRadius: 18, paddingVertical: 10, paddingHorizontal: 4, gap: 2 },
   tab: { flex: 1, alignItems: "center", gap: 4 },
   tabLabel: { textAlign: "center", letterSpacing: 0 },
+  ghost: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 40,
+    paddingVertical: 10,
+  },
 });

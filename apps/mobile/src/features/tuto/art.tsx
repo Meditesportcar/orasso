@@ -68,6 +68,8 @@ export function useArt() {
       accentText: c.accentText,
       accentSoft: alpha(c.accent, dark ? 0.16 : 0.26),
       win: c.win,
+      // Texte d'erreur (contraste suffisant sur le fond, Béton et Sable) : jeton `win-text`.
+      winText: c.winText,
       wait: c.statusWaitlist,
       field: c.surfaceField,
       fieldLine: alpha(c.ink, dark ? 0.22 : 0.28),
