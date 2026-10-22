@@ -17,10 +17,10 @@
   --olive-open: 3000ms;
   --olive-park: 320ms;
   --olive-orbit: 1400ms;
-  --battle-opacity: 0.18;
+  --battle-opacity: 0.5;
 }
 [data-theme="sable"] {
-  --battle-opacity: 0.1;
+  --battle-opacity: 0.32;
 }
 
 /* Ce qui arrive se gare : park jusqu'au dépassement, puis inout jusqu'à la place. */

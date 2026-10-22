@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { battle, olive } from "../../motion";
+import { battle, olive, smoke } from "../../motion";
 import {
   battleDuration,
   battlePath,
@@ -16,6 +16,7 @@ import {
   slipSamples,
   tandem,
 } from "./path";
+import { noise, puffClock, puffMaxRadius, puffState, rearWheel, smokePoolSize } from "./smoke";
 
 const W = 390;
 const H = 844;
@@ -222,5 +223,39 @@ describe("worklets : les fonctions du fil graphique sont marquées", () => {
     for (const name of ["driftOrbit", "poseAt", "curvatureSign"]) {
       expect(text).toMatch(new RegExp(`export function ${name}\\([^)]*\\)[^{]*\\{\\s*"worklet";`));
     }
+  });
+});
+
+describe("la fumée (lot C8)", () => {
+  it("chaque bouffée du pool renaît toutes les `life` ms, décalée de life / count", () => {
+    const life = smoke.battle.life;
+    expect(puffClock(0, 10, life, 0)).toEqual({ born: 0, age: 0, cycle: 0 });
+    expect(puffClock(3, 10, life, 100).age).toBe(-1);
+    const b = puffClock(3, 10, life, 420 + life * 2 + 50);
+    expect(b.cycle).toBe(2);
+    expect(b.age).toBeCloseTo(50);
+  });
+  it("valeurs de l'artefact : naît à 2,5 px, +18 px/s, s'efface en 1,4 s, recule derrière la voiture", () => {
+    const born = puffState(smoke.battle, 0, 10, 20, 0, 0.5, 0.5);
+    expect(born).toMatchObject({ x: 10, y: 20, r: 2.5 });
+    expect(born.alpha).toBeCloseTo(0.24);
+    const later = puffState(smoke.battle, 1000, 10, 20, 0, 0.5, 0.5);
+    expect(later.x).toBeCloseTo(10 - 24);
+    expect(later.r).toBeCloseTo(20.5);
+    expect(puffState(smoke.battle, smoke.battle.life, 0, 0, 0, 0.5, 0.5).alpha).toBe(0);
+    expect(puffMaxRadius(smoke.battle)).toBeCloseTo(2.5 + 18 * 1.4);
+  });
+  it("les roues arrière sont derrière le centre, de part et d'autre", () => {
+    const l = rearWheel(smoke.battle, 0, 0, 0, 26, 13, -1);
+    const r = rearWheel(smoke.battle, 0, 0, 0, 26, 13, 1);
+    expect(l.x).toBeCloseTo(-26 * 0.36);
+    expect(l.y).toBeCloseTo(-13 * 0.42);
+    expect(r.y).toBeCloseTo(13 * 0.42);
+  });
+  it("moins de bouffées sur un petit écran ou un Android ancien", () => {
+    expect(smokePoolSize(390)).toBe(smoke.pool.high);
+    expect(smokePoolSize(340)).toBe(smoke.pool.low);
+    expect(smokePoolSize(412, 26)).toBe(smoke.pool.low);
+    for (let i = 0; i < 50; i++) expect(noise(i, i * 3)).toBeGreaterThanOrEqual(0);
   });
 });

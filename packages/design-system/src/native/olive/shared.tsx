@@ -2,7 +2,7 @@
 // (un seul useFrameCallback par variante, arrêté hors focus et en arrière-plan), le O et sa voiture garée.
 
 import { type ComponentProps, type ReactNode, useEffect, useId, useState } from "react";
-import { AppState, StyleSheet, View } from "react-native";
+import { AppState, Platform, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, {
   type SharedValue,
   useFrameCallback,
@@ -10,8 +10,8 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Circle, G, Path, Rect } from "react-native-svg";
-import { olive } from "../../motion";
+import Svg, { Circle, Defs, G, Path, RadialGradient, Rect, Stop } from "react-native-svg";
+import { olive, smoke } from "../../motion";
 import { type BrandTone, oTransform, useTone } from "../Brand";
 import { brandArt } from "../brandArt";
 import { withAlpha } from "../color";
@@ -19,6 +19,9 @@ import { duration, easings, park } from "../motionHooks";
 import { useTheme } from "../theme";
 import { useOliveScreenActive } from "./activity";
 import { AnimatedCar } from "./brandCar";
+import { poolSlots, smokePoolSize } from "./smoke";
+
+export { poolSlots };
 
 const { carTop } = brandArt;
 const [, , viewW, viewH] = carTop.viewBox;
@@ -212,6 +215,37 @@ export function OrbitCar({
       <CarTop length={length} color={color} steer={(olive.steer * Math.PI) / 180} />
     </Animated.View>
   );
+}
+
+/**
+ * Une bouffée de fumée (lot C8) : un disque en dégradé radial pré-dessiné (`ink-muted` au centre vers transparent, pas
+ * de flou en temps réel), de rayon `maxR` px, que le style animé déplace, met à l'échelle et efface (transform et
+ * opacité seulement : la vue n'est jamais redessinée).
+ */
+export function SmokePuff({ maxR, style }: { maxR: number; style: ComponentProps<typeof Animated.View>["style"] }) {
+  const { t } = useTheme();
+  const id = `sp${useId().replaceAll(":", "")}`;
+  const d = maxR * 2;
+  return (
+    <Animated.View pointerEvents="none" style={[styles.layer, { width: d, height: d, opacity: 0 }, style]}>
+      <Svg width={d} height={d} viewBox="0 0 2 2">
+        <Defs>
+          <RadialGradient id={id} cx="1" cy="1" r="1" gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={t.color.inkMuted} stopOpacity={1} />
+            <Stop offset="1" stopColor={t.color.inkMuted} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Circle cx={1} cy={1} r={1} fill={`url(#${id})`} />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** Taille du pool de bouffées par voiture, selon l'écran et l'appareil (téléphones modestes : moins). */
+export function useSmokePool(kind: "battle" | "orbit" = "battle"): number {
+  const { width } = useWindowDimensions();
+  const api = Platform.OS === "android" ? Number(Platform.Version) : undefined;
+  return smokePoolSize(width, api, kind === "orbit" ? smoke.orbitPool : smoke.pool);
 }
 
 export const styles = StyleSheet.create({
