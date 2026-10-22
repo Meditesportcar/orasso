@@ -6,6 +6,7 @@ import { type EventCard, homeProfileLabels, type MyWeather, weatherCodeLabels } 
 import type { ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
+import { mediaSource } from "@/lib/media";
 import { temperatureRange } from "@/lib/weather";
 
 const { space2, space3, space4 } = tokens.spacing;
@@ -261,7 +262,7 @@ export function PosterRail({
             <View style={[styles.mpArt, { backgroundColor: c.night }]}>
               {(e.generatedPosterUrl ?? e.posterUrl) ? (
                 <Photo
-                  source={{ uri: e.generatedPosterUrl ?? e.posterUrl ?? undefined }}
+                  source={mediaSource(e.generatedPosterUrl ?? e.posterUrl)}
                   style={StyleSheet.absoluteFill as never}
                   accessibilityLabel=""
                 />

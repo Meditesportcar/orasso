@@ -9,7 +9,14 @@
 // `GET /me/home?persona=`.
 
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type HomeData, type HomeNudgeKind, homeLabels, homeProfileLabels, type MyApplication } from "@orasso/shared";
+import {
+  type HomeData,
+  type HomeNudgeKind,
+  type HomeOrganizer,
+  homeLabels,
+  homeProfileLabels,
+  type MyApplication,
+} from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback } from "react";
 import { StyleSheet, View } from "react-native";
@@ -22,6 +29,7 @@ import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { dayCountdown, formatDay, formatHour } from "@/lib/format";
 import { kvGet, kvSet } from "@/lib/kv";
+import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
@@ -33,6 +41,9 @@ import { HeroCard } from "./parts";
 import { todayLine } from "./today";
 
 const { space2, space3 } = tokens.spacing;
+const fileUrl = (url: string | null | undefined) => mediaSource(url)?.uri ?? null;
+/** Le logo de la structure vient aussi de l'API (URL relative). */
+const withLogo = (o: HomeOrganizer | null) => (o ? { ...o, logoUrl: fileUrl(o.logoUrl) } : null);
 const MONTH_MS = 31 * 24 * 3600 * 1000;
 const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
   weekday: "long",
@@ -134,8 +145,9 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
 
   const hero = next ? (
     <HeroCard
-      photoUrl={data?.nextAccess?.id === next.id ? data.nextAccess.photoUrl : null}
-      posterUrl={data?.nextAccess?.id === next.id ? data.nextAccess.posterUrl : null}
+      // Les fichiers de l'API sont relatifs à son hôte (`mediaSource`).
+      photoUrl={data?.nextAccess?.id === next.id ? fileUrl(data.nextAccess.photoUrl) : null}
+      posterUrl={data?.nextAccess?.id === next.id ? fileUrl(data.nextAccess.posterUrl) : null}
       startsAt={next.event.startsAt}
       countdown={dayCountdown(next.event.startsAt, now)}
       hourLabel={homeProfileLabels.openingAt(formatHour(next.event.startsAt))}
@@ -146,7 +158,9 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
           {next.zone ? <SkewTag onPoster>{`Zone ${next.zone.code}`}</SkewTag> : null}
         </>
       }
-      organizer={next.organizer ?? (data?.nextAccess?.id === next.id ? data.nextAccess.organizer : null) ?? null}
+      organizer={withLogo(
+        next.organizer ?? (data?.nextAccess?.id === next.id ? data.nextAccess.organizer : null) ?? null,
+      )}
       meta={[
         ...(next.event.city ? [{ icon: "place" as const, text: next.event.city }] : []),
         ...(arrivalPhrase(next.arrival)
@@ -170,8 +184,8 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     />
   ) : ticket ? (
     <HeroCard
-      photoUrl={ticket.photoUrl}
-      posterUrl={ticket.posterUrl}
+      photoUrl={fileUrl(ticket.photoUrl)}
+      posterUrl={fileUrl(ticket.posterUrl)}
       startsAt={ticket.event.startsAt}
       countdown={dayCountdown(ticket.event.startsAt, now)}
       hourLabel={homeProfileLabels.openingAt(formatHour(ticket.event.startsAt))}
@@ -186,7 +200,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
           </SkewTag>
         </>
       }
-      organizer={ticket.organizer}
+      organizer={withLogo(ticket.organizer)}
       meta={[
         ...(ticket.event.city ? [{ icon: "place" as const, text: ticket.event.city }] : []),
         {
