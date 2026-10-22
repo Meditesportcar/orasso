@@ -1,12 +1,13 @@
 // Lot 52 : casquette Organisateur v2. (1) Un brouillon « Expo de printemps » auquel il manque l'adresse et l'affiche
 // (« Il manque : adresse, affiche. »). (2) L'engagement de l'équipe de MéditeSportCar sur les événements passés, pour des
-// bulles de tailles différentes (Julie 3 événements, Théo 2, Marc 1). (3) Une structure « en vérification » dont le
+// bulles de tailles différentes (lot C5 : de 27 événements pour le plus assidu à 2 pour le plus récent, `TEAM_ENGAGEMENT`). (3) Une structure « en vérification » dont le
 // propriétaire est Pres_Vallespir (la structure de Damien est validée : sceau tournant). Idempotent, en dernier :
 // les affiches générées de tous les événements sont déjà passées, le brouillon reste sans affiche.
 import { randomBytes } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { TEAM_ENGAGEMENT } from "./da-v2";
 import { createAccount, createEvent, DAY, now } from "./helpers";
 
 const byPseudo = (pseudo: string) =>
@@ -47,16 +48,13 @@ export async function seedOrgaV2(hash: string) {
     .set({ posterStyle: null, posterPostKey: null, posterStoryKey: null, posterPhotoKey: null, posterTitle: null })
     .where(eq(t.events.slug, "expo-de-printemps-2027"));
 
-  // Engagement de l'équipe : les événements passés de la structure, tenus par Julie (3), Théo (2) et Marc (1).
+  // Engagement de l'équipe : les événements passés de la structure (éditions du lot C5 comprises), tenus par chacun
+  // un nombre de fois différent.
   const past = await db.query.events.findMany({
     where: sql`${t.events.structureId} = ${structure.id} and ${t.events.status} = 'published' and ${t.events.endsAt} < now()`,
     orderBy: [sql`${t.events.startsAt} desc`],
   });
-  const crew: [string, number][] = [
-    ["Julie_66", 3],
-    ["Theo_66", 2],
-    ["Marc_66", 1],
-  ];
+  const crew = TEAM_ENGAGEMENT;
   let rows = 0;
   for (const [pseudo, count] of crew) {
     const person = await byPseudo(pseudo);

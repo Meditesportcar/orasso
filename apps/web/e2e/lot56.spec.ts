@@ -357,7 +357,7 @@ test("en-tête de l'espace connecté : ni défilement horizontal ni recouvrement
     await page.waitForLoadState("networkidle");
     await noHorizontalScroll(page, `/app/acces ${viewport.width}`);
     // La recherche reste cliquable : rien ne la recouvre.
-    await page.getByTestId("site-search").getByRole("button").click({ trial: true });
+    await page.getByRole("link", { name: "Rechercher", exact: true }).click({ trial: true });
     await ctx.close();
   }
 });
