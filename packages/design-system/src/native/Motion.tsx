@@ -2,9 +2,19 @@
 // Mêmes noms et même rôle que web/components/Motion.tsx. Réduction des animations : fondu `fast` partout.
 
 import { Children, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { type LayoutChangeEvent, Pressable, StyleSheet, View, type ViewProps, type ViewStyle } from "react-native";
+import {
+  BackHandler,
+  type LayoutChangeEvent,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  type ViewProps,
+  type ViewStyle,
+} from "react-native";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { duration, easings, park, startPark, useFadeStyle, useParkStyle } from "./motionHooks";
+import { useOliveScreenActive } from "./olive/activity";
 import { useGroundQuiet } from "./olive/quiet";
 import { angle, useTheme } from "./theme";
 
@@ -205,7 +215,7 @@ export type SheetProps = {
 
 /**
  * Une feuille : voile (`--scrim`) sur tout l'écran, au-dessus de la barre d'onglets (elle se retire tant qu'une
- * feuille est ouverte, voir `useSheetOpen`), la feuille se gare du bas (ou du haut) avec 6 px de dépassement,
+ * feuille de l'écran affiché est ouverte, voir `useTabBarHidden` dans chrome.ts), la feuille se gare du bas (ou du haut) avec 6 px de dépassement,
  * ou part de ce qui l'a ouverte. À poser en dernier enfant d'un conteneur plein écran.
  */
 export function Sheet({ visible, onClose, from = "bottom", origin, children, accessibilityLabel }: SheetProps) {
@@ -214,8 +224,19 @@ export function Sheet({ visible, onClose, from = "bottom", origin, children, acc
   const [mounted, setMounted] = useState(visible);
   const progress = useSharedValue(0);
   const veil = useSharedValue(0);
-  // Lot 39 : feuille ouverte, le fond animé « battle » se tait.
-  useGroundQuiet(visible);
+  // Lot 39 : feuille ouverte, le fond animé « battle » se tait. Lot C1, tour 2 : seule une feuille de l'écran affiché
+  // compte (barre d'onglets et glissement retirés) ; celle d'un écran resté monté derrière ne les retire plus.
+  const shown = useOliveScreenActive();
+  useGroundQuiet(visible && shown);
+  // Retour Android : ferme la feuille de l'écran affiché, au lieu de quitter l'écran en la laissant ouverte.
+  useEffect(() => {
+    if (!visible || !shown || !onClose || Platform.OS === "web") return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      onClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [visible, shown, onClose]);
 
   useEffect(() => {
     if (visible) {
@@ -286,7 +307,8 @@ const styles = StyleSheet.create({
   visible: { overflow: "visible" },
   screens: { flex: 1 },
   screen: { flex: 1 },
-  overlay: { zIndex: 10 },
+  // Lot C1, tour 2 : au-dessus de l'en-tête (zIndex 20) et de tout l'écran, comme `#sheets` (z 50) de l'artefact.
+  overlay: { zIndex: 50 },
   anchor: { ...StyleSheet.absoluteFill, justifyContent: "flex-end" },
   bottom: { justifyContent: "flex-end" },
   top: { justifyContent: "flex-start" },

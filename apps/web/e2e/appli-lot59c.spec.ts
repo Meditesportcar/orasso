@@ -72,7 +72,16 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await expect(note).toContainText("une à deux minutes");
     await audit(page);
     await shot(page, `qr-compte-note-${theme}`);
-    // Tour 2 : quitter Profil par un onglet ferme la feuille (et rend les captures) ; au retour, elle est fermée.
+    // Lot C1 : une feuille ouverte passe au-dessus de la barre d'onglets, qui se retire (artefact) ; le voile la ferme,
+    // la barre revient. Puis : quitter Profil par un onglet et revenir, la feuille reste fermée.
+    await expect(page.getByTestId("persona-tabbar")).toHaveCount(0);
+    // Le voile, en haut de l’écran (le centre est couvert par la feuille).
+    await page
+      .getByRole("button", { name: "Fermer", exact: true })
+      .first()
+      .click({ position: { x: 20, y: 20 } });
+    await expect(page.getByTestId("qr-capture-note")).toHaveCount(0);
+    await expect(page.getByTestId("persona-tabbar")).toBeVisible();
     await page.getByRole("tab", { name: "Explorer" }).click();
     await page.waitForURL(/explorer/, { timeout: 20_000 });
     await page.getByRole("tab", { name: "Profil" }).click();

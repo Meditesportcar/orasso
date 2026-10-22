@@ -35,9 +35,15 @@ function PersonaTabBar({
   // Le glissement a besoin de l'onglet courant et de la navigation du groupe : la barre les lui prête.
   navigator.current = { current, navigate: (route) => navigation.navigate(route) };
   const hidden = useTabBarHidden();
-  if (hidden) return null;
+  // Lot C1, tour 2 : masquée sans être démontée (l'accès flottant garde ses données) ; `display: none` plutôt que
+  // l'opacité : sur le web, les zones d'appui des onglets restaient actives sous une feuille.
   return (
-    <View pointerEvents="box-none" style={styles.floating} testID="persona-tabbar">
+    <View
+      pointerEvents={hidden ? "none" : "box-none"}
+      style={[styles.floating, hidden ? styles.hidden : null]}
+      aria-hidden={hidden}
+      testID={hidden ? "persona-tabbar-hidden" : "persona-tabbar"}
+    >
       {/* Lot 43 : l'accès flottant, au-dessus de la barre dès J-7 (toutes les casquettes qui ont un accès). */}
       <NextAccessBar routeKey={current} tabId={current ? routes[current] : undefined} />
       <TabBar
@@ -135,6 +141,7 @@ export function PersonaTabSet({
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   floating: { position: "absolute", left: 0, right: 0, bottom: 0 },
+  hidden: { display: "none" },
   // Version web (recette) : glisser à la souris sélectionnerait le texte, et une sélection interrompt le geste.
   noSelect: { userSelect: "none" },
 });

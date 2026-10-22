@@ -58,6 +58,9 @@ export const archivoInstances: Record<ArchivoFamily, { stretch: number; weight: 
  * graisse (un écart de 10 % de largeur se voit plus qu'un écart de 100 de graisse).
  */
 export function archivoAt(stretch: number, weight: number, italic = false): ArchivoFamily {
+  // Une largeur illisible (« normal », valeur absente) vaut 100 % ; une graisse illisible, 400.
+  if (!Number.isFinite(stretch)) stretch = 100;
+  if (!Number.isFinite(weight)) weight = 400;
   if (italic && stretch >= 112) return "Archivo-Expanded-BlackItalic";
   let best: ArchivoFamily = "Archivo-Regular";
   let score = Number.POSITIVE_INFINITY;

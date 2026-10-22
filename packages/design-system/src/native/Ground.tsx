@@ -112,7 +112,7 @@ function BattleFx({ still, paused }: { still: boolean; paused: boolean }) {
 export function Ground({
   // Lot C1 (D33, écart R1) : le fond de l'artefact (`.app::before`, lampe et dégradé, sans marquage) par défaut.
   variant = "battle",
-  animated = false,
+  animated,
   still = false,
   paused = false,
   style,
@@ -122,7 +122,12 @@ export function Ground({
   const { t } = useTheme();
   return (
     <View style={[styles.root, { backgroundColor: t.color.ground }, style]} {...rest}>
-      {variant === "battle" ? <BattleFx still={still} paused={paused} /> : <Fx variant={variant} animated={animated} />}
+      {/* Lot C1, tour 2 : `animated={false}` (staff, jour J, tri) immobilise aussi le fond « battle ». */}
+      {variant === "battle" ? (
+        <BattleFx still={still || animated === false} paused={paused} />
+      ) : (
+        <Fx variant={variant} animated={animated ?? false} />
+      )}
       <View style={styles.content}>{children}</View>
     </View>
   );
