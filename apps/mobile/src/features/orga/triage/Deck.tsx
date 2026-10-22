@@ -269,6 +269,7 @@ export function Deck({
         tone="dashed"
         icon="close"
         disabled={busy}
+        layout="column"
         onPress={() => press("refuse")}
         style={styles.grow}
         testID="triage-refuse"
@@ -280,6 +281,7 @@ export function Deck({
         tone="wait"
         icon="wait"
         disabled={busy}
+        layout="column"
         onPress={() => press("waitlist")}
         style={styles.grow}
         testID="triage-waitlist"
@@ -290,6 +292,7 @@ export function Deck({
         variant="primary"
         icon="check"
         disabled={busy}
+        layout="column"
         onPress={() => press("accept")}
         style={styles.grow}
         testID="triage-accept"

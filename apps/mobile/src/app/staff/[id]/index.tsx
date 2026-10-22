@@ -4,7 +4,7 @@
 // s'affiche sans réseau depuis la liste du téléphone. Thème au choix de l'utilisateur (D25b), fond immobile.
 // Lot C4a : mise en page de l'artefact (en-tête de flux sans grand titre, rôle sur carte crème, Scanner moutarde).
 
-import { Button, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { archivoAt, Button, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   communicationLabels,
   staffHomeLabels as L,
@@ -455,7 +455,7 @@ function BarButton({
     >
       <Icon name={icon} size={18} color={ink} />
       {iconOnly ? null : (
-        <Text variant="button" color={ink} style={styles.barText} numberOfLines={1} adjustsFontSizeToFit>
+        <Text variant="bodyStrong" color={ink} style={styles.barText}>
           {label}
         </Text>
       )}
@@ -476,12 +476,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     height: 50,
-    paddingHorizontal: 14,
+    paddingHorizontal: 11,
     borderRadius: 14,
     borderWidth: 1.5,
   },
-  barIcon: { width: 50, paddingHorizontal: 0 },
-  barText: { fontSize: 13, lineHeight: 16 },
+  barIcon: { width: 46, paddingHorizontal: 0 },
+  // Artefact `.btn` : Archivo 118 % 900, 14 px ; ici 115 % 12,5 px pour tenir à 390 px sans couper « Main courante ».
+  barText: {
+    fontFamily: archivoAt(115, 900),
+    fontSize: 12.5,
+    lineHeight: 16,
+    letterSpacing: 0,
+    textTransform: "uppercase",
+  },
   sync: { borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, gap: space2 },
   syncRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   syncActions: { flexDirection: "row", flexWrap: "wrap", gap: space3, paddingLeft: 24 },

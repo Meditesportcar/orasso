@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   actions: { paddingHorizontal: space3, paddingBottom: space3 },
   dot: { width: 18, height: 3, borderRadius: radiusPill },
   certified: { position: "absolute", top: space2, right: space3 },
-  body: { padding: space3, gap: space2, flexShrink: 1 },
+  body: { padding: space3, gap: space2, flexShrink: 1, overflow: "hidden" },
   rows: { gap: space1 },
   row: { flexDirection: "row", gap: space2, alignItems: "flex-start" },
   rowLabel: { width: 92 },
