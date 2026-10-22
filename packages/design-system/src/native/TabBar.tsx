@@ -12,6 +12,7 @@ import { type TabSetName, tabSets } from "../labels";
 import { Icon } from "./Icon";
 import { useParkStyle } from "./motionHooks";
 import { CenterTabO } from "./olive/CenterTabO";
+import { LABEL_ROOM, tabLabelFit } from "./tabLabel";
 import { Text } from "./text";
 import { radius, useTheme } from "./theme";
 
@@ -50,14 +51,13 @@ export const TAB_BAR_INSET = 10;
 /** Place occupée sous le contenu par la barre flottante (hors zone de sécurité) : 66 + 10. */
 export const TAB_BAR_SPACE = TAB_BAR_HEIGHT + TAB_BAR_INSET;
 const O_SIZE = 68;
-
 function TabIcon({ tab, active, moved, ink }: { tab: TabItem; active: boolean; moved: boolean; ink: string }) {
   const { t } = useTheme();
   // Le nouvel onglet se gare, mais seulement quand l'onglet change : pas au premier rendu.
   const park = useParkStyle({ enabled: moved && active && !tab.center, trigger: active });
   return (
     <Animated.View style={[park, active ? styles.iconOn : null]}>
-      <Icon name={tab.icon} size={22} strokeWidth={2} filled={active} color={ink} />
+      <Icon name={tab.icon} size={22} strokeWidth={2} filled={active ? "parts" : false} color={ink} />
       {tab.dot && <View style={[styles.dot, { backgroundColor: t.color.accent }]} />}
     </Animated.View>
   );
@@ -105,7 +105,7 @@ function TabEntry({
             <Icon name={tab.icon} size={30} color={active ? c.accent : c.barInk} />
           )}
         </View>
-        <Text variant="tab" color={ink} style={styles.label}>
+        <Text variant="tab" color={ink} style={[styles.label, tabLabelFit(tab.label)]}>
           {tab.label}
         </Text>
       </Pressable>
@@ -117,10 +117,10 @@ function TabEntry({
       accessibilityLabel={tab.label}
       accessibilityState={{ selected: active }}
       onPress={() => onSelect?.(tab.id)}
-      style={styles.tab}
+      style={[styles.tab, styles.sideTab]}
     >
       <TabIcon tab={tab} active={active} moved={moved} ink={ink} />
-      <Text variant="tab" color={ink} style={styles.label}>
+      <Text variant="tab" color={ink} style={[styles.label, tabLabelFit(tab.label)]}>
         {tab.label}
       </Text>
       {active ? (
@@ -153,14 +153,18 @@ export function TabBar({ set = "exhibitor", tabs, active, onSelect, centerSlot, 
     }
   }, [active]);
   return (
-    <View
-      pointerEvents="box-none"
-      style={[styles.wrap, { paddingTop: TAB_OVERHANG, paddingBottom: TAB_BAR_INSET + safeBottom }, style]}
-    >
+    <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: TAB_BAR_INSET + safeBottom }, style]}>
+      {/* Lot C1, tour 2 : la rangée des onglets inclut le débord du O (22 px), pour que le haut du rond reçoive l'appui
+          (Android ne livre pas un appui hors du cadre du parent) ; le fond de la barre est un calque dessous. */}
       <View
-        accessibilityRole="tablist"
-        style={[styles.bar, { backgroundColor: c.bar, borderColor: c.barShellEdge, boxShadow: t.shadow.shadowTabbar }]}
-      >
+        pointerEvents="none"
+        style={[
+          styles.bar,
+          styles.shell,
+          { backgroundColor: c.bar, borderColor: c.barShellEdge, boxShadow: t.shadow.shadowTabbar },
+        ]}
+      />
+      <View accessibilityRole="tablist" pointerEvents="box-none" style={styles.row}>
         {items.map((tab) => (
           <TabEntry
             key={tab.id}
@@ -178,6 +182,9 @@ export function TabBar({ set = "exhibitor", tabs, active, onSelect, centerSlot, 
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: TAB_BAR_INSET },
+  row: { flexDirection: "row", height: TAB_BAR_HEIGHT + TAB_OVERHANG },
+  shell: { position: "absolute", left: TAB_BAR_INSET, right: TAB_BAR_INSET, top: TAB_OVERHANG },
+  sideTab: { marginTop: TAB_OVERHANG },
   bar: {
     flexDirection: "row",
     height: TAB_BAR_HEIGHT,
@@ -189,7 +196,7 @@ const styles = StyleSheet.create({
   iconOn: { transform: [{ translateY: -2 }] },
   obtn: {
     position: "absolute",
-    top: -TAB_OVERHANG,
+    top: 0,
     alignSelf: "center",
     width: O_SIZE,
     height: O_SIZE,
@@ -200,7 +207,7 @@ const styles = StyleSheet.create({
   },
   // `.tab { white-space: nowrap }` : un libellé long (Événements, Structure) déborde un peu de sa colonne, sans
   // jamais être coupé ; la boîte du texte est plus large que l'onglet et centrée sur lui.
-  label: { width: 96, textAlign: "center" },
+  label: { width: LABEL_ROOM, textAlign: "center" },
   indicator: {
     position: "absolute",
     bottom: 7,

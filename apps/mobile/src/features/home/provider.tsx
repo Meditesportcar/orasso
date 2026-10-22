@@ -1,7 +1,7 @@
 // Accueil du prestataire (lot 43, prototype `s-home` presta) : la mission retenue (affiche, emplacement, arrivée), la
 // météo du jour, le message de l'organisateur, les missions qui t'attendent. Sans mission : une phrase qui dit quoi faire.
 
-import { Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, Plate, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { homeLabels, homeProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet } from "react-native";
@@ -48,8 +48,11 @@ export function ProviderHome() {
             title={mission.event.title}
             tags={
               <>
-                <StatusTag status={accepted ? "retained" : mission.status === "pending" ? "pending" : "waitlist"} />
-                {mission.spotLabel ? <Chip surface="plate">{homeProfileLabels.spot(mission.spotLabel)}</Chip> : null}
+                <StatusTag
+                  status={accepted ? "retained" : mission.status === "pending" ? "pending" : "waitlist"}
+                  on="poster"
+                />
+                {mission.spotLabel ? <Tag on="poster">{homeProfileLabels.spot(mission.spotLabel)}</Tag> : null}
               </>
             }
             organizer={mission.organizer}

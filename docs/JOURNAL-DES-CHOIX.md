@@ -1978,6 +1978,18 @@ Référence : l'artefact DA v2 (`.claude/prototype-v2/index.html`), D33 et D34 ;
 - **Derniers compléments (lot C4b)** : icônes `spark`, `star`, `truck` de l'artefact (`shield` était déjà ajoutée) ; jetons `card-line` (`--card-line`) et `vitrine-from` / `vitrine-to` (dégradé des vitrines #d4552a → #8f1d22). Les segments du socle (`ui/Segments.tsx`) passent déjà à la ligne (`flexWrap`) : le débordement des filtres « Signalements » de l'administration vient d'un composant propre à l'écran (lot C4b), à reprendre avec `Segments` ou une rangée qui défile.
 - **Lot 56 (site public)** : l'audit « mot coupé » échoue sur « Rassemblement » dans la mini-affiche de l'éventail (boîte de 89 px à 390 px). Mesure : 94,5 px avec la largeur d'étiquette du lot C1 (75 %), 98,7 px avec l'ancienne (78,4 %) : le défaut précède le lot et ne dépend que des données du jour (format de l'événement affiché). À traiter dans le site (lot C5).
 
+## Lot C1, tour 2 (relecture Opus et Codex) — 22/10/2026
+
+- **Champs en Sable** : `plate-field` Sable = `--field` de l'artefact (#fffaf0) sous `plate-ink` (#131417) ; test de contraste ≥ 4,5:1 dans les deux thèmes. Béton inchangé (#363941). Avatars et pistes qui lisaient ce jeton deviennent crème en Sable, comme les champs de l'artefact.
+- **Tri sous la barre** : `TriageScreen` (seul écran d'onglet hors `TabScreen`) laisse en bas la place de la barre flottante (`TAB_BAR_SPACE` + zone sûre + 8). Fond immobile (`still`) et en pause hors focus.
+- **Feuilles et retour Android** : `Sheet` ferme au `hardwareBackPress` de l'écran affiché ; seules les feuilles de l'écran affiché (`OliveActivityProvider`) comptent pour retirer la barre et le glissement : une feuille restée ouverte derrière ne bloque plus la navigation. Voile au-dessus de l'en-tête (z 50, `#sheets` de l'artefact).
+- **Barre** : masquée par `display: none` (plus démontée ; l'opacité laissait les onglets actifs sur le web) ; la rangée des onglets inclut le débord du O, dont le haut reçoit l'appui ; libellés longs ajustés (instance 100 %, puis taille jusqu'à 7,5 px) pour ne pas toucher le voisin ; onglet actif : seules les parties `.fillme` de l'artefact se remplissent (`Icon filled="parts"`, `iconFillParts`).
+- **En-tête** : pastille « Organisateur » réduite au logo sous 380 px (ou sous 400 px avec un texte agrandi), libellé accessible inchangé ; cibles d'au moins 44 px (boutons, ✕, pastille). L'Administration (hors artefact, sans onglet Profil) garde sa pastille, seul retour vers Mon profil.
+- **Fond** : `Ground animated={false}` immobilise aussi le fond « battle » (staff : scan, liste, boutique, drive ; site : idem).
+- **Affiche d'Accueil** : étiquettes `Tag on="poster"` (statut, zone, billet, accréditation, emplacement) au lieu des pastilles de plaque, illisibles sur la crème ; `StatusTag` et `ApplicationStatusTag` prennent `on="poster"` (prop facultative, interface inchangée).
+- **Moutarde sur carte claire** : texte moutarde sur plaque en `accent-text` (`Chip` accent et allumée, heure des cartes d'Explorer, étoiles d'avis des Sorties) ; les fonds pleins restent moutarde.
+- **Robustesse** : `archivoAt` accepte une largeur non numérique (100 %) ; commentaire de `Sheet` corrigé ; recette `appli-lot59c` adaptée (la barre se retire sous la feuille du QR de compte, le voile la ferme).
+
 ## Lot C2a, passionné (partie a) : Accueil, Explorer, carte, Sorties, Mon accès, Boîte — 22/10/2026
 
 Référence : l'artefact DA v2 (D33) ; écarts de l'audit `audit-visuel/ECARTS.md` § 2, § 5 et § 8. Paires « artefact | réel » dans le relais (`lot-c2a-captures/`).

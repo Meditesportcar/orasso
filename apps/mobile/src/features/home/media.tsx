@@ -2,7 +2,7 @@
 // consignes de l'organisation (visibles une fois accrédité), « À couvrir bientôt », les contenus. Sans reportage : une
 // phrase qui dit quoi faire.
 
-import { Chip, Icon, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, Icon, Plate, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { homeLabels, homeProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
@@ -57,11 +57,13 @@ export function MediaHome() {
             tags={
               accredited ? (
                 <>
-                  <Chip surface="plate">{homeProfileLabels.accredited}</Chip>
-                  <Chip surface="plate">Badge presse</Chip>
+                  <Tag on="poster" tone="acc">
+                    {homeProfileLabels.accredited}
+                  </Tag>
+                  <Tag on="poster">Badge presse</Tag>
                 </>
               ) : (
-                <StatusTag status={report.status === "pending" ? "pending" : "waitlist"} />
+                <StatusTag status={report.status === "pending" ? "pending" : "waitlist"} on="poster" />
               )
             }
             organizer={report.organizer}

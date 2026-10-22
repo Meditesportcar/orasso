@@ -747,7 +747,7 @@ function PastTicket({
       {app.review?.given ? (
         <View style={styles.chipLine}>
           <SkewTag tone="line">Avis donné</SkewTag>
-          <Text variant="bodyStrong" color={c.accent} accessibilityLabel={starsLabel(app.review.given.rating)}>
+          <Text variant="bodyStrong" color={c.accentText} accessibilityLabel={starsLabel(app.review.given.rating)}>
             {"★".repeat(app.review.given.rating)}
           </Text>
         </View>

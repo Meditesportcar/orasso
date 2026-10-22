@@ -2,11 +2,23 @@
 // segments Véhicules / Prestataires / Liste d'attente / Liste, les compteurs en tête (mêmes que le site, en direct par
 // le canal `event:{id}:triage`) et, dessous, la file par glissement, la liste d'attente ou le mode liste. Toutes les
 // règles (capacité, liste d'attente, délais, verrouillage) restent dans l'API : l'écran n'affiche que ce qu'elle répond.
-import { Button, Chip, ChipRow, Counters, Ground, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  Button,
+  Chip,
+  ChipRow,
+  Counters,
+  Ground,
+  Plate,
+  TAB_BAR_SPACE,
+  Text,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
 import { orgaV2Labels, triageAppLabels } from "@orasso/shared";
 import { useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
 import { api } from "@/lib/api";
@@ -34,6 +46,7 @@ export function TriageScreen() {
   const { structureId, structureName } = useOrga();
   const { refreshMe } = useSession();
   const focused = useIsFocused();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ event?: string }>();
   const at = useNow(60_000);
   // Lot 40 : le tri se fait en glissant les cartes ; le glissement entre onglets est coupé sur cet écran.
@@ -101,9 +114,10 @@ export function TriageScreen() {
   ];
 
   return (
-    <Ground animated={false} style={styles.fill}>
+    <Ground still paused={!focused} style={styles.fill}>
       <TopBar />
-      <View style={styles.body}>
+      {/* Lot C1, tour 2 : la barre d'onglets flotte par-dessus ; le bas de l'écran lui laisse sa place. */}
+      <View style={[styles.body, { paddingBottom: TAB_BAR_SPACE + insets.bottom + space2 }]}>
         <TabTitle
           title={triageAppLabels.title}
           label={event ? orgaV2Labels.triRemaining(event.title, counters.data?.pending ?? 0) : structureName}
