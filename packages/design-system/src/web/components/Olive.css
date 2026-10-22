@@ -309,18 +309,18 @@
   z-index: 1;
 }
 .o-live__o.is-out .o-olive__park {
-  transform: translateX(130px);
-  transition: transform var(--live-out) cubic-bezier(0.6, 0, 0.8, 0.4);
+  transform: translateX(var(--live-out-x));
+  transition: transform var(--live-out) var(--live-ease-out);
 }
 .o-live__o.is-parked .o-olive__park {
   animation: o-live-park var(--live-park) var(--ease-park) both;
 }
 @keyframes o-live-park {
   0% {
-    transform: translateX(-120px);
+    transform: translateX(var(--live-from-x));
   }
   62% {
-    transform: translateX(7px);
+    transform: translateX(var(--live-overshoot));
   }
   100% {
     transform: translateX(0);

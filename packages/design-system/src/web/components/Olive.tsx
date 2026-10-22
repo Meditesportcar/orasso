@@ -663,10 +663,10 @@ class Paint {
   smoke = "";
   sprite: HTMLCanvasElement | null = null;
   private at = -1;
-  read(el: Element, t: number, ink?: string): void {
+  read(el: Element, t: number, ink?: () => string): void {
     if (this.at >= 0 && t - this.at < 0.5) return;
     this.at = t;
-    this.ink = ink ?? cssColor(el, "--ink", this.ink);
+    this.ink = ink ? ink() : cssColor(el, "--ink", this.ink);
     this.accent = cssColor(el, "--accent", this.accent);
     this.night = cssColor(el, "--night", this.night);
     const s = cssColor(el, "--ink-muted", this.smoke);
@@ -889,7 +889,7 @@ export function LiveO({ size = 170, mode = "tandem", scale = 0.9, className }: L
       // Mouvement réduit : la battle figée après 53 images (fumée et voitures immobiles), tirage déterministe.
       const e = new LiveEngine(mode, scale, smokeCap(), seededRandom(7));
       measure(e);
-      e.paint.read(o, 0, getComputedStyle(o).color);
+      e.paint.read(o, 0, () => getComputedStyle(o).color);
       setParked(false);
       begin(e);
       for (let i = 0; i < 53; i++) {
@@ -919,7 +919,7 @@ export function LiveO({ size = 170, mode = "tandem", scale = 0.9, className }: L
       raf = 0;
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      eng.paint.read(o, eng.T, getComputedStyle(o).color);
+      eng.paint.read(o, eng.T, () => getComputedStyle(o).color);
       begin(eng);
       const idle = eng.frame(ctx, dt, u, () => setParked(true));
       if (!idle) {
@@ -962,6 +962,10 @@ export function LiveO({ size = 170, mode = "tandem", scale = 0.9, className }: L
             height: size,
             "--live-out": ms(LIVE.out),
             "--live-park": ms(LIVE.parkIn),
+            "--live-ease-out": `cubic-bezier(${LIVE.outEase.join(",")})`,
+            "--live-out-x": `${LIVE.outX}px`,
+            "--live-from-x": `${LIVE.fromX}px`,
+            "--live-overshoot": `${LIVE.overshoot}px`,
           } as CSSProperties
         }
       >
