@@ -154,16 +154,18 @@ export function BattleLayer({ running }: { running: boolean }) {
       style={[StyleSheet.absoluteFill, { opacity: battle.opacity[theme] }]}
       onLayout={onLayout}
     >
-      {running &&
-        poolSlots(MAX_CARS).map((i) =>
-          poolSlots(pool).map((slot) => (
-            <BattlePuff key={`p${i}-${slot}`} index={i} slot={slot} count={pool} pack={pack} clock={clock} />
-          )),
-        )}
-      {running &&
-        colors.map((color, i) => (
-          <BattleCar key={color + String(i)} index={i} pack={pack} clock={clock} color={color} />
-        ))}
+      {/* Lot M3 : voitures et bouffées restent montées, invisibles hors meute (`pack` nul). Les démonter à la perte du
+          focus laissait Reanimated écrire, pendant le montage de l'écran suivant, sur des vues déjà détruites : un
+          avertissement natif par vue et par image (« synchronouslyUpdateUIProps failed », ~900 par seconde mesurés sur
+          le Xiaomi) qui bloquait le fil graphique 3 à 5 s à chaque changement d'écran. */}
+      {poolSlots(MAX_CARS).map((i) =>
+        poolSlots(pool).map((slot) => (
+          <BattlePuff key={`p${i}-${slot}`} index={i} slot={slot} count={pool} pack={pack} clock={clock} />
+        )),
+      )}
+      {colors.map((color, i) => (
+        <BattleCar key={color + String(i)} index={i} pack={pack} clock={clock} color={color} />
+      ))}
     </View>
   );
 }
