@@ -39,6 +39,8 @@ export type DraftPhoto = {
   /** Cadres proposés par la détection (mode Automatique). */
   detected?: PlateRect[];
   detection?: Detection;
+  /** Lot M2 : plaques lues sur la photo (normalisées), pour préremplir le numéro ; `probable` : filet de sécurité. */
+  readings?: { reading: string; probable: boolean }[];
   /** Photo locale sans cadre : la personne a confirmé « Envoyer sans flouter : aucune plaque visible ». */
   noPlate?: boolean;
 };

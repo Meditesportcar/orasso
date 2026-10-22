@@ -6,9 +6,9 @@ import {
   dayFor,
   type ExpressInvitePublic,
   type ExpressSignup,
+  formatPlate,
   isMultiDay,
   isStaffModeOpen,
-  formatPlate,
   normalizePlate,
   vehicleCreateSchema,
 } from "@orasso/shared";

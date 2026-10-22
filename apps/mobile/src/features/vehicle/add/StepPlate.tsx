@@ -1,17 +1,29 @@
-// Étape 5 de l'ajout (lot 51, prototype `s-vadd` « Sa plaque, floutée ») : Automatique (plaques repérées sur
+// Étape Plaque de l'ajout (lot 51, prototype `s-vadd` « Sa plaque, floutée ») : Automatique (plaques repérées sur
 // l'appareil, cadres proposés) ou À la main (cadre déplaçable et agrandissable, par photo) ; puis le numéro de plaque,
 // privé, facultatif pour un ancien véhicule. Le flou est appliqué par l'API à l'envoi et il est définitif : la personne
 // voit chaque cadre avant d'envoyer (garde de l'irréversibilité, H3).
+//
+// Interface (lot M2, pour le conteneur du parcours refait au lot M1) — composant d'étape autonome :
+// - entrée : `draft` (les photos `draft.photos`, chacune avec ses cadres `rects`, sa détection `detection` et ses
+//   lectures `readings` posées par `detectionPatch` de `./plateStep` après `detectPlateReadings`, plus `plate`,
+//   `former`, `status`, `unregistered`) et `draft.blurMode` ;
+// - sortie : `onRects(i, rects)` (cadres de la photo i), `onNoPlate(i, bool)` (« Envoyer sans flouter » de la photo i,
+//   confirmé ici photo par photo), `onMode(mode)`, et `patch({ plate | former | status | unregistered })` ;
+// - état : `stepIssue(<étape Plaque>, draft)` de `./model` dit ce qui bloque (photo à régler, numéro obligatoire).
+// Le numéro est prérempli d'après la lecture des photos (`plateSuggestion`), à confirmer ; un format étranger n'est
+// qu'un avertissement (`plateWarning`), l'API stocke une forme unique (lot M2).
 import { Button, CheckboxField, Chip, ChipRow, TextField, tokens } from "@orasso/design-system/native";
 import { archiveStatusChoices, vehicleWizardLabels as L, MAX_PLATE_RECTS, nextPlateFrame } from "@orasso/shared";
-import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Image, StyleSheet, View } from "react-native";
 
+import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { mediaSource } from "@/lib/media";
 import { Muted } from "@/ui/Muted";
 import { type BlurMode, blurredCount, type Draft, type DraftPhoto, detectionUnavailable } from "./model";
 import { PhotoBadge, PlateFrameEditor } from "./PlateFrameEditor";
 import { ChoiceRow, StepHead, StepNote } from "./parts";
+import { plateSuggestion, plateWarning } from "./plateStep";
 
 const { space2 } = tokens.spacing;
 
@@ -44,6 +56,19 @@ export function StepPlate({
   const badge = photo ? badgeOf(photo, draft.blurMode) : null;
   const total = blurredCount(draft);
   const unavailable = detectionUnavailable(draft.photos);
+  // « Envoyer sans flouter » : confirmé photo par photo, la photo sous les yeux (lot M2, retour 17).
+  const [confirmNoPlate, setConfirmNoPlate] = useState<number | null>(null);
+  const confirmPhoto = confirmNoPlate === null ? undefined : draft.photos[confirmNoPlate];
+  // Numéro prérempli par la lecture des photos (à confirmer) ; une fois proposé, jamais réécrit s'il est effacé.
+  const suggestion = plateSuggestion(draft.photos, draft.unregistered);
+  const proposed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!suggestion || proposed.current === suggestion || draft.plate.trim()) return;
+    proposed.current = suggestion;
+    patch({ plate: suggestion });
+  }, [suggestion, draft.plate, patch]);
+  const plateHelp =
+    suggestion && draft.plate.trim() === suggestion ? L.plateRead : (plateWarning(draft.plate) ?? undefined);
   return (
     <>
       <StepHead title={L.plateTitle} text={L.plateText} />
@@ -136,7 +161,7 @@ export function StepPlate({
               title={L.noPlate}
               icon="check"
               selected={Boolean(photo.noPlate)}
-              onPress={() => onNoPlate(i, !photo.noPlate)}
+              onPress={() => (photo.noPlate ? onNoPlate(i, false) : setConfirmNoPlate(i))}
               testID="plate-none"
             />
           ) : null}
@@ -153,6 +178,7 @@ export function StepPlate({
         editable={!draft.unregistered}
         placeholder="AB-123-CD"
         maxLength={20}
+        help={draft.unregistered ? undefined : plateHelp}
         testID="vehicle-plate"
       />
       <ChoiceRow
@@ -178,6 +204,28 @@ export function StepPlate({
         onChange={(unregistered) => patch({ unregistered, plate: unregistered ? "" : draft.plate })}
       />
       <StepNote icon="plate">{L.privacyNote}</StepNote>
+      <ConfirmSheet
+        visible={confirmPhoto !== undefined}
+        title={L.noPlateConfirmTitle}
+        body={L.noPlateConfirmBody}
+        confirmLabel={L.noPlateConfirm}
+        confirmIcon="check"
+        onConfirm={() => {
+          if (confirmNoPlate !== null) onNoPlate(confirmNoPlate, true);
+          setConfirmNoPlate(null);
+        }}
+        onClose={() => setConfirmNoPlate(null)}
+      >
+        {confirmPhoto ? (
+          <Image
+            source={confirmPhoto.remoteId ? mediaSource(confirmPhoto.uri) : { uri: confirmPhoto.uri }}
+            style={[styles.confirmPhoto, { aspectRatio: confirmPhoto.width / Math.max(1, confirmPhoto.height) }]}
+            resizeMode="contain"
+            accessibilityLabel={L.photoN((confirmNoPlate ?? 0) + 1, draft.photos.length)}
+            testID="plate-none-photo"
+          />
+        ) : null}
+      </ConfirmSheet>
     </>
   );
 }
@@ -187,4 +235,5 @@ const styles = StyleSheet.create({
   modeRow: { flexDirection: "row", alignItems: "center", gap: space2 },
   grow: { flex: 1, textAlign: "center" },
   stack: { gap: space2 },
+  confirmPhoto: { width: "100%", maxHeight: 280, borderRadius: tokens.radius.radiusMd },
 });
