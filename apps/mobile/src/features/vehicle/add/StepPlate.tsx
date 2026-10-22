@@ -20,6 +20,7 @@ import { Image, StyleSheet, View } from "react-native";
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { mediaSource } from "@/lib/media";
 import { Muted } from "@/ui/Muted";
+import { Overlay } from "@/ui/Overlay";
 import { type BlurMode, blurredCount, type Draft, type DraftPhoto, detectionUnavailable } from "./model";
 import { PhotoBadge, PlateFrameEditor } from "./PlateFrameEditor";
 import { ChoiceRow, StepHead, StepNote } from "./parts";
@@ -204,28 +205,31 @@ export function StepPlate({
         onChange={(unregistered) => patch({ unregistered, plate: unregistered ? "" : draft.plate })}
       />
       <StepNote icon="plate">{L.privacyNote}</StepNote>
-      <ConfirmSheet
-        visible={confirmPhoto !== undefined}
-        title={L.noPlateConfirmTitle}
-        body={L.noPlateConfirmBody}
-        confirmLabel={L.noPlateConfirm}
-        confirmIcon="check"
-        onConfirm={() => {
-          if (confirmNoPlate !== null) onNoPlate(confirmNoPlate, true);
-          setConfirmNoPlate(null);
-        }}
-        onClose={() => setConfirmNoPlate(null)}
-      >
-        {confirmPhoto ? (
-          <Image
-            source={confirmPhoto.remoteId ? mediaSource(confirmPhoto.uri) : { uri: confirmPhoto.uri }}
-            style={[styles.confirmPhoto, { aspectRatio: confirmPhoto.width / Math.max(1, confirmPhoto.height) }]}
-            resizeMode="contain"
-            accessibilityLabel={L.photoN((confirmNoPlate ?? 0) + 1, draft.photos.length)}
-            testID="plate-none-photo"
-          />
-        ) : null}
-      </ConfirmSheet>
+      {/* Zone des feuilles de l'écran : sinon le pied du parcours (Retour / Envoyer) passe par-dessus la feuille. */}
+      <Overlay>
+        <ConfirmSheet
+          visible={confirmPhoto !== undefined}
+          title={L.noPlateConfirmTitle}
+          body={L.noPlateConfirmBody}
+          confirmLabel={L.noPlateConfirm}
+          confirmIcon="check"
+          onConfirm={() => {
+            if (confirmNoPlate !== null) onNoPlate(confirmNoPlate, true);
+            setConfirmNoPlate(null);
+          }}
+          onClose={() => setConfirmNoPlate(null)}
+        >
+          {confirmPhoto ? (
+            <Image
+              source={confirmPhoto.remoteId ? mediaSource(confirmPhoto.uri) : { uri: confirmPhoto.uri }}
+              style={[styles.confirmPhoto, { aspectRatio: confirmPhoto.width / Math.max(1, confirmPhoto.height) }]}
+              resizeMode="contain"
+              accessibilityLabel={L.photoN((confirmNoPlate ?? 0) + 1, draft.photos.length)}
+              testID="plate-none-photo"
+            />
+          ) : null}
+        </ConfirmSheet>
+      </Overlay>
     </>
   );
 }
