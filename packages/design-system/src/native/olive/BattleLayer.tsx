@@ -1,14 +1,16 @@
 // Le calque des meutes du fond « battle » (lot 39, V14) : une paire (parfois un train de trois) toutes les 9 à 14 s, qui
 // entre par un bord, enchaîne ses virages en glisse et ressort. Entre deux meutes, rien ne tourne : pas d'horloge
-// image par image, seulement une minuterie. Opacité 18 % (Béton) / 10 % (Sable).
+// image par image, seulement une minuterie. Opacité de l'artefact : 50 % (Béton) / 32 % (Sable). Lot C8 : la fumée des
+// roues arrière quand la voiture glisse, en pool fixe de bouffées par voiture (smoke.ts), sous les voitures.
 
 import { useEffect, useState } from "react";
 import { type LayoutChangeEvent, StyleSheet, View } from "react-native";
 import Animated, { type SharedValue, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import { battle } from "../../motion";
+import { battle, smoke } from "../../motion";
 import { useTheme } from "../theme";
 import { type BattlePath, battleDuration, battlePath, type PackCar, poseAt, seededRandom, tandem } from "./path";
-import { CarTop, carBox, useOliveClock } from "./shared";
+import { CarTop, carBox, poolSlots, SmokePuff, useOliveClock, useSmokePool } from "./shared";
+import { noise, puffClock, puffMaxRadius, puffStyle, rearWheel } from "./smoke";
 
 type Pack = BattlePath & { cars: PackCar[]; speed: number };
 const MAX_CARS = 3;
@@ -50,6 +52,53 @@ function BattleCar({
   );
 }
 
+const SPEC = smoke.battle;
+const PUFF_R = puffMaxRadius(SPEC);
+
+/** Une bouffée du pool de la voiture `index` : elle naît entre ses roues arrière si la voiture glisse. */
+function BattlePuff({
+  index,
+  slot,
+  count,
+  pack,
+  clock,
+}: {
+  index: number;
+  slot: number;
+  count: number;
+  pack: SharedValue<Pack | null>;
+  clock: SharedValue<number>;
+}) {
+  const style = useAnimatedStyle(() => {
+    "worklet";
+    const p = pack.value;
+    const car = p?.cars[index];
+    if (!p || !car) return { opacity: 0 };
+    const b = puffClock(slot, count, SPEC.life, clock.value);
+    if (b.age < 0) return { opacity: 0 };
+    const s = (b.born * p.speed) / 1000 - car.lag;
+    if (s < 0 || s > p.length) return { opacity: 0 };
+    const pose = poseAt(p, s, car.side);
+    if (Math.abs(pose.slip) < SPEC.minSlip) return { opacity: 0 };
+    const axle = rearWheel(SPEC, pose.x, pose.y, pose.heading, battle.carLength, battle.carWidth, 0);
+    return puffStyle(
+      SPEC,
+      b.age,
+      axle.x,
+      axle.y,
+      pose.heading,
+      pose.heading - pose.slip,
+      (p.speed * SPEC.life) / 1000 / count,
+      battle.carWidth * SPEC.wheelSide,
+      noise(slot + index * 31, b.cycle),
+      noise(b.cycle + 7, slot + index * 17),
+      PUFF_R,
+      smoke.density,
+    );
+  });
+  return <SmokePuff maxR={PUFF_R} style={style} />;
+}
+
 /** Les meutes, tant que `running` (écran au focus, appli au premier plan, pas de feuille, animations permises). */
 export function BattleLayer({ running }: { running: boolean }) {
   const { t, theme } = useTheme();
@@ -57,6 +106,7 @@ export function BattleLayer({ running }: { running: boolean }) {
   const [live, setLive] = useState(false);
   const pack = useSharedValue<Pack | null>(null);
   const clock = useOliveClock(live && running);
+  const pool = useSmokePool();
 
   useEffect(() => {
     if (!running || !size.w || !size.h) {
@@ -96,13 +146,20 @@ export function BattleLayer({ running }: { running: boolean }) {
     const { width, height } = event.nativeEvent.layout;
     if (Math.abs(width - size.w) > 1 || Math.abs(height - size.h) > 1) setSize({ w: width, h: height });
   };
-  const colors = [t.color.accent, t.color.poster, t.color.accent];
+  // Artefact : tête moutarde, puis encre et moutarde en alternance.
+  const colors = [t.color.accent, t.color.ink, t.color.accent];
   return (
     <View
       pointerEvents="none"
       style={[StyleSheet.absoluteFill, { opacity: battle.opacity[theme] }]}
       onLayout={onLayout}
     >
+      {running &&
+        poolSlots(MAX_CARS).map((i) =>
+          poolSlots(pool).map((slot) => (
+            <BattlePuff key={`p${i}-${slot}`} index={i} slot={slot} count={pool} pack={pack} clock={clock} />
+          )),
+        )}
       {running &&
         colors.map((color, i) => (
           <BattleCar key={color + String(i)} index={i} pack={pack} clock={clock} color={color} />

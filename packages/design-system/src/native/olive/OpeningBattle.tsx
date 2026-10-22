@@ -1,15 +1,22 @@
 // OpeningBattle : l'ouverture de l'appli (lot 39, remplace OpeningScreen ; V12 : 3 s à chaque lancement). Le O, agrandi
 // au centre de l'écran ; deux voitures vues de dessus driftent autour en tandem, l'une chasse l'autre ; la voiture de
 // tête quitte le drift et se gare dans le O (elle devient la voiture du logo), la chasse s'efface, puis le logotype se
-// compose (le O reprend sa place, les lettres se découvrent). Pas de traces de pneus. Un toucher n'importe où passe
+// compose (le O reprend sa place, les lettres se découvrent). Pas de traces de pneus. Lot C8 : la fumée des roues
+// arrière derrière les deux voitures (artefact, classe `Drift`), en pool fixe de bouffées (smoke.ts). Un toucher n'importe où passe
 // l'ouverture (état final, puis `onDone`) : le staff qui relance l'appli sur le parking n'attend pas 3 s.
 // Réduction des animations : logo composé, fondu de 120 ms.
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, {
+  cancelAnimation,
+  type SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
-import { olive } from "../../motion";
+import { olive, smoke } from "../../motion";
 import { type BrandTone, LogoLetters, oTransform, useTone } from "../Brand";
 import { brandArt } from "../brandArt";
 import { Ground } from "../Ground";
@@ -17,7 +24,20 @@ import { duration, easings } from "../motionHooks";
 import { useTheme } from "../theme";
 import { AnimatedCar, CAR_OUT_LEFT } from "./brandCar";
 import { driftOrbit } from "./path";
-import { CAR_UNITS, fadeIn, O_CENTER, ORBIT, OrbitCar, useOliveActive, useOliveClock } from "./shared";
+import {
+  CAR_UNITS,
+  ellipsePerimeter,
+  fadeIn,
+  O_CENTER,
+  ORBIT,
+  OrbitCar,
+  poolSlots,
+  SmokePuff,
+  useOliveActive,
+  useOliveClock,
+  useSmokePool,
+} from "./shared";
+import { noise, puffClock, puffMaxRadius, puffStyle, rearWheel } from "./smoke";
 
 const { logoViewBox, carTop } = brandArt;
 const [, , viewW, viewH] = logoViewBox;
@@ -30,6 +50,66 @@ const PARK_AT = olive.open - olive.park - duration.poster;
 const COMPOSE_AT = PARK_AT + olive.park;
 /** Garée, la caisse de la voiture vue de dessus (60 unités sur 64) prend la longueur de la voiture du logo (66). */
 const PARKED_SCALE = (66 / 60) * (carTop.box[2] / CAR_UNITS);
+
+const SPEC = smoke.orbit;
+/** Échelle des rayons de la fumée (artefact : k = 0,6 pour l'accueil). */
+const SMOKE_K = smoke.openingK;
+const CAR_RATIO = carTop.box[3] / carTop.box[2];
+
+/**
+ * Une bouffée derrière la voiture de tête (`chase` faux) ou la chasse : elle naît tant que la voiture drifte (avant que
+ * la tête parte se garer, `parkT` en tours), puis vit sa vie. `kz` : px par unité du O agrandi.
+ */
+function OrbitPuff({
+  chase,
+  slot,
+  count,
+  clock,
+  parkT,
+  fade,
+  kz,
+  stagePx,
+}: {
+  chase: boolean;
+  slot: number;
+  count: number;
+  clock: SharedValue<number>;
+  parkT: SharedValue<number>;
+  fade: SharedValue<number>;
+  kz: number;
+  stagePx: number;
+}) {
+  const maxR = puffMaxRadius(SPEC, kz, SMOKE_K);
+  const length = CAR_UNITS * kz;
+  // Distance parcourue sur le tour entre deux bouffées (périmètre approché de l'ellipse du drift).
+  const gap = (ellipsePerimeter(ORBIT.radius, ORBIT.radius * ORBIT.squash) * kz * SPEC.life) / olive.orbit / count;
+  const style = useAnimatedStyle(() => {
+    "worklet";
+    const b = puffClock(slot, count, SPEC.life, clock.value);
+    if (b.age < 0) return { opacity: 0 };
+    if (parkT.value > 0 && b.born > parkT.value * olive.orbit) return { opacity: 0 };
+    const t = b.born / olive.orbit - (chase ? olive.tandemGap : 0);
+    const p = driftOrbit(t, ORBIT.radius + (chase ? 8 : 0), ORBIT.squash);
+    const axle = rearWheel(SPEC, p.x * kz, p.y * kz, p.heading, length, length * CAR_RATIO, 0);
+    return puffStyle(
+      SPEC,
+      b.age,
+      stagePx / 2 + axle.x,
+      stagePx / 2 + axle.y,
+      p.heading,
+      p.heading - p.slip,
+      gap,
+      length * CAR_RATIO * SPEC.wheelSide,
+      noise(slot + (chase ? 41 : 0), b.cycle),
+      noise(b.cycle + 3, slot + (chase ? 13 : 0)),
+      maxR,
+      smoke.density * fade.value,
+      kz,
+      SMOKE_K,
+    );
+  });
+  return <SmokePuff maxR={maxR} style={style} />;
+}
 
 export type OpeningBattleProps = {
   /** Appelé à la fin (3 s, ou 120 ms avec la réduction des animations, ou au toucher) : l'appli passe à la suite. */
@@ -71,6 +151,8 @@ export function OpeningBattleLogo({
   const park = useSharedValue(0);
   const parkT = useSharedValue(0);
   const fade = useSharedValue(1);
+  const smokeOn = useSharedValue(0);
+  const pool = useSmokePool("orbit");
   const [running, setRunning] = useState(false);
   const clock = useOliveClock(!reducedMotion && active && running);
   const done = useRef(onDone);
@@ -89,6 +171,7 @@ export function OpeningBattleLogo({
     chase.value = 0;
     lead.value = 0;
     park.value = 0;
+    smokeOn.value = withTiming(0, { duration: duration.fast, easing: easings.linear });
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `playKey` rejoue l'ouverture (recette)
@@ -105,7 +188,9 @@ export function OpeningBattleLogo({
     chase.value = 1;
     lead.value = 1;
     park.value = 0;
+    parkT.value = 0;
     clock.value = 0;
+    smokeOn.value = 1;
     setRunning(true);
     timers.current = [
       setTimeout(() => {
@@ -120,6 +205,10 @@ export function OpeningBattleLogo({
         lead.value = withTiming(0, { duration: duration.fast, easing: easings.linear });
         compose.value = withTiming(1, { duration: duration.poster, easing: easings.park });
       }, COMPOSE_AT),
+      setTimeout(() => {
+        // La fumée qui reste s'efface en `fast` avant que l'horloge s'arrête.
+        smokeOn.value = withTiming(0, { duration: duration.fast, easing: easings.linear });
+      }, olive.open - duration.fast),
       setTimeout(() => {
         setRunning(false);
         done.current?.();
@@ -179,6 +268,32 @@ export function OpeningBattleLogo({
       accessibilityLabel="Orasso"
       style={[styles.box, { width, height: boxH }]}
     >
+      {/* La fumée sous le O (l'artefact peint son canvas derrière le logo). */}
+      {!reducedMotion && running && (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.stage,
+            { width: stagePx, height: stagePx, left: (width - stagePx) / 2, top: (boxH - stagePx) / 2 },
+          ]}
+        >
+          {[false, true].map((isChase) =>
+            poolSlots(pool).map((slot) => (
+              <OrbitPuff
+                key={`${isChase ? "c" : "l"}${slot}`}
+                chase={isChase}
+                slot={slot}
+                count={pool}
+                clock={clock}
+                parkT={parkT}
+                fade={smokeOn}
+                kz={kz}
+                stagePx={stagePx}
+              />
+            )),
+          )}
+        </View>
+      )}
       <Animated.View style={[{ width, height }, logoStyle]}>
         <Animated.View style={[styles.layer, styles.clip, { height }, lettersStyle]}>
           <Svg width={width} height={height} viewBox={logoViewBox.join(" ")}>

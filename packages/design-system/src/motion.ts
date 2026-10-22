@@ -150,11 +150,16 @@ export const smoke = {
    * des ~42 bouffées par seconde et par roue du canvas de l'artefact. Petit écran ou Android ancien : `low`.
    */
   pool: { low: 6, high: 10 },
+  /** Autour du O, les voitures vont deux fois plus vite (un tour en 1,4 s) : plus de bouffées pour une traînée continue. */
+  orbitPool: { low: 10, high: 16 },
+  /** Échelle `k` des rayons de la fumée dans l'ouverture (artefact : `Drift` de l'accueil, k = 0,6). */
+  openingK: 0.6,
   /**
-   * Natif : avec 7 à 12 fois moins de bouffées que le canvas, chacune est plus opaque pour garder la même densité à
-   * l'œil (mesuré sur les captures « artefact | réel »).
+   * Natif : une bouffée par pas de la voiture (entre les deux roues arrière, étirée le long de la trace jusqu'à la
+   * suivante) au lieu de ~42 bouffées par seconde et par roue : chacune est plus opaque pour garder la même densité à
+   * l'œil (réglé sur les captures « artefact | réel »).
    */
-  density: 2.4,
+  density: 2.6,
   /** Site (canvas) : nombre de bouffées vivantes plafonné ; au-delà, les naissances attendent. */
   webCap: 160,
 } as const;
