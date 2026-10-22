@@ -48,6 +48,16 @@ async function go(page: Page, path: string) {
 }
 
 const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: true });
+/** Lot C1 : la barre d'onglets est masquée sur les pages de flux ; on referme la page (✕) avant de toucher l'onglet. */
+async function toTab(page: Page, name: string) {
+  if (
+    !(await tab(page, name)
+      .isVisible()
+      .catch(() => false))
+  )
+    await page.getByRole("button", { name: "Fermer", exact: true }).first().click();
+  await tab(page, name).click();
+}
 
 type Audit = { greens: string[]; truncated: string[]; horizontalScroll: boolean; noIcon: string[] };
 
@@ -199,7 +209,7 @@ test("super admin : structure à vérifier, signalement, sanction, 2FA d'un comp
   expect(JSON.stringify(rest.data)).toContain("verified");
 
   // --- 2. Un signalement : prise en charge, puis une sanction ---------------------------------------------------
-  await tab(page, "Signalements").click();
+  await toTab(page, "Signalements");
   const item = page.getByTestId("report-item").first();
   await expect(item).toBeVisible({ timeout: 30_000 });
   await shot("04-signalements-beton");
@@ -411,7 +421,7 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
 
   // Le lien profond : la demande arrive au Journal de l'équipe et ouvre la file des demandes d'aide.
   deliverNow("equipe@orasso.local");
-  await tab(page, "Équipe").click();
+  await toTab(page, "Équipe");
   await page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
   await page.getByTestId("inbox-journal").click();
   await page

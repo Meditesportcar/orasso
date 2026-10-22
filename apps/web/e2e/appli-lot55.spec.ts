@@ -135,7 +135,8 @@ async function closeSheet(page: Page) {
   await page
     .getByRole("button", { name: "Fermer", exact: true })
     .last()
-    .click({ position: { x: 60, y: 15 } });
+    // Lot C1 : l'en-tête couvre le haut du voile ; on touche le voile sous l'en-tête.
+    .click({ position: { x: 60, y: 120 } });
   await page.waitForTimeout(400);
 }
 
