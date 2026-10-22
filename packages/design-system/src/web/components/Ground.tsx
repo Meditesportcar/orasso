@@ -24,8 +24,9 @@ export type GroundProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
  * Variante `battle` : vignette, contre-jour, lampe qui respire lentement, grain, puis les meutes (Olive.tsx).
  */
 export function Ground({
-  variant = "screen",
-  animated = false,
+  // Lot C1 (D33, écart R1) : le fond de l'artefact par défaut, comme le site public.
+  variant = "battle",
+  animated,
   still = false,
   fixed = false,
   className,
@@ -33,15 +34,17 @@ export function Ground({
   ...rest
 }: GroundProps) {
   const motion = (name: string) => (animated ? `o-anim-ambient-${name}` : undefined);
+  // Lot C1, tour 2 : `animated={false}` explicite immobilise aussi le fond « battle » (terrain).
+  const quiet = still || animated === false;
   return (
     <div className={cx("o-ground", `o-ground--${variant}`, fixed && "o-ground--fixed", className)} {...rest}>
       {variant === "battle" ? (
         <div className="o-ground__fx" aria-hidden="true">
           <div className="o-ground__layer o-ground__vignette" />
           <div className="o-ground__layer o-ground__rim" />
-          <div className={cx("o-ground__layer o-ground__lamp", !still && "o-anim-ambient-breath")} />
+          <div className={cx("o-ground__layer o-ground__lamp", !quiet && "o-anim-ambient-breath")} />
           <Grain />
-          <BattleLayer still={still} />
+          <BattleLayer still={quiet} />
         </div>
       ) : (
         <div className="o-ground__fx" aria-hidden="true">

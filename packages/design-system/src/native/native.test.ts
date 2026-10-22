@@ -3,9 +3,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { tokens } from "../tokens";
 import { withAlpha } from "./color";
-import { archivoFamilies, archivoFamily } from "./fontFamily";
+import { archivoAt, archivoFamilies, archivoFamily } from "./fontFamily";
 import { linearLine, parseColor, parseGradient, radialGeometry, repeatingBands } from "./gradientCss";
 import { encodeAlphaPng, fractalNoiseTile, textureTile, toBase64 } from "./noise";
+import { tabLabelFit } from "./tabLabel";
 import { textStyle, textStyles } from "./textStyles";
 
 const dir = import.meta.dirname;
@@ -89,16 +90,29 @@ describe("le O vivant (lot 39) : variantes, alias, branchements", () => {
   });
   it("la barre d'onglets porte le O vivant, la feuille fait taire le fond", () => {
     expect(read("TabBar.tsx")).toContain("<CenterTabO active={active}");
-    expect(read("Motion.tsx")).toContain("useGroundQuiet(visible)");
+    expect(read("Motion.tsx")).toContain("useGroundQuiet(visible && shown)");
+    expect(read("Motion.tsx")).toContain("hardwareBackPress");
     expect(read("Ground.tsx")).toContain('variant === "battle"');
   });
 });
 
 describe("polices statiques", () => {
-  it("chaque style de texte a sa famille, trois largeurs", () => {
+  it("chaque style de texte a sa famille, largeurs de l'artefact (lot C1)", () => {
     expect(archivoFamily("wide", 900, true)).toBe("Archivo-Expanded-BlackItalic");
     expect(archivoFamily("wide", 900, false)).toBe("Archivo-Expanded-Black");
-    expect(archivoFamily("narrow", 700, false)).toBe("Archivo-Narrow-Bold");
+    // Étiquettes : 75 % 700 (.t-label) ; chiffres 62 % 800 (.t-num) ; boutons 118 % 900 ; onglets 115 % 800.
+    expect(archivoFamily("narrow", 700, false)).toBe("Archivo-75-Bold");
+    expect(textStyle("label").fontFamily).toBe("Archivo-75-Bold");
+    expect(textStyle("numberNarrow").fontFamily).toBe("Archivo-62-ExtraBold");
+    expect(textStyle("button").fontFamily).toBe("Archivo-118-Black");
+    expect(textStyle("tab").fontFamily).toBe("Archivo-115-ExtraBold");
+    expect(archivoAt(110, 850)).toBe("Archivo-110-Heavy");
+    expect(archivoAt(70, 900)).toBe("Archivo-70-Black");
+    // Largeur non numérique (font-stretch « normal ») : 100 %.
+    expect(archivoAt(Number.parseFloat("normal"), 800)).toBe("Archivo-ExtraBold");
+    expect(archivoAt(Number.NaN, Number.NaN)).toBe("Archivo-Regular");
+    expect(tabLabelFit("Accueil")).toEqual({});
+    expect(tabLabelFit("Candidatures").fontFamily).toBe("Archivo-ExtraBold");
     expect(archivoFamily("normal", 400, false)).toBe("Archivo-Regular");
     expect(archivoFamily("normal", 600, false)).toBe("Archivo-SemiBold");
     expect(archivoFamily("normal", 800, false)).toBe("Archivo-ExtraBold");
@@ -138,12 +152,17 @@ describe("dégradés des jetons", () => {
     // « transparent » prend la teinte du voisin : pas de liseré gris.
     expect(g.stops[2]?.color).toMatchObject({ r: 233, g: 184, b: 36, a: 0 });
   });
-  it("faisceau : bords francs (double position) ; marquage : bandes de 8 px tous les 112 px", () => {
+  it("faisceau : bords francs (double position) ; plus de marquage (lot C1, artefact DA v2)", () => {
     const beam = parseGradient(tokens.groundFx.beton.faisceau);
     if (beam.kind !== "linear") throw new Error();
     expect(beam.angle).toBe(170);
     expect(beam.stops.map((s) => s.at)).toEqual([0, 0.36, 0.36, 0.56, 0.56]);
-    const lines = parseGradient(tokens.groundFx.beton.marquage);
+    expect(tokens.groundFx.beton.marquage).toBe("none");
+    expect(tokens.groundFx.sable.marquage).toBe("none");
+    // Le calcul des bandes répétées reste testé sur l'ancien marquage.
+    const lines = parseGradient(
+      "repeating-linear-gradient(170deg, transparent 0 104px, rgba(243,235,221,0.18) 104px 112px)",
+    );
     if (lines.kind !== "linear") throw new Error();
     expect(lines.repeating).toBe(true);
     const bands = repeatingBands(lines, 390, 800);
@@ -198,5 +217,26 @@ describe("textures (feTurbulence recalculé)", () => {
     expect(grain.uri.startsWith("data:image/png;base64,")).toBe(true);
     const brush = textureTile(tokens.barBrush.sable, 32, 8);
     expect(brush.width).toBe(32);
+  });
+});
+
+describe("socle de l'artefact DA v2 (lot C1)", () => {
+  it("initiales d'organisateur : trois lettres au plus (repli .orglogo)", async () => {
+    const { initialsOf } = await import("../initials");
+    expect(initialsOf("MéditeSportCar")).toBe("MSC");
+    expect(initialsOf("Club Auto 66 Roussillon")).toBe("CA6");
+    expect(initialsOf("turbo")).toBe("TU");
+  });
+  it("icône Boîte : le bac à courrier de l'artefact, plus la bulle", async () => {
+    const { iconShapes } = await import("../icons");
+    expect(JSON.stringify(iconShapes.inbox)).not.toBe(JSON.stringify(iconShapes.chat));
+    expect(JSON.stringify(iconShapes.inbox)).toContain("M3 13l3-8h12l3 8");
+  });
+  it("plaque = carte du thème (claire en Sable), barres unies", () => {
+    expect(tokens.color.sable.plate).toBe(tokens.color.sable.surface);
+    expect(tokens.color.beton.plate).toBe(tokens.color.beton.surface);
+    expect(tokens.color.sable.plateInk).toBe(tokens.color.sable.ink);
+    for (const name of ["AppBar.tsx", "TabBar.tsx"])
+      expect(readFileSync(resolve(dir, name), "utf8")).not.toContain("<Metal");
   });
 });

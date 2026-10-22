@@ -54,7 +54,7 @@ export function ExplorerScreen() {
 
   const count = activeFilters(filters);
   return (
-    <TabScreen title={explorerLabels.title}>
+    <TabScreen>
       <View style={styles.head} testID="explorer-head">
         <SearchLine q={q} onChange={setQ} position={position} dept={dept} />
         <ChipRow>

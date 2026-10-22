@@ -6,7 +6,7 @@
 // La carte, les compteurs et les sorties viennent des candidatures gardées sur le téléphone (lisibles hors ligne) ;
 // le reste vient de `GET /me/home?persona=`.
 
-import { Button, Chip, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Chip, Plate, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   defaultHomeWidgets,
   type HomeData,
@@ -133,8 +133,8 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       title={next.event.title}
       tags={
         <>
-          <ApplicationStatusTag app={next} />
-          {next.zone ? <Chip surface="plate">{`Zone ${next.zone.code}`}</Chip> : null}
+          <ApplicationStatusTag app={next} on="poster" />
+          {next.zone ? <Tag on="poster">{`Zone ${next.zone.code}`}</Tag> : null}
         </>
       }
       organizer={next.organizer ?? (data?.nextAccess?.id === next.id ? data.nextAccess.organizer : null) ?? null}
@@ -167,12 +167,10 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       title={ticket.event.title}
       tags={
         <>
-          <Chip surface="plate" selected>
+          <Tag on="poster" tone="acc">
             Billet
-          </Chip>
-          <Chip surface="plate">
-            {ticket.priceCents == null ? "Entrée public · gratuite" : "Entrée public · payante"}
-          </Chip>
+          </Tag>
+          <Tag on="poster">{ticket.priceCents == null ? "Entrée public · gratuite" : "Entrée public · payante"}</Tag>
         </>
       }
       organizer={ticket.organizer}
@@ -251,7 +249,6 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
 
   return (
     <TabScreen
-      title={homeLabels.title}
       onRefresh={async () => {
         await Promise.all([reload(), home.reload(), staff.reload()]);
       }}

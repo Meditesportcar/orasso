@@ -1,15 +1,29 @@
-// AppBar : l'en-tête en métal brossé. Voir docs/design-system/components/AppBar.
+// AppBar : l'en-tête. Voir docs/design-system/components/AppBar.
+// Lot C1 (D33) : reproduit l'artefact DA v2. Barre d'onglet = `.appbar` (58 px, fond `--bar` uni, filet bas 2 px
+// `--bar-line`, logotype 118 px, boutons `.abtn` 38 px rayon 12, pastille `.capchip` « Organisateur ») ; plus de
+// métal brossé. Écran de flux = `.flowbar` (pas de barre : titre italique et ✕ carré `.closex` posés sur le fond).
 
 import type { ReactNode } from "react";
 import { Image, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from "react-native";
 import type { IconName } from "../icons";
-import { Logo, Monogram } from "./Brand";
-import { Button } from "./Button";
-import { textShadowOf } from "./color";
+import { initialsOf } from "../initials";
+import { Logo } from "./Brand";
+import { archivoAt } from "./fontFamily";
 import { Icon } from "./Icon";
-import { Metal } from "./Metal";
 import { Text } from "./text";
 import { angle, radius, spacing, useTheme } from "./theme";
+
+/** `.appbar` de l'artefact : 58 px sous la zone de sécurité. */
+export const APP_BAR_HEIGHT = 58;
+/** Cibles tactiles d'au moins 44 px autour des boutons de 38 px (lot C1, tour 2). */
+const HIT_38 = { top: 3, bottom: 3, left: 3, right: 3 };
+/**
+ * La pastille « Organisateur » complète demande environ 375 px (logotype, pastille, deux boutons, marges) : sous 380 px,
+ * ou sous 400 px avec un texte agrandi, elle se réduit au logo rond (le nom reste dans son libellé accessible).
+ */
+const CAPCHIP_FULL_MIN = 400;
+/** `.ab-logo` de l'artefact : 118 px (112 px sous 360 px). */
+const LOGO_WIDTH = 118;
 
 type ActionProps = {
   icon: IconName;
@@ -26,11 +40,10 @@ type ActionProps = {
   children?: ReactNode;
 };
 
-/** Une pastille d'action de l'en-tête : 34 px, `radius-chip`. */
+/** Un bouton de l'en-tête (`.abtn`) : 38 px, rayon 12, contour 1,5 px ; compteur `.dot` moutarde. */
 export function AppBarAction({ icon, label, onPress, onLongPress, on = false, count, children }: ActionProps) {
   const { t } = useTheme();
   const c = t.color;
-  // DA v2 : la barre est nuit dans les deux thèmes, la pastille aussi (plus de variante Sable).
   return (
     <Pressable
       accessibilityRole="button"
@@ -38,19 +51,16 @@ export function AppBarAction({ icon, label, onPress, onLongPress, on = false, co
       accessibilityState={{ selected: on }}
       onPress={onPress}
       onLongPress={onLongPress}
+      hitSlop={HIT_38}
       style={[
         styles.action,
         children ? styles.avatar : null,
-        {
-          borderWidth: 1.5,
-          borderColor: c.line,
-          backgroundColor: on ? c.barInk : "transparent",
-        },
+        { borderColor: c.barControlEdge, backgroundColor: on ? c.barInk : "transparent" },
       ]}
     >
-      {children ?? <Icon name={icon} size={18} color={on ? c.bar : c.barInk} />}
+      {children ?? <Icon name={icon} size={20} color={on ? c.bar : c.barInk} />}
       {count ? (
-        <View style={[styles.count, { backgroundColor: c.accent, boxShadow: t.shadow.neonAccent }]}>
+        <View style={[styles.count, { backgroundColor: c.accent, boxShadow: `0 0 0 2px ${c.bar}` }]}>
           <Text variant="credit" color={c.accentInk} style={styles.countText}>
             {count}
           </Text>
@@ -60,15 +70,60 @@ export function AppBarAction({ icon, label, onPress, onLongPress, on = false, co
   );
 }
 
-/** Pastille de casquette à côté du logotype (DA v2) : logo rond de la structure, ou son initiale. */
-export type AppBarPersona = { logoUrl: string | null; label: string };
+/**
+ * Pastille de casquette à côté du logotype (`.capchip`) : logo rond de la structure (ou ses initiales sur moutarde)
+ * et le nom de la casquette. L'artefact ne la montre que pour l'organisateur.
+ */
+export type AppBarPersona = { logoUrl: string | null; label: string; role?: string; hint?: string };
+
+function CapChip({
+  persona,
+  compact = false,
+  onPress,
+  testID,
+}: {
+  persona: AppBarPersona;
+  /** Logo rond seul (écran étroit ou texte agrandi) ; le nom de la casquette reste dans le libellé accessible. */
+  compact?: boolean;
+  onPress?: () => void;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      accessibilityRole={onPress ? "button" : "image"}
+      accessibilityLabel={persona.role ? `${persona.label}, ${persona.role}` : persona.label}
+      accessibilityHint={persona.hint}
+      onPress={onPress}
+      disabled={!onPress}
+      hitSlop={{ top: 7, bottom: 7 }}
+      testID={testID}
+      style={[styles.capchip, persona.role && !compact ? null : styles.capchipRound, { backgroundColor: c.barChip }]}
+    >
+      <View style={[styles.capLogo, { backgroundColor: persona.logoUrl ? c.night : c.accent }]}>
+        {persona.logoUrl ? (
+          <Image source={{ uri: persona.logoUrl }} style={styles.capImage} />
+        ) : (
+          <Text variant="credit" color={c.accentInk} style={styles.capInitials}>
+            {initialsOf(persona.label)}
+          </Text>
+        )}
+      </View>
+      {persona.role && !compact ? (
+        <Text variant="label" color={c.barInk} style={styles.capText} maxFontSizeMultiplier={1.2}>
+          {persona.role}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
 
 export type AppBarProps = {
   /**
-   * `tab` (DA v2, lot 38) : le logotype toujours à gauche (128 px, 112 px sous 360 px), la pastille de casquette,
-   * puis Recherche et Boîte à droite (✕ Fermer si `onClose`) ; le titre de la page est un `BigTitle` sous la barre.
-   * `flow` : écran de flux (Scan, Jour J, Candidature) : le monogramme, le titre, l'action de contexte éventuelle,
-   * puis ✕ Fermer en dernier. `home` et `page` : barres v1, dépréciées (remplacées par `tab` au lot 40).
+   * `tab` : le logotype à gauche, la pastille de casquette, puis Recherche et Boîte à droite (✕ Fermer si `onClose`) ;
+   * le titre de la page est sous la barre. `flow` : écran de flux (`.flowbar` de l'artefact) : titre italique, ligne
+   * de faits, compteur éventuel, ✕ carré. `home` et `page` : barres v1, dépréciées (rendues comme `tab` et `flow`).
    */
   kind: "tab" | "flow" | "home" | "page";
   title?: string;
@@ -76,40 +131,67 @@ export type AppBarProps = {
   facts?: string;
   /** Écran de flux : compteur de contexte (« 62 / 116 »). */
   counter?: string;
-  /** Pastille Recherche (écrans à onglets). */
+  /** Bouton Recherche (écrans à onglets). */
   onSearch?: () => void;
   searchOn?: boolean;
-  /** Pastille Cloche, avec son compteur ; elle perd son compteur quand on est sur la Boîte. */
+  /** Barres v1 : cloche, avec son compteur. */
   onNotifications?: () => void;
   notificationsOn?: boolean;
   notificationCount?: number;
-  /** Avatar à droite : photo du compte, ou logo de la structure active. Il ouvre « Moi ». */
+  /** Barres v1 : avatar à droite. */
   avatar?: ReactNode;
   onAvatar?: () => void;
-  /** Appui long sur l'avatar : retour au passionné quand une autre casquette est active (lot 16). */
   onAvatarLongPress?: () => void;
   avatarLabel?: string;
-  /** Une autre casquette a quelque chose à traiter : pastille moutarde sur l'avatar. */
   avatarDot?: boolean;
-  /** Barre `tab` : pastille de casquette à côté du logotype. */
+  /** Barre `tab` : pastille de casquette à côté du logotype, et son appui. */
   persona?: AppBarPersona;
+  onPersona?: () => void;
+  /** Barre `tab` : appui (et appui long) sur le logotype. */
+  onLogo?: () => void;
+  onLogoLongPress?: () => void;
+  logoLabel?: string;
+  logoHint?: string;
   /** Barre `tab` : la Boîte, avec son compteur ; elle perd son compteur quand on y est. */
   onInbox?: () => void;
   inboxOn?: boolean;
   inboxCount?: number;
-  /** Écran de flux : ✕ Fermer (et, en barre `tab`, une fermeture facultative). */
+  /** ✕ Fermer (obligatoire en flux ; facultatif en barre `tab`). */
   onClose?: () => void;
   closeLabel?: string;
   /** Déborde de la marge de 16 px de l'écran, sur toute sa largeur. */
   bleed?: boolean;
-  /** Hauteur de la zone de sécurité du haut (encoche, barre d'état), ajoutée au-dessus des 64 px. */
+  /** Hauteur de la zone de sécurité du haut (encoche, barre d'état), ajoutée au-dessus de la barre. */
   safeTop?: number;
   style?: ViewStyle;
 };
 
+/** Le ✕ carré de l'artefact (`.closex`) : 38 px, rayon 12. Sur la barre : contour clair ; en flux : fond de carte. */
+function CloseX({ label, onPress, onBar }: { label: string; onPress?: () => void; onBar: boolean }) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={HIT_38}
+      testID="appbar-close"
+      style={[
+        styles.action,
+        onBar
+          ? { borderColor: c.barControlEdge }
+          : { backgroundColor: c.surface, borderColor: c.plateLine, borderWidth: 1.5 },
+      ]}
+    >
+      <Icon name="close" size={20} color={onBar ? c.barInk : c.ink} />
+    </Pressable>
+  );
+}
+
 /**
- * L'en-tête : 64 px de métal brossé bordé d'un filet moutarde. La marque est toujours le premier élément à
- * gauche (même O, même place d'un écran à l'autre) ; la navigation « Fermer » est toujours à droite.
+ * L'en-tête d'onglet : 58 px de barre unie bordée d'un filet moutarde. La marque est toujours le premier élément à
+ * gauche ; la navigation « Fermer » est toujours à droite.
  */
 export function AppBar({
   kind,
@@ -127,6 +209,11 @@ export function AppBar({
   avatarLabel = "Moi et mes casquettes",
   avatarDot,
   persona,
+  onPersona,
+  onLogo,
+  onLogoLongPress,
+  logoLabel = "Orasso, accueil",
+  logoHint,
   onInbox,
   inboxOn,
   inboxCount,
@@ -136,113 +223,113 @@ export function AppBar({
   safeTop = 0,
   style,
 }: AppBarProps) {
-  const { t, theme } = useTheme();
-  const { width } = useWindowDimensions();
+  const { t } = useTheme();
+  const { width, fontScale } = useWindowDimensions();
   const c = t.color;
-  const showTabActions = kind !== "flow";
-  const barStyle = [
-    styles.bar,
-    {
-      height: spacing.barTop + safeTop,
-      paddingTop: 12 + safeTop,
-      borderBottomWidth: t.barEdgeHeader,
-      borderBottomColor: c.barEdge,
-      boxShadow: t.shadow.shadowBarTop,
-    },
-    bleed && { marginHorizontal: -spacing.space4 },
-    style,
-  ];
-  if (kind === "tab") {
+  if (kind === "flow" || kind === "page") {
+    // `.flowbar` : posée sur le fond, sans barre ni filet.
     return (
-      <View accessibilityRole="header" style={barStyle}>
-        <Metal />
-        <Logo width={width < 360 ? 112 : spacing.brandLogo} tone="dark" />
-        {persona ? (
-          <View
-            accessible
-            accessibilityRole="image"
-            accessibilityLabel={persona.label}
-            style={[styles.persona, { borderColor: c.line, backgroundColor: c.night }]}
-          >
-            {persona.logoUrl ? (
-              <Image source={{ uri: persona.logoUrl }} style={styles.personaImage} />
-            ) : (
-              <Text variant="label" color={c.barInk}>
-                {persona.label.trim().charAt(0).toUpperCase()}
-              </Text>
-            )}
-          </View>
-        ) : null}
-        <View style={styles.spacer} />
-        <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} />
-        <AppBarAction
-          icon="inbox"
-          label="Boîte"
-          onPress={onInbox}
-          on={inboxOn}
-          count={inboxOn ? undefined : inboxCount}
-        />
-        {onClose ? <Button variant="close" label={closeLabel} onPress={onClose} onBar /> : null}
-      </View>
-    );
-  }
-  const emboss = textShadowOf(t.shadow.embossBar);
-  const titleSize =
-    facts && kind === "flow" ? { fontSize: 12, lineHeight: 14 } : facts ? { fontSize: 13, lineHeight: 15 } : null;
-  return (
-    <View accessibilityRole="header" style={barStyle}>
-      <Metal />
-      {kind === "home" ? <Logo width={spacing.brandLogo} tone="dark" /> : <Monogram tone="dark" />}
-      {kind === "home" ? (
-        <View style={styles.spacer} />
-      ) : (
+      <View
+        accessibilityRole="header"
+        style={[
+          styles.flow,
+          { paddingTop: 12 + safeTop },
+          bleed ? null : styles.flowInset,
+          bleed && { marginHorizontal: -spacing.space4, paddingHorizontal: spacing.space4 },
+          style,
+        ]}
+      >
         <View style={styles.heading}>
-          <Text variant="title" color={c.barInk} style={[titleSize, emboss]} accessibilityRole="header">
+          <Text variant="posterM" color={c.ink} style={styles.flowTitle} accessibilityRole="header">
             {title}
           </Text>
           {facts ? (
-            <Text variant="label" color={c.barMuted} numberOfLines={1}>
+            <Text variant="caption" color={c.inkMuted} numberOfLines={1} style={styles.flowFacts}>
               {facts}
             </Text>
           ) : null}
         </View>
-      )}
-      {kind === "flow" && counter ? (
-        <View
-          style={[
-            styles.counter,
-            { borderColor: c.accent, backgroundColor: theme === "sable" ? c.accent : "transparent" },
-            { transform: [{ skewX: `${angle.skew}deg` }] },
-          ]}
-        >
-          <View style={{ transform: [{ skewX: `${-angle.skew}deg` }] }}>
-            <Text variant="meta" color={theme === "sable" ? c.accentInk : c.accent}>
-              {counter}
-            </Text>
+        {counter ? (
+          <View style={[styles.counter, { backgroundColor: c.accent, transform: [{ skewX: `${angle.skew}deg` }] }]}>
+            <View style={{ transform: [{ skewX: `${-angle.skew}deg` }] }}>
+              <Text variant="meta" color={c.accentInk}>
+                {counter}
+              </Text>
+            </View>
           </View>
-        </View>
+        ) : null}
+        {onClose || kind === "flow" ? <CloseX label={closeLabel} onPress={onClose} onBar={false} /> : null}
+      </View>
+    );
+  }
+  return (
+    <View
+      accessibilityRole="header"
+      style={[
+        styles.bar,
+        {
+          height: APP_BAR_HEIGHT + safeTop,
+          paddingTop: safeTop,
+          backgroundColor: c.bar,
+          borderBottomColor: c.barEdge,
+          boxShadow: t.shadow.shadowBarTop,
+        },
+        bleed && { marginHorizontal: -spacing.space4 },
+        style,
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={logoLabel}
+        accessibilityHint={logoHint}
+        onPress={onLogo}
+        onLongPress={onLogoLongPress}
+        disabled={!onLogo && !onLogoLongPress}
+        testID="topbar-logo"
+      >
+        <Logo width={width < 360 ? 112 : LOGO_WIDTH} tone="dark" />
+      </Pressable>
+      {persona ? (
+        <CapChip
+          persona={persona}
+          compact={width < 380 || (fontScale > 1 && width < CAPCHIP_FULL_MIN)}
+          onPress={onPersona}
+          testID="topbar-persona"
+        />
       ) : null}
-      {showTabActions && (
+      <View style={styles.spacer} />
+      {kind === "home" ? (
         <>
-          <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} />
-          <AppBarAction
-            icon="bell"
-            label="Journal"
-            onPress={onNotifications}
-            on={notificationsOn}
-            count={notificationsOn ? undefined : notificationCount}
-          />
+          {onSearch ? <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} /> : null}
+          {onNotifications ? (
+            <AppBarAction
+              icon="bell"
+              label="Journal"
+              onPress={onNotifications}
+              on={notificationsOn}
+              count={notificationsOn ? undefined : notificationCount}
+            />
+          ) : null}
           {avatar ? (
             <AppBarAction icon="profile" label={avatarLabel} onPress={onAvatar} onLongPress={onAvatarLongPress}>
               {avatar}
-              {avatarDot ? (
-                <View style={[styles.dot, { backgroundColor: c.accent, boxShadow: t.shadow.neonAccentSoft }]} />
-              ) : null}
+              {avatarDot ? <View style={[styles.dot, { backgroundColor: c.accent }]} /> : null}
             </AppBarAction>
           ) : null}
         </>
+      ) : (
+        <>
+          <AppBarAction icon="search" label="Rechercher" onPress={onSearch} on={searchOn} />
+          <AppBarAction
+            icon="inbox"
+            label="Boîte"
+            onPress={onInbox}
+            on={inboxOn}
+            count={inboxOn ? undefined : inboxCount}
+          />
+        </>
       )}
-      {kind === "flow" && <Button variant="close" label={closeLabel} onPress={onClose} onBar />}
+      {onClose ? <CloseX label={closeLabel} onPress={onClose} onBar /> : null}
     </View>
   );
 }
@@ -250,47 +337,62 @@ export function AppBar({
 const styles = StyleSheet.create({
   bar: {
     position: "relative",
+    zIndex: 20,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 18,
+    paddingLeft: 14,
+    paddingRight: 12,
+    borderBottomWidth: 2,
   },
+  flow: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 10 },
+  flowInset: { paddingHorizontal: spacing.space4 },
+  flowTitle: { fontSize: 16, lineHeight: 17 },
+  flowFacts: { fontSize: 12.5 },
   spacer: { flex: 1 },
   heading: { flex: 1, minWidth: 0 },
-  counter: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderWidth: 1.5,
-    borderRadius: radius.radiusSm,
-  },
+  counter: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: radius.radiusSm },
   action: {
-    width: 34,
-    height: 34,
+    width: 38,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.radiusChip,
+    borderRadius: 12,
+    borderWidth: 1.5,
   },
   avatar: { padding: 3 },
-  persona: {
-    width: 30,
+  capchip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     height: 30,
+    paddingLeft: 4,
+    paddingRight: 10,
     borderRadius: radius.radiusPill,
-    borderWidth: 1.5,
+  },
+  capchipRound: { paddingRight: 4 },
+  capLogo: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.radiusPill,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
-  personaImage: { width: "100%", height: "100%" },
+  capImage: { width: "100%", height: "100%" },
+  capInitials: { fontFamily: archivoAt(75, 900), fontSize: 8.5, lineHeight: 10, letterSpacing: 0 },
+  capText: { fontFamily: archivoAt(100, 800), fontSize: 11, letterSpacing: 0.33 },
   count: {
     position: "absolute",
-    top: -6,
-    right: -6,
-    minWidth: 16,
-    paddingVertical: 2,
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
     paddingHorizontal: 4,
-    borderRadius: radius.radiusPill,
+    borderRadius: 9,
     alignItems: "center",
+    justifyContent: "center",
   },
-  countText: { textAlign: "center" },
+  countText: { textAlign: "center", fontFamily: archivoAt(100, 800), fontSize: 10.5, lineHeight: 12, letterSpacing: 0 },
   dot: { position: "absolute", top: -3, right: -3, width: 8, height: 8, borderRadius: radius.radiusPill },
 });

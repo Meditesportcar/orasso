@@ -747,7 +747,7 @@ function PastTicket({
       {app.review?.given ? (
         <View style={styles.chipLine}>
           <Chip surface="plate">Avis donné</Chip>
-          <Text variant="bodyStrong" color={c.accent} accessibilityLabel={starsLabel(app.review.given.rating)}>
+          <Text variant="bodyStrong" color={c.accentText} accessibilityLabel={starsLabel(app.review.given.rating)}>
             {"★".repeat(app.review.given.rating)}
           </Text>
         </View>

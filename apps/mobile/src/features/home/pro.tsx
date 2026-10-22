@@ -32,7 +32,7 @@ export function ProHome() {
   const name = me?.profile.firstName ?? me?.profile.pseudo ?? "";
 
   return (
-    <TabScreen title={homeLabels.title} onRefresh={async () => void (await home.reload())}>
+    <TabScreen onRefresh={async () => void (await home.reload())}>
       <Greeting line={todayLine(now, pro?.name ?? me?.pro?.name ?? null)} name={name} />
 
       {home.error && !home.data ? <Notice>{homeLabels.loadFailed}</Notice> : null}

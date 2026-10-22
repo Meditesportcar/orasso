@@ -18,7 +18,7 @@ import { useTheme } from "./theme";
 export type GroundProps = Omit<ViewProps, "children"> & {
   /**
    * `screen` : fond d'un écran de téléphone ; `site` : marquage au pas de 200 px, halo resserré ; `battle` (DA v2) :
-   * lampe à sodium et contre-jour (Béton) ou fond uni (Sable), avec les meutes de drift.
+   * lampe à sodium et contre-jour (Béton) ou fond uni (Sable), avec les meutes de drift. Par défaut depuis le lot C1.
    */
   variant?: "screen" | "site" | "battle";
   /**
@@ -110,8 +110,9 @@ function BattleFx({ still, paused }: { still: boolean; paused: boolean }) {
  * un écran n'a pas le droit de modifier son fond.
  */
 export function Ground({
-  variant = "screen",
-  animated = false,
+  // Lot C1 (D33, écart R1) : le fond de l'artefact (`.app::before`, lampe et dégradé, sans marquage) par défaut.
+  variant = "battle",
+  animated,
   still = false,
   paused = false,
   style,
@@ -121,7 +122,12 @@ export function Ground({
   const { t } = useTheme();
   return (
     <View style={[styles.root, { backgroundColor: t.color.ground }, style]} {...rest}>
-      {variant === "battle" ? <BattleFx still={still} paused={paused} /> : <Fx variant={variant} animated={animated} />}
+      {/* Lot C1, tour 2 : `animated={false}` (staff, jour J, tri) immobilise aussi le fond « battle ». */}
+      {variant === "battle" ? (
+        <BattleFx still={still || animated === false} paused={paused} />
+      ) : (
+        <Fx variant={variant} animated={animated ?? false} />
+      )}
       <View style={styles.content}>{children}</View>
     </View>
   );

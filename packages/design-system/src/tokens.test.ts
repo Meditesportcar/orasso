@@ -28,6 +28,19 @@ const themedGroups: Array<[string, keyof typeof tokens, (name: string) => string
   ["bar-fx", "barFx", (n) => n],
 ];
 
+/** Contraste WCAG entre deux couleurs #rrggbb. */
+function contrast(a: string, b: string): number {
+  const lum = (hex: string) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => {
+      const v = Number.parseInt(hex.slice(i, i + 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (bl ?? 0);
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+}
+
 describe("jetons : tous ceux de tokens.json (+ surcouche v2) sont dans tokens.ts et tokens.css", () => {
   it("couleurs, ombres, fonds et barres : chaque thème, TS et CSS", () => {
     for (const [group, tsKey, varName] of themedGroups) {
@@ -199,22 +212,25 @@ describe("surcouche DA v2 (tokens.v2.json, lot 38)", () => {
     expect(block('[data-theme="beton"]')).toContain("--fx-battle-rim: radial-gradient(ellipse 95% 60% at -4% 108%");
   });
 
-  it("plate-field : graphite clair sous l'encre crème d'une plaque, dans les deux thèmes", () => {
+  it("plate-field : lisible sous l'encre de la plaque (graphite en Béton, --field de l'artefact en Sable, lot C1)", () => {
+    expect(tokens.color.beton.plateField).toBe("#363941");
+    expect(tokens.color.sable.plateField).toBe("#fffaf0");
     for (const theme of THEME_IDS) {
-      expect(tokens.color[theme].plateField).toBe("#363941");
-      expect(block(`[data-theme="${theme}"]`)).toContain("--plate-field: #363941;");
+      expect(block(`[data-theme="${theme}"]`)).toContain(`--plate-field: ${tokens.color[theme].plateField};`);
+      // Contraste de la saisie (plate-ink sur plate-field) : au moins 4,5:1 (WCAG AA).
+      expect(contrast(tokens.color[theme].plateInk, tokens.color[theme].plateField)).toBeGreaterThanOrEqual(4.5);
     }
     // surface-raised est devenu clair en Sable : il ne peut plus porter plate-ink.
     expect(tokens.color.sable.surfaceRaised).not.toBe(tokens.color.sable.plateField);
   });
 
-  it("number-narrow : le style number à 62,5 % de largeur", () => {
+  it("number-narrow : le style number à 62 % de largeur (.t-num de l'artefact, lot C1)", () => {
     const { fontStretch, ...narrow } = tokens.type.numberNarrow;
     const { fontStretch: base, ...number } = tokens.type.number;
-    expect(fontStretch).toBe("62.5%");
+    expect(fontStretch).toBe("62%");
     expect(base).toBeNull();
     expect(narrow).toEqual(number);
-    expect(typography).toMatch(/\.o-t-number-narrow \{[^}]*font-stretch: 62\.5%;/);
+    expect(typography).toMatch(/\.o-t-number-narrow \{[^}]*font-stretch: 62%;/);
   });
 
   it("les deux thèmes ont les mêmes clés dans chaque groupe", () => {

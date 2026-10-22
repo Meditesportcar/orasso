@@ -33,7 +33,11 @@ export const iconShapes = {
   vehicle: [p("M3 13l2-5h14l2 5v6H3z"), c(7, 17, 1.5), c(17, 17, 1.5)], // véhicule
   home: [p("M4 11l8-7 8 7v9H4z")], // accueil
   explore: [c(12, 12, 8), p("M15 9l-2 6-4 2 2-6z")], // explorer
-  inbox: [p("M4 6h16v10H8l-4 4z")], // boîte
+  // Boîte : le bac à courrier de l'artefact DA v2 (`#i-inbox`, lot C1) ; l'ancien tracé était une bulle (= chat).
+  // Itinéraire et carte (`#i-nav`, `#i-map` de l'artefact, lot C1) : la rangée d'itinéraires de la carte d'Accueil.
+  nav: [p("M3 11l18-8-8 18-2-8z")],
+  map: [p("M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"), p("M9 4v14M15 6v14")],
+  inbox: [p("M3 13l3-8h12l3 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"), p("M3 13h5l1 3h6l1-3h5")], // boîte
   search: [c(11, 11, 7), p("M20 20l-4-4")], // recherche
   bell: [p("M6 17V11a6 6 0 0112 0v6l2 2H4z"), p("M10 21h4")], // cloche
   next: [p("M5 12h14M13 6l6 6-6 6")], // suivant
@@ -127,9 +131,61 @@ export const iconShapes = {
   gallery: [r(3, 4, 18, 16, 2), c(9, 10, 2), p("M21 16l-5-5-9 9")], // Contenus (média), Vitrine
   badge: [c(12, 9, 6), p("M8.5 14L7 21l5-3 5 3-1.5-7")], // Structure (badge vérifié)
   o: [p("M12 4c5 0 9 3.6 9 8s-4 8-9 8-9-3.6-9-8 4-8 9-8z"), p("M8.5 13l7-2.5")], // le O (onglet central, sans la marque)
+  // Lot C1 : symboles de l'artefact DA v2 (`#i-edit`, `#i-lock`…), tracés repris tels quels (grille 24, trait 2).
+  edit: [p("M4 20h4L19 9l-4-4L4 16zM14 6l4 4")], // modifier (crayon)
+  lock: [r(5, 11, 14, 10, 2), p("M8 11V8a4 4 0 0 1 8 0v3")], // sécurité, cadenas
+  shield: [p("M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"), p("M9 12l2 2 4-4")], // confidentialité
+  gear: [
+    c(12, 12, 3),
+    p("M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"),
+  ], // réglages
+  help: [c(12, 12, 9), p("M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17h.01")], // aide
+  logout: [p("M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 8l-4 4 4 4M6 12h10")], // se déconnecter
+  trophy: [p("M8 4h8v5a4 4 0 0 1-8 0zM8 6H4a3 3 0 0 0 4 4M16 6h4a3 3 0 0 1-4 4M12 13v4M8 21h8M9 17h6")], // prix du public
+  copy: [r(8, 8, 13, 13, 2), p("M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3")], // dupliquer, copier
+  camera: [p("M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"), c(12, 13.5, 3.5)], // photo, prestataire
+  // « … » (`#i-dots` de l'artefact : trois points au trait de 3,4) : cercles de rayon 0,7 au trait de 2 = 3,4 de diamètre.
+  more: [c(5, 12, 0.7), c(12, 12, 0.7), c(19, 12, 0.7)], // plus d'actions
+  spark: [p("M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6")], // nouveauté, `#i-spark`
+  star: [p("M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.3L12 17.5 6.5 20.4l1-6.3L3 9.7l6.2-.9z")], // avis, `#i-star`
+  truck: [
+    p("M2 17V7a1 1 0 0 1 1-1h11v11"),
+    p("M14 10h4l3 3.5V17h-2"),
+    p("M5 9h6v3H5z"),
+    p("M4 6l1.2-2h8.6L15 6"),
+    c(6.5, 17.5, 1.8),
+    c(17, 17.5, 1.8),
+    p("M8.3 17.5h6.9"),
+  ], // food truck, prestataire, `#i-truck`
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;
+
+/**
+ * Lot C1, tour 2 : parties remplies d'une icône quand son onglet est actif (`.fillme` des symboles de l'artefact :
+ * l'aiguille de la boussole, le corps du ticket, la carrosserie, la tête du profil…). Une icône absente ne se remplit pas.
+ */
+export const iconFillParts: Partial<Record<IconName, readonly number[]>> = {
+  explore: [1],
+  ticket: [0],
+  vehicle: [0],
+  profile: [0],
+  stamp: [0],
+  briefcase: [0],
+  calendar: [0],
+  staff: [0],
+  crew: [0],
+  home: [0],
+  cards: [0],
+  express: [0],
+  grade: [0],
+};
+
+/** Remplissage d'une partie : `filled === "parts"` ne remplit que les parties `.fillme` ; `true` remplit tout. */
+export function shapeFilled(name: IconName, index: number, filled: boolean | "parts"): boolean {
+  if (filled === "parts") return iconFillParts[name]?.includes(index) ?? false;
+  return filled;
+}
 export const iconNames = Object.keys(iconShapes) as IconName[];
 
 /** Icône de chaque condition météo de `@orasso/shared` (`WeatherCode`), lot 28. */

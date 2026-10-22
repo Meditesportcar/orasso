@@ -4,7 +4,6 @@ import { type TabSetName, tabSets } from "../../labels";
 import { cx } from "./cx";
 import { Icon } from "./Icon";
 import { CenterTabO } from "./Olive";
-import { Brush } from "./Textures";
 
 export type TabItem = {
   id: string;
@@ -33,20 +32,14 @@ export type TabBarProps = {
 };
 
 function TabContent({ tab, active, centerSlot }: { tab: TabItem; active: boolean; centerSlot?: ReactNode }): ReactNode {
-  const icon = <Icon name={tab.icon} size={22} strokeWidth={1.8} filled={active && !tab.center} />;
-  if (tab.center && tab.o) {
-    return (
-      <>
-        {/* Lot 39 : le O vivant, voiture garée sur l'onglet central actif, sortie ailleurs. */}
-        <span className="o-tabbar__o">{centerSlot ?? <CenterTabO active={active} size={30} />}</span>
-        <span className="o-tabbar__center-label">{tab.label}</span>
-      </>
-    );
-  }
+  const icon = <Icon name={tab.icon} size={22} strokeWidth={2} filled={active && !tab.center ? "parts" : false} />;
   if (tab.center) {
+    // Lot C1 : le rond `.obtn` de l'artefact (68 px, débord de 22 px), le libellé en bas de la barre.
     return (
       <>
-        {icon}
+        <span className="o-tabbar__o">
+          {tab.o ? (centerSlot ?? <CenterTabO active={active} size={58} />) : <Icon name={tab.icon} size={30} />}
+        </span>
         <span className="o-tabbar__center-label">{tab.label}</span>
       </>
     );
@@ -58,6 +51,7 @@ function TabContent({ tab, active, centerSlot }: { tab: TabItem; active: boolean
         {tab.dot && <i className="o-tabbar__dot" />}
       </span>
       {tab.label}
+      {active ? <i className="o-tabbar__ind" aria-hidden="true" /> : null}
     </>
   );
 }
@@ -95,8 +89,8 @@ function TabEntry({
 }
 
 /**
- * Cinq onglets sur la barre nuit, avec le O au milieu (Accueil, ou Direct pour l'organisateur) comme une pastille
- * d'affiche inclinée : le seul néon de la barre. Le mode staff et le mode jour J n'ont pas de barre d'onglets : on en
+ * Cinq onglets sur la barre flottante de l'artefact (lot C1), avec le O au milieu (Accueil, ou Direct pour
+ * l'organisateur) dans son rond. Le conteneur la pose en bas (`position: fixed` ou `absolute`). Le mode staff et le mode jour J n'ont pas de barre d'onglets : on en
  * sort par la pastille ✕ de l'en-tête.
  */
 export function TabBar({
@@ -120,9 +114,6 @@ export function TabBar({
   }, [active]);
   return (
     <nav className={cx("o-tabbar", className)} aria-label={ariaLabel} data-moved={moved || undefined}>
-      <div className="o-tabbar__metal" aria-hidden="true">
-        <Brush />
-      </div>
       {items.map((tab) => (
         <TabEntry key={tab.id} tab={tab} active={tab.id === active} onSelect={onSelect} centerSlot={centerSlot} />
       ))}
