@@ -43,6 +43,7 @@ import { contactViews } from "../after-event/contact-views";
 import { notesService } from "../after-event/notes";
 import { crewsForApplications, crewsForTriage, eventCrewFilters } from "../crews/application-info";
 import { arrivalsOf } from "../events/arrivals";
+import { eventPhotoUrl, eventPosterUrl } from "../events/card";
 import { type DayRow, daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { pointsService } from "../points/service";
@@ -149,6 +150,8 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
           endsAt: e.endsAt.toISOString(),
           city: e.city,
           status: e.status,
+          posterUrl: eventPosterUrl(e),
+          photoUrl: eventPhotoUrl(e),
         },
         vehicle: v ? { id: v.id, label: vehicleLabel(v) } : null,
         day: dayView(r.eventDayId ? daysById.get(r.eventDayId) : undefined),

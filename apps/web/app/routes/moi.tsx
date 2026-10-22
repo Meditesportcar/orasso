@@ -12,7 +12,9 @@ import {
   notificationFamilies,
   notificationFamilyLabels,
   notificationTypeLabels,
+  type PersonaKind,
   type PublicPreview,
+  personaKindLabels,
   profileVisibilities,
   profileVisibilityAlways,
   profileVisibilityLabels,
@@ -129,6 +131,27 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
   const { me, settings, preview, categories, saved } = loaderData;
   const busy = useNavigation().state !== "idle";
   const err = (scope: string) => (actionData?.scope === scope ? actionData.error : null);
+  // Mes casquettes (lot C5, artefact `s-profil`) : le seul endroit du site d'où l'on passe à une autre casquette.
+  const isVisitor = me.personas.some((p) => p.kind === "visitor");
+  const hats = [
+    ...me.memberships
+      .filter((m) => m.status === "active")
+      .map((m) => ({
+        key: `orga-${m.structureSlug}`,
+        href: `/orga/${m.structureSlug}`,
+        kind: "organizer",
+        label: m.structureName,
+      })),
+    ...(me.pro ? [{ key: "pro", href: `/pro/${me.pro.slug}`, kind: "pro", label: me.pro.name }] : []),
+    ...me.personas
+      .filter((p) => p.kind === "provider" || p.kind === "media")
+      .map((p) => ({
+        key: `${p.kind}-${p.id}`,
+        href: p.kind === "provider" ? "/app/prestataire" : "/app/media",
+        kind: p.kind,
+        label: p.label,
+      })),
+  ];
   return (
     <div className="s-narrow s-stack" data-testid="moi">
       <div className="s-row s-row--between">
@@ -143,7 +166,41 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         </p>
       )}
 
-      <section className="s-section s-section--first" aria-labelledby="profil-titre">
+      {hats.length > 0 && (
+        <section className="s-section s-section--first" aria-labelledby="casquettes-titre" data-testid="hats">
+          <h2 id="casquettes-titre" className="s-h2">
+            Mes casquettes
+          </h2>
+          <div className="s-stack">
+            {hats.map((h) => (
+              <Button key={h.key} href={h.href} variant="secondary" icon="next">
+                {personaKindLabels[h.kind as PersonaKind]} · {h.label}
+              </Button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {isVisitor && (
+        <section
+          className={hats.length ? "s-section" : "s-section s-section--first"}
+          aria-labelledby="garage-titre"
+          data-testid="garage-link"
+        >
+          <h2 id="garage-titre" className="s-h2">
+            Mon garage
+          </h2>
+          <p className="s-muted">Tes véhicules archivés, l'ajout d'un véhicule et ton QR de compte.</p>
+          <Button href="/app/garage" variant="secondary" icon="vehicle">
+            Ouvrir mon garage
+          </Button>
+        </section>
+      )}
+
+      <section
+        className={hats.length || isVisitor ? "s-section" : "s-section s-section--first"}
+        aria-labelledby="profil-titre"
+      >
         <h2 id="profil-titre" className="s-h2">
           Profil
         </h2>
@@ -320,6 +377,17 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         <Button href="/app/sanctions" variant="secondary" icon="list" data-testid="my-sanctions-link">
           {moderationLabels.mySanctions}
         </Button>
+      </section>
+
+      <section className="s-section" aria-labelledby="session-titre">
+        <h2 id="session-titre" className="s-h2">
+          Session
+        </h2>
+        <Form method="post" action="/deconnexion">
+          <Button type="submit" variant="secondary" icon="close">
+            Déconnexion
+          </Button>
+        </Form>
       </section>
 
       <section className="s-section" aria-labelledby="suppression-titre" data-testid="delete-account">

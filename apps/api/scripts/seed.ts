@@ -19,6 +19,7 @@ import { seedBase } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedCommunication } from "./seed/communication";
 import { seedCrews } from "./seed/crews";
+import { seedDaV2Events, seedMscLogo, seedVisitorStamps } from "./seed/da-v2";
 import { seedDayJ } from "./seed/day-j";
 import { seedExplorer } from "./seed/explorer";
 import { seedGarage } from "./seed/garage";
@@ -132,12 +133,17 @@ async function main() {
   await seedMissions(hash);
   // Lot 49 : 9 tampons pour Kenji (1 rare), prix du public de Béziers Night (64 votants, Kenji 4e), résultats.
   await seedPassport();
-  // Lot 47 : créneaux d'arrivée de la Nocturne, notes d'arrivée, affiches générées de tous les événements (en dernier).
+  // Lot C5 : logo de MéditeSportCar, événement à J-6 et éditions passées (historiques de l'équipe), avant les affiches.
+  await seedMscLogo();
+  await seedDaV2Events();
+  // Lot 47 : créneaux d'arrivée de la Nocturne, notes d'arrivée, affiches générées de tous les événements.
   await seedPosters();
   // Lot 43 : billet de Paul (visiteur), remises, vues et abonnés du garage du port pour l'Accueil par profil.
   await seedHomeProfiles();
   // Lot 52 : brouillon incomplet, engagement de l'équipe (bulles), structure en cours de vérification.
   await seedOrgaV2(hash);
+  // Lot C5 : tampons de visite de Paul (visiteur).
+  await seedVisitorStamps();
 }
 
 try {

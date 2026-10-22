@@ -106,7 +106,7 @@ describe("fenêtre de l'accès flottant : jours calendaires, de J-7 au lendemain
     // La candidature en attente n'est pas un accès ; le billet du 3e jour passe avant la retenue du 6e.
     expect(items.map((i) => i.key)).toEqual(["app-a", "ticket-t", "staff-s"]);
     expect(nextAccessOf(items, NOW)?.key).toBe("ticket-t");
-    expect(nextAccessOf(items, NOW)?.href).toBe("/billets");
+    expect(nextAccessOf(items, NOW)?.href).toBe("/billet/t");
   });
 
   it("une place où l'on est déjà entré n'est plus un accès", () => {

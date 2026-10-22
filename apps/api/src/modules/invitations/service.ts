@@ -54,7 +54,7 @@ import { type Executor, type Tx, withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { requireEventReader, requireEventSpeaker, type StructureRow } from "../communication/guards";
 import { arrivalsOf } from "../events/arrivals";
-import { eventPosterUrl } from "../events/card";
+import { eventPhotoUrl, eventPosterUrl } from "../events/card";
 import { daysRepo } from "../events/days";
 import { type EventRow, eventsRepo } from "../events/repo";
 import { inboxService } from "../messaging/inbox";
@@ -108,6 +108,7 @@ function brief(e: EventRow, s: StructureRow, days: { id: string; dayDate: string
     endsAt: e.endsAt.toISOString(),
     city: e.city,
     posterUrl: eventPosterUrl(e),
+    photoUrl: eventPhotoUrl(e),
     status: e.status,
     privateEvent: e.admission === "invite_only",
     lockAt: lockAt(e).toISOString(),
