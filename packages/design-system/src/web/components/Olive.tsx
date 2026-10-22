@@ -1,29 +1,40 @@
 // Le O vivant, version site (lot 39) : mêmes noms et même rôle que src/native/olive (OpeningBattle, OLoader,
 // SendProgress, SendBurst, EmptyState, StampDrop, CenterTabO) et les meutes du fond « battle » (BattleLayer, posé par
 // Ground). SVG animé : SMIL (animateMotion) pour le drift le long d'une trajectoire, CSS (Olive.css) pour le reste.
+// Lot C8 : le fond « battle » et le O vivant du hero (LiveO) passent en canvas, avec la fumée de l'artefact (smoke.ts).
 // La géométrie vient du même module que le natif (native/olive/path.ts, brandArt.carTop) : même tracé des deux côtés.
 // Réduction des animations : pas de drift ni de meute ; la voiture est garée et tout apparaît en fondu `fast`.
 
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { battle, duration, olive } from "../../motion";
+import { battle, duration, olive, smoke } from "../../motion";
 import { brandArt } from "../../native/brandArt";
 import { useOliveScreenActive } from "../../native/olive/activity";
 import {
   type BattlePath,
-  battleDuration,
   battlePath,
-  battlePathD,
   driftOrbit,
   orbitPathD,
   type PackCar,
+  poseAt,
   seededRandom,
-  slipSamples,
   tandem,
 } from "../../native/olive/path";
 import { useIsGroundQuiet } from "../../native/olive/quiet";
 import { useReducedMotion } from "../theme";
 import type { BrandTone } from "./Brand";
 import { cx } from "./cx";
+import {
+  ARTIFACT_RATE,
+  cssColor,
+  drawCar,
+  fitCanvas,
+  MarkRing,
+  rearWheel,
+  SmokePool,
+  smokeCap,
+  smokeRate,
+  smokeSprite,
+} from "./smoke";
 
 const { carTop, carSkew } = brandArt;
 const oTransform = `translate(${brandArt.oOffset} 0)`;
@@ -614,120 +625,559 @@ export function CenterTabO({ active, size = 30, tone = "dark" }: CenterTabOProps
   );
 }
 
-// --- Le fond « battle » -----------------------------------------------------------------------------------------
+// --- Moteur canvas commun (lot C8) -----------------------------------------------------------------------------
 
-type Pack = { key: number; path: BattlePath; d: string; cars: PackCar[]; speed: number; w: number; h: number };
-const between = (random: () => number, [a, b]: readonly [number, number]) => a + random() * (b - a);
-const SLIP_SAMPLES = 24;
-
-/** Une voiture de la meute : animateMotion le long de la trajectoire, dérive échantillonnée. */
-function PackCarArt({ pack, car, index }: { pack: Pack; car: PackCar; index: number }) {
-  const total = pack.path.length / pack.speed;
-  const begin = `${(car.lag / pack.speed).toFixed(3)}s`;
-  const slips = slipSamples(pack.path, SLIP_SAMPLES);
-  const times = slips.map((_, i) => (i / (SLIP_SAMPLES - 1)).toFixed(3)).join(";");
-  return (
-    <g className={cx("o-ground__car", index === 0 || index === 2 ? "o-car--lead" : "o-car--chase")} visibility="hidden">
-      <set attributeName="visibility" to="visible" begin={begin} />
-      <animateMotion path={pack.d} dur={`${total.toFixed(3)}s`} begin={begin} rotate="auto" fill="freeze" />
-      <g transform={`translate(0 ${car.side}) scale(${battle.carLength / carBoxW})`}>
-        <g>
-          <animateTransform
-            attributeName="transform"
-            type="rotate"
-            values={slips.join(";")}
-            keyTimes={times}
-            dur={`${total.toFixed(3)}s`}
-            begin={begin}
-            fill="freeze"
-          />
-          <CarTopArt />
-        </g>
-      </g>
-    </g>
-  );
+/** L'élément est à l'écran (IntersectionObserver ; sans lui, toujours vrai). */
+function useInView(ref: { current: Element | null }): boolean {
+  const [inView, setInView] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (entry) setInView(entry.isIntersecting);
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref]);
+  return inView;
 }
 
-/**
- * Les meutes du fond « battle » : une paire (parfois un train de trois) toutes les `battle.gap`. Entre deux meutes, rien
- * n'est animé. Arrêtées quand la page est cachée, qu'une feuille est ouverte (GroundQuiet), avec `still` ou la
- * réduction des animations.
- */
-export function BattleLayer({ still = false }: { still?: boolean }) {
-  const reduced = useReducedMotion();
-  const quiet = useIsGroundQuiet();
-  const host = useRef<HTMLDivElement>(null);
-  const svg = useRef<SVGSVGElement>(null);
+/** L'onglet est visible (`visibilitychange`). */
+function useDocVisible(): boolean {
   const [visible, setVisible] = useState(true);
-  const [pack, setPack] = useState<Pack | null>(null);
-  const screen = useOliveScreenActive();
-  const running = !still && !reduced && !quiet && visible && screen;
-
   useEffect(() => {
     const onChange = () => setVisible(document.visibilityState === "visible");
     onChange();
     document.addEventListener("visibilitychange", onChange);
     return () => document.removeEventListener("visibilitychange", onChange);
   }, []);
+  return visible;
+}
+
+/** Couleurs lues sur l'hôte (thème courant) et dégradé de fumée pré-rendu, refait seulement si la couleur change. */
+class Paint {
+  ink = "";
+  accent = "";
+  night = "";
+  smoke = "";
+  sprite: HTMLCanvasElement | null = null;
+  private at = -1;
+  read(el: Element, t: number, ink?: string): void {
+    if (this.at >= 0 && t - this.at < 0.5) return;
+    this.at = t;
+    this.ink = ink ?? cssColor(el, "--ink", this.ink);
+    this.accent = cssColor(el, "--accent", this.accent);
+    this.night = cssColor(el, "--night", this.night);
+    const s = cssColor(el, "--ink-muted", this.smoke);
+    if (s && (s !== this.smoke || !this.sprite)) {
+      this.smoke = s;
+      this.sprite = smokeSprite(s);
+    }
+  }
+  reset(): void {
+    this.at = -1;
+  }
+}
+
+// --- Le O vivant du hero (artefact : `liveO`, classe `Drift`) ---------------------------------------------------
+
+const LIVE = olive.live;
+/** Orbite de l'artefact, en unités du O (le O fait 135,3 unités de large, 150 avec sa marge de viewBox). */
+const LIVE_ORBIT = { rx: 92, ry: 72 };
+const LIVE_UNITS = 150;
+const TRAIL = 34;
+const TAU = Math.PI * 2;
+type LiveCar = { off: number; b: number; dr: number; lead: boolean };
+const LIVE_CARS: Record<"drift" | "tandem", LiveCar[]> = {
+  drift: [{ off: 0, b: 0.66, dr: 0, lead: true }],
+  tandem: [
+    { off: 0, b: 0.62, dr: 0, lead: true },
+    { off: -1, b: 0.78, dr: 8, lead: false },
+  ],
+};
+
+/** État du moteur du O vivant : horloge propre (en pause hors écran), cycle course → sortie → pause. */
+class LiveEngine {
+  T = 0;
+  th = Math.PI / 2;
+  phase: "loop" | "exit" | "rest" = "loop";
+  loopAt = 0;
+  exitAt: number | null = null;
+  fade = [1, 1];
+  trails: Float32Array[] = [0, 1, 2, 3].map(() => new Float32Array(TRAIL * 2));
+  trailLen = [0, 0, 0, 0];
+  emit = [0, 0, 0, 0];
+  pool: SmokePool;
+  paint = new Paint();
+  cx = 0;
+  cy = 0;
+  w = 0;
+  h = 0;
+  constructor(
+    readonly mode: "drift" | "tandem",
+    readonly k: number,
+    cap: number,
+    readonly random: () => number = Math.random,
+  ) {
+    this.pool = new SmokePool(cap);
+  }
+
+  start(): void {
+    this.phase = "loop";
+    this.loopAt = this.T;
+    this.th = Math.PI / 2;
+    this.exitAt = null;
+    this.fade = [1, 1];
+    this.trailLen = [0, 0, 0, 0];
+    this.pool.clear();
+  }
+
+  /** Une image : avance de `dt` s et peint. Renvoie vrai quand il ne reste rien à peindre (pause entre deux tours). */
+  frame(ctx: CanvasRenderingContext2D, dt: number, u: number, onPark: () => void): boolean {
+    const spec = smoke.orbit;
+    const { k, random } = this;
+    this.T += dt;
+    if (this.phase === "loop" && this.T - this.loopAt >= LIVE.run / 1000) this.phase = "exit";
+    this.th += (TAU / (LIVE.lap / 1000)) * dt;
+    const cars = LIVE_CARS[this.mode];
+    // Fumée : elle avance avant les nouvelles bouffées (artefact).
+    this.pool.step(dt, spec.grow * u * k, spec.life / 1000);
+    const { rate, boost } = smokeRate(ARTIFACT_RATE.orbit, spec, this.pool.cap, cars.length * 2);
+    const sprite = this.paint.sprite;
+    if (sprite) this.pool.draw(ctx, sprite, spec.alpha * Math.sqrt(boost));
+    // Traces : 34 derniers points par roue, opacité croissante vers la voiture.
+    ctx.lineCap = "round";
+    ctx.strokeStyle = this.paint.ink;
+    ctx.lineWidth = Math.max(1, 2.2 * u);
+    for (let t = 0; t < 4; t++) drawTrail(ctx, this.trails[t] as Float32Array, this.trailLen[t] ?? 0);
+    const ms = this.T * 1000;
+    const L = 34 * u * k;
+    const W = 17 * u * k;
+    cars.forEach((car, ci) => {
+      const off = car.lead ? car.off : car.off - 0.12 * Math.sin(ms / 400);
+      const th = this.th + off;
+      const R1 = LIVE_ORBIT.rx + car.dr;
+      const R2 = LIVE_ORBIT.ry + car.dr;
+      const x = this.cx + R1 * Math.cos(th) * u;
+      const y = this.cy + R2 * Math.sin(th) * u;
+      const hd = Math.atan2(R2 * Math.cos(th), -R1 * Math.sin(th)) + car.b + 0.12 * Math.sin(ms / 260 + ci);
+      if (this.phase !== "loop") {
+        if (car.lead) {
+          const ang = ((th % TAU) + TAU) % TAU;
+          if (this.exitAt === null && ang > Math.PI * 0.92 && ang < Math.PI * 1.1) {
+            this.exitAt = this.T;
+            onPark();
+          }
+          if (this.exitAt !== null) this.fade[0] = Math.max(0, 1 - (this.T - this.exitAt) / 0.18);
+        } else if (this.exitAt !== null) this.fade[1] = Math.max(0, (this.fade[1] ?? 0) - dt * 2.2);
+      }
+      const a = this.fade[ci] ?? 0;
+      if (a <= 0) return;
+      for (let wi = 0; wi < 2; wi++) {
+        const [wx, wy] = rearWheel(x, y, hd, wi ? 1 : -1, L, W, spec);
+        if (a > 0.5) {
+          const slot = ci * 2 + wi;
+          this.emit[slot] = (this.emit[slot] ?? 0) + rate * dt;
+          while ((this.emit[slot] ?? 0) >= 1) {
+            this.emit[slot] = (this.emit[slot] ?? 0) - 1;
+            this.pool.spawn(
+              wx,
+              wy,
+              (-Math.cos(hd) * spec.speed + (random() - 0.5) * spec.spread) * u,
+              (-Math.sin(hd) * spec.speed + (random() - 0.5) * spec.spread) * u,
+              spec.radius * u * k * boost,
+            );
+          }
+          pushTrail(this, slot, wx, wy);
+        }
+      }
+      drawCar(
+        ctx,
+        { x, y, heading: hd, color: car.lead ? this.paint.accent : this.paint.ink, night: this.paint.night },
+        L,
+        W,
+        0.35,
+        u,
+        a,
+      );
+    });
+    const done = this.phase !== "loop" && this.fade.every((f) => f <= 0) && this.pool.n === 0;
+    if (done) this.phase = "rest";
+    return done;
+  }
+}
+
+function pushTrail(e: LiveEngine, slot: number, x: number, y: number): void {
+  const tr = e.trails[slot] as Float32Array;
+  let n = e.trailLen[slot] ?? 0;
+  if (n >= TRAIL) {
+    tr.copyWithin(0, 2);
+    n = TRAIL - 1;
+  }
+  tr[n * 2] = x;
+  tr[n * 2 + 1] = y;
+  e.trailLen[slot] = n + 1;
+}
+
+/** Une trace : segment i à l'opacité (i / n) × 0,16 (artefact), regroupés en quatre tranches. */
+function drawTrail(ctx: CanvasRenderingContext2D, tr: Float32Array, n: number): void {
+  const bands = 4;
+  for (let b = 0; b < bands; b++) {
+    const from = Math.max(1, Math.floor((b / bands) * n));
+    const to = Math.floor(((b + 1) / bands) * n);
+    if (to <= from) continue;
+    ctx.globalAlpha = ((from + to) / 2 / n) * 0.16;
+    ctx.beginPath();
+    ctx.moveTo(tr[(from - 1) * 2] ?? 0, tr[(from - 1) * 2 + 1] ?? 0);
+    for (let i = from; i < to; i++) ctx.lineTo(tr[i * 2] ?? 0, tr[i * 2 + 1] ?? 0);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+export type LiveOProps = {
+  /** Largeur du O, en px (artefact : 170 dans le hero du site). */
+  size?: number;
+  /** `tandem` : deux voitures, l'une chasse l'autre ; `drift` : une seule. */
+  mode?: "drift" | "tandem";
+  /** Échelle des voitures et de la fumée (artefact : 0,9). */
+  scale?: number;
+  className?: string;
+};
+
+/**
+ * Le O vivant du hero (artefact `liveO`) : battle en tandem autour du O pendant `olive.live.run`, avec fumée et
+ * traces en canvas, puis la voiture du logo se gare ; `olive.live.rest` de pause et ça repart. L'hôte remplit son conteneur (la toile
+ * le couvre, le O est centré dessus). Arrêté hors de l'écran et onglet caché ; mouvement réduit : une image figée.
+ */
+export function LiveO({ size = 170, mode = "tandem", scale = 0.9, className }: LiveOProps) {
+  const reduced = useReducedMotion();
+  const host = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const oEl = useRef<HTMLSpanElement>(null);
+  const engine = useRef<LiveEngine | null>(null);
+  const [parked, setParked] = useState(false);
+  const inView = useInView(host);
+  const visible = useDocVisible();
+  const screen = useOliveScreenActive();
+  const id = useSvgId("lo");
+  const running = !reduced && inView && visible && screen;
 
   useEffect(() => {
-    if (!running) {
-      setPack(null);
+    const cv = canvas.current;
+    const el = host.current;
+    const o = oEl.current;
+    const ctx = cv?.getContext("2d");
+    if (!cv || !el || !o || !ctx) return;
+    const u = size / LIVE_UNITS;
+    const measure = (e: LiveEngine) => {
+      const hr = el.getBoundingClientRect();
+      const or = o.getBoundingClientRect();
+      e.w = hr.width;
+      e.h = hr.height;
+      e.cx = or.left + or.width / 2 - hr.left;
+      e.cy = or.top + or.height / 2 - hr.top;
+    };
+    const begin = (e: LiveEngine) => {
+      const d = fitCanvas(cv, e.w, e.h);
+      ctx.setTransform(d, 0, 0, d, 0, 0);
+      ctx.clearRect(0, 0, e.w, e.h);
+    };
+
+    if (reduced) {
+      // Mouvement réduit : la battle figée après 53 images (fumée et voitures immobiles), tirage déterministe.
+      const e = new LiveEngine(mode, scale, smokeCap(), seededRandom(7));
+      measure(e);
+      e.paint.read(o, 0, getComputedStyle(o).color);
+      setParked(false);
+      begin(e);
+      for (let i = 0; i < 53; i++) {
+        ctx.clearRect(0, 0, e.w, e.h);
+        e.frame(ctx, 1 / 60, u, () => {});
+      }
+      engine.current = null;
       return;
     }
+    if (!running) return;
+
+    let e = engine.current;
+    if (!e || e.mode !== mode || e.k !== scale) {
+      e = new LiveEngine(mode, scale, smokeCap());
+      engine.current = e;
+      e.start();
+      setParked(false);
+    }
+    const eng = e;
+    measure(eng);
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => measure(eng));
+    ro?.observe(el);
+    let raf = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let key = 0;
-    const spawn = () => {
-      const box = host.current?.getBoundingClientRect();
-      const seed = Math.floor(Math.random() * 2147483647);
-      const random = seededRandom(seed ^ 0x5bd1e995);
-      if (!box || box.width < 10 || box.height < 10) {
-        timer = setTimeout(spawn, between(random, battle.gap));
+    let last = performance.now();
+    const tick = (now: number) => {
+      raf = 0;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      eng.paint.read(o, eng.T, getComputedStyle(o).color);
+      begin(eng);
+      const idle = eng.frame(ctx, dt, u, () => setParked(true));
+      if (!idle) {
+        raf = requestAnimationFrame(tick);
         return;
       }
-      const path = battlePath(seed, box.width, box.height);
-      const train = random() < battle.trainChance;
-      const cars = tandem(path, train ? battle.spacing.train : battle.spacing.pair, train ? 3 : 2);
-      const speed = between(random, battle.speed);
-      key++;
-      setPack({ key, path, d: battlePathD(path), cars, speed, w: box.width, h: box.height });
-      timer = setTimeout(
-        () => {
-          setPack(null);
-          timer = setTimeout(spawn, between(random, battle.gap));
-        },
-        battleDuration(path, cars, speed),
-      );
+      // Rien à peindre : pause (setTimeout, pas d'image) jusqu'au tour suivant.
+      ctx.clearRect(0, 0, eng.w, eng.h);
+      const wait = Math.max(0, (eng.exitAt ?? eng.T) + (LIVE.settle + LIVE.rest) / 1000 - eng.T);
+      timer = setTimeout(() => {
+        eng.T += wait;
+        eng.start();
+        setParked(false);
+        last = performance.now();
+        raf = requestAnimationFrame(tick);
+      }, wait * 1000);
     };
-    timer = setTimeout(spawn, battle.firstDelay);
+    if (eng.phase === "rest") {
+      eng.phase = "loop";
+      eng.start();
+      setParked(false);
+    }
+    raf = requestAnimationFrame(tick);
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       if (timer) clearTimeout(timer);
-      setPack(null);
+      ro?.disconnect();
+    };
+  }, [running, reduced, mode, scale, size]);
+
+  return (
+    <div ref={host} className={cx("o-live", className)} aria-hidden="true">
+      <canvas ref={canvas} className="o-live__fx" />
+      <span
+        ref={oEl}
+        className={cx("o-olive o-olive--auto o-live__o", parked || reduced ? "is-parked" : "is-out")}
+        style={
+          {
+            width: size,
+            height: size,
+            "--live-out": ms(LIVE.out),
+            "--live-park": ms(LIVE.parkIn),
+          } as CSSProperties
+        }
+      >
+        <svg width={size} height={size} viewBox={brandArt.viewBox.join(" ")} aria-hidden="true" focusable="false">
+          <OArt id={id} />
+        </svg>
+      </span>
+    </div>
+  );
+}
+
+// --- Le fond « battle » (artefact : moteur du fond, mode `battle`) ------------------------------------------------
+
+const between = (random: () => number, [a, b]: readonly [number, number]) => a + random() * (b - a);
+/** Traces du fond : sept secondes de vie, opacité 0,3 (artefact), plafond de segments selon l'appareil. */
+const MARK_LIFE = 7;
+const MARK_ALPHA = 0.3;
+/** Une trace se dépose quand la dérive dépasse 20 % du plein (artefact `slip > .2`, plein à 0,45 rad). */
+const MARK_SLIP = 0.2 * 0.45;
+
+type PackRun = {
+  path: BattlePath;
+  cars: (PackCar & { lead: boolean; px: number; py: number; qx: number; qy: number; on: boolean })[];
+  speed: number;
+  at: number;
+  end: number;
+};
+
+class BattleEngine {
+  T = 0;
+  pack: PackRun | null = null;
+  nextAt = battle.firstDelay / 1000;
+  pool: SmokePool;
+  marks: MarkRing;
+  paint = new Paint();
+  emit: number[] = [];
+  w = 0;
+  h = 0;
+  onScreen = 0;
+  constructor(cap: number) {
+    this.pool = new SmokePool(cap);
+    this.marks = new MarkRing(cap * 6);
+  }
+
+  spawn(): void {
+    const seed = Math.floor(Math.random() * 2147483647);
+    const random = seededRandom(seed ^ 0x5bd1e995);
+    if (this.w < 10 || this.h < 10) {
+      this.nextAt = this.T + 0.5;
+      return;
+    }
+    const path = battlePath(seed, this.w, this.h);
+    const train = random() < battle.trainChance;
+    const cars = tandem(path, train ? battle.spacing.train : battle.spacing.pair, train ? 3 : 2).map((c, i) => ({
+      ...c,
+      // Artefact : la première moutarde, puis encre et moutarde en alternance.
+      lead: i === 0 || i % 2 === 0,
+      px: Number.NaN,
+      py: Number.NaN,
+      qx: Number.NaN,
+      qy: Number.NaN,
+      on: false,
+    }));
+    const speed = between(random, battle.speed);
+    const lag = cars.reduce((m, c) => Math.max(m, c.lag), 0);
+    this.pack = { path, cars, speed, at: this.T, end: this.T + (path.length + lag) / speed };
+    this.emit = cars.flatMap(() => [0, 0]);
+  }
+
+  /** Une image. Renvoie vrai quand plus rien n'est à peindre (entre deux meutes). */
+  frame(ctx: CanvasRenderingContext2D, dt: number): boolean {
+    const spec = smoke.battle;
+    this.T += dt;
+    if (!this.pack && this.T >= this.nextAt) this.spawn();
+    ctx.lineCap = "round";
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = this.paint.ink;
+    this.marks.draw(ctx, dt, MARK_LIFE, MARK_ALPHA);
+    this.pool.step(dt, spec.grow, spec.life / 1000);
+    const pack = this.pack;
+    const wheels = Math.max(2, this.onScreen * 2);
+    const { rate, boost } = smokeRate(ARTIFACT_RATE.battle, spec, this.pool.cap, wheels);
+    const sprite = this.paint.sprite;
+    if (sprite) this.pool.draw(ctx, sprite, spec.alpha * Math.sqrt(boost));
+    let on = 0;
+    if (pack) {
+      const L = battle.carLength;
+      const W = battle.carWidth;
+      pack.cars.forEach((car, ci) => {
+        const s = (this.T - pack.at) * pack.speed - car.lag;
+        car.on = s >= 0 && s <= pack.path.length;
+        if (!car.on) return;
+        on++;
+        const pose = poseAt(pack.path, s, car.side);
+        const slip = Math.abs(pose.slip);
+        for (let wi = 0; wi < 2; wi++) {
+          const [wx, wy] = rearWheel(pose.x, pose.y, pose.heading, wi ? 1 : -1, L, W, spec);
+          const slot = ci * 2 + wi;
+          if (slip > spec.minSlip) {
+            this.emit[slot] = (this.emit[slot] ?? 0) + rate * dt;
+            while ((this.emit[slot] ?? 0) >= 1) {
+              this.emit[slot] = (this.emit[slot] ?? 0) - 1;
+              this.pool.spawn(
+                wx,
+                wy,
+                -Math.cos(pose.heading) * spec.speed + (Math.random() - 0.5) * spec.spread,
+                -Math.sin(pose.heading) * spec.speed + (Math.random() - 0.5) * spec.spread,
+                spec.radius * boost,
+              );
+            }
+          }
+          const px = wi ? car.qx : car.px;
+          const py = wi ? car.qy : car.py;
+          if (slip > MARK_SLIP && !Number.isNaN(px)) this.marks.push(px, py, wx, wy);
+          if (wi) {
+            car.qx = wx;
+            car.qy = wy;
+          } else {
+            car.px = wx;
+            car.py = wy;
+          }
+        }
+        drawCar(
+          ctx,
+          { ...pose, color: car.lead ? this.paint.accent : this.paint.ink, night: this.paint.night },
+          L,
+          W,
+          0.3,
+          1,
+        );
+      });
+      if (this.T >= pack.end) {
+        this.pack = null;
+        this.nextAt = this.T + between(Math.random, battle.gap) / 1000;
+      }
+    }
+    this.onScreen = on;
+    return !this.pack && this.pool.n === 0 && this.marks.n === 0;
+  }
+}
+
+/**
+ * Le fond « battle » (artefact) : une meute de deux voitures (parfois un train de trois) toutes les `battle.gap`, avec
+ * la fumée et les traces de pneus, en canvas. Entre deux meutes, plus rien n'est peint (minuterie, pas d'image).
+ * Arrêté hors de l'écran, onglet caché, feuille ouverte (GroundQuiet), avec `still` ou la réduction des animations.
+ */
+export function BattleLayer({ still = false }: { still?: boolean }) {
+  const reduced = useReducedMotion();
+  const quiet = useIsGroundQuiet();
+  const screen = useOliveScreenActive();
+  const host = useRef<HTMLDivElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const engine = useRef<BattleEngine | null>(null);
+  const inView = useInView(host);
+  const visible = useDocVisible();
+  const live = !still && !reduced && !quiet && screen;
+  const running = live && inView && visible;
+
+  useEffect(() => {
+    if (!live) engine.current = null;
+  }, [live]);
+
+  useEffect(() => {
+    const cv = canvas.current;
+    const el = host.current;
+    const ctx = cv?.getContext("2d");
+    if (!running || !cv || !el || !ctx) return;
+    if (!engine.current) engine.current = new BattleEngine(smokeCap());
+    const eng = engine.current;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      eng.w = r.width;
+      eng.h = r.height;
+    };
+    measure();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    ro?.observe(el);
+    let raf = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let last = performance.now();
+    let shown = -1;
+    const tick = (now: number) => {
+      raf = 0;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      eng.paint.read(el, eng.T);
+      const d = fitCanvas(cv, eng.w, eng.h);
+      ctx.setTransform(d, 0, 0, d, 0, 0);
+      ctx.clearRect(0, 0, eng.w, eng.h);
+      const idle = eng.frame(ctx, dt);
+      if (eng.onScreen !== shown) {
+        shown = eng.onScreen;
+        el.dataset.cars = String(shown);
+      }
+      if (!idle) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      const wait = Math.max(0, eng.nextAt - eng.T);
+      timer = setTimeout(() => {
+        eng.T = eng.nextAt;
+        last = performance.now();
+        raf = requestAnimationFrame(tick);
+      }, wait * 1000);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      if (timer) clearTimeout(timer);
+      ro?.disconnect();
     };
   }, [running]);
 
-  // Chaque meute est un nouveau <svg> : on remet son horloge SMIL à zéro (sinon il hérite du temps du document).
-  useLayoutEffect(() => {
-    if (pack) svg.current?.setCurrentTime?.(0);
-  }, [pack]);
-
   return (
-    <div ref={host} className="o-ground__battle" aria-hidden="true">
-      {pack && running && (
-        <svg
-          key={pack.key}
-          ref={svg}
-          width={pack.w}
-          height={pack.h}
-          viewBox={`0 0 ${pack.w} ${pack.h}`}
-          aria-hidden="true"
-          focusable="false"
-        >
-          {pack.cars.map((car, i) => (
-            <PackCarArt key={`${pack.key}-${car.lag}`} pack={pack} car={car} index={i} />
-          ))}
-        </svg>
-      )}
+    <div ref={host} className="o-ground__battle" aria-hidden="true" data-cars="0">
+      {live && <canvas ref={canvas} />}
     </div>
   );
 }

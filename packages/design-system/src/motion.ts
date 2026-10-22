@@ -82,6 +82,12 @@ export const olive = {
   tandemGap: 0.16,
   /** Le O descend de 64 px avant que l'actualisation parte (tirer pour actualiser). */
   pullDistance: 64,
+  /**
+   * Le O vivant du hero du site (lot C8, artefact `liveO(170, tandem, k .9)`) : battle en tandem pendant `run`, la
+   * voiture de tête sort à gauche et celle du logo se gare (`parkIn`), `settle` puis `rest` de pause, et ça repart ;
+   * la voiture du logo sort du O en `out`. Un tour d'orbite en `lap`.
+   */
+  live: { run: 4200, rest: 1600, settle: 650, parkIn: 700, out: 450, lap: 1450 },
 } as const;
 
 /**

@@ -69,12 +69,14 @@ test("/_ds « Le O vivant » : huit variantes, deux thèmes, audit sans défaut,
 
     // Fond « battle » : une meute arrive (première après 1,2 s), deux ou trois voitures.
     const ground = panel.getByTestId("olive-ground");
-    await expect(ground.locator(".o-ground__battle svg")).toHaveCount(1, { timeout: 5_000 });
-    const cars = await ground.locator(".o-ground__car").count();
-    expect(cars).toBeGreaterThanOrEqual(2);
+    // Lot C8 : la meute est peinte en canvas (fumée et traces de l'artefact) ; `data-cars` compte les voitures à l'écran.
+    await expect(ground.locator(".o-ground__battle canvas")).toHaveCount(1);
+    await expect(ground.locator(".o-ground__battle")).not.toHaveAttribute("data-cars", "0", { timeout: 6_000 });
+    const cars = Number(await ground.locator(".o-ground__battle").getAttribute("data-cars"));
+    expect(cars).toBeGreaterThanOrEqual(1);
     expect(cars).toBeLessThanOrEqual(3);
     const opacity = await ground.locator(".o-ground__battle").evaluate((el) => getComputedStyle(el).opacity);
-    expect(Number(opacity)).toBeCloseTo(theme === "beton" ? 0.18 : 0.1, 2);
+    expect(Number(opacity)).toBeCloseTo(theme === "beton" ? 0.5 : 0.32, 2);
     await page.waitForTimeout(1_000);
     await ground.screenshot({ path: `${SITE}/fond-battle-${theme}.png` });
 
@@ -156,7 +158,7 @@ test("réduction des animations : plus aucune animation en cours après 200 ms, 
     expect(await running(page), "animations en cours").toEqual([]);
     // Pas de drift (SMIL), pas de meute, logo composé, voiture garée.
     await expect(panel.locator("animateMotion")).toHaveCount(0);
-    await expect(panel.locator(".o-ground__battle svg")).toHaveCount(0);
+    await expect(panel.locator(".o-ground__battle canvas")).toHaveCount(0);
     await expect(panel.locator(".o-opening")).toHaveClass(/is-done/);
     const park = await panel
       .getByTestId("olive-load")
