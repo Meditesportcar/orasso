@@ -1,16 +1,20 @@
 // Petites pièces de l'artefact DA v2 communes aux écrans du passionné (lot C2a) : l'étiquette inclinée `.tag` et le
-// petit bouton d'action de carte `.btn.sm`. Locales en attendant les composants `Tag` et `Button` taille `sm` du socle
-// (lot C1) : à remplacer par eux après sa fusion. Valeurs relevées dans l'artefact :
+// petit bouton d'action de carte `.btn.sm`. Après la fusion du socle (lot C1) : l'étiquette passe par son `Tag` ; le socle
+// n'a ni `Button` taille `sm` ni `Seg` : ils restent ici. Valeurs relevées dans l'artefact :
 // `.tag` h 22, padding 0 9, skewX(-8deg), rayon 4, Archivo 80 % 800 11 px, interlettrage .06em, capitales ;
 // `.btn.sm` h 40, padding 0 12, rayon 10, Archivo 118 % 900 12 px, capitales, icône 16 px.
-import { Icon, type IconName, Text, useTheme } from "@orasso/design-system/native";
+import { Icon, type IconName, Tag, Text, useTheme } from "@orasso/design-system/native";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { useOnTicketPoster } from "./Ticket";
 
 export type TagTone = "ink" | "acc" | "line" | "wait" | "win";
 
-/** L'étiquette inclinée de l'artefact. `onPoster` : sur une carte crème (`.poster .tag`), l'encre de l'affiche. */
+/**
+ * L'étiquette inclinée de l'artefact : le `Tag` du socle (lot C1) pour l'encre, la moutarde et le contour ; `wait`
+ * (liste d'attente, bleu) et `win` (annulé, rouge) n'existent pas dans le `Tag` du socle : rendus ici aux mêmes cotes.
+ * `onPoster` : sur une carte d'affiche (`.poster .tag`), l'encre de l'affiche.
+ */
 export function SkewTag({
   children,
   tone = "ink",
@@ -26,27 +30,16 @@ export function SkewTag({
   const c = t.color;
   const inTicket = useOnTicketPoster();
   const onPoster = onPosterProp ?? inTicket;
-  const ink = onPoster ? c.posterInk : c.ink;
-  const paper = onPoster ? c.poster : c.ground;
-  const look =
-    tone === "acc"
-      ? { bg: c.accent, fg: c.accentInk, border: undefined }
-      : tone === "wait"
-        ? { bg: c.statusWaitlist, fg: c.barInk, border: undefined }
-        : tone === "win"
-          ? { bg: c.win, fg: c.winInk, border: undefined }
-          : tone === "line"
-            ? { bg: "transparent", fg: ink, border: ink }
-            : { bg: ink, fg: paper, border: undefined };
+  if (tone === "ink" || tone === "acc" || tone === "line") {
+    return (
+      <Tag tone={tone} on={onPoster ? "poster" : "card"} testID={testID}>
+        {children}
+      </Tag>
+    );
+  }
+  const look = tone === "wait" ? { bg: c.statusWaitlist, fg: c.barInk } : { bg: c.win, fg: c.winInk };
   return (
-    <View
-      testID={testID}
-      style={[
-        styles.tag,
-        { backgroundColor: look.bg },
-        look.border ? { borderWidth: 1.5, borderColor: look.border } : null,
-      ]}
-    >
+    <View testID={testID} style={[styles.tag, { backgroundColor: look.bg }]}>
       <Text variant="label" color={look.fg} style={styles.tagText} numberOfLines={1}>
         {children}
       </Text>

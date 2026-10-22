@@ -50,8 +50,8 @@ import { useNow } from "@/lib/useNow";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
-import { Segments } from "@/ui/Segments";
-import { ApplicationTag, SkewTag, SmallButton } from "./bits";
+
+import { ApplicationTag, Seg, SkewTag, SmallButton } from "./bits";
 import {
   arrivalPhrase,
   liveApplications,
@@ -253,7 +253,7 @@ export function SortiesScreen() {
       {answered ? <Notice>{answered}</Notice> : null}
       {avisNotice ? <Notice>{avisNotice}</Notice> : null}
 
-      <Segments
+      <Seg
         testID="sorties-segments"
         value={segment}
         onChange={setSegment}

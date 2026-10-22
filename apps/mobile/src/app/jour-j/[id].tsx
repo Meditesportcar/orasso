@@ -44,9 +44,8 @@ import { FlowScreen } from "@/ui/Screens";
 const { space2, space3, space4 } = tokens.spacing;
 
 const TITLE = "Jour J";
-// Phrase de l'artefact (« Hors ligne : tout est déjà sur ton téléphone ») trop longue pour l'en-tête de flux actuel, qui la
-// couperait : forme courte jusqu'à l'en-tête de C1.
-const FACTS = "Hors ligne OK";
+// Mention de l'artefact sous le titre (`.qr-top small`), dans l'en-tête de flux du socle (lot C1).
+const FACTS = "Hors ligne : tout est déjà sur ton téléphone";
 /** Sans nouvelles du serveur depuis 24 h, l'heure du téléphone n'a pas été recoupée : le code risque d'être refusé. */
 const STALE_MS = 24 * 3600_000;
 

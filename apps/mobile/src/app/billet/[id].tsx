@@ -19,9 +19,8 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
 
-// Phrase de l'artefact (« Hors ligne : tout est déjà sur ton téléphone ») trop longue pour l'en-tête de flux actuel, qui la
-// couperait : forme courte jusqu'à l'en-tête de C1.
-const FACTS = "Hors ligne OK";
+// Mention de l'artefact sous le titre (`.qr-top small`), dans l'en-tête de flux du socle (lot C1).
+const FACTS = "Hors ligne : tout est déjà sur ton téléphone";
 
 export default function Billet() {
   return (
