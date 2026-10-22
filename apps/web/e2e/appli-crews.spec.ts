@@ -106,7 +106,7 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     await expect(k.page.getByTestId("cand-done")).toBeVisible({ timeout: 20_000 });
     // Le suivi des confirmations (ancien écran d'inscription) reste joignable depuis la feuille.
     await k.page.getByTestId("cand-crew-follow-done").click();
-    await k.page.waitForURL(/crew/inscription/, { timeout: 20_000 });
+    await k.page.waitForURL(/crew\/inscription/, { timeout: 20_000 });
     await expect(k.page.getByTestId("crew-registration-member")).toHaveCount(2, { timeout: 20_000 });
     await shot(k.page, `06-inscription-envoyee-${theme}`);
     await k.ctx.close();
