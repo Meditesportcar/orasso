@@ -97,10 +97,64 @@ export const battle = {
   trainChance: 0.27,
   /** Distance entre deux voitures de la meute, le long de la trajectoire, en px (paire, train). */
   spacing: { pair: 40, train: 34 },
-  /** Opacité des voitures sur le fond : 18 % en Béton, 10 % en Sable. */
-  opacity: { beton: 0.18, sable: 0.1 },
+  /**
+   * Opacité des voitures sur le fond (lot C8, D33 : `--bgfx-op` de l'artefact) : 50 % en Béton, 32 % en Sable. La fumée
+   * se peint dessous, à 24 % de cette opacité.
+   */
+  opacity: { beton: 0.5, sable: 0.32 },
   /** Première meute après l'arrivée sur l'écran, en millisecondes. */
   firstDelay: 1200,
   /** Longueur de la voiture du fond, en px (la voiture du O garde ses 64 unités). */
   carLength: 26,
+  /** Largeur de la voiture du fond (artefact : 13 px), pour placer les roues arrière qui fument. */
+  carWidth: 13,
+} as const;
+
+/**
+ * La fumée des voitures qui driftent (lot C8, artefact DA v2) : des bouffées en dégradé radial, couleur `ink-muted`
+ * (`--muted` de l'artefact) au centre vers transparent, qui naissent aux roues arrière, reculent, grossissent et
+ * s'effacent. Valeurs de l'artefact : `battle` = moteur du fond (`parts`), `orbit` = classe `Drift` autour du O (rayons
+ * et vitesses en unités du O : × px par unité, × échelle `k` pour les rayons). Durées en millisecondes.
+ */
+export const smoke = {
+  battle: {
+    /** Durée de vie d'une bouffée. */
+    life: 1400,
+    /** Rayon à la naissance et croissance par seconde, en px. */
+    radius: 2.5,
+    grow: 18,
+    /** Recul derrière la voiture (px/s) et dispersion aléatoire (± moitié, px/s). */
+    speed: 24,
+    spread: 24,
+    /** Opacité au centre à la naissance (× l'opacité du fond), puis linéaire jusqu'à 0. */
+    alpha: 0.24,
+    /** La voiture ne fume que quand elle glisse : artefact `slip > .25`, avec slip = dérive / 0,45 rad. */
+    minSlip: 0.1125,
+    /** Position des roues arrière : 36 % de la longueur derrière le centre, 42 % de la largeur sur le côté. */
+    wheelBack: 0.36,
+    wheelSide: 0.42,
+  },
+  orbit: {
+    life: 1300,
+    radius: 3,
+    grow: 22,
+    speed: 30,
+    spread: 30,
+    alpha: 0.32,
+    minSlip: 0,
+    wheelBack: 0.36,
+    wheelSide: 0.42,
+  },
+  /**
+   * Natif (lot C8, consigne de Damien : téléphones modestes) : un pool fixe de bouffées par voiture, recyclées, au lieu
+   * des ~42 bouffées par seconde et par roue du canvas de l'artefact. Petit écran ou Android ancien : `low`.
+   */
+  pool: { low: 6, high: 10 },
+  /**
+   * Natif : avec 7 à 12 fois moins de bouffées que le canvas, chacune est plus opaque pour garder la même densité à
+   * l'œil (mesuré sur les captures « artefact | réel »).
+   */
+  density: 2.4,
+  /** Site (canvas) : nombre de bouffées vivantes plafonné ; au-delà, les naissances attendent. */
+  webCap: 160,
 } as const;
