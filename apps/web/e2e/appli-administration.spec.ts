@@ -48,24 +48,32 @@ async function go(page: Page, path: string) {
 }
 
 const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: true });
-/** Lot C1 : la barre d'onglets est masquée sur les pages de flux ; on rouvre alors l'onglet par son adresse. */
-const tabRoutes: Record<string, string> = {
+/** Onglets de l'administration rouvrables par leur adresse (la casquette Administration survit au rechargement). */
+const adminRoutes: Record<string, string> = {
   Accueil: "/administration",
   Signalements: "/signalements",
   Registres: "/registres",
   Gestion: "/gestion",
-  Équipe: "/equipe",
 };
 async function toTab(page: Page, name: string) {
-  // Le changement de casquette (survol) peut prendre un instant : on attend la barre avant de rouvrir par l'adresse.
-  const shown = await tab(page, name)
-    .waitFor({ state: "visible", timeout: 15_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (!shown) {
-    await page.goto(tabRoutes[name] ?? "/");
-    await expect(tab(page, name)).toBeVisible({ timeout: 30_000 });
+  const visible = (ms: number) =>
+    tab(page, name)
+      .waitFor({ state: "visible", timeout: ms })
+      .then(() => true)
+      .catch(() => false);
+  // Le changement de casquette (survol) peut prendre un instant.
+  let shown = await visible(10_000);
+  // Lot C1 : la barre est masquée sous une feuille ou sur une page de flux ; on referme (voile, puis ✕ de l'en-tête).
+  for (let i = 0; i < 3 && !shown; i++) {
+    const veil = page.locator('[role="button"][aria-label="Fermer"]:empty').last();
+    const close = page.getByTestId("appbar-close").last();
+    if (await veil.isVisible().catch(() => false))
+      await veil.click({ position: { x: 60, y: 120 } }).catch(() => undefined);
+    else if (await close.isVisible().catch(() => false)) await close.click().catch(() => undefined);
+    shown = await visible(5_000);
   }
+  // Dernier recours, administration seulement : un rechargement ferait perdre le survol d'une structure.
+  if (!shown && adminRoutes[name]) await page.goto(adminRoutes[name]);
   await tab(page, name).click();
 }
 
