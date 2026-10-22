@@ -132,10 +132,10 @@ async function rules(page: Page, theme: Theme, name: string) {
 }
 
 async function closeSheet(page: Page) {
+  // Lot C1 : le voile de la feuille (bouton « Fermer » sans enfant, plein écran) ; on le touche sous l'en-tête.
   await page
-    .getByRole("button", { name: "Fermer", exact: true })
+    .locator('[role="button"][aria-label="Fermer"]:empty')
     .last()
-    // Lot C1 : l'en-tête couvre le haut du voile ; on touche le voile sous l'en-tête.
     .click({ position: { x: 60, y: 120 } });
   await page.waitForTimeout(400);
 }

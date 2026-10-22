@@ -48,14 +48,23 @@ async function go(page: Page, path: string) {
 }
 
 const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: true });
-/** Lot C1 : la barre d'onglets est masquée sur les pages de flux ; on referme la page (✕) avant de toucher l'onglet. */
+/** Lot C1 : la barre d'onglets est masquée sur les pages de flux ; on rouvre alors l'onglet par son adresse. */
+const tabRoutes: Record<string, string> = {
+  Accueil: "/administration",
+  Signalements: "/signalements",
+  Registres: "/registres",
+  Gestion: "/gestion",
+  Équipe: "/equipe",
+};
 async function toTab(page: Page, name: string) {
   if (
     !(await tab(page, name)
       .isVisible()
       .catch(() => false))
-  )
-    await page.getByRole("button", { name: "Fermer", exact: true }).first().click();
+  ) {
+    await page.goto(tabRoutes[name] ?? "/");
+    await expect(tab(page, name)).toBeVisible({ timeout: 30_000 });
+  }
   await tab(page, name).click();
 }
 
@@ -334,7 +343,7 @@ test("super admin : structure à vérifier, signalement, sanction, 2FA d'un comp
   ).toBe(false);
 
   // --- 5. Horloge simulée (DEV_CLOCK) --------------------------------------------------------------------------
-  await tab(page, "Gestion").click();
+  await toTab(page, "Gestion");
   await expect(page.getByTestId("admin-link-horloge")).toBeVisible({ timeout: 30_000 });
   await shot("16-gestion-beton");
   await page.getByTestId("admin-link-horloge").click();
@@ -386,7 +395,7 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   });
   await shot("22-survol-bandeau-lecture-seule-beton");
   // Écrire sans demande ouverte : l'API refuse, l'appli affiche son message sans planter.
-  await tab(page, "Équipe").click();
+  await toTab(page, "Équipe");
   await page.getByTestId("team-nav-bans").click();
   await expect(page.getByTestId("assistance-banner")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("bans-pseudo").fill("Pilote_001");
@@ -436,7 +445,7 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   // Retour au survol : le bandeau annonce l'intervention, l'écriture passe et le journal la porte.
   await page.getByTestId("assistance-row").filter({ hasText: name }).getByTestId("admin-survey").click();
   await page.getByTestId("orga-confirm").click();
-  await tab(page, "Équipe").click();
+  await toTab(page, "Équipe");
   await page.getByTestId("team-nav-bans").click();
   await expect(page.getByTestId("assistance-banner")).toContainText("Intervention en cours", { timeout: 30_000 });
   await shot("27-survol-bandeau-intervention-beton");
