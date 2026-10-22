@@ -228,7 +228,8 @@ for (const theme of THEMES) {
     await expect(page.getByTestId("team-history-row").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("team-give-role")).toBeVisible();
     await shot(page, "equipe-bulle", theme);
-    await closeSheet(page);
+    // Lot C4a : la croix de la feuille du membre (le voile du haut est sous la barre du socle C1).
+    await page.getByRole("button", { name: "Fermer la fiche du membre", exact: true }).click();
 
     // Les rôles de l'événement : quatre rôles, ce que chacun permet (lot 48 : seuls certains rôles pointent).
     const scan = page.getByTestId("team-role-scan");
