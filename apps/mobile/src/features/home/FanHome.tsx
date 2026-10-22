@@ -134,6 +134,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
 
   const hero = next ? (
     <HeroCard
+      photoUrl={data?.nextAccess?.id === next.id ? data.nextAccess.photoUrl : null}
       posterUrl={data?.nextAccess?.id === next.id ? data.nextAccess.posterUrl : null}
       startsAt={next.event.startsAt}
       countdown={dayCountdown(next.event.startsAt, now)}
@@ -169,6 +170,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     />
   ) : ticket ? (
     <HeroCard
+      photoUrl={ticket.photoUrl}
       posterUrl={ticket.posterUrl}
       startsAt={ticket.event.startsAt}
       countdown={dayCountdown(ticket.event.startsAt, now)}
@@ -209,7 +211,9 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   // Météo : celle du jour J de la carte (lieu, jour et heure), sinon celle du département.
   const weather = data?.weather ?? null;
   const weatherWhen =
-    weather?.kind === "event" ? DAY_FMT.format(new Date(weather.event.startsAt)).replace(/ (\d+) h$/, " à $1 h") : null;
+    weather?.kind === "event"
+      ? DAY_FMT.format(new Date(weather.event.startsAt)).replace(/ (?:à )?(\d+) h$/, " à $1 h")
+      : null;
   const weatherPlace = weather?.kind === "event" ? (heroEvent?.city ?? null) : department ? `Dép. ${department}` : null;
 
   return (
