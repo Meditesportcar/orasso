@@ -224,8 +224,12 @@ async function runFlow(browser: Browser, profile: Profile, theme: Theme, capture
   await page.getByRole("button", { name: "Plus tard" }).click();
   await page.waitForURL((u) => !u.pathname.startsWith("/arrivee"), { timeout: 30_000 });
   await expect(page.getByRole("tab")).toHaveCount(5, { timeout: 30_000 });
-  // Sans la casquette, la barre est celle du visiteur et l'Accueil porte la carte « Termine ta fiche ».
+  // Sans la casquette, la barre est celle du visiteur et Mon profil porte la carte « Termine ta fiche » (lot C2a,
+  // artefact `s-home` / `s-me` : la carte a quitté l'Accueil, elle reste dans Mon profil).
   if (profile === "pro" || profile === "media") {
+    await expect(page.getByTestId(`pending-${profile}`).filter({ visible: true })).toHaveCount(0);
+    await page.getByRole("tab", { name: "Profil", exact: true }).click();
+    await expect(page).toHaveURL(/\/profil/, { timeout: 30_000 });
     await expect(page.getByTestId(`pending-${profile}`).filter({ visible: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId(`pending-${profile}`).filter({ visible: true })).toContainText("Termine ta fiche");
   }
