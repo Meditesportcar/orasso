@@ -172,6 +172,9 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   const request = page.getByTestId("team-request").filter({ hasText: pseudo });
   await expect(request).toBeVisible({ timeout: 30_000 });
   await shot(page, "01-equipe-demandes-beton");
+  // La feuille couvre la barre d'onglets (comme dans l'artefact) : on la ferme avant de changer d'onglet.
+  await page.getByRole("button", { name: "Fermer les demandes" }).click();
+  await expect(page.getByTestId("team-request")).toHaveCount(0);
 
   // La notification de la demande ouvre l'écran Équipe (lien profond, depuis le Journal) : on part d'un autre onglet.
   deliverNow("damien@orasso.local");
@@ -315,6 +318,9 @@ test("Équipe, structure, modèles, export et notes depuis l'appli", async ({ br
   await expect(page.getByTestId("structure-note").filter({ hasText: "(corrigé)" })).toHaveCount(0, { timeout: 20_000 });
 
   // Notes depuis la fiche de tri : l'onglet Tri montre la prochaine candidature ; sa fiche complète porte les notes.
+  // Notes internes est un écran de flux, sans barre d'onglets (socle C1, artefact `.app.is-flow`) : ✕ y ramène.
+  await page.getByRole("button", { name: "Fermer", exact: true }).filter({ visible: true }).first().click();
+  await expect(tab(page, "Tri")).toBeVisible({ timeout: 30_000 });
   await tab(page, "Tri").click();
   // L'événement du jour n'a plus rien à trier : on prend celui qui a des candidatures en attente (« Salon de printemps »).
   await page.getByRole("button", { name: /Événement à trier/ }).click();
