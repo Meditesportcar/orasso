@@ -2003,3 +2003,10 @@ Référence : l'artefact `.claude/prototype-v2/index.html` (D33, D34), reproduit
 - **Feuilles de la fiche au-dessus du bouton fixe** : candidature, candidature prestataire, demande d'accréditation et réservation de billet passent dans la zone des feuilles de l'écran (`overlays` de `PosterFlow`) ; la feuille « Affiche de l'organisateur » passe par `Overlay`.
 - **Échec d'`appli-lot55` (« Ton QR est prêt »)** : préexistant, sans lien avec le lot. Le seed place la Nocturne de Canet à J+2 du seed (`parisAt(2, 19)`) et l'écran jour J n'affiche cet encart que dans l'état « early » (avant la veille à 0 h, `lib/jourj.ts`). Une recette lancée après minuit sur un seed de la veille tombe dans l'état « open ». Elle repasse sur un seed du jour. À rendre indépendante de l'heure (lot C2a ou outillage).
 - Icône « … » absente du jeu (`more`) : remplacée par `cards`, à demander au socle (C1).
+
+### 22/10/2026 — Lot C2b, intégration du socle C1
+
+- `lot-c1-socle` (ebcf561c) fusionné dans `lot-c2b` : socle gardé tel quel (`packages/design-system/**`, `apps/mobile/src/ui/**`), recette 40 dans sa version C1, journal avec les deux entrées.
+- Le kit local du passionné passe au socle : `Tag` (tons encre, moutarde, contour ; `on="poster"`), `OrgLogo` (logo rond ou trois initiales), `initialsOf`, `SecHead` en italique 16 px, icônes de l'artefact (`edit`, `more`, `help`, `logout`, `gear`, `shield`, `lock`, `trophy`, `camera`) et jeton `card-line` (tuiles de réglages, faits de la fiche, candidature, classement, récap). Retirés du kit : `Tag`, `OrgInitials`, `initialsOf`.
+- Restent dans `features/passionne/kit.tsx`, faute d'équivalent dans le socle : `Card`, `PosterSurface`, `Seg` / `.cmode`, `SmButton` (`.btn.sm` et ses tons), `Nudge`, `CheckBox`, `CrewDot`, `PillO`, `Num` et `TagWin` (`.tag.win`, le ton rouge que le `Tag` du socle n'a pas). À ranger dans le socle au prochain passage.
+- `PosterFlow` (fiche, crew, page véhicule) appelle `useFlowChrome` : la barre d'onglets et l'accès flottant se retirent comme sur un `FlowScreen`.
