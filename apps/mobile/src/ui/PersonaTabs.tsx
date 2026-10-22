@@ -35,7 +35,8 @@ function PersonaTabBar({
   // Le glissement a besoin de l'onglet courant et de la navigation du groupe : la barre les lui prête.
   navigator.current = { current, navigate: (route) => navigation.navigate(route) };
   const hidden = useTabBarHidden();
-  // Lot C1, tour 2 : masquée par opacité, sans démonter l'accès flottant (ses données restent chargées).
+  // Lot C1, tour 2 : masquée sans être démontée (l'accès flottant garde ses données) ; `display: none` plutôt que
+  // l'opacité : sur le web, les zones d'appui des onglets restaient actives sous une feuille.
   return (
     <View
       pointerEvents={hidden ? "none" : "box-none"}
@@ -140,7 +141,7 @@ export function PersonaTabSet({
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   floating: { position: "absolute", left: 0, right: 0, bottom: 0 },
-  hidden: { opacity: 0 },
+  hidden: { display: "none" },
   // Version web (recette) : glisser à la souris sélectionnerait le texte, et une sélection interrompt le geste.
   noSelect: { userSelect: "none" },
 });
