@@ -33,7 +33,7 @@ import {
   type VehicleFull,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { arrivalBody } from "@/features/arrival/ArrivalSeen";
@@ -104,9 +104,13 @@ export function CandSheet({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ retained: boolean; crew: number | null } | null>(null);
 
-  // Chaque ouverture repart d'un état neuf (mode demandé, aucune case cochée, aucune note).
+  // Chaque ouverture repart d'un état neuf (mode demandé, aucune case cochée, aucune note). Seulement au passage à
+  // l'affichage : après l'envoi, la fiche se recharge (`soloAllowed` peut changer) sans effacer l'écran d'envoi.
+  const shown = useRef(false);
   useEffect(() => {
-    if (!visible) return;
+    const opening = visible && !shown.current;
+    shown.current = visible;
+    if (!opening) return;
     setMode(soloAllowed ? openMode : "crew");
     setCrewId(null);
     setPicked(null);
@@ -357,6 +361,7 @@ export function CandSheet({
                     <Pressable
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: on, disabled }}
+                      aria-checked={on}
                       accessibilityLabel={m.person.pseudo}
                       disabled={disabled}
                       onPress={() =>
@@ -483,6 +488,7 @@ export function CandSheet({
             <Pressable
               accessibilityRole="checkbox"
               accessibilityState={{ checked: seen }}
+              aria-checked={seen}
               accessibilityLabel={`J'ai vu le créneau d'arrivée. ${seenText(slot)}`}
               onPress={() => setSeen((s) => !s)}
               style={[styles.seen, { backgroundColor: c.poster }]}
@@ -503,6 +509,7 @@ export function CandSheet({
           <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{ checked: rules }}
+            aria-checked={rules}
             accessibilityLabel="J'ai lu le règlement de l'événement et je l'accepte"
             onPress={() => setRules((r) => !r)}
             style={styles.rulesRow}
@@ -520,6 +527,7 @@ export function CandSheet({
             <Pressable
               accessibilityRole="checkbox"
               accessibilityState={{ checked: newsletter }}
+              aria-checked={newsletter}
               accessibilityLabel="Recevoir la newsletter d'Orasso"
               onPress={() => setNewsletter((n) => !n)}
               style={styles.rulesRow}

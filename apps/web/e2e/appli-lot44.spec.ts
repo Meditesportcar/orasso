@@ -225,7 +225,12 @@ test("fiche v2 : affiche, créneaux, actions selon le profil, fermé, pas encore
       await expect(page.getByTestId("cand-send")).toBeDisabled();
       await page.getByTestId("cand-vehicle").first().click();
       await expect(page.getByTestId("cand-send")).toBeEnabled();
-      await expect(page.getByTestId("cand-newsletter")).toHaveAttribute("aria-checked", "false");
+      // La newsletter n'est pas cochée d'office (docs/01) : un appui la coche, un second la décoche.
+      await expect(page.getByTestId("cand-newsletter")).not.toHaveAttribute("aria-checked", "true");
+      await page.getByTestId("cand-newsletter").click();
+      await expect(page.getByTestId("cand-newsletter")).toHaveAttribute("aria-checked", "true");
+      await page.getByTestId("cand-newsletter").click();
+      await expect(page.getByTestId("cand-newsletter")).not.toHaveAttribute("aria-checked", "true");
       await shot(page, "candidature-case-creneau-beton");
     }
     await ctx.close();
