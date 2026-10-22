@@ -278,6 +278,8 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
     await page.getByTestId("jourj-vote").click();
     await expect(page).toHaveURL(/vote\//, { timeout: 30_000 });
     await expect(page.getByRole("heading", { name: "Prix du public", exact: true })).toBeVisible({ timeout: 30_000 });
+    // Lot C2b : déjà voté (deuxième thème), l'écran montre le classement ; « Changer mon vote » rouvre la grille.
+    if (round > 0) await page.getByTestId("vote-change").click({ timeout: 30_000 });
     await expect(page.getByText("Une voix, une seule", { exact: true })).toBeVisible();
     await expect(page.getByText(/^Pointage à \d+ h/)).toBeVisible();
     await expect(page.getByText("Pas pour toi-même. Le gagnant reçoit le badge et 50 points.")).toBeVisible();
@@ -288,9 +290,13 @@ test("prix du public : vote ouvert, classement en direct, vote clos, résultats 
     await checkRules(page, theme, `vote ouvert ${theme}`);
 
     // Un vote, puis on change d'avis : une seule voix de Kenji dans le classement.
+    // Lot C2b (artefact `s-vote`) : on choisit la voiture, puis « Voter pour … » ; « Changer mon vote » rouvre la grille.
     await page.getByTestId("vote-card").filter({ hasText: p2.pseudo }).click();
+    await page.getByTestId("vote-cta").click();
     await expect(page.getByTestId("vote-saved")).toContainText("Vote enregistré · tu peux le changer jusqu'à");
+    await page.getByTestId("vote-change").click();
     await page.getByTestId("vote-card").filter({ hasText: p1.pseudo }).click();
+    await page.getByTestId("vote-cta").click();
     await expect.poll(async () => (await board()).total, { timeout: 30_000 }).toBe(round === 0 ? 1 : 3);
     // Le classement bouge en direct : deux voix de plus par l'API, sans recharger.
     await apiCall(p2.cookie, "PUT", `/events/${event.id}/audience-prize/vote`, { applicationId: p1.applicationId });

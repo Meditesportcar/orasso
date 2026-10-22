@@ -1,10 +1,10 @@
 // Fiche v2, fermée (lot 44, `s-event` ; raison du lot 36) : on dit pourquoi et quoi faire. Complet : la liste d'attente
 // reste ouverte (la candidature y passe) ; clos : la raison (liste d'accès figée) ; pas encore ouvert : la date, et
 // l'avant-première pour les abonnés de la structure (« Suivre »).
-import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventPublic, eventPageLabels as L, type RegistrationBlock, registrationBlockText } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
-
+import { SmButton } from "@/features/passionne/kit";
 import { nowMs } from "@/lib/clock";
 import { formatDayHourYear } from "@/lib/format";
 import type { EventGate } from "./action";
@@ -55,26 +55,26 @@ export function EventGatePlate({
         <Icon name={gate === "soon" ? "wait" : gate === "ended" ? "flag" : "close"} size={20} color={c.ground} />
       </View>
       <View style={styles.body}>
-        <Text variant="bodyStrong" color={c.ink}>
+        <Text variant="bodyStrong" color={c.ink} style={styles.title}>
           {title}
         </Text>
-        <Text variant="meta" color={c.inkMuted} testID="registration-reason">
+        <Text variant="caption" color={c.inkMuted} testID="registration-reason">
           {text}
         </Text>
         {gate === "full" ? (
-          <Button variant="secondary" icon="wait" onPress={onWaitlist} testID="join-waitlist">
+          <SmButton kind="s" icon="wait" onPress={onWaitlist} style={styles.btn} testID="join-waitlist">
             {L.joinWaitlist}
-          </Button>
+          </SmButton>
         ) : null}
         {gate === "soon" ? (
           following ? (
-            <Text variant="meta" color={c.inkMuted}>
+            <Text variant="caption" color={c.inkMuted}>
               {L.soonFollowing}
             </Text>
           ) : (
-            <Button variant="secondary" icon="add" loading={busy} onPress={onFollow} testID="soon-follow">
+            <SmButton kind="s" icon="bell" disabled={busy} onPress={onFollow} style={styles.btn} testID="soon-follow">
               {L.soonFollow(event.structure.name)}
-            </Button>
+            </SmButton>
           )
         ) : null}
       </View>
@@ -83,7 +83,9 @@ export function EventGatePlate({
 }
 
 const styles = StyleSheet.create({
-  box: { flexDirection: "row", gap: space3, padding: space3, borderRadius: tokens.radius.radiusMd, borderWidth: 1.5 },
-  icon: { width: 40, height: 40, borderRadius: tokens.radius.radiusMd, alignItems: "center", justifyContent: "center" },
-  body: { flex: 1, gap: space1, alignItems: "flex-start" },
+  box: { flexDirection: "row", gap: space3, padding: space3 + 2, borderRadius: 16, borderWidth: 1.5 },
+  icon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  body: { flex: 1, gap: 3, alignItems: "flex-start" },
+  title: { fontFamily: "Archivo-ExtraBold" },
+  btn: { marginTop: space1 + 6 },
 });

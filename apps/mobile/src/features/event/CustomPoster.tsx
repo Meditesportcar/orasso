@@ -1,11 +1,12 @@
 // « Affiche de l'organisateur » (lot 44, `s-event` ; `customPosterUrl` du lot 47) : l'affiche perso vit dans le détail
 // de la fiche ; la toucher l'ouvre en grand. Sur les cartes, c'est l'affiche générée.
-import { Icon, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { eventPageLabels as L } from "@orasso/shared";
 import { useState } from "react";
 import { Image, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { AppSheet } from "@/ui/AppSheet";
+import { Overlay } from "@/ui/Overlay";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -21,43 +22,46 @@ export function CustomPoster({ url, structureName }: { url: string; structureNam
         onPress={() => setOpen(true)}
         testID="custom-poster"
       >
-        <Plate style={styles.row}>
+        <View style={[styles.row, { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard }]}>
           <Image source={{ uri: url }} style={styles.thumb} resizeMode="cover" accessibilityIgnoresInvertColors />
           <View style={styles.text}>
-            <Text variant="label" color={t.color.plateMuted}>
+            <Text variant="label" color={t.color.inkMuted}>
               {L.customPoster}
             </Text>
-            <Text variant="bodyStrong" color={t.color.plateInk}>
+            <Text variant="bodyStrong" color={t.color.ink}>
               {structureName}
             </Text>
-            <Text variant="meta" color={t.color.plateMuted}>
+            <Text variant="caption" color={t.color.inkMuted}>
               {L.customPosterHint}
             </Text>
           </View>
-          <Icon name="next" size={20} color={t.color.plateInk} />
-        </Plate>
+          <Icon name="next" size={20} color={t.color.ink} />
+        </View>
       </Pressable>
-      <AppSheet visible={open} onClose={() => setOpen(false)} accessibilityLabel={L.customPoster} maxHeight={0.92}>
-        <Text variant="title" color={t.color.ink}>
-          {L.customPoster}
-        </Text>
-        <Image
-          source={{ uri: url }}
-          style={[styles.full, { height: height * 0.6 }]}
-          resizeMode="contain"
-          accessibilityLabel={`${L.customPoster} : ${structureName}`}
-        />
-        <Text variant="meta" color={t.color.inkMuted}>
-          {L.customPosterSheet}
-        </Text>
-      </AppSheet>
+      {/* Lot C2b : la feuille va dans la zone des feuilles de l'écran, au-dessus du bouton fixe. */}
+      <Overlay>
+        <AppSheet visible={open} onClose={() => setOpen(false)} accessibilityLabel={L.customPoster} maxHeight={0.92}>
+          <Text variant="title" color={t.color.ink}>
+            {L.customPoster}
+          </Text>
+          <Image
+            source={{ uri: url }}
+            style={[styles.full, { height: height * 0.6 }]}
+            resizeMode="contain"
+            accessibilityLabel={`${L.customPoster} : ${structureName}`}
+          />
+          <Text variant="meta" color={t.color.inkMuted}>
+            {L.customPosterSheet}
+          </Text>
+        </AppSheet>
+      </Overlay>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: space3, padding: space2 },
-  thumb: { width: 86, height: 108, borderRadius: tokens.radius.radiusSm },
+  row: { flexDirection: "row", alignItems: "center", gap: space3, padding: space2 + 2, borderRadius: 16 },
+  thumb: { width: 86, height: 108, borderRadius: 10 },
   text: { flex: 1, gap: space1 },
   full: { width: "100%", borderRadius: tokens.radius.radiusSm },
 });

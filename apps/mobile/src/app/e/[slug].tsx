@@ -4,6 +4,9 @@
 // du jour J, les prestataires présents, puis l'action principale selon le profil ; fermé, la raison et quoi faire.
 // Ouverte sans compte ; « Candidater » demande de se connecter puis revient exactement ici. Découpée en
 // `features/event/*`.
+// Lot C2b (artefact `s-event`) : écran à affiche sans barre du haut (`PosterFlow` : pastille O et croix flottantes),
+// règlement en texte sous son titre, et la candidature dans une seule feuille (`CandSheet`, `sh-cand`) au lieu du
+// flux de trois écrans et de l'écran « Inscrire mon crew » (le mode « Avec <crew> » est dans la feuille).
 
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
@@ -12,7 +15,6 @@ import {
   eventAcceptsVendorType,
   eventAdmissionLabels,
   eventDaysLabels,
-  eventFormatLabels,
   formatDayDate,
   invitationLabels,
   eventPageLabels as L,
@@ -23,19 +25,22 @@ import {
   wizardEndLabels,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 import { ContactOrganizerButton } from "@/features/boite/MessageButton";
 import { EventFeed } from "@/features/communication/EventFeed";
 import { ArrivalSlots } from "@/features/event/ArrivalSlots";
 import { eventAction, type ProfileKind } from "@/features/event/action";
+import { CandSheet } from "@/features/event/CandSheet";
 import { CustomPoster } from "@/features/event/CustomPoster";
 import { Info, ProvidersPresent, Reviews } from "@/features/event/EventExtras";
 import { EventFactsGrid, EventTitle, OrganizerRow } from "@/features/event/EventFacts";
 import { EventGatePlate } from "@/features/event/EventGate";
 import { EventHero } from "@/features/event/EventHero";
 import { MediaContents } from "@/features/event/MediaContents";
+import { PosterFlow } from "@/features/event/PosterFlow";
 import { RequestSheet, type RequestTarget } from "@/features/media/RequestSheet";
+import { SmButton } from "@/features/passionne/kit";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { ReportButton } from "@/features/ReportSheet";
 import { TicketsBlock } from "@/features/tickets/TicketsBlock";
@@ -51,6 +56,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen } from "@/ui/Screens";
+import { SecHead } from "@/ui/SecHead";
 
 const { space1, space3 } = tokens.spacing;
 const OPEN_STATUSES = ["pending", "accepted", "waitlisted", "offered", "awaiting_member"];
@@ -58,7 +64,17 @@ const OPEN_STATUSES = ["pending", "accepted", "waitlisted", "offered", "awaiting
 export default function EventPage() {
   const { t } = useTheme();
   const router = useRouter();
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const {
+    slug,
+    candidater,
+    jour,
+    crew: crewParam,
+  } = useLocalSearchParams<{
+    slug: string;
+    candidater?: string;
+    jour?: string;
+    crew?: string;
+  }>();
   const { status, me, refreshMe } = useSession();
   const { persona, goTab } = usePersona();
   const event = useApi(() => api.eventBySlug(slug), [slug, status], { enabled: status !== "loading" });
@@ -91,9 +107,21 @@ export default function EventPage() {
   const providerProfile = useApi(async () => (await api.providerProfile()).profile, [status, hasPro, hasProvider], {
     enabled: status === "in" && (hasPro || hasProvider),
   });
-  // Inscription en crew (lot 19) : proposée au chef d'un crew.
-  const crews = useApi(() => api.myCrews(), [status], { enabled: status === "in" });
+  // La feuille de candidature (lot C2b). `?candidater=1` (retour de connexion, ancien lien `/candidater`) ne l'ouvre
+  // que si l'action de la fiche le permet (candidater ou liste d'attente) : voir `candOpen` plus bas.
+  // `?candidater=crew` l'ouvre en mode crew (page d'un crew, lien du site `/e/<slug>/crew`).
+  const [cand, setCand] = useState<"solo" | "crew" | null>(null);
+  const [linked, setLinked] = useState(false);
+  useEffect(() => {
+    if (candidater && status === "in") setLinked(true);
+  }, [candidater, status]);
+  // Inscription en crew (lot 19, relecture C2b) : le chef d'un crew garde son entrée, même déjà candidat ou sans
+  // véhicule, et le suivi de ses inscriptions (`/crew/inscription`).
+  const crews = useApi(() => api.myCrews(), [status], { enabled: status === "in", cacheKey: "my-crews" });
   const leadsCrew = (crews.data ?? []).some((c) => c.role === "leader");
+  const crewRegs = useApi(() => api.myCrewRegistrations(event.data?.id ?? ""), [event.data?.id, leadsCrew], {
+    enabled: leadsCrew && Boolean(event.data),
+  });
   const [applying, setApplying] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerSent, setProviderSent] = useState(false);
@@ -165,6 +193,29 @@ export default function EventPage() {
     cancelled,
     accreditation: e.accreditation ?? null,
   });
+  // La candidature personnelle est possible (bouton principal, liste d'attente, autre jour) ; sinon seul le mode crew.
+  const otherDay =
+    mine.length > 0 &&
+    (e.days?.length ?? 0) > 1 &&
+    e.dayAccess !== "whole" &&
+    canApply &&
+    !mine.some((a) => a.eventDayId === null);
+  const soloOk = action === "apply" || action === "applyGuest" || gate === "full" || otherDay;
+  const crewOk = leadsCrew && !cancelled && !e.isLocked && !notYetOpen && !inviteOnly && e.status !== "draft";
+  const linkedMode: "solo" | "crew" | null = linked
+    ? candidater === "crew"
+      ? crewOk
+        ? "crew"
+        : null
+      : soloOk
+        ? "solo"
+        : null
+    : null;
+  const candMode = cand ?? linkedMode;
+  const closeCand = () => {
+    setCand(null);
+    setLinked(false);
+  };
   const isFollowing = following || Boolean(structure.data?.isFollowing);
   const cover = (vehicles.data ?? []).find((v) => v.status === "active");
 
@@ -204,8 +255,8 @@ export default function EventPage() {
 
   const apply = () =>
     status === "in"
-      ? router.push(`/candidater/${e.slug}`)
-      : router.push({ pathname: "/auth", params: { mode: "signup", next: `/candidater/${e.slug}` } });
+      ? setCand("solo")
+      : router.push({ pathname: "/auth", params: { mode: "signup", next: `/e/${e.slug}?candidater=1` } });
 
   const primary =
     action === "triage"
@@ -271,19 +322,59 @@ export default function EventPage() {
   ) : null;
 
   return (
-    <FlowScreen title={eventFormatLabels[e.format]} onClose={close} onRefresh={event.reload} footer={footer}>
+    <PosterFlow
+      hero={<EventHero event={e} />}
+      onClose={close}
+      onRefresh={event.reload}
+      overlays={
+        <>
+          <CandSheet
+            event={e}
+            visible={candMode !== null}
+            mode={candMode ?? "solo"}
+            soloAllowed={soloOk}
+            crewSlug={crewParam}
+            initialDay={jour}
+            onClose={closeCand}
+            onSent={() => {
+              void event.reload();
+              void crewRegs.reload();
+            }}
+          />
+          <ApplySheet
+            eventTitle={applying ? e.title : null}
+            onClose={() => setApplying(false)}
+            onSend={async (message) => {
+              await api.applyAsProvider(e.id, { rulesAccepted: true, message });
+              setApplying(false);
+              setProviderSent(true);
+              void refreshMe();
+            }}
+          />
+          <RequestSheet
+            target={mediaTarget}
+            defaultFormats={mediaProfile.data?.formats ?? []}
+            onClose={() => setMediaTarget(null)}
+            onSent={() => void event.reload()}
+          />
+          <AppSheet visible={booking} onClose={() => setBooking(false)} accessibilityLabel={L.bookEntry}>
+            <Text variant="title" color={t.color.ink}>
+              {L.bookEntry}
+            </Text>
+            {booking ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
+          </AppSheet>
+        </>
+      }
+      footer={footer}
+      testID="event-page"
+    >
       {e.status === "draft" ? (
         <Notice tone="error" testID="draft-preview">
           {wizardEndLabels.previewBanner}
         </Notice>
       ) : null}
-      <EventHero event={e} />
       <EventTitle event={e} />
-      {mine.length > 0 ? (
-        <Notice>
-          Tu as candidaté : {mine.length > 1 ? `${mine.length} candidatures` : "ta candidature est dans Sorties"}.
-        </Notice>
-      ) : cancelled ? (
+      {cancelled ? (
         <Notice tone="error">Cet événement est annulé.</Notice>
       ) : inviteOnly ? (
         <Notice>{invitationLabels.invitationRequired}</Notice>
@@ -300,25 +391,26 @@ export default function EventPage() {
       {e.customPosterUrl ? <CustomPoster url={e.customPosterUrl} structureName={e.structure.name} /> : null}
 
       {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
-      {mine.length > 0 &&
-      (e.days?.length ?? 0) > 1 &&
-      e.dayAccess !== "whole" &&
-      canApply &&
-      !mine.some((a) => a.eventDayId === null) ? (
+      {otherDay ? (
         <Button variant="secondary" icon="calendar" fullWidth testID="apply-other-day" onPress={apply}>
           Candidater pour un autre jour
         </Button>
       ) : null}
-      {leadsCrew && !cancelled && !e.isLocked && !notYetOpen && e.admission !== "invite_only" ? (
-        <Button
-          variant="secondary"
-          icon="crew"
-          fullWidth
-          testID="register-crew"
-          onPress={() => router.push({ pathname: "/crew/inscription", params: { event: e.slug } })}
-        >
+      {/* Chef d'un crew : inscrire le crew (la feuille en mode crew), puis suivre les confirmations. */}
+      {crewOk ? (
+        <SmButton kind="s" big wide icon="staff" onPress={() => setCand("crew")} testID="register-crew">
           {crewLabels.registerCrew}
-        </Button>
+        </SmButton>
+      ) : null}
+      {leadsCrew && (crewRegs.data?.length ?? 0) > 0 ? (
+        <SmButton
+          kind="g"
+          icon="list"
+          onPress={() => router.push({ pathname: "/crew/inscription", params: { event: e.slug } })}
+          testID="crew-registrations"
+        >
+          Suivre les inscriptions du crew
+        </SmButton>
       ) : null}
 
       {(e.days?.length ?? 0) > 1 ? (
@@ -343,7 +435,14 @@ export default function EventPage() {
         {e.maxVehiclesPerUser > 1 ? ` · ${e.maxVehiclesPerUser} véhicules par personne au plus` : ""}
         {preview ? `\n${preview}` : ""}
       </Info>
-      {e.rulesText ? <Info label={L.rules}>{e.rulesText}</Info> : null}
+      {e.rulesText ? (
+        <>
+          <SecHead title={L.rules} />
+          <Text variant="body" color={t.color.inkMuted} style={styles.rules} testID="event-rules">
+            {e.rulesText}
+          </Text>
+        </>
+      ) : null}
       {weather.data ? <WeatherWidget summary={weather.data.summary} attribution={weather.data.attribution} /> : null}
       {/* Lot 34 (parité D20) : billets du public réservés dans l'appli, comme sur la page du site. */}
       {!cancelled ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
@@ -379,32 +478,11 @@ export default function EventPage() {
       {reviews.data && (reviews.data.count > 0 || new Date(e.endsAt).getTime() <= nowMs()) ? (
         <Reviews data={reviews.data} reportable={status === "in"} />
       ) : null}
-      <ApplySheet
-        eventTitle={applying ? e.title : null}
-        onClose={() => setApplying(false)}
-        onSend={async (message) => {
-          await api.applyAsProvider(e.id, { rulesAccepted: true, message });
-          setApplying(false);
-          setProviderSent(true);
-          void refreshMe();
-        }}
-      />
-      <RequestSheet
-        target={mediaTarget}
-        defaultFormats={mediaProfile.data?.formats ?? []}
-        onClose={() => setMediaTarget(null)}
-        onSent={() => void event.reload()}
-      />
-      <AppSheet visible={booking} onClose={() => setBooking(false)} accessibilityLabel={L.bookEntry}>
-        <Text variant="title" color={t.color.ink}>
-          {L.bookEntry}
-        </Text>
-        {booking ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
-      </AppSheet>
-    </FlowScreen>
+    </PosterFlow>
   );
 }
 
 const styles = StyleSheet.create({
   info: { gap: space1, padding: space3 },
+  rules: { fontSize: 14, lineHeight: 21.7 },
 });

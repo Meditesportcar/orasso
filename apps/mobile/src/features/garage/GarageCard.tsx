@@ -1,19 +1,22 @@
-// Grande carte d'un véhicule du garage (lot 51, prototype `s-garage`) : photo de couverture, catégories, nom entier
-// (jamais tronqué, deux lignes au besoin), sous-ligne « 3.0 · 2021 · blanche », chiffres étroits (ch, kg, événements),
-// « Certifié », « Prix du public », « Partager sa carte » en un geste, le crayon ouvre les cinq étapes préremplies.
-import { Button, Chip, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Carte d'un véhicule du garage (lot 51, prototype `s-garage` ; reproduite fidèlement au lot C2b).
+// Première carte `.veh` : photo pleine largeur 220 px, étiquettes inclinées (première catégorie pleine, les autres au
+// trait), nom entier en Archivo large italique 22 px (jamais tronqué), sous-ligne étroite « 3.0 · 2021 · blanche »,
+// trois chiffres étroits séparés par des pointillés (ch / kg / événements), « Partager sa carte » et le crayon.
+// Cartes suivantes `.veh.sm` : vignette de 120 px à gauche, une étiquette, nom 15 px, sous-ligne.
+import { Chip, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { vehicleWizardLabels as L, plateTransferLabels, type VehicleFull } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 
+import { Num, SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { useApi } from "@/lib/useApi";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space1, space2, space3, space4 } = tokens.spacing;
 
 /** « 1 495 » : espace fine insécable des milliers, comme le prototype. */
-const narrowNumber = (n: number) => n.toLocaleString("fr-FR").replace(/\s/g, " ");
+const narrowNumber = (n: number) => n.toLocaleString("fr-FR").replace(/\s/g, " ");
 
 /** Sous-ligne de la carte : motorisation, année, couleur en minuscules. */
 export function trimLine(v: Pick<VehicleFull, "engine" | "year" | "color">): string | null {
@@ -47,108 +50,148 @@ export function GarageCard({
   const events = history.data ? history.data.filter((h) => h.attended).length : null;
   const prizes = audiencePrizesOf(vehicle);
   const trim = trimLine(vehicle);
-  const specs: [string, string][] = [];
-  if (vehicle.powerHp) specs.push([narrowNumber(vehicle.powerHp), "ch"]);
-  if (vehicle.weightKg) specs.push([narrowNumber(vehicle.weightKg), "kg"]);
-  if (events !== null) specs.push([narrowNumber(events), L.events]);
-  const facts = vehicle.plateTransfer ? plateTransferLabels.pending : vehicle.photos.length === 0 ? L.needPhoto : null;
+  const photo = mediaSource(vehicle.photos[0]?.url);
+  const placeholder = `linear-gradient(135deg, ${c.surfaceRaised} 0%, ${c.night} 100%)`;
+  const open = () => router.push(`/vehicule/${vehicle.id}`);
 
-  return (
-    <Plate style={styles.card}>
+  if (!first) {
+    // `.veh.sm` : vignette à gauche, texte à droite.
+    const smallTrim = [vehicle.year ? String(vehicle.year) : null, vehicle.color?.toLowerCase() ?? null]
+      .concat(vehicle.powerHp ? [`${narrowNumber(vehicle.powerHp)} ch`] : [])
+      .filter(Boolean)
+      .join(" · ");
+    return (
       <Pressable
         accessibilityRole="link"
         accessibilityLabel={vehicle.label}
-        onPress={() => router.push(`/vehicule/${vehicle.id}`)}
+        onPress={open}
         testID="garage-card"
+        style={[styles.veh, styles.vehSm, { backgroundColor: c.surface, boxShadow: t.shadow.shadowPoster }]}
       >
-        <View style={[styles.photo, { height: first ? 200 : 150, backgroundColor: c.surfaceSunken }]}>
-          <Photo
-            source={mediaSource(vehicle.photos[0]?.url)}
-            placeholder={`linear-gradient(135deg, ${c.surfaceRaised} 0%, ${c.night} 100%)`}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.tags}>
-            {vehicle.certified ? (
-              <Chip variant="verified" selected>
-                {L.certified}
-              </Chip>
-            ) : null}
-            {prizes > 0 ? (
-              <Chip variant="accent" selected>
-                {prizes > 1 ? `${L.audiencePrize} ×${prizes}` : L.audiencePrize}
-              </Chip>
-            ) : null}
-          </View>
+        <View style={[styles.smPhoto, { backgroundColor: c.surfaceSunken }]}>
+          <Photo source={photo} placeholder={placeholder} style={StyleSheet.absoluteFill} />
+        </View>
+        <View style={styles.smBody}>
+          {vehicle.categories[0] ? <Tag tone="line">{vehicle.categories[0].label}</Tag> : null}
+          <Text variant="posterM" color={c.ink} style={styles.smName} testID="garage-card-name">
+            {vehicle.label}
+          </Text>
+          {smallTrim ? (
+            <Text variant="meta" color={c.inkMuted} style={styles.trim}>
+              {smallTrim}
+            </Text>
+          ) : null}
+        </View>
+      </Pressable>
+    );
+  }
+
+  const specs: [string, string][] = [
+    [vehicle.powerHp ? narrowNumber(vehicle.powerHp) : "—", "ch"],
+    [vehicle.weightKg ? narrowNumber(vehicle.weightKg) : "—", "kg"],
+    [events !== null ? narrowNumber(events) : "—", L.events],
+  ];
+  const facts = vehicle.plateTransfer ? plateTransferLabels.pending : vehicle.photos.length === 0 ? L.needPhoto : null;
+
+  return (
+    <View style={[styles.veh, { backgroundColor: c.surface, boxShadow: t.shadow.shadowPoster }]}>
+      <Pressable accessibilityRole="link" accessibilityLabel={vehicle.label} onPress={open} testID="garage-card">
+        <View style={[styles.photo, { backgroundColor: c.surfaceSunken }]}>
+          <Photo source={photo} placeholder={placeholder} style={StyleSheet.absoluteFill} />
+          {vehicle.certified || prizes > 0 ? (
+            <View style={styles.badges}>
+              {vehicle.certified ? (
+                <Chip variant="verified" selected>
+                  {L.certified}
+                </Chip>
+              ) : null}
+              {prizes > 0 ? (
+                <Chip variant="accent" selected>
+                  {prizes > 1 ? `${L.audiencePrize} ×${prizes}` : L.audiencePrize}
+                </Chip>
+              ) : null}
+            </View>
+          ) : null}
         </View>
         <View style={styles.body}>
           {vehicle.categories.length ? (
-            <View style={styles.chips}>
+            <View style={styles.tags}>
               {vehicle.categories.map((cat, i) => (
-                <Chip key={cat.id} surface="plate" selected={i === 0}>
+                <Tag key={cat.id} tone={i === 0 ? "ink" : "line"}>
                   {cat.label}
-                </Chip>
+                </Tag>
               ))}
             </View>
           ) : null}
           <View>
-            <Text variant="posterM" color={c.plateInk} testID="garage-card-name">
+            <Text variant="posterL" color={c.ink} style={styles.name} testID="garage-card-name">
               {vehicle.label}
             </Text>
             {trim ? (
-              <Text variant="meta" color={c.plateMuted}>
+              <Text variant="meta" color={c.inkMuted} style={styles.trim}>
                 {trim}
               </Text>
             ) : null}
           </View>
-          {specs.length ? (
-            <View style={styles.specs}>
-              {specs.map(([value, unit]) => (
-                <View key={unit} style={styles.spec}>
-                  <Text variant="numberNarrow" color={c.plateInk}>
-                    {value}
-                  </Text>
-                  <Text variant="label" color={c.plateMuted}>
-                    {unit}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
+          <View style={[styles.specs, { borderColor: c.line }]}>
+            {specs.map(([value, unit], i) => (
+              <View key={unit} style={[styles.spec, i > 0 && [styles.specSep, { borderColor: c.line }]]}>
+                <Num size={28}>{value}</Num>
+                <Text variant="caption" color={c.inkMuted} style={styles.specUnit}>
+                  {unit}
+                </Text>
+              </View>
+            ))}
+          </View>
           {facts ? (
-            <Text variant="caption" color={c.plateMuted}>
+            <Text variant="caption" color={c.inkMuted}>
               {facts}
             </Text>
           ) : null}
         </View>
       </Pressable>
       <View style={styles.actions}>
-        <View style={styles.grow}>
-          <Button variant="secondary" icon="share" onPress={() => onShare(vehicle)} fullWidth testID="garage-share">
-            {L.share}
-          </Button>
-        </View>
-        <Button
-          variant="plate"
-          icon="list"
+        <SmButton kind="s" icon="share" onPress={() => onShare(vehicle)} style={styles.grow} testID="garage-share">
+          {L.share}
+        </SmButton>
+        <SmButton
+          kind="s"
+          icon="edit"
           onPress={() => router.push(`/vehicule/${vehicle.id}/modifier`)}
           accessibilityLabel={L.editVehicle}
           testID="garage-edit"
-        >
-          Modifier
-        </Button>
+        />
       </View>
-    </Plate>
+      <Text variant="credit" color={c.inkMuted} style={styles.credit}>
+        Orasso
+      </Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { overflow: "hidden", paddingHorizontal: 0, paddingVertical: 0 },
-  photo: { overflow: "hidden" },
-  tags: { position: "absolute", top: space2, left: space2, flexDirection: "row", gap: space1 },
-  body: { gap: space2, paddingTop: space3, paddingHorizontal: space3 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space1 },
-  specs: { flexDirection: "row", gap: space3 + space2 },
-  spec: { flexDirection: "row", alignItems: "baseline", gap: space1 },
-  actions: { flexDirection: "row", gap: space2, padding: space3 },
-  grow: { flex: 1 },
+  veh: { borderRadius: 22, overflow: "hidden", position: "relative" },
+  photo: { height: 220, overflow: "hidden" },
+  badges: { position: "absolute", top: space2, left: space2, flexDirection: "row", gap: space1 },
+  body: { gap: space2 + 2, paddingTop: space3 + 2, paddingHorizontal: space4 },
+  tags: { flexDirection: "row", flexWrap: "wrap", gap: space1 + 2 },
+  name: { fontSize: 22, lineHeight: 21 },
+  trim: { fontSize: 13, textTransform: "uppercase" },
+  specs: { flexDirection: "row", borderTopWidth: 1, borderBottomWidth: 1, borderStyle: "dashed" },
+  spec: { flex: 1, paddingVertical: space2 + 2, gap: 2 },
+  specSep: { borderLeftWidth: 1, borderStyle: "dashed", paddingLeft: space3 },
+  specUnit: { fontSize: 11.5, lineHeight: 14 },
+  actions: {
+    flexDirection: "row",
+    gap: space2 + 2,
+    paddingHorizontal: space4,
+    paddingTop: space2 + 2,
+    paddingBottom: space4,
+  },
+  grow: { flex: 1, alignSelf: "stretch" },
+  credit: { position: "absolute", right: space3, bottom: space1 },
+  vehSm: { flexDirection: "row", alignItems: "stretch" },
+  smPhoto: { width: 120, minHeight: 110, overflow: "hidden" },
+  smBody: { flex: 1, gap: space2, padding: space3 + 2 },
+  smName: { fontSize: 15, lineHeight: 16 },
 });
