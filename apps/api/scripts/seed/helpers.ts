@@ -9,6 +9,7 @@ import * as t from "../../src/db/schema";
 import { storage } from "../../src/lib/storage";
 import type { EventRow } from "../../src/modules/events/repo";
 import { ensureProfile } from "../../src/modules/profiles/service";
+import { putRealPhoto } from "./photos";
 
 /** `--small` : volumes réduits (voir `seed.ts`). */
 export const SMALL = process.argv.slice(2).includes("--small");
@@ -72,8 +73,8 @@ export async function createAccount(
 }
 
 // --- Véhicules et photos factices ---------------------------------------------------------------------------------
-const PALETTE = ["#d4a017", "#2b2f36", "#8a1c1c", "#1f4e79", "#e8e4da", "#3a5f3a", "#6b6f76", "#c0c0c0"];
 let plateNo = 100;
+let vehiclePhotoNo = 0;
 const nextPlate = () => {
   const letters = "ABCDEFGHJKLMNPQRSTVWXYZ";
   const n = plateNo++;
@@ -147,7 +148,8 @@ export async function createVehicle(
   const photos = between(1, 3);
   for (let position = 1; position <= photos; position++) {
     const key = `seed/${row.id}-${position}.webp`;
-    const info = await fakePhoto(key, pick(PALETTE));
+    // Lot C6 : de vraies photos (JohnGRD Photographie), motos pour les motos, jamais deux fois la même d'affilée.
+    const info = await putRealPhoto(key, ref.type === "moto" ? "moto" : "car", vehiclePhotoNo++);
     await db.insert(t.vehiclePhotos).values({
       vehicleId: row.id,
       position,

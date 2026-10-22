@@ -6,6 +6,9 @@ import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { staffAccount } from "./day-j";
 import { createEvent, fakePhoto, now, parisAt } from "./helpers";
+import { putRealPhoto } from "./photos";
+
+let proPhotoNo = 0;
 
 // --- Professionnels et billetterie (lot 14) ------------------------------------------------------------------------
 
@@ -113,7 +116,7 @@ export async function seedPros(hash: string) {
     if (!pro) throw new Error("fiche pro");
     for (let i = 0; i < 3; i++) {
       const key = `seed/pros/${k.pro.slug}-${i}.webp`;
-      await fakePhoto(key, k.color);
+      await putRealPhoto(key, "car", proPhotoNo++);
       await db.insert(t.proPhotos).values({ proId: pro.id, storageKey: key, position: i });
     }
     for (const [grade, percent] of Object.entries(k.discounts)) {

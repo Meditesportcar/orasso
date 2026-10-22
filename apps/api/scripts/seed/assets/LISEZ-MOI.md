@@ -1,8 +1,10 @@
 # Assets du seed
 
-- `logo-msc.png` : logo de MéditeSportCar, tiré de l'artefact DA v2 (`.claude/prototype-v2/index.html`, variable `--msc-logo`).
-- `photos/*.jpg` : les 7 photos de voitures de l'artefact DA v2 (crédit « JohnGRD Photographie »), utilisées **en démonstration**
-  pour les affiches des événements du seed, en attendant les photos de Damien (D34).
+- `logo-msc.png` : logo réel de MéditeSportCar (blanc, fond transparent, rogné, 512 px), fourni par Damien (lot C6). Il se pose sur le fond sombre de la fiche organisateur.
+- `photos/*.jpg` : 24 photos réelles de JohnGRD Photographie (photographe de Damien, usage autorisé par lui), choisies parmi 121,
+  recompressées (côté long 1600 px, JPEG qualité 80, sans EXIF). Préfixes : `event-` (scènes de rassemblement), `car-` (voitures),
+  `moto-`, `detail-` (pare-brise MéditeSportCar). Les originaux ne sont pas versionnés.
+  Usage : affiches d'événements (`event-`, `car-`), garage des comptes de démonstration (`car-`, `moto-`), galeries (pros, média).
 
-Si Damien dépose ses photos dans `photos-seed/` (à la racine du dépôt, ou dans le dossier donné par `PHOTOS_SEED_DIR`),
-le seed les prend à la place de celles-ci. Les droits des photos de l'artefact restent à confirmer par Damien avant tout usage public.
+Si Damien dépose d'autres photos dans `photos-seed/` (à la racine du dépôt, ou dans le dossier donné par `PHOTOS_SEED_DIR`),
+le seed les prend à la place pour les affiches.

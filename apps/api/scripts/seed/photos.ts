@@ -1,11 +1,13 @@
-// Lot C5 (D34) : photos d'événements du seed. Priorité aux photos de Damien (`photos-seed/` à la racine du dépôt, ou le
-// dossier de `PHOTOS_SEED_DIR`) ; sinon les 7 photos de l'artefact DA v2 (`assets/photos`, crédit « JohnGRD Photographie »),
-// en démonstration. Toutes sont rendues en WebP (le pilote de stockage ne sert un `content-type` d'image que pour .webp).
+// Lot C5 (D34) puis lot C6 : photos du seed. Priorité aux photos de Damien (`photos-seed/` à la racine du dépôt, ou le
+// dossier de `PHOTOS_SEED_DIR`) pour les affiches ; sinon la sélection réelle de `assets/photos` (22 photos de
+// JohnGRD Photographie, recompressées, sans EXIF). Préfixes : `event-` (scènes), `car-`, `moto-`, `detail-`.
+// Toutes sont rendues en WebP (le pilote de stockage ne sert un `content-type` d'image que pour .webp).
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import { repoRoot } from "../../src/env";
+import { storage } from "../../src/lib/storage";
 
 export const ASSETS_DIR = fileURLToPath(new URL("./assets/", import.meta.url));
 const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp"]);
@@ -18,6 +20,38 @@ async function imagesIn(dir: string): Promise<string[]> {
   }
 }
 
+type Pool = "car" | "moto" | "detail";
+const poolCache = new Map<string, { name: string; data: Buffer; width: number; height: number }[]>();
+
+/** Les photos réelles d'un lot (voitures et scènes, motos ou détails), en WebP 1600 px, dans un ordre stable. */
+async function realPool(pool: Pool) {
+  const hit = poolCache.get(pool);
+  if (hit) return hit;
+  const dir = join(ASSETS_DIR, "photos");
+  const wanted = (n: string) =>
+    pool === "car" ? n.startsWith("car-") || n.startsWith("event-") : n.startsWith(`${pool}-`);
+  const out = [];
+  for (const name of (await imagesIn(dir)).filter(wanted)) {
+    const { data, info } = await sharp(await readFile(join(dir, name)))
+      .rotate()
+      .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer({ resolveWithObject: true });
+    out.push({ name, data, width: info.width, height: info.height });
+  }
+  poolCache.set(pool, out);
+  return out;
+}
+
+/** Pose la `index`-ième photo réelle du lot sous `key` (à la place d'un dégradé factice) ; renvoie ses dimensions. */
+export async function putRealPhoto(key: string, pool: Pool, index: number) {
+  const photos = await realPool(pool);
+  const photo = photos[index % photos.length];
+  if (!photo) throw new Error(`Aucune photo réelle « ${pool} » dans ${ASSETS_DIR}`);
+  await storage.put(key, photo.data);
+  return { width: photo.width, height: photo.height, size: photo.data.length };
+}
+
 /** Les photos d'événement disponibles, en WebP (2000 px au plus), dans un ordre stable. */
 export async function demoEventPhotos(): Promise<{ name: string; data: Buffer }[]> {
   const own = process.env.PHOTOS_SEED_DIR || join(repoRoot, "photos-seed");
@@ -25,7 +59,7 @@ export async function demoEventPhotos(): Promise<{ name: string; data: Buffer }[
   let names = await imagesIn(dir);
   if (!names.length) {
     dir = join(ASSETS_DIR, "photos");
-    names = await imagesIn(dir);
+    names = (await imagesIn(dir)).filter((n) => n.startsWith("car-") || n.startsWith("event-"));
   }
   const out: { name: string; data: Buffer }[] = [];
   for (const name of names) {
