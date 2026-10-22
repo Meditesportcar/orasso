@@ -1,5 +1,5 @@
 import type { SVGProps } from "react";
-import { type IconName, type IconShape, iconShapes } from "../../icons";
+import { type IconName, type IconShape, iconShapes, shapeFilled } from "../../icons";
 
 export type IconProps = Omit<SVGProps<SVGSVGElement>, "name" | "children"> & {
   name: IconName;
@@ -7,17 +7,18 @@ export type IconProps = Omit<SVGProps<SVGSVGElement>, "name" | "children"> & {
   size?: number;
   /** Épaisseur du trait (2 par défaut ; 1,8 dans la barre d'onglets). */
   strokeWidth?: number;
-  /** Remplie : seulement l'onglet actif de la barre d'onglets. */
-  filled?: boolean;
+  /** Remplie : `true` tout, `"parts"` seulement les parties `.fillme` de l'artefact (onglet actif, lot C1). */
+  filled?: boolean | "parts";
   /** Texte alternatif ; sans lui, l'icône est décorative (aria-hidden). */
   title?: string;
 };
 
-function renderShape(shape: IconShape, index: number) {
+function renderShape(shape: IconShape, index: number, fill?: string) {
   const [tag, attrs] = shape;
-  if (tag === "path") return <path key={index} {...attrs} />;
-  if (tag === "circle") return <circle key={index} {...attrs} />;
-  return <rect key={index} {...attrs} />;
+  const extra = fill ? { fill } : {};
+  if (tag === "path") return <path key={index} {...attrs} {...extra} />;
+  if (tag === "circle") return <circle key={index} {...attrs} {...extra} />;
+  return <rect key={index} {...attrs} {...extra} />;
 }
 
 /** Une icône du jeu Icons : trait en currentColor, la couleur vient du contexte. */
@@ -28,7 +29,7 @@ export function Icon({ name, size = 24, strokeWidth = 2, filled = false, title, 
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill={filled ? "currentColor" : "none"}
+      fill={filled === true ? "currentColor" : "none"}
       stroke="currentColor"
       strokeWidth={strokeWidth}
       strokeLinecap="round"
@@ -39,7 +40,9 @@ export function Icon({ name, size = 24, strokeWidth = 2, filled = false, title, 
       focusable="false"
       {...rest}
     >
-      {shapes.map(renderShape)}
+      {shapes.map((shape, i) =>
+        renderShape(shape, i, filled === "parts" && shapeFilled(name, i, filled) ? "currentColor" : undefined),
+      )}
     </svg>
   );
 }

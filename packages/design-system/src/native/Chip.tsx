@@ -55,8 +55,10 @@ export function Chip({
   let fill = c.ink;
   let selectedInk = c.surface;
   if (variant === "accent") {
+    // Lot C1, tour 2 : la plaque est la carte du thème (claire en Sable) ; le texte moutarde y prend accent-text
+    // (lisible), le fond plein reste moutarde.
     border = onPlate ? c.accent : c.accentText;
-    ink = onPlate ? c.accent : c.accentText;
+    ink = c.accentText;
     fill = onPlate ? c.accent : c.accentText;
     selectedInk = c.accentInk;
   } else if (variant === "verified") {
@@ -69,7 +71,7 @@ export function Chip({
   }
   if (lit) {
     border = c.accent;
-    ink = c.accent;
+    ink = c.accentText;
   }
   if (selected) border = fill;
 

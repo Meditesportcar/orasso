@@ -1,9 +1,9 @@
-// Accueil du mÃ©dia (lot 43, prototype `s-home` media) : le reportage accrÃ©ditÃ© (affiche, zone presse), le badge presse, les
-// consignes de l'organisation (visibles une fois accrÃ©ditÃ©), Â« Ã€ couvrir bientÃ´t Â», les contenus. Sans reportage : une
+// Accueil du média (lot 43, prototype `s-home` media) : le reportage accrédité (affiche, zone presse), le badge presse, les
+// consignes de l'organisation (visibles une fois accrédité), « À couvrir bientôt », les contenus. Sans reportage : une
 // phrase qui dit quoi faire.
-// Lot C4b (artefact `s-home` mÃ©dia) : pas de grand titre, consignes en lignes `.tz-it` cochÃ©es, titres `.sec-h`.
+// Lot C4b (artefact `s-home` média) : pas de grand titre, consignes en lignes `.tz-it` cochées, titres `.sec-h`.
 
-import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { homeLabels, homeProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
@@ -59,11 +59,13 @@ export function MediaHome() {
             tags={
               accredited ? (
                 <>
-                  <AngledTag tone="acc">{homeProfileLabels.accredited}</AngledTag>
-                  <AngledTag>Badge presse</AngledTag>
+                  <Tag on="poster" tone="acc">
+                    {homeProfileLabels.accredited}
+                  </Tag>
+                  <Tag on="poster">Badge presse</Tag>
                 </>
               ) : (
-                <StatusTag status={report.status === "pending" ? "pending" : "waitlist"} />
+                <StatusTag status={report.status === "pending" ? "pending" : "waitlist"} on="poster" />
               )
             }
             organizer={report.organizer}
@@ -113,9 +115,9 @@ export function MediaHome() {
             <MiniTile
               key={e.slug}
               testID="home-to-cover"
-              tag={<AngledTag tone="line">GardÃ©</AngledTag>}
+              tag={<AngledTag tone="line">Gardé</AngledTag>}
               title={e.title}
-              caption={[formatDay(e.startsAt), e.city].filter(Boolean).join(" Â· ")}
+              caption={[formatDay(e.startsAt), e.city].filter(Boolean).join(" · ")}
               onPress={() => router.push(`/e/${e.slug}`)}
             />
           ))}

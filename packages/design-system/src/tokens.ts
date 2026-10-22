@@ -135,7 +135,7 @@ export const tokens = {
       "brandCredit": "rgba(233,184,36,0.7)",
       "brandCreditLight": "#8a6200",
       "surfaceField": "#fffaf0",
-      "plateField": "#363941",
+      "plateField": "#fffaf0",
       "mapLand": "#e6dcc4",
       "mapLand2": "#dbcfb2",
       "mapSea": "#aebbbd",
@@ -1165,9 +1165,9 @@ export const tokensV2Overlay = [
     "name": "plate-field",
     "value": {
       "beton": "#363941",
-      "sable": "#363941"
+      "sable": "#fffaf0"
     },
-    "why": "champ et fond graphite clair dans une plaque, sous plate-ink (ancienne valeur de surface-raised, devenue claire en Sable)"
+    "why": "champ et fond de saisie dans une plaque, sous plate-ink : graphite clair en Béton, --field de l’artefact en Sable (lot C1, tour 2 : la plaque est claire en Sable)"
   },
   {
     "kind": "added",

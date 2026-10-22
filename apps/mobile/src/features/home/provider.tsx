@@ -1,8 +1,8 @@
-// Accueil du prestataire (lot 43, prototype `s-home` presta) : la mission retenue (affiche, emplacement, arrivÃ©e), la
-// mÃ©tÃ©o du jour, le message de l'organisateur, les missions qui t'attendent. Sans mission : une phrase qui dit quoi faire.
-// Lot C4b (artefact `s-home` prestataire) : pas de grand titre, titres `.sec-h`, Ã©tiquettes inclinÃ©es.
+// Accueil du prestataire (lot 43, prototype `s-home` presta) : la mission retenue (affiche, emplacement, arrivée), la
+// météo du jour, le message de l'organisateur, les missions qui t'attendent. Sans mission : une phrase qui dit quoi faire.
+// Lot C4b (artefact `s-home` prestataire) : pas de grand titre, titres `.sec-h`, étiquettes inclinées.
 
-import { Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { homeLabels, homeProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
@@ -50,21 +50,24 @@ export function ProviderHome() {
             title={mission.event.title}
             tags={
               <>
-                <StatusTag status={accepted ? "retained" : mission.status === "pending" ? "pending" : "waitlist"} />
-                {mission.spotLabel ? <AngledTag>{homeProfileLabels.spot(mission.spotLabel)}</AngledTag> : null}
+                <StatusTag
+                  status={accepted ? "retained" : mission.status === "pending" ? "pending" : "waitlist"}
+                  on="poster"
+                />
+                {mission.spotLabel ? <Tag on="poster">{homeProfileLabels.spot(mission.spotLabel)}</Tag> : null}
               </>
             }
             organizer={mission.organizer}
             meta={[
               ...(mission.event.city ? [{ icon: "place" as const, text: mission.event.city }] : []),
               ...(mission.installAt
-                ? [{ icon: "wait" as const, text: `ArrivÃ©e ${formatHour(mission.installAt)}` }]
+                ? [{ icon: "wait" as const, text: `Arrivée ${formatHour(mission.installAt)}` }]
                 : []),
             ]}
             action={{
               label: homeProfileLabels.myProviderAccess,
               icon: "qr",
-              // Le ticket de la candidature (emplacement, arrivÃ©e, consignes) vit dans l'onglet Candidatures (lot 54).
+              // Le ticket de la candidature (emplacement, arrivée, consignes) vit dans l'onglet Candidatures (lot 54).
               onPress: () => goTab("candidatures"),
             }}
             destination={{
@@ -111,7 +114,7 @@ export function ProviderHome() {
               title={m.title}
               caption={[formatDay(m.startsAt), m.city, m.distanceKm !== null ? `${m.distanceKm} km` : null]
                 .filter(Boolean)
-                .join(" Â· ")}
+                .join(" · ")}
               onPress={() => goTab("missions")}
             />
           ))}
@@ -124,6 +127,6 @@ export function ProviderHome() {
 }
 
 const styles = StyleSheet.create({
-  // `.tz-it` : posÃ© sur le fond, rayon 12.
+  // `.tz-it` : posé sur le fond, rayon 12.
   message: { gap: space2, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 12 },
 });

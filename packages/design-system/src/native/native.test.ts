@@ -6,6 +6,7 @@ import { withAlpha } from "./color";
 import { archivoAt, archivoFamilies, archivoFamily } from "./fontFamily";
 import { linearLine, parseColor, parseGradient, radialGeometry, repeatingBands } from "./gradientCss";
 import { encodeAlphaPng, fractalNoiseTile, textureTile, toBase64 } from "./noise";
+import { tabLabelFit } from "./tabLabel";
 import { textStyle, textStyles } from "./textStyles";
 
 const dir = import.meta.dirname;
@@ -89,7 +90,8 @@ describe("le O vivant (lot 39) : variantes, alias, branchements", () => {
   });
   it("la barre d'onglets porte le O vivant, la feuille fait taire le fond", () => {
     expect(read("TabBar.tsx")).toContain("<CenterTabO active={active}");
-    expect(read("Motion.tsx")).toContain("useGroundQuiet(visible)");
+    expect(read("Motion.tsx")).toContain("useGroundQuiet(visible && shown)");
+    expect(read("Motion.tsx")).toContain("hardwareBackPress");
     expect(read("Ground.tsx")).toContain('variant === "battle"');
   });
 });
@@ -106,6 +108,11 @@ describe("polices statiques", () => {
     expect(textStyle("tab").fontFamily).toBe("Archivo-115-ExtraBold");
     expect(archivoAt(110, 850)).toBe("Archivo-110-Heavy");
     expect(archivoAt(70, 900)).toBe("Archivo-70-Black");
+    // Largeur non numérique (font-stretch « normal ») : 100 %.
+    expect(archivoAt(Number.parseFloat("normal"), 800)).toBe("Archivo-ExtraBold");
+    expect(archivoAt(Number.NaN, Number.NaN)).toBe("Archivo-Regular");
+    expect(tabLabelFit("Accueil")).toEqual({});
+    expect(tabLabelFit("Candidatures").fontFamily).toBe("Archivo-ExtraBold");
     expect(archivoFamily("normal", 400, false)).toBe("Archivo-Regular");
     expect(archivoFamily("normal", 600, false)).toBe("Archivo-SemiBold");
     expect(archivoFamily("normal", 800, false)).toBe("Archivo-ExtraBold");
