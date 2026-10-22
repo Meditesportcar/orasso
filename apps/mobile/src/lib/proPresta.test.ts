@@ -17,6 +17,7 @@ import {
   reviewTag,
   spotLine,
   upcomingDetail,
+  viewerCellKey,
 } from "./proPresta";
 
 const card = (over: Partial<MissionCard> = {}): MissionCard =>
@@ -223,6 +224,14 @@ describe("fiche pro et stats", () => {
   it("ne promet pas Circuit+ quand Légende n'a pas de remise (Circuit seul, ou Légende seule)", () => {
     expect(discountCells({ circuit: 15 })).toEqual([{ key: "circuit", label: "Circuit", percent: 15 }]);
     expect(discountCells({ legende: 15 })).toEqual([{ key: "legende", label: "Légende", percent: 15 }]);
+  });
+  it("surligne la case du grade de celui qui regarde, Circuit+ comprise pour Légende (lot C4b)", () => {
+    const cells = discountCells({ rodage: 5, route: 8, sport: 10, circuit: 15, legende: 15 });
+    expect(viewerCellKey(cells, "sport")).toBe("sport");
+    expect(viewerCellKey(cells, "legende")).toBe("circuit");
+    expect(viewerCellKey(cells, "circuit")).toBe("circuit");
+    expect(viewerCellKey(discountCells({ route: 8 }), "sport")).toBeNull();
+    expect(viewerCellKey(cells, null)).toBeNull();
   });
   it("sépare les milliers par une espace insécable", () => {
     expect(formatCount(1284)).toBe("1 284");

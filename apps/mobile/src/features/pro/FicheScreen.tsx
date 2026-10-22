@@ -1,10 +1,15 @@
-// Casquette Pro, Ma fiche (DA v2, lot 54, prototype `s-pro`) : l'en-tête (logo rond, nom, « Pro validé », ville), deux
-// segments « Vue passionné » (ce que voit un passionné : activités en tuiles, remises par grade en grands chiffres,
-// réalisations en mosaïque, « Y aller » et « Favori ») et « Modifier ma fiche » (champs avec exemples de format, SIRET et
-// adresse vérifiés, remises, photos, publication). Publier une actualité reste une page masquée, ouverte d'ici.
-// L'abonnement et les emplacements sponsorisés se consultent seulement : aucun prix ni bouton de paiement dans l'appli,
-// la souscription se fait sur le site Orasso.
-import { Button, Chip, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Casquette Pro, Ma fiche (DA v2, lot 54, reconstruite au lot C4b d'après l'artefact `s-pro`) : photo d'atelier en
+// tête qui fond vers le fond (`.pro-hero`, 230 px), logo carré et nom remontés sur la photo (`.pro-id`), « Pro validé »
+// moutarde inclinée (`.pill-o`), puis le bloc de segments (`.seg`) :
+//  - « Vue passionné » : activités en tuiles à icône sur trois colonnes (`.acts-g`), remises par grade en quatre tuiles
+//    dont celle du grade de celui qui regarde en rouge (`.disc .top`), réalisations en mosaïque (`.works`), « Y aller »
+//    et « Favori » ;
+//  - « Modifier ma fiche » : les champs dans l'ordre de l'artefact (activités à cocher, SIRET, adresse, téléphone,
+//    Instagram, site web, présentation), puis remises, logo et photos ;
+//  - « Publications » (§ 5.2 de l'audit, le fourre-tout sorti de Modifier) : publier une actualité, l'état de la fiche
+//    dans l'annuaire, les organisateurs partenaires, l'abonnement et les emplacements sponsorisés en consultation.
+// L'abonnement se consulte seulement : aucun prix ni bouton de paiement dans l'appli, la souscription se fait sur le site.
+import { Button, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { proAppLabels as L, proActivityLabels, proV2Labels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
@@ -14,15 +19,14 @@ import { PhotoViewer } from "@/features/vehicle/PhotoViewer";
 import { api } from "@/lib/api";
 import { mapsUrl } from "@/lib/directions";
 import { mediaSource } from "@/lib/media";
-import { discountCells, proActivityIcons } from "@/lib/proPresta";
+import { discountCells, initialsOf, proActivityIcons, viewerCellKey } from "@/lib/proPresta";
+import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
-import { IconTiles } from "@/ui/IconTiles";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
-import { SecHead } from "@/ui/SecHead";
-import { Segments } from "@/ui/Segments";
 import { ProFicheFields } from "./FicheForm";
+import { ActGrid, DiscGrid, SecH, SegBlock, SquareLogo, ValidatedPill } from "./kit";
 import {
   DiscountsBlock,
   MediaBlock,
@@ -32,15 +36,21 @@ import {
   SubscriptionBlock,
 } from "./ProBlocks";
 
-const { space1, space2, space3, space4, space12 } = tokens.spacing;
-/** Logo rond de l'en-tête : 64 px. */
-const LOGO = space12 + space4;
+const { space1, space3, space4 } = tokens.spacing;
+/** `.pro-hero` : 230 px ; `.pro-id` remonte de 56 px sur la photo. */
+const HERO = 230;
+const ID_LIFT = 56;
+/** `.works` : deux rangées de 90 px, 6 px d'écart. */
+const WORK_ROW = 90;
+const WORK_GAP = 6;
 
-type Mode = "view" | "edit";
+type Mode = "view" | "edit" | "posts";
 
 export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
   const { t } = useTheme();
+  const c = t.color;
   const router = useRouter();
+  const { me } = useSession();
   // Fiche créée depuis Créer (lot 34) : un mot de confirmation.
   const { fait } = useLocalSearchParams<{ fait?: string }>();
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
@@ -56,12 +66,13 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
       : pro.city
     : (zone ?? proV2Labels.noAddress);
   const cells = pro ? discountCells(pro.discounts) : [];
+  const top = viewerCellKey(cells, me?.profile.grade);
   const hasPosition = Boolean(pro && ((pro.lat !== null && pro.lng !== null) || pro.addressLine || pro.city));
+  const works = pro?.photos.slice(0, 3) ?? [];
+  const heroUrl = pro?.photos[0]?.url ?? null;
 
   return (
     <TabScreen
-      title={proV2Labels.ficheTitle}
-      facts={pro?.name}
       onRefresh={async () => {
         await myPro.reload();
       }}
@@ -88,82 +99,97 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
         )
       ) : (
         <>
-          {fait === "creee" ? <Notice>{L.created}</Notice> : null}
-          {/* Copie en cache d'avant le lot 21 : pas de `visibility`. */}
-          {pro.visibility?.banner ? <Notice>{pro.visibility.banner}</Notice> : null}
+          {/* `.pro-hero` : la photo d'atelier pleine largeur (première réalisation), assombrie en haut, fondue vers le fond. */}
+          <View style={styles.hero} testID="pro-hero">
+            <Photo
+              source={heroUrl ? mediaSource(heroUrl) : undefined}
+              placeholder={`linear-gradient(160deg, ${c.surfaceRaised} 0%, ${c.groundDeep} 100%)`}
+              style={StyleSheet.absoluteFill}
+              accessibilityLabel={heroUrl ? `Photo de ${pro.name}` : undefined}
+            />
+            <Photo
+              placeholder={`linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 30%, ${c.ground} 100%)`}
+              style={StyleSheet.absoluteFill}
+            />
+          </View>
 
           <View style={styles.identity} testID="pro-identity">
-            <Photo
-              source={mediaSource(pro.logoUrl)}
-              placeholder={`linear-gradient(135deg, ${t.color.surfaceRaised} 0%, ${t.color.night} 100%)`}
-              cut="thumb"
-              style={styles.logo}
-              accessibilityLabel={`Logo de ${pro.name}`}
-            />
+            <SquareLogo initials={initialsOf(pro.name)} url={pro.logoUrl} label={`Logo de ${pro.name}`} />
             <View style={styles.identityText}>
-              <Text variant="posterM" color={t.color.ink}>
+              <Text variant="posterL" color={c.ink} accessibilityRole="header">
                 {pro.name}
               </Text>
               <View style={styles.pills}>
                 {pro.verifiedAt ? (
-                  <Chip variant="verified">{proV2Labels.proValidated}</Chip>
+                  <ValidatedPill label={proV2Labels.proValidated} />
                 ) : (
-                  <Chip>{L.toVerify}</Chip>
+                  <Text variant="meta" color={c.accentText}>
+                    {L.toVerify}
+                  </Text>
                 )}
-                {pro.published ? null : <Chip>{L.draft}</Chip>}
+                {pro.published ? null : (
+                  <Text variant="meta" color={c.inkMuted}>
+                    {L.draft}
+                  </Text>
+                )}
                 <Muted variant="caption">{cityLine}</Muted>
               </View>
             </View>
           </View>
+          {fait === "creee" ? <Notice>{L.created}</Notice> : null}
+          {/* Copie en cache d'avant le lot 21 : pas de `visibility`. */}
+          {pro.visibility?.banner ? <Notice>{pro.visibility.banner}</Notice> : null}
 
-          <Segments
+          <SegBlock
             testID="pro-segments"
             value={mode}
             onChange={setMode}
             items={[
               { id: "view", label: proV2Labels.segView },
               { id: "edit", label: proV2Labels.segEdit },
+              { id: "posts", label: proV2Labels.segPosts },
             ]}
           />
 
           <View style={[styles.stack, mode !== "view" && styles.hidden]} testID="pro-view">
-            <Muted variant="label">{proV2Labels.activities}</Muted>
-            <IconTiles
+            <Text variant="label" color={c.inkMuted}>
+              {proV2Labels.activities}
+            </Text>
+            <ActGrid
               testID="pro-view-activities"
               items={pro.activities.map((a) => ({ key: a, label: proActivityLabels[a], icon: proActivityIcons[a] }))}
             />
 
-            <SecHead title={proV2Labels.discountsTitle} hint={proV2Labels.discountsHint} />
+            <SecH title={proV2Labels.discountsTitle} hint={proV2Labels.discountsHint} />
             {cells.length ? (
-              <Plate style={styles.discounts} testID="pro-view-discounts">
-                {cells.map((c, i) => (
-                  <View
-                    key={c.key}
-                    style={[styles.discount, i > 0 && { borderLeftWidth: 1, borderLeftColor: t.color.plateLine }]}
-                  >
-                    <Text variant="label" color={t.color.plateMuted}>
-                      {c.label}
-                    </Text>
-                    <Text variant="numberNarrow" color={t.color.plateInk} style={styles.percent}>
-                      {`${c.percent} %`}
-                    </Text>
-                  </View>
-                ))}
-              </Plate>
+              <DiscGrid
+                testID="pro-view-discounts"
+                items={cells.map((cell) => ({
+                  key: cell.key,
+                  label: cell.label,
+                  // Espace insécable : « 10 % » ne se coupe jamais entre le chiffre et le signe.
+                  value: `${cell.percent} %`,
+                  top: cell.key === top,
+                }))}
+              />
             ) : (
               <Muted variant="body">{proV2Labels.discountsNone}</Muted>
             )}
 
-            <SecHead
+            <SecH
               title={proV2Labels.worksTitle}
               hint={pro.photos.length ? proV2Labels.works(pro.photos.length) : undefined}
             />
-            {pro.photos.length ? (
+            {works.length ? (
               <View style={styles.works} testID="pro-view-works">
-                {pro.photos.map((p, i) => (
+                {works.map((p, i) => (
                   <Pressable
                     key={p.id}
-                    style={styles.work}
+                    style={[
+                      styles.work,
+                      works.length === 1 ? styles.workAlone : i === 0 ? styles.workMain : styles.workSide,
+                      works.length === 2 && i === 1 && styles.workTall,
+                    ]}
                     onPress={() => setViewer(i)}
                     accessibilityRole="button"
                     accessibilityLabel={`Réalisation ${i + 1} en plein écran`}
@@ -180,7 +206,7 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
               {hasPosition ? (
                 <Button
                   variant="primary"
-                  icon="place"
+                  icon="nav"
                   style={styles.grow}
                   onPress={() =>
                     void Linking.openURL(
@@ -198,18 +224,24 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
                   {proV2Labels.goThere}
                 </Button>
               ) : null}
-              <Button variant="secondary" icon="heart" onPress={() => setPreviewNote(true)} testID="pro-favorite">
+              <Button variant="secondary" icon="star" onPress={() => setPreviewNote(true)} testID="pro-favorite">
                 {proV2Labels.favorite}
               </Button>
             </View>
             {previewNote ? <Notice>{proV2Labels.favoritePreview}</Notice> : null}
           </View>
-          {/* Montée en permanence : changer de segment ne perd pas la saisie en cours. */}
+
+          {/* Montés en permanence : changer de segment ne perd pas la saisie en cours. */}
           <View style={[styles.stack, mode !== "edit" && styles.hidden]} testID="pro-edit">
-            <ProFicheFields state={myPro} />
+            <ProFicheFields state={myPro} siret={<SiretBlock pro={pro} reload={reload} />} />
+            <DiscountsBlock pro={pro} reload={reload} />
+            <MediaBlock pro={pro} reload={reload} />
+          </View>
+
+          <View style={[styles.stack, mode !== "posts" && styles.hidden]} testID="pro-posts">
             {/* Lot 40 : Publier n'est plus un onglet (barre v2) ; on y arrive depuis Ma fiche. */}
             <Button
-              variant="plate"
+              variant="secondary"
               icon="add"
               next
               onPress={() => router.push("/(pro)/publier")}
@@ -219,9 +251,6 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
               Publier une actualité
             </Button>
             <PublicationBlock pro={pro} reload={reload} />
-            <SiretBlock pro={pro} reload={reload} />
-            <DiscountsBlock pro={pro} reload={reload} />
-            <MediaBlock pro={pro} reload={reload} />
             <PartnersBlock pro={pro} reload={reload} />
             <SubscriptionBlock pro={pro} />
           </View>
@@ -232,18 +261,27 @@ export function FicheScreen({ initial = "view" }: { initial?: Mode }) {
 }
 
 const styles = StyleSheet.create({
-  identity: { flexDirection: "row", alignItems: "center", gap: space3 },
+  // La zone qui défile a 16 px de marge et 12 px en haut (`TabScreen`) : la photo les reprend pour aller bord à bord.
+  hero: { height: HERO, marginHorizontal: -space4, marginTop: -space3, overflow: "hidden" },
+  identity: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: space3,
+    marginTop: -ID_LIFT - space3,
+    zIndex: 3,
+  },
   identityText: { flex: 1, minWidth: 0, gap: space1 },
-  logo: { width: LOGO, height: LOGO, borderRadius: tokens.radius.radiusPill, overflow: "hidden" },
-  pills: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space2 },
-  stack: { gap: space3 },
-  discounts: { flexDirection: "row", padding: 0, overflow: "hidden" },
-  discount: { flex: 1, minWidth: 0, alignItems: "center", gap: 2, paddingVertical: space3, paddingHorizontal: space1 },
-  percent: { textAlign: "center" },
+  pills: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: space1 },
+  stack: { gap: 16 },
   hidden: { display: "none" },
-  works: { flexDirection: "row", flexWrap: "wrap", gap: space1 },
-  work: { width: "32.4%" },
-  workPhoto: { width: "100%", aspectRatio: 1, borderRadius: tokens.radius.radiusSm },
-  actions: { flexDirection: "row", gap: space2 },
+  // `.works` : grille 2fr / 1fr sur deux rangées ; la première photo prend les deux rangées.
+  works: { height: WORK_ROW * 2 + WORK_GAP, flexDirection: "column", flexWrap: "wrap", gap: WORK_GAP },
+  work: { borderRadius: 12, overflow: "hidden" },
+  workMain: { height: WORK_ROW * 2 + WORK_GAP, width: "66%" },
+  workSide: { height: WORK_ROW, width: "32%" },
+  workTall: { height: WORK_ROW * 2 + WORK_GAP },
+  workAlone: { height: WORK_ROW * 2 + WORK_GAP, width: "100%" },
+  workPhoto: { width: "100%", height: "100%" },
+  actions: { flexDirection: "row", gap: space3 },
   grow: { flex: 1 },
 });

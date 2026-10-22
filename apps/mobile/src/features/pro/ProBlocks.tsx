@@ -122,7 +122,6 @@ export function PublicationBlock({ pro, reload }: BlockProps) {
 // --- SIRET -------------------------------------------------------------------------------------------------------
 
 export function SiretBlock({ pro, reload }: BlockProps) {
-  const { t } = useTheme();
   const { busy, error, notice, run, setNotice } = useRun();
   const [number, setNumber] = useState(pro.siret ?? "");
   const check = pro.registryCheck;
@@ -151,17 +150,8 @@ export function SiretBlock({ pro, reload }: BlockProps) {
 
   return (
     <>
-      <SectionTitle>{L.siretTitle}</SectionTitle>
-      <Plate style={styles.block} testID="pro-siret">
-        {pro.verifiedAt ? (
-          <Text variant="body" color={t.color.plateInk}>
-            {L.siretVerified(pro.siret ?? "", formatDay(pro.verifiedAt))}
-          </Text>
-        ) : (
-          <Text variant="caption" color={t.color.plateMuted}>
-            {L.siretHelp}
-          </Text>
-        )}
+      {/* Lot C4b : champ « .vfield » à plat entre les activités et l'adresse, comme dans l'artefact. */}
+      <View style={styles.flat} testID="pro-siret">
         <TextField
           label={L.siretLabel}
           value={number}
@@ -172,24 +162,26 @@ export function SiretBlock({ pro, reload }: BlockProps) {
           help={proV2Labels.siretHint}
           testID="pro-siret-field"
         />
-        <Feedback error={error} notice={notice} testID="pro-siret-notice" />
+        {pro.verifiedAt ? (
+          <Muted variant="caption">{L.siretVerified(pro.siret ?? "", formatDay(pro.verifiedAt))}</Muted>
+        ) : null}
+        <Feedback error={error} notice={notice} onPlate={false} testID="pro-siret-notice" />
         {registryText && !notice ? (
-          <Text variant="caption" color={t.color.plateMuted} testID="pro-siret-result">
+          <Muted variant="caption" testID="pro-siret-result">
             {registryText}
-          </Text>
+          </Muted>
         ) : null}
         <Button
-          variant="plate"
+          variant="secondary"
           icon="check"
           loading={busy === "siret"}
           disabled={siretDigits(number).length < 9}
           onPress={() => void checkSiret()}
-          fullWidth
           testID="pro-siret-check"
         >
           {pro.verifiedAt ? L.siretRecheck : L.siretCheck}
         </Button>
-      </Plate>
+      </View>
     </>
   );
 }
@@ -544,6 +536,7 @@ export function ProChips({ pro }: { pro: ProOwner }) {
 
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
+  flat: { gap: space2 },
   row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: space1 },
   logoRow: { flexDirection: "row", alignItems: "center", gap: space3 },
   logo: { width: 72, height: 72, borderRadius: tokens.radius.radiusSm },

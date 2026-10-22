@@ -48,6 +48,34 @@ async function go(page: Page, path: string) {
 }
 
 const tab = (page: Page, name: string) => page.getByRole("tab", { name, exact: true });
+/** Onglets de l'administration rouvrables par leur adresse (la casquette Administration survit au rechargement). */
+const adminRoutes: Record<string, string> = {
+  Accueil: "/administration",
+  Signalements: "/signalements",
+  Registres: "/registres",
+  Gestion: "/gestion",
+};
+async function toTab(page: Page, name: string) {
+  const visible = (ms: number) =>
+    tab(page, name)
+      .waitFor({ state: "visible", timeout: ms })
+      .then(() => true)
+      .catch(() => false);
+  // Le changement de casquette (survol) peut prendre un instant.
+  let shown = await visible(10_000);
+  // Lot C1 : la barre est masquée sous une feuille ou sur une page de flux ; on referme (voile, puis ✕ de l'en-tête).
+  for (let i = 0; i < 3 && !shown; i++) {
+    const veil = page.locator('[role="button"][aria-label="Fermer"]:empty').last();
+    const close = page.getByTestId("appbar-close").last();
+    if (await veil.isVisible().catch(() => false))
+      await veil.click({ position: { x: 60, y: 120 } }).catch(() => undefined);
+    else if (await close.isVisible().catch(() => false)) await close.click().catch(() => undefined);
+    shown = await visible(5_000);
+  }
+  // Dernier recours, administration seulement : un rechargement ferait perdre le survol d'une structure.
+  if (!shown && adminRoutes[name]) await page.goto(adminRoutes[name]);
+  await tab(page, name).click();
+}
 
 type Audit = { greens: string[]; truncated: string[]; horizontalScroll: boolean; noIcon: string[] };
 
@@ -199,7 +227,7 @@ test("super admin : structure à vérifier, signalement, sanction, 2FA d'un comp
   expect(JSON.stringify(rest.data)).toContain("verified");
 
   // --- 2. Un signalement : prise en charge, puis une sanction ---------------------------------------------------
-  await tab(page, "Signalements").click();
+  await toTab(page, "Signalements");
   const item = page.getByTestId("report-item").first();
   await expect(item).toBeVisible({ timeout: 30_000 });
   await shot("04-signalements-beton");
@@ -324,7 +352,7 @@ test("super admin : structure à vérifier, signalement, sanction, 2FA d'un comp
   ).toBe(false);
 
   // --- 5. Horloge simulée (DEV_CLOCK) --------------------------------------------------------------------------
-  await tab(page, "Gestion").click();
+  await toTab(page, "Gestion");
   await expect(page.getByTestId("admin-link-horloge")).toBeVisible({ timeout: 30_000 });
   await shot("16-gestion-beton");
   await page.getByTestId("admin-link-horloge").click();
@@ -376,8 +404,8 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   });
   await shot("22-survol-bandeau-lecture-seule-beton");
   // Écrire sans demande ouverte : l'API refuse, l'appli affiche son message sans planter.
-  // Lot C4a : les bannis se rangent dans Structure (plus de lien depuis l'Équipe).
-  await tab(page, "Structure").click();
+  // Lot C4a : les bannis se rangent dans Structure (plus de lien depuis l'Équipe) ; lot C4b : la feuille se ferme avant l'onglet.
+  await toTab(page, "Structure");
   await page.getByTestId("tile-bans").click();
   await expect(page.getByTestId("assistance-banner")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("bans-pseudo").fill("Pilote_001");
@@ -412,7 +440,7 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
 
   // Le lien profond : la demande arrive au Journal de l'équipe et ouvre la file des demandes d'aide.
   deliverNow("equipe@orasso.local");
-  await tab(page, "Équipe").click();
+  await toTab(page, "Équipe");
   await page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
   await page.getByTestId("inbox-journal").click();
   await page
@@ -427,8 +455,8 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   // Retour au survol : le bandeau annonce l'intervention, l'écriture passe et le journal la porte.
   await page.getByTestId("assistance-row").filter({ hasText: name }).getByTestId("admin-survey").click();
   await page.getByTestId("orga-confirm").click();
-  // Lot C4a : les bannis se rangent dans Structure (plus de lien depuis l'Équipe).
-  await tab(page, "Structure").click();
+  // Lot C4a : les bannis se rangent dans Structure (plus de lien depuis l'Équipe) ; lot C4b : la feuille se ferme avant l'onglet.
+  await toTab(page, "Structure");
   await page.getByTestId("tile-bans").click();
   await expect(page.getByTestId("assistance-banner")).toContainText("Intervention en cours", { timeout: 30_000 });
   await shot("27-survol-bandeau-intervention-beton");

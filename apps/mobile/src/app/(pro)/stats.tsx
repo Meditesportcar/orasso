@@ -1,10 +1,12 @@
 // Casquette Pro, Stats (DA v2, lot 54, prototype `s-pstats`) : deux chiffres en grand (vues de la fiche, remises), le
 // détail par grade en barres, sur les 30 derniers jours. Les clics « appeler » et « itinéraire » et les abonnés restent
 // en petit dessous (existant lot 14). Tes propres visites ne sont pas comptées.
-import { Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Lot C4b (artefact `s-pstats`) : tuiles `.dir-big` (la première crème) et barres `.bars` (piste 12 px, remplissage encre).
+import { Counters, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { proV2Labels } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
 
+import { DirBig } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { formatCount, gradeBars } from "@/lib/proPresta";
 import { useApi } from "@/lib/useApi";
@@ -12,7 +14,7 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space2, space3 } = tokens.spacing;
 
 export default function ProStats() {
   const { t } = useTheme();
@@ -34,43 +36,35 @@ export default function ProStats() {
         )
       ) : !s ? null : (
         <>
-          <View style={styles.big} testID="pro-stats-big">
-            <Plate style={styles.bigCell}>
-              <Text variant="label" color={t.color.plateMuted}>
-                {proV2Labels.views}
-              </Text>
-              <Text variant="numberNarrow" color={t.color.plateInk} testID="pro-stats-views">
-                {formatCount(s.views)}
-              </Text>
-            </Plate>
-            <Plate style={styles.bigCell}>
-              <Text variant="label" color={t.color.plateMuted}>
-                {proV2Labels.discounts}
-              </Text>
-              <Text variant="numberNarrow" color={t.color.plateInk} testID="pro-stats-discounts">
-                {formatCount(s.discounts)}
-              </Text>
-            </Plate>
-          </View>
+          <DirBig
+            testID="pro-stats-big"
+            items={[
+              { value: formatCount(s.views), label: proV2Labels.views, testID: "pro-stats-views" },
+              { value: formatCount(s.discounts), label: proV2Labels.discounts, testID: "pro-stats-discounts" },
+            ]}
+          />
 
-          <Plate style={styles.block} testID="pro-stats-grades">
-            <Text variant="label" color={t.color.plateMuted}>
+          <View
+            style={[styles.block, { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard }]}
+            testID="pro-stats-grades"
+          >
+            <Text variant="label" color={t.color.inkMuted}>
               {proV2Labels.byGrade}
             </Text>
             {gradeBars(s.discountsByGrade).map((bar) => (
               <View key={bar.grade} style={styles.barRow}>
-                <Text variant="body" color={t.color.plateInk} style={styles.barLabel}>
+                <Text variant="bodyStrong" color={t.color.ink} style={styles.barLabel}>
                   {bar.label}
                 </Text>
-                <View style={[styles.track, { backgroundColor: t.color.plateLine }]}>
-                  <View style={[styles.fill, { width: `${bar.percent}%`, backgroundColor: t.color.accent }]} />
+                <View style={[styles.track, { backgroundColor: t.color.line }]}>
+                  <View style={[styles.fill, { width: `${bar.percent}%`, backgroundColor: t.color.ink }]} />
                 </View>
-                <Text variant="bodyStrong" color={t.color.plateInk} style={styles.barCount}>
+                <Text variant="bodyStrong" color={t.color.ink} style={styles.barCount}>
                   {bar.count}
                 </Text>
               </View>
             ))}
-          </Plate>
+          </View>
 
           <Counters
             items={[
@@ -87,12 +81,11 @@ export default function ProStats() {
 }
 
 const styles = StyleSheet.create({
-  big: { flexDirection: "row", gap: space2 },
-  bigCell: { flex: 1, minWidth: 0, gap: space1, padding: space3 },
-  block: { gap: space2, padding: space3 },
+  // `.card.p.stack` : carte, rayon 18, 16 px ; `.bars` : 90 px | piste | 54 px, 8 px d'écart.
+  block: { gap: space3, padding: tokens.spacing.space4, borderRadius: tokens.radius.radiusLg },
   barRow: { flexDirection: "row", alignItems: "center", gap: space2 },
-  barLabel: { width: 76 },
-  track: { flex: 1, height: space2, borderRadius: tokens.radius.radiusPill, overflow: "hidden" },
-  fill: { height: space2, borderRadius: tokens.radius.radiusPill },
-  barCount: { width: 32, textAlign: "right" },
+  barLabel: { width: 90, fontSize: 13 },
+  track: { flex: 1, height: 12, borderRadius: 6, overflow: "hidden" },
+  fill: { height: 12, borderRadius: 6 },
+  barCount: { width: 54, textAlign: "right", fontSize: 13 },
 });

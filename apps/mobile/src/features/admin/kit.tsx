@@ -1,24 +1,14 @@
 // Pièces communes de la casquette Administration (lot 35d, décision D20) : la garde (rôle + double authentification),
 // l'écran de page, le suivi d'un geste (occupé, message d'erreur de l'API), la feuille « motif + confirmation », les
 // lignes de liste. Aucune règle métier : droits, motifs et traces sont ceux de l'API ; l'appli affiche ses refus.
-import {
-  Button,
-  Chip,
-  ChipRow,
-  Icon,
-  type IconName,
-  Plate,
-  Text,
-  TextField,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
+import { Button, Icon, type IconName, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { type AdminOverview, adminAppLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { createContext, type ReactNode, useCallback, useContext, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { TwoFactorGate } from "@/features/orga/OrgaGate";
+import { AngledTag, SegBlock } from "@/features/pro/kit";
 import { type AdminRole, adminRoleOf } from "@/lib/adminModel";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -29,6 +19,7 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, TabScreen } from "@/ui/Screens";
+import { Segments } from "@/ui/Segments";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -282,18 +273,17 @@ export function LinkRow({
         <Text variant="bodyStrong" color={t.color.plateInk} style={styles.grow}>
           {label}
         </Text>
-        {count !== undefined && count > 0 ? (
-          <Chip surface="plate" variant="accent">
-            {String(count)}
-          </Chip>
-        ) : null}
+        {count !== undefined && count > 0 ? <AngledTag tone="acc">{String(count)}</AngledTag> : null}
         <Icon name={icon} size={18} color={t.color.plateInk} />
       </Plate>
     </Pressable>
   );
 }
 
-/** Rangée de filtres (une puce choisie à la fois). */
+/**
+ * Rangée de filtres (un choix à la fois). Lot C4b (style du socle de l'artefact, l'administration est hors artefact) :
+ * jusqu'à trois choix, le bloc de segments `.seg` ; au-delà (Signalements…), les `Segments` du socle, qui passent à la ligne.
+ */
 export function Filters<T extends string>({
   value,
   options,
@@ -303,15 +293,8 @@ export function Filters<T extends string>({
   options: readonly { id: T; label: string }[];
   onChange: (id: T) => void;
 }) {
-  return (
-    <ChipRow accessibilityRole="tablist">
-      {options.map((o) => (
-        <Chip accessibilityRole="tab" key={o.id} selected={o.id === value} onPress={() => onChange(o.id)}>
-          {o.label}
-        </Chip>
-      ))}
-    </ChipRow>
-  );
+  if (options.length <= 3) return <SegBlock value={value} items={options} onChange={onChange} />;
+  return <Segments value={value} items={options} onChange={onChange} />;
 }
 
 /** Ligne « étiquette : valeur » dans une plaque. */

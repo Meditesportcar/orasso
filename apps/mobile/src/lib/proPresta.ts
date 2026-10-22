@@ -29,7 +29,7 @@ import { dayCountdown, formatShortDate } from "./format";
 export const proActivityIcons: Record<ProActivity, IconName> = {
   garage: "vehicle",
   preparation: "up",
-  detailing: "wash",
+  detailing: "spark",
   covering: "gallery",
   parts: "shop",
   tyres: "explore",
@@ -37,12 +37,12 @@ export const proActivityIcons: Record<ProActivity, IconName> = {
   tint: "weatherClear",
   upholstery: "cards",
   audio: "live",
-  inspection: "check",
+  inspection: "shield",
   other: "add",
 };
 
 export const tradeIcons: Record<VendorTypeCode, IconName> = {
-  food_truck: "shop",
+  food_truck: "truck",
   barber: "profile",
   tattoo: "incident",
   photographer: "gallery",
@@ -250,6 +250,18 @@ export function monthYear(iso: string | Date): string {
 }
 
 /** « LB » : initiales des deux premiers mots du nom (logo rond de la vitrine). */
+/**
+ * Lot C4b (`s-pro`, `.disc div.top`) : la case de remise qui s'applique au grade de celui qui regarde, surlignée en
+ * rouge. « Circuit+ » vaut pour Circuit et Légende. `null` quand aucune case ne correspond (grade sans remise).
+ */
+export function viewerCellKey(cells: readonly DiscountCell[], grade: Grade | null | undefined): string | null {
+  if (!grade) return null;
+  const exact = cells.find((c) => c.key === grade);
+  if (exact) return exact.key;
+  const merged = cells.find((c) => c.key === "circuit" && c.label.endsWith("+"));
+  return merged && grade === "legende" ? merged.key : null;
+}
+
 export function initialsOf(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
   return (

@@ -1,12 +1,14 @@
 // Accueil du média (lot 43, prototype `s-home` media) : le reportage accrédité (affiche, zone presse), le badge presse, les
 // consignes de l'organisation (visibles une fois accrédité), « À couvrir bientôt », les contenus. Sans reportage : une
 // phrase qui dit quoi faire.
+// Lot C4b (artefact `s-home` média) : pas de grand titre, consignes en lignes `.tz-it` cochées, titres `.sec-h`.
 
-import { Chip, Icon, Plate, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { homeLabels, homeProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
+import { AngledTag, SecH, TzRow } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { dayCountdown, formatDay, formatHour } from "@/lib/format";
 import { usePersona } from "@/lib/persona";
@@ -16,10 +18,10 @@ import { useNow } from "@/lib/useNow";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { StatusTag } from "@/ui/StatusTag";
-import { Greeting, HeroCard, MiniTile, NoteTile, QuietNote, SectionHead, TutoTile } from "./parts";
+import { Greeting, HeroCard, MiniTile, NoteTile, QuietNote, TutoTile } from "./parts";
 import { todayLine } from "./today";
 
-const { space2, space3 } = tokens.spacing;
+const { space2 } = tokens.spacing;
 
 export function MediaHome() {
   const { t } = useTheme();
@@ -88,30 +90,17 @@ export function MediaHome() {
           />
           {accredited && (report.briefing?.zones || lines.length > 0) ? (
             <>
-              <SectionHead title={homeProfileLabels.pressInstructions} />
-              <Plate style={styles.brief} testID="home-press-brief">
-                {report.briefing?.zones ? (
-                  <View style={styles.briefLine}>
-                    <Icon name="check" size={16} color={c.plateInk} />
-                    <Text variant="body" color={c.plateInk} style={styles.fill}>
-                      {report.briefing.zones}
-                    </Text>
-                  </View>
-                ) : null}
-                {lines.map((l) => (
-                  <View key={l} style={styles.briefLine}>
-                    <Icon name="check" size={16} color={c.plateInk} />
-                    <Text variant="body" color={c.plateInk} style={styles.fill}>
-                      {l}
-                    </Text>
-                  </View>
+              <SecH title={homeProfileLabels.pressInstructions} />
+              <View style={styles.brief} testID="home-press-brief">
+                {[...(report.briefing?.zones ? [report.briefing.zones] : []), ...lines].map((l) => (
+                  <TzRow key={l} leading={<Icon name="check" size={16} color={c.accentText} />} title={l} />
                 ))}
                 {report.briefing?.contact ? (
-                  <Text variant="caption" color={c.plateMuted}>
+                  <Text variant="caption" color={c.inkMuted}>
                     Contact : {report.briefing.contact}
                   </Text>
                 ) : null}
-              </Plate>
+              </View>
             </>
           ) : null}
         </>
@@ -121,12 +110,12 @@ export function MediaHome() {
 
       {media && media.toCover.length > 0 ? (
         <>
-          <SectionHead title={homeProfileLabels.toCover} link="Explorer" onLink={() => goTab("explorer")} />
+          <SecH title={homeProfileLabels.toCover} link="Explorer" onLink={() => goTab("explorer")} />
           {media.toCover.map((e) => (
             <MiniTile
               key={e.slug}
               testID="home-to-cover"
-              tag={<Chip surface="plate">Gardé</Chip>}
+              tag={<AngledTag tone="line">Gardé</AngledTag>}
               title={e.title}
               caption={[formatDay(e.startsAt), e.city].filter(Boolean).join(" · ")}
               onPress={() => router.push(`/e/${e.slug}`)}
@@ -151,7 +140,6 @@ export function MediaHome() {
 }
 
 const styles = StyleSheet.create({
-  brief: { gap: space2, padding: space3 },
-  briefLine: { flexDirection: "row", alignItems: "flex-start", gap: space2 },
-  fill: { flex: 1 },
+  // `.tz-list` : 8 px entre deux lignes.
+  brief: { gap: space2 },
 });

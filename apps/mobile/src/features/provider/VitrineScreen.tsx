@@ -1,16 +1,18 @@
 // Casquette Prestataire, Ma vitrine (DA v2, lot 54, prototype `s-vitrine`) : ce que voit l'organisateur, et la modification.
 // En-tête (initiales rondes, nom, métier · zone), deux segments « Vue organisateur » et « Modifier ma vitrine ». Il faut au
 // moins une photo (ou, pour un photographe, un Instagram ou un portfolio) pour candidater.
-import { Button, departmentChoices, Text, tokens, useTheme } from "@orasso/design-system/native";
+// Lot C4b (artefact `s-vitrine`) : pas de grand titre ; bandeau `.vit-hero` (170 px, dégradé rouge, icône du métier),
+// logo carré remonté dessus (`.pro-id`), segments en bloc (`.seg`).
+import { Button, departmentChoices, Icon, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { PROVIDER_MAX_PHOTOS, type ProviderProfileView, proV2Labels, vitrineTexts } from "@orasso/shared";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-
+import { SegBlock, SquareLogo } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { photoForm, pickPhotos } from "@/lib/photos";
-import { initialsOf } from "@/lib/proPresta";
+import { initialsOf, tradeIcons } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { LoadError } from "@/ui/LoadError";
@@ -19,13 +21,13 @@ import { Notice } from "@/ui/Notice";
 import { PhotoGrid } from "@/ui/PhotoGrid";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
-import { Segments } from "@/ui/Segments";
 import { ProviderForm } from "./ProviderForm";
 import { VitrineView } from "./VitrineView";
 
-const { space1, space3, space4, space12 } = tokens.spacing;
-/** Logo rond de l'en-tête : 64 px. */
-const LOGO = space12 + space4;
+const { space1, space3, space4 } = tokens.spacing;
+/** `.vit-hero` : 170 px ; `.pro-id` remonte de 56 px sur le bandeau. */
+const HERO = 170;
+const ID_LIFT = 56;
 
 type Mode = "view" | "edit";
 
@@ -79,8 +81,6 @@ export function VitrineScreen() {
 
   return (
     <TabScreen
-      title={proV2Labels.vitrineTitle}
-      facts={p?.name}
       onRefresh={async () => {
         await Promise.all([profile.reload(), reviews.reload()]);
       }}
@@ -92,22 +92,30 @@ export function VitrineScreen() {
       ) : (
         <>
           {p ? (
-            <View style={styles.identity} testID="vitrine-identity">
-              <View style={[styles.logo, { backgroundColor: t.color.surfaceRaised, borderColor: t.color.line }]}>
-                <Text variant="posterS" color={t.color.ink}>
-                  {initialsOf(p.name)}
-                </Text>
+            <>
+              {/* `.vit-hero` : dégradé de l'artefact, jetons `vitrine-from` → `vitrine-to` du socle, puis la nuit. */}
+              <View style={styles.hero} testID="vitrine-hero">
+                <Photo
+                  placeholder={`linear-gradient(135deg, ${t.color.vitrineFrom} 0%, ${t.color.vitrineTo} 70%, ${t.color.night} 100%)`}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View style={styles.heroIcon}>
+                  <Icon name={tradeIcons[p.type]} size={64} color={t.color.nightInk} />
+                </View>
               </View>
-              <View style={styles.identityText}>
-                <Text variant="posterM" color={t.color.ink}>
-                  {p.name}
-                </Text>
-                <Muted variant="caption">{proV2Labels.tradePlace(p.typeLabel, place ?? null)}</Muted>
+              <View style={styles.identity} testID="vitrine-identity">
+                <SquareLogo initials={initialsOf(p.name)} tone="red" label={`Logo de ${p.name}`} />
+                <View style={styles.identityText}>
+                  <Text variant="posterL" color={t.color.ink} accessibilityRole="header">
+                    {p.name}
+                  </Text>
+                  <Muted variant="caption">{proV2Labels.tradePlace(p.typeLabel, place ?? null)}</Muted>
+                </View>
               </View>
-            </View>
+            </>
           ) : null}
           {p ? (
-            <Segments
+            <SegBlock
               testID="vitrine-segments"
               value={mode}
               onChange={setMode}
@@ -170,16 +178,10 @@ export function VitrineScreen() {
 }
 
 const styles = StyleSheet.create({
-  identity: { flexDirection: "row", alignItems: "center", gap: space3 },
+  hero: { height: HERO, marginHorizontal: -space4, marginTop: -space3, overflow: "hidden" },
+  heroIcon: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", paddingBottom: 30 },
+  identity: { flexDirection: "row", alignItems: "flex-end", gap: space3, marginTop: -ID_LIFT - space3 },
   identityText: { flex: 1, minWidth: 0, gap: space1 },
   hidden: { display: "none" },
-  logo: {
-    width: LOGO,
-    height: LOGO,
-    borderRadius: tokens.radius.radiusPill,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   stack: { gap: space3 },
 });

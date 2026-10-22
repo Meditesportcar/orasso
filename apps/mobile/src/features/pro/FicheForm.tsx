@@ -4,7 +4,9 @@
 // Création (lot 34, parité D20) : le même formulaire, vide, depuis Moi > Mes casquettes ; la casquette Pro s'ouvre ensuite.
 // Lot 54 (DA v2) : les activités se cochent en tuiles (« touche pour cocher »), chaque champ montre un exemple de format,
 // et les champs sont un composant à part (`ProFicheFields`) que l'onglet Ma fiche pose dans son segment « Modifier ».
-import { Button, Plate, TextField, tokens } from "@orasso/design-system/native";
+// Lot C4b (artefact `s-pro`, `data-pp="edit"`) : champs à plat, dans l'ordre de l'artefact (activités en `.acts-g.edit`,
+// SIRET, adresse, téléphone, Instagram, site web, présentation) ; les champs que l'artefact n'a pas viennent dessous.
+import { Button, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   proAppLabels as L,
   type ProActivity,
@@ -16,8 +18,8 @@ import {
   weekdayLabels,
   weekdays,
 } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
-import { StyleSheet } from "react-native";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -28,12 +30,14 @@ import { useSession } from "@/lib/session";
 import { type ApiState, useApi } from "@/lib/useApi";
 import { useRun } from "@/lib/useRun";
 import { Feedback } from "@/ui/Feedback";
-import { IconTiles } from "@/ui/IconTiles";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { SectionTitle, TabScreen } from "@/ui/Screens";
+import { ActGrid } from "./kit";
 
-const { space2, space3 } = tokens.spacing;
+const { space2 } = tokens.spacing;
+/** `.field` de l'artefact : 14 px entre deux champs du segment Modifier. */
+const FIELD_GAP = 14;
 
 /**
  * Lot 36 : vérification de l'adresse par le géocodeur, comme pour une structure ou un événement. L'API géocode aussi à
@@ -76,7 +80,17 @@ export type MyProState = Pick<ApiState<Awaited<ReturnType<typeof api.myPro>>>, "
  * Les champs de la fiche : modification (onglet Ma fiche, qui passe sa propre `state`) ou création (depuis Créer).
  * Sans `state`, le composant charge la fiche lui-même (création : pour savoir si elle existe déjà).
  */
-export function ProFicheFields({ create = false, state }: { create?: boolean; state?: MyProState }) {
+export function ProFicheFields({
+  create = false,
+  state,
+  siret,
+}: {
+  create?: boolean;
+  state?: MyProState;
+  /** Bloc SIRET de la fiche existante, posé après les activités comme dans l'artefact (absent à la création). */
+  siret?: ReactNode;
+}) {
+  const { t } = useTheme();
   const { refreshMe } = useSession();
   const { choose } = usePersona();
   const own = useApi(() => api.myPro(), [], { cacheKey: state ? undefined : "my-pro", enabled: !state });
@@ -132,103 +146,116 @@ export function ProFicheFields({ create = false, state }: { create?: boolean; st
       {create && pro ? <Notice>{L.createExists}</Notice> : null}
       {!create && !pro ? myPro.loading ? null : <Notice>{L.noPro}</Notice> : null}
       {form && (create ? !pro : pro) ? (
-        <>
-          <Plate style={styles.block} testID="pro-form">
-            <TextField
-              label={L.name}
-              value={form.name}
-              onChangeText={(name) => edit({ name })}
-              maxLength={80}
-              placeholder={proV2Labels.placeholders.name}
-            />
-            <Muted variant="label">{proV2Labels.activitiesEdit}</Muted>
-            <IconTiles
-              testID="pro-activities"
-              items={proActivities.map((a) => ({
-                key: a,
-                label: proActivityLabels[a],
-                icon: proActivityIcons[a],
-                checked: form.activities.includes(a),
-              }))}
-              onToggle={(a) => edit({ activities: toggleActivity(form.activities, a as ProActivity) })}
-            />
-            <TextField
-              label={L.description}
-              value={form.description}
-              onChangeText={(description) => edit({ description })}
-              multiline
-              maxLength={2000}
-              style={{ minHeight: 96 }}
-              placeholder={proV2Labels.placeholders.description}
-            />
-          </Plate>
+        <View style={styles.fields} testID="pro-form">
+          <TextField
+            label={L.name}
+            value={form.name}
+            onChangeText={(name) => edit({ name })}
+            maxLength={80}
+            placeholder={proV2Labels.placeholders.name}
+          />
+          <Text variant="label" color={t.color.inkMuted}>
+            {proV2Labels.activitiesEdit}
+          </Text>
+          <ActGrid
+            testID="pro-activities"
+            items={proActivities.map((a) => ({
+              key: a,
+              label: proActivityLabels[a],
+              icon: proActivityIcons[a],
+              checked: form.activities.includes(a),
+            }))}
+            onToggle={(a) => edit({ activities: toggleActivity(form.activities, a as ProActivity) })}
+          />
+          {siret}
+          <TextField
+            label={L.address}
+            value={form.addressLine}
+            onChangeText={(addressLine) => edit({ addressLine })}
+            maxLength={200}
+            placeholder={proV2Labels.placeholders.address}
+          />
+          <View style={styles.pair}>
+            <View style={styles.postal}>
+              <TextField
+                label={L.postalCode}
+                value={form.postalCode}
+                onChangeText={(postalCode) => edit({ postalCode })}
+                keyboardType="number-pad"
+                maxLength={10}
+                placeholder={proV2Labels.placeholders.postalCode}
+              />
+            </View>
+            <View style={styles.grow}>
+              <TextField
+                label={L.city}
+                value={form.city}
+                onChangeText={(city) => edit({ city })}
+                maxLength={80}
+                placeholder={proV2Labels.placeholders.city}
+              />
+            </View>
+          </View>
+          <AddressCheck
+            query={[form.addressLine, form.postalCode, form.city].filter(Boolean).join(" ")}
+            located={!pro?.city || pro.lat !== null}
+          />
+          <TextField
+            label={L.phone}
+            value={form.phone}
+            onChangeText={(phone) => edit({ phone })}
+            keyboardType="phone-pad"
+            placeholder={proV2Labels.placeholders.phone}
+          />
+          <TextField
+            label={L.instagram}
+            value={form.socials.instagram}
+            onChangeText={(value) => edit({ socials: { ...form.socials, instagram: value } })}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder={proV2Labels.placeholders.instagram}
+          />
+          <TextField
+            label={L.website}
+            value={form.website}
+            onChangeText={(website) => edit({ website })}
+            keyboardType="url"
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder={proV2Labels.placeholders.website}
+          />
+          <TextField
+            label={L.description}
+            value={form.description}
+            onChangeText={(description) => edit({ description })}
+            multiline
+            maxLength={2000}
+            style={{ minHeight: 110 }}
+            placeholder={proV2Labels.placeholders.description}
+          />
 
-          <SectionTitle>{L.where}</SectionTitle>
-          <Plate style={styles.block}>
-            <TextField
-              label={L.address}
-              value={form.addressLine}
-              onChangeText={(addressLine) => edit({ addressLine })}
-              maxLength={200}
-              placeholder={proV2Labels.placeholders.address}
-            />
-            <TextField
-              label={L.postalCode}
-              value={form.postalCode}
-              onChangeText={(postalCode) => edit({ postalCode })}
-              keyboardType="number-pad"
-              maxLength={10}
-              placeholder={proV2Labels.placeholders.postalCode}
-            />
-            <TextField
-              label={L.city}
-              value={form.city}
-              onChangeText={(city) => edit({ city })}
-              maxLength={80}
-              placeholder={proV2Labels.placeholders.city}
-            />
-            <AddressCheck
-              query={[form.addressLine, form.postalCode, form.city].filter(Boolean).join(" ")}
-              located={!pro?.city || pro.lat !== null}
-            />
-            <TextField
-              label={L.zone}
-              help={L.zoneHelp}
-              value={form.zone}
-              onChangeText={(zone) => edit({ zone })}
-              autoCapitalize="characters"
-              placeholder={proV2Labels.placeholders.zone}
-            />
-          </Plate>
-
-          <SectionTitle>{L.contact}</SectionTitle>
-          <Plate style={styles.block}>
-            <TextField
-              label={L.phone}
-              value={form.phone}
-              onChangeText={(phone) => edit({ phone })}
-              keyboardType="phone-pad"
-              placeholder={proV2Labels.placeholders.phone}
-            />
-            <TextField
-              label={L.email}
-              value={form.email}
-              onChangeText={(email) => edit({ email })}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder={proV2Labels.placeholders.email}
-            />
-            <TextField
-              label={L.website}
-              value={form.website}
-              onChangeText={(website) => edit({ website })}
-              keyboardType="url"
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder={proV2Labels.placeholders.website}
-            />
-            {socialNetworks.map((n) => (
+          {/* Champs de la fiche absents de l'artefact (site et API les ont) : sous ceux de l'artefact, sans plaque. */}
+          <SectionTitle>{proV2Labels.moreDetails}</SectionTitle>
+          <TextField
+            label={L.email}
+            value={form.email}
+            onChangeText={(email) => edit({ email })}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder={proV2Labels.placeholders.email}
+          />
+          <TextField
+            label={L.zone}
+            help={L.zoneHelp}
+            value={form.zone}
+            onChangeText={(zone) => edit({ zone })}
+            autoCapitalize="characters"
+            placeholder={proV2Labels.placeholders.zone}
+          />
+          {socialNetworks
+            .filter((n) => n !== "instagram")
+            .map((n) => (
               <TextField
                 key={n}
                 label={L[n]}
@@ -236,24 +263,19 @@ export function ProFicheFields({ create = false, state }: { create?: boolean; st
                 onChangeText={(value) => edit({ socials: { ...form.socials, [n]: value } })}
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholder={n === "instagram" ? proV2Labels.placeholders.instagram : undefined}
               />
             ))}
-          </Plate>
-
           <SectionTitle>{L.hours}</SectionTitle>
-          <Plate style={styles.block}>
-            {weekdays.map((d) => (
-              <TextField
-                key={d}
-                label={weekdayLabels[d]}
-                value={form.hours[d]}
-                onChangeText={(value) => edit({ hours: { ...form.hours, [d]: value } })}
-                placeholder={L.hoursHint}
-                maxLength={60}
-              />
-            ))}
-          </Plate>
+          {weekdays.map((d) => (
+            <TextField
+              key={d}
+              label={weekdayLabels[d]}
+              value={form.hours[d]}
+              onChangeText={(value) => edit({ hours: { ...form.hours, [d]: value } })}
+              placeholder={L.hoursHint}
+              maxLength={60}
+            />
+          ))}
 
           <Feedback error={error} notice={notice} onPlate={false} testID="pro-form-notice" />
           <Button
@@ -266,7 +288,7 @@ export function ProFicheFields({ create = false, state }: { create?: boolean; st
           >
             {create ? L.createSave : L.saveFiche}
           </Button>
-        </>
+        </View>
       ) : null}
     </>
   );
@@ -283,5 +305,8 @@ export function FicheForm({ create = false }: { create?: boolean } = {}) {
 }
 
 const styles = StyleSheet.create({
-  block: { gap: space2, padding: space3 },
+  fields: { gap: FIELD_GAP },
+  pair: { flexDirection: "row", gap: space2 },
+  postal: { width: "36%" },
+  grow: { flex: 1, minWidth: 0 },
 });

@@ -1,11 +1,13 @@
 // Accueil du prestataire (lot 43, prototype `s-home` presta) : la mission retenue (affiche, emplacement, arrivée), la
 // météo du jour, le message de l'organisateur, les missions qui t'attendent. Sans mission : une phrase qui dit quoi faire.
+// Lot C4b (artefact `s-home` prestataire) : pas de grand titre, titres `.sec-h`, étiquettes inclinées.
 
-import { Chip, Plate, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { homeLabels, homeProfileLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 
+import { AngledTag, SecH } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { dayCountdown, formatDay, formatHour } from "@/lib/format";
 import { usePersona } from "@/lib/persona";
@@ -15,10 +17,10 @@ import { useNow } from "@/lib/useNow";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { StatusTag } from "@/ui/StatusTag";
-import { Greeting, HeroCard, MiniTile, OrganizerLine, QuietNote, SectionHead, TutoTile, WeatherBlock } from "./parts";
+import { Greeting, HeroCard, MiniTile, OrganizerLine, QuietNote, TutoTile, WeatherBlock } from "./parts";
 import { todayLine } from "./today";
 
-const { space2, space3 } = tokens.spacing;
+const { space2 } = tokens.spacing;
 
 export function ProviderHome() {
   const { t } = useTheme();
@@ -80,13 +82,16 @@ export function ProviderHome() {
           <WeatherBlock weather={data?.weather ?? null} />
           {mission.organizerMessage ? (
             <>
-              <SectionHead title={homeProfileLabels.organizerMessage} />
-              <Plate style={styles.message} testID="home-organizer-message">
+              <SecH title={homeProfileLabels.organizerMessage} />
+              <View
+                style={[styles.message, { backgroundColor: t.color.ground, boxShadow: t.shadow.shadowCard }]}
+                testID="home-organizer-message"
+              >
                 {mission.organizer ? <OrganizerLine organizer={mission.organizer} /> : null}
-                <Text variant="body" color={t.color.plateInk}>
+                <Text variant="caption" color={t.color.ink}>
                   {mission.organizerMessage}
                 </Text>
-              </Plate>
+              </View>
             </>
           ) : null}
         </>
@@ -96,7 +101,7 @@ export function ProviderHome() {
 
       {data?.provider && data.provider.nearbyMissions.length > 0 ? (
         <>
-          <SectionHead
+          <SecH
             title={homeProfileLabels.missionsNearby}
             link={homeProfileLabels.seeAll}
             onLink={() => goTab("missions")}
@@ -105,7 +110,7 @@ export function ProviderHome() {
             <MiniTile
               key={m.slug}
               testID="home-nearby-mission"
-              tag={<Chip surface="plate">{m.structureName}</Chip>}
+              tag={<AngledTag tone="line">{m.structureName}</AngledTag>}
               title={m.title}
               caption={[formatDay(m.startsAt), m.city, m.distanceKm !== null ? `${m.distanceKm} km` : null]
                 .filter(Boolean)
@@ -122,5 +127,6 @@ export function ProviderHome() {
 }
 
 const styles = StyleSheet.create({
-  message: { gap: space3, padding: space3 },
+  // `.tz-it` : posé sur le fond, rayon 12.
+  message: { gap: space2, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 12 },
 });

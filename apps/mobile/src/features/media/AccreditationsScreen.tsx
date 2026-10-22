@@ -3,12 +3,13 @@
 // « Consignes » donne les zones, horaires et contact de l'organisation), en attente (demande envoyée, retrait possible),
 // refusée avec la raison donnée par l'organisation ; les passées gardent ce qui a été publié et vu. Statuts et libellés sont
 // ceux du Tri côté organisateur (lot 52) : Accréditée, En attente, Refusée.
-import { Button, Chip, EmptyState, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, EmptyState, OLoader, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { mediaAppLabels as L, type MediaAccreditationView, mediaFormatLabels, mediaLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { AngledTag, SegBlock } from "@/features/pro/kit";
 import { Ticket } from "@/features/sorties/Ticket";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
@@ -23,7 +24,7 @@ import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { daysUntil } from "./model";
 
-const { space1, space2 } = tokens.spacing;
+const { space1 } = tokens.spacing;
 
 type Segment = "upcoming" | "past";
 const formatsOf = (a: MediaAccreditationView) => a.formats.map((f) => mediaFormatLabels[f].toLowerCase()).join(" et ");
@@ -70,14 +71,16 @@ export function AccreditationsScreen() {
         </>
       }
     >
-      <View accessibilityRole="tablist" style={styles.segments}>
-        <Chip accessibilityRole="tab" selected={segment === "upcoming"} onPress={() => setSegment("upcoming")}>
-          {L.upcoming(upcoming.length)}
-        </Chip>
-        <Chip accessibilityRole="tab" selected={segment === "past"} onPress={() => setSegment("past")}>
-          {L.past(past.length)}
-        </Chip>
-      </View>
+      {/* Lot C4b (artefact `s-accred`) : segments en bloc, statuts en étiquettes inclinées (`.tag.acc`, `.tag.line`). */}
+      <SegBlock
+        testID="media-press-segments"
+        value={segment}
+        onChange={setSegment}
+        items={[
+          { id: "upcoming", label: L.upcoming(upcoming.length) },
+          { id: "past", label: L.past(past.length) },
+        ]}
+      />
 
       {error ? <Notice tone="error">{error}</Notice> : null}
       {list.error && !list.data ? <Notice tone="error">{list.error.message}</Notice> : null}
@@ -150,9 +153,9 @@ function UpcomingTicket({
       testID={`media-ticket-${a.status}`}
       date={a.event.startsAt}
       badge={
-        <Chip surface="plate" selected={accredited}>
+        <AngledTag tone={accredited ? "acc" : "line"}>
           {accredited ? mediaLabels.accredited : refused ? mediaLabels.refused : mediaLabels.pending}
-        </Chip>
+        </AngledTag>
       }
       lead={accredited ? L.daysLeft(daysUntil(a.event.startsAt, now)) : undefined}
       title={a.event.title}
@@ -189,9 +192,9 @@ function PastTicket({ a, onOpen, onAdd }: { a: MediaAccreditationView; onOpen: (
       testID="media-ticket-past"
       date={a.event.startsAt}
       badge={
-        <Chip surface="plate">
+        <AngledTag tone="line">
           {refused ? mediaLabels.refused : a.coverage.contents > 0 ? L.covered(a.coverage.contents) : L.notCovered}
-        </Chip>
+        </AngledTag>
       }
       title={a.event.title}
       detail={
@@ -295,6 +298,5 @@ function WithdrawMediaSheet({
 }
 
 const styles = StyleSheet.create({
-  segments: { flexDirection: "row", gap: space2 },
   block: { gap: space1 },
 });

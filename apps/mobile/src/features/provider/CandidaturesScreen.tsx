@@ -10,6 +10,7 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
+import { AngledTag, SegBlock } from "@/features/pro/kit";
 import { Ticket } from "@/features/sorties/Ticket";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
@@ -22,7 +23,6 @@ import { LoadError } from "@/ui/LoadError";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
-import { Segments } from "@/ui/Segments";
 import { StatusTag } from "@/ui/StatusTag";
 
 const { space2, space3 } = tokens.spacing;
@@ -89,7 +89,7 @@ export function CandidaturesScreen() {
       case "pending":
         return <StatusTag status="pending" />;
       case "waitlist":
-        return <Chip surface="plate">{proV2Labels.waitlistRank(app.waitlistRank)}</Chip>;
+        return <AngledTag tone="wait">{proV2Labels.waitlistRank(app.waitlistRank)}</AngledTag>;
       case "refused":
         return <StatusTag status="refused" />;
       default:
@@ -138,7 +138,7 @@ export function CandidaturesScreen() {
     >
       {profile.data?.issue ? <Notice>Complète ta vitrine pour candidater : {profile.data.issue}</Notice> : null}
       {error && withdrawing === null ? <Notice tone="error">{error}</Notice> : null}
-      <Segments
+      <SegBlock
         testID="candidatures-segments"
         value={segment}
         onChange={setSegment}
@@ -231,7 +231,7 @@ export function CandidaturesScreen() {
                   key={app.id}
                   testID="provider-application-past"
                   date={app.event.startsAt}
-                  badge={review ? <Chip surface="plate">{review}</Chip> : badgeOf(app)}
+                  badge={review ? <AngledTag tone="line">{review}</AngledTag> : badgeOf(app)}
                   title={app.event.title}
                   detail={
                     app.review?.comment

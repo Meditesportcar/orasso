@@ -371,9 +371,15 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
     await chooseCasquette(page, "pro");
     const first = theme === "sable";
     await page.goto("/fiche");
-    // Lot 54 : Ma fiche s'ouvre sur « Vue passionné » ; modification, abonnement et remises sont dans « Modifier ma fiche ».
-    await page.getByText("Modifier ma fiche", { exact: true }).click();
-    await expect(page.getByTestId("pro-edit")).toBeVisible({ timeout: 30_000 });
+    // Lot 54 : Ma fiche s'ouvre sur « Vue passionné ». Lot C4b : abonnement, publication et partenaires dans
+    // « Publications » ; champs, SIRET, remises, logo et photos dans « Modifier ma fiche ».
+    const segment = async (name: "Modifier ma fiche" | "Publications") => {
+      await page.getByText(name, { exact: true }).click();
+      await expect(page.getByTestId(name === "Publications" ? "pro-posts" : "pro-edit")).toBeVisible({
+        timeout: 30_000,
+      });
+    };
+    await segment("Publications");
 
     // Abonnement et emplacements sponsorisés : consultation seulement, jamais de paiement.
     await expect(page.getByTestId("pro-subscription")).toHaveText("Gratuit jusqu'au 21 juin 2027");
@@ -385,6 +391,7 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
 
     if (first) {
       // Modifier la fiche.
+      await segment("Modifier ma fiche");
       await expect(page.getByTestId("pro-form")).toBeVisible();
       await page.getByLabel("Présentation").fill("Entretien, préparation et detailing, sur rendez-vous.");
       await page.getByLabel("Téléphone").fill("04 68 11 22 33");
@@ -417,6 +424,7 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
       expect(discounts.data.discounts.rodage).toBe(7);
 
       // Publication : brouillon avec confirmation, puis republication.
+      await segment("Publications");
       await page.getByTestId("pro-unpublish").click();
       await page.getByTestId("orga-confirm").click();
       await expect(page.getByTestId("pro-publish-notice")).toHaveText("Fiche repassée en brouillon.", {
@@ -429,6 +437,7 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
       });
 
       // Logo et photo.
+      await segment("Modifier ma fiche");
       const logoChooser = page.waitForEvent("filechooser");
       await page.getByTestId("pro-logo-change").click();
       await (await logoChooser).setFiles({ name: "logo.png", mimeType: "image/png", buffer: samplePhoto() });
@@ -448,6 +457,7 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
       expect((await apiCall<{ photos: unknown[] }>(cookie, "GET", "/me/pro")).data.photos).toHaveLength(0);
 
       // Partenaire : proposition puis retrait avec confirmation.
+      await segment("Publications");
       await page.getByRole("combobox", { name: "Organisateur" }).click();
       await page
         .getByRole("menuitem", { name: /MéditeSportCar/ })
@@ -469,6 +479,7 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
       expect((await apiCall<{ partnerLinks: unknown[] }>(cookie, "GET", "/me/pro")).data.partnerLinks).toHaveLength(0);
 
       // SIRET : un numéro inconnu du registre donne un résultat, jamais une erreur silencieuse.
+      await segment("Modifier ma fiche");
       await page.getByTestId("pro-siret-field").fill("000 000 000 00000");
       await page.getByTestId("pro-siret-check").click();
       await expect(page.getByTestId("pro-siret-result").or(page.getByTestId("pro-siret-notice-error"))).toBeVisible({
@@ -481,6 +492,7 @@ test("pro : fiche, remise, publication, photo, partenaire, SIRET, publications, 
     // Publications : création, modification, suppression avec confirmation.
     // Lot 40 : Publier n'est plus un onglet ; on y arrive depuis Ma fiche.
     await page.getByRole("tab", { name: "Ma fiche", exact: true }).click();
+    await page.getByText("Publications", { exact: true }).click();
     await page.getByTestId("pro-new-post").click();
     await expect(page.getByTestId("pro-posts-counter")).toBeVisible({ timeout: 30_000 });
     if (first) {

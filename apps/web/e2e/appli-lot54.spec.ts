@@ -106,7 +106,8 @@ for (const theme of THEMES) {
 
     // Ma fiche : en-tête, segments, activités en tuiles, remises en grands chiffres, réalisations, Y aller · Favori.
     await tab(page, "Ma fiche");
-    await expect(page.getByRole("heading", { name: "Ma fiche", exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    // Lot C4b : plus de grand titre, la photo d'atelier en tête (artefact `s-pro`).
+    await expect(page.getByTestId("pro-hero")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("pro-identity")).toBeVisible();
     await expect(page.getByTestId("pro-identity")).toContainText(/Pro validé|SIRET à vérifier/);
     await expect(page.getByText("Vue passionné", { exact: true })).toBeVisible();
@@ -140,15 +141,20 @@ for (const theme of THEMES) {
     await page.getByText("Modifier ma fiche", { exact: true }).click();
     await expect(page.getByLabel("Présentation")).toHaveValue("Brouillon gardé en changeant de segment.");
     await expect(page.getByTestId("pro-address-check")).toBeVisible();
-    await expect(page.getByTestId("pro-new-post")).toBeVisible();
     await rules(page, theme, "Modifier ma fiche");
     await shot(page, "fiche-modifier", theme);
+    // Lot C4b (§ 5.2 de l'audit) : publier, publication, partenaires et abonnement dans « Publications ».
+    await page.getByText("Publications", { exact: true }).click();
+    await expect(page.getByTestId("pro-new-post")).toBeVisible();
+    await expect(page.getByTestId("pro-subscription")).toBeVisible();
+    await rules(page, theme, "Publications");
+    await shot(page, "fiche-publications", theme);
 
     // Scanner : caméra en plein cadre, dernier scan en carte, historique.
     await tab(page, "Scanner");
     await expect(page.getByRole("heading", { name: "Scanner", exact: true }).first()).toBeVisible({ timeout: 30_000 });
     // Les onglets voisins restent montés : seul ce qui se voit compte.
-    await expect(page.getByText("Remises par grade", { exact: true }).last()).toBeVisible();
+    await expect(page.getByText("Remises par grade", { exact: true }).locator("visible=true").first()).toBeVisible();
     await expect(page.getByTestId("pro-camera")).toBeVisible();
     const field = page.getByLabel(/Recette · charge utile/);
     // Un passionné différent par thème : le code de 60 s d'un même compte ne se relit pas (rejeu refusé).
@@ -322,9 +328,8 @@ for (const theme of THEMES) {
 
     // Vitrine : vue organisateur.
     await tab(page, "Vitrine");
-    await expect(page.getByRole("heading", { name: "Ma vitrine", exact: true }).first()).toBeVisible({
-      timeout: 30_000,
-    });
+    // Lot C4b : plus de grand titre, le bandeau du métier en tête (artefact `s-vitrine`).
+    await expect(page.getByTestId("vitrine-hero")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("vitrine-identity")).toContainText("La Brasa");
     await expect(page.getByText("Vue organisateur", { exact: true })).toBeVisible();
     await expect(page.getByTestId("vitrine-menu-list")).toContainText("Bocata de botifarra");

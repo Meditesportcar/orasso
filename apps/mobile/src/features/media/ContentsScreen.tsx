@@ -31,6 +31,7 @@ import { useEffect, useRef, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
+import { DirBig } from "@/features/pro/kit";
 import { PhotoBadge, PlateFrameEditor } from "@/features/vehicle/add/PlateFrameEditor";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
@@ -41,6 +42,7 @@ import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { type PickedPhoto, pickPhotos } from "@/lib/photos";
 import { detectPlates } from "@/lib/plates/detect";
+import { formatCount } from "@/lib/proPresta";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
@@ -101,24 +103,14 @@ export function ContentsScreen() {
         </>
       }
     >
-      <Plate style={styles.stats} testID="media-stats">
-        <View style={styles.stat}>
-          <Text variant="label" color={t.color.plateMuted}>
-            {L.views}
-          </Text>
-          <Text variant="posterXl" color={t.color.plateInk}>
-            {totalViews(list).toLocaleString("fr-FR")}
-          </Text>
-        </View>
-        <View style={styles.stat}>
-          <Text variant="label" color={t.color.plateMuted}>
-            {L.contents}
-          </Text>
-          <Text variant="posterXl" color={t.color.plateInk}>
-            {list.length.toLocaleString("fr-FR")}
-          </Text>
-        </View>
-      </Plate>
+      {/* Lot C4b (artefact `s-contenus`) : deux tuiles `.dir-big`, la première crème. */}
+      <DirBig
+        testID="media-stats"
+        items={[
+          { value: formatCount(totalViews(list)), label: L.views },
+          { value: formatCount(list.length), label: L.contents },
+        ]}
+      />
 
       <Button variant="primary" icon="add" fullWidth onPress={() => setAdding(true)} testID="media-add">
         {L.addContent}
@@ -666,8 +658,6 @@ function EditBody({ item, onClose, onDone }: { item: MediaContentView; onClose: 
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  stats: { flexDirection: "row", gap: space3, padding: space3 },
-  stat: { flex: 1, gap: space1 },
   group: { gap: space2, marginTop: space2 },
   groupHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space2 },
   row: { gap: space2, padding: space3 },

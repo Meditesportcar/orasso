@@ -5,7 +5,7 @@
 // « Proposer <nom> » qui ouvre la feuille d'envoi. Dessous, « Sans mission précise · Ouverts à ton activité » : les
 // événements qui acceptent mon type sans avoir écrit de besoin (candidature libre, docs/01). L'API (lot 46,
 // `GET /missions`) fait le tri et le calcul de distance.
-import { Button, Chip, EmptyState, tokens } from "@orasso/design-system/native";
+import { Button, EmptyState, tokens } from "@orasso/design-system/native";
 import type { OpenEventForProvider, VendorTypeCode } from "@orasso/shared";
 import {
   type MissionCard,
@@ -18,10 +18,11 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { AngledTag, TzChip } from "@/features/pro/kit";
 import { Ticket } from "@/features/sorties/Ticket";
 import { api } from "@/lib/api";
 import { formatDayHour } from "@/lib/format";
-import { alreadyApplied, candidatureKind, missionDetail, missionFacts, missionTag } from "@/lib/proPresta";
+import { alreadyApplied, candidatureKind, missionDetail, missionFacts, missionTag, tradeIcons } from "@/lib/proPresta";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { LoadError } from "@/ui/LoadError";
@@ -29,13 +30,12 @@ import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
-import { Segments } from "@/ui/Segments";
 import { Slider } from "@/ui/Slider";
 import { StatusTag } from "@/ui/StatusTag";
 import { ApplySheet } from "./ApplySheet";
 import { ProposeSheet } from "./ProposeSheet";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space1, space3 } = tokens.spacing;
 
 /** Rayon d'intervention : la même plage que la vitrine (`providerProfileSchema`). */
 const RADIUS_MIN = 5;
@@ -130,20 +130,27 @@ export function MissionsScreen() {
       ) : (
         <>
           {p.issue ? <Notice>{proV2Labels.profileIncomplete(p.issue)}</Notice> : null}
-          <View style={styles.chips} testID="missions-filters">
-            <Segments<VendorTypeCode>
-              items={trades.map((id) => ({ id, label: vendorTypeLabels[id] }))}
-              value={activeTrade ?? p.type}
-              onChange={setTrade}
-            />
-            <Chip
-              accessibilityRole="toggle"
-              variant="accent"
-              selected={radiusOpen}
+          {/* Lot C4b (artefact `s-missions`, `.tz-chips`) : le métier actif en moutarde avec son icône, le rayon avec l'épingle. */}
+          <View style={styles.chips} testID="missions-filters" accessibilityRole="radiogroup">
+            {trades.map((id) => {
+              const on = id === (activeTrade ?? p.type);
+              return (
+                <TzChip
+                  key={id}
+                  label={vendorTypeLabels[id]}
+                  icon={on ? tradeIcons[id] : undefined}
+                  on={on}
+                  onPress={() => setTrade(id)}
+                />
+              );
+            })}
+            <TzChip
+              label={proV2Labels.radiusChip(shownRadius)}
+              icon="place"
+              kind="toggle"
+              on={radiusOpen}
               onPress={() => setRadiusOpen((v) => !v)}
-            >
-              {proV2Labels.radiusChip(shownRadius)}
-            </Chip>
+            />
           </View>
           {radiusOpen ? (
             <View style={styles.radius} testID="missions-radius">
@@ -193,7 +200,7 @@ export function MissionsScreen() {
                     ) : tag.mine ? (
                       <StatusTag status="retained" />
                     ) : (
-                      <Chip surface="plate">{tag.label}</Chip>
+                      <AngledTag tone="line">{tag.label}</AngledTag>
                     )
                   }
                   title={card.title}
@@ -203,9 +210,7 @@ export function MissionsScreen() {
                   {facts.length && !tag.mine ? (
                     <View style={styles.facts}>
                       {facts.map((f) => (
-                        <Chip key={f} surface="plate">
-                          {f}
-                        </Chip>
+                        <TzChip key={f} label={f} />
                       ))}
                     </View>
                   ) : null}
@@ -250,7 +255,7 @@ export function MissionsScreen() {
                   key={e.id}
                   testID="provider-open-event"
                   date={e.startsAt}
-                  badge={<Chip surface="plate">{proV2Labels.openSubtitle}</Chip>}
+                  badge={<AngledTag tone="line">{proV2Labels.openSubtitle}</AngledTag>}
                   title={e.title}
                   detail={[e.structureName, e.city, formatDayHour(e.startsAt)].filter(Boolean).join(" · ")}
                   onPressTitle={() => router.push(`/e/${e.slug}`)}
@@ -275,8 +280,8 @@ export function MissionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   radius: { paddingVertical: space1 },
   stack: { gap: space3 },
-  facts: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  facts: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
 });
