@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import { addVehicleApi, MOBILE, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import { sql } from "./helpers/lot48";
 import { RELAIS } from "./relais";
 
 // Lot 40, côté appli (version web de recette) : navigation v2. Les six casquettes du seed (exposant Kenji, visiteur
@@ -18,6 +19,10 @@ type Theme = "beton" | "sable";
 
 /** Les barres (libellé de l'onglet → route attendue dans l'URL, grand titre attendu). */
 // Lot C1 (artefact DA v2) : pas de grand titre sur Accueil, Explorer (exposant, visiteur) et Mon profil (null).
+// Lot C4b (artefact `s-pro`, `s-vitrine`) : Ma fiche et Ma vitrine n'ont plus de titre d'onglet, leur titre (h1, en-tête
+// pour le lecteur d'écran) est le nom de la fiche ; OWN_NAME le fait lire dans la base pour le compte de la casquette.
+// Un nom peut passer sur deux lignes à côté du logo (comme « Atelier Têt Detailing » dans l'artefact), jamais coupé.
+const OWN_NAME = "nom de la fiche";
 const BARS = {
   fan: [
     ["Explorer", "explorer", null], // Lot C2a : pas de grand titre (artefact).
@@ -42,7 +47,7 @@ const BARS = {
   ],
   pro: [
     ["Scanner", "scanner", "Scanner"],
-    ["Ma fiche", "fiche", "Ma fiche"],
+    ["Ma fiche", "fiche", OWN_NAME],
     ["Accueil", "accueil", null],
     ["Stats", "stats", "Stats"],
     ["Profil", "profil", null],
@@ -51,7 +56,7 @@ const BARS = {
     ["Missions", "missions", "Missions"],
     ["Candidatures", "candidatures", "Candidatures"],
     ["Accueil", "accueil", null],
-    ["Vitrine", "vitrine", "Ma vitrine"],
+    ["Vitrine", "vitrine", OWN_NAME],
     ["Profil", "profil", null],
   ],
   media: [
@@ -64,6 +69,18 @@ const BARS = {
 } as const;
 
 type Kind = keyof typeof BARS;
+
+/** Nom de la fiche pro ou de la vitrine du compte qui porte la casquette (titre de Ma fiche et de Ma vitrine). */
+async function ownName(kind: Kind): Promise<string> {
+  const table = kind === "pro" ? "pro_profiles" : "provider_profiles";
+  const owner = kind === "pro" ? "owner_user_id" : "user_id";
+  const [row] = await sql<{ name: string }>(
+    `select p.name from ${table} p join "user" u on u.id = p.${owner} where u.email = $1 and p.deleted_at is null`,
+    [ACCOUNTS[kind]],
+  );
+  if (!row) throw new Error(`Pas de fiche pour ${ACCOUNTS[kind]}`);
+  return row.name;
+}
 
 /** Qui représente chaque casquette dans le seed. */
 const ACCOUNTS: Record<Kind, string> = {
@@ -106,8 +123,11 @@ async function choose(page: Page, kind: Kind) {
   await page.waitForURL(landing[kind], { timeout: 30_000 });
 }
 
-/** La barre d'onglets, le logotype, un grand titre sur une ligne ; audit des règles qui valent dans l'appli web. */
-async function checkTab(page: Page, title: string | null) {
+/**
+ * La barre d'onglets, le logotype, un grand titre sur une ligne (un nom de fiche peut en prendre deux), jamais coupé ;
+ * audit des règles qui valent dans l'appli web.
+ */
+async function checkTab(page: Page, title: string | null, oneLine = true) {
   await expect(page.getByRole("tablist").last().getByRole("tab")).toHaveCount(5, { timeout: 30_000 });
   await expect(page.getByTestId("topbar-logo").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Boîte", exact: true }).first()).toBeVisible();
@@ -119,7 +139,9 @@ async function checkTab(page: Page, title: string | null) {
       const line = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.2;
       return Math.round(el.getBoundingClientRect().height / line);
     });
-    expect(lines, `« ${title} » sur une ligne`).toBeLessThanOrEqual(1);
+    expect(lines, `« ${title} » sur ${oneLine ? "une ligne" : "deux lignes au plus"}`).toBeLessThanOrEqual(
+      oneLine ? 1 : 2,
+    );
     const cut = await heading.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
     expect(cut, `« ${title} » sans points de suspension`).toBe(false);
   }
@@ -155,7 +177,8 @@ test("les 30 onglets des six casquettes du seed : barre, logotype, grand titre s
       for (const [label, route, title] of BARS[kind]) {
         await page.getByRole("tab", { name: label, exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/${route}(\\?|$)`), { timeout: 30_000 });
-        await checkTab(page, title);
+        if (title === OWN_NAME) await checkTab(page, await ownName(kind), false);
+        else await checkTab(page, title);
         await shot(page, `${kind}-${route}-${theme}`);
       }
       await ctx.close();
