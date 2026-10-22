@@ -1,5 +1,7 @@
 // Chargement d'une donnée de l'API : affiche tout de suite la dernière valeur connue (mémoire, ou cache du trousseau
 // si `cacheKey` est donné), recharge au retour sur l'écran, garde la valeur en cas de panne réseau.
+// Lot M3 (fluidité) : charge dès le montage, même hors focus (onglets voisins préchargés par la barre de pages) ; le
+// retour sur l'écran recharge en arrière-plan, sauf si une lecture vient de partir (moins de `FRESH_MS`).
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -24,6 +26,9 @@ export type ApiState<T> = {
   reload: () => Promise<T | null>;
   setData: (value: T | null) => void;
 };
+
+/** Une lecture partie depuis moins longtemps ne se relance pas au retour sur l'écran. */
+const FRESH_MS = 2000;
 
 export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], options: Options = {}): ApiState<T> {
   const { cacheKey, enabled = true, refreshMs } = options;
@@ -65,8 +70,10 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
     };
   }, [cacheKey, account]);
 
+  const startedAt = useRef(0);
   const reload = useCallback(async (): Promise<T | null> => {
     if (!enabled) return null;
+    startedAt.current = Date.now();
     // Compte du départ : une réponse qui arrive après un changement de compte est jetée (état, cache), même si
     // l'écran est resté monté d'un compte à l'autre.
     const guard = accountGuard();
@@ -90,9 +97,14 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
     }
   }, [enabled, cacheKey, ...deps]);
 
+  // Premier chargement au montage (et à chaque changement de dépendances), focus ou pas.
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
   useFocusEffect(
     useCallback(() => {
-      void reload();
+      if (Date.now() - startedAt.current > FRESH_MS) void reload();
       if (!refreshMs) return undefined;
       const timer = setInterval(() => void reload(), refreshMs);
       return () => clearInterval(timer);
