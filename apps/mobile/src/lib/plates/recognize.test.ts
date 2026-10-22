@@ -55,3 +55,18 @@ describe("extractPlates", () => {
     expect(extractPlates("IO-123-UA")).not.toContain("IO123UA");
   });
 });
+
+describe("formats ajoutés au lot M2 (lecture stricte de l'accueil drive)", () => {
+  it.each([
+    ["W garage", "W-623-AX", "W623AX"],
+    ["WW provisoire", "WW-123-AB", "WW123AB"],
+    ["diplomatique CD", "12 CD 3456", "12CD3456"],
+    ["diplomatique CMD", "6 CMD 15", "6CMD15"],
+  ])("%s", (_name, text, expected) => {
+    expect(extractPlates(text)[0]).toBe(expected);
+  });
+
+  it("le WW n'est pas une SIV, mais reste lu comme un provisoire", () => {
+    expect(extractPlates("WW-123-AB")).toEqual(["WW123AB"]);
+  });
+});

@@ -16,9 +16,16 @@ export function gradeFor(points: number, thresholds: Record<Grade, number> = GRA
   return result;
 }
 
-/** Plaque normalisée : majuscules d'abord, puis lettres et chiffres seuls (correction du coordinateur, 15/10). */
+/**
+ * Plaque normalisée : majuscules d'abord, puis lettres et chiffres seuls (correction du coordinateur, 15/10) ; les
+ * accents tombent avant (lot M2 : « aé-665 gh » → « AE665GH », au lieu de perdre la lettre).
+ */
 export function normalizePlate(plate: string): string {
-  return plate.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return plate
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 }
 
 /** Éligibilité d'un véhicule à une catégorie d'après son âge (youngtimer ≥ 20 ans, ancienne ≥ 30 ans). */

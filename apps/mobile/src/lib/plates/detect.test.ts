@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   detectPlates,
+  findPlates,
   looksLikePlate,
   normalizePlateText,
   orientedPlateRect,
+  plateReadingOf,
   platesFromLines,
+  probablePlate,
+  suggestedPlate,
   toPlateRect,
 } from "./detect";
 import type { TextFrame, TextLineResult } from "./mlkit";
@@ -225,5 +229,58 @@ describe("plaque penchée au bord de la photo : toute la plaque visible reste da
 
   it("au milieu, le cadre reste orienté", () => {
     expect(detect(500, 400, 30).angle).toBe(30);
+  });
+});
+
+describe("tous les formats français et filet de sécurité (lot M2)", () => {
+  it("W garage, WW provisoire et diplomatiques sont reconnus, avec leur lecture", () => {
+    const cases: [string, string][] = [
+      ["W-623-AX", "W623AX"], // la Nissan de Damien (retour 11)
+      ["W 623 AX", "W623AX"],
+      ["W-6Z3-AX", "W623AX"], // Z lu pour 2
+      ["WW-123-AB", "WW123AB"],
+      ["FT-340-NC", "FT340NC"], // la BMW (retour 12)
+      ["1234 AB 66", "1234AB66"],
+      ["12 CD 3456", "12CD3456"],
+      ["6 CMD 15", "6CMD15"],
+    ];
+    for (const [text, reading] of cases) {
+      expect(looksLikePlate(text), text).toBe(true);
+      expect(plateReadingOf(text), text).toBe(reading);
+    }
+  });
+
+  it("la plaque W garage lue en trois mots donne un cadre et un numéro prérempli", () => {
+    const lines = [
+      line([
+        ["W", frame(400, 600, 30, 40)],
+        ["623", frame(440, 600, 80, 40)],
+        ["AX", frame(530, 600, 60, 40)],
+      ]),
+    ];
+    const found = findPlates(lines, 1000, 1000);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ reading: "W623AX", probable: false });
+    expect(suggestedPlate(found)).toBe("W-623-AX");
+  });
+
+  it("filet de sécurité : 5 à 9 lettres et chiffres dans un rectangle de plaque = plaque probable", () => {
+    expect(probablePlate("M AB 1234", frame(0, 0, 250, 50))).toBe("MAB1234"); // plaque allemande, 5:1
+    expect(probablePlate("M AB 1234", frame(0, 0, 100, 100))).toBeNull(); // carré : pas une plaque
+    expect(probablePlate("TOYOTA", frame(0, 0, 250, 50))).toBeNull(); // pas de chiffre
+    expect(probablePlate("2026", frame(0, 0, 250, 50))).toBeNull(); // trop court, pas de lettre
+    expect(probablePlate("ABCDEF1234", frame(0, 0, 400, 50))).toBeNull(); // 10 caractères
+    const found = findPlates(
+      [line([["M-AB-1234", frame(300, 500, 250, 50)]]), line([["GA-662-KS", frame(300, 800, 250, 50)]])],
+      1000,
+      1000,
+    );
+    expect(found.map((f) => [f.reading, f.probable])).toEqual([
+      ["GA662KS", false],
+      ["MAB1234", true],
+    ]);
+    expect(suggestedPlate(found)).toBe("GA-662-KS");
+    expect(suggestedPlate(found.slice(1))).toBe("MAB1234");
+    expect(suggestedPlate([])).toBeNull();
   });
 });
