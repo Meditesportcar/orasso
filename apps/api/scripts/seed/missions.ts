@@ -123,7 +123,7 @@ export async function seedMissions(hash: string) {
     if (!row) throw new Error("besoin");
     return row;
   };
-  const nocturneNeed = await need(nocturne.id, { quantity: 1, power: "a16", installAt: parisAt(2, 16) });
+  const nocturneNeed = await need(nocturne.id, { quantity: 1, power: "a16", installAt: parisAt(6, 16) });
   const expoNeed = await need(expo.id, { quantity: 2, power: "a16", water: true, installAt: parisAt(10, 8) });
   await need(lac.id, {
     quantity: 1,

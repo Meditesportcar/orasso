@@ -76,6 +76,8 @@ export type ProfileEvent = {
   startsAt: string;
   city: string | null;
   posterUrl: string | null;
+  /** Lot C5 : photo de la voiture de l'affiche, `null` sans photo. */
+  photoUrl: string | null;
   structureName: string;
 };
 

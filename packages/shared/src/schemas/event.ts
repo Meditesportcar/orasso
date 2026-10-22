@@ -302,6 +302,11 @@ export type EventCard = {
    * gabarit « Minimal », jamais l'affiche perso. Le site garde `posterUrl` jusqu'au lot 56.
    */
   generatedPosterUrl: string | null;
+  /**
+   * Lot C5 : la photo de la voiture de l'affiche (`poster_photo_key`), `null` sans photo. Les cartes de l'artefact
+   * (Accueil, fiche, listes) la posent en tête ; sans elle, elles dessinent l'affiche générée entière.
+   */
+  photoUrl: string | null;
   /** Lot 52 : compteurs de candidatures, seulement dans la liste de l'organisateur de la structure. */
   counters?: EventCounters;
   status: EventStatus;

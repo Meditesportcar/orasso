@@ -39,7 +39,7 @@ async function shot(page: Page, name: string, theme: Theme) {
 }
 
 /**
- * Néons de la page hors de la pastille centrale de la barre d'onglets du site (`.o-tabbar__tab.is-center`, barre v1 de
+ * Néons de la page hors de la pastille centrale de la barre d'onglets du site (`.o-tabbar__tab.is-center`, barre de
  * l'espace connecté, toujours en néon) : avec elle, toute page de `/app` qui a un bouton principal compterait deux néons.
  * Écart signalé au coordinateur (barre du site, lot 56 / 58).
  */

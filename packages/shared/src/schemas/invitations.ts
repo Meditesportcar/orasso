@@ -64,6 +64,8 @@ export type InvitationEventBrief = {
   endsAt: string;
   city: string | null;
   posterUrl: string | null;
+  /** Lot C5 : photo de la voiture de l'affiche, `null` sans photo. */
+  photoUrl: string | null;
   status: EventStatus;
   privateEvent: boolean;
   /** Validité de l'invitation (S24) : le verrouillage des inscriptions. */
