@@ -146,12 +146,31 @@ async function noFanScreen(page: Page) {
   }
 }
 
+/** Lundi de la semaine d'un instant, date de Paris `AAAA-MM-JJ` (même règle que `weekStartOf` de l'appli). */
+function weekStartParis(instant: Date): string {
+  const day = new Date(`${instant.toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" })}T00:00:00Z`);
+  return new Date(day.getTime() - ((day.getUTCDay() + 6) % 7) * 86_400_000).toISOString().slice(0, 10);
+}
+
 for (const theme of THEMES) {
   test(`Léo : Explorer, Presse, Contenus, la barre et le logo restent (${theme})`, async ({ browser }) => {
     test.setTimeout(420_000);
     const { ctx, page } = await open(browser, theme);
     // Une passe précédente a pu garder des événements : on repart d'un agenda sans « gardé ».
     await sql("delete from media_saved_events");
+    // Les contenus ajoutés par la passe précédente (liens et galerie : une galerie identique déjà publiée est reconnue et
+    // n'envoie plus ses photos) sont effacés.
+    await sql(
+      `delete from media_contents where title like 'Reportage de la nuit %' or title like 'Nocturne, le reportage %'
+         or title like 'Galerie de la nuit %'`,
+    );
+    // Les demandes de Léo à Toulouse (envoyée, puis retirée par la passe précédente, quel que soit le thème) sont effacées :
+    // chaque thème repart de l'état du seed, dans n'importe quel ordre.
+    await sql(
+      `delete from applications where kind = 'media'
+         and user_id = (select id from "user" where email = 'leo@orasso.local')
+         and event_id in (select id from events where title like '%Toulouse%')`,
+    );
     await signIn(page, "leo@orasso.local");
     await toMedia(page);
     await noFanScreen(page);
@@ -210,9 +229,23 @@ for (const theme of THEMES) {
     await page.getByText("Mon agenda", { exact: true }).click();
     await expect(page.getByText(/Les événements que tu couvres ou que tu as gardés/)).toBeVisible();
     await expect(page.getByTestId("media-week")).toBeVisible();
-    await expect(page.getByText("Cette semaine", { exact: true })).toBeVisible();
+    // Section de chaque événement selon le jour : la semaine en cours (et ce qui a commencé) ou plus tard (règle de
+    // `splitAgenda`, appli).
+    const nowRows = await sql<{ title: string; starts_at: Date }>(
+      "select title, starts_at from events where title = 'Nocturne de Canet' or title like '%Montpellier%'",
+    );
+    const sections = new Set<string>();
+    for (const title of ["Nocturne de Canet", "Montpellier"]) {
+      const row = nowRows.find((r) => r.title.includes(title));
+      expect(row, `événement ${title} du seed`).toBeTruthy();
+      sections.add(
+        weekStartParis(new Date((row as { starts_at: Date }).starts_at)) <= weekStartParis(new Date())
+          ? "Cette semaine"
+          : "Plus tard",
+      );
+    }
+    for (const label of sections) await expect(page.getByText(label, { exact: true })).toBeVisible();
     await expect(page.getByTestId("media-agenda-event").filter({ hasText: "Nocturne de Canet" })).toBeVisible();
-    await expect(page.getByText("Plus tard", { exact: true })).toBeVisible();
     await expect(page.getByTestId("media-agenda-event").filter({ hasText: "Montpellier" })).toBeVisible();
     await shot(page, "explorer-agenda", theme);
     await rules(page, theme, "Mon agenda");
@@ -271,8 +304,10 @@ for (const theme of THEMES) {
       .getByTestId("media-badge")
       .click();
     await page.waitForURL(/jour-j\//, { timeout: 30_000 });
-    // Le kit du badge est enregistré sur le téléphone ; le mode s'ouvre la veille, l'écran dit l'événement.
-    await expect(page.getByText("Ton QR est prêt", { exact: true })).toBeVisible({ timeout: 30_000 });
+    // Le kit du badge est enregistré sur le téléphone ; le badge est consultable dès l'accréditation (D34).
+    await expect(page.getByTestId("qr-countdown").or(page.getByText("Ton QR est prêt"))).toBeVisible({
+      timeout: 30_000,
+    });
     await shot(page, "badge-presse", theme);
     await page.goBack();
     await expect(page.getByRole("tab", { name: "Presse", exact: true })).toBeVisible({ timeout: 30_000 });
@@ -440,6 +475,8 @@ for (const theme of THEMES) {
   test(`Un autre compte crée son profil média depuis Créer (${theme})`, async ({ browser }) => {
     test.setTimeout(300_000);
     const email = theme === "beton" ? "nina@orasso.local" : "lea@orasso.local";
+    // Le profil créé par une passe précédente est effacé : le compte repart sans casquette Média.
+    await sql('delete from media_profiles where user_id = (select id from "user" where email = $1)', [email]);
     const { ctx, page } = await open(browser, theme);
     await signIn(page, email);
     await page.goto("/moi");

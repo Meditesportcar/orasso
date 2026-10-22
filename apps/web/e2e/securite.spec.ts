@@ -173,6 +173,8 @@ async function addKey(page: Page, name: string) {
 }
 
 async function signInWithKey(page: Page, retour: string) {
+  // Lot C5 : la déconnexion est dans Profil (`/app/moi`), plus dans l'en-tête.
+  await page.goto("/app/moi");
   await page.getByRole("button", { name: "Déconnexion" }).first().click();
   await page.goto(`/connexion?retour=${retour}`);
   await page.getByRole("button", { name: "Se connecter avec une clé d'accès" }).click();

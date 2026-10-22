@@ -163,6 +163,8 @@ export type HomeNextAccess = MyApplication & {
   arrival: ArrivalSlot | null;
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
+  /** Lot C5 : la photo de la voiture de l'affiche, `null` sans photo. */
+  photoUrl: string | null;
   location: HomeLocation | null;
 };
 
@@ -176,12 +178,14 @@ export type HomeNextTicket = {
   arrival: ArrivalSlot | null;
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
+  /** Lot C5 : la photo de la voiture de l'affiche, `null` sans photo. */
+  photoUrl: string | null;
   location: HomeLocation | null;
 };
 
 export type HomeProScan = { grade: string; percent: number; usedAt: string };
 export type HomeProEvent = {
-  event: Pick<EventCard, "id" | "slug" | "title" | "startsAt" | "city" | "posterUrl">;
+  event: Pick<EventCard, "id" | "slug" | "title" | "startsAt" | "city" | "posterUrl" | "photoUrl">;
   /** Mes abonnés qui y sont retenus (« N de tes clients y vont »). */
   clientsGoing: number;
 };
@@ -212,6 +216,8 @@ export type HomeProviderMission = {
   organizerMessage: string | null;
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
+  /** Lot C5 : la photo de la voiture de l'affiche, `null` sans photo. */
+  photoUrl: string | null;
   location: HomeLocation | null;
 };
 export type HomeNearbyMission = {
@@ -236,6 +242,8 @@ export type HomeMediaReport = {
   briefing: { zones: string | null; instructions: string | null; contact: string | null } | null;
   organizer: HomeOrganizer | null;
   posterUrl: string | null;
+  /** Lot C5 : la photo de la voiture de l'affiche, `null` sans photo. */
+  photoUrl: string | null;
   location: HomeLocation | null;
 };
 export type HomeMedia = {
