@@ -26,14 +26,12 @@ export function alpha(color: string, a: number): string {
 }
 
 /**
- * Les valeurs que l'artefact écrit en dur (pas de jeton correspondant aujourd'hui) : pastilles d'avatar et de logo
- * (`#3a3d44`, `#2f5fb8`, `#d4552a`, `#8f1d22`, `#24418f`, `#5b554b`), papier des photos du passeport, fond du lecteur.
+ * Les valeurs que l'artefact écrit en dur et que le socle C1 n'a pas passées en jetons (propres aux tutos) : trois
+ * pastilles (`#3a3d44`, `#24418f`, `#5b554b`), papier et légende des photos du passeport, fond du lecteur, voile du bouton
+ * lecture, gris du badge presse. Bleu, orange et bordeaux viennent des jetons (`useArt`).
  */
 export const SWATCH = {
   graphite: "#3a3d44",
-  blue: "#2f5fb8",
-  orange: "#d4552a",
-  wine: "#8f1d22",
   navy: "#24418f",
   taupe: "#5b554b",
   photoPaper: "#f7f2e8",
@@ -61,7 +59,7 @@ export function useArt() {
       ink: c.ink,
       muted: c.inkMuted,
       faint: c.inkFaint,
-      line: alpha(c.ink, dark ? 0.14 : 0.16),
+      line: c.plateLine,
       poster: c.poster,
       posterInk: c.posterInk,
       posterMuted: c.posterMuted,
@@ -77,7 +75,12 @@ export function useArt() {
       barInk: c.barInk,
       barMuted: c.barMuted,
       night: c.night,
-      paper: c.barInk,
+      paper: c.photoInk,
+      // Pastilles et vitrine : jetons du socle C1 (`avatar-2`, `vitrine-from`, `vitrine-to`, `avatar-ink`).
+      avatarBlue: c.avatar2,
+      vitrineFrom: c.vitrineFrom,
+      vitrineTo: c.vitrineTo,
+      avatarInk: c.avatarInk,
       mapLand: c.mapLand,
       mapLand2: c.mapLand2,
       mapSea: c.mapSea,

@@ -150,17 +150,24 @@ function Sort() {
 }
 
 const BUBBLES = [
-  { i: "SA", c: SWATCH.blue, x: 26, y: 30, s: 96, f: 24, role: 0, d: 0.2 },
-  { i: "TH", c: SWATCH.wine, x: 66, y: 20, s: 74, f: 18, role: 1, d: 0.35 },
-  { i: "LU", c: SWATCH.graphite, x: 60, y: 64, s: 64, f: 16, role: 2, d: 0.5 },
-  { i: "NA", c: SWATCH.navy, x: 18, y: 72, s: 52, f: 13, role: -1, d: 0.65 },
-  { i: "JO", c: SWATCH.taupe, x: 86, y: 62, s: 44, f: 12, role: -1, d: 0.8 },
+  { i: "SA", c: "blue", x: 26, y: 30, s: 96, f: 24, role: 0, d: 0.2 },
+  { i: "TH", c: "wine", x: 66, y: 20, s: 74, f: 18, role: 1, d: 0.35 },
+  { i: "LU", c: "graphite", x: 60, y: 64, s: 64, f: 16, role: 2, d: 0.5 },
+  { i: "NA", c: "navy", x: 18, y: 72, s: 52, f: 13, role: -1, d: 0.65 },
+  { i: "JO", c: "taupe", x: 86, y: 62, s: 44, f: 12, role: -1, d: 0.8 },
 ] as const;
 
 /** L'équipe en bulles (la taille dit l'engagement), un rôle par bénévole, la demande en pointillés. */
 function Team() {
   const a = useArt();
   const [w, setW] = useState(0);
+  const bubbleColor = {
+    blue: a.avatarBlue,
+    wine: a.vitrineTo,
+    graphite: SWATCH.graphite,
+    navy: SWATCH.navy,
+    taupe: SWATCH.taupe,
+  };
   return (
     <ArtFrame label={o.team.kicker}>
       <Tz>
@@ -184,7 +191,7 @@ function Team() {
                       top: (b.y / 100) * 240 - b.s / 2,
                       width: b.s,
                       height: b.s,
-                      backgroundColor: b.c,
+                      backgroundColor: bubbleColor[b.c],
                     },
                   ]}
                 >

@@ -13,6 +13,7 @@ const p = tutoArt.pro;
 
 /** Fiche de l'atelier : logo, activités qui s'allument, remises par grade qui se remplissent. */
 function Sheet() {
+  const a = useArt();
   const on = [0.7, 0.85, undefined, 1];
   return (
     <ArtFrame label={p.sheet.name}>
@@ -21,7 +22,7 @@ function Sheet() {
           <Card>
             <Row>
               <A k="pop" d={0.35}>
-                <Badge initials={p.sheet.logo} color={SWATCH.blue} size={40} radius={11} font={16} />
+                <Badge initials={p.sheet.logo} color={a.avatarBlue} size={40} radius={11} font={16} />
               </A>
               <Grow>
                 <Nm>{p.sheet.name}</Nm>
@@ -77,7 +78,7 @@ function Found() {
       ))}
       <DroppedPin />
       <FloatCard>
-        <Badge initials={p.sheet.logo} color={SWATCH.blue} size={40} radius={11} font={16} />
+        <Badge initials={p.sheet.logo} color={a.avatarBlue} size={40} radius={11} font={16} />
         <View style={styles.grow}>
           <T k="poster" size={13} lh={14} color={a.ink}>
             {p.sheet.name}

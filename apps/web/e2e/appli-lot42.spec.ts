@@ -159,21 +159,26 @@ async function noBigAccentFill(page: Page, theme: Theme, label: string) {
     document.body.appendChild(probe);
     const rgb = getComputedStyle(probe).backgroundColor;
     probe.remove();
-    return [...document.querySelectorAll('[data-testid="tuto-art"] *')]
-      .filter((el) => getComputedStyle(el).backgroundColor === rgb)
-      // Une étiquette inclinée (`.tag`, skewX(−8°) : « Scan OK · zone JDM » de l'artefact) n'est pas un bouton (droit).
-      .filter((el) => {
-        const m = getComputedStyle(el).transform.match(/^matrix\(([^)]+)\)$/);
-        return !m || Math.abs(Number(m[1]?.split(",")[2] ?? 0)) < 0.01;
-      })
-      // Une bulle de discussion (`.tz-msg.me` : un coin pointu) n'est pas un bouton (quatre coins égaux).
-      .filter((el) => {
-        const cs = getComputedStyle(el);
-        return cs.borderTopLeftRadius === cs.borderBottomRightRadius && cs.borderTopRightRadius === cs.borderBottomLeftRadius;
-      })
-      .map((el) => el.getBoundingClientRect())
-      .filter((r) => r.width >= 160 && r.height >= 32 && r.height <= 64)
-      .map((r) => `${Math.round(r.width)}x${Math.round(r.height)}`);
+    return (
+      [...document.querySelectorAll('[data-testid="tuto-art"] *')]
+        .filter((el) => getComputedStyle(el).backgroundColor === rgb)
+        // Une étiquette inclinée (`.tag`, skewX(−8°) : « Scan OK · zone JDM » de l'artefact) n'est pas un bouton (droit).
+        .filter((el) => {
+          const m = getComputedStyle(el).transform.match(/^matrix\(([^)]+)\)$/);
+          return !m || Math.abs(Number(m[1]?.split(",")[2] ?? 0)) < 0.01;
+        })
+        // Une bulle de discussion (`.tz-msg.me` : un coin pointu) n'est pas un bouton (quatre coins égaux).
+        .filter((el) => {
+          const cs = getComputedStyle(el);
+          return (
+            cs.borderTopLeftRadius === cs.borderBottomRightRadius &&
+            cs.borderTopRightRadius === cs.borderBottomLeftRadius
+          );
+        })
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.width >= 160 && r.height >= 32 && r.height <= 64)
+        .map((r) => `${Math.round(r.width)}x${Math.round(r.height)}`)
+    );
   }, accent);
   expect(found, `${label} : pas de faux bouton moutarde dans l'illustration`).toEqual([]);
 }

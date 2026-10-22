@@ -11,11 +11,11 @@ const P_O =
   "M69.19 101.74Q49.85 101.74 36.12 96.66Q22.38 91.57 15.04 81.98Q7.7 72.38 7.7 58.87Q7.7 47.38 11.41 37.57Q15.12 27.76 21.8 20.35Q31.69 9.59 47.02 3.92Q62.35 -1.74 81.54 -1.74Q100.87 -1.74 114.61 3.42Q128.34 8.58 135.68 18.17Q143.02 27.76 143.02 41.42Q143.02 53.05 139.17 63.01Q135.32 72.97 128.34 80.38Q118.6 90.84 103.27 96.29Q87.94 101.74 69.19 101.74ZM56.2 29L102.2 29C110.49 29 116.02 35.72 114.56 44L112.44 56C110.98 64.28 103.08 71 94.8 71L48.8 71C40.51 71 34.98 64.28 36.44 56L38.56 44C40.02 35.72 47.92 29 56.2 29Z";
 const SKEW = "translate(75.5 50) skewX(-10) translate(-75.5 -50)";
 
-/** Couleurs propres aux gabarits d'affiche (les mêmes que le générateur d'affiches de l'API). */
+/**
+ * Couleurs propres aux gabarits d'affiche (celles du générateur d'affiches de l'API) ; la nuit, la crème et la moutarde
+ * viennent des jetons (`night`, `photo-ink`, `accent`, identiques dans les deux thèmes).
+ */
 const POSTER = {
-  night: "#131417",
-  cream: "#f3ebdd",
-  mustard: "#e9b824",
   jdmPaper: "#e8e2d4",
   sun: "#c8322b",
   flyerPaper: "#efe4c9",
@@ -43,19 +43,20 @@ const serif = Platform.select({ ios: "Georgia", default: "serif" });
 
 /** Une affiche carrée de `size` px. */
 export function Poster({ tpl, size }: { tpl: "neon" | "jdm" | "flyer"; size: number }) {
+  const a = useArt();
   const q = size / 100;
   const display = textStyles.posterL.fontFamily;
   const narrow = textStyles.numberNarrow.fontFamily;
   const label = textStyles.label.fontFamily;
   const sig = (color: string) => (
     <View style={[pz.sig, { right: 4 * q, bottom: 3 * q, gap: 1.4 * q }]}>
-      <OMono size={Math.max(8, 6 * q)} color={color} car={POSTER.mustard} />
+      <OMono size={Math.max(8, 6 * q)} color={color} car={a.accent} />
       <Text style={{ fontFamily: label, fontSize: Math.max(5, 3.2 * q), letterSpacing: 0.5, color }}>ORASSO</Text>
     </View>
   );
   if (tpl === "neon")
     return (
-      <View style={[pz.box, { width: size, height: size, backgroundColor: POSTER.night }]}>
+      <View style={[pz.box, { width: size, height: size, backgroundColor: a.night }]}>
         <Photo m="supra" style={FILL} />
         <Svg style={FILL} viewBox="0 0 10 10" preserveAspectRatio="none">
           <Defs>
@@ -70,7 +71,7 @@ export function Poster({ tpl, size }: { tpl: "neon" | "jdm" | "flyer"; size: num
         <View
           style={[
             pz.bar,
-            { height: 1.4 * q, backgroundColor: POSTER.mustard, boxShadow: `0 0 ${4 * q}px rgba(233,184,36,.8)` },
+            { height: 1.4 * q, backgroundColor: a.accent, boxShadow: `0 0 ${4 * q}px rgba(233,184,36,.8)` },
           ]}
         />
         <View
@@ -82,12 +83,12 @@ export function Poster({ tpl, size }: { tpl: "neon" | "jdm" | "flyer"; size: num
               paddingHorizontal: 2.6 * q,
               paddingTop: 1.6 * q,
               paddingBottom: q,
-              backgroundColor: POSTER.mustard,
+              backgroundColor: a.accent,
             },
           ]}
         >
-          <Text style={{ fontFamily: narrow, fontSize: 15 * q, lineHeight: 13 * q, color: POSTER.night }}>24</Text>
-          <Text style={{ fontFamily: label, fontSize: 3.4 * q, color: POSTER.night, letterSpacing: 0.4 }}>OCT</Text>
+          <Text style={{ fontFamily: narrow, fontSize: 15 * q, lineHeight: 13 * q, color: a.night }}>24</Text>
+          <Text style={{ fontFamily: label, fontSize: 3.4 * q, color: a.night, letterSpacing: 0.4 }}>OCT</Text>
         </View>
         <Text
           style={[
@@ -99,18 +100,16 @@ export function Poster({ tpl, size }: { tpl: "neon" | "jdm" | "flyer"; size: num
               fontFamily: display,
               fontSize: 11 * q,
               lineHeight: 10 * q,
-              color: POSTER.cream,
+              color: a.paper,
             },
           ]}
         >
           NOCTURNE DE CANET
         </Text>
-        <Text
-          style={[pz.abs, { left: 5 * q, bottom: 7 * q, fontFamily: label, fontSize: 3.6 * q, color: POSTER.mustard }]}
-        >
+        <Text style={[pz.abs, { left: 5 * q, bottom: 7 * q, fontFamily: label, fontSize: 3.6 * q, color: a.accent }]}>
           SAM · 19 H · PORT DE CANET
         </Text>
-        {sig(POSTER.cream)}
+        {sig(a.paper)}
       </View>
     );
   if (tpl === "jdm")
@@ -142,17 +141,17 @@ export function Poster({ tpl, size }: { tpl: "neon" | "jdm" | "flyer"; size: num
               fontFamily: display,
               fontSize: 14 * q,
               lineHeight: 13 * q,
-              color: POSTER.night,
+              color: a.night,
             },
           ]}
         >
           NOCTURNE DE CANET
         </Text>
         <View style={[pz.abs, { right: 5 * q, bottom: 10 * q, alignItems: "flex-end" }]}>
-          <Text style={{ fontFamily: narrow, fontSize: 16 * q, lineHeight: 14 * q, color: POSTER.cream }}>24.10</Text>
-          <Text style={{ fontFamily: label, fontSize: 3.4 * q, color: POSTER.cream }}>19 H · PORT DE CANET</Text>
+          <Text style={{ fontFamily: narrow, fontSize: 16 * q, lineHeight: 14 * q, color: a.paper }}>24.10</Text>
+          <Text style={{ fontFamily: label, fontSize: 3.4 * q, color: a.paper }}>19 H · PORT DE CANET</Text>
         </View>
-        {sig(POSTER.cream)}
+        {sig(a.paper)}
       </View>
     );
   return (

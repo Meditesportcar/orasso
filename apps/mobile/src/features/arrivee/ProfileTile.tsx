@@ -1,6 +1,7 @@
 // Une tuile du choix du profil (lot C3, artefact `.prof-grid .prof`) : carte de rayon 16, pictogramme dans un carré
 // (`.pg`), nom en capitales italiques, sous-titre ; rond de sélection en haut à droite. Choisie : la tuile passe en
 // affiche (crème en Béton, nuit en Sable), le carré moutarde, le rond coché, et elle se soulève de 3 px.
+import { archivoAt } from "@orasso/design-system/native";
 import { type MainProfile, mainProfileTiles } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -87,6 +88,6 @@ const styles = StyleSheet.create({
   },
   pg: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   // `.prof-grid .prof b` : 11,5 px, 88 %, italique 900 en capitales. L'appli n'a l'italique qu'en 125 % (trop large :
-  // « Organisateur » se coupait dans un tiers d'écran) : l'étroite des étiquettes, inclinée, tient sur une ligne.
-  title: { fontStyle: "italic", letterSpacing: 0 },
+  // « Organisateur » se coupait dans un tiers d'écran) : l'instance la plus proche de 88 % (socle C1, `archivoAt`), inclinée, tient sur une ligne.
+  title: { fontFamily: archivoAt(88, 900), fontStyle: "italic", letterSpacing: 0 },
 });

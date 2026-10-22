@@ -72,8 +72,8 @@ function Hero({ height }: { height?: number }) {
       <Svg style={FILL} viewBox="0 0 10 10" preserveAspectRatio="none">
         <Defs>
           <LinearGradient id="vit" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={SWATCH.orange} />
-            <Stop offset="1" stopColor={SWATCH.wine} />
+            <Stop offset="0" stopColor={a.vitrineFrom} />
+            <Stop offset="1" stopColor={a.vitrineTo} />
           </LinearGradient>
         </Defs>
         <Rect width={10} height={10} fill="url(#vit)" />

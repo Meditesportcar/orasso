@@ -132,7 +132,7 @@ export function ScanOk({ big, lines }: { big: string; lines: string[] }) {
 export function GradesAndPros() {
   const a = useArt();
   const g = tutoArt.grade;
-  const proColors = [SWATCH.blue, SWATCH.wine, SWATCH.graphite];
+  const proColors = [a.avatarBlue, a.vitrineTo, SWATCH.graphite];
   return (
     <View style={styles.tg}>
       <A k="inUp" d={0.15} dur={0.5} style={[styles.tgGrade, { backgroundColor: a.bg, boxShadow: a.shadow }]}>
@@ -167,7 +167,7 @@ export function GradesAndPros() {
         {g.pros.map((p, i) => (
           <A key={p.name} k="inr" d={1.15 + i * 0.15} dur={0.45}>
             <It>
-              <Badge initials={p.logo} color={proColors[i] ?? SWATCH.blue} size={34} radius={9} font={13} />
+              <Badge initials={p.logo} color={proColors[i] ?? a.avatarBlue} size={34} radius={9} font={13} />
               <Grow>
                 <Nm>{p.name}</Nm>
                 <Sm>{p.meta}</Sm>
@@ -261,7 +261,7 @@ export function SocialBand({ crewAction }: { crewAction: "join" | "follow" }) {
       </View>
       <A k="up" d={2.9} style={styles.friends}>
         <View style={styles.avs}>
-          {[SWATCH.graphite, SWATCH.blue, SWATCH.orange].map((c) => (
+          {[SWATCH.graphite, a.avatarBlue, a.vitrineFrom].map((c) => (
             <View key={c} style={[styles.av, { backgroundColor: c, boxShadow: `0 0 0 2px ${a.card}` }]} />
           ))}
         </View>
