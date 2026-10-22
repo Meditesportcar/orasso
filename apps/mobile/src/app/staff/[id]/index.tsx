@@ -314,7 +314,10 @@ export default function StaffHome() {
       ) : null}
 
       {count ? (
-        <View style={[styles.tz, { backgroundColor: c.ground }]} testID="staff-counters">
+        <View
+          style={[styles.tz, { backgroundColor: c.ground, boxShadow: t.shadow.shadowCard }]}
+          testID="staff-counters"
+        >
           <View style={styles.between}>
             <Text variant="label" color={c.inkMuted}>
               {L.entered}
@@ -492,7 +495,7 @@ const styles = StyleSheet.create({
   sync: { borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, gap: space2 },
   syncRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   syncActions: { flexDirection: "row", flexWrap: "wrap", gap: space3, paddingLeft: 24 },
-  link: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32 },
+  link: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 44 }, // cible tactile de 44 px (lot C4a, tour 2)
   linkText: { fontSize: 13 },
   dot: { width: 12, height: 12, borderRadius: 6 },
   role: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 16 },
@@ -512,7 +515,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     gap: 7,
-    boxShadow: "0 8px 24px rgba(0,0,0,0.40)",
   },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
   zoneRow: { flexDirection: "row", alignItems: "center", gap: space2 },

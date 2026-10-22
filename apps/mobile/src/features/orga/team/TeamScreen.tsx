@@ -15,6 +15,7 @@ import {
   staffRoleLabels,
   structureRoleLabels,
 } from "@orasso/shared";
+import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -26,6 +27,7 @@ import { canRemind, groupEvents, isTwoFactorError, pickCurrentEvent, staffSummar
 import {
   boardRoles,
   bubbleSize,
+  cloudHeight,
   cloudSizes,
   historyOf,
   holdersOf,
@@ -56,6 +58,7 @@ const CLOUD_HEIGHT = 310;
 export function TeamScreen() {
   const { t } = useTheme();
   const c = t.color;
+  const router = useRouter();
   const { me } = useSession();
   const { structureId } = useOrga();
   const at = useNow(60_000);
@@ -197,7 +200,7 @@ export function TeamScreen() {
       if (isTwoFactorError(e)) {
         closeAll();
         setError(e);
-      } else if (adding !== null || giving !== null) setSheetError(errorMessage(e));
+      } else if (adding !== null || giving !== null || opened !== null) setSheetError(errorMessage(e));
       else setError(e);
       return false;
     } finally {
@@ -267,7 +270,6 @@ export function TeamScreen() {
   const openedStaff = opened ? list.find((m) => m.userId === opened.userId) : undefined;
   const addable = adding ? list.filter((m) => !m.roles.includes(adding)) : [];
   const summary = staffSummary(list);
-  const reqSpot = requestBubbleSpot(cloudWidth, CLOUD_HEIGHT);
   const layout = useMemo(
     () =>
       packBubbles(
@@ -283,6 +285,9 @@ export function TeamScreen() {
       ),
     [bubbles, histories, cloudWidth],
   );
+  // Lot C4a, tour 2 : la carte s'allonge si la grille de repli descend plus bas ; « +N » se pose sous la dernière rangée.
+  const frameHeight = cloudHeight(layout, cloudWidth, CLOUD_HEIGHT);
+  const reqSpot = requestBubbleSpot(cloudWidth, frameHeight);
   /** Pastille de rôle d'une bulle : les trois premières lettres de son premier rôle pour l'événement choisi. */
   const badgeOf = (userId: string) => {
     const role = list.find((m) => m.userId === userId)?.roles[0];
@@ -650,7 +655,7 @@ export function TeamScreen() {
 
       {/* La grappe `.bubbles` : carte de 310 px, bulles posées librement, « +N » en bas à droite. */}
       <View
-        style={[styles.bubbles, { backgroundColor: c.surface }]}
+        style={[styles.bubbles, { backgroundColor: c.surface, height: frameHeight, boxShadow: t.shadow.shadowCard }]}
         onLayout={(e) => setCloudWidth(Math.round(e.nativeEvent.layout.width))}
         testID="team-bubbles"
       >
@@ -788,6 +793,17 @@ export function TeamScreen() {
               {L.remindAll(toRemind.length)}
             </Button>
           ) : null}
+          {/* Lot C4a, tour 2 : le mode staff de l'événement choisi (préparer la liste la veille, ou un autre événement que celui du Direct). */}
+          <Button
+            variant="secondary"
+            icon="staff"
+            next
+            onPress={() => router.push(`/staff/${event.id}`)}
+            fullWidth
+            testID="orga-staff-mode"
+          >
+            {orgaLabels.staffModeOpen}
+          </Button>
         </>
       ) : null}
     </TabScreen>
@@ -872,7 +888,7 @@ const styles = StyleSheet.create({
   line: { flexDirection: "row", alignItems: "center", gap: space2 },
   grow: { flex: 1, gap: space1 },
   buttons: { flexDirection: "row", gap: space2, marginTop: space1 },
-  bubbles: { height: CLOUD_HEIGHT, borderRadius: 24, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.40)" },
+  bubbles: { height: CLOUD_HEIGHT, borderRadius: 24, overflow: "hidden" },
   cloudEmpty: { padding: space3 },
   placed: { position: "absolute" },
   secH: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: space2 },

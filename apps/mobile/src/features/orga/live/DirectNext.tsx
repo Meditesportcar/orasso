@@ -25,6 +25,8 @@ export function DirectNext({
 }) {
   const { t } = useTheme();
   const c = t.color;
+  // Ombre de carte en jeton (lot C4a, tour 2).
+  const shadow = { boxShadow: t.shadow.shadowCard };
   const router = useRouter();
   const accepted = event.counters.accepted;
   const capacity = event.capacity;
@@ -38,7 +40,7 @@ export function DirectNext({
       <Muted variant="label">{L.directNext(formatDay(event.startsAt))}</Muted>
       {/* `.dir-big` : retenus sur carte crème, à trier sur carte, côte à côte. */}
       <View style={styles.big} testID="orga-direct-retained">
-        <View style={[styles.bigCard, { backgroundColor: c.poster }]}>
+        <View style={[styles.bigCard, shadow, { backgroundColor: c.poster }]}>
           <Text variant="label" color={c.posterMuted}>
             {L.directRetained}
           </Text>
@@ -54,7 +56,7 @@ export function DirectNext({
             {dayCountdown(event.startsAt, at)}
           </Text>
         </View>
-        <View style={[styles.bigCard, { backgroundColor: c.surface }]}>
+        <View style={[styles.bigCard, shadow, { backgroundColor: c.surface }]}>
           <Text variant="label" color={c.inkMuted}>
             {L.directToSort}
           </Text>
@@ -72,7 +74,7 @@ export function DirectNext({
         </View>
       </View>
 
-      <View style={[styles.card, { backgroundColor: c.surface }]} testID="orga-direct-zones">
+      <View style={[styles.card, shadow, { backgroundColor: c.surface }]} testID="orga-direct-zones">
         <Text variant="label" color={c.inkMuted}>
           {L.directByZone}
         </Text>
@@ -97,7 +99,7 @@ export function DirectNext({
         })}
       </View>
 
-      <View style={[styles.card, styles.row, { backgroundColor: c.surface }]} testID="orga-direct-team">
+      <View style={[styles.card, shadow, styles.row, { backgroundColor: c.surface }]} testID="orga-direct-team">
         <Icon name="staff" size={26} color={c.ink} />
         <View style={styles.grow}>
           <Text variant="bodyStrong" color={c.ink}>
@@ -124,11 +126,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 14,
     gap: space1,
-    boxShadow: "0 8px 24px rgba(0,0,0,0.40)",
   },
   num: { fontSize: 64, lineHeight: 62 },
   numSmall: { fontSize: 24, lineHeight: 28 },
-  card: { borderRadius: 18, padding: 14, gap: space2, boxShadow: "0 8px 24px rgba(0,0,0,0.40)" },
+  card: { borderRadius: 18, padding: 14, gap: space2 },
   row: { flexDirection: "row", alignItems: "center", gap: space3 },
   grow: { flex: 1, gap: space1 },
   bar: { flexDirection: "row", alignItems: "center", gap: space2 },

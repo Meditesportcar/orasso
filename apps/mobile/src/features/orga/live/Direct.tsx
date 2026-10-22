@@ -4,7 +4,15 @@
 // rechargement toutes les 60 s au cas où le canal se coupe.
 
 import { Button, Chip, ChipRow, Counters, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { eventDaysLabels, formatDayDate, type LiveCounters, localDate, orgaLabels, orgaV2Labels } from "@orasso/shared";
+import {
+  calendarDaysBetween,
+  eventDaysLabels,
+  formatDayDate,
+  type LiveCounters,
+  localDate,
+  orgaLabels,
+  orgaV2Labels,
+} from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
@@ -91,6 +99,8 @@ function DirectEvent({
   const audience = useApi(() => api.audienceBoard(eventId), [eventId], { enabled: field, refreshMs: 60_000 });
   const prize = audience.error ? null : audience.data;
   const at = useNow(60_000);
+  // Lot C4a, tour 2 : le mode staff s'ouvre dès J-1 (l'API l'ouvre dès J-1 0 h) pour synchroniser la liste la veille.
+  const staffOpen = field || calendarDaysBetween(at, new Date(current.event.startsAt)) <= 1;
   const [incident, setIncident] = useState<FieldIncident | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -376,9 +386,9 @@ function DirectEvent({
       ) : null}
 
       <View style={styles.buttons}>
-        {field ? (
+        {staffOpen ? (
           <Button
-            variant="primary"
+            variant={field ? "primary" : "secondary"}
             icon="staff"
             next
             onPress={() => router.push(`/staff/${eventId}`)}

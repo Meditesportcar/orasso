@@ -125,14 +125,39 @@ export function packBubbles(
     }
     if (ok) return placed;
   }
-  // Repli : une grille régulière de petites bulles (ne se produit qu'avec des dizaines de membres).
-  const cell = Math.max(24, Math.floor(Math.sqrt((width * height) / Math.max(sizes.length, 1))));
-  const perRow = Math.max(1, Math.floor(width / cell));
+  // Repli (dizaines de membres) : une grille régulière au-dessus de la bulle « +N », bulles de 36 px au moins (cible
+  // tactile) ; si elle ne tient pas dans la hauteur, elle continue vers le bas et la carte s'allonge (`cloudHeight`) :
+  // chaque membre reste dans le cadre et ouvrable (lot C4a, tour 2).
+  const pad = 8;
+  const usable = (reserved ? reserved.y - reserved.size / 2 - gap : height) - pad;
+  const n = Math.max(sizes.length, 1);
+  let cell = 96;
+  while (cell > 36) {
+    const perRow = Math.max(1, Math.floor((width - 2 * pad) / cell));
+    if (Math.ceil(n / perRow) * cell <= usable) break;
+    cell -= 2;
+  }
+  const perRow = Math.max(1, Math.floor((width - 2 * pad) / cell));
+  const left = (width - perRow * cell) / 2;
   return sizes.map((_, i) => ({
-    x: (i % perRow) * cell + cell / 2,
-    y: Math.floor(i / perRow) * cell + cell / 2,
+    x: left + (i % perRow) * cell + cell / 2,
+    y: pad + Math.floor(i / perRow) * cell + cell / 2,
     size: cell - gap,
   }));
+}
+
+/**
+ * Hauteur de la grappe : 310 px (artefact), ou plus quand la grille de repli descend plus bas ; la bulle « +N » se pose
+ * alors sous la dernière rangée (`requestBubbleSpot` sur cette hauteur).
+ */
+export function cloudHeight(placed: readonly PlacedBubble[], width: number, minHeight: number): number {
+  const req = requestBubbleSpot(width, minHeight);
+  const fits = placed.every(
+    (b) => b.y + b.size / 2 <= minHeight - 8 && Math.hypot(b.x - req.x, b.y - req.y) >= (b.size + req.size) / 2,
+  );
+  if (fits) return minHeight;
+  const bottom = placed.reduce((m, b) => Math.max(m, b.y + b.size / 2), 0);
+  return Math.ceil(bottom + 84);
 }
 
 function findSpot(
@@ -175,7 +200,7 @@ export function cloudSizes(sizes: readonly number[], width: number, height: numb
 
 /** La place de la bulle « +N » (demandes) ou « + » (inviter) : 56 px, en bas à droite de la grappe. */
 export function requestBubbleSpot(width: number, height: number): PlacedBubble {
-  return { x: width * 0.92 - 4, y: height * 0.86 - 4, size: 56 };
+  return { x: width * 0.92 - 4, y: height - 46, size: 56 };
 }
 
 /** Le premier nom d'un pseudo, sous les initiales des grandes bulles (« Lucie_Pia » → « Lucie »). */

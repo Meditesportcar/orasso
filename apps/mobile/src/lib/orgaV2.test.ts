@@ -12,6 +12,7 @@ import {
   bubbleInitials,
   bubbleName,
   bubbleSize,
+  cloudHeight,
   cloudSizes,
   draftMissing,
   historyOf,
@@ -131,14 +132,28 @@ describe("bulles", () => {
     expect(Math.max(...sizes)).toBeLessThanOrEqual(BUBBLE_MAX);
     expect(sizes[0]).toBeGreaterThan(sizes[2] ?? 0);
   });
-  it("une grande équipe tient dans la carte (tailles réduites)", () => {
-    const placed = packBubbles(
-      Array.from({ length: 40 }, () => 96),
-      358,
-      310,
-      null,
-    );
-    expect(placed).toHaveLength(40);
+  it.each([40, 60, 200])("%i membres : tous dans le cadre, sans chevauchement, hors de la bulle « +N »", (n) => {
+    const width = 358;
+    const sizes = Array.from({ length: n }, () => 96);
+    const placed = packBubbles(sizes, width, 310, requestBubbleSpot(width, 310), 14);
+    expect(placed).toHaveLength(n);
+    const height = cloudHeight(placed, width, 310);
+    const req = requestBubbleSpot(width, height);
+    for (const [i, a] of placed.entries()) {
+      // Dans le cadre (largeur et hauteur de la carte, éventuellement allongée) et assez grande pour un doigt.
+      expect(a.x - a.size / 2).toBeGreaterThanOrEqual(0);
+      expect(a.x + a.size / 2).toBeLessThanOrEqual(width);
+      expect(a.y - a.size / 2).toBeGreaterThanOrEqual(0);
+      expect(a.y + a.size / 2).toBeLessThanOrEqual(height);
+      expect(a.size).toBeGreaterThanOrEqual(20);
+      expect(Math.hypot(a.x - req.x, a.y - req.y)).toBeGreaterThanOrEqual((a.size + req.size) / 2);
+      for (const b of placed.slice(i + 1))
+        expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual((a.size + b.size) / 2);
+    }
+  });
+  it("une équipe ordinaire garde la carte de 310 px", () => {
+    const placed = packBubbles([96, 74, 60, 44], 358, 310, requestBubbleSpot(358, 310), 14);
+    expect(cloudHeight(placed, 358, 310)).toBe(310);
   });
   it("la couleur d'avatar est stable, le prénom vient du pseudo", () => {
     expect(avatarToken("u1")).toBe(avatarToken("u1"));

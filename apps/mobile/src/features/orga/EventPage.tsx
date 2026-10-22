@@ -31,7 +31,7 @@ import {
   wizardEndLabels,
 } from "@orasso/shared";
 import { useIsFocused, useRouter } from "expo-router";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { FeedEntry } from "@/features/communication/EventFeed";
@@ -108,6 +108,13 @@ export function EventPage({
   const reloadAll = async () => {
     await Promise.all([event.reload(), feed.reload()]);
   };
+  // Lot C4a, tour 2 : après « Publier » ou « Modifier », l'assistant ouvre une page neuve de l'événement ; celle restée
+  // dessous dans la pile se relit à son retour au premier plan (jamais un statut « Brouillon » périmé).
+  const wasFocused = useRef(focused);
+  useEffect(() => {
+    if (focused && !wasFocused.current) void Promise.all([event.reload(), feed.reload()]);
+    wasFocused.current = focused;
+  }, [focused, event.reload, feed.reload]);
   const closeSheet = () => {
     setSheet(null);
     setError(null);

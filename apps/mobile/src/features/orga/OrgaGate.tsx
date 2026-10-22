@@ -5,7 +5,7 @@
 // seulement : l'identifiant vient de la casquette, jamais d'un paramètre d'écran.
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { orgaLabels } from "@orasso/shared";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { createContext, type ReactNode, useContext } from "react";
 import { StyleSheet } from "react-native";
 
@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { gateKind, isTwoFactorError } from "@/lib/orga";
 import { usePersona } from "@/lib/persona";
+import { landingOf } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
@@ -104,10 +105,12 @@ function TwoFactorProbe({ title, children }: { title: string; children: ReactNod
 }
 
 export function OrgaGate({ title, children }: { title: string; children: ReactNode }) {
-  const { persona, active } = usePersona();
+  const { persona, active, ready } = usePersona();
   const { me } = useSession();
-  // Hors casquette Organisateur : la racine redirige déjà, on n'affiche rien en attendant (aucun appel, aucune donnée).
-  if (persona.kind !== "organizer") return null;
+  // Hors casquette Organisateur : aucun appel, aucune donnée. Les pages sorties du groupe (orga) au lot C4a (page d'un
+  // événement, assistant) échappent à la garde de la racine : on renvoie au premier écran de la casquette active,
+  // jamais un écran vide (tour 2).
+  if (persona.kind !== "organizer") return ready ? <Redirect href={landingOf(persona) as never} /> : null;
   if (active.kind !== "organizer" || active.id !== persona.structureId) {
     return (
       <TabScreen title={title}>

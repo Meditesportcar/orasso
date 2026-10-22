@@ -228,6 +228,8 @@ export function CandidateCard({
         />
       </View>
       <View style={styles.body}>
+        {/* L'alerte (banni, plaque en double, non immatriculé) d'abord : le corps se réduit par le bas, elle reste visible. */}
+        <AlertStrip alerts={item.alerts} />
         {/* Artefact `.tri .tb` (lot C4a) : étiquettes inclinées, nom du véhicule en entier sous la photo, puis les faits. */}
         {v && v.categories.length > 0 ? (
           <View style={styles.tags}>
@@ -251,8 +253,6 @@ export function CandidateCard({
             {orgaV2Labels.triArrivalNote} : « {item.arrivalNote} »
           </Text>
         ) : null}
-        {/* Une alerte reste en tête du corps : elle ne sort jamais de la carte. */}
-        <AlertStrip alerts={item.alerts} />
         {p?.need ? <Chip surface="plate">{p.need.tradeLabel}</Chip> : null}
         {p && item.accreditedMedia ? <Chip surface="plate">{triageAppLabels.mediaAccredited}</Chip> : null}
         <FactRows item={item} />

@@ -58,7 +58,7 @@ export function Bubble({
           opacity: dim ? 0.55 : 1,
           transform: [{ scale: pressed ? 0.94 : 1 }],
         },
-        diameter > 40 ? styles.shadow : null,
+        diameter > 40 ? { boxShadow: t.shadow.shadowCard } : null,
       ]}
     >
       <Text
@@ -122,7 +122,7 @@ export function RequestBubble({
 
 const styles = StyleSheet.create({
   round: { borderRadius: radiusPill, alignItems: "center", justifyContent: "center" },
-  shadow: { boxShadow: "0 8px 18px rgba(0,0,0,0.25)" },
+
   initials: { fontWeight: "900", textAlign: "center" },
   name: { fontSize: 10, letterSpacing: 0.4, textTransform: "uppercase", opacity: 0.85, maxWidth: "86%" },
   badge: {

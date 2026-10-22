@@ -2042,3 +2042,13 @@ Référence : l'artefact DA v2 (D33) ; décisions de Damien D34. Branche `lot-c5
 - **Carte du tri** : étiquettes `Tag` du socle et nom du véhicule sous la photo, et les trois décisions (Refuser, Attente, Retenir) dans la carte, hors du corps qui se réduit (toujours visibles) ; Fiche, Zone et Passer restent sous la carte. La photo de repli lit `photoUrl` (lot C5) puis l'affiche générée.
 - **Mode staff** : rangée du bas de l'artefact (Alerte à sa largeur, Main courante qui prend la place, Discussion en icône seule) ; « Main courante » en Archivo 115 % 12,5 px pour tenir en entier à 390 px (l'artefact : 118 % 14 px, trop large avec nos instances).
 - **Recette du lot 52** : la feuille du membre se ferme par sa croix (« Fermer la fiche du membre »).
+
+### Lot C4a, tour 2 (corrections des relectures Opus et Codex)
+
+- **Alerte du tri toujours visible** (bloquant) : `AlertStrip` (banni, plaque en double, non immatriculé) passe en tête du corps de la carte ; le corps se réduit par le bas, l'alerte ne peut plus être coupée. Recette : `appli-lot52` (Tri) marque la première candidature « non immatriculé » et vérifie que l'alerte est dans l'écran.
+- **Événement par défaut du tri figé** au premier calcul (`frozenDefault`) : un rafraîchissement (nouvelle candidature ailleurs) ne change plus l'événement en cours, donc ne démonte pas le paquet et n'envoie pas les décisions encore annulables. Un changement d'événement choisi par l'organisateur garde le comportement du lot 23 (les décisions armées partent avant de quitter, plutôt que de se perdre).
+- **Mode staff dès J-1** : la porte du Direct apparaît dès la veille (secondaire hors jour J, pour garder un seul bouton principal) ; l'Équipe retrouve « Passer en mode staff » pour l'événement choisi (préparer la liste la veille, ou un autre événement que celui du Direct).
+- **Heure réelle du pointage** : `pointedResult` donne l'heure du pointage (« Entrée pointée à 19:04 ») au lieu du mot « pointé ».
+- **Grandes équipes** : la grille de repli de la grappe tient compte de la hauteur et de la bulle « +N » ; au-delà, la carte s'allonge (`cloudHeight`) et « +N » se pose sous la dernière rangée : tous les membres restent dans le cadre et ouvrables (tests à 40, 60 et 200 membres).
+- **Routes sorties du groupe (orga)** : avec une autre casquette, `OrgaGate` renvoie au premier écran de la casquette active (`landingOf`), jamais un écran vide.
+- **Robustesse** : la page d'un événement restée dans la pile se relit à son retour au premier plan (après « Publier » depuis l'assistant) ; lien « Synchroniser la liste » à 44 px ; ombres en jeton (`shadowCard`) ; une erreur de rôle depuis la feuille du membre s'affiche dans la feuille.
