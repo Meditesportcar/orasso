@@ -57,11 +57,12 @@ const tabRoutes: Record<string, string> = {
   Équipe: "/equipe",
 };
 async function toTab(page: Page, name: string) {
-  if (
-    !(await tab(page, name)
-      .isVisible()
-      .catch(() => false))
-  ) {
+  // Le changement de casquette (survol) peut prendre un instant : on attend la barre avant de rouvrir par l'adresse.
+  const shown = await tab(page, name)
+    .waitFor({ state: "visible", timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!shown) {
     await page.goto(tabRoutes[name] ?? "/");
     await expect(tab(page, name)).toBeVisible({ timeout: 30_000 });
   }
