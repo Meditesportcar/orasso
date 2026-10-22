@@ -1,16 +1,22 @@
 # Avancement
 
-À lire au début de chaque session, à mettre à jour à la fin. Réécrit le 19/10/2026 au lot 38 (ouverture du chantier « Intégration de la DA v2 ») : l'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 22/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
 
-## État au 20/10/2026 : chantier DA v2 en pause (changement de PC)
+## État au 22/10/2026 : v2 conforme à l'artefact, en ligne ; phase des retours de Damien
 
-- **En ligne sur dev.orasso.fr** : `main` = `e5d24e9`, lots 38 à 49 et 51 (vagues 1 à 4 de la DA v2), migrations jusqu'à `0049_rotating-qr`.
-- **Fusionnés sur la branche `integration`, pas encore déployés** : lots 52 (organisateur v2) et 54 (pro et prestataire v2), et un garde-fou de test contre les expressions régulières cassées (`packages/shared/src/regexGuard.test.ts`).
-- **En pause** : lot 50 (passeport, vote, récap ; branche `lot-50-passeport-vote-recap`, corrections poussées, vérification à refaire) et lot 55 (média ; branche `lot-55-media`, corrections codées, trois specs à rejouer).
-- **À faire** : vérification et déploiement de la vague 5, puis lots 53 et 56 (vague 6), 57 (vague 7), 58 (recette finale, APK v2, vague 8).
-- **Reprendre** par la section « POINT DE REPRISE (20/10, pause) » du journal du relais (`~/.claude/relais/orasso/JOURNAL.md`) : ordre exact, réglages du `.env` de l'intégration (`CORS_ORIGINS=http://localhost:8399`, `DEV_CLOCK=on`, `DEV_SKIP_2FA=true`) et points à revoir avec Damien.
-- **Lancer le projet** : inchangé (voir plus bas, « Lancer le projet sur ce PC (Windows) » ; sur le nouveau PC, adapter les chemins).
-- **Lot 56 (branche `lot-56-site-public-v2`, non fusionné)** : site public v2 terminé : en-tête et pied (crédits des données), accueil (bandeau des dates, éventail, bandes), `/evenements` en phrase à trous avec cartes à affiche, `/organisateurs` (six temps, mur des huit styles), `/professionnels` (remises, offre fondateur), fiche événement (affiche en vedette, créneaux d'arrivée, contenus des médias), e-mails v2 (`mail-template.ts`, aperçu `/_mail`). Aucune migration. Recette : `apps/web/e2e/lot56.spec.ts`. Images statiques à régénérer si les gabarits d'affiche changent : `pnpm --filter @orasso/api site:assets`.
+- **En ligne sur dev.orasso.fr** : la v2 « conforme à l'artefact » (code applicatif du commit `97bd2516`, état de santé correct). `main` et `integration` sont au même commit : **`d0ee42a9`** (poussé). Migrations jusqu'à `0050_entrance-note`.
+- **APK** : `Orasso APK/Orasso-2026-10-22-97bd2516-v2-conforme.apk` sur le Drive ; installé sur le Xiaomi de Damien (il démarre, aucun plantage).
+- **Phase en cours** : Damien navigue sur le téléphone et donne ses retours (captures et remarques), puis un plan de corrections est dressé. Aucune évolution n'est codée avant la v2.1.
+- **Aucun lot ni agent en cours** à cette date ; rien n'attend d'être fusionné.
+- **Reprendre** par le dernier « POINT DE REPRISE » du journal du relais (`~/.claude/relais/orasso/JOURNAL.md`, entrée du 22/10 vers 11 h 45) et par `retours-damien-2026-10-22.md` (même dossier).
+
+### La référence : l'artefact « Orasso DA v2 »
+
+- **Où** : https://claude.ai/artifact/JZmQ1Vkn28dRv69CZDXQzQ (privé) ; copie locale `.claude/prototype-v2/index.html` (dans ce dépôt, non versionnée).
+- **Il prime sur les premières docs** (décision D33) : visuel, logiques de fonctionnement, tutos, places des fonctions. Ensuite vient la liberté d'ingénieur (toute amélioration pertinente et faisable est permise d'avance), puis `docs/00` à `03` et le système de design v1, qui restent la base d'origine mais sont dépassés là où l'artefact diffère. Les écarts sont notés dans `docs/JOURNAL-DES-CHOIX.md`.
+- **Méthode des paires « artefact | réel »** : pour chaque écran refait, on rend l'artefact et l'appli (ou le site) côte à côte, à 390 px en thèmes Béton et Sable (1 280 px pour le site), et on compare. Les paires de chaque lot sont dans le dossier du relais (`lot-c2a-captures/`, `lot-c2b-captures/`, `lot-c3-captures/`…). Les relectures les contrôlent. Un libellé de bouton ne se coupe jamais, même si l'artefact le fait.
+- **Décisions de Damien à connaître** : D33 (hiérarchie des références, ci-dessus) ; D34 (QR d'accès visible dès la validation, option Média de la feuille Créer comme l'artefact, Archivo exactement comme l'artefact en vue mobile, photos de l'artefact en démonstration en attendant celles de Damien).
+- **Pas encore tranché avec Damien** (« À revoir ») : opacité du fond battle (50 % en Béton, 32 % en Sable), entrée « Mon profil et mes casquettes » de l'administration, trois mots genrés écartés des tutos, « Suivre » de la candidature, abonnement du pro dans Publications, fond Sable plus gris que l'artefact.
 
 ## Terminé
 
@@ -50,6 +56,20 @@
 - **Lot 55 — appli média : Explorer national, Presse, Contenus, profil média (branche `lot-55-media`, vague 5)** : Explorer (Chercher partout en France : région, format, ce mois-ci, « Accréditation ouverte », carte, temps de route estimé, état de l'accréditation sur chaque ligne, « Demander » par une feuille, « Garder » ; Mon agenda : la semaine, « Cette semaine » / « Plus tard »), Presse (tickets accréditée avec « Mon badge presse » et « Consignes », en attente avec retrait, refusée avec la raison, passées avec les vues), Contenus (compteurs, ajout d'un lien ou d'une galerie de 30 photos, modification, suppression, « Mis en avant sur la page »), création et modification du profil média depuis « Créer » et la ligne de la casquette, « Demander une accréditation » / « Mon accréditation » et bloc Contenus sur la fiche événement ; le badge presse enregistre son kit du jour J sur le téléphone (il manquait). **D26 : plus de numéro de carte de presse** (schémas, API, seed ; colonne laissée vide) et vérification d'administration renommée « vérification du profil média ». Aucune migration. Recette `apps/web/e2e/appli-lot55.spec.ts` (`appli-lot41.spec.ts` et `appli-lot48.spec.ts` adaptés : écran de création du profil média, kit du badge presse synchronisé).
 - **Lot 57 — site : parité des fonctions nouvelles de la DA v2 (branche `lot-57-site-parite-v2`, vague 7, à relire et fusionner)** : Mes sorties (`/app/sorties`, `/app/acces` redirige), passeport, prix du public, récap, casquette Média (accréditations, recherche, contenus avec floutage proposé — D28, agenda, profil), fiche d'un média, prestataire v2 et vitrine (`/providers/:id`), carte à partager en trois styles, Mon profil en hub ; organisateur : presse, missions des prestataires (besoins, emplacement, avis), affiche à régénérer, prix du public, entrées drive, note d'arrivée au tri ; administration : profils média à vérifier. Aucune migration ; `POST /me/uploads` accepte `plateRects` (galerie média) ; dessin des tampons déplacé dans `shared`. Tableau de parité : journal des choix, lot 57.
 
+### Vague de conformité à l'artefact (21 et 22/10/2026)
+
+- **Lot C1 — socle du système de design** : fond « battle » par défaut, en-tête, pastille de casquette (organisateur seulement), barre d'onglets flottante avec le O qui déborde, barre masquée dans les écrans de flux, feuilles au-dessus de la barre ; valeurs de l'artefact devenues jetons (`tokens.v2.json`).
+- **Lot C2a — passionné, partie a** : Accueil, Explorer, carte, Sorties, Mon accès, Boîte (la carte « Termine ta fiche » vit dans Mon profil, plus sur l'Accueil).
+- **Lot C2b — passionné, partie b** : profil, garage, page du véhicule, fiche événement, candidature, crew, vote, partage, récap.
+- **Lot C3 — arrivée, ouverture, connexion, tutos** : accueil du premier lancement avec la battle en tandem, flux d'arrivée de l'artefact, 31 diapos de tuto reconstruites d'après l'artefact, photos et logo de démonstration.
+- **Lot C4a — organisateur et staff** : Équipe, Direct, Tri, Événements, Structure, assistant de création, page événement, carte du tri, accueil drive, mode staff (hors ligne et QR inchangés).
+- **Lot C4b — pro, prestataire, média, administration** : Ma fiche, Scanner, Stats, Missions, Candidatures, Vitrine, Agenda, Accréditation, Contenus, style de l'administration.
+- **Lot C5 — API, seed et site `/app`** : photo d'événement et logo d'organisateur partout, QR dès la retenue, seed enrichi, espace `/app` du site refait (la relecture a fait corriger une photo d'événement privé exposée).
+- **Lot C6 — ressources réelles** : 23 photos de JohnGRD Photographie (usage autorisé), plaques floutées, vrai logo de MéditeSportCar, icône ; le seed les utilise.
+- **Lot C8 — fumée de la battle** : fumée derrière les voitures et affiches du hero du site reprises de l'artefact, en natif (pool de bouffées, pensé pour les téléphones modestes) et en web (canvas), à la demande de Damien le 22/10.
+- **Correctif 53c** (missions de l'assistant de création), **lot 57** (parité du site), **lots 59a** (dette de code, recettes déterministes), **59c** (retours de l'APK d'essai : floutage de plaque, poignées du cadre, QR de compte) et **59d** (robustesse) : fusionnés.
+- **Correctifs de recettes après la vague (22/10)** : quatre recettes de l'appli dépassées par la v2 adaptées (`appli-lot55`, `appli-lot40`, `appli-structure-staff`, `appli-lot41`), sans changer le code de l'appli.
+
 ## Dette et outillage (lot 59)
 
 - **Lot 59a (branche `lot-59a-dette`, dette de code et recettes déterministes)** : `social.spec.ts` cherche l'entrée du Journal de Léa à travers la pagination (« Plus ancien ») au lieu de la supposer en première page ; `scenario-parcours1-b` (API) avait un délai de 20 s trop court sous charge (la comparaison des notifications ne dépendait déjà pas de l'ordre) : 120 s explicites ; `attente.spec.ts` : voir le journal des choix ; les cinq avertissements `noDescendingSpecificity` de `wizard.css` sont réglés sans changer le rendu ; registre des préfixes de cache à identifiant (`CACHE_KEY_PREFIXES` dans `apps/mobile/src/lib/kv.ts`, purge par préfixe à la déconnexion (navigateur), garde dans `cacheScope.test.ts` : un nouveau `cacheKey` à identifiant sans préfixe déclaré fait échouer le test).
@@ -58,36 +78,31 @@
 
 ## En cours
 
-- La branche `lot-44-explorer-carte` attend la relecture et la fusion du coordinateur (fichiers partagés : `packages/design-system/src/{index,native/index,web/index}.ts`, `web/styles.css`, `package.json` ; `apps/web/app/routes/event.tsx` (une prop) ; `apps/api/src/modules/events/explore.ts`, `packages/shared/src/schemas/event.ts` (`followed`) ; `apps/mobile/package.json` (`maplibre-gl`, rendu navigateur) ; `apps/web/e2e/appli-explorer.spec.ts` adapté à l'Explorer v2).
-
-
-- Branche `lot-51-garage-floutage` poussée, en attente de fusion (après 47 et 49 : migration `0045_plate-blur` à régénérer, règle B1).
-- Lots 38, 39, 45 et 46 fusionnés dans `main` (`43fc9aa`). La branche `lot-40-navigation-v2` (fusionnée avec `main`) attend la fusion du coordinateur (fichiers partagés : `apps/mobile/src/app/_layout.tsx`, `apps/api/src/modules/profiles/personas.ts`). À noter pour Damien : appui long sur le logo Orasso pour revenir au profil passionné.
-- Vague 3 : la branche `lot-47-api-evenement-v2` attend la relecture et la fusion du coordinateur (migration `0045_event-v2` à régénérer si le lot 49 fusionne avant, règle B1 ; `schema/applications.ts` et `modules/applications/service.ts` après 45 et 46).
-
-- La branche `lot-46-api-prestataires-v2` attend la relecture et la fusion du coordinateur (après le lot 45 : `schema/applications.ts`, migration à régénérer, règle B1).
-- La branche `lot-38-socle-v2` attend la relecture et la fusion du coordinateur. Point à confirmer par Damien : H2 (thème jamais imposé, contraire à `docs/03` l. 10) — le retrait du Sable imposé aux espaces orga et pro du site est dans un commit isolé, facile à annuler.
-
-- Vague 2 : la branche `lot-39-o-vivant` attend la relecture et la fusion du coordinateur (lots 40, 45, 46 en parallèle).
-- Vague 3 : la branche `lot-49-api-passeport-vote-recap` attend la relecture et la fusion du coordinateur (migration `0045_passport`, parent `0044_missions`, à régénérer si le lot 47 en ajoute une avant elle, règle B1 ; elle étend `point_kind` par `ADD VALUE`, jamais utilisé dans la même migration). Les pages Réglages de l'administration (site et appli) n'affichent pas encore `points.audience_prize` (API prête).
-
-- La branche `lot-43-sorties-accueil` (vague 4) attend la relecture et la fusion du coordinateur (fichiers partagés : `ui/PersonaTabs.tsx`, `lib/personaModel.ts` (`landingOf`), `packages/shared` (`home.ts`, `labels/home.fr.ts`), `seed.ts` ; la tuile « Découvre ce qu'il y a de nouveau » mène à `tuto/[profil]` du lot 42).
-
-- La branche `lot-42-tutos` (vague 4) attend la relecture et la fusion du coordinateur (aucune migration ; fichiers partagés : `packages/shared/src/labels.fr.ts`, `features/home/parts.tsx` (`TUTO_ROUTE_READY`), `app/reglages/[section].tsx`, `e2e/appli-lot41.spec.ts`).
-
-- Lot 41 (branche `lot-41-arrivee`, depuis `main` `7d4fd86`) en attente de la fusion du coordinateur : migration `0045_arrivee` à régénérer selon l'ordre des fusions (règle B1) ; fichiers partagés : `apps/mobile/src/app/_layout.tsx`, `apps/api/src/app.ts`, `modules/security/auth-hooks.ts`, `packages/shared` (labels, schémas), `apps/web/e2e/helpers.ts`.
-
-- Vague 4 : la branche `lot-48-jour-j-v2` attend la relecture et la fusion du coordinateur (migration `0049_rotating-qr`, parent `0048_plate-blur`, règle B1 ; fichiers partagés : `modules/staff/service.ts`, `modules/checkins/service.ts`, `shared/enums.ts`, `shared/schemas/access.ts`, `apps/mobile/package.json`).
-
-- Vague 5 : la branche `lot-52-orga-v2` attend la relecture indépendante (D27) et la fusion du coordinateur (aucune migration ; fichiers partagés : `packages/shared` (`roles.ts`, `labels.fr.ts`, `labels/shop.fr.ts`, `schemas/index.ts`), `apps/api/src/modules/staff/routes.ts`, `scripts/seed.ts`). Le lot 53 remplace l'assistant derrière « Créer un événement » et « Reprendre ».
-
-- Vague 6 : la branche `lot-53-assistant-huit-temps` (assistant de création en huit temps, site et appli) attend la relecture indépendante (D27) et la fusion du coordinateur (migration `0050_entrance-note`, parent `0049_rotating-qr`, à régénérer, règle B1 ; fichiers partagés : `apps/web/app/components/EventMap.tsx` (prop `draggablePin`), `apps/mobile/src/lib/orgaV2.ts` (règles par champ), `apps/api/src/modules/events/service.ts` et `schemas/event.ts` (`entranceNote`), recettes `lot36`, `multi-jours`, `site-public`, `appli-evenements`). Corrections des deux relectures faites le 21/10 (22 points : réconciliation après chaque enregistrement, adresse de modification dès la création, temps atteint et récurrence gardés sur l'appareil, Publier exige l'affiche, appli hors réseau, Sable lisible ; voir le journal des choix). Reste : précision d'entrée sur la fiche publique du site (lot 57) ; épingle native par geste à vérifier sur l'APK (lot 58).
-- Vague 5 : la branche `lot-55-media` attend la relecture indépendante (D27) et la fusion du coordinateur (aucune migration ; fichiers partagés : `apps/mobile/src/lib/applications.tsx`, `app/jour-j/[id].tsx`, `app/e/[slug].tsx`, `app/_layout.tsx`, `features/profil/parts.tsx` (zone média, sans toucher à celle du lot 50), `lib/api/index.ts`, `packages/shared` (`labels.fr.ts`, `labels/arrivee.fr.ts`, `schemas/media.ts`), `apps/api/src/modules/media/*` (D26 : route `/admin/media/:id/verify`), `scripts/seed/media.ts`). À fusionner après le lot 50.
+- **Les retours de Damien sur l'APK conforme** : classés dans `retours-damien-2026-10-22.md` (relais) en BUG, ÉCART ARTEFACT, QUESTION ou ÉVOLUTION (v2.1, non codée), avec une proposition de solution chacun. Premiers constats : titre de la carte d'accueil coupé au milieu d'un mot (« RASSEMBL / EMENT »), filigrane « ORASSO » de l'affiche qui déborde sous le bouton « Sur la carte ». Captures dans `.claude/retours-xiaomi/`.
+- **`lots/c7-finitions.md`** (relais), finitions relevées par les relectures, aucune bloquante : SIRET enregistré seulement par « Contrôler », initiales de grade en double, clé React en double ; bouton Boîte rogné dans l'en-tête de l'administration à 390 px ; échecs de chargement masqués dans le journal du site et destination de la carte flottante ; tickets de Presse, Candidatures et Missions au style de l'artefact ; deux recettes instables ; kits locaux à verser dans le socle ; battle autour du O (le lot C8 a repris la fumée et les affiches : à vérifier par paires à 390 et 1 280 px).
 
 ## Prochaine étape
 
-1. **Coordinateur** : fusionner les lots de la vague 2 (39, 40, 45, 46), tests, build, déploiement de fin de vague 2.
-2. **Damien** : H2 et les points « À revoir avec Damien » des lots 38 et 39 dans `docs/JOURNAL-DES-CHOIX.md` ; rendu du O vivant et du fond sur le Xiaomi au lot 58.
+1. **Damien** : continuer ses retours sur le téléphone, puis valider le plan de corrections.
+2. **Corrections par petits lots**, avec un APK construit sur ce PC à chaque fournée (voir « Construire l'APK sur ce PC »).
+3. **Lot C7** (finitions, `lots/c7-finitions.md`).
+4. **Lot 58 — recette finale** : APK v2 complet, passage sur le téléphone (rendu du O vivant et du fond, épingle native par geste, ML Kit), retrait des alias dépréciés (`Loader`, `OpeningScreen`, `fan`).
+5. **Outillage** (après un essai mesuré, avec l'accord de Damien) : lancer les recettes de l'appli sur la version web compilée (`expo export`, en local) au lieu de Metro. À mesurer d'abord.
+6. **v2.1 dans l'artefact** : les évolutions demandées par Damien se dessinent d'abord dans l'artefact, puis se codent ; rien n'est codé avant.
+
+## Méthode (décisions D31 et D32)
+
+- **Deux relectures par lot, en parallèle** : une par Opus, une par Codex, avec contrôle des paires « artefact | réel » pour les lots visuels.
+- **Un seul tour de corrections.** Pas de nouvelle relecture des corrections, sauf lot sensible (données, argent, sécurité, hors ligne). Seuls une régression ou un point bloquant arrêtent la fusion ; le reste part en lot de robustesse.
+- **Une grosse vérification par mise en ligne** (D31), sur un périmètre figé ; à chaque fusion : tests unitaires, typecheck et build.
+- Les règles de `CLAUDE.md` restent : journal des choix pour tout détail non écrit, branche par lot, commits en français.
+
+## Construire l'APK sur ce PC
+
+- **Script** : `C:\Users\Dams\.claude\relais\orasso\outils\build-apk-local.ps1` (8 à 13 minutes). Il construit depuis le checkout `main` (`C:\Users\Dams\Orasso`), signe avec la clé copiée dans `C:\Users\Dams\.orasso-signature` et écrit l'APK dans `C:\Users\Dams\orasso-apk\`. Faire `pnpm install` avant.
+- **Installer sur le Xiaomi** : `adb -s cd0ba0d8 install -r <fichier.apk>`.
+- **Déposer sur le Drive** : par le VPS (rclone, destination `gdrive:Orasso APK`), nom du type `Orasso-2026-10-22-97bd2516-v2-conforme.apk`.
+- **Captures du téléphone** : `adb -s cd0ba0d8 exec-out screencap -p > fichier.png`.
 
 ## Lancer le projet sur ce PC (Windows)
 
@@ -166,7 +181,7 @@ Seul ce qui est commité part. Migrations appliquées au démarrage de l'API ; s
 
 ## Builds de l'appli (EAS, lot 11)
 
-Configuration dans `apps/mobile/eas.json` (profils `development`, `preview` = APK Android vers https://dev.orasso.fr, `preview-simulator` = iOS simulateur). Aucune variable n'est secrète : l'adresse de l'API et la clé publique des QR (`kid 1`) sont dans le profil. **État** : projet EAS créé (`extra.eas.projectId` et `owner` dans `app.json`) ; les APK des vagues sont construits par le coordinateur (connecteur Expo, quota gratuit de 15 builds Android par mois) et déposés sur le Drive `gdrive:Orasso APK`. La section « Première fois » reste pour mémoire.
+Configuration dans `apps/mobile/eas.json` (profils `development`, `preview` = APK Android vers https://dev.orasso.fr, `preview-simulator` = iOS simulateur). Aucune variable n'est secrète : l'adresse de l'API et la clé publique des QR (`kid 1`) sont dans le profil. **État** : projet EAS créé (`extra.eas.projectId` et `owner` dans `app.json`) ; les APK sont désormais construits sur ce PC (voir « Construire l'APK sur ce PC »), cette section reste pour mémoire (connecteur Expo, quota gratuit de 15 builds Android par mois). La section « Première fois » reste pour mémoire.
 
 **Première fois (une fois, par Damien, depuis un terminal à la racine du dépôt) :**
 1. `cd apps/mobile`, puis `npx eas-cli@latest login` (compte Expo de Damien) et `npx eas-cli@latest init` : crée le projet `orasso` et écrit `extra.eas.projectId` et `owner` dans `app.json` (à commiter, ce ne sont pas des secrets).
