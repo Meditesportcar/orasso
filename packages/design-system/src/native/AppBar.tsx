@@ -15,6 +15,13 @@ import { angle, radius, spacing, useTheme } from "./theme";
 
 /** `.appbar` de l'artefact : 58 px sous la zone de sécurité. */
 export const APP_BAR_HEIGHT = 58;
+/** Cibles tactiles d'au moins 44 px autour des boutons de 38 px (lot C1, tour 2). */
+const HIT_38 = { top: 3, bottom: 3, left: 3, right: 3 };
+/**
+ * La pastille « Organisateur » complète demande environ 375 px (logotype, pastille, deux boutons, marges) : sous 380 px,
+ * ou sous 400 px avec un texte agrandi, elle se réduit au logo rond (le nom reste dans son libellé accessible).
+ */
+const CAPCHIP_FULL_MIN = 400;
 /** `.ab-logo` de l'artefact : 118 px (112 px sous 360 px). */
 const LOGO_WIDTH = 118;
 
@@ -44,6 +51,7 @@ export function AppBarAction({ icon, label, onPress, onLongPress, on = false, co
       accessibilityState={{ selected: on }}
       onPress={onPress}
       onLongPress={onLongPress}
+      hitSlop={HIT_38}
       style={[
         styles.action,
         children ? styles.avatar : null,
@@ -68,7 +76,18 @@ export function AppBarAction({ icon, label, onPress, onLongPress, on = false, co
  */
 export type AppBarPersona = { logoUrl: string | null; label: string; role?: string; hint?: string };
 
-function CapChip({ persona, onPress, testID }: { persona: AppBarPersona; onPress?: () => void; testID?: string }) {
+function CapChip({
+  persona,
+  compact = false,
+  onPress,
+  testID,
+}: {
+  persona: AppBarPersona;
+  /** Logo rond seul (écran étroit ou texte agrandi) ; le nom de la casquette reste dans le libellé accessible. */
+  compact?: boolean;
+  onPress?: () => void;
+  testID?: string;
+}) {
   const { t } = useTheme();
   const c = t.color;
   return (
@@ -78,8 +97,9 @@ function CapChip({ persona, onPress, testID }: { persona: AppBarPersona; onPress
       accessibilityHint={persona.hint}
       onPress={onPress}
       disabled={!onPress}
+      hitSlop={{ top: 7, bottom: 7 }}
       testID={testID}
-      style={[styles.capchip, persona.role ? null : styles.capchipRound, { backgroundColor: c.barChip }]}
+      style={[styles.capchip, persona.role && !compact ? null : styles.capchipRound, { backgroundColor: c.barChip }]}
     >
       <View style={[styles.capLogo, { backgroundColor: persona.logoUrl ? c.night : c.accent }]}>
         {persona.logoUrl ? (
@@ -90,8 +110,8 @@ function CapChip({ persona, onPress, testID }: { persona: AppBarPersona; onPress
           </Text>
         )}
       </View>
-      {persona.role ? (
-        <Text variant="label" color={c.barInk} style={styles.capText}>
+      {persona.role && !compact ? (
+        <Text variant="label" color={c.barInk} style={styles.capText} maxFontSizeMultiplier={1.2}>
           {persona.role}
         </Text>
       ) : null}
@@ -155,6 +175,7 @@ function CloseX({ label, onPress, onBar }: { label: string; onPress?: () => void
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
+      hitSlop={HIT_38}
       testID="appbar-close"
       style={[
         styles.action,
@@ -203,7 +224,7 @@ export function AppBar({
   style,
 }: AppBarProps) {
   const { t } = useTheme();
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
   const c = t.color;
   if (kind === "flow" || kind === "page") {
     // `.flowbar` : posée sur le fond, sans barre ni filet.
@@ -268,7 +289,14 @@ export function AppBar({
       >
         <Logo width={width < 360 ? 112 : LOGO_WIDTH} tone="dark" />
       </Pressable>
-      {persona ? <CapChip persona={persona} onPress={onPersona} testID="topbar-persona" /> : null}
+      {persona ? (
+        <CapChip
+          persona={persona}
+          compact={width < 380 || (fontScale > 1 && width < CAPCHIP_FULL_MIN)}
+          onPress={onPersona}
+          testID="topbar-persona"
+        />
+      ) : null}
       <View style={styles.spacer} />
       {kind === "home" ? (
         <>
