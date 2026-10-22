@@ -376,8 +376,9 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   });
   await shot("22-survol-bandeau-lecture-seule-beton");
   // Écrire sans demande ouverte : l'API refuse, l'appli affiche son message sans planter.
-  await tab(page, "Équipe").click();
-  await page.getByTestId("team-nav-bans").click();
+  // Lot C4a : les bannis se rangent dans Structure (plus de lien depuis l'Équipe).
+  await tab(page, "Structure").click();
+  await page.getByTestId("tile-bans").click();
   await expect(page.getByTestId("assistance-banner")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("bans-pseudo").fill("Pilote_001");
   await page.getByTestId("bans-add").click();
@@ -426,8 +427,9 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   // Retour au survol : le bandeau annonce l'intervention, l'écriture passe et le journal la porte.
   await page.getByTestId("assistance-row").filter({ hasText: name }).getByTestId("admin-survey").click();
   await page.getByTestId("orga-confirm").click();
-  await tab(page, "Équipe").click();
-  await page.getByTestId("team-nav-bans").click();
+  // Lot C4a : les bannis se rangent dans Structure (plus de lien depuis l'Équipe).
+  await tab(page, "Structure").click();
+  await page.getByTestId("tile-bans").click();
   await expect(page.getByTestId("assistance-banner")).toContainText("Intervention en cours", { timeout: 30_000 });
   await shot("27-survol-bandeau-intervention-beton");
   await page.getByTestId("bans-pseudo").fill("Pilote_001");

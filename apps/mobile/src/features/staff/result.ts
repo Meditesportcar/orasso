@@ -89,11 +89,12 @@ export function ticketResultOf(decision: TicketScanDecision, key: string, detect
   return { key, detectedAt, state: "refused", reason: ticketRefusalLabels[decision.reason] };
 }
 
-/** Pointé à la main (recherche, liste) : même écran que le scan OK, avec la zone à lire au conducteur. */
+/** Pointé à la main (recherche, liste) : même écran que le scan OK, avec la zone à lire au conducteur et l'heure réelle
+ * du pointage (lot C4a, tour 2 : plus le mot « pointé »). */
 export function pointedResult(entry: AccessListEntry, key: string, already: string | null): ShownResult {
   return already
     ? { key, state: "duplicate", time: clock(already), ...entryView(entry) }
-    : { key, state: "ok", time: "pointé", ...entryView(entry) };
+    : { key, state: "ok", time: clock(clockNow()), ...entryView(entry) };
 }
 
 /** Ce que ScanResult reçoit (sans la clé d'affichage ni l'heure de détection). */

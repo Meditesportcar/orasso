@@ -1,7 +1,7 @@
 // Direct hors événement (DA v2, lot 52, prototype `s-odirect`) : l'équivalent de l'Accueil pour l'organisateur. Le
 // prochain événement : retenus sur la capacité, J-N, ce qui reste à trier (avec « Trier »), les retenus par zone, et
-// l'équipe (présences confirmées, prochaine relance). Tout vient de l'API ; rien ne se calcule ici que des totaux.
-import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+// l'équipe (présences confirmées, prochaine relance). Lot C4a : mise en page de l'artefact (`.dir-big` crème, `.bars`). Tout vient de l'API ; rien ne se calcule ici que des totaux.
+import { Button, Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventOrganizer, type EventStaffMember, orgaV2Labels as L, type LiveCounters } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
@@ -9,7 +9,6 @@ import { StyleSheet, View } from "react-native";
 import { dayCountdown, formatDay } from "@/lib/format";
 import { nextReminder, reminderText } from "@/lib/orgaV2";
 import { Muted } from "@/ui/Muted";
-import { SectionTitle } from "@/ui/Screens";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -26,6 +25,8 @@ export function DirectNext({
 }) {
   const { t } = useTheme();
   const c = t.color;
+  // Ombre de carte en jeton (lot C4a, tour 2).
+  const shadow = { boxShadow: t.shadow.shadowCard };
   const router = useRouter();
   const accepted = event.counters.accepted;
   const capacity = event.capacity;
@@ -37,91 +38,103 @@ export function DirectNext({
   return (
     <View style={styles.wrap} testID="orga-direct-next">
       <Muted variant="label">{L.directNext(formatDay(event.startsAt))}</Muted>
-      <Plate style={styles.block} testID="orga-direct-retained">
-        <View style={styles.line}>
-          <View style={styles.grow}>
-            <Text variant="label" color={c.plateMuted}>
-              {L.directRetained}
-            </Text>
-            <Text variant="posterXl" color={c.plateInk}>
-              {accepted}
-              {capacity !== null ? (
-                <Text variant="posterM" color={c.plateMuted}>
-                  {` /${capacity}`}
-                </Text>
-              ) : null}
-            </Text>
-          </View>
-          <Text variant="posterM" color={c.plateInk}>
+      {/* `.dir-big` : retenus sur carte crème, à trier sur carte, côte à côte. */}
+      <View style={styles.big} testID="orga-direct-retained">
+        <View style={[styles.bigCard, shadow, { backgroundColor: c.poster }]}>
+          <Text variant="label" color={c.posterMuted}>
+            {L.directRetained}
+          </Text>
+          <Text variant="numberNarrow" color={c.posterInk} style={styles.num}>
+            {accepted}
+            {capacity !== null ? (
+              <Text variant="numberNarrow" color={c.posterInk} style={styles.numSmall}>
+                {`/${capacity}`}
+              </Text>
+            ) : null}
+          </Text>
+          <Text variant="caption" color={c.posterMuted}>
             {dayCountdown(event.startsAt, at)}
           </Text>
         </View>
-        <View style={styles.line}>
-          <View style={styles.grow}>
-            <Text variant="label" color={c.plateMuted}>
-              {L.directToSort}
-            </Text>
-            <Text variant="number" color={c.plateInk} testID="orga-direct-pending">
-              {event.counters.pending}
-            </Text>
-          </View>
+        <View style={[styles.bigCard, shadow, { backgroundColor: c.surface }]}>
+          <Text variant="label" color={c.inkMuted}>
+            {L.directToSort}
+          </Text>
+          <Text variant="numberNarrow" color={c.ink} style={styles.num} testID="orga-direct-pending">
+            {event.counters.pending}
+          </Text>
           <Button
             variant="primary"
-            icon="check"
-            next
+            icon="cards"
             onPress={() => router.push({ pathname: "/tri", params: { event: event.id } })}
             testID="orga-direct-sort"
           >
             {L.directSort}
           </Button>
         </View>
-      </Plate>
+      </View>
 
-      <SectionTitle>{L.directByZone}</SectionTitle>
-      {event.zones.length === 0 ? (
-        <Muted variant="body">{L.directNoZones}</Muted>
-      ) : (
-        <Plate style={styles.block} testID="orga-direct-zones">
-          {event.zones.map((z) => (
-            <View key={z.id} style={styles.zone}>
-              <Text variant="bodyStrong" color={c.plateInk} style={styles.grow}>
+      <View style={[styles.card, shadow, { backgroundColor: c.surface }]} testID="orga-direct-zones">
+        <Text variant="label" color={c.inkMuted}>
+          {L.directByZone}
+        </Text>
+        {event.zones.length === 0 ? <Muted variant="body">{L.directNoZones}</Muted> : null}
+        {event.zones.map((z) => {
+          const n = zoneCount(z.id);
+          const ratio = z.capacity ? Math.min(1, n / z.capacity) : 0;
+          return (
+            <View key={z.id} style={styles.bar}>
+              <Text variant="bodyStrong" color={c.ink} style={styles.barName} numberOfLines={1}>
                 {z.name}
               </Text>
-              <Text variant="bodyStrong" color={c.plateInk}>
-                {zoneCount(z.id)}
+              <View style={[styles.track, { backgroundColor: c.line }]}>
+                <View style={[styles.fill, { width: `${Math.round(ratio * 100)}%`, backgroundColor: c.ink }]} />
+              </View>
+              <Text variant="bodyStrong" color={c.ink} style={styles.barCount}>
+                {n}
                 {z.capacity ? `/${z.capacity}` : ""}
               </Text>
             </View>
-          ))}
-        </Plate>
-      )}
+          );
+        })}
+      </View>
 
-      <Plate style={styles.block} testID="orga-direct-team">
-        <Text variant="bodyStrong" color={c.plateInk}>
-          {staff.length === 0 ? L.directTeamNone : L.directTeam(present, staff.length)}
-        </Text>
-        <Text variant="caption" color={c.plateMuted}>
-          {next && unanswered ? L.directRemind(reminderText(next, at)) : L.directRemindNone}
-        </Text>
-        <Button
-          variant="plate"
-          icon="staff"
-          next
-          onPress={() => router.push("/equipe")}
-          fullWidth
-          testID="orga-direct-team-see"
-        >
+      <View style={[styles.card, shadow, styles.row, { backgroundColor: c.surface }]} testID="orga-direct-team">
+        <Icon name="staff" size={26} color={c.ink} />
+        <View style={styles.grow}>
+          <Text variant="bodyStrong" color={c.ink}>
+            {staff.length === 0 ? L.directTeamNone : L.directTeam(present, staff.length)}
+          </Text>
+          <Muted variant="caption">
+            {next && unanswered ? L.directRemind(reminderText(next, at)) : L.directRemindNone}
+          </Muted>
+        </View>
+        <Button variant="secondary" icon="next" onPress={() => router.push("/equipe")} testID="orga-direct-team-see">
           {L.directSeeTeam}
         </Button>
-      </Plate>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: space2 },
-  block: { gap: space3, padding: space3 },
-  line: { flexDirection: "row", alignItems: "center", gap: space2 },
+  wrap: { gap: space2 + 2 },
+  big: { flexDirection: "row", gap: 10 },
+  bigCard: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 20,
+    padding: 14,
+    gap: space1,
+  },
+  num: { fontSize: 64, lineHeight: 62 },
+  numSmall: { fontSize: 24, lineHeight: 28 },
+  card: { borderRadius: 18, padding: 14, gap: space2 },
+  row: { flexDirection: "row", alignItems: "center", gap: space3 },
   grow: { flex: 1, gap: space1 },
-  zone: { flexDirection: "row", alignItems: "baseline", gap: space2 },
+  bar: { flexDirection: "row", alignItems: "center", gap: space2 },
+  barName: { width: 90, fontSize: 13 },
+  track: { flex: 1, height: 12, borderRadius: 6, overflow: "hidden" },
+  fill: { height: "100%", borderRadius: 6 },
+  barCount: { width: 54, textAlign: "right", fontSize: 13, fontVariant: ["tabular-nums"] },
 });

@@ -86,6 +86,14 @@ for (const theme of THEMES) {
          order by a.created_at asc limit 1)`,
       ["J'arriverai vers 19 h 30 à cause du travail."],
     );
+    // Lot C4a, tour 2 : la même candidature porte une alerte (véhicule non immatriculé) ; elle doit rester visible
+    // dans la carte, même quand le corps se réduit (relecture : l'alerte était coupée en bas).
+    await sql(
+      `update vehicles set unregistered = true where id = (
+         select a.vehicle_id from applications a join events e on e.id = a.event_id
+         where e.slug = 'nocturne-de-canet-2026' and a.kind = 'vehicle' and a.status = 'pending'
+         order by a.created_at asc limit 1)`,
+    );
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "damien@orasso.local");
     await toOrganizer(page, "MéditeSportCar");
@@ -96,6 +104,7 @@ for (const theme of THEMES) {
       await expect(page.getByTestId("triage-counters")).toBeVisible({ timeout: 30_000 });
     };
     await pick("Nocturne de Canet");
+    await expect(page.getByTestId("triage-card").getByRole("alert")).toBeInViewport({ timeout: 30_000 });
 
     // Les segments du prototype.
     for (const label of ["Candidatures", "Liste d'attente", "En liste"]) {
@@ -214,8 +223,8 @@ for (const theme of THEMES) {
     expect(julie, "Julie plus grande que Marc").toBeGreaterThan(marc);
     expect(julie).toBeGreaterThanOrEqual(theo);
     expect(theo).toBeGreaterThanOrEqual(marc);
-    expect(marc).toBeGreaterThanOrEqual(44);
-    expect(julie).toBeLessThanOrEqual(88);
+    expect(marc).toBeGreaterThanOrEqual(36); // Lot C4a : bulles de 36 à 96 px (artefact `s-ostaff`).
+    expect(julie).toBeLessThanOrEqual(96);
     await rules(page, theme, "Équipe");
     await shot(page, "equipe", theme);
 
@@ -228,7 +237,8 @@ for (const theme of THEMES) {
     await expect(page.getByTestId("team-history-row").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("team-give-role")).toBeVisible();
     await shot(page, "equipe-bulle", theme);
-    await closeSheet(page);
+    // Lot C4a : la croix de la feuille du membre (le voile du haut est sous la barre du socle C1).
+    await page.getByRole("button", { name: "Fermer la fiche du membre", exact: true }).click();
 
     // Les rôles de l'événement : quatre rôles, ce que chacun permet (lot 48 : seuls certains rôles pointent).
     const scan = page.getByTestId("team-role-scan");

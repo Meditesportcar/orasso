@@ -71,6 +71,9 @@ export const staffHomeLabels = {
 
 /** Accueil drive (lot 48, prototype DA v2 `s-drive`, idée retenue n° 1). */
 export const driveLabels = {
+  // Lot C4a : carte moutarde du dernier résultat (artefact `.dr-res`).
+  resultKicker: "Retenue · zone",
+  resultPointed: (time: string) => `Entrée pointée à ${time}`,
   title: "Accueil drive",
   tile: "Accueil drive",
   tileHint: "La caméra lit la plaque, sans réseau",

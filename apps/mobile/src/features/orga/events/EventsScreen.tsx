@@ -3,8 +3,8 @@
 // retenues, à trier) et, pour un brouillon, ce qui lui manque. Les anciens événements sont derrière « … » : on peut les
 // dupliquer ; la copie arrive sur la page du nouvel événement, qui explique l'invitation des retenus de l'édition
 // précédente. Aucune règle métier ici (dates, publication, duplication : l'API).
-import { Button, Chip, Counters, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { type EventCard, type EventOrganizer, eventFormatLabels, orgaV2Labels as L, orgaLabels } from "@orasso/shared";
+import { Button, Chip, Photo, Plate, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { type EventCard, type EventOrganizer, orgaV2Labels as L, orgaLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -50,17 +50,27 @@ function useDrafts(structureId: string, ids: readonly string[]) {
   );
 }
 
+/** Les trois chiffres de l'artefact (`.counters` : chiffres étroits 26 px, libellé dessous, sans cases). */
 function Counts({ counters: c }: { counters: EventCard["counters"] }) {
-  const pending = c?.pending ?? 0;
+  const { t } = useTheme();
+  const items = [
+    { value: c ? c.accepted + c.pending + c.waitlisted + c.refused : "–", label: L.countApplications },
+    { value: c?.accepted ?? "–", label: L.countAccepted },
+    { value: c?.pending ?? "–", label: L.countPending },
+  ];
   return (
-    <Counters
-      items={[
-        { value: c ? c.accepted + c.pending + c.waitlisted + c.refused : "–", label: L.countApplications },
-        { value: c?.accepted ?? "–", label: L.countAccepted },
-        { value: c?.pending ?? "–", label: L.countPending },
-      ]}
-      active={pending > 0 ? 2 : undefined}
-    />
+    <View style={styles.counts}>
+      {items.map((i) => (
+        <View key={i.label} style={styles.count}>
+          <Text variant="numberNarrow" color={t.color.ink} style={styles.countValue}>
+            {String(i.value)}
+          </Text>
+          <Text variant="caption" color={t.color.inkMuted} style={styles.countLabel}>
+            {i.label}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -75,31 +85,34 @@ function Thumb({ event }: { event: EventCard }) {
   );
 }
 
+/** Carte `.oev` de l'artefact : vignette 4/5, étiquette « Publié · J-N » (moutarde dans le mois), titre, trois chiffres. */
 function ProgressCard({ event, at, onPress }: { event: EventCard; at: Date; onPress: () => void }) {
   const { t } = useTheme();
   const c = t.color;
+  const soon = Date.parse(event.startsAt) - at.getTime() < 30 * 86_400_000;
   return (
-    <Pressable onPress={onPress} accessibilityRole="link" accessibilityLabel={event.title} testID="orga-event-row">
-      <Plate style={styles.card}>
-        <View style={styles.head}>
-          <Thumb event={event} />
-          <View style={styles.headText}>
-            <View style={styles.chips}>
-              <Chip surface="plate" variant={event.outlook === "uncertain" ? "accent" : "default"}>
-                {publishedStatus(event.startsAt, event.endsAt, at)}
-              </Chip>
-            </View>
-            <Text variant="posterM" color={c.plateInk}>
-              {event.title}
-            </Text>
-            <Text variant="body" color={c.plateMuted}>
-              {formatDayHour(event.startsAt)} · {eventFormatLabels[event.format]}
-              {event.city ? ` · ${event.city}` : ""}
-            </Text>
-          </View>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="link"
+      accessibilityLabel={`${event.title}, ${formatDayHour(event.startsAt)}`}
+      testID="orga-event-row"
+      style={({ pressed }) => [
+        styles.oev,
+        { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard, opacity: pressed ? 0.9 : 1 },
+      ]}
+    >
+      <Thumb event={event} />
+      <View style={styles.headText}>
+        <View style={styles.chips}>
+          <Tag tone={soon || event.outlook === "uncertain" ? "acc" : "line"}>
+            {publishedStatus(event.startsAt, event.endsAt, at)}
+          </Tag>
         </View>
+        <Text variant="posterS" color={c.ink} style={styles.oevTitle}>
+          {event.title}
+        </Text>
         <Counts counters={event.counters} />
-      </Plate>
+      </View>
     </Pressable>
   );
 }
@@ -305,7 +318,13 @@ export function EventsScreen() {
 const styles = StyleSheet.create({
   head: { flexDirection: "row", gap: space3 },
   headText: { flex: 1, gap: space1 + 2 },
-  thumb: { width: 72, height: 90, borderRadius: 8, overflow: "hidden" },
+  thumb: { width: 76, aspectRatio: 4 / 5, borderRadius: 10, overflow: "hidden" },
+  oev: { flexDirection: "row", gap: 12, padding: 10, borderRadius: 18, marginBottom: space2 },
+  oevTitle: { fontSize: 15, lineHeight: 17, textTransform: "uppercase", marginTop: 2 },
+  counts: { flexDirection: "row", gap: 6, marginTop: 4 },
+  count: { flex: 1 },
+  countValue: { fontSize: 26, lineHeight: 26, fontWeight: "800" },
+  countLabel: { fontSize: 11 },
   card: { gap: space1 + 2, padding: space3, marginBottom: space2 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   top: { flexDirection: "row", gap: space2, alignItems: "stretch" },

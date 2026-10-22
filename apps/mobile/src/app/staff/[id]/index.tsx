@@ -2,8 +2,9 @@
 // en mémoire en tête, mon rôle donné par la structure et « Je suis là », grandes tuiles selon mes rôles (Scanner, Liste,
 // Placement, Contrôle des billets), entrés par zone, et toujours en bas : Alerte, Main courante, Discussion. Tout
 // s'affiche sans réseau depuis la liste du téléphone. Thème au choix de l'utilisateur (D25b), fond immobile.
+// Lot C4a : mise en page de l'artefact (en-tête de flux sans grand titre, rôle sur carte crème, Scanner moutarde).
 
-import { BigTitle, Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { archivoAt, Button, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   communicationLabels,
   staffHomeLabels as L,
@@ -15,7 +16,7 @@ import {
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { AlertSheet } from "@/features/staff/AlertSheet";
 import { recordAlert, recordIncident } from "@/features/staff/actions";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
@@ -125,7 +126,7 @@ export default function StaffHome() {
   return (
     <FlowScreen
       title={L.title}
-      facts={startsAt ? formatDayHour(startsAt) : undefined}
+      facts={startsAt ? `${title} · ${formatDayHour(startsAt)}` : title}
       onClose={close}
       still
       overlays={
@@ -149,109 +150,128 @@ export default function StaffHome() {
         </>
       }
       footer={
-        // Toujours en bas (docs/02, prototype) : l'alerte, la main courante et la discussion du staff (lot 20, en ligne).
+        // Toujours en bas (artefact `.stf-bar`) : Alerte (rouge, à sa largeur), Main courante qui prend la place
+        // (libellé sur une ligne, jamais coupé), Discussion en icône seule.
         <View style={styles.row}>
-          <Button variant="alert" icon="alert" onPress={() => setSheet("alert")} style={styles.flex}>
-            {L.alert}
-          </Button>
-          <Button
-            variant="rescue"
-            icon="incident"
-            onPress={() => setSheet("incident")}
-            style={styles.flex}
-            testID="staff-logbook"
-          >
-            {L.logbook}
-          </Button>
-          <Button
-            variant="rescue"
+          <BarButton tone="alert" icon="bell" label={L.alert} onPress={() => setSheet("alert")} testID="staff-alert" />
+          <BarButton icon="edit" label={L.logbook} onPress={() => setSheet("incident")} grow testID="staff-logbook" />
+          <BarButton
             icon="chat"
+            label={communicationLabels.staffDiscussion}
+            iconOnly
             onPress={() => router.push(`/staff/${id}/discussion`)}
-            style={styles.flex}
             testID="staff-discussion"
-            accessibilityLabel={communicationLabels.staffDiscussion}
-          >
-            {L.discussion}
-          </Button>
+          />
         </View>
       }
     >
-      <BigTitle title={title} />
-
       {error ? <Notice tone="error">{error}</Notice> : null}
       {TRUST_MISSING ? <Notice tone="error">{TRUST_MISSING}</Notice> : null}
       {closed ? (
         <Notice>Mode staff fermé depuis J+1 : la liste et les coordonnées ont été effacées de ce téléphone.</Notice>
       ) : null}
 
-      <Plate style={styles.block} testID="staff-sync">
+      {/* `.stf-sync` : point moutarde, heure de synchro, inscrits en mémoire ; la synchro manuelle reste, discrète. */}
+      <View style={[styles.sync, { backgroundColor: c.surface }]} testID="staff-sync">
         <View style={styles.syncRow}>
-          <View style={[styles.dot, { backgroundColor: state ? c.accent : c.plateMuted }]} />
+          <View
+            style={[
+              styles.dot,
+              state
+                ? { backgroundColor: c.accent, boxShadow: `0 0 0 5px ${c.accent}40` }
+                : { backgroundColor: c.inkFaint },
+            ]}
+          />
           <View style={styles.flex}>
-            <Text variant="bodyStrong" color={c.plateInk}>
+            <Text variant="bodyStrong" color={c.ink}>
               {state ? L.synced(hourFr(state.meta.syncedAt)) : state === null ? L.neverSynced : "Lecture de la liste…"}
             </Text>
-            <Text variant="caption" color={c.plateMuted}>
-              {state ? L.inMemory(inMemory) : L.syncFirst}
-            </Text>
+            <Muted variant="caption">{state ? L.inMemory(inMemory) : L.syncFirst}</Muted>
             {pending.length > 0 ? (
-              <Text variant="caption" color={c.plateInk} testID="staff-pending">
+              <Text variant="caption" color={c.ink} testID="staff-pending">
                 {`${pending.length} envoi${pending.length > 1 ? "s" : ""} en attente : ils partent au retour du réseau`}
               </Text>
             ) : null}
           </View>
         </View>
         {syncMessage ? (
-          <Text variant="body" color={syncMessage.error ? c.plateInk : c.plateMuted}>
+          <Text variant="caption" color={syncMessage.error ? c.ink : c.inkMuted}>
             {syncMessage.error ? `Attention : ${syncMessage.text}` : syncMessage.text}
           </Text>
         ) : null}
-        <View style={styles.row}>
-          <Button variant="plate" icon="list" loading={syncing} onPress={() => void sync(true)} style={styles.flex}>
-            Synchroniser la liste
-          </Button>
+        <View style={styles.syncActions}>
+          <Pressable
+            onPress={() => void sync(true)}
+            disabled={syncing}
+            accessibilityRole="button"
+            testID="staff-sync-now"
+            style={styles.link}
+          >
+            <Icon name="list" size={16} color={c.accentText} />
+            <Text variant="bodyStrong" color={c.accentText} style={styles.linkText}>
+              {syncing ? "Synchronisation…" : "Synchroniser la liste"}
+            </Text>
+          </Pressable>
           {pending.length > 0 ? (
-            <Button variant="plate" icon="export" onPress={() => userId && void flushNow(userId)} style={styles.flex}>
-              {`Envoyer · ${pending.length}`}
-            </Button>
+            <Pressable onPress={() => userId && void flushNow(userId)} accessibilityRole="button" style={styles.link}>
+              <Icon name="export" size={16} color={c.accentText} />
+              <Text variant="bodyStrong" color={c.accentText} style={styles.linkText}>
+                {`Envoyer · ${pending.length}`}
+              </Text>
+            </Pressable>
           ) : null}
         </View>
-      </Plate>
+      </View>
 
-      <Plate style={styles.block} testID="staff-role">
-        <View style={styles.roleRow}>
-          <View style={styles.flex}>
-            <Text variant="label" color={c.plateMuted}>
-              {L.role}
+      {/* `.stf-role` : carte crème (noire en Sable), « Je suis là » en pilule moutarde une fois confirmé. */}
+      <View style={[styles.role, { backgroundColor: c.poster }]} testID="staff-role">
+        <View style={styles.flex}>
+          <Text variant="label" color={c.posterMuted}>
+            {L.role}
+          </Text>
+          <Text variant="posterS" color={c.posterInk} style={styles.roleTitle}>
+            {roles.map((r) => staffRoleLabels[r]).join(" · ") || "Staff"}
+          </Text>
+          {mine ? (
+            <Text variant="caption" color={c.posterMuted}>
+              {L.givenBy(mine.structure.name)}
             </Text>
-            <Text variant="bodyStrong" color={c.plateInk}>
-              {roles.map((r) => staffRoleLabels[r]).join(" · ") || "Staff"}
-            </Text>
-            {mine ? (
-              <Text variant="caption" color={c.plateMuted}>
-                {L.givenBy(mine.structure.name)}
-              </Text>
-            ) : null}
-          </View>
-          {/* Un organisateur qui ouvre le mode staff n'est pas dans « Où je suis staff » : pas de présence (lot 22). */}
-          {organizerView ? null : (
-            <Button
-              variant="plate"
-              icon={currentPresence === "present" ? "check" : "close"}
-              tone={currentPresence === "present" ? "default" : "dashed"}
-              onPress={() => {
-                if (!userId) return;
-                const next = currentPresence !== "present";
-                setPresence(next ? "present" : "absent");
-                void record(id, userId, "presence", { present: next });
-              }}
-              testID="staff-presence"
-            >
-              {currentPresence === "present" ? L.here : currentPresence === "absent" ? L.notHere : L.here}
-            </Button>
-          )}
+          ) : null}
         </View>
-      </Plate>
+        {/* Un organisateur qui ouvre le mode staff n'est pas dans « Où je suis staff » : pas de présence (lot 22). */}
+        {organizerView ? null : (
+          <Pressable
+            onPress={() => {
+              if (!userId) return;
+              const next = currentPresence !== "present";
+              setPresence(next ? "present" : "absent");
+              void record(id, userId, "presence", { present: next });
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: currentPresence === "present" }}
+            testID="staff-presence"
+            style={[
+              styles.here,
+              currentPresence === "present"
+                ? { backgroundColor: c.accent, borderColor: c.accent }
+                : { borderColor: c.posterInk },
+            ]}
+          >
+            <Icon
+              name={currentPresence === "absent" ? "close" : "check"}
+              size={16}
+              color={currentPresence === "present" ? c.accentInk : c.posterInk}
+            />
+            <Text
+              variant="bodyStrong"
+              color={currentPresence === "present" ? c.accentInk : c.posterInk}
+              style={styles.hereText}
+            >
+              {currentPresence === "absent" ? L.notHere : L.here}
+            </Text>
+          </Pressable>
+        )}
+      </View>
 
       {state ? (
         <View style={styles.tiles}>
@@ -294,51 +314,52 @@ export default function StaffHome() {
       ) : null}
 
       {count ? (
-        <Plate style={styles.block} testID="staff-counters">
+        <View
+          style={[styles.tz, { backgroundColor: c.ground, boxShadow: t.shadow.shadowCard }]}
+          testID="staff-counters"
+        >
           <View style={styles.between}>
-            <Text variant="label" color={c.plateMuted}>
+            <Text variant="label" color={c.inkMuted}>
               {L.entered}
             </Text>
-            <Text variant="caption" color={c.plateMuted}>
-              {L.enteredOf(count.arrived, count.expected)}
-            </Text>
+            <Muted variant="caption">{L.enteredOf(count.arrived, count.expected)}</Muted>
           </View>
           {zones.map((z) => (
             <View key={z.code ?? "none"} style={styles.zoneRow}>
-              <Text variant="bodyStrong" color={c.plateInk} style={styles.zoneName}>
+              <Text variant="caption" color={c.inkMuted} style={styles.zoneName} numberOfLines={1}>
                 {z.name}
               </Text>
-              <View style={[styles.bar, { backgroundColor: c.plateLine }]}>
+              <View style={[styles.bar, { backgroundColor: c.line }]}>
                 <View
                   style={[
                     styles.barFill,
-                    { backgroundColor: c.plateInk, width: `${Math.round((100 * z.arrived) / z.expected)}%` },
+                    { backgroundColor: c.accent, width: `${Math.round((100 * z.arrived) / z.expected)}%` },
                   ]}
                 />
               </View>
-              <Text variant="caption" color={c.plateMuted}>
+              <Text variant="label" color={c.ink} style={styles.zoneCount}>
                 {z.arrived}/{z.expected}
               </Text>
             </View>
           ))}
-        </Plate>
+        </View>
       ) : null}
 
       <Muted variant="caption">{L.closesNote}</Muted>
 
       {consent === "undetermined" ? (
-        <Plate style={styles.block} testID="staff-location-ask">
-          <Text variant="label" color={c.plateMuted}>
+        <View style={[styles.block, styles.card, { backgroundColor: c.surface }]} testID="staff-location-ask">
+          <Text variant="label" color={c.inkMuted}>
             Position de l'alerte
           </Text>
-          <Text variant="body" color={c.plateInk}>
+          <Text variant="body" color={c.ink}>
             Quand tu touches « Alerte », ta position peut partir avec elle pour que le staff te retrouve. Elle n'est lue
             qu'à ce moment-là, jamais suivie, et effacée dès l'alerte close.
           </Text>
-          <Button variant="plate" icon="place" onPress={() => void askLocationConsent().then(setConsent)} fullWidth>
+          <Button variant="secondary" icon="place" onPress={() => void askLocationConsent().then(setConsent)} fullWidth>
             Autoriser la position
           </Button>
-        </Plate>
+        </View>
       ) : consent === "denied" ? (
         <Muted variant="meta">
           Position refusée : l'alerte part sans position (réglage du téléphone pour l'autoriser).
@@ -348,41 +369,41 @@ export default function StaffHome() {
       {ticketDupes.length > 0 ? (
         <>
           <SectionTitle>Rapport · billets</SectionTitle>
-          <Plate style={styles.block}>
+          <View style={[styles.block, styles.card, { backgroundColor: c.surface }]}>
             {ticketDupes.map((d) => (
-              <Text key={d.ticketId} variant="body" color={c.plateInk}>
+              <Text key={d.ticketId} variant="body" color={c.ink}>
                 Doublon · billet déjà utilisé à {d.usedAt ? clock(d.usedAt) : "—"} (autre téléphone)
                 {d.count > 1 ? ` · ×${d.count}` : ""}
               </Text>
             ))}
-          </Plate>
+          </View>
         </>
       ) : null}
 
       {duplicates.length > 0 || refusedByServer.length > 0 || failed.length > 0 ? (
         <>
           <SectionTitle>Rapport · réponses du serveur</SectionTitle>
-          <Plate style={styles.block}>
+          <View style={[styles.block, styles.card, { backgroundColor: c.surface }]}>
             {duplicates.map((l) => (
-              <Text key={l.key} variant="body" color={c.plateInk}>
+              <Text key={l.key} variant="body" color={c.ink}>
                 Doublon · {pseudoOf(l.passId, l.applicationId) ?? "véhicule"} déjà entré à {l.at ? clock(l.at) : "—"}
                 {l.otherDevice ? " (autre téléphone)" : ""}
                 {l.count > 1 ? ` · ×${l.count}` : ""}
               </Text>
             ))}
             {refusedByServer.map((l) => (
-              <Text key={l.key} variant="body" color={c.plateInk}>
+              <Text key={l.key} variant="body" color={c.ink}>
                 {l.result === "unknown" ? "Inconnu du serveur" : "Refusé par le serveur"} ·{" "}
                 {pseudoOf(l.passId, l.applicationId) ?? "QR"} · {l.at ? clock(l.at) : "—"}
                 {l.count > 1 ? ` · ×${l.count}` : ""}
               </Text>
             ))}
             {failed.map((a) => (
-              <Text key={a.id} variant="body" color={c.plateInk}>
+              <Text key={a.id} variant="body" color={c.ink}>
                 {a.kind === "express" ? `Express ${String(a.payload.email)}` : "Envoi"} : {String(a.result?.error)}
               </Text>
             ))}
-          </Plate>
+          </View>
         </>
       ) : null}
 
@@ -396,17 +417,109 @@ export default function StaffHome() {
   );
 }
 
+/**
+ * Bouton de la rangée du bas (artefact `.stf-bar .btn` : 50 px, rayon 14, libellé 13 px sur une ligne). Alerte en rouge
+ * à sa largeur, Main courante au trait qui prend la place restante, Discussion en icône seule (nom accessible gardé).
+ */
+function BarButton({
+  icon,
+  label,
+  onPress,
+  tone,
+  grow,
+  iconOnly,
+  testID,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  tone?: "alert";
+  grow?: boolean;
+  iconOnly?: boolean;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  const alert = tone === "alert";
+  const ink = alert ? c.nightInk : c.ink;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID={testID}
+      style={({ pressed }) => [
+        styles.barBtn,
+        grow ? styles.flex : null,
+        iconOnly ? styles.barIcon : null,
+        alert ? { backgroundColor: c.win, borderColor: c.win } : { backgroundColor: c.surface, borderColor: c.line },
+        { opacity: pressed ? 0.85 : 1 },
+      ]}
+    >
+      <Icon name={icon} size={18} color={ink} />
+      {iconOnly ? null : (
+        <Text variant="bodyStrong" color={ink} style={styles.barText}>
+          {label}
+        </Text>
+      )}
+    </Pressable>
+  );
+}
+
+// Mesures de l'artefact (`.stf`, `.stf-sync`, `.stf-role`, `.stf-here`, `.tz-card`, `.tz-bars`, `.stf-bar`).
 const styles = StyleSheet.create({
   block: { gap: space2, padding: space3 },
-  tiles: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  row: { flexDirection: "row", gap: space2 },
+  card: { borderRadius: 16 },
+  tiles: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  row: { flexDirection: "row", gap: space2, alignItems: "center" },
   flex: { flex: 1 },
-  syncRow: { flexDirection: "row", alignItems: "center", gap: space2 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  roleRow: { flexDirection: "row", alignItems: "center", gap: space3 },
+  barBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 50,
+    paddingHorizontal: 11,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  barIcon: { width: 46, paddingHorizontal: 0 },
+  // Artefact `.btn` : Archivo 118 % 900, 14 px ; ici 115 % 12,5 px pour tenir à 390 px sans couper « Main courante ».
+  barText: {
+    fontFamily: archivoAt(115, 900),
+    fontSize: 12.5,
+    lineHeight: 16,
+    letterSpacing: 0,
+    textTransform: "uppercase",
+  },
+  sync: { borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, gap: space2 },
+  syncRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  syncActions: { flexDirection: "row", flexWrap: "wrap", gap: space3, paddingLeft: 24 },
+  link: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 44 }, // cible tactile de 44 px (lot C4a, tour 2)
+  linkText: { fontSize: 13 },
+  dot: { width: 12, height: 12, borderRadius: 6 },
+  role: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 16 },
+  roleTitle: { fontSize: 17, lineHeight: 19, textTransform: "uppercase", marginTop: 3 },
+  here: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 38,
+    paddingHorizontal: 14,
+    borderRadius: 19,
+    borderWidth: 2,
+  },
+  hereText: { fontSize: 13 },
+  tz: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 7,
+  },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
   zoneRow: { flexDirection: "row", alignItems: "center", gap: space2 },
-  zoneName: { minWidth: 88 },
+  zoneName: { width: 84, fontSize: 11.5, fontWeight: "800" },
+  zoneCount: { width: 44, textAlign: "right" },
   bar: { flex: 1, height: 8, borderRadius: 4, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 4 },
 });

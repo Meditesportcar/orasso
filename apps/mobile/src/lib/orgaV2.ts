@@ -62,15 +62,150 @@ export function publishedStatus(startsAt: string, endsAt: string, at: Date): str
 
 // --- Équipe -----------------------------------------------------------------------------------------------------
 
-export const BUBBLE_MIN = 44;
-export const BUBBLE_MAX = 88;
+export const BUBBLE_MIN = 36;
+export const BUBBLE_MAX = 96;
 /** Au-delà de ce nombre d'événements tenus, la bulle ne grandit plus. */
-export const BUBBLE_FULL_AT = 10;
+export const BUBBLE_FULL_AT = 20;
 
-/** Taille d'une bulle : 44 px sans événement tenu, 88 px à dix événements tenus ou plus (linéaire entre les deux). */
+/** Taille d'une bulle (artefact `s-ostaff`, 36 à 96 px) : 36 px sans événement tenu, 96 px à vingt événements tenus ou plus. */
 export function bubbleSize(eventsHeld: number): number {
   const n = Math.min(Math.max(Math.floor(eventsHeld), 0), BUBBLE_FULL_AT);
   return Math.round(BUBBLE_MIN + ((BUBBLE_MAX - BUBBLE_MIN) * n) / BUBBLE_FULL_AT);
+}
+
+/** Les neuf jetons d'avatar du socle (`avatar-1` à `avatar-9`, relevés de l'artefact), encre `avatar-ink` dessus. */
+export const AVATAR_TOKENS = [
+  "avatar1",
+  "avatar2",
+  "avatar3",
+  "avatar4",
+  "avatar5",
+  "avatar6",
+  "avatar7",
+  "avatar8",
+  "avatar9",
+] as const;
+export type AvatarToken = (typeof AVATAR_TOKENS)[number];
+
+/** Le jeton d'avatar d'un membre : stable d'une ouverture à l'autre (dérivé de son identifiant). */
+export function avatarToken(userId: string): AvatarToken {
+  let h = 0;
+  for (const ch of userId) h = (h * 31 + (ch.codePointAt(0) ?? 0)) >>> 0;
+  return AVATAR_TOKENS[h % AVATAR_TOKENS.length] ?? "avatar1";
+}
+
+/** Une bulle posée dans la grappe : centre (x, y) et diamètre, en points. */
+export type PlacedBubble = { x: number; y: number; size: number };
+
+/**
+ * Grappe de bulles de l'artefact (`.bubbles` : carte de 310 px de haut, bulles posées librement, la bulle « +N » en bas à
+ * droite à 92 % / 86 %). Pose les bulles de la plus grande à la plus petite au plus près du centre, sans chevauchement
+ * (écart `gap`), dans la carte et hors de la place réservée à la bulle « +N ». Si tout ne tient pas, réduit les tailles et
+ * recommence. Les tailles doivent être triées de la plus grande à la plus petite ; le résultat suit le même ordre.
+ */
+export function packBubbles(
+  sizes: readonly number[],
+  width: number,
+  height: number,
+  reserved: PlacedBubble | null,
+  gap = 6,
+): PlacedBubble[] {
+  if (width <= 0 || height <= 0) return [];
+  for (let scale = 1; scale > 0.3; scale -= 0.08) {
+    const placed: PlacedBubble[] = [];
+    let ok = true;
+    for (const raw of sizes) {
+      const size = Math.max(24, Math.round(raw * scale));
+      const spot = findSpot(size, width, height, reserved ? [reserved, ...placed] : placed, gap);
+      if (!spot) {
+        ok = false;
+        break;
+      }
+      placed.push(spot);
+    }
+    if (ok) return placed;
+  }
+  // Repli (dizaines de membres) : une grille régulière au-dessus de la bulle « +N », bulles de 36 px au moins (cible
+  // tactile) ; si elle ne tient pas dans la hauteur, elle continue vers le bas et la carte s'allonge (`cloudHeight`) :
+  // chaque membre reste dans le cadre et ouvrable (lot C4a, tour 2).
+  const pad = 8;
+  const usable = (reserved ? reserved.y - reserved.size / 2 - gap : height) - pad;
+  const n = Math.max(sizes.length, 1);
+  let cell = 96;
+  while (cell > 36) {
+    const perRow = Math.max(1, Math.floor((width - 2 * pad) / cell));
+    if (Math.ceil(n / perRow) * cell <= usable) break;
+    cell -= 2;
+  }
+  const perRow = Math.max(1, Math.floor((width - 2 * pad) / cell));
+  const left = (width - perRow * cell) / 2;
+  return sizes.map((_, i) => ({
+    x: left + (i % perRow) * cell + cell / 2,
+    y: pad + Math.floor(i / perRow) * cell + cell / 2,
+    size: cell - gap,
+  }));
+}
+
+/**
+ * Hauteur de la grappe : 310 px (artefact), ou plus quand la grille de repli descend plus bas ; la bulle « +N » se pose
+ * alors sous la dernière rangée (`requestBubbleSpot` sur cette hauteur).
+ */
+export function cloudHeight(placed: readonly PlacedBubble[], width: number, minHeight: number): number {
+  const req = requestBubbleSpot(width, minHeight);
+  const fits = placed.every(
+    (b) => b.y + b.size / 2 <= minHeight - 8 && Math.hypot(b.x - req.x, b.y - req.y) >= (b.size + req.size) / 2,
+  );
+  if (fits) return minHeight;
+  const bottom = placed.reduce((m, b) => Math.max(m, b.y + b.size / 2), 0);
+  return Math.ceil(bottom + 84);
+}
+
+function findSpot(
+  size: number,
+  width: number,
+  height: number,
+  others: readonly PlacedBubble[],
+  gap: number,
+): PlacedBubble | null {
+  const r = size / 2;
+  const pad = 8;
+  const cx = width / 2;
+  const cy = height * 0.44;
+  // Spirale d'Archimède depuis le centre : la première place libre est la plus centrale.
+  for (let step = 0; step < 1400; step += 1) {
+    const angle = step * 0.35;
+    const dist = step * 0.55;
+    const x = cx + Math.cos(angle) * dist * (width / height);
+    const y = cy + Math.sin(angle) * dist;
+    if (x - r < pad || x + r > width - pad || y - r < pad || y + r > height - pad) {
+      if (dist > Math.max(width, height)) break;
+      continue;
+    }
+    if (others.every((o) => Math.hypot(o.x - x, o.y - y) >= r + o.size / 2 + gap)) return { x, y, size };
+  }
+  return null;
+}
+
+/**
+ * Tailles affichées dans la grappe : les tailles d'engagement agrandies d'un même facteur pour que les bulles couvrent
+ * environ 28 % de la carte, comme dans l'artefact (une petite équipe peu active ne doit pas tenir dans un coin). Les
+ * écarts entre membres sont gardés ; aucune bulle ne dépasse 96 px.
+ */
+export function cloudSizes(sizes: readonly number[], width: number, height: number): number[] {
+  const area = sizes.reduce((s, d) => s + (Math.PI * d * d) / 4, 0);
+  if (area === 0 || width <= 0) return [...sizes];
+  const scale = Math.min(2.2, Math.max(1, Math.sqrt((0.28 * width * height) / area)));
+  return sizes.map((d) => Math.min(BUBBLE_MAX, Math.round(d * scale)));
+}
+
+/** La place de la bulle « +N » (demandes) ou « + » (inviter) : 56 px, en bas à droite de la grappe. */
+export function requestBubbleSpot(width: number, height: number): PlacedBubble {
+  return { x: width * 0.92 - 4, y: height - 46, size: 56 };
+}
+
+/** Le premier nom d'un pseudo, sous les initiales des grandes bulles (« Lucie_Pia » → « Lucie »). */
+export function bubbleName(pseudo: string): string {
+  return pseudo.split(/[_\s]/u)[0] ?? pseudo;
 }
 
 /** Les initiales d'une bulle sans avatar : deux lettres du pseudo, en capitales. */

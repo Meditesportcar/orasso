@@ -1,9 +1,7 @@
-// Grande tuile du mode staff v2 (lot 48, prototype `s-staff`) : pictogramme, titre, ligne d'aide ; une tuile « big »
-// prend toute la largeur (Scanner). Sur plaque : lisible en plein soleil comme de nuit.
-import { Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { Pressable, StyleSheet, View } from "react-native";
-
-const { space1, space2, space3 } = tokens.spacing;
+// Grande tuile du mode staff (lot 48, artefact `s-staff`, classes `.stf-t` et `.stf-t.big`, lot C4a) : pictogramme,
+// titre italique, ligne d'aide ; la tuile « big » (Scanner) prend toute la largeur, en moutarde pleine.
+import { Icon, type IconName, Text, useTheme } from "@orasso/design-system/native";
+import { Pressable, StyleSheet } from "react-native";
 
 export function StaffTile({
   icon,
@@ -22,6 +20,8 @@ export function StaffTile({
 }) {
   const { t } = useTheme();
   const c = t.color;
+  // Artefact `.stf-t` : carte, icône 28 px moutarde lisible, titre italique large ; `.stf-t.big` (Scanner) : moutarde pleine.
+  const ink = big ? c.accentInk : c.ink;
   return (
     <Pressable
       onPress={onPress}
@@ -31,16 +31,18 @@ export function StaffTile({
       style={({ pressed }) => [
         styles.tile,
         big ? styles.big : styles.half,
-        { backgroundColor: c.plate, opacity: pressed ? 0.85 : 1, boxShadow: t.shadow.shadowCard },
+        {
+          backgroundColor: big ? c.accent : c.surface,
+          opacity: pressed ? 0.85 : 1,
+          boxShadow: big ? t.shadow.shadowPoster : t.shadow.shadowCard,
+        },
       ]}
     >
-      <View style={[styles.icon, { backgroundColor: big ? c.accent : c.plateLine }]}>
-        <Icon name={icon} size={22} color={big ? c.accentInk : c.plateInk} />
-      </View>
-      <Text variant={big ? "posterM" : "bodyStrong"} color={c.plateInk}>
+      <Icon name={icon} size={28} color={big ? c.accentInk : c.accentText} />
+      <Text variant="posterS" color={ink} style={styles.title}>
         {title}
       </Text>
-      <Text variant="caption" color={c.plateMuted}>
+      <Text variant="caption" color={big ? c.accentInk : c.inkMuted} style={styles.hint}>
         {hint}
       </Text>
     </Pressable>
@@ -48,15 +50,9 @@ export function StaffTile({
 }
 
 const styles = StyleSheet.create({
-  tile: { borderRadius: tokens.radius.radiusLg, padding: space3, gap: space1, minHeight: 112 },
-  big: { width: "100%" },
+  tile: { borderRadius: 18, padding: 14, gap: 6, minHeight: 118 },
+  big: { width: "100%", minHeight: 104 },
   half: { flexBasis: "47%", flexGrow: 1 },
-  icon: {
-    width: 40,
-    height: 40,
-    borderRadius: tokens.radius.radiusMd,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: space2,
-  },
+  title: { fontSize: 15, lineHeight: 16, textTransform: "uppercase", marginTop: 4 },
+  hint: { fontSize: 12 },
 });

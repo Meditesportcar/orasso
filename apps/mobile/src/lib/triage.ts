@@ -419,3 +419,14 @@ export function triageEvents<E extends { id: string; status: string; startsAt: s
     .filter((e) => e.status === "published" && Date.parse(e.endsAt) > t)
     .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
 }
+
+/**
+ * L'événement ouvert par défaut dans l'onglet Tri (artefact `s-otri`, ECARTS § 5.1, lot C4a) : le prochain qui a des
+ * candidatures à trier ; sinon le premier de la liste (le plus proche). L'événement du jour sans candidature n'est plus
+ * imposé : l'organisateur arrive là où il a du travail.
+ */
+export function defaultTriageEvent<E extends { id: string; counters?: { pending: number } }>(
+  choices: readonly E[],
+): E | undefined {
+  return choices.find((e) => (e.counters?.pending ?? 0) > 0) ?? choices[0];
+}

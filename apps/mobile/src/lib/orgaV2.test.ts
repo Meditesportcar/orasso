@@ -3,19 +3,26 @@ import { type ApplicationForTriage, type EventNeedView, type EventOrganizer, org
 import { describe, expect, it } from "vitest";
 
 import {
+  AVATAR_TOKENS,
+  avatarToken,
   BUBBLE_FULL_AT,
   BUBBLE_MAX,
   BUBBLE_MIN,
   boardRoles,
   bubbleInitials,
+  bubbleName,
   bubbleSize,
+  cloudHeight,
+  cloudSizes,
   draftMissing,
   historyOf,
   holdersOf,
   missionGroups,
   nextReminder,
+  packBubbles,
   publishedStatus,
   reminderText,
+  requestBubbleSpot,
   withRole,
 } from "./orgaV2";
 
@@ -97,12 +104,61 @@ describe("statut d'un événement publié", () => {
 });
 
 describe("bulles", () => {
-  it("la taille suit les événements tenus, de 44 à 88 px", () => {
+  it("la taille suit les événements tenus, de 36 à 96 px", () => {
     expect(bubbleSize(0)).toBe(BUBBLE_MIN);
     expect(bubbleSize(BUBBLE_FULL_AT)).toBe(BUBBLE_MAX);
     expect(bubbleSize(99)).toBe(BUBBLE_MAX);
-    expect(bubbleSize(5)).toBe(66);
+    expect(bubbleSize(10)).toBe(66);
     expect(bubbleSize(-3)).toBe(BUBBLE_MIN);
+  });
+  it("la grappe pose les bulles sans chevauchement, dans la carte et hors de la bulle « +N »", () => {
+    const sizes = [96, 74, 68, 60, 54, 50, 44, 40, 36];
+    const reserved = requestBubbleSpot(358, 310);
+    const placed = packBubbles(sizes, 358, 310, reserved);
+    expect(placed).toHaveLength(sizes.length);
+    const all = [reserved, ...placed];
+    for (const [i, a] of all.entries()) {
+      expect(a.x - a.size / 2).toBeGreaterThanOrEqual(0);
+      expect(a.x + a.size / 2).toBeLessThanOrEqual(358);
+      expect(a.y - a.size / 2).toBeGreaterThanOrEqual(0);
+      expect(a.y + a.size / 2).toBeLessThanOrEqual(310);
+      for (const b of all.slice(i + 1))
+        expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual((a.size + b.size) / 2);
+    }
+  });
+  it("une petite équipe peu active est agrandie, sans dépasser 96 px", () => {
+    const sizes = cloudSizes([45, 39, 36], 358, 310);
+    expect(sizes[0]).toBeGreaterThan(45);
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(BUBBLE_MAX);
+    expect(sizes[0]).toBeGreaterThan(sizes[2] ?? 0);
+  });
+  it.each([40, 60, 200])("%i membres : tous dans le cadre, sans chevauchement, hors de la bulle « +N »", (n) => {
+    const width = 358;
+    const sizes = Array.from({ length: n }, () => 96);
+    const placed = packBubbles(sizes, width, 310, requestBubbleSpot(width, 310), 14);
+    expect(placed).toHaveLength(n);
+    const height = cloudHeight(placed, width, 310);
+    const req = requestBubbleSpot(width, height);
+    for (const [i, a] of placed.entries()) {
+      // Dans le cadre (largeur et hauteur de la carte, éventuellement allongée) et assez grande pour un doigt.
+      expect(a.x - a.size / 2).toBeGreaterThanOrEqual(0);
+      expect(a.x + a.size / 2).toBeLessThanOrEqual(width);
+      expect(a.y - a.size / 2).toBeGreaterThanOrEqual(0);
+      expect(a.y + a.size / 2).toBeLessThanOrEqual(height);
+      expect(a.size).toBeGreaterThanOrEqual(20);
+      expect(Math.hypot(a.x - req.x, a.y - req.y)).toBeGreaterThanOrEqual((a.size + req.size) / 2);
+      for (const b of placed.slice(i + 1))
+        expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual((a.size + b.size) / 2);
+    }
+  });
+  it("une équipe ordinaire garde la carte de 310 px", () => {
+    const placed = packBubbles([96, 74, 60, 44], 358, 310, requestBubbleSpot(358, 310), 14);
+    expect(cloudHeight(placed, 358, 310)).toBe(310);
+  });
+  it("la couleur d'avatar est stable, le prénom vient du pseudo", () => {
+    expect(avatarToken("u1")).toBe(avatarToken("u1"));
+    expect(AVATAR_TOKENS).toContain(avatarToken("u2"));
+    expect(bubbleName("Lucie_Pia")).toBe("Lucie");
   });
   it("les initiales", () => {
     expect(bubbleInitials("Sarah_66")).toBe("SA");

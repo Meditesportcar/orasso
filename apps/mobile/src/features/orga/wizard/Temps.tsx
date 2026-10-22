@@ -744,15 +744,30 @@ export function AfficheTemps(ctx: StepContext) {
 
   return (
     <>
-      <Choices
-        label={posterTexts.photo}
-        options={[
-          { value: "post", label: posterTexts.post },
-          { value: "story", label: posterTexts.story },
-        ]}
-        value={format}
-        onChange={(f) => setFormat(f as PosterFormat)}
-      />
+      {/* Lot C4a (artefact s-create, temps 7) : « Photo » à gauche, Post / Story en segments à droite. */}
+      <View style={styles.photoHead}>
+        <Muted variant="label">{posterTexts.photo}</Muted>
+        <View style={[styles.seg, { backgroundColor: t.color.surfaceRaised }]} accessibilityRole="radiogroup">
+          {(["post", "story"] as const).map((f) => (
+            <Pressable
+              key={f}
+              onPress={() => setFormat(f)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: format === f }}
+              accessibilityLabel={posterTexts[f]}
+              style={[styles.segBtn, format === f ? { backgroundColor: t.color.ink } : null]}
+            >
+              <Text
+                variant="bodyStrong"
+                color={format === f ? t.color.ground : t.color.inkMuted}
+                style={styles.segText}
+              >
+                {posterTexts[f]}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
       <View style={styles.row}>
         {photo ? <Image source={{ uri: photo }} style={[styles.photo, { borderColor: t.color.accent }]} /> : null}
         {sending !== null ? <SendProgress size={56} progress={sending} /> : null}
@@ -768,17 +783,19 @@ export function AfficheTemps(ctx: StepContext) {
       </View>
       {!poster.photoKey ? <Muted variant="caption">{W.posterNoPhoto}</Muted> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
-      <View
-        style={[styles.preview, format === "story" ? styles.story : styles.post, { backgroundColor: t.color.line }]}
-      >
-        {preview ? (
-          <Image
-            source={{ uri: preview }}
-            style={StyleSheet.absoluteFill}
-            accessibilityLabel={W.posterPreviewAlt}
-            testID="wizard-poster-preview"
-          />
-        ) : null}
+      <View style={[styles.previewCard, { backgroundColor: t.color.surface }]}>
+        <View
+          style={[styles.preview, format === "story" ? styles.story : styles.post, { backgroundColor: t.color.line }]}
+        >
+          {preview ? (
+            <Image
+              source={{ uri: preview }}
+              style={StyleSheet.absoluteFill}
+              accessibilityLabel={W.posterPreviewAlt}
+              testID="wizard-poster-preview"
+            />
+          ) : null}
+        </View>
       </View>
       {refused ? (
         <View style={styles.gap1} testID="wizard-poster-refused">
@@ -817,7 +834,9 @@ export function AfficheTemps(ctx: StepContext) {
                 <Image source={{ uri: thumbs[`${format}:${style}`] }} style={StyleSheet.absoluteFill} />
               ) : null}
             </View>
-            <Text variant="caption">{posterStyleLabels[style]}</Text>
+            <Text variant="bodyStrong" color={t.color.ink} style={styles.tplName}>
+              {posterStyleLabels[style]}
+            </Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -908,8 +927,14 @@ const styles = StyleSheet.create({
   timeline: { flexDirection: "row", gap: space2 },
   rules: { minHeight: 200 },
   photo: { width: 64, height: 64, borderRadius: tokens.radius.radiusSm, borderWidth: 2 },
+  photoHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
+  seg: { flexDirection: "row", borderRadius: 14, padding: 3 },
+  segBtn: { height: 38, paddingHorizontal: 14, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  segText: { fontSize: 13 },
+  previewCard: { borderRadius: 24, paddingVertical: 14, alignItems: "center" },
+  tplName: { fontSize: 12, textAlign: "center" },
   preview: {
-    width: "100%",
+    width: "64%",
     maxWidth: 360,
     alignSelf: "center",
     borderRadius: tokens.radius.radiusMd,

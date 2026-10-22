@@ -16,7 +16,7 @@ import {
 } from "@orasso/design-system/native";
 import { orgaV2Labels, triageAppLabels } from "@orasso/shared";
 import { useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -24,7 +24,7 @@ import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
 import { api } from "@/lib/api";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
-import { COUNTER_ACTIVE, counterCells, triageEvents } from "@/lib/triage";
+import { COUNTER_ACTIVE, counterCells, defaultTriageEvent, triageEvents } from "@/lib/triage";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { TabTitle } from "@/ui/TabTitle";
@@ -67,9 +67,19 @@ export function TriageScreen() {
     refreshMs: 120_000,
   });
   const choices = useMemo(() => triageEvents(events.data ?? [], at), [events.data, at]);
+  // Lot C4a, tour 2 : l'événement par défaut est figé au premier calcul ; un rafraîchissement (nouvelle candidature
+  // ailleurs) ne change jamais l'événement en cours de tri, donc ne démonte pas le paquet ni n'envoie ses décisions armées.
+  const [frozenDefault, setFrozenDefault] = useState<string | null>(null);
+  const fallbackId = choices.find((e) => e.id === frozenDefault)?.id ?? defaultTriageEvent(choices)?.id;
+  useEffect(() => {
+    if (frozenDefault === null && fallbackId) setFrozenDefault(fallbackId);
+  }, [frozenDefault, fallbackId]);
   const eventId =
-    choices.find((e) => e.id === picked)?.id ?? choices.find((e) => e.id === params.event)?.id ?? choices[0]?.id;
+    choices.find((e) => e.id === picked)?.id ?? choices.find((e) => e.id === params.event)?.id ?? fallbackId;
   const event = choices.find((e) => e.id === eventId) ?? null;
+  // Lot C4a : sans photo du véhicule, la grande photo de la carte est celle de l'événement (`photoUrl`, exposée par
+  // l'API au lot C5), sinon son affiche générée.
+  const eventPhoto = event ? (event.photoUrl ?? event.generatedPosterUrl ?? null) : null;
 
   const counters = useApi(() => api.triageCounters(eventId ?? ""), [eventId], {
     enabled: Boolean(eventId),
@@ -169,6 +179,7 @@ export function TriageScreen() {
                   eventId={event.id}
                   kind="vehicle"
                   zones={zones}
+                  fallbackPhoto={eventPhoto}
                   onChanged={onChanged}
                 />
               ) : null}

@@ -89,7 +89,9 @@ for (const theme of ["beton", "sable"] as const) {
     const title = `Appli 53 ${unique()}`;
 
     // (1) Type.
-    await expect(v(page, "wizard-step")).toContainText("Étape 1 sur 8 · Type");
+    // Lot C4a : la frise montre « 1 Type » ; « Étape 1 sur 8 · Type » reste le nom accessible de la pastille.
+    await expect(v(page, "wizard-step")).toContainText("Type");
+    await expect(v(page, "wizard-step")).toHaveAttribute("aria-label", "Étape 1 sur 8 · Type");
     await v(page, "wizard-formats").getByText("Nocturne", { exact: true }).click();
     await v(page, "wizard-title").fill(title);
     await v(page, "wizard-date").fill(parisDay(25));
