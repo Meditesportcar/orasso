@@ -147,6 +147,26 @@ async function noFanScreen(page: Page) {
   }
 }
 
+/**
+ * Contenus publiés (non retirés) et leurs vues, lus dans la base : le seed en ajoute au fil des lots (galerie de Béziers
+ * Night au lot C6), le nombre attendu se calcule au lieu de s'écrire en dur. `email` restreint aux contenus d'un média.
+ */
+async function published(where: { slug?: string; email?: string }): Promise<{ n: number; views: number }> {
+  const [row] = await sql<{ n: number; views: number }>(
+    `select count(*)::int as n, coalesce(sum(c.views), 0)::int as views
+       from media_contents c
+       join media_profiles m on m.id = c.media_profile_id and m.deleted_at is null
+       join events e on e.id = c.event_id
+       join "user" u on u.id = m.user_id
+      where c.deleted_at is null and ($1::text is null or e.slug = $1) and ($2::text is null or u.email = $2)`,
+    [where.slug ?? null, where.email ?? null],
+  );
+  return row ?? { n: 0, views: 0 };
+}
+
+/** Nombre écrit comme l'appli (`toLocaleString("fr-FR")`, espace insécable fine), en motif d'expression régulière. */
+const frNumber = (n: number) => n.toLocaleString("fr-FR").replace(/\s/g, "\\s");
+
 /** Lundi de la semaine d'un instant, date de Paris `AAAA-MM-JJ` (même règle que `weekStartOf` de l'appli). */
 function weekStartParis(instant: Date): string {
   const day = new Date(`${instant.toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" })}T00:00:00Z`);
@@ -293,8 +313,12 @@ for (const theme of THEMES) {
     await page.getByText(/^Passées · \d+$/).click();
     const past = page.getByTestId("media-ticket-past").filter({ hasText: "Béziers Night" });
     await expect(past).toBeVisible();
-    await expect(past.getByText(/Couvert · 2 contenus/)).toBeVisible();
-    await expect(past.getByText(/1\s070 vues depuis la page de l'événement/)).toBeVisible();
+    const beziers = await published({ slug: "beziers-night-2026", email: "leo@orasso.local" });
+    expect(beziers.n, "Béziers Night : au moins les deux liens du lot 55").toBeGreaterThanOrEqual(2);
+    await expect(past.getByText(new RegExp(`Couvert · ${frNumber(beziers.n)} contenus`))).toBeVisible();
+    await expect(
+      past.getByText(new RegExp(`${frNumber(beziers.views)} vues depuis la page de l'événement`)),
+    ).toBeVisible();
     await shot(page, "presse-passees", theme);
 
     // Mon badge presse : le QR du jour J (variante média), puis retour.
@@ -318,7 +342,8 @@ for (const theme of THEMES) {
     await expect(page.getByRole("heading", { name: "Contenus", exact: true }).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("media-stats")).toBeVisible();
     await expect(page.getByText("Vues depuis Orasso", { exact: true })).toBeVisible();
-    await expect(page.getByText(/^1\s070$/)).toBeVisible();
+    const leoViews = (await published({ email: "leo@orasso.local" })).views;
+    await expect(page.getByTestId("media-stats").getByText(new RegExp(`^${frNumber(leoViews)}$`))).toBeVisible();
     const group = page.getByTestId("media-group").filter({ hasText: "Béziers Night" });
     await expect(group).toBeVisible();
     await expect(group.getByText("Mis en avant sur la page", { exact: true })).toBeVisible();
@@ -455,7 +480,9 @@ for (const theme of THEMES) {
     await expect(contents).toBeVisible({ timeout: 30_000 });
     await contents.scrollIntoViewIfNeeded();
     const rows = contents.getByTestId("event-media-content");
-    await expect(rows).toHaveCount(2);
+    // Tous les contenus publiés sur l'événement, tous médias confondus (lus dans la base).
+    const onEvent = (await published({ slug: "beziers-night-2026" })).n;
+    await expect(rows).toHaveCount(onEvent);
     await expect(rows.first()).toContainText("Le roll de minuit");
     await expect(rows.first()).toContainText("Mis en avant");
     await expect(rows.first()).toContainText("par Sud Cars");
@@ -469,7 +496,7 @@ for (const theme of THEMES) {
     await other.page.goto("/e/beziers-night-2026");
     await afterOpening(other.page);
     await expect(other.page.getByTestId("event-media-contents")).toBeVisible({ timeout: 30_000 });
-    await expect(other.page.getByTestId("event-media-content")).toHaveCount(2);
+    await expect(other.page.getByTestId("event-media-content")).toHaveCount(onEvent);
     await other.ctx.close();
   });
 
