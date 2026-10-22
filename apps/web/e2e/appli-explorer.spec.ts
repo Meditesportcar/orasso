@@ -65,6 +65,9 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
     await page.getByTestId("events-q").fill("");
     await page.getByTestId("people-open").click();
     await expect(page.getByTestId("people-search")).toBeVisible({ timeout: 30_000 });
+    // Les filtres de personnes (département, centre d'intérêt, grade) restent atteignables.
+    await page.getByTestId("people-filters").click();
+    await expect(page.getByTestId("people-filters-panel")).toBeVisible();
     await page.getByTestId("people-q").fill("drift");
     await expect(page.getByTestId("crew-row").filter({ hasText: "Roussillon Drift" }).first()).toBeVisible({
       timeout: 30_000,
@@ -97,6 +100,8 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
 
     // --- Pros ---------------------------------------------------------------------------------------------------
     await page.getByText("Pros", { exact: true }).first().click();
+    // Lot C2a : les lieux pratiques (garage favori, lavage, carburant) sont en tête des Pros.
+    await expect(page.getByTestId("explorer-places")).toBeVisible({ timeout: 30_000 });
     await page.getByTestId("events-q").fill("detailing");
     const pros = page.getByTestId("pro-row");
     await expect(pros.filter({ hasText: "Detailing Hérault" })).toBeVisible({ timeout: 30_000 });

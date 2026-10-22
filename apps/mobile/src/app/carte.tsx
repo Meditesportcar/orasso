@@ -3,21 +3,29 @@
 // (`.map-top`), « Me localiser » et « Liste » à droite (`.map-ctl`), la légende en bas à gauche (`.map-legend`), et
 // l'aperçu flottant de l'événement touché (`.map-peek`, la carte d'événement d'Explorer). Les gestes de la carte et le
 // toucher des étiquettes sont ceux du lot 59c (`ExplorerMap`, mode `fill`). Le segment Pros garde la carte d'Explorer
-// dans un écran de flux.
+// dans un écran de flux. Relecture du lot C2a : les filtres de la liste d'Explorer suivent (`filtres`, JSON) ; une pastille
+// de plusieurs événements les montre tous (aperçu qui défile) ; une erreur de chargement s'affiche avec « Réessayer ».
 import { Icon, type IconName, Text, useTheme } from "@orasso/design-system/native";
 import { type EventCard, explorerV2Labels as L } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EventCardV2 } from "@/features/explorer/EventCardV2";
 import { ExplorerMap } from "@/features/explorer/ExplorerMap";
 import { eventPins } from "@/features/explorer/mapPins";
 import { ProsSegment } from "@/features/explorer/ProsSegment";
-import { emptyEventFilters, eventQuery } from "@/features/explorer/queries";
+import {
+  type EventFilters,
+  emptyEventFilters,
+  emptyProFilters,
+  eventQuery,
+  type ProFilters,
+} from "@/features/explorer/queries";
 import { useExplorerPosition } from "@/features/explorer/useExplorerPosition";
 import { usePaged } from "@/features/explorer/usePaged";
+import { SmallButton } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
 import { useSession } from "@/lib/session";
@@ -25,19 +33,33 @@ import { FlowScreen } from "@/ui/Screens";
 
 export default function Carte() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ segment?: string; q?: string }>();
+  const params = useLocalSearchParams<{ segment?: string; q?: string; filtres?: string }>();
   const q = typeof params.q === "string" ? params.q : "";
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
-  if (params.segment === "pros") return <ProsMap q={q} onClose={close} />;
-  return <EventsMap initialQ={q} onClose={close} />;
+  // Un objet stable par valeur du paramètre : la liste ne se recharge pas à chaque rendu.
+  const proFilters = useMemo(() => parseFilters(params.filtres, emptyProFilters), [params.filtres]);
+  const eventFilters = useMemo(() => parseFilters(params.filtres, emptyEventFilters), [params.filtres]);
+  if (params.segment === "pros") return <ProsMap q={q} filters={proFilters} onClose={close} />;
+  return <EventsMap initialQ={q} filters={eventFilters} onClose={close} />;
 }
 
-function ProsMap({ q, onClose }: { q: string; onClose: () => void }) {
+/** Les filtres passés par Explorer ; ceux d'une autre forme sont ignorés (repli sur les filtres vides). */
+function parseFilters<T extends object>(raw: string | undefined, empty: T): T {
+  if (!raw) return empty;
+  try {
+    const value = JSON.parse(raw) as Partial<T>;
+    return { ...empty, ...Object.fromEntries(Object.entries(value).filter(([k]) => k in empty)) } as T;
+  } catch {
+    return empty;
+  }
+}
+
+function ProsMap({ q, filters, onClose }: { q: string; filters: ProFilters; onClose: () => void }) {
   const dept = useSession().me?.profile.departments[0] ?? null;
   const position = useExplorerPosition();
   return (
     <FlowScreen title={L.map} facts={q || undefined} onClose={onClose}>
-      <ProsSegment q={q} position={position} dept={dept} view="map" />
+      <ProsSegment q={q} position={position} dept={dept} view="map" filters={filters} />
     </FlowScreen>
   );
 }
@@ -75,18 +97,18 @@ function MapButton({
   );
 }
 
-function EventsMap({ initialQ, onClose }: { initialQ: string; onClose: () => void }) {
+function EventsMap({ initialQ, filters, onClose }: { initialQ: string; filters: EventFilters; onClose: () => void }) {
   const { t } = useTheme();
   const c = t.color;
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const position = useExplorerPosition();
   const [q, setQ] = useState(initialQ);
   const [selected, setSelected] = useState<string[]>([]);
   const ready = position.status !== "checking" && position.status !== "asking";
   const list = usePaged(
-    (cursor) =>
-      api.exploreEvents(eventQuery(q, emptyEventFilters, position.position, "map", new Date(nowMs()), cursor)),
-    [q, position.position],
+    (cursor) => api.exploreEvents(eventQuery(q, filters, position.position, "map", new Date(nowMs()), cursor)),
+    [q, filters, position.position],
     q ? 300 : 0,
     ready,
   );
@@ -162,14 +184,32 @@ function EventsMap({ initialQ, onClose }: { initialQ: string; onClose: () => voi
           />
         </View>
       ) : (
-        <View style={[styles.peek, { bottom: insets.bottom + 16 }]} testID="map-picked">
-          {picked.slice(0, 2).map((e) => (
-            <View key={e.id} style={[styles.peekCard, { boxShadow: t.shadow.shadowPoster }]}>
-              <EventCardV2 event={e} onPress={() => router.push(`/e/${e.slug}`)} />
-            </View>
-          ))}
+        <View style={[styles.peek, { bottom: insets.bottom + 16, maxHeight: height * 0.5 }]} testID="map-picked">
+          <ScrollView contentContainerStyle={styles.peekList} showsVerticalScrollIndicator={picked.length > 1}>
+            {picked.map((e) => (
+              <View key={e.id} style={[styles.peekCard, { boxShadow: t.shadow.shadowPoster }]}>
+                <EventCardV2 event={e} onPress={() => router.push(`/e/${e.slug}`)} />
+              </View>
+            ))}
+          </ScrollView>
         </View>
       )}
+      {list.error ? (
+        <View style={[styles.failed, { top: insets.top + 76, backgroundColor: c.ground }]} testID="map-error">
+          <Text variant="caption" color={c.ink}>
+            {list.error}
+          </Text>
+          <SmallButton icon="undo" onPress={() => void list.reload()}>
+            Réessayer
+          </SmallButton>
+        </View>
+      ) : list.items === null ? (
+        <View style={[styles.empty, { top: insets.top + 76, backgroundColor: c.ground }]} testID="map-loading">
+          <Text variant="caption" color={c.inkMuted}>
+            {L.loading}
+          </Text>
+        </View>
+      ) : null}
       {list.items && pins.length === 0 ? (
         <View style={[styles.empty, { top: insets.top + 76, backgroundColor: c.ground }]}>
           <Text variant="caption" color={c.inkMuted}>
@@ -223,5 +263,7 @@ const styles = StyleSheet.create({
   // `.map-peek` : l'aperçu flottant, ombre d'affiche.
   peek: { position: "absolute", left: 16, right: 16, gap: 8 },
   peekCard: { borderRadius: 20 },
+  peekList: { gap: 8 },
+  failed: { position: "absolute", left: 16, right: 76, borderRadius: 12, padding: 10, gap: 8 },
   empty: { position: "absolute", left: 16, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
 });

@@ -174,7 +174,17 @@ function Shell() {
       {/* Les écrans attendent la lecture de la session : sans jeton, leurs premières requêtes partiraient anonymes. */}
       <NavigationThemeProvider value={navigationTheme}>
         {status === "loading" ? null : (
-          <Stack screenOptions={{ headerShown: false, animation: "none", contentStyle: { backgroundColor: ground } }} />
+          <Stack screenOptions={{ headerShown: false, animation: "none", contentStyle: { backgroundColor: ground } }}>
+            {/* Lot C2a : la Boîte est une feuille (`sh-inbox`) par-dessus l'écran d'où l'on vient. */}
+            <Stack.Screen
+              name="boite/index"
+              options={{
+                presentation: "transparentModal",
+                animation: "fade",
+                contentStyle: { backgroundColor: "transparent" },
+              }}
+            />
+          </Stack>
         )}
       </NavigationThemeProvider>
       <AnnouncementSheet />

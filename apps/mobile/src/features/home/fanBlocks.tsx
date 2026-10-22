@@ -2,7 +2,14 @@
 // l'artefact : intitulé de section `.sec-h`, carte météo `.wx`, mini-tickets `.stat-strip` / `.mini-t`, incitation
 // `.nudge`, rail d'affiches `.rail` / `.mp`. Les cartes prennent `--card` (= jeton `surface`), rayon 16 à 18.
 import { Icon, type IconName, Photo, Text, tokens, useTheme, weatherIcons } from "@orasso/design-system/native";
-import { type EventCard, homeProfileLabels, type MyWeather, weatherCodeLabels } from "@orasso/shared";
+import {
+  type EventCard,
+  type HomeSponsored,
+  homeLabels,
+  homeProfileLabels,
+  type MyWeather,
+  weatherCodeLabels,
+} from "@orasso/shared";
 import type { ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
@@ -233,9 +240,18 @@ const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
 export function PosterRail({
   events,
   onOpen,
+  sponsored,
+  onSponsored,
 }: {
   events: (EventCard & { distanceKm?: number | null })[];
   onOpen: (slug: string) => void;
+  /**
+   * L'emplacement sponsorisé (lot 30, fonction validée) : une affiche du rail, en tête, marquée « Sponsorisé » (artefact :
+   * plus de carte à part, audit § 5.2). L'API ne compte une impression que pour l'emplacement qu'elle renvoie à cet
+   * Accueil, qui l'affiche toujours.
+   */
+  sponsored?: HomeSponsored | null;
+  onSponsored?: (s: HomeSponsored) => void;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -247,6 +263,43 @@ export function PosterRail({
       style={styles.railOut}
       testID="home-rail"
     >
+      {sponsored ? (
+        <Pressable
+          key={`s-${sponsored.id}`}
+          onPress={() => onSponsored?.(sponsored)}
+          accessibilityRole="link"
+          accessibilityLabel={`${homeLabels.sponsored} : ${sponsored.title}, ${sponsored.pro.name}`}
+          style={[styles.mp, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
+          testID="sponsored-card"
+        >
+          <View style={[styles.mpArt, { backgroundColor: c.night }]}>
+            {sponsored.imageUrl ? (
+              <Photo
+                source={mediaSource(sponsored.imageUrl)}
+                style={StyleSheet.absoluteFill as never}
+                accessibilityLabel=""
+              />
+            ) : (
+              <View style={styles.mpSponsoredText}>
+                <Text variant="posterS" color={c.nightInk}>
+                  {sponsored.title}
+                </Text>
+                <Text variant="caption" color={c.nightInk} numberOfLines={4}>
+                  {sponsored.body}
+                </Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.mpBody}>
+            <Text variant="posterS" color={c.ink} style={styles.mpTitle}>
+              {sponsored.pro.name}
+            </Text>
+            <Text variant="caption" color={c.inkMuted} style={styles.mpCap}>
+              {homeLabels.sponsored}
+            </Text>
+          </View>
+        </Pressable>
+      ) : null}
       {events.map((e) => {
         const day = DAY_FMT.format(new Date(e.startsAt)).replace(/\./g, "");
         const dist = typeof e.distanceKm === "number" ? ` · ${Math.round(e.distanceKm)} km` : "";
@@ -322,6 +375,7 @@ const styles = StyleSheet.create({
   mp: { width: 150, borderRadius: 16, overflow: "hidden" },
   mpArt: { height: 188 },
   mpBody: { padding: 10, gap: 3 },
+  mpSponsoredText: { flex: 1, padding: 10, gap: 6, justifyContent: "flex-end" },
   mpTitle: { fontSize: 12.5, lineHeight: 13 },
   mpCap: { fontSize: 12, lineHeight: 16 },
 });

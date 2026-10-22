@@ -54,15 +54,12 @@ test("appli : Accueil du passionné (artefact DA v2), sans le fourre-tout", asyn
     await expect(page.getByTestId("home-rail-item").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Autour du 66 ce mois-ci", { exact: true })).toBeVisible();
     await expect(page.getByTestId("home-passport")).toContainText("Passeport Orasso");
-    // Le fourre-tout retiré (audit § 5.2) : blocs réglables, sponsorisé, Réorganiser, grand titre.
-    for (const id of [
-      "widget-nearby",
-      "widget-garage",
-      "widget-wash",
-      "widget-fuel",
-      "sponsored-card",
-      "open-reorder",
-    ]) {
+    // Relecture du lot C2a : l'emplacement sponsorisé (fonction validée) est une affiche du rail, marquée « Sponsorisé » ;
+    // l'API ne compte l'impression que pour cet Accueil, qui l'affiche.
+    await expect(page.getByTestId("home-rail").getByTestId("sponsored-card")).toContainText("Sponsorisé");
+    // Le fourre-tout retiré (audit § 5.2) : blocs réglables, Réorganiser, grand titre ; les lieux pratiques sont dans
+    // Explorer › Pros.
+    for (const id of ["widget-nearby", "widget-garage", "widget-wash", "widget-fuel", "open-reorder"]) {
       await expect(page.getByTestId(id), id).toHaveCount(0);
     }
     await expect(page.getByRole("heading", { name: "Accueil", exact: true })).toHaveCount(0);

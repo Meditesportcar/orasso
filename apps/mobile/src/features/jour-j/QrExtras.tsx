@@ -112,7 +112,17 @@ function wazeUrl(d: Destination): string {
 }
 
 /** Bouton `.gps` de l'artefact : encadré, 46 px, rayon 12, capitales 12 px. */
-function Gps({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+function Gps({
+  icon,
+  label,
+  onPress,
+  disabled = false,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
   const { t } = useTheme();
   const c = t.color;
   return (
@@ -120,7 +130,9 @@ function Gps({ icon, label, onPress }: { icon: IconName; label: string; onPress:
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.gps, { borderColor: c.line, opacity: pressed ? 0.8 : 1 }]}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      style={({ pressed }) => [styles.gps, { borderColor: c.line, opacity: disabled ? 0.4 : pressed ? 0.8 : 1 }]}
     >
       <Icon name={icon} size={16} color={c.ink} />
       <Text variant="meta" color={c.ink} style={styles.gpsText}>
@@ -131,14 +143,23 @@ function Gps({ icon, label, onPress }: { icon: IconName; label: string; onPress:
 }
 
 /** Maps, Waze, Sur la carte (`.gpsrow` : 1fr 1fr 1,25fr ; aucun libellé coupé, D34). */
-export function GpsRow({ destination, onMap }: { destination: Destination; onMap: () => void }) {
+export function GpsRow({
+  destination,
+  onMap,
+  routes = true,
+}: {
+  destination: Destination;
+  onMap: () => void;
+  /** `false` : Maps et Waze éteints (pas de coordonnées sûres : un nom de ville mènerait au mauvais endroit). */
+  routes?: boolean;
+}) {
   return (
     <View style={styles.row}>
       <View style={styles.grow}>
-        <Gps icon="place" label="Maps" onPress={() => void Linking.openURL(mapsUrl(destination))} />
+        <Gps icon="place" label="Maps" disabled={!routes} onPress={() => void Linking.openURL(mapsUrl(destination))} />
       </View>
       <View style={styles.grow}>
-        <Gps icon="place" label="Waze" onPress={() => void Linking.openURL(wazeUrl(destination))} />
+        <Gps icon="place" label="Waze" disabled={!routes} onPress={() => void Linking.openURL(wazeUrl(destination))} />
       </View>
       <View style={styles.wide}>
         <Gps icon="explore" label="Sur la carte" onPress={onMap} />

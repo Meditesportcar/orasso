@@ -36,6 +36,13 @@ export const homeQuerySchema = z
     persona: z.enum(personaKinds).optional(),
     /** Lot 43 : `1` = les blocs du profil seulement (lecture de l'accès flottant : ni sources externes ni sponsorisé). */
     light: z.enum(["1"]).optional(),
+    /**
+     * Lot C2a (Accueil de l'appli d'après l'artefact DA v2) : `v2` = l'Accueil sans blocs réglables (météo et événements
+     * autour, toujours, quelles que soient les anciennes préférences masquées ; l'emplacement sponsorisé, affiché dans le
+     * rail) ; `places` = les lieux pratiques seulement (garage favori, lavage, carburant ; Explorer › Pros), sans
+     * sponsorisé ni incitation.
+     */
+    blocks: z.enum(["v2", "places"]).optional(),
   })
   .refine((q) => (q.lat === undefined) === (q.lng === undefined), "lat et lng vont ensemble");
 export type HomeQuery = z.infer<typeof homeQuerySchema>;

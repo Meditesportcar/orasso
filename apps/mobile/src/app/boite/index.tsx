@@ -3,18 +3,20 @@
 // `.seg` — « Tout » (messages non lus, demandes et notifications : l'ancien Journal de la cloche y est fondu),
 // « Messages » (amis, organisateurs, crews) et « Demandes » (ami, contact, crew, staff, invitations, transferts de
 // plaque ; `features/boite/requests/`). Lignes `.cap` : logo ou avatar 44 px, nom en gras, aperçu, pastille moutarde.
-// Mise à jour en direct par le canal `user:{id}`.
+// Mise à jour en direct par le canal `user:{id}` (messages, demandes, notifications) ; tirer pour actualiser.
+// Relecture du lot C2a : « Tout » ne marque lues que les notifications affichées (les suivantes se chargent par « Voir
+// plus ») et leurs pastilles tombent aussitôt ; la modale transparente est déclarée dans la pile (`app/_layout.tsx`).
 import { Icon, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type ConversationSummary, type InboxSummary, messagingLabels } from "@orasso/shared";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CapRow, Count } from "@/features/boite/CapRow";
 import { NotificationRow } from "@/features/boite/NotificationRow";
 import { requestSections } from "@/features/boite/requests";
-import { Seg } from "@/features/sorties/bits";
+import { Seg, SmallButton } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
 import { formatDay, formatHour } from "@/lib/format";
 import { useChannel } from "@/lib/realtime";
@@ -60,6 +62,8 @@ export default function Boite() {
   const conversations = useApi(() => api.conversations(), []);
   const summary = useApi<InboxSummary>(() => api.inboxSummary(), []);
   const notifications = useApi(() => api.notifications(), [refreshKey]);
+  const [moreBusy, setMoreBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   // Transferts de plaque reçus (lot 40) : comptés ici, `GET /inbox/summary` ne les compte pas.
   const transfers = useApi(() => api.plateTransfers(), [refreshKey]);
   const requests =
@@ -75,20 +79,49 @@ export default function Boite() {
   }, [conversations.reload, summary.reload, refreshMe]);
 
   useChannel(me ? `user:${me.user.id}` : null, (event) => {
-    if (event.type === "conversation.updated" || event.type === "inbox.changed" || event.type === "friend.request") {
+    if (
+      event.type === "conversation.updated" ||
+      event.type === "inbox.changed" ||
+      event.type === "friend.request" ||
+      event.type === "notification"
+    ) {
       void reloadAll();
     }
   });
 
   // « Tout » montre les notifications : les ouvrir, c'est les lire (comme l'ancien Journal).
+  // Seules les notifications affichées sont marquées lues ; leurs pastilles tombent tout de suite (copie locale).
   useEffect(() => {
-    if (segment === "all" && notifications.data?.items.some((n) => !n.readAt)) {
-      void api
-        .markNotificationsRead()
-        .then(() => refreshMe())
-        .catch(() => undefined);
+    const page = notifications.data;
+    if (segment !== "all" || !page) return;
+    const ids = page.items.filter((n) => !n.readAt).map((n) => n.id);
+    if (ids.length === 0) return;
+    void api
+      .markNotificationsReadIds(ids)
+      .then(() => {
+        const at = new Date().toISOString();
+        notifications.setData({
+          ...page,
+          items: page.items.map((n) => (ids.includes(n.id) ? { ...n, readAt: at } : n)),
+        });
+        return refreshMe();
+      })
+      .catch(() => undefined);
+  }, [segment, notifications.data, notifications.setData, refreshMe]);
+
+  async function moreNotifications() {
+    const page = notifications.data;
+    if (!page?.nextCursor) return;
+    setMoreBusy(true);
+    try {
+      const next = await api.notifications(page.nextCursor);
+      notifications.setData({ items: [...page.items, ...next.items], nextCursor: next.nextCursor });
+    } catch {
+      // Hors ligne : le bouton reste, on réessaiera.
+    } finally {
+      setMoreBusy(false);
     }
-  }, [segment, notifications.data, refreshMe]);
+  }
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const items = conversations.data?.items ?? [];
@@ -103,13 +136,6 @@ export default function Boite() {
 
   return (
     <View style={styles.fill} testID="inbox-sheet">
-      <Stack.Screen
-        options={{
-          presentation: "transparentModal",
-          animation: "fade",
-          contentStyle: { backgroundColor: "transparent" },
-        }}
-      />
       <Pressable
         style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]}
         onPress={close}
@@ -156,7 +182,21 @@ export default function Boite() {
             },
           ]}
         />
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              tintColor={c.accent}
+              onRefresh={async () => {
+                setRefreshing(true);
+                await reloadAll().finally(() => setRefreshing(false));
+              }}
+            />
+          }
+        >
           {conversations.offline ? <Notice>Hors ligne : dernière liste connue.</Notice> : null}
 
           {segment === "all" ? (
@@ -168,6 +208,14 @@ export default function Boite() {
               {(notifications.data?.items ?? []).map((n) => (
                 <NotificationRow key={n.id} n={n} onLeave={() => undefined} />
               ))}
+              {notifications.data?.nextCursor ? (
+                <SmallButton icon="add" disabled={moreBusy} onPress={() => void moreNotifications()}>
+                  Voir plus
+                </SmallButton>
+              ) : null}
+              {notifications.error && !notifications.data ? (
+                <Notice tone="error">Notifications indisponibles : tire pour réessayer.</Notice>
+              ) : null}
               {unreadConversations.length === 0 && requests === 0 && (notifications.data?.items.length ?? 0) === 0 ? (
                 <Muted variant="body">{notifications.loading ? "Chargement…" : "Rien de neuf pour le moment."}</Muted>
               ) : null}

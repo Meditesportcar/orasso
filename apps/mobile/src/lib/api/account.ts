@@ -29,4 +29,7 @@ export const accountApi = {
   notifications: (cursor?: string) =>
     request<Page<NotificationItem>>(`/api/me/notifications${qs({ limit: 30, cursor })}`),
   markNotificationsRead: () => request<unknown>("/api/me/notifications/read", { method: "POST", body: { all: true } }),
+  /** Lot C2a : seulement les notifications affichées (« Tout » de la Boîte). */
+  markNotificationsReadIds: (ids: string[]) =>
+    request<unknown>("/api/me/notifications/read", { method: "POST", body: { ids } }),
 };

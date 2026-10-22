@@ -20,7 +20,14 @@ import { SmallButton } from "@/features/sorties/bits";
 import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
 import { TabScreen } from "@/ui/Screens";
-import { activeFilters, type EventFilters, emptyEventFilters, type When } from "./queries";
+import {
+  activeFilters,
+  type EventFilters,
+  emptyEventFilters,
+  emptyProFilters,
+  type ProFilters,
+  type When,
+} from "./queries";
 import { type ExplorerPosition, useExplorerPosition } from "./useExplorerPosition";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -42,6 +49,7 @@ export function ExplorerScreen() {
   const [people, setPeople] = useState(params.segment === "personnes");
   const [q, setQ] = useState(typeof params.q === "string" ? params.q : "");
   const [filters, setFilters] = useState<EventFilters>(emptyEventFilters);
+  const [proFilters, setProFilters] = useState<ProFilters>(emptyProFilters);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
   const me = useSession().me;
@@ -101,7 +109,11 @@ export function ExplorerScreen() {
             () =>
               // La carte s'ouvre en écran plein (`s-map`, flux sans barre) ; sur le web de recette, la carte reste en place.
               mapFullScreen
-                ? router.push({ pathname: "/carte", params: { segment, q } })
+                ? router.push({
+                    pathname: "/carte",
+                    // La carte garde les filtres de la liste (relecture du lot C2a).
+                    params: { segment, q, filtres: JSON.stringify(segment === "pros" ? proFilters : filters) },
+                  })
                 : setView((v) => (v === "map" ? "list" : "map")),
             "map-toggle",
             "button",
@@ -115,7 +127,17 @@ export function ExplorerScreen() {
       {segment === "evenements" ? (
         <EventsSegment q={q} filters={filters} position={position} dept={dept} view={view} />
       ) : null}
-      {segment === "pros" ? <ProsSegment q={q} position={position} dept={dept} view={view} /> : null}
+      {segment === "pros" ? (
+        <ProsSegment
+          q={q}
+          position={position}
+          dept={dept}
+          view={view}
+          filters={proFilters}
+          onFiltersChange={setProFilters}
+          places
+        />
+      ) : null}
     </TabScreen>
   );
 }

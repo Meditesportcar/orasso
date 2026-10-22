@@ -19,7 +19,7 @@ import {
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback } from "react";
-import { StyleSheet, View } from "react-native";
+import { Linking, StyleSheet, View } from "react-native";
 import { useMyPosition } from "@/features/explorer/useMyPosition";
 import { NudgeCard } from "@/features/home/HomeWidgets";
 import { Stamp } from "@/features/passport/Stamp";
@@ -36,6 +36,7 @@ import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
+import { autoOpenKey, isDayJ } from "./autoOpen";
 import { Greet, MiniStrip, MiniTicket, Nudge, PosterRail, SecH, WeatherCard } from "./fanBlocks";
 import { HeroCard } from "./parts";
 import { todayLine } from "./today";
@@ -69,6 +70,8 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         lat: position.position?.lat,
         lng: position.position?.lng,
         persona: exhibitor ? "fan" : "visitor",
+        // Lot C2a : l'Accueil v2 (météo et rail toujours ; ni lavage ni carburant ; le sponsorisé dans le rail).
+        blocks: "v2",
       }),
     [position.position?.lat, position.position?.lng, variant],
     { cacheKey: `home-${variant}` },
@@ -115,12 +118,12 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   // D34 : le jour J, le QR d'accès (ou le billet) s'affiche d'office à l'ouverture de l'Accueil, une fois par jour et par
   // place (fermé, il ne revient pas en boucle ; il reste à un geste par la carte et l'accès flottant).
   const todayTarget =
-    next && next.status === "accepted" && !next.checkedInAt && dayCountdown(next.event.startsAt, now) === "Aujourd'hui"
+    next && next.status === "accepted" && !next.checkedInAt && isDayJ(next.event, next.day, now)
       ? { key: next.id, href: `/jour-j/${next.id}` }
-      : ticket && dayCountdown(ticket.event.startsAt, now) === "Aujourd'hui"
+      : ticket && isDayJ(ticket.event, null, now)
         ? { key: ticket.id, href: `/billet/${ticket.id}` }
         : null;
-  const todayKey = todayTarget ? `jourj-auto:${todayTarget.key}:${now.toISOString().slice(0, 10)}` : null;
+  const todayKey = todayTarget ? autoOpenKey(todayTarget.key, now) : null;
   const todayHref = todayTarget?.href ?? null;
   useFocusEffect(
     useCallback(() => {
@@ -308,7 +311,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         />
       ) : null}
 
-      {rail.length > 0 ? (
+      {rail.length > 0 || data?.sponsored ? (
         <>
           <SecH
             title={
@@ -317,7 +320,15 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
             link={homeProfileLabels.exploreLink}
             onLink={() => goTab("explorer")}
           />
-          <PosterRail events={rail} onOpen={(slug) => router.push(`/e/${slug}`)} />
+          <PosterRail
+            events={rail}
+            onOpen={(slug) => router.push(`/e/${slug}`)}
+            sponsored={data?.sponsored ?? null}
+            onSponsored={(s) => {
+              void api.sponsoredClick(s.id).catch(() => undefined);
+              if (/^https?:\/\//i.test(s.linkUrl)) void Linking.openURL(s.linkUrl).catch(() => undefined);
+            }}
+          />
         </>
       ) : null}
 
