@@ -109,7 +109,8 @@ function RecapBody({ view, onShare, onReview }: { view: RecapView; onShare: () =
   // Lot C2b (artefact `.rc-hero`) : l'image de l'événement en tête de la carte crème (l'affiche générée tant que
   // l'API ne sert pas la photo source, lot C5), qui fond dans la carte ; date et titre remontent dessus.
   const event = useApi(() => api.eventBySlug(view.event.slug), [view.event.slug]);
-  const image = event.data ? heroPoster(event.data) : null;
+  // Lot C5 : la photo de la voiture de l'affiche quand elle existe (artefact `.rc-hero .rph`), sinon l'affiche générée.
+  const image = event.data ? (event.data.photoUrl ?? heroPoster(event.data)) : null;
   return (
     <>
       <PosterSurface style={styles.hero} testID="recap-hero">
