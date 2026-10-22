@@ -274,7 +274,7 @@
   animation: o-olive-park var(--olive-park) linear;
 }
 
-/* Le fond « battle » : les meutes à 18 % (Béton) ou 10 % (Sable). */
+/* Le fond « battle » (lot C8 : canvas de l'artefact, voitures, traces et fumée) : 50 % (Béton) ou 32 % (Sable). */
 .o-ground__battle {
   position: absolute;
   inset: 0;
@@ -282,11 +282,49 @@
   opacity: var(--battle-opacity);
   pointer-events: none;
 }
-.o-ground__battle svg {
+.o-ground__battle canvas {
   position: absolute;
   inset: 0;
   display: block;
-  overflow: visible;
+  width: 100%;
+  height: 100%;
+}
+
+/* Le O vivant du hero (lot C8, artefact `liveO`) : la toile couvre l'hôte, le O est centré au-dessus (les voitures
+   passent dessous). La voiture du logo sort à droite pendant la battle et revient se garer (artefact `parkIn`). */
+.o-live {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.o-live__fx {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.o-live__o {
+  z-index: 1;
+}
+.o-live__o.is-out .o-olive__park {
+  transform: translateX(var(--live-out-x));
+  transition: transform var(--live-out) var(--live-ease-out);
+}
+.o-live__o.is-parked .o-olive__park {
+  animation: o-live-park var(--live-park) var(--ease-park) both;
+}
+@keyframes o-live-park {
+  0% {
+    transform: translateX(var(--live-from-x));
+  }
+  62% {
+    transform: translateX(var(--live-overshoot));
+  }
+  100% {
+    transform: translateX(0);
+  }
 }
 
 /* Réduction des animations : la voiture est garée, pas de trajet, tout apparaît en fondu `fast` (sans remplissage :
@@ -297,6 +335,7 @@
     transform: none !important;
   }
   .o-olive__park,
+  .o-live__o .o-olive__park,
   .o-olive__ring,
   .o-empty__car,
   .o-stamp-drop svg,

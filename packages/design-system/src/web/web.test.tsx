@@ -2,18 +2,20 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { battle, bezier, curve, duration, olive, park, shake } from "../motion";
+import { battle, bezier, curve, duration, olive, park, shake, smoke } from "../motion";
 import { brandArt } from "../native/brandArt";
 import {
   CarTopArt,
   CenterTabO,
   EmptyState,
+  LiveO,
   OLoader,
   OpeningBattle,
   SendBurst,
   SendProgress,
   StampDrop,
 } from "./components/Olive";
+import { ARTIFACT_RATE, SmokePool, smokeRate } from "./components/smoke";
 import {
   AppBar,
   BigTitle,
@@ -57,6 +59,26 @@ describe("composants : aucune valeur en dur", () => {
       });
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("fumée (lot C8) : pool plafonné et débit tenu", () => {
+  it("le pool recycle ses bouffées et refuse au-delà du plafond", () => {
+    const pool = new SmokePool(3);
+    for (let i = 0; i < 5; i++) pool.spawn(0, 0, 1, 1, 2);
+    expect(pool.n).toBe(3);
+    pool.step(smoke.battle.life / 1000 / 2, smoke.battle.grow, smoke.battle.life / 1000);
+    expect(pool.n).toBe(3);
+    pool.step(smoke.battle.life / 1000, smoke.battle.grow, smoke.battle.life / 1000);
+    expect(pool.n).toBe(0);
+    expect(pool.spawn(0, 0, 0, 0, 1)).toBe(true);
+  });
+  it("débit de l'artefact sous le plafond, réduit et compensé au-delà", () => {
+    expect(smokeRate(ARTIFACT_RATE.battle, smoke.battle, 1000, 2)).toEqual({ rate: ARTIFACT_RATE.battle, boost: 1 });
+    const capped = smokeRate(ARTIFACT_RATE.battle, smoke.battle, smoke.webCap, 6);
+    expect(capped.rate * (smoke.battle.life / 1000) * 6).toBeCloseTo(smoke.webCap, 6);
+    expect(capped.boost).toBeGreaterThan(1);
+    expect(capped.boost).toBeLessThanOrEqual(smoke.density);
   });
 });
 
@@ -331,6 +353,13 @@ describe("rendu serveur des composants", () => {
     expect(html(<CenterTabO active={false} />)).toContain("is-out");
     expect(html(<Ground variant="battle" />)).toContain("o-ground__battle");
     expect(html(<Ground variant="battle" still />)).not.toContain("o-anim-ambient-breath");
+    // Lot C8 : le fond peint en canvas (fumée de l'artefact), pas de toile quand il est immobile.
+    expect(html(<Ground variant="battle" />)).toContain("<canvas");
+    expect(html(<Ground variant="battle" still />)).not.toContain("<canvas");
+    // Le O vivant du hero : toile de fumée sous le O, voiture du logo sortie pendant la battle.
+    const live = html(<LiveO size={170} />);
+    expect(live).toContain("o-live__fx");
+    expect(live).toMatch(/o-live__o is-out/);
     // Le dessin de la voiture vue de dessus : même géométrie que le fichier du site (généré par le même script).
     const svg = readFileSync(resolve(import.meta.dirname, "assets/car-top.svg"), "utf8");
     expect(svg).toContain(brandArt.carTop.body);
