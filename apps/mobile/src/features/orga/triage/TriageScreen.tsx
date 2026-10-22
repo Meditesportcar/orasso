@@ -73,9 +73,9 @@ export function TriageScreen() {
     defaultTriageEvent(choices)?.id;
   const event = choices.find((e) => e.id === eventId) ?? null;
   // Lot C4a : sans photo du véhicule, la grande photo de la carte est celle de l'événement (`photoUrl`, exposée par
-  // l'API au lot C5 ; champ facultatif tant qu'il n'est pas fusionné), sinon son affiche générée.
+  // l'API au lot C5), sinon son affiche générée.
   const eventPhoto = event
-    ? ((event as { photoUrl?: string | null }).photoUrl ?? event.generatedPosterUrl ?? null)
+    ? (event.photoUrl ?? event.generatedPosterUrl ?? null)
     : null;
 
   const counters = useApi(() => api.triageCounters(eventId ?? ""), [eventId], {

@@ -2034,3 +2034,11 @@ Référence : l'artefact DA v2 (D33) ; décisions de Damien D34. Branche `lot-c5
 - **Néons.** Contrôle strict rétabli dans `lot57.spec.ts` ; le site met à plat le compteur de la Boîte (`.app__bar .o-appbar__count`), en attendant que le lot C1 le retire du système de design.
 - **Seed.** La Nocturne de Canet passe à J-6 (prochain accès de Kenji, comme l'artefact) ; l'événement « Cars & Coffee du Canigou » du tour 1 est retiré.
 - **Puce.** Mes casquettes n'est plus une liste à puces.
+
+### Lot C4a, après fusion du socle C1 et du lot C5
+
+- **Avatars en jetons** : les bulles de l'Équipe prennent les jetons du socle `avatar-1` à `avatar-9` (fond) et `avatar-ink` (encre), choisis par l'identifiant du membre (`avatarToken`, `lib/orgaV2.ts`) ; plus aucune couleur en dur.
+- **Drive, `DriveOk`** : le dernier pointage réussi s'affiche en carte moutarde lumineuse (artefact `.dr-res` : « Retenue · zone », zone en chiffres étroits de 64 px, pseudo et véhicule, heure du pointage). Pas de bouton « Pointer l'entrée » : le drive pointe seul (logique inchangée). Les autres résultats (déjà entré, refusé) gardent `ScanResult` du socle.
+- **Carte du tri** : étiquettes `Tag` du socle et nom du véhicule sous la photo, et les trois décisions (Refuser, Attente, Retenir) dans la carte, hors du corps qui se réduit (toujours visibles) ; Fiche, Zone et Passer restent sous la carte. La photo de repli lit `photoUrl` (lot C5) puis l'affiche générée.
+- **Mode staff** : rangée du bas de l'artefact (Alerte à sa largeur, Main courante qui prend la place, Discussion en icône seule) ; « Main courante » en Archivo 115 % 12,5 px pour tenir en entier à 390 px (l'artefact : 118 % 14 px, trop large avec nos instances).
+- **Recette du lot 52** : la feuille du membre se ferme par sa croix (« Fermer la fiche du membre »).
