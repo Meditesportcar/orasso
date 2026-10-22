@@ -92,9 +92,11 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     await expect(k.page.getByTestId("request-crew-request")).toBeVisible({ timeout: 20_000 });
     await shot(k.page, `04-demandes-chef-${theme}`);
 
-    // Lot C2b : l'inscription du crew est le mode « Avec <crew> » de la feuille de candidature.
-    await k.page.goto(`/e/${event.slug}?candidater=1`);
-    await k.page.getByTestId("cand-mode-crew").click({ timeout: 30_000 });
+    // Lot C2b : l'inscription du crew est le mode « Avec <crew> » de la feuille de candidature, ouverte par le bouton
+    // « Inscrire mon crew » de la fiche (relecture : il reste là même si le chef a déjà candidaté).
+    await k.page.goto(`/e/${event.slug}`);
+    await k.page.getByTestId("register-crew").click({ timeout: 30_000 });
+    await expect(k.page.getByTestId("cand-crew")).toBeVisible({ timeout: 20_000 });
     await expect(k.page.getByTestId("crew-pick")).toHaveCount(2, { timeout: 20_000 });
     for (const pick of await k.page.getByTestId("crew-pick").all()) await pick.click();
     await k.page.getByTestId("cand-rules").click();
@@ -102,6 +104,10 @@ test("appli : crew, inscription en crew, confirmation de venue, Boîte, Explorer
     await shot(k.page, `05-inscription-crew-${theme}`);
     await k.page.getByTestId("cand-send").click();
     await expect(k.page.getByTestId("cand-done")).toBeVisible({ timeout: 20_000 });
+    // Le suivi des confirmations (ancien écran d'inscription) reste joignable depuis la feuille.
+    await k.page.getByTestId("cand-crew-follow-done").click();
+    await k.page.waitForURL(/crew/inscription/, { timeout: 20_000 });
+    await expect(k.page.getByTestId("crew-registration-member")).toHaveCount(2, { timeout: 20_000 });
     await shot(k.page, `06-inscription-envoyee-${theme}`);
     await k.ctx.close();
 

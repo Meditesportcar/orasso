@@ -24,7 +24,7 @@ import { useApi } from "@/lib/useApi";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
 
-import { CreateSheet, HeadAvatar, PersonaRows, SeasonCard, SettingTile } from "./parts";
+import { CreateSheet, HeadAvatar, HubRow, PersonaRows, RowIcon, SeasonCard, SettingTile } from "./parts";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -44,6 +44,9 @@ export function ProfilScreen() {
   const staff = useApi(() => api.staffEvents(), [], { cacheKey: "staff-events" });
   // Lot 50 : le passeport compte ses tampons (la saison en cours).
   const passport = useApi(() => api.passport(), [], { cacheKey: "passport.now", enabled: base });
+  // Relecture C2b : sans véhicule actif (casquette visiteur, pas d'onglet Garage), les archives restent joignables ici.
+  const vehicles = useApi(() => api.vehicles(), [], { cacheKey: "vehicles", enabled: base });
+  const archived = vehicles.data?.filter((v) => v.status !== "active").length ?? 0;
 
   const profile = me?.profile;
   const department = profile?.departments[0];
@@ -61,7 +64,14 @@ export function ProfilScreen() {
   return (
     <TabScreen
       onRefresh={async () => {
-        await Promise.all([refreshMe(), points.reload(), crews.reload(), staff.reload(), passport.reload()]);
+        await Promise.all([
+          refreshMe(),
+          points.reload(),
+          crews.reload(),
+          staff.reload(),
+          passport.reload(),
+          vehicles.reload(),
+        ]);
       }}
       overlays={
         <>
@@ -165,6 +175,16 @@ export function ProfilScreen() {
             </View>
           </View>
         </Nudge>
+      ) : null}
+
+      {base && archived > 0 ? (
+        <HubRow
+          lead={<RowIcon name="vehicle" />}
+          title="Mes véhicules archivés"
+          caption={`${archived} · vendus, souvenirs, accidentés`}
+          onPress={() => router.push("/vehicules-archives")}
+          testID="profil-archived"
+        />
       ) : null}
 
       <SecHead title="Mes casquettes" hint="Une barre d'onglets par casquette" />

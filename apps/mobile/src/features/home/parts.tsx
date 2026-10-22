@@ -29,6 +29,7 @@ import { WeatherWidget } from "@/features/WeatherWidget";
 import { type Destination, openMaps, openWaze } from "@/lib/directions";
 import { formatShortDate } from "@/lib/format";
 import { kvGet, kvSet } from "@/lib/kv";
+import { mediaSource } from "@/lib/media";
 import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
 import { SectionTitle } from "@/ui/Screens";
@@ -78,7 +79,7 @@ export function OrganizerLine({ organizer }: { organizer: HomeOrganizer }) {
   const c = t.color;
   return (
     <View style={styles.org} testID="home-organizer">
-      <OrgLogo name={organizer.name} logoUrl={organizer.logoUrl} size={34} />
+      <OrgLogo name={organizer.name} logoUrl={mediaSource(organizer.logoUrl)?.uri ?? null} size={34} />
       <View style={styles.orgText}>
         <Text variant="bodyStrong" color={c.plateInk}>
           {organizer.name}

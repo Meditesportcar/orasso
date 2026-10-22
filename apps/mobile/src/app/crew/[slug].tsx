@@ -16,6 +16,7 @@ import { PosterFlow } from "@/features/event/PosterFlow";
 import { CrewDot, SmButton } from "@/features/passionne/kit";
 import { ReportButton } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
+import { useApplications } from "@/lib/applications";
 import { pickAvatar } from "@/lib/avatar";
 import { errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
@@ -58,6 +59,9 @@ export default function CrewScreen() {
   const [message, setMessage] = useState("");
   const [invite, setInvite] = useState("");
   const [inviting, setInviting] = useState(false);
+  // Relecture C2b : le suivi des inscriptions du crew (confirmations, retrait d'un membre en attente) reste joignable
+  // depuis la page du crew, pour chaque événement à venir où le crew est inscrit avec moi.
+  const { upcoming } = useApplications();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -96,6 +100,9 @@ export default function CrewScreen() {
   }
 
   const since = new Date(v.createdAt).getFullYear();
+  const registrations = leader
+    ? [...new Map((upcoming ?? []).filter((a) => a.crew?.id === v.id).map((a) => [a.event.slug, a.event])).values()]
+    : [];
   const inviteSheet = (
     <AppSheet visible={inviting} onClose={() => setInviting(false)} accessibilityLabel={crewLabels.invite}>
       <Text variant="posterM" color={c.ink}>
@@ -222,6 +229,18 @@ export default function CrewScreen() {
           ) : null}
         </View>
       ) : null}
+
+      {registrations.map((ev) => (
+        <SmButton
+          key={ev.slug}
+          kind="g"
+          icon="list"
+          onPress={() => router.push({ pathname: "/crew/inscription", params: { event: ev.slug } })}
+          testID="crew-registration-link"
+        >
+          {`Inscription du crew · ${ev.title}`}
+        </SmButton>
+      ))}
 
       {!v.archived && v.viewerState === "none" ? (
         <View style={styles.block}>

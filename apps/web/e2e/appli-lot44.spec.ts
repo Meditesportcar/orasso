@@ -220,6 +220,12 @@ test("fiche v2 : affiche, créneaux, actions selon le profil, fermé, pas encore
       await expect(page.getByTestId("cand-send")).toBeDisabled();
       await page.getByRole("checkbox", { name: /J'ai vu le créneau d'arrivée/ }).click();
       await expect(page.getByTestId("cand-send")).toBeEnabled();
+      // Relecture C2b : une sélection de véhicules vidée exprès reste vide (pas de véhicule remis d'office).
+      await page.getByTestId("cand-vehicle").first().click();
+      await expect(page.getByTestId("cand-send")).toBeDisabled();
+      await page.getByTestId("cand-vehicle").first().click();
+      await expect(page.getByTestId("cand-send")).toBeEnabled();
+      await expect(page.getByTestId("cand-newsletter")).toHaveAttribute("aria-checked", "false");
       await shot(page, "candidature-case-creneau-beton");
     }
     await ctx.close();

@@ -234,15 +234,23 @@ export function PersonaRows({
                 .slice(0, 2)
                 .map((s) => `${s.event.title} · ${s.structure.name}`)
                 .join(" · ")
-            : "Aucun événement pour l'instant · demander à rejoindre une équipe"
+            : "Aucun événement pour l'instant"
         }
         onPress={() => {
           const first = staffEvents[0];
-          if (staffEvents.length === 0) onStaffRequest();
+          if (staffEvents.length === 0) choose(base, `${tabHref(base.kind, "sorties") ?? "/"}`);
           else if (staffEvents.length === 1 && first) router.push(`/staff/${first.event.id}`);
           else choose(base, `${tabHref(base.kind, "sorties") ?? "/"}`);
         }}
         testID="casquette-staff"
+      />
+      {/* Relecture C2b : rejoindre une équipe reste possible, avec ou sans mission en cours. */}
+      <HubRow
+        lead={<RowIcon name="staff" />}
+        title="Rejoindre une équipe"
+        caption="Devenir staff d'une structure"
+        onPress={onStaffRequest}
+        testID="casquette-staff-request"
       />
     </View>
   );

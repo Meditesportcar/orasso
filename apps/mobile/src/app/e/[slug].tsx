@@ -10,6 +10,7 @@
 
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  crewLabels,
   dayAccessLabels,
   eventAcceptsVendorType,
   eventAdmissionLabels,
@@ -39,6 +40,7 @@ import { EventHero } from "@/features/event/EventHero";
 import { MediaContents } from "@/features/event/MediaContents";
 import { PosterFlow } from "@/features/event/PosterFlow";
 import { RequestSheet, type RequestTarget } from "@/features/media/RequestSheet";
+import { SmButton } from "@/features/passionne/kit";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { ReportButton } from "@/features/ReportSheet";
 import { TicketsBlock } from "@/features/tickets/TicketsBlock";
@@ -62,7 +64,17 @@ const OPEN_STATUSES = ["pending", "accepted", "waitlisted", "offered", "awaiting
 export default function EventPage() {
   const { t } = useTheme();
   const router = useRouter();
-  const { slug, candidater } = useLocalSearchParams<{ slug: string; candidater?: string }>();
+  const {
+    slug,
+    candidater,
+    jour,
+    crew: crewParam,
+  } = useLocalSearchParams<{
+    slug: string;
+    candidater?: string;
+    jour?: string;
+    crew?: string;
+  }>();
   const { status, me, refreshMe } = useSession();
   const { persona, goTab } = usePersona();
   const event = useApi(() => api.eventBySlug(slug), [slug, status], { enabled: status !== "loading" });
@@ -95,11 +107,21 @@ export default function EventPage() {
   const providerProfile = useApi(async () => (await api.providerProfile()).profile, [status, hasPro, hasProvider], {
     enabled: status === "in" && (hasPro || hasProvider),
   });
-  // La feuille de candidature (lot C2b) ; `?candidater=1` l'ouvre (retour de connexion, ancien lien `/candidater`).
-  const [cand, setCand] = useState(false);
+  // La feuille de candidature (lot C2b). `?candidater=1` (retour de connexion, ancien lien `/candidater`) ne l'ouvre
+  // que si l'action de la fiche le permet (candidater ou liste d'attente) : voir `candOpen` plus bas.
+  // `?candidater=crew` l'ouvre en mode crew (page d'un crew, lien du site `/e/<slug>/crew`).
+  const [cand, setCand] = useState<"solo" | "crew" | null>(null);
+  const [linked, setLinked] = useState(false);
   useEffect(() => {
-    if (candidater && status === "in") setCand(true);
+    if (candidater && status === "in") setLinked(true);
   }, [candidater, status]);
+  // Inscription en crew (lot 19, relecture C2b) : le chef d'un crew garde son entrée, même déjà candidat ou sans
+  // véhicule, et le suivi de ses inscriptions (`/crew/inscription`).
+  const crews = useApi(() => api.myCrews(), [status], { enabled: status === "in", cacheKey: "my-crews" });
+  const leadsCrew = (crews.data ?? []).some((c) => c.role === "leader");
+  const crewRegs = useApi(() => api.myCrewRegistrations(event.data?.id ?? ""), [event.data?.id, leadsCrew], {
+    enabled: leadsCrew && Boolean(event.data),
+  });
   const [applying, setApplying] = useState(false);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [providerSent, setProviderSent] = useState(false);
@@ -171,6 +193,29 @@ export default function EventPage() {
     cancelled,
     accreditation: e.accreditation ?? null,
   });
+  // La candidature personnelle est possible (bouton principal, liste d'attente, autre jour) ; sinon seul le mode crew.
+  const otherDay =
+    mine.length > 0 &&
+    (e.days?.length ?? 0) > 1 &&
+    e.dayAccess !== "whole" &&
+    canApply &&
+    !mine.some((a) => a.eventDayId === null);
+  const soloOk = action === "apply" || action === "applyGuest" || gate === "full" || otherDay;
+  const crewOk = leadsCrew && !cancelled && !e.isLocked && !notYetOpen && !inviteOnly && e.status !== "draft";
+  const linkedMode: "solo" | "crew" | null = linked
+    ? candidater === "crew"
+      ? crewOk
+        ? "crew"
+        : null
+      : soloOk
+        ? "solo"
+        : null
+    : null;
+  const candMode = cand ?? linkedMode;
+  const closeCand = () => {
+    setCand(null);
+    setLinked(false);
+  };
   const isFollowing = following || Boolean(structure.data?.isFollowing);
   const cover = (vehicles.data ?? []).find((v) => v.status === "active");
 
@@ -210,7 +255,7 @@ export default function EventPage() {
 
   const apply = () =>
     status === "in"
-      ? setCand(true)
+      ? setCand("solo")
       : router.push({ pathname: "/auth", params: { mode: "signup", next: `/e/${e.slug}?candidater=1` } });
 
   const primary =
@@ -283,7 +328,19 @@ export default function EventPage() {
       onRefresh={event.reload}
       overlays={
         <>
-          <CandSheet event={e} visible={cand} onClose={() => setCand(false)} onSent={() => void event.reload()} />
+          <CandSheet
+            event={e}
+            visible={candMode !== null}
+            mode={candMode ?? "solo"}
+            soloAllowed={soloOk}
+            crewSlug={crewParam}
+            initialDay={jour}
+            onClose={closeCand}
+            onSent={() => {
+              void event.reload();
+              void crewRegs.reload();
+            }}
+          />
           <ApplySheet
             eventTitle={applying ? e.title : null}
             onClose={() => setApplying(false)}
@@ -334,14 +391,26 @@ export default function EventPage() {
       {e.customPosterUrl ? <CustomPoster url={e.customPosterUrl} structureName={e.structure.name} /> : null}
 
       {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
-      {mine.length > 0 &&
-      (e.days?.length ?? 0) > 1 &&
-      e.dayAccess !== "whole" &&
-      canApply &&
-      !mine.some((a) => a.eventDayId === null) ? (
+      {otherDay ? (
         <Button variant="secondary" icon="calendar" fullWidth testID="apply-other-day" onPress={apply}>
           Candidater pour un autre jour
         </Button>
+      ) : null}
+      {/* Chef d'un crew : inscrire le crew (la feuille en mode crew), puis suivre les confirmations. */}
+      {crewOk ? (
+        <SmButton kind="s" big wide icon="staff" onPress={() => setCand("crew")} testID="register-crew">
+          {crewLabels.registerCrew}
+        </SmButton>
+      ) : null}
+      {leadsCrew && (crewRegs.data?.length ?? 0) > 0 ? (
+        <SmButton
+          kind="g"
+          icon="list"
+          onPress={() => router.push({ pathname: "/crew/inscription", params: { event: e.slug } })}
+          testID="crew-registrations"
+        >
+          Suivre les inscriptions du crew
+        </SmButton>
       ) : null}
 
       {(e.days?.length ?? 0) > 1 ? (

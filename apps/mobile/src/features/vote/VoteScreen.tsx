@@ -245,6 +245,20 @@ export function VoteScreen() {
 
       {view === "vote" && board.data && mine.data && (!mine.data.votedFor || changing) ? (
         <>
+          {/* Relecture C2b : on revient au classement sans rien changer. */}
+          {changing && mine.data.votedFor ? (
+            <SmButton
+              kind="g"
+              icon="back"
+              onPress={() => {
+                setPick(null);
+                setChanging(false);
+              }}
+              testID="vote-back"
+            >
+              Retour au classement
+            </SmButton>
+          ) : null}
           <PosterSurface style={styles.poster} testID="vote-poster">
             {mine.data.checkedInAt ? (
               <Text variant="label" color={c.posterMuted}>

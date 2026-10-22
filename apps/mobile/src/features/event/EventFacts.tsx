@@ -17,6 +17,7 @@ import { ExplorerMap } from "@/features/explorer/ExplorerMap";
 import { eventPins } from "@/features/explorer/mapPins";
 import { Num, PillO, SmButton } from "@/features/passionne/kit";
 import { formatDay, formatHour } from "@/lib/format";
+import { mediaSource } from "@/lib/media";
 
 const { space1, space2, space3 } = tokens.spacing;
 
@@ -65,7 +66,7 @@ export function OrganizerRow({
         style={styles.orgLink}
         testID="event-organizer"
       >
-        <OrgLogo name={event.structure.name} logoUrl={logo} size={44} />
+        <OrgLogo name={event.structure.name} logoUrl={mediaSource(logo)?.uri ?? null} size={44} />
         <View style={styles.orgText}>
           <Text variant="bodyStrong" color={t.color.ink} style={styles.strong}>
             {event.structure.name}

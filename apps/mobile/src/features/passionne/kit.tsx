@@ -3,8 +3,9 @@
 // l'étiquette (`Tag`), le logo d'organisateur (`OrgLogo`), les initiales (`initialsOf`), `SecHead`, les icônes et les
 // jetons viennent du socle ; ces pièces-ci n'y existent pas encore (consigné au journal des choix).
 // Valeurs relevées dans `.claude/prototype-v2/index.html` (feuille de style principale).
-import { Icon, type IconName, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
-import type { ReactNode } from "react";
+import { claimNeon, Icon, type IconName, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { useIsFocused } from "expo-router";
+import { type ReactNode, useEffect, useState } from "react";
 import { Pressable, type StyleProp, StyleSheet, type TextStyle, View, type ViewStyle } from "react-native";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -145,6 +146,25 @@ export function Seg<T extends string>({
 export type SmKind = "p" | "s" | "k" | "g";
 
 /** `.btn.sm` (40 px, rayon 10, 12 px) et ses tons : `p` moutarde, `s` carte bordée, `k` encre, `g` sans fond. */
+/**
+ * Un seul néon moutarde par écran (CLAUDE.md, README Motion) : le bouton principal demande le droit au néon tant que
+ * son écran est affiché (`claimNeon`) ; sans le droit, il reste moutarde mais sans halo.
+ */
+function useNeonRight(wanted: boolean): boolean {
+  const focused = useIsFocused();
+  const [lit, setLit] = useState(false);
+  useEffect(() => {
+    if (!wanted || !focused) {
+      setLit(false);
+      return;
+    }
+    const release = claimNeon();
+    setLit(release !== null);
+    return () => release?.();
+  }, [wanted, focused]);
+  return lit;
+}
+
 export function SmButton({
   kind = "s",
   icon,
@@ -171,8 +191,12 @@ export function SmButton({
   style?: StyleProp<ViewStyle>;
 }) {
   const { t } = useTheme();
+  const neon = useNeonRight(kind === "p" && !disabled);
   const look: Record<SmKind, { box: ViewStyle; color: string }> = {
-    p: { box: { backgroundColor: t.color.accent, boxShadow: t.shadow.neonAccent }, color: t.color.accentInk },
+    p: {
+      box: { backgroundColor: t.color.accent, boxShadow: neon ? t.shadow.neonAccent : t.shadow.shadowCard },
+      color: t.color.accentInk,
+    },
     s: { box: { backgroundColor: t.color.surface, borderWidth: 1.5, borderColor: t.color.line }, color: t.color.ink },
     k: { box: { backgroundColor: t.color.ink }, color: t.color.ground },
     g: { box: { paddingHorizontal: space1 + 2 }, color: t.color.ink },
@@ -197,7 +221,7 @@ export function SmButton({
     >
       <Icon name={icon} size={big ? 20 : 16} color={look[kind].color} />
       {children ? (
-        <Text variant="button" color={look[kind].color} style={big ? styles.bigText : styles.smText} numberOfLines={2}>
+        <Text variant="button" color={look[kind].color} style={big ? styles.bigText : styles.smText}>
           {children}
         </Text>
       ) : null}

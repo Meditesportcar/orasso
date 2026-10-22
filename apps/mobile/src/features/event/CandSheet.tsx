@@ -4,8 +4,11 @@
 // d'arrivée » sur l'aplat crème (obligatoire quand il y a un créneau exposants), une précision facultative, l'aide
 // « Un empêchement ? », puis « Envoyer ma candidature ». À l'envoi : le O, « Candidature envoyée » et « Voir mes
 // sorties ». Gardés de l'ancien flux (docs/01, audit § 2) : la case du règlement, sur une ligne, et le choix du jour
-// d'un événement sur plusieurs jours. Ni suivi de la structure ni newsletter cochés d'office : le bouton « Suivre » de
-// la fiche s'en charge.
+// d'un événement sur plusieurs jours, et la newsletter (case non cochée, docs/01). « Suivre la structure » n'est pas
+// coché d'office (le bouton « Suivre » de la fiche s'en charge ; écart à docs/01 consigné pour Damien).
+// Tour 2 (relectures) : le mode crew s'ouvre aussi seul (`mode="crew"`, bouton « Inscrire mon crew » de la fiche) pour un
+// chef qui a déjà candidaté ou qui n'a pas de véhicule ; sélecteur quand on dirige plusieurs crews ; lien vers le suivi
+// des confirmations (`/crew/inscription`) ; état remis à zéro à la fermeture.
 import {
   Chip,
   ChipRow,
@@ -30,7 +33,7 @@ import {
   type VehicleFull,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { arrivalBody } from "@/features/arrival/ArrivalSeen";
@@ -57,11 +60,23 @@ export function CandSheet({
   visible,
   onClose,
   onSent,
+  mode: openMode = "solo",
+  soloAllowed = true,
+  crewSlug,
+  initialDay,
 }: {
   event: EventPublic;
   visible: boolean;
   onClose: () => void;
   onSent: () => void;
+  /** Mode à l'ouverture : `crew` depuis « Inscrire mon crew ». */
+  mode?: "solo" | "crew";
+  /** Faux quand la candidature personnelle n'est plus possible (déjà candidat) : seul le mode crew reste. */
+  soloAllowed?: boolean;
+  /** Le crew présélectionné (ouvert depuis sa fiche). */
+  crewSlug?: string;
+  /** Jour présélectionné (`?jour=` des liens du site). */
+  initialDay?: string;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -69,21 +84,41 @@ export function CandSheet({
   const { reload, markAnnounced } = useApplications();
   const vehicles = useApi(() => api.vehicles(), [visible], { enabled: visible, cacheKey: "vehicles" });
   const crews = useApi(() => api.myCrews(), [visible], { enabled: visible, cacheKey: "my-crews" });
-  const crew = (crews.data ?? []).find((x) => x.role === "leader") ?? null;
+  const led = (crews.data ?? []).filter((x) => x.role === "leader");
+  const [crewId, setCrewId] = useState<string | null>(null);
+  const crew = led.find((x) => x.id === crewId) ?? led.find((x) => x.slug === crewSlug) ?? led[0] ?? null;
   const options = useApi(() => api.crewRegistrationOptions(e.id, crew?.id ?? ""), [e.id, crew?.id, visible], {
     enabled: visible && Boolean(crew),
   });
 
-  const [mode, setMode] = useState<"solo" | "crew">("solo");
-  const [picked, setPicked] = useState<string[]>([]);
+  const [mode, setMode] = useState<"solo" | "crew">(openMode);
+  // `null` : pas encore touché (le premier véhicule avec photo est proposé) ; une liste vidée exprès reste vide.
+  const [picked, setPicked] = useState<string[] | null>(null);
   const [members, setMembers] = useState<Record<string, string>>({});
   const [seen, setSeen] = useState(false);
   const [rules, setRules] = useState(false);
   const [note, setNote] = useState("");
+  const [newsletter, setNewsletter] = useState(false);
   const [dayChoice, setDayChoice] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ retained: boolean; crew: number | null } | null>(null);
+
+  // Chaque ouverture repart d'un état neuf (mode demandé, aucune case cochée, aucune note).
+  useEffect(() => {
+    if (!visible) return;
+    setMode(soloAllowed ? openMode : "crew");
+    setCrewId(null);
+    setPicked(null);
+    setMembers({});
+    setSeen(false);
+    setRules(false);
+    setNote("");
+    setNewsletter(false);
+    setDayChoice(undefined);
+    setError(null);
+    setDone(null);
+  }, [visible, openMode, soloAllowed]);
 
   const slot = e.arrivals?.exhibitors ?? null;
   const wanted = useMemo(() => new Set(e.criteria?.categoryIds ?? []), [e]);
@@ -96,7 +131,7 @@ export function CandSheet({
   const limit = e.maxVehiclesPerUser ?? 1;
   // Par défaut, le premier véhicule qui a une photo (« Candidater avec ma Supra »).
   const selected =
-    picked.length > 0
+    picked !== null
       ? picked
       : eligible
           .filter((v) => v.photos.length > 0)
@@ -129,7 +164,13 @@ export function CandSheet({
       ]
     : [];
   const dayId =
-    dayChoice !== undefined ? dayChoice : ((dayChoices.find((d) => !d.full && !d.mine) ?? dayChoices[0])?.id ?? null);
+    dayChoice !== undefined
+      ? dayChoice
+      : ((
+          dayChoices.find((d) => d.id === initialDay && !d.full && !d.mine) ??
+          dayChoices.find((d) => !d.full && !d.mine) ??
+          dayChoices[0]
+        )?.id ?? null);
 
   const crewMembers = options.data?.members ?? [];
   const chosenMembers = crewMembers.filter((m) => members[m.person.userId]);
@@ -156,8 +197,8 @@ export function CandSheet({
           vehicleIds: selected,
           rulesAccepted: true,
           followStructure: false,
-          newsletterOptIn: false,
-          companions: 0,
+          newsletterOptIn: newsletter,
+          // Accompagnants : absents de l'artefact, le champ n'est plus envoyé (relecture C2b).
           // Sans créneau exposants, la précision part comme mot pour l'équipe.
           message: slot ? null : note.trim().slice(0, 120) || null,
           eventDayId: multi ? dayId : undefined,
@@ -172,7 +213,8 @@ export function CandSheet({
           members: chosenMembers.map((m) => ({ userId: m.person.userId, vehicleId: members[m.person.userId] ?? "" })),
           rulesAccepted: true,
           followStructure: false,
-          message: null,
+          // La précision part comme note d'arrivée du chef s'il vient avec un créneau, sinon comme mot pour l'équipe.
+          message: leaderComes && slot ? null : note.trim().slice(0, 120) || null,
           ...(leaderComes ? arrivalBody(slot, seen, note.slice(0, ARRIVAL_NOTE_MAX)) : {}),
           eventDayId: multi && e.dayAccess !== "whole" ? dayId : undefined,
         });
@@ -190,6 +232,10 @@ export function CandSheet({
   const closeAll = () => {
     setDone(null);
     onClose();
+  };
+  const follow = () => {
+    closeAll();
+    router.push({ pathname: "/crew/inscription", params: { event: e.slug } });
   };
 
   return (
@@ -236,6 +282,11 @@ export function CandSheet({
           >
             Voir mes sorties
           </SmButton>
+          {done.crew !== null ? (
+            <SmButton kind="g" icon="list" onPress={follow} testID="cand-crew-follow-done">
+              Suivre les confirmations du crew
+            </SmButton>
+          ) : null}
         </View>
       ) : (
         <View style={styles.stack} testID="cand-sheet">
@@ -246,7 +297,7 @@ export function CandSheet({
               value={mode}
               onChange={setMode}
               options={[
-                { value: "solo", label: "Seul", icon: "profile" },
+                ...(soloAllowed ? [{ value: "solo" as const, label: "Seul", icon: "profile" as const }] : []),
                 {
                   value: "crew",
                   label: `Avec ${crew.name}`,
@@ -277,6 +328,22 @@ export function CandSheet({
 
           {mode === "crew" && crew ? (
             <View style={styles.block} testID="cand-crew">
+              {led.length > 1 ? (
+                <ChipRow>
+                  {led.map((x) => (
+                    <Chip
+                      key={x.id}
+                      selected={x.id === crew.id}
+                      onPress={() => {
+                        setCrewId(x.id);
+                        setMembers({});
+                      }}
+                    >
+                      {x.name}
+                    </Chip>
+                  ))}
+                </ChipRow>
+              ) : null}
               <Text variant="label" color={c.inkMuted}>
                 Qui vient du crew, avec quel véhicule ?
               </Text>
@@ -336,6 +403,9 @@ export function CandSheet({
                 Chacun reçoit une notification et confirme sa venue. Si le crew est retenu, chacun a son QR et arrive à
                 son heure.
               </Text>
+              <SmButton kind="g" icon="list" onPress={follow} testID="cand-crew-follow">
+                Suivre les inscriptions du crew
+              </SmButton>
             </View>
           ) : (
             <View style={styles.block}>
@@ -446,17 +516,31 @@ export function CandSheet({
             </Text>
           </Pressable>
 
-          {mode === "solo" || leaderComes ? (
-            <TextField
-              label="Une précision pour l'équipe ? (facultatif)"
-              value={note}
-              onChangeText={setNote}
-              maxLength={slot ? ARRIVAL_NOTE_MAX : 120}
-              placeholder="ex. J'arriverai vers 19 h 30 à cause du travail"
-              multiline
-              testID="arrival-note"
-            />
+          {mode === "solo" ? (
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: newsletter }}
+              accessibilityLabel="Recevoir la newsletter d'Orasso"
+              onPress={() => setNewsletter((n) => !n)}
+              style={styles.rulesRow}
+              testID="cand-newsletter"
+            >
+              <CheckBox on={newsletter} />
+              <Text variant="caption" color={c.ink} style={styles.grow}>
+                Recevoir la newsletter d'Orasso.
+              </Text>
+            </Pressable>
           ) : null}
+
+          <TextField
+            label="Une précision pour l'équipe ? (facultatif)"
+            value={note}
+            onChangeText={setNote}
+            maxLength={slot && (mode === "solo" || leaderComes) ? ARRIVAL_NOTE_MAX : 120}
+            placeholder="ex. J'arriverai vers 19 h 30 à cause du travail"
+            multiline
+            testID="arrival-note"
+          />
 
           <View style={styles.hint}>
             <Icon name="alert" size={16} color={c.inkMuted} />
