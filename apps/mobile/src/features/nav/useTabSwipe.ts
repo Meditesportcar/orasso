@@ -9,7 +9,7 @@
 
 import { useIsGroundQuiet } from "@orasso/design-system/native";
 import { useFocusEffect } from "expo-router";
-import { createContext, type MutableRefObject, useCallback, useContext, useMemo, useRef } from "react";
+import { createContext, type MutableRefObject, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { PanResponder, type PanResponderInstance, useWindowDimensions } from "react-native";
 
 import { shouldCaptureSwipe, swipeDirection } from "./swipe";
@@ -29,6 +29,8 @@ export const TabSwipeContext = createContext<TabSwipeControl | null>(null);
 export function useTabSwipe(onSwipe: (direction: 1 | -1) => void): {
   panHandlers: PanResponderInstance["panHandlers"];
   control: TabSwipeControl;
+  /** Lot M3 : le glissement est coupé (écran qui le demande, feuille ouverte) ; lu par les pages natives. */
+  blocked: boolean;
 } {
   const { width } = useWindowDimensions();
   const widthRef = useRef(width);
@@ -36,6 +38,7 @@ export function useTabSwipe(onSwipe: (direction: 1 | -1) => void): {
   const onSwipeRef = useRef(onSwipe);
   onSwipeRef.current = onSwipe;
   const disabled = useRef(0);
+  const [disabledCount, setDisabledCount] = useState(0);
   const lastSwipe = useRef<LastSwipe | null>(null);
   // Feuille ouverte : le même signal que le fond « battle » (`useGroundQuiet` posé par `Sheet`, lot 39) coupe le geste.
   const quiet = useRef(false);
@@ -62,11 +65,13 @@ export function useTabSwipe(onSwipe: (direction: 1 | -1) => void): {
     () => ({
       disable: () => {
         disabled.current += 1;
+        setDisabledCount(disabled.current);
         let released = false;
         return () => {
           if (released) return;
           released = true;
           disabled.current -= 1;
+          setDisabledCount(disabled.current);
         };
       },
       lastSwipe,
@@ -74,7 +79,7 @@ export function useTabSwipe(onSwipe: (direction: 1 | -1) => void): {
     [],
   );
 
-  return { panHandlers: responder.panHandlers, control };
+  return { panHandlers: responder.panHandlers, control, blocked: disabledCount > 0 || quiet.current };
 }
 
 /** Coupe le glissement entre onglets tant que l'écran est affiché (carte, carrousel horizontal). */
