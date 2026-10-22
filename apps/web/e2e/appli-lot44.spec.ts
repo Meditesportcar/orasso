@@ -96,7 +96,7 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     await shot(page, `explorer-demande-${theme}`);
     await page.getByTestId("position-enable").click();
     await expect(page.getByTestId("sort-line")).toContainText("Position refusée : autour du 66", { timeout: 30_000 });
-    await expect(page.getByTestId("gps-button")).toContainText("66");
+    await expect(page.getByTestId("gps-button")).toContainText("Ma position"); // Lot C2a : libellé de l'artefact.
     await expect(page.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
     expect(await page.getByTestId("event-row").count()).toBeGreaterThan(3);
     const km = await distances(page);
@@ -125,6 +125,11 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     await expect(canvas).toHaveAttribute("data-map-style", `orasso-${theme}`, { timeout: 45_000 });
     await expect(canvas.locator("canvas.maplibregl-canvas")).toBeVisible();
     await expect(canvas.locator('[data-testid="map-marker"], [data-testid="map-cluster"]').first()).toBeVisible();
+    // Lot C2a : carte en écran plein (`s-map`) : recherche en surimpression, légende, sans barre d'onglets.
+    await expect(page).toHaveURL(/\/carte/);
+    await expect(page.getByTestId("map-q")).toBeVisible();
+    await expect(page.getByTestId("map-legend")).toContainText("Plusieurs");
+    await expect(page.getByRole("tab", { name: "Explorer", exact: true })).toBeHidden();
     await page.waitForTimeout(3000);
     await shot(page, `explorer-carte-${theme}`);
     await ctx.close();

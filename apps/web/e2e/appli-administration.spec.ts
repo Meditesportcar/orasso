@@ -442,7 +442,7 @@ test("mode assistance : survoler en lecture seule, demander l'aide, intervenir",
   deliverNow("equipe@orasso.local");
   await toTab(page, "Équipe");
   await page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
-  await page.getByTestId("inbox-journal").click();
+  await page.getByTestId("inbox-all").click(); // Lot C2a : notifications dans « Tout » de la feuille Boîte.
   await page
     .getByTestId("journal-item")
     .filter({ hasText: `Demande d'aide · ${name}` })
@@ -522,7 +522,7 @@ test("modérateur limité à sa file ; un passionné ne voit pas l'administratio
   deliverNow("moderatrice@orasso.local");
   await go(m.page, "/administration");
   await m.page.goto("/boite"); // Lot 40 : la Boîte réunit messages et notifications (plus de cloche).
-  await m.page.getByTestId("inbox-journal").click();
+  await m.page.getByTestId("inbox-all").click(); // Lot C2a : notifications dans « Tout » de la feuille Boîte.
   await m.page.getByTestId("journal-item").filter({ hasText: "Alerte prioritaire" }).first().click();
   await expect(m.page).toHaveURL(/signalements/, { timeout: 20_000 });
   await m.ctx.close();

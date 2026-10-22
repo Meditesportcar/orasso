@@ -5,8 +5,12 @@
 // veille, se ferme après le scan ou à J+1.
 // Lot 50 : une fois entré, le bouton « Prix du public » (secondaire : le QR reste l'élément principal) ; au scan, le
 // tampon tombe à l'écran (`passport.stamped`, `StampArrival` à la racine).
+// Lot C2a (artefact DA v2 `s-qr`) : écran sombre dans les deux thèmes (`#s-qr` sur `--bg-deep`, encre crème), en-tête
+// « Jour J · <événement> » et « Hors ligne : tout est déjà sur ton téléphone », la carte crème du QR, l'encart des
+// captures, « Comment ça marche sans réseau », Maps / Waze / Sur la carte. Plus de « Me désister » ici : on se retire
+// depuis le ticket de Sorties (audit § 5.2, une seule porte). Statut « Annulé » ou « Incertain » seulement s'il y a lieu.
 
-import { Button, Chip, Plate, StatusBadge, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Plate, StatusBadge, Text, ThemeScope, tokens, useTheme } from "@orasso/design-system/native";
 import {
   communicationLabels,
   eventDaysLabels,
@@ -24,11 +28,10 @@ import { CaptureNote, GpsRow, HowItWorks, useBlockCapture } from "@/features/jou
 import { type QrHolder, QrPoster } from "@/features/jour-j/QrPoster";
 import { useRotatingCode } from "@/features/jour-j/useRotatingCode";
 import { WeatherWidget } from "@/features/WeatherWidget";
-import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { serverSkewAt } from "@/lib/clock";
-import { formatDay, formatDayHour, formatDuration, formatHour, formatStamp } from "@/lib/format";
+import { formatDay, formatDayHour, formatHour, formatStamp } from "@/lib/format";
 import { jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, loadOtpSecret, refreshKit } from "@/lib/kits";
 import { useSession } from "@/lib/session";
@@ -41,7 +44,8 @@ import { FlowScreen } from "@/ui/Screens";
 const { space2, space3, space4 } = tokens.spacing;
 
 const TITLE = "Jour J";
-const FACTS = "Hors ligne OK";
+// Mention de l'artefact sous le titre (`.qr-top small`), dans l'en-tête de flux du socle (lot C1).
+const FACTS = "Hors ligne : tout est déjà sur ton téléphone";
 /** Sans nouvelles du serveur depuis 24 h, l'heure du téléphone n'a pas été recoupée : le code risque d'être refusé. */
 const STALE_MS = 24 * 3600_000;
 
@@ -64,13 +68,22 @@ function holderOf(kit: AccessKit, pseudo: string): QrHolder {
 }
 
 export default function JourJ() {
+  // L'artefact garde cet écran sombre en Sable aussi : la carte crème du QR y ressort au soleil comme de nuit.
+  return (
+    <ThemeScope theme="beton">
+      <JourJScreen />
+    </ThemeScope>
+  );
+}
+
+function JourJScreen() {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { me } = useSession();
-  const { upcoming, past, press, reload } = useApplications();
+  const { upcoming, past, press } = useApplications();
   const now = useNow(10_000);
   const network = useNetworkState();
   const online = network.isConnected !== false && network.isInternetReachable !== false;
@@ -78,7 +91,6 @@ export default function JourJ() {
   const [kit, setKit] = useState<AccessKit | null | undefined>(undefined);
   const [secret, setSecret] = useState<string | null>(null);
   const [refreshFailed, setRefreshFailed] = useState(false);
-  const [withdrawing, setWithdrawing] = useState(false);
   const app = [...(upcoming ?? []), ...(past ?? []), ...press].find((a) => a.id === id) ?? null;
   const pseudo = me?.profile.pseudo ?? kit?.pseudo ?? "";
   // Dernière annonce de l'organisateur (lot 20) : avec du réseau, gardée sur le téléphone pour la suite (hors ligne OK).
@@ -135,8 +147,8 @@ export default function JourJ() {
     kit?.checkedInAt && (!kit.multiDay || kit.day || localDate(new Date(kit.checkedInAt), tz) === localDate(now, tz)),
   );
   const state = kit && span ? jourJState(span, now, entered, tz) : null;
-  // Les captures ne sont bloquées que tant que le QR est à l'écran.
-  useBlockCapture(state === "open");
+  // Captures bloquées dès que le QR est à l'écran (D34 : consultable avant le jour J, quel que soit l'état « early » ou « open »).
+  useBlockCapture(state !== null && state !== "closed");
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
   const offline = !online || refreshFailed;
@@ -163,7 +175,6 @@ export default function JourJ() {
 
   // Kits enregistrés avant le lot 28 : ancienne forme de météo, ignorée jusqu'au prochain rafraîchissement.
   const weather = kit.weather && "summary" in kit.weather ? kit.weather : null;
-  const untilStart = new Date(span.startsAt).getTime() - now.getTime();
   const qrSize = Math.min(width - 6 * space4, 280);
   const place = [kit.event.addressLine, [kit.event.postalCode, kit.event.city].filter(Boolean).join(" ")]
     .filter(Boolean)
@@ -176,40 +187,7 @@ export default function JourJ() {
   const qrValue = rotating.code ?? kit.pass.payload;
 
   return (
-    <FlowScreen
-      title={TITLE}
-      facts={FACTS}
-      onClose={close}
-      still
-      overlays={
-        <WithdrawSheet
-          app={withdrawing ? app : null}
-          now={now}
-          onClose={() => setWithdrawing(false)}
-          onConfirm={async (target) => {
-            await api.withdraw(target.id);
-            setWithdrawing(false);
-            await reload();
-            router.replace("/acces");
-          }}
-        />
-      }
-      footer={
-        // Le badge presse se retire depuis l'onglet Presse (pas de malus de points pour la presse, lot 55).
-        state === "open" && app && app.status === "accepted" && kit.holder?.kind !== "media" ? (
-          <Button
-            variant="plate"
-            tone="dashed"
-            icon="close"
-            disabled={!online}
-            onPress={() => setWithdrawing(true)}
-            fullWidth
-          >
-            Me désister
-          </Button>
-        ) : undefined
-      }
-    >
+    <FlowScreen title={`${TITLE} · ${kit.event.title}`} facts={FACTS} onClose={close} still>
       {stale ? (
         <Notice tone="error" testID="jourj-stale">
           Ouvre l'appli avec du réseau une fois avant l'événement : l'heure de ton téléphone sera recoupée et ton code
@@ -217,29 +195,16 @@ export default function JourJ() {
         </Notice>
       ) : null}
 
-      {/* En plein soleil comme de nuit : le titre et le compte à rebours sont sur une plaque, pas sur le fond. */}
-      <Plate style={styles.head}>
-        <Text variant="posterXl" color={c.plateInk}>
-          {kit.event.title}
+      {kit.multiDay ? (
+        <Text variant="label" color={c.inkMuted} testID="jourj-day">
+          {kit.day ? formatDayDate(kit.day.date) : eventDaysLabels.wholeEvent}
         </Text>
-        {kit.multiDay ? (
-          <Text variant="label" color={c.plateInk} testID="jourj-day">
-            {kit.day ? formatDayDate(kit.day.date) : eventDaysLabels.wholeEvent}
-          </Text>
-        ) : null}
-        <Text variant="body" color={c.plateMuted}>
-          {untilStart > 0
-            ? `${formatDay(span.startsAt, tz)} · ouverture des portes dans ${formatDuration(untilStart)}`
-            : "L'événement a commencé."}
-        </Text>
-        {kit.event.cancelled ? (
-          <StatusBadge status="cancelled" />
-        ) : kit.event.outlook === "uncertain" ? (
-          <StatusBadge status="uncertain" />
-        ) : (
-          <Chip surface="plate">Maintenu</Chip>
-        )}
-      </Plate>
+      ) : null}
+      {kit.event.cancelled ? (
+        <StatusBadge status="cancelled" />
+      ) : kit.event.outlook === "uncertain" ? (
+        <StatusBadge status="uncertain" />
+      ) : null}
 
       {state === "closed" ? (
         <Plate kind="note" style={styles.block}>
@@ -353,7 +318,6 @@ export default function JourJ() {
 }
 
 const styles = StyleSheet.create({
-  head: { gap: space2, padding: space3, alignItems: "flex-start" },
   center: { textAlign: "center" },
   block: { gap: space2, padding: space3 },
 });

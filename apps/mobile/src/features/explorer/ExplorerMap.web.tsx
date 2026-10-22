@@ -19,7 +19,15 @@ type MapLibre = typeof import("maplibre-gl");
 /** Vrai : la carte s'affiche aussi dans un navigateur. */
 export const mapSupported = true;
 
-export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children, reveal = true }: ExplorerMapProps) {
+export function ExplorerMap({
+  pins,
+  me,
+  onSelect,
+  onSelectGroup,
+  children,
+  reveal = true,
+  fill = false,
+}: ExplorerMapProps) {
   const { theme, t } = useTheme();
   const box = useRef<HTMLElement | null>(null);
   const handle = useRef<OrassoMap | null>(null);
@@ -100,8 +108,10 @@ export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children, revea
   }, [theme]);
 
   return (
-    <View style={styles.wrap} testID="explorer-map">
-      <View style={[styles.map, { borderColor: t.color.line, height: mapHeight(screenHeight) }]}>
+    <View style={fill ? styles.fillWrap : styles.wrap} testID="explorer-map">
+      <View
+        style={fill ? styles.fillMap : [styles.map, { borderColor: t.color.line, height: mapHeight(screenHeight) }]}
+      >
         <section
           ref={box}
           aria-label={explorerV2Labels.mapLabel}
@@ -109,7 +119,7 @@ export function ExplorerMap({ pins, me, onSelect, onSelectGroup, children, revea
           style={{ position: "absolute", inset: 0, ...(mapCssVars(theme) as Record<string, string>) }}
         />
       </View>
-      <View ref={below} style={styles.below}>
+      <View ref={below} pointerEvents="box-none" style={fill ? styles.fillBelow : styles.below}>
         {children}
       </View>
     </View>
@@ -120,4 +130,7 @@ const styles = StyleSheet.create({
   wrap: { gap: space3 },
   map: { borderRadius: tokens.radius.radiusMd, overflow: "hidden", borderWidth: 1 },
   below: { gap: space3 },
+  fillWrap: { flex: 1 },
+  fillMap: { flex: 1, overflow: "hidden" },
+  fillBelow: { position: "absolute", left: 12, right: 12, bottom: 12, gap: space3 },
 });

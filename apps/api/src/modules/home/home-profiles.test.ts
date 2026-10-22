@@ -109,6 +109,38 @@ describe("accueil des autres profils : aucune impression sponsorisée, aucune so
     expect((await home(u, "fan")).sponsored).not.toBeNull();
     expect(await db.select().from(sponsoredDailySeen)).toHaveLength(1);
   });
+
+  it("lot C2a : les lieux pratiques (Explorer › Pros) ne comptent aucune impression ; l'Accueil v2 rend le sponsorisé qu'il affiche", async () => {
+    const owner = await signUp("Pro_Sponso_V2");
+    const pro = await createPro(owner.id);
+    await db.insert(sponsoredPlacements).values({
+      proProfileId: pro.id,
+      title: "Offre",
+      body: "Texte",
+      linkUrl: "https://exemple.fr",
+      startsOn: "2026-10-01",
+      endsOn: "2026-10-31",
+      status: "active",
+    });
+    const u = await signUp("Fan_Sponso_V2");
+    const places = await home(u, "fan&blocks=places");
+    expect(places.sponsored).toBeNull();
+    expect(places.nudge).toBeNull();
+    expect(places.nearby).toBeNull();
+    expect(await db.select().from(sponsoredDailySeen)).toHaveLength(0);
+    const v2 = await home(u, "fan&blocks=v2");
+    expect(v2.sponsored).not.toBeNull();
+    expect(await db.select().from(sponsoredDailySeen)).toHaveLength(1);
+  });
+
+  it("lot C2a : l'Accueil v2 ignore les anciens blocs masqués (météo et événements autour toujours demandés)", async () => {
+    const u = await signUp("Fan_Masque");
+    expect((await call(u, "PUT", "/me/home/widgets", { order: [], hidden: ["nearby", "weather"] })).status).toBe(200);
+    expect((await home(u, "fan")).nearby).toBeNull();
+    // Sans département ni position, `nearby` répond quand même (rayon, source nulle) dès que le bloc est demandé.
+    expect((await home(u, "fan&blocks=v2")).nearby).not.toBeNull();
+    expect((await home(u, "fan&blocks=v2")).wash).toEqual([]);
+  });
 });
 
 describe("exposant : le prochain accès enrichi", () => {

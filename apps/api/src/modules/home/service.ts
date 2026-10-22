@@ -89,6 +89,20 @@ export const homeService = {
     // incitation, emplacement sponsorisé) ; `light` = la lecture de l'accès flottant : les blocs du profil seulement.
     const full = (profile === "exhibitor" || profile === "visitor") && !q.light;
     if (!full) shown.clear();
+    // Lot C2a : l'Accueil v2 de l'appli montre toujours la météo et les événements autour (les anciennes préférences
+    // masquées du site ne s'y appliquent pas) et n'appelle pas les sources des lieux pratiques ; Explorer › Pros lit les
+    // lieux pratiques seuls.
+    if (full && q.blocks === "v2") {
+      shown.clear();
+      shown.add("nearby");
+      shown.add("weather");
+    } else if (full && q.blocks === "places") {
+      shown.clear();
+      shown.add("favorite_garage");
+      shown.add("wash");
+      shown.add("fuel");
+    }
+    const extras = full && q.blocks !== "places";
 
     const upcomingPromise = applicationsQueries.mine(v, "upcoming");
     const interestsPromise = db
@@ -109,10 +123,10 @@ export const homeService = {
       shown.has("favorite_garage") ? this.favoriteGarage(v) : Promise.resolve(null),
       shown.has("wash") ? this.wash(v, located) : Promise.resolve([] as NearbyPlace[]),
       shown.has("fuel") ? this.fuel(v, located) : Promise.resolve([] as FuelStation[]),
-      full ? this.nudge(v) : Promise.resolve(null),
+      extras ? this.nudge(v) : Promise.resolve(null),
     ]);
     // L'emplacement sponsorisé n'est compté (affichage) que s'il est vraiment renvoyé.
-    const sponsored = full
+    const sponsored = extras
       ? await sponsoredService.select(
           v,
           interests.map((i) => i.id),

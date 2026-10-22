@@ -3,7 +3,8 @@ import { expect, type Page, test } from "@playwright/test";
 import { apiCall, SEED_PASSWORD, signUpApi, unique } from "./helpers";
 import { RELAIS } from "./relais";
 
-// Recherche de premier niveau et Explorer (lot 29) dans l'appli, version web de recette (`expo start --web`) :
+// Recherche de premier niveau et Explorer (lot 29 ; lot C2a : la loupe du passionné mène à Explorer, Personnes et
+// crews en feuille) dans l'appli, version web de recette (`expo start --web`) :
 // recherche depuis la barre du haut (« Supra », « Rivesaltes »), Explorer (lot 44 : du plus proche au plus loin, « Mes
 // affinités » et « Structures suivies » en filtres, position jamais enregistrée, Pros), pages d'une structure et d'un
 // pro, lien depuis la page d'un événement. La carte stylée est vérifiée par `appli-lot44.spec.ts`.
@@ -50,25 +51,28 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
     await page.getByRole("button", { name: "Me connecter" }).click();
     await page.waitForURL(/accueil/, { timeout: 30_000 });
 
-    // --- Recherche de premier niveau, depuis la barre du haut ---------------------------------------------------
+    // --- La loupe de la barre du haut (lot C2a, artefact DA v2) : elle mène à Explorer, dont le champ cherche ---------
     await page.getByLabel("Rechercher").first().click();
-    await expect(page).toHaveURL(/recherche/, { timeout: 30_000 });
-    await shot(page, `01-recherche-vide-${theme}`);
-    await page.getByTestId("search-q").fill("Supra");
-    await expect(page.getByTestId("vehicle-hit").first()).toContainText("Toyota Supra", { timeout: 30_000 });
-    await expect(page.getByText("Kenji_66").first()).toBeVisible();
-    await shot(page, `02-recherche-supra-${theme}`);
-    await page.getByTestId("search-q").fill("Rivesaltes");
-    await expect(page.getByTestId("event-row").filter({ hasText: "Expo Rivesaltes" })).toBeVisible({
+    await expect(page).toHaveURL(/explorer/, { timeout: 30_000 });
+    await expect(page.getByTestId("events-q")).toBeVisible({ timeout: 30_000 });
+    await shot(page, `01-loupe-explorer-${theme}`);
+    await page.getByTestId("events-q").fill("Rivesaltes");
+    await expect(page.getByTestId("event-row").filter({ hasText: "Expo Rivesaltes" }).first()).toBeVisible({
       timeout: 30_000,
     });
-    await shot(page, `03-recherche-rivesaltes-${theme}`);
-    await page.getByTestId("search-q").fill("drift");
-    await expect(page.getByTestId("crew-row").filter({ hasText: "Roussillon Drift" })).toBeVisible({ timeout: 30_000 });
-    // « Voir tout » : plus de cinq événements pour « de ».
-    await page.getByTestId("search-q").fill("de");
-    await page.getByTestId("see-all-evenements").click({ timeout: 30_000 });
-    await expect(page.getByTestId("events-q")).toHaveValue("de", { timeout: 30_000 });
+    await shot(page, `03-explorer-rivesaltes-${theme}`);
+    // Personnes et crews : la feuille de l'artefact (`sh-people`), par-dessus Explorer.
+    await page.getByTestId("events-q").fill("");
+    await page.getByTestId("people-open").click();
+    await expect(page.getByTestId("people-search")).toBeVisible({ timeout: 30_000 });
+    // Les filtres de personnes (département, centre d'intérêt, grade) restent atteignables.
+    await page.getByTestId("people-filters").click();
+    await expect(page.getByTestId("people-filters-panel")).toBeVisible();
+    await page.getByTestId("people-q").fill("drift");
+    await expect(page.getByTestId("crew-row").filter({ hasText: "Roussillon Drift" }).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.getByTestId("sheet-close").click();
 
     // --- Explorer v2 (lot 44) : position accordée → tout, du plus proche au plus loin -----------------------------
     await page.goto("/explorer");
@@ -96,6 +100,8 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
 
     // --- Pros ---------------------------------------------------------------------------------------------------
     await page.getByText("Pros", { exact: true }).first().click();
+    // Lot C2a : les lieux pratiques (garage favori, lavage, carburant) sont en tête des Pros.
+    await expect(page.getByTestId("explorer-places")).toBeVisible({ timeout: 30_000 });
     await page.getByTestId("events-q").fill("detailing");
     const pros = page.getByTestId("pro-row");
     await expect(pros.filter({ hasText: "Detailing Hérault" })).toBeVisible({ timeout: 30_000 });

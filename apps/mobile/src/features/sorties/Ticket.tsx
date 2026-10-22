@@ -1,21 +1,26 @@
-// Ticket de l'onglet Sorties (lot 43, prototype `s-sorties`) : la date en souche à gauche (inclinée, séparée du corps par
-// une ligne de perforation), un statut, le titre, une ligne de détail, puis les actions. Un même gabarit pour une
-// candidature, un billet, une mission staff, une sortie passée. Aucun néon : le seul de l'écran est le bouton principal.
+// Ticket de l'onglet Sorties (lot 43 ; lot C2a : reproduit d'après `.tk` de l'artefact DA v2 `s-sorties`) : la souche
+// de 70 px (jour, quantième Archivo condensé 38 px, mois) séparée du corps par une perforation en pointillés avec ses
+// deux encoches, puis l'étiquette et le repère court (« J-6 »), le titre en affiche 15 px, une ligne de détail 12,5 px
+// et de petits boutons (`.btn.sm`). `highlight` : le ticket mis en avant, sur l'affiche crème (`.tk.me`, noir en
+// Sable) ; `staff` : liseré d'encre (`.tk.staff`). Un même gabarit pour une candidature, un billet, une mission staff,
+// une sortie passée (et les missions du prestataire et les accréditations du média).
 
-import { Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Plate, Text, useTheme } from "@orasso/design-system/native";
 import { BUSINESS_TIMEZONE, wallTime } from "@orasso/shared";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-const { space1, space2, space3 } = tokens.spacing;
+const WEEKDAYS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."];
+const MONTHS = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
 
-const WEEKDAYS = ["DIM", "LUN", "MAR", "MER", "JEU", "VEN", "SAM"];
-const MONTHS = ["JANV", "FÉVR", "MARS", "AVR", "MAI", "JUIN", "JUIL", "AOÛT", "SEPT", "OCT", "NOV", "DÉC"];
+/** Vrai dans un ticket mis en avant (crème) : les petits boutons et étiquettes prennent l'encre de l'affiche. */
+const TicketPoster = createContext(false);
+export const useOnTicketPoster = () => useContext(TicketPoster);
 
 export type TicketProps = {
   /** Début de l'événement : la souche en tire le jour, le quantième et le mois. */
   date: string;
-  /** Le statut (`StatusTag` ou `Chip`) et, à sa droite, un repère court (« J-6 »). */
+  /** Le statut (étiquette) et, à sa droite, un repère court (« J-6 »). */
   badge?: ReactNode;
   lead?: string;
   title: string;
@@ -28,35 +33,55 @@ export type TicketProps = {
   onPressTitle?: () => void;
   /** Mis en retrait : sortie passée. */
   dim?: boolean;
+  /** Le ticket mis en avant (`.tk.me`) : fond d'affiche. */
+  highlight?: boolean;
+  /** Mission staff (`.tk.staff`) : liseré d'encre de 2 px. */
+  staff?: boolean;
   testID?: string;
 };
 
-export function Ticket({ date, badge, lead, title, detail, notes, children, onPressTitle, dim, testID }: TicketProps) {
+export function Ticket({
+  date,
+  badge,
+  lead,
+  title,
+  detail,
+  notes,
+  children,
+  onPressTitle,
+  dim,
+  highlight = false,
+  staff = false,
+  testID,
+}: TicketProps) {
   const { t } = useTheme();
   const c = t.color;
   const w = wallTime(new Date(date), BUSINESS_TIMEZONE);
   const weekday = WEEKDAYS[new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay()];
-  return (
-    <Plate style={styles.plate} testID={testID}>
-      <View style={[styles.stub, { borderRightColor: c.plateLine }]}>
-        <View style={styles.stubInner}>
-          <Text variant="meta" color={c.plateMuted}>
-            {weekday}
-          </Text>
-          <Text variant="posterM" color={dim ? c.plateMuted : c.plateInk} style={styles.day}>
-            {w.day}
-          </Text>
-          <Text variant="meta" color={c.plateMuted}>
-            {MONTHS[w.month - 1]}
-          </Text>
-        </View>
+  const ink = highlight ? c.posterInk : c.plateInk;
+  const muted = highlight ? c.posterMuted : c.plateMuted;
+  const content = (
+    <>
+      <View style={[styles.stub, { borderRightColor: highlight ? c.posterMuted : c.plateLine }]}>
+        <Text variant="label" color={muted} style={styles.stubSmall}>
+          {weekday}
+        </Text>
+        <Text variant="numberNarrow" color={dim ? muted : ink} style={styles.day}>
+          {w.day}
+        </Text>
+        <Text variant="label" color={muted} style={styles.stubSmall}>
+          {MONTHS[w.month - 1]}
+        </Text>
+        {/* Les deux encoches de la perforation, de la couleur du fond. */}
+        <View style={[styles.notch, styles.notchTop, { backgroundColor: c.ground }]} />
+        <View style={[styles.notch, styles.notchBottom, { backgroundColor: c.ground }]} />
       </View>
       <View style={styles.body}>
         {badge || lead ? (
           <View style={styles.head}>
             {badge}
             {lead ? (
-              <Text variant="label" color={c.plateMuted}>
+              <Text variant="caption" color={muted} style={styles.cap}>
                 {lead}
               </Text>
             ) : null}
@@ -67,40 +92,58 @@ export function Ticket({ date, badge, lead, title, detail, notes, children, onPr
           disabled={!onPressTitle}
           accessibilityRole={onPressTitle ? "link" : undefined}
         >
-          <Text variant="posterS" color={dim ? c.plateMuted : c.plateInk}>
+          <Text variant="posterS" color={dim ? muted : ink} style={styles.title}>
             {title}
           </Text>
         </Pressable>
         {detail ? (
-          <Text variant="body" color={c.plateMuted}>
+          <Text variant="caption" color={muted} style={styles.cap}>
             {detail}
           </Text>
         ) : null}
         {notes?.map((n) => (
-          <Text key={n} variant="meta" color={c.plateMuted} style={styles.note}>
+          <Text key={n} variant="caption" color={muted} style={styles.cap}>
             {n}
           </Text>
         ))}
         {children ? <View style={styles.actions}>{children}</View> : null}
       </View>
-    </Plate>
+    </>
+  );
+  return (
+    <TicketPoster.Provider value={highlight}>
+      {highlight ? (
+        <View style={[styles.plate, { backgroundColor: c.poster, boxShadow: t.shadow.shadowCard }]} testID={testID}>
+          {content}
+        </View>
+      ) : (
+        <Plate style={[styles.plate, staff ? { borderWidth: 2, borderColor: c.ink } : null] as never} testID={testID}>
+          {content}
+        </Plate>
+      )}
+    </TicketPoster.Provider>
   );
 }
 
 const styles = StyleSheet.create({
-  plate: { flexDirection: "row", padding: 0, overflow: "hidden" },
+  plate: { flexDirection: "row", padding: 0, borderRadius: 18, overflow: "hidden" },
   stub: {
-    width: 64,
+    width: 70,
     alignItems: "center",
     justifyContent: "center",
-    borderRightWidth: 1.5,
+    borderRightWidth: 2,
     borderStyle: "dashed",
-    paddingVertical: space3,
+    paddingVertical: 12,
+    gap: 1,
   },
-  stubInner: { alignItems: "center", transform: [{ rotate: "-4deg" }] },
-  day: { lineHeight: 30 },
-  body: { flex: 1, gap: space1, padding: space3 },
-  head: { flexDirection: "row", alignItems: "center", gap: space2, flexWrap: "wrap" },
-  note: { textTransform: "none" },
-  actions: { gap: space2, marginTop: space2 },
+  stubSmall: { fontSize: 10.5, lineHeight: 13, fontWeight: "800" },
+  day: { fontSize: 38, lineHeight: 34 },
+  notch: { position: "absolute", right: -9, width: 16, height: 16, borderRadius: 8 },
+  notchTop: { top: -8 },
+  notchBottom: { bottom: -8 },
+  body: { flex: 1, minWidth: 0, gap: 7, paddingVertical: 12, paddingHorizontal: 14 },
+  head: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  title: { fontSize: 15, lineHeight: 16 },
+  cap: { fontSize: 12.5, lineHeight: 17 },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 },
 });

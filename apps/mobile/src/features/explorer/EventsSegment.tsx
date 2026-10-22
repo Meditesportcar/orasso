@@ -59,11 +59,11 @@ export function EventsSegment({
   return (
     <>
       <View style={styles.sortline} testID="sort-line">
-        <Text variant="meta" color={t.color.inkMuted} style={styles.sortText}>
+        <Text variant="caption" color={t.color.inkMuted} style={styles.sortText}>
           {sortLine(filters, position.status, dept)}
         </Text>
         {list.items ? (
-          <Text variant="meta" color={t.color.inkMuted} testID="results-count">
+          <Text variant="caption" color={t.color.inkMuted} testID="results-count">
             {L.results(items.length, list.hasMore)}
           </Text>
         ) : null}

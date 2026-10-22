@@ -10,7 +10,7 @@ import {
   type SearchResults,
   searchGroupLabels,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CrewRowNative } from "@/features/crews/CrewSearch";
@@ -19,12 +19,23 @@ import { PersonRow } from "@/features/social/PersonRow";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
-import { tabHref } from "@/lib/personaModel";
+import { isBaseKind, tabHref } from "@/lib/personaModel";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
 
+/**
+ * Lot C2a (artefact DA v2 : la loupe mène à Explorer, « chaque fonction à un seul endroit ») : pour l'exposant et le
+ * visiteur, la loupe ouvre l'onglet Explorer, dont le champ cherche événements, pros, personnes et crews. Les autres
+ * casquettes (sans Explorer de passionné) gardent cette recherche.
+ */
 export default function Recherche() {
+  const { persona } = usePersona();
+  const own = isBaseKind(persona.kind) ? tabHref(persona.kind, "explorer") : null;
+  return own ? <Redirect href={own as never} /> : <SearchScreen />;
+}
+
+function SearchScreen() {
   const router = useRouter();
   const { persona, base, choose } = usePersona();
   const [q, setQ] = useState("");

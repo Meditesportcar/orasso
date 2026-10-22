@@ -64,6 +64,7 @@ export function ExplorerMap({
   onSelectGroup,
   children,
   reveal: revealOnPress = true,
+  fill = false,
 }: ExplorerMapProps) {
   const { theme, t } = useTheme();
   const [zoom, setZoom] = useState<number>(() => {
@@ -119,9 +120,9 @@ export function ExplorerMap({
   const groups = useMemo(() => clusterPins(pins, Math.round(zoom)), [pins, zoom]);
 
   return (
-    <View style={styles.wrap} testID="explorer-map">
+    <View style={fill ? styles.fillWrap : styles.wrap} testID="explorer-map">
       <View
-        style={[styles.map, { borderColor: t.color.line, height: mapHeight(screenHeight) }]}
+        style={fill ? styles.fillMap : [styles.map, { borderColor: t.color.line, height: mapHeight(screenHeight) }]}
         onTouchStart={(e) => touchHold.start(ids(e))}
         onTouchEnd={(e) => touchHold.end(ids(e))}
         onTouchCancel={() => touchHold.cancel()}
@@ -194,7 +195,7 @@ export function ExplorerMap({
           </MapView>
         )}
       </View>
-      <View ref={below} collapsable={false} style={styles.below}>
+      <View ref={below} collapsable={false} pointerEvents="box-none" style={fill ? styles.fillBelow : styles.below}>
         {children}
       </View>
     </View>
@@ -205,4 +206,7 @@ const styles = StyleSheet.create({
   wrap: { gap: space3 },
   map: { borderRadius: tokens.radius.radiusMd, overflow: "hidden", borderWidth: 1 },
   below: { gap: space3 },
+  fillWrap: { flex: 1 },
+  fillMap: { flex: 1, overflow: "hidden" },
+  fillBelow: { position: "absolute", left: 12, right: 12, bottom: 12, gap: space3 },
 });

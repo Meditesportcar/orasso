@@ -150,6 +150,12 @@ export const homeProfileLabels = {
   staffNudge: "Tu es staff",
   passportTile: (n: number) => `${n} tampon${n > 1 ? "s" : ""} cette saison`,
   passportTitle: "Passeport Orasso",
+  // Lot C2a (artefact DA v2 `s-home`) : rail d'affiches, incitations.
+  aroundThisMonth: (place: string) => `Autour du ${place} ce mois-ci`,
+  aroundThisMonthNoPlace: "Autour de toi ce mois-ci",
+  exploreLink: "Explorer",
+  staffModeEve: "le mode staff s'ouvre la veille",
+  passportNext: "Le prochain t'attend à ta prochaine sortie.",
   tutoTitle: "Découvre ce qu'il y a de nouveau",
   tutoBody: "Un tour rapide de ton espace.",
   weatherDayJ: "Météo prévue sur place le jour J",

@@ -5,9 +5,15 @@ import {
   arrivalTime,
   BUSINESS_TIMEZONE,
   calendarDaysBetween,
+  inNearWindow,
   type MyApplication,
   type MyStaffEvent,
   type MyTicket,
+  NEAR_AFTER_DAYS,
+  NEAR_BEFORE_DAYS,
+  type NearItem,
+  type NearKind,
+  nearestAccess,
   OFFER_DELAY_DAY,
   OFFER_DELAY_DEFAULT,
   OFFER_DELAY_EVE,
@@ -57,17 +63,16 @@ export const ticketsPast = (items: readonly MyTicket[], now: Date) =>
 
 // --- Accès flottant ------------------------------------------------------------------------------------------------
 
+// Lot C2a : la règle est celle du lot C5, commune à l'appli et au site (`packages/shared/src/rules/nearAccess.ts`) ;
+// les noms ci-dessous restent pour l'accès flottant (`NextAccessBar`) et ses tests.
+
 /** La barre flotte de J-7 (inclus) au lendemain de la fin de l'événement. */
-export const FLOATING_BEFORE_DAYS = 7;
-export const FLOATING_AFTER_DAYS = 1;
+export const FLOATING_BEFORE_DAYS = NEAR_BEFORE_DAYS;
+export const FLOATING_AFTER_DAYS = NEAR_AFTER_DAYS;
 
-export type AccessKind = "application" | "ticket" | "staff" | "accreditation" | "mission";
+export type AccessKind = NearKind;
 
-export type AccessItem = {
-  key: string;
-  kind: AccessKind;
-  startsAt: string;
-  endsAt: string;
+export type AccessItem = NearItem & {
   title: string;
   /** Écran à ouvrir. */
   href: string;
@@ -77,25 +82,11 @@ export type AccessItem = {
  * Vrai si l'accès est dans la fenêtre de la barre : en jours calendaires (Europe/Paris), de J-7 dès 0 h jusqu'au lendemain
  * de la fin de l'événement (un événement de plusieurs jours reste là tant qu'il dure).
  */
-export function inFloatingWindow(startsAt: string | Date, endsAt: string | Date, now: Date): boolean {
-  return (
-    calendarDaysBetween(now, new Date(startsAt)) <= FLOATING_BEFORE_DAYS &&
-    calendarDaysBetween(new Date(endsAt), now) <= FLOATING_AFTER_DAYS
-  );
-}
+export const inFloatingWindow = (startsAt: string | Date, endsAt: string | Date, now: Date): boolean =>
+  inNearWindow(startsAt, endsAt, now);
 
-/** L'accès le plus proche dans la fenêtre (le plus tôt d'abord ; à égalité : candidature, billet, staff…). */
-export function nextAccessOf(items: readonly AccessItem[], now: Date): AccessItem | null {
-  const order: AccessKind[] = ["application", "accreditation", "mission", "ticket", "staff"];
-  const live = items
-    .filter((i) => inFloatingWindow(i.startsAt, i.endsAt, now))
-    .sort(
-      (a, b) =>
-        new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() ||
-        order.indexOf(a.kind) - order.indexOf(b.kind),
-    );
-  return live[0] ?? null;
-}
+/** L'accès le plus proche dans la fenêtre (le plus tôt d'abord ; à égalité : candidature, accréditation, mission…). */
+export const nextAccessOf = (items: readonly AccessItem[], now: Date): AccessItem | null => nearestAccess(items, now);
 
 /** Les candidatures retenues deviennent des accès (une place retenue ouvre le jour J) ; une fois entré, le QR n'a plus d'usage. */
 export function applicationAccesses(apps: readonly MyApplication[] | null | undefined): AccessItem[] {
@@ -121,7 +112,8 @@ export function ticketAccesses(items: readonly MyTicket[] | null | undefined, no
       startsAt: x.event.startsAt,
       endsAt: x.event.endsAt,
       title: x.event.title,
-      href: "/billets",
+      // Lot C2a : le billet s'ouvre dans la variante visiteur de `s-qr`.
+      href: `/billet/${x.id}`,
     }));
 }
 
