@@ -5,6 +5,7 @@
 import {
   type AdminDecision,
   type AdminPlateTransfer,
+  formatPlate,
   type OutgoingPlateTransferView,
   PLATE_TRANSFER_DELAY_DAYS,
   type PlateTransferView,
@@ -221,7 +222,7 @@ async function viewOf(t: TransferRow, holderVehicleId: string): Promise<PlateTra
     id: t.id,
     status: t.status,
     createdAt: t.createdAt.toISOString(),
-    plate: holder?.plate ?? t.plateNormalized,
+    plate: formatPlate(holder?.plate ?? t.plateNormalized),
     requesterPseudo: requester?.pseudo ?? "Membre",
     holderVehicleId,
     holderVehicleLabel: (await labelOf(holderVehicleId)) ?? "Véhicule",

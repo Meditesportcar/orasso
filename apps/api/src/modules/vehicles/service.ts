@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
+  formatPlate,
   normalizePlate,
   type PlateRect,
   type ShareFormat,
@@ -221,7 +222,8 @@ export const vehiclesService = {
             engine: input.engine,
             powerHp: input.powerHp ?? null,
             weightKg: input.weightKg ?? null,
-            plate: input.unregistered ? null : input.plate,
+            // Lot M2 : forme lisible unique (« ae 665gh » → « AE-665-GH ») ; la forme de recherche est `plateNormalized`.
+            plate: input.unregistered || !input.plate ? null : formatPlate(input.plate),
             plateNormalized: pendingTransferId ? null : plateNormalized,
             pendingTransferId,
             unregistered: input.unregistered,
@@ -259,14 +261,16 @@ export const vehiclesService = {
       modelId: input.modelId ?? current.modelId,
       generationId: input.generationId !== undefined ? input.generationId : current.generationId,
       year: input.year !== undefined ? input.year : current.year,
-      plate: input.plate !== undefined ? input.plate : current.plate,
+      plate: input.plate !== undefined ? (input.plate ? formatPlate(input.plate) : null) : current.plate,
       unregistered: input.unregistered ?? current.unregistered,
       status: input.status ?? current.status,
     };
     const pending = Boolean(current.pendingTransferId);
     // Tant que la plaque est en attente de transfert, on ne la change pas : on supprime le véhicule ou on l'archive.
     if (pending) {
-      const plateChanged = input.plate !== undefined && input.plate !== current.plate;
+      // Même plaque écrite autrement (« ab 123 cd ») : pas un changement (lot M2).
+      const plateChanged =
+        input.plate !== undefined && normalizePlate(input.plate ?? "") !== normalizePlate(current.plate ?? "");
       const unregisteredChanged = input.unregistered !== undefined && input.unregistered !== current.unregistered;
       if (plateChanged || unregisteredChanged) {
         throw validation("Plaque en attente de transfert : elle ne peut pas être modifiée pour le moment", {

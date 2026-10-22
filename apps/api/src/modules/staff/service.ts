@@ -18,6 +18,7 @@ import {
   mediaLabels,
   type PassRevokedReason,
   providerTypeLabel,
+  formatPlate,
   type StaffRole,
   type StaffSync,
   settleAt,
@@ -570,7 +571,7 @@ async function accessEntries(
       ...(dayDates.size ? { lastSeenAt: seenAt?.toISOString() ?? null } : {}),
       updatedAt: new Date(updatedAt).toISOString(),
     };
-    if (organizer) entry.plate = v?.plate ?? null;
+    if (organizer) entry.plate = v?.plate ? formatPlate(v.plate) : null;
     if (withContact) {
       entry.contact = { firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone, email };
     }

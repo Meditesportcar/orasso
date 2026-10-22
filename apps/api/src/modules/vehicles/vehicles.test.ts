@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, seedReference, signUp, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { plateTransferRequests } from "../../db/schema";
+import { plateTransferRequests, vehicles } from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -130,11 +130,33 @@ describe("garage", () => {
     expect(ok.json.categories[0].slug).toBe("youngtimer");
   });
 
+  it("lot M2 : toute saisie de plaque est stockée sous une seule forme, rendue lisible ; une étrangère passe", async () => {
+    const u = await signUp("Garage_M2");
+    const first = await call(u, "POST", "/me/vehicles", { ...car(), plate: "ae 665gh" });
+    expect(first.status).toBe(201);
+    expect(first.json.plate).toBe("AE-665-GH");
+    const row = await db.query.vehicles.findFirst({ where: eq(vehicles.id, first.json.id) });
+    expect(row).toMatchObject({ plate: "AE-665-GH", plateNormalized: "AE665GH" });
+    // Même plaque écrite autrement : doublon reconnu.
+    const again = await call(u, "POST", "/me/vehicles", { ...car(), plate: "AE-665-GH" });
+    expect(again.status).toBe(409);
+    // W garage et plaque étrangère : acceptées.
+    const w = await call(u, "PATCH", `/me/vehicles/${first.json.id}`, { plate: "w623 ax" });
+    expect(w.status).toBe(200);
+    expect(w.json.plate).toBe("W-623-AX");
+    const foreign = await call(u, "PATCH", `/me/vehicles/${first.json.id}`, { plate: "m-ab  1234" });
+    expect(foreign.status).toBe(200);
+    expect(foreign.json.plate).toBe("M-AB 1234");
+    expect((await db.query.vehicles.findFirst({ where: eq(vehicles.id, first.json.id) }))?.plateNormalized).toBe(
+      "MAB1234",
+    );
+  });
+
   it("la fiche vue par un autre n'a jamais la plaque", async () => {
     const a = await signUp("Garage_04");
     const b = await signUp("Garage_05");
     const v = await call(a, "POST", "/me/vehicles", car());
-    expect(v.json.plate).toBe("ab-123-cd");
+    expect(v.json.plate).toBe("AB-123-CD"); // saisie « ab-123-cd », rendue lisible (lot M2)
     const seen = await call(b, "GET", `/vehicles/${v.json.id}`);
     expect(seen.status).toBe(200);
     expect(seen.json.plate).toBeUndefined();

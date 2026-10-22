@@ -8,6 +8,7 @@ import {
   type ExpressSignup,
   isMultiDay,
   isStaffModeOpen,
+  formatPlate,
   normalizePlate,
   vehicleCreateSchema,
 } from "@orasso/shared";
@@ -179,7 +180,7 @@ export const expressService = {
           makeId: vehicle.makeId,
           modelId: vehicle.modelId,
           generationId: vehicle.generationId ?? null,
-          plate: vehicle.unregistered ? null : vehicle.plate,
+          plate: vehicle.unregistered || !vehicle.plate ? null : formatPlate(vehicle.plate),
           plateNormalized,
           unregistered: vehicle.unregistered,
           status: "active",
