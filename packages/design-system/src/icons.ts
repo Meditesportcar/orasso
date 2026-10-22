@@ -160,6 +160,32 @@ export const iconShapes = {
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;
+
+/**
+ * Lot C1, tour 2 : parties remplies d'une icône quand son onglet est actif (`.fillme` des symboles de l'artefact :
+ * l'aiguille de la boussole, le corps du ticket, la carrosserie, la tête du profil…). Une icône absente ne se remplit pas.
+ */
+export const iconFillParts: Partial<Record<IconName, readonly number[]>> = {
+  explore: [1],
+  ticket: [0],
+  vehicle: [0],
+  profile: [0],
+  stamp: [0],
+  briefcase: [0],
+  calendar: [0],
+  staff: [0],
+  crew: [0],
+  home: [0],
+  cards: [0],
+  express: [0],
+  grade: [0],
+};
+
+/** Remplissage d'une partie : `filled === "parts"` ne remplit que les parties `.fillme` ; `true` remplit tout. */
+export function shapeFilled(name: IconName, index: number, filled: boolean | "parts"): boolean {
+  if (filled === "parts") return iconFillParts[name]?.includes(index) ?? false;
+  return filled;
+}
 export const iconNames = Object.keys(iconShapes) as IconName[];
 
 /** Icône de chaque condition météo de `@orasso/shared` (`WeatherCode`), lot 28. */

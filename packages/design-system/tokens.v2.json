@@ -327,9 +327,9 @@
         "name": "plate-field",
         "value": {
           "beton": "#363941",
-          "sable": "#363941"
+          "sable": "#fffaf0"
         },
-        "usage": "champ et fond graphite clair dans une plaque, sous plate-ink (ancienne valeur de surface-raised, devenue claire en Sable)"
+        "usage": "champ et fond de saisie dans une plaque, sous plate-ink : graphite clair en Béton, --field de l’artefact en Sable (lot C1, tour 2 : la plaque est claire en Sable)"
       },
       {
         "name": "map-land",
