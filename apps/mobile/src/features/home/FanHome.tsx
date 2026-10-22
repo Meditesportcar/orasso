@@ -13,12 +13,13 @@ import {
   type HomeData,
   type HomeNudgeKind,
   type HomeOrganizer,
+  type HomeSponsored,
   homeLabels,
   homeProfileLabels,
   type MyApplication,
 } from "@orasso/shared";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 import { useMyPosition } from "@/features/explorer/useMyPosition";
 import { NudgeCard } from "@/features/home/HomeWidgets";
@@ -39,13 +40,13 @@ import { TabScreen } from "@/ui/Screens";
 import { autoOpenKey, isDayJ } from "./autoOpen";
 import { Greet, MiniStrip, MiniTicket, Nudge, PosterRail, SecH, WeatherCard } from "./fanBlocks";
 import { HeroCard } from "./parts";
+import { homeRail, splitSponsored } from "./rail";
 import { todayLine } from "./today";
 
 const { space2, space3 } = tokens.spacing;
 const fileUrl = (url: string | null | undefined) => mediaSource(url)?.uri ?? null;
 /** Le logo de la structure vient aussi de l'API (URL relative). */
 const withLogo = (o: HomeOrganizer | null) => (o ? { ...o, logoUrl: fileUrl(o.logoUrl) } : null);
-const MONTH_MS = 31 * 24 * 3600 * 1000;
 const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
   weekday: "long",
   day: "numeric",
@@ -64,15 +65,22 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   const position = useMyPosition();
   const exhibitor = variant === "exhibitor";
 
+  // Le sponsorisé ne vient que de la réponse fraîche de l'API (celle qui l'a compté) ; la réponse gardée dans le cache
+  // n'en porte jamais (`splitSponsored`).
+  const [sponsored, setSponsored] = useState<HomeSponsored | null>(null);
   const home = useApi(
-    () =>
-      api.homeData({
+    async () => {
+      const fresh = await api.homeData({
         lat: position.position?.lat,
         lng: position.position?.lng,
         persona: exhibitor ? "fan" : "visitor",
         // Lot C2a : l'Accueil v2 (météo et rail toujours ; ni lavage ni carburant ; le sponsorisé dans le rail).
         blocks: "v2",
-      }),
+      });
+      const parts = splitSponsored(fresh);
+      setSponsored(parts.sponsored);
+      return parts.cacheable;
+    },
     [position.position?.lat, position.position?.lng, variant],
     { cacheKey: `home-${variant}` },
   );
@@ -109,10 +117,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   const staffNext = (staff.data ?? []).find((s) => new Date(s.event.endsAt) > now && s.presence !== "absent");
   const heroEvent = next?.event ?? ticket?.event ?? null;
   // Rail « Autour du 66 ce mois-ci » : les événements proches du mois qui vient, sans celui de la carte.
-  const rail = (data?.nearby?.events ?? [])
-    .filter((e) => e.slug !== heroEvent?.slug)
-    .filter((e) => new Date(e.startsAt).getTime() - now.getTime() < MONTH_MS)
-    .slice(0, 8);
+  const rail = homeRail(data?.nearby?.events ?? [], sponsored, heroEvent?.slug, now);
   const stamps = (passport.data?.pages ?? []).flatMap((p) => p.stamps).slice(-3);
 
   // D34 : le jour J, le QR d'accès (ou le billet) s'affiche d'office à l'ouverture de l'Accueil, une fois par jour et par
@@ -311,7 +316,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
         />
       ) : null}
 
-      {rail.length > 0 || data?.sponsored ? (
+      {rail.visible ? (
         <>
           <SecH
             title={
@@ -321,9 +326,9 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
             onLink={() => goTab("explorer")}
           />
           <PosterRail
-            events={rail}
+            events={rail.events}
             onOpen={(slug) => router.push(`/e/${slug}`)}
-            sponsored={data?.sponsored ?? null}
+            sponsored={rail.sponsored}
             onSponsored={(s) => {
               void api.sponsoredClick(s.id).catch(() => undefined);
               if (/^https?:\/\//i.test(s.linkUrl)) void Linking.openURL(s.linkUrl).catch(() => undefined);
