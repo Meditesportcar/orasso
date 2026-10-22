@@ -5,6 +5,7 @@ import { Children, type ReactNode, useCallback, useEffect, useRef, useState } fr
 import {
   BackHandler,
   type LayoutChangeEvent,
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -229,7 +230,7 @@ export function Sheet({ visible, onClose, from = "bottom", origin, children, acc
   useGroundQuiet(visible && shown);
   // Retour Android : ferme la feuille de l'écran affiché, au lieu de quitter l'écran en la laissant ouverte.
   useEffect(() => {
-    if (!visible || !shown || !onClose) return;
+    if (!visible || !shown || !onClose || Platform.OS === "web") return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       onClose();
       return true;
