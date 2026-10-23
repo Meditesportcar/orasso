@@ -189,6 +189,12 @@ export function ShareBody({
       delete next[key];
       return next;
     });
+    // La vérification repart sur l'affiche masquée (elle dira « Plaque masquée sur l'affiche. »).
+    setChecks((all) => {
+      const next = { ...all };
+      delete next[key];
+      return next;
+    });
     if (old) releasePrepared(old);
   }
 

@@ -33,7 +33,7 @@ test("site : Tes préférences enregistrées sur le compte", async ({ page }) =>
   await page.getByLabel("Nocturne").check();
   await page.getByLabel(/Me prévenir des nouveaux événements dans mon coin/).uncheck();
   // « Partout en France » : plus de limite de distance (null), le curseur est grisé.
-  await page.getByLabel("Partout en France").check();
+  await page.getByTestId("pref-everywhere").check();
   await expect(page.getByTestId("pref-radius")).toContainText("Partout");
   const audit = await auditPage(page);
   expect(audit.greens).toEqual([]);
@@ -138,7 +138,7 @@ test.describe("site sans JavaScript : Tes préférences", () => {
     await expect(page.getByRole("heading", { name: /Tes préférences/i })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("pref-radius")).toContainText("Partout");
     await expect(page.locator("#pref-radius-range")).toBeEnabled();
-    await page.getByLabel("Partout en France").uncheck();
+    await page.getByTestId("pref-everywhere").uncheck();
     await page.getByRole("button", { name: /Enregistrer/ }).click();
     await expect(page.getByTestId("preferences-saved")).toBeVisible({ timeout: 30_000 });
     const after = await apiCall<{ radiusKm: number | null }>(cookie, "GET", "/me/preferences");
