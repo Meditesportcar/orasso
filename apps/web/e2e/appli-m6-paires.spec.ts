@@ -153,9 +153,7 @@ for (const theme of THEMES) {
     await expect(page.getByText(new RegExp(event.title, "i")).first()).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(1500);
     await decideApi(damien, event.id, applicationId, "accept");
-    await page.reload();
-    await afterOpening(page);
-    // Le bandeau arrive dès que la candidature retenue est relue ; capture quand il est posé.
+    // Le bandeau arrive en direct (temps réel, puis relecture des candidatures) ; capture quand il est posé.
     await expect(page.getByTestId("announce-good")).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(700);
     await shot(page, "20-annonce-retenue", theme);
