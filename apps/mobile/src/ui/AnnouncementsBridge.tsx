@@ -75,7 +75,14 @@ export function AnnouncementsBridge({
       title: n.title,
       text: n.body ?? undefined,
       icon: n.type.startsWith("message") || n.type === "contact_request" ? "chat" : "bell",
-      onOpen: () => onOpenNotification(n.data),
+      // Une décision ou une place proposée : Sorties, où le ticket concerné pulse ; le reste suit le lien de la notification.
+      onOpen: () => {
+        const passionate = n.data?.screen !== "provider_applications";
+        if (passionate && (n.type.startsWith("application_") || n.type.startsWith("offer_"))) {
+          if (applicationId) pulseTicket(applicationId);
+          router.navigate("/acces");
+        } else onOpenNotification(n.data);
+      },
     });
   });
 

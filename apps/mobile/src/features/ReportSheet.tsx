@@ -82,9 +82,22 @@ export function ReportSheet({ target, onClose }: { target: ReportTargetRef | nul
     <AppSheet visible={Boolean(target)} onClose={close} accessibilityLabel={moderationLabels.report}>
       {target ? (
         <>
-          <Text variant="title" color={t.color.ink}>
-            {moderationLabels.reportTitle(reportTargetThis[target.type])}
-          </Text>
+          {/* Maquette 9.2 : le titre et ✕ (fermer sans rien envoyer). */}
+          <View style={styles.head}>
+            <Text variant="posterM" color={t.color.ink} style={styles.title} accessibilityRole="header">
+              {moderationLabels.reportTitle(reportTargetThis[target.type])}
+            </Text>
+            <Pressable
+              onPress={close}
+              accessibilityRole="button"
+              accessibilityLabel={moderationLabels.cancel}
+              hitSlop={6}
+              testID="report-close"
+              style={[styles.closex, { backgroundColor: t.color.surface }]}
+            >
+              <Icon name="close" size={20} color={t.color.ink} />
+            </Pressable>
+          </View>
           {done ? (
             <>
               <Text variant="body" color={t.color.ink} accessibilityRole="alert" testID="report-done">
@@ -275,6 +288,9 @@ export function ReportSheetHost() {
 }
 
 const styles = StyleSheet.create({
+  head: { flexDirection: "row", alignItems: "flex-start", gap: tokens.spacing.space2 },
+  title: { flex: 1, fontSize: 20, lineHeight: 22 },
+  closex: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   list: { gap: 6 },
   row: {
     flexDirection: "row",
