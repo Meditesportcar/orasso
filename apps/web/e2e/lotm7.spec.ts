@@ -68,6 +68,7 @@ function fiches(id: Ids): [string, string][] {
     ["creer-fiche-pro", "/app/pro/nouvelle"],
     ["profil-prestataire", "/app/prestataire"],
     ["profil-media", "/app/media/nouveau"],
+    ["aide", "/app/aide"],
   ];
 }
 

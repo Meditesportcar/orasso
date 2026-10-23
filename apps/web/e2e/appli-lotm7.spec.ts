@@ -160,6 +160,10 @@ function pages(kind: Kind, id: Ids): [string, string][] {
         ["organisateur-public", `/o/${id.structure}`],
         ["pro-public", `/p/${id.pro}`],
         ["reglages", "/reglages/preferences"],
+        // Lot M5 : réglages Compte et Confidentialité, Aide (mode B, en-tête de fiche).
+        ["reglages-compte", "/reglages/compte"],
+        ["reglages-confidentialite", "/reglages/confidentialite"],
+        ["aide", "/reglages/aide"],
         ["amis", "/amis"],
         ["billets", "/billets"],
         ["passeport", "/mon-passeport"],
