@@ -1,6 +1,6 @@
-// Carte à partager en écran de flux (lot C2b, prototype `s-share`) : barre « Carte à partager · Format story, signée
-// Orasso » et ✕, puis le contenu commun (`ShareBody`). Ouvert depuis « Partager sa carte » du Garage. Sans barre
-// d'onglets ni accès flottant : « En story » n'est plus caché (audit § 1, feuilles sous la barre).
+// Affiche à partager en écran de flux (lot C2b ; lot M6, maquette 2.1) : barre « Affiche à partager · Ta GR Supra,
+// signée Orasso » et ✕ (mode B, plein écran, sans barre d'onglets), puis le contenu commun (`ShareBody`). Ouvert
+// depuis « Partager son affiche » du Garage et de la page du véhicule.
 import { shareSheetLabels as L } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -16,8 +16,9 @@ export default function PartagerVehicule() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const vehicle = useApi(() => api.vehicle(id), [id]);
   const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/garage"));
+  const model = vehicle.data?.modelName;
   return (
-    <FlowScreen title={L.title} facts={L.subtitle} onClose={close}>
+    <FlowScreen title={L.title} facts={model ? L.subtitleOf(model) : L.subtitle} onClose={close}>
       {vehicle.data ? (
         <ShareBody
           key={shareSheetKey(vehicle.data.id, vehicle.data.shareVersion)}

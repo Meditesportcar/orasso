@@ -1,18 +1,19 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { SHARE_SIZES, shareSafeBands, shareStyles } from "@orasso/shared";
+import { SHARE_SIZES, shareFormats, shareSafeBands, shareStyles } from "@orasso/shared";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
-import { renderStory, STORY_COLORS, type StoryInput, storyLayout } from "./share-story";
+import { fitNameLine, renderStory, type StoryInput, storyLayout } from "./share-story";
 
-// Carte à partager au format story (lot 50) : dimensions, zones sûres d'Instagram (fond uniforme), trois styles.
+// Affiche à partager (lot 50 ; lot M6, maquettes 2.1 à 2.3) : formats story 9:16 et post 4:5, trois styles, aucun
+// texte dans les marges qu'Instagram recouvre, nom du véhicule sur une seule ligne quelle que soit sa longueur.
 async function cover() {
-  // Une « photo » très contrastée : si elle débordait sur les bandes, le test le verrait.
-  return sharp({ create: { width: 1600, height: 1000, channels: 3, background: "#7a5c2e" } })
+  // Une « photo » carrée très contrastée.
+  return sharp({ create: { width: 1200, height: 1200, channels: 3, background: "#7a5c2e" } })
     .composite([
       {
-        input: await sharp({ create: { width: 800, height: 500, channels: 3, background: "#ff0000" } })
+        input: await sharp({ create: { width: 600, height: 600, channels: 3, background: "#ff0000" } })
           .png()
           .toBuffer(),
         left: 0,
@@ -23,88 +24,90 @@ async function cover() {
     .toBuffer();
 }
 
+const LONG = "Mercedes-AMG GT 63 S E Performance 4MATIC+";
+
 const base = (over: Partial<StoryInput> = {}): StoryInput => ({
+  format: "story",
   style: "night",
   photo: null,
-  grade: "Sport",
-  pseudo: "kenji_66",
   name: "GR Supra",
-  line: "Toyota · 2021 · Japonaise",
-  numbers: [
-    { value: "340", label: "ch" },
-    { value: "14", label: "rassos" },
-    { value: "1", label: "prix du public" },
+  line: "Toyota · A90 · Blanche",
+  tags: ["JDM", "Sportive", "Japonaise"],
+  stats: [
+    { label: "Puissance", value: "340", unit: "ch" },
+    { label: "Poids", value: "1 495", unit: "kg" },
+    { label: "Année", value: "2021" },
   ],
+  certified: true,
+  pseudo: "Kenji_66",
+  findIt: "Retrouve-la sur",
+  site: "orasso.fr",
+  qrUrl: "https://orasso.fr/v/00000000-0000-0000-0000-000000000000",
   ...over,
 });
 
-const hex = (c: string) => [1, 3, 5].map((i) => Number.parseInt(c.slice(i, i + 2), 16));
-
-/** Toutes les lignes `[from, to[` ont exactement la couleur `ground`. */
-async function bandIsUniform(png: Buffer, from: number, to: number, ground: string) {
-  const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
-  const [r, g, b] = hex(ground);
-  for (let y = from; y < to; y++) {
-    for (let x = 0; x < info.width; x++) {
-      const i = (y * info.width + x) * info.channels;
-      if (data[i] !== r || data[i + 1] !== g || data[i + 2] !== b) return { ok: false, x, y };
-    }
-  }
-  return { ok: true };
-}
-
-describe("story v2", () => {
-  it.each(shareStyles)("style %s : 1080 × 1920, bandes d'Instagram de la couleur du fond", async (style) => {
-    const photo = await cover();
-    const png = await renderStory(base({ style, photo }));
-    const meta = await sharp(png).metadata();
-    expect([meta.width, meta.height]).toEqual([SHARE_SIZES.story.width, SHARE_SIZES.story.height]);
-    const bands = shareSafeBands(SHARE_SIZES.story.height);
-    expect(bands).toEqual({ top: 269, bottom: 384 });
-    const ground = STORY_COLORS[style].ground;
-    expect(await bandIsUniform(png, 0, bands.top, ground)).toEqual({ ok: true });
-    expect(await bandIsUniform(png, SHARE_SIZES.story.height - bands.bottom, SHARE_SIZES.story.height, ground)).toEqual(
-      { ok: true },
-    );
-    const out = process.env.SHARE_OUT;
-    if (out) {
-      mkdirSync(out, { recursive: true });
-      writeFileSync(join(out, `story-${style}.png`), png);
-    }
-  });
-
-  it("un nom très long ou sans photo reste dans les zones sûres, sans chiffre il n'y a pas de rangée vide", async () => {
-    for (const name of ["Série 3 Touring Compact", "Hispano-Suiza-Alfonso-Treize-Cinquante-Super-Sport", "GTI"]) {
-      const png = await renderStory(base({ name, photo: null, numbers: [] }));
-      const bands = shareSafeBands(1920);
-      expect(await bandIsUniform(png, 0, bands.top, STORY_COLORS.night.ground)).toEqual({ ok: true });
-      expect(await bandIsUniform(png, 1920 - bands.bottom, 1920, STORY_COLORS.night.ground)).toEqual({ ok: true });
-    }
-  });
-
-  it("l'adresse imprimée est « orasso.fr » (le site n'a pas de page publique par pseudo), le @pseudo est sur la carte", () => {
-    const { layout } = storyLayout(base());
-    const texts = layout.layers.flatMap((l) => (l.kind === "text" ? l.lines : []));
-    expect(texts).toContain("orasso.fr");
-    expect(texts).toContain("@kenji_66");
-    expect(texts.some((t) => t.startsWith("orasso.fr/"))).toBe(false);
-  });
-
-  // Les bandes sont déjà vérifiées au pixel (tests ci-dessus) ; celui-ci vérifie en plus les ancrages déclarés : tout
-  // calque (photo, texte, signature, cartouche) reste entre la bande du haut et celle du bas, nom très long compris.
-  it("la mise en page ne dépose rien dans les bandes", () => {
-    const { layout, bands } = storyLayout(base({ name: "Hispano-Suiza-Alfonso-Treize-Cinquante-Super-Sport" }));
-    for (const l of layout.layers) {
-      if (l.kind === "photo") expect(l.y).toBeGreaterThanOrEqual(bands.top);
-      if (l.kind === "photo") expect(l.y + l.h).toBeLessThanOrEqual(1920 - bands.bottom);
-      if (l.kind === "box") expect(l.y).toBeGreaterThanOrEqual(bands.top);
-      if (l.kind === "text") {
-        // Ancré par la ligne de base : le haut du bloc = la base moins ses lignes.
-        const top = (l.anchor ?? "top") === "bottom" ? l.y - l.lines.length * l.size * (l.lineHeight ?? 0.9) : l.y;
-        expect(top).toBeGreaterThanOrEqual(bands.top);
-        expect(l.y).toBeLessThan(1920 - bands.bottom);
+describe("affiche à partager", () => {
+  for (const format of shareFormats) {
+    it.each(shareStyles)(`${format}, style %s : dimensions du format`, async (style) => {
+      const png = await renderStory(base({ format, style, photo: await cover() }));
+      const meta = await sharp(png).metadata();
+      expect([meta.width, meta.height]).toEqual([SHARE_SIZES[format].width, SHARE_SIZES[format].height]);
+      const out = process.env.SHARE_OUT;
+      if (out) {
+        mkdirSync(out, { recursive: true });
+        writeFileSync(join(out, `${format}-${style}.png`), png);
       }
-      if (l.kind === "sig") expect(l.y).toBeLessThan(1920 - bands.bottom);
+    });
+  }
+
+  it("story : marges d'Instagram de 13 % en haut et 15 % en bas", () => {
+    expect(shareSafeBands(1920)).toEqual({ top: 250, bottom: 288 });
+  });
+
+  it("story : aucun texte, étiquette, logo ni QR dans les marges masquées, nom très long compris", async () => {
+    for (const name of ["GTI", "GR Supra", LONG]) {
+      for (const certified of [true, false]) {
+        const { frame, placed } = await storyLayout(base({ name, certified }));
+        for (const p of placed) {
+          if (p.kind === "shadow" || p.kind === "halo") continue;
+          expect(p.top, `${p.kind} sous la marge du haut (${name})`).toBeGreaterThanOrEqual(frame.bands.top);
+          expect(p.bottom, `${p.kind} au-dessus de la marge du bas (${name})`).toBeLessThanOrEqual(
+            frame.H - frame.bands.bottom,
+          );
+        }
+      }
     }
+  });
+
+  it("le nom tient sur une seule ligne, dans la largeur, et le corps baisse avec sa longueur", async () => {
+    const width = 936;
+    const short = await fitNameLine("GR Supra", width, 140, "#f3ebdd");
+    const long = await fitNameLine(LONG, width, 140, "#f3ebdd");
+    expect(short.size).toBeGreaterThan(120);
+    expect(short.font).toBe("expanded");
+    expect(short.image.width).toBeLessThanOrEqual(width);
+    expect(long.size).toBeLessThan(140);
+    expect(long.image.width).toBeLessThanOrEqual(width);
+    // Une seule ligne : la hauteur de l'image reste celle d'une ligne de ce corps.
+    expect(long.image.height).toBeLessThan(long.size * 1.6);
+  });
+
+  it("sans chiffres, sans photo, sans certification : le rendu passe ; le sceau n'apparaît qu'avec la certification", async () => {
+    const png = await renderStory(base({ photo: null, stats: [], tags: [], certified: false }));
+    expect((await sharp(png).metadata()).height).toBe(1920);
+    const plain = await storyLayout(base({ certified: false }));
+    expect(plain.placed.some((p) => p.kind === "seal")).toBe(false);
+    const certified = await storyLayout(base({ certified: true }));
+    expect(certified.placed.some((p) => p.kind === "seal")).toBe(true);
+  });
+
+  it("le filet de sécurité floute les zones demandées sur l'affiche composée", async () => {
+    const photo = await cover();
+    const clear = await renderStory(base({ photo }));
+    const masked = await renderStory(base({ photo, masks: [{ x: 0.05, y: 0.06, w: 0.3, h: 0.08 }] }));
+    const crop = (png: Buffer) =>
+      sharp(png).extract({ left: 54, top: 115, width: 324, height: 154 }).raw().toBuffer({ resolveWithObject: true });
+    const [a, b] = await Promise.all([crop(clear), crop(masked)]);
+    expect(Buffer.compare(a.data, b.data)).not.toBe(0);
   });
 });

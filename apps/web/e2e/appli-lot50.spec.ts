@@ -435,8 +435,8 @@ test("carte à partager : trois styles, zones masquées par Instagram, les trois
     await goto(page, "/garage");
     await expect(page.getByTestId("garage-card").first()).toBeVisible({ timeout: 30_000 });
     await page.getByTestId("garage-share").first().click();
-    await expect(page.getByText("Carte à partager", { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/Format story, signée Orasso/)).toBeVisible();
+    await expect(page.getByText("Affiche à partager", { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/signée Orasso/)).toBeVisible();
     for (const [label, file] of [
       ["Nuit", "nuit"],
       ["Sable", "sable"],

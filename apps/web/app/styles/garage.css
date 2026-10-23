@@ -287,7 +287,7 @@
   align-items: center;
 }
 
-/* Lot 57 : carte à partager (story 9:16), avec les zones masquées par Instagram (14 % en haut, 20 % en bas). */
+/* Lot 57 : affiche à partager ; lot M6 : story 9:16 (zones masquées par Instagram : 13 % en haut, 15 % en bas) ou post 4:5. */
 .g-share {
   position: relative;
   margin: 0;
@@ -296,6 +296,10 @@
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--surface-sunken);
+}
+.g-share--post {
+  width: min(100%, 300px);
+  aspect-ratio: 4 / 5;
 }
 .g-share img {
   width: 100%;
@@ -315,9 +319,9 @@
 }
 .g-share__safe--top {
   top: 0;
-  height: 14%;
+  height: 13%;
 }
 .g-share__safe--bottom {
   bottom: 0;
-  height: 20%;
+  height: 15%;
 }

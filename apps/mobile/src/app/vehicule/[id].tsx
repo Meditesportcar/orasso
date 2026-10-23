@@ -171,10 +171,10 @@ export default function VehiculeFiche() {
           })}
           testID="vehicle-edit-open"
         />
-        {/* Relecture C2b : la carte à partager de chaque véhicule, pas seulement du premier du Garage. */}
+        {/* Relecture C2b : l'affiche à partager de chaque véhicule, pas seulement du premier du Garage. */}
         <HubRow
           lead={<RowIcon name="share" />}
-          title="Partager sa carte"
+          title="Partager son affiche"
           caption="Format story, signée Orasso"
           onPress={openFrom(() => router.push(`/vehicule/${v.id}/partager`))}
           testID="vehicle-share-open"

@@ -97,12 +97,12 @@ export const vehiclesRoutes = new Hono<AppEnv>()
   .get("/me/vehicles/:id/share-image", async (c) => {
     const v = await requireUser(c);
     rateLimit("shareImage", v.user.id);
-    const { format, style, download } = query(c, shareImageQuery);
-    const png = await vehiclesService.shareImage(v, uuidParam(c, "id"), format, style);
+    const { format, style, download, masks } = query(c, shareImageQuery);
+    const png = await vehiclesService.shareImage(v, uuidParam(c, "id"), format, style, masks);
     return c.body(new Uint8Array(png), 200, {
       "content-type": "image/png",
       "cache-control": CACHE_1H["cache-control"],
-      "content-disposition": `${download ? "attachment" : "inline"}; filename="orasso-${format}${format === "story" ? `-${style}` : ""}.png"`,
+      "content-disposition": `${download ? "attachment" : "inline"}; filename="orasso-${format}-${style}.png"`,
     });
   })
   .post("/me/vehicles/:id/certification-request", async (c) => {

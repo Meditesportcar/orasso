@@ -17,6 +17,10 @@ export const POSTER_FONTS = {
   expanded: { file: "Archivo-Expanded-BlackItalic.ttf", family: "Archivo-Expanded-BlackItalic" },
   bold: { file: "Archivo-ExtraBold.ttf", family: "Archivo-ExtraBold" },
   narrow: { file: "Archivo-Narrow-Bold.ttf", family: "Archivo-Narrow-Bold" },
+  /** Lot M6 (affiche à partager) : chiffres (`font-stretch: 62%`, 900) et nom trop long pour la largeur étirée. */
+  condensed: { file: "Archivo-62-Black.ttf", family: "Archivo-62-Black" },
+  /** Lot M6 : étiquettes et ligne de la marque (`font-stretch: 75%`, 800). */
+  label: { file: "Archivo-75-ExtraBold.ttf", family: "Archivo-75-ExtraBold" },
 } as const;
 export type PosterFont = keyof typeof POSTER_FONTS;
 

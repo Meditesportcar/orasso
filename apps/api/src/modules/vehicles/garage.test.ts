@@ -1,6 +1,4 @@
 // Lot 31 : garage complet — catégories cohérentes, statuts, transfert de plaque, fiche Instagram, certification.
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { PLATE_TRANSFER_DELAY_DAYS, SHARE_SIZES } from "@orasso/shared";
 import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
@@ -38,7 +36,7 @@ import { storage } from "../../lib/storage";
 import { certificationService } from "./certification";
 import { plateTransferService } from "./plate-transfer";
 import { vehiclesRepo } from "./repo";
-import { cachedShareImage, clearShareImageCache, renderShareImage, SHARE_COLORS, shareFacts } from "./share-image";
+import { cachedShareImage, clearShareImageCache, renderShareImage, storyLine, storyStats } from "./share-image";
 
 afterAll(async () => {
   await pool.end();
@@ -395,7 +393,7 @@ describe("fiche Instagram", () => {
     return v;
   }
 
-  it("story 1080×1920 et publication 1080×1080, mises en cache une heure", async () => {
+  it("story 1080×1920 et post 1080×1350 (lot M6), mises en cache une heure", async () => {
     const u = await signUp("Kenji_66");
     const v = await withCover(u.id, { year: 1996, powerHp: 330, weightKg: 1500 });
     const story = await app.request(`/api/me/vehicles/${v.id}/share-image?format=story`, {
@@ -410,7 +408,16 @@ describe("fiche Instagram", () => {
       headers: { cookie: u.cookie },
     });
     const postMeta = await sharp(Buffer.from(await post.arrayBuffer())).metadata();
-    expect([postMeta.width, postMeta.height]).toEqual([1080, 1080]);
+    expect([postMeta.width, postMeta.height]).toEqual([1080, 1350]);
+    // Zones à masquer (filet de sécurité) : acceptées si elles sont dans l'image, refusées sinon.
+    const masked = await app.request(`/api/me/vehicles/${v.id}/share-image?format=story&masks=0.1,0.2,0.3,0.05`, {
+      headers: { cookie: u.cookie },
+    });
+    expect(masked.status).toBe(200);
+    const bad = await app.request(`/api/me/vehicles/${v.id}/share-image?format=story&masks=0.9,0.2,0.3,0.05`, {
+      headers: { cookie: u.cookie },
+    });
+    expect(bad.status).toBe(400);
     // Story v2 (lot 50) : trois styles, même taille ; style inconnu refusé.
     for (const style of ["night", "sand", "neon"]) {
       const res = await app.request(`/api/me/vehicles/${v.id}/share-image?format=story&style=${style}`, {
@@ -446,7 +453,7 @@ describe("fiche Instagram", () => {
     expect(await cachedShareImage(row, "Kenji_66", "post", t0 + 3_700_000)).not.toBe(a);
   });
 
-  it("jamais de plaque : le rendu ne lit ni la plaque ni la plaque normalisée ; nom long sur deux lignes sans erreur", async () => {
+  it("jamais de plaque : le rendu ne lit ni la plaque ni la plaque normalisée ; nom long sur une ligne sans erreur", async () => {
     const u = await signUp("Kenji_66");
     const [mercedes] = await db
       .insert(vehicleMakes)
@@ -477,18 +484,12 @@ describe("fiche Instagram", () => {
       expect(meta.width).toBe(1080);
       expect(meta.height).toBe(SHARE_SIZES[format].height);
     }
-    expect(shareFacts(row)).not.toMatch(/SECRET|777/);
-    expect(shareFacts(row)).toContain("Allemagne");
+    expect(storyLine(row)).toBe("Mercedes-Benz · R170");
+    expect(JSON.stringify(storyStats(row))).not.toMatch(/SECRET|777/);
   });
 
-  it("la palette de l'image reprend les jetons du thème Béton", async () => {
-    const source = readFileSync(
-      fileURLToPath(new URL("../../../../../packages/design-system/src/tokens.ts", import.meta.url)),
-      "utf8",
-    );
-    const beton = source.slice(source.indexOf('"beton"', source.indexOf('"color"')));
-    for (const hex of Object.values(SHARE_COLORS)) expect(beton).toContain(`"${hex}"`);
-  });
+  // Lot M6 : l'affiche est un objet fabriqué aux couleurs des maquettes 2.1 à 2.3 (écart 6 du README du système de
+  // design), comme les affiches d'événement : la comparaison aux jetons du Béton (lot 31) n'a plus lieu d'être.
 });
 
 describe("certification", () => {
