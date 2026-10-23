@@ -25,6 +25,22 @@ import { withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
 import { eventsRepo } from "./repo";
 
+/**
+ * Règle du coordinateur (23/10) : l'alerte part toujours des départements choisis. Sans département, aucune alerte.
+ * « Partout » (adiusKm null) lève seulement la limite de distance, à l'intérieur de ces départements : l'événement
+ * doit être dans l'un d'eux. Avec une distance : le centre du coin (départements) à moins de adiusKm de l'événement,
+ * jamais le GPS.
+ */
+export function nearbyTarget(
+  c: { departments: string[]; radiusKm: number | null },
+  e: { department: string | null; position: { lat: number; lng: number } },
+): boolean {
+  if (c.departments.length === 0) return false;
+  if (c.radiusKm === null) return e.department !== null && c.departments.includes(e.department);
+  const home = profilePosition(c.departments);
+  return home !== null && distanceKm(home, e.position) <= c.radiusKm;
+}
+
 export const nearbyService = {
   /** Renvoie le nombre de personnes notifiées. */
   async notifyNearby(eventId: string): Promise<number> {
@@ -57,11 +73,7 @@ export const nearbyService = {
           sql`not exists (select 1 from ${notifications} n where n.user_id = ${profiles.userId} and n.type = 'event_nearby_interest' and n.event_id = ${e.id})`,
         ),
       );
-    const targets = candidates.filter((c) => {
-      const home = profilePosition(c.departments);
-      // Rayon null = partout en France (pas de limite) ; sinon la distance se mesure depuis le coin enregistré (départements), jamais du GPS.
-      return c.radiusKm === null || (home !== null && distanceKm(home, position) <= c.radiusKm);
-    });
+    const targets = candidates.filter((c) => nearbyTarget(c, { department: e.department, position }));
     if (!targets.length) return 0;
 
     // Déjà notifiés exclus ci-dessus ; si deux passages se croisaient, l'index unique `(user_id, type, event_id)`

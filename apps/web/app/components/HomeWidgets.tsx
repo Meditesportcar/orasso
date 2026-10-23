@@ -16,10 +16,11 @@ import {
   homeWidgetTitles,
   type MyApplication,
   type NearbyPlace,
+  preferencesLabels,
   proActivityLabels,
   weatherTexts,
 } from "@orasso/shared";
-import { type ReactNode, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { Form } from "react-router";
 
 import { apiFetch } from "../lib/api.client";
@@ -75,41 +76,21 @@ export function NearbyBlock({
   device: { lat: number; lng: number } | null;
 }) {
   const onDevice = device !== null;
-  const slider = useRef<HTMLInputElement>(null);
-  // Une requête par relâchement, pas une par cran : l'événement natif `change` de React est celui de `input`.
-  useEffect(() => {
-    const el = slider.current;
-    if (!el) return undefined;
-    const send = () => el.form?.requestSubmit();
-    el.addEventListener("change", send);
-    return () => el.removeEventListener("change", send);
-  }, []);
   return (
     <Block id="nearby" title={homeWidgetTitles.nearby}>
-      <Form method="post" id={RADIUS_FORM} className="hm-radius">
-        <input type="hidden" name="intent" value="radius" />
+      {/* Coordinateur (23/10) : le widget n'écrit plus le rayon ; il lit celui de « Tes préférences » (10–200 km ou
+          « Partout ») et y renvoie. */}
+      <p className="o-t-meta" data-testid="home-radius">
+        {homeLabels.radius(nearby.radiusKm)} ·{" "}
+        <a href="/app/preferences" className="s-link">
+          {preferencesLabels.settingsRow}
+        </a>
+      </p>
+      {/* « Utiliser ma position » (UsePosition) envoie ce formulaire : l'affichage autour de l'appareil, sans rien écrire. */}
+      <Form method="post" id={RADIUS_FORM} hidden>
+        <input type="hidden" name="intent" value="position" />
         {device && <input type="hidden" name="lat" value={device.lat} />}
         {device && <input type="hidden" name="lng" value={device.lng} />}
-        <label className="o-t-meta" htmlFor="home-radius-input">
-          {homeLabels.radius(nearby.radiusKm)}
-        </label>
-        <input
-          ref={slider}
-          id="home-radius-input"
-          name="rayon"
-          type="range"
-          min={10}
-          max={200}
-          step={10}
-          defaultValue={nearby.radiusKm ?? 200}
-          aria-label={homeLabels.radiusLabel}
-          data-testid="home-radius"
-        />
-        <noscript>
-          <Button type="submit" variant="plate" icon="check">
-            {homeLabels.done}
-          </Button>
-        </noscript>
       </Form>
       {nearby.events.length === 0 ? (
         <p className="hm-block__muted" data-testid="nearby-empty">

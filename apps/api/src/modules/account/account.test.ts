@@ -439,30 +439,38 @@ describe("« près de chez toi » : types d'événements choisis (lot M6)", () =
 });
 
 describe("« près de chez toi » : distance habituelle", () => {
-  it("« Partout en France » (rayon null) prévient aussi loin du coin ; sinon la distance du coin décide", async () => {
+  // Coordinateur (23/10) : l'alerte part toujours des départements choisis. « Partout » lève la limite de distance, mais
+  // seulement dans ces départements ; sans département, aucune alerte.
+  it("« Partout en France » prévient dans les départements choisis seulement ; sans département, rien", async () => {
     const ref = await seedReference();
     const orga = await signUp("Orga_Rayon");
     const s = await createStructure(orga.id);
-    const partout = await signUp("Partout_59");
-    const limite = await signUp("Limite_59");
-    for (const [u, radiusKm] of [
-      [partout, null],
-      [limite, 100],
+    const partout66 = await signUp("Partout_66");
+    const partout59 = await signUp("Partout_59");
+    const limite59 = await signUp("Limite_59");
+    const sansCoin = await signUp("Sans_coin");
+    for (const [u, departments, radiusKm] of [
+      [partout66, ["59", "66"], null],
+      [partout59, ["59"], null],
+      [limite59, ["59"], 100],
+      [sansCoin, [], null],
     ] as const) {
       await db
         .update(profiles)
-        .set({ departments: ["59"], radiusKm })
+        .set({ departments: [...departments], radiusKm })
         .where(eq(profiles.userId, u.id));
       await db.insert(profileInterests).values({ userId: u.id, categoryId: ref.jdm.id });
     }
+    // Un événement à Perpignan (66), loin du 59.
     const e = await createEvent(s.id, {
       lat: 42.69,
       lng: 2.9,
+      department: "66",
       criteria: { categoryIds: [ref.jdm.id], makeIds: [], countries: [], text: null },
     });
     expect(await nearbyService.notifyNearby(e.id)).toBe(1);
     const sent = await db.query.notifications.findMany({ where: eq(notifications.type, "event_nearby_interest") });
-    expect(sent.map((n) => n.userId)).toEqual([partout.id]);
+    expect(sent.map((n) => n.userId)).toEqual([partout66.id]);
   });
 });
 

@@ -6,7 +6,6 @@ import {
   applicationStatusLabels,
   eventFormatLabels,
   type FuelStation,
-  HOME_RADIUS,
   type HomeData,
   type HomeFavoriteGarage,
   type HomeNudgeKind,
@@ -16,18 +15,17 @@ import {
   homeWidgetTitles,
   type MyApplication,
   type NearbyPlace,
+  preferencesLabels,
   proActivityLabels,
 } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
-
+import { SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { formatDay, formatHour, formatShortDate } from "@/lib/format";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { SectionTitle } from "@/ui/Screens";
-import { Slider } from "@/ui/Slider";
 import type { PositionState } from "../explorer/useMyPosition";
 
 const { space1, space2, space3 } = tokens.spacing;
@@ -84,35 +82,27 @@ export function PendingWidget({ items }: { items: MyApplication[] }) {
 export function NearbyWidget({
   nearby,
   position,
-  onRadius,
 }: {
   nearby: NonNullable<HomeData["nearby"]>;
   position: PositionState;
-  /** Rayon choisi au curseur (enregistré dans le profil par l'API). */
-  onRadius: (km: number) => void;
+  /** Plus utilisé (le widget n'écrit plus le rayon, coordinateur 23/10) : gardé pour les appelants. */
+  onRadius?: (km: number) => void;
 }) {
   const { t } = useTheme();
   const router = useRouter();
-  // `radiusKm: null` = « Partout en France » (réglé dans « Tes préférences ») : le curseur part de sa butée.
-  const [shown, setShown] = useState<number>(nearby.radiusKm ?? HOME_RADIUS.max);
-  useEffect(() => setShown(nearby.radiusKm ?? HOME_RADIUS.max), [nearby.radiusKm]);
+  // Coordinateur (23/10) : le widget n'écrit plus le rayon ; il lit la distance de « Tes préférences » (10–200 km ou
+  // `null` = « Partout en France ») et y renvoie pour la changer.
+  const km = nearby.radiusKm;
   return (
     <>
       <SectionTitle>{homeWidgetTitles.nearby}</SectionTitle>
       <Plate style={styles.stack} testID="widget-nearby">
         <Text variant="meta" color={t.color.plateMuted} testID="nearby-radius">
-          {homeLabels.radius(nearby.radiusKm === null && shown === HOME_RADIUS.max ? null : shown)}
+          {homeLabels.radius(km)}
         </Text>
-        <Slider
-          value={shown}
-          onChange={setShown}
-          onCommit={onRadius}
-          min={HOME_RADIUS.min}
-          max={HOME_RADIUS.max}
-          step={HOME_RADIUS.step}
-          label={homeLabels.radiusLabel}
-          format={(km) => `${km} km`}
-        />
+        <SmButton kind="g" icon="edit" onPress={() => router.push("/preferences")} testID="nearby-preferences">
+          {preferencesLabels.settingsRow}
+        </SmButton>
         {nearby.events.length > 0 ? (
           nearby.events.map((e) => (
             <Pressable
@@ -140,9 +130,7 @@ export function NearbyWidget({
           ))
         ) : (
           <Text variant="body" color={t.color.plateMuted}>
-            {nearby.source === null
-              ? homeLabels.nearbyNoPlace
-              : homeLabels.nearbyEmpty(nearby.radiusKm === null ? null : shown)}
+            {nearby.source === null ? homeLabels.nearbyNoPlace : homeLabels.nearbyEmpty(km)}
           </Text>
         )}
         {position.position ? (

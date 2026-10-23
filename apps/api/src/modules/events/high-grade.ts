@@ -2,13 +2,14 @@
 // `registrations_open_at − high_grade_preview_hours`. Notification `preview_open` aux personnes de grade ≥ seuil dont le
 // centre du premier département est dans leur rayon, une seule fois par événement (les abonnés qui l'ont déjà reçue ne
 // la reçoivent pas deux fois). Exclus : événements sur invitation, bannis, comptes supprimés.
-import { distanceKm, grades, profilePosition, registrationOpensAt } from "@orasso/shared";
+import { grades, registrationOpensAt } from "@orasso/shared";
 import { and, inArray, isNull, sql } from "drizzle-orm";
 
 import { notifications, profiles, structureBans } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { type Tx, withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
+import { nearbyTarget } from "./nearby";
 import { type EventRow, eventsRepo } from "./repo";
 
 const sameInstant = (a: Date, iso: unknown) =>
@@ -49,11 +50,8 @@ export const highGradePreview = {
             sql`not exists (select 1 from ${notifications} n where n.user_id = ${profiles.userId} and n.type = 'preview_open' and n.event_id = ${e.id})`,
           ),
         );
-      const targets = candidates.filter((c) => {
-        const home = profilePosition(c.departments);
-        // Rayon null = partout en France (pas de limite) ; sinon la distance se mesure depuis le coin enregistré (départements), jamais du GPS.
-        return c.radiusKm === null || (home !== null && distanceKm(home, position) <= c.radiusKm);
-      });
+      // Même règle que l'alerte « près de chez toi » (départements choisis ; « Partout » = dans ces départements).
+      const targets = candidates.filter((c) => nearbyTarget(c, { department: e.department, position }));
       if (!targets.length) return 0;
       await notificationsService.notifyMany(
         tx,

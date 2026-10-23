@@ -150,9 +150,10 @@ export default function TesPreferences() {
             {L.departments}
           </Text>
           <View style={styles.dsel} testID="pref-departments">
+            {/* Coordinateur (23/10) : sans département, aucune alerte « nouvel événement » ; une ligne invite, sans bloquer. */}
             {draft.departments.length === 0 ? (
-              <Text variant="caption" color={c.inkMuted}>
-                {L.noDepartment}
+              <Text variant="caption" color={c.winText} testID="preferences-no-coin">
+                {L.noCoinAlerts}
               </Text>
             ) : null}
             {draft.departments.map((code, i) => (

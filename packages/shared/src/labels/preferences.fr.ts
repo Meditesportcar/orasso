@@ -9,6 +9,9 @@ export const preferencesLabels = {
   lead: "L'Explorer s'ouvrira déjà trié pour toi, mais tu pourras toujours voir plus large. Tout se change ensuite dans Profil › Tes préférences.",
   departments: "Ton coin",
   noDepartment: "Aucun département : choisis le tien pour voir les événements près de chez toi.",
+  /** Coordinateur (23/10) : sans département, aucune alerte « nouvel événement » ; une ligne invite à choisir son coin. */
+  noCoinAlerts:
+    "Choisis ton coin (au moins un département) : sans lui, pas d'alerte « nouvel événement près de chez toi ».",
   editDepartments: "Modifier",
   distance: "Distance habituelle",
   everywhere: "Partout en France",
