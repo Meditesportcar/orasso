@@ -327,6 +327,25 @@ describe("distance : GET /events?sort=distance", () => {
     }
   });
 
+  it("« Ailleurs… » (lot M4) : around=<département> part de son centre, sans toucher au profil ; sans rayon, partout", async () => {
+    const viewer = await person("Viewer_66", { departments: ["66"] });
+    const owner = await person("Orga_A");
+    const s = await createStructure(owner.id);
+    const paris = await createEvent(s.id, { title: "Paris", ...PARIS });
+    const rivesaltes = await createEvent(s.id, { title: "Rivesaltes", ...RIVESALTES });
+    for (const mode of MODES) {
+      const res = await get(viewer, "/events?sort=distance&around=75", mode);
+      expect(res.status).toBe(200);
+      expect(ids(res.json.items)).toEqual([paris.slug, rivesaltes.slug]);
+      expect(res.json.items[0].distanceKm).toBeLessThan(20);
+    }
+    // Rayon : seulement autour du centre choisi.
+    expect(ids((await get(viewer, "/events?sort=distance&around=75&radiusKm=50")).json.items)).toEqual([paris.slug]);
+    const [profile] = await db.select().from(profiles).where(eq(profiles.userId, viewer.id));
+    expect(profile?.departments).toEqual(["66"]);
+    expect((await get(viewer, "/events?around=999")).status).toBe(400);
+  });
+
   it("la position de l'appareil prime pour la requête et n'est enregistrée nulle part", async () => {
     const viewer = await person("Viewer_66", { departments: ["66"] });
     const owner = await person("Orga_A");

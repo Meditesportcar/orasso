@@ -72,7 +72,11 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
   const t = now();
   const upcoming = q.scope !== "past";
   const explicit = q.lat !== undefined && q.lng !== undefined;
-  const located = resolvePosition({ lat: q.lat, lng: q.lng }, viewer?.profile.departments ?? null);
+  // Lot M4 : « Ailleurs… » part du centre d'un département choisi (temporaire, le profil ne change pas).
+  const located = resolvePosition(
+    { lat: q.lat, lng: q.lng },
+    q.around ? [q.around] : (viewer?.profile.departments ?? null),
+  );
   // L'ordre par affinités suppose un compte ; sans compte, il se replie sur la distance (si on en a une) puis la date.
   const sort = !upcoming
     ? "date"

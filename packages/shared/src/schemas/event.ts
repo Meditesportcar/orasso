@@ -244,6 +244,12 @@ export const eventListQuerySchema = pageQuery.extend({
   lat: z.coerce.number().min(-90).max(90).optional(),
   lng: z.coerce.number().min(-180).max(180).optional(),
   radiusKm: z.coerce.number().min(1).max(500).optional(),
+  /**
+   * Lot M4 (« Autour de… » de l'Explorer) : point de départ des distances au centre d'un autre département que ceux du
+   * profil (« Ailleurs… »), sans rien changer au profil. Ignoré quand `lat`/`lng` sont envoyés. Sans `radiusKm` :
+   * partout en France.
+   */
+  around: departmentSchema.optional(),
   structureId: z.uuid().optional(),
   q: z.string().trim().max(80).optional(),
   /** `upcoming` (défaut) : pas encore terminés, du plus proche au plus lointain ; `past` : terminés, du plus récent. */
