@@ -9,7 +9,9 @@ import {
   shareStyles,
 } from "../garage";
 import type { Grade } from "../grades";
+import type { HomeSponsored } from "../home";
 import type { CategoryRefusal, CertificationFields, CertificationMissing } from "../rules/garage";
+import type { ProActivity } from "../rules/pro";
 import { optionalText } from "./common";
 
 /** `GET /vehicle-reference/categories?makeId&vehicleType&year` : chaque catégorie avec son éligibilité. */
@@ -148,4 +150,30 @@ export type CertificationSnapshot = {
   photoUrls: string[];
   /** Champs surveillés au moment de la demande : comparés à la fiche actuelle avant toute validation. */
   fields?: CertificationFields;
+};
+
+/**
+ * « Pour ta … » du Garage (lot M5, maquette 7.1) : `GET /me/vehicles/:id/pros`. Le sponsorisé est un emplacement ciblé
+ * sur une catégorie du véhicule (jamais un emplacement ouvert à tous), compté comme celui de l'Accueil : seulement
+ * quand l'API le renvoie. Les pros partenaires (qui accordent une remise aux membres) sont les plus proches.
+ */
+export type VehiclePro = {
+  slug: string;
+  name: string;
+  logoUrl: string | null;
+  activities: ProActivity[];
+  city: string | null;
+  /** Distance au secteur de la personne ; `null` sans adresse. */
+  distanceKm: number | null;
+  /** Remise à montrer : celle du grade de la personne, sinon celle du grade au-dessus (`from`). */
+  discount: { percent: number; from: Grade | null } | null;
+};
+
+export type VehiclePros = {
+  vehicleId: string;
+  /** À compter par `POST /sponsored/:id/impression` quand il apparaît à l'écran (lot M5, tour 2). */
+  sponsored: (HomeSponsored & { discount: VehiclePro["discount"]; city: string | null }) | null;
+  pros: VehiclePro[];
+  /** Aucun secteur connu : pas de liste ; l'écran invite à choisir son coin. */
+  needsPlace: boolean;
 };

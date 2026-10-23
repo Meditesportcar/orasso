@@ -64,7 +64,22 @@ export const sponsoredService = {
    * jour) : un nouveau chargement de l'Accueil rend le même emplacement sans rien compter (table `sponsored_daily_seen`),
    * et le plafond du jour est respecté de façon atomique au moment de compter.
    */
-  async select(v: Viewer, interests: string[]): Promise<HomeSponsored | null> {
+  async select(
+    v: Viewer,
+    interests: string[],
+    /**
+     * Lot M5 (« Pour ta … » du Garage) : seulement un emplacement ciblé sur une catégorie (`interests` = celles du
+     * véhicule), jamais un emplacement ouvert à tous, qui ne serait pas « lié au véhicule ».
+     */
+    opts: {
+      targetedOnly?: boolean;
+      /**
+       * Lot M5, tour 2 : ne pas compter l'affichage ici. L'écran le compte à la première apparition de l'emplacement
+       * (`impression`) ; un clic n'est accepté qu'après.
+       */
+      deferImpression?: boolean;
+    } = {},
+  ): Promise<HomeSponsored | null> {
     const t = now();
     if (proVisibility(null, null, t).hidden.promotion) return null;
     // Lot 33 : interrupteur de l'administration.
@@ -98,6 +113,7 @@ export const sponsoredService = {
       .where(and(eq(sponsoredDailySeen.day, today), inArray(sponsoredDailySeen.placementId, ids)));
     const seenIds = new Set(seen.filter((s) => s.hash === userHash(v.user.id, s.id, today)).map((s) => s.id));
     const candidates = rows.flatMap((r) => {
+      if (opts.targetedOnly && r.placement.categoryIds.length === 0) return [];
       const m = placementMatch(target(r.placement), {
         today,
         sector: v.profile.departments,
@@ -113,6 +129,7 @@ export const sponsoredService = {
       : pickWeighted(candidates, `${v.user.id}|${today}`);
     if (!picked) return null;
     if (
+      !opts.deferImpression &&
       !seenIds.has(picked.id) &&
       !(await this.claimImpression(picked.id, v.user.id, today, picked.row.placement.dailyCap))
     ) {
@@ -170,6 +187,21 @@ export const sponsoredService = {
         .where(eq(sponsoredPlacements.id, id));
       return true;
     });
+  },
+
+  /**
+   * `POST /sponsored/:id/impression` (lot M5, tour 2) : l'emplacement renvoyé sans être compté (Garage) vient d'apparaître
+   * à l'écran. Compté une fois par (emplacement, personne, jour), sous le plafond du jour ; plafond atteint : 409, l'écran
+   * le retire. Seulement pour un emplacement encore diffusé.
+   */
+  async impression(v: Viewer, id: string): Promise<void> {
+    rateLimit("sponsoredClick", v.user.id);
+    const today = parisDay(now());
+    const p = await db.query.sponsoredPlacements.findFirst({ where: eq(sponsoredPlacements.id, id) });
+    if (p?.status !== "active" || today < p.startsOn || today > p.endsOn) throw notFound("Emplacement introuvable");
+    if (!(await this.claimImpression(id, v.user.id, today, p.dailyCap))) {
+      throw new AppError(409, "conflict", "Emplacement complet pour aujourd'hui");
+    }
   },
 
   /**

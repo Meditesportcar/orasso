@@ -88,6 +88,20 @@ export function discountForGrade(discounts: ProDiscounts, grade: Grade): number 
 }
 
 /**
+ * La remise à montrer à une personne (« Pour ta … » du Garage, lot M5) : la sienne si son grade en a une, sinon la
+ * première du grade au-dessus (« −10 % dès Sport »). `null` : ce pro n'accorde aucune remise à ce grade ni au-dessus.
+ */
+export function shownDiscount(discounts: ProDiscounts, grade: Grade): { percent: number; from: Grade | null } | null {
+  const mine = discounts[grade];
+  if (mine) return { percent: mine, from: null };
+  for (const g of grades.slice(grades.indexOf(grade) + 1)) {
+    const p = discounts[g];
+    if (p) return { percent: p, from: g };
+  }
+  return null;
+}
+
+/**
  * Remises cohérentes : un grade plus élevé ne peut pas avoir une remise plus faible qu'un grade inférieur déjà
  * remisé (sinon le grade n'avantage pas). Renvoie le grade fautif, ou `null`.
  */

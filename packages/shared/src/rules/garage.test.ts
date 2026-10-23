@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { shareFormats } from "../garage";
-import { categoryRefusalLabels, certificationMissingLabels } from "../labels/garage.fr";
+import { categoryRefusalLabels, certificationLineLabels, certificationMissingLabels } from "../labels/garage.fr";
 import {
   type CategoryRule,
   categoryAllowedForVehicle,
   categoryRefusal,
   certificationEligibility,
   certificationInactive,
+  certificationLine,
   certificationLostByChange,
   SHARE_CHAR_WIDTH,
   SHARE_MARGIN,
@@ -207,5 +208,57 @@ describe("shareImageLayout", () => {
     const l = shareImageLayout("Hispano-Suiza-Alfonso-Treize-Cinquante", "post");
     expect(l.lines).toHaveLength(1);
     expect(l.fontSize).toBeLessThan(96);
+  });
+});
+
+describe("certificationLine (lot M5, ligne d'état du Garage)", () => {
+  const facts = (missing: Parameters<typeof certificationLine>[0]["missing"], photoCount = 3) => ({
+    line: certificationLine({ certified: false, missing }, photoCount),
+    photoCount,
+    missing,
+  });
+
+  it("un ancien véhicule (vendu, souvenir, accidenté) : impossible, quoi qu'il manque d'autre", () => {
+    const { line } = facts(["grade", "status", "photos"], 1);
+    expect(line).toEqual({ kind: "impossible" });
+    expect(certificationLineLabels.headline(line)).toBe("Certification impossible");
+    expect(certificationLineLabels.detail(line, { photoCount: 1, missing: ["status"] })).toMatch(/ancien véhicule/);
+  });
+
+  it("ce qui manque en premier : les photos, puis la description, la catégorie, la plaque, le grade", () => {
+    const a = facts(["grade", "photos", "description"], 2);
+    expect(a.line).toEqual({ kind: "missing", first: "photos", photosMissing: 1, count: 3 });
+    expect(certificationLineLabels.headline(a.line)).toBe("Certification : il manque 1 photo");
+    expect(certificationLineLabels.detail(a.line, a)).toBe("2 sur 3 photos · description ✗ · grade Sport ✗");
+    expect(certificationLineLabels.headline(facts(["photos"], 0).line)).toBe("Certification : il manque 3 photos");
+    expect(certificationLineLabels.headline(facts(["grade", "description"]).line)).toBe(
+      "Certification : il manque la description",
+    );
+    expect(certificationLineLabels.headline(facts(["grade"]).line)).toBe("Certification : il faut le grade Sport");
+  });
+
+  it("certifié, demande en cours, prête", () => {
+    expect(certificationLine({ certified: true, missing: ["certified"] }, 3)).toEqual({ kind: "certified" });
+    expect(certificationLine({ certified: false, missing: ["pending"] }, 3)).toEqual({ kind: "pending" });
+    expect(certificationLine({ certified: false, missing: [] }, 3)).toEqual({ kind: "ready" });
+  });
+
+  it("la règle de l'API : 3 photos et une description, et un véhicule actif", () => {
+    const base = {
+      status: "active",
+      photoCount: 3,
+      description: "Ma Supra",
+      categoryCount: 1,
+      plateTransferPending: false,
+      certified: false,
+      hasPendingRequest: false,
+    };
+    expect(certificationEligibility({ grade: "sport" }, base).ok).toBe(true);
+    expect(certificationEligibility({ grade: "sport" }, { ...base, photoCount: 2 }).missing).toEqual(["photos"]);
+    expect(certificationEligibility({ grade: "sport" }, { ...base, description: " " }).missing).toEqual([
+      "description",
+    ]);
+    for (const status of ["sold", "keepsake", "wrecked"])
+      expect(certificationEligibility({ grade: "sport" }, { ...base, status }).missing).toContain("status");
   });
 });

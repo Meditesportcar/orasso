@@ -4,13 +4,11 @@
 // affiche (photo de couverture pleine largeur, étiquettes inclinées, nom, trois chiffres étroits) et range ses actions
 // comme le demande l'audit (§ 5.2) : un seul crayon (l'assistant prérempli), le partage reste au Garage, et le reste
 // (modifier la fiche, certification, vendu / souvenir / accidenté, supprimer) passe dans le menu « … ».
-import { Chip, ChipRow, Icon, Photo, Tag, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, ChipRow, Photo, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   applicationStatusLabels,
-  certificationConditions,
-  certificationLostLabels,
-  certificationMissingLabels,
-  certificationStatusLabels,
+  certificationLine,
+  certificationLineLabels,
   countryLabel,
   garageAppLabels,
   photoLabels,
@@ -24,6 +22,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { PosterFlow } from "@/features/event/PosterFlow";
+import { CertificationSheet } from "@/features/garage/CertificationSheet";
 import { trimLine } from "@/features/garage/GarageCard";
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { Card, Num, SmButton, TagWin } from "@/features/passionne/kit";
@@ -69,7 +68,6 @@ export default function VehiculeFiche() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [certMessage, setCertMessage] = useState("");
   // Lot 51 : floutage de la plaque d'une photo déjà en ligne (définitif).
   const [blurring, setBlurring] = useState<BlurTarget>(null);
   const v = vehicle.data;
@@ -118,7 +116,6 @@ export default function VehiculeFiche() {
   }
 
   const cert = v.certification;
-  const missing = new Set(cert.missing ?? []);
   const archived = v.status !== "active";
   const country = countryLabel(v.country);
   const trim = trimLine(v);
@@ -174,7 +171,7 @@ export default function VehiculeFiche() {
         {/* Relecture C2b : la carte à partager de chaque véhicule, pas seulement du premier du Garage. */}
         <HubRow
           lead={<RowIcon name="share" />}
-          title="Partager sa carte"
+          title="Partager son affiche"
           caption="Format story, signée Orasso"
           onPress={openFrom(() => router.push(`/vehicule/${v.id}/partager`))}
           testID="vehicle-share-open"
@@ -182,13 +179,8 @@ export default function VehiculeFiche() {
         <HubRow
           lead={<RowIcon name="badge" />}
           title="Certification"
-          caption={
-            cert.certified
-              ? "Certifié"
-              : cert.request?.status === "pending"
-                ? certificationStatusLabels.pending
-                : "Conditions et demande"
-          }
+          // Lot M5 : la ligne d'état (ce qui manque en premier ; ancien véhicule : impossible).
+          caption={certificationLineLabels.headline(certificationLine(cert, v.photos.length))}
           onPress={openFrom(() => setCertOpen(true))}
           testID="vehicle-cert-open"
         />
@@ -217,83 +209,14 @@ export default function VehiculeFiche() {
           testID="vehicle-delete"
         />
       </AppSheet>
-      <AppSheet visible={certOpen} onClose={() => setCertOpen(false)} accessibilityLabel="Certification">
-        <Text variant="posterM" color={c.ink} style={styles.sheetTitle}>
-          Certification
-        </Text>
-        {cert.certified ? (
-          <>
-            <Tag tone="acc">Certifié</Tag>
-            <Text variant="body" color={c.ink}>
-              {`Certifié depuis le ${cert.certifiedAt ? formatDay(cert.certifiedAt) : ""}. Elle se perd si la fiche technique est modifiée, ou après six mois sans événement.`}
-            </Text>
-          </>
-        ) : (
-          <>
-            {cert.lostReason ? (
-              <Text variant="body" color={c.winText}>
-                {`Certification perdue : ${certificationLostLabels[cert.lostReason].toLowerCase()}.`}
-              </Text>
-            ) : null}
-            {cert.request?.status === "pending" ? (
-              <Text variant="bodyStrong" color={c.ink}>
-                {`${certificationStatusLabels.pending}. L'équipe Orasso valide à la main.`}
-              </Text>
-            ) : null}
-            {cert.request?.status === "refused" ? (
-              <Text variant="body" color={c.winText}>
-                {`${certificationStatusLabels.refused}${cert.request.note ? ` : ${cert.request.note}` : "."}`}
-              </Text>
-            ) : null}
-            {certificationConditions.map((cond) => (
-              <View key={cond.key} style={styles.condition}>
-                <Icon
-                  name={missing.has(cond.key) ? "close" : "check"}
-                  size={18}
-                  color={missing.has(cond.key) ? c.inkMuted : c.accentText}
-                />
-                <Text variant="body" color={missing.has(cond.key) ? c.inkMuted : c.ink} style={styles.grow}>
-                  {cond.label}
-                </Text>
-              </View>
-            ))}
-            {cert.missing.some((m) => m === "plate" || m === "pending") ? (
-              <Text variant="caption" color={c.inkMuted}>
-                {cert.missing
-                  .filter((m) => m === "plate" || m === "pending")
-                  .map((m) => certificationMissingLabels[m])
-                  .join(" · ")}
-              </Text>
-            ) : null}
-            {cert.eligible ? (
-              <>
-                <TextField
-                  label="Message pour l'équipe (facultatif)"
-                  value={certMessage}
-                  onChangeText={setCertMessage}
-                  multiline
-                  maxLength={500}
-                  testID="certification-message"
-                />
-                <SmButton
-                  kind="p"
-                  big
-                  wide
-                  icon="check"
-                  disabled={busy !== null}
-                  onPress={() =>
-                    void run("Envoi de la demande…", () => api.requestCertification(v.id, certMessage.trim() || null))
-                  }
-                  testID="certification-request"
-                >
-                  Demander la certification
-                </SmButton>
-              </>
-            ) : null}
-          </>
-        )}
-        {error ? <Notice tone="error">{error}</Notice> : null}
-      </AppSheet>
+      <CertificationSheet
+        visible={certOpen}
+        onClose={() => setCertOpen(false)}
+        vehicleId={v.id}
+        photoCount={v.photos.length}
+        cert={cert}
+        onChanged={() => vehicle.reload()}
+      />
       <ArchiveSheet
         visible={archiveOpen}
         onClose={() => setArchiveOpen(false)}
@@ -550,7 +473,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: space2 + 2, alignItems: "stretch" },
   grow: { flex: 1, minWidth: 0 },
   sheetTitle: { fontSize: 18, lineHeight: 19 },
-  condition: { flexDirection: "row", alignItems: "center", gap: space2 },
   factsCard: { gap: space2 },
   fact: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: space3 },
   factValue: { flex: 1, textAlign: "right" },
