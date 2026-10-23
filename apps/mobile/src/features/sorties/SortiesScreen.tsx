@@ -47,10 +47,10 @@ import { useSession } from "@/lib/session";
 import { useStaffActions } from "@/lib/staff/useStaff";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
+import { TicketPulse } from "@/ui/Announce";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
-
 import { ApplicationTag, Seg, SkewTag, SmallButton } from "./bits";
 import {
   arrivalPhrase,
@@ -283,23 +283,25 @@ export function SortiesScreen() {
           ) : null}
 
           {live.map((app) => (
-            <ApplicationTicket
-              key={app.id}
-              app={app}
-              now={now}
-              busy={busyId === app.id}
-              primary={app.id === firstAccepted}
-              highlight={app.id === meId}
-              primaryOffer={app.id === offerId}
-              onOpen={() => router.push(`/e/${app.event.slug}`)}
-              onJourJ={() => router.push(`/jour-j/${app.id}`)}
-              onVote={() => router.push(`/vote/${app.event.id}?titre=${encodeURIComponent(app.event.title)}`)}
-              onWithdraw={() => setWithdrawing(app)}
-              onAccept={() => void run(app, () => api.acceptOffer(app.id))}
-              onDecline={() => void run(app, () => api.declineOffer(app.id))}
-              onConfirmCrew={() => setConfirmingCrew(app)}
-              onDeclineCrew={() => void run(app, () => api.declineCrewVenue(app.id))}
-            />
+            // Lot M6 : le ticket annoncé par le bandeau (« Retenue ! », place libérée) bat deux fois.
+            <TicketPulse key={app.id} id={app.id}>
+              <ApplicationTicket
+                app={app}
+                now={now}
+                busy={busyId === app.id}
+                primary={app.id === firstAccepted}
+                highlight={app.id === meId}
+                primaryOffer={app.id === offerId}
+                onOpen={() => router.push(`/e/${app.event.slug}`)}
+                onJourJ={() => router.push(`/jour-j/${app.id}`)}
+                onVote={() => router.push(`/vote/${app.event.id}?titre=${encodeURIComponent(app.event.title)}`)}
+                onWithdraw={() => setWithdrawing(app)}
+                onAccept={() => void run(app, () => api.acceptOffer(app.id))}
+                onDecline={() => void run(app, () => api.declineOffer(app.id))}
+                onConfirmCrew={() => setConfirmingCrew(app)}
+                onDeclineCrew={() => void run(app, () => api.declineCrewVenue(app.id))}
+              />
+            </TicketPulse>
           ))}
 
           {upcomingTickets.map((x, i) => (

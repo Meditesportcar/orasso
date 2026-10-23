@@ -1,6 +1,7 @@
 export * from "./admin";
 export * from "./affinity";
 export * from "./afterEvent";
+export * from "./announcements";
 export * from "./applicationTransitions";
 export * from "./arrival";
 export * from "./audiencePrize";

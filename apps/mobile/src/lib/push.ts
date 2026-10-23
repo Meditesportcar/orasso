@@ -9,10 +9,12 @@ import { api } from "./api";
 
 export type PermissionState = "granted" | "denied" | "undetermined";
 
+// Lot M6 (système d'annonces unique) : appli ouverte, la notification arrive par le bandeau de l'appli (ui/Announce),
+// plus par la bannière du système en double ; elle reste dans le centre de notifications.
 if (Platform.OS !== "web") {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowBanner: true,
+      shouldShowBanner: false,
       shouldShowList: true,
       shouldPlaySound: false,
       shouldSetBadge: false,

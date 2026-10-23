@@ -21,7 +21,7 @@ import {
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { StampArrival } from "@/features/passport/StampArrival";
 import { ReportSheetHost } from "@/features/ReportSheet";
@@ -37,7 +37,8 @@ import { misplacedTarget } from "@/lib/personaModel";
 import { registerThisDevice } from "@/lib/push";
 import { initSentry } from "@/lib/sentry";
 import { SessionProvider, useSession } from "@/lib/session";
-import { AnnouncementSheet } from "@/ui/AnnouncementSheet";
+import { AnnounceHost } from "@/ui/Announce";
+import { AnnouncementsBridge } from "@/ui/AnnouncementsBridge";
 import { ClockBanner } from "@/ui/ClockBanner";
 
 // GlitchTip / Sentry (lot 15) : seulement si EXPO_PUBLIC_SENTRY_DSN est renseigné au build.
@@ -138,17 +139,16 @@ function Shell() {
   }, [entries, choose]);
 
   // Toucher une notification ouvre l'onglet Sorties de la casquette de base (quelle que soit la casquette active) ou
-  // l'écran de son lien.
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+  // l'écran de son lien. Lot M6 : le même chemin sert au bandeau d'annonce (notification reçue pendant l'utilisation).
+  const openNotification = useCallback(
+    (data: Record<string, unknown> | undefined) => {
       // Décision sur une candidature de prestataire (lot 21) : l'écran Candidatures de la casquette Prestataire.
-      if (response.notification.request.content.data?.screen === "provider_applications") {
+      if (data?.screen === "provider_applications") {
         choose({ kind: "provider" }, "/(provider)/candidatures");
         return;
       }
       // Décision sur une accréditation presse, contenu mis en avant (lot 55) : Presse ou Contenus de la casquette Média.
-      const screen = response.notification.request.content.data?.screen;
+      const screen = data?.screen;
       if (screen === "media_accreditations" || screen === "media_contents") {
         const target = screen === "media_contents" ? "/(media)/contenus" : "/(media)/presse";
         const media = entries.find((e) => e.kind === "media");
@@ -158,25 +158,32 @@ function Shell() {
         return;
       }
       // Demande pour devenir staff (lot 35a) : l'écran Équipe de la structure, sous la casquette Organisateur.
-      const team = teamRequestTarget(response.notification.request.content.data);
+      const team = teamRequestTarget(data);
       if (team) {
         choose({ kind: "organizer", structureId: team }, "/(orga)/equipe");
         return;
       }
       // Alerte de modération ou demande d'aide d'une structure (lot 35d) : l'écran de la casquette Administration.
-      const admin = adminLinkOf(response.notification.request.content.data?.link);
+      const admin = adminLinkOf(data?.link);
       if (admin) {
         choose({ kind: "admin" }, admin);
         return;
       }
       backToBase();
       // Un lien de l'appli (profil d'un ami, événement) ouvre cet écran, sinon l'onglet Sorties (`/acces` y redirige).
-      const link = appLinkOf(response.notification.request.content.data?.link);
+      const link = appLinkOf(data?.link);
       if (link) router.navigate(link as never);
       else router.navigate("/acces");
-    });
+    },
+    [router, backToBase, choose, entries],
+  );
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const sub = Notifications.addNotificationResponseReceivedListener((response) =>
+      openNotification(response.notification.request.content.data),
+    );
     return () => sub.remove();
-  }, [router, backToBase, choose, entries]);
+  }, [openNotification]);
 
   return (
     <View style={[styles.fill, { backgroundColor: ground }]}>
@@ -199,12 +206,15 @@ function Shell() {
           </Stack>
         )}
       </NavigationThemeProvider>
-      <AnnouncementSheet />
+      {/* Lot M6 : les annonces arrivent par un seul bandeau en haut (voir ui/Announce.tsx). */}
+      {status === "in" ? <AnnouncementsBridge onOpenNotification={openNotification} /> : null}
       {/* Lot 50 : le tampon du passeport qui tombe au pointage, au-dessus de tout écran et de ses feuilles. */}
       {status === "in" ? <StampArrival /> : null}
       {/* Lot 32 : feuille « Signaler », une pour toute l'appli. */}
       {status === "in" ? <ReportSheetHost /> : null}
       {status === "in" ? <StaffBackground /> : null}
+      {/* Le bandeau d'annonce, au-dessus des écrans et de leurs feuilles. */}
+      <AnnounceHost />
       {/* Lot 39 (V12) : la battle en tandem de 3 s à chaque lancement (fondu de 120 ms si animations réduites). Lot C3 :
           pas au premier lancement, où l'accueil (`/arrivee`, artefact `s-splash`) joue lui-même la battle autour du O. */}
       {/* Rien avant la lecture d'« onboarded » (pas d'éclair de l'ouverture au premier lancement, ni de l'écran ensuite). */}
