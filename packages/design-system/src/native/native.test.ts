@@ -83,8 +83,8 @@ describe("le O vivant (lot 39) : variantes, alias, branchements", () => {
     const stage = Number(shared.match(/STAGE_COMPACT = (\d+)/)?.[1]);
     expect((24 * units) / stage).toBeGreaterThanOrEqual(7);
   });
-  it("l'envoi : O vivant + anneau (décision v39), l'ouverture se passe d'un toucher", () => {
-    expect(read("olive/Send.tsx")).toContain("<OLoader size={size} progress={p} done={complete}");
+  it("l'envoi : O vivant + anneau (décision v39), sans anneau à la demande (lot M1), l'ouverture se passe d'un toucher", () => {
+    expect(read("olive/Send.tsx")).toContain("<OLoader size={size} progress={ring ? p : undefined} done={complete}");
     const opening = read("olive/OpeningBattle.tsx");
     expect(opening).toContain('accessibilityHint="Passer"');
   });
