@@ -2,15 +2,13 @@
 // toujours fixée en haut, jamais au défilement : retour, logo, nom et ✓ d'une structure validée, abonnés, « Suivre »
 // en secondaire (contour ; « Suivie » en moutarde) et ✉, qui ouvre « Écrire à » avec le contexte de l'événement.
 // Elle remplace la pastille O et la croix flottantes ; le nom de l'organisateur ne se répète pas sur l'affiche.
+// Lot M7 (fusion) : elle se pose dans l'emplacement `band` de `PosterFlow` (en-tête de fiche `FicheHeader`) : l'aplat,
+// la zone sûre et le ✕ (à droite, à sa place habituelle, à la place du retour) viennent de l'en-tête.
 import { Icon, OrgLogo, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { eventPageLabels as L } from "@orasso/shared";
 import { Pressable, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { space1, space2 } = tokens.spacing;
-
-/** `.orgbar` : 58 px sous la barre d'état. */
-export const ORG_BAR_HEIGHT = 58;
 
 export type OrgBarProps = {
   name: string;
@@ -20,7 +18,6 @@ export type OrgBarProps = {
   followers: number | null;
   following: boolean;
   busy?: boolean;
-  onBack: () => void;
   onOpen: () => void;
   onFollow: () => void;
   /** Absent : pas de message possible (structure non validée). */
@@ -34,39 +31,14 @@ export function OrgBar({
   followers,
   following,
   busy = false,
-  onBack,
   onOpen,
   onFollow,
   onWrite,
 }: OrgBarProps) {
   const { t } = useTheme();
   const c = t.color;
-  const insets = useSafeAreaInsets();
   return (
-    <View
-      accessibilityRole="header"
-      style={[
-        styles.bar,
-        {
-          paddingTop: insets.top,
-          height: insets.top + ORG_BAR_HEIGHT,
-          backgroundColor: c.bar,
-          borderBottomColor: c.barEdge,
-          boxShadow: t.shadow.shadowBarTop,
-        },
-      ]}
-      testID="org-bar"
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Retour"
-        onPress={onBack}
-        hitSlop={8}
-        style={styles.back}
-        testID="flow-close"
-      >
-        <Icon name="back" size={22} color={c.barInk} />
-      </Pressable>
+    <View style={styles.bar} testID="org-bar">
       <Pressable
         accessibilityRole="link"
         accessibilityLabel={`Organisateur : ${name}`}
@@ -122,15 +94,7 @@ export function OrgBar({
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space2,
-    paddingHorizontal: 10,
-    borderBottomWidth: 2,
-    zIndex: 20,
-  },
-  back: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+  bar: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space2 },
   who: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space2 },
   text: { flex: 1, minWidth: 0, gap: 1 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: space1 },

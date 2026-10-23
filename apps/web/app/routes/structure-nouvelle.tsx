@@ -10,10 +10,13 @@ import {
   structureKinds,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
-
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { FileField, TextAreaField } from "../components/Fields";
 import { api, requireMe } from "../lib/api.server";
 import type { Route } from "./+types/structure-nouvelle";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Créer ma structure · Orasso" }, { name: "robots", content: "noindex" }];
@@ -95,63 +98,64 @@ export default function StructureNouvelle({ actionData }: Route.ComponentProps) 
   const errors: Errors = actionData?.errors ?? {};
   const v = (actionData?.values ?? {}) as Record<string, string>;
   return (
-    <div className="s-narrow s-stack">
-      <div className="o-t-label s-label">Organisateur</div>
-      <h1 className="s-title">Créer ma structure</h1>
-      <p className="s-lead">
-        Association, club, circuit ou entreprise : tu en deviens le propriétaire. Tu pourras préparer tes événements
-        tout de suite ; la publication demande la vérification de la structure (étape suivante).
-      </p>
-      <Form method="post" encType="multipart/form-data" className="s-form" data-testid="structure-form">
-        <SelectField
-          label="Type"
-          name="kind"
-          defaultValue={v.kind ?? "association"}
-          options={KINDS.map((k) => ({ value: k, label: structureKindLabels[k] }))}
-          error={errors.kind}
-        />
-        <TextField label="Nom" name="name" defaultValue={v.name} error={errors.name} required />
-        <TextAreaField
-          label="Description"
-          name="description"
-          defaultValue={v.description}
-          help="Ce que fait la structure, ses événements : affiché sur sa page publique."
-        />
-        <TextField label="Adresse" name="addressLine" autoComplete="street-address" defaultValue={v.addressLine} />
-        <div className="s-two">
-          <TextField label="Code postal" name="postalCode" autoComplete="postal-code" defaultValue={v.postalCode} />
-          <TextField label="Ville" name="city" autoComplete="address-level2" defaultValue={v.city} />
-        </div>
-        <TextField
-          label="Départements couverts"
-          name="departments"
-          defaultValue={v.departments}
-          placeholder="66, 11"
-          help="Les départements où tu organises : codes séparés par des virgules."
-          error={errors.departments}
-        />
-        <TextField label="Site web" name="website" inputMode="url" defaultValue={v.website} placeholder="https://" />
-        <div className="s-two">
-          <TextField label="Instagram" name="instagram" inputMode="url" defaultValue={v.instagram} />
-          <TextField label="Facebook" name="facebook" inputMode="url" defaultValue={v.facebook} />
-          <TextField label="TikTok" name="tiktok" inputMode="url" defaultValue={v.tiktok} />
-          <TextField label="YouTube" name="youtube" inputMode="url" defaultValue={v.youtube} />
-        </div>
-        {errors.social && (
-          <p className="s-error" role="alert">
-            {errors.social}
-          </p>
-        )}
-        <FileField label="Logo" name="logo" accept="image/*" help="Carré de préférence ; JPEG, PNG ou WebP." />
-        {errors.form && (
-          <p className="s-error" role="alert">
-            {errors.form}
-          </p>
-        )}
-        <Button type="submit" icon="add" loading={busy} fullWidth>
-          Créer la structure
-        </Button>
-      </Form>
-    </div>
+    <>
+      <FicheBar title="Créer ma structure" facts="Organisateur" back="/app/moi" />
+      <div className="s-narrow s-stack">
+        <p className="s-lead">
+          Association, club, circuit ou entreprise : tu en deviens le propriétaire. Tu pourras préparer tes événements
+          tout de suite ; la publication demande la vérification de la structure (étape suivante).
+        </p>
+        <Form method="post" encType="multipart/form-data" className="s-form" data-testid="structure-form">
+          <SelectField
+            label="Type"
+            name="kind"
+            defaultValue={v.kind ?? "association"}
+            options={KINDS.map((k) => ({ value: k, label: structureKindLabels[k] }))}
+            error={errors.kind}
+          />
+          <TextField label="Nom" name="name" defaultValue={v.name} error={errors.name} required />
+          <TextAreaField
+            label="Description"
+            name="description"
+            defaultValue={v.description}
+            help="Ce que fait la structure, ses événements : affiché sur sa page publique."
+          />
+          <TextField label="Adresse" name="addressLine" autoComplete="street-address" defaultValue={v.addressLine} />
+          <div className="s-two">
+            <TextField label="Code postal" name="postalCode" autoComplete="postal-code" defaultValue={v.postalCode} />
+            <TextField label="Ville" name="city" autoComplete="address-level2" defaultValue={v.city} />
+          </div>
+          <TextField
+            label="Départements couverts"
+            name="departments"
+            defaultValue={v.departments}
+            placeholder="66, 11"
+            help="Les départements où tu organises : codes séparés par des virgules."
+            error={errors.departments}
+          />
+          <TextField label="Site web" name="website" inputMode="url" defaultValue={v.website} placeholder="https://" />
+          <div className="s-two">
+            <TextField label="Instagram" name="instagram" inputMode="url" defaultValue={v.instagram} />
+            <TextField label="Facebook" name="facebook" inputMode="url" defaultValue={v.facebook} />
+            <TextField label="TikTok" name="tiktok" inputMode="url" defaultValue={v.tiktok} />
+            <TextField label="YouTube" name="youtube" inputMode="url" defaultValue={v.youtube} />
+          </div>
+          {errors.social && (
+            <p className="s-error" role="alert">
+              {errors.social}
+            </p>
+          )}
+          <FileField label="Logo" name="logo" accept="image/*" help="Carré de préférence ; JPEG, PNG ou WebP." />
+          {errors.form && (
+            <p className="s-error" role="alert">
+              {errors.form}
+            </p>
+          )}
+          <Button type="submit" icon="add" loading={busy} fullWidth>
+            Créer la structure
+          </Button>
+        </Form>
+      </div>
+    </>
   );
 }

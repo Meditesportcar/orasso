@@ -6,6 +6,9 @@
 // avec l'accès flottant, sur un écran de flux et sous une feuille ouverte (`useTabBarHidden`).
 // Lot M3 (fluidité) : les onglets de la barre sont préchargés un à un après l'ouverture (`navigation.preload`, voisins
 // d'abord) : au premier passage, l'onglet est déjà monté, ses données lues (cache d'abord) ; un onglet reste monté.
+// Lot M7 (deux modes d'affichage) : le groupe pose aussi la bande ORASSO du haut (`TabBandProvider`), une fois pour
+// toutes ses pages d'onglet (mode A) ; une page masquée qui est une fiche ou un parcours (`FlowScreen`) n'a ni bande ni
+// barre (mode B).
 import { TabBar, type TabItem, tabSets, useTabBarHidden } from "@orasso/design-system/native";
 import { Tabs } from "expo-router";
 import { type ComponentProps, type ReactNode, useCallback, useEffect, useMemo, useRef } from "react";
@@ -16,6 +19,7 @@ import { neighbourRoute, preloadOrder } from "@/features/nav/swipe";
 import { TabSwipeContext, useTabSwipe } from "@/features/nav/useTabSwipe";
 import { NextAccessBar } from "@/features/sorties/NextAccessBar";
 import { personaTabSets, personaTabs } from "@/lib/personaModel";
+import { TabBandProvider } from "./TopBar";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 type Navigator = { current: string | undefined; navigate: (route: string) => void };
@@ -118,20 +122,22 @@ export function PersonaTabs({
   const { panHandlers, control } = useTabSwipe(onSwipe);
   return (
     <TabSwipeContext.Provider value={control}>
-      <View
-        style={[styles.fill, Platform.OS === "web" ? styles.noSelect : null]}
-        {...panHandlers}
-        testID="persona-tabs"
-      >
-        <Tabs
-          initialRouteName={initialRouteName}
-          backBehavior={backBehavior}
-          screenOptions={{ headerShown: false, animation: "none" }}
-          tabBar={(props) => <PersonaTabBar {...props} tabs={tabs} routes={routes} navigator={navigator} />}
+      <TabBandProvider>
+        <View
+          style={[styles.fill, Platform.OS === "web" ? styles.noSelect : null]}
+          {...panHandlers}
+          testID="persona-tabs"
         >
-          {children}
-        </Tabs>
-      </View>
+          <Tabs
+            initialRouteName={initialRouteName}
+            backBehavior={backBehavior}
+            screenOptions={{ headerShown: false, animation: "none" }}
+            tabBar={(props) => <PersonaTabBar {...props} tabs={tabs} routes={routes} navigator={navigator} />}
+          >
+            {children}
+          </Tabs>
+        </View>
+      </TabBandProvider>
     </TabSwipeContext.Provider>
   );
 }

@@ -3,8 +3,11 @@
 // remonte de 8 px sur l'image (`.ev-body`). Mêmes fond, zone des feuilles et action fixe en bas que `FlowScreen`.
 // Lot M3 : zone sûre de la barre d'état. Une bande de la couleur de la tête reste fixée sous l'heure et la batterie :
 // en défilant, l'affiche et le texte passent dessous, jamais sous les icônes d'Android (retour 20 de Damien).
-// Lot M4 : `header`, un en-tête de fiche fixé en haut (mode B : la bande de l'organisateur de la fiche événement), qui
-// remplace la pastille O et la croix flottantes et porte lui-même la zone sûre ; `heroFloat` se pose sur l'affiche.
+// Lot M7 (deux modes d'affichage) : c'est un écran du mode B. `band` est l'emplacement standard de l'en-tête de fiche :
+// une bande fixée en haut (l'organisateur de la fiche événement, dessinée par le lot M4), le ✕ à sa place habituelle ;
+// elle remplace la pastille O et le ✕ flottants. Le ✕ flottant a la cible tactile de 44 px des autres en-têtes.
+// Lot M4 (maquette 4.2) : la bande de l'organisateur garde son aplat (couleur de la barre, filet) sur toute la largeur,
+// le ✕ de l'en-tête de fiche à droite ; `heroFloat` se pose en haut de l'affiche quand la bande est là (le pavé J-x).
 import {
   Ground,
   Icon,
@@ -19,10 +22,13 @@ import { type ReactNode, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { FicheHeader } from "@/ui/FicheHeader";
 import { KeyboardSafe } from "@/ui/KeyboardSafe";
 import { OverlayProvider, OverlaySlot } from "@/ui/Overlay";
 
 const { space2, space3, space4, space6 } = tokens.spacing;
+/** Cible de 44 px autour du ✕ de 38 px, comme celui de l'en-tête de fiche. */
+const CLOSE_SLOP = { top: 3, bottom: 3, left: 3, right: 3 };
 
 export function PosterFlow({
   hero,
@@ -33,7 +39,7 @@ export function PosterFlow({
   onRefresh,
   testID,
   liftHero = false,
-  header,
+  band,
   heroFloat,
 }: {
   /** La tête pleine largeur (affiche, photo) ; les boutons flottants se posent dessus. */
@@ -46,9 +52,9 @@ export function PosterFlow({
   testID?: string;
   /** Lot M3 : la tête passe au-dessus du corps, sans découpe (affiche qui grandit depuis la liste). */
   liftHero?: boolean;
-  /** Lot M4 : en-tête fixé en haut (zone sûre comprise) ; sans lui, pastille O et croix flottantes. */
-  header?: ReactNode;
-  /** Lot M4 : ce qui se pose en haut de l'affiche quand l'en-tête est fixé (le pavé J-x). */
+  /** Lot M7 : bande fixe de l'en-tête de fiche (organisateur), à la place de la pastille O et du ✕ flottants. */
+  band?: ReactNode;
+  /** Lot M4 : ce qui se pose en haut de l'affiche quand la bande est fixée (le pavé J-x). */
   heroFloat?: ReactNode;
 }) {
   const { t } = useTheme();
@@ -61,7 +67,17 @@ export function PosterFlow({
     <OliveActivityProvider active={focused}>
       <OverlayProvider>
         <Ground paused={!focused} style={styles.fill}>
-          {header}
+          {band ? (
+            <View
+              style={[
+                styles.band,
+                { backgroundColor: t.color.bar, borderBottomColor: t.color.barEdge, boxShadow: t.shadow.shadowBarTop },
+              ]}
+              testID="org-band"
+            >
+              <FicheHeader band={band} onClose={onClose} />
+            </View>
+          ) : null}
           <KeyboardSafe style={styles.fill}>
             <ScrollView
               style={styles.fill}
@@ -87,7 +103,7 @@ export function PosterFlow({
             >
               <View style={[styles.hero, liftHero ? styles.heroLifted : null, { backgroundColor: t.color.bar }]}>
                 {hero}
-                {header ? (
+                {band ? (
                   heroFloat ? (
                     <View style={[styles.float, { top: 7 }]} pointerEvents="box-none">
                       {heroFloat}
@@ -102,6 +118,7 @@ export function PosterFlow({
                       accessibilityRole="button"
                       accessibilityLabel="Fermer"
                       onPress={onClose}
+                      hitSlop={CLOSE_SLOP}
                       style={[styles.close, { backgroundColor: `${t.color.night}8c` }]}
                       testID="flow-close"
                     >
@@ -114,7 +131,7 @@ export function PosterFlow({
             </ScrollView>
             {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
           </KeyboardSafe>
-          {header ? null : (
+          {band ? null : (
             <View
               pointerEvents="none"
               style={[styles.statusBar, { height: insets.top, backgroundColor: t.color.bar }]}
@@ -131,6 +148,8 @@ export function PosterFlow({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  // Lot M4 : la bande de l'organisateur au-dessus de l'affiche (aplat de la barre, filet en bas).
+  band: { borderBottomWidth: 2, zIndex: 20 },
   content: { paddingBottom: space6 * 2 },
   hero: { width: "100%", position: "relative", overflow: "hidden" },
   // Lot M3 : sans découpe et au-dessus du corps, pour que l'affiche grandisse depuis sa place dans la liste.

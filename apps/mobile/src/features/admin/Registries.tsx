@@ -118,7 +118,7 @@ function StructuresBody() {
 
 export function StructuresScreen() {
   return (
-    <AdminGate title={L.registryStructures}>
+    <AdminGate page title={L.registryStructures}>
       <StructuresBody />
     </AdminGate>
   );
@@ -229,7 +229,7 @@ function ProsBody() {
 
 export function ProsScreen() {
   return (
-    <AdminGate title={L.registryPros}>
+    <AdminGate page title={L.registryPros}>
       <ProsBody />
     </AdminGate>
   );
@@ -611,7 +611,7 @@ function VehiclesBody() {
 
 export function VehiclesScreen() {
   return (
-    <AdminGate title={L.registryVehicles}>
+    <AdminGate page title={L.registryVehicles}>
       <VehiclesBody />
     </AdminGate>
   );
@@ -738,7 +738,7 @@ function AuditBody() {
 
 export function AuditScreen() {
   return (
-    <AdminGate title={adminTexts.audit}>
+    <AdminGate page title={adminTexts.audit}>
       <AuditBody />
     </AdminGate>
   );

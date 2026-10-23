@@ -58,12 +58,16 @@ export function AdminGate({
   title,
   children,
   moderator = false,
+  page = false,
 }: {
   title: string;
   children: ReactNode;
   /** Page ouverte au modérateur (accueil et signalements) ; les autres sont réservées au super admin. */
   moderator?: boolean;
+  /** Lot M7, tour 2 : page masquée du groupe (mode B) : un refus (rôle, double authentification) garde l'en-tête de fiche. */
+  page?: boolean;
 }) {
+  const Gate = page ? GatePage : TabScreen;
   const { persona } = usePersona();
   const { me } = useSession();
   const role = adminRoleOf(me?.profile.platformRole);
@@ -75,24 +79,24 @@ export function AdminGate({
   if (persona.kind !== "admin") return null;
   if (!role) {
     return (
-      <TabScreen title={title}>
+      <Gate title={title}>
         <Notice tone="error">{L.notAdmin}</Notice>
-      </TabScreen>
+      </Gate>
     );
   }
   if (role === "moderator" && !moderator) {
     return (
-      <TabScreen title={title}>
+      <Gate title={title}>
         <Notice tone="error">{L.superAdminOnly}</Notice>
-      </TabScreen>
+      </Gate>
     );
   }
   const probe = role === "super_admin" ? overview : reports;
   if (isTwoFactorError(probe.error)) {
     return (
-      <TabScreen title={title}>
+      <Gate title={title}>
         <TwoFactorGate />
-      </TabScreen>
+      </Gate>
     );
   }
   return (
@@ -102,6 +106,11 @@ export function AdminGate({
       {children}
     </AdminContext.Provider>
   );
+}
+
+/** Écran de refus d'une page masquée (mode B) : l'en-tête de fiche de `AdminPage`. */
+function GatePage({ title, children }: { title: string; children: ReactNode }) {
+  return <AdminPage title={title}>{children}</AdminPage>;
 }
 
 // --- Écran de page ----------------------------------------------------------------------------------------------------

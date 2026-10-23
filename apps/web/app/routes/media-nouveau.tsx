@@ -14,7 +14,11 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { FileField, TextAreaField } from "../components/Fields";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import "../styles/media.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/media-nouveau";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: `${L.profileTitle} · Orasso` }, { name: "robots", content: "noindex" }];
@@ -80,73 +84,72 @@ export default function MediaNouveau({ loaderData, actionData }: Route.Component
   const busy = useNavigation().state !== "idle";
   const chosen = new Set(profile?.formats ?? []);
   return (
-    <div className="s-narrow s-stack" data-testid="media-profile-page">
-      <div className="s-head">
-        <div className="o-t-label s-label">Casquette Média</div>
-        <h1 className="s-title">{profile ? L.casquetteEdit : L.createTitle}</h1>
-      </div>
-      <p className="s-lead">{L.profileCreateIntro}</p>
-      {actionData?.error && (
-        <p className="s-error" role="alert" data-testid="media-profile-error">
-          {actionData.error}
-        </p>
-      )}
-      <Form method="post" encType="multipart/form-data" className="s-form" data-testid="media-profile-form">
-        <TextField label={L.profileName} name="name" defaultValue={profile?.name ?? ""} required maxLength={60} />
-        <fieldset className="s-stack s-stack--tight">
-          <legend className="o-t-label">{L.profileFormats}</legend>
-          {mediaFormats.map((f) => (
-            <CheckboxField
-              key={f}
-              name="formats"
-              value={f}
-              label={mediaFormatLabels[f]}
-              defaultChecked={chosen.has(f)}
-            />
-          ))}
-        </fieldset>
-        <TextAreaField
-          label={L.profileDescription}
-          name="description"
-          defaultValue={profile?.description ?? ""}
-          maxLength={800}
-        />
-        <p className="o-t-caption">{L.profileLinkHelp}</p>
-        <TextField label={L.profileWebsite} name="website" defaultValue={profile?.website ?? ""} />
-        <TextField label={L.profileInstagram} name="instagram" defaultValue={profile?.instagram ?? ""} />
-        <TextField label={L.profileYoutube} name="youtube" defaultValue={profile?.youtube ?? ""} />
-        <TextField
-          label={L.profileCover}
-          name="departments"
-          defaultValue={profile?.departments.join(", ") ?? ""}
-          help={L.profileCoverHelp}
-        />
-        {profile?.logoUrl && <img className="md-logo" src={profile.logoUrl} alt={L.profileLogo} />}
-        <FileField
-          label={profile?.logoUrl ? L.profileLogoChange : L.profileLogoPick}
-          name="logo"
-          accept="image/jpeg,image/png,image/webp"
-        />
-        <p className="o-t-caption s-muted">{profile ? L.profileReverifyNote : L.profileVerifyNote}</p>
-        <div>
-          <Button type="submit" icon="check" loading={busy}>
-            {profile ? L.profileSave : L.profileCreate}
-          </Button>
-        </div>
-      </Form>
-      {profile?.logoUrl && (
-        <Form method="post">
-          <input type="hidden" name="intent" value="logo-remove" />
-          <Button type="submit" variant="secondary" icon="close" loading={busy}>
-            {L.profileLogoRemove}
-          </Button>
+    <>
+      <FicheBar title={profile ? L.casquetteEdit : L.createTitle} facts="Casquette Média" back="/app/moi" />
+      <div className="s-narrow s-stack" data-testid="media-profile-page">
+        <p className="s-lead">{L.profileCreateIntro}</p>
+        {actionData?.error && (
+          <p className="s-error" role="alert" data-testid="media-profile-error">
+            {actionData.error}
+          </p>
+        )}
+        <Form method="post" encType="multipart/form-data" className="s-form" data-testid="media-profile-form">
+          <TextField label={L.profileName} name="name" defaultValue={profile?.name ?? ""} required maxLength={60} />
+          <fieldset className="s-stack s-stack--tight">
+            <legend className="o-t-label">{L.profileFormats}</legend>
+            {mediaFormats.map((f) => (
+              <CheckboxField
+                key={f}
+                name="formats"
+                value={f}
+                label={mediaFormatLabels[f]}
+                defaultChecked={chosen.has(f)}
+              />
+            ))}
+          </fieldset>
+          <TextAreaField
+            label={L.profileDescription}
+            name="description"
+            defaultValue={profile?.description ?? ""}
+            maxLength={800}
+          />
+          <p className="o-t-caption">{L.profileLinkHelp}</p>
+          <TextField label={L.profileWebsite} name="website" defaultValue={profile?.website ?? ""} />
+          <TextField label={L.profileInstagram} name="instagram" defaultValue={profile?.instagram ?? ""} />
+          <TextField label={L.profileYoutube} name="youtube" defaultValue={profile?.youtube ?? ""} />
+          <TextField
+            label={L.profileCover}
+            name="departments"
+            defaultValue={profile?.departments.join(", ") ?? ""}
+            help={L.profileCoverHelp}
+          />
+          {profile?.logoUrl && <img className="md-logo" src={profile.logoUrl} alt={L.profileLogo} />}
+          <FileField
+            label={profile?.logoUrl ? L.profileLogoChange : L.profileLogoPick}
+            name="logo"
+            accept="image/jpeg,image/png,image/webp"
+          />
+          <p className="o-t-caption s-muted">{profile ? L.profileReverifyNote : L.profileVerifyNote}</p>
+          <div>
+            <Button type="submit" icon="check" loading={busy}>
+              {profile ? L.profileSave : L.profileCreate}
+            </Button>
+          </div>
         </Form>
-      )}
-      {profile && (
-        <Button variant="secondary" icon="back" href="/app/media">
-          {L.casquettePress}
-        </Button>
-      )}
-    </div>
+        {profile?.logoUrl && (
+          <Form method="post">
+            <input type="hidden" name="intent" value="logo-remove" />
+            <Button type="submit" variant="secondary" icon="close" loading={busy}>
+              {L.profileLogoRemove}
+            </Button>
+          </Form>
+        )}
+        {profile && (
+          <Button variant="secondary" icon="back" href="/app/media">
+            {L.casquettePress}
+          </Button>
+        )}
+      </div>
+    </>
   );
 }

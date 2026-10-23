@@ -18,6 +18,10 @@ import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, safeReturn } from "../lib/api.server";
 import type { Route } from "./+types/garage-nouveau";
 import "../styles/garage.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Ajouter un véhicule · Orasso" }, { name: "robots", content: "noindex" }];
@@ -143,130 +147,132 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const visibleModels = models.filter((m) => m.vehicleType === type || m.isOther);
 
   return (
-    <div className="s-narrow s-stack">
-      <h1 className="s-title">Ajouter un véhicule</h1>
-      <p className="s-lead">
-        L'essentiel pour candidater : le véhicule, sa plaque (visible par l'équipe organisatrice seulement) et une
-        photo.
-      </p>
-      <Form method="post" encType="multipart/form-data" className="s-form">
-        {retour && <input type="hidden" name="retour" value={retour} />}
-        <SelectField
-          label="Type"
-          name="vehicleType"
-          value={type}
-          onChange={(e) => {
-            setType(e.currentTarget.value);
-            setModelId("");
-          }}
-          options={vehicleTypes.map((t) => ({ value: t, label: vehicleTypeLabels[t] }))}
-          error={errors.vehicleType}
-        />
-        <SelectField
-          label="Marque"
-          name="makeId"
-          value={makeId}
-          onChange={(e) => setMakeId(e.currentTarget.value)}
-          placeholder="Choisir une marque"
-          options={makes.map((m) => ({ value: m.id, label: m.name }))}
-          error={errors.makeId}
-        />
-        <SelectField
-          label="Modèle"
-          name="modelId"
-          value={modelId}
-          onChange={(e) => setModelId(e.currentTarget.value)}
-          placeholder={makeId ? "Choisir un modèle" : "Choisis d'abord une marque"}
-          disabled={!makeId}
-          options={visibleModels.map((m) => ({ value: m.id, label: m.name }))}
-          error={errors.modelId}
-        />
-        {generations.length > 0 && (
+    <>
+      <FicheBar title="Ajouter un véhicule" back={retour ?? "/app/garage"} />
+      <div className="s-narrow s-stack">
+        <p className="s-lead">
+          L'essentiel pour candidater : le véhicule, sa plaque (visible par l'équipe organisatrice seulement) et une
+          photo.
+        </p>
+        <Form method="post" encType="multipart/form-data" className="s-form">
+          {retour && <input type="hidden" name="retour" value={retour} />}
           <SelectField
-            label="Génération (facultatif)"
-            name="generationId"
-            defaultValue=""
-            options={[
-              { value: "", label: "Je ne sais pas" },
-              ...generations.map((g) => ({ value: g.id, label: g.name })),
-            ]}
+            label="Type"
+            name="vehicleType"
+            value={type}
+            onChange={(e) => {
+              setType(e.currentTarget.value);
+              setModelId("");
+            }}
+            options={vehicleTypes.map((t) => ({ value: t, label: vehicleTypeLabels[t] }))}
+            error={errors.vehicleType}
           />
-        )}
-        <TextField
-          label="Année"
-          name="year"
-          inputMode="numeric"
-          maxLength={4}
-          value={year}
-          onChange={(e) => setYear(e.currentTarget.value)}
-          error={errors.year}
-        />
-        <div className="s-two">
-          <TextField label="Puissance en ch (facultatif)" name="powerHp" inputMode="numeric" error={errors.powerHp} />
-          <TextField label="Poids en kg (facultatif)" name="weightKg" inputMode="numeric" error={errors.weightKg} />
-        </div>
-        <TextField label="Couleur (facultatif)" name="color" />
-        <SelectField
-          label="Statut"
-          name="status"
-          value={status}
-          onChange={(e) => setStatus(e.currentTarget.value)}
-          options={[
-            { value: "active", label: "Dans mon garage (actif)" },
-            ...archiveStatusChoices.map((c) => ({ value: c.status, label: c.label })),
-          ]}
-          help="Un véhicule vendu, en souvenir ou accidenté ne candidate pas ; sa plaque est facultative."
-        />
-        {!active && <TextField label="Motif (facultatif)" name="statusNote" maxLength={300} />}
-        <fieldset className="g-cats" data-testid="categories">
-          <legend className="o-field__label o-t-label">Catégories</legend>
-          {categories.map((c) => (
-            <div key={c.id} className={c.eligible ? "g-cat" : "g-cat is-off"}>
-              <label>
-                <input type="checkbox" name="categoryIds" value={c.id} disabled={!c.eligible} />
-                {c.label}
-              </label>
-              {!c.eligible && <span className="o-t-meta">{c.reason}</span>}
-            </div>
-          ))}
-        </fieldset>
-        <TextField
-          label="Plaque"
-          name="plate"
-          autoCapitalize="characters"
-          disabled={unregistered}
-          help={
-            active
-              ? "Jamais affichée aux autres passionnés. Déjà prise par un autre membre ? Il sera prévenu et pourra confirmer le transfert."
-              : "Facultative pour un véhicule archivé. Jamais affichée aux autres passionnés."
-          }
-          error={errors.plate}
-        />
-        <CheckboxField
-          name="unregistered"
-          checked={unregistered}
-          onChange={(e) => setUnregistered(e.currentTarget.checked)}
-          label="Véhicule non immatriculé"
-        />
-        <PhotoWithPlate
-          label="Photo"
-          help="Une photo de ton véhicule, de face ou de trois quarts. Tu floutes la plaque juste en dessous."
-          error={errors.photo}
-          required={active}
-          testId="new-plate-frame"
-        />
-        {errors.form && (
-          <p className="s-error" role="alert">
-            {errors.form}
-          </p>
-        )}
-        <Button type="submit" icon="check" loading={busy} fullWidth>
-          Ajouter au garage
-        </Button>
-        <Button variant="secondary" icon="back" href={retour ?? "/app/garage"} fullWidth>
-          Annuler
-        </Button>
-      </Form>
-    </div>
+          <SelectField
+            label="Marque"
+            name="makeId"
+            value={makeId}
+            onChange={(e) => setMakeId(e.currentTarget.value)}
+            placeholder="Choisir une marque"
+            options={makes.map((m) => ({ value: m.id, label: m.name }))}
+            error={errors.makeId}
+          />
+          <SelectField
+            label="Modèle"
+            name="modelId"
+            value={modelId}
+            onChange={(e) => setModelId(e.currentTarget.value)}
+            placeholder={makeId ? "Choisir un modèle" : "Choisis d'abord une marque"}
+            disabled={!makeId}
+            options={visibleModels.map((m) => ({ value: m.id, label: m.name }))}
+            error={errors.modelId}
+          />
+          {generations.length > 0 && (
+            <SelectField
+              label="Génération (facultatif)"
+              name="generationId"
+              defaultValue=""
+              options={[
+                { value: "", label: "Je ne sais pas" },
+                ...generations.map((g) => ({ value: g.id, label: g.name })),
+              ]}
+            />
+          )}
+          <TextField
+            label="Année"
+            name="year"
+            inputMode="numeric"
+            maxLength={4}
+            value={year}
+            onChange={(e) => setYear(e.currentTarget.value)}
+            error={errors.year}
+          />
+          <div className="s-two">
+            <TextField label="Puissance en ch (facultatif)" name="powerHp" inputMode="numeric" error={errors.powerHp} />
+            <TextField label="Poids en kg (facultatif)" name="weightKg" inputMode="numeric" error={errors.weightKg} />
+          </div>
+          <TextField label="Couleur (facultatif)" name="color" />
+          <SelectField
+            label="Statut"
+            name="status"
+            value={status}
+            onChange={(e) => setStatus(e.currentTarget.value)}
+            options={[
+              { value: "active", label: "Dans mon garage (actif)" },
+              ...archiveStatusChoices.map((c) => ({ value: c.status, label: c.label })),
+            ]}
+            help="Un véhicule vendu, en souvenir ou accidenté ne candidate pas ; sa plaque est facultative."
+          />
+          {!active && <TextField label="Motif (facultatif)" name="statusNote" maxLength={300} />}
+          <fieldset className="g-cats" data-testid="categories">
+            <legend className="o-field__label o-t-label">Catégories</legend>
+            {categories.map((c) => (
+              <div key={c.id} className={c.eligible ? "g-cat" : "g-cat is-off"}>
+                <label>
+                  <input type="checkbox" name="categoryIds" value={c.id} disabled={!c.eligible} />
+                  {c.label}
+                </label>
+                {!c.eligible && <span className="o-t-meta">{c.reason}</span>}
+              </div>
+            ))}
+          </fieldset>
+          <TextField
+            label="Plaque"
+            name="plate"
+            autoCapitalize="characters"
+            disabled={unregistered}
+            help={
+              active
+                ? "Jamais affichée aux autres passionnés. Déjà prise par un autre membre ? Il sera prévenu et pourra confirmer le transfert."
+                : "Facultative pour un véhicule archivé. Jamais affichée aux autres passionnés."
+            }
+            error={errors.plate}
+          />
+          <CheckboxField
+            name="unregistered"
+            checked={unregistered}
+            onChange={(e) => setUnregistered(e.currentTarget.checked)}
+            label="Véhicule non immatriculé"
+          />
+          <PhotoWithPlate
+            label="Photo"
+            help="Une photo de ton véhicule, de face ou de trois quarts. Tu floutes la plaque juste en dessous."
+            error={errors.photo}
+            required={active}
+            testId="new-plate-frame"
+          />
+          {errors.form && (
+            <p className="s-error" role="alert">
+              {errors.form}
+            </p>
+          )}
+          <Button type="submit" icon="check" loading={busy} fullWidth>
+            Ajouter au garage
+          </Button>
+          <Button variant="secondary" icon="back" href={retour ?? "/app/garage"} fullWidth>
+            Annuler
+          </Button>
+        </Form>
+      </div>
+    </>
   );
 }

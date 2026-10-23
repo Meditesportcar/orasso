@@ -1,7 +1,7 @@
 // Conversation (lot 18, ARCHITECTURE-SUITE § 3.5) : liste inversée, bulles, image avec visionneuse, « Lu par … » (S9),
 // envoi avec un `clientId` et nouvel essai tant que l'écran est ouvert (S13, pas de file persistante), message
 // supprimé, appui long (Supprimer pour ses messages ; Signaler ceux des autres, lot 32).
-import { AppBar, Button, Ground, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Ground, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type ConversationView,
   MESSAGE_BODY_MAX,
@@ -26,6 +26,7 @@ import { pickPhotos } from "@/lib/photos";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
+import { FicheHeader } from "@/ui/FicheHeader";
 import { KeyboardSafe } from "@/ui/KeyboardSafe";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -341,12 +342,10 @@ export function ConversationScreen({
 
   return (
     <Ground style={styles.fill}>
-      <AppBar
-        kind="flow"
+      <FicheHeader
         title={conversation?.title ?? messagingLabels.inbox}
         facts={conversation?.subtitle ?? undefined}
         onClose={close}
-        safeTop={insets.top}
       />
       <KeyboardSafe style={styles.fill}>
         {header ? <View style={styles.pad}>{header}</View> : null}

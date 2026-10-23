@@ -47,6 +47,7 @@ import { ProTile } from "../components/ProTile";
 import { UsePosition } from "../components/UsePosition";
 import { api, apiOrThrow } from "../lib/api.server";
 import { friendAction } from "../lib/friends.server";
+import { withRetour } from "../lib/retour";
 import type { Route } from "./+types/app-explorer";
 
 // Explorer (docs/02, lots 17 et 29) : recherche en tête, quatre vues : les résultats groupés de la recherche de premier
@@ -755,12 +756,14 @@ function ResultGroups({ results, busy, q }: { results: SearchResults; busy: bool
               <li key={v.id} className="s-person" data-testid="vehicle-hit">
                 <PersonAvatar url={v.owner.avatarUrl} pseudo={v.owner.pseudo} size={48} />
                 <div className="s-person__main">
-                  <a className="s-person__name o-t-title" href={`/v/${v.id}`}>
+                  <a className="s-person__name o-t-title" href={withRetour(`/v/${v.id}`, "/app/explorer")}>
                     {v.label}
                   </a>
                   <span className="o-t-caption s-muted">
-                    <a href={`/u/${encodeURIComponent(v.owner.pseudo)}`}>{v.owner.pseudo}</a> ·{" "}
-                    {gradeLabels[v.owner.grade]}
+                    <a href={withRetour(`/u/${encodeURIComponent(v.owner.pseudo)}`, "/app/explorer")}>
+                      {v.owner.pseudo}
+                    </a>{" "}
+                    · {gradeLabels[v.owner.grade]}
                   </span>
                 </div>
               </li>

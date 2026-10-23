@@ -81,7 +81,7 @@ function MediaBody() {
 
 export function MediaScreen() {
   return (
-    <AdminGate title="Médias">
+    <AdminGate page title="Médias">
       <MediaBody />
     </AdminGate>
   );

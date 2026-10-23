@@ -18,6 +18,7 @@ import {
   weekdayLabels,
   weekdays,
 } from "@orasso/shared";
+import { useRouter } from "expo-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -32,7 +33,7 @@ import { useRun } from "@/lib/useRun";
 import { Feedback } from "@/ui/Feedback";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { SectionTitle, TabScreen } from "@/ui/Screens";
+import { FlowScreen, SectionTitle } from "@/ui/Screens";
 import { ActGrid } from "./kit";
 
 const { space2 } = tokens.spacing;
@@ -294,13 +295,20 @@ export function ProFicheFields({
   );
 }
 
-/** Création de la fiche depuis Créer (lot 34) : le même formulaire, vide, dans un écran d'onglet. */
+/**
+ * Création de la fiche depuis Créer (lot 34) : le même formulaire, vide. Lot M7 : c'est un parcours hors des onglets,
+ * donc en mode B (en-tête de fiche, ✕ pour revenir).
+ */
 export function FicheForm({ create = false }: { create?: boolean } = {}) {
+  const router = useRouter();
   return (
-    <TabScreen title={create ? L.createTitle : L.editTitle}>
+    <FlowScreen
+      title={create ? L.createTitle : L.editTitle}
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/profil"))}
+    >
       {create ? <Muted variant="body">{L.createIntro}</Muted> : null}
       <ProFicheFields create={create} />
-    </TabScreen>
+    </FlowScreen>
   );
 }
 

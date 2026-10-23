@@ -14,8 +14,8 @@ import {
 import { useIsFocused, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-
 import { api } from "@/lib/api";
+import { withReturn } from "@/lib/closeTo";
 import { formatDay, formatDayHour, formatHour } from "@/lib/format";
 import { staffRequests } from "@/lib/orga";
 import { useChannel } from "@/lib/realtime";
@@ -25,7 +25,7 @@ import { useNow } from "@/lib/useNow";
 import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { SectionTitle, TabScreen } from "@/ui/Screens";
+import { FlowScreen, SectionTitle } from "@/ui/Screens";
 import { GroupMessageSheet } from "./GroupMessageSheet";
 import { OrgaFailure, useOrga } from "./OrgaGate";
 
@@ -197,9 +197,11 @@ export function InboxScreen() {
   const failure = summary.error ?? conversations.error ?? groups.error ?? chats.error ?? members.error;
 
   return (
-    <TabScreen
+    // Lot M7 : hors de la barre d'onglets, la Boîte de la structure est en mode B (en-tête de fiche, ✕ pour revenir).
+    <FlowScreen
       title={orgaLabels.inboxTitle}
       facts={structureName}
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/(orga)/direct"))}
       onRefresh={reloadAll}
       overlays={
         <GroupMessageSheet
@@ -263,7 +265,7 @@ export function InboxScreen() {
             variant="plate"
             icon="chat"
             next
-            onPress={() => router.push("/modeles")}
+            onPress={() => router.push(withReturn("/modeles", "/boite/orga") as never)}
             fullWidth
             testID="orga-templates-open"
           >
@@ -332,7 +334,7 @@ export function InboxScreen() {
           )}
         </>
       ) : null}
-    </TabScreen>
+    </FlowScreen>
   );
 }
 

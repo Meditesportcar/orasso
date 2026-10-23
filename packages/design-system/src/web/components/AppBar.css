@@ -216,9 +216,13 @@
   letter-spacing: 0;
   text-transform: none;
 }
-.o-appbar--flow .o-appbar__close {
+/* Lot M7 : sélecteur renforcé. La règle des boutons posés sur une barre (`:is(.o-appbar, [data-bar]) .o-button--close`,
+   encre de barre sur fond transparent) gagnait aussi en flux, où il n'y a pas de barre : ✕ clair sur fond clair en Sable.
+   Le ✕ de l'en-tête de fiche est celui de l'artefact (`.flowbar .closex`) et de l'appli : fond de carte, encre, filet. */
+.o-appbar.o-appbar--flow .o-appbar__close.o-button--close {
   width: 38px;
   height: 38px;
+  border: 0;
   border-radius: 12px;
   background: var(--surface);
   color: var(--ink);

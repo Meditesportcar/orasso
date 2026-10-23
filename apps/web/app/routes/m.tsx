@@ -13,16 +13,22 @@ import {
 } from "@orasso/shared";
 
 import { PhotoGallery } from "../components/PhotoGallery";
-import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { api, apiOrThrow, requireMe, safeReturn } from "../lib/api.server";
 import { type CursorChunk, cursorParam, loadChunk, useCursorList } from "../lib/useCursorList";
 import "../styles/media.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/m";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return [{ title: `${d?.media.name ?? "Média"} · Orasso` }, { name: "robots", content: "noindex" }];
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
+  const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
   await requireMe(request);
   const id = encodeURIComponent(params.id);
   const media = await apiOrThrow<MediaPublic>(request, `/media/${id}`);
@@ -38,7 +44,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
     return res.ok ? res.data : null;
   });
-  return { media, chunk, size };
+  return {
+    back,
+    media,
+    chunk,
+    size,
+  };
 }
 
 const PAGE_SIZE = 20;
@@ -55,49 +66,51 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
   const m = loaderData.media;
   const ig = instagramUrl(m.instagram);
   return (
-    <div className="s-narrow s-stack" data-testid="media-public">
-      <div className="s-row">
-        {m.logoUrl && <img className="md-logo" src={m.logoUrl} alt="" />}
-        <div className="s-stack s-stack--tight">
-          <div className="o-t-label s-label">Média</div>
-          <h1 className="s-title o-never-truncate">{m.name}</h1>
-          <ChipRow className="s-chips-wrap">
-            {m.verified && <Chip variant="verified">{L.profileVerified}</Chip>}
-            {m.formats.map((f) => (
-              <Chip key={f}>{mediaFormatLabels[f]}</Chip>
-            ))}
-          </ChipRow>
+    <>
+      <FicheBar heading={false} title="Média" back={loaderData.back} />
+      <div className="s-narrow s-stack" data-testid="media-public">
+        <div className="s-row">
+          {m.logoUrl && <img className="md-logo" src={m.logoUrl} alt="" />}
+          <div className="s-stack s-stack--tight">
+            <h1 className="s-title o-never-truncate">{m.name}</h1>
+            <ChipRow className="s-chips-wrap">
+              {m.verified && <Chip variant="verified">{L.profileVerified}</Chip>}
+              {m.formats.map((f) => (
+                <Chip key={f}>{mediaFormatLabels[f]}</Chip>
+              ))}
+            </ChipRow>
+          </div>
         </div>
+        {m.description && <p className="s-prewrap">{m.description}</p>}
+        <Plate className="s-stack s-stack--tight">
+          <div className="o-t-label">{L.profileCover}</div>
+          <p>{m.departments.length ? m.departments.join(", ") : L.profileCoverAll}</p>
+        </Plate>
+        <div className="s-row">
+          {m.website && (
+            <Button variant="secondary" icon="explore" href={m.website} target="_blank" rel="noreferrer">
+              {L.profileWebsite}
+            </Button>
+          )}
+          {ig && (
+            <Button variant="secondary" icon="instagram" href={ig} target="_blank" rel="noreferrer">
+              {instagramHandle(m.instagram) ?? L.profileInstagram}
+            </Button>
+          )}
+          {m.youtube && (
+            <Button variant="secondary" icon="live" href={m.youtube} target="_blank" rel="noreferrer">
+              {L.profileYoutube}
+            </Button>
+          )}
+        </div>
+        <MediaContents
+          key={`${m.id}:${loaderData.chunk.cursor}:${loaderData.size}`}
+          mediaId={m.id}
+          first={loaderData.chunk}
+          size={loaderData.size}
+        />{" "}
       </div>
-      {m.description && <p className="s-prewrap">{m.description}</p>}
-      <Plate className="s-stack s-stack--tight">
-        <div className="o-t-label">{L.profileCover}</div>
-        <p>{m.departments.length ? m.departments.join(", ") : L.profileCoverAll}</p>
-      </Plate>
-      <div className="s-row">
-        {m.website && (
-          <Button variant="secondary" icon="explore" href={m.website} target="_blank" rel="noreferrer">
-            {L.profileWebsite}
-          </Button>
-        )}
-        {ig && (
-          <Button variant="secondary" icon="instagram" href={ig} target="_blank" rel="noreferrer">
-            {instagramHandle(m.instagram) ?? L.profileInstagram}
-          </Button>
-        )}
-        {m.youtube && (
-          <Button variant="secondary" icon="live" href={m.youtube} target="_blank" rel="noreferrer">
-            {L.profileYoutube}
-          </Button>
-        )}
-      </div>
-      <MediaContents
-        key={`${m.id}:${loaderData.chunk.cursor}:${loaderData.size}`}
-        mediaId={m.id}
-        first={loaderData.chunk}
-        size={loaderData.size}
-      />{" "}
-    </div>
+    </>
   );
 }
 

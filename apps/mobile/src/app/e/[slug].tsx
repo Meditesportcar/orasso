@@ -195,7 +195,6 @@ export default function EventPage() {
       followers={structure.data?.followersCount ?? null}
       following={following || Boolean(structure.data?.isFollowing)}
       busy={following && !structure.data?.isFollowing}
-      onBack={close}
       onOpen={() => router.push(`/o/${card.structure.slug}`)}
       onFollow={extra?.onFollow ?? (() => undefined)}
       onWrite={extra?.onWrite}
@@ -209,7 +208,7 @@ export default function EventPage() {
       return (
         <PosterFlow
           hero={<EventHero event={cardPreview.card} from={posterFrom} underHeader />}
-          header={orgBar(cardPreview.card)}
+          band={orgBar(cardPreview.card)}
           heroFloat={<Countdown event={cardPreview.card} />}
           onClose={close}
           liftHero
@@ -428,7 +427,7 @@ export default function EventPage() {
   return (
     <PosterFlow
       hero={<EventHero event={e} underHeader />}
-      header={orgBar(e, {
+      band={orgBar(e, {
         onFollow: () => void toggleFollow(),
         // Tour 2 : sans compte, ✉ mène à la connexion, comme « Suivre » (la feuille « Écrire à » demande un compte).
         onWrite:

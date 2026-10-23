@@ -104,7 +104,9 @@ function EntryLogo({ entry }: { entry: AppPersonaEntry }) {
 /** Le nom simple d'une casquette (maquette 7.2) : « Passionné », « Organisateur · MéditeSportCar ». */
 export function capName(entry: AppPersonaEntry): string {
   const name = capLabels.name[entry.kind] ?? entry.kind;
-  if (entry.kind === "fan" || entry.kind === "visitor" || entry.kind === "admin") return name;
+  if (entry.kind === "fan" || entry.kind === "visitor") return name;
+  // Administration : le nom du rôle (« Modération » pour un modérateur, `adminModel.ts`), pas le nom générique.
+  if (entry.kind === "admin") return entry.label || name;
   return `${name} · ${entry.label}`;
 }
 

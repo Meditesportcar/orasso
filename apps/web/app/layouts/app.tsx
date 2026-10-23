@@ -7,8 +7,9 @@ import {
   reportReasonLabels,
 } from "@orasso/shared";
 import { useEffect } from "react";
-import { Form, Outlet, useLocation, useRevalidator } from "react-router";
+import { Form, Outlet, useLocation, useMatches, useRevalidator } from "react-router";
 
+import { isFiche } from "../components/FicheBar";
 import { ThemeSwitch } from "../components/SiteChrome";
 import { api, requireMe } from "../lib/api.server";
 import { now } from "../lib/clock";
@@ -22,6 +23,9 @@ import type { Route } from "./+types/app";
 // Explorer · Sorties · Accueil · Garage · Profil ; visiteur : Passeport à la place du Garage), la Boîte et la recherche
 // en haut à droite, l'accès flottant au-dessus de la barre. Les casquettes, la déconnexion et le reste vivent dans
 // Profil (`/app/moi`) : « chaque fonction à un seul endroit ».
+// Lot M7 (deux modes d'affichage, comme l'appli) : une page de navigation a la bande ORASSO et la barre d'onglets (mode
+// A) ; une fiche ou un parcours (route qui déclare `handle = ficheHandle`) n'a que son en-tête de fiche (`FicheBar` :
+// titre, ✕ qui revient), sans bande, sans barre ni accès flottant (mode B).
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
   // Accès flottant : l'accès le plus proche (J-7 à J+1) parmi mes places retenues (à venir et finies depuis moins d'un
@@ -78,6 +82,7 @@ function activeTab(pathname: string): string {
 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const { pathname, search } = useLocation();
+  const fiche = isFiche(useMatches());
   const revalidator = useRevalidator();
   const { setDepartment } = useTheme();
   useEffect(() => setDepartment(loaderData.department), [loaderData.department, setDepartment]);
@@ -94,24 +99,25 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   // Un onglet absent de la barre de la casquette (Passeport d'un exposant, Garage d'un visiteur) tombe sur Profil.
   const raw = activeTab(pathname);
   const tab = raw === "" || tabs.some((t) => t.id === raw) ? raw : "profile";
-  // Écrans de flux (création, vote, récap : `.is-flow` de l'artefact) : ni accès flottant ni place réservée.
-  const isFlow = /\/(nouveau|nouvelle)(\/|$)|^\/app\/(vote|recap)\//.test(pathname);
-  // Lot M5 (retours 30 et 31, comme l'appli) : pas d'accès flottant non plus au Garage ni au Profil.
+  // Lot M5 (retours 30 et 31, comme l'appli) : pas d'accès flottant non plus au Garage ni au Profil ; lot M7 : ni sur une
+  // fiche ou un parcours (mode B).
   const near =
-    loaderData.near && !isFlow && !["home", "outings", "garage", "profile"].includes(tab) ? loaderData.near : null;
+    loaderData.near && !fiche && !["home", "outings", "garage", "profile"].includes(tab) ? loaderData.near : null;
   return (
     <Ground variant="site" animated fixed>
       <div className="app">
-        <AppBar
-          kind="tab"
-          className="app__bar"
-          searchHref="/app/explorer?segment=resultats"
-          searchOn={pathname.startsWith("/app/explorer") && /[?&](q=|segment=resultats)/.test(search)}
-          inboxHref="/app/journal"
-          inboxOn={tab === ""}
-          inboxCount={loaderData.unreadInbox}
-        />
-        <div className={near ? "app__body app__body--near" : "app__body"}>
+        {fiche ? null : (
+          <AppBar
+            kind="tab"
+            className="app__bar"
+            searchHref="/app/explorer?segment=resultats"
+            searchOn={pathname.startsWith("/app/explorer") && /[?&](q=|segment=resultats)/.test(search)}
+            inboxHref="/app/journal"
+            inboxOn={tab === ""}
+            inboxCount={loaderData.unreadInbox}
+          />
+        )}
+        <div className={fiche ? "app__body app__body--fiche" : near ? "app__body app__body--near" : "app__body"}>
           {!loaderData.emailVerified && (
             <Form method="post" action="/app/moi" className="s-notice s-row s-row--between" data-testid="verify-banner">
               <span>Vérifie ton e-mail : un lien de confirmation t'a été envoyé à l'inscription.</span>
@@ -153,9 +159,11 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             </span>
           </a>
         )}
-        <div className="app__tabs">
-          <TabBar tabs={tabs} active={tab} aria-label="Mon compte" />
-        </div>
+        {fiche ? null : (
+          <div className="app__tabs">
+            <TabBar tabs={tabs} active={tab} aria-label="Mon compte" />
+          </div>
+        )}
       </div>
     </Ground>
   );
