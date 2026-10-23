@@ -92,17 +92,20 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     await afterOpening(page);
     // Demande à la première ouverture, puis refus → icône rouge et repli sur le 66.
     await expect(page.getByTestId("position-ask")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("sort-line")).toContainText("autour du 66");
+    // Lot M4 : « N événements · distances depuis le centre du 66 ».
+    await expect(page.getByTestId("sort-line")).toContainText("depuis le centre du 66");
     await shot(page, `explorer-demande-${theme}`);
     await page.getByTestId("position-enable").click();
-    await expect(page.getByTestId("sort-line")).toContainText("Position refusée : autour du 66", { timeout: 30_000 });
+    await expect(page.getByTestId("sort-line")).toContainText("position refusée : distances depuis le centre du 66", {
+      timeout: 30_000,
+    });
     await expect(page.getByTestId("gps-button")).toContainText("Ma position"); // Lot C2a : libellé de l'artefact.
     await expect(page.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
     expect(await page.getByTestId("event-row").count()).toBeGreaterThan(3);
     const km = await distances(page);
     expect(km.length).toBeGreaterThan(3);
     expect([...km].sort((a, b) => a - b)).toEqual(km);
-    await expect(page.getByTestId("results-count")).toContainText("résultat");
+    await expect(page.getByTestId("sort-line")).toContainText("événement");
     await audit(page);
     await shot(page, `explorer-liste-${theme}`);
 
@@ -185,13 +188,16 @@ test("fiche v2 : affiche, créneaux, actions selon le profil, fermé, pas encore
     await page.goto(`/e/${NOCTURNE}`);
     await afterOpening(page);
     await expect(page.getByTestId("event-hero")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("arrival-exhibitors")).toContainText("Exposants");
-    await expect(page.getByTestId("arrival-exhibitors")).toContainText(/Strict|Conseillé/);
-    if (noct.data.arrivals.public) await expect(page.getByTestId("arrival-public")).toBeVisible();
-    await expect(page.getByTestId("event-primary")).toContainText("Candidater avec ma");
+    // Lot M4 (correction de Damien) : le créneau des exposants est privé (feuille et « Ta place »), aucun horaire
+    // « conseillé » ; le bouton dit seulement « Candidater ».
+    await expect(page.getByTestId("arrival-exhibitors")).toHaveCount(0);
+    if (noct.data.arrivals.public && !noct.data.arrivals.public.strict) {
+      await expect(page.getByTestId("arrival-public")).toHaveCount(0);
+    }
+    await expect(page.getByTestId("event-primary")).toHaveText(/Candidater/);
     await audit(page);
     await shot(page, `fiche-ouverte-${theme}`);
-    await page.getByTestId("arrival-slots").scrollIntoViewIfNeeded();
+    await page.getByTestId("event-seats").scrollIntoViewIfNeeded();
     await shot(page, `fiche-creneaux-${theme}`);
 
     if (fullEvent) {

@@ -77,7 +77,8 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
     // --- Explorer v2 (lot 44) : position accordée → tout, du plus proche au plus loin -----------------------------
     await page.goto("/explorer");
     const rows = page.getByTestId("event-row");
-    await expect(page.getByTestId("sort-line")).toContainText("du plus proche au plus loin", { timeout: 30_000 });
+    // Lot M4 : « N événements · distances depuis ta position ».
+    await expect(page.getByTestId("sort-line")).toContainText("distances depuis ta position", { timeout: 30_000 });
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });
     await shot(page, `04-explorer-distance-${theme}`);
 

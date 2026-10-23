@@ -89,7 +89,7 @@ export function PosterFlow({
                 {hero}
                 {header ? (
                   heroFloat ? (
-                    <View style={[styles.float, { top: space3 }]} pointerEvents="box-none">
+                    <View style={[styles.float, { top: 7 }]} pointerEvents="box-none">
                       {heroFloat}
                     </View>
                   ) : null

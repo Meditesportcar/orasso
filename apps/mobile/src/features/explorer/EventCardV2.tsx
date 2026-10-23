@@ -147,8 +147,9 @@ export function EventCardV2({
         {event.title}
       </Text>
       <View style={styles.org}>
-        {event.structure.logoUrl ? (
-          <Image source={{ uri: event.structure.logoUrl }} style={styles.logo} accessibilityIgnoresInvertColors />
+        {/* Lot M4 (retour 19) : l'adresse du logo passe par `mediaSource` (adresse relative de l'API), sinon rond vide. */}
+        {mediaSource(event.structure.logoUrl) ? (
+          <Image source={mediaSource(event.structure.logoUrl)} style={styles.logo} accessibilityIgnoresInvertColors />
         ) : (
           <View style={[styles.logo, { backgroundColor: c.night }]}>
             <Text variant="label" color={c.nightInk}>

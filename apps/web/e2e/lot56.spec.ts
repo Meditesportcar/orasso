@@ -202,11 +202,11 @@ test("fiche événement : affiche en vedette, créneaux d'arrivée en deux plaqu
   await page.goto("/e/nocturne-de-canet-2026");
   await expect(page.getByTestId("event-hero").getByRole("heading", { level: 1 })).toHaveText("Nocturne de Canet");
   await expect(page.getByTestId("event-poster").locator("img")).toBeVisible();
-  const plaques = page.getByTestId("arrival-plaque");
-  await expect(plaques).toHaveCount(2);
-  await expect(plaques.first()).toContainText("Exposants");
-  await expect(plaques.first()).toContainText("18 h 30 – 19 h 15");
-  await expect(plaques.nth(1)).toContainText("Public");
+  // Lot M4 (correction de Damien) : plus de plaques de créneaux publiques ; le créneau strict des exposants n'est
+  // jamais montré au public (l'API ne le donne pas), aucun horaire « conseillé ».
+  await expect(page.getByTestId("arrival-plaque")).toHaveCount(0);
+  await expect(page.getByText("18 h 30 – 19 h 15")).toHaveCount(0);
+  await expect(page.getByTestId("org-bar")).toContainText("MéditeSportCar");
   await page.goto("/e/beziers-night-2026");
   await expect(page.getByTestId("media-contents")).toBeVisible();
   await expect(page.getByTestId("audience-prize")).toHaveCount(0); // sans compte, le classement n'est pas lu

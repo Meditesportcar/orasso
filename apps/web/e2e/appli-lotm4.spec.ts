@@ -121,7 +121,8 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
     const res = await apiCall<{ id: string }[]>(cookie, "POST", `/events/${eventId}/applications`, {
       vehicleIds: [vehicleId],
       rulesAccepted: true,
-      followStructure: true,
+      // Ne suit pas encore MéditeSportCar : la feuille propose « Suivre », cochée d'office.
+      followStructure: false,
       arrivalSeen: true,
     });
     expect(res.status).toBe(201);
@@ -187,7 +188,7 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await expect(page.getByTestId("write-sent")).toBeVisible({ timeout: 15_000 });
       await page.getByTestId("write-open").click();
       await expect(page.getByText(`Remorque possible ? (${theme})`)).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByTestId("message-about").last()).toContainText(open6.title);
+      await expect(page.getByTestId("message-about").filter({ hasText: open6.title }).first()).toBeVisible();
       await goto(page, `/e/${open6.slug}`);
       await expect(page.getByTestId("event-page")).toBeVisible({ timeout: 30_000 });
     }
@@ -270,8 +271,9 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
     await expect(page.getByText("Bonjour, je peux venir avec une remorque ?")).toBeVisible({ timeout: 30_000 });
     await shot(page, `conversation-${theme}`);
     if (AFTER) {
-      await expect(page.getByTestId("message-about").first()).toContainText(soon.title.slice(0, 20));
-      await expect(page.getByTestId("message-about").first()).toContainText("À propos de");
+      const aboutSoon = page.getByTestId("message-about").filter({ hasText: soon.title }).first();
+      await expect(aboutSoon).toBeVisible();
+      await expect(aboutSoon).toContainText("À propos de");
     }
 
     // 5. Explorer : cartes en portrait, « Trier : Distance ▾ » dans une feuille, bascule « Liste | Carte » flottante.
@@ -300,10 +302,11 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await page.getByTestId("sort-distance").click();
       await page.getByTestId("map-toggle").click();
       await expect(page).toHaveURL(/\/carte/, { timeout: 30_000 });
-      await expect(page.getByTestId("list-map-toggle")).toBeVisible();
+      const onMap = page.getByTestId("map-screen");
+      await expect(onMap.getByTestId("list-map-toggle")).toBeVisible();
       await page.waitForTimeout(2500);
       await shot(page, `carte-${theme}`);
-      await page.getByTestId("list-toggle").click();
+      await onMap.getByTestId("list-toggle").click();
       await expect(page).toHaveURL(/explorer/, { timeout: 30_000 });
     }
     await ctx.close();
