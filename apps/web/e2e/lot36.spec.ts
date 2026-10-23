@@ -111,8 +111,9 @@ test("garde avant de quitter l'assistant avec une saisie non enregistrée", asyn
   // Un lien de l'espace organisateur (lien classique : le navigateur demande « Quitter le site ? », accepté ici) :
   // la saisie reste dans le navigateur et revient à l'ouverture de l'assistant.
   page.on("dialog", (d) => void d.accept());
-  await page.locator("a[href='/orga/meditesportcar/staff']").first().click();
-  await page.waitForURL(/\/staff/);
+  // Lot M7 (c98f6c8d) : l'assistant est un parcours sans barre latérale ; on le quitte par le ✕ « Fermer » de l'en-tête de fiche.
+  await page.getByRole("link", { name: "Fermer" }).click();
+  await page.waitForURL(/\/orga\/meditesportcar$/);
   await page.goto("/orga/meditesportcar/nouvel-evenement");
   await expect(page.getByTestId("wizard-restored")).toBeVisible();
   await expect(page.getByLabel("Titre")).toHaveValue(title);

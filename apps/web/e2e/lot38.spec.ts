@@ -187,7 +187,16 @@ test("Sable, barre nuit : ✕ d'une barre de flux et choix du thème lisibles ; 
   await page.goto("/e/expo-rivesaltes-2026/candidater");
   const close = page.locator(".o-appbar .o-button--close");
   await expect(close).toBeVisible();
-  expect(await close.evaluate((el) => getComputedStyle(el).color)).toBe(ink);
+  // Lot M7 (c98f6c8d, AppBar.css) : le ✕ d'un en-tête de fiche est sur fond de carte, à l'encre du thème (plus l'encre de barre).
+  const pageInk = await page.evaluate(() => {
+    const probe = document.createElement("i");
+    probe.style.color = "var(--ink)";
+    document.body.append(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  });
+  expect(await close.evaluate((el) => getComputedStyle(el).color)).toBe(pageInk);
   await page.screenshot({ path: `${DIR}/candidater-barre-flux-sable.png` });
   await ctx.close();
 });
