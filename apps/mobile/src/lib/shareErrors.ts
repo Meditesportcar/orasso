@@ -1,8 +1,8 @@
-// Erreurs de la carte à partager (lot 50) : pures, testées sans le téléphone (`shareVehicle.ts` en fait des `ApiRequestError`).
+// Erreurs de l'affiche à partager (lot 50) : pures, testées sans le téléphone (`shareVehicle.ts` en fait des `ApiRequestError`).
 
-export const SHARE_LIMIT_MESSAGE = "Trop de cartes générées : réessaie plus tard.";
+export const SHARE_LIMIT_MESSAGE = "Trop d'affiches générées : réessaie plus tard.";
 export const SHARE_NETWORK_MESSAGE = "Pas de connexion : réessaie quand le réseau revient.";
-export const SHARE_FAILED_MESSAGE = "Impossible de générer la carte : réessaie dans un instant.";
+export const SHARE_FAILED_MESSAGE = "Impossible de générer l'affiche : réessaie dans un instant.";
 
 export type ShareErrorInfo = { status: number; code: "rate_limited" | "network" | "internal"; message: string };
 

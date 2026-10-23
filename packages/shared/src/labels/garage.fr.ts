@@ -31,7 +31,7 @@ export const countryLabels: Record<string, string> = {
 
 export const countryLabel = (code: string | null): string | null => (code ? (countryLabels[code] ?? code) : null);
 
-/** Origine d'un véhicule, dite comme sur la carte à partager : « Toyota · 2021 · Japonaise » (adjectif du pays de la marque). */
+/** Origine d'un véhicule, dite comme sur l'affiche à partager : « Toyota · 2021 · Japonaise » (adjectif du pays de la marque). */
 export const countryOriginLabels: Record<string, string> = {
   CZ: "Tchèque",
   DE: "Allemande",
