@@ -401,6 +401,7 @@ export const accountService = {
           newsletterOptIn: false,
           homeWidgets: null,
           mutedTypes: [],
+          preferredFormats: [],
           inviteToken: randomBytes(12).toString("base64url"),
           accountQrSecret: randomBytes(32),
           // L'identifiant court reste dérivé de l'identifiant du compte (unique) : inutilisable sans le secret.

@@ -41,6 +41,10 @@ export const posterCharWidth = {
   bold: 0.7,
   /** Archivo Narrow Bold : titre du style Magazine, chiffres, libellés. */
   narrow: 0.54,
+  /** Archivo 62 % Black : chiffres de l'affiche à partager (lot M6). */
+  condensed: 0.46,
+  /** Archivo 75 % ExtraBold : étiquettes de l'affiche à partager (lot M6). */
+  label: 0.58,
 } as const;
 
 export type FittedTitle = {

@@ -21,7 +21,7 @@ export const rateRules = {
    */
   vehiclePhoto: { max: 60, windowMs: 3_600_000, message: "Trop de photos envoyées : réessaie plus tard." },
   /** Fiche Instagram d'un véhicule (rendu d'image, mis en cache une heure par véhicule). */
-  shareImage: { max: 40, windowMs: 3_600_000, message: "Trop de fiches générées : réessaie plus tard." },
+  shareImage: { max: 40, windowMs: 3_600_000, message: "Trop d'affiches générées : réessaie plus tard." },
   /** Vérification d'un QR de compte : code de 8 chiffres deviné par essais successifs. */
   accountQrVerify: { max: 30, windowMs: 60_000, message: "Trop de vérifications : réessaie dans une minute." },
   /** Recherche du staff par début de plaque ou pseudo. */
@@ -106,6 +106,11 @@ export const rateRules = {
   mediaView: { max: 30, windowMs: 3_600_000, message: "Trop d'actions sur ce contenu." },
   /** Prix du public (lot 49) : une voix modifiable, pas un bouton qu'on martèle. */
   audienceVote: { max: 20, windowMs: 60_000, message: "Trop de votes : réessaie dans une minute." },
+  /**
+   * Lot M6, tour 4 : retrait d'un jeton push sans session (déconnexion hors ligne rejouée), par adresse. Un téléphone
+   * le rejoue quelques fois ; 30 laisse passer plusieurs téléphones derrière une même adresse d'opérateur.
+   */
+  pushTokenForget: { max: 30, windowMs: 3_600_000, message: "Trop de retraits : réessaie dans une heure." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

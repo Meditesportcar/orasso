@@ -1,209 +1,138 @@
-// Fiche à partager sur Instagram (lot 31, ARCHITECTURE-SUITE § 14) : PNG 1080×1920 (story) ou 1080×1080 (publication)
-// rendu par `sharp` : photo de couverture recadrée, dégradé, nom du véhicule en Archivo (une ou deux lignes, jamais
-// tronqué), année et chiffres clés, pseudo, « ORASSO » et « orasso.fr ». Jamais de plaque : la fonction ne lit pas le
-// champ. Palette = thème Béton de `docs/design-system/tokens.json` (le paquet du système de design n'est pas une
-// dépendance de l'API ; `share-image.test.ts` compare ces valeurs aux jetons).
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import {
-  countryLabel,
-  type Grade,
-  gradeLabels,
-  originLabel,
-  SHARE_MARGIN,
-  SHARE_SIZES,
-  type ShareFormat,
-  type ShareStyle,
-  shareImageLayout,
-} from "@orasso/shared";
-import sharp, { type OverlayOptions } from "sharp";
+// Affiche à partager d'un véhicule (lot 31, lot 50 ; lot M6 : maquettes 2.1 à 2.3) : story 9:16 ou post 4:5, trois
+// styles, rendue par `share-story.ts`. Ce fichier rassemble ce que l'affiche montre (jamais la plaque : la fonction ne
+// lit pas le champ ; la photo est celle que le serveur a floutée) et la garde une heure en cache.
+import { type PlateRect, type ShareFormat, type ShareStyle, shareSheetLabels } from "@orasso/shared";
 
-import { repoRoot } from "../../env";
+import { env } from "../../env";
+import { AppError } from "../../lib/errors";
 import { storage } from "../../lib/storage";
 import type { VehicleWithAll } from "./repo";
-import { vehicleLabel } from "./serializers";
-import { renderStory } from "./share-story";
-
-/** Jetons du thème Béton (`color.beton.*`). */
-export const SHARE_COLORS = {
-  groundDeep: "#07080a",
-  ink: "#f3ebdd",
-  inkMuted: "#afa89c",
-  accent: "#e9b824",
-} as const;
-
-const FONT_DIR = join(repoRoot, "packages", "design-system", "src", "native", "fonts");
-const FONTS = {
-  name: { file: "Archivo-ExtraBold.ttf", family: "Archivo ExtraBold" },
-  body: { file: "Archivo-SemiBold.ttf", family: "Archivo SemiBold" },
-  brand: { file: "Archivo-Expanded-Black.ttf", family: "Archivo Expanded Black" },
-} as const;
-
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-/** Texte rendu par pango avec la police Archivo (repli sur la police du système si le fichier manque). */
-async function text(
-  content: string,
-  font: keyof typeof FONTS,
-  size: number,
-  color: string,
-  maxWidth: number,
-): Promise<{ data: Buffer; width: number; height: number }> {
-  const f = FONTS[font];
-  const fontfile = join(FONT_DIR, f.file);
-  const rendered = await sharp({
-    text: {
-      text: `<span foreground="${color}">${esc(content)}</span>`,
-      font: `${f.family} ${size}`,
-      ...(existsSync(fontfile) ? { fontfile } : {}),
-      dpi: 72,
-      rgba: true,
-      wrap: "none",
-      align: "left",
-    },
-  })
-    .png()
-    .toBuffer({ resolveWithObject: true });
-  // Filet de sécurité : la mesure du texte est estimée, jamais coupée — au pire on réduit l'image du texte.
-  if (rendered.info.width > maxWidth) {
-    const scaled = await sharp(rendered.data).resize({ width: maxWidth }).png().toBuffer({ resolveWithObject: true });
-    return { data: scaled.data, width: scaled.info.width, height: scaled.info.height };
-  }
-  return { data: rendered.data, width: rendered.info.width, height: rendered.info.height };
-}
+import { renderStory, type ShareStat } from "./share-story";
 
 const fr = new Intl.NumberFormat("fr-FR");
-const plainSpaces = (s: string) => s.replace(/[  ]/g, " ");
+// Espace insécable (U+00A0) et fine insécable (U+202F) du format fr-FR : remplacées par une espace simple.
+const plainSpaces = (s: string) => s.replace(/[\u00a0\u202f]/g, " ");
 
-/** « 1995 · 330 ch · 1 500 kg · Japon » : jamais de plaque. */
-export function shareFacts(v: Pick<VehicleWithAll, "year" | "powerHp" | "weightKg" | "make">): string {
-  return [
-    v.year ? String(v.year) : null,
-    v.powerHp ? `${v.powerHp} ch` : null,
-    v.weightKg ? plainSpaces(`${fr.format(v.weightKg)} kg`) : null,
-    v.make.isOther ? null : countryLabel(v.make.country),
-  ]
-    .filter(Boolean)
-    .join("  ·  ");
-}
+/** Ce que la story montre en plus de la fiche : style, zones à masquer (filet de sécurité de l'appli). */
+export type ShareExtras = { style?: ShareStyle; masks?: PlateRect[] };
 
-async function background(v: VehicleWithAll, width: number, height: number): Promise<Buffer> {
-  const cover = v.photos[0];
-  const source = cover ? await storage.get(cover.storageKey) : null;
-  if (source) {
-    try {
-      return await sharp(source).rotate().resize(width, height, { fit: "cover", position: "centre" }).png().toBuffer();
-    } catch {
-      // Photo illisible : fond uni.
-    }
-  }
-  return sharp({ create: { width, height, channels: 3, background: SHARE_COLORS.groundDeep } })
-    .png()
-    .toBuffer();
-}
-
-/** Dégradé du bas : transparent au départ, presque opaque derrière le texte. */
-function gradient(width: number, height: number, from: number): Buffer {
-  return Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-<stop offset="${from}" stop-color="${SHARE_COLORS.groundDeep}" stop-opacity="0"/>
-<stop offset="1" stop-color="${SHARE_COLORS.groundDeep}" stop-opacity="0.96"/>
-</linearGradient></defs>
-<rect width="${width}" height="${height}" fill="url(#g)"/></svg>`,
-  );
-}
-
-/** Ce que la story v2 ajoute à la fiche : style, grade du propriétaire, rassos pointés (lot 50). */
-export type ShareExtras = { style?: ShareStyle; grade?: Grade; rassos?: number };
-
-/** « Toyota  ·  2021  ·  Japonaise » : marque, année, origine (sans les morceaux absents). */
-export function storyLine(v: Pick<VehicleWithAll, "year" | "make">): string {
+/** « Toyota · A90 · Blanche » : marque, génération, couleur (sans les morceaux absents ou « Autre »). */
+export function storyLine(v: Pick<VehicleWithAll, "make" | "generation" | "color">): string {
   return [
     v.make.isOther ? null : v.make.name,
-    v.year ? String(v.year) : null,
-    v.make.isOther ? null : originLabel(v.make.country),
+    v.generation && !v.generation.isOther ? v.generation.name : null,
+    v.color?.trim() || null,
   ]
     .filter(Boolean)
     .join(" · ");
 }
 
-/** Nom de la story : le modèle et la génération (la marque est sur la ligne du dessous). */
-export function storyName(v: Pick<VehicleWithAll, "model" | "generation">): string {
-  const parts = [
-    v.model.isOther ? null : v.model.name,
-    v.generation && !v.generation.isOther ? v.generation.name : null,
-  ];
-  return parts.filter(Boolean).join(" ") || "Véhicule";
+/** Nom de l'affiche : le modèle (la marque et la génération sont sur la ligne du dessous). */
+export function storyName(v: Pick<VehicleWithAll, "model" | "make">): string {
+  if (!v.model.isOther) return v.model.name;
+  return v.make.isOther ? "Véhicule" : v.make.name;
 }
 
-async function renderStoryCard(v: VehicleWithAll, pseudo: string, extras: ShareExtras): Promise<Buffer> {
-  const cover = v.photos[0];
-  const photo = cover ? await storage.get(cover.storageKey) : null;
-  const numbers = [
-    v.powerHp ? { value: String(v.powerHp), label: "ch" } : null,
-    extras.rassos ? { value: String(extras.rassos), label: "rassos" } : null,
-    v.audiencePrizes ? { value: String(v.audiencePrizes), label: "prix du public" } : null,
-  ].filter((n): n is { value: string; label: string } => n !== null);
-  return renderStory({
-    style: extras.style ?? "night",
-    photo,
-    grade: gradeLabels[extras.grade ?? "rodage"],
-    pseudo,
-    name: storyName(v),
-    line: storyLine(v),
-    numbers,
-  });
+/** Puissance, poids, année : lisibles par tous (plus de grade, retour 17). */
+export function storyStats(v: Pick<VehicleWithAll, "powerHp" | "weightKg" | "year">): ShareStat[] {
+  return [
+    v.powerHp ? { label: "Puissance", value: String(v.powerHp), unit: "ch" } : null,
+    v.weightKg ? { label: "Poids", value: plainSpaces(fr.format(v.weightKg)), unit: "kg" } : null,
+    v.year ? { label: "Année", value: String(v.year) } : null,
+  ].filter((s): s is ShareStat => s !== null);
 }
 
-/** Rend la fiche. `pseudo` : le propriétaire. La story passe par le gabarit v2 (zones sûres d'Instagram). */
-export async function renderShareImage(
+/** « Retrouve-la » (voiture, moto) ou « Retrouve-le » (camion). */
+const findIt = (v: Pick<VehicleWithAll, "vehicleType">) =>
+  v.vehicleType === "truck" ? shareSheetLabels.findIt.replace("-la", "-le") : shareSheetLabels.findIt;
+
+// --- File de rendu (lot M6, tour 2) ----------------------------------------------------------------------------------
+// Un rendu d'affiche est lourd (image, QR, SVG → PNG) : au plus MAX_RENDERS en même temps, les suivants attendent leur
+// tour ; au-delà de MAX_WAITING en attente, `429 rate_limited` plutôt que d'empiler sans fin.
+export const MAX_RENDERS = 2;
+export const MAX_WAITING = 20;
+
+/** File simple : au plus `limit` tâches en cours, `maxWaiting` en attente, `429` au-delà. */
+export function createRenderQueue(limit = MAX_RENDERS, maxWaiting = MAX_WAITING) {
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  const next = () => {
+    const start = waiting.shift();
+    if (start) start();
+  };
+  return {
+    get running() {
+      return running;
+    },
+    get waiting() {
+      return waiting.length;
+    },
+    async run<T>(task: () => Promise<T>): Promise<T> {
+      if (running >= limit) {
+        if (waiting.length >= maxWaiting) {
+          throw new AppError(429, "rate_limited", "Trop d'affiches en préparation, réessaie dans un instant.", {
+            retryAfter: 5,
+          });
+        }
+        // Le créneau est transmis tel quel par `next` (pas de `running--` entre-temps) : jamais plus de `limit`.
+        await new Promise<void>((resolve) => waiting.push(resolve));
+      } else {
+        running++;
+      }
+      try {
+        return await task();
+      } finally {
+        if (waiting.length) next();
+        else running--;
+      }
+    },
+  };
+}
+
+const renderQueue = createRenderQueue();
+
+/** Rend l'affiche (dans la file : deux rendus à la fois au plus). `pseudo` : le propriétaire. */
+export function renderShareImage(
   v: VehicleWithAll,
   pseudo: string,
   format: ShareFormat,
   extras: ShareExtras = {},
 ): Promise<Buffer> {
-  if (format === "story") return renderStoryCard(v, pseudo, extras);
-  const { width, height } = SHARE_SIZES[format];
-  const available = width - SHARE_MARGIN * 2;
-  const layout = shareImageLayout(vehicleLabel(v), format, width);
-  const nameSize = layout.fontSize;
-  const factsSize = 36;
-  const gap = 28;
-
-  const [name, facts, by, site, brand] = await Promise.all([
-    text(layout.lines.join("\n"), "name", nameSize, SHARE_COLORS.ink, available),
-    text(shareFacts(v), "body", factsSize, SHARE_COLORS.inkMuted, available),
-    text(`par ${pseudo}`, "body", factsSize, SHARE_COLORS.ink, available),
-    text("orasso.fr", "brand", 34, SHARE_COLORS.accent, available),
-    text("ORASSO", "brand", 40, SHARE_COLORS.ink, available),
-  ]);
-
-  // Empilé depuis le bas : site, pseudo, chiffres, nom.
-  const bottom = height - 90;
-  let y = bottom - site.height;
-  const layers: OverlayOptions[] = [
-    { input: gradient(width, height, 0.38), top: 0, left: 0 },
-    { input: brand.data, top: 70, left: SHARE_MARGIN },
-    { input: site.data, top: y, left: SHARE_MARGIN },
-  ];
-  y -= gap + by.height;
-  layers.push({ input: by.data, top: y, left: SHARE_MARGIN });
-  if (shareFacts(v)) {
-    y -= gap + facts.height;
-    layers.push({ input: facts.data, top: y, left: SHARE_MARGIN });
-  }
-  y -= gap * 1.5 + name.height;
-  layers.push({ input: name.data, top: Math.max(0, Math.round(y)), left: SHARE_MARGIN });
-
-  const base = await background(v, width, height);
-  return sharp(base)
-    .composite(layers.map((l) => ({ ...l, top: Math.round(l.top ?? 0) })))
-    .png({ compressionLevel: 8 })
-    .toBuffer();
+  return renderQueue.run(() => renderShareImageNow(v, pseudo, format, extras));
 }
 
-// --- Cache (une heure par véhicule et format) -----------------------------------------------------------------------
+async function renderShareImageNow(
+  v: VehicleWithAll,
+  pseudo: string,
+  format: ShareFormat,
+  extras: ShareExtras = {},
+): Promise<Buffer> {
+  const cover = v.photos[0];
+  const photo = cover ? await storage.get(cover.storageKey) : null;
+  const site = new URL(env.PUBLIC_URL);
+  return renderStory({
+    format,
+    style: extras.style ?? "night",
+    photo,
+    name: storyName(v),
+    line: storyLine(v),
+    tags: v.categories
+      .map((c) => c.category)
+      .filter((c) => c.active)
+      .sort((a, b) => a.position - b.position)
+      .map((c) => c.label)
+      .slice(0, 3),
+    stats: storyStats(v),
+    certified: Boolean(v.certifiedAt),
+    pseudo,
+    findIt: findIt(v),
+    site: site.host,
+    qrUrl: `${site.origin}/v/${v.id}`,
+    masks: extras.masks,
+  });
+}
+
+// --- Cache (une heure par véhicule, format et style) ----------------------------------------------------------------
 const TTL_MS = 3_600_000;
 const MAX_ENTRIES = 60;
 const cache = new Map<string, { at: number; data: Buffer }>();
@@ -212,10 +141,11 @@ export function shareImageCacheKey(v: VehicleWithAll, format: ShareFormat, extra
   return [
     v.id,
     format,
-    format === "story" ? (extras.style ?? "night") : "",
-    format === "story" ? `${extras.grade ?? ""}/${extras.rassos ?? 0}/${v.audiencePrizes}` : "",
+    extras.style ?? "night",
+    (extras.masks ?? []).map((m) => `${m.x},${m.y},${m.w},${m.h},${m.angle ?? 0}`).join(";"),
     v.updatedAt.getTime(),
     v.photos.map((p) => p.id).join(","),
+    v.categories.map((c) => c.categoryId).join(","),
     v.certifiedAt ? "c" : "",
   ].join("|");
 }

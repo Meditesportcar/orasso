@@ -1,6 +1,7 @@
 export * from "./admin";
 export * from "./affinity";
 export * from "./afterEvent";
+export * from "./announcements";
 export * from "./applicationTransitions";
 export * from "./arrival";
 export * from "./audiencePrize";
@@ -24,6 +25,7 @@ export * from "./plateNumber";
 export * from "./points";
 export * from "./poster";
 export * from "./pro";
+export * from "./pushRecipient";
 export * from "./quietHours";
 export * from "./recurrence";
 export * from "./registrationBlock";

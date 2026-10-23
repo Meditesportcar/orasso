@@ -4,10 +4,11 @@
 // casquette » (une phrase claire, chaque casquette avec son icône, son nom simple et ce qu'elle ouvre, l'active marquée ;
 // le staff n'y est que si la personne a des missions), « Devenir organisateur ou pro », « Rejoindre une équipe staff »,
 // puis les réglages en lignes groupées : Compte (e-mail, mot de passe, sanctions), Notifications, Confidentialité
-// (profil public, export des données, suppression), Préférences, Mon profil public, Amis et crews, Aide, Se déconnecter.
+// (profil public, export des données, suppression), Tes préférences (lot M6 : coin, distance, types, centres
+// d'intérêt), Apparence (thème, animations), Mon profil public, Amis et crews, Aide, Se déconnecter.
 // Plus d'accès flottant ici (retour 31).
 import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { capLabels, gradeLabels, passportScreenTexts } from "@orasso/shared";
+import { capLabels, gradeLabels, passportScreenTexts, preferencesLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -63,13 +64,8 @@ export function ProfilScreen() {
   const department = profile?.departments[0];
   const crew = crews.data?.[0];
   const theme = preference === "sable" ? "Sable" : preference === "auto" ? "Automatique" : "Béton";
-  const preferencesCaption = [
-    `Thème ${theme}`,
-    department ? `${department} favori` : null,
-    profile ? `${profile.radiusKm} km` : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  // Lot M6 : la tuile Préférences devient « Apparence » (thème, animations) ; coin et distance sont dans « Tes préférences ».
+  const preferencesCaption = `Thème ${theme}`;
   const qrLabel = persona.kind === "pro" ? "Ma fiche" : "Mon QR de compte";
 
   return (
@@ -205,8 +201,19 @@ export function ProfilScreen() {
           testID="reglage-confidentialite"
         />
         <SetRow
+          icon="explore"
+          title={preferencesLabels.settingsRow}
+          caption={
+            department
+              ? `${department} favori, distance, types, centres d'intérêt`
+              : preferencesLabels.settingsRowCaption
+          }
+          onPress={() => router.push("/preferences")}
+          testID="reglage-tes-preferences-tuile"
+        />
+        <SetRow
           icon="gear"
-          title="Préférences"
+          title="Apparence"
           caption={preferencesCaption}
           onPress={() => router.push("/reglages/preferences")}
           testID="reglage-preferences"

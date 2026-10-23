@@ -57,6 +57,7 @@ export const tokens = {
       "plateField": "#363941",
       "mapLand": "#1f2227",
       "mapLand2": "#262a30",
+      "deptLand": "#3b3f48",
       "mapSea": "#0f1216",
       "mapRoad": "#f3ebdd",
       "mapLabel": "#c9c1b2",
@@ -138,6 +139,7 @@ export const tokens = {
       "plateField": "#fffaf0",
       "mapLand": "#e6dcc4",
       "mapLand2": "#dbcfb2",
+      "deptLand": "#d6c9a6",
       "mapSea": "#aebbbd",
       "mapRoad": "#2a2723",
       "mapLabel": "#3d3830",
@@ -1188,6 +1190,16 @@ export const tokensV2Overlay = [
       "sable": "#dbcfb2"
     },
     "why": "terre secondaire de la carte (parcs, zones)"
+  },
+  {
+    "kind": "added",
+    "group": "color",
+    "name": "dept-land",
+    "value": {
+      "beton": "#3b3f48",
+      "sable": "#d6c9a6"
+    },
+    "why": "la France remplie de « Ton coin » (carte des départements, un cran au-dessus de la carte qui la porte ; lot M6, maquette 8.1, validé par Damien le 23/10)"
   },
   {
     "kind": "added",

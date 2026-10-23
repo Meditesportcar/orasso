@@ -51,7 +51,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const lat = num(url.searchParams.get("lat"));
   const lng = num(url.searchParams.get("lng"));
   const params = new URLSearchParams();
-  if (rayon !== undefined && rayon >= 10 && rayon <= 300) params.set("radiusKm", String(Math.round(rayon)));
+  if (rayon !== undefined && rayon >= 10 && rayon <= 200) params.set("radiusKm", String(Math.round(rayon)));
   if (lat !== undefined && lng !== undefined) {
     params.set("lat", String(lat));
     params.set("lng", String(lng));
@@ -69,13 +69,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
-  // Rayon : enregistré par `PATCH /me/settings` (une lecture n'écrit pas), puis la page est rechargée avec ce rayon (affiché
-  // même si l'enregistrement est refusé à un compte suspendu).
-  if (form.get("intent") === "radius") {
-    const km = Math.round(Number(form.get("rayon")));
-    if (!Number.isFinite(km) || km < 10 || km > 300) return data({ error: homeLabels.saveFailed }, { status: 400 });
-    await api(request, "/me/settings", { method: "PATCH", json: { radiusKm: km } });
-    const params = new URLSearchParams({ rayon: String(km) });
+  // Coordinateur (23/10) : l'Accueil n'écrit plus le rayon (il se règle dans « Tes préférences ») ; « Utiliser ma
+  // position » recharge seulement l'affichage autour de l'appareil (`radius` : ancien nom, accepté).
+  if (form.get("intent") === "position" || form.get("intent") === "radius") {
+    const params = new URLSearchParams();
     const lat = num(String(form.get("lat") ?? "") || null);
     const lng = num(String(form.get("lng") ?? "") || null);
     if (lat !== undefined && lng !== undefined) {

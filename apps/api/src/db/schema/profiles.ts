@@ -24,7 +24,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { user } from "./auth";
+import { session, user } from "./auth";
 import { bytea, timestamps, tstz } from "./common";
 
 export const platformRoleEnum = pgEnum("platform_role", platformRoles);
@@ -49,7 +49,12 @@ export const profiles = pgTable(
     bio: text("bio"),
     visibility: profileVisibilityEnum("visibility").notNull().default("public"),
     departments: text("departments").array().notNull().default(sql`'{}'::text[]`),
-    radiusKm: smallint("radius_km").notNull().default(50),
+    /** Distance habituelle (10 à 200 km) autour du coin (départements) ; null = partout en France (lot M6, tour 2). */
+    radiusKm: smallint("radius_km").default(50),
+    /** Lot M6 (« Tes préférences ») : types d'événements préférés (`EventFormat`, validés par l'API) ; vide = tous. */
+    preferredFormats: text("preferred_formats").array().notNull().default(sql`'{}'::text[]`),
+    /** Lot M6 : l'étape « Tes préférences » a été vue (validée ou passée) ; null = jamais, l'appli la propose une fois. */
+    preferencesSeenAt: tstz("preferences_seen_at"),
     /** Lot 41 : profil choisi à l'arrivée (textes et tuto, pas les casquettes) ; null pour les comptes antérieurs. */
     mainProfile: mainProfileEnum("main_profile"),
     platformRole: platformRoleEnum("platform_role").notNull().default("user"),
@@ -148,11 +153,17 @@ export const devices = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     platform: devicePlatformEnum("platform").notNull(),
     expoPushToken: text("expo_push_token").unique("devices_expo_push_token_key"),
+    /**
+     * Lot M6, tour 4 (vie privée) : la session qui a inscrit l'appareil. Révoquée (déconnexion à distance, mot de passe
+     * changé, suspension) ou expirée, plus aucun push n'y part et le jeton est effacé (`profilesService.forgetStalePush`).
+     * `set null` et pas `cascade` : la ligne sert aussi d'appareil du staff (lectures du jour J rattachées).
+     */
+    sessionId: text("session_id").references(() => session.id, { onDelete: "set null" }),
     name: text("name"),
     appVersion: text("app_version"),
     lastSeenAt: tstz("last_seen_at"),
     revokedAt: tstz("revoked_at"),
     ...timestamps,
   },
-  (t) => [index("devices_user_id_idx").on(t.userId)],
+  (t) => [index("devices_user_id_idx").on(t.userId), index("devices_session_id_idx").on(t.sessionId)],
 );

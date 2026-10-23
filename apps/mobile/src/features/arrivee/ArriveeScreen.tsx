@@ -35,12 +35,15 @@ export function ArriveeScreen({
   step,
   onClose,
   footer,
+  overlay,
   children,
 }: {
   step: 0 | 1 | 2;
   /** La croix de la barre de flux : retour à l'écran précédent (l'accueil depuis le choix du profil). */
   onClose: () => void;
   footer: ReactNode;
+  /** Lot M6 : une feuille posée au-dessus de tout l'écran (barre de flux et bouton compris). */
+  overlay?: ReactNode;
   children: ReactNode;
 }) {
   const a = useArt();
@@ -101,6 +104,7 @@ export function ArriveeScreen({
           </ScrollView>
           {stuck ? cta : null}
         </KeyboardSafe>
+        {overlay}
       </Ground>
     </OliveActivityProvider>
   );

@@ -77,25 +77,11 @@ test("accueil : blocs, rayon 50 puis 150 km, sponsorisé ciblé 66, réorganisat
   // ouvert à tous certains jours (lot 34 : la recette ne dépend plus de la date).
   await expect(sponsored).toContainText(/Polish avant saison|Covering sur mesure/);
 
-  // Curseur de rayon : 150 km, enregistré dans le profil (la page se recharge avec ?rayon=150).
-  // Glisser le curseur (beaucoup d'événements `input`) n'envoie rien : une seule requête, au relâchement (`change`).
-  const posts: string[] = [];
-  page.on("request", (r) => {
-    if (r.method() === "POST" && new URL(r.url()).pathname === "/app") posts.push(r.url());
-  });
-  await page.getByTestId("home-radius").evaluate(async (el: HTMLInputElement) => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    for (let km = 20; km <= 150; km += 10) {
-      setter?.call(el, String(km));
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-  });
-  await page.waitForTimeout(800);
-  expect(posts).toHaveLength(0);
-  await page
-    .getByTestId("home-radius")
-    .evaluate((el: HTMLInputElement) => el.dispatchEvent(new Event("change", { bubbles: true })));
-  await expect(page).toHaveURL(/rayon=150/);
+  // Lot M6, tour 3 (coordinateur, 23/10) : le widget n'écrit plus le rayon ; il le lit dans « Tes préférences » et y
+  // renvoie. On règle 150 km par la page des préférences, l'Accueil le reprend.
+  await expect(page.getByTestId("home-radius").getByRole("link")).toHaveAttribute("href", "/app/preferences");
+  expect((await apiCall(cookie, "PATCH", "/me/preferences", { radiusKm: 150 })).status).toBe(200);
+  await page.goto("/app");
   await expect(page.getByTestId("widget-nearby")).toContainText("Rayon : 150 km");
   const near150 = await page.getByTestId("widget-nearby").getByTestId("nearby-event").count();
   expect(near150).toBeGreaterThanOrEqual(near50);

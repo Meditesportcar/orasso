@@ -26,9 +26,12 @@ export const homeLabels = {
   saveFailed: "Réglage non enregistré : réessaie.",
   loadFailed: "Accueil indisponible pour le moment.",
   // Autour de moi.
-  radius: (km: number) => `Rayon : ${km} km`,
+  radius: (km: number | null) => (km === null ? "Rayon : partout en France" : `Rayon : ${km} km`),
   radiusLabel: "Rayon des suggestions",
-  nearbyEmpty: (km: number) => `Aucun événement à venir à moins de ${km} km : élargis le rayon.`,
+  nearbyEmpty: (km: number | null) =>
+    km === null
+      ? "Aucun événement à venir en France pour le moment."
+      : `Aucun événement à venir à moins de ${km} km : élargis le rayon.`,
   nearbyNoPlace:
     "Ajoute un département dans ton profil, ou utilise ta position, pour voir les événements autour de toi.",
   usePosition: "Utiliser ma position",

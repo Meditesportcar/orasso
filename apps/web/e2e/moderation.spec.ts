@@ -88,8 +88,10 @@ test("modération : suspension automatique, bandeau, contestation, levée ; mess
   const dialog = pageC.getByTestId("report-dialog");
   await expect(dialog).toBeVisible();
   await shot(pageC, "signaler-profil");
-  await dialog.getByLabel("Motif").selectOption("insult");
-  await dialog.getByLabel("Détails").fill("Insultes répétées après la sortie de dimanche.");
+  await dialog.getByRole("radio", { name: "Insulte" }).check();
+  await dialog
+    .getByRole("textbox", { name: /Ce qui s'est passé/ })
+    .fill("Insultes répétées après la sortie de dimanche.");
   await dialog.getByLabel("Capture d'écran").setInputFiles({
     name: "capture.png",
     mimeType: "image/png",
@@ -157,7 +159,7 @@ test("modération : suspension automatique, bandeau, contestation, levée ; mess
   await insult.getByTestId("report-open").click();
   const mdialog = insult.getByTestId("report-dialog");
   await expect(mdialog).toContainText("5 messages avant et après");
-  await mdialog.getByLabel("Motif").selectOption("insult");
+  await mdialog.getByRole("radio", { name: "Insulte" }).check();
   await mdialog.getByTestId("report-send").click();
   await expect(mdialog.getByTestId("report-done")).toBeVisible();
 

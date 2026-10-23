@@ -1,8 +1,10 @@
-import { deviceRegisterSchema, profileUpdateSchema, pseudoSchema } from "@orasso/shared";
+import { deviceRegisterSchema, deviceUnregisterSchema, profileUpdateSchema, pseudoSchema } from "@orasso/shared";
 import { Hono } from "hono";
 import sharp from "sharp";
 
 import { AppError, validation } from "../../lib/errors";
+import { rateLimit } from "../../lib/rateLimit";
+import { visitorOf } from "../../lib/search-limit";
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body, uuidParam } from "../../lib/validate";
 import { MAX_PHOTO_BYTES } from "../vehicles/service";
@@ -43,7 +45,19 @@ export const profilesRoutes = new Hono<AppEnv>()
   .get("/me/devices", async (c) => c.json(await profilesService.listDevices(await requireUser(c))))
   .post("/me/devices", async (c) => {
     const v = await requireUser(c);
-    return c.json(await profilesService.registerDevice(v, await body(c, deviceRegisterSchema)), 201);
+    const input = await body(c, deviceRegisterSchema);
+    return c.json(await profilesService.registerDevice(v, input, c.get("sessionId")), 201);
+  })
+  .post("/me/devices/unregister", async (c) => {
+    await profilesService.unregisterDevice(await requireUser(c), await body(c, deviceUnregisterSchema));
+    return c.body(null, 204);
+  })
+  // Lot M6, tour 4 : sans session, sur preuve du jeton push (déconnexion hors ligne rejouée après expiration). Toujours
+  // 204, que le jeton soit connu ou non ; limité par adresse.
+  .post("/devices/unregister", async (c) => {
+    rateLimit("pushTokenForget", visitorOf(c));
+    await profilesService.forgetPushToken(await body(c, deviceUnregisterSchema));
+    return c.body(null, 204);
   })
   .delete("/me/devices/:id", async (c) => {
     await profilesService.revokeDevice(await requireUser(c), uuidParam(c, "id"));

@@ -1,11 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { apiCall, login, MOBILE, SEED_PASSWORD, unique } from "./helpers";
 
-// Lot 41 (correction), site : la liste des départements est le chemin accessible de la carte. Cases de formulaire (rôle,
-// état coché, libellé « 66 · Pyrénées-Orientales »), outre-mer compris, premier choisi = favori, 20 au plus, carte hors du
+// Lot 41 (correction), site : la liste des départements est le chemin accessible de la carte. Fenêtre « Tes départements » (lot M6 :
+// ✕, recherche, compteur, Valider) en cases de formulaire (rôle, état coché, libellé « 66 · Pyrénées-Orientales »), outre-mer compris, premier choisi = favori, 20 au plus, carte hors du
 // clavier ; l'inscription marche sans JavaScript (tuile radio, liste en cases). Prérequis : API et site lancés.
 
-test("liste des départements : cases accessibles, outre-mer, premier = favori, 20 au plus", async ({ browser }) => {
+test("liste des départements : fenêtre « Tes départements », cases accessibles, premier = favori, 20 au plus", async ({
+  browser,
+}) => {
   test.setTimeout(120_000);
   const ctx = await browser.newContext({ viewport: MOBILE });
   const page = await ctx.newPage();
@@ -14,26 +16,49 @@ test("liste des départements : cases accessibles, outre-mer, premier = favori, 
   // Les tracés de la carte ne prennent pas le focus clavier et ne sont pas des boutons : la liste est le chemin clavier.
   await expect(page.getByTestId("dept-66")).toHaveAttribute("tabindex", "-1");
   await expect(page.getByTestId("france-map")).toHaveAttribute("aria-hidden", "true");
-  await page.getByText("Choisir dans une liste").click();
+  // Lot M6 : la liste est une fenêtre (avant l'hydratation, le bouton n'existe pas encore : on réessaie).
+  const sheet = page.getByTestId("department-sheet");
+  await expect(async () => {
+    await page.getByTestId("department-list-toggle").click({ timeout: 1_500 });
+    await expect(sheet).toBeVisible({ timeout: 1_500 });
+  }).toPass({ timeout: 20_000 });
+  await expect(sheet.getByRole("heading", { name: "Tes départements" })).toBeVisible();
+  await expect(page.getByTestId("department-count")).toHaveText("Aucun choisi");
+  // Recherche sans accents, par nom ou numéro.
+  await page.getByTestId("department-search").fill("pyrenees");
+  await expect(page.getByTestId("deptrow-66")).toBeVisible();
+  await expect(page.getByTestId("deptrow-974")).toHaveCount(0);
+  await page.getByTestId("department-search").fill("");
   const reunion = page.getByRole("checkbox", { name: "974 · La Réunion" });
   await expect(reunion).not.toBeChecked();
-  await expect(async () => {
-    await reunion.check();
-    await expect(page.getByTestId("dept-summary")).toContainText("974 · favori", { timeout: 1_500 });
-  }).toPass({ timeout: 20_000 });
+  await reunion.check();
   await page.getByRole("checkbox", { name: "66 · Pyrénées-Orientales" }).check();
-  // Premier choisi = favori, l'autre dans « +1 » ; la carte suit.
+  await expect(page.getByTestId("department-count")).toHaveText("2 choisis");
+  await expect(page.getByRole("button", { name: "Valider (2)" })).toBeVisible();
+  // ✕ : rien n'est appliqué.
+  await page.getByTestId("department-sheet-cancel").click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByTestId("dept-summary")).not.toContainText("974");
+  // Rouverte, puis validée : premier choisi = favori, l'autre dans « +1 » ; la carte suit.
+  await page.getByTestId("department-list-toggle").click();
+  await page.getByRole("checkbox", { name: "974 · La Réunion" }).check();
+  await page.getByRole("checkbox", { name: "66 · Pyrénées-Orientales" }).check();
+  await page.getByTestId("department-validate").click();
+  await expect(sheet).toBeHidden();
   await expect(page.getByTestId("dept-summary")).toContainText("974 · favori");
   await expect(page.getByTestId("dept-summary")).toContainText("+1");
   await expect(page.getByTestId("dept-66")).toHaveClass(/is-selected/);
   // 20 au plus : la 21e case est refusée, en français.
+  await page.getByTestId("department-list-toggle").click();
   await reunion.uncheck();
   await page.getByRole("checkbox", { name: "66 · Pyrénées-Orientales" }).uncheck();
-  const boxes = page.locator('input[name="department"]');
+  const boxes = sheet.locator('.o-deptdlg__list input[type="checkbox"]');
   for (let i = 0; i < 20; i++) await boxes.nth(i).check();
   await boxes.nth(20).click();
-  await expect(page.getByTestId("dept-limit")).toHaveText("Tu peux choisir 20 départements au plus.");
+  await expect(page.getByTestId("department-limit")).toHaveText("Tu peux choisir 20 départements au plus.");
   await expect(boxes.nth(20)).not.toBeChecked();
+  await page.getByTestId("department-validate").click();
+  await expect(page.getByTestId("dept-summary")).toContainText("+19");
   await ctx.close();
 });
 

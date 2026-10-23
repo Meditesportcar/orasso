@@ -1,6 +1,7 @@
 // Réglages, ouverts par les tuiles de Mon profil (lot 40, prototype `s-me` : « réglages en tuiles ») : chaque tuile a
 // son écran de flux, fait des sections de l'ancien écran Moi (`features/moi/`, inchangées). Notifications ;
-// Préférences (thème Béton / Sable / Automatique, « Réduire les animations », secteur, rayon, centres d'intérêt) ;
+// Apparence (clé de route `preferences` : thème Béton / Sable / Automatique, « Réduire les animations » ; l'entrée « Tes
+// préférences » en tête mène à l'écran de ce qu'on veut voir : coin, distance, types, centres d'intérêt, lot M6) ;
 // Compte (lot M5 : e-mail, mot de passe et appareils, mes sanctions ; `securite` y mène aussi) ; Confidentialité
 // (compte public ou privé, export de mes données, supprimer le compte) ; Mon profil public (photo, pseudo, description,
 // aperçu) ; Aide (lot M5, maquette 7.3 : tutos par casquette, questions fréquentes, nous écrire, version).
@@ -14,7 +15,7 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import { helpLabels, moderationLabels } from "@orasso/shared";
+import { helpLabels, moderationLabels, preferencesLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
@@ -28,7 +29,6 @@ import { PasskeysSheet } from "@/features/moi/PasskeysSheet";
 import { PointsSection } from "@/features/moi/PointsSection";
 import { ProfileSection } from "@/features/moi/ProfileSection";
 import { QrSecretSheet } from "@/features/moi/QrSecretSheet";
-import { SectorSection } from "@/features/moi/SectorSection";
 import { SecuritySection, type SecuritySheet } from "@/features/moi/SecuritySection";
 import { SessionsSheet } from "@/features/moi/SessionsSheet";
 import { TwoFactorSheet } from "@/features/moi/TwoFactorSheet";
@@ -42,7 +42,7 @@ import { FlowScreen, SectionTitle } from "@/ui/Screens";
 
 const SECTIONS = {
   notifications: "Notifications",
-  preferences: "Préférences",
+  preferences: "Apparence",
   compte: "Compte",
   // Ancien chemin (lot 40) : même écran que Compte.
   securite: "Compte",
@@ -100,6 +100,16 @@ export default function Reglages() {
 
       {section === "preferences" ? (
         <>
+          {/* Lot M6 : « Tes préférences » (ton coin, distance, types d'événements, centres d'intérêt, interrupteur), la page de l'arrivée. */}
+          <Button
+            variant="secondary"
+            icon="explore"
+            fullWidth
+            onPress={() => router.push("/preferences")}
+            testID="reglage-tes-preferences"
+          >
+            {preferencesLabels.settingsRow}
+          </Button>
           <SectionTitle>Thème</SectionTitle>
           <ChipRow accessibilityRole="radiogroup" accessibilityLabel="Thème">
             {themeChoices.map((choice) => (
@@ -128,7 +138,6 @@ export default function Reglages() {
           <Muted variant="caption">
             Réduites : tout apparaît en fondu, sans glissement. Le réglage du téléphone s'applique aussi.
           </Muted>
-          <SectorSection settings={settings.settings} save={settings.save} />
         </>
       ) : null}
 

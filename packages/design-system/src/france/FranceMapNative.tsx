@@ -15,6 +15,13 @@ export type FranceMapProps = {
   /** Code du favori (le premier choisi), bordé d'encre. */
   favorite?: string | null;
   onToggle: (code: string) => void;
+  /**
+   * Lot M6 (« Ton coin », maquette 8.1) : la France remplie d'une teinte « terre » un cran au-dessus de la carte qui la
+   * porte (deptLand), frontières de la couleur de ce fond. Sans ces deux couleurs, le dessin d'origine (mapLand2,
+   * frontières ground) reste celui des autres écrans.
+   */
+  land?: string;
+  border?: string;
   style?: ViewStyle;
 };
 
@@ -22,14 +29,14 @@ export type FranceMapProps = {
 const orderedFor = (favorite?: string | null) =>
   [...franceDepartments].sort((a, b) => Number(a.code === favorite) - Number(b.code === favorite));
 
-function FranceMapBase({ selected, favorite, onToggle, style }: FranceMapProps) {
+function FranceMapBase({ selected, favorite, onToggle, land, border, style }: FranceMapProps) {
   const { t } = useTheme();
   const c = t.color;
   const chosen = new Set(selected);
   const ordered = orderedFor(favorite);
   const paint = (code: string) => ({
-    fill: chosen.has(code) ? c.accent : c.mapLand2,
-    stroke: code === favorite ? c.ink : c.ground,
+    fill: chosen.has(code) ? c.accent : (land ?? c.mapLand2),
+    stroke: code === favorite ? c.ink : (border ?? c.ground),
     strokeWidth: code === favorite ? 2.5 : 1,
   });
 
