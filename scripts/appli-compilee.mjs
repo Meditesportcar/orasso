@@ -30,20 +30,24 @@ const port = Number(option("--port", "8821"));
 if (!flag("--skip-export")) {
   const t0 = Date.now();
   const expoBin = resolveExpoCli();
-  const result = spawnSync(process.execPath, [expoBin, "export", "--platform", "web", "--output-dir", outDir, ...(flag("--clear") ? ["--clear"] : [])], {
-    cwd: mobile,
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      CI: "1",
-      EXPO_NO_TELEMETRY: "1",
-      EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL ?? `http://localhost:${env.API_PORT ?? 3001}`,
-      EXPO_PUBLIC_SITE_URL: process.env.EXPO_PUBLIC_SITE_URL ?? `http://localhost:${env.WEB_PORT ?? 5173}`,
-      EXPO_PUBLIC_USE_RN_FETCH: "1",
-      // Fonctions de recette (injection d'un scan, maintien du scan) : voir apps/mobile/src/lib/recette.ts.
-      EXPO_PUBLIC_RECETTE: "1",
+  const result = spawnSync(
+    process.execPath,
+    [expoBin, "export", "--platform", "web", "--output-dir", outDir, ...(flag("--clear") ? ["--clear"] : [])],
+    {
+      cwd: mobile,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        CI: "1",
+        EXPO_NO_TELEMETRY: "1",
+        EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL ?? `http://localhost:${env.API_PORT ?? 3001}`,
+        EXPO_PUBLIC_SITE_URL: process.env.EXPO_PUBLIC_SITE_URL ?? `http://localhost:${env.WEB_PORT ?? 5173}`,
+        EXPO_PUBLIC_USE_RN_FETCH: "1",
+        // Fonctions de recette (injection d'un scan, maintien du scan) : voir apps/mobile/src/lib/recette.ts.
+        EXPO_PUBLIC_RECETTE: "1",
+      },
     },
-  });
+  );
   if (result.status !== 0) {
     console.error("expo export a échoué");
     process.exit(result.status ?? 1);
@@ -100,5 +104,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, () => {
-  console.log(`Appli compilée : http://localhost:${port} (API ${env.API_PORT ?? 3001}) — APP_URL=http://localhost:${port}`);
+  console.log(
+    `Appli compilée : http://localhost:${port} (API ${env.API_PORT ?? 3001}) — APP_URL=http://localhost:${port}`,
+  );
 });
