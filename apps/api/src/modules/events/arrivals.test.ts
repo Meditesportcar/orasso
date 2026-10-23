@@ -16,7 +16,7 @@ import {
   useClock,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { applications, eventAnnouncements, notifications } from "../../db/schema";
+import { applications, eventAnnouncements, notifications, vehicles } from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -50,11 +50,12 @@ async function nocturne(arrivals: typeof NOCTURNE | null = NOCTURNE) {
 }
 
 describe("créneaux d'arrivée de l'événement", () => {
-  it("PATCH les enregistre ; la fiche publique les renvoie", async () => {
+  it("PATCH les enregistre ; la fiche publique ne renvoie que celui du public (lot M4)", async () => {
     const e = await nocturne();
     const page = await call(null, "GET", `/events/by-slug/${e.slug}`);
     expect(page.status).toBe(200);
-    expect(page.json.arrivals).toEqual(NOCTURNE);
+    expect(page.json.arrivals).toEqual({ exhibitors: null, public: NOCTURNE.public });
+    expect((await call(orga, "GET", `/events/by-slug/${e.slug}`)).json.arrivals).toEqual(NOCTURNE);
     // `null` les retire.
     expect((await call(orga, "PATCH", `/events/${e.id}`, { arrivals: null })).json.arrivals).toEqual({
       exhibitors: null,
@@ -143,6 +144,57 @@ describe("créneaux d'arrivée de l'événement", () => {
     const other = await signUp("Autre", { twoFactor: true });
     await createStructure(other.id);
     expect((await call(other, "PATCH", `/events/${e.id}`, { arrivals: NOCTURNE })).status).toBe(403);
+  });
+});
+
+// Lot M4 (correction de Damien, 23/10) : l'horaire strict des exposants est privé. Seuls l'organisation, l'exposant
+// concerné et qui peut candidater (véhicule actif : la feuille le montre avant « J'ai vu ») le reçoivent.
+describe("créneau des exposants privé", () => {
+  const leaks = (json: unknown) => {
+    const text = JSON.stringify(json);
+    return text.includes(NOCTURNE.exhibitors.from) || text.includes(NOCTURNE.exhibitors.note);
+  };
+
+  it("absent des réponses anonymes : fiche, liste de l'Explorer, page de la structure", async () => {
+    const e = await nocturne();
+    const page = await call(null, "GET", `/events/by-slug/${e.slug}`);
+    expect(page.json.arrivals.exhibitors).toBeNull();
+    expect(leaks(page.json)).toBe(false);
+    const list = await call(null, "GET", "/events");
+    expect(list.status).toBe(200);
+    expect(list.json.items.some((x: { id: string }) => x.id === e.id)).toBe(true);
+    expect(leaks(list.json)).toBe(false);
+    const structure = await call(null, "GET", `/structures/by-slug/${page.json.structure.slug}`);
+    expect(structure.status).toBe(200);
+    expect(leaks(structure.json)).toBe(false);
+  });
+
+  it("absent pour un visiteur connecté sans véhicule ; donné à qui peut candidater, à l'inscrit, à l'organisation", async () => {
+    const e = await nocturne();
+    const visitor = await signUp("Nina");
+    const seen = await call(visitor, "GET", `/events/by-slug/${e.slug}`);
+    expect(seen.status).toBe(200);
+    expect(seen.json.arrivals).toEqual({ exhibitors: null, public: NOCTURNE.public });
+    expect(leaks(seen.json)).toBe(false);
+    expect(leaks((await call(visitor, "GET", "/events")).json)).toBe(false);
+
+    const kenji = await signUp("Kenji");
+    const v = await createVehicle(kenji.id, ref);
+    expect((await call(kenji, "GET", `/events/by-slug/${e.slug}`)).json.arrivals.exhibitors).toEqual(
+      NOCTURNE.exhibitors,
+    );
+    const applied = await call(kenji, "POST", `/events/${e.id}/applications`, {
+      vehicleIds: [v.id],
+      rulesAccepted: true,
+      arrivalSeen: true,
+    });
+    expect(applied.status).toBe(201);
+    // Véhicule vendu après la candidature : l'inscrit garde son créneau.
+    await db.update(vehicles).set({ status: "sold" }).where(eq(vehicles.id, v.id));
+    expect((await call(kenji, "GET", `/events/by-slug/${e.slug}`)).json.arrivals.exhibitors).toEqual(
+      NOCTURNE.exhibitors,
+    );
+    expect((await call(orga, "GET", `/events/${e.id}`)).json.arrivals.exhibitors).toEqual(NOCTURNE.exhibitors);
   });
 });
 

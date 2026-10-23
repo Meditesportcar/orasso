@@ -49,6 +49,7 @@ import {
   structureFollows,
   structureMembers,
   tickets,
+  vehicles,
 } from "../../db/schema";
 import { requireOrganizer, staffAccess } from "../../lib/access";
 import { deps, now } from "../../lib/deps";
@@ -77,7 +78,13 @@ import { scheduleEventJobs } from "./jobs";
 import { posterColumns, posterService, posterSettingsOf, samePoster } from "./poster/service";
 import { type EventRow, eventsRepo } from "./repo";
 
-async function publicView(e: EventRow, s: StructureRow, showInstructions: boolean): Promise<EventPublic> {
+/**
+ * Ce que la fiche montre au-delà du public : les consignes (retenus et organisation) et, depuis le lot M4, le créneau
+ * d'arrivée strict des exposants.
+ */
+type ViewRights = { instructions: boolean; exhibitorSlot: boolean };
+
+async function publicView(e: EventRow, s: StructureRow, rights: ViewRights): Promise<EventPublic> {
   const counters = await eventsRepo.counters(e);
   const t = now();
   // Plusieurs jours (lot 26) : jours avec leurs places ; un événement d'un jour n'en a pas et reste `whole`.
@@ -90,8 +97,9 @@ async function publicView(e: EventRow, s: StructureRow, showInstructions: boolea
     dayAccess: days.length ? e.dayAccess : "whole",
     ...card(e, s, counters.remaining),
     description: e.description,
-    // Lot 47 : créneaux d'arrivée, affiche générée (Post et Story), affiche perso de l'organisateur.
-    arrivals: arrivalsOf(e),
+    // Lot 47 : créneaux d'arrivée, affiche générée (Post et Story), affiche perso de l'organisateur. Lot M4 (correction
+    // de Damien) : le créneau des exposants est privé, jamais dans une réponse publique ni anonyme.
+    arrivals: rights.exhibitorSlot ? arrivalsOf(e) : { ...arrivalsOf(e), exhibitors: null },
     poster: postUrl && storyUrl && style ? { postUrl, storyUrl, style } : null,
     customPosterUrl: storage.url(e.posterKey),
     addressLine: e.addressLine,
@@ -112,10 +120,19 @@ async function publicView(e: EventRow, s: StructureRow, showInstructions: boolea
     lockAt: lockAt(e).toISOString(),
     isLocked: isLocked(e, t),
     rulesText: e.rulesText,
-    instructions: showInstructions ? e.instructions : null,
+    instructions: rights.instructions ? e.instructions : null,
     entranceNote: e.entranceNote,
     acceptedCount: counters.accepted,
   };
+}
+
+/** Un véhicule actif au garage : la personne peut candidater, donc doit voir le créneau avant de cocher « J'ai vu ». */
+async function hasActiveVehicle(userId: string) {
+  const v = await db.query.vehicles.findFirst({
+    where: and(eq(vehicles.ownerId, userId), eq(vehicles.status, "active")),
+    columns: { id: true },
+  });
+  return Boolean(v);
 }
 
 async function isMember(structureId: string, userId: string) {
@@ -279,7 +296,13 @@ export const eventsService = {
     const member = viewer ? await isMember(e.structureId, viewer.user.id) : false;
     await assertCanSeeEvent(e, viewer);
     const accepted = mine.some((a) => a.status === "accepted");
-    const view = await publicView(e, s, member || accepted);
+    // Lot M4 : le créneau strict des exposants n'est donné qu'aux concernés (l'organisation, qui a candidaté avec un
+    // véhicule, membre de crew compris) et à qui peut candidater (véhicule actif : la feuille de candidature le montre
+    // avant « J'ai vu le créneau »). Anonyme, visiteur sans véhicule : jamais.
+    const exhibitorSlot =
+      viewer !== null &&
+      (member || mine.some((a) => a.kind === "vehicle") || (await hasActiveVehicle(viewer.user.id)));
+    const view = await publicView(e, s, { instructions: member || accepted, exhibitorSlot });
     if (!viewer) return view;
     const follower = await isFollowing(e.structureId, viewer.user.id);
     const full: EventPublic = {
@@ -304,7 +327,7 @@ export const eventsService = {
     });
     const settings = posterSettingsOf(e);
     return {
-      ...(await publicView(e, s, true)),
+      ...(await publicView(e, s, { instructions: true, exhibitorSlot: true })),
       zones: zones.map((z) => ({ id: z.id, code: z.code, name: z.name, capacity: z.capacity, position: z.position })),
       counters: await eventsRepo.counters(e),
       publishedAt: e.publishedAt?.toISOString() ?? null,
