@@ -18,7 +18,10 @@ import { temperatureRange } from "@/lib/weather";
 
 const { space2, space3, space4 } = tokens.spacing;
 
-/** `.greet` : étiquette du jour, « Salut Kenji » en affiche 32 px, et l'aide au glissement entre onglets à droite. */
+/**
+ * `.greet` : étiquette du jour, « Salut Kenji » en affiche 32 px. Lot M5 (maquette 6.1, retour 28) : plus de petites
+ * flèches ‹ › à droite (on les prenait pour le passage d'une sortie à l'autre, qui se fait maintenant au doigt).
+ */
 export function Greet({ line, name }: { line: string; name: string }) {
   const { t } = useTheme();
   const c = t.color;
@@ -31,10 +34,6 @@ export function Greet({ line, name }: { line: string; name: string }) {
         <Text variant="posterXl" color={c.ink} accessibilityRole="header" style={styles.greetTitle}>
           {homeProfileLabels.greeting(name)}
         </Text>
-      </View>
-      <View accessibilityLabel="Glisse à gauche ou à droite pour changer d'onglet" style={styles.swipe}>
-        <Icon name="back" size={14} color={c.inkMuted} />
-        <Icon name="next" size={14} color={c.inkMuted} />
       </View>
     </View>
   );
@@ -353,7 +352,6 @@ const styles = StyleSheet.create({
   card: { borderRadius: 18, padding: space4 },
   greet: { flexDirection: "row", alignItems: "flex-end", gap: 10, paddingTop: space2 },
   greetTitle: { fontSize: 32, lineHeight: 31, marginTop: 2 },
-  swipe: { flexDirection: "row", paddingBottom: 6, opacity: 0.8 },
   secH: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginTop: space2 },
   secTitle: { fontSize: 16, lineHeight: 18, flexShrink: 1 },
   secLink: { flexDirection: "row", alignItems: "center", gap: 4 },

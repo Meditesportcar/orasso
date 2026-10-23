@@ -16,6 +16,7 @@ import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import Svg, { Path } from "react-native-svg";
 
 import { replayProfiles } from "@/features/tuto/model";
 import { useSession } from "@/lib/session";
@@ -47,7 +48,10 @@ function TutoCard({ profile, onPress }: { profile: MainProfile; onPress: () => v
       ]}
     >
       <View style={[styles.play, { backgroundColor: c.accent }]}>
-        <Icon name="next" size={16} color={c.accentInk} />
+        {/* Le triangle « lecture » de la maquette (`.tuto-b .pi`). */}
+        <Svg width={16} height={16} viewBox="0 0 24 24" style={styles.playIcon}>
+          <Path d="M7 4l13 8-13 8z" fill={c.accentInk} />
+        </Svg>
       </View>
       <Text variant="bodyStrong" color={c.ink} style={styles.tutoName}>
         {tutoProfileNames[profile]}
@@ -217,6 +221,7 @@ const styles = StyleSheet.create({
   tutos: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
   tuto: { width: "48%", flexGrow: 1, gap: space2, padding: space3, borderRadius: 16 },
   play: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  playIcon: { marginLeft: 2 },
   tutoName: { fontSize: 14, lineHeight: 17, fontWeight: "800" },
   tutoCap: { fontSize: 12, lineHeight: 16 },
   pressed: { opacity: 0.8 },
