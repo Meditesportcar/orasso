@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inNearWindow, nearCountdown, nearestAccess, nearWeekday } from "./nearAccess";
+import { directionsOpen, inNearWindow, nearCountdown, nearestAccess, nearWeekday } from "./nearAccess";
 import { fromWallTime } from "./time";
 
 const at = (month: number, day: number, hour = 10) => fromWallTime({ year: 2026, month, day, hour, minute: 0 });
@@ -30,5 +30,17 @@ describe("accès flottant : règle J-7 à J+1", () => {
     expect(nearestAccess(items, at(10, 20))?.key).toBe("x");
     expect(nearestAccess(items.slice(0, 2), at(10, 20))?.key).toBe("a");
     expect(nearestAccess(items, at(10, 1))).toBeNull();
+  });
+});
+
+describe("Maps et Waze à l'approche (lot M4)", () => {
+  const start = at(10, 24, 19);
+  const end = at(10, 24, 23);
+  it("ni à J-6 ni à J-2 ; de la veille 0 h à la fin", () => {
+    expect(directionsOpen(start, end, at(10, 18))).toBe(false);
+    expect(directionsOpen(start, end, at(10, 22, 23))).toBe(false);
+    expect(directionsOpen(start, end, at(10, 23, 0))).toBe(true);
+    expect(directionsOpen(start, end, at(10, 24, 22))).toBe(true);
+    expect(directionsOpen(start, end, at(10, 24, 23))).toBe(false);
   });
 });

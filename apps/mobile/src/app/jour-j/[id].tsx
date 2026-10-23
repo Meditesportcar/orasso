@@ -9,29 +9,32 @@
 // « Jour J · <événement> » et « Hors ligne : tout est déjà sur ton téléphone », la carte crème du QR, l'encart des
 // captures, « Comment ça marche sans réseau », Maps / Waze / Sur la carte. Plus de « Me désister » ici : on se retire
 // depuis le ticket de Sorties (audit § 5.2, une seule porte). Statut « Annulé » ou « Incertain » seulement s'il y a lieu.
+// Lot M4 (maquette 5.1, retours 26 et 27) : Mon QR épuré. Le titre est celui de l'événement ; « Hors ligne » porte un
+// « ? » ; un seul texte, « Présente le QR code », dans la carte ; luminosité au maximum, rendue en quittant ; le O au
+// centre du QR ; plus de pavé des captures (bandeau à la tentative), plus de grade, plus de lieu ni de météo (ils
+// restent sur la fiche) ; Maps et Waze discrets, et seulement à partir de la veille. Consignes et dernière annonce
+// restent : elles servent hors ligne, à l'entrée.
 
 import { Button, Plate, StatusBadge, Text, ThemeScope, tokens, useTheme } from "@orasso/design-system/native";
 import {
   communicationLabels,
+  directionsOpen,
   eventDaysLabels,
   formatDayDate,
-  gradeLabels,
   localDate,
   voteScreenTexts,
-  weatherTexts,
 } from "@orasso/shared";
 import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, useWindowDimensions } from "react-native";
-import { CaptureNote, GpsRow, HowItWorks, useBlockCapture } from "@/features/jour-j/QrExtras";
+import { CaptureBanner, GpsRow, OfflineLine, useBlockCapture, useMaxBrightness } from "@/features/jour-j/QrExtras";
 import { type QrHolder, QrPoster } from "@/features/jour-j/QrPoster";
 import { useRotatingCode } from "@/features/jour-j/useRotatingCode";
-import { WeatherWidget } from "@/features/WeatherWidget";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
 import { serverSkewAt } from "@/lib/clock";
-import { formatDay, formatDayHour, formatHour, formatStamp } from "@/lib/format";
+import { formatDayHour } from "@/lib/format";
 import { jourJState } from "@/lib/jourj";
 import { type AccessKit, loadKit, loadOtpSecret, refreshKit } from "@/lib/kits";
 import { useSession } from "@/lib/session";
@@ -43,7 +46,7 @@ import { FlowScreen } from "@/ui/Screens";
 
 const { space2, space3, space4 } = tokens.spacing;
 
-const TITLE = "Jour J";
+const TITLE = "Mon QR";
 // Mention de l'artefact sous le titre (`.qr-top small`), dans l'en-tête de flux du socle (lot C1).
 const FACTS = "Hors ligne : tout est déjà sur ton téléphone";
 /** Sans nouvelles du serveur depuis 24 h, l'heure du téléphone n'a pas été recoupée : le code risque d'être refusé. */
@@ -90,7 +93,6 @@ function JourJScreen() {
   // `undefined` : lecture du kit en cours ; `null` : pas de kit sur ce téléphone.
   const [kit, setKit] = useState<AccessKit | null | undefined>(undefined);
   const [secret, setSecret] = useState<string | null>(null);
-  const [refreshFailed, setRefreshFailed] = useState(false);
   const app = [...(upcoming ?? []), ...(past ?? []), ...press].find((a) => a.id === id) ?? null;
   const pseudo = me?.profile.pseudo ?? kit?.pseudo ?? "";
   // Dernière annonce de l'organisateur (lot 20) : avec du réseau, gardée sur le téléphone pour la suite (hors ligne OK).
@@ -132,9 +134,9 @@ function JourJScreen() {
       .then((fresh) => {
         if (cancelled) return;
         setKit(fresh);
-        setRefreshFailed(false);
       })
-      .catch(() => !cancelled && setRefreshFailed(true));
+      // Sans réseau ou refus : le kit enregistré reste à l'écran.
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -148,10 +150,12 @@ function JourJScreen() {
   );
   const state = kit && span ? jourJState(span, now, entered, tz) : null;
   // Captures bloquées dès que le QR est à l'écran (D34 : consultable avant le jour J, quel que soit l'état « early » ou « open »).
-  useBlockCapture(state !== null && state !== "closed");
+  const showing = state !== null && state !== "closed";
+  useBlockCapture(showing);
+  // Lot M4 : luminosité au maximum tant que le QR est à l'écran (rien à dire : elle se règle toute seule).
+  useMaxBrightness(showing);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/acces"));
-  const offline = !online || refreshFailed;
 
   if (kit === undefined) {
     return (
@@ -173,8 +177,6 @@ function JourJScreen() {
     );
   }
 
-  // Kits enregistrés avant le lot 28 : ancienne forme de météo, ignorée jusqu'au prochain rafraîchissement.
-  const weather = kit.weather && "summary" in kit.weather ? kit.weather : null;
   const qrSize = Math.min(width - 6 * space4, 280);
   const place = [kit.event.addressLine, [kit.event.postalCode, kit.event.city].filter(Boolean).join(" ")]
     .filter(Boolean)
@@ -187,7 +189,13 @@ function JourJScreen() {
   const qrValue = rotating.code ?? kit.pass.payload;
 
   return (
-    <FlowScreen title={`${TITLE} · ${kit.event.title}`} facts={FACTS} onClose={close} still>
+    <FlowScreen
+      title={kit.event.title}
+      onClose={close}
+      still
+      overlays={<CaptureBanner active={showing && Boolean(rotating.code)} />}
+    >
+      <OfflineLine text={FACTS} />
       {stale ? (
         <Notice tone="error" testID="jourj-stale">
           Ouvre l'appli avec du réseau une fois avant l'événement : l'heure de ton téléphone sera recoupée et ton code
@@ -225,15 +233,10 @@ function JourJScreen() {
             rotating={rotating.code ? { secondsLeft: rotating.secondsLeft, number: rotating.number } : undefined}
             size={qrSize}
             label="QR d'accès à présenter à l'entrée"
+            say="Présente le QR code"
+            logo={Boolean(rotating.code)}
           />
-          {me ? (
-            <Muted variant="caption" style={styles.center}>
-              {gradeLabels[me.profile.grade]} · luminosité au maximum, présente le code à travers le pare-brise
-            </Muted>
-          ) : null}
-          {rotating.code ? (
-            <CaptureNote />
-          ) : (
+          {rotating.code ? null : (
             <Notice testID="jourj-legacy">
               Ancien QR : ouvre l'appli une fois avec du réseau pour recevoir ton code qui change toutes les 20
               secondes.
@@ -256,8 +259,7 @@ function JourJScreen() {
         </Button>
       ) : null}
 
-      <HowItWorks />
-
+      {/* Lot M4 : Maps et Waze seulement à partir de la veille (à J-6, « Sur la carte » seul), plus discrets. */}
       <GpsRow
         destination={{
           title: kit.event.title,
@@ -265,32 +267,10 @@ function JourJScreen() {
           lng: kit.event.lng,
           address: place || kit.event.title,
         }}
+        directions={directionsOpen(span.startsAt, span.endsAt, now)}
+        discreet
         onMap={() => router.push(`/e/${kit.event.slug}`)}
       />
-
-      <Plate kind="note" style={styles.block}>
-        <Text variant="bodyStrong" color={c.plateInk}>
-          {place || kit.event.title}
-        </Text>
-        {kit.event.entranceNote ? (
-          <Text variant="meta" color={c.plateInk} testID="jour-j-entrance">
-            {kit.event.entranceNote}
-          </Text>
-        ) : null}
-        <Text variant="meta" color={c.plateMuted}>
-          {formatDay(kit.event.startsAt, tz)} · {formatHour(kit.event.startsAt, tz)} –{" "}
-          {formatHour(kit.event.endsAt, tz)}
-        </Text>
-        <Text variant="meta" color={offline ? c.accent : c.plateMuted}>
-          {offline
-            ? `Hors ligne · QR et infos enregistrés le ${formatStamp(kit.savedAt, tz)}`
-            : `À jour · enregistré sur ce téléphone le ${formatStamp(kit.savedAt, tz)}`}
-        </Text>
-      </Plate>
-
-      {weather ? (
-        <WeatherWidget summary={weather.summary} attribution={weather.attribution} title={weatherTexts.todayTitle} />
-      ) : null}
 
       {kit.event.instructions ? (
         <Plate style={styles.block}>
@@ -318,6 +298,5 @@ function JourJScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { textAlign: "center" },
   block: { gap: space2, padding: space3 },
 });
