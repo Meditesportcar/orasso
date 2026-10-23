@@ -9,7 +9,7 @@ import { addScreenshotListener, allowScreenCaptureAsync, preventScreenCaptureAsy
 import { useEffect, useRef, useState } from "react";
 import { AppState, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 
-import { type BrightnessApi, type BrightnessController, createBrightnessController } from "./brightness";
+import { type BrightnessApi, createBrightnessController, createBrightnessHolders } from "./brightness";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -53,6 +53,14 @@ function loadBrightness(): Promise<BrightnessApi | null> {
  * fenêtre de l'appli change (aucune permission), puis elle suit de nouveau le réglage du téléphone ; iPhone : la
  * valeur d'avant est remise. Ordre et annulation des opérations : `brightness.ts`. Rien sur le web.
  */
+/** Tour 2 : une seule file et une seule valeur d'avant pour toute l'appli (deux écrans QR empilés). */
+let brightnessHolders: ReturnType<typeof createBrightnessHolders> | null = null;
+function holdBrightness(id: symbol, on: boolean) {
+  if (Platform.OS === "web") return;
+  brightnessHolders ??= createBrightnessHolders(createBrightnessController(loadBrightness));
+  void brightnessHolders.hold(id, on);
+}
+
 export function useMaxBrightness(active: boolean) {
   const focused = useIsFocused();
   const [appActive, setAppActive] = useState(AppState.currentState === "active");
@@ -60,20 +68,12 @@ export function useMaxBrightness(active: boolean) {
     const sub = AppState.addEventListener("change", (state) => setAppActive(state === "active"));
     return () => sub.remove();
   }, []);
-  const controller = useRef<BrightnessController | null>(null);
-  if (controller.current === null && Platform.OS !== "web") {
-    controller.current = createBrightnessController(loadBrightness);
-  }
+  const id = useRef(Symbol("qr")).current;
   const wanted = active && focused && appActive;
   useEffect(() => {
-    void controller.current?.want(wanted);
-  }, [wanted]);
-  useEffect(
-    () => () => {
-      void controller.current?.want(false);
-    },
-    [],
-  );
+    holdBrightness(id, wanted);
+  }, [id, wanted]);
+  useEffect(() => () => holdBrightness(id, false), [id]);
 }
 
 /** Lot M4 : durée du bandeau des captures (celle des bandeaux d'annonce, retour 25). */

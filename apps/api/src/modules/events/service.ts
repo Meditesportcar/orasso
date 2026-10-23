@@ -76,6 +76,7 @@ import { decorateForMedia } from "../media/explore";
 import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
+import { vehiclesRepo } from "../vehicles/repo";
 import { arrivalColumns, arrivalsOf, assertArrivals } from "./arrivals";
 import { card, type StructureRow } from "./card";
 import { dayInUse, daysRepo } from "./days";
@@ -132,13 +133,15 @@ async function publicView(e: EventRow, s: StructureRow, rights: ViewRights): Pro
   };
 }
 
-/** Un véhicule actif au garage : sans lui, personne ne candidate (ni ne coche « J'ai vu le créneau »). */
-async function hasActiveVehicle(userId: string) {
-  const v = await db.query.vehicles.findFirst({
-    where: and(eq(vehicles.ownerId, userId), eq(vehicles.status, "active")),
-    columns: { id: true },
-  });
-  return Boolean(v);
+/**
+ * Un véhicule qui peut candidater à cet événement, avec les règles de la candidature (`applicationsService.apply`) :
+ * actif, sans transfert de plaque en cours, d'un type admis, avec au moins une photo.
+ */
+async function hasEligibleVehicle(userId: string, e: Pick<EventRow, "admittedVehicleTypes">) {
+  const garage = await vehiclesRepo.findFull(and(eq(vehicles.ownerId, userId), eq(vehicles.status, "active")));
+  return garage.some(
+    (x) => !x.pendingTransferId && e.admittedVehicleTypes.includes(x.vehicleType) && x.photos.length > 0,
+  );
 }
 
 /**
@@ -344,6 +347,10 @@ export const eventsService = {
       throw new AppError(403, "invitation_required", invitationLabels.invitationRequired);
     }
     const t = now();
+    // Compte suspendu : lecture seule, aucune candidature (lot 32).
+    if (v.profile.suspendedUntil && v.profile.suspendedUntil > t) {
+      throw forbidden("Ton compte est suspendu : lecture seule.");
+    }
     const applicant = { follower: await isFollowing(e.structureId, v.user.id), grade: v.profile.grade };
     const check = canApply(e, applicant, t);
     if (!check.ok) {
@@ -360,8 +367,10 @@ export const eventsService = {
       columns: { id: true },
     });
     if (banned) throw forbidden("Tu ne peux pas candidater aux événements de cette structure");
-    if (!(await hasActiveVehicle(v.user.id))) {
-      throw conflict("conflict", "Ajoute un véhicule à ton garage pour candidater", { noVehicle: true });
+    if (!(await hasEligibleVehicle(v.user.id, e))) {
+      throw conflict("conflict", "Aucun véhicule de ton garage ne peut candidater à cet événement", {
+        noVehicle: true,
+      });
     }
     return { exhibitors: arrivalsOf(e).exhibitors };
   },

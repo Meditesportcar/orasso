@@ -2,7 +2,7 @@
 // une augmentation en attente est annulée par un passage en arrière-plan.
 import { describe, expect, it, vi } from "vitest";
 
-import { type BrightnessApi, createBrightnessController } from "./brightness";
+import { type BrightnessApi, createBrightnessController, createBrightnessHolders } from "./brightness";
 
 /** Une promesse qu'on résout à la main. */
 function deferred<T>() {
@@ -119,5 +119,21 @@ describe("luminosité du QR", () => {
     await expect(none.want(false)).resolves.toBeUndefined();
     const broken = createBrightnessController(() => Promise.reject(new Error("Cannot find native module")));
     await expect(broken.want(true)).resolves.toBeUndefined();
+  });
+});
+
+describe("deux écrans QR empilés (tour 2)", () => {
+  it("une seule valeur d'avant : le second ne lit pas 100 %, la sortie du dernier rend la valeur d'avant", async () => {
+    const fake = fakeApi({ level: 0.35 });
+    const holders = createBrightnessHolders(createBrightnessController(async () => fake.api));
+    const a = Symbol("a");
+    const b = Symbol("b");
+    await holders.hold(a, true);
+    // B s'ouvre par-dessus A : B prend la main avant que A ne la rende.
+    await holders.hold(b, true);
+    await holders.hold(a, false);
+    expect(fake.calls).toEqual(["get", "set:1"]);
+    await holders.hold(b, false);
+    expect(fake.calls).toEqual(["get", "set:1", "set:0.35"]);
   });
 });

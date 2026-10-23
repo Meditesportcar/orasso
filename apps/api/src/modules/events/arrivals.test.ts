@@ -22,6 +22,7 @@ import {
   eventInvitations,
   events,
   notifications,
+  profiles,
   structureBans,
   vehicles,
 } from "../../db/schema";
@@ -300,6 +301,26 @@ describe("créneau des exposants privé", () => {
     const draft = await nocturne();
     await db.update(events).set({ status: "draft" }).where(eq(events.id, draft.id));
     expect((await context(kenji, draft.id)).status).toBe(404);
+
+    // Tour 2 (relecture Opus) : mêmes règles que la candidature : type de véhicule admis, compte non suspendu.
+    const motosOnly = await nocturne();
+    await db
+      .update(events)
+      .set({ admittedVehicleTypes: ["moto"] })
+      .where(eq(events.id, motosOnly.id));
+    const notAdmitted = await context(kenji, motosOnly.id);
+    expect(notAdmitted.status).toBe(409);
+    expect(notAdmitted.json.error.details.noVehicle).toBe(true);
+    expect(leaks(notAdmitted.json)).toBe(false);
+    const open = await nocturne();
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(paris(10, 8, 10).getTime()) })
+      .where(eq(profiles.userId, kenji.id));
+    const suspended = await context(kenji, open.id);
+    expect(suspended.status).toBe(403);
+    expect(leaks(suspended.json)).toBe(false);
+    await db.update(profiles).set({ suspendedUntil: null }).where(eq(profiles.userId, kenji.id));
 
     // À H-2 : la liste d'accès est figée.
     const locked = await nocturne();

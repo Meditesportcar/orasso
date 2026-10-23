@@ -64,3 +64,19 @@ export function createBrightnessController(load: () => Promise<BrightnessApi | n
     },
   };
 }
+
+/**
+ * Tour 2 (relecture Opus) : une seule file pour toute l'appli. Deux écrans QR empilés (ou une transition de l'un à
+ * l'autre) partagent la même valeur d'avant : tant qu'un écran tient la luminosité, elle reste au maximum ; le dernier
+ * qui la rend remet la valeur d'avant. Jamais 100 % en sortant.
+ */
+export function createBrightnessHolders(controller: BrightnessController) {
+  const holders = new Set<symbol>();
+  return {
+    hold(id: symbol, on: boolean): Promise<void> {
+      if (on) holders.add(id);
+      else holders.delete(id);
+      return controller.want(holders.size > 0);
+    },
+  };
+}

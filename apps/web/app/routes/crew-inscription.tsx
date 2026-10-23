@@ -31,6 +31,14 @@ export function meta({ loaderData }: Route.MetaArgs) {
   ];
 }
 
+// Lot M4, tour 2 : la page (et ses données `.data`) peut porter le créneau privé des exposants : ni le navigateur ni un
+// relais ne la gardent. En-têtes du parent conservés (`root.tsx`).
+export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
+  const h = new Headers(parentHeaders);
+  h.set("cache-control", "private, no-store");
+  return h;
+};
+
 export async function loader({ request, params }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(params.slug)}`);

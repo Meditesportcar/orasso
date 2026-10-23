@@ -272,7 +272,9 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
   ];
   // Réglages communs conservés d'un changement de vue à l'autre.
   const autour = around === "dept" ? aroundDept : around === "me" ? "moi" : "coin";
-  const keep = { segment, q, ...f, rayon: radius, lat: position?.lat, lng: position?.lng, autour };
+  // Tour 2 : la position ne reste dans l'adresse (et les champs cachés) que pour « Autour de moi ».
+  const usedPosition = around === "me" ? position : null;
+  const keep = { segment, q, ...f, rayon: radius, lat: usedPosition?.lat, lng: usedPosition?.lng, autour };
   // Tour 2 : « Revenir à mon coin » (point de départ et distance remis, position oubliée).
   const home = href({ ...keep, autour: "coin", rayon: null, lat: null, lng: null, suite: null });
   const away = around !== "mine" || radius !== null;
@@ -287,7 +289,7 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
       </a>
     </nav>
   );
-  const positionNote = position ? (
+  const positionNote = usedPosition ? (
     <p className="o-t-caption s-muted" data-testid="position-note">
       {explorerLabels.usingPosition} · <a href={withoutPosition}>{explorerLabels.stopPosition}</a>
     </p>
@@ -351,8 +353,8 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
             <Form method="get" className="s-filters" id="explorer-form" data-testid="events-filters">
               <input type="hidden" name="segment" value="evenements" />
               <input type="hidden" name="vue" value={vue} />
-              {position && <input type="hidden" name="lat" value={position.lat} />}
-              {position && <input type="hidden" name="lng" value={position.lng} />}
+              {usedPosition && <input type="hidden" name="lat" value={usedPosition.lat} />}
+              {usedPosition && <input type="hidden" name="lng" value={usedPosition.lng} />}
               <TextField
                 label={explorerLabels.searchTitle}
                 name="q"
