@@ -4,7 +4,7 @@
 // Sécurité ; Confidentialité (compte public ou privé, mes données, supprimer le compte) ; Mon profil public (photo,
 // pseudo, description, aperçu) ; Aide (sanctions, version).
 import { Button, Chip, ChipRow, Text, type ThemePreference, useTheme } from "@orasso/design-system/native";
-import { moderationLabels, tutoLabels, tutoProfileNames } from "@orasso/shared";
+import { moderationLabels, preferencesLabels, tutoLabels, tutoProfileNames } from "@orasso/shared";
 import Constants from "expo-constants";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
@@ -87,6 +87,16 @@ export default function Reglages() {
 
       {section === "preferences" ? (
         <>
+          {/* Lot M6 : « Tes préférences » (types d'événements, distance, départements, notifications), l'écran de l'arrivée. */}
+          <Button
+            variant="secondary"
+            icon="explore"
+            fullWidth
+            onPress={() => router.push("/preferences")}
+            testID="reglage-tes-preferences"
+          >
+            {preferencesLabels.settingsRow}
+          </Button>
           <SectionTitle>Thème</SectionTitle>
           <ChipRow accessibilityRole="radiogroup" accessibilityLabel="Thème">
             {themeChoices.map((choice) => (
