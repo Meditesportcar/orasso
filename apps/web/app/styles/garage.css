@@ -321,3 +321,65 @@
   bottom: 0;
   height: 20%;
 }
+
+/* Lot M5 (maquette 7.1) : ligne de certification et « Pour ta … ». Jetons seulement. */
+.g-certline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink);
+  text-decoration: none;
+}
+.g-certline > svg:first-child {
+  color: var(--accent-text);
+}
+.g-certline__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.g-certline__text .o-t-caption {
+  color: var(--ink-muted);
+}
+.g-pros {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.g-pro {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.g-pro--sponsored {
+  border-color: var(--accent);
+}
+.g-pro__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.g-pro__text .o-t-caption,
+.g-pro__text .o-t-label {
+  color: var(--ink-muted);
+}
+.g-pro__rm {
+  color: var(--accent-text);
+  font-weight: 900;
+  white-space: nowrap;
+}

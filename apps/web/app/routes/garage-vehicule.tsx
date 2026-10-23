@@ -4,6 +4,8 @@ import {
   archiveStatusChoices,
   type CategoryOption,
   certificationConditions,
+  certificationLine,
+  certificationLineLabels,
   certificationLostLabels,
   certificationMissingLabels,
   certificationStatusLabels,
@@ -143,6 +145,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
   const archived = v.status !== "active";
   const chosen = new Set(v.categories.map((c) => c.id));
   const missing = new Set(cert.missing);
+  const line = certificationLine(cert, v.photos.length);
   const country = countryLabel(v.country);
 
   return (
@@ -324,7 +327,12 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
         <h2 id="certification" className="s-h2">
           Certification
         </h2>
-        {cert.certified ? (
+        {/* Lot M5 : la ligne d'état (ce qui manque en premier) ; un ancien véhicule ne peut pas être certifié. */}
+        <p className="o-t-body" data-testid="certification-line">
+          <strong>{certificationLineLabels.headline(line)}</strong> ·{" "}
+          {certificationLineLabels.detail(line, { photoCount: v.photos.length, missing: cert.missing })}
+        </p>
+        {line.kind === "impossible" ? null : cert.certified ? (
           <p>
             <Chip variant="verified">Certifié</Chip> depuis le {cert.certifiedAt ? formatDay(cert.certifiedAt) : ""}.
             Elle se perd si la fiche technique est modifiée, ou après six mois sans événement.

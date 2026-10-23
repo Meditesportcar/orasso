@@ -1,0 +1,67 @@
+/* Aide du site (lot M5, parité de la maquette 7.3) : questions repliables et lignes de contact. Jetons seulement. */
+.ai-faq,
+.ai-list {
+  display: grid;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.ai-faq details + details,
+.ai-row + .ai-row {
+  border-top: 1px solid var(--line);
+}
+.ai-faq summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.ai-faq summary::-webkit-details-marker {
+  display: none;
+}
+.ai-faq summary svg {
+  flex: none;
+  color: var(--ink-muted);
+}
+.ai-faq details[open] summary svg {
+  transform: rotate(180deg);
+}
+.ai-faq details p {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-4);
+  color: var(--ink-muted);
+}
+.ai-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  color: var(--ink);
+  text-decoration: none;
+}
+.ai-row > svg {
+  flex: none;
+  color: var(--ink-muted);
+}
+.ai-row__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ai-row__text .o-t-caption {
+  color: var(--ink-muted);
+}
+.ai-center {
+  text-align: center;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ai-faq summary svg {
+    transition: transform var(--timing-base) ease;
+  }
+}
