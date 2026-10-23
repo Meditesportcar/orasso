@@ -401,6 +401,12 @@
 .fiche-bar {
   padding-inline: 0;
 }
+/* Au-dessus d'une page étroite (carte de 520 px), l'en-tête prend sa largeur : titre et ✕ alignés sur la carte. */
+.fiche-bar:has(+ .s-narrow) {
+  width: 100%;
+  max-width: 520px;
+  margin-inline: auto;
+}
 /* Place de l'accès flottant : le bas de la page ne passe pas dessous. */
 .app__body--near {
   padding-bottom: calc(var(--bar-tabs) + var(--space-12) + 72px);

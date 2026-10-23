@@ -2314,3 +2314,8 @@ Règle de Damien (23/10, TRANSVERSE) : (A) navigation = bande ORASSO en haut (lo
 | `/orga/:s/nouvel-evenement`, `/orga/:s/e/:id/modifier` | B | barre latérale + titre | `FicheBar`, barre latérale retirée |
 | `/pro/:pro/*`, `/admin/*` | navigation d'outil | barre latérale | — |
 | site public (`/`, `/evenements`, `/e/:slug`, `/o/:slug`, `/p/:slug`…) | en-tête du site | en-tête public (artefact `s-web-*`) | — ; `/e/:slug/candidater` garde son en-tête de flux |
+
+### Lot M7, suite (23/10/2026)
+- **Un seul retour sur la page d'un événement de l'organisateur** : le bouton « Tous les événements » doublait le ✕ de l'en-tête de fiche ; retiré (`features/orga/EventPage.tsx`).
+- **Site, place de l'en-tête de fiche** : sur les pages posées dans une carte (`.s-narrow` : profil public, crew, sécurité, amis…), `FicheBar` passe au-dessus de la carte, sur le fond, et s'aligne sur la colonne de la page (`.fiche-bar`, marge latérale retirée) : le ✕ est au même endroit sur toutes les fiches du site. Création d'un événement : le nom de la structure n'est plus répété dans l'en-tête (l'assistant l'écrit déjà).
+- **Recette de l'appli en web** : Expo lancé avec `CI=1` ne surveille pas les fichiers ; après chaque modification, relancer Metro (`--clear`), sinon les captures « après » montrent l'ancien code.
