@@ -4,7 +4,7 @@
 // rien changer. Ensuite, rouverte depuis Profil › Préférences : « Enregistrer » puis retour. Types d'événements
 // (plusieurs choix), distance autour de toi (10 à 200 km), départements (la feuille de « Ton coin »), notifications
 // « pour toi ». Tout est rangé sur le compte par l'API (`PATCH /me/preferences`).
-import { Chip, ChipRow, franceDepartmentByCode, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Chip, franceDepartmentByCode, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   arriveeLabels,
   clampPreferenceRadius,
@@ -151,7 +151,8 @@ export default function TesPreferences() {
           <Text variant="label" color={c.inkMuted}>
             {L.types}
           </Text>
-          <ChipRow accessibilityLabel={L.types}>
+          {/* Maquette 8.3 (`.pchips`) : les types passent à la ligne, tous visibles. */}
+          <View style={styles.pchips} accessibilityLabel={L.types}>
             {eventFormats.map((f) => (
               <Chip
                 key={f}
@@ -164,7 +165,7 @@ export default function TesPreferences() {
                 {eventFormatLabels[f]}
               </Chip>
             ))}
-          </ChipRow>
+          </View>
 
           <Text variant="label" color={c.inkMuted}>
             {L.distance}
@@ -275,6 +276,7 @@ const styles = StyleSheet.create({
   track: { width: "100%", height: 6, borderRadius: 3, overflow: "hidden" },
   bar: { width: "92%", height: 6, borderRadius: 3 },
   head: { gap: 6 },
+  pchips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   h1: { fontSize: 30, lineHeight: 30 },
   card: { borderRadius: 18, padding: 14, gap: 10 },
   rv: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },

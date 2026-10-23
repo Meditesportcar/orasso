@@ -62,7 +62,7 @@ async function signIn(page: Page, email: string) {
   await page.waitForURL(/accueil|explorer|sorties/, { timeout: 30_000 });
 }
 
-async function shot(page: Page, name: string, theme: Theme, fullPage = false) {
+async function shot(page: Page, name: string, theme: string, fullPage = false) {
   mkdirSync(DIR, { recursive: true });
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${DIR}/${name}-${theme}.png`, fullPage });
@@ -194,33 +194,64 @@ for (const theme of THEMES) {
   });
 }
 
-test("site : affiche à partager du garage, signaler un événement (deux thèmes)", async ({ browser }) => {
-  test.setTimeout(300_000);
+// Site raccord (rappel de Damien) : mêmes écrans à 390 et 1280 px. La page des préférences n'existe qu'après le lot.
+const WIDTHS = [
+  { name: "390", viewport: MOBILE },
+  { name: "1280", viewport: { width: 1280, height: 900 } },
+] as const;
+
+test("site : affiche à partager, signaler, Ton coin, Tes préférences (deux thèmes, deux largeurs)", async ({
+  browser,
+}) => {
+  test.setTimeout(600_000);
   const WEB = `http://localhost:${process.env.WEB_PORT}`;
   for (const theme of THEMES) {
-    const ctx = await browser.newContext({ viewport: MOBILE, baseURL: WEB });
-    await ctx.addCookies([{ name: "orasso-theme", value: theme, url: WEB }]);
-    const page = await ctx.newPage();
-    await page.goto("/connexion?retour=/app/garage");
-    await page.getByLabel("E-mail").fill("kenji@orasso.local");
-    await page.getByLabel("Mot de passe", { exact: true }).fill(SEED_PASSWORD);
-    await page.getByRole("button", { name: "Se connecter", exact: true }).click();
-    await page.waitForURL(/\/app\/garage/);
-    await page.waitForLoadState("networkidle");
-    await page.locator('a[href^="/app/garage/"]').filter({ hasNotText: "Ajouter" }).first().click();
-    const card = page.getByTestId("share-card");
-    await expect(card).toBeVisible({ timeout: 30_000 });
-    await card.scrollIntoViewIfNeeded();
-    await expect
-      .poll(() => card.locator("img").evaluate((el: HTMLImageElement) => el.naturalHeight), { timeout: 60_000 })
-      .toBeGreaterThan(0);
-    await shot(page, "50-site-affiche", theme);
-    await page.goto(`/e/${NOCTURNE}`);
-    const rep = page.getByRole("button", { name: /Signaler/ }).last();
-    await rep.scrollIntoViewIfNeeded({ timeout: 30_000 });
-    await rep.click();
-    await page.waitForTimeout(600);
-    await shot(page, "51-site-signaler", theme);
-    await ctx.close();
+    for (const w of WIDTHS) {
+      const tag = `${theme}-${w.name}`;
+      // Ton coin du site (arrivée), sans compte.
+      const anon = await browser.newContext({ viewport: w.viewport, baseURL: WEB });
+      await anon.addCookies([{ name: "orasso-theme", value: theme, url: WEB }]);
+      const a = await anon.newPage();
+      await a.goto("/inscription");
+      await a.waitForLoadState("networkidle");
+      for (const d of ["66", "11"]) await a.getByTestId(`dept-${d}`).click();
+      await shot(a, "52-site-ton-coin", tag);
+      const toggle = a.getByTestId("department-list-toggle");
+      if (await toggle.isVisible().catch(() => false)) {
+        await toggle.click();
+        await shot(a, "53-site-ton-coin-liste", tag);
+      }
+      await anon.close();
+
+      const ctx = await browser.newContext({ viewport: w.viewport, baseURL: WEB });
+      await ctx.addCookies([{ name: "orasso-theme", value: theme, url: WEB }]);
+      const page = await ctx.newPage();
+      await page.goto("/connexion?retour=/app/garage");
+      await page.getByLabel("E-mail").fill("kenji@orasso.local");
+      await page.getByLabel("Mot de passe", { exact: true }).fill(SEED_PASSWORD);
+      await page.getByRole("button", { name: "Se connecter", exact: true }).click();
+      await page.waitForURL(/\/app\/garage/);
+      await page.waitForLoadState("networkidle");
+      await page.locator('a[href^="/app/garage/"]').filter({ hasNotText: "Ajouter" }).first().click();
+      const card = page.getByTestId("share-card");
+      await expect(card).toBeVisible({ timeout: 30_000 });
+      await card.scrollIntoViewIfNeeded();
+      await expect
+        .poll(() => card.locator("img").evaluate((el: HTMLImageElement) => el.naturalHeight), { timeout: 60_000 })
+        .toBeGreaterThan(0);
+      await shot(page, "50-site-affiche", tag);
+      await page.goto(`/e/${NOCTURNE}`);
+      const rep = page.getByRole("button", { name: /Signaler/ }).last();
+      await rep.scrollIntoViewIfNeeded({ timeout: 30_000 });
+      await rep.click();
+      await page.waitForTimeout(600);
+      await shot(page, "51-site-signaler", tag);
+      if (PHASE === "apres") {
+        await page.goto("/app/preferences");
+        await page.waitForLoadState("networkidle");
+        await shot(page, "54-site-preferences", tag, true);
+      }
+      await ctx.close();
+    }
   }
 });

@@ -40,19 +40,22 @@ test("liste des départements : rôle et état, outre-mer, premier = favori, 20 
   await page.waitForURL(/arrivee\/departement/);
   // La carte est décorative pour le lecteur d'écran ; la liste est le chemin accessible.
   await expect(page.getByRole("checkbox")).toHaveCount(0);
+  // Lot M6 (maquette 8.2) : la liste s'ouvre en feuille ; rien ne s'applique avant « Valider (n) ».
   await page.getByTestId("department-list-toggle").click();
   const reunion = page.getByRole("checkbox", { name: "974 · La Réunion" });
   await expect(reunion).toHaveAttribute("aria-checked", "false");
   await reunion.click();
   await expect(reunion).toHaveAttribute("aria-checked", "true");
-  // Puce du favori (artefact `.dchip.fav`) : le numéro dans sa pastille, puis le nom et « favori ».
-  await expect(page.getByText("La Réunion · favori")).toBeVisible();
   const pyrenees = page.getByRole("checkbox", { name: "66 · Pyrénées-Orientales" });
   await pyrenees.click();
   await expect(pyrenees).toHaveAttribute("aria-checked", "true");
+  await page.getByTestId("department-validate").click();
+  // Puce du favori (artefact `.dchip.fav`) : le numéro dans sa pastille, puis le nom et « favori » ; « +1 » à côté.
+  await expect(page.getByText("La Réunion · favori")).toBeVisible();
   await expect(page.getByText("+1", { exact: true })).toBeVisible();
   await expect(page.getByTestId("dept-66")).toBeVisible();
   // Retoucher la ligne retire le département ; 20 au plus.
+  await page.getByTestId("department-list-toggle").click();
   await pyrenees.click();
   await expect(pyrenees).toHaveAttribute("aria-checked", "false");
   const codes = Array.from({ length: 19 }, (_, i) => String(i + 1).padStart(2, "0"));

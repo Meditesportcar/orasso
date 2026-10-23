@@ -118,7 +118,7 @@ export function DepartmentSheet({
           </Text>
         </View>
         {limit ? (
-          <Text variant="caption" color={c.winText} accessibilityRole="alert">
+          <Text variant="caption" color={c.winText} accessibilityRole="alert" testID="department-limit">
             {arriveeLabels.errors.tooMany}
           </Text>
         ) : null}
@@ -127,7 +127,7 @@ export function DepartmentSheet({
           style={styles.list}
           keyExtractor={(r) => (r.kind === "sep" ? `sep-${r.label}` : r.code)}
           keyboardShouldPersistTaps="handled"
-          initialNumToRender={24}
+          initialNumToRender={rows.length}
           testID="department-list"
           renderItem={({ item }) => {
             if (item.kind === "sep")
