@@ -89,7 +89,11 @@ export async function action({ request }: Route.ActionArgs) {
   const yearText = text("year");
   const powerText = text("powerHp");
   const weightText = text("weightKg");
-  const photo = form.get("photo");
+  // Lot M1, tour 2 : jusqu'à trois photos à la création (« photo », « photo2 », « photo3 »), chacune avec sa plaque.
+  const photos = PHOTO_SLOTS.flatMap((suffix, i) => {
+    const file = form.get(`photo${suffix}`);
+    return file instanceof File && file.size > 0 ? [{ suffix, n: i + 1, file }] : [];
+  });
   const errors: Errors = {};
   if (!text("makeId")) errors.makeId = "Choisis une marque.";
   if (!text("modelId")) errors.modelId = "Choisis un modèle.";
@@ -106,10 +110,15 @@ export async function action({ request }: Route.ActionArgs) {
   if (text("description").length > VEHICLE_DESCRIPTION_MAX) {
     errors.description = `Description : ${VEHICLE_DESCRIPTION_MAX} caractères au plus.`;
   }
-  const hasPhoto = photo instanceof File && photo.size > 0;
-  if (active && !hasPhoto) errors.photo = "Ajoute au moins une photo : elle est exigée pour candidater.";
-  // Relecture du lot 51 : une photo part avec son cadre de plaque, ou « aucune plaque visible » coché.
-  if (hasPhoto && plateDecisionError(form)) errors.photo = plateDecisionError(form) ?? undefined;
+  if (active && photos.length === 0) errors.photo = "Ajoute au moins une photo : elle est exigée pour candidater.";
+  // Relecture du lot 51 : chaque photo part avec son cadre de plaque, ou « aucune plaque visible » coché.
+  for (const p of photos) {
+    const issue = plateDecisionError(form, p.suffix, photos.length > 1 ? p.n : undefined);
+    if (issue) {
+      errors.photo = issue;
+      break;
+    }
+  }
   if (Object.keys(errors).length) return data({ errors }, { status: 400 });
 
   const preparation = form
@@ -143,16 +152,18 @@ export async function action({ request }: Route.ActionArgs) {
     const field = created.error.code === "plate_taken" ? "plate" : "form";
     return data({ errors: { [field]: created.error.message } satisfies Errors }, { status: created.status });
   }
-  if (!hasPhoto) return redirect(`/app/garage/${created.data.id}`);
-  const upload = new FormData();
-  upload.set("photo", photo as File);
-  // Lot 51 : cadres de plaque posés à la main, floutés par l'API avant le stockage (définitif) ; lot M1, tour 2 :
-  // sinon « aucune plaque visible » confirmé, que l'API exige aussi.
-  plateFields(form, upload);
-  const sent = await api(request, `/me/vehicles/${created.data.id}/photos`, { method: "POST", body: upload });
-  if (!sent.ok) {
-    // Le véhicule existe : on reste sur la fiche avec le message, la photo se rajoute depuis le garage.
-    return redirect(`/app/garage?photo=refusee`);
+  if (photos.length === 0) return redirect(`/app/garage/${created.data.id}`);
+  for (const p of photos) {
+    const upload = new FormData();
+    upload.set("photo", p.file);
+    // Lot 51 : cadres de plaque posés à la main, floutés par l'API avant le stockage (définitif) ; lot M1, tour 2 :
+    // sinon « aucune plaque visible » confirmé, que l'API exige aussi.
+    plateFields(form, upload, p.suffix);
+    const sent = await api(request, `/me/vehicles/${created.data.id}/photos`, { method: "POST", body: upload });
+    if (!sent.ok) {
+      // Le véhicule existe : on reste sur la fiche avec le message, la photo se rajoute depuis le garage.
+      return redirect(`/app/garage?photo=refusee`);
+    }
   }
   // Plaque d'un autre membre : le véhicule existe, en attente de transfert (S36) ; on ouvre sa page pour l'expliquer.
   if (created.data.plateTransfer) return redirect(`/app/garage/${created.data.id}`);
@@ -163,8 +174,9 @@ export async function action({ request }: Route.ActionArgs) {
 
 // Textes propres au site (les autres viennent de `vehicleAddLabels` et `vehicleWizardLabels`).
 const SITE = {
-  photoOnlyOne: "Une photo à la création : tu ajoutes les autres depuis la fiche de ton véhicule.",
+  photoOnlyOne: "Jusqu'à 3 photos ici : les autres s'ajoutent depuis la fiche de ton véhicule.",
   photoHelp: "Une photo de ton véhicule, de face ou de trois quarts. Elle sera recadrée au carré.",
+  photoMoreHelp: "Facultative. Recadrée au carré, avec sa plaque à masquer.",
   formerNotCertified: "Un ancien véhicule ne peut pas être certifié.",
   formerStatus: "Il est…",
   statusNote: "Motif (facultatif)",
@@ -176,6 +188,8 @@ const SITE = {
 
 /** Les pastilles de photos conseillées (1, 2, 3). */
 const CERT_DOTS = Array.from({ length: CERTIFICATION_MIN_PHOTOS }, (_, i) => i + 1);
+/** Lot M1, tour 2 : les champs des photos de la création (le premier garde son nom d'avant). */
+const PHOTO_SLOTS = ["", "2", "3"] as const;
 
 const typeIcon = { car: "vehicle", moto: "moto", truck: "truck" } as const;
 
@@ -227,7 +241,9 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const [unregistered, setUnregistered] = useState(false);
   const [former, setFormer] = useState(false);
   const [status, setStatus] = useState<string>(archiveStatusChoices[0]?.status ?? "keepsake");
-  const [hasPhoto, setHasPhoto] = useState(false);
+  // Photos choisies, emplacement par emplacement (la suivante apparaît quand la précédente est choisie).
+  const [picked, setPicked] = useState<boolean[]>(PHOTO_SLOTS.map(() => false));
+  const photoCount = picked.filter(Boolean).length;
   const [cropFile, setCropFile] = useState<File | null>(null);
   const cropDone = useRef<((file: File | null) => void) | null>(null);
   const active = !former;
@@ -242,7 +258,6 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
     [],
   );
   const finishCrop = (file: File | null) => {
-    setHasPhoto(file !== null);
     cropDone.current?.(file);
     cropDone.current = null;
     setCropFile(null);
@@ -314,7 +329,8 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
   const toggleStyle = (id: string) =>
     setCategoryIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id].slice(0, 10)));
 
-  const certNoun = hasPhoto ? V.certSome(1) : V.certNone;
+  const certNoun =
+    photoCount >= CERTIFICATION_MIN_PHOTOS ? V.certReady : photoCount ? V.certSome(photoCount) : V.certNone;
 
   return (
     <div className="s-narrow s-stack">
@@ -326,18 +342,25 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
         <section className="s-stack g-section" data-testid="add-photos">
           <h2 className="s-h2">{`1 · ${V.steps[0]}`}</h2>
           <p className="o-t-body s-muted">{V.photosText}</p>
-          <PhotoWithPlate
-            label="Photo"
-            help={SITE.photoHelp}
-            error={errors.photo}
-            required={active}
-            testId="new-plate-frame"
-            prepare={prepare}
-          />
+          {PHOTO_SLOTS.map((suffix, i) =>
+            i === 0 || picked[i - 1] || picked[i] ? (
+              <PhotoWithPlate
+                key={suffix || "1"}
+                label={i === 0 ? "Photo" : V.photoN(i + 1)}
+                help={i === 0 ? SITE.photoHelp : SITE.photoMoreHelp}
+                error={i === 0 ? errors.photo : undefined}
+                required={i === 0 && active}
+                testId={i === 0 ? "new-plate-frame" : `new-plate-frame-${i + 1}`}
+                prepare={prepare}
+                suffix={suffix}
+                onPicked={(on) => setPicked((all) => all.map((v, j) => (j === i ? on : v)))}
+              />
+            ) : null,
+          )}
           <div className="g-cert" data-testid="add-cert">
             <span className="g-dots" aria-hidden="true">
               {CERT_DOTS.map((n) => (
-                <span key={n} className={n <= (hasPhoto ? 1 : 0) ? "g-dot is-on" : "g-dot"} />
+                <span key={n} className={n <= photoCount ? "g-dot is-on" : "g-dot"} />
               ))}
             </span>
             <p className="o-t-caption">

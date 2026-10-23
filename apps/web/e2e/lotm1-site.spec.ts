@@ -7,8 +7,10 @@ import { checkerPhoto, storedPhoto } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
 // Lot M1 : l'ajout de véhicule du site applique les mêmes règles, les mêmes mots et le même ordre que l'appli. Un
-// véhicule complet (photo recadrée au carré, plaque, Toyota › Supra › Mk5, motorisation du catalogue, teinte, description,
-// préparation) est ajouté par le formulaire, puis relu par l'API.
+// véhicule complet (deux photos recadrées au carré, chacune avec sa décision de plaque, Toyota › Supra › Mk5,
+// motorisation saisie, teinte, description, préparation) est ajouté par le formulaire, puis relu par l'API. Tour 2 :
+// fiche technique libre (décision de Damien du 23/10), teinte gardée quand on regarde une autre famille, « Préparée »
+// décochable, une photo sans décision de plaque refusée.
 
 type Photo = { id: string; url: string; width: number; height: number };
 type Vehicle = {
@@ -71,6 +73,11 @@ test("ajout complet d'un véhicule sur le site, photo carrée, fiche technique e
   await expect(page.getByTestId("add-cert")).toContainText("il en faut 3 pour demander la certification");
   await page.getByTestId("site-no-plate").click();
   await page.getByTestId("site-no-plate-yes").click();
+  // Tour 2 : une deuxième photo à la création, avec sa propre décision de plaque.
+  await chooseSitePhoto(page, { name: "gt86.png", mimeType: "image/png", buffer: checkerPhoto(480, 640) }, "Photo 2");
+  await expect(page.getByTestId("new-plate-frame-2")).toBeVisible();
+  await expect(page.getByTestId("add-cert")).toContainText("2 sur 3");
+  await expect(page.getByLabel("Photo 3", { exact: true })).toBeVisible();
 
   // 2 · Plaque : numéro obligatoire (privé), ancien véhicule, non immatriculé, note de vie privée.
   const plate = page.getByTestId("add-plate");
@@ -90,18 +97,19 @@ test("ajout complet d'un véhicule sur le site, photo carrée, fiche technique e
   await expect(mk5).toHaveCount(1);
   await page.getByLabel("Génération", { exact: true }).selectOption((await mk5.getAttribute("value")) as string);
 
-  // 4 · Fiche technique : motorisation du catalogue → puissance 340 et poids 1 495.
-  const engines = page.getByTestId("add-engines");
-  await expect(engines).toBeVisible();
-  await expect(engines.getByTestId("add-engine-other")).toBeAttached();
-  const card = engines.locator("label", { hasText: "340 ch" }).first();
-  await expect(card).toContainText("1 495 kg");
-  await card.click();
-  await expect(card).toHaveClass(/is-on/);
+  // 4 · Fiche technique : motorisation, puissance et poids en saisie libre (plus de catalogue).
+  await expect(page.getByTestId("add-engines")).toHaveCount(0);
+  await page.getByLabel("Motorisation", { exact: true }).fill("3.0 turbo B58");
+  await page.getByLabel("Puissance (ch)", { exact: true }).fill("340");
+  await page.getByLabel("Poids (kg)", { exact: true }).fill("1495");
   await page.getByTestId("add-year-2021").click();
   await page.getByTestId("site-color-family-grey").click();
   await page.getByRole("radio", { name: /Gris acier/ }).check();
   await expect(page.getByTestId("site-color-name")).toContainText("Gris acier");
+  // Tour 2 : regarder les bleus sans rien choisir garde la teinte choisie.
+  await page.getByTestId("site-color-family-blue").click();
+  await expect(page.getByTestId("site-color-name")).toContainText("Gris acier");
+  await expect(page.getByTestId("site-color-value")).toHaveValue("Gris acier");
   await page.getByLabel("Description", { exact: true }).fill("Supra Mk5 d'origine, entretien suivi, sortie circuit.");
   await expect(page.getByTestId("add-description-count")).toContainText("/ 600");
   await page.getByTestId("add-prep-wheels").check();
@@ -109,13 +117,24 @@ test("ajout complet d'un véhicule sur le site, photo carrée, fiche technique e
   // 5 · Catégories : origine déduite de la marque, « Préparée » cochée d'office par la préparation.
   await expect(page.getByTestId("add-origin")).toContainText("Japonaise");
   await expect(page.getByTestId("add-origin")).toContainText("JDM · déduit de Toyota");
-  await expect(page.getByTestId("categories").getByRole("checkbox", { name: "Préparée" })).toBeChecked();
+  const prepared = page.getByTestId("categories").getByRole("checkbox", { name: "Préparée" });
+  await expect(prepared).toBeChecked();
   await expect(page.getByTestId("add-styles-note")).toContainText("Préparée est cochée");
+  // Tour 2 : « Préparée » reste décochable, comme dans l'appli ; l'envoi ne la recoche pas.
+  await prepared.uncheck();
+  await expect(prepared).not.toBeChecked();
   const audit = await auditPage(page);
   expect(audit.greens).toEqual([]);
   expect(audit.horizontalScroll).toBe(false);
   expect(audit.buttonsWithoutIcon).toEqual([]);
 
+  // Tour 2 : la deuxième photo n'a ni cadre ni « aucune plaque » : refusée avant tout envoi.
+  await page.getByRole("button", { name: "Envoyer", exact: true }).click();
+  await expect(page.getByText(/Photo 2 : place le cadre sur la plaque/).first()).toBeVisible({ timeout: 20_000 });
+  expect((await apiCall<Vehicle[]>(cookie, "GET", "/me/vehicles")).data).toHaveLength(0);
+  await page.getByTestId("site-no-plate2").click();
+  await page.getByTestId("site-no-plate-yes2").click();
+  if (await prepared.isChecked()) await prepared.uncheck();
   await page.getByRole("button", { name: "Envoyer", exact: true }).click();
   await page.waitForURL(/\/app\/garage$/, { timeout: 30_000 });
 
@@ -125,16 +144,19 @@ test("ajout complet d'un véhicule sur le site, photo carrée, fiche technique e
   expect(added.color).toBe("Gris acier");
   expect(added.preparation).toBe("Jantes");
   expect(added.description).toBe("Supra Mk5 d'origine, entretien suivi, sortie circuit.");
+  expect(added.engine).toBe("3.0 turbo B58");
   expect(added.powerHp).toBe(340);
   expect(added.weightKg).toBe(1495);
   expect(added.year).toBe(2021);
-  expect(added.categories.map((c) => c.label)).toEqual(expect.arrayContaining(["JDM", "Préparée"]));
-  // La photo stockée est carrée.
-  const photo = added.photos[0];
-  if (!photo) throw new Error("photo absente");
-  expect(photo.width).toBe(photo.height);
-  const meta = await sharp(await storedPhoto(photo.url)).metadata();
-  expect(meta.width).toBe(meta.height);
+  expect(added.categories.map((c) => c.label)).toContain("JDM");
+  expect(added.categories.map((c) => c.label)).not.toContain("Préparée");
+  // Les deux photos stockées sont carrées.
+  expect(added.photos).toHaveLength(2);
+  for (const photo of added.photos) {
+    expect(photo.width).toBe(photo.height);
+    const meta = await sharp(await storedPhoto(photo.url)).metadata();
+    expect(meta.width).toBe(meta.height);
+  }
   await ctx.close();
 });
 
@@ -152,6 +174,11 @@ test("un ancien véhicule s'ajoute sans plaque ni photo, et la teinte libre part
   await page.getByLabel("Modèle", { exact: true }).selectOption({ index: 1 });
   await page.getByTestId("site-color-other").click();
   await page.getByLabel("Sa teinte").fill("Bleu Laguna");
+  // Tour 2 : bornes de la saisie libre, les mêmes que l'appli et l'API.
+  await page.getByLabel("Puissance (ch)", { exact: true }).fill("2500");
+  await page.getByRole("button", { name: "Envoyer", exact: true }).click();
+  await expect(page.getByText("Puissance : un nombre entier de 1 à 2\u00a0000 ch.")).toBeVisible({ timeout: 20_000 });
+  await page.getByLabel("Puissance (ch)", { exact: true }).fill("");
   await page.getByRole("button", { name: "Envoyer", exact: true }).click();
   await page.waitForURL(/\/app\/garage\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   const list = await apiCall<(Vehicle & { status: string })[]>(cookie, "GET", "/me/vehicles");

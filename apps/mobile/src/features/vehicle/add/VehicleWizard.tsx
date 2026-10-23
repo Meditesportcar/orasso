@@ -669,6 +669,6 @@ const styles = StyleSheet.create({
   footer: { flexDirection: "row", gap: space2, alignItems: "center" },
   grow: { flex: 1 },
   why: { textAlign: "center" },
-  track: { height: 6, borderRadius: 3, overflow: "hidden", marginRight: 48, marginTop: -4 },
-  fill: { height: "100%", borderRadius: 3 },
+  track: { height: 6, borderRadius: tokens.radius.radiusPill, overflow: "hidden", marginRight: 48, marginTop: -4 },
+  fill: { height: "100%", borderRadius: tokens.radius.radiusPill },
 });

@@ -339,7 +339,7 @@ function FrameBox({
       testID="plate-frame"
       style={[
         styles.frame,
-        mask === "black" ? { borderColor: c.accent, borderWidth: 1.5, borderRadius: 3 } : { borderColor: c.accent },
+        mask === "black" ? { borderColor: c.accent, borderWidth: 1.5, borderRadius: 0 } : { borderColor: c.accent },
         editable ? styles.grab : null,
         style,
       ]}
@@ -451,7 +451,7 @@ export function PhotoBadge({ children, accent = false }: { children: ReactNode; 
 const styles = StyleSheet.create({
   outer: { width: "100%", alignItems: "center" },
   editor: { borderRadius: tokens.radius.radiusLg, overflow: "hidden" },
-  frame: { position: "absolute", borderWidth: 2, borderRadius: 6 },
+  frame: { position: "absolute", borderWidth: 2, borderRadius: tokens.radius.radiusSm },
   grab: { cursor: "grab" } as object,
   handle: {
     position: "absolute",
@@ -477,13 +477,13 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     overflow: "hidden",
   },
-  loupeFrame: { position: "absolute", borderWidth: 2, borderRadius: 3 },
+  loupeFrame: { position: "absolute", borderWidth: 2, borderRadius: 0 },
   cross: {
     position: "absolute",
     left: LOUPE_SIZE / 2 - 3,
     top: LOUPE_SIZE / 2 - 3,
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: 0,
   },
 });

@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
   photo: {
     width: 92,
     height: 68,
-    borderRadius: 11,
+    borderRadius: tokens.radius.radiusChip,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
   photoFill: { width: 92, height: 68 },
   text: { flex: 1, minWidth: 0, gap: 2 },
   line: { flexDirection: "row", alignItems: "center", gap: space1 },
-  small: { fontSize: 11.5, lineHeight: 15 },
-  plate: { fontSize: 11, lineHeight: 14 },
+  small: { fontSize: tokens.type.label.fontSize, lineHeight: tokens.type.label.lineHeight },
+  plate: { fontSize: tokens.type.label.fontSize, lineHeight: tokens.type.label.lineHeight },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space1, marginTop: 3 },
 });

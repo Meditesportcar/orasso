@@ -196,7 +196,7 @@ export function DoneView({
 const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 0 },
   center: { textAlign: "center" },
-  small: { fontSize: 12.5, lineHeight: 16 },
+  small: { fontSize: tokens.type.meta.fontSize, lineHeight: tokens.type.meta.lineHeight },
   sendRow: { flexDirection: "row", alignItems: "center", gap: space3 + 2, paddingVertical: space2 },
   files: { gap: space1 + 2 },
   file: {
@@ -204,11 +204,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space2 + 2,
     padding: space1 + 2,
-    borderRadius: 12,
+    borderRadius: tokens.radius.radiusMd,
     borderWidth: 1,
   },
-  thumb: { width: 44, height: 44, borderRadius: 9, overflow: "hidden" },
-  ok: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  thumb: { width: 44, height: 44, borderRadius: tokens.radius.radiusSm, overflow: "hidden" },
+  ok: { width: 24, height: 24, borderRadius: tokens.radius.radiusPill, alignItems: "center", justifyContent: "center" },
   burst: { alignItems: "center", paddingTop: space2 },
   doneText: { gap: space1, alignItems: "center" },
   card: { borderRadius: tokens.radius.radiusLg, overflow: "hidden" },

@@ -456,7 +456,13 @@ const styles = StyleSheet.create({
     paddingRight: space1 + 2,
   },
   searchInput: { flex: 1, minWidth: 0, height: 46, paddingVertical: 0, outlineStyle: "none" } as object,
-  clear: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  clear: {
+    width: 36,
+    height: 36,
+    borderRadius: tokens.radius.radiusChip,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   grow: { flex: 1, minWidth: 0 },
   list: { gap: space2 },
   stack: { gap: space2 },
@@ -474,11 +480,11 @@ const styles = StyleSheet.create({
   flag: {
     width: 34,
     height: 24,
-    borderRadius: 4,
+    borderRadius: tokens.radius.radiusSm / 2,
     overflow: "hidden",
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  disc: { width: 11, height: 11, borderRadius: 6 },
+  disc: { width: 11, height: 11, borderRadius: tokens.radius.radiusPill },
 });

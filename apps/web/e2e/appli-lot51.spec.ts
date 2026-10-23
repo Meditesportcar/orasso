@@ -155,9 +155,9 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await shot(page, "01-marque-modele", theme);
     await next(page);
 
-    // 4. Fiche technique : moteur « Autre » saisi, années de la génération en boutons, nuancier.
+    // 4. Fiche technique : motorisation saisie (lot M1, tour 2 : saisie libre, plus de catalogue), années de la
+    // génération en boutons, nuancier.
     await expect(page.getByText("Étape 4 sur 5 · Fiche technique").first()).toBeVisible();
-    await page.getByTestId("vehicle-engine-other").click();
     await page.getByTestId("vehicle-engine").fill("3.0 L6 turbo");
     await page.getByTestId("vehicle-power").fill("340");
     await page.getByTestId("vehicle-weight").fill("1495");

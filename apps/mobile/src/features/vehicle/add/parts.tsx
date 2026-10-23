@@ -329,7 +329,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   vgText: { flex: 1, minWidth: 0, gap: 2 },
-  check: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  check: {
+    width: 24,
+    height: 24,
+    borderRadius: tokens.radius.radiusPill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   vtype: {
     flex: 1,
     height: 64,
@@ -339,7 +345,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: space1,
   },
-  small: { fontSize: 13, lineHeight: 16 },
+  small: { fontSize: tokens.type.caption.fontSize, lineHeight: tokens.type.caption.lineHeight },
   pill: {
     flexDirection: "row",
     alignItems: "center",
@@ -360,7 +366,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  yearText: { fontSize: 20, lineHeight: 24 },
+  yearText: { fontSize: tokens.type.title.fontSize, lineHeight: tokens.type.title.lineHeight },
   crumb: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space1 + 2 },
   crumbItem: { flexDirection: "row", alignItems: "center", gap: space1 + 2 },
   square: {

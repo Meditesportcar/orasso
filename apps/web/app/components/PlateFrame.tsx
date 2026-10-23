@@ -31,6 +31,8 @@ export function PhotoWithPlate({
   required,
   testId,
   prepare,
+  suffix = "",
+  onPicked,
 }: {
   label: string;
   help?: string;
@@ -39,6 +41,13 @@ export function PhotoWithPlate({
   testId?: string;
   /** Lot M1 : prépare la photo choisie (recadrage carré) ; le fichier rendu remplace celui du champ, `null` l'annule. */
   prepare?: (file: File) => Promise<File | null>;
+  /**
+   * Lot M1, tour 2 (plusieurs photos à la création) : suffixe des champs (`photo2`, `plateRects2`, `noPlate2`) ; vide
+   * par défaut, les noms d'avant sont gardés.
+   */
+  suffix?: string;
+  /** Lot M1, tour 2 : une photo est choisie (`true`) ou retirée (`false`). */
+  onPicked?: (picked: boolean) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => () => (url ? URL.revokeObjectURL(url) : undefined), [url]);
@@ -50,7 +59,7 @@ export function PhotoWithPlate({
     <>
       <FileField
         label={label}
-        name="photo"
+        name={`photo${suffix}`}
         accept="image/jpeg,image/png,image/webp"
         help={help}
         error={error}
@@ -70,17 +79,25 @@ export function PhotoWithPlate({
             file = prepared;
           }
           setUrl(file ? URL.createObjectURL(file) : null);
+          onPicked?.(file !== null);
         }}
       />
       {url ? (
         <section className="s-stack s-stack--tight" aria-label={L.blurAction}>
           <div className="o-t-label">{L.blurAction}</div>
-          <PlateFrame key={url} src={url} alt="Photo choisie" initial={[]} testId={testId} />
+          <PlateFrame
+            key={url}
+            src={url}
+            alt="Photo choisie"
+            name={`plateRects${suffix}`}
+            initial={[]}
+            testId={testId}
+          />
           <label className="g-noplate o-t-body">
             <input
               type="checkbox"
-              name="noPlate"
-              data-testid="site-no-plate"
+              name={`noPlate${suffix}`}
+              data-testid={`site-no-plate${suffix}`}
               checked={noPlate}
               onChange={(e) => {
                 if (!e.currentTarget.checked) setNoPlate(false);
@@ -92,11 +109,11 @@ export function PhotoWithPlate({
           <dialog
             ref={confirm}
             className="mod-dialog"
-            aria-labelledby="noplate-confirm-title"
-            data-testid="site-no-plate-confirm"
+            aria-labelledby={`noplate-confirm-title${suffix}`}
+            data-testid={`site-no-plate-confirm${suffix}`}
           >
             <div className="s-stack">
-              <h2 id="noplate-confirm-title" className="s-h2">
+              <h2 id={`noplate-confirm-title${suffix}`} className="s-h2">
                 {L.noPlateConfirmTitle}
               </h2>
               <p className="o-t-body">{L.noPlateConfirmBody}</p>
@@ -105,7 +122,7 @@ export function PhotoWithPlate({
                 variant="secondary"
                 icon="check"
                 fullWidth
-                data-testid="site-no-plate-yes"
+                data-testid={`site-no-plate-yes${suffix}`}
                 onClick={() => {
                   setNoPlate(true);
                   confirm.current?.close();
@@ -124,10 +141,14 @@ export function PhotoWithPlate({
   );
 }
 
-/** Message d'erreur si une photo part sans cadre ni « aucune plaque visible » (action du serveur), sinon null. */
-export function plateDecisionError(form: FormData): string | null {
-  const rects = String(form.get("plateRects") ?? "").trim();
-  return rects || form.get("noPlate") === "on" ? null : L.noPlateIssue(1).replace(/^Photo 1 : /, "Photo : ");
+/**
+ * Message d'erreur si une photo part sans cadre ni « aucune plaque visible » (action du serveur), sinon null. Lot M1,
+ * tour 2 : `suffix` et `n` pour la n-ième photo de l'ajout (« Photo 2 : … »).
+ */
+export function plateDecisionError(form: FormData, suffix = "", n?: number): string | null {
+  const rects = String(form.get(`plateRects${suffix}`) ?? "").trim();
+  if (rects || form.get(`noPlate${suffix}`) === "on") return null;
+  return n ? L.noPlateIssue(n) : L.noPlateIssue(1).replace(/^Photo 1 : /, "Photo : ");
 }
 
 type Gesture = "move" | "resize" | "rotate";

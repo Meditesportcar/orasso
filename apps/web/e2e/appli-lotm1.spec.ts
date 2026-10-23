@@ -5,9 +5,11 @@ import { RELAIS } from "./relais";
 
 // Lot M1, côté appli (version web de recette) : l'ajout de véhicule refait d'après les maquettes 1.1 à 1.9. Ordre de
 // Damien (photos → plaque → marque et modèle → fiche technique → catégories → envoi), photos au carré par notre écran
-// de recadrage, fiche qui se construit, motorisations du catalogue, nuancier, description, préparation qui coche
-// « Préparée », styles cachés ou barrés, envoi compact et succès. Les animations (worklets) se vérifient sur le
-// téléphone ; ici, les écrans, les règles et ce que l'API enregistre. Captures Béton et Sable à 390 px.
+// de recadrage, fiche qui se construit, fiche technique en saisie libre (décision de Damien du 23/10), nuancier,
+// description, préparation qui coche « Préparée », styles cachés ou barrés, envoi compact et succès. Tour 2 : « Continuer »
+// grisé pendant l'import d'une photo, la photo ajoutée repasse par l'étape Plaque, ✕ demande confirmation. Les
+// animations (worklets) se vérifient sur le téléphone ; ici, les écrans, les règles et ce que l'API enregistre.
+// Captures Béton et Sable à 390 px.
 const APP = process.env.APP_URL;
 const DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-m1-captures/appli`;
 test.skip(!APP, "Appli : lancer avec APP_URL");
@@ -15,13 +17,14 @@ test.skip(!APP, "Appli : lancer avec APP_URL");
 /** Photos de test : celles des maquettes si elles sont là (M1_PHOTOS, dossier), sinon des aplats générés. */
 function photos(): { name: string; mimeType: string; buffer: Buffer }[] {
   const dir = process.env.M1_PHOTOS;
-  const names = ["supra.jpg", "gt86.jpg"];
+  const names = ["supra.jpg", "gt86.jpg", "supra.jpg"];
   if (dir && names.every((n) => existsSync(`${dir}/${n}`))) {
     return names.map((name) => ({ name, mimeType: "image/jpeg", buffer: readFileSync(`${dir}/${name}`) }));
   }
   return [
     { name: "a.png", mimeType: "image/png", buffer: samplePhoto([200, 200, 205]) },
     { name: "b.png", mimeType: "image/png", buffer: samplePhoto([40, 60, 120]) },
+    { name: "c.png", mimeType: "image/png", buffer: samplePhoto([150, 40, 40]) },
   ];
 }
 
@@ -52,7 +55,9 @@ async function shot(page: Page, name: string) {
 const next = (page: Page) => page.getByTestId("vehicle-step-next").click();
 
 for (const theme of ["beton", "sable"] as const) {
-  test(`ajout de véhicule refait (${theme}) : ordre, carré, catalogue, nuancier, envoi`, async ({ browser }) => {
+  test(`ajout de véhicule refait (${theme}) : ordre, carré, plaque pendant l'import, nuancier, envoi`, async ({
+    browser,
+  }) => {
     test.setTimeout(300_000);
     const pseudo = `AjoutM1${unique()}`.slice(0, 20);
     const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
@@ -76,7 +81,7 @@ for (const theme of ["beton", "sable"] as const) {
     await shot(page, `${theme}-01-photos-vide`);
     const chooser = page.waitForEvent("filechooser");
     await page.getByTestId("vehicle-photo-add").click();
-    await (await chooser).setFiles(photos());
+    await (await chooser).setFiles(photos().slice(0, 2));
 
     // Recadrage carré, photo par photo : cadre fixe, zoom − / +, aperçus.
     await expect(page.getByTestId("square-cropper")).toBeVisible({ timeout: 30_000 });
@@ -138,6 +143,36 @@ for (const theme of ["beton", "sable"] as const) {
     await shot(page, `${theme}-04-plaque`);
     await next(page);
 
+    // Tour 2 (vie privée de la plaque) : on revient aux photos et on en ajoute une. Pendant l'import, « Continuer » est
+    // grisé ; la nouvelle photo repasse par l'étape Plaque avant de pouvoir aller plus loin.
+    await expect(page.getByText("Étape 3 sur 5 · Marque et modèle")).toBeVisible();
+    await page.getByTestId("vehicle-step-back").click();
+    await page.getByTestId("vehicle-step-back").click();
+    await expect(page.getByText("Étape 1 sur 5 · Photos")).toBeVisible();
+    const late = page.waitForEvent("filechooser");
+    await page.getByTestId("vehicle-photo-add").click();
+    const lateChooser = await late;
+    await expect(page.getByTestId("vehicle-step-next")).toBeDisabled();
+    await expect(page.getByTestId("vehicle-step-why")).toContainText("Import de la photo en cours");
+    await shot(page, `${theme}-03b-import-en-cours`);
+    await lateChooser.setFiles(photos().slice(2));
+    await expect(page.getByTestId("square-cropper")).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("crop-validate").click();
+    await expect(page.getByTestId("vehicle-photo-cert")).toContainText("3 photos", { timeout: 20_000 });
+    // ✕ avec un brouillon non vide : confirmation, on reste.
+    await page.getByTestId("vehicle-step-back").click();
+    await expect(page.getByText("Quitter sans enregistrer ?")).toBeVisible();
+    await shot(page, `${theme}-03c-quitter`);
+    await page.getByRole("button", { name: "Rester" }).click();
+    await expect(page.getByText("Quitter sans enregistrer ?")).toHaveCount(0);
+    await next(page);
+    await expect(page.getByText("Étape 2 sur 5 · Plaque")).toBeVisible();
+    await next(page);
+    await expect(page.getByTestId("plate-message")).toContainText("Photo 3 : pose le cadre");
+    await page.getByTestId("plate-none").click();
+    await page.getByTestId("plate-none-yes").click();
+    await next(page);
+
     // 3. Marque et modèle : types à icônes, recherche, fil d'Ariane, « Continuer » actif seulement au bout du choix.
     await expect(page.getByText("Étape 3 sur 5 · Marque et modèle")).toBeVisible();
     await expect(page.getByTestId("vehicle-step-next")).toBeDisabled();
@@ -152,10 +187,16 @@ for (const theme of ["beton", "sable"] as const) {
     await shot(page, `${theme}-05-marque`);
     await next(page);
 
-    // 4. Fiche technique : motorisation du catalogue (puissance et poids remplis), année, nuancier, description,
-    // préparation.
+    // 4. Fiche technique : motorisation, puissance et poids en saisie libre (décision de Damien du 23/10), bornes
+    // communes avec l'API ; année, nuancier, description, préparation.
     await expect(page.getByText("Étape 4 sur 5 · Fiche technique")).toBeVisible();
-    await page.getByRole("radio", { name: /3\.0 L6 turbo/ }).click();
+    await expect(page.getByRole("radio", { name: /ch ·/ })).toHaveCount(0);
+    await page.getByTestId("vehicle-engine").fill("3.0 turbo B58");
+    await page.getByTestId("vehicle-power").fill("2500");
+    await page.getByTestId("vehicle-weight").fill("1495");
+    await next(page);
+    await expect(page.getByTestId("vehicle-step-error")).toContainText("Puissance");
+    await page.getByTestId("vehicle-power").fill("340");
     await expect(page.getByTestId("vehicle-live-specs")).toContainText("340 ch");
     await page.getByRole("radio", { name: "2021" }).click();
     await shot(page, `${theme}-06-fiche`);
@@ -214,13 +255,13 @@ for (const theme of ["beton", "sable"] as const) {
     >(cookie, "GET", "/me/vehicles");
     const v = mine.data[0];
     expect(v?.color).toBe("Gris acier");
-    expect(v?.engine).toBe("3.0 L6 turbo");
+    expect(v?.engine).toBe("3.0 turbo B58");
     expect(v?.powerHp).toBe(340);
     expect(v?.weightKg).toBe(1495);
     expect(v?.preparation).toBe("Échappement · Jantes");
     expect(v?.description).toContain("Sortie le dimanche");
     expect(v?.categories.map((c) => c.slug)).toContain("preparee");
-    expect(v?.photos).toHaveLength(2);
+    expect(v?.photos).toHaveLength(3);
     for (const p of v?.photos ?? []) expect(p.width).toBe(p.height);
     await ctx.close();
   });
