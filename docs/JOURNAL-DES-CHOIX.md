@@ -2258,6 +2258,7 @@ Mesures sur le Xiaomi de Damien (Redmi Note 10 Pro, `adb -s cd0ba0d8`), enregist
 - **Mouvement réduit** : squelettes et affiche venue de la liste en fondu de 120 ms ; la courbe de l'affiche vient du jeton `bezier.park`.
 - Captures rangées dans `lot-m3-captures/` du relais : 12 paires avant/après (Accueil, Explorer, Sorties, Garage, Profil, fiche ; Béton et Sable, 390 px) et 4 paires « artefact | réel » (Explorer, fiche). Les écarts à l'artefact de l'Explorer et de la fiche existaient avant ce lot (même rendu avant et après) : ils relèvent du lot M4.
 - APK et mesures du tour 2 : faits par le coordinateur après la fusion (mémoire du PC saturée, consigne du 23/10).
+
 ## Lot M2 — Plaque : formats, numéro prérempli et normalisé, « sans flouter » confirmé par photo — 23/10/2026
 
 Source : retours de Damien du 22/10 (entrées 11, 12, 15 et 17), décisions de Damien qui priment. **Périmètre réduit en cours de lot (consigne de Damien relayée par le coordinateur, 23/10)** : tout ce qui est visuel passe d'abord par l'artefact. Non faits ici, à dessiner puis valider : aperçu masqué en noir, loupe, gestes à deux doigts, poignées plus grosses, bandeau de vignettes avec état, boutons ronds posés sur la photo, « Envoyer » qui mène à la photo à régler, bloc à part pour le numéro.
