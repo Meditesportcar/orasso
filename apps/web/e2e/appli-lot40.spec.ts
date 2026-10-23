@@ -212,11 +212,13 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
       await expect(page.getByTestId(id).first()).toBeVisible();
     }
     await expect(page.getByTestId("casquette-staff")).toBeVisible();
+    // Lot M5 (maquette 7.2) : réglages en lignes groupées, « Compte » (e-mail, mot de passe, sanctions) à la place de
+    // « Sécurité ».
     for (const id of [
       "reglage-notifications",
       "reglage-tes-preferences-tuile",
       "reglage-preferences",
-      "reglage-securite",
+      "reglage-compte",
       "reglage-confidentialite",
       "reglage-amis",
       "reglage-profil",
@@ -224,7 +226,7 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
       await expect(page.getByTestId(id)).toBeVisible();
     }
     await page.screenshot({ path: `${DIR}/profil-hub-${theme}.png`, fullPage: true });
-    // Un seul bouton « Créer » : la feuille propose structure, fiche pro, prestataire.
+    // Lot M5 : « Devenir organisateur ou pro » (lien) ouvre la même feuille : structure, fiche pro, prestataire.
     await page.getByTestId("profil-create").click();
     await expect(page.getByTestId("casquette-create-organizer")).toBeVisible();
     await shot(page, `profil-creer-${theme}`);

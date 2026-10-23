@@ -30,6 +30,9 @@ export default [
     route("app/securite", "routes/securite.tsx"),
     // Lot 32 : mes sanctions et la contestation (une seule fois par sanction).
     route("app/sanctions", "routes/sanctions.tsx"),
+    // Lot M5 : l'Aide (questions fréquentes, contact) et l'export de mes données (fichier JSON), comme l'appli.
+    route("app/aide", "routes/aide.tsx"),
+    route("app/mes-donnees", "routes/mes-donnees.ts"),
     route("app/structure/nouvelle", "routes/structure-nouvelle.tsx"),
     route("app/pro/nouvelle", "routes/pro-nouvelle.tsx"),
     route("app/prestataire", "routes/prestataire.tsx"),

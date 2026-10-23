@@ -309,7 +309,8 @@ test("Mon profil › Aide : « Revoir le tuto » rejoue le tuto de chaque profil
   await expect(page.getByRole("heading", { name: "Revoir le tuto", exact: true }).first()).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByText("Un tour de ton espace, diapo par diapo.")).toBeVisible();
+  // Lot M5 (maquette 7.3) : une carte par casquette, « un par casquette » à droite du titre.
+  await expect(page.getByText("un par casquette", { exact: true })).toBeVisible();
   // Kenji est exposant : son tuto, et seulement ceux de ses casquettes.
   await expect(page.getByTestId("replay-tuto-exhibitor")).toBeVisible();
   await shot(page, "aide-revoir-le-tuto-beton");

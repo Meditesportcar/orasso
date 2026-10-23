@@ -590,9 +590,10 @@ test("compte : newsletter, export des données, clés d'accès renommées puis s
     await shot(page, "09-moi-donnees", theme);
 
     // Clés d'accès : liste, renommage, suppression.
-    // Lot 40 : les clés d'accès vivent dans Sécurité ; on y va dans l'appli (✕ puis la tuile), sans recharger la page.
+    // Lot 40 : les clés d'accès vivent dans Sécurité ; on y va dans l'appli (✕ puis la ligne), sans recharger la page.
+    // Lot M5 : Sécurité est dans « Compte » (e-mail, mot de passe et appareils, sanctions).
     await page.getByRole("button", { name: "Fermer" }).first().click();
-    await page.getByTestId("reglage-securite").click();
+    await page.getByTestId("reglage-compte").click();
     await reveal(page, page.getByTestId("moi-passkeys"));
     await page.getByTestId("moi-passkeys").click();
     await expect(page.getByTestId("passkey-row")).toHaveCount(1, { timeout: 20_000 });
