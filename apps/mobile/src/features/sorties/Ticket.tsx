@@ -91,9 +91,10 @@ export function Ticket({
           </View>
         ) : null}
         <Pressable
-          onPress={onPressTitle}
-          disabled={!onPressTitle}
-          accessibilityRole={onPressTitle ? "link" : undefined}
+          onPress={onPressTitle ?? onPress}
+          disabled={!(onPressTitle ?? onPress)}
+          accessibilityRole={onPressTitle || onPress ? "link" : undefined}
+          accessibilityLabel={onPressTitle || onPress ? `${title} : ouvrir la fiche` : undefined}
         >
           <Text variant="posterS" color={dim ? muted : ink} style={styles.title}>
             {title}
@@ -125,10 +126,13 @@ export function Ticket({
   return (
     <TicketPoster.Provider value={highlight}>
       {onPress ? (
+        // Tour 2 (relecture Opus) : la zone tactile du ticket n'est pas un élément d'accessibilité ; sinon VoiceOver et
+        // TalkBack la lisent d'un bloc et les boutons (Mon accès, Se retirer, Voter) deviennent inaccessibles. Lecteur
+        // d'écran : le titre est le lien vers la fiche, chaque bouton reste atteignable seul.
         <Pressable
           onPress={onPress}
-          accessibilityRole="link"
-          accessibilityLabel={`${title} : ouvrir la fiche`}
+          accessible={false}
+          importantForAccessibility="no"
           style={({ pressed }) => (pressed ? styles.pressed : null)}
           testID={testID ? `${testID}-open` : undefined}
         >
