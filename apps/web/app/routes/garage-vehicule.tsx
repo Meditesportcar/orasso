@@ -14,6 +14,7 @@ import {
   type PlateTransferView,
   plateTransferLabels,
   shareSheetLabels,
+  VEHICLE_ENGINE_MAX,
   type VehicleDetail,
   type VehicleHistoryItem,
   vehicleStatusLabels,
@@ -27,6 +28,7 @@ import { PhotoWithPlate, PlateFrame, plateDecisionError } from "../components/Pl
 import { ShareCard } from "../components/ShareButtons";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime, formatDay } from "../lib/format";
+import { plateFields } from "../lib/vehicle-add";
 import type { Route } from "./+types/garage-vehicule";
 import "../styles/garage.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
@@ -41,7 +43,11 @@ export function meta() {
 export async function loader({ request, params }: Route.LoaderArgs) {
   const id = params.id;
   const vehicle = await apiOrThrow<VehicleDetail>(request, `/me/vehicles/${encodeURIComponent(id)}`);
-  const query = new URLSearchParams({ makeId: vehicle.makeId, vehicleType: vehicle.vehicleType });
+  const query = new URLSearchParams({
+    makeId: vehicle.makeId,
+    modelId: vehicle.modelId,
+    vehicleType: vehicle.vehicleType,
+  });
   if (vehicle.year) query.set("year", String(vehicle.year));
   const [history, categories, transfers] = await Promise.all([
     apiOrThrow<VehicleHistoryItem[]>(request, `/me/vehicles/${encodeURIComponent(id)}/history`),
@@ -52,6 +58,56 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
   const outgoing = transfers?.ok ? transfers.data.outgoing.find((t) => t.id === vehicle.plateTransfer?.id) : undefined;
   return { vehicle, history, categories, answerBy: outgoing?.answerBy ?? null };
+}
+
+type EditFields = {
+  year: number | null;
+  engine: string | null;
+  powerHp: number | null;
+  weightKg: number | null;
+  color: string | null;
+  description: string | null;
+  preparation: string | null;
+  categoryIds: string[];
+};
+
+/** Les champs qui diffèrent de la fiche enregistrée (lot M1, tour 2). */
+function changedFields(v: VehicleDetail, next: EditFields): Partial<EditFields> {
+  const body: Partial<EditFields> = {};
+  const same = (a: string | number | null | undefined, b: string | number | null) => (a ?? null) === b;
+  if (!same(v.year, next.year)) body.year = next.year;
+  if (!same(v.engine?.trim() || null, next.engine)) body.engine = next.engine;
+  if (!same(v.powerHp, next.powerHp)) body.powerHp = next.powerHp;
+  if (!same(v.weightKg, next.weightKg)) body.weightKg = next.weightKg;
+  if (!same(v.color?.trim() || null, next.color)) body.color = next.color;
+  if (!same(v.description?.trim() || null, next.description)) body.description = next.description;
+  if (!same(v.preparation?.trim() || null, next.preparation)) body.preparation = next.preparation;
+  const before = v.categories.map((c) => c.id);
+  if (before.length !== next.categoryIds.length || !before.every((id) => next.categoryIds.includes(id))) {
+    body.categoryIds = next.categoryIds;
+  }
+  return body;
+}
+
+/** Libellés des champs de « Modifier la fiche », pour dire lequel bloque. */
+const FIELD_LABELS: Record<string, string> = {
+  year: "Année",
+  engine: "Moteur",
+  powerHp: "Puissance",
+  weightKg: "Poids",
+  color: "Couleur",
+  description: "Description",
+  preparation: "Préparation",
+  categoryIds: "Catégories",
+};
+
+/** « Poids : … » quand l'API dit quel champ est refusé, sinon son message. */
+function fieldError(error: { message: string; details?: Record<string, unknown> }): string {
+  const fields = (error.details?.fields ?? {}) as Record<string, string>;
+  const first = Object.keys(fields)[0];
+  if (!first) return error.message;
+  const label = FIELD_LABELS[first.split(".")[0] ?? ""] ?? first;
+  return `${label} : ${fields[first]}`;
 }
 
 const numberOrNull = (v: FormDataEntryValue | null) => {
@@ -68,20 +124,24 @@ export async function action({ request, params }: Route.ActionArgs) {
     data({ error: res.error.message, done: null }, { status: res.status });
 
   if (intent === "update") {
-    const res = await api(request, base, {
-      method: "PATCH",
-      json: {
-        year: numberOrNull(form.get("year")),
-        engine: text("engine") || null,
-        powerHp: numberOrNull(form.get("powerHp")),
-        weightKg: numberOrNull(form.get("weightKg")),
-        color: text("color") || null,
-        description: text("description") || null,
-        preparation: text("preparation") || null,
-        categoryIds: form.getAll("categoryIds").map(String),
-      },
+    // Lot M1, tour 2 : seuls les champs modifiés partent, comme dans l'appli : une fiche ancienne qui dépasse les
+    // bornes d'aujourd'hui (poids, puissance, motorisation) reste modifiable pour le reste, sa couleur par exemple.
+    const current = await api<VehicleDetail>(request, base);
+    if (!current.ok) return fail(current);
+    const body = changedFields(current.data, {
+      year: numberOrNull(form.get("year")),
+      engine: text("engine") || null,
+      powerHp: numberOrNull(form.get("powerHp")),
+      weightKg: numberOrNull(form.get("weightKg")),
+      color: text("color") || null,
+      description: text("description") || null,
+      preparation: text("preparation") || null,
+      categoryIds: form.getAll("categoryIds").map(String),
     });
-    return res.ok ? data({ error: null, done: "update" }) : fail(res);
+    if (Object.keys(body).length === 0) return data({ error: null, done: "update" });
+    const res = await api(request, base, { method: "PATCH", json: body });
+    if (res.ok) return data({ error: null, done: "update" });
+    return data({ error: fieldError(res.error), done: null }, { status: res.status });
   }
   if (intent === "archive" || intent === "restore") {
     const status = intent === "restore" ? "active" : text("status");
@@ -102,7 +162,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (decision) return data({ error: decision, done: null }, { status: 400 });
     const upload = new FormData();
     upload.set("photo", photo);
-    if (text("plateRects")) upload.set("plateRects", text("plateRects"));
+    plateFields(form, upload);
     const res = await api(request, `${base}/photos`, { method: "POST", body: upload });
     return res.ok ? data({ error: null, done: "photo" }) : fail(res);
   }
@@ -250,7 +310,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
         <p className="s-notice">Aucune photo : ajoute-en au moins une pour candidater.</p>
       )}
       {v.photos.length < 8 && (
-        <Form method="post" encType="multipart/form-data" className="s-form">
+        <Form method="post" encType="multipart/form-data" className="s-form" id="ajouter-photo">
           <PhotoWithPlate label="Ajouter une photo" required testId="add-plate-frame" />
           <Button type="submit" name="intent" value="photo-add" variant="secondary" icon="add" loading={busy}>
             Envoyer la photo
@@ -421,7 +481,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
             <TextField label="Année" name="year" inputMode="numeric" maxLength={4} defaultValue={v.year ?? ""} />
             <TextField label="Couleur" name="color" defaultValue={v.color ?? ""} />
           </div>
-          <TextField label="Moteur" name="engine" defaultValue={v.engine ?? ""} />
+          <TextField label="Moteur" name="engine" maxLength={VEHICLE_ENGINE_MAX} defaultValue={v.engine ?? ""} />
           <div className="s-two">
             <TextField label="Puissance (ch)" name="powerHp" inputMode="numeric" defaultValue={v.powerHp ?? ""} />
             <TextField label="Poids (kg)" name="weightKg" inputMode="numeric" defaultValue={v.weightKg ?? ""} />

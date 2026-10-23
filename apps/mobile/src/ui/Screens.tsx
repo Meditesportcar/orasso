@@ -189,6 +189,7 @@ export function FlowScreen({
   still,
   onRefresh,
   overlays,
+  header,
 }: Common & {
   title: string;
   facts?: string;
@@ -197,6 +198,8 @@ export function FlowScreen({
   band?: ReactNode;
   onClose: () => void;
   closeLabel?: string;
+  /** Lot M1 : zone fixe sous l'en-tête, qui ne défile pas (barre de progression, fiche en construction). */
+  header?: ReactNode;
 }) {
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
@@ -217,6 +220,7 @@ export function FlowScreen({
             onClose={onClose}
             closeLabel={closeLabel}
           />
+          {header ? <View style={styles.flowHeader}>{header}</View> : null}
           <KeyboardSafe style={styles.fill}>
             <Body onRefresh={onRefresh}>
               {inInbox ? (
@@ -331,5 +335,6 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { paddingHorizontal: space4, paddingTop: space3, paddingBottom: space6 * 2, gap: space3 },
   footer: { paddingHorizontal: space4, paddingTop: space2, gap: space2 },
+  flowHeader: { paddingHorizontal: space4, gap: space3, paddingBottom: space2 },
   section: { marginTop: space3 },
 });

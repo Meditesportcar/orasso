@@ -1,4 +1,4 @@
-import { Button, Chip, Icon, Plate, TextField, VehicleCard } from "@orasso/design-system/web";
+import { Button, Chip, Icon, Plate, VehicleCard } from "@orasso/design-system/web";
 import {
   type AccountQrSecret,
   certificationLine,
@@ -87,16 +87,9 @@ export async function action({ request }: Route.ActionArgs) {
     if (!res.ok) return data({ error: res.error.message }, { status: res.status });
     return data({ error: null });
   }
-  const vehicleId = String(form.get("vehicleId") ?? "");
-  const photo = form.get("photo");
-  if (!vehicleId || !(photo instanceof File) || photo.size === 0) {
-    return data({ error: "Choisis une photo." }, { status: 400 });
-  }
-  const upload = new FormData();
-  upload.set("photo", photo);
-  const res = await api(request, `/me/vehicles/${vehicleId}/photos`, { method: "POST", body: upload });
-  if (!res.ok) return data({ error: res.error.message }, { status: res.status });
-  return data({ error: null });
+  // Lot M1, tour 2 : plus d'envoi de photo depuis la liste (sans cadre de plaque, l'API la refusait toujours) ; la
+  // photo s'ajoute depuis la fiche du véhicule, avec son cadre de plaque ou « aucune plaque visible » confirmé.
+  return data({ error: "Ajoute la photo depuis la fiche du véhicule." }, { status: 400 });
 }
 
 export default function Garage({ loaderData, actionData }: Route.ComponentProps) {
@@ -189,20 +182,16 @@ export default function Garage({ loaderData, actionData }: Route.ComponentProps)
               />
             </a>
             <CertLine vehicleId={v.id} state={certs[v.id]} />
+            {/* Lot M1, tour 2 : la photo s'ajoute sur la fiche, qui pose le cadre de plaque (l'API l'exige). */}
             {v.photos.length === 0 && (
-              <Form method="post" encType="multipart/form-data" className="s-form">
-                <input type="hidden" name="vehicleId" value={v.id} />
-                <TextField
-                  label="Ajouter une photo"
-                  name="photo"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  required
-                />
-                <Button type="submit" variant="secondary" icon="add" loading={busy}>
-                  Envoyer la photo
-                </Button>
-              </Form>
+              <Button
+                variant="secondary"
+                icon="add"
+                href={`/app/garage/${v.id}#ajouter-photo`}
+                data-testid="garage-add-photo"
+              >
+                Ajouter une photo
+              </Button>
             )}
           </div>
         ))}

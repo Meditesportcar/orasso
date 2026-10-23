@@ -39,12 +39,15 @@ export const garageApi = {
   /** Suppression définitive (impossible si le véhicule a déjà participé à un événement : l'API répond 409). */
   deleteVehicle: (id: string) => request<unknown>(`/api/me/vehicles/${id}`, { method: "DELETE" }),
   deleteVehiclePhoto: (vehicleId: string, photoId: string) =>
-    request<unknown>(`/api/me/vehicles/${vehicleId}/photos/${photoId}`, { method: "DELETE" }),
+    request<VehicleFull>(`/api/me/vehicles/${vehicleId}/photos/${photoId}`, { method: "DELETE" }),
   /** Ordre des photos (lot 36 : la première est la couverture de la carte du véhicule). */
   reorderVehiclePhotos: (vehicleId: string, photoIds: string[]) =>
     request<VehicleFull>(`/api/me/vehicles/${vehicleId}/photos/order`, { method: "PUT", body: { photoIds } }),
   createVehicle: (body: VehicleCreate) => request<VehicleFull>("/api/me/vehicles", { method: "POST", body }),
-  /** Lot 51 : champ facultatif `plateRects` (JSON) = plaque floutée par l'API avant le stockage. */
+  /**
+   * Lot 51 : `plateRects` (JSON) = plaque floutée par l'API avant le stockage ; lot M1, tour 2 : sinon `noPlate=true`
+   * (« aucune plaque visible » confirmé). L'API refuse une photo sans l'un ni l'autre.
+   */
   uploadVehiclePhoto: (vehicleId: string, form: FormData) =>
     request<VehicleFull>(`/api/me/vehicles/${vehicleId}/photos`, { method: "POST", form, timeout: 60_000 }),
   /** Floute la plaque d'une photo déjà en ligne (lot 51) : définitif, l'originale n'est gardée nulle part. */
@@ -58,8 +61,11 @@ export const garageApi = {
   models: (makeId: string) => request<VehicleModel[]>(`/api/vehicle-reference/makes/${makeId}/models`),
   generations: (modelId: string) =>
     request<VehicleGeneration[]>(`/api/vehicle-reference/models/${modelId}/generations`),
-  /** Catégories ; avec marque, type et année : chacune dit si elle convient et pourquoi sinon. */
-  categories: (filter: { makeId?: string; vehicleType?: string; year?: number } = {}) =>
+  /**
+   * Catégories ; avec marque, type et année : chacune dit si elle convient et pourquoi sinon. Lot M1, tour 2 : le
+   * modèle dit s'il est tout-terrain (« 4x4 »).
+   */
+  categories: (filter: { makeId?: string; modelId?: string; vehicleType?: string; year?: number } = {}) =>
     request<CategoryOption[]>(`/api/vehicle-reference/categories${qs(filter)}`),
   requestCertification: (vehicleId: string, message?: string | null) =>
     request<VehicleCertification>(`/api/me/vehicles/${vehicleId}/certification-request`, {

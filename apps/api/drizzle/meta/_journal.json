@@ -372,6 +372,13 @@
       "when": 1792763090986,
       "tag": "0052_plate-normalization",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1792770001337,
+      "tag": "0053_vehicle-client-key-offroad",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { apiCall, loginInBrowser, randomPlate, setTheme, signUpApi, unique } from "./helpers";
+import { apiCall, chooseSitePhoto, loginInBrowser, randomPlate, setTheme, signUpApi, unique } from "./helpers";
 import { checkerPhoto, regionSpread, storedPhoto } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
@@ -35,8 +35,8 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await page.getByLabel("Marque").selectOption({ label: "Toyota" });
     await expect(page.getByLabel("Modèle").locator('option:text-is("Supra")')).toHaveCount(1);
     await page.getByLabel("Modèle").selectOption({ label: "Supra" });
-    await page.getByLabel("Plaque").fill(randomPlate());
-    await page.getByLabel("Photo").setInputFiles({ name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
+    await page.getByLabel("Numéro de plaque").fill(randomPlate());
+    await chooseSitePhoto(page, { name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
     const editor = page.getByTestId("new-plate-frame");
     await editor.getByRole("button", { name: "Poser un cadre" }).click();
     const frame = editor.getByTestId("site-plate-frame").first();
@@ -60,7 +60,7 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await page.waitForTimeout(300);
     await editor.screenshot({ path: `${DIR}/cadre-tourne-${theme}.png` });
 
-    await page.getByRole("button", { name: "Ajouter au garage" }).click();
+    await page.getByRole("button", { name: "Envoyer", exact: true }).click();
     await page.waitForURL(/\/app\/garage$/, { timeout: 30_000 });
     const list = await apiCall<{ photos: { url: string; plateBlurred: boolean }[] }[]>(cookie, "GET", "/me/vehicles");
     const photo = list.data[0]?.photos[0];

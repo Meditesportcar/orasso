@@ -23,8 +23,17 @@ export type CategoryRule = {
   allowedMakeIds: readonly string[];
 };
 
+/**
+ * Lot M1, tour 2 : pseudo-type des vrais tout-terrain (Defender, Wrangler, Classe G, Pajero, Land Cruiser… marqués
+ * `offroad` dans le référentiel). Une catégorie qui le liste dans ses types (« 4x4 ») convient à ces modèles, même
+ * typés « voiture » ; pas à une Supra.
+ */
+export const OFFROAD_TYPE = "offroad";
+
 export type VehicleFacts = {
   vehicleType: string;
+  /** Modèle tout-terrain du référentiel (lot M1, tour 2) : compte aussi comme `OFFROAD_TYPE`. */
+  offroad?: boolean;
   year: number | null;
   makeId: string | null;
   /** Pays de la marque ; null = inconnu. */
@@ -42,7 +51,10 @@ export type CategoryRefusal = "age" | "type" | "country" | "make";
  */
 export function categoryRefusal(category: CategoryRule, vehicle: VehicleFacts, now: Date): CategoryRefusal | null {
   if (!categoryAllowedForYear(category.minVehicleAge, vehicle.year, now)) return "age";
-  if (category.allowedVehicleTypes && !category.allowedVehicleTypes.includes(vehicle.vehicleType)) return "type";
+  if (category.allowedVehicleTypes) {
+    const types = vehicle.offroad ? [vehicle.vehicleType, OFFROAD_TYPE] : [vehicle.vehicleType];
+    if (!types.some((type) => category.allowedVehicleTypes?.includes(type))) return "type";
+  }
   if (vehicle.makeIsOther) return null;
   if (category.allowedCountries && vehicle.makeCountry && !category.allowedCountries.includes(vehicle.makeCountry)) {
     return "country";

@@ -64,10 +64,18 @@ function diff(
   return sum / (box.width * box.height * 3);
 }
 
-async function upload(u: { cookie: string }, vehicleId: string, image: Buffer, plateRects?: unknown) {
+/** Sans cadre : « aucune plaque visible » confirmé (lot M1, tour 2 : l'API refuse une photo sans décision). */
+async function upload(
+  u: { cookie: string },
+  vehicleId: string,
+  image: Buffer,
+  plateRects?: unknown,
+  noPlate: string | null = plateRects === undefined ? "true" : null,
+) {
   const form = new FormData();
   form.append("photo", new File([new Uint8Array(image)], "auto.png", { type: "image/png" }));
   if (plateRects !== undefined) form.append("plateRects", JSON.stringify(plateRects));
+  if (noPlate !== null) form.append("noPlate", noPlate);
   return app.request(`/api/me/vehicles/${vehicleId}/photos`, {
     method: "POST",
     body: form,
@@ -254,6 +262,35 @@ describe("POST /me/vehicles/:id/photos (plateRects) et /photos/:photoId/blur", (
     const clear = await pixels(await stored(both.photos[1]?.url ?? ""));
     expect(diff(blurred, clear, { left: 110, top: 60, width: 180, height: 80 })).toBeGreaterThan(40);
     expect(diff(blurred, clear, { left: 0, top: 0, width: 90, height: 40 })).toBeLessThan(6);
+  });
+
+  it("lot M1, tour 2 : sans cadre ni « aucune plaque » confirmé, la photo est refusée (400) et rien n'est stocké", async () => {
+    const u = await signUp("Flou_05");
+    const v = await call(u, "POST", "/me/vehicles", car());
+    const src = await checker();
+    for (const noPlate of [null, "", "false", "on", "1"]) {
+      const res = await upload(u, v.json.id, src, undefined, noPlate);
+      expect(res.status, `noPlate=${noPlate}`).toBe(400);
+      const err = ((await res.json()) as { error: { code: string; details: { fields: Record<string, string> } } })
+        .error;
+      expect(err.code).toBe("validation_error");
+      expect(err.details.fields.plateDecision).toBe("required");
+    }
+    // Un tableau de cadres vide n'est pas une décision.
+    const empty = new FormData();
+    empty.append("photo", new File([new Uint8Array(src)], "auto.png", { type: "image/png" }));
+    empty.append("plateRects", "[]");
+    const res = await app.request(`/api/me/vehicles/${v.json.id}/photos`, {
+      method: "POST",
+      body: empty,
+      headers: { cookie: u.cookie },
+    });
+    expect(res.status).toBe(400);
+    expect((await call(u, "GET", `/me/vehicles/${v.json.id}`)).json.photos).toEqual([]);
+    // Avec la confirmation : acceptée, telle quelle (pas de flou).
+    const ok = await upload(u, v.json.id, src, undefined, "true");
+    expect(ok.status).toBe(201);
+    expect(((await ok.json()) as { photos: { plateBlurred: boolean }[] }).photos[0]?.plateBlurred).toBe(false);
   });
 
   it("rectangle hors de l'image, JSON illisible ou plus de 4 cadres : 400", async () => {

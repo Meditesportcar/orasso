@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, seedReference, signUp, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { plateTransferRequests, vehicles } from "../../db/schema";
+import { categories, plateTransferRequests, vehicleModels, vehicles } from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -79,6 +79,89 @@ describe("inscription et profil", () => {
   it("profils réservés aux utilisateurs connectés", async () => {
     await signUp("Public_03");
     expect((await call(null, "GET", "/users/Public_03")).status).toBe(401);
+  });
+});
+
+describe("lot M1, tour 2 : fiche technique libre, création idempotente, « 4x4 » des tout-terrain", () => {
+  it("motorisation, puissance et poids facultatifs, aux bornes de la décision de Damien", async () => {
+    const u = await signUp("Fiche_01");
+    const base = { ...car(), unregistered: true, plate: undefined };
+    const ok = await call(u, "POST", "/me/vehicles", { ...base, engine: "3.0 turbo B58", powerHp: 2000, weightKg: 50 });
+    expect(ok.status).toBe(201);
+    expect(ok.json).toMatchObject({ engine: "3.0 turbo B58", powerHp: 2000, weightKg: 50 });
+    const empty = await call(u, "POST", "/me/vehicles", { ...base, engine: null, powerHp: null, weightKg: null });
+    expect(empty.status).toBe(201);
+    expect(empty.json).toMatchObject({ engine: null, powerHp: null, weightKg: null });
+    for (const bad of [
+      { engine: "x".repeat(61) },
+      { powerHp: 0 },
+      { powerHp: 2001 },
+      { weightKg: 49 },
+      { weightKg: 10_001 },
+      { powerHp: 12.5 },
+    ]) {
+      expect((await call(u, "POST", "/me/vehicles", { ...base, ...bad })).status, JSON.stringify(bad)).toBe(400);
+    }
+    expect((await call(u, "PATCH", `/me/vehicles/${ok.json.id}`, { weightKg: 10_001 })).status).toBe(400);
+    expect((await call(u, "PATCH", `/me/vehicles/${ok.json.id}`, { weightKg: 10_000 })).status).toBe(200);
+  });
+
+  it("la même clé client renvoie le véhicule déjà créé (« Reprendre » sans doublon)", async () => {
+    const u = await signUp("Reprise_01");
+    const other = await signUp("Reprise_02");
+    const clientKey = "8d3c1b5e-4f7a-4c2e-9b1d-2a6f0e8c7d45";
+    const first = await call(u, "POST", "/me/vehicles", { ...car(), clientKey });
+    expect(first.status).toBe(201);
+    const again = await call(u, "POST", "/me/vehicles", { ...car(), clientKey });
+    expect(again.status).toBe(201);
+    expect(again.json.id).toBe(first.json.id);
+    expect((await call(u, "GET", "/me/vehicles")).json).toHaveLength(1);
+    // Deux envois en même temps : un seul véhicule.
+    const key2 = "1f0e2d3c-4b5a-4968-8776-655443322110";
+    const both = await Promise.all([
+      call(u, "POST", "/me/vehicles", { ...car(), plate: undefined, unregistered: true, clientKey: key2 }),
+      call(u, "POST", "/me/vehicles", { ...car(), plate: undefined, unregistered: true, clientKey: key2 }),
+    ]);
+    expect(both.map((r) => r.status)).toEqual([201, 201]);
+    expect(both[0]?.json.id).toBe(both[1]?.json.id);
+    expect((await call(u, "GET", "/me/vehicles")).json).toHaveLength(2);
+    // La clé est propre au compte : un autre membre crée son véhicule.
+    const theirs = await call(other, "POST", "/me/vehicles", { ...car(), plate: "ef-456-gh", clientKey });
+    expect(theirs.status).toBe(201);
+    expect(theirs.json.id).not.toBe(first.json.id);
+    expect((await call(u, "POST", "/me/vehicles", { ...car(), clientKey: "pas-une-clé" })).status).toBe(400);
+  });
+
+  it("« 4x4 » proposé aux tout-terrain du référentiel, pas aux autres voitures", async () => {
+    const [cat] = await db
+      .insert(categories)
+      .values({ slug: "4x4", label: "4x4", allowedVehicleTypes: ["truck", "offroad"] })
+      .returning();
+    const [defender] = await db
+      .insert(vehicleModels)
+      .values({ makeId: ref.makeId, name: "X5 tout-terrain", slug: "x5-tt", vehicleType: "car", offroad: true })
+      .returning();
+    const option = async (modelId?: string) => {
+      const q = new URLSearchParams({ makeId: ref.makeId, vehicleType: "car" });
+      if (modelId) q.set("modelId", modelId);
+      const res = await app.request(`/api/vehicle-reference/categories?${q}`);
+      const rows = (await res.json()) as { id: string; eligible: boolean; refusal: string | null }[];
+      return rows.find((r) => r.id === cat?.id);
+    };
+    expect(await option(ref.modelId)).toMatchObject({ eligible: false, refusal: "type" });
+    expect(await option()).toMatchObject({ eligible: false, refusal: "type" });
+    expect(await option(defender?.id)).toMatchObject({ eligible: true, refusal: null });
+    const u = await signUp("Toutterrain_01");
+    const refused = await call(u, "POST", "/me/vehicles", { ...car(), categoryIds: [cat?.id] });
+    expect(refused.status).toBe(400);
+    const accepted = await call(u, "POST", "/me/vehicles", {
+      ...car(),
+      modelId: defender?.id,
+      generationId: null,
+      categoryIds: [cat?.id],
+    });
+    expect(accepted.status).toBe(201);
+    expect(accepted.json.categories.map((c: { slug: string }) => c.slug)).toEqual(["4x4"]);
   });
 });
 
@@ -183,6 +266,7 @@ describe("garage", () => {
     const upload = async () => {
       const form = new FormData();
       form.append("photo", new File([new Uint8Array(jpeg)], "auto.jpg", { type: "image/jpeg" }));
+      form.append("noPlate", "true");
       return app.request(`/api/me/vehicles/${v.json.id}/photos`, {
         method: "POST",
         body: form,

@@ -2,13 +2,14 @@
 // Code déplacé tel quel depuis `scripts/seed.ts` (lot 15) ; appelé par `seed.ts`.
 import { randomBytes } from "node:crypto";
 import { fromWallTime, type RefusalReason } from "@orasso/shared";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
 import { vehicleReference } from "../../src/db/seed/vehicle-reference";
 import { startJobs } from "../../src/jobs";
 import { deps } from "../../src/lib/deps";
 import { slugify } from "../../src/lib/slug";
+import type { Executor } from "../../src/lib/tx";
 import { scheduleEventJobs } from "../../src/modules/events/jobs";
 import {
   type AppStatus,
@@ -41,6 +42,8 @@ const CATEGORIES: [string, string, number | null][] = [
   ["preparee", "Préparée", null],
   ["stance", "Stance", null],
   ["drift", "Drift", null],
+  ["track-day", "Track day", null],
+  ["origine", "Origine", null],
   ["4x4", "4x4", null],
   ["utilitaire", "Utilitaire", null],
   ["moto", "Moto", null],
@@ -52,6 +55,49 @@ async function seedCategories() {
     .values(CATEGORIES.map(([slug, label, minVehicleAge], position) => ({ slug, label, minVehicleAge, position })))
     .returning();
   return new Map(rows.map((c) => [c.slug, c.id]));
+}
+
+/** Lot M1 : « Track day » et « Origine » (styles de l'artefact) ajoutés à la fin d'une base déjà semée ; sans effet sinon. */
+export async function seedMissingCategories() {
+  const existing = new Set((await db.select({ slug: t.categories.slug }).from(t.categories)).map((c) => c.slug));
+  if (existing.size === 0) return; // base vide : seedCategories s'en charge
+  const [{ max } = { max: 0 }] = await db
+    .select({ max: sql<number>`coalesce(max(${t.categories.position}), -1)` })
+    .from(t.categories);
+  const missing = CATEGORIES.filter(([slug]) => ["track-day", "origine"].includes(slug) && !existing.has(slug));
+  if (!missing.length) return;
+  await db
+    .insert(t.categories)
+    .values(missing.map(([slug, label, minVehicleAge], i) => ({ slug, label, minVehicleAge, position: max + 1 + i })))
+    .onConflictDoNothing();
+  console.log(`Catégories ajoutées : ${missing.map(([slug]) => slug).join(", ")}.`);
+}
+
+/**
+ * Lot M1, tour 2 : les vrais tout-terrain du référentiel (`offroad` de `vehicle-reference.ts`) marqués sur une base
+ * déjà semée, pour que « 4x4 » leur soit proposé. Idempotente (ne touche que les modèles listés, par marque et nom).
+ */
+export async function seedOffroadModels(ex: Executor = db) {
+  let marked = 0;
+  for (const make of vehicleReference) {
+    const names = make.models.filter((m) => m.offroad).map((m) => m.name);
+    if (!names.length) continue;
+    const row = await ex.query.vehicleMakes.findFirst({ where: eq(t.vehicleMakes.name, make.name) });
+    if (!row) continue;
+    const updated = await ex
+      .update(t.vehicleModels)
+      .set({ offroad: true })
+      .where(
+        and(
+          eq(t.vehicleModels.makeId, row.id),
+          inArray(t.vehicleModels.name, names),
+          eq(t.vehicleModels.offroad, false),
+        ),
+      )
+      .returning({ id: t.vehicleModels.id });
+    marked += updated.length;
+  }
+  if (marked) console.log(`Référentiel : ${marked} modèles tout-terrain marqués.`);
 }
 
 // --- Référentiel véhicules (+ « Autre » à chaque niveau) -------------------------------------------------------
@@ -77,7 +123,13 @@ async function seedReference() {
     const models = await db
       .insert(t.vehicleModels)
       .values([
-        ...source.models.map((m) => ({ makeId: make.id, name: m.name, slug: slugify(m.name), vehicleType: m.type })),
+        ...source.models.map((m) => ({
+          makeId: make.id,
+          name: m.name,
+          slug: slugify(m.name),
+          vehicleType: m.type,
+          offroad: Boolean(m.offroad),
+        })),
         { makeId: make.id, name: "Autre", slug: "autre", vehicleType: "car" as const, isOther: true },
       ])
       .returning();

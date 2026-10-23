@@ -63,7 +63,7 @@ export const vehicleWizardLabels = {
   dimmedForYear: (labels: string, year: number) => `${labels} : grisées, ta voiture est de ${year}.`,
   // Étape 4
   photosTitle: "Ses photos",
-  photosText: "Une à huit photos. L'étoile choisit la couverture de sa carte.",
+  photosText: "Une à huit photos. L'étoile choisit la couverture de sa fiche.",
   photosAutoNote:
     "À l'étape suivante, tu vérifies la plaque de chaque photo : repérée par ton téléphone quand il le peut, sinon tu poses le cadre.",
   noPlate: "Envoyer sans flouter : aucune plaque visible",
@@ -75,7 +75,7 @@ export const vehicleWizardLabels = {
   cover: "Couverture",
   makeCover: "Choisir comme couverture",
   plateBlurred: "Plaque floutée",
-  photoRequired: "Ajoute au moins une photo : c'est la couverture de sa carte.",
+  photoRequired: "Ajoute au moins une photo : c'est la couverture de sa fiche.",
   // Étape 5
   plateTitle: "Sa plaque, floutée",
   plateText:
@@ -120,7 +120,7 @@ export const vehicleWizardLabels = {
   resume: "Reprendre l'envoi",
   doneTitle: (name: string) => `Ta ${name} est au garage`,
   doneTitleEdit: "Fiche enregistrée",
-  doneText: "Sa carte est prête : plaque floutée, couverture choisie.",
+  doneText: "Sa fiche est prête : plaque floutée, couverture choisie.",
   explore: "Découvrir les événements autour de moi",
   backToGarage: "Retour au garage",
   seeVehicle: "Voir sa fiche",

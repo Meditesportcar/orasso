@@ -1,40 +1,75 @@
-// Les quatre premières étapes de l'ajout de véhicule (lot 51, prototype `s-vadd`) : marque › modèle › génération dans
-// la liste Orasso (« Autre » sans saisie libre), fiche technique, catégories (origine déduite, styles grisés avec la
-// raison), photos (une à huit, étoile = couverture, croix confirmée, pastille « Plaque floutée »).
-import { Button, Chip, ChipRow, Icon, Photo, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+// Étapes 3 à 5 de l'ajout de véhicule (lot 51 ; lot M1 d'après les maquettes 1.5 à 1.7 et l'artefact `s-vadd`) :
+// marque › modèle › génération dans la liste Orasso (« Autre » sans saisie libre), fiche technique (motorisation,
+// puissance et poids en saisie libre — décision de Damien du 23/10, pas de catalogue —, années en rangée, nuancier,
+// description, préparation), catégories (origine déduite sous cadenas, styles en pastilles, incompatibles cachés ou
+// barrés avec une seule phrase d'explication).
+import { Icon, type IconName, Text, TextField, textStyles, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type CategoryOption,
   vehicleWizardLabels as L,
-  photoLabels,
+  vehicleAddLabels as V,
+  VEHICLE_DESCRIPTION_MAX,
+  VEHICLE_ENGINE_MAX,
   type VehicleGeneration,
   type VehicleMake,
   type VehicleModel,
+  type VehiclePreparation,
+  vehiclePreparationLabels,
+  vehiclePreparations,
   vehicleTypeLabels,
   vehicleTypes,
 } from "@orasso/shared";
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 
-import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
-import { mediaSource } from "@/lib/media";
-import { Muted } from "@/ui/Muted";
+import { ColorPicker } from "./ColorPicker";
+import { typeIcon } from "./LiveCard";
 import {
   type Draft,
+  dimmedNote,
   filterRows,
   generationYears,
-  MAX_PHOTOS,
   originCategories,
-  styleCategories,
+  visibleStyles,
   yearChoices,
 } from "./model";
-import { PhotoBadge } from "./PlateFrameEditor";
-import { ChoiceRow, Grid, GridButton, StepHead, StepNote } from "./parts";
+import { Crumb, FieldLabel, Pill, SelectRow, StepHead, StepNote, TypeButton, YearChip } from "./parts";
 
-const { space1, space2 } = tokens.spacing;
+const { space1, space2, space3 } = tokens.spacing;
 
 type Patch = (change: Partial<Draft>) => void;
 
-// --- 1. Marque, modèle, génération --------------------------------------------------------------------------------
+/** Pictogramme de chaque préparation (maquette 1.6). */
+const PREP_ICONS = {
+  engine: "power",
+  exhaust: "weatherWind",
+  intake: "spark",
+  suspension: "layers",
+  wheels: "rim",
+  brakes: "shield",
+  body: "vehicle",
+  interior: "profile",
+  wrap: "drop",
+} as const satisfies Record<VehiclePreparation, IconName>;
+
+/** Pictogramme des styles (artefact `s-vadd`, maquette 1.7) ; les autres catégories prennent l'étoile. */
+const STYLE_ICONS: Record<string, IconName> = {
+  jdm: "spark",
+  sportive: "power",
+  preparee: "wrench",
+  "track-day": "flag",
+  drift: "weatherWind",
+  stance: "layers",
+  origine: "drop",
+  youngtimer: "wait",
+  ancienne: "star",
+  supercar: "trophy",
+  moto: "moto",
+  utilitaire: "truck",
+  "4x4": "vehicle",
+};
+
+// --- 3. Marque, modèle, génération (1.5) ------------------------------------------------------------------------
 
 export function StepIdentity({
   draft,
@@ -49,6 +84,8 @@ export function StepIdentity({
   models: VehicleModel[];
   generations: VehicleGeneration[];
 }) {
+  const { t } = useTheme();
+  const c = t.color;
   const [search, setSearch] = useState("");
   const make = makes.find((m) => m.id === draft.makeId);
   const model = models.find((m) => m.id === draft.modelId);
@@ -86,127 +123,166 @@ export function StepIdentity({
             title: g.isOther ? L.other : g.name,
             detail: g.isOther ? L.otherHint : generationYears(g),
             other: g.isOther,
+            // Lot M1, tour 2 : motorisation, puissance et poids sont saisis par la personne ; changer de génération
+            // les garde.
             pick: () => patch({ generationId: g.id }),
             selected: draft.generationId === g.id,
           }));
   const onlyOther = rows.length > 0 && rows.every((r) => r.other) && search.trim().length > 0;
+  const crumbs = [
+    make
+      ? {
+          label: make.isOther ? L.other : make.name,
+          a11y: `${L.make} : ${make.isOther ? L.other : make.name}, changer`,
+          onPress: () => patch({ makeId: undefined, modelId: undefined, generationId: undefined }),
+        }
+      : null,
+    model
+      ? {
+          label: model.isOther ? L.other : model.name,
+          a11y: `${L.model} : ${model.isOther ? L.other : model.name}, changer`,
+          onPress: () => patch({ modelId: undefined, generationId: undefined }),
+        }
+      : null,
+  ].filter((x): x is NonNullable<typeof x> => x !== null);
 
   return (
     <>
       <StepHead title={L.identityTitle[draft.vehicleType]} text={L.identityText} />
-      <Grid>
+      <View style={styles.types} accessibilityRole="radiogroup">
         {vehicleTypes.map((v) => (
-          <GridButton
+          <TypeButton
             key={v}
             label={vehicleTypeLabels[v]}
-            icon="vehicle"
+            icon={typeIcon[v]}
             selected={draft.vehicleType === v}
             onPress={() => pickType(v)}
             testID={`vehicle-type-${v}`}
           />
         ))}
-      </Grid>
-      <TextField label={L.search} value={search} onChangeText={setSearch} autoCorrect={false} testID="vehicle-search" />
-      {make ? (
-        <ChipRow>
-          <Chip
-            variant="accent"
-            selected
-            onPress={() => patch({ makeId: undefined, modelId: undefined, generationId: undefined })}
-            accessibilityLabel={`${L.make} : ${make.isOther ? L.other : make.name}, changer`}
+      </View>
+      <View style={[styles.search, { backgroundColor: c.surfaceField, borderColor: c.line }]}>
+        <Icon name="search" size={20} color={c.inkMuted} />
+        <TextInput
+          accessibilityLabel={L.search}
+          value={search}
+          onChangeText={setSearch}
+          autoCorrect={false}
+          placeholder={L.search}
+          placeholderTextColor={c.inkFaint}
+          selectionColor={c.accent}
+          style={[textStyles.body, styles.searchInput, { color: c.ink }]}
+          testID="vehicle-search"
+        />
+        {search ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={V.clearSearch}
+            onPress={() => setSearch("")}
+            style={[styles.clear, { backgroundColor: c.surfaceRaised }]}
+            testID="vehicle-search-clear"
           >
-            {make.isOther ? L.other : make.name}
-          </Chip>
-          {model ? (
-            <Chip
-              variant="accent"
-              selected
-              onPress={() => patch({ modelId: undefined, generationId: undefined })}
-              accessibilityLabel={`${L.model} : ${model.isOther ? L.other : model.name}, changer`}
-            >
-              {model.isOther ? L.other : model.name}
-            </Chip>
-          ) : null}
-          <Muted variant="label">{level === "model" ? L.model : L.generation}</Muted>
-        </ChipRow>
+            <Icon name="close" size={18} color={c.ink} />
+          </Pressable>
+        ) : null}
+      </View>
+      {crumbs.length ? (
+        <Crumb items={crumbs} next={level === "model" ? L.model : L.generation} />
       ) : (
-        <Muted variant="label">{L.make}</Muted>
+        <Text variant="label" color={c.inkMuted}>
+          {L.make}
+        </Text>
       )}
       <View style={styles.list}>
         {rows.map((r) => (
-          <ChoiceRow
+          <SelectRow
             key={r.id}
             title={r.title}
             detail={r.detail}
             selected={r.selected}
-            icon={r.other ? "search" : "vehicle"}
+            other={r.other}
+            icon={r.other ? "help" : typeIcon[draft.vehicleType]}
             onPress={r.pick}
             testID={r.other ? "ref-other" : "ref-row"}
           />
         ))}
       </View>
-      {onlyOther ? <Muted variant="caption">{L.noMatch}</Muted> : null}
+      {onlyOther ? <StepNote icon="info">{L.noMatch}</StepNote> : null}
     </>
   );
 }
 
-// --- 2. Fiche technique -------------------------------------------------------------------------------------------
+// --- 4. Fiche technique (1.6) -----------------------------------------------------------------------------------
 
 export function StepSpecs({
   draft,
   patch,
   generation,
+  onPreparation,
 }: {
   draft: Draft;
   patch: Patch;
   generation: VehicleGeneration | undefined;
+  /** Une préparation vient d'être choisie (la catégorie « Préparée » se coche d'office). */
+  onPreparation: (items: VehiclePreparation[]) => void;
 }) {
   const years = yearChoices(generation && !generation.isOther ? generation : undefined, new Date().getFullYear());
   const [yearText, setYearText] = useState(draft.year ? String(draft.year) : "");
+  const customColor = Boolean(draft.colorCustom);
+  const toggle = (p: VehiclePreparation) => {
+    const next = draft.preparation.includes(p) ? draft.preparation.filter((x) => x !== p) : [...draft.preparation, p];
+    patch({ preparation: next });
+    onPreparation(next);
+  };
   return (
     <>
-      <StepHead title={L.specsTitle} text={L.specsText} />
-      <TextField
-        label={L.engine}
-        value={draft.engine}
-        onChangeText={(engine) => patch({ engine })}
-        placeholder={L.enginePlaceholder}
-        maxLength={80}
-        testID="vehicle-engine"
-      />
-      <View style={styles.two}>
+      <StepHead title={L.specsTitle} text={V.specsText} />
+      {/* Décision de Damien du 23/10 : trois champs libres et facultatifs, bornes de `vehicleSpecsIssue`. */}
+      <View style={styles.stack}>
         <TextField
-          label={L.power}
-          value={draft.powerHp}
-          onChangeText={(powerHp) => patch({ powerHp })}
-          keyboardType="number-pad"
-          maxLength={4}
-          style={styles.half}
-          testID="vehicle-power"
+          label={L.engine}
+          value={draft.engine}
+          onChangeText={(engine) => patch({ engine: engine.slice(0, VEHICLE_ENGINE_MAX) })}
+          help={V.engineHelp}
+          maxLength={VEHICLE_ENGINE_MAX}
+          autoCapitalize="none"
+          testID="vehicle-engine"
         />
-        <TextField
-          label={L.weight}
-          value={draft.weightKg}
-          onChangeText={(weightKg) => patch({ weightKg })}
-          keyboardType="number-pad"
-          maxLength={5}
-          style={styles.half}
-          testID="vehicle-weight"
-        />
+        <View style={styles.two}>
+          <TextField
+            label={L.power}
+            value={draft.powerHp}
+            onChangeText={(powerHp) => patch({ powerHp: powerHp.replace(/\D/g, "") })}
+            keyboardType="number-pad"
+            maxLength={4}
+            help={V.powerHelp}
+            style={styles.grow}
+            testID="vehicle-power"
+          />
+          <TextField
+            label={L.weight}
+            value={draft.weightKg}
+            onChangeText={(weightKg) => patch({ weightKg: weightKg.replace(/\D/g, "") })}
+            keyboardType="number-pad"
+            maxLength={5}
+            help={V.weightHelp}
+            style={styles.grow}
+            testID="vehicle-weight"
+          />
+        </View>
       </View>
-      <Muted variant="label">{L.year}</Muted>
+      <FieldLabel>{V.year}</FieldLabel>
       {years.length ? (
-        <Grid columns={4}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.years}>
           {years.map((y) => (
-            <GridButton
+            <YearChip
               key={y}
-              label={String(y)}
+              year={y}
               selected={draft.year === y}
               onPress={() => patch({ year: draft.year === y ? undefined : y })}
-              testID={`vehicle-year-${y}`}
             />
           ))}
-        </Grid>
+        </ScrollView>
       ) : (
         <TextField
           label={L.year}
@@ -221,40 +297,61 @@ export function StepSpecs({
           testID="vehicle-year"
         />
       )}
-      <Muted variant="label">{L.color}</Muted>
-      <Grid columns={4}>
-        {L.colors.map((color) => (
-          <GridButton
-            key={color}
-            label={color}
-            selected={draft.color === color}
-            onPress={() => patch({ color: draft.color === color ? undefined : color })}
-            testID={`vehicle-color-${color}`}
+      <ColorPicker
+        value={draft.color}
+        custom={customColor}
+        onChange={(color, custom) => patch({ color, colorCustom: custom })}
+      />
+      <View style={styles.stack}>
+        <TextField
+          label={V.description}
+          value={draft.description}
+          onChangeText={(description) => patch({ description: description.slice(0, VEHICLE_DESCRIPTION_MAX) })}
+          placeholder={V.descriptionPlaceholder}
+          multiline
+          numberOfLines={4}
+          maxLength={VEHICLE_DESCRIPTION_MAX}
+          help={V.descriptionHint}
+          testID="vehicle-description"
+        />
+      </View>
+      <FieldLabel>{V.preparation}</FieldLabel>
+      <View style={styles.pills}>
+        {vehiclePreparations.map((p) => (
+          <Pill
+            key={p}
+            label={vehiclePreparationLabels[p]}
+            icon={PREP_ICONS[p]}
+            selected={draft.preparation.includes(p)}
+            onPress={() => toggle(p)}
+            testID={`vehicle-prep-${p}`}
           />
         ))}
-      </Grid>
+      </View>
     </>
   );
 }
 
-// --- 3. Catégories --------------------------------------------------------------------------------------------------
+// --- 5. Catégories (1.7) ------------------------------------------------------------------------------------------
 
 export function StepCategories({
   draft,
   patch,
   categories,
   make,
-  ageNote,
 }: {
   draft: Draft;
   patch: Patch;
   categories: CategoryOption[];
   make: VehicleMake | undefined;
-  ageNote: string | null;
 }) {
   const { t } = useTheme();
+  const c = t.color;
   const origins = originCategories(categories, make?.isOther ? null : make?.country);
-  const styles2 = styleCategories(categories);
+  const styles2 = visibleStyles(categories);
+  const note = dimmedNote(categories, draft.year, draft.vehicleType);
+  const prepared = categories.find((x) => x.slug === "preparee");
+  const preparedNote = draft.preparation.length > 0 && prepared && draft.categoryIds.includes(prepared.id);
   const toggle = (id: string) =>
     patch({
       categoryIds: draft.categoryIds.includes(id)
@@ -264,160 +361,130 @@ export function StepCategories({
   return (
     <>
       <StepHead title={L.categoriesTitle} text={L.categoriesText} />
-      {origins.map((o) => (
-        <View
-          key={o.id}
-          style={[styles.origin, { backgroundColor: t.color.surfaceRaised }]}
-          accessibilityLabel={`${o.label}, ${L.deducedFrom(make?.name ?? "")}`}
-          testID="vehicle-origin"
-        >
-          <View style={styles.originText}>
-            <Text variant="bodyStrong" color={t.color.ink}>
-              {o.label}
-            </Text>
-            <Muted variant="caption">{L.deducedFrom(make?.name ?? "")}</Muted>
+      {origins.map((o) => {
+        const line = V.originLine(o.label, make?.country ?? null, make?.name ?? "");
+        return (
+          <View
+            key={o.id}
+            style={[styles.origin, { backgroundColor: c.surface }]}
+            accessible
+            accessibilityLabel={`${line.title}, ${line.detail}, ${V.originLocked}`}
+            testID="vehicle-origin"
+          >
+            <Flag country={make?.country ?? null} />
+            <View style={styles.grow}>
+              <Text variant="bodyStrong" color={c.ink}>
+                {line.title}
+              </Text>
+              <Text variant="caption" color={c.inkMuted}>
+                {line.detail}
+              </Text>
+            </View>
+            <Icon name="lock" size={16} color={c.inkMuted} />
           </View>
-          <Icon name="check" size={20} color={t.color.accentText} />
-        </View>
-      ))}
-      <Muted variant="label">{L.styles}</Muted>
-      <Grid>
-        {styles2.map((c) => (
-          <GridButton
-            key={c.id}
-            label={c.label}
-            selected={draft.categoryIds.includes(c.id)}
-            disabled={!c.eligible}
-            reason={c.eligible ? null : c.reason}
-            onPress={() => toggle(c.id)}
-            testID={c.eligible ? "vehicle-style" : "vehicle-style-off"}
+        );
+      })}
+      <FieldLabel>{L.styles}</FieldLabel>
+      <View style={styles.pills}>
+        {styles2.map((s) => (
+          <Pill
+            key={s.id}
+            label={s.label}
+            icon={STYLE_ICONS[s.slug] ?? "star"}
+            selected={draft.categoryIds.includes(s.id)}
+            off={!s.eligible}
+            hint={s.eligible ? null : s.reason}
+            onPress={() => toggle(s.id)}
+            testID={s.eligible ? "vehicle-style" : "vehicle-style-off"}
           />
         ))}
-      </Grid>
-      {ageNote ? <StepNote icon="alert">{ageNote}</StepNote> : null}
-    </>
-  );
-}
-
-// --- 4. Photos ------------------------------------------------------------------------------------------------------
-
-export function StepPhotos({
-  draft,
-  onAdd,
-  onRemove,
-  onCover,
-  busy,
-}: {
-  draft: Draft;
-  onAdd: () => void;
-  onRemove: (index: number) => void;
-  onCover: (index: number) => void;
-  busy: boolean;
-}) {
-  const { t } = useTheme();
-  const [removing, setRemoving] = useState<number | null>(null);
-  return (
-    <>
-      <StepHead title={L.photosTitle} text={L.photosText} />
-      <StepNote icon="plate">{L.photosAutoNote}</StepNote>
-      <View style={styles.photos} testID="new-vehicle-photos">
-        {draft.photos.map((p, i) => (
-          <View key={p.key} style={styles.tile}>
-            <View style={[styles.tileInner, { backgroundColor: t.color.surfaceSunken }]}>
-              <PhotoThumb uri={p.uri} remote={Boolean(p.remoteId)} />
-              <View style={styles.tileTop}>
-                {i === 0 ? <PhotoBadge accent>{L.cover}</PhotoBadge> : null}
-                {p.rects.length || p.plateBlurred ? <PhotoBadge>{L.plateBlurred}</PhotoBadge> : null}
-              </View>
-              <View style={styles.tileActions}>
-                {i === 0 ? null : (
-                  <Button
-                    variant="close"
-                    icon="grade"
-                    onPhoto
-                    label={L.makeCover}
-                    disabled={busy}
-                    onPress={() => onCover(i)}
-                    testID="photo-cover"
-                  />
-                )}
-                <Button
-                  variant="close"
-                  onPhoto
-                  label={photoLabels.remove}
-                  disabled={busy}
-                  onPress={() => setRemoving(i)}
-                  testID="photo-remove"
-                />
-              </View>
-            </View>
-          </View>
-        ))}
-        {draft.photos.length < MAX_PHOTOS ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={photoLabels.addOne}
-            disabled={busy}
-            onPress={onAdd}
-            testID="vehicle-photo-add"
-            style={[styles.tile, styles.add, { borderColor: t.color.line }]}
-          >
-            <Muted variant="bodyStrong">{L.addPhoto}</Muted>
-            <Muted variant="caption">{L.photoCount(draft.photos.length)}</Muted>
-          </Pressable>
-        ) : null}
       </View>
-      <ConfirmSheet
-        modal
-        visible={removing !== null}
-        title={photoLabels.removeTitle}
-        body={photoLabels.removeBody}
-        confirmLabel={photoLabels.removeConfirm}
-        confirmIcon="close"
-        danger
-        onConfirm={() => {
-          if (removing !== null) onRemove(removing);
-          setRemoving(null);
-        }}
-        onClose={() => setRemoving(null)}
-      />
+      {note || preparedNote ? (
+        <StepNote icon="info" testID="vehicle-styles-note">
+          {[note, preparedNote ? V.preparedChecked : null].filter(Boolean).join(" ")}
+        </StepNote>
+      ) : null}
     </>
   );
 }
 
-function PhotoThumb({ uri, remote }: { uri: string; remote: boolean }) {
-  return <Photo source={remote ? mediaSource(uri) : { uri }} style={StyleSheet.absoluteFill} />;
+/**
+ * Drapeau du pays de la marque (`.vo-flag`), dessiné en bandes : Japon (disque), France, Italie, Allemagne,
+ * Royaume-Uni (croix simple), États-Unis (bandes) ; sinon un rectangle neutre.
+ */
+function Flag({ country }: { country: string | null }) {
+  const { t } = useTheme();
+  const c = t.color;
+  const art = FLAGS[country ?? ""];
+  return (
+    <View style={[styles.flag, { backgroundColor: art?.ground ?? c.surfaceRaised, borderColor: c.line }]}>
+      {art?.bands ? (
+        <View style={[StyleSheet.absoluteFill, { flexDirection: art.vertical ? "column" : "row" }]}>
+          {art.bands.map((b, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: bandes d'un drapeau, ordre fixe
+            <View key={i} style={{ flex: 1, backgroundColor: b }} />
+          ))}
+        </View>
+      ) : null}
+      {art?.disc ? <View style={[styles.disc, { backgroundColor: art.disc }]} /> : null}
+    </View>
+  );
 }
+
+// Couleurs des drapeaux : des données (comme les teintes de carrosserie), pas des jetons d'interface.
+const FLAGS: Record<string, { ground?: string; bands?: string[]; vertical?: boolean; disc?: string }> = {
+  JP: { ground: "#f3ebdd", disc: "#c8322b" },
+  FR: { bands: ["#2f5fb8", "#f3ebdd", "#c8322b"] },
+  IT: { bands: ["#2e8b57", "#f3ebdd", "#c8322b"] },
+  DE: { bands: ["#131417", "#c8322b", "#e9b824"], vertical: true },
+  GB: { ground: "#2f5fb8", disc: undefined, bands: ["#2f5fb8", "#f3ebdd", "#2f5fb8"], vertical: true },
+  US: { bands: ["#c8322b", "#f3ebdd", "#c8322b", "#f3ebdd", "#c8322b"], vertical: true },
+  SE: { bands: ["#2f5fb8", "#e9b824", "#2f5fb8"], vertical: true },
+  KR: { ground: "#f3ebdd", disc: "#2f5fb8" },
+};
 
 const styles = StyleSheet.create({
-  list: { gap: space2 },
-  two: { flexDirection: "row", gap: space2 },
-  half: { flex: 1 },
-  origin: {
+  types: { flexDirection: "row", gap: space2 },
+  search: {
     flexDirection: "row",
     alignItems: "center",
     gap: space2,
-    padding: space2 + space1,
+    minHeight: 48,
     borderRadius: tokens.radius.radiusMd,
+    borderWidth: 1.5,
+    paddingLeft: space3,
+    paddingRight: space1 + 2,
   },
-  originText: { flex: 1, gap: 2 },
-  photos: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  tile: { width: "48%", aspectRatio: 4 / 5 },
-  tileInner: { flex: 1, borderRadius: tokens.radius.radiusMd, overflow: "hidden" },
-  tileTop: { position: "absolute", left: space2, top: space2, gap: space1, alignItems: "flex-start" },
-  tileActions: {
-    position: "absolute",
-    right: space2,
-    bottom: space2,
-    flexDirection: "row",
-    gap: space1,
-  },
-  add: {
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderRadius: tokens.radius.radiusMd,
+  searchInput: { flex: 1, minWidth: 0, height: 46, paddingVertical: 0, outlineStyle: "none" } as object,
+  clear: {
+    width: 36,
+    height: 36,
+    borderRadius: tokens.radius.radiusChip,
     alignItems: "center",
     justifyContent: "center",
-    gap: space1,
   },
+  grow: { flex: 1, minWidth: 0 },
+  list: { gap: space2 },
+  stack: { gap: space2 },
+  two: { flexDirection: "row", gap: space2 },
+  years: { gap: space1 + 2, paddingRight: space2 },
+  pills: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
+  origin: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space3,
+    paddingVertical: space3,
+    paddingHorizontal: space3 + 2,
+    borderRadius: tokens.radius.radiusMd,
+  },
+  flag: {
+    width: 34,
+    height: 24,
+    borderRadius: tokens.radius.radiusSm / 2,
+    overflow: "hidden",
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  disc: { width: 11, height: 11, borderRadius: tokens.radius.radiusPill },
 });

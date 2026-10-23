@@ -1,3 +1,4 @@
+// Lot M1 : adapté au nouvel ordre de l'ajout (photos → plaque → marque…) ; les messages sont sur la photo.
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { apiCall, type Cookie, MOBILE, SEED_PASSWORD, signUpApi, unique } from "./helpers";
@@ -40,7 +41,7 @@ async function shot(page: Page, name: string) {
 }
 
 const next = (page: Page) => page.getByTestId("vehicle-step-next").click();
-const error = (page: Page) => page.getByTestId("vehicle-step-error");
+const message = (page: Page) => page.getByTestId("plate-message");
 
 test("étape Plaque : sans flouter confirmé sur la photo, message vivant, numéro obligatoire et lisible", async ({
   browser,
@@ -59,14 +60,7 @@ test("étape Plaque : sans flouter confirmé sur la photo, message vivant, numé
 
   await page.goto("/vehicule/nouveau");
   await afterOpening(page);
-  await page.getByLabel("Marque ou modèle").fill("toyota");
-  await page.getByRole("radio", { name: "Toyota", exact: false }).first().click();
-  await page.getByRole("radio", { name: "Supra", exact: false }).first().click();
-  await page.getByRole("radio", { name: "Mk5", exact: false }).first().click();
-  await next(page);
-  await page.getByTestId("vehicle-year-2021").click();
-  await next(page);
-  await next(page);
+  // Nouvel ordre : photos (recadrage carré) → plaque.
   const chooser = page.waitForEvent("filechooser");
   await page.getByTestId("vehicle-photo-add").click();
   const file =
@@ -74,37 +68,50 @@ test("étape Plaque : sans flouter confirmé sur la photo, message vivant, numé
       ? { name: "nissan.jpg", mimeType: "image/jpeg", buffer: readFileSync(PHOTO) }
       : { name: "damier.png", mimeType: "image/png", buffer: checkerPhoto() };
   await (await chooser).setFiles(file);
+  await expect(page.getByTestId("square-cropper")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("crop-validate").click();
   await expect(page.getByTestId("new-vehicle-photos").getByText("Couverture")).toBeVisible({ timeout: 20_000 });
   await next(page);
 
-  // Rien de réglé : la photo d'abord.
+  // Rien de réglé : la photo d'abord, avec son message sur la photo.
   await expect(page.getByTestId("plate-none")).toBeVisible();
   await next(page);
-  await expect(error(page)).toContainText("Photo 1 : place le cadre");
+  await expect(message(page)).toContainText("Photo 1 : pose le cadre");
   await shot(page, "01-photo-a-regler");
 
-  // « Envoyer sans flouter » : confirmation avec la photo.
+  // « Aucune plaque » : confirmation sur la photo.
   await page.getByTestId("plate-none").click();
-  await expect(page.getByTestId("plate-none-photo")).toBeVisible();
-  await expect(page.getByText("Aucune plaque visible sur cette photo ?").first()).toBeVisible();
+  await expect(page.getByTestId("plate-none-confirm")).toContainText("Aucune plaque visible sur cette photo ?");
   await shot(page, "02-sans-flouter-confirmation");
-  await page.getByRole("button", { name: "Annuler" }).click();
+  await page.getByTestId("plate-none-cancel").click();
   await expect(page.getByTestId("plate-none")).toHaveAttribute("aria-checked", "false");
 
-  // Cadre posé : le message de la photo laisse place à celui du numéro, sans nouvel appui sur « Envoyer ».
+  // Cadre posé : le message de la photo disparaît tout seul, sans nouvel appui ; le numéro manquant a son message.
   await page.getByTestId("plate-frame-add").click();
-  await expect(error(page)).toContainText("Indique le numéro de plaque");
+  await expect(message(page)).toHaveCount(0);
+  await next(page);
+  await expect(page.getByTestId("vehicle-plate-error")).toContainText("Indique le numéro de plaque");
   await shot(page, "03-numero-obligatoire");
 
   // Format étranger : simple avertissement ; format W garage saisi n'importe comment : aucun avertissement.
   await page.getByTestId("vehicle-plate").fill("m-ab 1234");
   await expect(page.getByText("Ce n'est pas un format français").first()).toBeVisible();
-  await expect(error(page)).toHaveCount(0);
+  await expect(page.getByTestId("vehicle-plate-error")).toHaveCount(0);
   await shot(page, "04-plaque-etrangere-avertissement");
   const plate = `W-${100 + Math.floor(Math.random() * 900)}-AX`;
   await page.getByTestId("vehicle-plate").fill(plate.replaceAll("-", " ").toLowerCase());
   await expect(page.getByText("Ce n'est pas un format français")).toHaveCount(0);
   await shot(page, "05-w-garage-saisi");
+  await expect(page.getByTestId("vehicle-plate-error")).toHaveCount(0);
+  // Plaque réglée : le reste de l'ajout (marque, fiche, catégories) jusqu'à l'envoi.
+  await next(page);
+  await page.getByLabel("Marque ou modèle").fill("toyota");
+  await page.getByRole("radio", { name: "Toyota", exact: false }).first().click();
+  await page.getByRole("radio", { name: "Supra", exact: false }).first().click();
+  await page.getByRole("radio", { name: "Mk5", exact: false }).first().click();
+  await next(page);
+  await page.getByTestId("vehicle-year-2021").click();
+  await next(page);
   await next(page);
   await expect(page.getByTestId("vehicle-done-title")).toBeVisible({ timeout: 60_000 });
 

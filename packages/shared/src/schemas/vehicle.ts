@@ -5,6 +5,16 @@ import type { PlateTransferInfo, VehicleCertification } from "./garage";
 
 const currentYear = new Date().getUTCFullYear();
 
+/**
+ * Fiche technique en saisie libre (décision de Damien du 23/10, lot M1, tour 2 : pas de catalogue des motorisations,
+ * le propriétaire connaît sa voiture, préparation comprise). Les trois champs sont facultatifs.
+ */
+export const VEHICLE_ENGINE_MAX = 60;
+export const VEHICLE_POWER_MIN = 1;
+export const VEHICLE_POWER_MAX = 2000;
+export const VEHICLE_WEIGHT_MIN = 50;
+export const VEHICLE_WEIGHT_MAX = 10000;
+
 const vehicleFields = z.object({
   vehicleType: z.enum(vehicleTypes),
   makeId: z.uuid(),
@@ -17,9 +27,9 @@ const vehicleFields = z.object({
     .max(currentYear + 1)
     .nullish(),
   color: optionalText(40),
-  engine: optionalText(80),
-  powerHp: z.number().int().min(1).max(2500).nullish(),
-  weightKg: z.number().int().min(50).max(40000).nullish(),
+  engine: optionalText(VEHICLE_ENGINE_MAX),
+  powerHp: z.number().int().min(VEHICLE_POWER_MIN).max(VEHICLE_POWER_MAX).nullish(),
+  weightKg: z.number().int().min(VEHICLE_WEIGHT_MIN).max(VEHICLE_WEIGHT_MAX).nullish(),
   /** Format libre (plaques étrangères ou anciennes). */
   plate: optionalText(20),
   unregistered: z.boolean().default(false),
@@ -47,7 +57,11 @@ function plateRule(v: Parameters<typeof vehiclePlateIssue>[0], ctx: z.Refinement
   if (message) ctx.addIssue({ code: "custom", path: ["plate"], message });
 }
 
-export const vehicleCreateSchema = vehicleFields.superRefine(plateRule);
+/**
+ * Création. Lot M1, tour 2 : `clientKey` facultative, tirée par l'appli à l'ouverture de l'ajout : la même clé renvoie
+ * le véhicule déjà créé (« Reprendre » après une réponse perdue ne crée pas de doublon).
+ */
+export const vehicleCreateSchema = vehicleFields.extend({ clientKey: z.uuid().optional() }).superRefine(plateRule);
 export type VehicleCreate = z.infer<typeof vehicleCreateSchema>;
 
 /** Mise à jour partielle ; la règle de plaque est revérifiée par le service sur la fiche complète. */
