@@ -100,7 +100,7 @@ async function eventIn(damien: Cookie, days: number, title: string) {
   });
   expect(created.status).toBe(201);
   expect((await apiCall(damien, "POST", `/events/${created.data.id}/publish`)).status).toBe(200);
-  return created.data;
+  return { ...created.data, title };
 }
 
 test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async ({ browser }) => {
@@ -151,13 +151,45 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
     const { ctx, page } = await open(browser, theme);
     await signIn(page, email);
 
-    // 1. Fiche d'un événement ouvert : pas de créneau des exposants affiché ; la feuille de candidature.
+    // 1. Fiche d'un événement ouvert : bande de l'organisateur fixe, pavé J-x, fiche compacte ; pas de créneau des
+    // exposants affiché ; la feuille de candidature.
     await goto(page, `/e/${open6.slug}`);
     await expect(page.getByTestId("event-page")).toBeVisible({ timeout: 30_000 });
     await shot(page, `fiche-haut-${theme}`);
     if (AFTER) {
+      await expect(page.getByTestId("org-bar")).toContainText("MéditeSportCar");
+      await expect(page.getByTestId("org-bar")).toContainText("abonné");
+      await expect(page.getByTestId("event-countdown")).toContainText("J-9");
+      await expect(page.getByTestId("event-when")).toContainText("18 h");
+      await expect(page.getByTestId("event-when")).not.toContainText("17 h");
+      await expect(page.getByTestId("event-seats")).toContainText("places exposants restantes");
+      await expect(page.getByTestId("event-public")).toContainText("Public");
       await expect(page.getByTestId("arrival-exhibitors")).toHaveCount(0);
       await expect(page.getByText(/conseillé/i)).toHaveCount(0);
+      await expect(page.getByTestId("event-primary")).toHaveText(/Candidater$/);
+      await page.getByTestId("admission-help-admission").click();
+      await expect(page.getByTestId("admission-help-text")).toContainText("L'équipe organisatrice choisit");
+      // La bande reste en haut quand on fait défiler la fiche.
+      await page.getByTestId("event-page").evaluate((el) => el.scrollTo(0, 900));
+      await page.waitForTimeout(400);
+      const bar = await page.getByTestId("org-bar").boundingBox();
+      expect(bar?.y ?? 99).toBeLessThan(5);
+      await shot(page, `fiche-defile-${theme}`);
+      await page.getByTestId("event-page").evaluate((el) => el.scrollTo(0, 0));
+      await audit(page);
+      // ✉ : « Écrire à MéditeSportCar » avec l'étiquette « À propos de ».
+      await page.getByTestId("org-write").click();
+      await expect(page.getByTestId("write-sheet")).toBeVisible();
+      await expect(page.getByTestId("write-sheet").getByTestId("message-about")).toContainText(open6.title);
+      await shot(page, `ecrire-${theme}`);
+      await page.getByTestId("write-body").fill(`Remorque possible ? (${theme})`);
+      await page.getByTestId("write-send").click();
+      await expect(page.getByTestId("write-sent")).toBeVisible({ timeout: 15_000 });
+      await page.getByTestId("write-open").click();
+      await expect(page.getByText(`Remorque possible ? (${theme})`)).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("message-about").last()).toContainText(open6.title);
+      await goto(page, `/e/${open6.slug}`);
+      await expect(page.getByTestId("event-page")).toBeVisible({ timeout: 30_000 });
     }
     await page.getByTestId("event-primary").click();
     await expect(page.getByTestId("cand-sheet")).toBeVisible({ timeout: 15_000 });
@@ -168,7 +200,7 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await expect(page.getByTestId("cand-follow")).toContainText("Suivre MéditeSportCar");
       await expect(page.getByTestId("cand-newsletter")).toHaveAttribute("aria-checked", "false");
       await expect(page.getByTestId("arrival-seen")).toContainText("J'ai vu le créneau d'arrivée");
-      await expect(page.getByTestId("arrival-seen")).toContainText("17 h 00 à 17 h 45, strict");
+      await expect(page.getByTestId("arrival-seen")).toContainText("17 h à 17 h 45, strict");
       await expect(page.getByTestId("cand-send")).toBeDisabled();
       await page.getByTestId("arrival-seen").click();
       await page.getByTestId("cand-rules").click();
@@ -214,6 +246,25 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await expect(page.getByTestId("gps-map")).toBeVisible();
     }
 
+    // 3 bis. La fiche « inscrit » : « Ta place » en tête (statut, J-x, véhicule, zone, créneau privé, Se retirer),
+    // « Mon QR » en bouton principal ; ouverte en touchant le ticket de Sorties.
+    if (AFTER) {
+      await goto(page, "/sorties");
+      const ticket = page.getByTestId("ticket-application-open").filter({ hasText: far.title });
+      await expect(ticket).toBeVisible({ timeout: 30_000 });
+      await ticket.click({ position: { x: 30, y: 30 } });
+      await expect(page.getByTestId("my-place")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("my-place")).toContainText("Retenue");
+      await expect(page.getByTestId("my-place-countdown")).toHaveText("J-6");
+      await expect(page.getByTestId("my-place")).toContainText("BMW");
+      await expect(page.getByTestId("my-place-arrival")).toContainText("17:00 – 17:45");
+      await expect(page.getByTestId("my-place-arrival")).toContainText("Arrivée exposants, strict");
+      await expect(page.getByTestId("my-place-withdraw")).toBeVisible();
+      await expect(page.getByTestId("event-primary")).toHaveText(/Mon QR/);
+      await audit(page);
+      await shot(page, `fiche-inscrit-${theme}`);
+    }
+
     // 4. La conversation : l'étiquette « À propos de » l'événement, des deux côtés.
     await goto(page, `/boite/${conv.data.id}`);
     await expect(page.getByText("Bonjour, je peux venir avec une remorque ?")).toBeVisible({ timeout: 30_000 });
@@ -221,6 +272,39 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
     if (AFTER) {
       await expect(page.getByTestId("message-about").first()).toContainText(soon.title.slice(0, 20));
       await expect(page.getByTestId("message-about").first()).toContainText("À propos de");
+    }
+
+    // 5. Explorer : cartes en portrait, « Trier : Distance ▾ » dans une feuille, bascule « Liste | Carte » flottante.
+    await goto(page, "/explorer");
+    await expect(page.getByTestId("event-row").first()).toBeVisible({ timeout: 30_000 });
+    const later = page.getByText("Plus tard", { exact: true });
+    if (await later.isVisible().catch(() => false)) await later.click();
+    await shot(page, `explorer-${theme}`);
+    if (AFTER) {
+      await expect(page.getByTestId("sort-open")).toContainText("Distance");
+      await expect(page.getByTestId("sort-line")).toContainText("événement");
+      await expect(page.getByTestId("list-map-toggle")).toBeVisible();
+      await audit(page);
+      await page.getByTestId("sort-open").click();
+      await expect(page.getByTestId("sort-sheet")).toBeVisible();
+      await shot(page, `explorer-trier-${theme}`);
+      await page.getByTestId("sort-recent").click();
+      await expect(page.getByTestId("sort-sheet")).toHaveCount(0);
+      await expect(page.getByTestId("sort-open")).toContainText("Nouveautés");
+      // Le dernier publié de la recette arrive en tête.
+      await expect(page.getByTestId("event-row").first()).toContainText(open6.title, { timeout: 30_000 });
+      // Gardé pour la prochaine visite.
+      await goto(page, "/explorer");
+      await expect(page.getByTestId("sort-open")).toContainText("Nouveautés", { timeout: 30_000 });
+      await page.getByTestId("sort-open").click();
+      await page.getByTestId("sort-distance").click();
+      await page.getByTestId("map-toggle").click();
+      await expect(page).toHaveURL(/\/carte/, { timeout: 30_000 });
+      await expect(page.getByTestId("list-map-toggle")).toBeVisible();
+      await page.waitForTimeout(2500);
+      await shot(page, `carte-${theme}`);
+      await page.getByTestId("list-toggle").click();
+      await expect(page).toHaveURL(/explorer/, { timeout: 30_000 });
     }
     await ctx.close();
   }

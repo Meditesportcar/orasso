@@ -12,10 +12,13 @@ export function ContactOrganizer({
   structureId,
   connected,
   retour,
+  about,
 }: {
   structureId: string;
   connected: boolean;
   retour: string;
+  /** Lot M4 : écrit depuis la fiche d'un événement : le message part avec le contexte « À propos de ». */
+  about?: { eventId: string; title: string; when: string; structureName: string };
 }) {
   const busy = useNavigation().state !== "idle";
   const action = useActionData() as { messageError?: string | null } | undefined;
@@ -24,6 +27,34 @@ export function ContactOrganizer({
       <Button variant="secondary" icon="chat" href={`/connexion?retour=${encodeURIComponent(retour)}`} fullWidth>
         {messagingLabels.contactOrganizer}
       </Button>
+    );
+  }
+  if (about) {
+    return (
+      <Form method="post" className="s-stack s-stack--tight" id="ecrire" data-testid="write-organizer">
+        <input type="hidden" name="intent" value="contact_organizer" />
+        <input type="hidden" name="structureId" value={structureId} />
+        <input type="hidden" name="aboutEventId" value={about.eventId} />
+        <strong>{messagingLabels.writeTo(about.structureName)}</strong>
+        <div className="s-about" data-testid="write-about">
+          <small className="o-t-label">{messagingLabels.aboutEvent}</small>
+          <strong>{about.title}</strong>
+          <span className="o-t-caption s-muted">{about.when}</span>
+        </div>
+        <p className="o-t-caption s-muted">{messagingLabels.aboutEventHint}</p>
+        <label className="o-t-label" htmlFor="write-body">
+          {messagingLabels.yourMessage}
+        </label>
+        <textarea id="write-body" name="body" className="s-textarea" rows={3} maxLength={2000} required />
+        <Button type="submit" variant="secondary" icon="send" loading={busy} fullWidth data-testid="contact-organizer">
+          Envoyer
+        </Button>
+        {action?.messageError && (
+          <p className="s-error" role="alert">
+            {action.messageError}
+          </p>
+        )}
+      </Form>
     );
   }
   return (

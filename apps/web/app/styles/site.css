@@ -209,6 +209,96 @@
   flex-wrap: wrap;
   gap: var(--space-8);
 }
+/* Lot M4 (maquette 4.2, correction de Damien) : la bande de l'organisateur, fixée en haut de la fiche. */
+.ev__orgbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 58px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border-bottom: 2px solid var(--bar-edge);
+  background: var(--bar);
+  color: var(--bar-ink);
+}
+.ev__orgbar-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: inherit;
+  text-decoration: none;
+}
+.ev__orgbar-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+.ev__orgbar-logo--initials {
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  font-size: 12px;
+}
+.ev__orgbar-text {
+  display: grid;
+  min-width: 0;
+}
+.ev__orgbar-text strong {
+  color: var(--bar-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13.5px;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+.ev__orgbar-text .o-t-caption {
+  color: var(--bar-muted);
+}
+.ev__orgbar-ok {
+  color: var(--accent);
+  display: inline-flex;
+}
+.ev__orgbar-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 10px;
+  border: 1.5px solid color-mix(in srgb, var(--bar-ink) 35%, transparent);
+  background: transparent;
+  color: var(--bar-ink);
+  font: inherit;
+  font-weight: 800;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ev__orgbar-follow.is-on {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.ev__orgbar-mail {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--bar-ink);
+}
 .ev__main {
   flex: 999 1 520px;
   min-width: 0;
@@ -1665,6 +1755,22 @@
 }
 .s-bubble--deleted {
   opacity: 0.7;
+}
+/* Lot M4 (maquette 4.2) : « À propos de » un événement, bordé de moutarde (`.ctx`), des deux côtés. */
+.s-about {
+  display: grid;
+  gap: 2px;
+  align-self: stretch;
+  max-width: 520px;
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.s-about small {
+  color: var(--accent-text);
 }
 .s-bubble--pending {
   opacity: 0.6;

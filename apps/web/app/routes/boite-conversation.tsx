@@ -245,6 +245,16 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
           return (
             <li key={m.id} className={`s-chat__item${mine ? " s-chat__item--mine" : ""}`} data-testid="message">
               {day && <div className="s-chat__day o-t-caption s-muted">{formatDay(m.createdAt)}</div>}
+              {/* Lot M4 : « À propos de » l'événement d'où le message a été écrit, quand le sujet change. */}
+              {m.about && m.about.eventId !== prev?.about?.eventId && (
+                <a className="s-about" href={`/e/${m.about.slug}`} data-testid="message-about">
+                  <small className="o-t-label">{messagingLabels.aboutEvent}</small>
+                  <strong>{m.about.title}</strong>
+                  <span className="o-t-caption s-muted">
+                    {[formatDay(m.about.startsAt), m.about.city].filter(Boolean).join(" · ")}
+                  </span>
+                </a>
+              )}
               {(!mine || (m.asStructure && c.side === "structure")) &&
                 (prev?.sender?.userId !== m.sender?.userId || day) && (
                   <span className="o-t-caption s-muted">{label(m)}</span>

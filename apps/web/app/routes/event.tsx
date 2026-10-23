@@ -14,7 +14,7 @@ import {
   type AudiencePrizeBoard,
   applicationStatusLabels,
   arrivalLabel,
-  arrivalTexts,
+  arrivalTime,
   type Category,
   crewLabels,
   type EventProviderPublic,
@@ -419,8 +419,66 @@ function EventPage({
               ? "Brouillon"
               : "Annulé";
 
+  // Lot M4 : le créneau des exposants, que l'API ne donne qu'aux concernés ; affiché seulement à l'inscrit.
+  const mySlot = mine.length > 0 ? event.arrivals.exhibitors : null;
+  const publicFrom = event.arrivals.public?.strict ? arrivalTime(event.arrivals.public.from) : null;
+  const whenShort = formatWhen(event.startsAt, event.endsAt);
+
   return (
     <div className="ev">
+      {/* Lot M4 (maquette 4.2, correction de Damien) : la bande de l'organisateur, fixée en haut de la fiche. */}
+      <div className="ev__orgbar" data-testid="org-bar">
+        <a className="ev__orgbar-who" href={`/o/${structure.slug}`}>
+          {structure.logoUrl ? (
+            <img className="ev__orgbar-logo" src={structure.logoUrl} alt="" />
+          ) : (
+            <span className="ev__orgbar-logo ev__orgbar-logo--initials" aria-hidden="true">
+              {structure.name.slice(0, 2).toUpperCase()}
+            </span>
+          )}
+          <span className="ev__orgbar-text">
+            <strong>
+              {structure.name}
+              {structure.verified && (
+                <span className="ev__orgbar-ok" role="img" aria-label="Structure vérifiée">
+                  <Icon name="check" size={14} />
+                </span>
+              )}
+            </strong>
+            <span className="o-t-caption">{structure.followersCount} abonnés · organisateur</span>
+          </span>
+        </a>
+        {connected ? (
+          <Form method="post">
+            <input type="hidden" name="structureId" value={structure.id} />
+            <button
+              type="submit"
+              name="intent"
+              value={structure.isFollowing ? "unfollow" : "follow"}
+              className={`ev__orgbar-follow${structure.isFollowing ? " is-on" : ""}`}
+              data-testid="follow-structure"
+            >
+              <Icon name={structure.isFollowing ? "check" : "add"} size={14} />
+              {structure.isFollowing ? "Suivie" : "Suivre"}
+            </button>
+          </Form>
+        ) : (
+          <a className="ev__orgbar-follow" href={`/connexion?retour=${retour}`} data-testid="follow-structure">
+            <Icon name="add" size={14} />
+            Suivre
+          </a>
+        )}
+        {structure.verified && (
+          <a
+            className="ev__orgbar-mail"
+            href={connected ? "#ecrire" : `/connexion?retour=${retour}`}
+            aria-label={`Écrire à ${structure.name}`}
+            data-testid="org-write"
+          >
+            <Icon name="chat" size={20} />
+          </a>
+        )}
+      </div>
       <div className="ev__main s-plated">
         {event.status === "draft" && (
           <p className="s-notice s-notice--alert" role="status" data-testid="draft-preview">
@@ -478,39 +536,9 @@ function EventPage({
           }
         />
 
-        {/* Créneaux d'arrivée (lot 47) : deux plaques, exposants et public. */}
-        {(event.arrivals.exhibitors || event.arrivals.public) && (
-          <section className="s-section s-section--first" data-testid="arrivals" aria-labelledby="arrivals-title">
-            <h2 className="s-h2" id="arrivals-title">
-              {L.event.arrivals}
-            </h2>
-            <div className="ev__arrivals">
-              {(
-                [
-                  [L.event.arrivalsExhibitors, event.arrivals.exhibitors],
-                  [L.event.arrivalsPublic, event.arrivals.public],
-                ] as const
-              ).map(([label, slot]) =>
-                slot ? (
-                  <div key={label} className="ev__plaque" data-testid="arrival-plaque">
-                    <span className="o-t-label">{label}</span>
-                    <strong className="o-t-number-narrow">
-                      {arrivalLabel(slot)
-                        .replace(/^Arrivée /, "")
-                        .replace(/ \(.*\)$/, "")}
-                    </strong>
-                    <p className="o-t-caption">{slot.strict ? arrivalTexts.strict : arrivalTexts.advised}</p>
-                    {slot.note && <p className="o-t-caption">{slot.note}</p>}
-                  </div>
-                ) : null,
-              )}
-            </div>
-          </section>
-        )}
-
-        <section
-          className={`s-section${event.arrivals.exhibitors || event.arrivals.public ? "" : " s-section--first"}`}
-        >
+        {/* Lot M4 (correction de Damien) : plus de plaques de créneaux publiques. Le créneau strict des exposants est
+            privé (dans « Ta place », à droite, pour l'inscrit) ; aucun horaire « conseillé » n'est affiché. */}
+        <section className="s-section s-section--first">
           <h2 className="s-h2">Véhicules recherchés</h2>
           <ChipRow>
             {wanted.map((label) => (
@@ -682,7 +710,8 @@ function EventPage({
             ]}
           />
           {mine.length > 0 ? (
-            <div className="s-stack s-stack--tight">
+            <div className="s-stack s-stack--tight" data-testid="my-place">
+              <span className="s-label o-t-label">Ta place</span>
               {mine.map((a) => {
                 const badge = badgeFor({ status: a.status });
                 return (
@@ -696,6 +725,16 @@ function EventPage({
                   </div>
                 );
               })}
+              {mySlot && (
+                <p className="o-t-caption" data-testid="my-place-arrival">
+                  <strong>
+                    {arrivalLabel(mySlot)
+                      .replace(/^Arrivée /, "Arrivée exposants ")
+                      .replace(/ \(conseillé\)$/, "")}
+                  </strong>
+                  {mySlot.note ? ` · ${mySlot.note}` : ""}
+                </p>
+              )}
               <Button variant="primary" icon="qr" href="/app/sorties" fullWidth>
                 Voir mon accès
               </Button>
@@ -775,29 +814,28 @@ function EventPage({
             <p className="o-t-caption s-muted">{registrationFullText}</p>
           )}
 
-          {connected ? (
-            <Form method="post">
-              <input type="hidden" name="structureId" value={structure.id} />
-              <Button
-                type="submit"
-                name="intent"
-                value={structure.isFollowing ? "unfollow" : "follow"}
-                variant="secondary"
-                icon="heart"
-                fullWidth
-              >
-                {structure.isFollowing ? `Tu suis ${structure.name}` : `Suivre ${structure.name}`}
-              </Button>
-            </Form>
-          ) : (
-            <Button variant="secondary" icon="heart" href={`/connexion?retour=${retour}`} fullWidth>
-              Suivre {structure.name}
-            </Button>
-          )}
+          {/* Lot M4 : « Suivre » est dans la bande de l'organisateur ; écrire part avec le contexte de l'événement. */}
           {structure.verified && (
-            <ContactOrganizer structureId={structure.id} connected={connected} retour={`/e/${event.slug}`} />
+            <ContactOrganizer
+              structureId={structure.id}
+              connected={connected}
+              retour={`/e/${event.slug}`}
+              about={
+                connected
+                  ? {
+                      eventId: event.id,
+                      title: event.title,
+                      when: [whenShort, event.city].filter(Boolean).join(" · "),
+                      structureName: structure.name,
+                    }
+                  : undefined
+              }
+            />
           )}
-          <p className="o-t-caption s-muted">Visiteurs : {publicAccess.toLowerCase()}.</p>
+          <p className="o-t-caption s-muted">
+            Visiteurs : {publicAccess.toLowerCase()}
+            {publicFrom ? `, dès ${publicFrom}` : ""}.
+          </p>
         </div>
 
         {offer && (

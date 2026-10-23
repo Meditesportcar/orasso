@@ -11,6 +11,7 @@ import {
   eventFormats,
   eventHints,
   explorerLabels,
+  explorerV2Labels,
   fromWallTime,
   gradeLabels,
   grades,
@@ -52,7 +53,14 @@ type Segment = (typeof SEGMENTS)[number];
 const PAGE = 24;
 const MAP_PAGE = 100;
 const RADII = [10, 25, 50, 100, 200];
-const EVENT_SORTS: Record<string, EventSort> = { affinites: "affinity", date: "date", distance: "distance" };
+// Lot M4 (maquette 3.2, parité du site) : aussi « Nouveautés » et « Places restantes ».
+const EVENT_SORTS: Record<string, EventSort> = {
+  affinites: "affinity",
+  date: "date",
+  distance: "distance",
+  nouveautes: "recent",
+  places: "seats",
+};
 
 /** « 2026-10-17 » → instant de minuit (début) ou de 23 h 59 (fin) à Paris ; `null` si la date est illisible. */
 function dayBound(value: string, end: boolean): string | null {
@@ -360,6 +368,8 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
                   { value: "affinites", label: explorerLabels.sortAffinity },
                   { value: "date", label: explorerLabels.sortDate },
                   { value: "distance", label: explorerLabels.sortDistance },
+                  { value: "nouveautes", label: explorerV2Labels.sorts.recent?.label ?? "Nouveautés" },
+                  { value: "places", label: explorerV2Labels.sorts.seats?.label ?? "Places restantes" },
                 ]}
               />
               <SelectField

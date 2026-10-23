@@ -35,6 +35,18 @@ export async function messageAction(request: Request, form: FormData) {
       { method: "POST" },
     );
     if (res.status === 401) throw redirect(loginUrl(request));
+    // Lot M4 : écrit depuis la fiche d'un événement, le premier message part avec son contexte (« À propos de »).
+    const body = String(form.get("body") ?? "").trim();
+    const aboutEventId = String(form.get("aboutEventId") ?? "");
+    if (res.ok && body) {
+      const sent = await api(request, `/conversations/${res.data.id}/messages`, {
+        method: "POST",
+        json: { clientId: crypto.randomUUID(), body, ...(aboutEventId ? { aboutEventId } : {}) },
+      });
+      if (!sent.ok) {
+        return data({ contact: false, messageError: sent.error.message, contactSent: null }, { status: sent.status });
+      }
+    }
     if (res.ok) throw redirect(`/app/boite/${res.data.id}`);
     return data({ contact: false, messageError: res.error.message, contactSent: null }, { status: res.status });
   }
