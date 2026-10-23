@@ -24,7 +24,7 @@ import { errorMessage } from "@/lib/http";
 import { AppSheet } from "@/ui/AppSheet";
 import { Notice } from "@/ui/Notice";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space2, space3 } = tokens.spacing;
 
 /** `.certl` de la maquette 7.1 : pastille bouclier, titre (ce qui manque), détail, chevron ; toucher = la feuille. */
 export function CertificationRow({
