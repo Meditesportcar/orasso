@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizePlate } from "./misc";
-import { formatPlate, plateKind } from "./plateNumber";
+import { formatPlate, normalizePlate, plateKind } from "./plateNumber";
 
 describe("numéro de plaque (lot M2)", () => {
   it("une seule forme stockée, quelle que soit la saisie", () => {
@@ -42,5 +41,28 @@ describe("numéro de plaque (lot M2)", () => {
   it("le SIV refuse « SS » et « WW » à gauche (le WW est le provisoire)", () => {
     expect(plateKind("SS-123-AB")).toBeNull();
     expect(plateKind("WW-123-AB")).toBe("ww");
+  });
+});
+
+describe("forme unique : bande « F » et département retirés (lot M2, tour 2)", () => {
+  it.each([
+    ["F AB-123-CD 66", "AB123CD", "AB-123-CD"],
+    ["F AB-123-CD", "AB123CD", "AB-123-CD"],
+    ["AB-123-CD 66", "AB123CD", "AB-123-CD"],
+    ["AB-123-CD 974", "AB123CD", "AB-123-CD"],
+    ["F W 623 AX 66", "W623AX", "W-623-AX"],
+    ["W-623-AX 66", "W623AX", "W-623-AX"],
+    ["F WW-123-AB 2A", "WW123AB", "WW-123-AB"],
+    ["F 1234 AB 66", "1234AB66", "1234 AB 66"],
+    ["1234 AB 66", "1234AB66", "1234 AB 66"],
+    ["aé 665 gh", "AE665GH", "AE-665-GH"],
+  ])("%s", (raw, stored, shown) => {
+    expect(normalizePlate(raw)).toBe(stored);
+    expect(formatPlate(raw)).toBe(shown);
+  });
+
+  it("une plaque étrangère n'est pas rognée", () => {
+    expect(normalizePlate("F-123 XY 66 99")).toBe("F123XY6699");
+    expect(normalizePlate("M AB 1234")).toBe("MAB1234");
   });
 });

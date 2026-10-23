@@ -31,6 +31,7 @@ import {
 import { db, pool } from "../../db/client";
 import {
   accessPasses,
+  applications,
   checkins,
   devices,
   emailOutbox,
@@ -40,6 +41,7 @@ import {
   passportStamps,
   profiles,
   scanEvents,
+  vehicles,
 } from "../../db/schema";
 import { mail } from "../../lib/mail";
 import { realtime } from "../../lib/realtime";
@@ -509,7 +511,8 @@ describe("inscription express", () => {
       password: "motdepasse-express-1",
       firstName: "Paul",
       lastName: "Nouveau",
-      plate: "EX-123-PR",
+      // Lot M2 : saisie n'importe comment, avec la bande « F » et le département.
+      plate: "f ex 123pr 66",
       makeId: ref!.makeId,
       modelId: ref!.id,
     };
@@ -532,6 +535,12 @@ describe("inscription express", () => {
     expect(res.json.passPayload).toMatch(/^OR1/);
     const entry = await db.query.checkins.findFirst({ where: eq(checkins.applicationId, res.json.applicationId) });
     expect(entry).toMatchObject({ method: "express", staffUserId: julie.id });
+    // Lot M2 : plaque stockée lisible et sous sa forme unique.
+    const expressApp = await db.query.applications.findFirst({ where: eq(applications.id, res.json.applicationId) });
+    expect(await db.query.vehicles.findFirst({ where: eq(vehicles.id, expressApp?.vehicleId ?? "") })).toMatchObject({
+      plate: "EX-123-PR",
+      plateNormalized: "EX123PR",
+    });
     // Lot 49 : l'entrée express pose le tampon de participation.
     expect(
       await db.query.passportStamps.findFirst({ where: eq(passportStamps.applicationId, res.json.applicationId) }),

@@ -10,11 +10,12 @@
 // - sortie : `onRects(i, rects)` (cadres de la photo i), `onNoPlate(i, bool)` (« Envoyer sans flouter » de la photo i,
 //   confirmé ici photo par photo), `onMode(mode)`, et `patch({ plate | former | status | unregistered })` ;
 // - état : `stepIssue(<étape Plaque>, draft)` de `./model` dit ce qui bloque (photo à régler, numéro obligatoire).
-// Le numéro est prérempli d'après la lecture des photos (`plateSuggestion`), à confirmer ; un format étranger n'est
-// qu'un avertissement (`plateWarning`), l'API stocke une forme unique (lot M2).
+// Le numéro est prérempli d'après une lecture sûre des photos (`prefillPatch`), à confirmer, jamais par-dessus une
+// saisie (`plateTouched`, gardé dans le brouillon) ; un format étranger n'est qu'un avertissement (`plateHelp`) ;
+// l'API stocke une forme unique (lot M2).
 import { Button, CheckboxField, Chip, ChipRow, TextField, tokens } from "@orasso/design-system/native";
 import { archiveStatusChoices, vehicleWizardLabels as L, MAX_PLATE_RECTS, nextPlateFrame } from "@orasso/shared";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
@@ -24,7 +25,7 @@ import { Overlay } from "@/ui/Overlay";
 import { type BlurMode, blurredCount, type Draft, type DraftPhoto, detectionUnavailable } from "./model";
 import { PhotoBadge, PlateFrameEditor } from "./PlateFrameEditor";
 import { ChoiceRow, StepHead, StepNote } from "./parts";
-import { plateSuggestion, plateWarning } from "./plateStep";
+import { plateHelp, prefillPatch, typedPlate } from "./plateStep";
 
 const { space2 } = tokens.spacing;
 
@@ -60,16 +61,12 @@ export function StepPlate({
   // « Envoyer sans flouter » : confirmé photo par photo, la photo sous les yeux (lot M2, retour 17).
   const [confirmNoPlate, setConfirmNoPlate] = useState<number | null>(null);
   const confirmPhoto = confirmNoPlate === null ? undefined : draft.photos[confirmNoPlate];
-  // Numéro prérempli par la lecture des photos (à confirmer) ; une fois proposé, jamais réécrit s'il est effacé.
-  const suggestion = plateSuggestion(draft.photos, draft.unregistered);
-  const proposed = useRef<string | null>(null);
+  // Numéro prérempli par une lecture sûre (à confirmer) ; jamais une saisie, même effacée (état dans le brouillon).
+  const prefill = prefillPatch(draft);
   useEffect(() => {
-    if (!suggestion || proposed.current === suggestion || draft.plate.trim()) return;
-    proposed.current = suggestion;
-    patch({ plate: suggestion });
-  }, [suggestion, draft.plate, patch]);
-  const plateHelp =
-    suggestion && draft.plate.trim() === suggestion ? L.plateRead : (plateWarning(draft.plate) ?? undefined);
+    if (prefill) patch(prefill);
+  }, [prefill, patch]);
+  const help = plateHelp(draft) ?? undefined;
   return (
     <>
       <StepHead title={L.plateTitle} text={L.plateText} />
@@ -173,13 +170,13 @@ export function StepPlate({
       <TextField
         label={L.plateNumber}
         value={draft.plate}
-        onChangeText={(plate) => patch({ plate })}
+        onChangeText={(plate) => patch(typedPlate(plate))}
         autoCapitalize="characters"
         autoCorrect={false}
         editable={!draft.unregistered}
         placeholder="AB-123-CD"
         maxLength={20}
-        help={draft.unregistered ? undefined : plateHelp}
+        help={help}
         testID="vehicle-plate"
       />
       <ChoiceRow

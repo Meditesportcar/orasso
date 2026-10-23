@@ -212,3 +212,20 @@ export const plateTransferRequests = pgTable(
       .where(sql`${t.status} in ('pending', 'arbitrated')`),
   ],
 );
+
+/**
+ * Lot M2, tour 2 : plaques que la nouvelle forme unique (`normalizePlate` : accents, bande « F », département) aurait
+ * rendues identiques à celle d'un autre véhicule actif. La migration ne fusionne rien : le véhicule garde son ancienne
+ * forme et la collision est listée ici pour l'équipe Orasso.
+ */
+export const plateNormalizationConflicts = pgTable("plate_normalization_conflicts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  vehicleId: uuid("vehicle_id")
+    .notNull()
+    .references(() => vehicles.id, { onDelete: "cascade" }),
+  /** Forme gardée (calculée avant le lot M2). */
+  keptNormalized: text("kept_normalized").notNull(),
+  /** Forme unique qu'elle aurait dû prendre. */
+  wantedNormalized: text("wanted_normalized").notNull(),
+  createdAt: tstz("created_at").notNull().defaultNow(),
+});
