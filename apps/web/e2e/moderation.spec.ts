@@ -89,7 +89,7 @@ test("modération : suspension automatique, bandeau, contestation, levée ; mess
   await expect(dialog).toBeVisible();
   await shot(pageC, "signaler-profil");
   await dialog.getByRole("radio", { name: "Insulte" }).check();
-  await dialog.getByLabel("Ce qui s'est passé").fill("Insultes répétées après la sortie de dimanche.");
+  await dialog.getByRole("textbox", { name: /Ce qui s'est passé/ }).fill("Insultes répétées après la sortie de dimanche.");
   await dialog.getByLabel("Capture d'écran").setInputFiles({
     name: "capture.png",
     mimeType: "image/png",
