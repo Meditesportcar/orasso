@@ -14,7 +14,7 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import { orgaV2Labels, triageAppLabels } from "@orasso/shared";
-import { useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router";
+import { useIsFocused, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,7 +22,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
 import { api } from "@/lib/api";
 import { useChannel } from "@/lib/realtime";
-import { useSession } from "@/lib/session";
 import { COUNTER_ACTIVE, counterCells, defaultTriageEvent, triageEvents } from "@/lib/triage";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
@@ -43,7 +42,6 @@ type Segment = "vehicles" | "waitlist" | "providers" | "press" | "list";
 export function TriageScreen() {
   const { t } = useTheme();
   const { structureId, structureName } = useOrga();
-  const { refreshMe } = useSession();
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ event?: string }>();
@@ -54,12 +52,7 @@ export function TriageScreen() {
   const [picked, setPicked] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
 
-  // Compteurs de la cloche à jour à chaque retour sur l'onglet (comme les autres onglets).
-  useFocusEffect(
-    useCallback(() => {
-      void refreshMe();
-    }, [refreshMe]),
-  );
+  // Lot M7, tour 2 : la relecture du profil au retour sur l'onglet est celle de `TabStage` (une seule requête).
 
   const events = useApi(() => api.structureEvents(structureId), [structureId], {
     cacheKey: `orga-events-${structureId}`,

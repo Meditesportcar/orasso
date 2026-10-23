@@ -2,7 +2,6 @@
 // Lot M7 : page masquée du groupe ouverte depuis Ma fiche, c'est un parcours : mode B (en-tête de fiche, ✕ revient à Ma
 // fiche), sans barre d'onglets.
 import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
-import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
 
@@ -13,12 +12,14 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
+import { useCloseTo } from "@/ui/useCloseTo";
 
 const { space2, space3 } = tokens.spacing;
 
 export default function ProPublier() {
   const { t } = useTheme();
-  const router = useRouter();
+  // Lot M7, tour 2 : le ✕ revient à Ma fiche (le retour des onglets Pro mènerait au Scanner).
+  const close = useCloseTo("/(pro)/fiche");
   const myPro = useApi(() => api.myPro(), [], { cacheKey: "my-pro" });
   const pro = myPro.data;
   const [title, setTitle] = useState("");
@@ -47,7 +48,7 @@ export default function ProPublier() {
     <FlowScreen
       title="Publier"
       facts={pro ? `${pro.postsUsed} / ${pro.postsLimit} ce mois-ci` : undefined}
-      onClose={() => (router.canGoBack() ? router.back() : router.replace("/(pro)/fiche"))}
+      onClose={close}
     >
       {!pro ? (
         myPro.loading ? null : (

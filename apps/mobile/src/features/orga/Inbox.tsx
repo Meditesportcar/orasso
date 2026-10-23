@@ -14,8 +14,8 @@ import {
 import { useIsFocused, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-
 import { api } from "@/lib/api";
+import { withReturn } from "@/lib/closeTo";
 import { formatDay, formatDayHour, formatHour } from "@/lib/format";
 import { staffRequests } from "@/lib/orga";
 import { useChannel } from "@/lib/realtime";
@@ -265,7 +265,7 @@ export function InboxScreen() {
             variant="plate"
             icon="chat"
             next
-            onPress={() => router.push("/modeles")}
+            onPress={() => router.push(withReturn("/modeles", "/boite/orga") as never)}
             fullWidth
             testID="orga-templates-open"
           >

@@ -33,7 +33,7 @@ import { KeyboardSafe } from "./KeyboardSafe";
 import { OverlayProvider, OverlaySlot } from "./Overlay";
 import { revealOffset, type ScrollAssist, ScrollAssistContext } from "./ScrollAssist";
 import { TabTitle } from "./TabTitle";
-import { TopBar, useInTabs } from "./TopBar";
+import { TopBar, useInTabs, useTabBandRefresh } from "./TopBar";
 
 const { space2, space3, space4, space6 } = tokens.spacing;
 
@@ -71,15 +71,20 @@ export function TabScreen(props: TabProps) {
 /** Relit le profil (compteurs de la Boîte, casquettes) à chaque arrivée sur un onglet. */
 function useRefreshOnFocus() {
   const { refreshMe } = useSession();
+  // Lot M7, tour 2 : et le compteur de la Boîte de la structure, s'il a pu changer depuis sa dernière lecture.
+  const refreshBand = useTabBandRefresh();
   // Compteurs de la Boîte et du garage, casquettes (un véhicule ajouté fait passer de visiteur à exposant) à jour à
   // chaque retour sur un onglet.
   // Lot M3 : un peu après l'arrivée sur l'onglet, pour que la page s'affiche d'abord (la relecture du profil
   // redessine toute l'appli).
   useFocusEffect(
     useCallback(() => {
-      const timer = setTimeout(() => void refreshMe(), REFRESH_AFTER_FOCUS_MS);
+      const timer = setTimeout(() => {
+        void refreshMe();
+        refreshBand();
+      }, REFRESH_AFTER_FOCUS_MS);
       return () => clearTimeout(timer);
-    }, [refreshMe]),
+    }, [refreshMe, refreshBand]),
   );
 }
 

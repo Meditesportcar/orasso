@@ -418,7 +418,7 @@ function ReportBody() {
 
 export function ReportDetailScreen() {
   return (
-    <AdminGate title={moderationLabels.queueTitle} moderator>
+    <AdminGate page title={moderationLabels.queueTitle} moderator>
       <ReportBody />
     </AdminGate>
   );
@@ -575,7 +575,7 @@ function SanctionsBody() {
 
 export function SanctionsScreen() {
   return (
-    <AdminGate title={moderationLabels.sanctionsTitle}>
+    <AdminGate page title={moderationLabels.sanctionsTitle}>
       <SanctionsBody />
     </AdminGate>
   );
@@ -694,7 +694,7 @@ function ContestsBody() {
 
 export function ContestsScreen() {
   return (
-    <AdminGate title="Contestations de malus">
+    <AdminGate page title="Contestations de malus">
       <ContestsBody />
     </AdminGate>
   );

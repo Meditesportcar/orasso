@@ -13,10 +13,11 @@
 // bandes). Hors d'un groupe d'onglets, pas de bande : l'écran est en mode B (en-tête de fiche, `FicheHeader`).
 import { AppBar, type AppBarProps } from "@orasso/design-system/native";
 import { useRouter } from "expo-router";
-import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/lib/api";
+import { mutationCount } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
 import { homeOf, personaKindLabels, tabHref } from "@/lib/personaModel";
 import { useSession } from "@/lib/session";
@@ -27,7 +28,9 @@ type Band = Pick<
   "persona" | "onPersona" | "onLogo" | "onLogoLongPress" | "logoHint" | "onSearch" | "onInbox" | "inboxCount"
 >;
 
-const TabBandContext = createContext<Band | null>(null);
+type BandValue = { band: Band; refresh: () => void };
+
+const TabBandContext = createContext<BandValue | null>(null);
 
 /** La bande du groupe d'onglets : lue une fois par le layout, affichée par chaque page d'onglet. */
 export function TabBandProvider({ children }: { children: ReactNode }) {
@@ -42,6 +45,17 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
     enabled: structureId !== null && !active.assisted,
     refreshMs: 60_000,
   });
+  // Lot M7, tour 2 (relecture Codex) : le résumé est lu au-dessus des onglets, dont le focus est celui du groupe. Une
+  // page d'onglet qui s'affiche le relit donc elle-même, mais seulement si une modification est partie depuis la
+  // dernière lecture (demande de staff acceptée, message lu) : une seule requête par changement, pas une par onglet.
+  const seen = useRef(mutationCount());
+  const reloadInbox = orgInbox.reload;
+  const refresh = useCallback(() => {
+    const now = mutationCount();
+    if (now === seen.current) return;
+    seen.current = now;
+    void reloadInbox();
+  }, [reloadInbox]);
   const orgCount = orgInbox.data
     ? orgInbox.data.participantMessages + orgInbox.data.staffDiscussions + orgInbox.data.staffRequests
     : 0;
@@ -69,7 +83,8 @@ export function TabBandProvider({ children }: { children: ReactNode }) {
     [showPersona, active.logoUrl, active.label, persona, base, baseLabel, choose, backToBase, router, inboxCount],
   );
 
-  return <TabBandContext.Provider value={band}>{children}</TabBandContext.Provider>;
+  const value = useMemo(() => ({ band, refresh }), [band, refresh]);
+  return <TabBandContext.Provider value={value}>{children}</TabBandContext.Provider>;
 }
 
 /** L'écran est-il une page d'un groupe d'onglets (mode A) ? */
@@ -77,10 +92,18 @@ export function useInTabs(): boolean {
   return useContext(TabBandContext) !== null;
 }
 
+/** Relit le compteur de la Boîte de la structure s'il a pu changer (à l'arrivée sur une page d'onglet). */
+export function useTabBandRefresh(): () => void {
+  const value = useContext(TabBandContext);
+  return value?.refresh ?? noop;
+}
+
+const noop = () => {};
+
 /** La bande ORASSO, telle que le groupe d'onglets l'a posée ; rien hors d'un groupe d'onglets. */
 export function TopBar() {
-  const band = useContext(TabBandContext);
+  const value = useContext(TabBandContext);
   const insets = useSafeAreaInsets();
-  if (!band) return null;
-  return <AppBar kind="tab" safeTop={insets.top} {...band} />;
+  if (!value) return null;
+  return <AppBar kind="tab" safeTop={insets.top} {...value.band} />;
 }

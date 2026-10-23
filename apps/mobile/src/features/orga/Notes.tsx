@@ -9,7 +9,6 @@ import {
   STRUCTURE_NOTE_MAX,
   type StructureNoteView,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -22,6 +21,7 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
+import { useCloseTo } from "@/ui/useCloseTo";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { OrgaFailure, useOrga } from "./OrgaGate";
 
@@ -247,7 +247,6 @@ export function StructureNotes({
 
 /** Écran « Notes internes » : les plus récentes, ou la recherche par pseudo. */
 export function NotesScreen() {
-  const router = useRouter();
   const { structureId, structureName } = useOrga();
   const structure = useApi(() => api.orgStructure(structureId), [structureId]);
   const [query, setQuery] = useState("");
@@ -255,7 +254,8 @@ export function NotesScreen() {
   const notes = useApi(() => api.notes(structureId, { limit: 50, q: searched || undefined }), [structureId, searched]);
   const [error, setError] = useState<unknown>(null);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/(orga)/equipe"));
+  // Lot M7, tour 2 : le ✕ revient à l'écran qui a ouvert la page (le retour des onglets mènerait aux Événements).
+  const close = useCloseTo("/(orga)/structure");
   const groups = groupNotesByPerson(notes.data?.items ?? []);
   const writable = !isSuspended(structure.data);
 
