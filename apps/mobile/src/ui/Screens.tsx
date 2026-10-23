@@ -44,6 +44,9 @@ type Common = {
  * d'onglets flottante et accès flottant passent par-dessus. */
 const TAB_BODY_BOTTOM = 150;
 
+/** Lot M3 : délai de la relecture du profil à l'arrivée sur un onglet (après l'affichage de la page). */
+const REFRESH_AFTER_FOCUS_MS = 400;
+
 /**
  * Écran d'un onglet (DA v2, lot 40 ; lot C1 : fond de l'artefact, barre flottante par-dessus le contenu) : la barre du haut v2 (logotype, pastille de casquette, Recherche, Boîte), puis le
  * grand titre sur une ligne (`BigTitle`, `facts` en étiquette à droite) en tête de la zone qui défile. L'onglet ouvert
@@ -69,9 +72,12 @@ export function TabScreen({
   const [journal, setJournal] = useState(false);
   // Compteurs de la Boîte et du garage, casquettes (un véhicule ajouté fait passer de visiteur à exposant) à jour à
   // chaque retour sur un onglet.
+  // Lot M3 : un peu après l'arrivée sur l'onglet, pour que la page s'affiche d'abord (la relecture du profil
+  // redessine toute l'appli).
   useFocusEffect(
     useCallback(() => {
-      void refreshMe();
+      const timer = setTimeout(() => void refreshMe(), REFRESH_AFTER_FOCUS_MS);
+      return () => clearTimeout(timer);
     }, [refreshMe]),
   );
   const unread = me?.counts.unreadNotifications ?? 0;

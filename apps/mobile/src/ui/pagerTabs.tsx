@@ -9,6 +9,10 @@
 // - Le geste natif ne démarre que sur un glissement nettement horizontal (pente du ViewPager2) ; les listes
 //   horizontales et le curseur le gardent pour eux (ils bloquent l'interception native), une feuille ouverte ou un
 //   écran qui le demande (`useTabSwipeDisabled` : carte, tri) le coupent (`swipeEnabled`).
+// - Seules les pages dans la fenêtre se dessinent : une page entièrement hors champ passe à l'opacité 0, calculée sur
+//   le fil graphique depuis la position du geste (`onPageScroll`, pilote natif d'`Animated`). Mesuré sur le Xiaomi :
+//   les cinq pages dessinées à chaque image coûtaient 150 ms par image au repos, contre 24 ms pour une seule.
+// - L'appui sur la barre tourne la page tout de suite (commande native), avant le rendu React du changement d'onglet.
 // Le site de recette (Expo web) garde les onglets d'avant (`pagerTabs.web.tsx`).
 import { APP_BAR_HEIGHT, tokens } from "@orasso/design-system/native";
 import { withLayoutContext } from "expo-router";
@@ -22,13 +26,15 @@ import {
   useNavigationBuilder,
 } from "expo-router/react-navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Animated, StyleSheet, View } from "react-native";
 import PagerView, { type PagerViewOnPageSelectedEvent } from "react-native-pager-view";
 
 import type { PagerTabBarProps } from "./pagerTabsTypes";
 import { EVENT_LIST_BLOCKS, Waiting } from "./Waiting";
 
 const { space4, space6 } = tokens.spacing;
+
+const AnimatedPager = Animated.createAnimatedComponent(PagerView);
 
 /** Délai avant le premier préchargement (la page ouverte peint d'abord), puis entre deux pages. */
 const PRELOAD_FIRST_MS = 350;
@@ -109,11 +115,24 @@ function PagerTabNavigator({
   // La barre (ou un lien) change d'onglet : la page suit, sans animation ; le doigt, lui, a déjà tourné la page.
   const pager = useRef<PagerView>(null);
   const shown = useRef(pageIndex);
+  // Position du geste (page + fraction), suivie sur le fil graphique : décide quelles pages se dessinent.
+  const position = useRef(new Animated.Value(Math.max(0, pageIndex))).current;
+  const offset = useRef(new Animated.Value(0)).current;
+  const progress = useMemo(() => Animated.add(position, offset), [position, offset]);
+  const onPageScroll = useMemo(
+    () => Animated.event([{ nativeEvent: { position, offset } }], { useNativeDriver: true }),
+    [position, offset],
+  );
+  const turnTo = (index: number) => {
+    if (index < 0 || index === shown.current) return;
+    shown.current = index;
+    position.setValue(index);
+    offset.setValue(0);
+    pager.current?.setPageWithoutAnimation(index);
+  };
   useEffect(() => {
-    if (pageIndex < 0 || pageIndex === shown.current) return;
-    shown.current = pageIndex;
-    pager.current?.setPageWithoutAnimation(pageIndex);
-  }, [pageIndex]);
+    turnTo(pageIndex);
+  });
   const onPageSelected = (event: PagerViewOnPageSelectedEvent) => {
     const position = event.nativeEvent.position;
     if (position === shown.current) return;
@@ -134,8 +153,9 @@ function PagerTabNavigator({
   return (
     <NavigationContent>
       <View style={styles.fill}>
-        <PagerView
+        <AnimatedPager
           ref={pager}
+          onPageScroll={onPageScroll}
           style={styles.fill}
           initialPage={Math.max(0, pageIndex)}
           scrollEnabled={swipeEnabled && !hidden}
@@ -143,8 +163,21 @@ function PagerTabNavigator({
           onPageSelected={onPageSelected}
           testID="persona-pages"
         >
-          {pageRoutes.map((route) => (
-            <View key={route.key} collapsable={false} style={styles.fill}>
+          {pageRoutes.map((route, i) => (
+            <Animated.View
+              key={route.key}
+              collapsable={false}
+              style={[
+                styles.fill,
+                {
+                  opacity: progress.interpolate({
+                    inputRange: [i - 1, i - 0.999, i + 0.999, i + 1],
+                    outputRange: [0, 1, 1, 0],
+                    extrapolate: "clamp",
+                  }),
+                },
+              ]}
+            >
               {mounted.has(route.key) ? (
                 descriptors[route.key]?.render()
               ) : (
@@ -153,9 +186,9 @@ function PagerTabNavigator({
                   <Waiting blocks={EVENT_LIST_BLOCKS} />
                 </View>
               )}
-            </View>
+            </Animated.View>
           ))}
-        </PagerView>
+        </AnimatedPager>
         {hiddenRoutes.map((route) => (
           <View
             key={route.key}
@@ -165,7 +198,17 @@ function PagerTabNavigator({
             {descriptors[route.key]?.render()}
           </View>
         ))}
-        {tabBar({ state, navigation, descriptors } as unknown as PagerTabBarProps)}
+        {tabBar({
+          state,
+          descriptors,
+          navigation: {
+            navigate: (name: string) => {
+              // La page tourne d'abord (natif), le rendu du changement d'onglet suit.
+              turnTo(pageRoutes.findIndex((r) => r.name === name));
+              navigation.navigate(name);
+            },
+          },
+        } as unknown as PagerTabBarProps)}
       </View>
     </NavigationContent>
   );
