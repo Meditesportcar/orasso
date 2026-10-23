@@ -6,7 +6,7 @@
 import { Button, Credit, Plate, ScanResult, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { proV2Labels } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useKeepAwake } from "expo-keep-awake";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
@@ -30,6 +30,7 @@ const REPEAT_MS = 4_000;
 const HISTORY = 6;
 
 type OkScan = Extract<ProScan, { state: "ok" }>;
+const KEEP_AWAKE_TAG = "pro-scanner";
 
 export default function ProScanner() {
   const { t } = useTheme();
@@ -41,7 +42,12 @@ export default function ProScanner() {
   const [busy, setBusy] = useState(false);
   const seen = useRef<{ payload: string; at: number } | null>(null);
   const counter = useRef(0);
-  useKeepAwake();
+  // Lot M3, tour 2 : l'onglet est préchargé ; l'écran ne reste allumé que tant que le scanner est affiché.
+  useEffect(() => {
+    if (!focused) return;
+    void activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+    return () => void deactivateKeepAwake(KEEP_AWAKE_TAG);
+  }, [focused]);
 
   const handle = useCallback(async (raw: string) => {
     const payload = raw.trim();

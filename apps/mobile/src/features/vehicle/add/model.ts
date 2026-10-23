@@ -39,6 +39,11 @@ export type DraftPhoto = {
   /** Cadres proposés par la détection (mode Automatique). */
   detected?: PlateRect[];
   detection?: Detection;
+  /**
+   * Lot M2 : plaques lues sur la photo (voir `FoundPlate` de `lib/plates/detect`), pour préremplir le numéro ; celles
+   * du filet de sécurité (`probable`) sont gardées comme donnée « à vérifier », jamais appliquées d'office.
+   */
+  readings?: PlateReading[];
   /** Photo locale sans cadre : la personne a confirmé « Envoyer sans flouter : aucune plaque visible ». */
   noPlate?: boolean;
 };
@@ -63,6 +68,21 @@ export type Draft = {
   former: boolean;
   status: VehicleStatus;
   unregistered: boolean;
+  /**
+   * Lot M2, tour 2 : le numéro a été touché à la main (saisi, corrigé ou effacé) : plus jamais prérempli. Gardé dans
+   * le brouillon, il survit au va-et-vient entre les étapes.
+   */
+  plateTouched?: boolean;
+};
+
+/** Une plaque lue sur une photo, telle que l'étape Plaque la garde (sans le cadre). */
+export type PlateReading = {
+  plate: string;
+  fixes: number;
+  valid: boolean;
+  ambiguous: boolean;
+  probable: boolean;
+  area: number;
 };
 
 export const emptyDraft = (): Draft => ({
@@ -103,6 +123,8 @@ export function draftFromVehicle(v: VehicleFull): Draft {
     })),
     blurMode: "manual",
     plate: v.plate ?? "",
+    // Fiche existante : son numéro (ou son absence) est une saisie, jamais repréremplie (lot M2, tour 2).
+    plateTouched: true,
     former: v.status !== "active",
     status: v.status,
     unregistered: v.unregistered,

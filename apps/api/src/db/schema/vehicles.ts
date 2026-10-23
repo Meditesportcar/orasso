@@ -212,3 +212,33 @@ export const plateTransferRequests = pgTable(
       .where(sql`${t.status} in ('pending', 'arbitrated')`),
   ],
 );
+
+/**
+ * Lot M2 : plaques que la forme unique (`normalizePlate` : accents, bande « F », département) aurait rendues identiques
+ * à celle d'un autre véhicule actif, ou d'une autre demande de transfert ouverte du même demandeur. La migration ne
+ * fusionne rien : la ligne garde son ancienne forme et la collision est listée ici. La forme voulue est réservée
+ * (`plateHolder`) ; le staff retrouve le véhicule par son ancienne clé ou par son nom (une seule clé par véhicule,
+ * tour 4). Une ligne n'est listée qu'une fois ; elle disparaît quand la plaque du véhicule change. Résolution par
+ * l'équipe : plus tard (C7).
+ */
+export const plateNormalizationConflicts = pgTable(
+  "plate_normalization_conflicts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    vehicleId: uuid("vehicle_id")
+      .unique("plate_normalization_conflicts_vehicle_key")
+      .references(() => vehicles.id, { onDelete: "cascade" }),
+    transferId: uuid("transfer_id")
+      .unique("plate_normalization_conflicts_transfer_key")
+      .references(() => plateTransferRequests.id, { onDelete: "cascade" }),
+    /** Forme gardée (calculée avant le lot M2). */
+    keptNormalized: text("kept_normalized").notNull(),
+    /** Forme unique qu'elle aurait dû prendre. */
+    wantedNormalized: text("wanted_normalized").notNull(),
+    createdAt: tstz("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("plate_normalization_conflicts_wanted_idx").on(t.wantedNormalized),
+    check("plate_normalization_conflicts_one_row", sql`num_nonnulls(${t.vehicleId}, ${t.transferId}) = 1`),
+  ],
+);

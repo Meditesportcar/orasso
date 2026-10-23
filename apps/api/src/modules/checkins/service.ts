@@ -592,16 +592,15 @@ export const checkinsService = {
     // Plusieurs jours (lot 26) : seulement tout l'événement ou le jour même (Paris) ; une plaque qui garde plusieurs
     // candidatures (jour et tout l'événement, ou hors des jours) est renvoyée ambiguë, rien n'est pointé.
     const days = await daysRepo.list(eventId);
-    let rows = all;
     const ambiguous: string[] = [];
-    if (isMultiDay(days)) {
-      const today = dayFor(days, now(), event.timezone);
-      const kept = all.filter((r) => r.eventDayId === null || r.eventDayId === today?.id);
-      const perPlate = new Map<string | null, number>();
-      for (const r of kept) perPlate.set(r.plate, (perPlate.get(r.plate) ?? 0) + 1);
-      rows = kept.filter((r) => perPlate.get(r.plate) === 1);
-      for (const [plate, n] of perPlate) if (n > 1 && plate) ambiguous.push(wanted.get(plate) ?? plate);
-    }
+    const today = isMultiDay(days) ? dayFor(days, now(), event.timezone) : null;
+    const kept = isMultiDay(days) ? all.filter((r) => r.eventDayId === null || r.eventDayId === today?.id) : all;
+    // Lot M2, tour 4 : sur tout événement (un jour ou plusieurs), une plaque qui désigne plusieurs pass retenus est
+    // renvoyée ambiguë et rien n'est pointé (jamais de points au mauvais participant).
+    const perPlate = new Map<string | null, number>();
+    for (const r of kept) perPlate.set(r.plate, (perPlate.get(r.plate) ?? 0) + 1);
+    const rows = kept.filter((r) => perPlate.get(r.plate) === 1);
+    for (const [plate, n] of perPlate) if (n > 1 && plate) ambiguous.push(wanted.get(plate) ?? plate);
     const createdIds = new Set<string>();
     await withTx(async (tx, after) => {
       await lockEventCheckins(tx, eventId);

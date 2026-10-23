@@ -63,7 +63,10 @@ test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   await page.getByLabel("Plaque").fill(plate);
   await page.getByLabel("Photo").setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: samplePhoto() });
   // Lot 51 : une photo part avec son cadre de plaque, ou « aucune plaque visible » coché.
-  await page.getByTestId("site-no-plate").check();
+  // Lot M2, tour 2 : « Envoyer sans flouter » se confirme sur la photo.
+  await page.getByTestId("site-no-plate").click();
+  await page.getByTestId("site-no-plate-yes").click();
+  await expect(page.getByTestId("site-no-plate")).toBeChecked();
   await page.getByRole("button", { name: "Ajouter au garage" }).click();
   await page.waitForURL(new RegExp(`/e/${event.slug}/candidater\\?vehicule=`));
 

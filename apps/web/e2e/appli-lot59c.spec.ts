@@ -211,6 +211,16 @@ test("ajout d'un véhicule : les poignées du cadre tournent et agrandissent (le
   await (await chooser).setFiles({ name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
   await expect(page.getByTestId("new-vehicle-photos").getByText("Couverture")).toBeVisible({ timeout: 20_000 });
   await next();
+  // Lot M2 : « Envoyer sans flouter » se confirme sur cette photo, montrée dans la confirmation ; puis on revient.
+  await page.getByTestId("plate-none").click();
+  await expect(page.getByTestId("plate-none-photo")).toBeVisible();
+  await shot(page, "plaque-sans-flouter-confirmation-sable");
+  await page.getByTestId("orga-confirm").click();
+  await expect(page.getByTestId("plate-none")).toHaveAttribute("aria-checked", "true");
+  // Décoché : sans confirmation (on revient à la prudence).
+  await page.getByTestId("plate-none").click();
+  await expect(page.getByTestId("plate-none")).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByTestId("plate-none-photo")).toHaveCount(0);
   await page.getByTestId("plate-frame-add").click();
   await expect(page.getByTestId("plate-frame").first()).toBeVisible();
   const before = await turn(page, "plate-frame");
