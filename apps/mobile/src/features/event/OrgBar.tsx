@@ -56,7 +56,7 @@ export function OrgBar({
             </Text>
             {verified ? <Icon name="check" size={15} strokeWidth={3} color={c.accent} /> : null}
           </View>
-          <Text variant="caption" color={c.barMuted} style={styles.small} numberOfLines={1}>
+          <Text variant="caption" color={c.barMuted} style={styles.small} numberOfLines={2}>
             {followers !== null ? `${L.followers(followers)} · ${L.organizerRole}` : L.organizerRole}
           </Text>
         </View>

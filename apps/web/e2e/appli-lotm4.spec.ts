@@ -175,7 +175,8 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       // La bande reste en haut quand on fait défiler la fiche.
       await page.getByTestId("event-page").evaluate((el) => el.scrollTo(0, 900));
       await page.waitForTimeout(400);
-      const bar = await page.getByTestId("org-bar").boundingBox();
+      // Lot M7 : la bande se pose dans l'en-tête de fiche (`org-band`, aplat de la barre), fixé en haut.
+      const bar = await page.getByTestId("org-band").boundingBox();
       expect(bar?.y ?? 99).toBeLessThan(5);
       await shot(page, `fiche-defile-${theme}`);
       await page.getByTestId("event-page").evaluate((el) => el.scrollTo(0, 0));
