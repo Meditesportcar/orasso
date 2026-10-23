@@ -5,7 +5,7 @@
 import { type ReactNode, useEffect, useId } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Line, Path } from "react-native-svg";
 import { carTransform, oTransform, useTone } from "../Brand";
 import { brandArt } from "../brandArt";
 import { duration, easings, park } from "../motionHooks";
@@ -18,6 +18,12 @@ import { fadeIn } from "./shared";
 const VIEW = [-95, -25, 237, 150] as const;
 /** La place libre, dans l'ouverture de l'O, penchée comme la voiture. */
 const SPOT = "M60 33h38a12 12 0 0 1 12 12v10a12 12 0 0 1-12 12H60a12 12 0 0 1-12-12V45a12 12 0 0 1 12-12z";
+/**
+ * Lot M5 (maquette 9.3, retour 23) : la ligne de route en pointillés sous la voiture, pour qu'elle ne semble plus
+ * flotter (`.empty-o .eo .road` : du bord gauche jusqu'à 30 px du bord droit, 23 px au-dessus du bas, tirets de 10 et
+ * 8), en unités du viewBox.
+ */
+const ROAD = { x1: VIEW[0], x2: VIEW[0] + VIEW[2] - 19, y: VIEW[1] + VIEW[3] - 24 } as const;
 /** La voiture arrive de 80 unités plus à gauche. */
 const ARRIVE_FROM = CAR_OUT_LEFT - 80;
 
@@ -29,9 +35,11 @@ export type EmptyStateProps = {
   width?: number;
   /** Rejouer (recette). */
   playKey?: unknown;
+  /** La ligne de route sous la voiture (état vide de Sorties, lot M5). Sans elle : le dessin de l'artefact. */
+  road?: boolean;
 };
 
-export function EmptyState({ title, text, action, width = 180, playKey }: EmptyStateProps) {
+export function EmptyState({ title, text, action, width = 180, playKey, road = false }: EmptyStateProps) {
   const { t, reducedMotion } = useTheme();
   const version = useTone("auto");
   const id = `oe${useId().replaceAll(":", "")}`;
@@ -61,6 +69,18 @@ export function EmptyState({ title, text, action, width = 180, playKey }: EmptyS
     <Animated.View style={[styles.root, fadeStyle]}>
       <View aria-hidden>
         <Svg width={width} height={height} viewBox={VIEW.join(" ")}>
+          {road ? (
+            <Line
+              x1={ROAD.x1}
+              y1={ROAD.y}
+              x2={ROAD.x2}
+              y2={ROAD.y}
+              stroke={t.color.line}
+              strokeWidth={2}
+              strokeDasharray="10 8"
+              testID="empty-road"
+            />
+          ) : null}
           <Path transform={oTransform} d={brandArt.oPath} fill={brandArt.ink[version]} fillRule="evenodd" />
           <Path
             transform={carTransform}

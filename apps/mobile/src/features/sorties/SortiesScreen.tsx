@@ -318,9 +318,12 @@ export function SortiesScreen() {
           {countUpcoming === 0 && loading ? (
             <Muted variant="body">Chargement…</Muted>
           ) : countUpcoming === 0 && !(invitations.data && invitations.data.length > 0) ? (
+            // Lot M5 (maquette 9.3, retour 23) : l'état vide du O vivant, plus grand, avec sa ligne de route.
             <EmptyState
               title={sortiesLabels.emptyUpcomingTitle}
               text={sortiesLabels.emptyUpcomingText}
+              width={237}
+              road
               action={
                 <Button variant="primary" icon="explore" onPress={() => goTab("explorer")} fullWidth>
                   Explorer les événements
