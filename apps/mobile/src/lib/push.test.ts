@@ -146,10 +146,10 @@ describe("déconnexion : l'appareil quitte les push du compte", () => {
     expect(sim.notifications.getExpoPushTokenAsync).not.toHaveBeenCalled();
     // Pas de réseau sur la route du compte : inutile d'essayer l'autre.
     expect(sim.api.forgetPushToken).not.toHaveBeenCalled();
-    expect(pending()).toEqual({ token: TOKEN_A, native: false });
+    expect(pending()).toEqual({ tokens: [TOKEN_A], native: false });
 
     await replayPendingPush(); // toujours hors ligne
-    expect(pending()).toEqual({ token: TOKEN_A, native: false });
+    expect(pending()).toEqual({ tokens: [TOKEN_A], native: false });
     sim.api.forgetPushToken.mockResolvedValue(null); // le réseau revient
     await replayPendingPush();
     expect(sim.api.forgetPushToken).toHaveBeenLastCalledWith({ expoPushToken: TOKEN_A });
@@ -179,7 +179,7 @@ describe("déconnexion : l'appareil quitte les push du compte", () => {
     await registerThisDevice();
     sim.notifications.unregisterForNotificationsAsync.mockRejectedValueOnce(new Error("SERVICE_NOT_AVAILABLE"));
     await leavePush({ withSession: true });
-    expect(pending()).toEqual({ token: null, native: true });
+    expect(pending()).toEqual({ tokens: [], native: true });
     await replayPendingPush();
     expect(sim.notifications.unregisterForNotificationsAsync).toHaveBeenCalledTimes(2);
     expect(pending()).toBeNull();
@@ -193,7 +193,7 @@ describe("déconnexion : l'appareil quitte les push du compte", () => {
       const done = leavePush({ withSession: true });
       await vi.advanceTimersByTimeAsync(5_000);
       await done;
-      expect(pending()).toEqual({ token: null, native: true });
+      expect(pending()).toEqual({ tokens: [], native: true });
     } finally {
       vi.useRealTimers();
     }
@@ -206,7 +206,7 @@ describe("déconnexion : l'appareil quitte les push du compte", () => {
     sim.api.forgetPushToken.mockImplementation(offline);
     sim.notifications.unregisterForNotificationsAsync.mockRejectedValueOnce(new Error("hors ligne"));
     await leavePush({ withSession: true });
-    expect(pending()).toEqual({ token: TOKEN_A, native: true });
+    expect(pending()).toEqual({ tokens: [TOKEN_A], native: true });
 
     // B se connecte (réseau revenu) : pas de nouvelle désinscription du système, retrait d'abord, puis inscription.
     const order: string[] = [];
@@ -226,7 +226,7 @@ describe("déconnexion : l'appareil quitte les push du compte", () => {
 
   it("le même jeton repris par le compte suivant n'est jamais retiré ensuite", async () => {
     // Retrait en attente du jeton, mais B s'inscrit avec ce jeton alors que la route sans session échoue encore.
-    sim.store.set("push-unregister", JSON.stringify({ token: TOKEN_A, native: false }));
+    sim.store.set("push-unregister", JSON.stringify({ tokens: [TOKEN_A], native: false }));
     sim.api.forgetPushToken.mockImplementation(() => status(503));
     setPushAccount("compte-b");
     await registerThisDevice();
@@ -234,5 +234,17 @@ describe("déconnexion : l'appareil quitte les push du compte", () => {
     sim.api.forgetPushToken.mockClear();
     await replayPendingPush();
     expect(sim.api.forgetPushToken).not.toHaveBeenCalled();
+  });
+
+  it("un ancien jeton encore en attente n'est jamais perdu par une nouvelle déconnexion hors ligne", async () => {
+    sim.store.set("push-unregister", JSON.stringify({ tokens: ["ExponentPushToken[ancien]"], native: true }));
+    sim.store.set("push-token", TOKEN_A);
+    sim.api.unregisterDevice.mockImplementation(offline);
+    await leavePush({ withSession: true });
+    // La désinscription du système vient de réussir : plus à refaire.
+    expect(pending()).toEqual({ tokens: ["ExponentPushToken[ancien]", TOKEN_A], native: false });
+    await replayPendingPush();
+    expect(sim.api.forgetPushToken).toHaveBeenCalledTimes(2);
+    expect(pending()).toBeNull();
   });
 });

@@ -118,9 +118,9 @@ async function pushToken(): Promise<string | null> {
 
 /** Dernier jeton inscrit auprès de l'API : connu sans réseau au moment de la déconnexion. */
 const TOKEN_KEY = "push-token";
-/** Retrait pas encore fait : jeton à retirer côté API, désinscription du système à refaire. */
+/** Retrait pas encore fait : jetons à retirer côté API, désinscription du système à refaire. */
 const PENDING_KEY = "push-unregister";
-export type PendingUnregister = { token: string | null; native: boolean };
+export type PendingUnregister = { tokens: string[]; native: boolean };
 
 /**
  * Délai laissé aux appels qui passent par le réseau sans le dire : la désinscription du système (Android supprime son
@@ -187,20 +187,26 @@ async function retireToken(token: string, withSession: boolean): Promise<boolean
   return (await outcomeOf(() => api.forgetPushToken({ expoPushToken: token }))) === "done";
 }
 
+async function readPending(): Promise<PendingUnregister> {
+  const saved = await kvGetJson<Partial<PendingUnregister>>(PENDING_KEY);
+  return { tokens: Array.isArray(saved?.tokens) ? saved.tokens : [], native: saved?.native === true };
+}
+
 async function savePending(next: PendingUnregister): Promise<void> {
-  if (next.token || next.native) await kvSetJson(PENDING_KEY, next);
+  if (next.tokens.length || next.native) await kvSetJson(PENDING_KEY, next);
   else await kvDel(PENDING_KEY);
 }
 
 /** Rejoue le retrait en attente (sans session : sur preuve du jeton). */
 async function replayPending(): Promise<void> {
-  const pending = await kvGetJson<PendingUnregister>(PENDING_KEY);
-  if (!pending) return;
-  let { token, native } = pending;
+  const pending = await readPending();
+  if (!pending.tokens.length && !pending.native) return;
+  let { native } = pending;
   // Un compte a été ouvert depuis : l'appareil se réinscrit pour lui, la désinscription du système n'a plus lieu d'être.
   if (native) native = openAccount ? false : !(await unregisterNative());
-  if (token && (await retireToken(token, false))) token = null;
-  await savePending({ token, native });
+  const tokens: string[] = [];
+  for (const token of pending.tokens) if (!(await retireToken(token, false))) tokens.push(token);
+  await savePending({ tokens, native });
 }
 
 // --- Inscription, déconnexion ------------------------------------------------------------------------------------
@@ -226,8 +232,9 @@ export function registerThisDevice(): Promise<void> {
     if (!token) return;
     await kvSet(TOKEN_KEY, token);
     // L'API a repris ce jeton pour le compte ouvert (retiré de tout autre) : son retrait en attente n'a plus d'objet.
-    const pending = await kvGetJson<PendingUnregister>(PENDING_KEY);
-    if (pending?.token === token) await savePending({ ...pending, token: null });
+    const pending = await readPending();
+    if (pending.tokens.includes(token))
+      await savePending({ ...pending, tokens: pending.tokens.filter((t) => t !== token) });
   });
 }
 
@@ -241,15 +248,16 @@ export function leavePush({ withSession }: { withSession: boolean }): Promise<vo
   setPushAccount(null);
   if (Platform.OS === "web") return Promise.resolve();
   return serial(async () => {
-    const pending = (await kvGetJson<PendingUnregister>(PENDING_KEY)) ?? { token: null, native: false };
+    const pending = await readPending();
     // Le jeton se lit avant la désinscription du système (le redemander après réinscrirait l'appareil).
     const token = await knownToken();
     const native = !(await unregisterNative());
     await kvDel(TOKEN_KEY);
     const retired = token ? await retireToken(token, withSession) : true;
-    // Un ancien jeton encore en attente (autre déconnexion hors ligne) reste à retirer.
-    const left = retired ? (pending.token && pending.token !== token ? pending.token : null) : token;
-    await savePending({ token: left, native: native || pending.native });
+    // Un ancien jeton encore en attente (autre déconnexion hors ligne) reste à retirer avec celui-ci.
+    const tokens = pending.tokens.filter((t) => t !== token);
+    if (token && !retired) tokens.push(token);
+    await savePending({ tokens, native });
   });
 }
 
