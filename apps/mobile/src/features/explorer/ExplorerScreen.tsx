@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
   group: { gap: space1 },
   grow: { flex: 1, minWidth: 0 },
   xtools: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space2 },
-  filtersEnd: { flexGrow: 1, alignItems: "flex-end" },
+  filtersEnd: { marginLeft: "auto" },
   wrapRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   backHome: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", minHeight: 32 },
   backHomeText: { fontSize: 12.5, lineHeight: 16, fontFamily: "Archivo-ExtraBold" },
