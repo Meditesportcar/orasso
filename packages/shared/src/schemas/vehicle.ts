@@ -154,3 +154,21 @@ export type VehicleGeneration = {
   isOther: boolean;
 };
 export type Category = CategoryRef & { minVehicleAge: number | null };
+
+/** Transmission d'une motorisation du catalogue (« propulsion », « traction », « intégrale »). */
+export const vehicleDrivetrains = ["rwd", "fwd", "awd"] as const;
+export type VehicleDrivetrain = (typeof vehicleDrivetrains)[number];
+
+/**
+ * Motorisation du catalogue Orasso pour une génération (lot M1, docs/01 « Motorisation générée de façon cohérente
+ * avec le véhicule ») : choisie à l'ajout, elle remplit la motorisation, la puissance et le poids de la fiche.
+ */
+export type VehicleEngine = {
+  id: string;
+  generationId: string;
+  /** « 3.0 L6 turbo » : copié tel quel dans `engine` de la fiche. */
+  name: string;
+  powerHp: number | null;
+  weightKg: number | null;
+  drivetrain: VehicleDrivetrain | null;
+};

@@ -38,6 +38,7 @@ export * from "./stamps";
 export * from "./templates";
 export * from "./ticketing";
 export * from "./time";
+export * from "./vehicleAdd";
 export * from "./visibility";
 export * from "./waitlistDeadline";
 export * from "./weather";
