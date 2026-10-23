@@ -205,14 +205,16 @@ export function ExplorerScreen() {
           <View style={styles.xtools}>
             <SortButton value={sort} onPress={() => setSorting(true)} />
             <AroundButton around={around} onPress={() => setAroundOpen(true)} />
-            <View style={styles.grow} />
-            {chip(
-              count > 0 ? `${L.filters} · ${count}` : L.filters,
-              filtersOpen || count > 0,
-              () => setFiltersOpen((o) => !o),
-              "filters-toggle",
-              "toggle",
-            )}
+            {/* Tour 2 : « Filtres » reste à droite, sur la même ligne ou la suivante s'il n'y a plus la place. */}
+            <View style={styles.filtersEnd}>
+              {chip(
+                count > 0 ? `${L.filters} · ${count}` : L.filters,
+                filtersOpen || count > 0,
+                () => setFiltersOpen((o) => !o),
+                "filters-toggle",
+                "toggle",
+              )}
+            </View>
           </View>
         ) : null}
         {segment === "evenements" && away ? <BackHome onPress={backHome} /> : null}
@@ -386,7 +388,8 @@ function AroundOptions({
             placeholder="66, Aude, Gironde…"
             testID="around-find"
           />
-          <ChipRow>
+          {/* Tour 2 : les puces passent à la ligne (une rangée qui défile cachait la fin de la liste). */}
+          <View style={styles.wrapRow}>
             {matches.map((d) => (
               <Chip
                 key={d.code}
@@ -397,14 +400,14 @@ function AroundOptions({
                 {departmentLabel(d)}
               </Chip>
             ))}
-          </ChipRow>
+          </View>
         </View>
       ) : null}
       <View style={styles.group}>
         <Text variant="label" color={c.inkMuted}>
           {L.aroundDistance}
         </Text>
-        <ChipRow accessibilityRole="radiogroup" accessibilityLabel={L.aroundDistance}>
+        <View style={styles.wrapRow} accessibilityRole="radiogroup" accessibilityLabel={L.aroundDistance}>
           {RADII.map((km) => (
             <Chip key={km} accessibilityRole="radio" selected={radiusKm === km} onPress={() => onRadius(km)}>
               {L.aroundKm(km)}
@@ -413,7 +416,7 @@ function AroundOptions({
           <Chip accessibilityRole="radio" selected={radiusKm === null} onPress={() => onRadius(null)}>
             {L.everywhere}
           </Chip>
-        </ChipRow>
+        </View>
       </View>
       <Text variant="caption" color={c.inkMuted} style={styles.optHint}>
         {L.aroundSheetHint}
@@ -728,6 +731,8 @@ const styles = StyleSheet.create({
   group: { gap: space1 },
   grow: { flex: 1, minWidth: 0 },
   xtools: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space2 },
+  filtersEnd: { flexGrow: 1, alignItems: "flex-end" },
+  wrapRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   backHome: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", minHeight: 32 },
   backHomeText: { fontSize: 12.5, lineHeight: 16, fontFamily: "Archivo-ExtraBold" },
   sortBtn: {

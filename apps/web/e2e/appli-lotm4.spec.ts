@@ -314,7 +314,7 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await page.getByTestId("around-elsewhere").click();
       await page.getByTestId("around-find").fill("75");
       await shot(page, `explorer-autour-${theme}`);
-      await page.getByRole("radio", { name: "75 · Paris" }).click();
+      await page.getByRole("radio", { name: /^75 · / }).click();
       await expect(page.getByTestId("around-sheet")).toHaveCount(0);
       await expect(page.getByTestId("around-open")).toContainText("Le 75");
       await expect(page.getByTestId("sort-line")).toContainText("distances depuis le centre du 75", {
