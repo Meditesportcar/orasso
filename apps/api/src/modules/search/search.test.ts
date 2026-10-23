@@ -30,6 +30,7 @@ import {
   vehicleModels,
   vehicles,
 } from "../../db/schema";
+import { now } from "../../lib/deps";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { socialRepo } from "../social/repo";
 
@@ -469,7 +470,8 @@ describe("événements jamais listés", () => {
     await createEvent(unverified.id, { title: "Non vérifié Rivesaltes" });
     await createEvent(suspended.id, { title: "Suspendu Rivesaltes" });
     await createEvent(deleted.id, { title: "Supprimé Rivesaltes" });
-    await createEvent(ok.id, { title: "Passé Rivesaltes", startsAt: new Date(Date.now() - 5 * DAY) });
+    // Lot M4 : « passé » à l'heure de l'API (horloge figée du fichier), pas à l'heure réelle du PC.
+    await createEvent(ok.id, { title: "Passé Rivesaltes", startsAt: new Date(now().getTime() - 5 * DAY) });
 
     for (const path of [
       "/events?q=rivesaltes",
