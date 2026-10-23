@@ -172,7 +172,7 @@ function VerificationBody() {
 
 export function VerificationScreen() {
   return (
-    <AdminGate title="Structures à vérifier">
+    <AdminGate page title="Structures à vérifier">
       <VerificationBody />
     </AdminGate>
   );
@@ -311,7 +311,7 @@ function CertificationsBody() {
 
 export function CertificationsScreen() {
   return (
-    <AdminGate title="Certifications">
+    <AdminGate page title="Certifications">
       <CertificationsBody />
     </AdminGate>
   );
@@ -422,7 +422,7 @@ function TransfersBody() {
 
 export function TransfersScreen() {
   return (
-    <AdminGate title="Transferts de plaque">
+    <AdminGate page title="Transferts de plaque">
       <TransfersBody />
     </AdminGate>
   );

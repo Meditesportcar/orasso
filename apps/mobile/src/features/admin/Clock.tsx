@@ -270,7 +270,7 @@ function ClockBody() {
 
 export function ClockScreen() {
   return (
-    <AdminGate title={L.title}>
+    <AdminGate page title={L.title}>
       <ClockBody />
     </AdminGate>
   );

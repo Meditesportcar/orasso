@@ -3,17 +3,7 @@
 // « Billet OK » / « Déjà utilisé » / « Refusé »), et compteur d'entrées des visiteurs (+1, +10, −1). Tout marche sans
 // réseau : la liste des billets est sur le téléphone, chaque geste entre dans la file (idempotente) et part au retour
 // du réseau ; le serveur arbitre (un billet ne passe qu'une fois, le total est la somme de tous les téléphones).
-import {
-  AppBar,
-  Button,
-  Ground,
-  Plate,
-  ScanResult,
-  Text,
-  TextField,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
+import { Button, Ground, Plate, ScanResult, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { shopLabels } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
@@ -30,6 +20,7 @@ import { ed25519Verify } from "@/lib/staff/crypto";
 import { decideTicketLocal, ScanGate, shopAccess, visitorTotals } from "@/lib/staff/model";
 import { clearWriteError, getWriteError, newId, trustedKeysNow } from "@/lib/staff/runtime";
 import { useStaffActions, useStaffEvent } from "@/lib/staff/useStaff";
+import { FicheHeader } from "@/ui/FicheHeader";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -100,8 +91,7 @@ export default function Boutique() {
 
   return (
     <Ground animated={false} style={styles.fill}>
-      <AppBar
-        kind="flow"
+      <FicheHeader
         title={shopLabels.title}
         facts={
           state
@@ -111,7 +101,6 @@ export default function Boutique() {
         counter={tickets.length > 0 ? `${checked} / ${tickets.length}` : undefined}
         onClose={close}
         closeLabel="Quitter l'entrée visiteurs"
-        safeTop={insets.top}
       />
 
       <View style={[styles.camera, { backgroundColor: c.night, borderRadius: tokens.radius.radiusLg }]}>

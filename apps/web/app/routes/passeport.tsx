@@ -17,6 +17,7 @@ import { PassportPage } from "../components/PassportStamp";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
 import { formatDay } from "../lib/format";
+import { withRetour } from "../lib/retour";
 import "../styles/passport.css";
 import type { Route } from "./+types/passeport";
 
@@ -125,7 +126,13 @@ export default function Passeport({ loaderData }: Route.ComponentProps) {
           <p className="s-muted">{passportScreenTexts.votesNone}</p>
         ) : (
           votes.map((e) => (
-            <Button key={e.id} variant="secondary" icon="badge" next href={`/app/vote/${e.slug}`}>
+            <Button
+              key={e.id}
+              variant="secondary"
+              icon="badge"
+              next
+              href={withRetour(`/app/vote/${e.slug}`, "/app/passeport")}
+            >
               {`${passportScreenTexts.votesTitle} · ${e.title}`}
             </Button>
           ))

@@ -3,7 +3,6 @@
 // geste passe par une feuille de confirmation. Seule l'équipe Orasso bannit de la plateforme.
 import { Button, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { orgaManageLabels as L } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
 
@@ -16,6 +15,7 @@ import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
+import { useCloseTo } from "@/ui/useCloseTo";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { OrgaFailure, useOrga } from "./OrgaGate";
 
@@ -23,7 +23,6 @@ const { space2, space3 } = tokens.spacing;
 
 export function BansScreen() {
   const { t } = useTheme();
-  const router = useRouter();
   const { structureId, structureName } = useOrga();
   const bans = useApi(() => api.bans(structureId), [structureId]);
   const [pseudo, setPseudo] = useState("");
@@ -36,7 +35,8 @@ export function BansScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | undefined>();
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/(orga)/equipe"));
+  // Lot M7, tour 2 : le ✕ revient à l'écran qui a ouvert la page (le retour des onglets mènerait aux Événements).
+  const close = useCloseTo("/(orga)/structure");
   const list = sortedBans(bans.data ?? []);
 
   function askAdd() {

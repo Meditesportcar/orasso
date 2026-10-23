@@ -7,7 +7,6 @@ import {
   Chip,
   ChipRow,
   Counters,
-  Ground,
   Plate,
   TAB_BAR_SPACE,
   Text,
@@ -15,7 +14,7 @@ import {
   useTheme,
 } from "@orasso/design-system/native";
 import { orgaV2Labels, triageAppLabels } from "@orasso/shared";
-import { useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router";
+import { useIsFocused, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,12 +22,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTabSwipeDisabled } from "@/features/nav/useTabSwipe";
 import { api } from "@/lib/api";
 import { useChannel } from "@/lib/realtime";
-import { useSession } from "@/lib/session";
 import { COUNTER_ACTIVE, counterCells, defaultTriageEvent, triageEvents } from "@/lib/triage";
 import { useApi } from "@/lib/useApi";
 import { useNow } from "@/lib/useNow";
+import { TabStage } from "@/ui/Screens";
 import { TabTitle } from "@/ui/TabTitle";
-import { TopBar } from "@/ui/TopBar";
 import { OrgaFailure, useOrga } from "../OrgaGate";
 import { Deck } from "./Deck";
 import { ListMode } from "./ListMode";
@@ -44,7 +42,6 @@ type Segment = "vehicles" | "waitlist" | "providers" | "press" | "list";
 export function TriageScreen() {
   const { t } = useTheme();
   const { structureId, structureName } = useOrga();
-  const { refreshMe } = useSession();
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ event?: string }>();
@@ -55,12 +52,7 @@ export function TriageScreen() {
   const [picked, setPicked] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
 
-  // Compteurs de la cloche à jour à chaque retour sur l'onglet (comme les autres onglets).
-  useFocusEffect(
-    useCallback(() => {
-      void refreshMe();
-    }, [refreshMe]),
-  );
+  // Lot M7, tour 2 : la relecture du profil au retour sur l'onglet est celle de `TabStage` (une seule requête).
 
   const events = useApi(() => api.structureEvents(structureId), [structureId], {
     cacheKey: `orga-events-${structureId}`,
@@ -124,8 +116,32 @@ export function TriageScreen() {
   ];
 
   return (
-    <Ground still paused={!focused} style={styles.fill}>
-      <TopBar />
+    // Lot M7 : la bande ORASSO est celle du groupe d'onglets (`TabStage`), plus une bande posée par l'écran.
+    <TabStage
+      still
+      overlays={
+        <ScreenSheet visible={picker} onClose={() => setPicker(false)} accessibilityLabel={triageAppLabels.eventPicker}>
+          <Text variant="title" color={t.color.ink}>
+            {triageAppLabels.eventPicker}
+          </Text>
+          {choices.map((e) => (
+            <Button
+              key={e.id}
+              variant={e.id === eventId ? "secondary" : "plate"}
+              icon="calendar"
+              onPress={() => {
+                setPicked(e.id);
+                setPicker(false);
+              }}
+              fullWidth
+              testID="triage-event-choice"
+            >
+              {e.title}
+            </Button>
+          ))}
+        </ScreenSheet>
+      }
+    >
       {/* Lot C1, tour 2 : la barre d'onglets flotte par-dessus ; le bas de l'écran lui laisse sa place. */}
       <View style={[styles.body, { paddingBottom: TAB_BAR_SPACE + insets.bottom + space2 }]}>
         <TabTitle
@@ -211,28 +227,7 @@ export function TriageScreen() {
           </>
         )}
       </View>
-
-      <ScreenSheet visible={picker} onClose={() => setPicker(false)} accessibilityLabel={triageAppLabels.eventPicker}>
-        <Text variant="title" color={t.color.ink}>
-          {triageAppLabels.eventPicker}
-        </Text>
-        {choices.map((e) => (
-          <Button
-            key={e.id}
-            variant={e.id === eventId ? "secondary" : "plate"}
-            icon="calendar"
-            onPress={() => {
-              setPicked(e.id);
-              setPicker(false);
-            }}
-            fullWidth
-            testID="triage-event-choice"
-          >
-            {e.title}
-          </Button>
-        ))}
-      </ScreenSheet>
-    </Ground>
+    </TabStage>
   );
 }
 
