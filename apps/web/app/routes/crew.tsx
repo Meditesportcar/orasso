@@ -110,265 +110,272 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
     if (!window.confirm(text)) e.preventDefault();
   };
   return (
-    <div className="s-narrow s-stack" data-testid="crew" data-state={crew.viewerState}>
+    <>
       <FicheBar title={crewLabels.crew} back="/app/crews" />
-      <div className="crw-head">
-        <CrewLogo url={crew.logoUrl} name={crew.name} size={88} />
-        <div className="s-grow s-stack s-stack--tight">
-          <h1 className="s-title o-never-truncate">{crew.name}</h1>
-          <div className="s-row s-row--tight">
-            <Chip>{crew.department}</Chip>
-            <Chip>{crewLabels.membersCount(crew.membersCount)}</Chip>
-            {leader && <Chip variant="accent">{crewLabels.leader}</Chip>}
+      <div className="s-narrow s-stack" data-testid="crew" data-state={crew.viewerState}>
+        <div className="crw-head">
+          <CrewLogo url={crew.logoUrl} name={crew.name} size={88} />
+          <div className="s-grow s-stack s-stack--tight">
+            <h1 className="s-title o-never-truncate">{crew.name}</h1>
+            <div className="s-row s-row--tight">
+              <Chip>{crew.department}</Chip>
+              <Chip>{crewLabels.membersCount(crew.membersCount)}</Chip>
+              {leader && <Chip variant="accent">{crewLabels.leader}</Chip>}
+            </div>
+            {crew.leader && <span className="o-t-caption s-muted">{crewLabels.leaderOf(crew.leader.pseudo)}</span>}
           </div>
-          {crew.leader && <span className="o-t-caption s-muted">{crewLabels.leaderOf(crew.leader.pseudo)}</span>}
         </div>
-      </div>
-      {crew.archived && <p className="s-notice">{crewLabels.archived}</p>}
-      {crew.description && <p className="s-prewrap">{crew.description}</p>}
+        {crew.archived && <p className="s-notice">{crewLabels.archived}</p>}
+        {crew.description && <p className="s-prewrap">{crew.description}</p>}
 
-      {result?.crewError && (
-        <p className="s-error" role="alert">
-          {result.crewError}
-        </p>
-      )}
-      {result?.crewOk && (
-        <p className="s-notice s-notice--ok" role="status" data-testid="crew-ok">
-          {result.crewOk}
-        </p>
-      )}
+        {result?.crewError && (
+          <p className="s-error" role="alert">
+            {result.crewError}
+          </p>
+        )}
+        {result?.crewOk && (
+          <p className="s-notice s-notice--ok" role="status" data-testid="crew-ok">
+            {result.crewOk}
+          </p>
+        )}
 
-      {/* Une seule action principale selon la relation. */}
-      {!crew.archived && crew.viewerState === "none" && (
-        <Form method="post" className="s-form s-card" data-testid="crew-request-form">
-          <Hidden crewId={crew.id} intent="crew_request" />
-          <label className="s-label o-t-label" htmlFor="crew-message">
-            {crewLabels.requestMessage}
-          </label>
-          <textarea
-            id="crew-message"
-            name="message"
-            className="s-textarea"
-            rows={3}
-            maxLength={CREW_REQUEST_MESSAGE_MAX}
-          />
-          <Button type="submit" icon="crew" loading={busy} data-testid="crew-request">
-            {crewLabels.requestJoin}
+        {/* Une seule action principale selon la relation. */}
+        {!crew.archived && crew.viewerState === "none" && (
+          <Form method="post" className="s-form s-card" data-testid="crew-request-form">
+            <Hidden crewId={crew.id} intent="crew_request" />
+            <label className="s-label o-t-label" htmlFor="crew-message">
+              {crewLabels.requestMessage}
+            </label>
+            <textarea
+              id="crew-message"
+              name="message"
+              className="s-textarea"
+              rows={3}
+              maxLength={CREW_REQUEST_MESSAGE_MAX}
+            />
+            <Button type="submit" icon="crew" loading={busy} data-testid="crew-request">
+              {crewLabels.requestJoin}
+            </Button>
+          </Form>
+        )}
+        {crew.viewerState === "requested" && (
+          <div className="s-row">
+            <Button variant="secondary" icon="wait" disabled data-testid="crew-requested">
+              {crewLabels.requestSent}
+            </Button>
+            <Form method="post">
+              <Hidden crewId={crew.id} userId={userId} intent="crew_request_cancel" />
+              <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                {crewLabels.cancelRequest}
+              </Button>
+            </Form>
+          </div>
+        )}
+        {crew.viewerState === "invited" && (
+          <div className="s-row">
+            <Form method="post">
+              <Hidden crewId={crew.id} intent="crew_invitation_accept" />
+              <Button type="submit" icon="check" loading={busy} data-testid="crew-invitation-accept">
+                {crewLabels.acceptInvitation}
+              </Button>
+            </Form>
+            <Form method="post">
+              <Hidden crewId={crew.id} intent="crew_invitation_decline" />
+              <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                {crewLabels.declineInvitation}
+              </Button>
+            </Form>
+          </div>
+        )}
+        {member && crew.conversationId && (
+          <Button
+            variant={leader ? "secondary" : "primary"}
+            icon="chat"
+            href={`/app/boite/${crew.conversationId}`}
+            data-testid="crew-discussion"
+          >
+            {crewLabels.openDiscussion}
           </Button>
-        </Form>
-      )}
-      {crew.viewerState === "requested" && (
-        <div className="s-row">
-          <Button variant="secondary" icon="wait" disabled data-testid="crew-requested">
-            {crewLabels.requestSent}
-          </Button>
-          <Form method="post">
-            <Hidden crewId={crew.id} userId={userId} intent="crew_request_cancel" />
-            <Button type="submit" variant="secondary" icon="close" loading={busy}>
-              {crewLabels.cancelRequest}
-            </Button>
-          </Form>
-        </div>
-      )}
-      {crew.viewerState === "invited" && (
-        <div className="s-row">
-          <Form method="post">
-            <Hidden crewId={crew.id} intent="crew_invitation_accept" />
-            <Button type="submit" icon="check" loading={busy} data-testid="crew-invitation-accept">
-              {crewLabels.acceptInvitation}
-            </Button>
-          </Form>
-          <Form method="post">
-            <Hidden crewId={crew.id} intent="crew_invitation_decline" />
-            <Button type="submit" variant="secondary" icon="close" loading={busy}>
-              {crewLabels.declineInvitation}
-            </Button>
-          </Form>
-        </div>
-      )}
-      {member && crew.conversationId && (
-        <Button
-          variant={leader ? "secondary" : "primary"}
-          icon="chat"
-          href={`/app/boite/${crew.conversationId}`}
-          data-testid="crew-discussion"
-        >
-          {crewLabels.openDiscussion}
-        </Button>
-      )}
-      {!member && <p className="o-t-caption s-muted">{crewLabels.membersPrivate}</p>}
-      {!leader && !crew.archived && <ReportDialog look="link" targetType="crew" targetId={crew.id} />}
+        )}
+        {!member && <p className="o-t-caption s-muted">{crewLabels.membersPrivate}</p>}
+        {!leader && !crew.archived && <ReportDialog look="link" targetType="crew" targetId={crew.id} />}
 
-      {leader && pending && (
-        <section className="s-section" aria-labelledby="demandes-titre" data-testid="crew-pending">
-          <h2 id="demandes-titre" className="s-h2">
-            {crewLabels.pendingRequests}
-          </h2>
-          {pending.requests.length === 0 ? (
-            <p className="s-muted">{crewLabels.noPending}</p>
-          ) : (
-            <ul className="s-people">
-              {pending.requests.map((r) => (
-                <li key={r.person.userId} className="s-person" data-testid="crew-pending-request">
-                  <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={44} />
-                  <div className="s-person__main">
-                    <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(r.person.pseudo)}`}>
-                      {r.person.pseudo}
-                    </a>
-                    {r.message && <p className="o-t-caption s-muted s-prewrap">{r.message}</p>}
-                  </div>
-                  <div className="s-row">
-                    <Form method="post">
-                      <Hidden crewId={crew.id} userId={r.person.userId} intent="crew_request_accept" />
-                      <Button type="submit" variant="secondary" icon="check" loading={busy}>
-                        {crewLabels.accept}
-                      </Button>
-                    </Form>
-                    <Form method="post">
-                      <Hidden crewId={crew.id} userId={r.person.userId} intent="crew_request_decline" />
-                      <Button type="submit" variant="secondary" icon="close" loading={busy}>
-                        {crewLabels.decline}
-                      </Button>
-                    </Form>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Form method="post" className="s-row crw-row-end" data-testid="crew-invite-form">
-            <Hidden crewId={crew.id} intent="crew_invite" />
-            <TextField label={crewLabels.invitePseudo} name="pseudo" required autoComplete="off" />
-            <Button type="submit" variant="secondary" icon="add" loading={busy}>
-              {crewLabels.invite}
-            </Button>
-          </Form>
-          {pending.invitations.length > 0 && (
-            <>
-              <h3 className="s-label o-t-label">{crewLabels.pendingInvitations}</h3>
+        {leader && pending && (
+          <section className="s-section" aria-labelledby="demandes-titre" data-testid="crew-pending">
+            <h2 id="demandes-titre" className="s-h2">
+              {crewLabels.pendingRequests}
+            </h2>
+            {pending.requests.length === 0 ? (
+              <p className="s-muted">{crewLabels.noPending}</p>
+            ) : (
               <ul className="s-people">
-                {pending.invitations.map((r) => (
-                  <li key={r.person.userId} className="s-person">
-                    <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={36} />
-                    <span className="s-person__main">{r.person.pseudo}</span>
-                    <Form method="post">
-                      <Hidden crewId={crew.id} userId={r.person.userId} intent="crew_invitation_cancel" />
-                      <Button type="submit" variant="secondary" icon="close" loading={busy}>
-                        {crewLabels.cancelInvitation}
-                      </Button>
-                    </Form>
+                {pending.requests.map((r) => (
+                  <li key={r.person.userId} className="s-person" data-testid="crew-pending-request">
+                    <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={44} />
+                    <div className="s-person__main">
+                      <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(r.person.pseudo)}`}>
+                        {r.person.pseudo}
+                      </a>
+                      {r.message && <p className="o-t-caption s-muted s-prewrap">{r.message}</p>}
+                    </div>
+                    <div className="s-row">
+                      <Form method="post">
+                        <Hidden crewId={crew.id} userId={r.person.userId} intent="crew_request_accept" />
+                        <Button type="submit" variant="secondary" icon="check" loading={busy}>
+                          {crewLabels.accept}
+                        </Button>
+                      </Form>
+                      <Form method="post">
+                        <Hidden crewId={crew.id} userId={r.person.userId} intent="crew_request_decline" />
+                        <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                          {crewLabels.decline}
+                        </Button>
+                      </Form>
+                    </div>
                   </li>
                 ))}
               </ul>
-            </>
-          )}
-        </section>
-      )}
-
-      {members && (
-        <section className="s-section" aria-labelledby="membres-titre" data-testid="crew-members">
-          <h2 id="membres-titre" className="s-h2">
-            {crewLabels.members}
-          </h2>
-          <ul className="s-people">
-            {members.map((m) => (
-              <li key={m.userId} className="s-person" data-testid="crew-member">
-                <PersonAvatar url={m.avatarUrl} pseudo={m.pseudo} size={44} />
-                <div className="s-person__main">
-                  <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(m.pseudo)}`}>
-                    {m.pseudo}
-                  </a>
-                  <div className="s-row s-row--tight">
-                    <Chip>{gradeLabels[m.grade]}</Chip>
-                    {m.role === "leader" && <Chip variant="accent">{crewLabels.leader}</Chip>}
-                  </div>
-                </div>
-                {leader && m.role !== "leader" && !crew.archived && (
-                  <Form method="post" onSubmit={confirm(crewLabels.removeConfirm(m.pseudo))}>
-                    <Hidden crewId={crew.id} userId={m.userId} intent="crew_remove" />
-                    <Button type="submit" variant="secondary" icon="close" loading={busy}>
-                      {crewLabels.remove}
-                    </Button>
-                  </Form>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {leader && !crew.archived && (
-        <section className="s-section" aria-labelledby="modifier-titre">
-          <h2 id="modifier-titre" className="s-h2">
-            {crewLabels.edit}
-          </h2>
-          <Form method="post" encType="multipart/form-data" className="s-row crw-row-end" data-testid="crew-logo-form">
-            <input type="hidden" name="intent" value="crew_logo" />
-            <input type="hidden" name="crewId" value={crew.id} />
-            <label className="s-stack s-stack--tight">
-              <span className="s-label o-t-label">{crewLabels.logo}</span>
-              <input type="file" name="logo" accept="image/jpeg,image/png,image/webp,image/heic" required />
-            </label>
-            <Button type="submit" variant="secondary" icon="add" loading={busy}>
-              {crewLabels.changeLogo}
-            </Button>
-          </Form>
-          {crew.logoUrl && (
-            <Form method="post">
-              <Hidden crewId={crew.id} intent="crew_logo_remove" />
-              <Button type="submit" variant="secondary" icon="close" loading={busy}>
-                {crewLabels.removeLogo}
+            )}
+            <Form method="post" className="s-row crw-row-end" data-testid="crew-invite-form">
+              <Hidden crewId={crew.id} intent="crew_invite" />
+              <TextField label={crewLabels.invitePseudo} name="pseudo" required autoComplete="off" />
+              <Button type="submit" variant="secondary" icon="add" loading={busy}>
+                {crewLabels.invite}
               </Button>
             </Form>
-          )}
-          <Form method="post" className="s-form s-card" data-testid="crew-edit-form">
-            <Hidden crewId={crew.id} intent="crew_edit" />
-            <TextField
-              label={crewLabels.name}
-              name="name"
-              defaultValue={crew.name}
-              minLength={3}
-              maxLength={40}
-              required
-            />
-            <label className="s-label o-t-label" htmlFor="crew-description">
-              {crewLabels.description}
-            </label>
-            <textarea
-              id="crew-description"
-              name="description"
-              className="s-textarea"
-              rows={4}
-              maxLength={CREW_DESCRIPTION_MAX}
-              defaultValue={crew.description ?? ""}
-            />
-            <SelectField
-              label={crewLabels.department}
-              name="department"
-              defaultValue={crew.department}
-              options={departments.map((d) => ({ value: d, label: d }))}
-            />
-            <Button type="submit" variant="secondary" icon="check" loading={busy}>
-              {crewLabels.save}
-            </Button>
-          </Form>
-          <Form method="post" onSubmit={confirm(crewLabels.archiveConfirm)}>
-            <Hidden crewId={crew.id} intent="crew_archive" />
-            <Button type="submit" variant="secondary" icon="close" loading={busy} data-testid="crew-archive">
-              {crewLabels.archive}
-            </Button>
-          </Form>
-          <p className="o-t-caption s-muted">{crewLabels.leaderCannotLeave}</p>
-        </section>
-      )}
+            {pending.invitations.length > 0 && (
+              <>
+                <h3 className="s-label o-t-label">{crewLabels.pendingInvitations}</h3>
+                <ul className="s-people">
+                  {pending.invitations.map((r) => (
+                    <li key={r.person.userId} className="s-person">
+                      <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={36} />
+                      <span className="s-person__main">{r.person.pseudo}</span>
+                      <Form method="post">
+                        <Hidden crewId={crew.id} userId={r.person.userId} intent="crew_invitation_cancel" />
+                        <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                          {crewLabels.cancelInvitation}
+                        </Button>
+                      </Form>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+        )}
 
-      {crew.viewerState === "member" && !crew.archived && (
-        <Form method="post" onSubmit={confirm(crewLabels.leaveConfirm)}>
-          <Hidden crewId={crew.id} userId={userId} intent="crew_leave" />
-          <Button type="submit" variant="secondary" icon="undo" loading={busy} data-testid="crew-leave">
-            {crewLabels.leave}
-          </Button>
-        </Form>
-      )}
-    </div>
+        {members && (
+          <section className="s-section" aria-labelledby="membres-titre" data-testid="crew-members">
+            <h2 id="membres-titre" className="s-h2">
+              {crewLabels.members}
+            </h2>
+            <ul className="s-people">
+              {members.map((m) => (
+                <li key={m.userId} className="s-person" data-testid="crew-member">
+                  <PersonAvatar url={m.avatarUrl} pseudo={m.pseudo} size={44} />
+                  <div className="s-person__main">
+                    <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(m.pseudo)}`}>
+                      {m.pseudo}
+                    </a>
+                    <div className="s-row s-row--tight">
+                      <Chip>{gradeLabels[m.grade]}</Chip>
+                      {m.role === "leader" && <Chip variant="accent">{crewLabels.leader}</Chip>}
+                    </div>
+                  </div>
+                  {leader && m.role !== "leader" && !crew.archived && (
+                    <Form method="post" onSubmit={confirm(crewLabels.removeConfirm(m.pseudo))}>
+                      <Hidden crewId={crew.id} userId={m.userId} intent="crew_remove" />
+                      <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                        {crewLabels.remove}
+                      </Button>
+                    </Form>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {leader && !crew.archived && (
+          <section className="s-section" aria-labelledby="modifier-titre">
+            <h2 id="modifier-titre" className="s-h2">
+              {crewLabels.edit}
+            </h2>
+            <Form
+              method="post"
+              encType="multipart/form-data"
+              className="s-row crw-row-end"
+              data-testid="crew-logo-form"
+            >
+              <input type="hidden" name="intent" value="crew_logo" />
+              <input type="hidden" name="crewId" value={crew.id} />
+              <label className="s-stack s-stack--tight">
+                <span className="s-label o-t-label">{crewLabels.logo}</span>
+                <input type="file" name="logo" accept="image/jpeg,image/png,image/webp,image/heic" required />
+              </label>
+              <Button type="submit" variant="secondary" icon="add" loading={busy}>
+                {crewLabels.changeLogo}
+              </Button>
+            </Form>
+            {crew.logoUrl && (
+              <Form method="post">
+                <Hidden crewId={crew.id} intent="crew_logo_remove" />
+                <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                  {crewLabels.removeLogo}
+                </Button>
+              </Form>
+            )}
+            <Form method="post" className="s-form s-card" data-testid="crew-edit-form">
+              <Hidden crewId={crew.id} intent="crew_edit" />
+              <TextField
+                label={crewLabels.name}
+                name="name"
+                defaultValue={crew.name}
+                minLength={3}
+                maxLength={40}
+                required
+              />
+              <label className="s-label o-t-label" htmlFor="crew-description">
+                {crewLabels.description}
+              </label>
+              <textarea
+                id="crew-description"
+                name="description"
+                className="s-textarea"
+                rows={4}
+                maxLength={CREW_DESCRIPTION_MAX}
+                defaultValue={crew.description ?? ""}
+              />
+              <SelectField
+                label={crewLabels.department}
+                name="department"
+                defaultValue={crew.department}
+                options={departments.map((d) => ({ value: d, label: d }))}
+              />
+              <Button type="submit" variant="secondary" icon="check" loading={busy}>
+                {crewLabels.save}
+              </Button>
+            </Form>
+            <Form method="post" onSubmit={confirm(crewLabels.archiveConfirm)}>
+              <Hidden crewId={crew.id} intent="crew_archive" />
+              <Button type="submit" variant="secondary" icon="close" loading={busy} data-testid="crew-archive">
+                {crewLabels.archive}
+              </Button>
+            </Form>
+            <p className="o-t-caption s-muted">{crewLabels.leaderCannotLeave}</p>
+          </section>
+        )}
+
+        {crew.viewerState === "member" && !crew.archived && (
+          <Form method="post" onSubmit={confirm(crewLabels.leaveConfirm)}>
+            <Hidden crewId={crew.id} userId={userId} intent="crew_leave" />
+            <Button type="submit" variant="secondary" icon="undo" loading={busy} data-testid="crew-leave">
+              {crewLabels.leave}
+            </Button>
+          </Form>
+        )}
+      </div>
+    </>
   );
 }

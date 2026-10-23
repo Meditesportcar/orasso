@@ -98,62 +98,64 @@ export default function StructureNouvelle({ actionData }: Route.ComponentProps) 
   const errors: Errors = actionData?.errors ?? {};
   const v = (actionData?.values ?? {}) as Record<string, string>;
   return (
-    <div className="s-narrow s-stack">
+    <>
       <FicheBar title="Créer ma structure" facts="Organisateur" back="/app/moi" />
-      <p className="s-lead">
-        Association, club, circuit ou entreprise : tu en deviens le propriétaire. Tu pourras préparer tes événements
-        tout de suite ; la publication demande la vérification de la structure (étape suivante).
-      </p>
-      <Form method="post" encType="multipart/form-data" className="s-form" data-testid="structure-form">
-        <SelectField
-          label="Type"
-          name="kind"
-          defaultValue={v.kind ?? "association"}
-          options={KINDS.map((k) => ({ value: k, label: structureKindLabels[k] }))}
-          error={errors.kind}
-        />
-        <TextField label="Nom" name="name" defaultValue={v.name} error={errors.name} required />
-        <TextAreaField
-          label="Description"
-          name="description"
-          defaultValue={v.description}
-          help="Ce que fait la structure, ses événements : affiché sur sa page publique."
-        />
-        <TextField label="Adresse" name="addressLine" autoComplete="street-address" defaultValue={v.addressLine} />
-        <div className="s-two">
-          <TextField label="Code postal" name="postalCode" autoComplete="postal-code" defaultValue={v.postalCode} />
-          <TextField label="Ville" name="city" autoComplete="address-level2" defaultValue={v.city} />
-        </div>
-        <TextField
-          label="Départements couverts"
-          name="departments"
-          defaultValue={v.departments}
-          placeholder="66, 11"
-          help="Les départements où tu organises : codes séparés par des virgules."
-          error={errors.departments}
-        />
-        <TextField label="Site web" name="website" inputMode="url" defaultValue={v.website} placeholder="https://" />
-        <div className="s-two">
-          <TextField label="Instagram" name="instagram" inputMode="url" defaultValue={v.instagram} />
-          <TextField label="Facebook" name="facebook" inputMode="url" defaultValue={v.facebook} />
-          <TextField label="TikTok" name="tiktok" inputMode="url" defaultValue={v.tiktok} />
-          <TextField label="YouTube" name="youtube" inputMode="url" defaultValue={v.youtube} />
-        </div>
-        {errors.social && (
-          <p className="s-error" role="alert">
-            {errors.social}
-          </p>
-        )}
-        <FileField label="Logo" name="logo" accept="image/*" help="Carré de préférence ; JPEG, PNG ou WebP." />
-        {errors.form && (
-          <p className="s-error" role="alert">
-            {errors.form}
-          </p>
-        )}
-        <Button type="submit" icon="add" loading={busy} fullWidth>
-          Créer la structure
-        </Button>
-      </Form>
-    </div>
+      <div className="s-narrow s-stack">
+        <p className="s-lead">
+          Association, club, circuit ou entreprise : tu en deviens le propriétaire. Tu pourras préparer tes événements
+          tout de suite ; la publication demande la vérification de la structure (étape suivante).
+        </p>
+        <Form method="post" encType="multipart/form-data" className="s-form" data-testid="structure-form">
+          <SelectField
+            label="Type"
+            name="kind"
+            defaultValue={v.kind ?? "association"}
+            options={KINDS.map((k) => ({ value: k, label: structureKindLabels[k] }))}
+            error={errors.kind}
+          />
+          <TextField label="Nom" name="name" defaultValue={v.name} error={errors.name} required />
+          <TextAreaField
+            label="Description"
+            name="description"
+            defaultValue={v.description}
+            help="Ce que fait la structure, ses événements : affiché sur sa page publique."
+          />
+          <TextField label="Adresse" name="addressLine" autoComplete="street-address" defaultValue={v.addressLine} />
+          <div className="s-two">
+            <TextField label="Code postal" name="postalCode" autoComplete="postal-code" defaultValue={v.postalCode} />
+            <TextField label="Ville" name="city" autoComplete="address-level2" defaultValue={v.city} />
+          </div>
+          <TextField
+            label="Départements couverts"
+            name="departments"
+            defaultValue={v.departments}
+            placeholder="66, 11"
+            help="Les départements où tu organises : codes séparés par des virgules."
+            error={errors.departments}
+          />
+          <TextField label="Site web" name="website" inputMode="url" defaultValue={v.website} placeholder="https://" />
+          <div className="s-two">
+            <TextField label="Instagram" name="instagram" inputMode="url" defaultValue={v.instagram} />
+            <TextField label="Facebook" name="facebook" inputMode="url" defaultValue={v.facebook} />
+            <TextField label="TikTok" name="tiktok" inputMode="url" defaultValue={v.tiktok} />
+            <TextField label="YouTube" name="youtube" inputMode="url" defaultValue={v.youtube} />
+          </div>
+          {errors.social && (
+            <p className="s-error" role="alert">
+              {errors.social}
+            </p>
+          )}
+          <FileField label="Logo" name="logo" accept="image/*" help="Carré de préférence ; JPEG, PNG ou WebP." />
+          {errors.form && (
+            <p className="s-error" role="alert">
+              {errors.form}
+            </p>
+          )}
+          <Button type="submit" icon="add" loading={busy} fullWidth>
+            Créer la structure
+          </Button>
+        </Form>
+      </div>
+    </>
   );
 }

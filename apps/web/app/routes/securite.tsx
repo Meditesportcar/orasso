@@ -106,152 +106,154 @@ export default function Securite({ loaderData, actionData }: Route.ComponentProp
   const totpOn = loaderData.enabled || actionData?.done;
   const scoped = (scope: string) => (actionData?.scope === scope ? actionData.error : null);
   return (
-    <div className="s-narrow s-stack">
+    <>
       <FicheBar title="Sécurité" back="/app/moi" />
-      {(loaderData.hint === "passkey_sign_in" || loaderData.hint === "totp_sign_in") && (
-        <p className="s-notice s-notice--alert" data-testid="passkey-sign-in-needed">
-          Cette session ne prouve pas ta double authentification : pour l'espace organisateur et pour changer tes clés
-          ou ton code, reconnecte-toi avec ta clé d'accès ou ton code.
-        </p>
-      )}
-
-      <section className="s-section s-section--first" aria-labelledby="totp-titre">
-        <h2 id="totp-titre" className="s-h2">
-          Application d'authentification
-        </h2>
-        {totpOn && (
-          <p className="s-notice s-notice--ok">
-            <Chip variant="accent">Active</Chip> La double authentification est activée sur ton compte.
+      <div className="s-narrow s-stack">
+        {(loaderData.hint === "passkey_sign_in" || loaderData.hint === "totp_sign_in") && (
+          <p className="s-notice s-notice--alert" data-testid="passkey-sign-in-needed">
+            Cette session ne prouve pas ta double authentification : pour l'espace organisateur et pour changer tes clés
+            ou ton code, reconnecte-toi avec ta clé d'accès ou ton code.
           </p>
         )}
-        {!totpOn && !enable && (
-          <>
-            <p className="s-lead">
-              {loaderData.required
-                ? "La double authentification est obligatoire pour les organisateurs : application d'authentification, ou connexion avec une clé d'accès."
-                : "Protège ton compte avec un code à usage unique."}
-            </p>
-            <Form method="post" className="s-form">
-              <input type="hidden" name="intent" value="enable" />
-              <TextField
-                label="Ton mot de passe"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                revealable
-                error={scoped("totp")}
-                required
-              />
-              <Button type="submit" icon="entry" loading={busy} fullWidth>
-                Activer
-              </Button>
-            </Form>
-          </>
-        )}
-        {enable && (
-          <div className="s-stack">
-            <p className="s-lead">
-              Scanne ce QR avec ton application d'authentification, ou saisis la clé à la main, puis entre le code
-              affiché.
-            </p>
-            <div className="acc__qr">
-              <Qr payload={enable.totpURI} label="QR de la double authentification" />
-            </div>
-            <p className="o-t-caption s-muted">Clé : {secret}</p>
-            <div className="s-card">
-              <div className="s-label o-t-label">Codes de secours (à garder hors de cet appareil)</div>
-              <p>{enable.backupCodes.join("  ")}</p>
-            </div>
-            <Form method="post" className="s-form">
-              <input type="hidden" name="intent" value="verify" />
-              <TextField
-                label="Code à 6 chiffres"
-                name="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                error={scoped("totp")}
-                required
-              />
-              <Button type="submit" icon="check" loading={busy} fullWidth>
-                Confirmer
-              </Button>
-            </Form>
-          </div>
-        )}
-      </section>
 
-      <section className="s-section" aria-labelledby="passkeys-titre" data-testid="passkeys">
-        <h2 id="passkeys-titre" className="s-h2">
-          Clés d'accès
-        </h2>
-        <p className="s-muted">
-          Face ID, empreinte ou code de l'appareil : se connecter sur ce site avec une clé d'accès vaut double
-          authentification pour cette session. Une connexion par mot de passe, elle, demande l'application
-          d'authentification si elle est activée. Dans l'appli, la double authentification se fait par code.
-        </p>
-        {loaderData.passkeys.length === 0 ? (
-          <p className="s-notice">Aucune clé d'accès.</p>
-        ) : (
-          loaderData.passkeys.map((k) => (
-            <div key={k.id} className="s-card s-stack s-stack--tight" data-testid="passkey-row">
-              <div className="s-row s-row--between">
-                <strong>{k.name || "Clé d'accès"}</strong>
-                <span className="o-t-caption s-muted">Créée le {formatDateTime(k.createdAt)}</span>
+        <section className="s-section s-section--first" aria-labelledby="totp-titre">
+          <h2 id="totp-titre" className="s-h2">
+            Application d'authentification
+          </h2>
+          {totpOn && (
+            <p className="s-notice s-notice--ok">
+              <Chip variant="accent">Active</Chip> La double authentification est activée sur ton compte.
+            </p>
+          )}
+          {!totpOn && !enable && (
+            <>
+              <p className="s-lead">
+                {loaderData.required
+                  ? "La double authentification est obligatoire pour les organisateurs : application d'authentification, ou connexion avec une clé d'accès."
+                  : "Protège ton compte avec un code à usage unique."}
+              </p>
+              <Form method="post" className="s-form">
+                <input type="hidden" name="intent" value="enable" />
+                <TextField
+                  label="Ton mot de passe"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  revealable
+                  error={scoped("totp")}
+                  required
+                />
+                <Button type="submit" icon="entry" loading={busy} fullWidth>
+                  Activer
+                </Button>
+              </Form>
+            </>
+          )}
+          {enable && (
+            <div className="s-stack">
+              <p className="s-lead">
+                Scanne ce QR avec ton application d'authentification, ou saisis la clé à la main, puis entre le code
+                affiché.
+              </p>
+              <div className="acc__qr">
+                <Qr payload={enable.totpURI} label="QR de la double authentification" />
               </div>
-              <Form method="post" className="s-row">
-                <input type="hidden" name="id" value={k.id} />
-                <TextField label="Renommer" name="name" defaultValue={k.name ?? ""} maxLength={60} />
-                <Button type="submit" name="intent" value="rename-passkey" variant="secondary" icon="check">
-                  Renommer
-                </Button>
-                <Button type="submit" name="intent" value="delete-passkey" variant="secondary" icon="close">
-                  Supprimer
+              <p className="o-t-caption s-muted">Clé : {secret}</p>
+              <div className="s-card">
+                <div className="s-label o-t-label">Codes de secours (à garder hors de cet appareil)</div>
+                <p>{enable.backupCodes.join("  ")}</p>
+              </div>
+              <Form method="post" className="s-form">
+                <input type="hidden" name="intent" value="verify" />
+                <TextField
+                  label="Code à 6 chiffres"
+                  name="code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  error={scoped("totp")}
+                  required
+                />
+                <Button type="submit" icon="check" loading={busy} fullWidth>
+                  Confirmer
                 </Button>
               </Form>
             </div>
-          ))
-        )}
-        {scoped("passkey") && (
-          <p className="s-error" role="alert">
-            {scoped("passkey")}
-          </p>
-        )}
-        <AddPasskey busy={busy} />
-      </section>
+          )}
+        </section>
 
-      <section className="s-section" aria-labelledby="sessions-titre" data-testid="sessions">
-        <h2 id="sessions-titre" className="s-h2">
-          Appareils connectés
-        </h2>
-        {loaderData.sessions.map((s) => (
-          <div key={s.id} className="s-row s-row--between s-card" data-testid="session-row">
-            <div className="s-stack s-stack--tight">
-              <strong>
-                {s.device}
-                {s.current ? " · cet appareil" : ""}
-              </strong>
-              <span className="o-t-caption s-muted">Dernière activité le {formatDateTime(s.lastActiveAt)}</span>
-            </div>
-            {!s.current && (
-              <Form method="post">
-                <input type="hidden" name="id" value={s.id} />
-                <Button type="submit" name="intent" value="revoke-session" variant="secondary" icon="close">
-                  Déconnecter
-                </Button>
-              </Form>
-            )}
-          </div>
-        ))}
-        {scoped("session") && (
-          <p className="s-error" role="alert">
-            {scoped("session")}
+        <section className="s-section" aria-labelledby="passkeys-titre" data-testid="passkeys">
+          <h2 id="passkeys-titre" className="s-h2">
+            Clés d'accès
+          </h2>
+          <p className="s-muted">
+            Face ID, empreinte ou code de l'appareil : se connecter sur ce site avec une clé d'accès vaut double
+            authentification pour cette session. Une connexion par mot de passe, elle, demande l'application
+            d'authentification si elle est activée. Dans l'appli, la double authentification se fait par code.
           </p>
-        )}
-        <p className="s-muted">
-          Mot de passe perdu ou compromis ? <a href="/mot-de-passe-oublie">Réinitialise-le</a> : tous tes appareils
-          seront déconnectés.
-        </p>
-      </section>
-    </div>
+          {loaderData.passkeys.length === 0 ? (
+            <p className="s-notice">Aucune clé d'accès.</p>
+          ) : (
+            loaderData.passkeys.map((k) => (
+              <div key={k.id} className="s-card s-stack s-stack--tight" data-testid="passkey-row">
+                <div className="s-row s-row--between">
+                  <strong>{k.name || "Clé d'accès"}</strong>
+                  <span className="o-t-caption s-muted">Créée le {formatDateTime(k.createdAt)}</span>
+                </div>
+                <Form method="post" className="s-row">
+                  <input type="hidden" name="id" value={k.id} />
+                  <TextField label="Renommer" name="name" defaultValue={k.name ?? ""} maxLength={60} />
+                  <Button type="submit" name="intent" value="rename-passkey" variant="secondary" icon="check">
+                    Renommer
+                  </Button>
+                  <Button type="submit" name="intent" value="delete-passkey" variant="secondary" icon="close">
+                    Supprimer
+                  </Button>
+                </Form>
+              </div>
+            ))
+          )}
+          {scoped("passkey") && (
+            <p className="s-error" role="alert">
+              {scoped("passkey")}
+            </p>
+          )}
+          <AddPasskey busy={busy} />
+        </section>
+
+        <section className="s-section" aria-labelledby="sessions-titre" data-testid="sessions">
+          <h2 id="sessions-titre" className="s-h2">
+            Appareils connectés
+          </h2>
+          {loaderData.sessions.map((s) => (
+            <div key={s.id} className="s-row s-row--between s-card" data-testid="session-row">
+              <div className="s-stack s-stack--tight">
+                <strong>
+                  {s.device}
+                  {s.current ? " · cet appareil" : ""}
+                </strong>
+                <span className="o-t-caption s-muted">Dernière activité le {formatDateTime(s.lastActiveAt)}</span>
+              </div>
+              {!s.current && (
+                <Form method="post">
+                  <input type="hidden" name="id" value={s.id} />
+                  <Button type="submit" name="intent" value="revoke-session" variant="secondary" icon="close">
+                    Déconnecter
+                  </Button>
+                </Form>
+              )}
+            </div>
+          ))}
+          {scoped("session") && (
+            <p className="s-error" role="alert">
+              {scoped("session")}
+            </p>
+          )}
+          <p className="s-muted">
+            Mot de passe perdu ou compromis ? <a href="/mot-de-passe-oublie">Réinitialise-le</a> : tous tes appareils
+            seront déconnectés.
+          </p>
+        </section>
+      </div>
+    </>
   );
 }

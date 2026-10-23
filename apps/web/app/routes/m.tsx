@@ -59,49 +59,51 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
   const m = loaderData.media;
   const ig = instagramUrl(m.instagram);
   return (
-    <div className="s-narrow s-stack" data-testid="media-public">
+    <>
       <FicheBar title="Média" back="/app" />
-      <div className="s-row">
-        {m.logoUrl && <img className="md-logo" src={m.logoUrl} alt="" />}
-        <div className="s-stack s-stack--tight">
-          <h1 className="s-title o-never-truncate">{m.name}</h1>
-          <ChipRow className="s-chips-wrap">
-            {m.verified && <Chip variant="verified">{L.profileVerified}</Chip>}
-            {m.formats.map((f) => (
-              <Chip key={f}>{mediaFormatLabels[f]}</Chip>
-            ))}
-          </ChipRow>
+      <div className="s-narrow s-stack" data-testid="media-public">
+        <div className="s-row">
+          {m.logoUrl && <img className="md-logo" src={m.logoUrl} alt="" />}
+          <div className="s-stack s-stack--tight">
+            <h1 className="s-title o-never-truncate">{m.name}</h1>
+            <ChipRow className="s-chips-wrap">
+              {m.verified && <Chip variant="verified">{L.profileVerified}</Chip>}
+              {m.formats.map((f) => (
+                <Chip key={f}>{mediaFormatLabels[f]}</Chip>
+              ))}
+            </ChipRow>
+          </div>
         </div>
+        {m.description && <p className="s-prewrap">{m.description}</p>}
+        <Plate className="s-stack s-stack--tight">
+          <div className="o-t-label">{L.profileCover}</div>
+          <p>{m.departments.length ? m.departments.join(", ") : L.profileCoverAll}</p>
+        </Plate>
+        <div className="s-row">
+          {m.website && (
+            <Button variant="secondary" icon="explore" href={m.website} target="_blank" rel="noreferrer">
+              {L.profileWebsite}
+            </Button>
+          )}
+          {ig && (
+            <Button variant="secondary" icon="instagram" href={ig} target="_blank" rel="noreferrer">
+              {instagramHandle(m.instagram) ?? L.profileInstagram}
+            </Button>
+          )}
+          {m.youtube && (
+            <Button variant="secondary" icon="live" href={m.youtube} target="_blank" rel="noreferrer">
+              {L.profileYoutube}
+            </Button>
+          )}
+        </div>
+        <MediaContents
+          key={`${m.id}:${loaderData.chunk.cursor}:${loaderData.size}`}
+          mediaId={m.id}
+          first={loaderData.chunk}
+          size={loaderData.size}
+        />{" "}
       </div>
-      {m.description && <p className="s-prewrap">{m.description}</p>}
-      <Plate className="s-stack s-stack--tight">
-        <div className="o-t-label">{L.profileCover}</div>
-        <p>{m.departments.length ? m.departments.join(", ") : L.profileCoverAll}</p>
-      </Plate>
-      <div className="s-row">
-        {m.website && (
-          <Button variant="secondary" icon="explore" href={m.website} target="_blank" rel="noreferrer">
-            {L.profileWebsite}
-          </Button>
-        )}
-        {ig && (
-          <Button variant="secondary" icon="instagram" href={ig} target="_blank" rel="noreferrer">
-            {instagramHandle(m.instagram) ?? L.profileInstagram}
-          </Button>
-        )}
-        {m.youtube && (
-          <Button variant="secondary" icon="live" href={m.youtube} target="_blank" rel="noreferrer">
-            {L.profileYoutube}
-          </Button>
-        )}
-      </div>
-      <MediaContents
-        key={`${m.id}:${loaderData.chunk.cursor}:${loaderData.size}`}
-        mediaId={m.id}
-        first={loaderData.chunk}
-        size={loaderData.size}
-      />{" "}
-    </div>
+    </>
   );
 }
 

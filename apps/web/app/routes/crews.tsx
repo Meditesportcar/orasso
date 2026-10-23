@@ -39,59 +39,61 @@ export default function Crews({ loaderData, actionData }: Route.ComponentProps) 
   const { crews, defaultDepartment } = loaderData;
   const busy = useNavigation().state !== "idle";
   return (
-    <div className="s-narrow s-stack" data-testid="crews">
+    <>
       <FicheBar title={crewLabels.myCrews} back="/app/moi" />
-      {crews.length === 0 ? (
-        <p className="s-notice">{crewLabels.noCrews}</p>
-      ) : (
-        <ul className="s-people">
-          {crews.map((c) => (
-            <CrewRow
-              key={c.id}
-              crew={c}
-              extra={c.role === "leader" ? <Chip variant="accent">{crewLabels.leader}</Chip> : null}
-            />
-          ))}
-        </ul>
-      )}
-      <Button variant="secondary" icon="search" href="/app/explorer?segment=personnes">
-        {crewLabels.search}
-      </Button>
-
-      <section className="s-section" aria-labelledby="creer-titre">
-        <h2 id="creer-titre" className="s-h2">
-          {crewLabels.createCrew}
-        </h2>
-        <p className="o-t-caption s-muted">{crewLabels.createCrewHint}</p>
-        {actionData?.error && (
-          <p className="s-error" role="alert">
-            {actionData.error}
-          </p>
+      <div className="s-narrow s-stack" data-testid="crews">
+        {crews.length === 0 ? (
+          <p className="s-notice">{crewLabels.noCrews}</p>
+        ) : (
+          <ul className="s-people">
+            {crews.map((c) => (
+              <CrewRow
+                key={c.id}
+                crew={c}
+                extra={c.role === "leader" ? <Chip variant="accent">{crewLabels.leader}</Chip> : null}
+              />
+            ))}
+          </ul>
         )}
-        <Form method="post" className="s-form s-card" data-testid="crew-create-form">
-          <TextField label={crewLabels.name} name="name" minLength={3} maxLength={40} required />
-          <label className="s-label o-t-label" htmlFor="crew-description">
-            {crewLabels.description}
-          </label>
-          <textarea
-            id="crew-description"
-            name="description"
-            className="s-textarea"
-            rows={3}
-            maxLength={CREW_DESCRIPTION_MAX}
-            placeholder={crewLabels.descriptionPlaceholder}
-          />
-          <SelectField
-            label={crewLabels.department}
-            name="department"
-            defaultValue={defaultDepartment}
-            options={departments.map((d) => ({ value: d, label: d }))}
-          />
-          <Button type="submit" icon="crew" loading={busy} data-testid="crew-create">
+        <Button variant="secondary" icon="search" href="/app/explorer?segment=personnes">
+          {crewLabels.search}
+        </Button>
+
+        <section className="s-section" aria-labelledby="creer-titre">
+          <h2 id="creer-titre" className="s-h2">
             {crewLabels.createCrew}
-          </Button>
-        </Form>
-      </section>
-    </div>
+          </h2>
+          <p className="o-t-caption s-muted">{crewLabels.createCrewHint}</p>
+          {actionData?.error && (
+            <p className="s-error" role="alert">
+              {actionData.error}
+            </p>
+          )}
+          <Form method="post" className="s-form s-card" data-testid="crew-create-form">
+            <TextField label={crewLabels.name} name="name" minLength={3} maxLength={40} required />
+            <label className="s-label o-t-label" htmlFor="crew-description">
+              {crewLabels.description}
+            </label>
+            <textarea
+              id="crew-description"
+              name="description"
+              className="s-textarea"
+              rows={3}
+              maxLength={CREW_DESCRIPTION_MAX}
+              placeholder={crewLabels.descriptionPlaceholder}
+            />
+            <SelectField
+              label={crewLabels.department}
+              name="department"
+              defaultValue={defaultDepartment}
+              options={departments.map((d) => ({ value: d, label: d }))}
+            />
+            <Button type="submit" icon="crew" loading={busy} data-testid="crew-create">
+              {crewLabels.createCrew}
+            </Button>
+          </Form>
+        </section>
+      </div>
+    </>
   );
 }

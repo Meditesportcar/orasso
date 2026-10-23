@@ -28,9 +28,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 export default function Prestataires({ loaderData }: Route.ComponentProps) {
   return (
-    <div className="s-narrow s-stack" data-testid="provider-public">
+    <>
       <FicheBar title={P.providerPage} back="/app" />
-      <ProviderVitrine provider={loaderData.provider} reviews={loaderData.reviews} />
-    </div>
+      <div className="s-narrow s-stack" data-testid="provider-public">
+        <ProviderVitrine provider={loaderData.provider} reviews={loaderData.reviews} />
+      </div>
+    </>
   );
 }

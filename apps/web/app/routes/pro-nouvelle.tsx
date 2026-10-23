@@ -41,30 +41,32 @@ export async function action({ request }: Route.ActionArgs) {
 export default function ProNouvelle({ actionData }: Route.ComponentProps) {
   const busy = useNavigation().state !== "idle";
   return (
-    <div className="s-narrow s-stack">
-      <div className="s-head">
-        <FicheBar title="Créer ma fiche pro" facts="Professionnels" back="/app/moi" />
-        <p className="s-lead">
-          Gratuit jusqu'au 21 juin 2027. Tu complèteras ensuite tes remises par grade, tes photos et la vérification de
-          ton SIRET.
-        </p>
+    <>
+      <FicheBar title="Créer ma fiche pro" facts="Professionnels" back="/app/moi" />
+      <div className="s-narrow s-stack">
+        <div className="s-head">
+          <p className="s-lead">
+            Gratuit jusqu'au 21 juin 2027. Tu complèteras ensuite tes remises par grade, tes photos et la vérification
+            de ton SIRET.
+          </p>
+        </div>
+        <Plate as="section" aria-label="Fiche pro">
+          <Form method="post" encType="multipart/form-data" className="s-form" data-testid="pro-create">
+            <ProFicheFields />
+            <FileField label="Logo" name="logo" accept="image/*" />
+            {actionData?.error && (
+              <p className="s-error" role="alert">
+                {actionData.error}
+              </p>
+            )}
+            <div>
+              <Button type="submit" icon="check" loading={busy}>
+                Créer ma fiche
+              </Button>
+            </div>
+          </Form>
+        </Plate>
       </div>
-      <Plate as="section" aria-label="Fiche pro">
-        <Form method="post" encType="multipart/form-data" className="s-form" data-testid="pro-create">
-          <ProFicheFields />
-          <FileField label="Logo" name="logo" accept="image/*" />
-          {actionData?.error && (
-            <p className="s-error" role="alert">
-              {actionData.error}
-            </p>
-          )}
-          <div>
-            <Button type="submit" icon="check" loading={busy}>
-              Créer ma fiche
-            </Button>
-          </div>
-        </Form>
-      </Plate>
-    </div>
+    </>
   );
 }

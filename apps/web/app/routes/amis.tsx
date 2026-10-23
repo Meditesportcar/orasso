@@ -38,128 +38,130 @@ export default function Amis({ loaderData, actionData }: Route.ComponentProps) {
   const { friends, incoming, outgoing, inviteLink } = loaderData;
   const busy = useNavigation().state !== "idle";
   return (
-    <div className="s-narrow s-stack" data-testid="amis">
+    <>
       <FicheBar title={socialLabels.myFriends} back="/app/moi" />
-      {actionData?.friendError && (
-        <p className="s-error" role="alert">
-          {actionData.friendError}
-        </p>
-      )}
-
-      {incoming.length > 0 && (
-        <section className="s-section s-section--first" aria-labelledby="recues-titre" data-testid="requests-in">
-          <h2 id="recues-titre" className="s-h2">
-            {socialLabels.friendRequestsIn}
-          </h2>
-          <ul className="s-people">
-            {incoming.map((r) => (
-              <li key={r.id} className="s-person">
-                <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={48} />
-                <div className="s-person__main">
-                  <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(r.person.pseudo)}`}>
-                    {r.person.pseudo}
-                  </a>
-                  <Chip>{gradeLabels[r.person.grade]}</Chip>
-                  {r.message && <p className="o-t-caption s-muted s-prewrap">{r.message}</p>}
-                </div>
-                <div className="s-row">
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="friend_accept" />
-                    <input type="hidden" name="id" value={r.id} />
-                    <Button type="submit" variant="secondary" icon="check" loading={busy}>
-                      {socialLabels.accept}
-                    </Button>
-                  </Form>
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="friend_decline" />
-                    <input type="hidden" name="id" value={r.id} />
-                    <Button type="submit" variant="secondary" icon="close" loading={busy}>
-                      {socialLabels.decline}
-                    </Button>
-                  </Form>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className="s-section" aria-labelledby="amis-titre">
-        <h2 id="amis-titre" className="s-h2">
-          {socialLabels.myFriends} · {friends.length}
-        </h2>
-        {friends.length === 0 ? (
-          <p className="s-notice">{socialLabels.noFriends}</p>
-        ) : (
-          <ul className="s-people" data-testid="friends-list">
-            {friends.map((f) => (
-              <li key={f.userId} className="s-person">
-                <PersonAvatar url={f.avatarUrl} pseudo={f.pseudo} size={48} />
-                <div className="s-person__main">
-                  <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(f.pseudo)}`}>
-                    {f.pseudo}
-                  </a>
-                  <Chip>{gradeLabels[f.grade]}</Chip>
-                </div>
-                <Form method="post">
-                  <input type="hidden" name="intent" value="friend_remove" />
-                  <input type="hidden" name="userId" value={f.userId} />
-                  <Button type="submit" variant="secondary" icon="close" loading={busy}>
-                    {socialLabels.removeFriend}
-                  </Button>
-                </Form>
-              </li>
-            ))}
-          </ul>
+      <div className="s-narrow s-stack" data-testid="amis">
+        {actionData?.friendError && (
+          <p className="s-error" role="alert">
+            {actionData.friendError}
+          </p>
         )}
-      </section>
 
-      {outgoing.length > 0 && (
-        <section className="s-section" aria-labelledby="envoyees-titre" data-testid="requests-out">
-          <h2 id="envoyees-titre" className="s-h2">
-            {socialLabels.friendRequestsOut}
+        {incoming.length > 0 && (
+          <section className="s-section s-section--first" aria-labelledby="recues-titre" data-testid="requests-in">
+            <h2 id="recues-titre" className="s-h2">
+              {socialLabels.friendRequestsIn}
+            </h2>
+            <ul className="s-people">
+              {incoming.map((r) => (
+                <li key={r.id} className="s-person">
+                  <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={48} />
+                  <div className="s-person__main">
+                    <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(r.person.pseudo)}`}>
+                      {r.person.pseudo}
+                    </a>
+                    <Chip>{gradeLabels[r.person.grade]}</Chip>
+                    {r.message && <p className="o-t-caption s-muted s-prewrap">{r.message}</p>}
+                  </div>
+                  <div className="s-row">
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="friend_accept" />
+                      <input type="hidden" name="id" value={r.id} />
+                      <Button type="submit" variant="secondary" icon="check" loading={busy}>
+                        {socialLabels.accept}
+                      </Button>
+                    </Form>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="friend_decline" />
+                      <input type="hidden" name="id" value={r.id} />
+                      <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                        {socialLabels.decline}
+                      </Button>
+                    </Form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <section className="s-section" aria-labelledby="amis-titre">
+          <h2 id="amis-titre" className="s-h2">
+            {socialLabels.myFriends} · {friends.length}
           </h2>
-          <ul className="s-people">
-            {outgoing.map((r) => (
-              <li key={r.id} className="s-person">
-                <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={48} />
-                <div className="s-person__main">
-                  <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(r.person.pseudo)}`}>
-                    {r.person.pseudo}
-                  </a>
-                  <span className="o-t-caption s-muted">{socialLabels.requestSent}</span>
-                </div>
-                <Form method="post">
-                  <input type="hidden" name="intent" value="friend_remove" />
-                  <input type="hidden" name="userId" value={r.person.userId} />
-                  <Button type="submit" variant="secondary" icon="undo" loading={busy}>
-                    Annuler
-                  </Button>
-                </Form>
-              </li>
-            ))}
-          </ul>
+          {friends.length === 0 ? (
+            <p className="s-notice">{socialLabels.noFriends}</p>
+          ) : (
+            <ul className="s-people" data-testid="friends-list">
+              {friends.map((f) => (
+                <li key={f.userId} className="s-person">
+                  <PersonAvatar url={f.avatarUrl} pseudo={f.pseudo} size={48} />
+                  <div className="s-person__main">
+                    <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(f.pseudo)}`}>
+                      {f.pseudo}
+                    </a>
+                    <Chip>{gradeLabels[f.grade]}</Chip>
+                  </div>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="friend_remove" />
+                    <input type="hidden" name="userId" value={f.userId} />
+                    <Button type="submit" variant="secondary" icon="close" loading={busy}>
+                      {socialLabels.removeFriend}
+                    </Button>
+                  </Form>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
-      )}
 
-      <section className="s-section" aria-labelledby="ajout-titre">
-        <h2 id="ajout-titre" className="s-h2">
-          {socialLabels.addFriend}
-        </h2>
-        <Form method="post" className="s-form">
-          <input type="hidden" name="intent" value="friend_add" />
-          <input type="hidden" name="source" value="search" />
-          <TextField label="Pseudo" name="pseudo" autoComplete="off" required />
-          <Button type="submit" variant="primary" icon="add" loading={busy}>
-            Envoyer la demande
+        {outgoing.length > 0 && (
+          <section className="s-section" aria-labelledby="envoyees-titre" data-testid="requests-out">
+            <h2 id="envoyees-titre" className="s-h2">
+              {socialLabels.friendRequestsOut}
+            </h2>
+            <ul className="s-people">
+              {outgoing.map((r) => (
+                <li key={r.id} className="s-person">
+                  <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={48} />
+                  <div className="s-person__main">
+                    <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(r.person.pseudo)}`}>
+                      {r.person.pseudo}
+                    </a>
+                    <span className="o-t-caption s-muted">{socialLabels.requestSent}</span>
+                  </div>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="friend_remove" />
+                    <input type="hidden" name="userId" value={r.person.userId} />
+                    <Button type="submit" variant="secondary" icon="undo" loading={busy}>
+                      Annuler
+                    </Button>
+                  </Form>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <section className="s-section" aria-labelledby="ajout-titre">
+          <h2 id="ajout-titre" className="s-h2">
+            {socialLabels.addFriend}
+          </h2>
+          <Form method="post" className="s-form">
+            <input type="hidden" name="intent" value="friend_add" />
+            <input type="hidden" name="source" value="search" />
+            <TextField label="Pseudo" name="pseudo" autoComplete="off" required />
+            <Button type="submit" variant="primary" icon="add" loading={busy}>
+              Envoyer la demande
+            </Button>
+          </Form>
+          <Button variant="secondary" icon="search" href="/app/explorer?segment=personnes">
+            {socialLabels.searchPeople}
           </Button>
-        </Form>
-        <Button variant="secondary" icon="search" href="/app/explorer?segment=personnes">
-          {socialLabels.searchPeople}
-        </Button>
-        <TextField label="Mon lien d'ami" value={inviteLink} readOnly onFocus={(e) => e.currentTarget.select()} />
-        <p className="o-t-caption s-muted">{socialLabels.scanFriendHint} Le scan se fait dans l'appli.</p>
-      </section>
-    </div>
+          <TextField label="Mon lien d'ami" value={inviteLink} readOnly onFocus={(e) => e.currentTarget.select()} />
+          <p className="o-t-caption s-muted">{socialLabels.scanFriendHint} Le scan se fait dans l'appli.</p>
+        </section>
+      </div>
+    </>
   );
 }
