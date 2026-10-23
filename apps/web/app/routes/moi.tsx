@@ -1,10 +1,12 @@
 import { Button, CheckboxField, Chip, Icon, TextField } from "@orasso/design-system/web";
 import {
   type AccountSettings,
+  accountAppLabels,
   departments as allDepartments,
   arriveeLabels,
   type Category,
   gradeLabels,
+  helpLabels,
   MAX_DEPARTMENTS,
   moderationLabels,
   mutableTypesByFamily,
@@ -241,9 +243,10 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         </div>
       </section>
 
-      <section className="s-section" aria-labelledby="email-titre">
+      {/* Lot M5 (parité de la maquette 7.2) : « Compte » réunit l'e-mail, la sécurité et mes sanctions. */}
+      <section className="s-section" aria-labelledby="email-titre" data-testid="account-section">
         <h2 id="email-titre" className="s-h2">
-          Adresse e-mail
+          Compte
         </h2>
         <p>
           {me.user.email} · {me.user.emailVerified ? <Chip variant="accent">Confirmée</Chip> : <Chip>À confirmer</Chip>}
@@ -261,6 +264,14 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             )}
           </Form>
         )}
+        <p className="s-muted">Mot de passe, double authentification, clés d'accès, appareils connectés.</p>
+        <Button href="/app/securite" variant="secondary" icon="eye">
+          Ouvrir la sécurité
+        </Button>
+        {/* Lot 32 : sanctions de la modération et contestation. */}
+        <Button href="/app/sanctions" variant="secondary" icon="list" data-testid="my-sanctions-link">
+          {moderationLabels.mySanctions}
+        </Button>
       </section>
 
       <Form method="post" className="s-stack">
@@ -295,10 +306,12 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           ))}
         </section>
 
-        <section className="s-section" aria-labelledby="visibilite-titre">
+        {/* Lot M5 (parité de la maquette 7.2) : « Confidentialité » = compte public ou privé, export des données. */}
+        <section className="s-section" aria-labelledby="visibilite-titre" data-testid="privacy-section">
           <h2 id="visibilite-titre" className="s-h2">
-            Compte public ou privé
+            Confidentialité
           </h2>
+          <p className="s-label o-t-label">Compte public ou privé</p>
           {profileVisibilities.map((v) => (
             <label key={v} className="o-check">
               <input
@@ -317,6 +330,11 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
             </label>
           ))}
           <p className="o-t-caption s-muted">{profileVisibilityAlways}</p>
+          <p className="s-label o-t-label">{accountAppLabels.dataTitle}</p>
+          <p className="o-t-caption s-muted">{accountAppLabels.exportHelp}</p>
+          <Button href="/app/mes-donnees" variant="secondary" icon="export" data-testid="export-data">
+            {accountAppLabels.export}
+          </Button>
         </section>
 
         <section className="s-section" aria-labelledby="secteur-titre">
@@ -365,17 +383,14 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
         </Button>
       </Form>
 
-      <section className="s-section" aria-labelledby="securite-titre">
-        <h2 id="securite-titre" className="s-h2">
-          Sécurité
+      {/* Lot M5 (parité de la maquette 7.3) : l'Aide, ses questions fréquentes et le contact. */}
+      <section className="s-section" aria-labelledby="aide-titre">
+        <h2 id="aide-titre" className="s-h2">
+          {helpLabels.title}
         </h2>
-        <p className="s-muted">Double authentification, clés d'accès, appareils connectés.</p>
-        <Button href="/app/securite" variant="secondary" icon="eye">
-          Ouvrir la sécurité
-        </Button>
-        {/* Lot 32 : sanctions de la modération et contestation. */}
-        <Button href="/app/sanctions" variant="secondary" icon="list" data-testid="my-sanctions-link">
-          {moderationLabels.mySanctions}
+        <p className="s-muted">Questions fréquentes, nous écrire, signaler un problème.</p>
+        <Button href="/app/aide" variant="secondary" icon="help" data-testid="help-link">
+          Ouvrir l'aide
         </Button>
       </section>
 

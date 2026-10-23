@@ -151,8 +151,14 @@ export const homeProfileLabels = {
   passportTile: (n: number) => `${n} tampon${n > 1 ? "s" : ""} cette saison`,
   passportTitle: "Passeport Orasso",
   // Lot C2a (artefact DA v2 `s-home`) : rail d'affiches, incitations.
-  aroundThisMonth: (place: string) => `Autour du ${place} ce mois-ci`,
-  aroundThisMonthNoPlace: "Autour de toi ce mois-ci",
+  // Trait d'union insécable (U+2011) : « mois‑ci » ne se coupe jamais en fin de ligne (retour 01, lot M5).
+  aroundThisMonth: (place: string) => `Autour du ${place} ce mois‑ci`,
+  aroundThisMonthNoPlace: "Autour de toi ce mois‑ci",
+  // Lot M5 (maquette 6.1) : « Ta prochaine sortie », les tickets qui glissent.
+  nextOuting: "Ta prochaine sortie",
+  outingOf: (i: number, n: number) => `${i} sur ${n}`,
+  myApplication: "Ma candidature",
+  waitlistLine: "Prévenu si une place se libère",
   exploreLink: "Explorer",
   staffModeEve: "le mode staff s'ouvre la veille",
   passportNext: "Le prochain t'attend à ta prochaine sortie.",

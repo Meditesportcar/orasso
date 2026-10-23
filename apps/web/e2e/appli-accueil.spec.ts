@@ -50,9 +50,10 @@ test("appli : Accueil du passionné (artefact DA v2), sans le fourre-tout", asyn
     // Lot C2a (artefact DA v2 `s-home`) : la salutation, la carte du prochain événement, puis seulement la météo, les
     // autres sorties en mini-tickets, « Tu es staff », le rail « Autour du 66 ce mois-ci » et le Passeport.
     await expect(page.getByTestId("home-greeting")).toContainText(/Salut Kenji/i, { timeout: 30_000 });
-    await expect(page.getByTestId("home-hero")).toBeVisible();
+    // Lot M5 (maquette 6.1) : « Ta prochaine sortie » en tickets qui glissent ; « mois‑ci » à trait d'union insécable.
+    await expect(page.getByTestId("home-outing").first()).toBeVisible();
     await expect(page.getByTestId("home-rail-item").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Autour du 66 ce mois-ci", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Autour du 66 ce mois.ci$/)).toBeVisible();
     await expect(page.getByTestId("home-passport")).toContainText("Passeport Orasso");
     // Relecture du lot C2a : l'emplacement sponsorisé (fonction validée) est une affiche du rail, marquée « Sponsorisé » ;
     // l'API ne compte l'impression que pour cet Accueil, qui l'affiche.

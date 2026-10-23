@@ -27,6 +27,8 @@ export const homeApi = {
       .then((r) => r.audienceRank)
       .catch(() => null),
   sponsoredClick: (id: string) => request<unknown>(`/api/sponsored/${id}/click`, { method: "POST" }),
+  /** Lot M5, tour 2 : l'emplacement du Garage vient d'apparaître à l'écran (compté une fois par jour). */
+  sponsoredImpression: (id: string) => request<unknown>(`/api/sponsored/${id}/impression`, { method: "POST" }),
   /** Compteurs de la fiche pro (lot 14) : « appeler » et « itinéraire » du garage favori. */
   trackPro: (slug: string, kind: "call" | "route") =>
     request<unknown>(`/api/pros/by-slug/${encodeURIComponent(slug)}/track`, { method: "POST", body: { kind } }),

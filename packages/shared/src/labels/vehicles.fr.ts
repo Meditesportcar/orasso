@@ -129,6 +129,7 @@ export const vehicleWizardLabels = {
   garageCount: (n: number) => (n <= 1 ? `${n} véhicule` : `${n} véhicules`),
   addVehicle: "Ajouter un véhicule",
   addVehicleHint: "Marque, photos, plaque floutée : deux minutes.",
+  // Lot M5 : vocabulaire de Damien (« carte » = le plan seulement).
   share: "Partager son affiche",
   editVehicle: "Modifier le véhicule",
   events: "événements",

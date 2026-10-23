@@ -18,6 +18,7 @@ import { body, parse, query, uuidParam } from "../../lib/validate";
 import { categoryOptions } from "./categories";
 import { certificationService } from "./certification";
 import { photoBlurService } from "./photos-blur";
+import { vehicleProsService } from "./pros";
 import { vehiclesRepo } from "./repo";
 import { vehiclesService } from "./service";
 
@@ -108,6 +109,13 @@ export const vehiclesRoutes = new Hono<AppEnv>()
       "cache-control": CACHE_1H["cache-control"],
       "content-disposition": `${download ? "attachment" : "inline"}; filename="orasso-${format}${format === "story" ? `-${style}` : ""}.png"`,
     });
+  })
+  // Lot M5 : « Pour ta … » du Garage (pros partenaires et sponsorisé lié au véhicule). Jamais gardé en cache : le
+  // sponsorisé n'est compté que quand il est renvoyé.
+  .get("/me/vehicles/:id/pros", async (c) => {
+    const v = await requireUser(c);
+    c.header("cache-control", "no-store");
+    return c.json(await vehicleProsService.forVehicle(v, uuidParam(c, "id")));
   })
   .post("/me/vehicles/:id/certification-request", async (c) => {
     const v = await requireUser(c);

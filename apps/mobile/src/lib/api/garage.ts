@@ -13,6 +13,7 @@ import type {
   VehicleHistoryItem,
   VehicleMake,
   VehicleModel,
+  VehiclePros,
   VehicleStatus,
   VehicleUpdate,
 } from "@orasso/shared";
@@ -25,6 +26,8 @@ export const garageApi = {
   /** Page du véhicule : fiche et état de la certification. */
   vehicle: (id: string) => request<VehicleDetail>(`/api/me/vehicles/${id}`),
   vehicleHistory: (id: string) => request<VehicleHistoryItem[]>(`/api/me/vehicles/${id}/history`),
+  /** Lot M5 : « Pour ta … » du Garage (pros partenaires, sponsorisé lié au véhicule ; jamais gardé en cache). */
+  vehiclePros: (id: string) => request<VehiclePros>(`/api/me/vehicles/${id}/pros`),
   /** Passage en archive (vendu, souvenir, accidenté) ou retour au garage actif, avec motif facultatif. */
   setVehicleStatus: (id: string, status: VehicleStatus, statusNote?: string | null) =>
     request<VehicleFull>(`/api/me/vehicles/${id}`, {
