@@ -122,7 +122,7 @@ export const vehicleWizardLabels = {
   garageCount: (n: number) => (n <= 1 ? `${n} véhicule` : `${n} véhicules`),
   addVehicle: "Ajouter un véhicule",
   addVehicleHint: "Marque, photos, plaque floutée : deux minutes.",
-  share: "Partager sa carte",
+  share: "Partager son affiche",
   editVehicle: "Modifier le véhicule",
   events: "événements",
   audiencePrize: "Prix du public",

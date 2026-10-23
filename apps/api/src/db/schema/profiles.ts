@@ -50,6 +50,10 @@ export const profiles = pgTable(
     visibility: profileVisibilityEnum("visibility").notNull().default("public"),
     departments: text("departments").array().notNull().default(sql`'{}'::text[]`),
     radiusKm: smallint("radius_km").notNull().default(50),
+    /** Lot M6 (« Tes préférences ») : types d'événements préférés (`EventFormat`, validés par l'API) ; vide = tous. */
+    preferredFormats: text("preferred_formats").array().notNull().default(sql`'{}'::text[]`),
+    /** Lot M6 : l'étape « Tes préférences » a été vue (validée ou passée) ; null = jamais, l'appli la propose une fois. */
+    preferencesSeenAt: tstz("preferences_seen_at"),
     /** Lot 41 : profil choisi à l'arrivée (textes et tuto, pas les casquettes) ; null pour les comptes antérieurs. */
     mainProfile: mainProfileEnum("main_profile"),
     platformRole: platformRoleEnum("platform_role").notNull().default("user"),

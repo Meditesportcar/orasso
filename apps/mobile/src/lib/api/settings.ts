@@ -6,6 +6,8 @@ import type {
   AccountSettingsUpdate,
   Me,
   Page,
+  Preferences,
+  PreferencesUpdate,
   ProfileUpdate,
   PublicPreview,
   SessionView,
@@ -19,6 +21,10 @@ export const settingsApi = {
   settings: () => request<AccountSettings>("/api/me/settings"),
   updateSettings: (body: AccountSettingsUpdate) =>
     request<AccountSettings>("/api/me/settings", { method: "PATCH", body }),
+  /** Lot M6 : « Tes préférences » (un envoi, même vide, marque l'étape comme vue). */
+  preferences: () => request<Preferences>("/api/me/preferences"),
+  updatePreferences: (body: PreferencesUpdate) =>
+    request<Preferences>("/api/me/preferences", { method: "PATCH", body }),
   publicPreview: () => request<PublicPreview>("/api/me/public-preview"),
   updateProfile: (body: ProfileUpdate) => request<Me>("/api/me/profile", { method: "PATCH", body }),
   uploadAvatar: (form: FormData) =>

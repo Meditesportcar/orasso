@@ -16,7 +16,11 @@ export const reportTargets = [
 ] as const;
 export type ReportTarget = (typeof reportTargets)[number];
 
-/** Motifs (docs/01 : insulte, arnaque, contenu choquant, faux profil, harcèlement… ; `other` exige des détails). */
+/**
+ * Motifs (docs/01 : insulte, arnaque, contenu choquant, faux profil, harcèlement… ; `other` exige des détails). Lot M6
+ * (retour 21 de Damien) : des motifs propres à ce qu'on signale, ajoutés à la fin (valeurs de l'enum PostgreSQL) ;
+ * chaque type n'en propose qu'une partie (`reportReasonsByTarget`), vérifiée par l'API.
+ */
 export const reportReasons = [
   "insult",
   "scam",
@@ -26,8 +30,61 @@ export const reportReasons = [
   "spam",
   "dangerous_driving",
   "other",
+  "misleading_info",
+  "cancelled_unannounced",
+  "unauthorized_place",
+  "abusive_pricing",
+  "plate_or_face",
+  "copyright",
+  "fake_pro",
+  "discount_not_applied",
+  "fake_reviews",
 ] as const;
 export type ReportReason = (typeof reportReasons)[number];
+
+/** Les motifs d'une personne (la liste d'origine) : aussi ceux d'une sanction décidée par l'administration. */
+export const personReportReasons = [
+  "insult",
+  "harassment",
+  "fake_profile",
+  "scam",
+  "shocking",
+  "spam",
+  "dangerous_driving",
+  "other",
+] as const satisfies readonly ReportReason[];
+
+/**
+ * Les motifs proposés pour chaque type, dans l'ordre de la feuille « Signaler » (appli et site). `other` toujours en
+ * dernier. Événement : liste de la maquette 9.2 ; personne : la liste d'origine ; pro et prestataire, contenu, message :
+ * retour 21 ; véhicule, avis, crew, annonce : adaptés (journal des choix, lot M6).
+ */
+export const reportReasonsByTarget: Record<ReportTarget, readonly ReportReason[]> = {
+  event: [
+    "scam",
+    "misleading_info",
+    "cancelled_unannounced",
+    "dangerous_driving",
+    "unauthorized_place",
+    "abusive_pricing",
+    "shocking",
+    "spam",
+    "other",
+  ],
+  profile: personReportReasons,
+  vehicle: ["plate_or_face", "shocking", "copyright", "misleading_info", "spam", "other"],
+  photo: ["plate_or_face", "shocking", "copyright", "other"],
+  message: ["insult", "harassment", "scam", "spam", "other"],
+  review: ["insult", "misleading_info", "spam", "other"],
+  crew: ["insult", "shocking", "fake_profile", "dangerous_driving", "spam", "other"],
+  pro: ["fake_pro", "scam", "discount_not_applied", "fake_reviews", "other"],
+  provider: ["fake_pro", "scam", "fake_reviews", "other"],
+  announcement: ["misleading_info", "shocking", "insult", "spam", "other"],
+};
+
+/** Le motif est-il proposé pour ce type ? (contrôle de l'API, `reportCreateSchema`). */
+export const reportReasonAllowed = (target: ReportTarget, reason: ReportReason): boolean =>
+  reportReasonsByTarget[target].includes(reason);
 
 export const reportStatuses = [
   "pending",

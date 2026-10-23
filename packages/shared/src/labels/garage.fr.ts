@@ -78,26 +78,41 @@ export const certificationConditions: { key: Exclude<CertificationMissing, "pend
   ];
 
 export const shareFormatLabels: Record<ShareFormat, string> = {
-  story: "Story (9:16)",
-  post: "Publication (1:1)",
+  story: "Story 9:16",
+  post: "Post 4:5",
 };
 
-/** Carte à partager (lot 50, prototype `s-share`) : styles, zones masquées et boutons. */
+/** Affiche à partager (lot 50 ; lot M6, maquettes 2.1 à 2.3) : formats, styles, zones masquées et boutons. */
 export const shareStyleLabels: Record<ShareStyle, string> = { night: "Nuit", sand: "Sable", neon: "Néon" };
 
 export const shareSheetLabels = {
-  title: "Carte à partager",
-  subtitle: "Format story, signée Orasso",
-  help: "Une carte avec la photo de couverture, le nom du véhicule et tes chiffres clés. Jamais la plaque.",
+  title: "Affiche à partager",
+  subtitle: "Signée Orasso",
+  /** Sous-titre avec le modèle : « Ta GR Supra, signée Orasso ». */
+  subtitleOf: (model: string) => `Ta ${model}, signée Orasso`,
+  help: "Une affiche avec la photo de couverture, le nom du véhicule et ses chiffres. La plaque reste floutée.",
   showSafe: "Voir les zones masquées par Instagram",
   hideSafe: "Cacher les zones masquées",
   maskedByInstagram: "Masqué par Instagram",
   story: "En story",
+  post: "En post",
   image: "Image",
+  copyLink: "Copier le lien",
+  linkCopied: "Lien copié.",
   saved: "Image enregistrée.",
   unavailable: "Le partage n'est pas disponible sur cet appareil.",
-  loading: "Préparation de la carte…",
-  failed: "Impossible de préparer la carte : vérifie ta connexion.",
+  loading: "Préparation de l'affiche…",
+  failed: "Impossible de préparer l'affiche : vérifie ta connexion.",
+  // Filet de sécurité : la plaque re-détectée sur l'affiche composée, avant le partage.
+  plateChecking: "Vérification de la plaque sur l'affiche…",
+  plateClear: "Plaque vérifiée à nouveau avant le partage : rien de lisible.",
+  plateServer: "La photo garde la plaque floutée par Orasso.",
+  plateFound: "Une plaque semble lisible sur l'affiche.",
+  plateMask: "La masquer",
+  plateMasked: "Plaque masquée sur l'affiche.",
+  /** Pied de l'affiche (texte rendu par l'API). */
+  findIt: "Retrouve-la sur",
+  certifiedSeal: "Véhicule certifié · Orasso",
 };
 
 /** Motifs de statut proposés dans la feuille « Vendu / Souvenir / Accidenté ». */
