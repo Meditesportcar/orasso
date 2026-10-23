@@ -127,6 +127,11 @@ export type AppBarProps = {
    */
   kind: "tab" | "flow" | "home" | "page";
   title?: string;
+  /**
+   * Écran de flux (lot M7, en-tête de fiche) : une bande à la place du titre (l'organisateur d'une fiche événement) ;
+   * le ✕ garde sa place.
+   */
+  lead?: ReactNode;
   /** Ligne de faits sous le titre (Tri, Scan, Direct) : « Nocturne de Canet · MéditeSportCar · J-2 ». */
   facts?: string;
   /** Écran de flux : compteur de contexte (« 62 / 116 »). */
@@ -179,6 +184,8 @@ function CloseX({ label, onPress, onBar }: { label: string; onPress?: () => void
       testID="appbar-close"
       style={[
         styles.action,
+        // Lot M7 : en flux, le ✕ reste en haut quand le titre passe sur deux lignes (même place sur tous les écrans).
+        onBar ? null : styles.closeTop,
         onBar
           ? { borderColor: c.barControlEdge }
           : { backgroundColor: c.surface, borderColor: c.plateLine, borderWidth: 1.5 },
@@ -196,6 +203,7 @@ function CloseX({ label, onPress, onBar }: { label: string; onPress?: () => void
 export function AppBar({
   kind,
   title,
+  lead,
   facts,
   counter,
   onSearch,
@@ -240,14 +248,18 @@ export function AppBar({
         ]}
       >
         <View style={styles.heading}>
-          <Text variant="posterM" color={c.ink} style={styles.flowTitle} accessibilityRole="header">
-            {title}
-          </Text>
-          {facts ? (
-            <Text variant="caption" color={c.inkMuted} numberOfLines={1} style={styles.flowFacts}>
-              {facts}
-            </Text>
-          ) : null}
+          {lead ?? (
+            <>
+              <Text variant="posterM" color={c.ink} style={styles.flowTitle} accessibilityRole="header">
+                {title}
+              </Text>
+              {facts ? (
+                <Text variant="caption" color={c.inkMuted} numberOfLines={1} style={styles.flowFacts}>
+                  {facts}
+                </Text>
+              ) : null}
+            </>
+          )}
         </View>
         {counter ? (
           <View style={[styles.counter, { backgroundColor: c.accent, transform: [{ skewX: `${angle.skew}deg` }] }]}>
@@ -350,7 +362,9 @@ const styles = StyleSheet.create({
   flowTitle: { fontSize: 16, lineHeight: 17 },
   flowFacts: { fontSize: 12.5 },
   spacer: { flex: 1 },
-  heading: { flex: 1, minWidth: 0 },
+  // Au moins la hauteur du ✕ : un titre d'une ligne reste centré sur lui, comme avant le lot M7.
+  heading: { flex: 1, minWidth: 0, minHeight: 38, justifyContent: "center" },
+  closeTop: { alignSelf: "flex-start" },
   counter: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: radius.radiusSm },
   action: {
     width: 38,
