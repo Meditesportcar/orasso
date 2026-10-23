@@ -260,12 +260,24 @@ export function findPlates(lines: TextLineResult[], imageWidth: number, imageHei
     // Dans un groupe, la plaque est la plus longue suite lue (à longueur égale, la mieux lue) : une sous-suite
     // (« 123 CD 66 » dans « A8 123 CD 66 ») ne réduit jamais le cadre ; le cadre couvre l'union du groupe, et une
     // concurrente mieux lue qui donne un autre numéro rend la plaque ambiguë (pas de numéro).
-    const groups: (typeof reads)[] = [];
-    for (const r of [...reads].sort((a, b) => a.start - b.start || b.end - a.end)) {
-      const last = groups.at(-1);
-      if (last && r.start < Math.max(...last.map((x) => x.end))) last.push(r);
-      else groups.push([r]);
-    }
+    // Tour 5 : le regroupement ne passe que par des lectures sûres ; une lecture probable ne prolonge jamais un cadre
+    // sûr (« CD 66 911 » ne relie pas « AB 123 CD 66 » au badge « 911 TURBO »). Les probables qui débordent d'un groupe
+    // sûr forment leurs propres propositions, « à vérifier », jamais appliquées ; celles qui y sont incluses s'effacent.
+    const chain = (list: typeof reads) => {
+      const out: (typeof reads)[] = [];
+      for (const r of [...list].sort((a, b) => a.start - b.start || b.end - a.end)) {
+        const last = out.at(-1);
+        if (last && r.start < Math.max(...last.map((x) => x.end))) last.push(r);
+        else out.push([r]);
+      }
+      return out;
+    };
+    const sureGroups = chain(reads.filter((r) => r.fixes <= MAX_SURE_FIXES));
+    const inside = (r: (typeof reads)[number]) =>
+      sureGroups.some(
+        (g) => r.start >= Math.min(...g.map((x) => x.start)) && r.end <= Math.max(...g.map((x) => x.end)),
+      );
+    const groups = [...sureGroups, ...chain(reads.filter((r) => r.fixes > MAX_SURE_FIXES && !inside(r)))];
     for (const group of groups) {
       const primary = [...group].sort((a, b) => b.end - b.start - (a.end - a.start) || byQuality(a, b))[0];
       if (!primary) continue;
