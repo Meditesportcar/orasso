@@ -8,9 +8,9 @@
 // tête commence sous la barre d'état (zone sûre) : plus rien ne passe sous l'heure et la batterie.
 // Lot M4 (maquette 4.1 et sa note) : sous la bande fixe de l'organisateur (`underHeader`, qui porte déjà la zone sûre),
 // une bande sombre de 56 px au-dessus de l'affiche reçoit le pavé J-x : il ne cache rien de l'affiche générée.
-import { duration, Photo, useTheme } from "@orasso/design-system/native";
+import { bezier, duration, Photo, useTheme } from "@orasso/design-system/native";
 import type { EventCard, EventPublic } from "@orasso/shared";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -23,7 +23,7 @@ import { mediaSource } from "@/lib/media";
 const HERO_TOP = 62;
 /** Lot M4 : la bande du pavé J-x sous la bande de l'organisateur (pavé de 42 px, 7 px autour). */
 export const HERO_TOP_UNDER_HEADER = 56;
-const parkCurve = Easing.bezier(0.12, 0.75, 0.25, 1);
+const parkCurve = Easing.bezier(...bezier.park);
 
 export function EventHero({
   event,
@@ -40,6 +40,17 @@ export function EventHero({
   // Seulement l'affiche générée : l'affiche perso de l'organisateur reste dans le détail (`CustomPoster`).
   const url = "poster" in event ? heroPoster(event) : cardPoster(event);
   const grow = useRef(new Animated.Value(from && !reducedMotion ? 0 : 1)).current;
+  // Tour 2 : animations réduites, l'affiche venue de la liste apparaît en fondu de 120 ms (`fast`), sans trajet.
+  const fade = useRef(new Animated.Value(from && reducedMotion ? 0 : 1)).current;
+  useEffect(() => {
+    if (!from || !reducedMotion) return;
+    Animated.timing(fade, {
+      toValue: 1,
+      duration: duration.fast,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start();
+  }, [from, reducedMotion, fade]);
   // Départ de la transition : en attente de la mesure de l'en-tête (`pending`), puis calculé.
   const [start, setStartState] = useState<{ pending: boolean; value: Start | null }>(() => ({
     pending: Boolean(from && !reducedMotion),
@@ -77,12 +88,20 @@ export function EventHero({
       ]
     : undefined;
   return (
-    <View style={[styles.hero, { paddingTop: underHeader ? HERO_TOP_UNDER_HEADER : insets.top + HERO_TOP }]} testID="event-hero">
+    <View
+      style={[styles.hero, { paddingTop: underHeader ? HERO_TOP_UNDER_HEADER : insets.top + HERO_TOP }]}
+      testID="event-hero"
+    >
       <Animated.View
         ref={posterRef}
         collapsable={false}
         onLayout={onLayout}
-        style={[styles.poster, transform ? { transform } : null, start.pending ? styles.waiting : null]}
+        style={[
+          styles.poster,
+          { opacity: fade },
+          transform ? { transform } : null,
+          start.pending ? styles.waiting : null,
+        ]}
       >
         {url ? (
           <Photo

@@ -122,8 +122,11 @@ export default function EventPage() {
   });
   const e = event.data;
   // Lot M3 : la carte touchée (aperçu immédiat) et la place de son affiche (transition, une seule fois).
-  const [cardPreview] = useState(() => eventPreview(slug));
-  const [posterFrom] = useState(() => takePosterRect(slug));
+  // Tour 2 : suit le `slug` (fiche réutilisée pour un autre événement).
+  const [opened, setOpened] = useState(() => ({ slug, preview: eventPreview(slug), from: takePosterRect(slug) }));
+  if (opened.slug !== slug) setOpened({ slug, preview: eventPreview(slug), from: takePosterRect(slug) });
+  const cardPreview = opened.preview;
+  const posterFrom = opened.from;
   const reviews = useApi(() => api.eventReviews(slug), [slug, status], { enabled: status !== "loading" });
   // Météo du jour J (lot 28) : seulement dans les 7 jours avant l'événement ; jamais bloquante.
   const weather = useApi(() => api.eventWeather(slug), [slug], { enabled: status !== "loading" });

@@ -126,9 +126,13 @@ export function Deck({
 
   useEffect(() => {
     void fill();
+  }, [fill]);
+  // Lot M3, tour 2 : la relecture de la file toutes les minutes seulement tant que le tri est affiché.
+  useEffect(() => {
+    if (!focused) return;
     const timer = setInterval(() => void fill(), 60_000);
     return () => clearInterval(timer);
-  }, [fill]);
+  }, [fill, focused]);
 
   // File presque vide : on va chercher la suite tout de suite (la suivante est déjà prête quand on décide).
   useEffect(() => {

@@ -12,7 +12,7 @@ import { StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
 import { type PosterRect, prefetchEvent, rememberEventCard } from "@/lib/eventPreview";
-import { Notice } from "@/ui/Notice";
+import { LoadError } from "@/ui/LoadError";
 import { EVENT_LIST_BLOCKS, Waiting } from "@/ui/Waiting";
 import { EventCardV2 } from "./EventCardV2";
 import { ExplorerMap } from "./ExplorerMap";
@@ -101,7 +101,8 @@ export function EventsSegment({
         </Text>
       </View>
 
-      {list.error ? <Notice tone="error">{list.error}</Notice> : null}
+      {/* Lot M3, tour 2 : l'erreur se réessaie à la main (la liste se revalide aussi au retour sur l'écran et du réseau). */}
+      {list.error ? <LoadError message={list.error} onRetry={() => void list.reload()} /> : null}
       {list.items === null && !list.error ? (
         <Waiting blocks={EVENT_LIST_BLOCKS} label={L.loading} testID="explorer-loading" />
       ) : null}
