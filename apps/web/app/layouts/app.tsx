@@ -125,7 +125,9 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           />
         )}
         <AnnounceBanner item={announcements.current} onDone={announcements.drop} />
-        <div className={fiche ? "app__body app__body--fiche" : near ? "app__body app__body--near" : "app__body"}>          {!loaderData.emailVerified && (
+        <div className={fiche ? "app__body app__body--fiche" : near ? "app__body app__body--near" : "app__body"}>
+          {" "}
+          {!loaderData.emailVerified && (
             <Form method="post" action="/app/moi" className="s-notice s-row s-row--between" data-testid="verify-banner">
               <span>Vérifie ton e-mail : un lien de confirmation t'a été envoyé à l'inscription.</span>
               <input type="hidden" name="intent" value="resend" />
