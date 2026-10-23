@@ -438,7 +438,8 @@ function EventPage({
           )}
           <span className="ev__orgbar-text">
             <strong>
-              {structure.name}
+              {/* Tour 2 : un nom long sur deux lignes, jamais coupé au milieu d'un mot (comme l'appli). */}
+              <span className="ev__orgbar-name">{structure.name}</span>
               {structure.verified && (
                 <span className="ev__orgbar-ok" role="img" aria-label="Structure vérifiée">
                   <Icon name="check" size={14} />

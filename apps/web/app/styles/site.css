@@ -255,12 +255,23 @@
 }
 .ev__orgbar-text strong {
   color: var(--bar-ink);
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
   font-size: 13.5px;
+  line-height: 16px;
   overflow-wrap: normal;
   word-break: keep-all;
+}
+/* Tour 2 (relecture Opus) : deux lignes au plus plutôt qu'une coupure. */
+.ev__orgbar-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  min-width: 0;
 }
 .ev__orgbar-text .o-t-caption {
   color: var(--bar-muted);

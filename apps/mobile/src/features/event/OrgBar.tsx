@@ -77,15 +77,9 @@ export function OrgBar({
         <OrgLogo name={name} logoUrl={logoUrl} size={34} />
         <View style={styles.text}>
           <View style={styles.nameRow}>
-            {/* Le nom passe entier : la bande le réduit plutôt que de le couper au milieu d'un mot. */}
-            <Text
-              variant="bodyStrong"
-              color={c.barInk}
-              style={styles.name}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.75}
-            >
+            {/* Tour 2 (relecture Opus) : un nom long passe sur deux lignes plutôt que d'être coupé (la réduction de la
+                police n'existe pas sur le web) ; jamais coupé au milieu d'un mot. */}
+            <Text variant="bodyStrong" color={c.barInk} style={styles.name} numberOfLines={2}>
               {name}
             </Text>
             {verified ? <Icon name="check" size={15} strokeWidth={3} color={c.accent} /> : null}
@@ -140,7 +134,7 @@ const styles = StyleSheet.create({
   who: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space2 },
   text: { flex: 1, minWidth: 0, gap: 1 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: space1 },
-  name: { flexShrink: 1, fontSize: 13.5, lineHeight: 17, fontFamily: "Archivo-ExtraBold" },
+  name: { flexShrink: 1, fontSize: 13.5, lineHeight: 16, fontFamily: "Archivo-ExtraBold" },
   small: { fontSize: 11.5, lineHeight: 14 },
   follow: {
     height: 34,
