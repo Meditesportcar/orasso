@@ -38,6 +38,7 @@ import {
   events,
   eventZones,
   mediaProfiles,
+  plateNormalizationConflicts,
   profiles,
   scanEvents,
   structureMembers,
@@ -465,6 +466,19 @@ async function accessEntries(
     : new Map<string, Buffer>();
   const vehicleIds = [...new Set(rows.flatMap((r) => (r.app.vehicleId ? [r.app.vehicleId] : [])))];
   const vehicles = new Map((await vehiclesRepo.findFullByIds(vehicleIds)).map((x) => [x.id, x]));
+  // Lot M2, tour 3 : véhicules dont la clé a gardé une ancienne forme (collision listée) : leur forme unique aussi.
+  const wantedPlates = new Map(
+    (vehicleIds.length
+      ? await db
+          .select({
+            vehicleId: plateNormalizationConflicts.vehicleId,
+            wanted: plateNormalizationConflicts.wantedNormalized,
+          })
+          .from(plateNormalizationConflicts)
+          .where(inArray(plateNormalizationConflicts.vehicleId, vehicleIds))
+      : []
+    ).map((c) => [c.vehicleId, c.wanted]),
+  );
   const providers = await loadProviders(
     rows.flatMap((r) => (r.app.providerProfileId ? [r.app.providerProfileId] : [])),
   );
@@ -561,6 +575,9 @@ async function accessEntries(
       categories: v ? v.categories.map((c) => c.category.slug) : [],
       plateHint: plate ? plate.slice(0, 3) : null,
       plateHash: plate ? plateHash(event.plateSalt, plate) : null,
+      ...(plate && v && wantedPlates.get(v.id)
+        ? { plateHashAlt: plateHash(event.plateSalt, wantedPlates.get(v.id) as string) }
+        : {}),
       otpSecret: otpSecrets.get(pass.id)?.toString("base64url") ?? null,
       zoneCode: zone?.code ?? null,
       zoneName: zone?.name ?? null,

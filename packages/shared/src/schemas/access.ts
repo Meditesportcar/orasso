@@ -134,6 +134,12 @@ export type AccessListEntry = {
   plateHint: string | null;
   /** HMAC-SHA256(event.plateSalt, plaque normalisée), hex tronqué à 16 caractères. */
   plateHash: string | null;
+  /**
+   * Lot M2, tour 3 : véhicule dont la clé a gardé une ancienne forme (collision listée) : hachage de sa forme unique,
+   * pour que le staff le retrouve par la plaque lue ou tapée. Absent sinon (la signature des autres entrées ne change
+   * pas).
+   */
+  plateHashAlt?: string;
   /** Plaque en clair : organisateur seulement (docs/01). */
   plate?: string | null;
   zoneCode: string | null;

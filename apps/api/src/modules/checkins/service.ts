@@ -34,6 +34,7 @@ import {
   devices,
   events,
   eventZones,
+  plateNormalizationConflicts,
   profiles,
   scanEvents,
   staffAlerts,
@@ -570,6 +571,20 @@ export const checkinsService = {
       const n = normalizePlate(p);
       if (n.length >= 2 && !wanted.has(n)) wanted.set(n, p);
     }
+    // Lot M2, tour 3 : un véhicule dont la clé a gardé une ancienne forme (collision listée) se retrouve par sa forme
+    // unique ; sa clé gardée est cherchée aussi, puis ramenée à la forme tapée.
+    const aliases = new Map(
+      (wanted.size
+        ? await db
+            .select({
+              kept: plateNormalizationConflicts.keptNormalized,
+              wanted: plateNormalizationConflicts.wantedNormalized,
+            })
+            .from(plateNormalizationConflicts)
+            .where(inArray(plateNormalizationConflicts.wantedNormalized, [...wanted.keys()]))
+        : []
+      ).map((c) => [c.kept, c.wanted]),
+    );
     const all = wanted.size
       ? await db
           .select({
@@ -585,10 +600,11 @@ export const checkinsService = {
             and(
               eq(applications.eventId, eventId),
               eq(applications.status, "accepted"),
-              inArray(vehicles.plateNormalized, [...wanted.keys()]),
+              inArray(vehicles.plateNormalized, [...wanted.keys(), ...aliases.keys()]),
             ),
           )
       : [];
+    for (const r of all) r.plate = (r.plate && aliases.get(r.plate)) || r.plate;
     // Plusieurs jours (lot 26) : seulement tout l'événement ou le jour même (Paris) ; une plaque qui garde plusieurs
     // candidatures (jour et tout l'événement, ou hors des jours) est renvoyée ambiguë, rien n'est pointé.
     const days = await daysRepo.list(eventId);
@@ -686,7 +702,19 @@ export const checkinsService = {
     assertStaffWindow(event, access);
     const plate = normalizePlate(text);
     const conditions: SQL[] = [ilike(profiles.pseudo, `${escapeLike(text)}%`)];
-    if (plate.length >= 2) conditions.push(like(vehicles.plateNormalized, `${escapeLike(plate)}%`));
+    if (plate.length >= 2) {
+      conditions.push(like(vehicles.plateNormalized, `${escapeLike(plate)}%`));
+      // Lot M2, tour 3 : véhicule en conflit, retrouvé par sa forme unique.
+      conditions.push(
+        inArray(
+          vehicles.id,
+          db
+            .select({ id: sql<string>`${plateNormalizationConflicts.vehicleId}` })
+            .from(plateNormalizationConflicts)
+            .where(like(plateNormalizationConflicts.wantedNormalized, `${escapeLike(plate)}%`)),
+        ),
+      );
+    }
     return listItems(eventId, or(...conditions), 20);
   },
 

@@ -13,7 +13,7 @@ import {
 import { and, asc, count, desc, eq, gte, inArray, lte, ne, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { adminAuditLog, plateTransferRequests, profiles, vehicles } from "../../db/schema";
+import { adminAuditLog, plateNormalizationConflicts, plateTransferRequests, profiles, vehicles } from "../../db/schema";
 import { requirePlatformRole } from "../../lib/access";
 import { deps, now } from "../../lib/deps";
 import { AppError, conflict, notFound } from "../../lib/errors";
@@ -120,7 +120,18 @@ async function applyAccepted(tx: Tx, transfer: TransferRow, decidedBy: string | 
     return;
   }
   const [holder] = await tx.select().from(vehicles).where(eq(vehicles.id, transfer.fromVehicleId)).for("update");
-  if (holder && holder.status === "active" && holder.plateNormalized === transfer.plateNormalized) {
+  // Lot M2, tour 3 : un détenteur listé en conflit porte encore l'ancienne forme ; la forme voulue lui est réservée.
+  const reserved =
+    holder && holder.plateNormalized !== transfer.plateNormalized
+      ? await tx.query.plateNormalizationConflicts.findFirst({
+          where: and(
+            eq(plateNormalizationConflicts.vehicleId, holder.id),
+            eq(plateNormalizationConflicts.wantedNormalized, transfer.plateNormalized),
+          ),
+        })
+      : undefined;
+  if (holder && holder.status === "active" && (holder.plateNormalized === transfer.plateNormalized || reserved)) {
+    if (reserved) await tx.delete(plateNormalizationConflicts).where(eq(plateNormalizationConflicts.id, reserved.id));
     await tx
       .update(vehicles)
       .set({
