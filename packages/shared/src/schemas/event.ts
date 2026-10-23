@@ -237,6 +237,14 @@ export type EventSort = (typeof eventSorts)[number];
 
 export const eventListQuerySchema = pageQuery.extend({
   format: z.enum(eventFormats).optional(),
+  /**
+   * Lot M4, tour 2 : plusieurs formats (« Tes préférences », types d'événements), séparés par des virgules. `format`
+   * (un seul, choisi dans les filtres) l'emporte.
+   */
+  formats: z.preprocess(
+    (v) => (typeof v === "string" ? v.split(",").filter(Boolean) : v),
+    z.array(z.enum(eventFormats)).max(eventFormats.length).optional(),
+  ),
   categoryId: z.uuid().optional(),
   department: departmentSchema.optional(),
   from: isoDate.optional(),

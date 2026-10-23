@@ -25,7 +25,13 @@ import {
   tokens,
   useTheme,
 } from "@orasso/design-system/native";
-import { eventFormatLabels, eventFormats, explorerLabels, explorerV2Labels as L } from "@orasso/shared";
+import {
+  eventFormatLabels,
+  eventFormats,
+  explorerLabels,
+  explorerV2Labels as L,
+  preferenceFilterCount,
+} from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
@@ -36,6 +42,7 @@ import { PeopleSheetBody } from "@/features/explorer/PeopleSheet";
 import { ProsSegment } from "@/features/explorer/ProsSegment";
 import { SmallButton } from "@/features/sorties/bits";
 import { kvGet, kvSet } from "@/lib/kv";
+import { usePreferences } from "@/lib/preferences";
 import { useSession } from "@/lib/session";
 import { AppSheet } from "@/ui/AppSheet";
 import { TabScreen } from "@/ui/Screens";
@@ -50,6 +57,7 @@ import {
   emptyEventFilters,
   emptyProFilters,
   type ProFilters,
+  preferredFormats,
   RADII,
   SORT_KEY,
   type When,
@@ -111,12 +119,23 @@ export function ExplorerScreen() {
       params: { segment, q, filtres: JSON.stringify(segment === "pros" ? proFilters : filters) },
     });
   const me = useSession().me;
-  const dept = me?.profile.departments[0] ?? null;
+  // Tour 2 (lot M6 fusionné) : « Tes préférences » sont le point de départ de l'Explorer, jamais une limite : Mon coin
+  // (leurs départements), la distance habituelle (ou partout) et les types préférés. Ce qu'on choisit ici ne les change pas.
+  const { preferences: prefs, loading: prefsLoading, error: prefsError } = usePreferences();
+  const prefsRead = !me || prefs !== null || prefsError !== null || !prefsLoading;
+  const coin = prefs?.departments.length ? prefs.departments : (me?.profile.departments ?? []);
+  const dept = coin[0] ?? null;
+  // Les types des préférences s'appliquent tant qu'aucun format n'est choisi à la main (« Revenir à mon coin » les rend).
+  const [prefFormatsOn, setPrefFormatsOn] = useState(true);
+  const prefFormats = prefFormatsOn ? preferredFormats(prefs?.eventFormats) : [];
   const position = useExplorerPosition();
   // Tour 2 : « Autour de… » et la distance de l'Explorer. Temporaires : en mémoire de l'écran seulement (jamais le
   // profil, les préférences ni l'appareil). `null` : pas encore choisi (la position si elle est activée, sinon Mon coin).
   const [chosen, setChosen] = useState<Around | null>(null);
-  const [radiusKm, setRadiusKm] = useState<number | null>(null);
+  // `undefined` : la distance habituelle des préférences (`null` = partout en France).
+  const [radiusChoice, setRadiusChoice] = useState<number | null | undefined>(undefined);
+  const radiusKm = radiusChoice !== undefined ? radiusChoice : (prefs?.radiusKm ?? null);
+  const radiusFromPrefs = radiusChoice === undefined && prefs !== null;
   const [aroundOpen, setAroundOpen] = useState(false);
   const around = effectiveAround(chosen, position.status === "on" && position.position !== null);
   const aroundId = around.kind === "dept" ? `d${around.code}` : around.kind;
@@ -137,9 +156,20 @@ export function ExplorerScreen() {
   };
   const backHome = () => {
     chooseAround({ kind: "mine" });
-    setRadiusKm(null);
+    setRadiusChoice(undefined);
+    setPrefFormatsOn(true);
+    setFilters((f) => ({ ...f, format: "" }));
   };
-  const away = around.kind !== "mine" || radiusKm !== null;
+  const away = around.kind !== "mine" || (prefs ? radiusChoice !== undefined || !prefFormatsOn : radiusKm !== null);
+  const prefFormatsKey = prefFormats.join(",");
+  const listFilters = useMemo(
+    () => ({ ...filters, formats: prefFormatsKey ? (prefFormatsKey.split(",") as EventFilters["formats"]) : [] }),
+    [filters, prefFormatsKey],
+  );
+  // Pastille « Filtres » : les filtres choisis et ceux qui viennent des préférences (types, distance).
+  const fromPrefs =
+    prefs !== null &&
+    preferenceFilterCount({ eventFormats: prefFormats, radiusKm: radiusFromPrefs ? prefs.radiusKm : null }) > 0;
 
   // « Voir tout » d'une recherche : on arrive avec un segment et un texte.
   useEffect(() => {
@@ -148,7 +178,11 @@ export function ExplorerScreen() {
     if (typeof params.q === "string") setQ(params.q);
   }, [fromParams, params.segment, params.q]);
 
-  const count = activeFilters(filters);
+  const count =
+    activeFilters(filters) +
+    (prefs
+      ? preferenceFilterCount({ eventFormats: prefFormats, radiusKm: radiusFromPrefs ? prefs.radiusKm : null })
+      : 0);
   const chip = (
     label: string,
     on: boolean,
@@ -180,12 +214,12 @@ export function ExplorerScreen() {
             <AroundOptions
               around={around}
               radiusKm={radiusKm}
-              departments={me?.profile.departments ?? []}
+              departments={coin}
               onAround={(next) => {
                 chooseAround(next);
                 setAroundOpen(false);
               }}
-              onRadius={setRadiusKm}
+              onRadius={(km) => setRadiusChoice(km)}
             />
           </AppSheet>
         </>
@@ -219,20 +253,29 @@ export function ExplorerScreen() {
         ) : null}
         {segment === "evenements" && away ? <BackHome onPress={backHome} /> : null}
         {segment === "evenements" && filtersOpen ? (
-          <FiltersPanel value={filters} onChange={setFilters} signedIn={Boolean(me)} />
+          <FiltersPanel
+            value={filters}
+            onChange={(next) => {
+              // Un format choisi à la main remplace les types des préférences.
+              if (next.format !== filters.format) setPrefFormatsOn(false);
+              setFilters(next);
+            }}
+            signedIn={Boolean(me)}
+          />
         ) : null}
       </View>
       {position.status === "ask" ? <AskPosition position={position} dept={dept} onEnable={enableMyPosition} /> : null}
       {segment === "evenements" ? (
         <EventsSegment
           q={q}
-          filters={filters}
+          filters={listFilters}
           position={position}
           dept={dept}
           view={view}
           sort={sort}
-          settled={sortRead}
+          settled={sortRead && prefsRead}
           place={place}
+          fromPrefs={fromPrefs && around.kind === "mine"}
         />
       ) : null}
       {segment === "pros" ? (

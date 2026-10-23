@@ -122,6 +122,7 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
   ];
   if (q.to) filters.push(sql`${events.startsAt} <= ${q.to.toISOString()}::timestamptz`);
   if (q.format) filters.push(eq(events.format, q.format));
+  else if (q.formats?.length) filters.push(inArray(events.format, q.formats));
   if (q.department) filters.push(eq(events.department, q.department));
   if (q.structureId) filters.push(eq(events.structureId, q.structureId));
   if (q.categoryId) filters.push(sql`${events.criteria} -> 'categoryIds' ? ${q.categoryId}`);

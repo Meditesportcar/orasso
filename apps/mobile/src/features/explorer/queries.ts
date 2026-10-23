@@ -2,7 +2,7 @@
 // l'API ; l'appli ne fait que les traduire. Explorer v2 (lot 44, `s-explore`) : par défaut tout, du plus proche au plus
 // loin (`sort=distance` : position de l'appareil si elle est activée, sinon le département favori du profil) ;
 // filtres Format, Quand, Selon mes goûts (« Mes affinités » = tri par affinités, « Structures suivies » = filtre).
-import { addDays, type EventFormat, fromWallTime, type LatLng, wallTime } from "@orasso/shared";
+import { addDays, type EventFormat, eventFormats, fromWallTime, type LatLng, wallTime } from "@orasso/shared";
 
 import type { ExploreEventsQuery, ExploreProsQuery } from "@/lib/api/explorer";
 
@@ -12,6 +12,8 @@ export type When = "all" | "weekend" | "month";
 
 export type EventFilters = {
   format: EventFormat | "";
+  /** Lot M4, tour 2 : les types de « Tes préférences » (lot M6), tant qu'aucun format n'est choisi dans les filtres. */
+  formats?: EventFormat[];
   when: When;
   /** « Mes affinités » : l'ordre par affinités (S34) au lieu de la distance. */
   affinity: boolean;
@@ -81,6 +83,14 @@ export function effectiveAround(chosen: Around | null, positionOn: boolean): Aro
   return chosen ?? (positionOn ? { kind: "me" } : { kind: "mine" });
 }
 
+/**
+ * Les types de « Tes préférences » qui filtrent vraiment : ni vides ni tous cochés (`preferenceFilterCount` les compte
+ * de la même façon).
+ */
+export function preferredFormats(formats: readonly EventFormat[] | null | undefined): EventFormat[] {
+  return formats && formats.length > 0 && formats.length < eventFormats.length ? [...formats] : [];
+}
+
 /** Clé du cache de la liste : jamais pour « Autour de moi » (distances calculées depuis la position). */
 export function placeKey(place: ExplorerPlace): string | null {
   const where = place.around.kind === "mine" ? "coin" : place.around.kind === "dept" ? `d${place.around.code}` : null;
@@ -103,6 +113,7 @@ export function eventQuery(
   return {
     q: q.trim() || undefined,
     format: filters.format || undefined,
+    formats: !filters.format && filters.formats?.length ? filters.formats.join(",") : undefined,
     ...whenRange(filters.when, now),
     // « Mes affinités » (filtres) l'emporte sur le tri choisi.
     sort: filters.affinity ? "affinity" : sort,

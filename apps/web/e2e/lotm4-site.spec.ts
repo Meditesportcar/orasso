@@ -176,7 +176,8 @@ test("Lot M4, site : fiche, « Ta place », écrire avec le contexte, candidatur
         await shot(mine, `explorer-ailleurs-${theme}-${size}`);
         await mine.getByTestId("around-back").click();
         await expect(mine.getByLabel("Autour de")).toHaveValue("coin", { timeout: 30_000 });
-        await expect(mine.getByTestId("around-line")).toContainText("partout en France");
+        // Revenu au point de départ des préférences (Mon coin, distance habituelle).
+        await expect(mine.getByTestId("around-line")).toContainText("Mon coin");
         await expect(mine.getByTestId("around-back")).toHaveCount(0);
       }
       await ctx.close();

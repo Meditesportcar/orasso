@@ -91,7 +91,7 @@ export function EventsSegment({
     // Lot M3 : la liste par défaut (sans texte ni filtre) s'affiche depuis le cache avant la position et l'API. Tour 2 :
     // une clé par point de départ et distance, jamais pour « Autour de moi » (rien de la position sur l'appareil).
     settled && !q && activeFilters(filters) === 0 && view === "list" && (!place || placeKey(place) !== null)
-      ? `explore-events.${sort}${place ? `.${placeKey(place)}` : ""}`
+      ? `explore-events.${sort}${place ? `.${placeKey(place)}` : ""}${filters.formats?.length ? `.${filters.formats.join("+")}` : ""}`
       : undefined,
   );
   const items = list.items ?? [];

@@ -429,6 +429,21 @@ describe("distance : GET /events?sort=distance", () => {
     expect((await get(viewer, "/events?around=999")).status).toBe(400);
   });
 
+  it("formats des préférences (lot M4, tour 2) : plusieurs formats, `format` seul l'emporte", async () => {
+    const owner = await person("Orga_Formats");
+    const s = await createStructure(owner.id);
+    const expo = await createEvent(s.id, { title: "Expo", format: "exhibition" });
+    const rasso = await createEvent(s.id, { title: "Rasso", format: "gathering" });
+    await createEvent(s.id, { title: "Cars", format: "cars_and_coffee" });
+    expect(ids((await get(null, "/events?formats=exhibition,gathering")).json.items).sort()).toEqual(
+      [expo.slug, rasso.slug].sort(),
+    );
+    expect(ids((await get(null, "/events?formats=exhibition,gathering&format=exhibition")).json.items)).toEqual([
+      expo.slug,
+    ]);
+    expect((await get(null, "/events?formats=inconnu")).status).toBe(400);
+  });
+
   it("« Partout en France » (lot M4, tour 2) : everywhere=1 enlève le rayon d'origine d'une position triée par date", async () => {
     const viewer = await person("Viewer_66", { departments: ["66"] });
     const owner = await person("Orga_A");

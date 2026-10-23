@@ -26,6 +26,7 @@ import {
   hasPeopleSearchCriteria,
   type Page,
   type PeopleSearchPage,
+  type Preferences,
   type ProCard,
   proActivities,
   proActivityLabels,
@@ -141,6 +142,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   if (segment === "evenements") {
+    // Tour 2 (lot M6 fusionné) : « Tes préférences » : Mon coin, la distance habituelle (`rayon` absent ; `partout` =
+    // partout en France) et les types préférés (tant qu'aucun format n'est choisi). Rien n'est enregistré ici.
+    const prefsRes = await api<Preferences>(request, "/me/preferences");
+    const prefs = prefsRes.ok ? prefsRes.data : null;
+    const rayon = get("rayon");
+    const radiusFromPrefs = radius === null && rayon !== "partout" && prefs !== null;
+    const eventsRadius = radius ?? (radiusFromPrefs ? (prefs?.radiusKm ?? null) : null);
+    const prefFormats =
+      !url.searchParams.has("format") &&
+      prefs &&
+      prefs.eventFormats.length > 0 &&
+      prefs.eventFormats.length < eventFormats.length
+        ? prefs.eventFormats
+        : [];
     const filters = {
       format: (eventFormats as readonly string[]).includes(get("format")) ? get("format") : "",
       categoryId: /^[0-9a-f-]{36}$/i.test(get("categorie")) ? get("categorie") : "",
@@ -162,8 +177,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     // Tour 2 : la distance de l'Explorer, ou « Partout en France » (aucun rayon) ; le point de départ choisi.
-    if (radius) params.set("radiusKm", String(radius));
+    if (eventsRadius) params.set("radiusKm", String(eventsRadius));
     else params.set("everywhere", "1");
+    if (!filters.format && prefFormats.length) params.set("formats", prefFormats.join(","));
     if (position && around === "me") {
       params.set("lat", String(position.lat));
       params.set("lng", String(position.lng));
@@ -177,6 +193,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     return {
       ...base,
       ...empty,
+      radius: eventsRadius,
+      radiusFromPrefs,
+      coin: prefs?.departments ?? [],
+      fromPrefs: prefs !== null && (prefFormats.length > 0 || (radiusFromPrefs && eventsRadius !== null)),
+      prefsKnown: prefs !== null,
       filters,
       categories,
       events: events.ok ? events.data : { items: [], nextCursor: null },
@@ -262,6 +283,12 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
   const { segment, q, vue, position, radius, filters, results, events, pros, people, categories, failed, crews } =
     loaderData;
   const { around, aroundDept, wantedMe } = loaderData;
+  const prefsView = loaderData as {
+    radiusFromPrefs?: boolean;
+    coin?: string[];
+    fromPrefs?: boolean;
+    prefsKnown?: boolean;
+  };
   const busy = useNavigation().state !== "idle";
   const f = filters as Record<string, string>;
   const segments: { id: Segment; label: string }[] = [
@@ -274,10 +301,12 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
   const autour = around === "dept" ? aroundDept : around === "me" ? "moi" : "coin";
   // Tour 2 : la position ne reste dans l'adresse (et les champs cachés) que pour « Autour de moi ».
   const usedPosition = around === "me" ? position : null;
-  const keep = { segment, q, ...f, rayon: radius, lat: usedPosition?.lat, lng: usedPosition?.lng, autour };
-  // Tour 2 : « Revenir à mon coin » (point de départ et distance remis, position oubliée).
-  const home = href({ ...keep, autour: "coin", rayon: null, lat: null, lng: null, suite: null });
-  const away = around !== "mine" || radius !== null;
+  // La distance habituelle des préférences ne s'écrit pas dans l'adresse (elle reste le point de départ).
+  const rayonParam = prefsView.radiusFromPrefs ? null : (radius ?? (prefsView.prefsKnown ? "partout" : null));
+  const keep = { segment, q, ...f, rayon: rayonParam, lat: usedPosition?.lat, lng: usedPosition?.lng, autour };
+  // Tour 2 : « Revenir à mon coin » : le point de départ, la distance et les types des préférences (position oubliée).
+  const home = href({ segment, q, vue });
+  const away = around !== "mine" || (prefsView.prefsKnown ? !prefsView.radiusFromPrefs : radius !== null);
   const withoutPosition = href({ ...keep, lat: null, lng: null, suite: null });
   const viewLinks = (
     <nav className="s-row" aria-label="Affichage">
@@ -421,9 +450,9 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
               <SelectField
                 label={explorerV2Labels.aroundDistance}
                 name="rayon"
-                defaultValue={radius ? String(radius) : ""}
+                defaultValue={radius ? String(radius) : "partout"}
                 options={[
-                  { value: "", label: explorerV2Labels.everywhere },
+                  { value: "partout", label: explorerV2Labels.everywhere },
                   ...RADII.map((r) => ({ value: String(r), label: explorerV2Labels.aroundKm(r) })),
                 ]}
               />
@@ -442,8 +471,11 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
               ? explorerV2Labels.fromDeptElsewhere(aroundDept)
               : around === "me"
                 ? explorerV2Labels.fromPosition
-                : explorerV2Labels.aroundMine}
+                : prefsView.coin?.length
+                  ? `${explorerV2Labels.aroundMine} (${prefsView.coin.join(", ")})`
+                  : explorerV2Labels.aroundMine}
             {radius ? ` · ${explorerV2Labels.withinKm(radius)}` : ` · ${explorerV2Labels.everywhereLine}`}
+            {prefsView.fromPrefs && around === "mine" ? ` · ${explorerV2Labels.fromPrefs}` : ""}
             {wantedMe ? ` · ${explorerLabels.usePosition}` : ""}
             {away ? (
               <>

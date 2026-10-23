@@ -9,7 +9,7 @@ import { qs } from "./qs";
 type Position = { lat?: number; lng?: number; radiusKm?: number };
 
 /** Lot M4, tour 2 (« Autour de… ») : un autre département comme point de départ, et « Partout en France ». */
-type Around = { around?: string; everywhere?: "1" };
+type Around = { around?: string; everywhere?: "1"; formats?: string };
 
 export type ExploreEventsQuery = Position &
   Around & {
