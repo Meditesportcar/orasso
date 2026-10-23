@@ -127,17 +127,20 @@ export function ExplorerScreen() {
   const dept = coin[0] ?? null;
   // Les types des préférences s'appliquent tant qu'aucun format n'est choisi à la main (« Revenir à mon coin » les rend).
   const [prefFormatsOn, setPrefFormatsOn] = useState(true);
-  const prefFormats = prefFormatsOn ? preferredFormats(prefs?.eventFormats) : [];
+  // Une recherche par texte cherche partout : les préférences cadrent la découverte, jamais une recherche.
+  const searching = q.trim().length > 0;
+  const prefFormats = prefFormatsOn && !searching ? preferredFormats(prefs?.eventFormats) : [];
   const position = useExplorerPosition();
   // Tour 2 : « Autour de… » et la distance de l'Explorer. Temporaires : en mémoire de l'écran seulement (jamais le
   // profil, les préférences ni l'appareil). `null` : pas encore choisi (la position si elle est activée, sinon Mon coin).
   const [chosen, setChosen] = useState<Around | null>(null);
   // `undefined` : la distance habituelle des préférences (`null` = partout en France).
   const [radiusChoice, setRadiusChoice] = useState<number | null | undefined>(undefined);
-  const radiusKm = radiusChoice !== undefined ? radiusChoice : (prefs?.radiusKm ?? null);
-  const radiusFromPrefs = radiusChoice === undefined && prefs !== null;
   const [aroundOpen, setAroundOpen] = useState(false);
   const around = effectiveAround(chosen, position.status === "on" && position.position !== null);
+  // La distance habituelle vaut autour de Mon coin (pas autour de la position ni d'un autre département), hors recherche.
+  const radiusFromPrefs = radiusChoice === undefined && prefs !== null && !searching && around.kind === "mine";
+  const radiusKm = radiusChoice !== undefined ? radiusChoice : radiusFromPrefs ? (prefs?.radiusKm ?? null) : null;
   const aroundId = around.kind === "dept" ? `d${around.code}` : around.kind;
   // biome-ignore lint/correctness/useExhaustiveDependencies: le point de départ change quand son identifiant change
   const place: ExplorerPlace = useMemo(() => ({ around, radiusKm }), [aroundId, radiusKm]);

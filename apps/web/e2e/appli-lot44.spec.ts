@@ -110,7 +110,8 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     await shot(page, `explorer-liste-${theme}`);
 
     // Filtres repliés : Format, Quand, Selon mes goûts.
-    await page.getByText("Filtres", { exact: true }).click();
+    // Tour 2 du lot M4 : la pastille compte aussi les filtres venus des préférences (« Filtres · 1 »).
+    await page.getByTestId("filters-toggle").click();
     await expect(page.getByTestId("explorer-filters")).toBeVisible();
     await page.getByTestId("explorer-filters").getByText("Exposition", { exact: true }).click();
     await expect(page.getByTestId("event-row").first()).toContainText("Exposition", { timeout: 30_000 });
@@ -120,7 +121,7 @@ test("Explorer v2 : position refusée → 66, du plus proche au plus loin, filtr
     await page.getByText("Mes affinités", { exact: true }).click();
     await expect(page.getByTestId("sort-line")).toContainText("affinités");
     await page.getByText("Mes affinités", { exact: true }).click();
-    await page.getByText("Filtres", { exact: true }).click();
+    await page.getByTestId("filters-toggle").click();
 
     // Carte stylée : canvas MapLibre, style du thème, étiquettes datées.
     await page.getByText("Carte", { exact: true }).click();

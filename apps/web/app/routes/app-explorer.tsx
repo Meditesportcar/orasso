@@ -147,9 +147,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     const prefsRes = await api<Preferences>(request, "/me/preferences");
     const prefs = prefsRes.ok ? prefsRes.data : null;
     const rayon = get("rayon");
-    const radiusFromPrefs = radius === null && rayon !== "partout" && prefs !== null;
+    // Une recherche par texte cherche partout (les préférences cadrent la découverte, pas une recherche).
+    const radiusFromPrefs = radius === null && rayon !== "partout" && prefs !== null && !q && around === "mine";
     const eventsRadius = radius ?? (radiusFromPrefs ? (prefs?.radiusKm ?? null) : null);
     const prefFormats =
+      !q &&
       !url.searchParams.has("format") &&
       prefs &&
       prefs.eventFormats.length > 0 &&
