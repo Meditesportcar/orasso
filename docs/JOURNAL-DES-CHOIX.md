@@ -2328,3 +2328,8 @@ Maquettes 3.1 à 3.3, 4.1 à 4.4, 5.1 et corrections de Damien du 23/10 (`valida
 ### À revoir avec Damien (lot M4)
 - Le créneau des exposants atteint l'API pour tout compte qui a un véhicule actif (nécessaire à « J'ai vu ») : quiconque ajoute un véhicule peut le lire. Le garder ainsi, ou ne le donner qu'à l'ouverture de la feuille par une route dédiée ?
 - Le pavé J-x dans une bande au-dessus de l'affiche (et non sur l'affiche, qui porte déjà son format en haut à gauche).
+
+## Lot M2, tour 5 (vérification finale Codex) — 23/10/2026
+
+Source : `corrections-m2e.md` (relais), à fusionner avant toute mise en ligne. Constat vérifié : avec les mots « AB | 123 | CD | 66 | 911 | TURBO », la lecture douteuse « CD 66 911 » reliait la plaque au badge et le cadre sûr floutait « 911 TURBO » (test rouge sur `de085cf3`).
+- **Une lecture probable ne prolonge jamais un cadre sûr.** Le regroupement des suites qui se chevauchent ne passe que par des lectures sûres (`MAX_SURE_FIXES`). Les lectures probables qui débordent d'un groupe sûr forment leurs propres propositions, marquées probables (« à vérifier », jamais appliquées) ; celles qui sont incluses dans un groupe sûr s'effacent. Tests : ce cas et sa variante avec la bande « F » (cadre sur la plaque, sans atteindre « 911 ») ; les 95 cas du détecteur passent.
