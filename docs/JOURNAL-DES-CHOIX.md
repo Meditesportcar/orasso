@@ -2309,3 +2309,8 @@ Source : `corrections-m2d.md` (relais). Constats vérifiés dans le code avant c
 - **Tri** : au retour sur le tri, la file est relue tout de suite, puis toutes les minutes ; elle l'est aussi à chaque (ré)abonnement confirmé du canal temps réel (`useChannel`, troisième argument). `fill` ne se lance jamais deux fois en même temps.
 - **Une requête par changement de filtre** : la revalidation au retour sur l'écran ne part qu'à l'arrivée sur l'écran (plus à chaque nouvelle `reload`), jamais pendant le délai de frappe ni pendant une lecture (`shouldRevalidate`, testé).
 - Fichiers : `apps/mobile/src/lib/{requestGate.ts,requestGate.test.ts,useApi.ts}`, `apps/mobile/src/features/explorer/{usePaged.ts,usePaged.test.ts}`, `apps/mobile/src/features/orga/triage/Deck.tsx`.
+
+## Lot M2, tour 5 (vérification finale Codex) — 23/10/2026
+
+Source : `corrections-m2e.md` (relais), à fusionner avant toute mise en ligne. Constat vérifié : avec les mots « AB | 123 | CD | 66 | 911 | TURBO », la lecture douteuse « CD 66 911 » reliait la plaque au badge et le cadre sûr floutait « 911 TURBO » (test rouge sur `de085cf3`).
+- **Une lecture probable ne prolonge jamais un cadre sûr.** Le regroupement des suites qui se chevauchent ne passe que par des lectures sûres (`MAX_SURE_FIXES`). Les lectures probables qui débordent d'un groupe sûr forment leurs propres propositions, marquées probables (« à vérifier », jamais appliquées) ; celles qui sont incluses dans un groupe sûr s'effacent. Tests : ce cas et sa variante avec la bande « F » (cadre sur la plaque, sans atteindre « 911 ») ; les 95 cas du détecteur passent.
