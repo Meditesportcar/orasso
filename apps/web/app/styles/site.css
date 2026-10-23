@@ -299,6 +299,14 @@
   height: 36px;
   color: var(--bar-ink);
 }
+/* Tour 2 (relecture Opus) : plus fort que la couleur des liens de la page (`.s-main a`, moutarde) : « Suivre » (lien de
+   connexion) et ✉ gardent l'encre de la bande, lisible en Sable ; « Suivre » est secondaire (contour), seul « Suivie »
+   prend la moutarde, comme dans l'appli. */
+.ev__orgbar a.ev__orgbar-who,
+.ev__orgbar a.ev__orgbar-follow:not(.is-on),
+.ev__orgbar a.ev__orgbar-mail {
+  color: var(--bar-ink);
+}
 .ev__main {
   flex: 999 1 520px;
   min-width: 0;
