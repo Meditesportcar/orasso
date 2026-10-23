@@ -382,6 +382,8 @@ const styles = StyleSheet.create({
   },
   check: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", alignSelf: "stretch" },
   checkText: { flexShrink: 1 },
-  row: { flexDirection: "row", gap: space2 + 2 },
+  row: { flexDirection: "row", gap: space2 },
+  /** Le bouton « Copier le lien » : une icône seule, carré de 50 px (`.btn.btn-s` de la maquette). */
+  square: { width: 50, paddingHorizontal: 0 },
   grow: { flex: 1, alignSelf: "stretch" },
 });

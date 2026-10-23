@@ -47,7 +47,21 @@ export const arriveeLabels = {
     password: "Mot de passe",
   },
   credit: "Carte : svg-maps, Victor Cazanave (CC BY 4.0)",
-  list: { open: "Choisir dans une liste", close: "Masquer la liste", label: "Liste des départements" },
+  list: {
+    open: "Choisir dans une liste",
+    close: "Masquer la liste",
+    label: "Liste des départements",
+    // Lot M6 (maquette 8.2) : la liste en feuille à 90 % de la hauteur.
+    title: "Tes départements",
+    cancel: "Annuler",
+    search: "Nom ou numéro",
+    searchAria: "Chercher un département",
+    count: (n: number) => (n === 0 ? "Aucun choisi" : n === 1 ? "1 choisi" : `${n} choisis`),
+    firstIsFavorite: (tag: string) => `Le premier est ton ${tag}`,
+    chosenSection: "Choisis",
+    allSection: "Tous les départements",
+    validate: (n: number) => `Valider (${n})`,
+  },
   errors: {
     mainProfile: "Choisis ton profil.",
     departments: "Choisis au moins un département.",
