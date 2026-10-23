@@ -291,9 +291,7 @@ export function EventPage({
         </>
       }
     >
-      <Button variant="plate" icon="back" onPress={() => router.replace("/evenements")} fullWidth>
-        {orgaLabels.eventsBack}
-      </Button>
+      {/* Lot M7 : plus de bouton « Tous les événements » : le ✕ de l'en-tête de fiche est le seul retour. */}
       <OrgaFailure error={event.error} />
       {foreign ? <Notice tone="error">{orgaLabels.foreignEvent}</Notice> : null}
       {notice ? <Notice>{notice}</Notice> : null}
