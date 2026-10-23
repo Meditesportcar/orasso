@@ -1,8 +1,10 @@
+import { mkdirSync, readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import sharp from "sharp";
 import { auditPage } from "./audit";
-import { apiCall, chooseSitePhoto, loginInBrowser, randomPlate, signUpApi, unique } from "./helpers";
+import { apiCall, chooseSitePhoto, loginInBrowser, randomPlate, setTheme, signUpApi, unique } from "./helpers";
 import { checkerPhoto, storedPhoto } from "./helpers/lot51";
+import { RELAIS } from "./relais";
 
 // Lot M1 : l'ajout de véhicule du site applique les mêmes règles, les mêmes mots et le même ordre que l'appli. Un
 // véhicule complet (photo recadrée au carré, plaque, Toyota › Supra › Mk5, motorisation du catalogue, teinte, description,
@@ -157,3 +159,36 @@ test("un ancien véhicule s'ajoute sans plaque ni photo, et la teinte libre part
   expect(list.data[0]?.status).toBe("keepsake");
   await ctx.close();
 });
+
+// Captures du site (consigne « Le site raccord ») : Béton et Sable, 390 et 1280 px, page vide puis photo posée avec
+// son cadre de plaque masqué en noir, regardées à chaque lot.
+const SITE_DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-m1-captures/site`;
+const PHOTO = process.env.M1_PHOTOS ? `${process.env.M1_PHOTOS}/supra.jpg` : null;
+
+for (const theme of ["beton", "sable"] as const) {
+  for (const width of [390, 1280] as const) {
+    test(`captures du site (${theme}, ${width} px)`, async ({ browser }) => {
+      const pseudo = `M1Cap_${unique()}`.slice(0, 20);
+      const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+      await signUpApi(pseudo, email);
+      const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await ctx.newPage();
+      await setTheme(page, theme);
+      await loginInBrowser(page, email, undefined, "/app/garage/nouveau");
+      mkdirSync(SITE_DIR, { recursive: true });
+      await expect(page.getByTestId("vehicle-add-form")).toBeVisible();
+      await page.screenshot({ path: `${SITE_DIR}/fin-${theme}-${width}-vide.png`, fullPage: true });
+      await chooseSitePhoto(
+        page,
+        PHOTO
+          ? { name: "supra.jpg", mimeType: "image/jpeg", buffer: readFileSync(PHOTO) }
+          : { name: "damier.png", mimeType: "image/png", buffer: checkerPhoto(640, 480) },
+      );
+      await page.getByRole("button", { name: "Poser un cadre" }).click();
+      await expect(page.getByTestId("site-plate-frame").first()).toBeVisible();
+      await page.getByTestId("site-plate-frame").first().scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${SITE_DIR}/fin-${theme}-${width}-plaque.png` });
+      await ctx.close();
+    });
+  }
+}
