@@ -139,8 +139,9 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   }
 
   const openEvent = (slug: string) => router.push(`/e/${slug}`);
-  // « Sur la carte » = le plan (vocabulaire de Damien), centré sur l'événement cherché par son nom.
-  const onMap = (title: string) => () => router.push({ pathname: "/carte", params: { q: title } } as never);
+  // « Sur la carte » = le plan (vocabulaire de Damien), sur cet événement précis (par son adresse, jamais par son titre :
+  // homonymes possibles, et l'Explorer ne liste pas les événements sur invitation). L'API dit s'il est visible.
+  const onMap = (slug: string) => () => router.push({ pathname: "/carte", params: { event: slug } } as never);
 
   /** Une candidature en ticket : son affiche, son statut, son arrivée, son geste. */
   const appOuting = (a: MyApplication): Outing => {
@@ -182,22 +183,23 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
               onPress: () => goTab("sorties"),
               testID: "home-outing-application",
             },
-      onMap: accepted ? onMap(a.event.title) : null,
+      onMap: accepted ? onMap(a.event.slug) : null,
       onOpen: () => openEvent(a.event.slug),
     };
   };
 
-  // Les sorties du glissement : la prochaine (place retenue d'abord) puis les autres par date ; un billet pour
-  // l'événement d'une candidature n'est pas montré deux fois.
+  // Les sorties du glissement : la prochaine (place retenue d'abord) puis les autres par date. Un billet n'est caché que
+  // si une place retenue donne déjà un accès au même événement (lot M5, tour 2) : en attente ou en liste d'attente, le
+  // billet reste, c'est lui qui fait entrer.
   const apps = next ? [next, ...live.filter((a) => a.id !== next.id)] : live;
-  const appSlugs = new Set(apps.map((a) => a.event.slug));
+  const accessSlugs = new Set(apps.filter((a) => a.status === "accepted").map((a) => a.event.slug));
   const tickets = ticketsUpcoming(myTickets.data ?? [], now).filter(
-    (x) => x.id !== ticket?.id && !appSlugs.has(x.event.slug),
+    (x) => x.id !== ticket?.id && !accessSlugs.has(x.event.slug),
   );
   const ticketOuting = (x: {
     id: string;
     priceCents: number | null;
-    event: { slug: string; title: string; startsAt: string; city: string | null };
+    event: { slug: string; title: string; startsAt: string; city: string | null; posterUrl?: string | null };
     posterUrl?: string | null;
     arrivalText?: string | null;
   }): Outing => ({
@@ -205,7 +207,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     title: x.event.title,
     startsAt: x.event.startsAt,
     countdown: dayCountdown(x.event.startsAt, now),
-    posterUrl: fileUrl(x.posterUrl ?? null),
+    posterUrl: fileUrl(x.posterUrl ?? x.event.posterUrl ?? null),
     tags: (
       <>
         <SkewTag tone="acc" onPoster>
@@ -225,7 +227,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
       onPress: () => router.push(`/billet/${x.id}`),
       testID: "home-hero-action",
     },
-    onMap: onMap(x.event.title),
+    onMap: onMap(x.event.slug),
     onOpen: () => openEvent(x.event.slug),
   });
   const outings: Outing[] = [

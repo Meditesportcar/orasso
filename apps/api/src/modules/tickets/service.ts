@@ -43,6 +43,7 @@ import {
   stripePlatform,
 } from "../../lib/stripe";
 import { type Tx, withTx } from "../../lib/tx";
+import { eventPosterUrl } from "../events/card";
 import { eventsRepo } from "../events/repo";
 import { assertCanSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
@@ -212,6 +213,8 @@ async function myTicketsOf(userId: string, onlyEventId?: string): Promise<MyTick
       endsAt: e.endsAt.toISOString(),
       city: e.city,
       structureName: s.name,
+      // Lot M5 : l'affiche du ticket de l'Accueil (même adresse que les candidatures).
+      posterUrl: eventPosterUrl(e),
     },
   }));
 }

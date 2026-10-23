@@ -75,6 +75,8 @@ export type MyTicket = {
     endsAt: string;
     city: string | null;
     structureName: string;
+    /** Lot M5 : l'affiche de l'événement (tickets de l'Accueil) ; absente d'une copie gardée avant le lot M5. */
+    posterUrl?: string | null;
   };
 };
 
