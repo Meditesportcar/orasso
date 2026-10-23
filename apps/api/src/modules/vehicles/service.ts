@@ -382,6 +382,11 @@ export const vehiclesService = {
           current.status === "active" &&
           current.plateNormalized &&
           (merged.status !== "active" || plateNormalized !== current.plateNormalized);
+        // Lot M2, tour 4 : la plaque change (ou le véhicule quitte sa plaque) : sa ligne de conflit est périmée, retirée
+        // avant toute libération (une réservation périmée n'est pas une preuve de détention).
+        if (nextPlateNormalized !== current.plateNormalized || merged.status !== current.status) {
+          await tx.delete(plateNormalizationConflicts).where(eq(plateNormalizationConflicts.vehicleId, id));
+        }
         if (leftPlate) await plateTransferService.plateReleased(tx, id);
         // La certification se perd quand un champ technique, une catégorie ou une photo change (S38), pas pour la
         // description, la préparation, la couleur ou le statut.

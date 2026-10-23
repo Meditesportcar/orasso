@@ -315,6 +315,38 @@ describe("tous les formats français et filet de sécurité (lot M2)", () => {
     }
   });
 
+  it("tour 4 : plaque et texte de carrosserie sur une ligne : la plaque sûre garde son cadre, à part", () => {
+    const cases: [string[], number, number, string][] = [
+      // [mots, premier et dernier mot de la plaque (exclu), numéro]
+      [["AB-123-CD", "PORSCHE", "911", "TURBO"], 0, 1, "AB-123-CD"],
+      [["AB", "123", "CD", "PORSCHE", "911", "TURBO"], 0, 3, "AB-123-CD"],
+      [["GT3", "RS", "FT-340-NC"], 2, 3, "FT-340-NC"],
+      [["W-623-AX", "350Z", "NISMO", "LE", "MANS", "24"], 0, 1, "W-623-AX"],
+    ];
+    for (const [texts, from, to, number] of cases) {
+      let x = 50;
+      const ws = texts.map((t): [string, TextFrame] => {
+        const f = frame(x, 600, t.length * 18, 40);
+        x += t.length * 18 + 12;
+        return [t, f];
+      });
+      const lines = [line(ws)];
+      const found = findPlates(lines, 1000, 1000);
+      const sure = found.filter((f) => !f.probable);
+      expect(sure, texts.join(" ")).toHaveLength(1);
+      expect(suggestedPlate(found), texts.join(" ")).toBe(number);
+      // Le cadre couvre la plaque, sans déborder sur le mot suivant.
+      const rect = platesFromLines(lines, 1000, 1000);
+      expect(rect, texts.join(" ")).toHaveLength(1);
+      const left = ws[from]![1].left;
+      const right = ws[to - 1]![1].left + ws[to - 1]![1].width;
+      expect(rect[0]!.x, texts.join(" ")).toBeLessThanOrEqual(left / 1000);
+      expect(rect[0]!.x + rect[0]!.w, texts.join(" ")).toBeGreaterThanOrEqual(right / 1000);
+      const next = ws[to]?.[1];
+      if (next) expect(rect[0]!.x + rect[0]!.w, texts.join(" ")).toBeLessThan((next.left + next.width / 2) / 1000);
+    }
+  });
+
   it("tour 3 : « F » lu à part = bande (W garage) ; collé = SIV de série FW", () => {
     expect(plateReadingOf("F W 123 AB")).toBe("W123AB");
     expect(plateReadingOf("F W 123 AB 66")).toBe("W123AB");

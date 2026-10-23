@@ -1,5 +1,5 @@
 {
-  "id": "09448a7b-1190-48dd-abeb-d7b01064f01b",
+  "id": "f0efa041-9e63-4312-a00b-2d42c16b5139",
   "prevId": "a162be41-4ff9-4c34-9b47-b2c98576f052",
   "version": "7",
   "dialect": "postgresql",
@@ -14021,7 +14021,13 @@
           "name": "vehicle_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "transfer_id": {
+          "name": "transfer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "kept_normalized": {
           "name": "kept_normalized",
@@ -14043,7 +14049,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "plate_normalization_conflicts_wanted_idx": {
+          "name": "plate_normalization_conflicts_wanted_idx",
+          "columns": [
+            {
+              "expression": "wanted_normalized",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "plate_normalization_conflicts_vehicle_id_vehicles_id_fk": {
           "name": "plate_normalization_conflicts_vehicle_id_vehicles_id_fk",
@@ -14057,12 +14079,45 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "plate_normalization_conflicts_transfer_id_plate_transfer_requests_id_fk": {
+          "name": "plate_normalization_conflicts_transfer_id_plate_transfer_requests_id_fk",
+          "tableFrom": "plate_normalization_conflicts",
+          "tableTo": "plate_transfer_requests",
+          "columnsFrom": [
+            "transfer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "plate_normalization_conflicts_vehicle_key": {
+          "name": "plate_normalization_conflicts_vehicle_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "vehicle_id"
+          ]
+        },
+        "plate_normalization_conflicts_transfer_key": {
+          "name": "plate_normalization_conflicts_transfer_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "transfer_id"
+          ]
+        }
+      },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "plate_normalization_conflicts_one_row": {
+          "name": "plate_normalization_conflicts_one_row",
+          "value": "num_nonnulls(\"plate_normalization_conflicts\".\"vehicle_id\", \"plate_normalization_conflicts\".\"transfer_id\") = 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.plate_transfer_requests": {

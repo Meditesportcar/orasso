@@ -6,6 +6,7 @@ import {
   type AdminDecision,
   type AdminPlateTransfer,
   formatPlate,
+  normalizePlate,
   type OutgoingPlateTransferView,
   PLATE_TRANSFER_DELAY_DAYS,
   type PlateTransferView,
@@ -121,8 +122,11 @@ async function applyAccepted(tx: Tx, transfer: TransferRow, decidedBy: string | 
   }
   const [holder] = await tx.select().from(vehicles).where(eq(vehicles.id, transfer.fromVehicleId)).for("update");
   // Lot M2, tour 3 : un détenteur listé en conflit porte encore l'ancienne forme ; la forme voulue lui est réservée.
+  // Tour 4 : seulement si la plaque du véhicule donne encore cette forme (une réservation périmée ne compte pas).
   const reserved =
-    holder && holder.plateNormalized !== transfer.plateNormalized
+    holder &&
+    holder.plateNormalized !== transfer.plateNormalized &&
+    normalizePlate(holder.plate ?? "") === transfer.plateNormalized
       ? await tx.query.plateNormalizationConflicts.findFirst({
           where: and(
             eq(plateNormalizationConflicts.vehicleId, holder.id),

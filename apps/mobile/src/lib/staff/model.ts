@@ -598,10 +598,6 @@ export function shopAccess(
 
 export type SearchHit = { entry: AccessListEntry; checkedInAt: string | null; by: "plate" | "pseudo" | "vehicle" };
 
-/** Hachages de plaque d'une entrée : sa clé, et la forme unique d'un véhicule en conflit (lot M2, tour 3). */
-export const entryPlateHashes = (e: AccessListEntry): string[] =>
-  [e.plateHash, e.plateHashAlt].filter((h): h is string => Boolean(h));
-
 const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 /**
@@ -623,7 +619,7 @@ export function searchLocal(state: StaffState, text: string, limit = 30): Search
     hits.push({ entry, checkedInAt: checkedInAt(state, entry), by });
   };
   const all = [...state.entries.values()];
-  if (hash) for (const e of all) if (entryPlateHashes(e).includes(hash)) push(e, "plate");
+  if (hash) for (const e of all) if (e.plateHash === hash) push(e, "plate");
   if (plate.length >= 2) {
     for (const e of all) {
       if (!e.plateHint) continue;
@@ -663,7 +659,7 @@ export function quickPlateMatch(state: StaffState, text: string, now: Date = clo
   const valid = [...state.entries.values()].filter((e) => e.status === "valid" && expectedOn(state.meta, e, now));
   if (plate.length > 3) {
     const hash = plateHashOf(state.meta.plateSalt, plate);
-    const exact = valid.filter((e) => hash !== null && entryPlateHashes(e).includes(hash));
+    const exact = valid.filter((e) => e.plateHash === hash);
     if (exact.length === 1 && exact[0]) return { kind: "one", entry: exact[0] };
     if (exact.length > 1) return { kind: "many", entries: exact };
   }

@@ -216,9 +216,10 @@ export const plateTransferRequests = pgTable(
 /**
  * Lot M2 : plaques que la forme unique (`normalizePlate` : accents, bande « F », département) aurait rendues identiques
  * à celle d'un autre véhicule actif, ou d'une autre demande de transfert ouverte du même demandeur. La migration ne
- * fusionne rien : la ligne garde son ancienne forme et la collision est listée ici. Tour 3 : la forme voulue est
- * réservée (`plateHolder`), le staff retrouve le véhicule par elle (hachage de la liste, recherche), et une ligne
- * n'est listée qu'une fois (rejouer la migration ne crée pas de doublon). Résolution par l'équipe : plus tard (C7).
+ * fusionne rien : la ligne garde son ancienne forme et la collision est listée ici. La forme voulue est réservée
+ * (`plateHolder`) ; le staff retrouve le véhicule par son ancienne clé ou par son nom (une seule clé par véhicule,
+ * tour 4). Une ligne n'est listée qu'une fois ; elle disparaît quand la plaque du véhicule change. Résolution par
+ * l'équipe : plus tard (C7).
  */
 export const plateNormalizationConflicts = pgTable(
   "plate_normalization_conflicts",

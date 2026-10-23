@@ -49,7 +49,7 @@ const BAND_PREFIX = /^\s*F[\s\-.·]+/i;
  * partie du numéro). Tour 3 : la saisie départage la SIV de série « FW » et le W garage précédé de sa bande. Un « F »
  * suivi d'un séparateur est une bande (« F W 123 AB » → W123AB, « F FW-123-AB 66 » → FW123AB) ; sans séparateur, la
  * plaque entière passe d'abord (« FW-123-AB 66 » → FW123AB, « FW123AB » reste une SIV). Même règle, en SQL, dans la
- * migration `0053_plate-normalization-conflicts` (test de parité).
+ * migration `0052_plate-normalization` (test de parité).
  */
 export function normalizePlate(raw: string): string {
   const n = plateCharacters(raw);

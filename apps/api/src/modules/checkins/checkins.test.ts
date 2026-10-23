@@ -36,11 +36,9 @@ import {
   devices,
   emailOutbox,
   eventStaff,
-  events,
   expressInvites,
   notifications,
   passportStamps,
-  plateNormalizationConflicts,
   profiles,
   scanEvents,
   vehicles,
@@ -51,7 +49,7 @@ import type { Viewer } from "../../lib/session";
 import { ed25519Verify } from "../../lib/signing";
 import { applicationsService } from "../applications/service";
 import { notificationsService } from "../notifications/service";
-import { plateHash, staffService } from "../staff/service";
+import { staffService } from "../staff/service";
 import { checkinsService } from "./service";
 
 afterAll(async () => {
@@ -309,29 +307,20 @@ describe("pointage manuel et par plaque", () => {
     expect(found.text).not.toContain(kenji.plate.replaceAll("-", ""));
   });
 
-  it("lot M2, tour 3 : un véhicule en conflit (clé ancienne gardée) se retrouve par sa forme unique", async () => {
-    const kenji = people[0]!;
-    const app = await db.query.applications.findFirst({ where: eq(applications.id, kenji.applicationId) });
+  it("lot M2, tour 4 : deux pass retenus sous la même plaque (un jour) → ambiguë, rien n'est pointé", async () => {
+    const [kenji, lea] = [people[0]!, people[1]!];
+    const kApp = await db.query.applications.findFirst({ where: eq(applications.id, kenji.applicationId) });
+    const lApp = await db.query.applications.findFirst({ where: eq(applications.id, lea.applicationId) });
+    const kVehicle = await db.query.vehicles.findFirst({ where: eq(vehicles.id, kApp!.vehicleId!) });
+    // Le véhicule de Léa porte la même clé (gardé en souvenir : la contrainte d'unicité ne vise que les actifs).
     await db
       .update(vehicles)
-      .set({ plate: "F AB-777-CD 66", plateNormalized: "FAB777CD66" })
-      .where(eq(vehicles.id, app!.vehicleId!));
-    await db
-      .insert(plateNormalizationConflicts)
-      .values({ vehicleId: app!.vehicleId!, keptNormalized: "FAB777CD66", wantedNormalized: "AB777CD" });
-    // Liste du drive : le hachage de la forme unique en plus de celui de la clé.
-    const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
-    const entry = (await call(theo, "GET", `/events/${eventId}/staff/sync`)).json.entries.find(
-      (e: { pseudo: string }) => e.pseudo === "Kenji_66",
-    );
-    expect(entry.plateHash).toBe(plateHash(event!.plateSalt, "FAB777CD66"));
-    expect(entry.plateHashAlt).toBe(plateHash(event!.plateSalt, "AB777CD"));
-    // Recherche en ligne et pointage par plaque, par la forme unique.
-    const found = await call(theo, "GET", `/events/${eventId}/search?q=AB777`);
-    expect(found.json.some((x: { applicationId: string }) => x.applicationId === kenji.applicationId)).toBe(true);
-    const plates = await call(theo, "POST", `/events/${eventId}/checkins/by-plates`, { plates: ["AB-777-CD"] });
-    expect(plates.json.matched).toMatchObject([{ applicationId: kenji.applicationId, plate: "AB-777-CD" }]);
-    expect(plates.json.unmatched).toEqual([]);
+      .set({ status: "keepsake", plateNormalized: kVehicle!.plateNormalized })
+      .where(eq(vehicles.id, lApp!.vehicleId!));
+    const res = await call(theo, "POST", `/events/${eventId}/checkins/by-plates`, { plates: [kenji.plate] });
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ matched: [], unmatched: [], ambiguous: [kenji.plate] });
+    expect(await db.query.checkins.findMany({ where: eq(checkins.eventId, eventId) })).toEqual([]);
   });
 
   it("direct de l'équipe organisatrice : arrivés / attendus, staff présent", async () => {

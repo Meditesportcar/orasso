@@ -255,12 +255,20 @@ export function findPlates(lines: TextLineResult[], imageWidth: number, imageHei
         if (read) reads.push({ ...read, start, end: start + size });
       }
     }
-    // La plaque est la plus longue suite lue (à longueur égale, la mieux lue) : une sous-suite (« 123 CD 66 » dans
-    // « A8 123 CD 66 ») ne réduit jamais le cadre. Les lectures qui la chevauchent sont concurrentes : le cadre couvre
-    // leur union, et une concurrente mieux lue qui donne un autre numéro rend la plaque ambiguë (pas de numéro).
-    const primary = [...reads].sort((a, b) => b.end - b.start - (a.end - a.start) || byQuality(a, b))[0];
-    if (primary) {
-      const group = reads.filter((r) => r.start < primary.end && primary.start < r.end);
+    // Tour 4 : les lectures se rangent en groupes de suites qui se chevauchent ; deux groupes disjoints sont deux
+    // détections (« AB-123-CD PORSCHE 911 TURBO » : la plaque sûre garde son cadre, « 911 TUR 80 » reste à part).
+    // Dans un groupe, la plaque est la plus longue suite lue (à longueur égale, la mieux lue) : une sous-suite
+    // (« 123 CD 66 » dans « A8 123 CD 66 ») ne réduit jamais le cadre ; le cadre couvre l'union du groupe, et une
+    // concurrente mieux lue qui donne un autre numéro rend la plaque ambiguë (pas de numéro).
+    const groups: (typeof reads)[] = [];
+    for (const r of [...reads].sort((a, b) => a.start - b.start || b.end - a.end)) {
+      const last = groups.at(-1);
+      if (last && r.start < Math.max(...last.map((x) => x.end))) last.push(r);
+      else groups.push([r]);
+    }
+    for (const group of groups) {
+      const primary = [...group].sort((a, b) => b.end - b.start - (a.end - a.start) || byQuality(a, b))[0];
+      if (!primary) continue;
       const start = Math.min(...group.map((r) => r.start));
       const end = Math.max(...group.map((r) => r.end));
       const run = words.slice(start, end);
@@ -279,8 +287,8 @@ export function findPlates(lines: TextLineResult[], imageWidth: number, imageHei
         // Sûre si l'une des lectures du groupe l'est : le cadre (union) est alors appliqué.
         probable: group.every((r) => r.fixes > MAX_SURE_FIXES),
       });
-      continue;
     }
+    if (groups.length) continue;
     if (!line.frame) continue;
     const corners = line.corners?.length === 4 ? [line.corners] : [];
     const read = readPlate(line.text);

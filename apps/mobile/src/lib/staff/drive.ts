@@ -7,7 +7,7 @@ import type { AccessListEntry } from "@orasso/shared";
 import { now as clockNow } from "../clock";
 import type { PlateGroup } from "../plates/recognize";
 import { plateHashOf } from "./crypto";
-import { checkedInAt, entryPlateHashes, expectedOn, type StaffState } from "./model";
+import { checkedInAt, expectedOn, type StaffState } from "./model";
 
 export type DriveMatch = { plate: string; entry: AccessListEntry };
 
@@ -15,8 +15,8 @@ export type DriveMatch = { plate: string; entry: AccessListEntry };
 export function driveLookup(state: StaffState, plates: readonly string[]): DriveMatch[] {
   const byHash = new Map<string, AccessListEntry[]>();
   for (const e of state.entries.values()) {
-    // Lot M2, tour 3 : un véhicule en conflit porte aussi le hachage de sa forme unique.
-    for (const h of entryPlateHashes(e)) byHash.set(h, [...(byHash.get(h) ?? []), e]);
+    if (!e.plateHash) continue;
+    byHash.set(e.plateHash, [...(byHash.get(e.plateHash) ?? []), e]);
   }
   const out: DriveMatch[] = [];
   const seen = new Set<string>();

@@ -1,4 +1,4 @@
-// Lot M2 : la migration 0053 recalcule la forme unique des plaques enregistrées avant le lot (accents, bande « F »,
+// Lot M2 : la migration 0052 recalcule la forme unique des plaques enregistrées avant le lot (accents, bande « F »,
 // département), liste les collisions sans rien fusionner (rejouable, jamais en échec), suit toutes les demandes de
 // transfert ouvertes et fait repartir les entrées du staff. On rejoue ici sa partie « données » sur des lignes écrites
 // comme avant M2, et on vérifie que sa fonction SQL donne la même forme que `normalizePlate`.
@@ -23,13 +23,13 @@ beforeEach(async () => {
   ref = await seedReference();
 });
 
-const MIGRATION = fileURLToPath(new URL("../../../drizzle/0053_plate-normalization-conflicts.sql", import.meta.url));
+const MIGRATION = fileURLToPath(new URL("../../../drizzle/0052_plate-normalization.sql", import.meta.url));
 
 /** Les instructions « données » de la migration (après le changement de la table), dans l'ordre. */
 function dataStatements(): string[] {
   const text = readFileSync(MIGRATION, "utf8");
   return text
-    .slice(text.indexOf("-- Lot M2, tour 3"))
+    .slice(text.indexOf("-- Lot M2 : forme unique"))
     .split("--> statement-breakpoint")
     .map((s) => s.trim())
     .filter(Boolean);
@@ -67,7 +67,7 @@ const car = (plate: string) => ({
   plate,
 });
 
-describe("migration 0053 : forme unique des plaques existantes", () => {
+describe("migration 0052 : forme unique des plaques existantes", () => {
   it("parité : la fonction SQL de la migration donne la même forme que normalizePlate", async () => {
     const corpus = [
       "AB-123-CD",
@@ -226,5 +226,18 @@ describe("migration 0053 : forme unique des plaques existantes", () => {
     expect(created.json.plateTransfer).not.toBeNull();
     const row = await db.query.vehicles.findFirst({ where: eq(vehicles.id, created.json.id) });
     expect(row?.plateNormalized).toBeNull();
+    // Tour 4 : A corrige la plaque de son véhicule en conflit (une demande attend sur l'ancienne) : son conflit est
+    // retiré dans la même transaction ; le véhicule reste actif, avec sa nouvelle clé et sa certification.
+    const certifiedAt = new Date("2026-10-01T10:00:00Z");
+    await db.update(vehicles).set({ certifiedAt }).where(eq(vehicles.id, va.id));
+    expect((await call(a, "PATCH", `/me/vehicles/${va.id}`, { plate: "EF-456-GH" })).status).toBe(200);
+    expect(await db.query.vehicles.findFirst({ where: eq(vehicles.id, va.id) })).toMatchObject({
+      status: "active",
+      plateNormalized: "EF456GH",
+      certifiedAt,
+    });
+    expect(
+      await db.select().from(plateNormalizationConflicts).where(eq(plateNormalizationConflicts.vehicleId, va.id)),
+    ).toEqual([]);
   });
 });
