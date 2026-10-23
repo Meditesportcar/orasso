@@ -13,7 +13,9 @@ import type { Executor } from "../../lib/tx";
 
 type PrivateEvent = { id: string; structureId: string; admission: string };
 /** Qui regarde : son compte suffit (lot M4, tour 2 : aussi chaque destinataire d'un message « À propos de »). */
-export type SeeingUser = { user: Pick<Viewer["user"], "id" | "email" | "emailVerified"> };
+export type SeeingUser = { user: Pick<Viewer["user"], "id" | "email" | "emailVerified"> } & Partial<
+  Omit<Viewer, "user">
+>;
 
 export const inviteOnlyError = () =>
   new AppError(403, "invite_only", "Événement privé sur invitation : seuls les invités le voient.");
