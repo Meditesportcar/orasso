@@ -333,6 +333,370 @@
   height: 15%;
 }
 
+/* Lot M1 : ajout de véhicule refait (même ordre, mêmes mots que l'appli). Jetons seulement ; les teintes du nuancier et
+   des drapeaux sont des données (inline), pas de l'interface. */
+/* Lot M1 (maquette 1.3, décision de Damien du 12) : dans l'ajout de véhicule, l'aperçu masque la plaque en noir plein,
+   comme l'appli ; ce qu'on voit est ce qui sera publié (le vrai flou reste celui du serveur). Pendant le geste, un voile
+   laisse voir la plaque dessous. */
+.g-add .g-plate__frame {
+  background: var(--night);
+  backdrop-filter: none;
+  border-width: 1.5px;
+  border-radius: 3px;
+}
+.g-add .g-plate__frame:active {
+  background: color-mix(in srgb, var(--night) 68%, transparent);
+}
+
+.g-add {
+  gap: var(--space-8);
+}
+.g-section {
+  padding-top: var(--space-6);
+  border-top: 1.5px solid var(--line);
+}
+.g-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+/* Choix à pastille, carte ou cercle : l'entrée réelle couvre toute la zone (clavier, lecteur d'écran, clic). */
+.g-opt {
+  position: relative;
+  cursor: pointer;
+}
+.g-opt > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.g-opt:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.g-types {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.g-types legend {
+  grid-column: 1 / -1;
+  padding: 0;
+  margin-bottom: var(--space-2);
+}
+.g-type {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-field);
+  color: var(--ink);
+}
+.g-type.is-on,
+.g-pill.is-on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+.g-pills,
+.g-years {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.g-pills legend,
+.g-years legend {
+  width: 100%;
+  padding: 0;
+  margin-bottom: var(--space-1);
+}
+.g-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-field);
+  color: var(--ink);
+}
+.g-pill.is-off {
+  opacity: 0.5;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+.g-pill.is-off > input {
+  cursor: not-allowed;
+}
+.g-pill.is-off span {
+  text-decoration: line-through;
+}
+.g-count {
+  margin: calc(var(--space-2) * -1) 0 0;
+  text-align: right;
+  color: var(--ink-muted);
+}
+.g-cert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.g-dots {
+  display: flex;
+  gap: var(--space-1);
+  flex: none;
+}
+.g-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+}
+.g-dot.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* Nuancier : familles en onglets, pastilles rondes avec reflet, nom dessous, choix cerclé. */
+.g-colors__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.g-colors__name {
+  color: var(--ink-muted);
+  text-align: right;
+}
+.g-colors__tabs {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+}
+@media (min-width: 640px) {
+  .g-colors__tabs {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
+.g-tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  height: 38px;
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-field);
+  color: var(--ink-muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.g-tab.is-on {
+  border-width: 2px;
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.g-tab--other {
+  border-style: dashed;
+}
+.g-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.g-tab__dots {
+  display: inline-flex;
+}
+.g-tab__dot {
+  width: 12px;
+  height: 12px;
+  margin-left: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--surface);
+}
+.g-tab__dot:first-child {
+  margin-left: 0;
+}
+.g-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: var(--space-3) var(--space-2);
+}
+.g-swatches__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1);
+}
+.g-swatches__ring {
+  display: block;
+  padding: 3px;
+  border: 2.5px solid transparent;
+  border-radius: 50%;
+}
+.g-swatches__cell.is-on .g-swatches__ring {
+  border-color: var(--accent);
+}
+.g-swatch {
+  display: block;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+.g-swatches__label {
+  text-align: center;
+  line-height: 1.25;
+  color: var(--ink-muted);
+}
+.g-swatches__cell.is-on .g-swatches__label {
+  color: var(--ink);
+}
+
+/* Origine déduite de la marque : drapeau, nom, cadenas. */
+.g-origin {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-field);
+  color: var(--ink);
+}
+.g-origin__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.g-flag {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+.g-flag__disc {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+/* Recadrage carré : cadre fixe, photo qui se glisse, aperçus en direct. */
+.g-crop {
+  width: min(92vw, 360px);
+  max-height: calc(100dvh - var(--space-8));
+  overflow-y: auto;
+}
+.g-crop > .s-stack {
+  gap: var(--space-3);
+}
+.g-crop__frame {
+  position: relative;
+  align-self: center;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.g-crop__frame img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+}
+.g-crop__badge {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--scrim);
+  color: var(--night-ink);
+}
+.g-crop__busy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.g-crop__zoom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+}
+.g-crop__step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-field);
+  color: var(--ink);
+  cursor: pointer;
+}
+.g-crop__step svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.g-crop__step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.g-crop__previews {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: var(--space-6);
+}
+.g-crop__figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+.g-crop__thumb {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.g-crop__thumb img {
+  position: absolute;
+  max-width: none;
+}
+
 /* Lot M5 (maquette 7.1) : ligne de certification et « Pour ta … ». Jetons seulement. */
 .g-certline {
   display: flex;

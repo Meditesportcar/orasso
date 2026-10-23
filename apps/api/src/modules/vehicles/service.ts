@@ -58,6 +58,16 @@ const isUniqueViolation = (error: unknown, constraint: string) => {
 const isPlateConflict = (error: unknown) =>
   isUniqueViolation(error, "vehicles_active_plate_key") || isUniqueViolation(error, "plate_transfer_requests_open_key");
 
+/** Véhicule déjà créé par ce compte avec cette clé client (lot M1, tour 2), ou null. */
+async function vehicleByClientKey(ownerId: string, clientKey: string | undefined): Promise<string | null> {
+  if (!clientKey) return null;
+  const [row] = await db
+    .select({ id: vehicles.id })
+    .from(vehicles)
+    .where(and(eq(vehicles.ownerId, ownerId), eq(vehicles.clientKey, clientKey)));
+  return row?.id ?? null;
+}
+
 /** Cohérence marque → modèle → génération, et type du véhicule (sauf modèle « Autre »). */
 export async function checkReference(
   ex: Executor,
@@ -195,12 +205,17 @@ export const vehiclesService = {
   },
 
   async create(v: Viewer, input: VehicleCreate): Promise<VehicleFull> {
+    // Lot M1, tour 2 : création idempotente. La même clé client (« Reprendre » après une réponse perdue) renvoie le
+    // véhicule déjà créé au lieu d'un doublon.
+    const replay = await vehicleByClientKey(v.user.id, input.clientKey);
+    if (replay) return full(replay);
     const plateNormalized = input.plate && !input.unregistered ? normalizePlate(input.plate) : null;
     if (input.plate && !plateNormalized) throw validation("Plaque invalide", { field: "plate" });
     await checkReference(db, input);
     await checkCategories(db, input.categoryIds, {
       vehicleType: input.vehicleType,
       makeId: input.makeId,
+      modelId: input.modelId,
       year: input.year ?? null,
     });
     const holder = input.status === "active" ? await plateHolder(db, plateNormalized) : null;
@@ -240,6 +255,7 @@ export const vehiclesService = {
             description: input.description,
             preparation: input.preparation,
             archivedAt: input.status === "active" ? null : now(),
+            clientKey: input.clientKey ?? null,
           })
           .returning({ id: vehicles.id });
         if (!row) throw new Error("Insertion du véhicule impossible");
@@ -254,6 +270,11 @@ export const vehiclesService = {
       }
       return full(id);
     } catch (error) {
+      // Deux envois simultanés avec la même clé : le second renvoie le véhicule du premier.
+      if (isUniqueViolation(error, "vehicles_owner_client_key_unique")) {
+        const existing = await vehicleByClientKey(v.user.id, input.clientKey);
+        if (existing) return full(existing);
+      }
       if (isPlateConflict(error)) {
         throw conflict("plate_taken", "Cette plaque est déjà enregistrée sur un véhicule actif");
       }
@@ -320,6 +341,7 @@ export const vehiclesService = {
       await checkCategories(db, categoryIds, {
         vehicleType: merged.vehicleType,
         makeId: merged.makeId,
+        modelId: merged.modelId,
         year: merged.year ?? null,
       });
     }
@@ -421,9 +443,23 @@ export const vehiclesService = {
   /**
    * Photo recompressée à l'arrivée : 2048 px au plus, WebP, orientation EXIF appliquée, métadonnées retirées.
    * `plateRects` (lot 51) : plaque floutée avant le stockage, l'original n'est jamais écrit (V9).
+   * Lot M1, tour 2 (vie privée, défense en profondeur) : aucune photo de véhicule n'entre sans décision sur la plaque,
+   * quel que soit le client — des cadres, ou « aucune plaque visible » confirmé (`noPlate` : la case « Envoyer sans
+   * flouter » du site, le bouton « Aucune plaque » de l'appli). Sinon 400, rien n'est écrit.
    */
-  async addPhoto(v: Viewer, id: string, file: File, plateRects?: PlateRect[]): Promise<VehicleFull> {
+  async addPhoto(
+    v: Viewer,
+    id: string,
+    file: File,
+    plateRects: PlateRect[] | undefined,
+    noPlate: boolean,
+  ): Promise<VehicleFull> {
     await ownVehicle(v, id);
+    if (!plateRects?.length && !noPlate) {
+      throw validation("Photo : place le cadre sur la plaque, ou confirme qu'aucune plaque n'est visible.", {
+        fields: { plateDecision: "required" },
+      });
+    }
     if (file.size > MAX_PHOTO_BYTES) throw new AppError(413, "payload_too_large", "Photo trop lourde (15 Mo au plus)");
     if (!ACCEPTED_TYPES.includes(file.type)) {
       throw new AppError(415, "unsupported_media_type", "Formats acceptés : JPEG, PNG, WebP, HEIC");
@@ -489,7 +525,8 @@ export const vehiclesService = {
       }
       await certificationService.afterChange(tx, after, id, certifiedBefore);
     });
-    await storage.remove(target.storageKey);
+    // Lot M1, tour 2 : l'ancienne image (peut-être avec une plaque nette) ne reste jamais stockée.
+    await removeOrRetry(target.storageKey);
     return full(id);
   },
 

@@ -1,0 +1,322 @@
+import { mkdirSync, readFileSync } from "node:fs";
+import { expect, test } from "@playwright/test";
+import pg from "pg";
+import sharp from "sharp";
+import { auditPage } from "./audit";
+import { apiCall, chooseSitePhoto, loginInBrowser, randomPlate, setTheme, signUpApi, unique } from "./helpers";
+import { checkerPhoto, storedPhoto } from "./helpers/lot51";
+import { RELAIS } from "./relais";
+
+// Lot M1 : l'ajout de véhicule du site applique les mêmes règles, les mêmes mots et le même ordre que l'appli. Un
+// véhicule complet (deux photos recadrées au carré, chacune avec sa décision de plaque, Toyota › Supra › Mk5,
+// motorisation saisie, teinte, description, préparation) est ajouté par le formulaire, puis relu par l'API. Tour 2 :
+// fiche technique libre (décision de Damien du 23/10), teinte gardée quand on regarde une autre famille, « Préparée »
+// décochable, une photo sans décision de plaque refusée.
+
+type Photo = { id: string; url: string; width: number; height: number };
+type Vehicle = {
+  id: string;
+  color: string | null;
+  description: string | null;
+  preparation: string | null;
+  powerHp: number | null;
+  weightKg: number | null;
+  engine: string | null;
+  year: number | null;
+  categories: { id: string; label: string }[];
+  photos: Photo[];
+};
+
+test("ajout complet d'un véhicule sur le site, photo carrée, fiche technique et préparation", async ({ browser }) => {
+  const pseudo = `M1Site_${unique()}`.slice(0, 20);
+  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+  const cookie = await signUpApi(pseudo, email);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, email, undefined, "/app/garage/nouveau");
+
+  // Les cinq sections, dans l'ordre de l'appli.
+  await expect(page.getByTestId("vehicle-add-form").getByRole("heading", { level: 2 })).toHaveText([
+    "1 · Photos",
+    "2 · Plaque",
+    "3 · Marque et modèle",
+    "4 · Fiche technique",
+    "5 · Catégories",
+  ]);
+
+  // 1 · Photos : la photo s'ouvre dans le recadrage carré (cadre fixe, zoom ×1 à ×2,5), puis part en carré.
+  await page.getByLabel("Photo", { exact: true }).setInputFiles({
+    name: "supra.png",
+    mimeType: "image/png",
+    buffer: checkerPhoto(640, 480),
+  });
+  const crop = page.getByTestId("site-crop");
+  await expect(crop).toBeVisible();
+  await expect(crop.getByRole("heading", { name: "Recadrer" })).toBeVisible();
+  await expect(page.getByTestId("site-crop-zoom")).toHaveText("×1,0");
+  await page.getByTestId("site-crop-in").click();
+  await expect(page.getByTestId("site-crop-zoom")).toHaveText("×1,3");
+  // On glisse la photo à la souris : le cadre reste carré et le zoom ne change pas.
+  const frame = await page.getByTestId("site-crop-frame").boundingBox();
+  if (!frame) throw new Error("cadre de recadrage absent");
+  expect(Math.round(frame.width)).toBe(Math.round(frame.height));
+  await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(frame.x + frame.width / 2 - 40, frame.y + frame.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(crop.getByText("Vignette")).toBeVisible();
+  await expect(crop.getByText("Fiche", { exact: true })).toBeVisible();
+  await crop.getByRole("button", { name: "Annuler" }).click();
+  await expect(crop).toHaveCount(0);
+  await expect(page.getByTestId("new-plate-frame")).toHaveCount(0);
+  await chooseSitePhoto(page, { name: "supra.png", mimeType: "image/png", buffer: checkerPhoto(640, 480) });
+  await expect(page.getByTestId("add-cert")).toContainText("3 photos conseillées");
+  await expect(page.getByTestId("add-cert")).toContainText("il en faut 3 pour demander la certification");
+  await page.getByTestId("site-no-plate").click();
+  await page.getByTestId("site-no-plate-yes").click();
+  // Tour 2 : une deuxième photo à la création, avec sa propre décision de plaque.
+  await chooseSitePhoto(page, { name: "gt86.png", mimeType: "image/png", buffer: checkerPhoto(480, 640) }, "Photo 2");
+  await expect(page.getByTestId("new-plate-frame-2")).toBeVisible();
+  await expect(page.getByTestId("add-cert")).toContainText("2 sur 3");
+  await expect(page.getByLabel("Photo 3", { exact: true })).toBeVisible();
+
+  // 2 · Plaque : numéro obligatoire (privé), ancien véhicule, non immatriculé, note de vie privée.
+  const plate = page.getByTestId("add-plate");
+  await expect(plate.getByLabel("Numéro de plaque · privé")).toBeVisible();
+  await expect(plate).toContainText("Le numéro reste privé");
+  await plate.getByLabel("Numéro de plaque · privé").fill(randomPlate());
+  await plate.getByLabel("C'est un ancien véhicule").check();
+  await expect(page.getByTestId("add-former")).toContainText("Un ancien véhicule ne peut pas être certifié.");
+  await plate.getByLabel("C'est un ancien véhicule").uncheck();
+
+  // 3 · Marque et modèle : Toyota › Supra › Mk5.
+  await page.getByTestId("add-types").getByRole("radio", { name: "Voiture" }).check();
+  await page.getByLabel("Marque", { exact: true }).selectOption({ label: "Toyota" });
+  await expect(page.getByLabel("Modèle", { exact: true }).locator('option:text-is("Supra")')).toHaveCount(1);
+  await page.getByLabel("Modèle", { exact: true }).selectOption({ label: "Supra" });
+  const mk5 = page.getByLabel("Génération", { exact: true }).locator("option", { hasText: "Mk5" });
+  await expect(mk5).toHaveCount(1);
+  await page.getByLabel("Génération", { exact: true }).selectOption((await mk5.getAttribute("value")) as string);
+
+  // 4 · Fiche technique : motorisation, puissance et poids en saisie libre (plus de catalogue).
+  await expect(page.getByTestId("add-engines")).toHaveCount(0);
+  await page.getByLabel("Motorisation", { exact: true }).fill("3.0 turbo B58");
+  await page.getByLabel("Puissance (ch)", { exact: true }).fill("340");
+  await page.getByLabel("Poids (kg)", { exact: true }).fill("1495");
+  await page.getByTestId("add-year-2021").click();
+  await page.getByTestId("site-color-family-grey").click();
+  await page.getByRole("radio", { name: /Gris acier/ }).check();
+  await expect(page.getByTestId("site-color-name")).toContainText("Gris acier");
+  // Tour 2 : regarder les bleus sans rien choisir garde la teinte choisie.
+  await page.getByTestId("site-color-family-blue").click();
+  await expect(page.getByTestId("site-color-name")).toContainText("Gris acier");
+  await expect(page.getByTestId("site-color-value")).toHaveValue("Gris acier");
+  await page.getByLabel("Description", { exact: true }).fill("Supra Mk5 d'origine, entretien suivi, sortie circuit.");
+  await expect(page.getByTestId("add-description-count")).toContainText("/ 600");
+  await page.getByTestId("add-prep-wheels").check();
+
+  // 5 · Catégories : origine déduite de la marque, « Préparée » cochée d'office par la préparation.
+  await expect(page.getByTestId("add-origin")).toContainText("Japonaise");
+  await expect(page.getByTestId("add-origin")).toContainText("JDM · déduit de Toyota");
+  const prepared = page.getByTestId("categories").getByRole("checkbox", { name: "Préparée" });
+  await expect(prepared).toBeChecked();
+  await expect(page.getByTestId("add-styles-note")).toContainText("Préparée est cochée");
+  // Tour 2 : « Préparée » reste décochable, comme dans l'appli ; l'envoi ne la recoche pas.
+  await prepared.uncheck();
+  await expect(prepared).not.toBeChecked();
+  const audit = await auditPage(page);
+  expect(audit.greens).toEqual([]);
+  expect(audit.horizontalScroll).toBe(false);
+  expect(audit.buttonsWithoutIcon).toEqual([]);
+
+  // Tour 2 : la deuxième photo n'a ni cadre ni « aucune plaque » : refusée avant tout envoi.
+  await page.getByRole("button", { name: "Envoyer", exact: true }).click();
+  await expect(page.getByText(/Photo 2 : place le cadre sur la plaque/).first()).toBeVisible({ timeout: 20_000 });
+  expect((await apiCall<Vehicle[]>(cookie, "GET", "/me/vehicles")).data).toHaveLength(0);
+  await page.getByTestId("site-no-plate2").click();
+  await page.getByTestId("site-no-plate-yes2").click();
+  if (await prepared.isChecked()) await prepared.uncheck();
+  await page.getByRole("button", { name: "Envoyer", exact: true }).click();
+  await page.waitForURL(/\/app\/garage$/, { timeout: 30_000 });
+
+  const list = await apiCall<Vehicle[]>(cookie, "GET", "/me/vehicles");
+  const added = list.data[0];
+  if (!added) throw new Error("véhicule absent du garage");
+  expect(added.color).toBe("Gris acier");
+  expect(added.preparation).toBe("Jantes");
+  expect(added.description).toBe("Supra Mk5 d'origine, entretien suivi, sortie circuit.");
+  expect(added.engine).toBe("3.0 turbo B58");
+  expect(added.powerHp).toBe(340);
+  expect(added.weightKg).toBe(1495);
+  expect(added.year).toBe(2021);
+  expect(added.categories.map((c) => c.label)).toContain("JDM");
+  expect(added.categories.map((c) => c.label)).not.toContain("Préparée");
+  // Les deux photos stockées sont carrées.
+  expect(added.photos).toHaveLength(2);
+  for (const photo of added.photos) {
+    expect(photo.width).toBe(photo.height);
+    const meta = await sharp(await storedPhoto(photo.url)).metadata();
+    expect(meta.width).toBe(meta.height);
+  }
+  await ctx.close();
+});
+
+test("un ancien véhicule s'ajoute sans plaque ni photo, et la teinte libre part telle quelle", async ({ browser }) => {
+  const pseudo = `M1Old_${unique()}`.slice(0, 20);
+  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+  const cookie = await signUpApi(pseudo, email);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, email, undefined, "/app/garage/nouveau");
+  await page.getByLabel("C'est un ancien véhicule").check();
+  await page.getByLabel("Il est…").selectOption({ label: "Souvenir" });
+  await page.getByLabel("Marque", { exact: true }).selectOption({ label: "BMW" });
+  await expect(page.getByLabel("Modèle", { exact: true })).toBeEnabled();
+  await page.getByLabel("Modèle", { exact: true }).selectOption({ index: 1 });
+  await page.getByTestId("site-color-other").click();
+  await page.getByLabel("Sa teinte").fill("Bleu Laguna");
+  // Tour 2 : bornes de la saisie libre, les mêmes que l'appli et l'API.
+  await page.getByLabel("Puissance (ch)", { exact: true }).fill("2500");
+  await page.getByRole("button", { name: "Envoyer", exact: true }).click();
+  await expect(page.getByText("Puissance : un nombre entier de 1 à 2\u00a0000 ch.")).toBeVisible({ timeout: 20_000 });
+  await page.getByLabel("Puissance (ch)", { exact: true }).fill("");
+  await page.getByRole("button", { name: "Envoyer", exact: true }).click();
+  await page.waitForURL(/\/app\/garage\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+  const list = await apiCall<(Vehicle & { status: string })[]>(cookie, "GET", "/me/vehicles");
+  expect(list.data[0]?.color).toBe("Bleu Laguna");
+  expect(list.data[0]?.status).toBe("keepsake");
+  await ctx.close();
+});
+
+test("garage sans photo : « Ajouter une photo » ouvre la fiche, qui pose le cadre de plaque (lot M1, tour 2)", async ({
+  browser,
+}) => {
+  const pseudo = `M1Gar_${unique()}`.slice(0, 20);
+  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+  const cookie = await signUpApi(pseudo, email);
+  const makes = await apiCall<{ id: string; name: string }[]>(cookie, "GET", "/vehicle-reference/makes");
+  const bmw = makes.data.find((m) => m.name === "BMW");
+  const models = await apiCall<{ id: string; vehicleType: string }[]>(
+    cookie,
+    "GET",
+    `/vehicle-reference/makes/${bmw?.id}/models`,
+  );
+  const model = models.data.find((m) => m.vehicleType === "car");
+  const created = await apiCall<{ id: string }>(cookie, "POST", "/me/vehicles", {
+    vehicleType: "car",
+    makeId: bmw?.id,
+    modelId: model?.id,
+    plate: randomPlate(),
+  });
+  expect(created.status).toBe(201);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, email, undefined, "/app/garage");
+  await page.getByTestId("garage-add-photo").click();
+  await page.waitForURL(new RegExp(`/app/garage/${created.data.id}`), { timeout: 30_000 });
+  await page.getByLabel("Ajouter une photo").setInputFiles({
+    name: "photo.png",
+    mimeType: "image/png",
+    buffer: checkerPhoto(),
+  });
+  await expect(page.getByTestId("add-plate-frame")).toBeVisible();
+  // Sans cadre ni « aucune plaque » : refusée par le site (et par l'API).
+  await page.getByRole("button", { name: "Envoyer la photo" }).click();
+  await expect(page.getByText(/place le cadre sur la plaque/).first()).toBeVisible({ timeout: 20_000 });
+  await page.getByLabel("Ajouter une photo").setInputFiles({
+    name: "photo.png",
+    mimeType: "image/png",
+    buffer: checkerPhoto(),
+  });
+  await page.getByTestId("site-no-plate").click();
+  await page.getByTestId("site-no-plate-yes").click();
+  await page.getByRole("button", { name: "Envoyer la photo" }).click();
+  await expect
+    .poll(async () => (await apiCall<Vehicle>(cookie, "GET", `/me/vehicles/${created.data.id}`)).data.photos.length, {
+      timeout: 30_000,
+    })
+    .toBe(1);
+  await ctx.close();
+});
+
+test("modifier la fiche : seuls les champs changés partent, le champ refusé est nommé (lot M1, tour 2)", async ({
+  browser,
+}) => {
+  const pseudo = `M1Mod_${unique()}`.slice(0, 20);
+  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+  const cookie = await signUpApi(pseudo, email);
+  const makes = await apiCall<{ id: string; name: string }[]>(cookie, "GET", "/vehicle-reference/makes");
+  const bmw = makes.data.find((m) => m.name === "BMW");
+  const models = await apiCall<{ id: string; vehicleType: string }[]>(
+    cookie,
+    "GET",
+    `/vehicle-reference/makes/${bmw?.id}/models`,
+  );
+  const created = await apiCall<{ id: string }>(cookie, "POST", "/me/vehicles", {
+    vehicleType: "car",
+    makeId: bmw?.id,
+    modelId: models.data.find((m) => m.vehicleType === "car")?.id,
+    plate: randomPlate(),
+  });
+  // Une fiche d'avant le tour 2 : un poids au-delà des bornes d'aujourd'hui (posé en base, l'API le refuserait).
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  await client.query("update vehicles set weight_kg = 25000 where id = $1", [created.data.id]);
+  await client.end();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, email, undefined, `/app/garage/${created.data.id}`);
+  const edit = page.getByTestId("vehicle-edit");
+  const openEdit = async () => {
+    if (!(await edit.isVisible())) await page.getByText("Modifier la fiche").first().click();
+    await expect(edit).toBeVisible();
+  };
+  await openEdit();
+  await edit.getByLabel("Couleur", { exact: true }).fill("Bleu Laguna");
+  await edit.getByRole("button", { name: "Enregistrer" }).click();
+  await expect
+    .poll(async () => (await apiCall<Vehicle>(cookie, "GET", `/me/vehicles/${created.data.id}`)).data.color, {
+      timeout: 30_000,
+    })
+    .toBe("Bleu Laguna");
+  expect((await apiCall<Vehicle>(cookie, "GET", `/me/vehicles/${created.data.id}`)).data.weightKg).toBe(25000);
+  // Le poids modifié au-delà des bornes est refusé, et le message dit quel champ.
+  await openEdit();
+  await edit.getByLabel("Poids (kg)", { exact: true }).fill("20000");
+  await edit.getByRole("button", { name: "Enregistrer" }).click();
+  await expect(page.getByText(/^Poids : /).first()).toBeVisible({ timeout: 20_000 });
+  await ctx.close();
+});
+
+// Captures du site (consigne « Le site raccord ») : Béton et Sable, 390 et 1280 px, page vide puis photo posée avec
+// son cadre de plaque masqué en noir, regardées à chaque lot.
+const SITE_DIR = process.env.CAPTURES_DIR ?? `${RELAIS}/lot-m1-captures/site`;
+const PHOTO = process.env.M1_PHOTOS ? `${process.env.M1_PHOTOS}/supra.jpg` : null;
+
+for (const theme of ["beton", "sable"] as const) {
+  for (const width of [390, 1280] as const) {
+    test(`captures du site (${theme}, ${width} px)`, async ({ browser }) => {
+      const pseudo = `M1Cap_${unique()}`.slice(0, 20);
+      const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+      await signUpApi(pseudo, email);
+      const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await ctx.newPage();
+      await setTheme(page, theme);
+      await loginInBrowser(page, email, undefined, "/app/garage/nouveau");
+      mkdirSync(SITE_DIR, { recursive: true });
+      await expect(page.getByTestId("vehicle-add-form")).toBeVisible();
+      await page.screenshot({ path: `${SITE_DIR}/fin-${theme}-${width}-vide.png`, fullPage: true });
+      await chooseSitePhoto(
+        page,
+        PHOTO
+          ? { name: "supra.jpg", mimeType: "image/jpeg", buffer: readFileSync(PHOTO) }
+          : { name: "damier.png", mimeType: "image/png", buffer: checkerPhoto(640, 480) },
+      );
+      await page.getByRole("button", { name: "Poser un cadre" }).click();
+      await expect(page.getByTestId("site-plate-frame").first()).toBeVisible();
+      await page.getByTestId("site-plate-frame").first().scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${SITE_DIR}/fin-${theme}-${width}-plaque.png` });
+      await ctx.close();
+    });
+  }
+}

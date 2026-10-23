@@ -310,6 +310,11 @@ test("créer une structure, la vérifier, créer un Rassemblement par étapes, p
   await form
     .getByLabel("Photo du véhicule")
     .setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: POSTER });
+  // Lot M1, tour 2 : la photo part avec une décision sur la plaque (cadre, ou « aucune plaque visible » confirmé).
+  await expect(form.getByTestId("express-plate-frame")).toBeVisible();
+  await form.getByTestId("site-no-plate").click();
+  await g.getByTestId("site-no-plate-yes").click();
+  await expect(form.getByTestId("site-no-plate")).toBeChecked();
   await form.getByRole("button", { name: "M'inscrire" }).click();
   const done = g.getByTestId("express-done");
   await expect(done).toBeVisible({ timeout: 30_000 });

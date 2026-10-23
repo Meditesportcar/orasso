@@ -2,7 +2,14 @@
 // changés partent (une fiche inchangée ne fait pas perdre la certification) ; la plaque change comme à l'ajout : une
 // plaque déjà prise par un autre membre ouvre une demande de transfert, l'API décide. Mêmes champs que « Modifier la
 // fiche » du site, plus la plaque (c'est le lancement d'un transfert depuis un véhicule existant).
-import type { VehicleFull, VehicleUpdate } from "@orasso/shared";
+import {
+  VEHICLE_POWER_MAX,
+  VEHICLE_POWER_MIN,
+  VEHICLE_WEIGHT_MAX,
+  VEHICLE_WEIGHT_MIN,
+  type VehicleFull,
+  type VehicleUpdate,
+} from "@orasso/shared";
 
 export type VehicleEditForm = {
   year: string;
@@ -53,9 +60,9 @@ export function vehicleUpdateBody(
 
   const year = numberField(form.year, "Année", 1885, currentYear + 1);
   if (typeof year === "string") return { error: year };
-  const power = numberField(form.powerHp, "Puissance", 1, 2500);
+  const power = numberField(form.powerHp, "Puissance", VEHICLE_POWER_MIN, VEHICLE_POWER_MAX);
   if (typeof power === "string") return { error: power };
-  const weight = numberField(form.weightKg, "Poids", 50, 40000);
+  const weight = numberField(form.weightKg, "Poids", VEHICLE_WEIGHT_MIN, VEHICLE_WEIGHT_MAX);
   if (typeof weight === "string") return { error: weight };
 
   if (form.year.trim() !== before.year) body.year = year;

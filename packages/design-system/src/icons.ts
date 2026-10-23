@@ -157,6 +157,25 @@ export const iconShapes = {
     c(17, 17.5, 1.8),
     p("M8.3 17.5h6.9"),
   ], // food truck, prestataire, `#i-truck`
+  // Lot M1 (ajout de véhicule, maquettes 1.1 à 1.7) : symboles de l'artefact DA v2 tels quels.
+  moto: [c(5.5, 16, 3.5), c(18.5, 16, 3.5), p("M5.5 16l4-7h5l4 7M9.5 9H7M14 6h3l1.5 3")], // type moto (`s-vadd`)
+  crop: [p("M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14")], // recadrer, `#i-crop`
+  minus: [p("M5 12h14")], // dézoomer (le pendant de `add`)
+  trash: [p("M4 7h16M9 7V4h6v3M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13")], // supprimer une photo, `#i-trash`
+  // Puissance (`#i-bolt`) : motorisation, style Sportive et préparation Moteur ; l'éclair « express » reste réservé.
+  power: [p("M13 2L4 14h7l-1 8 9-12h-7z")],
+  layers: [p("M12 3l9 5-9 5-9-5zM3 13l9 5 9-5")], // suspension, Stance, `#i-layers`
+  wrench: [p("M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z")], // Préparée
+  drop: [p("M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z")], // covering, Origine, `#i-drop`
+  rim: [c(12, 12, 7), c(12, 12, 2.5), p("M12 2v3M12 19v3M2 12h3M19 12h3")], // jantes (`#i-gps` de l'artefact)
+  info: [c(12, 12, 9), p("M12 11v6M12 7.5h.01")], // explication, `#i-info`
+  upload: [p("M12 16V4M7 9l5-5 5 5M4 20h16")], // envoyer des fichiers, `#i-upload`
+  move: [p("M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3")], // glisser la photo (recadrage), `#i-moveo`
+  hand: [
+    p(
+      "M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v6.5M14 10.5V5.5a1.5 1.5 0 0 1 3 0V13M17 10a1.5 1.5 0 0 1 3 0v4a7 7 0 0 1-7 7h-1a7 7 0 0 1-5.6-2.8L4 15.5a1.6 1.6 0 0 1 2.5-2L8 15",
+    ),
+  ], // à la main, gestes à deux doigts, `#i-hand`
 } as const satisfies Record<string, readonly IconShape[]>;
 
 export type IconName = keyof typeof iconShapes;

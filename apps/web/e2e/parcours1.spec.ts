@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   addVehicleApi,
   apiCall,
+  chooseSitePhoto,
   createEvent,
   decideApi,
   fillArrivee,
@@ -60,14 +61,14 @@ test("parcours passionné, tri, pointage et points", async ({ browser }) => {
   await expect(page.getByLabel("Modèle")).toBeEnabled();
   await page.getByLabel("Modèle").selectOption({ index: 1 });
   await page.getByLabel("Année").fill("1995");
-  await page.getByLabel("Plaque").fill(plate);
-  await page.getByLabel("Photo").setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: samplePhoto() });
+  await page.getByLabel("Numéro de plaque").fill(plate);
+  await chooseSitePhoto(page, { name: "photo.png", mimeType: "image/png", buffer: samplePhoto() });
   // Lot 51 : une photo part avec son cadre de plaque, ou « aucune plaque visible » coché.
   // Lot M2, tour 2 : « Envoyer sans flouter » se confirme sur la photo.
   await page.getByTestId("site-no-plate").click();
   await page.getByTestId("site-no-plate-yes").click();
   await expect(page.getByTestId("site-no-plate")).toBeChecked();
-  await page.getByRole("button", { name: "Ajouter au garage" }).click();
+  await page.getByRole("button", { name: "Envoyer", exact: true }).click();
   await page.waitForURL(new RegExp(`/e/${event.slug}/candidater\\?vehicule=`));
 
   // --- 4. Candidature en 3 écrans ---

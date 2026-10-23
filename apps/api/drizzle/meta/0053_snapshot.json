@@ -1,5 +1,5 @@
 {
-  "id": "529674ff-b76f-4dfd-9f85-9df9ad12e110",
+  "id": "9f4832d9-c4ac-4cde-9de5-a81a6ee25544",
   "prevId": "f0efa041-9e63-4312-a00b-2d42c16b5139",
   "version": "7",
   "dialect": "postgresql",
@@ -8997,12 +8997,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "session_id": {
-          "name": "session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -9057,21 +9051,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "devices_session_id_idx": {
-          "name": "devices_session_id_idx",
-          "columns": [
-            {
-              "expression": "session_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -9086,19 +9065,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "devices_session_id_session_id_fk": {
-          "name": "devices_session_id_session_id_fk",
-          "tableFrom": "devices",
-          "tableTo": "session",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -9241,21 +9207,8 @@
           "name": "radius_km",
           "type": "smallint",
           "primaryKey": false,
-          "notNull": false,
-          "default": 50
-        },
-        "preferred_formats": {
-          "name": "preferred_formats",
-          "type": "text[]",
-          "primaryKey": false,
           "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "preferences_seen_at": {
-          "name": "preferences_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
+          "default": 50
         },
         "main_profile": {
           "name": "main_profile",
@@ -14636,6 +14589,13 @@
           "notNull": true,
           "default": false
         },
+        "offroad": {
+          "name": "offroad",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -14959,6 +14919,12 @@
           "notNull": true,
           "default": 0
         },
+        "client_key": {
+          "name": "client_key",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -15017,6 +14983,27 @@
           ],
           "isUnique": true,
           "where": "\"vehicles\".\"status\" = 'active' and \"vehicles\".\"plate_normalized\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vehicles_owner_client_key_unique": {
+          "name": "vehicles_owner_client_key_unique",
+          "columns": [
+            {
+              "expression": "owner_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "client_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -15583,16 +15570,7 @@
         "harassment",
         "spam",
         "dangerous_driving",
-        "other",
-        "misleading_info",
-        "cancelled_unannounced",
-        "unauthorized_place",
-        "abusive_pricing",
-        "plate_or_face",
-        "copyright",
-        "fake_pro",
-        "discount_not_applied",
-        "fake_reviews"
+        "other"
       ]
     },
     "public.report_status": {

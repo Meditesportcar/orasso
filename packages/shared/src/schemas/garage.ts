@@ -19,6 +19,8 @@ import { type PlateRect, plateRectSchema } from "./vehicle";
 /** `GET /vehicle-reference/categories?makeId&vehicleType&year` : chaque catégorie avec son éligibilité. */
 export const categoryReferenceQuery = z.object({
   makeId: z.uuid().optional(),
+  /** Lot M1, tour 2 : le modèle dit s'il est tout-terrain (« 4x4 » proposé au Defender, pas à la Supra). */
+  modelId: z.uuid().optional(),
   vehicleType: z.enum(vehicleTypes).optional(),
   year: z.coerce.number().int().min(1885).max(2200).optional(),
 });

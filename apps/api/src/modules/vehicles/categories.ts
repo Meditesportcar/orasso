@@ -11,7 +11,7 @@ import {
 import { asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { categories, categoryMakes, vehicleMakes } from "../../db/schema";
+import { categories, categoryMakes, vehicleMakes, vehicleModels } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { validation } from "../../lib/errors";
 import type { Executor } from "../../lib/tx";
@@ -48,15 +48,17 @@ export async function loadCategoryRules(ex: Executor, ids?: string[]): Promise<C
   }));
 }
 
-/** Faits du véhicule utiles aux règles : type, année, marque (pays et « Autre » lus en base). */
+/** Faits du véhicule utiles aux règles : type, année, marque (pays et « Autre » lus en base), modèle tout-terrain. */
 export async function loadVehicleFacts(
   ex: Executor,
-  v: { vehicleType: string; makeId: string; year: number | null },
+  v: { vehicleType: string; makeId: string; modelId?: string | null; year: number | null },
 ): Promise<VehicleFacts> {
   const make = await ex.query.vehicleMakes.findFirst({ where: eq(vehicleMakes.id, v.makeId) });
   if (!make) throw validation("Marque inconnue");
+  const model = v.modelId ? await ex.query.vehicleModels.findFirst({ where: eq(vehicleModels.id, v.modelId) }) : null;
   return {
     vehicleType: v.vehicleType,
+    offroad: Boolean(model?.offroad && model.makeId === make.id),
     year: v.year,
     makeId: make.id,
     makeCountry: make.country,
@@ -68,7 +70,7 @@ export async function loadVehicleFacts(
 export async function checkCategories(
   ex: Executor,
   ids: string[],
-  vehicle: { vehicleType: string; makeId: string; year: number | null },
+  vehicle: { vehicleType: string; makeId: string; modelId?: string | null; year: number | null },
 ) {
   if (!ids.length) return;
   const unique = [...new Set(ids)];
@@ -101,6 +103,7 @@ export async function categoryOptions(query: CategoryReferenceQuery): Promise<Ca
     ? await loadVehicleFacts(db, {
         vehicleType: query.vehicleType ?? "car",
         makeId: query.makeId,
+        modelId: query.modelId ?? null,
         year: query.year ?? null,
       })
     : {
