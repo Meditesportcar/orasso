@@ -9,6 +9,8 @@ import { RELAIS } from "./relais";
 // côté de « Hors ligne », plus de pavé des captures, Maps et Waze seulement à l'approche), le créneau strict des
 // exposants absent de la fiche publique, l'étiquette « À propos de » d'un message écrit depuis la fiche. Deux thèmes,
 // captures à 390 px. `M4_PHASE=avant` : captures seules, avant les changements (paires avant | après).
+// Tour 2 : pas de logo O dans le QR, consigne du créneau dans « Ta place » et sur l'écran du QR (hors ligne),
+// « Autour de… » de l'Explorer (Mon coin, Ailleurs…, distance, « Revenir à mon coin »), ✉ sans compte → connexion.
 // Lancer avec APP_URL=http://localhost:8801 (relais isolé devant Metro), API et site seedés.
 const APP = process.env.APP_URL;
 const PHASE = process.env.M4_PHASE ?? "apres";
@@ -228,6 +230,9 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await expect(page.getByTestId("gps-waze")).toBeVisible();
       await expect(page.getByTestId("gps-map")).toBeVisible();
       await expect(page.getByTestId("jourj-place")).toHaveCount(0);
+      // Tour 2 : pas de logo O pour l'instant ; le créneau privé et sa consigne restent ici, hors ligne.
+      await expect(page.getByTestId("qr-logo")).toHaveCount(0);
+      await expect(page.getByText(/Entrée côté capitainerie/).first()).toBeVisible();
       await page.getByTestId("qr-offline-help").click();
       await expect(page.getByTestId("qr-offline-pop")).toContainText("Comment ça marche sans réseau");
       await shot(page, `mon-qr-aide-${theme}`);
@@ -260,6 +265,8 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await expect(page.getByTestId("my-place")).toContainText("BMW");
       await expect(page.getByTestId("my-place-arrival")).toContainText("17:00 – 17:45");
       await expect(page.getByTestId("my-place-arrival")).toContainText("Arrivée exposants, strict");
+      // Tour 2 : la consigne du créneau revient dans « Ta place ».
+      await expect(page.getByTestId("my-place-arrival-note")).toHaveText("Entrée côté capitainerie.");
       await expect(page.getByTestId("my-place-withdraw")).toBeVisible();
       await expect(page.getByTestId("event-primary")).toHaveText(/Mon QR/);
       await audit(page);
@@ -299,6 +306,29 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await expect(page.getByTestId("sort-open")).toContainText("Nouveautés");
       // Le dernier publié de la recette arrive en tête.
       await expect(page.getByTestId("event-row").first()).toContainText(open6.title, { timeout: 30_000 });
+      // Tour 2 : « Autour de… » (temporaire) : Ailleurs… le 75, une distance, puis « Revenir à mon coin ».
+      await expect(page.getByTestId("around-open")).toContainText("Mon coin");
+      await expect(page.getByTestId("around-back")).toHaveCount(0);
+      await page.getByTestId("around-open").click();
+      await expect(page.getByTestId("around-sheet")).toBeVisible();
+      await page.getByTestId("around-elsewhere").click();
+      await page.getByTestId("around-find").fill("75");
+      await shot(page, `explorer-autour-${theme}`);
+      await page.getByRole("radio", { name: "75 · Paris" }).click();
+      await expect(page.getByTestId("around-sheet")).toHaveCount(0);
+      await expect(page.getByTestId("around-open")).toContainText("Le 75");
+      await expect(page.getByTestId("sort-line")).toContainText("distances depuis le centre du 75", {
+        timeout: 30_000,
+      });
+      await page.getByTestId("around-open").click();
+      await page.getByRole("radio", { name: "50 km" }).click();
+      await page.getByTestId("sheet-close").last().click();
+      await expect(page.getByTestId("sort-line")).toContainText("à 50 km au plus", { timeout: 30_000 });
+      await shot(page, `explorer-ailleurs-${theme}`);
+      await page.getByTestId("around-back").click();
+      await expect(page.getByTestId("around-open")).toContainText("Mon coin");
+      await expect(page.getByTestId("around-back")).toHaveCount(0);
+      await expect(page.getByTestId("sort-line")).not.toContainText("75");
       // Gardé pour la prochaine visite.
       await goto(page, "/explorer");
       await expect(page.getByTestId("sort-open")).toContainText("Nouveautés", { timeout: 30_000 });
@@ -313,6 +343,16 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await onMap.getByTestId("list-toggle").click();
       await expect(page).toHaveURL(/explorer/, { timeout: 30_000 });
     }
+    await ctx.close();
+  }
+
+  // Tour 2 : sans compte, ✉ de la bande de l'organisateur mène à la connexion, comme « Suivre ».
+  if (AFTER) {
+    const { ctx, page } = await open(browser, "beton");
+    await goto(page, `/e/${open6.slug}`);
+    await expect(page.getByTestId("org-write")).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("org-write").click();
+    await expect(page).toHaveURL(/\/auth/, { timeout: 30_000 });
     await ctx.close();
   }
 });

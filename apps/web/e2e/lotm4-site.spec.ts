@@ -165,6 +165,20 @@ test("Lot M4, site : fiche, « Ta place », écrire avec le contexte, candidatur
         await expect(mine.getByText(open.title).first()).toBeVisible({ timeout: 30_000 });
         await expect(mine.getByLabel("Trier par")).toHaveValue("nouveautes");
       }
+      // Tour 2 : « Autour de… » et la distance de l'Explorer, comme l'appli.
+      if (AFTER) {
+        await mine.goto("/app/explorer?autour=75&rayon=50");
+        await expect(mine.getByTestId("around-line")).toContainText("distances depuis le centre du 75", {
+          timeout: 30_000,
+        });
+        await expect(mine.getByTestId("around-line")).toContainText("à 50 km au plus");
+        await expect(mine.getByLabel("Autour de")).toHaveValue("75");
+        await shot(mine, `explorer-ailleurs-${theme}-${size}`);
+        await mine.getByTestId("around-back").click();
+        await expect(mine.getByLabel("Autour de")).toHaveValue("coin", { timeout: 30_000 });
+        await expect(mine.getByTestId("around-line")).toContainText("partout en France");
+        await expect(mine.getByTestId("around-back")).toHaveCount(0);
+      }
       await ctx.close();
     }
   }
