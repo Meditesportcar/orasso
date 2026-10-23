@@ -38,6 +38,7 @@ import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock, pointedResult, resultOf, resultProps, type ShownResult, vibrate } from "@/features/staff/result";
 import { SearchSheet } from "@/features/staff/SearchSheet";
 import { serverNow } from "@/lib/clock";
+import { RECETTE } from "@/lib/recette";
 import { ed25519Verify } from "@/lib/staff/crypto";
 import { counters, decideLocal, ScanGate } from "@/lib/staff/model";
 import { clearWriteError, getWriteError, newId, trustedKeysNow } from "@/lib/staff/runtime";
@@ -160,7 +161,7 @@ export default function Scan() {
 
   // Recette seulement (pas de caméra dans le navigateur de test) : injection d'une charge utile.
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!RECETTE) return;
     const g = globalThis as {
       __orassoScan?: (p: string) => void;
       __orassoScanTimings?: number[];
@@ -348,7 +349,7 @@ export default function Scan() {
         ) : null}
       </View>
 
-      {__DEV__ ? <DevInject onInject={handle} lastMs={lastMs} /> : null}
+      {RECETTE ? <DevInject onInject={handle} lastMs={lastMs} /> : null}
 
       <View style={[styles.actions, { paddingBottom: space3 + insets.bottom }]}>
         <View style={styles.row}>
@@ -389,7 +390,7 @@ export default function Scan() {
           fullscreen
           onReturn={
             // Recette : `__orassoScanHold` garde le résultat affiché le temps d'une capture d'écran.
-            __DEV__ && (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold
+            RECETTE && (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold
               ? undefined
               : () => {
                   setLast(result);
