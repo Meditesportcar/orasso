@@ -50,6 +50,7 @@ const WRITES_WHILE_SUSPENDED: [method: string, path: RegExp][] = [
   ["POST", /^\/api\/me\/notifications\/read$/],
   ["POST", /^\/api\/conversations\/[^/]+\/read$/],
   ["POST", /^\/api\/me\/devices$/],
+  ["POST", /^\/api\/me\/devices\/unregister$/],
   ["DELETE", /^\/api\/me\/devices\/[^/]+$/],
   ["DELETE", /^\/api\/me\/sessions\/[^/]+$/],
   // Relecture : se désister d'un événement (sinon malus d'absence à J+2 à cause de la suspension).

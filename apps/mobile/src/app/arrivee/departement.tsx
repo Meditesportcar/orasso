@@ -1,8 +1,10 @@
-// « Ton coin » (lot C3, artefact `s-dept`) : la carte des départements dans une carte (`.dept-map`, crédit en bas à
-// droite), la puce du favori (`.dchip.fav` : numéro moutarde, nom, « favori », ×) et « +N », la consigne, puis
-// « Continuer ». Le premier choisi est le favori (ou le département principal). La carte est décorative pour le
-// lecteur d'écran : « Choisir dans une liste » (lien discret) ouvre les 101 départements en cases à cocher.
-import { Button, DepartmentChecklist, FranceMap, franceDepartmentByCode } from "@orasso/design-system/native";
+// « Ton coin » (lot C3, artefact `s-dept` ; lot M6, maquettes 8.1 et 8.2, retours 02 et 03) : la carte des départements
+// dans une carte au filet clair (`card-line`), la France remplie d'une teinte « terre » un cran au-dessus de la carte
+// (jeton `dept-land`), frontières de la couleur de la carte, départements choisis en moutarde, le favori cerclé. Sous la
+// carte : le favori en pastille, puis « +1 », « +2 »… à côté (correction de Damien : rien ne déborde ni ne bouge).
+// « Choisir dans une liste » ouvre une feuille à 90 % de la hauteur (recherche, choisis en tête, « Valider (n) ») ; la
+// carte est décorative pour le lecteur d'écran, la feuille est son chemin.
+import { Button, FranceMap, franceDepartmentByCode, useTheme } from "@orasso/design-system/native";
 import {
   arriveeLabels,
   departmentFirstTag,
@@ -15,9 +17,9 @@ import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { ArriveeScreen, ObHead } from "@/features/arrivee/ArriveeScreen";
+import { DepartmentSheet } from "@/features/arrivee/DepartmentSheet";
 import { arriveeStore, departmentLimitReached, toggleDepartment, useArrivee } from "@/features/arrivee/model";
 import { T, useArt } from "@/features/tuto/art";
-import { ArtIcon } from "@/features/tuto/icons";
 
 /** Le nom d'un département (outre-mer compris). */
 function nameOf(code: string): string {
@@ -26,6 +28,7 @@ function nameOf(code: string): string {
 
 export default function ArriveeDepartement() {
   const a = useArt();
+  const { t } = useTheme();
   const router = useRouter();
   const { profile: chosen, departments } = useArrivee();
   const profile = chosen ?? "exhibitor";
@@ -57,17 +60,36 @@ export default function ArriveeDepartement() {
           {arriveeLabels.next}
         </Button>
       }
+      overlay={
+        <DepartmentSheet
+          visible={listOpen}
+          selected={departments}
+          favoriteTag={departmentFirstTag[profile]}
+          onCancel={() => setListOpen(false)}
+          onValidate={(next) => {
+            setLimit(false);
+            arriveeStore.set({ departments: next });
+            setListOpen(false);
+          }}
+        />
+      }
     >
       <ObHead title={arriveeLabels.department.title} text={departmentWhy[profile]} />
       {/* Décorative pour le lecteur d'écran (le chemin accessible est « Choisir dans une liste ») : rien n'y est annoncé. */}
       <View
-        style={[styles.map, { backgroundColor: a.card, boxShadow: a.shadow }]}
+        style={[styles.map, { backgroundColor: a.card, boxShadow: `inset 0 0 0 1px ${t.color.cardLine}, ${a.shadow}` }]}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
         aria-hidden
         testID="department-map"
       >
-        <FranceMap selected={departments} favorite={first ?? null} onToggle={toggle} />
+        <FranceMap
+          selected={departments}
+          favorite={first ?? null}
+          onToggle={toggle}
+          land={t.color.deptLand}
+          border={a.card}
+        />
         <T k="body" size={9.5} lh={12} color={a.muted} style={styles.credit}>
           {arriveeLabels.credit}
         </T>
@@ -98,16 +120,30 @@ export default function ArriveeDepartement() {
           </T>
         )}
         {others.length > 0 ? (
-          <View
+          <Pressable
+            onPress={() => setListOpen(true)}
+            accessibilityRole="button"
             style={[styles.dchip, styles.more, { backgroundColor: a.accent, boxShadow: a.shadow }]}
             accessibilityLabel={`${others.length} ${arriveeLabels.department.more}`}
+            testID="department-more"
           >
             <T k="num" size={16} lh={18} color={a.accentInk}>
               {`+${others.length}`}
             </T>
-          </View>
+          </Pressable>
         ) : null}
       </View>
+      {/* Maquette 8.1 : « Choisir dans une liste » en bouton secondaire pleine largeur, la consigne dessous. */}
+      <Button
+        variant="secondary"
+        icon="list"
+        fullWidth
+        onPress={() => setListOpen(true)}
+        accessibilityState={{ expanded: listOpen }}
+        testID="department-list-toggle"
+      >
+        {arriveeLabels.list.open}
+      </Button>
       <T k="cap" color={a.muted} style={styles.hint}>
         {`${departmentHint[profile]} ${arriveeLabels.department.hint}`}
       </T>
@@ -116,20 +152,6 @@ export default function ArriveeDepartement() {
           {arriveeLabels.errors.tooMany}
         </T>
       ) : null}
-      {/* Chemin accessible (la carte ne se lit pas au lecteur d'écran) : lien discret, `.btn-g.sm`. */}
-      <Pressable
-        onPress={() => setListOpen((v) => !v)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: listOpen }}
-        testID="department-list-toggle"
-        style={styles.listLink}
-      >
-        <ArtIcon name={listOpen ? "x" : "chr"} size={16} color={a.ink} />
-        <T k="btn" size={12} lh={14} color={a.ink}>
-          {listOpen ? arriveeLabels.list.close : arriveeLabels.list.open}
-        </T>
-      </Pressable>
-      {listOpen ? <DepartmentChecklist selected={departments} onToggle={toggle} surface="surface" /> : null}
     </ArriveeScreen>
   );
 }
@@ -152,12 +174,4 @@ const styles = StyleSheet.create({
   shrink: { flexShrink: 1 },
   x: { opacity: 0.6 },
   hint: { marginTop: -4 },
-  listLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    minHeight: 40,
-    paddingHorizontal: 6,
-    alignSelf: "flex-start",
-  },
 });

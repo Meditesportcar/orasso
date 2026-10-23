@@ -5,6 +5,7 @@ import {
   type CategoryMakeMode,
   type CertificationLostReason,
   type CertificationStatus,
+  SHARE_MAX_MASKS,
   shareFormats,
   shareStyles,
 } from "../garage";
@@ -13,6 +14,7 @@ import type { HomeSponsored } from "../home";
 import type { CategoryRefusal, CertificationFields, CertificationMissing } from "../rules/garage";
 import type { ProActivity } from "../rules/pro";
 import { optionalText } from "./common";
+import { type PlateRect, plateRectSchema } from "./vehicle";
 
 /** `GET /vehicle-reference/categories?makeId&vehicleType&year` : chaque catégorie avec son éligibilité. */
 export const categoryReferenceQuery = z.object({
@@ -24,12 +26,54 @@ export const categoryReferenceQuery = z.object({
 });
 export type CategoryReferenceQuery = z.infer<typeof categoryReferenceQuery>;
 
-/** `download=1` : l'image est servie en pièce jointe (téléchargement depuis le site) au lieu de s'afficher. */
+/**
+ * Zones à masquer sur l'affiche composée (filet de sécurité, lot M6) : « x,y,l,h[,angle] » séparés par « ; », fractions
+ * de l'image (0 à 1, comme les cadres de plaque `plateRectSchema`), angle en degrés. Rien d'invalide ne passe : une
+ * zone illisible fait refuser la requête.
+ */
+export function parseShareMasks(raw: string): PlateRect[] | null {
+  const out: PlateRect[] = [];
+  for (const part of raw.split(";").filter(Boolean)) {
+    const [x, y, w, h, angle, ...rest] = part.split(",").map((s) => (s.trim() === "" ? Number.NaN : Number(s)));
+    if (rest.length) return null;
+    const parsed = plateRectSchema.safeParse({ x, y, w, h, ...(angle !== undefined ? { angle } : {}) });
+    if (!parsed.success) return null;
+    out.push(parsed.data);
+  }
+  return out.length <= SHARE_MAX_MASKS ? out : null;
+}
+
+/** L'inverse de `parseShareMasks` (l'appli l'envoie dans l'adresse de l'affiche). */
+export const formatShareMasks = (rects: readonly PlateRect[]): string =>
+  rects
+    .slice(0, SHARE_MAX_MASKS)
+    .map((r) =>
+      [r.x, r.y, r.w, r.h, ...(r.angle ? [r.angle] : [])].map((n) => Number(n.toFixed(4)).toString()).join(","),
+    )
+    .join(";");
+
+/**
+ * `download=1` : l'image est servie en pièce jointe (téléchargement depuis le site) au lieu de s'afficher. `masks` :
+ * zones à flouter sur l'affiche composée (plaque re-détectée par l'appli avant le partage).
+ */
 export const shareImageQuery = z.object({
   format: z.enum(shareFormats).default("story"),
-  /** Style de la story (lot 50) ; sans effet sur la publication 1:1. */
+  /** Style de l'affiche (lot 50) : story et post (lot M6). */
   style: z.enum(shareStyles).default("night"),
   download: z.literal("1").optional(),
+  masks: z
+    .string()
+    .max(400)
+    .optional()
+    .transform((v, ctx) => {
+      if (!v) return [];
+      const rects = parseShareMasks(v);
+      if (!rects) {
+        ctx.addIssue({ code: "custom", message: "Zones à masquer invalides" });
+        return z.NEVER;
+      }
+      return rects;
+    }),
 });
 
 export const certificationRequestSchema = z.object({ message: optionalText(500) });

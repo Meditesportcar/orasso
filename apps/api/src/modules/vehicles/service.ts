@@ -188,24 +188,20 @@ export const vehiclesService = {
   },
 
   /**
-   * PNG de la fiche à partager (story ou publication), sans plaque ; mis en cache une heure. La story (lot 50) porte
-   * le grade du propriétaire et les rassos pointés avec ce véhicule.
+   * PNG de l'affiche à partager (story ou post, lot M6), sans plaque ; mise en cache une heure. `masks` : zones que
+   * l'appli a re-détectées sur l'affiche composée, floutées en plus.
    */
-  async shareImage(v: Viewer, id: string, format: ShareFormat, style: ShareStyle = "night"): Promise<Buffer> {
+  async shareImage(
+    v: Viewer,
+    id: string,
+    format: ShareFormat,
+    style: ShareStyle = "night",
+    masks: PlateRect[] = [],
+  ): Promise<Buffer> {
     await ownVehicle(v, id);
     const row = await vehiclesRepo.findFullById(id);
     if (!row) throw notFound("Véhicule introuvable");
-    if (format !== "story") return cachedShareImage(row, v.profile.pseudo, format);
-    const [rassos] = await db
-      .select({ n: count() })
-      .from(checkins)
-      .innerJoin(applications, eq(applications.id, checkins.applicationId))
-      .where(eq(applications.vehicleId, id));
-    return cachedShareImage(row, v.profile.pseudo, format, Date.now(), {
-      style,
-      grade: v.profile.grade,
-      rassos: rassos?.n ?? 0,
-    });
+    return cachedShareImage(row, v.profile.pseudo, format, Date.now(), { style, masks });
   },
 
   async create(v: Viewer, input: VehicleCreate): Promise<VehicleFull> {

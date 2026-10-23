@@ -297,7 +297,7 @@ test("l'inscription refuse un compte sans nom ou sans département (API)", async
   expect(ok.status).toBe(200);
 });
 
-test("Mon profil › Préférences : la carte de France remplace la liste (crédit visible, premier = favori)", async ({
+test("Tes préférences : le coin se choisit dans la feuille des départements (premier = favori)", async ({
   browser,
 }) => {
   test.setTimeout(240_000);
@@ -315,11 +315,13 @@ test("Mon profil › Préférences : la carte de France remplace la liste (créd
   await page.getByLabel("Mot de passe", { exact: true }).first().fill(SEED_PASSWORD);
   await page.getByRole("button", { name: "Me connecter" }).click();
   await page.waitForURL(/accueil/, { timeout: 30_000 });
-  await page.goto("/reglages/preferences");
+  // Le secteur n'est plus dans les réglages : « Tes préférences » est la seule page (ton coin en premier).
+  await page.goto("/preferences");
   await skipOpening(page);
-  await expect(page.getByTestId("moi-sector")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("dept-66").first()).toBeVisible();
-  await expect(page.getByText("Carte : Victor Cazanave, CC BY 4.0").first()).toBeVisible();
+  await expect(page.getByTestId("pref-departments")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/· favori/).first()).toBeVisible();
+  await page.getByTestId("pref-departments-edit").click();
+  await expect(page.getByTestId("department-sheet")).toBeVisible();
   await page.screenshot({ path: `${DIR}/04-moi-secteur-beton.png` });
   await ctx.close();
 });

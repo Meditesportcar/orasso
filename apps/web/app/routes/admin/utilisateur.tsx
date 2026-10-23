@@ -7,10 +7,10 @@ import {
   adminTexts,
   gradeLabels,
   type PointKind,
+  personReportReasons,
   platformRoleLabels,
   pointKindLabels,
   reportReasonLabels,
-  reportReasons,
   type SanctionKind,
   sanctionKindLabels,
   sanctionKinds,
@@ -270,7 +270,7 @@ export default function AdminUser({ loaderData, actionData }: Route.ComponentPro
               <SelectField
                 label="Motif"
                 name="motive"
-                options={reportReasons.map((r) => ({ value: r, label: reportReasonLabels[r] }))}
+                options={personReportReasons.map((r) => ({ value: r, label: reportReasonLabels[r] }))}
               />
             </ActionForm>
           )}

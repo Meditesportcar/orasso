@@ -71,7 +71,7 @@ export function toggleHomeWidget(config: HomeWidgetsConfig, id: HomeWidgetId): H
 // --- Rayon et listes -------------------------------------------------------------------------------------------
 
 /** Curseur de rayon des suggestions (même plage que le réglage `radiusKm` du profil). */
-export const HOME_RADIUS = { min: 10, max: 300, step: 10, default: 50 } as const;
+export const HOME_RADIUS = { min: 10, max: 200, step: 10, default: 50 } as const;
 /** Événements affichés dans « Autour de moi ». */
 export const HOME_NEARBY_LIMIT = 5;
 /** Stations affichées pour le lavage et le carburant. */
@@ -260,7 +260,7 @@ export type HomeData = {
   profile: HomeProfile;
   nextAccess: HomeNextAccess | null;
   pendingStatuses: MyApplication[];
-  nearby: { radiusKm: number; source: "device" | "sector" | null; events: EventCard[] } | null;
+  nearby: { radiusKm: number | null; source: "device" | "sector" | null; events: EventCard[] } | null;
   weather: MyWeather | null;
   favoriteGarage: HomeFavoriteGarage | null;
   wash: NearbyPlace[];

@@ -1,14 +1,15 @@
 // « Signaler » (lot 32, docs/01 « Signalement et modération ») : un seul composant pour toutes les cibles du site. Le
 // bouton (icône drapeau) ouvre une fenêtre : motif, détails, capture facultative (envoyée à `/api/me/uploads`, privée),
 // puis `POST /api/reports`. Pour un message, le serveur joint la copie des 5 messages avant et après.
-import { Button, Icon, SelectField } from "@orasso/design-system/web";
+import { Button, Icon } from "@orasso/design-system/web";
 import {
   MODERATION,
   moderationLabels,
   type ReportReason,
   type ReportTarget,
-  reportReasonLabels,
-  reportReasons,
+  reportReasonsByTarget,
+  reportReasonText,
+  reportSheetNotice,
   reportTargetThis,
   type UploadResult,
 } from "@orasso/shared";
@@ -24,8 +25,6 @@ type Props = {
   /** `link` : petit lien sous un avis, une annonce ou un message ; `button` (défaut) : bouton secondaire. */
   look?: "button" | "link";
 };
-
-const REASON_OPTIONS = reportReasons.map((r) => ({ value: r, label: reportReasonLabels[r] }));
 
 export function ReportDialog({ targetType, targetId, look = "button" }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -45,8 +44,8 @@ export function ReportDialog({ targetType, targetId, look = "button" }: Props) {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!reason) return setError("Choisis un motif.");
-    if (reason === "other" && !details.trim()) return setError("Précise le motif « Autre » en quelques mots.");
+    if (!reason) return setError(moderationLabels.chooseReason);
+    if (reason === "other" && !details.trim()) return setError(moderationLabels.otherNeedsDetails);
     setBusy(true);
     setError(null);
     try {
@@ -130,22 +129,41 @@ export function ReportDialog({ targetType, targetId, look = "button" }: Props) {
               {targetType === "message" && (
                 <p className="o-t-caption s-muted">{moderationLabels.messageContextNotice}</p>
               )}
-              <p className="o-t-caption s-muted">{moderationLabels.anonymityNotice}</p>
-              <SelectField
-                label={moderationLabels.reason}
-                name="reason"
-                required
-                value={reason}
-                placeholder="Choisir un motif"
-                options={REASON_OPTIONS}
-                onChange={(e) => setReason(e.target.value as ReportReason)}
-              />
+              <p className="o-t-caption s-muted">{reportSheetNotice[targetType]}</p>
+              <fieldset className="mod-reasons">
+                <legend className="o-t-label mod-reasons__legend">{moderationLabels.reason}</legend>
+                {reportReasonsByTarget[targetType].map((r) => {
+                  const text = reportReasonText(targetType, r);
+                  return (
+                    <label key={r} className="mod-reason" data-checked={reason === r ? "true" : undefined}>
+                      <input
+                        type="radio"
+                        name="reason"
+                        value={r}
+                        className="mod-reason__radio"
+                        checked={reason === r}
+                        onChange={() => setReason(r)}
+                      />
+                      <span className="mod-reason__text">
+                        <b className="mod-reason__label">{text.label}</b>
+                        {text.help && (
+                          <small className={text.warn ? "mod-reason__help mod-reason__help--warn" : "mod-reason__help"}>
+                            {text.help}
+                          </small>
+                        )}
+                      </span>
+                    </label>
+                  );
+                })}
+              </fieldset>
               <TextAreaField
-                label={moderationLabels.details}
+                label={
+                  reason === "other" ? moderationLabels.whatHappenedRequired : moderationLabels.whatHappenedOptional
+                }
                 name="details"
-                rows={3}
+                rows={2}
                 maxLength={MODERATION.detailsMax}
-                help={moderationLabels.detailsHint}
+                placeholder={moderationLabels.whatHappenedPlaceholder}
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
               />
@@ -162,7 +180,14 @@ export function ReportDialog({ targetType, targetId, look = "button" }: Props) {
                 </p>
               )}
               <div className="s-row">
-                <Button type="submit" variant="secondary" icon="flag" loading={busy} data-testid="report-send">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  icon="flag"
+                  loading={busy}
+                  disabled={!reason}
+                  data-testid="report-send"
+                >
                   {moderationLabels.send}
                 </Button>
               </div>

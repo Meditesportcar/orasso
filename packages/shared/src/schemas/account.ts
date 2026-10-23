@@ -8,6 +8,7 @@ import {
   profileVisibilities,
 } from "../enums";
 import { arriveeLabels } from "../labels/arrivee.fr";
+import { PREFERENCE_RADIUS } from "../preferences";
 import { type HomeWidgets, homeWidgetsSchema } from "./home";
 import type { UserProfileView } from "./social";
 
@@ -25,7 +26,7 @@ export const accountSettingsSchema = z
     mutedTypes: z.array(z.enum(notificationTypeNames)).max(100),
     visibility: z.enum(profileVisibilities),
     departments: z.array(departmentSchema).max(MAX_DEPARTMENTS, arriveeLabels.errors.tooMany),
-    radiusKm: z.number().int().min(10).max(300),
+    radiusKm: z.number().int().min(PREFERENCE_RADIUS.min).max(PREFERENCE_RADIUS.max).nullable(),
     interests: z.array(z.uuid()).max(30),
     homeWidgets: homeWidgetsSchema.nullable(),
   })
@@ -37,7 +38,8 @@ export type AccountSettings = {
   mutedTypes: string[];
   visibility: (typeof profileVisibilities)[number];
   departments: string[];
-  radiusKm: number;
+  /** Distance habituelle (10 à 200 km) ; `null` = partout en France. */
+  radiusKm: number | null;
   interests: string[];
   homeWidgets: HomeWidgets | null;
 };

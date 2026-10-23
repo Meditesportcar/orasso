@@ -348,6 +348,14 @@
         "usage": "terre secondaire de la carte (parcs, zones)"
       },
       {
+        "name": "dept-land",
+        "value": {
+          "beton": "#3b3f48",
+          "sable": "#d6c9a6"
+        },
+        "usage": "la France remplie de « Ton coin » (carte des départements, un cran au-dessus de la carte qui la porte ; lot M6, maquette 8.1, validé par Damien le 23/10)"
+      },
+      {
         "name": "map-sea",
         "value": {
           "beton": "#0f1216",

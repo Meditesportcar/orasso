@@ -40,19 +40,22 @@ test("liste des départements : rôle et état, outre-mer, premier = favori, 20 
   await page.waitForURL(/arrivee\/departement/);
   // La carte est décorative pour le lecteur d'écran ; la liste est le chemin accessible.
   await expect(page.getByRole("checkbox")).toHaveCount(0);
+  // Lot M6 (maquette 8.2) : la liste s'ouvre en feuille ; rien ne s'applique avant « Valider (n) ».
   await page.getByTestId("department-list-toggle").click();
   const reunion = page.getByRole("checkbox", { name: "974 · La Réunion" });
   await expect(reunion).toHaveAttribute("aria-checked", "false");
   await reunion.click();
   await expect(reunion).toHaveAttribute("aria-checked", "true");
-  // Puce du favori (artefact `.dchip.fav`) : le numéro dans sa pastille, puis le nom et « favori ».
-  await expect(page.getByText("La Réunion · favori")).toBeVisible();
   const pyrenees = page.getByRole("checkbox", { name: "66 · Pyrénées-Orientales" });
   await pyrenees.click();
   await expect(pyrenees).toHaveAttribute("aria-checked", "true");
+  await page.getByTestId("department-validate").click();
+  // Puce du favori (artefact `.dchip.fav`) : le numéro dans sa pastille, puis le nom et « favori » ; « +1 » à côté.
+  await expect(page.getByText("La Réunion · favori")).toBeVisible();
   await expect(page.getByText("+1", { exact: true })).toBeVisible();
   await expect(page.getByTestId("dept-66")).toBeVisible();
   // Retoucher la ligne retire le département ; 20 au plus.
+  await page.getByTestId("department-list-toggle").click();
   await pyrenees.click();
   await expect(pyrenees).toHaveAttribute("aria-checked", "false");
   const codes = Array.from({ length: 19 }, (_, i) => String(i + 1).padStart(2, "0"));
@@ -101,22 +104,23 @@ test("profil pro sans fiche : carte « Termine ta fiche » (Accueil, Mon profil)
   await expect(page.getByRole("tab", { name: "Passeport" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("pending-pro").filter({ visible: true })).toContainText("Termine ta fiche");
 
-  // Mon profil : la même carte ; le secteur (deux touchers rapides, le dernier gagne, rien de faux ensuite).
-  await page.goto("/reglages/preferences");
+  // Tes préférences : le coin (trois touchers rapides dans la feuille, le dernier gagne), puis « Enregistrer ».
+  await page.goto("/preferences");
   await skipOpening(page);
-  await expect(page.getByTestId("moi-sector")).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId("department-list-toggle").click();
-  await page.getByTestId("deptrow-11").click();
-  await page.getByTestId("deptrow-34").click();
-  await page.getByTestId("deptrow-11").click();
+  await expect(page.getByTestId("pref-departments")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("pref-departments-edit").click();
+  for (const code of ["11", "34", "11"]) {
+    await page.getByTestId("department-search").fill(code);
+    await page.getByTestId(`deptrow-${code}`).click();
+  }
+  await page.getByTestId("department-validate").click();
+  await page.getByTestId("preferences-submit").click();
   const cookie = await login(email);
   await expect
     .poll(async () => (await apiCall<{ departments: string[] }>(cookie, "GET", "/me/settings")).data.departments, {
       timeout: 30_000,
     })
     .toEqual(["66", "34"]);
-  await expect(page.getByTestId("deptrow-34")).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByTestId("deptrow-11")).toHaveAttribute("aria-checked", "false");
 
   await page.goto("/");
   await skipOpening(page);

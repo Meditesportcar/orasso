@@ -1,12 +1,13 @@
 // Routes du compte (lot 15, ARCHITECTURE-SUITE § 1.2).
 import { isIP } from "node:net";
-import { accountDeleteSchema, accountSettingsSchema, referralSchema } from "@orasso/shared";
+import { accountDeleteSchema, accountSettingsSchema, preferencesUpdateSchema, referralSchema } from "@orasso/shared";
 import { Hono } from "hono";
 
 import { type AppEnv, requireUser } from "../../lib/session";
 import { body } from "../../lib/validate";
 import { securityService } from "../security/service";
 import { accountExportService } from "./export";
+import { preferencesService } from "./preferences";
 import { accountService } from "./service";
 
 /** Adresse du client pour le journal d'administration (première de `x-forwarded-for`, posée par nginx). */
@@ -31,6 +32,12 @@ export const accountRoutes = new Hono<AppEnv>()
   .patch("/me/settings", async (c) => {
     const v = await requireUser(c);
     return c.json(await accountService.updateSettings(v, await body(c, accountSettingsSchema)));
+  })
+  // Lot M6 : « Tes préférences » (ton coin, distance, types d'événements, centres d'intérêt, interrupteur), lues par l'Explorer.
+  .get("/me/preferences", async (c) => c.json(await preferencesService.get(await requireUser(c))))
+  .patch("/me/preferences", async (c) => {
+    const v = await requireUser(c);
+    return c.json(await preferencesService.update(v, await body(c, preferencesUpdateSchema)));
   })
   .get("/me/sessions", async (c) => {
     const v = await requireUser(c);

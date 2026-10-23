@@ -8,12 +8,13 @@ import {
   type NotificationType,
   notificationTypes,
   pushOnlyNotificationTypes,
+  pushRecipientId,
   shouldDeliver,
 } from "@orasso/shared";
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { devices, type NotificationData, notifications, profiles, user } from "../../db/schema";
+import { type NotificationData, notifications, profiles, user } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { type MailContent, mail, renderMail } from "../../lib/mail";
@@ -230,37 +231,45 @@ export const notificationsService = {
 };
 
 async function deliverOne(n: NotificationRow) {
+  const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, n.userId) });
+  const banned = Boolean(profile?.bannedAt);
+  // Lot M6, tour 2 : le Journal garde toujours la notification, mais le bandeau en direct ne l'annonce que si elle est
+  // livrée (`delivered`) : pas pour un type ou une famille coupés, un compte supprimé ou banni, une actualité du Journal.
+  const delivered =
+    !journalOnlyNotificationTypes.includes(n.type) &&
+    !profile?.deletedAt &&
+    !(banned && n.family !== "account") &&
+    shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type);
   realtime.publish(`user:${n.userId}`, "notification", {
     id: n.id,
     type: n.type,
     title: n.title,
     body: n.body,
     data: stripInternal(n.data),
+    delivered,
   });
   // Actualité du Journal : jamais de push ni d'e-mail (lot 17).
   if (journalOnlyNotificationTypes.includes(n.type)) return;
-  const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, n.userId) });
   // Compte supprimé : plus rien n'est livré.
   if (profile?.deletedAt) return;
   // Compte banni (lot 32, relecture) : seulement la famille « Sécurité du compte », par e-mail (appareils révoqués).
-  const banned = Boolean(profile?.bannedAt);
   if (banned && n.family !== "account") return;
   // Chaque famille et chaque type peuvent être coupés, sauf `staff` et `account` ; la notification reste au Journal.
   if (!shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type)) return;
 
-  const tokens = (
-    banned
-      ? []
-      : await db
-          .select({ token: devices.expoPushToken })
-          .from(devices)
-          .where(and(eq(devices.userId, n.userId), isNull(devices.revokedAt), isNotNull(devices.expoPushToken)))
-  )
-    .map((d) => d.token)
-    .filter((t): t is string => Boolean(t));
+  // Lot M6, tour 4 : seulement les appareils dont la session d'inscription vit encore (`push.tokensOf`).
+  const tokens = banned ? [] : await push.tokensOf(n.userId);
   let pushed = 0;
   if (tokens.length) {
-    const data = stripInternal(n.data);
+    // Lot M6, tour 2 : l'identifiant et le type voyagent avec le push, pour que l'appli ouverte l'annonce dans son bandeau
+    // avec la même clé que le temps réel (`notification-<id>`, jamais deux fois).
+    // Tour 3 : `recipient` = identifiant opaque du compte ; l'appli n'annonce rien si ce n'est pas le compte ouvert.
+    const data = {
+      ...stripInternal(n.data),
+      notificationId: n.id,
+      notificationType: n.type,
+      recipient: pushRecipientId(n.userId),
+    };
     // Compte suspendu (lot 32, relecture) : pas d'aperçu de message sur l'écran verrouillé, il lit dans sa Boîte.
     const suspended = Boolean(profile?.suspendedUntil && profile.suspendedUntil > now());
     const body = suspended && n.type === "message_received" ? "Nouveau message" : n.body;

@@ -1,18 +1,19 @@
 // « Signaler » (lot 32, docs/01) : une seule feuille pour toutes les cibles de l'appli. Motif, détails, capture choisie
 // dans la photothèque (envoyée à `/api/me/uploads purpose=report`, privée), puis `POST /api/reports`. Pour un message,
 // l'API joint la copie des 5 messages avant et après (rien à envoyer d'ici).
-import { Button, Icon, SelectField, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Icon, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import {
   MODERATION,
   moderationLabels,
   type ReportReason,
   type ReportTarget,
-  reportReasonLabels,
-  reportReasons,
+  reportReasonsByTarget,
+  reportReasonText,
+  reportSheetNotice,
   reportTargetThis,
 } from "@orasso/shared";
 import { useState, useSyncExternalStore } from "react";
-import { Platform, Pressable, StyleSheet } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 
 import { api } from "@/lib/api";
 import { ApiRequestError, errorMessage } from "@/lib/http";
@@ -20,8 +21,6 @@ import { type PickedPhoto, pickPhotos } from "@/lib/photos";
 import { AppSheet } from "@/ui/AppSheet";
 
 export type ReportTargetRef = { type: ReportTarget; id: string };
-
-const OPTIONS = reportReasons.map((r) => ({ value: r, label: reportReasonLabels[r] }));
 
 async function uploadCapture(photo: PickedPhoto): Promise<string> {
   const form = new FormData();
@@ -56,7 +55,7 @@ export function ReportSheet({ target, onClose }: { target: ReportTargetRef | nul
   const send = async () => {
     if (!target || !reason) return;
     if (reason === "other" && !details.trim()) {
-      setError("Précise le motif « Autre » en quelques mots.");
+      setError(moderationLabels.otherNeedsDetails);
       return;
     }
     setBusy(true);
@@ -83,9 +82,22 @@ export function ReportSheet({ target, onClose }: { target: ReportTargetRef | nul
     <AppSheet visible={Boolean(target)} onClose={close} accessibilityLabel={moderationLabels.report}>
       {target ? (
         <>
-          <Text variant="title" color={t.color.ink}>
-            {moderationLabels.reportTitle(reportTargetThis[target.type])}
-          </Text>
+          {/* Maquette 9.2 : le titre et ✕ (fermer sans rien envoyer). */}
+          <View style={styles.head}>
+            <Text variant="posterM" color={t.color.ink} style={styles.title} accessibilityRole="header">
+              {moderationLabels.reportTitle(reportTargetThis[target.type])}
+            </Text>
+            <Pressable
+              onPress={close}
+              accessibilityRole="button"
+              accessibilityLabel={moderationLabels.cancel}
+              hitSlop={6}
+              testID="report-close"
+              style={[styles.closex, { backgroundColor: t.color.surface }]}
+            >
+              <Icon name="close" size={20} color={t.color.ink} />
+            </Pressable>
+          </View>
           {done ? (
             <>
               <Text variant="body" color={t.color.ink} accessibilityRole="alert" testID="report-done">
@@ -103,18 +115,58 @@ export function ReportSheet({ target, onClose }: { target: ReportTargetRef | nul
                 </Text>
               ) : null}
               <Text variant="caption" color={t.color.inkMuted}>
-                {moderationLabels.anonymityNotice}
+                {reportSheetNotice[target.type]}
               </Text>
-              <SelectField
-                label={moderationLabels.reason}
-                options={OPTIONS}
-                value={reason}
-                placeholder="Choisir un motif"
-                onValueChange={(v) => setReason(v as ReportReason)}
-              />
+              <View style={styles.list} accessibilityRole="radiogroup" accessibilityLabel={moderationLabels.reason}>
+                {reportReasonsByTarget[target.type].map((r) => {
+                  const text = reportReasonText(target.type, r);
+                  const checked = reason === r;
+                  return (
+                    <Pressable
+                      key={r}
+                      onPress={() => setReason(r)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked }}
+                      accessibilityLabel={text.help ? `${text.label}. ${text.help}` : text.label}
+                      testID={`report-reason-${r}`}
+                      style={[
+                        styles.row,
+                        checked
+                          ? { backgroundColor: t.color.ground, borderColor: t.color.accent }
+                          : { backgroundColor: t.color.surface, borderColor: "transparent" },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.radio,
+                          checked
+                            ? { borderColor: t.color.accent, borderWidth: 7 }
+                            : { borderColor: t.color.inkMuted, borderWidth: 2 },
+                        ]}
+                      />
+                      <View style={styles.rowText}>
+                        <Text variant="bodyStrong" color={t.color.ink} style={styles.rowLabel}>
+                          {text.label}
+                        </Text>
+                        {text.help ? (
+                          <Text
+                            variant="caption"
+                            color={text.warn ? t.color.winText : t.color.inkMuted}
+                            style={[styles.rowHelp, text.warn ? styles.warn : null]}
+                          >
+                            {text.help}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
               <TextField
-                label={moderationLabels.details}
-                help={moderationLabels.detailsHint}
+                label={
+                  reason === "other" ? moderationLabels.whatHappenedRequired : moderationLabels.whatHappenedOptional
+                }
+                placeholder={moderationLabels.whatHappenedPlaceholder}
                 value={details}
                 onChangeText={setDetails}
                 multiline
@@ -126,7 +178,7 @@ export function ReportSheet({ target, onClose }: { target: ReportTargetRef | nul
               </Text>
               <Button
                 variant="secondary"
-                icon={photo ? "close" : "add"}
+                icon={photo ? "close" : "gallery"}
                 fullWidth
                 onPress={async () => {
                   if (photo) return setPhoto(null);
@@ -234,6 +286,27 @@ export function ReportSheetHost() {
   );
   return <ReportSheet target={target} onClose={() => openReport(null)} />;
 }
+
+const styles = StyleSheet.create({
+  head: { flexDirection: "row", alignItems: "flex-start", gap: tokens.spacing.space2 },
+  title: { flex: 1, fontSize: 20, lineHeight: 22 },
+  closex: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  list: { gap: 6 },
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: tokens.spacing.space3,
+    padding: tokens.spacing.space3,
+    borderRadius: tokens.radius.radiusMd,
+    borderWidth: 2,
+    minHeight: tokens.spacing.touch,
+  },
+  radio: { width: 20, height: 20, borderRadius: 10, marginTop: 1 },
+  rowText: { flex: 1 },
+  rowLabel: { fontSize: 14, lineHeight: 18, fontWeight: "700" },
+  rowHelp: { fontSize: 12, lineHeight: 16, marginTop: 2 },
+  warn: { fontWeight: "700" },
+});
 
 const linkStyles = StyleSheet.create({
   link: {

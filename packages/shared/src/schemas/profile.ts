@@ -11,6 +11,7 @@ import {
 import type { Grade } from "../grades";
 import { arriveeLabels } from "../labels/arrivee.fr";
 import type { SuspensionInfo } from "../moderation";
+import { PREFERENCE_RADIUS } from "../preferences";
 import type { PlatformRole, StaffRole, StructureRole } from "../roles";
 import { optionalText } from "./common";
 
@@ -27,7 +28,7 @@ export const profileUpdateSchema = z
     visibility: z.enum(profileVisibilities),
     mainProfile: z.enum(mainProfiles),
     departments: z.array(departmentSchema).max(MAX_DEPARTMENTS, arriveeLabels.errors.tooMany),
-    radiusKm: z.number().int().min(5).max(500),
+    radiusKm: z.number().int().min(PREFERENCE_RADIUS.min).max(PREFERENCE_RADIUS.max).nullable(),
     interests: z.array(z.uuid()).max(30),
     notificationPrefs: z.object({
       application: z.boolean(),
@@ -53,6 +54,12 @@ export const deviceRegisterSchema = z.object({
   appVersion: optionalText(20),
 });
 export type DeviceRegister = z.infer<typeof deviceRegisterSchema>;
+
+/** Lot M6, tour 3 : retirer le jeton push d'un appareil pour le compte connecté (déconnexion de l'appli). */
+export const deviceUnregisterSchema = z.object({
+  expoPushToken: z.string().regex(/^Expo(nent)?PushToken\[.+\]$/),
+});
+export type DeviceUnregister = z.infer<typeof deviceUnregisterSchema>;
 
 export type Membership = {
   structureId: string;
@@ -107,7 +114,8 @@ export type Me = {
     bio: string | null;
     visibility: (typeof profileVisibilities)[number];
     departments: string[];
-    radiusKm: number;
+    /** Distance habituelle (10 à 200 km) ; `null` = partout en France. */
+    radiusKm: number | null;
     /** Profil choisi à l'arrivée (lot 41) ; `null` pour les comptes antérieurs. */
     mainProfile: MainProfile | null;
     interests: string[];

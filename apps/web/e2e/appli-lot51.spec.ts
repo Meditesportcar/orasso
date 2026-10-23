@@ -204,8 +204,11 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     expect(blurred, "dans le cadre : la plaque est floutée").toBeLessThan(25);
 
     // Garage v2 : grand titre, carte, chiffres étroits, partage, ajout.
-    await page.getByTestId("vehicle-done-garage").click();
-    await page.waitForURL(/garage/, { timeout: 30_000 });
+    // Lot M6, tour 4 : premier véhicule, le bouton principal ouvre « Tes préférences » (règle « première fois ») ; le
+    // garage s'ouvre ensuite par son adresse.
+    await page.getByTestId("vehicle-done-preferences").click();
+    await page.waitForURL(/preferences/, { timeout: 30_000 });
+    await page.goto("/garage");
     await afterOpening(page);
     await expect(page.getByRole("heading", { name: "Mon garage" }).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("1 véhicule").first()).toBeVisible();

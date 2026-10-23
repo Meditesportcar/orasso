@@ -175,7 +175,8 @@ test("certification : Kenji demande, Damien certifie, la puissance change et ell
     return out;
   }, id);
   expect(dims.story).toEqual([200, 0x50, 1080, 1920]);
-  expect(dims.post).toEqual([200, 0x50, 1080, 1080]);
+  // Lot M6 : le post passe en 4:5 (maquette 2.2).
+  expect(dims.post).toEqual([200, 0x50, 1080, 1350]);
 
   const damienPage = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
   await loginInBrowser(damienPage, "damien@orasso.local", undefined, "/admin/certifications");

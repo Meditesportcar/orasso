@@ -97,6 +97,7 @@ export const accountExportService = {
             visibility: p.visibility,
             departments: p.departments,
             radiusKm: p.radiusKm,
+            preferredFormats: p.preferredFormats,
             newsletterOptIn: p.newsletterOptIn,
             notificationPrefs: p.notificationPrefs,
             mutedTypes: p.mutedTypes,

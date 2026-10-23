@@ -1,7 +1,7 @@
 // Modération (lot 32, ARCHITECTURE-SUITE § 15.2, § 15.3) : entrées des routes.
 import { z } from "zod";
 
-import { reportReasons, reportStatuses, reportTargets, sanctionKinds } from "../moderation";
+import { reportReasonAllowed, reportReasons, reportStatuses, reportTargets, sanctionKinds } from "../moderation";
 import { MODERATION } from "../rules/moderation";
 import { optionalText } from "./common";
 
@@ -24,6 +24,11 @@ export const reportCreateSchema = z
   .refine((v) => v.reason !== "other" || Boolean(v.details), {
     message: "Précise le motif « Autre » en quelques mots",
     path: ["details"],
+  })
+  // Lot M6 : chaque type a ses motifs (un événement ne se signale pas pour « faux profil »).
+  .refine((v) => reportReasonAllowed(v.targetType, v.reason), {
+    message: "Motif inconnu pour ce type de signalement",
+    path: ["reason"],
   });
 export type ReportCreate = z.infer<typeof reportCreateSchema>;
 
