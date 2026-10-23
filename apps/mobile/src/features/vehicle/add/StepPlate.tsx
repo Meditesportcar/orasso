@@ -1,240 +1,655 @@
-// Étape Plaque de l'ajout (lot 51, prototype `s-vadd` « Sa plaque, floutée ») : Automatique (plaques repérées sur
-// l'appareil, cadres proposés) ou À la main (cadre déplaçable et agrandissable, par photo) ; puis le numéro de plaque,
-// privé, facultatif pour un ancien véhicule. Le flou est appliqué par l'API à l'envoi et il est définitif : la personne
-// voit chaque cadre avant d'envoyer (garde de l'irréversibilité, H3).
+// Étape 2 de l'ajout : sa plaque (lot 51 ; logique du lot M2 ; visuel du lot M1 d'après les maquettes 1.3 et 1.4,
+// retours 11 à 15). Un bandeau de vignettes dit l'état de chaque photo (masquée, aucune plaque, à vérifier) ; toucher
+// une vignette ouvre la photo. La photo reste fixe, les outils sont de petits boutons posés dessus (Cadre, Retirer,
+// Aucune plaque) ; l'aperçu masque la plaque en noir plein (ce qu'on voit est ce qui sera publié, le vrai flou reste
+// celui du serveur). « Continuer » emmène à la photo à régler : la vignette clignote et le message s'affiche sur la
+// photo. « Aucune plaque » se confirme photo par photo, sur la photo. Puis le numéro, prérempli par une lecture sûre,
+// obligatoire, modifiable ; « ancien véhicule » et « non immatriculé » dans le même bloc. Plaque affichée simple, sans
+// bande « F » ni département (correction de Damien).
 //
-// Interface (lot M2, pour le conteneur du parcours refait au lot M1) — composant d'étape autonome :
-// - entrée : `draft` (les photos `draft.photos`, chacune avec ses cadres `rects`, sa détection `detection` et ses
-//   lectures `readings` posées par `detectionPatch` de `./plateStep` après `detectPlateReadings`, plus `plate`,
-//   `former`, `status`, `unregistered`) et `draft.blurMode` ;
-// - sortie : `onRects(i, rects)` (cadres de la photo i), `onNoPlate(i, bool)` (« Envoyer sans flouter » de la photo i,
-//   confirmé ici photo par photo), `onMode(mode)`, et `patch({ plate | former | status | unregistered })` ;
-// - état : `stepIssue(<étape Plaque>, draft)` de `./model` dit ce qui bloque (photo à régler, numéro obligatoire).
-// Le numéro est prérempli d'après une lecture sûre des photos (`prefillPatch`), à confirmer, jamais par-dessus une
-// saisie (`plateTouched`, gardé dans le brouillon) ; un format étranger n'est qu'un avertissement (`plateHelp`) ;
-// l'API stocke une forme unique (lot M2).
-import { Button, CheckboxField, Chip, ChipRow, TextField, tokens } from "@orasso/design-system/native";
-import { archiveStatusChoices, vehicleWizardLabels as L, MAX_PLATE_RECTS, nextPlateFrame } from "@orasso/shared";
+// Interface (lot M2) — inchangée : `draft` (photos avec `rects`, `detection`, `readings` posées par `detectionPatch`,
+// `plate`, `former`, `status`, `unregistered`) ; sorties `onRects(i, rects)`, `onNoPlate(i, bool)`, `onMode(mode)`,
+// `patch(…)`. Une lecture « probable » n'est jamais appliquée d'office : la photo est signalée « à vérifier ». Le
+// numéro n'est prérempli que d'une lecture sûre (`prefillPatch`), jamais par-dessus une saisie (`plateTouched`).
+import {
+  Chip,
+  ChipRow,
+  Icon,
+  type IconName,
+  Tag,
+  Text,
+  textStyles,
+  tokens,
+  useTheme,
+  withAlpha,
+} from "@orasso/design-system/native";
+import {
+  archiveStatusChoices,
+  vehicleWizardLabels as L,
+  MAX_PLATE_RECTS,
+  nextPlateFrame,
+  vehicleAddLabels as V,
+} from "@orasso/shared";
 import { useEffect, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import Animated, {
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
-import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { mediaSource } from "@/lib/media";
-import { Muted } from "@/ui/Muted";
-import { Overlay } from "@/ui/Overlay";
-import { type BlurMode, blurredCount, type Draft, type DraftPhoto, detectionUnavailable } from "./model";
-import { PhotoBadge, PlateFrameEditor } from "./PlateFrameEditor";
-import { ChoiceRow, StepHead, StepNote } from "./parts";
+import { type BlurMode, type Draft, type DraftPhoto, needsPlateDecision } from "./model";
+import { PlateFrameEditor } from "./PlateFrameEditor";
+import { StepHead, StepNote } from "./parts";
 import { plateHelp, prefillPatch, typedPlate } from "./plateStep";
 
-const { space2 } = tokens.spacing;
+const { space1, space2, space3 } = tokens.spacing;
+const THUMB = 74;
 
-function badgeOf(p: DraftPhoto, mode: BlurMode): { text: string; accent: boolean } {
-  if (p.rects.length) return { text: L.blurredCount(p.rects.length), accent: true };
-  if (p.plateBlurred) return { text: L.alreadyBlurred, accent: false };
-  if (mode === "manual") return { text: L.placeFrame, accent: false };
-  if (p.detection === "pending") return { text: L.detecting, accent: false };
-  if (p.detection === "unavailable" || p.remoteId) return { text: L.noDetection, accent: false };
-  return { text: L.noPlateFound, accent: false };
+export type PlateState = "ok" | "none" | "check" | "fix" | "pending" | "online";
+
+/** État d'une photo pour le bandeau (une lecture probable rend la photo « à vérifier », sans cadre posé d'office). */
+export function plateState(p: DraftPhoto): PlateState {
+  if (p.rects.length || p.plateBlurred) return "ok";
+  if (p.remoteId) return "online";
+  if (p.noPlate) return "none";
+  if (p.detection === "pending") return "pending";
+  if (p.readings?.some((r) => r.probable)) return "check";
+  return "fix";
 }
+
+/** Première photo à régler (recherche en cours, puis sans cadre ni « aucune plaque »), ou -1. */
+export const photoToFix = (d: Draft): number => {
+  const pending = d.photos.findIndex((p) => !p.remoteId && p.detection === "pending");
+  return pending >= 0 ? pending : d.photos.findIndex(needsPlateDecision);
+};
 
 export function StepPlate({
   draft,
   patch,
-  onMode,
   onRects,
   onNoPlate,
+  focus,
+  issue,
+  issueShown,
+  onAddPhotos,
 }: {
   draft: Draft;
   patch: (change: Partial<Draft>) => void;
   onMode: (mode: BlurMode) => void;
   onRects: (index: number, rects: DraftPhoto["rects"]) => void;
   onNoPlate: (index: number, value: boolean) => void;
+  /** « Continuer » avec une photo à régler : on l'ouvre et sa vignette clignote. */
+  focus?: { index: number; tick: number } | null;
+  /** Ce qui bloque l'étape (`stepIssue`) et s'il faut le dire (après « Continuer »). */
+  issue?: string | null;
+  issueShown?: boolean;
+  /** Le « + » du bandeau : retour aux photos. */
+  onAddPhotos?: () => void;
 }) {
+  const { t } = useTheme();
+  const c = t.color;
   const [index, setIndex] = useState(0);
+  const [confirming, setConfirming] = useState<number | null>(null);
+  const [blink, setBlink] = useState<number | null>(null);
   const i = Math.min(index, Math.max(0, draft.photos.length - 1));
   const photo = draft.photos[i];
-  const manual = draft.blurMode === "manual";
-  const badge = photo ? badgeOf(photo, draft.blurMode) : null;
-  const total = blurredCount(draft);
-  const unavailable = detectionUnavailable(draft.photos);
-  // « Envoyer sans flouter » : confirmé photo par photo, la photo sous les yeux (lot M2, retour 17).
-  const [confirmNoPlate, setConfirmNoPlate] = useState<number | null>(null);
-  const confirmPhoto = confirmNoPlate === null ? undefined : draft.photos[confirmNoPlate];
+  const state = photo ? plateState(photo) : null;
+
+  // « Continuer » vers la photo à régler.
+  useEffect(() => {
+    if (!focus) return;
+    setIndex(focus.index);
+    setBlink(focus.index);
+    setConfirming(null);
+  }, [focus]);
+  // Réglée : la vignette ne clignote plus.
+  useEffect(() => {
+    const p = blink === null ? undefined : draft.photos[blink];
+    if (p && !["fix", "check", "pending"].includes(plateState(p))) setBlink(null);
+  }, [blink, draft.photos]);
+
   // Numéro prérempli par une lecture sûre (à confirmer) ; jamais une saisie, même effacée (état dans le brouillon).
   const prefill = prefillPatch(draft);
   useEffect(() => {
     if (prefill) patch(prefill);
   }, [prefill, patch]);
-  const help = plateHelp(draft) ?? undefined;
+  const help = plateHelp(draft);
+  const read = help === L.plateRead;
+  const numberIssue = issueShown && issue && (issue === L.plateRequired || issue === L.plateInvalid) ? issue : null;
+  const showFix = state === "check" || (state === "fix" && (issueShown || blink === i));
+
   return (
     <>
-      <StepHead title={L.plateTitle} text={L.plateText} />
-      {unavailable ? <StepNote icon="plate">{L.noDetection}</StepNote> : null}
-      <View style={styles.modeRow}>
-        <ChipRow accessibilityRole="radiogroup" accessibilityLabel={L.plateTitle}>
-          {/* Relecture : sans détection possible ici (web, Expo Go), « Automatique » ne promet rien qu'on ne fait pas. */}
-          {unavailable ? null : (
-            <Chip
-              accessibilityRole="radio"
-              selected={!manual}
-              onPress={() => onMode("auto")}
-              accessibilityLabel={L.auto}
-            >
-              {L.auto}
-            </Chip>
-          )}
-          <Chip
-            accessibilityRole="radio"
-            selected={manual}
-            onPress={() => onMode("manual")}
-            accessibilityLabel={L.manual}
-          >
-            {L.manual}
-          </Chip>
-        </ChipRow>
-        <Muted variant="meta" testID="plate-blur-count">
-          {L.blurredCount(total)}
-        </Muted>
-      </View>
-      {photo ? (
-        <>
-          <PlateFrameEditor
-            source={photo.remoteId ? mediaSource(photo.uri) : { uri: photo.uri }}
-            width={photo.width}
-            height={photo.height}
-            rects={photo.rects}
-            editable={manual}
-            onChange={(rects) => onRects(i, rects)}
-            badge={badge ? <PhotoBadge accent={badge.accent}>{badge.text}</PhotoBadge> : null}
-            testID="plate-editor"
+      <StepHead title={V.plateTitle} text={V.plateText} />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.strip}
+        accessibilityLabel={V.plateStrip}
+        testID="plate-strip"
+      >
+        {draft.photos.map((p, j) => (
+          <Thumb
+            key={p.key}
+            photo={p}
+            n={j + 1}
+            selected={j === i}
+            blink={blink === j}
+            onPress={() => {
+              setIndex(j);
+              setConfirming(null);
+            }}
           />
-          <View style={styles.row}>
-            <Button
-              variant="close"
-              icon="back"
-              label={L.previousPhoto}
-              disabled={i === 0}
-              onPress={() => setIndex(i - 1)}
-            />
-            <Muted variant="meta" style={styles.grow}>
-              {L.photoN(i + 1, draft.photos.length)}
-            </Muted>
-            <Button
-              variant="close"
-              icon="next"
-              label={L.nextPhoto}
-              disabled={i >= draft.photos.length - 1}
-              onPress={() => setIndex(i + 1)}
-              testID="plate-next-photo"
-            />
-          </View>
-          {manual ? (
-            <View style={styles.stack}>
-              <Button
-                variant="secondary"
-                icon="add"
-                disabled={photo.rects.length >= MAX_PLATE_RECTS}
-                onPress={() => onRects(i, [...photo.rects, nextPlateFrame(photo.rects)])}
-                fullWidth
-                testID="plate-frame-add"
-              >
-                {L.addFrame}
-              </Button>
-              {photo.rects.length ? (
-                <Button
-                  variant="plate"
-                  icon="close"
-                  onPress={() => onRects(i, photo.rects.slice(0, -1))}
-                  fullWidth
-                  testID="plate-frame-remove"
-                >
-                  {L.removeFrame}
-                </Button>
-              ) : null}
+        ))}
+        {onAddPhotos ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={V.add}
+            onPress={onAddPhotos}
+            style={[styles.more, { borderColor: c.line }]}
+          >
+            <Icon name="add" size={20} color={c.inkMuted} />
+          </Pressable>
+        ) : null}
+      </ScrollView>
+      {photo ? (
+        <PlateFrameEditor
+          source={photo.remoteId ? mediaSource(photo.uri) : { uri: photo.uri }}
+          width={photo.width}
+          height={photo.height}
+          rects={photo.rects}
+          editable
+          mask="black"
+          loupe
+          onChange={(rects) => onRects(i, rects)}
+          badge={state === "ok" || state === "none" || state === "online" ? <Badge n={i + 1} state={state} /> : null}
+          testID="plate-editor"
+        >
+          {showFix ? (
+            <View
+              style={[styles.msg, { backgroundColor: c.night, borderColor: c.win }]}
+              accessibilityRole="alert"
+              testID="plate-message"
+            >
+              <Icon name="info" size={18} color={c.winText} />
+              <Text variant="caption" color={c.nightInk} style={styles.grow}>
+                {state === "check" ? V.plateProbable(i + 1) : V.plateFix(i + 1)}
+              </Text>
             </View>
           ) : null}
-          {!photo.remoteId && photo.rects.length === 0 ? (
-            <ChoiceRow
-              title={L.noPlate}
-              icon="check"
-              selected={Boolean(photo.noPlate)}
-              onPress={() => (photo.noPlate ? onNoPlate(i, false) : setConfirmNoPlate(i))}
-              testID="plate-none"
-            />
+          {state === "pending" ? (
+            <View style={[styles.msg, { backgroundColor: c.night, borderColor: c.line }]}>
+              <Icon name="search" size={18} color={c.nightInk} />
+              <Text variant="caption" color={c.nightInk} style={styles.grow}>
+                {V.plateSearching}
+              </Text>
+            </View>
           ) : null}
-          <StepNote icon="alert">{L.irreversible}</StepNote>
-        </>
+          <View style={styles.tools}>
+            <Tool
+              icon="add"
+              label={V.toolFrame}
+              on={state === "fix" || state === "check"}
+              disabled={photo.rects.length >= MAX_PLATE_RECTS}
+              onPress={() => onRects(i, [...photo.rects, nextPlateFrame(photo.rects)])}
+              testID="plate-frame-add"
+            />
+            {photo.rects.length ? (
+              <Tool
+                icon="close"
+                label={V.toolRemove}
+                onPress={() => onRects(i, photo.rects.slice(0, -1))}
+                testID="plate-frame-remove"
+              />
+            ) : null}
+            {!photo.remoteId && photo.rects.length === 0 ? (
+              <Tool
+                icon="eye"
+                label={V.toolNone}
+                on={Boolean(photo.noPlate)}
+                onPress={() => (photo.noPlate ? onNoPlate(i, false) : setConfirming(i))}
+                testID="plate-none"
+                checked={Boolean(photo.noPlate)}
+              />
+            ) : null}
+          </View>
+          {confirming === i ? (
+            <View style={[styles.confirm, { backgroundColor: withAlpha(c.night, 0.82) }]} testID="plate-none-confirm">
+              <Text variant="posterM" color={c.nightInk} style={styles.center}>
+                {V.noneTitle}
+              </Text>
+              <Text variant="caption" color={withAlpha(c.nightInk, 0.8)} style={styles.center}>
+                {V.noneText}
+              </Text>
+              <View style={styles.confirmRow}>
+                <OverlayButton
+                  icon="close"
+                  label={V.noneCancel}
+                  onPress={() => setConfirming(null)}
+                  testID="plate-none-cancel"
+                />
+                <OverlayButton
+                  icon="check"
+                  label={V.noneYes}
+                  strong
+                  onPress={() => {
+                    onNoPlate(i, true);
+                    setConfirming(null);
+                  }}
+                  testID="plate-none-yes"
+                />
+              </View>
+            </View>
+          ) : null}
+        </PlateFrameEditor>
+      ) : null}
+      {photo && photo.rects.length > 0 ? (
+        <View style={styles.hints}>
+          <HandHint icon="hand" lead={V.handTwo} text={V.handTwoText} />
+          <HandHint icon="move" lead={V.handOne} text={V.handOneText} />
+        </View>
       ) : null}
 
-      <TextField
-        label={L.plateNumber}
-        value={draft.plate}
-        onChangeText={(plate) => patch(typedPlate(plate))}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        editable={!draft.unregistered}
-        placeholder="AB-123-CD"
-        maxLength={20}
-        help={help}
-        testID="vehicle-plate"
-      />
-      <ChoiceRow
-        title={L.formerTitle}
-        detail={L.formerText}
-        icon="undo"
-        selected={draft.former}
-        onPress={() => patch({ former: !draft.former, status: draft.former ? "active" : "keepsake" })}
-        testID="vehicle-former"
-      />
-      {draft.former ? (
-        <ChipRow>
-          {archiveStatusChoices.map((c) => (
-            <Chip key={c.status} selected={draft.status === c.status} onPress={() => patch({ status: c.status })}>
-              {c.label}
-            </Chip>
-          ))}
-        </ChipRow>
-      ) : null}
-      <CheckboxField
-        label={L.unregistered}
-        checked={draft.unregistered}
-        onChange={(unregistered) => patch({ unregistered, plate: unregistered ? "" : draft.plate })}
-      />
-      <StepNote icon="plate">{L.privacyNote}</StepNote>
-      {/* Zone des feuilles de l'écran : sinon le pied du parcours (Retour / Envoyer) passe par-dessus la feuille. */}
-      <Overlay>
-        <ConfirmSheet
-          visible={confirmPhoto !== undefined}
-          title={L.noPlateConfirmTitle}
-          body={L.noPlateConfirmBody}
-          confirmLabel={L.noPlateConfirm}
-          confirmIcon="check"
-          onConfirm={() => {
-            if (confirmNoPlate !== null) onNoPlate(confirmNoPlate, true);
-            setConfirmNoPlate(null);
-          }}
-          onClose={() => setConfirmNoPlate(null)}
-        >
-          {confirmPhoto ? (
-            <Image
-              source={confirmPhoto.remoteId ? mediaSource(confirmPhoto.uri) : { uri: confirmPhoto.uri }}
-              style={[styles.confirmPhoto, { aspectRatio: confirmPhoto.width / Math.max(1, confirmPhoto.height) }]}
-              resizeMode="contain"
-              accessibilityLabel={L.photoN((confirmNoPlate ?? 0) + 1, draft.photos.length)}
-              testID="plate-none-photo"
-            />
+      <View style={[styles.block, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}>
+        <View style={styles.blockHead}>
+          <Text variant="label" color={c.inkMuted}>
+            {V.plateLabel}
+          </Text>
+          {read ? (
+            <View style={styles.read} testID="plate-read">
+              <Icon name="spark" size={15} color={c.accentText} />
+              <Text variant="bodyStrong" color={c.accentText} style={styles.small}>
+                {V.plateRead}
+              </Text>
+            </View>
           ) : null}
-        </ConfirmSheet>
-      </Overlay>
+        </View>
+        <TextInput
+          accessibilityLabel={`${L.plateNumber}, obligatoire`}
+          value={draft.plate}
+          onChangeText={(plate) => patch(typedPlate(plate))}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          editable={!draft.unregistered}
+          placeholder="AB-123-CD"
+          placeholderTextColor={c.inkFaint}
+          maxLength={20}
+          selectionColor={c.accent}
+          style={[
+            textStyles.title,
+            styles.plate,
+            {
+              color: c.ink,
+              backgroundColor: c.surfaceField,
+              borderColor: numberIssue ? c.winText : c.ink,
+              opacity: draft.unregistered ? 0.4 : 1,
+            },
+          ]}
+          testID="vehicle-plate"
+        />
+        {numberIssue ? (
+          <Text variant="caption" color={c.winText} accessibilityRole="alert" testID="vehicle-plate-error">
+            {numberIssue}
+          </Text>
+        ) : help && !read ? (
+          <StepNote icon="alert">{help}</StepNote>
+        ) : (
+          <Text variant="caption" color={c.inkMuted}>
+            {V.plateHelp}
+          </Text>
+        )}
+        <CheckRow
+          title={L.formerTitle}
+          text={L.formerText}
+          checked={draft.former}
+          onPress={() => patch({ former: !draft.former, status: draft.former ? "active" : "keepsake" })}
+          testID="vehicle-former"
+        />
+        {draft.former ? (
+          <>
+            <ChipRow>
+              {archiveStatusChoices.map((s) => (
+                <Chip key={s.status} selected={draft.status === s.status} onPress={() => patch({ status: s.status })}>
+                  {s.label}
+                </Chip>
+              ))}
+            </ChipRow>
+            <StepNote icon="info" testID="vehicle-former-cert">
+              {V.formerNoCert}
+            </StepNote>
+          </>
+        ) : null}
+        <CheckRow
+          title={L.unregistered}
+          text={V.unregisteredText}
+          checked={draft.unregistered}
+          onPress={() => patch({ unregistered: !draft.unregistered, plate: draft.unregistered ? draft.plate : "" })}
+          testID="vehicle-unregistered"
+        />
+      </View>
+      <StepNote icon="lock">{V.privacyShort}</StepNote>
     </>
   );
 }
 
+/** Vignette du bandeau (`.pl-th`) : la photo, sa pastille d'état, son mot ; clignote quand « Continuer » y mène. */
+function Thumb({
+  photo,
+  n,
+  selected,
+  blink,
+  onPress,
+}: {
+  photo: DraftPhoto;
+  n: number;
+  selected: boolean;
+  blink: boolean;
+  onPress: () => void;
+}) {
+  const { t, reducedMotion } = useTheme();
+  const c = t.color;
+  const state = plateState(photo);
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    if (blink && !reducedMotion) pulse.value = withRepeat(withTiming(0.35, { duration: 550 }), -1, true);
+    else {
+      cancelAnimation(pulse);
+      pulse.value = 1;
+    }
+  }, [blink, reducedMotion, pulse]);
+  const style = useAnimatedStyle(() => {
+    "worklet";
+    return { opacity: pulse.value };
+  });
+  const art: Record<PlateState, { bg: string; ink: string; icon: IconName; word: string }> = {
+    ok: { bg: c.accent, ink: c.accentInk, icon: "check", word: c.accentText },
+    none: { bg: c.night, ink: c.nightInk, icon: "close", word: c.inkMuted },
+    check: { bg: c.win, ink: c.winInk, icon: "info", word: c.winText },
+    fix: { bg: c.win, ink: c.winInk, icon: "info", word: c.winText },
+    pending: { bg: c.surfaceRaised, ink: c.ink, icon: "search", word: c.inkMuted },
+    online: { bg: c.surfaceRaised, ink: c.ink, icon: "check", word: c.inkMuted },
+  };
+  const a = art[state];
+  const ring = selected ? c.accent : blink ? c.win : "transparent";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={V.plateOpen(n, V.plateState[state])}
+      onPress={onPress}
+      style={styles.thumbCell}
+      testID={`plate-thumb-${n}`}
+    >
+      <Animated.View style={[styles.thumb, { borderColor: ring, boxShadow: t.shadow.shadowCard }, style]}>
+        <View style={styles.thumbInner}>
+          <PhotoThumb photo={photo} />
+        </View>
+        <View style={[styles.state, { backgroundColor: a.bg }]}>
+          <Icon name={a.icon} size={13} strokeWidth={3} color={a.ink} />
+        </View>
+      </Animated.View>
+      <Text variant="caption" color={a.word} style={styles.word}>
+        {V.plateState[state]}
+      </Text>
+    </Pressable>
+  );
+}
+
+function PhotoThumb({ photo }: { photo: DraftPhoto }) {
+  // Les vignettes du bandeau sont carrées : la photo (carrée depuis le lot M1) les remplit.
+  return (
+    <Image
+      source={photo.remoteId ? mediaSource(photo.uri) : { uri: photo.uri }}
+      style={StyleSheet.absoluteFill}
+      resizeMode="cover"
+    />
+  );
+}
+
+/** Pastille posée sur la photo (« Photo 1 · plaque masquée »). */
+function Badge({ n, state }: { n: number; state: PlateState }) {
+  const text = state === "ok" ? V.plateBadgeMasked(n) : state === "none" ? V.plateBadgeNone(n) : V.plateBadgeOnline(n);
+  return (
+    <View testID="plate-badge">
+      <Tag tone="acc">{text}</Tag>
+    </View>
+  );
+}
+
+/** Petit bouton posé sur la photo (`.pl-b`) : voile sombre, moutarde quand il appelle le geste à faire. */
+function Tool({
+  icon,
+  label,
+  on = false,
+  disabled = false,
+  checked,
+  onPress,
+  testID,
+}: {
+  icon: IconName;
+  label: string;
+  on?: boolean;
+  disabled?: boolean;
+  checked?: boolean;
+  onPress: () => void;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      accessibilityRole={checked === undefined ? "button" : "checkbox"}
+      accessibilityState={{ disabled, checked }}
+      aria-checked={checked}
+      accessibilityLabel={label}
+      disabled={disabled}
+      onPress={onPress}
+      testID={testID}
+      style={[styles.tool, { backgroundColor: on ? c.accent : withAlpha(c.night, 0.76), opacity: disabled ? 0.4 : 1 }]}
+    >
+      <Icon name={icon} size={16} color={on ? c.accentInk : c.nightInk} />
+      <Text variant="bodyStrong" color={on ? c.accentInk : c.nightInk} style={styles.tiny}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** Bouton de la confirmation posée sur la photo (`.pl-conf`) : sombre dans les deux thèmes, comme la photo. */
+function OverlayButton({
+  icon,
+  label,
+  strong = false,
+  onPress,
+  testID,
+}: {
+  icon: IconName;
+  label: string;
+  strong?: boolean;
+  onPress: () => void;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  const ink = strong ? c.night : c.nightInk;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      testID={testID}
+      style={[styles.overlayBtn, { backgroundColor: strong ? c.nightInk : withAlpha(c.nightInk, 0.12) }]}
+    >
+      <Icon name={icon} size={16} color={ink} />
+      <Text variant="button" color={ink} style={styles.tiny}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** Ligne à cocher du bloc du numéro (`.vold.sm`) : case carrée, titre, précision. */
+function CheckRow({
+  title,
+  text,
+  checked,
+  onPress,
+  testID,
+}: {
+  title: string;
+  text: string;
+  checked: boolean;
+  onPress: () => void;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      aria-checked={checked}
+      accessibilityLabel={`${title}, ${text}`}
+      onPress={onPress}
+      testID={testID}
+      style={[styles.check, { backgroundColor: c.surfaceRaised }]}
+    >
+      <View
+        style={[
+          styles.box,
+          checked ? { backgroundColor: c.accent, borderColor: c.accent } : { borderColor: c.inkFaint },
+        ]}
+      >
+        {checked ? <Icon name="check" size={16} strokeWidth={3} color={c.accentInk} /> : null}
+      </View>
+      <View style={styles.grow}>
+        <Text variant="bodyStrong" color={c.ink} style={styles.small}>
+          {title}
+        </Text>
+        <Text variant="caption" color={c.inkMuted} style={styles.small}>
+          {text}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function HandHint({ icon, lead, text }: { icon: IconName; lead: string; text: string }) {
+  const { t } = useTheme();
+  return (
+    <View style={styles.hint}>
+      <Icon name={icon} size={24} color={t.color.accentText} />
+      <Text variant="caption" color={t.color.inkMuted} style={styles.grow}>
+        <Text variant="bodyStrong" color={t.color.ink} style={styles.small}>
+          {lead}
+        </Text>{" "}
+        {text}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: space2 },
-  modeRow: { flexDirection: "row", alignItems: "center", gap: space2 },
-  grow: { flex: 1, textAlign: "center" },
-  stack: { gap: space2 },
-  confirmPhoto: { width: "100%", maxHeight: 280, borderRadius: tokens.radius.radiusMd },
+  grow: { flex: 1, minWidth: 0 },
+  center: { textAlign: "center" },
+  small: { fontSize: 13, lineHeight: 17 },
+  tiny: { fontSize: 12, lineHeight: 15 },
+  strip: { gap: space2, paddingRight: space2, alignItems: "flex-start" },
+  thumbCell: { width: THUMB, alignItems: "center", gap: space1 + 1 },
+  thumb: { width: THUMB, height: THUMB, borderRadius: 14, borderWidth: 3 },
+  thumbInner: { flex: 1, borderRadius: 11, overflow: "hidden" },
+  state: {
+    position: "absolute",
+    right: 3,
+    top: 3,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  word: { fontSize: 10.5, lineHeight: 13, textAlign: "center" },
+  more: {
+    width: 44,
+    height: THUMB,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  msg: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    top: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space2,
+    paddingVertical: 10,
+    paddingHorizontal: space3,
+    borderRadius: 14,
+    borderWidth: 2,
+  },
+  tools: {
+    position: "absolute",
+    left: 8,
+    right: 8,
+    bottom: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: space1 + 2,
+  },
+  tool: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space1 + 2,
+    height: 36,
+    paddingHorizontal: space3,
+    borderRadius: tokens.radius.radiusPill,
+  },
+  confirm: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space2 + 2,
+    padding: 18,
+  },
+  overlayBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space2,
+    minHeight: 44,
+    paddingHorizontal: space3 + 2,
+    borderRadius: tokens.radius.radiusMd,
+  },
+  confirmRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space2 },
+  hints: { gap: space2 },
+  hint: { flexDirection: "row", alignItems: "flex-start", gap: space2 + 2 },
+  block: { gap: space2 + 2, padding: 14, borderRadius: tokens.radius.radiusLg },
+  blockHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
+  read: { flexDirection: "row", alignItems: "center", gap: space1 },
+  plate: {
+    height: 56,
+    borderWidth: 2,
+    borderRadius: tokens.radius.radiusSm,
+    textAlign: "center",
+    letterSpacing: 3,
+    paddingHorizontal: space3,
+    outlineStyle: "none",
+  } as object,
+  check: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space3,
+    paddingVertical: 10,
+    paddingHorizontal: space3,
+    borderRadius: tokens.radius.radiusMd,
+  },
+  box: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center" },
 });

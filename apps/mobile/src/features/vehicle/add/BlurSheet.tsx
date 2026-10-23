@@ -114,6 +114,8 @@ export function BlurSheet({
           height={target.photo.height}
           rects={rects}
           editable
+          mask="black"
+          loupe
           onChange={setRects}
           badge={
             <PhotoBadge accent={rects.length > 0}>

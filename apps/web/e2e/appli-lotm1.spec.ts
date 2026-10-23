@@ -102,15 +102,39 @@ for (const theme of ["beton", "sable"] as const) {
     await expect(page.getByTestId("vehicle-step-next")).toBeEnabled();
     await next(page);
 
-    // 2. Plaque (logique du lot M2) : chaque photo réglée, numéro obligatoire.
+    // 2. Plaque (logique du lot M2, visuel 1.3 et 1.4) : bandeau d'états, « Continuer » mène à la photo à régler,
+    // masque noir, loupe pendant le déplacement, « Aucune plaque » confirmé sur la photo, numéro obligatoire.
     await expect(page.getByText("Étape 2 sur 5 · Plaque")).toBeVisible();
-    for (let i = 0; i < 2; i++) {
-      await page.getByTestId("plate-none").click();
-      await page.getByRole("button", { name: /Oui, envoyer sans flouter/ }).click();
-      if (i === 0) await page.getByTestId("plate-next-photo").click();
+    await expect(page.getByTestId("plate-strip")).toBeVisible();
+    await next(page);
+    await expect(page.getByTestId("plate-message")).toContainText("Photo 1 : pose le cadre");
+    await expect(page.getByTestId("vehicle-step-error")).toHaveCount(0);
+    await shot(page, `${theme}-04a-plaque-a-regler`);
+    await page.getByTestId("plate-frame-add").click();
+    await expect(page.getByTestId("plate-message")).toHaveCount(0);
+    await expect(page.getByTestId("plate-badge")).toContainText("Photo 1 · plaque masquée");
+    const frame = await page.getByTestId("plate-frame").first().boundingBox();
+    if (frame) {
+      await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(frame.x + frame.width / 2 - 30, frame.y + frame.height / 2 - 20, { steps: 8 });
+      await shot(page, `${theme}-04b-loupe`);
+      await page.mouse.up();
     }
+    await page.getByTestId("plate-thumb-2").click();
+    await page.getByTestId("plate-none").click();
+    await expect(page.getByTestId("plate-none-confirm")).toContainText("Aucune plaque visible sur cette photo ?");
+    await shot(page, `${theme}-04c-aucune-plaque`);
+    await page.getByTestId("plate-none-yes").click();
+    await expect(page.getByTestId("plate-none")).toHaveAttribute("aria-checked", "true");
+    await next(page);
+    await expect(page.getByTestId("vehicle-plate-error")).toContainText("Indique le numéro de plaque");
     const plate = randomPlate();
     await page.getByTestId("vehicle-plate").fill(plate);
+    await expect(page.getByTestId("vehicle-plate-error")).toHaveCount(0);
+    await page.getByTestId("vehicle-former").click();
+    await expect(page.getByTestId("vehicle-former-cert")).toContainText("ne peut pas être certifié");
+    await page.getByTestId("vehicle-former").click();
     await shot(page, `${theme}-04-plaque`);
     await next(page);
 

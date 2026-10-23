@@ -55,7 +55,7 @@ import { SquareButton } from "./parts";
 import { detectionPatch } from "./plateStep";
 import { DoneView, type PhotoState, SendingView } from "./SendViews";
 import { type PhotoSource, StepPhotos } from "./StepPhotos";
-import { StepPlate } from "./StepPlate";
+import { photoToFix, StepPlate } from "./StepPlate";
 import { StepCategories, StepIdentity, StepSpecs } from "./Steps";
 
 const { space2 } = tokens.spacing;
@@ -91,6 +91,8 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   // Recadrage : file des photos à cadrer (import) ou une seule (bouton Recadrer).
   const [cropQueue, setCropQueue] = useState<string[]>([]);
   const [cropBusy, setCropBusy] = useState(false);
+  // Étape Plaque : « Continuer » ouvre la photo à régler (maquette 1.3).
+  const [plateFocus, setPlateFocus] = useState<{ index: number; tick: number } | null>(null);
   // Envoi interrompu (réseau) : on reprend sans recréer le véhicule ni renvoyer les photos déjà parties.
   const sent = useRef<{
     vehicleId: string | null;
@@ -276,6 +278,10 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     const issue = stepIssue(step, draft);
     setError(null);
     setIssueShown(Boolean(issue));
+    if (issue && step === STEP.plate) {
+      const target = photoToFix(draft);
+      if (target >= 0) setPlateFocus({ index: target, tick: Date.now() });
+    }
     if (issue) return;
     if (step < STEP_COUNT - 1) setStep(step + 1);
     else void send();
@@ -545,7 +551,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
       }
       footer={
         <>
-          {shownError && !blocked ? (
+          {shownError && !blocked && (step !== STEP.plate || error) ? (
             <Text variant="caption" color={t.color.winText} accessibilityRole="alert" testID="vehicle-step-error">
               {shownError}
             </Text>
@@ -599,6 +605,10 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
           draft={draft}
           patch={patch}
           onMode={setMode}
+          focus={plateFocus}
+          issue={issue}
+          issueShown={issueShown}
+          onAddPhotos={draft.photos.length < MAX_PHOTOS ? () => setStep(STEP.photos) : undefined}
           onRects={(i, rects) => {
             const key = draft.photos[i]?.key;
             if (key) updatePhoto(key, (p) => ({ ...p, rects, noPlate: rects.length ? false : p.noPlate }));
