@@ -13,7 +13,7 @@
 // J ; le créneau des exposants est privé (dans « Ta place » et la feuille), aucun horaire « conseillé ». Inscrit :
 // « Ta place » en tête et « Mon QR » en bouton principal. « Candidater » seul : le véhicule se choisit dans la feuille.
 
-import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Chip, ChipRow, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   crewLabels,
   dayAccessLabels,
@@ -45,6 +45,7 @@ import { MediaContents } from "@/features/event/MediaContents";
 import { MyPlace } from "@/features/event/MyPlace";
 import { OrgBar } from "@/features/event/OrgBar";
 import { PosterFlow } from "@/features/event/PosterFlow";
+import { orderPlaces, usedNow } from "@/features/event/places";
 import { WriteSheet } from "@/features/event/WriteSheet";
 import { RequestSheet, type RequestTarget } from "@/features/media/RequestSheet";
 import { SmButton } from "@/features/passionne/kit";
@@ -71,8 +72,6 @@ import { DETAIL_BLOCKS, Waiting } from "@/ui/Waiting";
 
 const { space1, space3 } = tokens.spacing;
 const OPEN_STATUSES = ["pending", "accepted", "waitlisted", "offered", "awaiting_member"];
-/** Lot M4 : la place montrée dans « Ta place » quand il y en a plusieurs (retenue d'abord). */
-const PLACE_ORDER = ["accepted", "offered", "pending", "waitlisted", "awaiting_member"];
 
 /** Lot M4 : le pavé J-x moutarde posé sur l'affiche (`.evcd`) : « J-6 » et « Sam. 24 oct. · 19 h », ou « En cours ». */
 function Countdown({ event }: { event: Pick<EventCard, "startsAt" | "endsAt"> }) {
@@ -181,6 +180,8 @@ export default function EventPage() {
   const [withdrawing, setWithdrawing] = useState<MyApplication | null>(null);
   // Tour 2 : la place a changé pendant la confirmation (offre acceptée ou expirée ailleurs).
   const [placeNotice, setPlaceNotice] = useState<string | null>(null);
+  // Tour 2 : la place choisie quand il y en a plusieurs (jours, véhicules) ; sinon la plus utile maintenant.
+  const [placeId, setPlaceId] = useState<string | null>(null);
   const applications = useApplications();
 
   const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
@@ -308,10 +309,13 @@ export default function EventPage() {
   };
   const isFollowing = following || Boolean(structure.data?.isFollowing);
   // Lot M4 : la place de la personne (« Ta place »), d'après ses candidatures (cache d'abord, à jour en direct).
-  const place =
-    (applications.upcoming ?? [])
-      .filter((a) => a.event.id === e.id && OPEN_STATUSES.includes(a.status))
-      .sort((a, b) => PLACE_ORDER.indexOf(a.status) - PLACE_ORDER.indexOf(b.status))[0] ?? null;
+  // Tour 2 (relecture Codex) : l'accès qui sert maintenant d'abord (jour en cours, pas encore pointé), les autres au choix.
+  const multiDay = (e.days?.length ?? 0) > 1;
+  const placeNow = new Date(nowMs());
+  const places = orderPlaces(applications.upcoming ?? [], e.id, placeNow, multiDay);
+  const place = places.find((a) => a.id === placeId) ?? places[0] ?? null;
+  const placeLabel = (a: MyApplication) =>
+    multiDay ? (a.day ? formatDayDate(a.day.date) : eventDaysLabels.wholeEvent) : (a.vehicle?.label ?? L.myPlace);
   const placePhoto = place?.vehicle
     ? ((vehicles.data ?? []).find((v) => v.id === place.vehicle?.id)?.photos[0]?.url ?? null)
     : null;
@@ -367,7 +371,7 @@ export default function EventPage() {
         : action === "applyGuest"
           ? { label: L.apply, icon: "send" as const, onPress: apply }
           : action === "myApplication"
-            ? place?.status === "accepted" && !place.checkedInAt
+            ? place?.status === "accepted" && !usedNow(place, placeNow, multiDay)
               ? { label: L.myQr, icon: "qr" as const, onPress: () => router.push(`/jour-j/${place.id}`) }
               : { label: L.myApplication, icon: "ticket" as const, onPress: () => router.navigate("/sorties") }
             : action === "myProviderApplication"
@@ -522,6 +526,15 @@ export default function EventPage() {
         <Notice tone="error" testID="place-notice">
           {placeNotice}
         </Notice>
+      ) : null}
+      {places.length > 1 ? (
+        <ChipRow>
+          {places.map((a) => (
+            <Chip key={a.id} selected={a.id === place?.id} onPress={() => setPlaceId(a.id)} accessibilityRole="radio">
+              {placeLabel(a)}
+            </Chip>
+          ))}
+        </ChipRow>
       ) : null}
       {place ? (
         <MyPlace
