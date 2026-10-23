@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
 import {
@@ -346,5 +347,54 @@ test("tour 3 : vérification de plaque interrompue par un changement de style, r
   await page.getByText("Sable", { exact: true }).first().click();
   await page.getByText("Nuit", { exact: true }).first().click();
   await expect(page.getByTestId("share-plate-check")).toContainText("rien de lisible", { timeout: 60_000 });
+  await expect(page.getByTestId("share-story")).toBeEnabled();
+});
+
+test("tour 4 : vérification de plaque trop longue (8 s), « Vérifier à nouveau » ou partager confirmé", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const kenji = await login("kenji@orasso.local");
+  const vehicles = await apiCall<{ id: string; status: string }[]>(kenji, "GET", "/me/vehicles");
+  const vehicle = vehicles.data.find((v) => v.status === "active");
+  // Détection simulée qui ne répond pas avant 30 s (recette seulement).
+  await page.addInitScript(() => {
+    const w = window as unknown as { __orassoFakePlates: unknown; __orassoFakePlatesDelayMs: number };
+    w.__orassoFakePlates = [];
+    w.__orassoFakePlatesDelayMs = 30_000;
+  });
+  await open(page);
+  await signIn(page, "kenji@orasso.local");
+  const dir = `${RELAIS}/lot-m6-captures/tour4`;
+  mkdirSync(dir, { recursive: true });
+  for (const theme of ["beton", "sable"] as const) {
+    await page.evaluate((t) => localStorage.setItem("orasso.theme", t), theme);
+    await go(page, `/vehicule/${vehicle?.id}/partager`);
+    await expect(page.getByTestId("share-plate-check")).toContainText("Vérification", { timeout: 60_000 });
+    await expect(page.getByTestId("share-story")).toBeDisabled();
+    await expect(page.getByTestId("share-plate-check")).toContainText("n'a pas pu être vérifiée", {
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("share-story")).toBeHidden();
+    await expect(page.getByTestId("share-plate-retry")).toBeVisible();
+    await expect(page.getByTestId("share-anyway")).toBeVisible();
+    await clean(page);
+    await page.screenshot({ path: `${dir}/verification-longue-${theme}.png` });
+  }
+  // « Partager quand même » demande confirmation ; refusée, rien ne part.
+  const asked: string[] = [];
+  page.once("dialog", (d) => {
+    asked.push(d.message());
+    void d.dismiss();
+  });
+  await page.getByTestId("share-anyway").click();
+  await expect.poll(() => asked.length).toBe(1);
+  expect(asked[0]).toContain("n'a pas pu être vérifiée");
+  // « Vérifier à nouveau » : la détection répond cette fois, le partage s'ouvre.
+  await page.evaluate(() => {
+    (window as unknown as { __orassoFakePlatesDelayMs: number }).__orassoFakePlatesDelayMs = 0;
+  });
+  await page.getByTestId("share-plate-retry").click();
+  await expect(page.getByTestId("share-plate-check")).toContainText("rien de lisible", { timeout: 30_000 });
   await expect(page.getByTestId("share-story")).toBeEnabled();
 });

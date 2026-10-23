@@ -24,6 +24,7 @@ import { appReturn } from "@/lib/closeTo";
 import { errorMessage } from "@/lib/http";
 import { cropSquare, type PickedPhoto, photoForm, pickPhotos, takePhoto } from "@/lib/photos";
 import { detectPlateReadings } from "@/lib/plates/detect";
+import { PREFERENCES_FIRST_ROUTE, routeAfterFirstVehicle } from "@/lib/preferences";
 import { useSession } from "@/lib/session";
 import { centerCrop, cropPixels, type SquareCrop } from "@/lib/squareCrop";
 import { useApi } from "@/lib/useApi";
@@ -67,10 +68,10 @@ import { DraftIncomplete, newSendMemo, photoPlan, runSend, type SendApi } from "
 const { space2 } = tokens.spacing;
 
 /**
- * Lot M1 : après le premier véhicule, l'étape « Tes préférences » (route créée par le lot M6). Tant qu'elle n'existe
- * pas sur cette branche : `null`, et le bouton principal ramène au garage.
+ * Lot M1 : après le premier véhicule, l'étape « Tes préférences » (route du lot M6). Lot M6, tour 4 : branchée ; le
+ * bouton suit la règle « première fois » (`routeAfterFirstVehicle` : l'étape si jamais vue, sinon l'Explorer).
  */
-const PREFERENCES_ROUTE: string | null = null;
+const PREFERENCES_ROUTE: string | null = PREFERENCES_FIRST_ROUTE;
 
 type Phase = "steps" | "crop" | "sending" | "done";
 
@@ -470,7 +471,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
               <Button
                 variant="primary"
                 icon="next"
-                onPress={() => router.replace(PREFERENCES_ROUTE as never)}
+                onPress={() => void routeAfterFirstVehicle().then((to) => router.replace(to as never))}
                 fullWidth
                 testID="vehicle-done-preferences"
               >
