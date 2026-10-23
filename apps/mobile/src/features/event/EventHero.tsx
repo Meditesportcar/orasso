@@ -6,6 +6,8 @@
 // image, `generatedPosterUrl` et `poster.postUrl` sortent de la même clé) ; l'affiche touchée grandit de sa place dans
 // la liste jusqu'à l'en-tête (`from`, `base`, courbe « park »), sans transition si les animations sont réduites. La
 // tête commence sous la barre d'état (zone sûre) : plus rien ne passe sous l'heure et la batterie.
+// Lot M4 (maquette 4.1) : sous la bande fixe de l'organisateur (`underHeader`), l'affiche commence tout de suite (la
+// bande porte déjà la zone sûre) et un voile sombre en haut fait ressortir le pavé J-x posé dessus.
 import { duration, Photo, useTheme } from "@orasso/design-system/native";
 import type { EventCard, EventPublic } from "@orasso/shared";
 import { useRef, useState } from "react";
@@ -21,7 +23,16 @@ import { mediaSource } from "@/lib/media";
 const HERO_TOP = 62;
 const parkCurve = Easing.bezier(0.12, 0.75, 0.25, 1);
 
-export function EventHero({ event, from = null }: { event: EventPublic | EventCard; from?: PosterRect | null }) {
+export function EventHero({
+  event,
+  from = null,
+  underHeader = false,
+}: {
+  event: EventPublic | EventCard;
+  from?: PosterRect | null;
+  /** Lot M4 : posée sous un en-tête fixé (qui a déjà la zone sûre et les boutons). */
+  underHeader?: boolean;
+}) {
   const { t, reducedMotion } = useTheme();
   const insets = useSafeAreaInsets();
   // Seulement l'affiche générée : l'affiche perso de l'organisateur reste dans le détail (`CustomPoster`).
@@ -64,7 +75,7 @@ export function EventHero({ event, from = null }: { event: EventPublic | EventCa
       ]
     : undefined;
   return (
-    <View style={[styles.hero, { paddingTop: insets.top + HERO_TOP }]} testID="event-hero">
+    <View style={[styles.hero, { paddingTop: underHeader ? 0 : insets.top + HERO_TOP }]} testID="event-hero">
       <Animated.View
         ref={posterRef}
         collapsable={false}
@@ -81,6 +92,14 @@ export function EventHero({ event, from = null }: { event: EventPublic | EventCa
           <MinimalPoster event={event} big />
         )}
       </Animated.View>
+      {underHeader ? (
+        <View style={styles.shade} pointerEvents="none">
+          <Photo
+            placeholder={`linear-gradient(180deg, ${t.color.night}80 0%, ${t.color.night}00 100%)`}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+      ) : null}
       <View style={styles.fade} pointerEvents="none">
         <Photo
           placeholder={`linear-gradient(180deg, ${t.color.ground}00 0%, ${t.color.ground} 100%)`}
@@ -100,4 +119,6 @@ const styles = StyleSheet.create({
   // Avant la mesure (une image au plus) : l'affiche ne se montre pas en grand avant de partir de la liste.
   waiting: { opacity: 0 },
   fade: { position: "absolute", left: 0, right: 0, bottom: 0, height: "14%" },
+  // `.evh::after` : voile sombre sur les 16 % du haut, sous le pavé J-x.
+  shade: { position: "absolute", left: 0, right: 0, top: 0, height: "16%" },
 });

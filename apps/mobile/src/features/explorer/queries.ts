@@ -60,6 +60,11 @@ export function whenRange(when: When, now: Date): { from?: string; to?: string }
   };
 }
 
+/** Lot M4 (maquette 3.2) : le tri choisi dans « Trier : … ▾ » (gardé pour les prochaines visites). */
+export const EVENT_SORTS = ["distance", "date", "recent", "seats"] as const;
+export type EventSort = (typeof EVENT_SORTS)[number];
+export const SORT_KEY = "explorer.sort";
+
 export function eventQuery(
   q: string,
   filters: EventFilters,
@@ -67,12 +72,14 @@ export function eventQuery(
   mode: "list" | "map",
   now: Date,
   cursor?: string,
+  sort: EventSort = "distance",
 ): ExploreEventsQuery {
   return {
     q: q.trim() || undefined,
     format: filters.format || undefined,
     ...whenRange(filters.when, now),
-    sort: filters.affinity ? "affinity" : "distance",
+    // « Mes affinités » (filtres) l'emporte sur le tri choisi.
+    sort: filters.affinity ? "affinity" : sort,
     followed: filters.followed ? "1" : undefined,
     lat: position?.lat,
     lng: position?.lng,

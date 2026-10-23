@@ -18,7 +18,7 @@ export const messagingApi = {
   conversations: (cursor?: string) => request<ConversationPage>(`/api/me/conversations${qs({ limit: 30, cursor })}`),
   conversation: (id: string) => request<ConversationView>(`/api/conversations/${id}`),
   messages: (id: string, before?: string) => request<MessagePage>(`/api/conversations/${id}/messages${qs({ before })}`),
-  sendMessage: (id: string, body: { clientId: string; body?: string; imageKey?: string }) =>
+  sendMessage: (id: string, body: { clientId: string; body?: string; imageKey?: string; aboutEventId?: string }) =>
     request<MessageView>(`/api/conversations/${id}/messages`, { method: "POST", body, timeout: 20_000 }),
   markRead: (id: string, messageId: string) =>
     request<{ ok: boolean }>(`/api/conversations/${id}/read`, { method: "POST", body: { messageId } }),

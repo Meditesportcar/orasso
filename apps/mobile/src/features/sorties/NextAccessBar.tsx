@@ -21,8 +21,8 @@ import { usePersona } from "@/lib/persona";
 import { useNow } from "@/lib/useNow";
 import { type AccessItem, applicationAccesses, barDay, nextAccessOf, staffAccesses, ticketAccesses } from "./model";
 
-/** Onglets où l'artefact ne montre pas l'accès flottant (`.app.no-near`). */
-const NO_NEAR = new Set(["home", "outings"]);
+/** Onglets où l'artefact ne montre pas l'accès flottant (`.app.no-near`). Lot M4 : ni l'Explorer, où flotte la bascule « Liste | Carte » (maquette 3.1). */
+const NO_NEAR = new Set(["home", "outings", "explore"]);
 
 /** Nature de l'accès, en tête de la ligne d'information. */
 const KIND_LABEL: Record<AccessItem["kind"], string> = {

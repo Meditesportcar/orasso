@@ -16,6 +16,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { AppState, FlatList, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AboutCard } from "@/features/boite/AboutCard";
 import { PrivateImage } from "@/features/boite/PrivateImage";
 import { openReport } from "@/features/ReportSheet";
 import { api } from "@/lib/api";
@@ -294,6 +295,12 @@ export function ConversationScreen({
             {formatDay(m.createdAt)}
           </Muted>
         ) : null}
+        {/* Lot M4 : « À propos de » l'événement, quand le message change de sujet. */}
+        {m.about && m.about.eventId !== prev?.about?.eventId ? (
+          <View style={styles.about}>
+            <AboutCard about={m.about} />
+          </View>
+        ) : null}
         {showName ? <Muted variant="caption">{label(m)}</Muted> : null}
         <Pressable
           onLongPress={() => setMenu(m)}
@@ -445,6 +452,7 @@ export function ConversationScreen({
 }
 
 const styles = StyleSheet.create({
+  about: { alignSelf: "stretch", marginBottom: 4 },
   fill: { flex: 1 },
   pad: { paddingHorizontal: space4, paddingTop: space2 },
   list: { paddingHorizontal: space4, paddingVertical: space3, gap: space2 },

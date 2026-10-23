@@ -2,6 +2,9 @@
 // nom (jamais tronqué), le logo et le nom de l'organisateur, le lieu, une jauge de places exposants ; à droite (ou en
 // haut pour la première, « en vedette »), l'affiche générée (lot 47), ou le gabarit « Minimal » sans photo : jamais de
 // rectangle vide. Réutilisée par l'Explorer du média (lot 55) et la carte (aperçu sous l'épingle).
+// Lot M4 (maquette 3.1, retour 19) : `portrait`, la mise en page unique de l'Explorer : l'affiche en portrait (4:5,
+// 116 px) à gauche, les infos à droite (format, distance, « SAM. 24 OCT. · 19 H », nom, organisateur avec son logo et
+// son nom jamais coupé, lieu, jauge) ; plus de grande bande paysage en tête de liste.
 import { Chip, Icon, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventCard, eventFormatLabels, explorerV2Labels as L, wallTime } from "@orasso/shared";
 import { useRef } from "react";
@@ -73,11 +76,14 @@ export function MinimalPoster({ event, big }: { event: Pick<EventCard, "format" 
 export function EventCardV2({
   event,
   big = false,
+  portrait = false,
   onPress,
   onPressIn,
 }: {
   event: EventCard;
   big?: boolean;
+  /** Lot M4 : affiche en portrait à gauche, infos à droite (Explorer, carte). */
+  portrait?: boolean;
   /** Lot M3 : reçoit la place de l'affiche dans la fenêtre (transition vers l'en-tête de la fiche). */
   onPress: (poster: PosterRect | null) => void;
   /** Lot M3 : au premier contact du doigt (la fiche se charge dès le toucher). */
@@ -132,7 +138,12 @@ export function EventCardV2({
           </Text>
         ) : null}
       </View>
-      <Text variant={big ? "posterM" : "posterS"} color={c.plateInk}>
+      {portrait ? (
+        <Text variant="label" color={c.accentText} style={styles.when} testID="event-when">
+          {`${stub.day} ${stub.date} ${stub.month} · ${stub.hour}`}
+        </Text>
+      ) : null}
+      <Text variant={big ? "posterM" : "posterS"} color={c.plateInk} style={portrait ? styles.portraitTitle : null}>
         {event.title}
       </Text>
       <View style={styles.org}>
@@ -195,7 +206,14 @@ export function EventCardV2({
             <Chip surface="plate">{L.waitlistFlag}</Chip>
           </View>
         ) : null}
-        {big ? (
+        {portrait && !big ? (
+          <View style={styles.row}>
+            <View ref={posterRef} collapsable={false} style={styles.posterPortrait}>
+              {poster}
+            </View>
+            {main}
+          </View>
+        ) : big ? (
           <>
             <View ref={posterRef} collapsable={false} style={styles.posterBig}>
               {poster}
@@ -246,6 +264,10 @@ const styles = StyleSheet.create({
   gaugeFill: { height: 5, borderRadius: tokens.radius.radiusPill },
   poster: { width: 84, minHeight: 118, borderRadius: tokens.radius.radiusSm, overflow: "hidden" },
   posterBig: { height: 220, overflow: "hidden" },
+  // `.xc-aff` : 116 px de large, 4:5, rayon 12.
+  posterPortrait: { width: 116, aspectRatio: 4 / 5, borderRadius: 12, overflow: "hidden", alignSelf: "flex-start" },
+  when: { fontSize: 12, lineHeight: 15 },
+  portraitTitle: { fontSize: 15.5, lineHeight: 16 },
   minimal: { flex: 1, padding: space2, gap: space1, justifyContent: "space-between" },
   flag: { position: "absolute", top: space2, right: space2, zIndex: 3 },
 });

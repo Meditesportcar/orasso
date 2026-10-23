@@ -3,6 +3,8 @@
 // remonte de 8 px sur l'image (`.ev-body`). Mêmes fond, zone des feuilles et action fixe en bas que `FlowScreen`.
 // Lot M3 : zone sûre de la barre d'état. Une bande de la couleur de la tête reste fixée sous l'heure et la batterie :
 // en défilant, l'affiche et le texte passent dessous, jamais sous les icônes d'Android (retour 20 de Damien).
+// Lot M4 : `header`, un en-tête de fiche fixé en haut (mode B : la bande de l'organisateur de la fiche événement), qui
+// remplace la pastille O et la croix flottantes et porte lui-même la zone sûre ; `heroFloat` se pose sur l'affiche.
 import {
   Ground,
   Icon,
@@ -31,6 +33,8 @@ export function PosterFlow({
   onRefresh,
   testID,
   liftHero = false,
+  header,
+  heroFloat,
 }: {
   /** La tête pleine largeur (affiche, photo) ; les boutons flottants se posent dessus. */
   hero: ReactNode;
@@ -42,6 +46,10 @@ export function PosterFlow({
   testID?: string;
   /** Lot M3 : la tête passe au-dessus du corps, sans découpe (affiche qui grandit depuis la liste). */
   liftHero?: boolean;
+  /** Lot M4 : en-tête fixé en haut (zone sûre comprise) ; sans lui, pastille O et croix flottantes. */
+  header?: ReactNode;
+  /** Lot M4 : ce qui se pose en haut de l'affiche quand l'en-tête est fixé (le pavé J-x). */
+  heroFloat?: ReactNode;
 }) {
   const { t } = useTheme();
   const focused = useIsFocused();
@@ -53,6 +61,7 @@ export function PosterFlow({
     <OliveActivityProvider active={focused}>
       <OverlayProvider>
         <Ground paused={!focused} style={styles.fill}>
+          {header}
           <KeyboardSafe style={styles.fill}>
             <ScrollView
               style={styles.fill}
@@ -78,30 +87,40 @@ export function PosterFlow({
             >
               <View style={[styles.hero, liftHero ? styles.heroLifted : null, { backgroundColor: t.color.bar }]}>
                 {hero}
-                <View style={[styles.float, { top: insets.top + space3 + 2 }]} pointerEvents="box-none">
-                  <View style={[styles.pill, { backgroundColor: `${t.color.night}99` }]}>
-                    <Monogram size={32} tone="dark" />
+                {header ? (
+                  heroFloat ? (
+                    <View style={[styles.float, { top: space3 }]} pointerEvents="box-none">
+                      {heroFloat}
+                    </View>
+                  ) : null
+                ) : (
+                  <View style={[styles.float, { top: insets.top + space3 + 2 }]} pointerEvents="box-none">
+                    <View style={[styles.pill, { backgroundColor: `${t.color.night}99` }]}>
+                      <Monogram size={32} tone="dark" />
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Fermer"
+                      onPress={onClose}
+                      style={[styles.close, { backgroundColor: `${t.color.night}8c` }]}
+                      testID="flow-close"
+                    >
+                      <Icon name="close" size={20} color={t.color.nightInk} />
+                    </Pressable>
                   </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Fermer"
-                    onPress={onClose}
-                    style={[styles.close, { backgroundColor: `${t.color.night}8c` }]}
-                    testID="flow-close"
-                  >
-                    <Icon name="close" size={20} color={t.color.nightInk} />
-                  </Pressable>
-                </View>
+                )}
               </View>
               <View style={styles.body}>{children}</View>
             </ScrollView>
             {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
           </KeyboardSafe>
-          <View
-            pointerEvents="none"
-            style={[styles.statusBar, { height: insets.top, backgroundColor: t.color.bar }]}
-            testID="status-bar-guard"
-          />
+          {header ? null : (
+            <View
+              pointerEvents="none"
+              style={[styles.statusBar, { height: insets.top, backgroundColor: t.color.bar }]}
+              testID="status-bar-guard"
+            />
+          )}
           {overlays}
           <OverlaySlot />
         </Ground>

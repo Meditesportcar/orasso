@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EventCardV2 } from "@/features/explorer/EventCardV2";
 import { ExplorerMap } from "@/features/explorer/ExplorerMap";
+import { ListMapToggle } from "@/features/explorer/ExplorerScreen";
 import { eventPins } from "@/features/explorer/mapPins";
 import { ProsSegment } from "@/features/explorer/ProsSegment";
 import {
@@ -162,14 +163,15 @@ function EventsMap({ initialQ, filters, onClose }: { initialQ: string; filters: 
           onPress={() => void position.request()}
           testID="map-locate"
         />
-        <MapButton icon="list" label={L.list} onPress={onClose} testID="map-list" />
       </View>
+      {/* Lot M4 (maquette 3.3) : la même bascule « Liste | Carte » qu'à l'Explorer, côté Carte. */}
+      <ListMapToggle view="map" onList={onClose} onMap={() => undefined} bottom={insets.bottom + 16} />
 
       {picked.length === 0 ? (
         <View
           style={[
             styles.legend,
-            { bottom: insets.bottom + 40, backgroundColor: c.ground, boxShadow: t.shadow.shadowCard },
+            { bottom: insets.bottom + 74, backgroundColor: c.ground, boxShadow: t.shadow.shadowCard },
           ]}
           testID="map-legend"
         >
@@ -185,12 +187,13 @@ function EventsMap({ initialQ, filters, onClose }: { initialQ: string; filters: 
           />
         </View>
       ) : (
-        <View style={[styles.peek, { bottom: insets.bottom + 16, maxHeight: height * 0.5 }]} testID="map-picked">
+        <View style={[styles.peek, { bottom: insets.bottom + 74, maxHeight: height * 0.5 }]} testID="map-picked">
           <ScrollView contentContainerStyle={styles.peekList} showsVerticalScrollIndicator={picked.length > 1}>
             {picked.map((e) => (
               <View key={e.id} style={[styles.peekCard, { boxShadow: t.shadow.shadowPoster }]}>
                 <EventCardV2
                   event={e}
+                  portrait
                   onPressIn={() => prefetchEvent(e.slug)}
                   onPress={(r) => {
                     rememberEventCard(e, r);

@@ -7,49 +7,59 @@
 // Lot C2b (artefact `s-event`) : écran à affiche sans barre du haut (`PosterFlow` : pastille O et croix flottantes),
 // règlement en texte sous son titre, et la candidature dans une seule feuille (`CandSheet`, `sh-cand`) au lieu du
 // flux de trois écrans et de l'écran « Inscrire mon crew » (le mode « Avec <crew> » est dans la feuille).
+// Lot M4 (maquettes 4.1 à 4.3, corrections de Damien) : la bande de l'organisateur est l'en-tête fixe de la fiche
+// (logo, nom, ✓, abonnés, Suivre, ✉ avec le contexte de l'événement) ; l'affiche porte le pavé J-x ; la fiche compacte
+// en lignes (quand, où et mini-plan, places en barre, public), l'admission en étiquettes avec « ? », la météo du jour
+// J ; le créneau des exposants est privé (dans « Ta place » et la feuille), aucun horaire « conseillé ». Inscrit :
+// « Ta place » en tête et « Mon QR » en bouton principal. « Candidater » seul : le véhicule se choisit dans la feuille.
 
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   crewLabels,
   dayAccessLabels,
+  type EventCard,
   eventAcceptsVendorType,
-  eventAdmissionLabels,
   eventDaysLabels,
   formatDayDate,
   invitationLabels,
   eventPageLabels as L,
   mediaAppLabels as M,
-  previewSummary,
+  type MyApplication,
+  nearCountdown,
   registrationBlock,
   type VendorTypeCode,
   wizardEndLabels,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
-import { ContactOrganizerButton } from "@/features/boite/MessageButton";
+import { StyleSheet, View } from "react-native";
 import { EventFeed } from "@/features/communication/EventFeed";
-import { ArrivalSlots } from "@/features/event/ArrivalSlots";
 import { eventAction, type ProfileKind } from "@/features/event/action";
 import { CandSheet } from "@/features/event/CandSheet";
 import { CustomPoster } from "@/features/event/CustomPoster";
 import { Info, ProvidersPresent, Reviews } from "@/features/event/EventExtras";
-import { EventFactsGrid, EventTitle, OrganizerRow } from "@/features/event/EventFacts";
+import { AdmissionTags, EventRows, EventTitle } from "@/features/event/EventFacts";
 import { EventGatePlate } from "@/features/event/EventGate";
 import { EventHero } from "@/features/event/EventHero";
 import { MediaContents } from "@/features/event/MediaContents";
+import { MyPlace } from "@/features/event/MyPlace";
+import { OrgBar } from "@/features/event/OrgBar";
 import { PosterFlow } from "@/features/event/PosterFlow";
+import { WriteSheet } from "@/features/event/WriteSheet";
 import { RequestSheet, type RequestTarget } from "@/features/media/RequestSheet";
 import { SmButton } from "@/features/passionne/kit";
 import { ApplySheet } from "@/features/provider/ApplySheet";
 import { ReportButton } from "@/features/ReportSheet";
 import { TicketsBlock } from "@/features/tickets/TicketsBlock";
 import { WeatherWidget } from "@/features/WeatherWidget";
+import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { api } from "@/lib/api";
+import { useApplications } from "@/lib/applications";
 import { nowMs } from "@/lib/clock";
 import { eventPreview, takePosterRect, takePrefetchedEvent } from "@/lib/eventPreview";
 import { formatHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
+import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
@@ -61,6 +71,34 @@ import { DETAIL_BLOCKS, Waiting } from "@/ui/Waiting";
 
 const { space1, space3 } = tokens.spacing;
 const OPEN_STATUSES = ["pending", "accepted", "waitlisted", "offered", "awaiting_member"];
+/** Lot M4 : la place montrée dans « Ta place » quand il y en a plusieurs (retenue d'abord). */
+const PLACE_ORDER = ["accepted", "offered", "pending", "waitlisted", "awaiting_member"];
+
+/** Lot M4 : le pavé J-x moutarde posé sur l'affiche (`.evcd`) : « J-6 » et « Sam. 24 oct. · 19 h », ou « En cours ». */
+function Countdown({ event }: { event: Pick<EventCard, "startsAt" | "endsAt"> }) {
+  const { t } = useTheme();
+  const now = new Date(nowMs());
+  if (now >= new Date(event.endsAt)) return null;
+  const live = now >= new Date(event.startsAt);
+  const day = new Intl.DateTimeFormat("fr-FR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "Europe/Paris",
+  }).format(new Date(event.startsAt));
+  return (
+    <View style={[styles.cd, { backgroundColor: t.color.accent }]} testID="event-countdown">
+      <View style={styles.cdIn}>
+        <Text variant="numberNarrow" color={t.color.accentInk} style={styles.cdBig}>
+          {live ? L.live : nearCountdown(event.startsAt, now)}
+        </Text>
+        <Text variant="label" color={t.color.accentInk} style={styles.cdSmall}>
+          {live ? `Jusqu'à ${formatHour(event.endsAt)}` : `${day} · ${formatHour(event.startsAt)}`}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 export default function EventPage() {
   const { t } = useTheme();
@@ -135,8 +173,27 @@ export default function EventPage() {
   const [booking, setBooking] = useState(false);
   const [following, setFollowing] = useState(false);
   const [followError, setFollowError] = useState<string | null>(null);
+  // Lot M4 : « Écrire à » (✉ de la bande) et « Se retirer » (bloc « Ta place »).
+  const [writing, setWriting] = useState(false);
+  const [withdrawing, setWithdrawing] = useState<MyApplication | null>(null);
+  const applications = useApplications();
 
   const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
+  // Lot M4 : la bande de l'organisateur, en-tête fixe de la fiche (aussi pendant l'aperçu, sans les abonnés).
+  const orgBar = (card: Pick<EventCard, "structure">, extra?: { onFollow: () => void; onWrite?: () => void }) => (
+    <OrgBar
+      name={card.structure.name}
+      logoUrl={mediaSource(structure.data?.logoUrl ?? card.structure.logoUrl)?.uri ?? null}
+      verified={structure.data ? structure.data.verified : true}
+      followers={structure.data?.followersCount ?? null}
+      following={following || Boolean(structure.data?.isFollowing)}
+      busy={following && !structure.data?.isFollowing}
+      onBack={close}
+      onOpen={() => router.push(`/o/${card.structure.slug}`)}
+      onFollow={extra?.onFollow ?? (() => undefined)}
+      onWrite={extra?.onWrite}
+    />
+  );
 
   if (!e) {
     // Lot M3 : en attendant la réponse, la fiche est déjà là avec la carte de la liste (affiche, titre, format), et des
@@ -144,7 +201,9 @@ export default function EventPage() {
     if (!event.error && cardPreview) {
       return (
         <PosterFlow
-          hero={<EventHero event={cardPreview.card} from={posterFrom} />}
+          hero={<EventHero event={cardPreview.card} from={posterFrom} underHeader />}
+          header={orgBar(cardPreview.card)}
+          heroFloat={<Countdown event={cardPreview.card} />}
           onClose={close}
           liftHero
           testID="event-page-preview"
@@ -195,7 +254,6 @@ export default function EventPage() {
   const block = registrationBlock(e, nowMs());
   const canApply = !inviteOnly && !cancelled && !e.isLocked && !notYetOpen && e.status !== "draft";
   const full = canApply && e.admission === "open" && e.remaining !== null && e.remaining <= 0;
-  const preview = previewSummary(e);
 
   // Prestataires (lot 21) : un prestataire candidate avec son profil ; un pro, avec le stand de sa fiche pro.
   const profileData = providerProfile.data;
@@ -244,7 +302,14 @@ export default function EventPage() {
     setLinked(false);
   };
   const isFollowing = following || Boolean(structure.data?.isFollowing);
-  const cover = (vehicles.data ?? []).find((v) => v.status === "active");
+  // Lot M4 : la place de la personne (« Ta place »), d'après ses candidatures (cache d'abord, à jour en direct).
+  const place =
+    (applications.upcoming ?? [])
+      .filter((a) => a.event.id === e.id && OPEN_STATUSES.includes(a.status))
+      .sort((a, b) => PLACE_ORDER.indexOf(a.status) - PLACE_ORDER.indexOf(b.status))[0] ?? null;
+  const placePhoto = place?.vehicle
+    ? ((vehicles.data ?? []).find((v) => v.id === place.vehicle?.id)?.photos[0]?.url ?? null)
+    : null;
 
   async function openProviderApply() {
     setProviderError(null);
@@ -293,11 +358,13 @@ export default function EventPage() {
           onPress: () => router.push({ pathname: "/tri", params: { event: e.id } }),
         }
       : action === "apply"
-        ? { label: cover ? L.applyWith(cover.modelName) : L.applyNoVehicle, icon: "send" as const, onPress: apply }
+        ? { label: L.apply, icon: "send" as const, onPress: apply }
         : action === "applyGuest"
-          ? { label: L.applyNoVehicle, icon: "send" as const, onPress: apply }
+          ? { label: L.apply, icon: "send" as const, onPress: apply }
           : action === "myApplication"
-            ? { label: L.myApplication, icon: "qr" as const, onPress: () => router.navigate("/sorties") }
+            ? place?.status === "accepted" && !place.checkedInAt
+              ? { label: L.myQr, icon: "qr" as const, onPress: () => router.push(`/jour-j/${place.id}`) }
+              : { label: L.myApplication, icon: "ticket" as const, onPress: () => router.navigate("/sorties") }
             : action === "myProviderApplication"
               ? {
                   label: L.myApplication,
@@ -350,12 +417,28 @@ export default function EventPage() {
 
   return (
     <PosterFlow
-      hero={<EventHero event={e} />}
+      hero={<EventHero event={e} underHeader />}
+      header={orgBar(e, {
+        onFollow: () => void toggleFollow(),
+        onWrite: structure.data?.verified === false ? undefined : () => setWriting(true),
+      })}
+      heroFloat={<Countdown event={e} />}
       liftHero
       onClose={close}
       onRefresh={event.reload}
       overlays={
         <>
+          {status === "in" ? <WriteSheet event={e} visible={writing} onClose={() => setWriting(false)} /> : null}
+          <WithdrawSheet
+            app={withdrawing}
+            now={new Date(nowMs())}
+            onClose={() => setWithdrawing(null)}
+            onConfirm={async (a) => {
+              await api.withdraw(a.id);
+              setWithdrawing(null);
+              await Promise.all([applications.reload(), event.reload()]);
+            }}
+          />
           <CandSheet
             event={e}
             visible={candMode !== null}
@@ -363,6 +446,7 @@ export default function EventPage() {
             soloAllowed={soloOk}
             crewSlug={crewParam}
             initialDay={jour}
+            alreadyFollowing={isFollowing}
             onClose={closeCand}
             onSent={() => {
               void event.reload();
@@ -407,15 +491,19 @@ export default function EventPage() {
       ) : inviteOnly ? (
         <Notice>{invitationLabels.invitationRequired}</Notice>
       ) : null}
-      <OrganizerRow
-        event={e}
-        structure={structure.data ?? null}
-        busy={following && !structure.data?.isFollowing}
-        onFollow={() => void toggleFollow()}
-      />
       {followError ? <Notice tone="error">{followError}</Notice> : null}
-      <EventFactsGrid event={e} />
-      <ArrivalSlots arrivals={e.arrivals} entranceNote={e.entranceNote} />
+      {place ? (
+        <MyPlace
+          app={place}
+          photoUrl={placePhoto}
+          pseudo={me?.profile.pseudo ?? ""}
+          now={new Date(nowMs())}
+          onWithdraw={() => setWithdrawing(place)}
+        />
+      ) : null}
+      <EventRows event={e} />
+      <AdmissionTags event={e} />
+      {weather.data ? <WeatherWidget summary={weather.data.summary} attribution={weather.data.attribution} /> : null}
       {e.customPosterUrl ? <CustomPoster url={e.customPosterUrl} structureName={e.structure.name} /> : null}
 
       {/* Lot 26 : candidater aussi pour un autre jour (accès par jour ou au choix). */}
@@ -458,11 +546,6 @@ export default function EventPage() {
           ))}
         </Plate>
       ) : null}
-      <Info label="Admission">
-        {eventAdmissionLabels[e.admission]}
-        {e.maxVehiclesPerUser > 1 ? ` · ${e.maxVehiclesPerUser} véhicules par personne au plus` : ""}
-        {preview ? `\n${preview}` : ""}
-      </Info>
       {e.rulesText ? (
         <>
           <SecHead title={L.rules} />
@@ -471,7 +554,6 @@ export default function EventPage() {
           </Text>
         </>
       ) : null}
-      {weather.data ? <WeatherWidget summary={weather.data.summary} attribution={weather.data.attribution} /> : null}
       {/* Lot 34 (parité D20) : billets du public réservés dans l'appli, comme sur la page du site. */}
       {!cancelled ? <TicketsBlock slug={e.slug} eventId={e.id} /> : null}
       {e.vendorTypes.length > 0 ? <Info label="Prestataires attendus">{e.vendorTypes.join(" · ")}</Info> : null}
@@ -500,8 +582,7 @@ export default function EventPage() {
       {action === "providerApply" && providerError ? <Notice tone="error">{providerError}</Notice> : null}
       {feed.data ? <EventFeed items={feed.data.items} reportable={status === "in"} /> : null}
       {e.instructions ? <Info label="Consignes de l'équipe organisatrice">{e.instructions}</Info> : null}
-      {/* Contacter l'organisateur (lot 18) : toujours possible pour une personne connectée. */}
-      {status === "in" ? <ContactOrganizerButton structureId={e.structure.id} /> : null}
+      {/* Lot M4 : écrire à l'organisateur passe par le ✉ de la bande (avec le contexte de l'événement). */}
       {status === "in" ? <ReportButton look="link" type="event" id={e.id} /> : null}
       {reviews.data && (reviews.data.count > 0 || new Date(e.endsAt).getTime() <= nowMs()) ? (
         <Reviews data={reviews.data} reportable={status === "in"} />
@@ -512,5 +593,10 @@ export default function EventPage() {
 
 const styles = StyleSheet.create({
   info: { gap: space1, padding: space3 },
+  // `.evcd` : pavé moutarde penché de 8°, 42 px de haut, chiffres étroits 24 px.
+  cd: { height: 42, paddingHorizontal: 10, borderRadius: 9, justifyContent: "center", transform: [{ skewX: "-8deg" }] },
+  cdIn: { transform: [{ skewX: "8deg" }] },
+  cdBig: { fontSize: 24, lineHeight: 22 },
+  cdSmall: { fontSize: 9.5, lineHeight: 12 },
   rules: { fontSize: 14, lineHeight: 21.7 },
 });
