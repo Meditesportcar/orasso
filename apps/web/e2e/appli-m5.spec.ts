@@ -160,11 +160,11 @@ test.describe("le lot M5 à l'écran", () => {
     await expect(page.getByTestId("garage-edit")).toBeVisible();
     const line = page.getByTestId("certification-line");
     await expect(line).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("certification-line-title")).toHaveText(/^Certification/);
+    // Le titre dit l'état (il dépend de ce que les autres recettes ont fait du véhicule de Kenji).
+    await expect(page.getByTestId("certification-line-title")).toHaveText(/^Certifi/);
     await line.click();
-    await expect(
-      page.getByRole("dialog", { name: "Certification" }).or(page.getByText("Grade Sport ou plus")),
-    ).toBeVisible();
+    // Le détail au toucher : la feuille « Certification ».
+    await expect(page.getByText("Certification", { exact: true }).last()).toBeVisible();
     await page.keyboard.press("Escape");
     const pros = page.getByTestId("garage-pros");
     await expect(pros).toBeVisible({ timeout: 30_000 });

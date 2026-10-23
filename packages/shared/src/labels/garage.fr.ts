@@ -100,11 +100,11 @@ export const certificationLineLabels = {
       case "certified":
         return "Certifié Orasso";
       case "pending":
-        return "Demande en cours d'examen";
+        return "Certification : demande en cours d'examen";
       case "impossible":
         return "Certification impossible";
       case "ready":
-        return "Prête : tu peux la demander";
+        return "Certification : prête, tu peux la demander";
       case "missing": {
         const first =
           line.first === "photos"

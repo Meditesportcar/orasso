@@ -85,11 +85,18 @@ test.describe("parité du site (lot M5)", () => {
   }) => {
     await loginInBrowser(page, "kenji@orasso.local", undefined, "/app/garage");
     await page.goto("/app/garage");
-    await expect(page.getByTestId("certification-line").first()).toContainText("Certification");
+    // Le titre dit l'état (il dépend de ce que les autres recettes ont fait du véhicule de Kenji).
+    await expect(page.getByTestId("certification-line").first()).toContainText(/Certifi/);
     const pros = page.getByTestId("garage-pros");
     await expect(pros.getByRole("heading", { name: /^Pour ta / })).toBeVisible();
     expect(await pros.getByTestId("garage-pros-sponsored").count()).toBeLessThanOrEqual(1);
     await expect(pros.getByTestId("garage-pros-item").first()).toBeVisible();
+    // Comme l'appli : pas d'accès flottant au Garage ni au Profil ; il reste sur l'Explorer.
+    await expect(page.getByTestId("near-access")).toHaveCount(0);
+    await page.goto("/app/moi");
+    await expect(page.getByTestId("near-access")).toHaveCount(0);
+    await page.goto("/app/explorer");
+    await expect(page.getByTestId("near-access")).toHaveCount(1);
     await page.goto("/app");
     expect(await page.getByTestId("widget-sponsored").count()).toBeLessThanOrEqual(1);
   });
