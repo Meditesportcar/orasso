@@ -3,6 +3,7 @@ import {
   certificationLostReasons,
   type PlateRect,
   plateTransferStatuses,
+  vehicleDrivetrains,
   vehicleStatuses,
   vehicleTypes,
 } from "@orasso/shared";
@@ -30,6 +31,7 @@ import { categories } from "./profiles";
 
 export const vehicleTypeEnum = pgEnum("vehicle_type", vehicleTypes);
 export const vehicleStatusEnum = pgEnum("vehicle_status", vehicleStatuses);
+export const vehicleDrivetrainEnum = pgEnum("vehicle_drivetrain", vehicleDrivetrains);
 export const plateTransferStatusEnum = pgEnum("plate_transfer_status", plateTransferStatuses);
 export const certificationLostReasonEnum = pgEnum("certification_lost_reason", certificationLostReasons);
 
@@ -84,6 +86,31 @@ export const vehicleGenerations = pgTable(
   (t) => [
     unique("vehicle_generations_model_name_key").on(t.modelId, t.name),
     index("vehicle_generations_name_trgm_idx").using("gin", t.name.op("gin_trgm_ops")),
+  ],
+);
+
+/**
+ * Lot M1 : motorisations par génération (« 3.0 L6 turbo · 340 ch · 1 495 kg · propulsion »), proposées à l'ajout d'un
+ * véhicule pour remplir seules puissance et poids. Alimentées par le seed ; à vérifier par l'équipe Orasso (docs/01).
+ */
+export const vehicleEngines = pgTable(
+  "vehicle_engines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    generationId: uuid("generation_id")
+      .notNull()
+      .references(() => vehicleGenerations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    powerHp: integer("power_hp"),
+    weightKg: integer("weight_kg"),
+    drivetrain: vehicleDrivetrainEnum("drivetrain"),
+    /** Ordre d'affichage (version sportive d'abord). */
+    position: integer("position").notNull().default(0),
+    createdAt: tstz("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("vehicle_engines_generation_id_idx").on(t.generationId),
+    unique("vehicle_engines_generation_name_key").on(t.generationId, t.name),
   ],
 );
 

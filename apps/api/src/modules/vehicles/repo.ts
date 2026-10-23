@@ -1,7 +1,16 @@
-import { asc, eq, inArray, type SQL } from "drizzle-orm";
+import type { VehicleEngine } from "@orasso/shared";
+import { asc, eq, inArray, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { categories, vehicleGenerations, vehicleMakes, vehicleModels, vehiclePhotos, vehicles } from "../../db/schema";
+import {
+  categories,
+  vehicleEngines,
+  vehicleGenerations,
+  vehicleMakes,
+  vehicleModels,
+  vehiclePhotos,
+  vehicles,
+} from "../../db/schema";
 import type { Executor } from "../../lib/tx";
 
 export type VehicleRow = typeof vehicles.$inferSelect;
@@ -46,6 +55,22 @@ export const vehiclesRepo = {
       where: eq(vehicleGenerations.modelId, modelId),
       orderBy: [asc(vehicleGenerations.isOther), asc(vehicleGenerations.yearFrom), asc(vehicleGenerations.name)],
     });
+  },
+  /** Motorisations d'une génération (lot M1) : version la plus placée d'abord, puis la plus puissante. */
+  async engines(generationId: string): Promise<VehicleEngine[]> {
+    const rows = await db
+      .select()
+      .from(vehicleEngines)
+      .where(eq(vehicleEngines.generationId, generationId))
+      .orderBy(asc(vehicleEngines.position), sql`${vehicleEngines.powerHp} desc nulls last`, asc(vehicleEngines.name));
+    return rows.map((r) => ({
+      id: r.id,
+      generationId: r.generationId,
+      name: r.name,
+      powerHp: r.powerHp,
+      weightKg: r.weightKg,
+      drivetrain: r.drivetrain,
+    }));
   },
   categories() {
     return db.query.categories.findMany({ where: eq(categories.active, true), orderBy: [asc(categories.position)] });

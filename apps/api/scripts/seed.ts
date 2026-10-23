@@ -15,7 +15,7 @@ import { storageDir } from "../src/lib/storage";
 import { notificationsService } from "../src/modules/notifications/service";
 import { seedAdmin } from "./seed/admin";
 import { seedAfterEvent } from "./seed/after-event";
-import { seedBase } from "./seed/base";
+import { seedBase, seedEngines, seedMissingCategories } from "./seed/base";
 import { seedCasquettes } from "./seed/casquettes";
 import { seedCommunication } from "./seed/communication";
 import { seedCrews } from "./seed/crews";
@@ -89,6 +89,9 @@ async function main() {
   } else {
     await seedBase(hash);
   }
+  // Lot M1 : motorisations par génération et catégories « Track day » / « Origine » ; complète un seed existant.
+  await seedEngines();
+  await seedMissingCategories();
   // Lot 06 : QR des retenus, jour J (« Salon Argelès »), événement passé réglé, points ; complète un seed existant.
   await seedDayJ(hash);
   // Lot 14 : professionnels (annuaire, remises par grade) et billetterie (billets gratuits, billets payants « bientôt »).

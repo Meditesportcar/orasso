@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { call, resetDb, seedReference, signUp, useClock } from "../../../test/helpers";
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
-import { plateTransferRequests, vehicles } from "../../db/schema";
+import { plateTransferRequests, vehicleEngines, vehicles } from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -79,6 +79,64 @@ describe("inscription et profil", () => {
   it("profils réservés aux utilisateurs connectés", async () => {
     await signUp("Public_03");
     expect((await call(null, "GET", "/users/Public_03")).status).toBe(401);
+  });
+});
+
+describe("motorisations d'une génération (lot M1)", () => {
+  const engines = (id: string) => app.request(`/api/vehicle-reference/generations/${id}/engines`);
+
+  it("publique, liste vide pour une génération sans motorisation", async () => {
+    const res = await engines(ref.generationId);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+
+  it("triée par position, puis puissance décroissante, puis nom, au format VehicleEngine", async () => {
+    await db.insert(vehicleEngines).values([
+      { generationId: ref.generationId, name: "2.5 L6", powerHp: 192, weightKg: 1300, drivetrain: "rwd", position: 1 },
+      {
+        generationId: ref.generationId,
+        name: "3.2 L6 (S50)",
+        powerHp: 321,
+        weightKg: 1460,
+        drivetrain: "rwd",
+        position: 0,
+      },
+      { generationId: ref.generationId, name: "1.8 L4 B", powerHp: 140, weightKg: null, drivetrain: null, position: 1 },
+      {
+        generationId: ref.generationId,
+        name: "1.8 L4 A",
+        powerHp: 140,
+        weightKg: 1230,
+        drivetrain: "fwd",
+        position: 1,
+      },
+      {
+        generationId: ref.generationId,
+        name: "Inconnue",
+        powerHp: null,
+        weightKg: null,
+        drivetrain: null,
+        position: 1,
+      },
+    ]);
+    const res = await engines(ref.generationId);
+    expect(res.status).toBe(200);
+    const list = (await res.json()) as Record<string, unknown>[];
+    expect(list.map((e) => e.name)).toEqual(["3.2 L6 (S50)", "2.5 L6", "1.8 L4 A", "1.8 L4 B", "Inconnue"]);
+    expect(list[0]).toEqual({
+      id: expect.any(String),
+      generationId: ref.generationId,
+      name: "3.2 L6 (S50)",
+      powerHp: 321,
+      weightKg: 1460,
+      drivetrain: "rwd",
+    });
+    expect(list[4]).toMatchObject({ powerHp: null, weightKg: null, drivetrain: null });
+  });
+
+  it("identifiant qui n'est pas un uuid : 400", async () => {
+    expect((await engines("pas-un-uuid")).status).toBe(400);
   });
 });
 

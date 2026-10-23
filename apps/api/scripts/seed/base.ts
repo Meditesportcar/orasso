@@ -5,6 +5,7 @@ import { fromWallTime, type RefusalReason } from "@orasso/shared";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import * as t from "../../src/db/schema";
+import { vehicleEngines } from "../../src/db/seed/vehicle-engines";
 import { vehicleReference } from "../../src/db/seed/vehicle-reference";
 import { startJobs } from "../../src/jobs";
 import { deps } from "../../src/lib/deps";
@@ -41,6 +42,8 @@ const CATEGORIES: [string, string, number | null][] = [
   ["preparee", "Préparée", null],
   ["stance", "Stance", null],
   ["drift", "Drift", null],
+  ["track-day", "Track day", null],
+  ["origine", "Origine", null],
   ["4x4", "4x4", null],
   ["utilitaire", "Utilitaire", null],
   ["moto", "Moto", null],
@@ -52,6 +55,50 @@ async function seedCategories() {
     .values(CATEGORIES.map(([slug, label, minVehicleAge], position) => ({ slug, label, minVehicleAge, position })))
     .returning();
   return new Map(rows.map((c) => [c.slug, c.id]));
+}
+
+/** Lot M1 : « Track day » et « Origine » (styles de l'artefact) ajoutés à la fin d'une base déjà semée ; sans effet sinon. */
+export async function seedMissingCategories() {
+  const existing = new Set((await db.select({ slug: t.categories.slug }).from(t.categories)).map((c) => c.slug));
+  if (existing.size === 0) return; // base vide : seedCategories s'en charge
+  const [{ max } = { max: 0 }] = await db
+    .select({ max: sql<number>`coalesce(max(${t.categories.position}), -1)` })
+    .from(t.categories);
+  const missing = CATEGORIES.filter(([slug]) => ["track-day", "origine"].includes(slug) && !existing.has(slug));
+  if (!missing.length) return;
+  await db
+    .insert(t.categories)
+    .values(missing.map(([slug, label, minVehicleAge], i) => ({ slug, label, minVehicleAge, position: max + 1 + i })))
+    .onConflictDoNothing();
+  console.log(`Catégories ajoutées : ${missing.map(([slug]) => slug).join(", ")}.`);
+}
+
+// --- Motorisations (lot M1) --------------------------------------------------------------------------------------
+
+/**
+ * Insère les motorisations de `vehicleEngines` pour les générations retrouvées par « marque|modèle|génération ».
+ * Idempotente : ne fait rien si la table n'est pas vide, ce qui complète aussi une base déjà semée.
+ */
+export async function seedEngines() {
+  const [existing] = await db.select({ n: sql<number>`count(*)::int` }).from(t.vehicleEngines);
+  if (existing && existing.n > 0) return;
+  const rows = await db
+    .select({
+      id: t.vehicleGenerations.id,
+      make: t.vehicleMakes.name,
+      model: t.vehicleModels.name,
+      gen: t.vehicleGenerations.name,
+    })
+    .from(t.vehicleGenerations)
+    .innerJoin(t.vehicleModels, eq(t.vehicleGenerations.modelId, t.vehicleModels.id))
+    .innerJoin(t.vehicleMakes, eq(t.vehicleModels.makeId, t.vehicleMakes.id));
+  const ids = new Map(rows.map((r) => [`${r.make}|${r.model}|${r.gen}`, r.id]));
+  const values = Object.entries(vehicleEngines).flatMap(([key, engines]) => {
+    const generationId = ids.get(key);
+    return generationId ? engines.map((e, position) => ({ generationId, ...e, position })) : [];
+  });
+  for (let i = 0; i < values.length; i += 500) await db.insert(t.vehicleEngines).values(values.slice(i, i + 500));
+  console.log(`Motorisations : ${values.length} sur ${new Set(values.map((v) => v.generationId)).size} générations.`);
 }
 
 // --- Référentiel véhicules (+ « Autre » à chaque niveau) -------------------------------------------------------
@@ -119,6 +166,7 @@ async function seedReference() {
 export async function seedBase(hash: string) {
   const categories = await seedCategories();
   const { refs, find } = await seedReference();
+  await seedEngines();
 
   // Comptes nommés (prototype validé).
   const damien = await createAccount(
