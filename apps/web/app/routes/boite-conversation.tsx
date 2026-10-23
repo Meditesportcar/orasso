@@ -10,7 +10,7 @@ import {
   type UploadResult,
 } from "@orasso/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { PersonAvatar } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
 import { apiFetch } from "../lib/api.client";
@@ -21,6 +21,9 @@ import type { Route } from "./+types/boite-conversation";
 
 // Conversation (lot 18) : messages en direct (`conversation:{id}`), envoi idempotent par `clientId` avec nouvel essai
 // tant que la page est ouverte (S13), image, « Lu par … » (S9), suppression de ses messages.
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
+
 export function meta() {
   return [{ title: "Conversation · Orasso" }, { name: "robots", content: "noindex" }];
 }
@@ -199,11 +202,7 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="s-narrow s-stack" data-testid="conversation">
-      <div className="s-row">
-        <a href="/app/boite" className="s-linkbutton o-t-button">
-          ← {messagingLabels.inbox}
-        </a>
-      </div>
+      <FicheBar title={messagingLabels.inbox} back="/app/boite" />
       <header className="s-row s-row--top">
         <PersonAvatar url={c.avatarUrl} pseudo={c.title} size={48} />
         <div className="s-grow s-stack s-stack--tight">

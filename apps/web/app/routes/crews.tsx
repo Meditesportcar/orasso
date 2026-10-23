@@ -3,10 +3,14 @@ import { CREW_DESCRIPTION_MAX, type CrewView, crewLabels, departments, type MyCr
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { CrewRow } from "../components/Crews";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import type { Route } from "./+types/crews";
 
 // Mes crews (lot 19) : les crews dont je suis membre, et la création d'un crew (je deviens son chef).
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
+
 export function meta() {
   return [{ title: `${crewLabels.myCrews} · Orasso` }, { name: "robots", content: "noindex" }];
 }
@@ -36,7 +40,7 @@ export default function Crews({ loaderData, actionData }: Route.ComponentProps) 
   const busy = useNavigation().state !== "idle";
   return (
     <div className="s-narrow s-stack" data-testid="crews">
-      <h1 className="s-title">{crewLabels.myCrews}</h1>
+      <FicheBar title={crewLabels.myCrews} back="/app/moi" />
       {crews.length === 0 ? (
         <p className="s-notice">{crewLabels.noCrews}</p>
       ) : (

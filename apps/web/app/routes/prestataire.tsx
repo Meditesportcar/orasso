@@ -42,7 +42,11 @@ import { formatTime, formatWhen } from "../lib/format";
 import { useVendorTypes } from "../lib/lists";
 import { badgeFor } from "../lib/status";
 import "../styles/providers.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/prestataire";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Prestataire · Orasso" }, { name: "robots", content: "noindex" }];
@@ -246,8 +250,7 @@ export default function Prestataire({ loaderData, actionData }: Route.ComponentP
   return (
     <div className="s-narrow s-stack" data-testid="provider-space">
       <div className="s-head">
-        <div className="o-t-label s-label">Casquette Prestataire</div>
-        <h1 className="s-title">Prestataire</h1>
+        <FicheBar title="Prestataire" facts="Casquette Prestataire" back="/app/moi" />
         <p className="s-lead">
           Food truck, barbier, tatoueur, photographe, animation… Crée ton profil puis candidate aux événements qui
           accueillent ton activité. Tu n'as besoin ni de SIRET ni de fiche pro.

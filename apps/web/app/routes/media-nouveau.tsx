@@ -14,7 +14,11 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { FileField, TextAreaField } from "../components/Fields";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import "../styles/media.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/media-nouveau";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: `${L.profileTitle} · Orasso` }, { name: "robots", content: "noindex" }];
@@ -82,8 +86,7 @@ export default function MediaNouveau({ loaderData, actionData }: Route.Component
   return (
     <div className="s-narrow s-stack" data-testid="media-profile-page">
       <div className="s-head">
-        <div className="o-t-label s-label">Casquette Média</div>
-        <h1 className="s-title">{profile ? L.casquetteEdit : L.createTitle}</h1>
+        <FicheBar title={profile ? L.casquetteEdit : L.createTitle} facts="Casquette Média" back="/app/moi" />
       </div>
       <p className="s-lead">{L.profileCreateIntro}</p>
       {actionData?.error && (

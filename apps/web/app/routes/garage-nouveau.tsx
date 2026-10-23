@@ -18,6 +18,10 @@ import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, safeReturn } from "../lib/api.server";
 import type { Route } from "./+types/garage-nouveau";
 import "../styles/garage.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Ajouter un véhicule · Orasso" }, { name: "robots", content: "noindex" }];
@@ -144,7 +148,7 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
 
   return (
     <div className="s-narrow s-stack">
-      <h1 className="s-title">Ajouter un véhicule</h1>
+      <FicheBar title="Ajouter un véhicule" back={retour ?? "/app/garage"} />
       <p className="s-lead">
         L'essentiel pour candidater : le véhicule, sa plaque (visible par l'équipe organisatrice seulement) et une
         photo.

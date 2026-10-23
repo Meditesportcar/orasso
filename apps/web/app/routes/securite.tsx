@@ -1,12 +1,15 @@
 import { Button, Chip, TextField } from "@orasso/design-system/web";
 import type { SessionView } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
-
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { AddPasskey } from "../components/Passkeys";
 import { Qr } from "../components/Qr";
 import { api, requireMe, withCookies } from "../lib/api.server";
 import { formatDateTime } from "../lib/format";
 import type { Route } from "./+types/securite";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Sécurité · Orasso" }, { name: "robots", content: "noindex" }];
@@ -104,10 +107,7 @@ export default function Securite({ loaderData, actionData }: Route.ComponentProp
   const scoped = (scope: string) => (actionData?.scope === scope ? actionData.error : null);
   return (
     <div className="s-narrow s-stack">
-      <h1 className="s-title">Sécurité</h1>
-      <p className="s-muted">
-        <a href="/app/moi">← Mon compte</a>
-      </p>
+      <FicheBar title="Sécurité" back="/app/moi" />
       {(loaderData.hint === "passkey_sign_in" || loaderData.hint === "totp_sign_in") && (
         <p className="s-notice s-notice--alert" data-testid="passkey-sign-in-needed">
           Cette session ne prouve pas ta double authentification : pour l'espace organisateur et pour changer tes clés

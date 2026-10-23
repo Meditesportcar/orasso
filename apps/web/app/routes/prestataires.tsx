@@ -6,7 +6,11 @@ import { proV2Labels as P, type ProviderPublic, type ProviderReviewsSummary } fr
 import { ProviderVitrine } from "../components/ProviderVitrine";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import "../styles/providers.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/prestataires";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return [{ title: `${d?.provider.name ?? P.providerPage} · Orasso` }, { name: "robots", content: "noindex" }];
@@ -25,7 +29,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function Prestataires({ loaderData }: Route.ComponentProps) {
   return (
     <div className="s-narrow s-stack" data-testid="provider-public">
-      <div className="o-t-label s-label">{P.providerPage}</div>
+      <FicheBar title={P.providerPage} back="/app" />
       <ProviderVitrine provider={loaderData.provider} reviews={loaderData.reviews} />
     </div>
   );

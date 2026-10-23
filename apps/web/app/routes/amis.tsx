@@ -1,7 +1,7 @@
 import { Button, Chip, TextField } from "@orasso/design-system/web";
 import { type FriendItem, type FriendRequestView, gradeLabels, socialLabels } from "@orasso/shared";
 import { Form, useNavigation } from "react-router";
-
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { PersonAvatar } from "../components/People";
 import { apiOrThrow, originOf, requireMe } from "../lib/api.server";
 import { friendAction } from "../lib/friends.server";
@@ -9,6 +9,9 @@ import type { Route } from "./+types/amis";
 
 // Mes amis (lot 17) : amis, demandes reçues et envoyées, ajout par pseudo, mon lien d'ami. Le scan d'un QR de compte
 // se fait dans l'appli (caméra).
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
+
 export function meta() {
   return [{ title: "Mes amis · Orasso" }, { name: "robots", content: "noindex" }];
 }
@@ -36,7 +39,7 @@ export default function Amis({ loaderData, actionData }: Route.ComponentProps) {
   const busy = useNavigation().state !== "idle";
   return (
     <div className="s-narrow s-stack" data-testid="amis">
-      <h1 className="s-title">{socialLabels.myFriends}</h1>
+      <FicheBar title={socialLabels.myFriends} back="/app/moi" />
       {actionData?.friendError && (
         <p className="s-error" role="alert">
           {actionData.friendError}

@@ -10,11 +10,14 @@ import {
   sanctionKindLabels,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
-
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { TextAreaField } from "../components/Fields";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime } from "../lib/format";
 import type { Route } from "./+types/sanctions";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: `${moderationLabels.mySanctions} · Orasso` }, { name: "robots", content: "noindex" }];
@@ -43,7 +46,7 @@ export default function MySanctions({ loaderData, actionData }: Route.ComponentP
   const busy = useNavigation().state !== "idle";
   return (
     <div className="s-narrow s-stack" data-testid="my-sanctions">
-      <h1 className="s-title">{moderationLabels.mySanctions}</h1>
+      <FicheBar title={moderationLabels.mySanctions} back="/app/moi" />
       {sent && (
         <p className="s-notice s-notice--ok" role="status" data-testid="contest-sent">
           {moderationLabels.contestSent}

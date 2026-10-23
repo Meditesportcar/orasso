@@ -2,12 +2,15 @@
 import { Button, Plate } from "@orasso/design-system/web";
 import type { ProOwner } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
-
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { FileField } from "../components/Fields";
 import { ProFicheFields } from "../components/ProFicheFields";
 import { api, requireMe } from "../lib/api.server";
 import { proBodyFrom } from "../lib/proForm.server";
 import type { Route } from "./+types/pro-nouvelle";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Créer ma fiche pro · Orasso" }, { name: "robots", content: "noindex" }];
@@ -40,8 +43,7 @@ export default function ProNouvelle({ actionData }: Route.ComponentProps) {
   return (
     <div className="s-narrow s-stack">
       <div className="s-head">
-        <div className="o-t-label s-label">Professionnels</div>
-        <h1 className="s-title">Créer ma fiche pro</h1>
+        <FicheBar title="Créer ma fiche pro" facts="Professionnels" back="/app/moi" />
         <p className="s-lead">
           Gratuit jusqu'au 21 juin 2027. Tu complèteras ensuite tes remises par grade, tes photos et la vérification de
           ton SIRET.

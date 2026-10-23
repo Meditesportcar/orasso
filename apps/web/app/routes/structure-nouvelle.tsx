@@ -10,10 +10,13 @@ import {
   structureKinds,
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
-
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { FileField, TextAreaField } from "../components/Fields";
 import { api, requireMe } from "../lib/api.server";
 import type { Route } from "./+types/structure-nouvelle";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Créer ma structure · Orasso" }, { name: "robots", content: "noindex" }];
@@ -96,8 +99,7 @@ export default function StructureNouvelle({ actionData }: Route.ComponentProps) 
   const v = (actionData?.values ?? {}) as Record<string, string>;
   return (
     <div className="s-narrow s-stack">
-      <div className="o-t-label s-label">Organisateur</div>
-      <h1 className="s-title">Créer ma structure</h1>
+      <FicheBar title="Créer ma structure" facts="Organisateur" back="/app/moi" />
       <p className="s-lead">
         Association, club, circuit ou entreprise : tu en deviens le propriétaire. Tu pourras préparer tes événements
         tout de suite ; la publication demande la vérification de la structure (étape suivante).

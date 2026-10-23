@@ -13,6 +13,7 @@ import {
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { CrewLogo } from "../components/Crews";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { PersonAvatar } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
@@ -22,6 +23,9 @@ import type { Route } from "./+types/crew";
 // Fiche d'un crew (lot 19, ARCHITECTURE-SUITE § 4.4) : nom, logo, description, département, chef et nombre de membres
 // pour toute personne connectée ; liste des membres et discussion pour les membres (S16) ; demandes, invitations,
 // modification, logo et dissolution pour le chef.
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
+
 export function meta({ loaderData }: Route.MetaArgs) {
   return [{ title: `${loaderData?.crew.name ?? "Crew"} · Orasso` }, { name: "robots", content: "noindex" }];
 }
@@ -107,10 +111,10 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
   };
   return (
     <div className="s-narrow s-stack" data-testid="crew" data-state={crew.viewerState}>
+      <FicheBar title={crewLabels.crew} back="/app/crews" />
       <div className="crw-head">
         <CrewLogo url={crew.logoUrl} name={crew.name} size={88} />
         <div className="s-grow s-stack s-stack--tight">
-          <div className="s-label o-t-label">{crewLabels.crew}</div>
           <h1 className="s-title o-never-truncate">{crew.name}</h1>
           <div className="s-row s-row--tight">
             <Chip>{crew.department}</Chip>

@@ -22,10 +22,14 @@ import { formatDay, formatTime } from "../lib/format";
 import { friendAction } from "../lib/friends.server";
 import { isMessageIntent, type MessageActionData, messageAction } from "../lib/messaging.server";
 import "../styles/passport.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/profil";
 
 // Profil d'un autre (lot 17, ARCHITECTURE-SUITE § 2.2 et 2.5) : complet pour un compte public ou un ami, réduit
 // (pseudo, photo, grade, marque et modèle) pour un compte privé. Jamais la plaque. Réservé aux connectés.
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
+
 export function meta({ params }: Route.MetaArgs) {
   return [{ title: `${params.pseudo} · Orasso` }, { name: "robots", content: "noindex" }];
 }
@@ -138,6 +142,7 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
   const limited = p.audience === "public_limited";
   return (
     <div className="s-narrow s-stack" data-testid="profil" data-audience={p.audience}>
+      <FicheBar title="Profil" back="/app" />
       <div className="s-row s-row--top">
         <PersonAvatar url={p.avatarUrl} pseudo={p.pseudo} size={72} />
         <div className="s-grow s-stack s-stack--tight">

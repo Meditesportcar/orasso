@@ -1,7 +1,7 @@
 import { Button, Chip, Plate, VehicleCard } from "@orasso/design-system/web";
 import { gradeLabels, type OtherVehicle, type PeopleSearchPage, socialLabels } from "@orasso/shared";
 import { useNavigation } from "react-router";
-
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { FriendAction, PersonAvatar, PersonRow } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
 import { api, apiOrThrow } from "../lib/api.server";
@@ -10,6 +10,9 @@ import type { Route } from "./+types/vehicule";
 
 // Véhicule d'un autre (lot 17, ARCHITECTURE-SUITE § 2.5) : la fiche selon le compte de son propriétaire (complète si
 // public ou ami, marque et modèle sinon, jamais la plaque) et « Autres propriétaires près de chez moi ».
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
+
 export function meta() {
   return [{ title: "Véhicule · Orasso" }, { name: "robots", content: "noindex" }];
 }
@@ -30,6 +33,7 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
   const full = "photos" in v ? v : null;
   return (
     <div className="s-narrow s-stack" data-testid="vehicule" data-detailed={v.detailed}>
+      <FicheBar title="Véhicule" back="/app" />
       {full?.photos[0] ? (
         <VehicleCard
           first

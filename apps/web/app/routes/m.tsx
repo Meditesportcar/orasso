@@ -16,7 +16,11 @@ import { PhotoGallery } from "../components/PhotoGallery";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { type CursorChunk, cursorParam, loadChunk, useCursorList } from "../lib/useCursorList";
 import "../styles/media.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/m";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return [{ title: `${d?.media.name ?? "Média"} · Orasso` }, { name: "robots", content: "noindex" }];
@@ -56,10 +60,10 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
   const ig = instagramUrl(m.instagram);
   return (
     <div className="s-narrow s-stack" data-testid="media-public">
+      <FicheBar title="Média" back="/app" />
       <div className="s-row">
         {m.logoUrl && <img className="md-logo" src={m.logoUrl} alt="" />}
         <div className="s-stack s-stack--tight">
-          <div className="o-t-label s-label">Média</div>
           <h1 className="s-title o-never-truncate">{m.name}</h1>
           <ChipRow className="s-chips-wrap">
             {m.verified && <Chip variant="verified">{L.profileVerified}</Chip>}

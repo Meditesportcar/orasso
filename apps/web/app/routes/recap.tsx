@@ -10,7 +10,11 @@ import { ShareButtons } from "../components/ShareButtons";
 import { api, originOf, requireMe } from "../lib/api.server";
 import { formatDay } from "../lib/format";
 import "../styles/passport.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/recap";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: `${recapScreenTexts.title} · Orasso` }, { name: "robots", content: "noindex" }];
@@ -32,7 +36,7 @@ export default function Recap({ loaderData }: Route.ComponentProps) {
   if (!view) {
     return (
       <div className="s-narrow s-stack" data-testid="recap">
-        <h1 className="s-title">{recapScreenTexts.title}</h1>
+        <FicheBar title={recapScreenTexts.title} back="/app/sorties" />
         <p className="s-notice" data-testid="recap-not-ready">
           {recapScreenTexts.notReady}
         </p>
@@ -47,6 +51,7 @@ export default function Recap({ loaderData }: Route.ComponentProps) {
   const url = `${origin}/e/${view.event.slug}`;
   return (
     <div className="s-narrow s-stack" data-testid="recap">
+      <FicheBar title={recapScreenTexts.title} back="/app/sorties" />
       <Plate className="s-stack s-stack--tight" data-testid="recap-hero">
         <div className="o-t-label">{formatDay(view.event.startsAt)}</div>
         <h1 className="s-title o-never-truncate">{recapScreenTexts.was(view.event.title)}</h1>
