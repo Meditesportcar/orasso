@@ -273,7 +273,7 @@ test.describe("lot M5, tour 2", () => {
   }) => {
     test.setTimeout(300_000);
     const damien = await login("damien@orasso.local");
-    const event = await createEvent(damien, { title: `Billet M5 ${unique()}`, publicAccess: "free_reservation" });
+    const event = await createEvent(damien, { title: `Entrée M5 ${unique()}`, publicAccess: "free_reservation" });
     const opened = await apiCall(damien, "PUT", `/events/${event.id}/ticketing`, { enabled: true, capacity: null });
     expect(opened.status, JSON.stringify(opened.data)).toBe(200);
     const u = await fresh("M5billet");
@@ -285,7 +285,7 @@ test.describe("lot M5, tour 2", () => {
     const tickets = page.getByTestId("home-outing").filter({ hasText: event.title });
     // La candidature en attente et le billet : deux tickets, et « Mon billet » mène au QR du billet.
     await expect(tickets).toHaveCount(2, { timeout: 30_000 });
-    const billet = tickets.filter({ hasText: "Billet" });
+    const billet = tickets.filter({ has: page.getByRole("button", { name: "Mon billet" }) });
     await expect(billet).toHaveCount(1);
     await expect(billet.getByRole("button", { name: "Mon billet" })).toBeVisible();
     await ctx.close();
