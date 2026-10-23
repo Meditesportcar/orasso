@@ -190,7 +190,8 @@ export default function EventPage() {
     <OrgBar
       name={card.structure.name}
       logoUrl={mediaSource(structure.data?.logoUrl ?? card.structure.logoUrl)?.uri ?? null}
-      verified={structure.data ? structure.data.verified : true}
+      // Tour 2 (relecture Opus) : pas de ✓ « vérifiée » tant que la structure n'est pas lue (aperçu).
+      verified={structure.data?.verified ?? false}
       followers={structure.data?.followersCount ?? null}
       following={following || Boolean(structure.data?.isFollowing)}
       busy={following && !structure.data?.isFollowing}
