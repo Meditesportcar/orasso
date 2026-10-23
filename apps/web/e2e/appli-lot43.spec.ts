@@ -295,9 +295,13 @@ test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, 
   for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, near.email);
-    // Explorer, Garage, Profil : la barre est là (une fois, au-dessus de la barre d'onglets).
+    // Lot M4 (maquette 3.1) : plus sur l'Explorer, où flotte la bascule « Liste | Carte ».
+    await page.getByRole("tab", { name: "Explorer", exact: true }).click();
+    await expect(page).toHaveURL(/\/explorer/, { timeout: 30_000 });
+    await expect(page.getByTestId("list-map-toggle")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
+    // Garage, Profil : la barre est là (une fois, au-dessus de la barre d'onglets).
     for (const [tab, route] of [
-      ["Explorer", /\/explorer/],
       ["Garage", /\/garage/],
       ["Profil", /\/profil/],
     ] as const) {
