@@ -237,6 +237,8 @@ export const eventPageLabels = {
   myPlace: "Ta place",
   myZone: "Ta zone",
   myArrival: (strict: boolean) => (strict ? "Arrivée exposants, strict" : "Arrivée exposants"),
+  /** Lot M4, tour 2 : l'écran du QR (hors ligne) garde le créneau privé et sa consigne. */
+  myArrivalTitle: "Ton créneau d'arrivée",
   noZone: "À venir",
   withdraw: "Se retirer",
   withdrawFree: (when: string) => `Sans pénalité jusqu'au ${when}`,

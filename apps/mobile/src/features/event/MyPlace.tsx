@@ -97,6 +97,13 @@ export function MyPlace({
           ) : null}
         </View>
       ) : null}
+      {/* Tour 2 (relecture Codex) : la consigne du créneau (« Entrée côté capitainerie ») revient sous les chiffres ; elle
+          reste aussi sur l'écran du QR, hors ligne (kit du jour J). */}
+      {app.status === "accepted" && slot?.note ? (
+        <Text variant="caption" color={c.posterInk} style={styles.note} testID="my-place-arrival-note">
+          {slot.note}
+        </Text>
+      ) : null}
       {canWithdraw ? (
         <View style={[styles.foot, { borderTopColor: `${c.posterInk}40` }]}>
           <Text variant="caption" color={c.posterMuted} style={[styles.grow, styles.small]}>
@@ -128,6 +135,7 @@ const styles = StyleSheet.create({
   infos: { flexDirection: "row", gap: space2 },
   info: { flex: 1, padding: 10, borderRadius: 12 },
   big: { fontSize: 24, lineHeight: 22 },
+  note: { fontSize: 12.5, lineHeight: 17 },
   foot: {
     flexDirection: "row",
     alignItems: "center",

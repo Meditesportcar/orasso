@@ -17,9 +17,11 @@
 
 import { Button, Plate, StatusBadge, Text, ThemeScope, tokens, useTheme } from "@orasso/design-system/native";
 import {
+  arrivalLabel,
   communicationLabels,
   directionsOpen,
   eventDaysLabels,
+  eventPageLabels,
   formatDayDate,
   localDate,
   voteScreenTexts,
@@ -28,6 +30,7 @@ import { useNetworkState } from "expo-network";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, useWindowDimensions } from "react-native";
+import { seenText } from "@/features/event/CandSheet";
 import { CaptureBanner, GpsRow, OfflineLine, useBlockCapture, useMaxBrightness } from "@/features/jour-j/QrExtras";
 import { type QrHolder, QrPoster } from "@/features/jour-j/QrPoster";
 import { useRotatingCode } from "@/features/jour-j/useRotatingCode";
@@ -273,6 +276,19 @@ function JourJScreen() {
         discreet
         onMap={() => router.push(`/e/${kit.event.slug}`)}
       />
+
+      {/* Tour 2 (relecture Codex) : le créneau privé et sa consigne restent ici, hors ligne, sauf si les consignes de
+          l'équipe commencent déjà par lui (elles le reprennent quand l'organisateur les envoie). */}
+      {kit.arrival && !(kit.event.instructions ?? "").startsWith(arrivalLabel(kit.arrival)) ? (
+        <Plate style={styles.block} testID="jourj-arrival">
+          <Text variant="label" color={c.plateMuted}>
+            {eventPageLabels.myArrivalTitle}
+          </Text>
+          <Text variant="body" color={c.plateInk}>
+            {seenText(kit.arrival)}
+          </Text>
+        </Plate>
+      ) : null}
 
       {kit.event.instructions ? (
         <Plate style={styles.block}>
