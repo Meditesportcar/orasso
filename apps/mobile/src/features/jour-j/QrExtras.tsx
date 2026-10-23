@@ -4,10 +4,12 @@
 // côté de « Hors ligne » (`OfflineLine`), bandeau des captures seulement lors d'une tentative (`CaptureBanner`),
 // Maps et Waze plus discrets et seulement à l'approche (`GpsRow`, `directions`).
 import { Button, Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
-import * as Brightness from "expo-brightness";
+import { useIsFocused } from "expo-router";
 import { addScreenshotListener, allowScreenCaptureAsync, preventScreenCaptureAsync } from "expo-screen-capture";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppState, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+
+import { type BrightnessApi, type BrightnessController, createBrightnessController } from "./brightness";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -28,42 +30,50 @@ export function useBlockCapture(active: boolean, key = CAPTURE_KEY) {
 }
 
 /**
- * Lot M4 : luminosité de l'écran au maximum tant que `active` (QR à l'écran), rendue en quittant l'écran ou l'appli.
- * Android : seule la fenêtre de l'appli change (aucune permission), puis elle suit de nouveau le réglage du téléphone ;
- * iPhone : la valeur d'avant est remise. Rien sur le web.
+ * `expo-brightness`, importé à la demande (tour 2, relecture Opus) : un binaire sans le module natif (ancien APK) ne
+ * plante pas l'écran du QR, la luminosité reste simplement celle du téléphone.
+ */
+let brightnessModule: Promise<BrightnessApi | null> | null = null;
+function loadBrightness(): Promise<BrightnessApi | null> {
+  brightnessModule ??= import("expo-brightness")
+    .then(
+      (B): BrightnessApi => ({
+        get: () => B.getBrightnessAsync(),
+        set: (value) => B.setBrightnessAsync(value),
+        restoreSystem: Platform.OS === "android" ? () => B.restoreSystemBrightnessAsync() : undefined,
+      }),
+    )
+    .catch(() => null);
+  return brightnessModule;
+}
+
+/**
+ * Lot M4 : luminosité de l'écran au maximum tant que le QR est à l'écran **et** que l'écran a le focus **et** que
+ * l'appli est active (tour 2 : « Sur la carte » ou une autre route la rend, l'arrière-plan aussi). Android : seule la
+ * fenêtre de l'appli change (aucune permission), puis elle suit de nouveau le réglage du téléphone ; iPhone : la
+ * valeur d'avant est remise. Ordre et annulation des opérations : `brightness.ts`. Rien sur le web.
  */
 export function useMaxBrightness(active: boolean) {
+  const focused = useIsFocused();
+  const [appActive, setAppActive] = useState(AppState.currentState === "active");
   useEffect(() => {
-    if (!active || Platform.OS === "web") return;
-    let before: number | null = null;
-    let cancelled = false;
-    const raise = async () => {
-      try {
-        if (before === null) before = await Brightness.getBrightnessAsync();
-        if (!cancelled) await Brightness.setBrightnessAsync(1);
-      } catch {
-        // Module absent (ancien APK) ou refus : le QR reste lisible, sans plus.
-      }
-    };
-    const restore = async () => {
-      try {
-        if (Platform.OS === "android") await Brightness.restoreSystemBrightnessAsync();
-        else if (before !== null) await Brightness.setBrightnessAsync(before);
-      } catch {
-        // Rien à rendre.
-      }
-    };
-    void raise();
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void raise();
-      else void restore();
-    });
-    return () => {
-      cancelled = true;
-      sub.remove();
-      void restore();
-    };
-  }, [active]);
+    const sub = AppState.addEventListener("change", (state) => setAppActive(state === "active"));
+    return () => sub.remove();
+  }, []);
+  const controller = useRef<BrightnessController | null>(null);
+  if (controller.current === null && Platform.OS !== "web") {
+    controller.current = createBrightnessController(loadBrightness);
+  }
+  const wanted = active && focused && appActive;
+  useEffect(() => {
+    void controller.current?.want(wanted);
+  }, [wanted]);
+  useEffect(
+    () => () => {
+      void controller.current?.want(false);
+    },
+    [],
+  );
 }
 
 /** Lot M4 : durée du bandeau des captures (celle des bandeaux d'annonce, retour 25). */
