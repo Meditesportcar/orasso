@@ -82,9 +82,12 @@ export const helpFaq: readonly { id: string; q: string; a: string }[] = [
 export const capLabels = {
   title: "Changer de casquette",
   active: "Active",
-  /** La phrase d'en-tête, selon les casquettes de la personne. */
-  intro(kinds: readonly string[]): string {
-    if (kinds.includes("organizer"))
+  /**
+   * La phrase d'en-tête, selon les casquettes de la personne et celle qui est active (tour 2 : « Tu es aussi
+   * organisateur ? » n'a pas de sens quand la casquette organisateur est déjà active).
+   */
+  intro(kinds: readonly string[], active?: string): string {
+    if (kinds.includes("organizer") && active !== "organizer")
       return "Tu es aussi organisateur ? Passe sur ta casquette pour gérer tes événements : la barre du bas change avec elle.";
     if (kinds.length > 1) return "Passe d'une casquette à l'autre : la barre du bas change avec elle.";
     return "Organisateur, pro, prestataire ou média : chaque rôle a sa casquette, avec sa propre barre du bas.";
@@ -111,4 +114,9 @@ export const capLabels = {
   } as Record<string, string>,
   become: "Devenir organisateur ou pro",
   joinTeam: "Rejoindre une équipe staff",
+  /** Le nom du tuto d'un profil : le même mot que sa casquette (tour 2). */
+  tutoName(profile: MainProfile): string {
+    const kind = profile === "exhibitor" ? "fan" : profile;
+    return capLabels.name[kind] ?? profile;
+  },
 };

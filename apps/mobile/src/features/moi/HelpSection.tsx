@@ -5,10 +5,10 @@
 import { Icon, type IconName, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   CONTACT_EMAIL,
+  capLabels,
   helpFaq,
   helpLabels,
   type MainProfile,
-  tutoProfileNames,
   tutoReplayCaptions,
   tutoSlides,
 } from "@orasso/shared";
@@ -38,7 +38,7 @@ function TutoCard({ profile, onPress }: { profile: MainProfile; onPress: () => v
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${helpLabels.replay} : ${tutoProfileNames[profile]}`}
+      accessibilityLabel={`${helpLabels.replay} : ${capLabels.tutoName(profile)}`}
       onPress={onPress}
       testID={`replay-tuto-${profile}`}
       style={({ pressed }) => [
@@ -54,7 +54,7 @@ function TutoCard({ profile, onPress }: { profile: MainProfile; onPress: () => v
         </Svg>
       </View>
       <Text variant="bodyStrong" color={c.ink} style={styles.tutoName}>
-        {tutoProfileNames[profile]}
+        {capLabels.tutoName(profile)}
       </Text>
       <Text variant="caption" color={c.inkMuted} style={styles.tutoCap}>
         {`${tutoReplayCaptions[profile]} · ${count} écrans`}

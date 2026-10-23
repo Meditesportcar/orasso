@@ -609,7 +609,8 @@ const styles = StyleSheet.create({
   cntText: { fontSize: 12, letterSpacing: 0 },
   onT: { flexDirection: "row", alignItems: "center", gap: 4 },
   onTText: { fontSize: 11, lineHeight: 14 },
-  linkRow: { flexDirection: "row", alignItems: "center", gap: space1 + 2, alignSelf: "flex-start", paddingVertical: 4 },
+  // Tour 2 : cibles d'au moins 44 px (règle d'accessibilité du kit).
+  linkRow: { flexDirection: "row", alignItems: "center", gap: space1 + 2, alignSelf: "flex-start", minHeight: 44 },
   linkText: { fontSize: 13.5, lineHeight: 18, fontWeight: "800" },
   pressed: { opacity: 0.8 },
   sheetTitle: { fontSize: 18, lineHeight: 19 },
@@ -628,8 +629,8 @@ const styles = StyleSheet.create({
   points: { flexDirection: "row", alignItems: "baseline", gap: space1 },
   track: { height: 10, borderRadius: 5, overflow: "hidden", flexDirection: "row" },
   fill: { height: 10, borderRadius: 5 },
-  seasonFoot: { flexDirection: "row", flexWrap: "wrap", columnGap: space3 + 4, rowGap: space1 },
-  footLink: { flexDirection: "row", alignItems: "center", gap: 4 },
+  seasonFoot: { flexDirection: "row", flexWrap: "wrap", columnGap: space3 + 4, marginVertical: -space2 },
+  footLink: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 44 },
   footText: { fontSize: 12.5, lineHeight: 17, fontWeight: "700" },
   lrow: {
     flexDirection: "row",

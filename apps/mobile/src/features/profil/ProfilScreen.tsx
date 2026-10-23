@@ -37,7 +37,7 @@ import {
   SetRow,
 } from "./parts";
 
-const { space1, space2, space3 } = tokens.spacing;
+const { space1, space3 } = tokens.spacing;
 
 const visibilityCaption = { public: "Profil public", private: "Profil privé" } as const;
 
@@ -164,7 +164,10 @@ export function ProfilScreen() {
 
       <SecHead title={capLabels.title} />
       <Text variant="body" color={t.color.inkMuted} style={styles.capsay} testID="casquettes-intro">
-        {capLabels.intro(entries.map((e) => e.kind))}
+        {capLabels.intro(
+          entries.map((e) => e.kind),
+          persona.kind,
+        )}
       </Text>
       <CapRows staffEvents={staff.data ?? []} />
       <View style={styles.links}>
@@ -253,5 +256,5 @@ const styles = StyleSheet.create({
   qrb: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   pressed: { opacity: 0.8 },
   capsay: { fontSize: 13.5, lineHeight: 19 },
-  links: { gap: space2 },
+  links: { gap: 0 },
 });
