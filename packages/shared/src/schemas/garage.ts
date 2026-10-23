@@ -171,6 +171,9 @@ export type VehiclePro = {
 
 export type VehiclePros = {
   vehicleId: string;
+  /** À compter par `POST /sponsored/:id/impression` quand il apparaît à l'écran (lot M5, tour 2). */
   sponsored: (HomeSponsored & { discount: VehiclePro["discount"]; city: string | null }) | null;
   pros: VehiclePro[];
+  /** Aucun secteur connu : pas de liste ; l'écran invite à choisir son coin. */
+  needsPlace: boolean;
 };

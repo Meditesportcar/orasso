@@ -139,6 +139,15 @@ export const certificationLineLabels = {
   },
 };
 
+/** « Pour ta … » (lot M5, tour 2) : sans département connu, pas de liste, une invitation à choisir son coin. */
+export const vehicleProsLabels = {
+  partners: "Pros partenaires",
+  needsPlace:
+    "Choisis ton coin (ton département) dans tes préférences pour voir les pros partenaires près de chez toi.",
+  needsPlaceLink: "Choisir mon coin",
+  qrHint: "La remise s'applique sur présentation de ton QR de compte.",
+};
+
 export const shareFormatLabels: Record<ShareFormat, string> = {
   story: "Story (9:16)",
   post: "Publication (1:1)",

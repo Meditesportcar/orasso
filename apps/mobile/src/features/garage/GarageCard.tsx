@@ -43,10 +43,13 @@ export function GarageCard({
   vehicle,
   first,
   onShare,
+  round = 0,
 }: {
   vehicle: VehicleFull;
   first: boolean;
   onShare: (vehicle: VehicleFull) => void;
+  /** Change à chaque « tirer pour actualiser » du Garage (tour 2) : la certification se relit. */
+  round?: number;
 }) {
   const { t } = useTheme();
   const c = t.color;
@@ -58,7 +61,7 @@ export function GarageCard({
     cacheKey: `vehicle-history-${vehicle.id}`,
   });
   // L'état de la certification (`GET /me/vehicles/:id`), pour la mini-fiche seulement.
-  const detail = useApi(() => api.vehicle(vehicle.id), [vehicle.id, vehicle.shareVersion], { enabled: first });
+  const detail = useApi(() => api.vehicle(vehicle.id), [vehicle.id, vehicle.shareVersion, round], { enabled: first });
   const events = history.data ? history.data.filter((h) => h.attended).length : null;
   const prizes = audiencePrizesOf(vehicle);
   const trim = trimLine(vehicle);
@@ -108,7 +111,9 @@ export function GarageCard({
   const onInfo = (e: LayoutChangeEvent) => setInfoW(e.nativeEvent.layout.width);
   const thumbs = vehicle.photos.slice(1, 1 + MAX_THUMBS);
   const more = vehicle.photos.length - 1 - thumbs.length;
-  const cert = detail.data?.certification ?? null;
+  // Tour 2 : la fiche détaillée (même lecture que « ce qui manque ») donne le nombre de photos de la ligne d'état.
+  const cert = detail.data?.id === vehicle.id ? detail.data.certification : null;
+  const certPhotos = detail.data?.id === vehicle.id ? detail.data.photos.length : vehicle.photos.length;
 
   return (
     <View
@@ -196,9 +201,7 @@ export function GarageCard({
         </Text>
       ) : null}
 
-      {cert ? (
-        <CertificationRow cert={cert} photoCount={vehicle.photos.length} onPress={() => setCertOpen(true)} />
-      ) : null}
+      {cert ? <CertificationRow cert={cert} photoCount={certPhotos} onPress={() => setCertOpen(true)} /> : null}
 
       <View style={styles.actions}>
         <SmButton
@@ -231,7 +234,7 @@ export function GarageCard({
           visible={certOpen}
           onClose={() => setCertOpen(false)}
           vehicleId={vehicle.id}
-          photoCount={vehicle.photos.length}
+          photoCount={certPhotos}
           cert={cert}
           onChanged={() => detail.reload()}
         />

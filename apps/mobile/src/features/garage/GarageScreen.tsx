@@ -8,6 +8,7 @@
 import { Button, EmptyState, Icon, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { vehicleWizardLabels as L } from "@orasso/shared";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { SmButton } from "@/features/passionne/kit";
@@ -27,6 +28,7 @@ export function GarageScreen() {
   const active = vehicles.data?.filter((v) => v.status === "active") ?? [];
   const archived = vehicles.data?.filter((v) => v.status !== "active") ?? [];
   const add = () => router.push("/vehicule/nouveau");
+  const [round, setRound] = useState(0);
 
   return (
     <TabScreen
@@ -34,6 +36,8 @@ export function GarageScreen() {
       facts={vehicles.data ? L.garageCount(active.length) : undefined}
       onRefresh={async () => {
         await vehicles.reload();
+        // Tour 2 : la certification et « Pour ta … » se relisent aussi.
+        setRound((r) => r + 1);
       }}
     >
       {vehicles.offline ? <Notice>Hors ligne : ton garage tel que ton téléphone l'a gardé.</Notice> : null}
@@ -50,7 +54,13 @@ export function GarageScreen() {
         />
       ) : null}
       {active.map((v, i) => (
-        <GarageCard key={v.id} vehicle={v} first={i === 0} onShare={(v) => router.push(`/vehicule/${v.id}/partager`)} />
+        <GarageCard
+          key={v.id}
+          vehicle={v}
+          first={i === 0}
+          round={round}
+          onShare={(v) => router.push(`/vehicule/${v.id}/partager`)}
+        />
       ))}
 
       {active.length > 0 ? (
@@ -74,7 +84,10 @@ export function GarageScreen() {
         </Pressable>
       ) : null}
 
-      {active[0] ? <VehiclePros vehicleId={active[0].id} modelName={active[0].modelName} /> : null}
+      {/* Une section par véhicule (clé) : jamais les pros d'un autre véhicule, même le temps d'une réponse. */}
+      {active[0] ? (
+        <VehiclePros key={active[0].id} vehicleId={active[0].id} modelName={active[0].modelName} round={round} />
+      ) : null}
 
       {/* Archivés : une ligne en bas du Garage (audit § 5.2), la liste vit dans « Mes véhicules archivés ». */}
       {archived.length > 0 ? (

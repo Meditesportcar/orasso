@@ -1,11 +1,14 @@
 // « Pour ta … » du Garage (lot M5, maquette 7.1 ; idée de Damien, priorité) : les pros partenaires utiles à ce véhicule,
 // avec leur remise ; le sponsorisé en tête, lié au véhicule (emplacement ciblé sur une de ses catégories). La réponse
-// n'est jamais gardée sur le téléphone : le sponsorisé n'est compté que quand l'API le renvoie (logique du lot C2a), et
-// cet écran l'affiche toujours. Hors ligne : la section n'apparaît pas.
+// n'est jamais gardée sur le téléphone. Tour 2 : le sponsorisé n'est compté qu'à sa première apparition à l'écran
+// (`POST /sponsored/:id/impression`) ; plafond atteint, il disparaît. Une réponse d'un autre véhicule (changement de
+// véhicule, réponse en retard) n'est jamais montrée ; hors ligne, la section n'apparaît pas. Sans département connu :
+// une phrase pour choisir son coin, aucune liste.
 import { Icon, OrgLogo, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { gradeLabels, homeLabels, proActivityLabels, type VehiclePro } from "@orasso/shared";
-import { useRouter } from "expo-router";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { gradeLabels, homeLabels, proActivityLabels, type VehiclePro, vehicleProsLabels } from "@orasso/shared";
+import { useIsFocused, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { SecH } from "@/features/home/fanBlocks";
 import { api } from "@/lib/api";
@@ -84,12 +87,81 @@ function ProRow({
   );
 }
 
-export function VehiclePros({ vehicleId, modelName }: { vehicleId: string; modelName: string }) {
+/**
+ * Compte l'affichage du sponsorisé à sa première apparition à l'écran (écran au premier plan, au moins la moitié de la
+ * ligne dans la fenêtre), une seule fois. Renvoie faux si l'API le refuse (plafond du jour atteint) : on le retire.
+ */
+function useImpression(id: string | null) {
+  const ref = useRef<View>(null);
+  const focused = useIsFocused();
+  const { height } = useWindowDimensions();
+  const [state, setState] = useState<"waiting" | "counted" | "refused">("waiting");
+  useEffect(() => {
+    if (!id || !focused || state !== "waiting") return;
+    let stopped = false;
+    const check = () =>
+      ref.current?.measureInWindow((_x, y, _w, h) => {
+        if (stopped || h <= 0 || y + h / 2 > height || y + h / 2 < 0) return;
+        stopped = true;
+        api.sponsoredImpression(id).then(
+          () => setState("counted"),
+          (e: { status?: number }) => {
+            // 409 (plafond atteint), 404 (emplacement arrêté) : il ne s'affiche plus. Autre panne : réessai plus tard.
+            if (e.status === 409 || e.status === 404) setState("refused");
+            else stopped = false;
+          },
+        );
+      });
+    check();
+    const timer = setInterval(check, 700);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [id, focused, height, state]);
+  return { ref, refused: state === "refused" };
+}
+
+export function VehiclePros({
+  vehicleId,
+  modelName,
+  round = 0,
+}: {
+  vehicleId: string;
+  modelName: string;
+  /** Change à chaque « tirer pour actualiser » du Garage : la section se relit. */
+  round?: number;
+}) {
   const { t } = useTheme();
   const router = useRouter();
-  const pros = useApi(() => api.vehiclePros(vehicleId), [vehicleId]);
-  const data = pros.data;
-  if (!data || (!data.sponsored && data.pros.length === 0)) return null;
+  const pros = useApi(() => api.vehiclePros(vehicleId), [vehicleId, round]);
+  // Une réponse d'un autre véhicule n'est jamais montrée (le composant est aussi remonté à chaque véhicule).
+  const data = pros.data?.vehicleId === vehicleId ? pros.data : null;
+  const seen = useImpression(data?.sponsored?.id ?? null);
+  if (!data) return null;
+  if (data.needsPlace && !data.sponsored) {
+    return (
+      <View style={styles.wrap} testID="garage-pros">
+        <SecH title={`Pour ta ${modelName}`} meta={vehicleProsLabels.partners} testID="garage-pros-head" />
+        <Text variant="body" color={t.color.inkMuted} testID="garage-pros-needs-place">
+          {vehicleProsLabels.needsPlace}
+        </Text>
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => router.push("/reglages/preferences")}
+          style={styles.place}
+          testID="garage-pros-place"
+        >
+          <Icon name="place" size={16} color={t.color.accentText} />
+          <Text variant="bodyStrong" color={t.color.accentText}>
+            {vehicleProsLabels.needsPlaceLink}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+  const sponsoredShown = data.sponsored && !seen.refused ? data.sponsored : null;
+  if (!sponsoredShown && data.pros.length === 0) return null;
   const lineOf = (p: Pick<VehiclePro, "activities" | "city" | "distanceKm">) =>
     [
       p.activities
@@ -101,24 +173,26 @@ export function VehiclePros({ vehicleId, modelName }: { vehicleId: string; model
     ]
       .filter(Boolean)
       .join(" · ");
-  const s = data.sponsored;
+  const s = sponsoredShown;
   return (
     <View style={styles.wrap} testID="garage-pros">
       <SecH title={`Pour ta ${modelName}`} meta="Pros partenaires" testID="garage-pros-head" />
       <View style={styles.list}>
         {s ? (
-          <ProRow
-            name={s.pro.name}
-            logoUrl={s.pro.logoUrl}
-            line={[s.title, s.city].filter(Boolean).join(" · ")}
-            discount={s.discount}
-            sponsored
-            testID="garage-pros-sponsored"
-            onPress={() => {
-              void api.sponsoredClick(s.id).catch(() => undefined);
-              if (/^https?:\/\//i.test(s.linkUrl)) void Linking.openURL(s.linkUrl).catch(() => undefined);
-            }}
-          />
+          <View ref={seen.ref} collapsable={false}>
+            <ProRow
+              name={s.pro.name}
+              logoUrl={s.pro.logoUrl}
+              line={[s.title, s.city].filter(Boolean).join(" · ")}
+              discount={s.discount}
+              sponsored
+              testID="garage-pros-sponsored"
+              onPress={() => {
+                void api.sponsoredClick(s.id).catch(() => undefined);
+                if (/^https?:\/\//i.test(s.linkUrl)) void Linking.openURL(s.linkUrl).catch(() => undefined);
+              }}
+            />
+          </View>
         ) : null}
         {data.pros.map((p) => (
           <ProRow
@@ -132,8 +206,13 @@ export function VehiclePros({ vehicleId, modelName }: { vehicleId: string; model
           />
         ))}
       </View>
+      {data.needsPlace ? (
+        <Text variant="caption" color={t.color.inkMuted} testID="garage-pros-needs-place">
+          {vehicleProsLabels.needsPlace}
+        </Text>
+      ) : null}
       <Text variant="caption" color={t.color.inkMuted}>
-        La remise s'applique sur présentation de ton QR de compte.
+        {vehicleProsLabels.qrHint}
       </Text>
     </View>
   );
@@ -141,6 +220,7 @@ export function VehiclePros({ vehicleId, modelName }: { vehicleId: string; model
 
 const styles = StyleSheet.create({
   wrap: { gap: space2 + 2 },
+  place: { flexDirection: "row", alignItems: "center", gap: space1, alignSelf: "flex-start", minHeight: 44 },
   list: { gap: space2 },
   pro: {
     flexDirection: "row",

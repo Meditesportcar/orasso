@@ -15,8 +15,10 @@ import {
   type VehiclePro,
   type VehiclePros,
   type VehicleStatus,
+  vehicleProsLabels,
   vehicleStatusLabels,
 } from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
 import { data, Form, useNavigation } from "react-router";
 
 import { AccountQr } from "../components/AccountQr";
@@ -206,8 +208,8 @@ export default function Garage({ loaderData, actionData }: Route.ComponentProps)
         ))}
       </div>
 
-      {pros && vehicles[0] && (pros.sponsored || pros.pros.length > 0) && (
-        <VehicleProsBlock pros={pros} modelName={vehicles[0].modelName} />
+      {pros && vehicles[0] && (pros.sponsored || pros.pros.length > 0 || pros.needsPlace) && (
+        <VehicleProsBlock key={pros.vehicleId} pros={pros} modelName={vehicles[0].modelName} />
       )}
 
       {archived.length > 0 && (
@@ -276,8 +278,37 @@ const discountText = (d: VehiclePro["discount"]) =>
   d ? `−${d.percent} %${d.from ? ` dès ${gradeLabels[d.from]}` : ""}` : null;
 
 /** « Pour ta … » (lot M5, maquette 7.1) : le sponsorisé lié au véhicule en tête, puis les pros partenaires proches. */
+/**
+ * Compte l'affichage du sponsorisé à sa première apparition à l'écran (lot M5, tour 2 : la page du Garage ne le compte
+ * plus au chargement) ; plafond atteint ou emplacement arrêté, il disparaît. Sans JavaScript : rien n'est compté.
+ */
+function useSponsoredImpression(id: string | null) {
+  const ref = useRef<HTMLLIElement>(null);
+  const [refused, setRefused] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!id || !el || typeof IntersectionObserver === "undefined") return;
+    let done = false;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (done || !entries.some((e) => e.isIntersecting)) return;
+        done = true;
+        io.disconnect();
+        void apiFetch(`/sponsored/${id}/impression`, { method: "POST" }).then((r) => {
+          if (!r.ok && (r.status === 409 || r.status === 404)) setRefused(true);
+        });
+      },
+      { threshold: 0.5 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [id]);
+  return { ref, refused };
+}
+
 function VehicleProsBlock({ pros, modelName }: { pros: VehiclePros; modelName: string }) {
-  const s = pros.sponsored;
+  const seen = useSponsoredImpression(pros.sponsored?.id ?? null);
+  const s = seen.refused ? null : pros.sponsored;
   const lineOf = (p: VehiclePro) =>
     [
       p.activities
@@ -295,11 +326,16 @@ function VehicleProsBlock({ pros, modelName }: { pros: VehiclePros; modelName: s
         <h2 id="pros-titre" className="s-h2">
           Pour ta {modelName}
         </h2>
-        <span className="o-t-meta">Pros partenaires</span>
+        <span className="o-t-meta">{vehicleProsLabels.partners}</span>
       </div>
+      {pros.needsPlace && (
+        <p className="s-muted" data-testid="garage-pros-needs-place">
+          {vehicleProsLabels.needsPlace} <a href="/app/moi#secteur-titre">{vehicleProsLabels.needsPlaceLink}</a>
+        </p>
+      )}
       <ul className="g-pros">
         {s && (
-          <li>
+          <li ref={seen.ref}>
             <a
               className="g-pro g-pro--sponsored"
               href={s.linkUrl}
@@ -329,7 +365,7 @@ function VehicleProsBlock({ pros, modelName }: { pros: VehiclePros; modelName: s
           </li>
         ))}
       </ul>
-      <p className="o-t-caption s-muted">La remise s'applique sur présentation de ton QR de compte.</p>
+      <p className="o-t-caption s-muted">{vehicleProsLabels.qrHint}</p>
     </section>
   );
 }
