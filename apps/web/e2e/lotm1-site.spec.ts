@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
+import pg from "pg";
 import sharp from "sharp";
 import { auditPage } from "./audit";
 import { apiCall, chooseSitePhoto, loginInBrowser, randomPlate, setTheme, signUpApi, unique } from "./helpers";
@@ -184,6 +185,106 @@ test("un ancien véhicule s'ajoute sans plaque ni photo, et la teinte libre part
   const list = await apiCall<(Vehicle & { status: string })[]>(cookie, "GET", "/me/vehicles");
   expect(list.data[0]?.color).toBe("Bleu Laguna");
   expect(list.data[0]?.status).toBe("keepsake");
+  await ctx.close();
+});
+
+test("garage sans photo : « Ajouter une photo » ouvre la fiche, qui pose le cadre de plaque (lot M1, tour 2)", async ({
+  browser,
+}) => {
+  const pseudo = `M1Gar_${unique()}`.slice(0, 20);
+  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+  const cookie = await signUpApi(pseudo, email);
+  const makes = await apiCall<{ id: string; name: string }[]>(cookie, "GET", "/vehicle-reference/makes");
+  const bmw = makes.data.find((m) => m.name === "BMW");
+  const models = await apiCall<{ id: string; vehicleType: string }[]>(
+    cookie,
+    "GET",
+    `/vehicle-reference/makes/${bmw?.id}/models`,
+  );
+  const model = models.data.find((m) => m.vehicleType === "car");
+  const created = await apiCall<{ id: string }>(cookie, "POST", "/me/vehicles", {
+    vehicleType: "car",
+    makeId: bmw?.id,
+    modelId: model?.id,
+    plate: randomPlate(),
+  });
+  expect(created.status).toBe(201);
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, email, undefined, "/app/garage");
+  await page.getByTestId("garage-add-photo").click();
+  await page.waitForURL(new RegExp(`/app/garage/${created.data.id}`), { timeout: 30_000 });
+  await page.getByLabel("Ajouter une photo").setInputFiles({
+    name: "photo.png",
+    mimeType: "image/png",
+    buffer: checkerPhoto(),
+  });
+  await expect(page.getByTestId("add-plate-frame")).toBeVisible();
+  // Sans cadre ni « aucune plaque » : refusée par le site (et par l'API).
+  await page.getByRole("button", { name: "Envoyer la photo" }).click();
+  await expect(page.getByText(/place le cadre sur la plaque/).first()).toBeVisible({ timeout: 20_000 });
+  await page.getByLabel("Ajouter une photo").setInputFiles({
+    name: "photo.png",
+    mimeType: "image/png",
+    buffer: checkerPhoto(),
+  });
+  await page.getByTestId("site-no-plate").click();
+  await page.getByTestId("site-no-plate-yes").click();
+  await page.getByRole("button", { name: "Envoyer la photo" }).click();
+  await expect
+    .poll(async () => (await apiCall<Vehicle>(cookie, "GET", `/me/vehicles/${created.data.id}`)).data.photos.length, {
+      timeout: 30_000,
+    })
+    .toBe(1);
+  await ctx.close();
+});
+
+test("modifier la fiche : seuls les champs changés partent, le champ refusé est nommé (lot M1, tour 2)", async ({
+  browser,
+}) => {
+  const pseudo = `M1Mod_${unique()}`.slice(0, 20);
+  const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+  const cookie = await signUpApi(pseudo, email);
+  const makes = await apiCall<{ id: string; name: string }[]>(cookie, "GET", "/vehicle-reference/makes");
+  const bmw = makes.data.find((m) => m.name === "BMW");
+  const models = await apiCall<{ id: string; vehicleType: string }[]>(
+    cookie,
+    "GET",
+    `/vehicle-reference/makes/${bmw?.id}/models`,
+  );
+  const created = await apiCall<{ id: string }>(cookie, "POST", "/me/vehicles", {
+    vehicleType: "car",
+    makeId: bmw?.id,
+    modelId: models.data.find((m) => m.vehicleType === "car")?.id,
+    plate: randomPlate(),
+  });
+  // Une fiche d'avant le tour 2 : un poids au-delà des bornes d'aujourd'hui (posé en base, l'API le refuserait).
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  await client.query("update vehicles set weight_kg = 25000 where id = $1", [created.data.id]);
+  await client.end();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await loginInBrowser(page, email, undefined, `/app/garage/${created.data.id}`);
+  const edit = page.getByTestId("vehicle-edit");
+  const openEdit = async () => {
+    if (!(await edit.isVisible())) await page.getByText("Modifier la fiche").first().click();
+    await expect(edit).toBeVisible();
+  };
+  await openEdit();
+  await edit.getByLabel("Couleur", { exact: true }).fill("Bleu Laguna");
+  await edit.getByRole("button", { name: "Enregistrer" }).click();
+  await expect
+    .poll(async () => (await apiCall<Vehicle>(cookie, "GET", `/me/vehicles/${created.data.id}`)).data.color, {
+      timeout: 30_000,
+    })
+    .toBe("Bleu Laguna");
+  expect((await apiCall<Vehicle>(cookie, "GET", `/me/vehicles/${created.data.id}`)).data.weightKg).toBe(25000);
+  // Le poids modifié au-delà des bornes est refusé, et le message dit quel champ.
+  await openEdit();
+  await edit.getByLabel("Poids (kg)", { exact: true }).fill("20000");
+  await edit.getByRole("button", { name: "Enregistrer" }).click();
+  await expect(page.getByText(/^Poids : /).first()).toBeVisible({ timeout: 20_000 });
   await ctx.close();
 });
 

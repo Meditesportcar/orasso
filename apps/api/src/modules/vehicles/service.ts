@@ -529,7 +529,8 @@ export const vehiclesService = {
       }
       await certificationService.afterChange(tx, after, id, certifiedBefore);
     });
-    await storage.remove(target.storageKey);
+    // Lot M1, tour 2 : l'ancienne image (peut-être avec une plaque nette) ne reste jamais stockée.
+    await removeOrRetry(target.storageKey);
     return full(id);
   },
 

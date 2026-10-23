@@ -16,10 +16,12 @@ import {
 import { useEffect, useState } from "react";
 import { data, Form, useNavigation } from "react-router";
 import { TermsField } from "../components/Fields";
+import { PhotoWithPlate, plateDecisionError } from "../components/PlateFrame";
 import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow, cookieFrom, withCookies } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
 import { formatDateTime } from "../lib/format";
+import { plateFields } from "../lib/vehicle-add";
 import type { Route } from "./+types/express";
 
 export function meta() {
@@ -38,7 +40,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 type Errors = Partial<
   Record<
-    "pseudo" | "password" | "password2" | "firstName" | "lastName" | "plate" | "makeId" | "modelId" | "terms" | "form",
+    | "pseudo"
+    | "password"
+    | "password2"
+    | "firstName"
+    | "lastName"
+    | "plate"
+    | "makeId"
+    | "modelId"
+    | "photo"
+    | "terms"
+    | "form",
     string
   >
 >;
@@ -50,6 +62,11 @@ export async function action({ request, params }: Route.ActionArgs) {
   const unregistered = form.get("unregistered") === "on";
   const photo = form.get("photo");
   const errors: Errors = {};
+  // Lot M1, tour 2 : la photo part avec son cadre de plaque, ou « aucune plaque visible » confirmé (l'API l'exige).
+  if (photo instanceof File && photo.size > 0) {
+    const issue = plateDecisionError(form);
+    if (issue) errors.photo = issue;
+  }
   if (!/^[A-Za-z0-9_.]{3,24}$/.test(text("pseudo"))) {
     errors.pseudo = "3 à 24 caractères : lettres, chiffres, « _ » ou « . ».";
   } else {
@@ -112,6 +129,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (vehicle) {
       const upload = new FormData();
       upload.set("photo", photo);
+      plateFields(form, upload);
       photoSent = (await api(request, `/me/vehicles/${vehicle.id}/photos`, { method: "POST", body: upload, cookie }))
         .ok;
     }
@@ -302,13 +320,13 @@ export default function Express({ loaderData, actionData }: Route.ComponentProps
             checked={unregistered}
             onChange={(e) => setUnregistered(e.currentTarget.checked)}
           />
-          <div className="o-field">
-            <label className="o-field__label o-t-label" htmlFor="express-photo">
-              Photo du véhicule
-            </label>
-            <input id="express-photo" name="photo" type="file" accept="image/*" capture="environment" />
-            <span className="o-field__help o-t-caption">Prends-la sur place avec ton téléphone.</span>
-          </div>
+          {/* Lot M1, tour 2 : cadre de plaque comme à l'ajout (l'API refuse une photo sans décision sur la plaque). */}
+          <PhotoWithPlate
+            label="Photo du véhicule"
+            help="Prends-la sur place avec ton téléphone, puis masque sa plaque."
+            error={errors.photo}
+            testId="express-plate-frame"
+          />
         </Plate>
         {/* Lot 36 : conditions générales, case obligatoire et tracée (`profiles.terms_accepted_at`). */}
         <TermsField error={errors.terms} defaultChecked={values?.terms} />
