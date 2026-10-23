@@ -425,7 +425,13 @@ export default function EventPage() {
       hero={<EventHero event={e} underHeader />}
       header={orgBar(e, {
         onFollow: () => void toggleFollow(),
-        onWrite: structure.data?.verified === false ? undefined : () => setWriting(true),
+        // Tour 2 : sans compte, ✉ mène à la connexion, comme « Suivre » (la feuille « Écrire à » demande un compte).
+        onWrite:
+          structure.data?.verified === false
+            ? undefined
+            : status === "in"
+              ? () => setWriting(true)
+              : () => router.push({ pathname: "/auth", params: { mode: "signup", next: `/e/${e.slug}` } }),
       })}
       heroFloat={<Countdown event={e} />}
       liftHero
