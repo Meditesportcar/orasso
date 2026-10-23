@@ -1,3 +1,4 @@
+// Lot M1 : adapté au nouvel ordre de l'ajout (photos → plaque → marque et modèle → fiche technique → catégories → envoi).
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
@@ -82,91 +83,46 @@ for (const theme of ["beton", "sable"] as Theme[]) {
 
     await page.goto("/vehicule/nouveau");
     await afterOpening(page);
-    await expect(page.getByRole("heading", { name: "Ta voiture, c'est quoi ?" })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Étape 1 sur 5 · Marque et modèle").first()).toBeVisible();
 
-    // « Autre » : aucune saisie libre, seulement la demande à l'équipe ; un seul champ, la recherche.
-    await page.getByLabel("Marque ou modèle").fill("zzz introuvable");
-    await expect(page.getByTestId("ref-row")).toHaveCount(0);
-    await expect(page.getByTestId("ref-other")).toHaveCount(1);
-    await expect(page.getByText("Pas dans la liste ? L'équipe Orasso l'ajoute à la base.").first()).toBeVisible();
-    await expect(page.getByText("Rien dans la liste Orasso").first()).toBeVisible();
-    await expect(page.locator("input:visible, textarea:visible")).toHaveCount(1);
-    await shot(page, "01a-autre-sans-saisie", theme);
-
-    // 1. Toyota › Supra › Mk5.
-    await page.getByLabel("Marque ou modèle").fill("toyota");
-    await row(page, "Toyota").click();
-    await row(page, "Supra").click();
-    await row(page, "Mk5").click();
-    await expect(page.getByTestId("vehicle-live-name")).toHaveText("Toyota Supra");
-    await checkDesign(page);
-    await shot(page, "01-marque-modele", theme);
-    await next(page);
-
-    // 2. Fiche technique : années de la génération en boutons.
-    await expect(page.getByText("Étape 2 sur 5 · Fiche technique").first()).toBeVisible();
-    await page.getByTestId("vehicle-engine").fill("3.0 L6 turbo");
-    await page.getByTestId("vehicle-power").fill("340");
-    await page.getByTestId("vehicle-weight").fill("1495");
-    await page.getByTestId("vehicle-year-2021").click();
-    await page.getByTestId("vehicle-color-Blanche").click();
-    await expect(page.getByTestId("vehicle-live-specs")).toHaveText("3.0 L6 turbo · 340 ch · 2021 · blanche");
-    await checkDesign(page);
-    await shot(page, "02-fiche-technique", theme);
-    await next(page);
-
-    // 3. Catégories : origine déduite de Toyota, Youngtimer et Ancienne grisées avec la raison.
-    await expect(page.getByTestId("vehicle-origin")).toContainText("JDM");
-    await expect(page.getByTestId("vehicle-origin")).toContainText("Déduit de Toyota");
-    const youngtimer = page.getByRole("checkbox", { name: /Youngtimer, Véhicule trop récent/ });
-    await expect(youngtimer).toBeDisabled();
-    await expect(page.getByText("Youngtimer et Ancienne : grisées, ta voiture est de 2021.").first()).toBeVisible();
-    await expect(page.getByText("Allemande")).toHaveCount(0);
-    await page.getByRole("checkbox", { name: "Sportive", exact: true }).click();
-    await checkDesign(page);
-    await shot(page, "03-categories", theme);
-    await next(page);
-
-    // 4. Photos : au moins une.
-    await next(page);
-    await expect(page.getByTestId("vehicle-step-error")).toContainText("au moins une photo");
+    // 1. Photos : au moins une (« Continuer » grisé, raison donnée), puis recadrage carré.
+    await expect(page.getByTestId("vehicle-photo-camera")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("vehicle-step-next")).toBeDisabled();
+    await expect(page.getByTestId("vehicle-step-why")).toContainText("au moins une photo");
     const chooser = page.waitForEvent("filechooser");
     await page.getByTestId("vehicle-photo-add").click();
     await (await chooser).setFiles({ name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
+    await expect(page.getByTestId("square-cropper")).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("crop-validate").click();
     await expect(page.getByTestId("new-vehicle-photos").getByText("Couverture")).toBeVisible({ timeout: 20_000 });
     await shot(page, "04-photos", theme);
     await next(page);
 
-    // 5. Plaque : pas de ML Kit dans le navigateur → à la main ; cadre posé puis déplacé.
-    await expect(page.getByRole("heading", { name: "Sa plaque, floutée" })).toBeVisible();
-    await expect(page.getByText("Pas de repérage automatique ici").first()).toBeVisible();
-    // Relecture : sans détection, pas de mode « Automatique » ; une photo sans cadre ne part pas sans confirmation.
-    await expect(page.getByText("Automatique", { exact: true })).toHaveCount(0);
+    // 2. Plaque : pas de ML Kit dans le navigateur → cadre posé à la main, toujours modifiable, masque noir.
+    await expect(page.getByText("Étape 2 sur 5 · Plaque").first()).toBeVisible();
     await expect(page.getByTestId("plate-none")).toBeVisible();
     // Lot M2 : numéro saisi n'importe comment, stocké sous une seule forme et rendu lisible (« AB-123-CD »).
     const plate = randomPlate().replace(/[IOUSW]/g, "A"); // SIV valide (ni I, O, U ; ni SS, ni WW)
     await page.getByTestId("vehicle-plate").fill(plate.replaceAll("-", " ").toLowerCase());
+    // Une photo sans cadre ne part pas sans confirmation : « Continuer » ouvre la photo avec son message.
     await next(page);
-    await expect(page.getByTestId("vehicle-step-error")).toContainText("Photo 1 : place le cadre");
+    await expect(page.getByTestId("plate-message")).toContainText("Photo 1 : pose le cadre");
     await shot(page, "05a-plaque-sans-detection", theme);
-    // Lot M2 : « Envoyer sans flouter » se confirme photo par photo, la photo sous les yeux ; Annuler ne coche rien.
+    // « Aucune plaque » se confirme photo par photo, sur la photo ; Annuler ne coche rien.
     await page.getByTestId("plate-none").click();
-    await expect(page.getByTestId("plate-none-photo")).toBeVisible();
-    await expect(page.getByText("Aucune plaque visible sur cette photo ?").first()).toBeVisible();
-    await page.getByRole("button", { name: "Annuler" }).click();
-    await expect(page.getByTestId("plate-none-photo")).toHaveCount(0);
+    await expect(page.getByTestId("plate-none-confirm")).toContainText("Aucune plaque visible sur cette photo ?");
+    await page.getByTestId("plate-none-cancel").click();
+    await expect(page.getByTestId("plate-none-confirm")).toHaveCount(0);
     await expect(page.getByTestId("plate-none")).toHaveAttribute("aria-checked", "false");
     await page.getByTestId("plate-frame-add").click();
     await expect(page.getByTestId("plate-none")).toHaveCount(0);
-    // Lot M2 (retour 15) : le message disparaît dès que la photo est réglée, sans nouvel appui sur « Envoyer ».
-    await expect(page.getByTestId("vehicle-step-error")).toHaveCount(0);
+    // Le message disparaît dès que la photo est réglée, sans nouvel appui sur « Continuer ».
+    await expect(page.getByTestId("plate-message")).toHaveCount(0);
     // Numéro vide : son propre message, qui se relit aussi à la saisie.
     await page.getByTestId("vehicle-plate").fill("");
     await next(page);
-    await expect(page.getByTestId("vehicle-step-error")).toContainText("Indique le numéro de plaque");
+    await expect(page.getByTestId("vehicle-plate-error")).toContainText("Indique le numéro de plaque");
     await page.getByTestId("vehicle-plate").fill(plate.replaceAll("-", " ").toLowerCase());
-    await expect(page.getByTestId("vehicle-step-error")).toHaveCount(0);
+    await expect(page.getByTestId("vehicle-plate-error")).toHaveCount(0);
     const frame = page.getByTestId("plate-frame").first();
     await expect(frame).toBeVisible();
     const box = await frame.boundingBox();
@@ -177,9 +133,57 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await page.mouse.up();
     const rect = await frameRect(page);
     expect(rect.x).toBeLessThan(0.35);
-    await expect(page.getByText("1 plaque floutée").first()).toBeVisible();
     await checkDesign(page);
     await shot(page, "05-plaque-a-la-main", theme);
+    await next(page);
+
+    // 3. Marque et modèle. « Autre » : aucune saisie libre, seulement la demande à l'équipe ; un seul champ.
+    await expect(page.getByText("Étape 3 sur 5 · Marque et modèle").first()).toBeVisible();
+    await page.getByLabel("Marque ou modèle").fill("zzz introuvable");
+    await expect(page.getByTestId("ref-row")).toHaveCount(0);
+    await expect(page.getByTestId("ref-other")).toHaveCount(1);
+    await expect(page.getByText("Pas dans la liste ? L'équipe Orasso l'ajoute à la base.").first()).toBeVisible();
+    await expect(page.getByText("Rien dans la liste Orasso").first()).toBeVisible();
+    await expect(page.locator("input:visible, textarea:visible")).toHaveCount(1);
+    await shot(page, "01a-autre-sans-saisie", theme);
+    await page.getByLabel("Marque ou modèle").fill("toyota");
+    await row(page, "Toyota").click();
+    await row(page, "Supra").click();
+    await row(page, "Mk5").click();
+    await expect(page.getByTestId("vehicle-live-name")).toHaveText("Toyota Supra");
+    await checkDesign(page);
+    await shot(page, "01-marque-modele", theme);
+    await next(page);
+
+    // 4. Fiche technique : motorisation saisie (lot M1, tour 2 : saisie libre, plus de catalogue), années de la
+    // génération en boutons, nuancier.
+    await expect(page.getByText("Étape 4 sur 5 · Fiche technique").first()).toBeVisible();
+    await page.getByTestId("vehicle-engine").fill("3.0 L6 turbo");
+    await page.getByTestId("vehicle-power").fill("340");
+    await page.getByTestId("vehicle-weight").fill("1495");
+    await page.getByTestId("vehicle-year-2021").click();
+    await page.getByTestId("vehicle-color-family-white").click();
+    await page.getByTestId("vehicle-color-Blanc").click();
+    await expect(page.getByTestId("vehicle-live-specs")).toContainText("3.0 L6 turbo");
+    await expect(page.getByTestId("vehicle-live-specs")).toContainText("340 ch");
+    await expect(page.getByTestId("vehicle-live-specs")).toContainText("2021");
+    await expect(page.getByTestId("vehicle-live-specs")).toContainText(/blanc/i);
+    // Le nuancier montre de vraies teintes de carrosserie (dont des verts) : sur cette étape, seul le défilement
+    // horizontal se contrôle ; « pas de vert » reste vérifié sur toutes les autres.
+    expect((await auditPage(page)).horizontalScroll).toBe(false);
+    await shot(page, "02-fiche-technique", theme);
+    await next(page);
+
+    // 5. Catégories : origine déduite de Toyota, Youngtimer et Ancienne refusées pour l'âge.
+    await expect(page.getByTestId("vehicle-origin")).toContainText("JDM");
+    await expect(page.getByTestId("vehicle-origin")).toContainText("déduit de Toyota");
+    await expect(page.getByTestId("vehicle-style-off").first()).toBeVisible();
+    await expect(page.getByTestId("vehicle-style-off").filter({ hasText: "Youngtimer" })).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: /Youngtimer/ })).toBeDisabled();
+    await expect(page.getByText("Allemande")).toHaveCount(0);
+    await page.getByRole("checkbox", { name: "Sportive", exact: true }).click();
+    await checkDesign(page);
+    await shot(page, "03-categories", theme);
     await next(page);
 
     // Envoi : la voiture se gare, la carte entre au garage.
@@ -200,14 +204,13 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     expect(blurred, "dans le cadre : la plaque est floutée").toBeLessThan(25);
 
     // Garage v2 : grand titre, carte, chiffres étroits, partage, ajout.
-    await page.getByTestId("vehicle-done-explore").click();
-    await page.waitForURL(/explorer/, { timeout: 30_000 });
-    await page.goto("/garage");
+    await page.getByTestId("vehicle-done-garage").click();
+    await page.waitForURL(/garage/, { timeout: 30_000 });
     await afterOpening(page);
     await expect(page.getByRole("heading", { name: "Mon garage" }).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("1 véhicule").first()).toBeVisible();
     await expect(page.getByTestId("garage-card-name")).toHaveText("Toyota Supra Mk5");
-    await expect(page.getByText("3.0 L6 turbo · 2021 · blanche").first()).toBeVisible();
+    await expect(page.getByText("3.0 L6 turbo · 2021 · blanc").first()).toBeVisible();
     // Lot M5 : vocabulaire de Damien (« carte » = le plan) ; la mini-fiche dit « Partager ».
     await expect(page.getByTestId("garage-share")).toBeVisible();
     await expect(page.getByText("Marque, photos, plaque floutée : deux minutes.").first()).toBeVisible();
@@ -243,6 +246,11 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     // Modification par les mêmes étapes, préremplies.
     await page.getByTestId("garage-edit").click();
     await expect(page.getByTestId("vehicle-live-name")).toHaveText("Toyota Supra", { timeout: 30_000 });
+    // La modification s'ouvre sur les photos ; deux « Continuer » mènent à Marque et modèle, préremplie.
+    await expect(page.getByText("Étape 1 sur 5 · Photos").first()).toBeVisible();
+    await next(page);
+    await next(page);
+    await expect(page.getByText("Étape 3 sur 5 · Marque et modèle").first()).toBeVisible();
     await expect(row(page, "Mk5")).toHaveAttribute("aria-checked", "true");
     await shot(page, "08-modifier", theme);
     await ctx.close();

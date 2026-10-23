@@ -1,7 +1,16 @@
 import { mkdirSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
-import { apiCall, type Cookie, loginInBrowser, randomPlate, setTheme, signUpApi, unique } from "./helpers";
+import {
+  apiCall,
+  type Cookie,
+  chooseSitePhoto,
+  loginInBrowser,
+  randomPlate,
+  setTheme,
+  signUpApi,
+  unique,
+} from "./helpers";
 import { checkerPhoto, inner, type Rect, regionSpread, storedPhoto } from "./helpers/lot51";
 import { RELAIS } from "./relais";
 
@@ -87,8 +96,8 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await page.getByLabel("Marque").selectOption({ label: "Toyota" });
     await expect(page.getByLabel("Modèle").locator('option:text-is("Supra")')).toHaveCount(1);
     await page.getByLabel("Modèle").selectOption({ label: "Supra" });
-    await page.getByLabel("Plaque").fill(randomPlate());
-    await page.getByLabel("Photo").setInputFiles({ name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
+    await page.getByLabel("Numéro de plaque").fill(randomPlate());
+    await chooseSitePhoto(page, { name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
     const editor = page.getByTestId("new-plate-frame");
     await expect(editor).toBeVisible();
     await expect(editor.getByText("Place le cadre sur la plaque")).toBeVisible();
@@ -101,7 +110,7 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     expect(audit.greens).toEqual([]);
     expect(audit.horizontalScroll).toBe(false);
     await shot(page, "01-ajout-cadre", theme);
-    await page.getByRole("button", { name: "Ajouter au garage" }).click();
+    await page.getByRole("button", { name: "Envoyer", exact: true }).click();
     await page.waitForURL(/\/app\/garage$/, { timeout: 30_000 });
     const added = await firstPhoto(cookie);
     expect(added.photo?.plateBlurred).toBe(true);

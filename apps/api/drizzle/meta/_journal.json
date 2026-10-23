@@ -379,6 +379,13 @@
       "when": 1792765342689,
       "tag": "0053_message-about-event",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1792770001337,
+      "tag": "0053_vehicle-client-key-offroad",
+      "breakpoints": true
     }
   ]
 }

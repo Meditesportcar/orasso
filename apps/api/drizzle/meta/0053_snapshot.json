@@ -1,5 +1,5 @@
 {
-  "id": "991653db-218f-46da-8c6a-ff02a7bb103b",
+  "id": "9f4832d9-c4ac-4cde-9de5-a81a6ee25544",
   "prevId": "f0efa041-9e63-4312-a00b-2d42c16b5139",
   "version": "7",
   "dialect": "postgresql",
@@ -6719,12 +6719,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "about_event_id": {
-          "name": "about_event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "deleted_at": {
           "name": "deleted_at",
           "type": "timestamp with time zone",
@@ -6838,19 +6832,6 @@
           "tableTo": "user",
           "columnsFrom": [
             "sender_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "messages_about_event_id_events_id_fk": {
-          "name": "messages_about_event_id_events_id_fk",
-          "tableFrom": "messages",
-          "tableTo": "events",
-          "columnsFrom": [
-            "about_event_id"
           ],
           "columnsTo": [
             "id"
@@ -14608,6 +14589,13 @@
           "notNull": true,
           "default": false
         },
+        "offroad": {
+          "name": "offroad",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -14931,6 +14919,12 @@
           "notNull": true,
           "default": 0
         },
+        "client_key": {
+          "name": "client_key",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -14989,6 +14983,27 @@
           ],
           "isUnique": true,
           "where": "\"vehicles\".\"status\" = 'active' and \"vehicles\".\"plate_normalized\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vehicles_owner_client_key_unique": {
+          "name": "vehicles_owner_client_key_unique",
+          "columns": [
+            {
+              "expression": "owner_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "client_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}

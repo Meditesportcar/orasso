@@ -3,6 +3,9 @@
 // 100 % la voiture se gare dans le O (remplace UploadProgress de l'appli). SendBurst, une candidature envoyée : un tour
 // de drift, la voiture se gare, le O s'allume (pic de néon, un seul à la fois). Réduction des animations : pas de
 // drift, l'anneau suit le pourcentage, fondu de 120 ms.
+// Lot M1 (correction de Damien sur la maquette 1.8) : `ring={false}` retire l'anneau qui se remplit (« des bandes qui se
+// remplissent, pas beau », retour 16) : la voiture drifte seule autour du O, l'écran pose le pourcentage en petit à
+// côté ; à 100 % elle se gare. `SendBurst` prend un `label` (« Véhicule au garage »).
 
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -20,9 +23,11 @@ export type SendProgressProps = {
   onParked?: () => void;
   /** Côté de l'indicateur, en px. */
   size?: number;
+  /** Anneau moutarde qui se remplit autour du O (par défaut) ; `false` : la voiture drifte seule (lot M1). */
+  ring?: boolean;
 };
 
-export function SendProgress({ progress, onParked, size = 96 }: SendProgressProps) {
+export function SendProgress({ progress, onParked, size = 96, ring = true }: SendProgressProps) {
   const { reducedMotion } = useTheme();
   const p = Math.max(0, Math.min(1, progress));
   const [complete, setComplete] = useState(p >= 1);
@@ -42,7 +47,7 @@ export function SendProgress({ progress, onParked, size = 96 }: SendProgressProp
       accessibilityLabel="Envoi en cours"
       accessibilityValue={{ min: 0, max: 100, now: Math.round(p * 100) }}
     >
-      <OLoader size={size} progress={p} done={complete} onParked={onParked} label={null} />
+      <OLoader size={size} progress={ring ? p : undefined} done={complete} onParked={onParked} label={null} />
     </View>
   );
 }
@@ -53,10 +58,12 @@ export type SendBurstProps = {
   size?: number;
   /** Rejouer (recette). */
   playKey?: unknown;
+  /** Texte alternatif (« Candidature envoyée » par défaut). */
+  label?: string;
 };
 
 /** Une candidature envoyée : un tour de drift, la voiture se gare, le O s'allume. */
-export function SendBurst({ onDone, size = 120, playKey }: SendBurstProps) {
+export function SendBurst({ onDone, size = 120, playKey, label = "Candidature envoyée" }: SendBurstProps) {
   const { t, reducedMotion } = useTheme();
   const [done, setDone] = useState(reducedMotion);
   const { style: glow, fire } = useNeonPulse();
@@ -92,7 +99,7 @@ export function SendBurst({ onDone, size = 120, playKey }: SendBurstProps) {
         key={String(playKey ?? "")}
         size={size}
         done={done}
-        label="Candidature envoyée"
+        label={label}
         onParked={() => {
           fire();
           if (lit.current) clearTimeout(lit.current);

@@ -9,6 +9,7 @@ import {
   certificationInactive,
   certificationLine,
   certificationLostByChange,
+  OFFROAD_TYPE,
   SHARE_CHAR_WIDTH,
   SHARE_MARGIN,
   shareImageLayout,
@@ -53,6 +54,16 @@ describe("categoryAllowedForVehicle", () => {
     expect(categoryRefusal(youngtimer, { ...toyota, year: 2015 }, NOW)).toBe("age");
     expect(categoryAllowedForVehicle(youngtimer, { ...toyota, year: 1995 }, NOW)).toBe(true);
     expect(categoryRefusal(youngtimer, { ...toyota, year: null }, NOW)).toBe("age");
+  });
+
+  it("lot M1, tour 2 : « 4x4 » convient aux camions et aux tout-terrain du référentiel, pas aux autres voitures", () => {
+    const fourByFour: CategoryRule = { ...any, allowedVehicleTypes: ["truck", OFFROAD_TYPE] };
+    expect(categoryRefusal(fourByFour, toyota, NOW)).toBe("type");
+    expect(categoryRefusal(fourByFour, { ...toyota, offroad: false }, NOW)).toBe("type");
+    expect(categoryRefusal(fourByFour, { ...toyota, offroad: true }, NOW)).toBeNull();
+    expect(categoryRefusal(fourByFour, { ...toyota, vehicleType: "truck" }, NOW)).toBeNull();
+    // Un tout-terrain reste une voiture : « Moto » ne lui convient pas.
+    expect(categoryRefusal(moto, { ...toyota, offroad: true }, NOW)).toBe("type");
   });
 
   it("type : la catégorie moto ne convient pas à une voiture", () => {

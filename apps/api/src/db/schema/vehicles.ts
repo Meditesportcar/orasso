@@ -60,6 +60,8 @@ export const vehicleModels = pgTable(
     slug: text("slug").notNull(),
     vehicleType: vehicleTypeEnum("vehicle_type").notNull(),
     isOther: boolean("is_other").notNull().default(false),
+    /** Lot M1, tour 2 : vrai tout-terrain (Defender, Wrangler, Classe G…) : « 4x4 » lui est proposé (`OFFROAD_TYPE`). */
+    offroad: boolean("offroad").notNull().default(false),
     ...timestamps,
   },
   (t) => [
@@ -126,6 +128,8 @@ export const vehicles = pgTable(
     archivedAt: tstz("archived_at"),
     /** Prix du public gagnés (lot 49) : compteur lu par la carte à partager. */
     audiencePrizes: integer("audience_prizes").notNull().default(0),
+    /** Lot M1, tour 2 : clé tirée par l'appli à l'ouverture de l'ajout (création idempotente, pas de doublon). */
+    clientKey: uuid("client_key"),
     ...timestamps,
   },
   (t) => [
@@ -135,6 +139,7 @@ export const vehicles = pgTable(
     uniqueIndex("vehicles_active_plate_key")
       .on(t.plateNormalized)
       .where(sql`${t.status} = 'active' and ${t.plateNormalized} is not null`),
+    uniqueIndex("vehicles_owner_client_key_unique").on(t.ownerId, t.clientKey),
     check("vehicles_power_hp_check", sql`${t.powerHp} is null or ${t.powerHp} between 1 and 2500`),
     check("vehicles_weight_kg_check", sql`${t.weightKg} is null or ${t.weightKg} between 50 and 40000`),
   ],

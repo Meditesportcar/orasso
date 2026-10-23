@@ -1,3 +1,4 @@
+// Lot M1 : adapté au nouvel ordre de l'ajout (photos d'abord, recadrage carré, plaque sur la photo).
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { auditPage } from "./audit";
@@ -197,30 +198,24 @@ test("ajout d'un véhicule : les poignées du cadre tournent et agrandissent (le
   await page.goto("/vehicule/nouveau");
   await afterOpening(page);
   const next = () => page.getByTestId("vehicle-step-next").click();
-  await page.getByLabel("Marque ou modèle").fill("toyota");
-  await page.getByRole("radio", { name: "Toyota", exact: false }).first().click();
-  await page.getByRole("radio", { name: "Supra", exact: false }).first().click();
-  await page.getByRole("radio", { name: "Mk5", exact: false }).first().click();
-  await next();
-  await page.getByTestId("vehicle-year-2021").click();
-  await next();
-  await page.getByRole("checkbox", { name: "Sportive", exact: true }).click();
-  await next();
+  // Nouvel ordre : les photos d'abord (recadrage carré), puis la plaque.
   const chooser = page.waitForEvent("filechooser");
   await page.getByTestId("vehicle-photo-add").click();
   await (await chooser).setFiles({ name: "supra.png", mimeType: "image/png", buffer: checkerPhoto() });
+  await expect(page.getByTestId("square-cropper")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("crop-validate").click();
   await expect(page.getByTestId("new-vehicle-photos").getByText("Couverture")).toBeVisible({ timeout: 20_000 });
   await next();
-  // Lot M2 : « Envoyer sans flouter » se confirme sur cette photo, montrée dans la confirmation ; puis on revient.
+  // « Aucune plaque » se confirme sur cette photo, montrée dans la confirmation ; puis on revient.
   await page.getByTestId("plate-none").click();
-  await expect(page.getByTestId("plate-none-photo")).toBeVisible();
+  await expect(page.getByTestId("plate-none-confirm")).toBeVisible();
   await shot(page, "plaque-sans-flouter-confirmation-sable");
-  await page.getByTestId("orga-confirm").click();
+  await page.getByTestId("plate-none-yes").click();
   await expect(page.getByTestId("plate-none")).toHaveAttribute("aria-checked", "true");
   // Décoché : sans confirmation (on revient à la prudence).
   await page.getByTestId("plate-none").click();
   await expect(page.getByTestId("plate-none")).toHaveAttribute("aria-checked", "false");
-  await expect(page.getByTestId("plate-none-photo")).toHaveCount(0);
+  await expect(page.getByTestId("plate-none-confirm")).toHaveCount(0);
   await page.getByTestId("plate-frame-add").click();
   await expect(page.getByTestId("plate-frame").first()).toBeVisible();
   const before = await turn(page, "plate-frame");

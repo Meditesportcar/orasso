@@ -61,7 +61,7 @@ export const photoLabels = {
   removeConfirm: "Retirer",
   cover: "Couverture",
   makeCover: "En couverture",
-  coverHint: "La photo de couverture illustre la carte de ton véhicule. Touche « En couverture » sous une autre photo.",
+  coverHint: "La photo de couverture illustre la fiche de ton véhicule. Touche « En couverture » sous une autre photo.",
   addOne: "Ajouter une photo",
   cropHint: "Chaque photo se recadre avant l'envoi.",
   uploading: (n: number, total: number) => `Envoi de la photo ${n} sur ${total}…`,

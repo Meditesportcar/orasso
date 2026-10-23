@@ -73,7 +73,11 @@ export const vehiclesRoutes = new Hono<AppEnv>()
       }
       plateRects = parse(plateRectsSchema, raw);
     }
-    return c.json(await vehiclesService.addPhoto(v, uuidParam(c, "id"), form.photo, plateRects), 201);
+    // Lot M1, tour 2 : « aucune plaque visible » confirmé (`noPlate=true`) ; sans cadre ni confirmation, refusée.
+    return c.json(
+      await vehiclesService.addPhoto(v, uuidParam(c, "id"), form.photo, plateRects, form.noPlate === "true"),
+      201,
+    );
   })
   // Floutage de plaque sur une photo déjà envoyée (irréversible, V9).
   .post("/me/vehicles/:id/photos/:photoId/blur", async (c) => {

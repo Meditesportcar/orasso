@@ -126,6 +126,20 @@ export function deliverNow(email: string): void {
   });
 }
 
+/**
+ * Choisit la photo dans le formulaire d'ajout de véhicule du site (lot M1) : elle s'ouvre dans le recadrage carré,
+ * on valide le cadrage par défaut ; le fichier du champ est alors le carré recadré.
+ */
+export async function chooseSitePhoto(
+  page: Page,
+  file: { name: string; mimeType: string; buffer: Buffer },
+  label = "Photo",
+): Promise<void> {
+  await page.getByLabel(label, { exact: true }).setInputFiles(file);
+  await page.getByTestId("site-crop-validate").click();
+  await expect(page.getByTestId("site-crop")).toHaveCount(0);
+}
+
 /** Photo de test : un PNG uni de 320 × 240 (le serveur le recompresse en WebP), sans dépendance d'image. */
 export function samplePhoto(rgb: [number, number, number] = [138, 74, 42]): Buffer {
   const width = 320;
@@ -248,6 +262,8 @@ export async function addVehicleApi(cookie: Cookie, plate: string): Promise<stri
   if (created.status !== 201) throw new Error(`Véhicule : ${created.status} ${JSON.stringify(created.data)}`);
   const form = new FormData();
   form.set("photo", new Blob([new Uint8Array(samplePhoto())], { type: "image/png" }), "photo.png");
+  // Lot M1, tour 2 : l'API exige une décision sur la plaque (ici, aucune plaque sur l'image d'essai).
+  form.set("noPlate", "true");
   const res = await fetch(`${API}/api/me/vehicles/${created.data.id}/photos`, {
     method: "POST",
     headers: { origin: WEB, cookie },
