@@ -234,7 +234,9 @@ function JourJScreen() {
             size={qrSize}
             label="QR d'accès à présenter à l'entrée"
             say="Présente le QR code"
-            logo={Boolean(rotating.code)}
+            // Tour 2 (décision du coordinateur) : pas de O au centre pour l'instant. À taille d'écran égale, le QR avec logo
+            // ne se relit plus au moindre flou (`lib/qr.test.ts`) ; à réessayer sur le scanner staff du Pixel et du Xiaomi.
+            logo={false}
           />
           {rotating.code ? null : (
             <Notice testID="jourj-legacy">
