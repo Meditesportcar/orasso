@@ -42,7 +42,9 @@ export async function action({ request }: Route.ActionArgs) {
 export default function PreferencesPage({ loaderData, actionData }: Route.ComponentProps) {
   const { preferences, saved } = loaderData;
   const busy = useNavigation().state !== "idle";
-  const [radius, setRadius] = useState(clampPreferenceRadius(preferences.radiusKm));
+  // La vraie distance du compte (jusqu'à 300 km) : le curseur s'arrête à 200 mais l'écran dit la vérité ; elle n'est
+  // renvoyée que si le curseur bouge (`radiusInitial`, voir `parsePreferencesForm`).
+  const [radius, setRadius] = useState(preferences.radiusKm);
   return (
     <div className="s-narrow s-stack" data-testid="preferences">
       <h1 className="s-title">{L.title}</h1>
@@ -82,6 +84,7 @@ export default function PreferencesPage({ loaderData, actionData }: Route.Compon
             <span className="o-t-body"> km</span>
             <span className="o-t-caption s-muted pref-radius__time">{travelTimeLabel(radius)}</span>
           </span>
+          <input type="hidden" name="radiusInitial" value={preferences.radiusKm} />
           <input
             type="range"
             className="s-range"
@@ -89,7 +92,7 @@ export default function PreferencesPage({ loaderData, actionData }: Route.Compon
             min={PREFERENCE_RADIUS.min}
             max={PREFERENCE_RADIUS.max}
             step={PREFERENCE_RADIUS.step}
-            value={radius}
+            value={clampPreferenceRadius(radius)}
             onChange={(e) => setRadius(Number(e.currentTarget.value))}
           />
         </label>

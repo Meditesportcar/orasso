@@ -2,10 +2,13 @@
 // Tâche `event.notify-nearby`, planifiée à la publication : profils dont un centre d'intérêt est une catégorie de
 // l'événement et dont le centre du premier département est à moins de `radius_km`, hors abonnés de la structure (déjà
 // prévenus par `new_event_followed`), une seule fois par événement (index unique partiel sur `notifications`).
-// S4 : un événement sans catégorie ne notifie personne. Exclus : événements sur invitation ou déjà commencés,
+// S4 : un événement sans catégorie ne notifie aucun passionné qui s'appuie sur ses centres d'intérêt.
+// Lot M6, tour 2 : les types d'événements choisis dans « Tes préférences » (`profiles.preferred_formats`, vide = tous)
+// s'appliquent aussi ici ; un compte sans centre d'intérêt mais avec des types choisis est prévenu sur ses types et sa
+// distance (sans centre d'intérêt et sans type, rien : comportement d'origine). Exclus : événements sur invitation ou déjà commencés,
 // structures suspendues ou supprimées, personnes bannies par la structure.
 import { distanceKm, profilePosition } from "@orasso/shared";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import {
@@ -30,16 +33,24 @@ export const nearbyService = {
     const structure = await db.query.structures.findFirst({ where: eq(structures.id, e.structureId) });
     if (!structure || structure.deletedAt || structure.verification === "suspended") return 0;
     const categoryIds = e.criteria?.categoryIds ?? [];
-    if (!categoryIds.length || e.lat === null || e.lng === null) return 0;
+    if (e.lat === null || e.lng === null) return 0;
     const position = { lat: e.lat, lng: e.lng };
 
     const candidates = await db
-      .selectDistinct({ userId: profiles.userId, departments: profiles.departments, radiusKm: profiles.radiusKm })
+      .select({ userId: profiles.userId, departments: profiles.departments, radiusKm: profiles.radiusKm })
       .from(profiles)
-      .innerJoin(profileInterests, eq(profileInterests.userId, profiles.userId))
       .where(
         and(
-          inArray(profileInterests.categoryId, categoryIds),
+          or(
+            // Centre d'intérêt = une catégorie de l'événement.
+            categoryIds.length
+              ? sql`exists (select 1 from ${profileInterests} i where i.user_id = ${profiles.userId} and ${inArray(sql`i.category_id`, categoryIds)})`
+              : undefined,
+            // Sans aucun centre d'intérêt mais avec des types choisis : les types (ci-dessous) et la distance suffisent.
+            sql`(not exists (select 1 from ${profileInterests} i where i.user_id = ${profiles.userId}) and cardinality(${profiles.preferredFormats}) > 0)`,
+          ),
+          // Types choisis : vide = tous ; sinon le format de l'événement doit en faire partie.
+          sql`(cardinality(${profiles.preferredFormats}) = 0 or ${e.format} = any(${profiles.preferredFormats}))`,
           isNull(profiles.deletedAt),
           sql`not exists (select 1 from ${structureBans} b where b.user_id = ${profiles.userId} and b.structure_id = ${e.structureId})`,
           sql`not exists (select 1 from ${structureFollows} f where f.user_id = ${profiles.userId} and f.structure_id = ${e.structureId})`,

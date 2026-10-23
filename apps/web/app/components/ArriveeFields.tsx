@@ -16,6 +16,7 @@ import {
   namePrivacy,
 } from "@orasso/shared";
 import { type ReactNode, useState } from "react";
+import { parseDepartmentText } from "../lib/departments";
 import "../styles/arrivee.css";
 
 export type ArriveeValues = { mainProfile?: string; departments?: string[]; firstName?: string; lastName?: string };
@@ -172,14 +173,7 @@ export function ArriveeFields({
   );
 }
 
-const parseDepartments = (text: string) => [
-  ...new Set(
-    text
-      .split(/[\s,;]+/)
-      .map((d) => d.trim().toUpperCase())
-      .filter(Boolean),
-  ),
-];
+const parseDepartments = parseDepartmentText;
 
 /**
  * Mon secteur (/app/moi) : la carte de France et le champ de numéros restent synchronisés (l'outre-mer, absent de la
@@ -218,6 +212,8 @@ export function DepartmentsField({ initial }: { initial: string[] }) {
           {arriveeLabels.errors.tooMany}
         </p>
       ) : null}
+      {/* Marqueur lu par `readDepartmentsField` : sans JavaScript, les cases `departmentBox` font foi. */}
+      <input type="hidden" name="departmentBoxes" value="1" />
       <TextField
         label="Départements"
         name="departments"

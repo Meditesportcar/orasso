@@ -81,3 +81,43 @@ for (const [name, viewport] of [
     await page.screenshot({ path: `${DIR}/56-site-annonce-info-${name}.png` });
   });
 }
+
+// Sans JavaScript, la liste des départements est une vraie liste de cases (`departmentBox`) : ce qu'on coche, y compris
+// « tout décocher », est enregistré tel quel par /app/preferences ; la distance du compte (300 km) n'est pas réécrite.
+test.describe("site sans JavaScript : Tes préférences", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("les cases de départements font foi, tout décocher enregistre une liste vide, la distance reste", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const s = unique();
+    const email = `snojs_${s}@e2e.orasso.test`;
+    const cookie = await signUpApi(`Snojs_${s}`.slice(0, 24), email);
+    // Le compte a une distance plus large que le curseur (jusqu'à 300 km, comptes anciens) : posée par l'API des réglages.
+    await apiCall(cookie, "PATCH", "/me/settings", { radiusKm: 300 });
+    await page.setViewportSize(MOBILE);
+    await loginInBrowser(page, email, undefined, "/app/preferences");
+    await expect(page.getByRole("heading", { name: /Tes préférences/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("pref-radius")).toContainText("300");
+
+    // Les cases sont dans un <details> : on l'ouvre, on coche le 34 et on décoche le 66.
+    await page.getByTestId("department-details").locator("summary").click();
+    await page.locator('input[name="departmentBox"][value="34"]').check();
+    await page.locator('input[name="departmentBox"][value="66"]').uncheck();
+    await page.getByRole("button", { name: /Enregistrer/ }).click();
+    await expect(page.getByTestId("preferences-saved")).toBeVisible({ timeout: 30_000 });
+    const one = await apiCall<{ departments: string[]; radiusKm: number }>(cookie, "GET", "/me/preferences");
+    expect(one.data.departments).toEqual(["34"]);
+    expect(one.data.radiusKm).toBe(300);
+
+    // Tout décocher : liste vide enregistrée.
+    await page.getByTestId("department-details").locator("summary").click();
+    await page.locator('input[name="departmentBox"][value="34"]').uncheck();
+    await page.getByRole("button", { name: /Enregistrer/ }).click();
+    await expect(page.getByTestId("preferences-saved")).toBeVisible({ timeout: 30_000 });
+    const none = await apiCall<{ departments: string[]; radiusKm: number }>(cookie, "GET", "/me/preferences");
+    expect(none.data.departments).toEqual([]);
+    expect(none.data.radiusKm).toBe(300);
+  });
+});

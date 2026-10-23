@@ -26,6 +26,7 @@ import { data, Form, redirect, useNavigation } from "react-router";
 import { DepartmentsField } from "../components/ArriveeFields";
 import { TextAreaField } from "../components/Fields";
 import { api, apiOrThrow, requireMe, withCookies } from "../lib/api.server";
+import { readDepartmentsField } from "../lib/departments";
 import type { Route } from "./+types/moi";
 
 // Mon compte sur le site (lot 15, ARCHITECTURE-SUITE § 1.6) : profil, aperçu public, notifications par type, compte
@@ -60,10 +61,7 @@ export async function action({ request }: Route.ActionArgs) {
     return redirect("/app/moi?fait=profil");
   }
   if (intent === "settings") {
-    const depts = String(form.get("departments") ?? "")
-      .split(/[\s,;]+/)
-      .map((d) => d.trim().toUpperCase())
-      .filter(Boolean);
+    const depts = readDepartmentsField(form);
     const unknown = depts.filter((d) => !(allDepartments as readonly string[]).includes(d));
     if (unknown.length) {
       return data({ scope: "settings", error: `Département inconnu : ${unknown.join(", ")}` }, { status: 400 });

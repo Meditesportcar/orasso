@@ -4,12 +4,14 @@
 import { type PlateRect, type ShareFormat, type ShareStyle, shareSheetLabels } from "@orasso/shared";
 
 import { env } from "../../env";
+import { AppError } from "../../lib/errors";
 import { storage } from "../../lib/storage";
 import type { VehicleWithAll } from "./repo";
 import { renderStory, type ShareStat } from "./share-story";
 
 const fr = new Intl.NumberFormat("fr-FR");
-const plainSpaces = (s: string) => s.replace(/[ {2}]/g, " ");
+// Espace insécable (U+00A0) et fine insécable (U+202F) du format fr-FR : remplacées par une espace simple.
+const plainSpaces = (s: string) => s.replace(/[\u00a0\u202f]/g, " ");
 
 /** Ce que la story montre en plus de la fiche : style, zones à masquer (filet de sécurité de l'appli). */
 export type ShareExtras = { style?: ShareStyle; masks?: PlateRect[] };
@@ -44,8 +46,62 @@ export function storyStats(v: Pick<VehicleWithAll, "powerHp" | "weightKg" | "yea
 const findIt = (v: Pick<VehicleWithAll, "vehicleType">) =>
   v.vehicleType === "truck" ? shareSheetLabels.findIt.replace("-la", "-le") : shareSheetLabels.findIt;
 
-/** Rend l'affiche. `pseudo` : le propriétaire. */
-export async function renderShareImage(
+// --- File de rendu (lot M6, tour 2) ----------------------------------------------------------------------------------
+// Un rendu d'affiche est lourd (image, QR, SVG → PNG) : au plus MAX_RENDERS en même temps, les suivants attendent leur
+// tour ; au-delà de MAX_WAITING en attente, `429 rate_limited` plutôt que d'empiler sans fin.
+export const MAX_RENDERS = 2;
+export const MAX_WAITING = 20;
+
+/** File simple : au plus `limit` tâches en cours, `maxWaiting` en attente, `429` au-delà. */
+export function createRenderQueue(limit = MAX_RENDERS, maxWaiting = MAX_WAITING) {
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  const next = () => {
+    const start = waiting.shift();
+    if (start) start();
+  };
+  return {
+    get running() {
+      return running;
+    },
+    get waiting() {
+      return waiting.length;
+    },
+    async run<T>(task: () => Promise<T>): Promise<T> {
+      if (running >= limit) {
+        if (waiting.length >= maxWaiting) {
+          throw new AppError(429, "rate_limited", "Trop d'affiches en préparation, réessaie dans un instant.", {
+            retryAfter: 5,
+          });
+        }
+        // Le créneau est transmis tel quel par `next` (pas de `running--` entre-temps) : jamais plus de `limit`.
+        await new Promise<void>((resolve) => waiting.push(resolve));
+      } else {
+        running++;
+      }
+      try {
+        return await task();
+      } finally {
+        if (waiting.length) next();
+        else running--;
+      }
+    },
+  };
+}
+
+const renderQueue = createRenderQueue();
+
+/** Rend l'affiche (dans la file : deux rendus à la fois au plus). `pseudo` : le propriétaire. */
+export function renderShareImage(
+  v: VehicleWithAll,
+  pseudo: string,
+  format: ShareFormat,
+  extras: ShareExtras = {},
+): Promise<Buffer> {
+  return renderQueue.run(() => renderShareImageNow(v, pseudo, format, extras));
+}
+
+async function renderShareImageNow(
   v: VehicleWithAll,
   pseudo: string,
   format: ShareFormat,

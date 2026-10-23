@@ -1,4 +1,5 @@
 // Lot M6 : « Tes préférences » (`GET` et `PATCH /me/preferences`) et motifs de signalement propres à chaque type.
+import { shouldDeliver } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -68,10 +69,40 @@ describe("Tes préférences", () => {
     expect((await call(null, "GET", "/me/preferences")).status).toBe(401);
   });
 
-  it("un rayon de compte plus large que le curseur est ramené à 200 km", async () => {
+  it("un rayon de compte plus large que le curseur est renvoyé tel quel, jamais réécrit (lot M6, tour 2)", async () => {
     const u = await signUp("Large");
     await db.update(profiles).set({ radiusKm: 300 }).where(eq(profiles.userId, u.id));
-    expect((await call(u, "GET", "/me/preferences")).json.radiusKm).toBe(200);
+    expect((await call(u, "GET", "/me/preferences")).json.radiusKm).toBe(300);
+    // Un enregistrement qui ne parle pas de distance la laisse à 300 km.
+    const saved = await call(u, "PATCH", "/me/preferences", { eventFormats: ["night"] });
+    expect(saved.json.radiusKm).toBe(300);
+    const [row] = await db.select().from(profiles).where(eq(profiles.userId, u.id));
+    expect(row?.radiusKm).toBe(300);
+  });
+
+  it("un interrupteur est allumé seulement si la famille est active ET le type non coupé", async () => {
+    const u = await signUp("Famille");
+    // « Événements » coupée en famille : « Nouveaux événements » et « Actualité suivie » sont éteints.
+    await call(u, "PATCH", "/me/settings", {
+      notificationPrefs: { application: true, event: false, social: true, grade: true },
+    });
+    const first = await call(u, "GET", "/me/preferences");
+    expect(first.json.notifications).toEqual({ newEvents: false, freedSpots: true, followedNews: false });
+
+    // Rallumer « Nouveaux événements » : la famille revient, mais pas les autres types réglables de la famille.
+    const again = await call(u, "PATCH", "/me/preferences", { notifications: { newEvents: true } });
+    expect(again.json.notifications).toEqual({ newEvents: true, freedSpots: true, followedNews: false });
+    const [row] = await db.select().from(profiles).where(eq(profiles.userId, u.id));
+    expect(row?.notificationPrefs.event).toBe(true);
+    expect(row?.mutedTypes).toContain("new_event_followed");
+    expect(row?.mutedTypes).not.toContain("event_nearby_interest");
+    expect(shouldDeliver(row?.notificationPrefs, row?.mutedTypes, "event_nearby_interest")).toBe(true);
+    expect(shouldDeliver(row?.notificationPrefs, row?.mutedTypes, "new_event_followed")).toBe(false);
+    expect(shouldDeliver(row?.notificationPrefs, row?.mutedTypes, "event_updated")).toBe(false);
+
+    // Couper un type ne touche pas la famille ; les deux d'une même famille dans un seul envoi.
+    const both = await call(u, "PATCH", "/me/preferences", { notifications: { newEvents: false, followedNews: true } });
+    expect(both.json.notifications).toEqual({ newEvents: false, freedSpots: true, followedNews: true });
   });
 });
 

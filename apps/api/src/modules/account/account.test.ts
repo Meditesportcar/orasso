@@ -50,6 +50,7 @@ import {
 } from "../../db/schema";
 import { requireOrganizer, twoFactorRequired } from "../../lib/access";
 import { resetRateLimits } from "../../lib/rateLimit";
+import { realtime } from "../../lib/realtime";
 import { dataDir } from "../../lib/storage";
 import { accessService } from "../access/service";
 import { nearbyService } from "../events/nearby";
@@ -328,6 +329,27 @@ describe("préférences par type", () => {
     const journal = (await call(u, "GET", "/me/notifications")).json.items as { type: string }[];
     expect(journal.filter((n) => types.includes(n.type))).toHaveLength(3);
   });
+
+  it("le temps réel dit si la notification est livrée : un type coupé reste au Journal sans bandeau (lot M6)", async () => {
+    useClock(new Date("2026-10-17T13:00:00Z"));
+    const u = await signUp("Prefs_Live");
+    await call(u, "PATCH", "/me/settings", { mutedTypes: ["new_event_followed"] });
+    const messages: { type: string; payload: Record<string, unknown> }[] = [];
+    const socket = { send: (data: string) => messages.push(JSON.parse(data)) };
+    realtime.subscribe(`user:${u.id}`, socket);
+    try {
+      await db.transaction(async (tx) => {
+        await notificationsService.notify(tx, u.id, "new_event_followed", { title: "Coupé", body: "x" });
+        await notificationsService.notify(tx, u.id, "points_awarded", { title: "Reçu", body: "x" });
+      });
+      await notificationsService.deliverDue();
+    } finally {
+      realtime.unsubscribeAll(socket);
+    }
+    const byTitle = (t: string) => messages.find((m) => m.type === "notification" && m.payload.title === t);
+    expect(byTitle("Coupé")?.payload.delivered).toBe(false);
+    expect(byTitle("Reçu")?.payload.delivered).toBe(true);
+  });
 });
 
 describe("événement près de chez toi", () => {
@@ -372,6 +394,47 @@ describe("événement près de chez toi", () => {
       criteria: { categoryIds: [ref.jdm.id], makeIds: [], countries: [], text: null },
     });
     expect(await nearbyService.notifyNearby(invitation.id)).toBe(0);
+  });
+});
+
+describe("« près de chez toi » : types d'événements choisis (lot M6)", () => {
+  it("les types choisis filtrent ; sans centre d'intérêt, types + distance suffisent ; sans rien, personne", async () => {
+    const ref = await seedReference();
+    const orga = await signUp("Orga_Fmt");
+    const s = await createStructure(orga.id);
+    const memeType = await signUp("Meme_Type");
+    const autreType = await signUp("Autre_Type");
+    const sansFormat = await signUp("Sans_Type");
+    const seulFormat = await signUp("Seul_Type");
+    const seulLoin = await signUp("Seul_Loin");
+    const rien = await signUp("Rien_Du_Tout");
+    const prefs: [TestUser, string[], boolean][] = [
+      [memeType, ["gathering"], true],
+      [autreType, ["night"], true],
+      [sansFormat, [], true],
+      [seulFormat, ["gathering"], false],
+      [seulLoin, ["gathering"], false],
+      [rien, [], false],
+    ];
+    for (const [u, formats, interest] of prefs) {
+      await db
+        .update(profiles)
+        .set({ departments: [u === seulLoin ? "59" : "66"], radiusKm: 100, preferredFormats: formats })
+        .where(eq(profiles.userId, u.id));
+      if (interest) await db.insert(profileInterests).values({ userId: u.id, categoryId: ref.jdm.id });
+    }
+    const e = await createEvent(s.id, {
+      lat: 42.69,
+      lng: 2.9,
+      format: "gathering",
+      criteria: { categoryIds: [ref.jdm.id], makeIds: [], countries: [], text: null },
+    });
+    expect(await nearbyService.notifyNearby(e.id)).toBe(3);
+    const sent = await db.query.notifications.findMany({ where: eq(notifications.type, "event_nearby_interest") });
+    expect(sent.map((n) => n.userId).sort()).toEqual([memeType.id, sansFormat.id, seulFormat.id].sort());
+    // Un événement sans catégorie ne prévient que les comptes sans centre d'intérêt qui ont choisi des types.
+    const sansCategorie = await createEvent(s.id, { lat: 42.69, lng: 2.9, format: "gathering", criteria: null });
+    expect(await nearbyService.notifyNearby(sansCategorie.id)).toBe(1);
   });
 });
 

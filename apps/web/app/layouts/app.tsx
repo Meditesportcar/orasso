@@ -84,7 +84,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   useEffect(() => setDepartment(loaderData.department), [loaderData.department, setDepartment]);
   // Boîte et Journal en direct (lot 18) : un message, une demande ou une notification recharge les compteurs.
   // Lot M6 : une notification reçue s'annonce aussi dans le bandeau (même système que l'appli).
-  const announcements = useAnnouncements();
+  const announcements = useAnnouncements(loaderData.userId);
   useChannel(`user:${loaderData.userId}`, (m) => {
     if (m.type === "inbox.changed" || m.type === "conversation.updated" || m.type === "notification") {
       revalidator.revalidate();

@@ -230,20 +230,28 @@ export const notificationsService = {
 };
 
 async function deliverOne(n: NotificationRow) {
+  const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, n.userId) });
+  const banned = Boolean(profile?.bannedAt);
+  // Lot M6, tour 2 : le Journal garde toujours la notification, mais le bandeau en direct ne l'annonce que si elle est
+  // livrée (`delivered`) : pas pour un type ou une famille coupés, un compte supprimé ou banni, une actualité du Journal.
+  const delivered =
+    !journalOnlyNotificationTypes.includes(n.type) &&
+    !profile?.deletedAt &&
+    !(banned && n.family !== "account") &&
+    shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type);
   realtime.publish(`user:${n.userId}`, "notification", {
     id: n.id,
     type: n.type,
     title: n.title,
     body: n.body,
     data: stripInternal(n.data),
+    delivered,
   });
   // Actualité du Journal : jamais de push ni d'e-mail (lot 17).
   if (journalOnlyNotificationTypes.includes(n.type)) return;
-  const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, n.userId) });
   // Compte supprimé : plus rien n'est livré.
   if (profile?.deletedAt) return;
   // Compte banni (lot 32, relecture) : seulement la famille « Sécurité du compte », par e-mail (appareils révoqués).
-  const banned = Boolean(profile?.bannedAt);
   if (banned && n.family !== "account") return;
   // Chaque famille et chaque type peuvent être coupés, sauf `staff` et `account` ; la notification reste au Journal.
   if (!shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type)) return;

@@ -20,25 +20,49 @@ type NotificationPayload = {
   title?: string;
   body?: string | null;
   data?: { link?: unknown };
+  /** `false` : la notification est coupée par le compte (elle reste au Journal), pas de bandeau. */
+  delivered?: boolean;
 };
+
+/** Seuls les chemins internes du site (« /app/… ») : ni `//hôte`, ni `/\hôte`, ni lien externe. */
+export function internalPath(link: unknown): string | null {
+  return typeof link === "string" && /^\/[^/\\]/.test(link) ? link : null;
+}
 
 /** Une notification du canal → une annonce (ou rien). Sur le site, « Retenue » s'annonce aussi : pas d'autre écho. */
 export function announcementOf(payload: unknown): SiteAnnouncement | null {
   const n = payload as NotificationPayload;
   if (!n?.id || !n.type || !n.title) return null;
+  if (n.delivered === false) return null;
   if (n.type !== "application_accepted" && !notificationAnnounced(n.type)) return null;
-  const link = typeof n.data?.link === "string" && n.data.link.startsWith("/") ? n.data.link : null;
-  return { id: n.id, tone: announceToneOf(n.type), title: n.title, text: n.body ?? null, href: link };
+  return {
+    id: n.id,
+    tone: announceToneOf(n.type),
+    title: n.title,
+    text: n.body ?? null,
+    href: internalPath(n.data?.link),
+  };
 }
 
-/** File des annonces du site : `push` en ajoute une, le bandeau montre la première. */
-export function useAnnouncements() {
-  const [queue, setQueue] = useState<SiteAnnouncement[]>([]);
+/**
+ * File des annonces du site : `push` en ajoute une, le bandeau montre la première. La file appartient à un compte
+ * (`userId`) : si le compte change sans que le layout soit remonté, elle est vidée, jamais montrée à un autre.
+ */
+export function useAnnouncements(userId: string) {
+  const [state, setState] = useState<{ userId: string; queue: SiteAnnouncement[] }>({ userId, queue: [] });
+  const queue = state.userId === userId ? state.queue : [];
   const push = useCallback(
-    (a: SiteAnnouncement) => setQueue((q) => (q.some((x) => x.id === a.id) ? q : [...q, a])),
-    [],
+    (a: SiteAnnouncement) =>
+      setState((s) => {
+        const q = s.userId === userId ? s.queue : [];
+        return { userId, queue: q.some((x) => x.id === a.id) ? q : [...q, a] };
+      }),
+    [userId],
   );
-  const drop = useCallback(() => setQueue((q) => q.slice(1)), []);
+  const drop = useCallback(
+    () => setState((s) => (s.userId === userId ? { userId, queue: s.queue.slice(1) } : { userId, queue: [] })),
+    [userId],
+  );
   return { current: queue[0] ?? null, push, drop };
 }
 
