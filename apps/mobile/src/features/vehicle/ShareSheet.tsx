@@ -371,13 +371,14 @@ export function ShareBody({
       ) : null}
       {/* Tour 4 : vérification trop longue ; rien à masquer sans plaque repérée : la refaire, ou partager, confirmé. */}
       {check === "slow" ? (
-        <View style={styles.row}>
+        // Deux libellés longs : l'un sous l'autre, pleine largeur (côte à côte, le principal s'écrasait).
+        <View style={styles.stack}>
           <SmButton
             kind="p"
             big
             icon="shield"
             onPress={() => setAttempt((n) => n + 1)}
-            style={styles.grow}
+            style={styles.wide}
             testID="share-plate-retry"
           >
             {L.plateRetry}
@@ -388,6 +389,7 @@ export function ShareBody({
             icon="share"
             disabled={!current || busy !== null}
             onPress={() => confirmShareAnyway(() => void send("share"), true)}
+            style={styles.wide}
             testID="share-anyway"
           >
             {L.shareAnyway}
@@ -476,6 +478,8 @@ const styles = StyleSheet.create({
   check: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap", alignSelf: "stretch" },
   checkText: { flexShrink: 1 },
   row: { flexDirection: "row", gap: space2 },
+  stack: { gap: space2 },
+  wide: { alignSelf: "stretch" },
   /** Le bouton « Copier le lien » : une icône seule, carré de 50 px (`.btn.btn-s` de la maquette). */
   square: { width: 50, paddingHorizontal: 0 },
   hidden: { display: "none" },
