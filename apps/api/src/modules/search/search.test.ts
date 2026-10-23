@@ -432,7 +432,11 @@ describe("événements jamais listés", () => {
     await createEvent(unverified.id, { title: "Non vérifié Rivesaltes" });
     await createEvent(suspended.id, { title: "Suspendu Rivesaltes" });
     await createEvent(deleted.id, { title: "Supprimé Rivesaltes" });
-    await createEvent(ok.id, { title: "Passé Rivesaltes", startsAt: new Date(Date.now() - 5 * DAY) });
+    // Cinq jours avant l'horloge figée du fichier (17/10/2026), pas avant l'heure réelle : sinon il redevient « à venir ».
+    await createEvent(ok.id, {
+      title: "Passé Rivesaltes",
+      startsAt: fromWallTime({ year: 2026, month: 10, day: 12, hour: 15, minute: 0 }),
+    });
 
     for (const path of [
       "/events?q=rivesaltes",
