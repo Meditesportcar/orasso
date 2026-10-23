@@ -58,7 +58,7 @@ import { useApplications } from "@/lib/applications";
 import { nowMs } from "@/lib/clock";
 import { eventPreview, takePosterRect, takePrefetchedEvent } from "@/lib/eventPreview";
 import { formatHour } from "@/lib/format";
-import { errorMessage } from "@/lib/http";
+import { ApiRequestError, errorMessage } from "@/lib/http";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
 import { useSession } from "@/lib/session";
@@ -179,6 +179,8 @@ export default function EventPage() {
   // Lot M4 : « Écrire à » (✉ de la bande) et « Se retirer » (bloc « Ta place »).
   const [writing, setWriting] = useState(false);
   const [withdrawing, setWithdrawing] = useState<MyApplication | null>(null);
+  // Tour 2 : la place a changé pendant la confirmation (offre acceptée ou expirée ailleurs).
+  const [placeNotice, setPlaceNotice] = useState<string | null>(null);
   const applications = useApplications();
 
   const close = () => (router.canGoBack() ? router.back() : router.replace(status === "in" ? "/" : "/auth"));
@@ -437,7 +439,22 @@ export default function EventPage() {
             now={new Date(nowMs())}
             onClose={() => setWithdrawing(null)}
             onConfirm={async (a) => {
-              await api.withdraw(a.id);
+              try {
+                // Tour 2 (relecture Codex) : une offre de place se refuse par `declineOffer`, que l'API vérifie sous
+                // verrou ; acceptée entre-temps sur un autre appareil, elle n'est jamais désistée (ni malus).
+                if (a.status === "offered") await api.declineOffer(a.id);
+                else await api.withdraw(a.id);
+              } catch (error) {
+                // Conflit (offre acceptée ou expirée ailleurs) : la fiche se relit et dit pourquoi, la feuille se ferme.
+                if (error instanceof ApiRequestError && error.status === 409) {
+                  setWithdrawing(null);
+                  setPlaceNotice("Ta place a changé entre-temps : la fiche est à jour, rien n'a été retiré.");
+                  await Promise.all([applications.reload(), event.reload()]);
+                  return;
+                }
+                throw error;
+              }
+              setPlaceNotice(null);
               setWithdrawing(null);
               await Promise.all([applications.reload(), event.reload()]);
             }}
@@ -495,6 +512,11 @@ export default function EventPage() {
         <Notice>{invitationLabels.invitationRequired}</Notice>
       ) : null}
       {followError ? <Notice tone="error">{followError}</Notice> : null}
+      {placeNotice ? (
+        <Notice tone="error" testID="place-notice">
+          {placeNotice}
+        </Notice>
+      ) : null}
       {place ? (
         <MyPlace
           app={place}
