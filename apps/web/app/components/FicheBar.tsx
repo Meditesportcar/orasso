@@ -18,14 +18,25 @@ export function FicheBar({
   facts,
   back,
   closeLabel,
+  heading = true,
 }: {
   title: string;
   facts?: ReactNode;
   /** Où mène le ✕ (sans JavaScript aussi) : l'écran d'où l'on vient d'ordinaire. */
   back: string;
   closeLabel?: string;
+  /** Lot M7, tour 2 : `false` quand la page a déjà son titre (`h1`) ; l'en-tête le dit alors sans être un titre. */
+  heading?: boolean;
 }) {
   return (
-    <AppBar kind="flow" title={title} facts={facts} closeHref={back} closeLabel={closeLabel} className="fiche-bar" />
+    <AppBar
+      kind="flow"
+      title={title}
+      titleAs={heading ? "h1" : "p"}
+      facts={facts}
+      closeHref={back}
+      closeLabel={closeLabel}
+      className="fiche-bar"
+    />
   );
 }

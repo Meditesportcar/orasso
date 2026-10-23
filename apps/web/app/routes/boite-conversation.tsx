@@ -202,7 +202,7 @@ export default function Conversation({ loaderData }: Route.ComponentProps) {
 
   return (
     <>
-      <FicheBar title={messagingLabels.inbox} back="/app/boite" />
+      <FicheBar heading={false} title={messagingLabels.inbox} back="/app/boite" />
       <div className="s-narrow s-stack" data-testid="conversation">
         <header className="s-row s-row--top">
           <PersonAvatar url={c.avatarUrl} pseudo={c.title} size={48} />

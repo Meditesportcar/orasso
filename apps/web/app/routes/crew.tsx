@@ -18,6 +18,7 @@ import { PersonAvatar } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { type CrewActionData, crewAction, isCrewIntent } from "../lib/crews.server";
+import { withRetour } from "../lib/retour";
 import type { Route } from "./+types/crew";
 
 // Fiche d'un crew (lot 19, ARCHITECTURE-SUITE § 4.4) : nom, logo, description, département, chef et nombre de membres
@@ -111,7 +112,7 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
   };
   return (
     <>
-      <FicheBar title={crewLabels.crew} back="/app/crews" />
+      <FicheBar heading={false} title={crewLabels.crew} back="/app/crews" />
       <div className="s-narrow s-stack" data-testid="crew" data-state={crew.viewerState}>
         <div className="crw-head">
           <CrewLogo url={crew.logoUrl} name={crew.name} size={88} />
@@ -213,7 +214,10 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
                   <li key={r.person.userId} className="s-person" data-testid="crew-pending-request">
                     <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={44} />
                     <div className="s-person__main">
-                      <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(r.person.pseudo)}`}>
+                      <a
+                        className="s-person__name o-t-title"
+                        href={withRetour(`/u/${encodeURIComponent(r.person.pseudo)}`, `/c/${crew.slug}`)}
+                      >
                         {r.person.pseudo}
                       </a>
                       {r.message && <p className="o-t-caption s-muted s-prewrap">{r.message}</p>}
@@ -275,7 +279,10 @@ export default function Crew({ loaderData, actionData }: Route.ComponentProps) {
                 <li key={m.userId} className="s-person" data-testid="crew-member">
                   <PersonAvatar url={m.avatarUrl} pseudo={m.pseudo} size={44} />
                   <div className="s-person__main">
-                    <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(m.pseudo)}`}>
+                    <a
+                      className="s-person__name o-t-title"
+                      href={withRetour(`/u/${encodeURIComponent(m.pseudo)}`, `/c/${crew.slug}`)}
+                    >
                       {m.pseudo}
                     </a>
                     <div className="s-row s-row--tight">

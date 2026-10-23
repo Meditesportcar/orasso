@@ -4,7 +4,7 @@
 import { proV2Labels as P, type ProviderPublic, type ProviderReviewsSummary } from "@orasso/shared";
 
 import { ProviderVitrine } from "../components/ProviderVitrine";
-import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { api, apiOrThrow, requireMe, safeReturn } from "../lib/api.server";
 import "../styles/providers.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/prestataires";
@@ -17,19 +17,25 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
+  const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
   await requireMe(request);
   const id = encodeURIComponent(params.id);
   const [provider, reviews] = await Promise.all([
     apiOrThrow<ProviderPublic>(request, `/providers/${id}`),
     api<ProviderReviewsSummary>(request, `/providers/${id}/reviews`),
   ]);
-  return { provider, reviews: reviews.ok ? reviews.data : null };
+  return {
+    back,
+    provider,
+    reviews: reviews.ok ? reviews.data : null,
+  };
 }
 
 export default function Prestataires({ loaderData }: Route.ComponentProps) {
   return (
     <>
-      <FicheBar title={P.providerPage} back="/app" />
+      <FicheBar title={P.providerPage} back={loaderData.back} />
       <div className="s-narrow s-stack" data-testid="provider-public">
         <ProviderVitrine provider={loaderData.provider} reviews={loaderData.reviews} />
       </div>

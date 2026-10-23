@@ -17,10 +17,11 @@ import { Form, useNavigation } from "react-router";
 import { CrewRow } from "../components/Crews";
 import { FriendAction, PersonAvatar } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
-import { api, apiOrThrow, getMe } from "../lib/api.server";
+import { api, apiOrThrow, getMe, safeReturn } from "../lib/api.server";
 import { formatDay, formatTime } from "../lib/format";
 import { friendAction } from "../lib/friends.server";
 import { isMessageIntent, type MessageActionData, messageAction } from "../lib/messaging.server";
+import { withRetour } from "../lib/retour";
 import "../styles/passport.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/profil";
@@ -35,8 +36,10 @@ export function meta({ params }: Route.MetaArgs) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
+  const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
   const profile = await apiOrThrow<UserProfileView>(request, `/users/${encodeURIComponent(params.pseudo)}`);
-  if (profile.audience !== "self") return { profile, hub: null };
+  if (profile.audience !== "self") return { back, profile, hub: null };
   // Lot 57 (DA v2, `s-me`) : mon profil devient le hub, comme l'appli : passeport, crew, casquettes avec leur accès.
   const [me, passport, crews] = await Promise.all([
     getMe(request),
@@ -59,6 +62,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
               : "/app/media",
     }));
   return {
+    back,
     profile,
     hub: {
       passport: passport.ok ? { total: passport.data.total, rare: passport.data.rare } : null,
@@ -142,7 +146,7 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
   const limited = p.audience === "public_limited";
   return (
     <>
-      <FicheBar title="Profil" back="/app" />
+      <FicheBar heading={false} title="Profil" back={loaderData.back} />
       <div className="s-narrow s-stack" data-testid="profil" data-audience={p.audience}>
         <div className="s-row s-row--top">
           <PersonAvatar url={p.avatarUrl} pseudo={p.pseudo} size={72} />
@@ -253,7 +257,12 @@ export default function Profil({ loaderData, actionData: rawAction }: Route.Comp
           ) : (
             <div className="s-grid">
               {p.vehicles.map((v) => (
-                <a key={v.id} className="s-cardlink" href={`/v/${v.id}`} data-testid="profil-vehicle">
+                <a
+                  key={v.id}
+                  className="s-cardlink"
+                  href={withRetour(`/v/${v.id}`, `/u/${encodeURIComponent(p.pseudo)}`)}
+                  data-testid="profil-vehicle"
+                >
                   {v.photoUrl ? (
                     <VehicleCard first name={v.label} photo={<img src={v.photoUrl} alt="" loading="lazy" />} />
                   ) : (

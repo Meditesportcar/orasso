@@ -5,6 +5,7 @@ import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { PersonAvatar } from "../components/People";
 import { apiOrThrow, originOf, requireMe } from "../lib/api.server";
 import { friendAction } from "../lib/friends.server";
+import { withRetour } from "../lib/retour";
 import type { Route } from "./+types/amis";
 
 // Mes amis (lot 17) : amis, demandes reçues et envoyées, ajout par pseudo, mon lien d'ami. Le scan d'un QR de compte
@@ -57,7 +58,10 @@ export default function Amis({ loaderData, actionData }: Route.ComponentProps) {
                 <li key={r.id} className="s-person">
                   <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={48} />
                   <div className="s-person__main">
-                    <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(r.person.pseudo)}`}>
+                    <a
+                      className="s-person__name o-t-title"
+                      href={withRetour(`/u/${encodeURIComponent(r.person.pseudo)}`, "/app/amis")}
+                    >
                       {r.person.pseudo}
                     </a>
                     <Chip>{gradeLabels[r.person.grade]}</Chip>
@@ -97,7 +101,10 @@ export default function Amis({ loaderData, actionData }: Route.ComponentProps) {
                 <li key={f.userId} className="s-person">
                   <PersonAvatar url={f.avatarUrl} pseudo={f.pseudo} size={48} />
                   <div className="s-person__main">
-                    <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(f.pseudo)}`}>
+                    <a
+                      className="s-person__name o-t-title"
+                      href={withRetour(`/u/${encodeURIComponent(f.pseudo)}`, "/app/amis")}
+                    >
                       {f.pseudo}
                     </a>
                     <Chip>{gradeLabels[f.grade]}</Chip>
@@ -125,7 +132,10 @@ export default function Amis({ loaderData, actionData }: Route.ComponentProps) {
                 <li key={r.id} className="s-person">
                   <PersonAvatar url={r.person.avatarUrl} pseudo={r.person.pseudo} size={48} />
                   <div className="s-person__main">
-                    <a className="s-person__name o-t-title" href={`/u/${encodeURIComponent(r.person.pseudo)}`}>
+                    <a
+                      className="s-person__name o-t-title"
+                      href={withRetour(`/u/${encodeURIComponent(r.person.pseudo)}`, "/app/amis")}
+                    >
                       {r.person.pseudo}
                     </a>
                     <span className="o-t-caption s-muted">{socialLabels.requestSent}</span>

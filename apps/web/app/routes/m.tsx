@@ -13,7 +13,7 @@ import {
 } from "@orasso/shared";
 
 import { PhotoGallery } from "../components/PhotoGallery";
-import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { api, apiOrThrow, requireMe, safeReturn } from "../lib/api.server";
 import { type CursorChunk, cursorParam, loadChunk, useCursorList } from "../lib/useCursorList";
 import "../styles/media.css";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
@@ -27,6 +27,8 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
+  const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
   await requireMe(request);
   const id = encodeURIComponent(params.id);
   const media = await apiOrThrow<MediaPublic>(request, `/media/${id}`);
@@ -42,7 +44,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
     return res.ok ? res.data : null;
   });
-  return { media, chunk, size };
+  return {
+    back,
+    media,
+    chunk,
+    size,
+  };
 }
 
 const PAGE_SIZE = 20;
@@ -60,7 +67,7 @@ export default function MediaPage({ loaderData }: Route.ComponentProps) {
   const ig = instagramUrl(m.instagram);
   return (
     <>
-      <FicheBar title="Média" back="/app" />
+      <FicheBar heading={false} title="Média" back={loaderData.back} />
       <div className="s-narrow s-stack" data-testid="media-public">
         <div className="s-row">
           {m.logoUrl && <img className="md-logo" src={m.logoUrl} alt="" />}

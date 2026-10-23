@@ -53,7 +53,7 @@ export default function Recap({ loaderData }: Route.ComponentProps) {
   const url = `${origin}/e/${view.event.slug}`;
   return (
     <>
-      <FicheBar title={recapScreenTexts.title} back="/app/sorties" />
+      <FicheBar heading={false} title={recapScreenTexts.title} back="/app/sorties" />
       <div className="s-narrow s-stack" data-testid="recap">
         <Plate className="s-stack s-stack--tight" data-testid="recap-hero">
           <div className="o-t-label">{formatDay(view.event.startsAt)}</div>

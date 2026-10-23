@@ -392,3 +392,105 @@ test("feuilles : au-dessus de la bande ORASSO et de la barre (Boîte, Mon QR de 
     await ctx.close();
   }
 });
+
+/**
+ * Lot M7, tour 2 (relecture Codex) : un écran B ouvert depuis un onglet se ferme sur cet onglet, une fois par casquette
+ * (les groupes Pro et Organisateur gardent le retour par défaut des onglets, qui menait au premier onglet).
+ */
+const CLOSINGS: Record<Kind, { tab: [string, string]; open: (page: Page) => Promise<void>; page: RegExp }> = {
+  fan: {
+    tab: ["Garage", "garage"],
+    open: (page) => page.getByTestId("garage-card").first().click(),
+    page: /\/vehicule\//,
+  },
+  visitor: {
+    tab: ["Profil", "profil"],
+    open: (page) => page.getByTestId("reglage-preferences").first().click(),
+    page: /\/reglages\/preferences/,
+  },
+  organizer: {
+    tab: ["Structure", "structure"],
+    open: (page) => page.getByTestId("tile-bans").first().click(),
+    page: /\/bannis/,
+  },
+  pro: {
+    tab: ["Ma fiche", "fiche"],
+    open: async (page) => {
+      await page.getByText("Publications", { exact: true }).first().click();
+      await page.getByTestId("pro-new-post").first().click();
+    },
+    page: /\/publier/,
+  },
+  provider: {
+    tab: ["Profil", "profil"],
+    open: (page) => page.getByTestId("reglage-notifications").first().click(),
+    page: /\/reglages\/notifications/,
+  },
+  media: {
+    tab: ["Profil", "profil"],
+    open: (page) => page.getByTestId("reglage-preferences").first().click(),
+    page: /\/reglages\/preferences/,
+  },
+  admin: {
+    tab: ["Registres", "registres"],
+    open: (page) => page.getByTestId("admin-link-utilisateurs").first().click(),
+    page: /\/utilisateurs/,
+  },
+};
+
+test("fermeture : le ✕ d'un écran B ouvert depuis un onglet ramène à cet onglet (chaque casquette)", async ({
+  browser,
+}) => {
+  test.setTimeout(600_000);
+  for (const kind of Object.keys(CLOSINGS) as Kind[]) {
+    const c = CLOSINGS[kind];
+    const { ctx, page } = await open(browser, "beton");
+    await signIn(page, ACCOUNTS[kind]);
+    await choose(page, kind);
+    await page.getByRole("tab", { name: c.tab[0], exact: true }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/${c.tab[1]}(?|$)`), { timeout: 30_000 });
+    await page.waitForTimeout(600);
+    await c.open(page);
+    await expect(page, `${kind} : page ouverte`).toHaveURL(c.page, { timeout: 30_000 });
+    await modeB(page, `${kind} › fermeture`);
+    await page.locator('[data-testid="appbar-close"], [data-testid="flow-close"]').first().click();
+    await expect(page, `${kind} : retour à l'onglet ${c.tab[0]}`).toHaveURL(new RegExp(`/${c.tab[1]}(?|$)`), {
+      timeout: 30_000,
+    });
+    await modeA(page, `${kind} › retour`);
+    await ctx.close();
+  }
+});
+
+test("glissement entre onglets : seule la page glisse, la bande ORASSO ne bouge pas", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const { ctx, page } = await open(browser, "beton");
+  await signIn(page, ACCOUNTS.fan);
+  await afterOpening(page);
+  const logo = page.getByTestId("topbar-logo").first();
+  await expect(logo).toBeVisible({ timeout: 30_000 });
+  const before = await logo.boundingBox();
+  // Le geste de la recette du lot 40, sur le haut de la page (pas de carte ni de carrousel sous le doigt).
+  await page.mouse.move(320, 112);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) await page.mouse.move(320 + ((60 - 320) * i) / 12, 112 + i * 0.2);
+  await page.mouse.up();
+  // Pendant que la page qui arrive se gare (220 ms), la bande reste à la même place.
+  const seen: { x: number; y: number }[] = [];
+  for (let i = 0; i < 12; i++) {
+    const box = await page
+      .getByTestId("topbar-logo")
+      .filter({ visible: true })
+      .first()
+      .boundingBox()
+      .catch(() => null);
+    if (box) seen.push({ x: box.x, y: box.y });
+    await page.waitForTimeout(30);
+  }
+  await page.waitForURL(/\/garage/, { timeout: 15_000 });
+  expect(seen.length, "bande visible pendant le glissement").toBeGreaterThan(0);
+  for (const p of seen) expect(p, "la bande n'a pas bougé").toEqual({ x: before?.x, y: before?.y });
+  const after = await page.getByTestId("topbar-logo").filter({ visible: true }).first().boundingBox();
+  expect({ x: after?.x, y: after?.y }).toEqual({ x: before?.x, y: before?.y });
+  await ctx.close();
+});

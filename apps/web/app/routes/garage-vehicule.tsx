@@ -151,7 +151,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
 
   return (
     <div className="s-stack" data-testid="vehicle-page">
-      <FicheBar title="Mon véhicule" back="/app/garage" />
+      <FicheBar heading={false} title="Mon véhicule" back="/app/garage" />
       <div className="g-hero">
         <h1 className="s-title g-name o-never-truncate" data-testid="vehicle-name">
           {v.label}

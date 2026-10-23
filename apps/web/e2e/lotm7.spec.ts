@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { loginInBrowser, MOBILE, setTheme } from "./helpers";
+import { login, loginInBrowser, MOBILE, setTheme } from "./helpers";
 import { sql } from "./helpers/lot48";
 import { RELAIS } from "./relais";
 
@@ -185,3 +185,38 @@ for (const [label, viewport] of [
     }
   });
 }
+
+/** Lot M7, tour 2 : le ✕ de l'en-tête de fiche est un vrai lien (sans JavaScript aussi) et revient à l'écran d'origine. */
+test("✕ du site sans JavaScript : un lien vers l'écran d'origine (?retour=), jamais vers une adresse extérieure", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const id = await ids();
+  const web = `http://localhost:${process.env.WEB_PORT ?? 5173}`;
+  const ctx = await browser.newContext({ viewport: MOBILE, javaScriptEnabled: false });
+  const cookies = [{ name: "orasso-theme", value: "beton", url: web }];
+  for (const pair of (await login("kenji@orasso.local")).split("; ").filter(Boolean)) {
+    const i = pair.indexOf("=");
+    cookies.push({ name: pair.slice(0, i), value: pair.slice(i + 1), url: web });
+  }
+  await ctx.addCookies(cookies);
+  const page = await ctx.newPage();
+  const close = page.locator(".o-appbar--flow a.o-appbar__close");
+  const cases: [string, string][] = [
+    [`/app/garage/${id.vehicle}`, "/app/garage"],
+    [`/u/${id.pseudo}?retour=${encodeURIComponent("/app/amis")}`, "/app/amis"],
+    [`/u/${id.pseudo}?retour=${encodeURIComponent("//evil.example")}`, "/app"],
+    [`/v/${id.publicVehicle}?retour=${encodeURIComponent(`/u/${id.pseudo}`)}`, `/u/${id.pseudo}`],
+  ];
+  for (const [path, back] of cases) {
+    await page.goto(`${web}${path}`);
+    await expect(close, `${path} : le ✕ est un lien`).toHaveAttribute("href", back);
+    // Un seul titre de page (h1), celui de l'en-tête ou celui de la fiche.
+    await expect(page.locator("h1"), `${path} : un seul h1`).toHaveCount(1);
+  }
+  // Sans JavaScript, le lien ramène bien à l'écran d'origine.
+  await page.goto(`${web}/u/${id.pseudo}?retour=${encodeURIComponent("/app/amis")}`);
+  await close.click();
+  await page.waitForURL(/\/app\/amis$/, { timeout: 30_000 });
+  await ctx.close();
+});

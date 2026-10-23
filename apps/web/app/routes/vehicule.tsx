@@ -4,8 +4,9 @@ import { useNavigation } from "react-router";
 import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { FriendAction, PersonAvatar, PersonRow } from "../components/People";
 import { ReportDialog } from "../components/ReportDialog";
-import { api, apiOrThrow } from "../lib/api.server";
+import { api, apiOrThrow, safeReturn } from "../lib/api.server";
 import { friendAction } from "../lib/friends.server";
+import { withRetour } from "../lib/retour";
 import type { Route } from "./+types/vehicule";
 
 // Véhicule d'un autre (lot 17, ARCHITECTURE-SUITE § 2.5) : la fiche selon le compte de son propriétaire (complète si
@@ -18,9 +19,15 @@ export function meta() {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
+  const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app");
   const vehicle = await apiOrThrow<OtherVehicle>(request, `/vehicles/${params.id}`);
   const nearby = await api<PeopleSearchPage & { sector: string[] }>(request, `/vehicles/${params.id}/owners-nearby`);
-  return { vehicle, nearby: nearby.ok ? nearby.data : null };
+  return {
+    back,
+    vehicle,
+    nearby: nearby.ok ? nearby.data : null,
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -33,7 +40,7 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
   const full = "photos" in v ? v : null;
   return (
     <>
-      <FicheBar title="Véhicule" back="/app" />
+      <FicheBar heading={false} title="Véhicule" back={loaderData.back} />
       <div className="s-narrow s-stack" data-testid="vehicule" data-detailed={v.detailed}>
         {full?.photos[0] ? (
           <VehicleCard
@@ -58,7 +65,11 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
         )}
         {/* Signaler la photo principale (lot 32) ; les autres photos ont leur lien sous la galerie. */}
         {full?.photos[0] && <ReportDialog look="link" targetType="photo" targetId={full.photos[0].id} />}
-        <a className="s-row" href={`/u/${encodeURIComponent(v.owner.pseudo)}`} data-testid="vehicule-owner">
+        <a
+          className="s-row"
+          href={withRetour(`/u/${encodeURIComponent(v.owner.pseudo)}`, `/v/${v.id}`)}
+          data-testid="vehicule-owner"
+        >
           <PersonAvatar url={v.owner.avatarUrl} pseudo={v.owner.pseudo} />
           <span className="o-t-title">{v.owner.pseudo}</span>
           <Chip>{gradeLabels[v.owner.grade]}</Chip>
