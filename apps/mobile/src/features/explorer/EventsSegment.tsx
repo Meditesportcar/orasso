@@ -53,6 +53,7 @@ export function EventsSegment({
   view,
   sort = "distance",
   fromPrefs = false,
+  settled = true,
 }: {
   q: string;
   filters: EventFilters;
@@ -63,6 +64,8 @@ export function EventsSegment({
   sort?: EventSort;
   /** Lot M4 : la liste s'ouvre filtrée d'après « Tes préférences » (lot M6). */
   fromPrefs?: boolean;
+  /** Tour 2 : les réglages enregistrés (tri) sont lus ; avant, ni requête ni cache. */
+  settled?: boolean;
 }) {
   const { t } = useTheme();
   const router = useRouter();
@@ -72,9 +75,9 @@ export function EventsSegment({
     (cursor) => api.exploreEvents(eventQuery(q, filters, position.position, view, new Date(nowMs()), cursor, sort)),
     [q, filters, position.position, view, sort],
     q ? 300 : 0,
-    ready,
+    ready && settled,
     // Lot M3 : la liste par défaut (sans texte ni filtre) s'affiche depuis le cache avant la position et l'API.
-    !q && activeFilters(filters) === 0 && view === "list" ? `explore-events.${sort}` : undefined,
+    settled && !q && activeFilters(filters) === 0 && view === "list" ? `explore-events.${sort}` : undefined,
   );
   const items = list.items ?? [];
   const pins = useMemo(() => eventPins(list.items ?? []), [list.items]);

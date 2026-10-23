@@ -73,10 +73,22 @@ export function ExplorerScreen() {
   // Lot M4 : le tri choisi, relu au lancement et gardé pour les prochaines visites.
   const [sort, setSort] = useState<EventSort>("distance");
   const [sorting, setSorting] = useState(false);
+  // Tour 2 (relecture Opus) : la liste attend la lecture du tri enregistré (pas de première requête au mauvais tri,
+  // pas de liste qui saute d'un cache à l'autre).
+  const [sortRead, setSortRead] = useState(false);
   useEffect(() => {
-    void kvGet(SORT_KEY).then((v) => {
-      if (v && (EVENT_SORTS as readonly string[]).includes(v)) setSort(v as EventSort);
-    });
+    let alive = true;
+    void kvGet(SORT_KEY)
+      .then((v) => {
+        if (alive && v && (EVENT_SORTS as readonly string[]).includes(v)) setSort(v as EventSort);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (alive) setSortRead(true);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
   const chooseSort = (next: EventSort) => {
     setSort(next);
@@ -159,7 +171,15 @@ export function ExplorerScreen() {
       </View>
       {position.status === "ask" ? <AskPosition position={position} dept={dept} /> : null}
       {segment === "evenements" ? (
-        <EventsSegment q={q} filters={filters} position={position} dept={dept} view={view} sort={sort} />
+        <EventsSegment
+          q={q}
+          filters={filters}
+          position={position}
+          dept={dept}
+          view={view}
+          sort={sort}
+          settled={sortRead}
+        />
       ) : null}
       {segment === "pros" ? (
         <ProsSegment
