@@ -300,8 +300,7 @@ export const eventsService = {
     // véhicule, membre de crew compris) et à qui peut candidater (véhicule actif : la feuille de candidature le montre
     // avant « J'ai vu le créneau »). Anonyme, visiteur sans véhicule : jamais.
     const exhibitorSlot =
-      viewer !== null &&
-      (member || mine.some((a) => a.kind === "vehicle") || (await hasActiveVehicle(viewer.user.id)));
+      viewer !== null && (member || mine.some((a) => a.kind === "vehicle") || (await hasActiveVehicle(viewer.user.id)));
     const view = await publicView(e, s, { instructions: member || accepted, exhibitorSlot });
     if (!viewer) return view;
     const follower = await isFollowing(e.structureId, viewer.user.id);

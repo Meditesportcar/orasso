@@ -128,14 +128,21 @@ export async function exploreEvents(q: EventListQuery, viewer: Viewer | null): P
   const nearSql = dist ? sql<number>`(case when ${dist} <= ${AFFINITY_NEAR_KM} then 1 else 0 end)` : sql<number>`0`;
   const scoreSql = sql`(case when ${followedSql} then 3 else 0 end + 2 * ${commonSql} + ${nearSql})`;
 
+  // Lot M4 (maquette 3.2) : places exposants restantes (sans limite en tête), retenues et places offertes déduites.
+  const seatsSql = sql`(case when ${events.capacity} is null then 2147483647 else ${events.capacity} - (select count(*)::int
+    from applications a where a.event_id = ${events.id} and a.kind = 'vehicle' and a.status in ('accepted', 'offered')) end)`;
   const order: SQL[] =
-    sort === "affinity"
-      ? [desc(scoreSql), asc(events.startsAt), asc(events.id)]
-      : sort === "distance" && dist
-        ? [sql`${dist} asc nulls last`, asc(events.startsAt), asc(events.id)]
-        : upcoming
-          ? [asc(events.startsAt), asc(events.id)]
-          : [desc(events.startsAt), asc(events.id)];
+    sort === "recent"
+      ? [sql`${events.publishedAt} desc nulls last`, asc(events.startsAt), asc(events.id)]
+      : sort === "seats"
+        ? [sql`${seatsSql} desc`, asc(events.startsAt), asc(events.id)]
+        : sort === "affinity"
+          ? [desc(scoreSql), asc(events.startsAt), asc(events.id)]
+          : sort === "distance" && dist
+            ? [sql`${dist} asc nulls last`, asc(events.startsAt), asc(events.id)]
+            : upcoming
+              ? [asc(events.startsAt), asc(events.id)]
+              : [desc(events.startsAt), asc(events.id)];
 
   const offset = decodeOffset(q.cursor);
   const rows = await db

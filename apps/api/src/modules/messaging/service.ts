@@ -356,7 +356,10 @@ export const messagingService = {
     const access = await requireAccess(actor, id);
     const replay = async (row: MessageRow) => {
       if (row.senderId !== v.user.id) throw conflict("conflict", "Identifiant de message déjà utilisé");
-      return { message: serializeMessage(row, senderOf(v), v.user.id, null, await aboutsOf(db, [row])), created: false };
+      return {
+        message: serializeMessage(row, senderOf(v), v.user.id, null, await aboutsOf(db, [row])),
+        created: false,
+      };
     };
     const [seen] = await db
       .select()
@@ -372,12 +375,7 @@ export const messagingService = {
         .from(events)
         .where(eq(events.id, input.aboutEventId));
       const conv = access.conversation;
-      if (
-        conv.kind !== "organizer" ||
-        !about ||
-        about.structureId !== conv.structureId ||
-        about.status === "draft"
-      ) {
+      if (conv.kind !== "organizer" || !about || about.structureId !== conv.structureId || about.status === "draft") {
         throw validation(messagingLabels.aboutEventNotHere, { field: "aboutEventId" });
       }
     }

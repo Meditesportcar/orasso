@@ -231,7 +231,8 @@ const zoneFields = z.object({
 export const zoneCreateSchema = zoneFields.extend({ position: zoneFields.shape.position.default(0) });
 export const zoneUpdateSchema = zoneFields.partial();
 
-export const eventSorts = ["date", "affinity", "distance"] as const;
+/** Lot M4 (maquette 3.2) : aussi « Nouveautés » (`recent`, publiés depuis peu) et « Places restantes » (`seats`). */
+export const eventSorts = ["date", "affinity", "distance", "recent", "seats"] as const;
 export type EventSort = (typeof eventSorts)[number];
 
 export const eventListQuerySchema = pageQuery.extend({

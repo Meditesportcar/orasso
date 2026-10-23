@@ -18,6 +18,7 @@ import {
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import {
+  applications,
   friendships,
   profileInterests,
   profiles,
@@ -252,6 +253,42 @@ describe("structures suivies (lot 44) : GET /events?followed=1", () => {
     }
     const anonymous = await get(null, "/events?followed=1");
     expect(ids(anonymous.json.items).sort()).toEqual([mine.slug, theirs.slug].sort());
+  });
+});
+
+// Lot M4 (maquette 3.2) : « Nouveautés » (publiés depuis peu d'abord) et « Places restantes » (le plus de places
+// exposants d'abord, sans limite en tête ; retenues et places offertes déduites).
+describe("tris de l'Explorer : GET /events?sort=recent | seats", () => {
+  it("ordonne par publication récente, puis par places restantes", async () => {
+    const owner = await person("Orga_Tri");
+    const s = await createStructure(owner.id);
+    const old = await createEvent(s.id, { title: "Ancien", capacity: 50, publishedAt: new Date(Date.now() - 9 * DAY) });
+    const fresh = await createEvent(s.id, { title: "Récent", capacity: 5, publishedAt: new Date(Date.now() - DAY) });
+    const open = await createEvent(s.id, {
+      title: "Sans limite",
+      capacity: null,
+      publishedAt: new Date(Date.now() - 5 * DAY),
+    });
+    const kenji = await person("Kenji_Tri");
+    for (let i = 0; i < 3; i++) {
+      const v = await createVehicle(kenji.id, ref);
+      await db.insert(applications).values({
+        eventId: fresh.id,
+        userId: kenji.id,
+        vehicleId: v.id,
+        status: i === 0 ? "offered" : "accepted",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+      });
+    }
+    for (const mode of MODES) {
+      const recent = await get(null, "/events?sort=recent", mode);
+      expect(recent.status).toBe(200);
+      expect(ids(recent.json.items)).toEqual([fresh, open, old].map((e) => e.slug));
+      const seats = await get(null, "/events?sort=seats", mode);
+      expect(ids(seats.json.items)).toEqual([open, old, fresh].map((e) => e.slug));
+      expect(seats.json.items[2].remaining).toBe(2);
+    }
   });
 });
 
