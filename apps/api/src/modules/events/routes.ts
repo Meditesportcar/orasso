@@ -27,8 +27,17 @@ export const eventsRoutes = new Hono<AppEnv>()
     if (q.q) limitSearch(c, viewer);
     return c.json(await eventsService.list(q, viewer), 200, { "cache-control": "private, no-cache" });
   })
+  // La fiche dépend de la personne (candidatures, consignes, créneau privé des exposants) : jamais en cache partagé.
   .get("/events/by-slug/:slug", async (c) =>
-    c.json(await eventsService.getPublic(c.req.param("slug"), await optionalUser(c))),
+    c.json(await eventsService.getPublic(c.req.param("slug"), await optionalUser(c)), 200, {
+      "cache-control": "private, no-cache",
+    }),
+  )
+  // Lot M4, tour 2 : le créneau strict des exposants, à l'ouverture de la feuille de candidature (si l'on peut candidater).
+  .get("/events/:id/apply-context", async (c) =>
+    c.json(await eventsService.applyContext(await requireUser(c), uuidParam(c, "id")), 200, {
+      "cache-control": "private, no-store",
+    }),
   )
   // Organisateur.
   .get("/structures/:id/events", async (c) =>

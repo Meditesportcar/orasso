@@ -138,7 +138,7 @@ export async function call(u: TestUser | null, method: string, path: string, bod
   } catch {
     json = text;
   }
-  return { status: res.status, json, text };
+  return { status: res.status, json, text, headers: res.headers };
 }
 
 /** Référentiel minimal : une marque, un modèle, une génération (et les « Autre »), deux catégories. */

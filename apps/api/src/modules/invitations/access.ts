@@ -53,6 +53,15 @@ export async function canSeeEvent(e: PrivateEvent, viewer: Viewer | null, ex: Ex
     )
     .limit(1);
   if (mine) return true;
+  return hasPendingInvitation(e.id, viewer, ex);
+}
+
+/**
+ * Une invitation en attente pour cette personne, à son compte ou à l'adresse **confirmée** de son compte (lot 25).
+ * Lot M4, tour 2 : c'est aussi ce qui ouvre le créneau des exposants d'un événement privé avant de s'inscrire.
+ */
+export async function hasPendingInvitation(eventId: string, viewer: Viewer, ex: Executor = db): Promise<boolean> {
+  const userId = viewer.user.id;
   // Adresse non confirmée : elle ne prouve rien (relecture du lot 25) ; le lien reçu passe par `claim`.
   const email = viewer.user.emailVerified ? (viewer.user.email?.toLowerCase() ?? "") : "";
   const [invited] = await ex
@@ -60,7 +69,7 @@ export async function canSeeEvent(e: PrivateEvent, viewer: Viewer | null, ex: Ex
     .from(eventInvitations)
     .where(
       and(
-        eq(eventInvitations.eventId, e.id),
+        eq(eventInvitations.eventId, eventId),
         // Acceptée : l'accès passe par la candidature créée (active seulement, ci-dessus).
         eq(eventInvitations.status, "pending"),
         email

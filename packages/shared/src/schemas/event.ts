@@ -20,7 +20,7 @@ import { regionCodes } from "../geo";
 import { type Grade, grades } from "../grades";
 import { eventAddressRequired } from "../labels/corrections.fr";
 import type { Affinity } from "../rules/affinity";
-import { ARRIVAL_NOTE_MAX, type Arrivals } from "../rules/arrival";
+import { ARRIVAL_NOTE_MAX, type ArrivalSlot, type Arrivals } from "../rules/arrival";
 import { type EventDayInput, MAX_EVENT_DAYS } from "../rules/eventDays";
 import {
   POSTER_PREVIEW_MAX_WIDTH,
@@ -342,9 +342,18 @@ export type MyApplicationBrief = {
 /** Lot 47 : l'affiche générée telle que la fiche la reçoit. */
 export type EventPoster = { postUrl: string; storyUrl: string; style: PosterStyle };
 
+/**
+ * Lot M4, tour 2 : `GET /events/:id/apply-context`, lu à l'ouverture de la feuille de candidature (`private, no-store`).
+ * Le créneau strict des exposants n'est donné qu'à qui peut candidater maintenant, pour la case « J'ai vu ».
+ */
+export type ApplyContext = { exhibitors: ArrivalSlot | null };
+
 export type EventPublic = EventCard & {
   description: string | null;
-  /** Lot 47 : créneaux d'arrivée (exposants, public). */
+  /**
+   * Lot 47 : créneaux d'arrivée (exposants, public). Lot M4 : `exhibitors` n'est rempli que pour l'organisation et qui a
+   * une candidature en cours ou acceptée (crew compris) ; sinon `null`.
+   */
   arrivals: Arrivals;
   /** Lot 47 : affiche générée (Post et Story), `null` s'il n'y en a pas. */
   poster: EventPoster | null;

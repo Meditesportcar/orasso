@@ -131,7 +131,13 @@ export function CandSheet({
     setDone(null);
   }, [visible, openMode, soloAllowed]);
 
-  const slot = e.arrivals?.exhibitors ?? null;
+  // Tour 2 (relectures) : le créneau des exposants est privé ; la fiche ne le donne qu'aux inscrits. La feuille le lit
+  // à son ouverture (`apply-context`), seulement si l'on peut candidater maintenant ; jamais gardé en cache.
+  const context = useApi(() => api.applyContext(e.id), [e.id, visible], { enabled: visible });
+  const contextReady = context.data !== null;
+  const slot = context.data?.exhibitors ?? e.arrivals?.exhibitors ?? null;
+  // Sans véhicule, la feuille propose d'en ajouter un : ce refus-là ne s'affiche pas.
+  const contextError = context.error && !context.error.details?.noVehicle ? errorMessage(context.error) : null;
   const wanted = useMemo(() => new Set(e.criteria?.categoryIds ?? []), [e]);
   const eligible = useMemo(() => {
     const active = (vehicles.data ?? []).filter((v) => v.status === "active");
@@ -197,7 +203,9 @@ export function CandSheet({
   const chosenMembers = crewMembers.filter((m) => members[m.person.userId]);
   const leaderComes = chosenMembers.some((m) => m.isLeader);
   const needSeen = slot !== null && (mode === "solo" || leaderComes);
+  // Tant que le créneau n'est pas lu, on ne sait pas s'il faut cocher « J'ai vu » : pas d'envoi (sauf crew sans le chef).
   const ready =
+    (contextReady || (mode === "crew" && !leaderComes)) &&
     rules &&
     (!needSeen || seen) &&
     (mode === "solo" ? selected.length > 0 : chosenMembers.filter((m) => !m.isLeader).length > 0);
@@ -593,9 +601,9 @@ export function CandSheet({
               Un empêchement ? Préviens depuis Sorties : ta place ira à la liste d'attente.
             </Text>
           </View>
-          {error ? (
-            <Text variant="caption" color={c.winText} accessibilityRole="alert">
-              {error}
+          {error || contextError ? (
+            <Text variant="caption" color={c.winText} accessibilityRole="alert" testID="cand-error">
+              {error ?? contextError}
             </Text>
           ) : null}
           <SmButton

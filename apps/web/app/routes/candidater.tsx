@@ -1,6 +1,7 @@
 import { AppBar, Button, CheckboxField, Chip, ChipRow, VehicleThumb } from "@orasso/design-system/web";
 import {
   type ApplicationCreate,
+  type ApplyContext,
   type EventPublic,
   eventDaysLabels,
   formatDayDate,
@@ -13,7 +14,7 @@ import { useState } from "react";
 import { redirect, useNavigate } from "react-router";
 import { ArrivalSeen, arrivalBody } from "../components/ArrivalSeen";
 import { apiFetch } from "../lib/api.client";
-import { apiOrThrow, requireMe } from "../lib/api.server";
+import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { nowMs } from "../lib/clock";
 import { registrationState } from "../lib/status";
 import type { Route } from "./+types/candidater";
@@ -32,10 +33,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (active.length && (event.days.length === 0 || active.some((a) => a.eventDayId === null))) {
     throw redirect("/app/sorties");
   }
-  const [structure, vehicles] = await Promise.all([
+  // Lot M4, tour 2 : le créneau des exposants est privé (la fiche ne le donne qu'aux inscrits) ; la candidature le lit
+  // à part, seulement si l'on peut candidater maintenant (sinon l'état « pas encore ouvert », « clos »… s'affiche).
+  const [structure, vehicles, context] = await Promise.all([
     apiOrThrow<StructurePublic>(request, `/structures/by-slug/${encodeURIComponent(event.structure.slug)}`),
     apiOrThrow<VehicleFull[]>(request, "/me/vehicles"),
+    api<ApplyContext>(request, `/events/${event.id}/apply-context`),
   ]);
+  const slot = context.ok ? context.data.exhibitors : (event.arrivals?.exhibitors ?? null);
   const wanted = new Set(event.criteria?.categoryIds ?? []);
   const activeVehicles = vehicles
     .filter((v) => v.status === "active")
@@ -60,6 +65,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       matches: v.categories.filter((c) => wanted.has(c.id)).map((c) => c.label),
     })),
     preselected,
+    slot,
     preselectedDay,
     takenDays: active.map((a) => a.eventDayId),
     state: registrationState(event, nowMs()),
@@ -69,7 +75,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 type Step = 1 | 2 | 3;
 
 export default function Candidater({ loaderData }: Route.ComponentProps) {
-  const { event, structure, vehicles, preselected, preselectedDay, takenDays, state } = loaderData;
+  const { event, structure, vehicles, preselected, preselectedDay, takenDays, state, slot } = loaderData;
   const navigate = useNavigate();
   const backHref = `/e/${event.slug}`;
   const here = `/e/${event.slug}/candidater`;
@@ -111,7 +117,6 @@ export default function Candidater({ loaderData }: Route.ComponentProps) {
   });
   const [rules, setRules] = useState(false);
   // Lot 47 : « J'ai vu » l'horaire d'arrivée des exposants (obligatoire s'il existe) et une note facultative.
-  const slot = event.arrivals?.exhibitors ?? null;
   const [arrivalSeen, setArrivalSeen] = useState(false);
   const [arrivalNote, setArrivalNote] = useState("");
   const [follow, setFollow] = useState(true);

@@ -2,9 +2,12 @@
 // récurrence, publication, modification, statut Maintenu/Incertain, annulation, zones.
 import { randomBytes } from "node:crypto";
 import {
+  type ApplicationStatus,
+  type ApplyContext,
   addDays,
   BUSINESS_TIMEZONE,
   calendarDaysBetween,
+  canApply,
   type DaysError,
   departmentFromPostalCode,
   duplicateDates,
@@ -20,6 +23,8 @@ import {
   eventOutlookLabels,
   formatDayDate,
   fromWallTime,
+  invitationLabels,
+  isActiveStatus,
   isLocked,
   isMultiDay,
   localDate,
@@ -46,6 +51,7 @@ import {
   events,
   eventZones,
   orders,
+  structureBans,
   structureFollows,
   structureMembers,
   tickets,
@@ -65,7 +71,7 @@ import { type Tx, withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { announcementsService } from "../communication/announcements";
 import { staffChatsService } from "../communication/staff-chats";
-import { assertCanSeeEvent } from "../invitations/access";
+import { assertCanSeeEvent, hasPendingInvitation } from "../invitations/access";
 import { decorateForMedia } from "../media/explore";
 import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
@@ -126,13 +132,22 @@ async function publicView(e: EventRow, s: StructureRow, rights: ViewRights): Pro
   };
 }
 
-/** Un véhicule actif au garage : la personne peut candidater, donc doit voir le créneau avant de cocher « J'ai vu ». */
+/** Un véhicule actif au garage : sans lui, personne ne candidate (ni ne coche « J'ai vu le créneau »). */
 async function hasActiveVehicle(userId: string) {
   const v = await db.query.vehicles.findFirst({
     where: and(eq(vehicles.ownerId, userId), eq(vehicles.status, "active")),
     columns: { id: true },
   });
   return Boolean(v);
+}
+
+/**
+ * Lot M4, tour 2 : le créneau strict des exposants n'appartient qu'à l'organisation (membres actifs de la structure,
+ * staff compris) et à qui a une candidature **en cours ou acceptée** avec un véhicule, membre de crew compris (à
+ * confirmer). Une candidature refusée, retirée, expirée ou annulée ne l'ouvre plus.
+ */
+function holdsExhibitorSlot(member: boolean, mine: { kind: string; status: ApplicationStatus }[]): boolean {
+  return member || mine.some((a) => a.kind === "vehicle" && isActiveStatus(a.status));
 }
 
 async function isMember(structureId: string, userId: string) {
@@ -296,11 +311,9 @@ export const eventsService = {
     const member = viewer ? await isMember(e.structureId, viewer.user.id) : false;
     await assertCanSeeEvent(e, viewer);
     const accepted = mine.some((a) => a.status === "accepted");
-    // Lot M4 : le créneau strict des exposants n'est donné qu'aux concernés (l'organisation, qui a candidaté avec un
-    // véhicule, membre de crew compris) et à qui peut candidater (véhicule actif : la feuille de candidature le montre
-    // avant « J'ai vu le créneau »). Anonyme, visiteur sans véhicule : jamais.
-    const exhibitorSlot =
-      viewer !== null && (member || mine.some((a) => a.kind === "vehicle") || (await hasActiveVehicle(viewer.user.id)));
+    // Lot M4, tour 2 : le créneau strict des exposants n'est donné qu'aux concernés (`holdsExhibitorSlot`). La feuille
+    // de candidature le lit à part, par `applyContext`, seulement si l'on peut candidater maintenant.
+    const exhibitorSlot = viewer !== null && holdsExhibitorSlot(member, mine);
     const view = await publicView(e, s, { instructions: member || accepted, exhibitorSlot });
     if (!viewer) return view;
     const follower = await isFollowing(e.structureId, viewer.user.id);
@@ -315,6 +328,42 @@ export const eventsService = {
     // Lot 55 : pour un média connecté, l'état de l'accréditation presse (`accreditation {open, mine}`, `travelMinutes`).
     await decorateForMedia([full], {} as EventListQuery, viewer);
     return full;
+  },
+
+  /**
+   * `GET /events/:id/apply-context` (lot M4, tour 2), lu à l'ouverture de la feuille de candidature : le créneau strict
+   * des exposants, pour la case « J'ai vu ». Seulement si la personne peut candidater **maintenant** : événement publié
+   * et non verrouillé, inscriptions ouvertes pour elle (avant-première comprise), invitation en attente si l'événement
+   * est privé, pas bannie par la structure, un véhicule actif au garage. Sinon, les mêmes refus que la candidature.
+   */
+  async applyContext(v: Viewer, eventId: string): Promise<ApplyContext> {
+    const e = await eventsRepo.byId(eventId);
+    if (e.status === "draft") throw notFound("Événement introuvable");
+    await assertCanSeeEvent(e, v);
+    if (e.admission === "invite_only" && !(await hasPendingInvitation(e.id, v))) {
+      throw new AppError(403, "invitation_required", invitationLabels.invitationRequired);
+    }
+    const t = now();
+    const applicant = { follower: await isFollowing(e.structureId, v.user.id), grade: v.profile.grade };
+    const check = canApply(e, applicant, t);
+    if (!check.ok) {
+      if (check.reason === "locked") throw new AppError(423, "locked", "Inscriptions closes");
+      if (check.reason === "not_open") {
+        throw conflict("conflict", "Les candidatures ne sont pas encore ouvertes pour toi", {
+          opensAt: registrationOpensAt(e, applicant).toISOString(),
+        });
+      }
+      throw conflict("conflict", "Événement annulé");
+    }
+    const banned = await db.query.structureBans.findFirst({
+      where: and(eq(structureBans.structureId, e.structureId), eq(structureBans.userId, v.user.id)),
+      columns: { id: true },
+    });
+    if (banned) throw forbidden("Tu ne peux pas candidater aux événements de cette structure");
+    if (!(await hasActiveVehicle(v.user.id))) {
+      throw conflict("conflict", "Ajoute un véhicule à ton garage pour candidater", { noVehicle: true });
+    }
+    return { exhibitors: arrivalsOf(e).exhibitors };
   },
 
   async getForOrganizer(v: Viewer, id: string): Promise<EventOrganizer> {
