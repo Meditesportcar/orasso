@@ -32,6 +32,17 @@ export const messagingLabels = {
   closeImage: "Fermer la photo",
   imageTooLarge: "Photo trop lourde (15 Mo au plus).",
   contactOrganizer: "Contacter l'équipe organisatrice",
+  /** Lot M4 : étiquette d'un message écrit depuis la fiche d'un événement, et la feuille « Écrire à ». */
+  aboutEvent: "À propos de",
+  writeTo: (name: string) => `Écrire à ${name}`,
+  aboutEventHint:
+    "L'organisateur voit tout de suite de quel événement tu parles. Cette étiquette reste dans la conversation, des deux côtés.",
+  yourMessage: "Ton message",
+  sent: "Message envoyé : la réponse arrivera dans ta Boîte.",
+  openConversation: "Ouvrir la conversation",
+  /** Tour 2 : envoi sans réponse (réseau) : le même message repart, sans doublon. */
+  sendPending: "Le message n'est peut-être pas parti : « Envoyer » le renvoie tel quel, sans doublon.",
+  aboutEventNotHere: "Cet événement n'est pas organisé par cette structure",
   structureSuspended: "Cette structure est suspendue.",
   contactRequest: "Demande de contact",
   contactRequestHint:

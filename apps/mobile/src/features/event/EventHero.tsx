@@ -6,6 +6,8 @@
 // image, `generatedPosterUrl` et `poster.postUrl` sortent de la même clé) ; l'affiche touchée grandit de sa place dans
 // la liste jusqu'à l'en-tête (`from`, `base`, courbe « park »), sans transition si les animations sont réduites. La
 // tête commence sous la barre d'état (zone sûre) : plus rien ne passe sous l'heure et la batterie.
+// Lot M4 (maquette 4.1 et sa note) : sous la bande fixe de l'organisateur (`underHeader`, qui porte déjà la zone sûre),
+// une bande sombre de 56 px au-dessus de l'affiche reçoit le pavé J-x : il ne cache rien de l'affiche générée.
 import { bezier, duration, Photo, useTheme } from "@orasso/design-system/native";
 import type { EventCard, EventPublic } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
@@ -19,9 +21,20 @@ import { mediaSource } from "@/lib/media";
 
 /** Place des boutons flottants au-dessus de l'affiche (`.ev-hero` : 62 px). */
 const HERO_TOP = 62;
+/** Lot M4 : la bande du pavé J-x sous la bande de l'organisateur (pavé de 42 px, 7 px autour). */
+export const HERO_TOP_UNDER_HEADER = 56;
 const parkCurve = Easing.bezier(...bezier.park);
 
-export function EventHero({ event, from = null }: { event: EventPublic | EventCard; from?: PosterRect | null }) {
+export function EventHero({
+  event,
+  from = null,
+  underHeader = false,
+}: {
+  event: EventPublic | EventCard;
+  from?: PosterRect | null;
+  /** Lot M4 : posée sous un en-tête fixé (qui a déjà la zone sûre et les boutons). */
+  underHeader?: boolean;
+}) {
   const { t, reducedMotion } = useTheme();
   const insets = useSafeAreaInsets();
   // Seulement l'affiche générée : l'affiche perso de l'organisateur reste dans le détail (`CustomPoster`).
@@ -75,7 +88,10 @@ export function EventHero({ event, from = null }: { event: EventPublic | EventCa
       ]
     : undefined;
   return (
-    <View style={[styles.hero, { paddingTop: insets.top + HERO_TOP }]} testID="event-hero">
+    <View
+      style={[styles.hero, { paddingTop: underHeader ? HERO_TOP_UNDER_HEADER : insets.top + HERO_TOP }]}
+      testID="event-hero"
+    >
       <Animated.View
         ref={posterRef}
         collapsable={false}

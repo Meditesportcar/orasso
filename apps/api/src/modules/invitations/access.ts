@@ -12,12 +12,16 @@ import type { Viewer } from "../../lib/session";
 import type { Executor } from "../../lib/tx";
 
 type PrivateEvent = { id: string; structureId: string; admission: string };
+/** Qui regarde : son compte suffit (lot M4, tour 2 : aussi chaque destinataire d'un message « À propos de »). */
+export type SeeingUser = { user: Pick<Viewer["user"], "id" | "email" | "emailVerified"> } & Partial<
+  Omit<Viewer, "user">
+>;
 
 export const inviteOnlyError = () =>
   new AppError(403, "invite_only", "Événement privé sur invitation : seuls les invités le voient.");
 
 /** Vrai si l'événement n'est pas privé, ou si la personne en est ayant droit. */
-export async function canSeeEvent(e: PrivateEvent, viewer: Viewer | null, ex: Executor = db): Promise<boolean> {
+export async function canSeeEvent(e: PrivateEvent, viewer: SeeingUser | null, ex: Executor = db): Promise<boolean> {
   if (e.admission !== "invite_only") return true;
   if (!viewer) return false;
   const userId = viewer.user.id;
@@ -53,6 +57,15 @@ export async function canSeeEvent(e: PrivateEvent, viewer: Viewer | null, ex: Ex
     )
     .limit(1);
   if (mine) return true;
+  return hasPendingInvitation(e.id, viewer, ex);
+}
+
+/**
+ * Une invitation en attente pour cette personne, à son compte ou à l'adresse **confirmée** de son compte (lot 25).
+ * Lot M4, tour 2 : c'est aussi ce qui ouvre le créneau des exposants d'un événement privé avant de s'inscrire.
+ */
+export async function hasPendingInvitation(eventId: string, viewer: SeeingUser, ex: Executor = db): Promise<boolean> {
+  const userId = viewer.user.id;
   // Adresse non confirmée : elle ne prouve rien (relecture du lot 25) ; le lien reçu passe par `claim`.
   const email = viewer.user.emailVerified ? (viewer.user.email?.toLowerCase() ?? "") : "";
   const [invited] = await ex
@@ -60,7 +73,7 @@ export async function canSeeEvent(e: PrivateEvent, viewer: Viewer | null, ex: Ex
     .from(eventInvitations)
     .where(
       and(
-        eq(eventInvitations.eventId, e.id),
+        eq(eventInvitations.eventId, eventId),
         // Acceptée : l'accès passe par la candidature créée (active seulement, ci-dessus).
         eq(eventInvitations.status, "pending"),
         email
@@ -73,6 +86,6 @@ export async function canSeeEvent(e: PrivateEvent, viewer: Viewer | null, ex: Ex
 }
 
 /** `403 invite_only` si la personne ne peut pas voir l'événement privé. */
-export async function assertCanSeeEvent(e: PrivateEvent, viewer: Viewer | null, ex: Executor = db): Promise<void> {
+export async function assertCanSeeEvent(e: PrivateEvent, viewer: SeeingUser | null, ex: Executor = db): Promise<void> {
   if (!(await canSeeEvent(e, viewer, ex))) throw inviteOnlyError();
 }

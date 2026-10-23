@@ -111,7 +111,9 @@ test("QR tournant : quatre variantes, nouveau code au passage d'un créneau de 2
       await goto(page, `/jour-j/${pilot?.id}`);
       await expect(page.getByTestId("qr-countdown")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("qr-holder-value")).not.toHaveText("—");
-      await expect(page.getByTestId("qr-capture-note")).toBeVisible();
+      // Lot M4 (maquette 5.1) : plus de pavé des captures (bandeau à la tentative seulement).
+      await expect(page.getByTestId("qr-capture-note")).toHaveCount(0);
+      await expect(page.getByTestId("qr-say")).toHaveText("Présente le QR code");
       // Le numéro affiché est celui du créneau courant (secondes Unix / 20, modulo 10 000).
       const number = async () => Number((await page.getByTestId("qr-number").innerText()).replace(/\D/g, ""));
       const slotNow = async () => Math.floor((await page.evaluate(() => Date.now())) / 20_000) % 10_000;
@@ -119,7 +121,7 @@ test("QR tournant : quatre variantes, nouveau code au passage d'un créneau de 2
       const before = await number();
       await shot(page, `qr-vehicule-${theme}`);
       await audit(page, `qr-vehicule-${theme}`);
-      await page.getByTestId("qr-how").click();
+      await page.getByTestId("qr-offline-help").click();
       await expect(page.getByText(/Il fabrique un nouveau code toutes les 20 secondes/)).toBeVisible();
       await shot(page, `qr-comment-ca-marche-${theme}`);
       await page.clock.fastForward(20_000);

@@ -52,9 +52,11 @@ export default function CrewRegistration() {
   const chosen = members.filter((m) => picked[m.person.userId]);
   const others = chosen.filter((m) => !m.isLeader);
   const leaderComes = chosen.some((m) => m.isLeader);
-  const leaderSlot = e?.arrivals?.exhibitors ?? null;
   const mine = registrations.data?.find((r) => r.crew.id === crew?.id);
   const closed = e ? e.isLocked || e.status !== "published" || e.admission === "invite_only" : false;
+  // Lot M4, tour 2 : le créneau des exposants est privé ; le chef qui vient le lit à part (`apply-context`).
+  const context = useApi(() => api.applyContext(e?.id ?? ""), [e?.id], { enabled: Boolean(e) && !closed });
+  const leaderSlot = context.data?.exhibitors ?? e?.arrivals?.exhibitors ?? null;
 
   return (
     <FlowScreen
@@ -265,7 +267,11 @@ export default function CrewRegistration() {
           <Button
             icon="crew"
             loading={busy}
-            disabled={!rules || others.length === 0 || (leaderComes && leaderSlot !== null && !arrivalSeen)}
+            disabled={
+              !rules ||
+              others.length === 0 ||
+              (leaderComes && (context.data === null || (leaderSlot !== null && !arrivalSeen)))
+            }
             fullWidth
             testID="crew-registration-send"
             onPress={async () => {

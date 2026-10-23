@@ -14,6 +14,7 @@ export function ArrivalSeen({ slot, ...control }: { slot: ArrivalSlot | null } &
     <div className="s-card s-stack s-stack--tight" data-testid="arrival-seen">
       <div className="o-t-label s-label">{arrivalTexts.exhibitors}</div>
       <p className="o-t-body">
+        {/* Lot M4 : jamais « conseillé » (correction de Damien, dans `arrivalLabel`). */}
         <strong>{arrivalLabel(slot)}</strong>
         {slot.note ? ` · ${slot.note}` : ""}
       </p>

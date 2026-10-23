@@ -1,5 +1,6 @@
 import { Button, CheckboxField, Chip, SelectField, StatusBadge } from "@orasso/design-system/web";
 import {
+  type ApplyContext,
   applicationStatusLabels,
   type CrewRegistrationOptions,
   type CrewRegistrationView,
@@ -30,6 +31,14 @@ export function meta({ loaderData }: Route.MetaArgs) {
   ];
 }
 
+// Lot M4, tour 2 : la page (et ses données `.data`) peut porter le créneau privé des exposants : ni le navigateur ni un
+// relais ne la gardent. En-têtes du parent conservés (`root.tsx`).
+export const headers: Route.HeadersFunction = ({ parentHeaders }) => {
+  const h = new Headers(parentHeaders);
+  h.set("cache-control", "private, no-store");
+  return h;
+};
+
 export async function loader({ request, params }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(params.slug)}`);
@@ -43,7 +52,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       )
     : null;
   const registrations = await apiOrThrow<CrewRegistrationView[]>(request, `/events/${event.id}/crew-applications/mine`);
-  return { event, led, crew, options, registrations, userId: me.user.id, sent: url.searchParams.get("envoye") === "1" };
+  // Lot M4, tour 2 : le créneau des exposants est privé ; le chef qui vient le lit à part, s'il peut candidater.
+  const context = await api<ApplyContext>(request, `/events/${event.id}/apply-context`);
+  const leaderSlot = context.ok ? context.data.exhibitors : (event.arrivals?.exhibitors ?? null);
+  return {
+    event,
+    led,
+    crew,
+    options,
+    registrations,
+    leaderSlot,
+    userId: me.user.id,
+    sent: url.searchParams.get("envoye") === "1",
+  };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -82,7 +103,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 }
 
 export default function CrewInscription({ loaderData, actionData }: Route.ComponentProps) {
-  const { event, led, crew, options, registrations, userId, sent } = loaderData;
+  const { event, led, crew, options, registrations, leaderSlot, userId, sent } = loaderData;
   const busy = useNavigation().state !== "idle";
   // Véhicule choisi par membre (absent = ne vient pas).
   const [picked, setPicked] = useState<Record<string, string>>({});
@@ -270,7 +291,7 @@ export default function CrewInscription({ loaderData, actionData }: Route.Compon
 
           <CheckboxField name="rules" required label={crewLabels.registerCrewRules} />
           {/* Lot 47 : la case « J'ai vu » vaut pour le chef s'il vient ; les membres la cochent à leur confirmation. */}
-          {picked[userId] ? <ArrivalSeen slot={event.arrivals?.exhibitors ?? null} /> : null}
+          {picked[userId] ? <ArrivalSeen slot={leaderSlot} /> : null}
           <CheckboxField
             name="follow"
             defaultChecked

@@ -23,9 +23,11 @@ import { type AccessItem, applicationAccesses, barDay, nextAccessOf, staffAccess
 
 /**
  * Onglets sans accès flottant : ceux où l'artefact ne le montre pas (`.app.no-near` : Accueil et Sorties, l'accès y
- * est déjà en tête), et depuis le lot M5 le Garage et le Profil (retours 30 et 31 : il n'y a rien à faire).
+ * est déjà en tête), depuis le lot M4 l'Explorer (la bascule « Liste | Carte » y flotte, maquette 3.1), et depuis le
+ * lot M5 le Garage et le Profil (retours 30 et 31 : il n'y a rien à faire). L'exposant ne l'a donc plus sur aucun de
+ * ses onglets ; le visiteur (Passeport), le prestataire et le média le gardent sur les leurs.
  */
-const NO_NEAR = new Set(["home", "outings", "garage", "profile"]);
+const NO_NEAR = new Set(["home", "outings", "explore", "garage", "profile"]);
 
 /** Nature de l'accès, en tête de la ligne d'information. */
 const KIND_LABEL: Record<AccessItem["kind"], string> = {

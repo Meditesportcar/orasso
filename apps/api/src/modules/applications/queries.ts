@@ -6,6 +6,7 @@ import {
   canContest,
   contestDeadline,
   type EventCounters,
+  isActiveStatus,
   lockAt,
   type MyApplication,
   type Page,
@@ -176,7 +177,8 @@ async function toMine(rows: ApplicationRow[]): Promise<MyApplication[]> {
           : null,
         review: myReviews.get(r.id) ?? null,
         crew: crewInfo(r, e),
-        arrival: arrivalsOf(e).exhibitors,
+        // Lot M4, tour 2 : le créneau privé des exposants pour une candidature en cours ou acceptée seulement.
+        arrival: isActiveStatus(r.status) ? arrivalsOf(e).exhibitors : null,
         organizer: organizerOf(structuresById.get(e.structureId)),
       },
     ];

@@ -7,6 +7,8 @@ import { api, loginUrl } from "./api.server";
 
 export const MESSAGE_INTENTS = ["message_open", "contact_organizer", "contact_request"] as const;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function isMessageIntent(intent: string): boolean {
   return (MESSAGE_INTENTS as readonly string[]).includes(intent);
 }
@@ -35,6 +37,26 @@ export async function messageAction(request: Request, form: FormData) {
       { method: "POST" },
     );
     if (res.status === 401) throw redirect(loginUrl(request));
+    // Lot M4 : écrit depuis la fiche d'un événement, le premier message part avec son contexte (« À propos de »).
+    // Tour 2 : l'identifiant vient du formulaire (créé par la page, gardé jusqu'à la confirmation) ; une réponse perdue
+    // (pas de réponse, erreur du serveur) renvoie le même identifiant et le même texte : l'API ne publie pas de doublon.
+    const body = String(form.get("body") ?? "").trim();
+    const aboutEventId = String(form.get("aboutEventId") ?? "");
+    const given = String(form.get("clientId") ?? "");
+    const clientId = UUID.test(given) ? given : crypto.randomUUID();
+    if (res.ok && body) {
+      const sent = await api(request, `/conversations/${res.data.id}/messages`, {
+        method: "POST",
+        json: { clientId, body, ...(aboutEventId ? { aboutEventId } : {}) },
+      });
+      if (!sent.ok) {
+        const pending = sent.status >= 500 ? { clientId, body } : null;
+        return data(
+          { contact: false, messageError: sent.error.message, contactSent: null, pending },
+          { status: sent.status },
+        );
+      }
+    }
     if (res.ok) throw redirect(`/app/boite/${res.data.id}`);
     return data({ contact: false, messageError: res.error.message, contactSent: null }, { status: res.status });
   }
@@ -53,4 +75,10 @@ export async function messageAction(request: Request, form: FormData) {
   return data({ contact: false, messageError: "Action inconnue.", contactSent: null }, { status: 400 });
 }
 
-export type MessageActionData = { contact: boolean; messageError: string | null; contactSent: string | null };
+export type MessageActionData = {
+  contact: boolean;
+  messageError: string | null;
+  contactSent: string | null;
+  /** Tour 2 : envoi à l'issue inconnue, à renvoyer à l'identique. */
+  pending?: { clientId: string; body: string } | null;
+};

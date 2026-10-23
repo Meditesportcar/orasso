@@ -8,25 +8,29 @@ import { qs } from "./qs";
 /** Réglages communs de position : celle de l'appareil pour cette requête seulement, jamais enregistrée par l'API. */
 type Position = { lat?: number; lng?: number; radiusKm?: number };
 
-export type ExploreEventsQuery = Position & {
-  q?: string;
-  format?: string;
-  categoryId?: string;
-  department?: string;
-  /** Instants ISO. */
-  from?: string;
-  to?: string;
-  sort?: EventSort;
-  /** Lot 44 : seulement les structures suivies. */
-  followed?: "1";
-  structureId?: string;
-  /** Lot 55 (Explorer du média) : seulement les accréditations ouvertes ; région (code de `regions`). */
-  accreditationOpen?: "1";
-  region?: string;
-  scope?: "upcoming" | "past";
-  limit?: number;
-  cursor?: string;
-};
+/** Lot M4, tour 2 (« Autour de… ») : un autre département comme point de départ, et « Partout en France ». */
+type Around = { around?: string; everywhere?: "1"; formats?: string };
+
+export type ExploreEventsQuery = Position &
+  Around & {
+    q?: string;
+    format?: string;
+    categoryId?: string;
+    department?: string;
+    /** Instants ISO. */
+    from?: string;
+    to?: string;
+    sort?: EventSort;
+    /** Lot 44 : seulement les structures suivies. */
+    followed?: "1";
+    structureId?: string;
+    /** Lot 55 (Explorer du média) : seulement les accréditations ouvertes ; région (code de `regions`). */
+    accreditationOpen?: "1";
+    region?: string;
+    scope?: "upcoming" | "past";
+    limit?: number;
+    cursor?: string;
+  };
 
 export type ExploreProsQuery = Position & {
   q?: string;

@@ -77,12 +77,13 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
     // --- Explorer v2 (lot 44) : position accordée → tout, du plus proche au plus loin -----------------------------
     await page.goto("/explorer");
     const rows = page.getByTestId("event-row");
-    await expect(page.getByTestId("sort-line")).toContainText("du plus proche au plus loin", { timeout: 30_000 });
+    // Lot M4 : « N événements · distances depuis ta position ».
+    await expect(page.getByTestId("sort-line")).toContainText("distances depuis ta position", { timeout: 30_000 });
     await expect(rows.first()).toBeVisible({ timeout: 30_000 });
     await shot(page, `04-explorer-distance-${theme}`);
 
     // « Mes affinités » : l'organisateur suivi en tête ; « Structures suivies » : seulement lui.
-    await page.getByText("Filtres", { exact: true }).click();
+    await page.getByTestId("filters-toggle").click();
     await page.getByText("Mes affinités", { exact: true }).click();
     await expect(rows.first()).toContainText("Rassemblement de Narbonne", { timeout: 30_000 });
     await shot(page, `05-explorer-affinites-${theme}`);
@@ -92,7 +93,7 @@ test("appli : recherche, Explorer, structure, pro", async ({ browser }) => {
     for (const text of await rows.allTextContents()) expect(text).toContain("Club Audois Passion");
     await shot(page, `06-explorer-suivies-${theme}`);
     await page.getByText("Structures suivies", { exact: true }).click();
-    await page.getByText("Filtres", { exact: true }).click();
+    await page.getByTestId("filters-toggle").click();
 
     // Position : jamais enregistrée.
     const me = await apiCall<{ profile: { departments: string[] } }>(cookie, "GET", "/me");

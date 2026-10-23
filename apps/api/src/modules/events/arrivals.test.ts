@@ -16,7 +16,16 @@ import {
   useClock,
 } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
-import { applications, eventAnnouncements, notifications } from "../../db/schema";
+import {
+  applications,
+  eventAnnouncements,
+  eventInvitations,
+  events,
+  notifications,
+  profiles,
+  structureBans,
+  vehicles,
+} from "../../db/schema";
 
 afterAll(async () => {
   await pool.end();
@@ -50,11 +59,12 @@ async function nocturne(arrivals: typeof NOCTURNE | null = NOCTURNE) {
 }
 
 describe("créneaux d'arrivée de l'événement", () => {
-  it("PATCH les enregistre ; la fiche publique les renvoie", async () => {
+  it("PATCH les enregistre ; la fiche publique ne renvoie que celui du public (lot M4)", async () => {
     const e = await nocturne();
     const page = await call(null, "GET", `/events/by-slug/${e.slug}`);
     expect(page.status).toBe(200);
-    expect(page.json.arrivals).toEqual(NOCTURNE);
+    expect(page.json.arrivals).toEqual({ exhibitors: null, public: NOCTURNE.public });
+    expect((await call(orga, "GET", `/events/by-slug/${e.slug}`)).json.arrivals).toEqual(NOCTURNE);
     // `null` les retire.
     expect((await call(orga, "PATCH", `/events/${e.id}`, { arrivals: null })).json.arrivals).toEqual({
       exhibitors: null,
@@ -143,6 +153,218 @@ describe("créneaux d'arrivée de l'événement", () => {
     const other = await signUp("Autre", { twoFactor: true });
     await createStructure(other.id);
     expect((await call(other, "PATCH", `/events/${e.id}`, { arrivals: NOCTURNE })).status).toBe(403);
+  });
+});
+
+// Lot M4 (correction de Damien, 23/10), tour 2 : l'horaire strict des exposants est privé. La fiche (`by-slug`, aussi
+// lue par le site) ne le donne qu'à l'organisation et à qui a une candidature en cours ou acceptée (crew compris) ; la
+// feuille de candidature le lit par `apply-context`, seulement si l'on peut candidater maintenant.
+describe("créneau des exposants privé", () => {
+  const leaks = (json: unknown) => {
+    const text = JSON.stringify(json);
+    return text.includes(NOCTURNE.exhibitors.from) || text.includes(NOCTURNE.exhibitors.note);
+  };
+  const fiche = async (u: TestUser | null, slug: string) => {
+    const res = await call(u, "GET", `/events/by-slug/${slug}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("private, no-cache");
+    return res.json.arrivals.exhibitors;
+  };
+  const context = async (u: TestUser | null, id: string) => {
+    const res = await call(u, "GET", `/events/${id}/apply-context`);
+    if (res.status === 200) expect(res.headers.get("cache-control")).toBe("private, no-store");
+    return res;
+  };
+  const applyWith = async (u: TestUser, eventId: string, vehicleId: string) => {
+    const res = await call(u, "POST", `/events/${eventId}/applications`, {
+      vehicleIds: [vehicleId],
+      rulesAccepted: true,
+      arrivalSeen: true,
+    });
+    expect(res.status).toBe(201);
+    return res.json[0].id as string;
+  };
+
+  it("anonyme : ni la fiche, ni la liste de l'Explorer, ni la page de la structure ; apply-context exige un compte", async () => {
+    const e = await nocturne();
+    expect(await fiche(null, e.slug)).toBeNull();
+    const page = await call(null, "GET", `/events/by-slug/${e.slug}`);
+    expect(page.json.arrivals.public).toEqual(NOCTURNE.public);
+    expect(leaks(page.json)).toBe(false);
+    const list = await call(null, "GET", "/events");
+    expect(list.json.items.some((x: { id: string }) => x.id === e.id)).toBe(true);
+    expect(leaks(list.json)).toBe(false);
+    const structure = await call(null, "GET", `/structures/by-slug/${page.json.structure.slug}`);
+    expect(structure.status).toBe(200);
+    expect(leaks(structure.json)).toBe(false);
+    expect((await context(null, e.id)).status).toBe(401);
+  });
+
+  it("visiteur sans véhicule : rien, et apply-context refuse (409, sans véhicule)", async () => {
+    const e = await nocturne();
+    const nina = await signUp("Nina");
+    expect(await fiche(nina, e.slug)).toBeNull();
+    expect(leaks((await call(nina, "GET", "/events")).json)).toBe(false);
+    const res = await context(nina, e.id);
+    expect(res.status).toBe(409);
+    expect(res.json.error.details.noVehicle).toBe(true);
+    expect(leaks(res.json)).toBe(false);
+  });
+
+  it("passionné avec un véhicule, sans candidature : pas dans la fiche ; apply-context le donne", async () => {
+    const e = await nocturne();
+    const kenji = await signUp("Kenji");
+    await createVehicle(kenji.id, ref);
+    expect(await fiche(kenji, e.slug)).toBeNull();
+    const res = await context(kenji, e.id);
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual({ exhibitors: NOCTURNE.exhibitors });
+  });
+
+  it("candidat : la fiche, apply-context et Sorties le donnent, même après la vente du véhicule", async () => {
+    const e = await nocturne();
+    const kenji = await signUp("Kenji");
+    const v = await createVehicle(kenji.id, ref);
+    await applyWith(kenji, e.id, v.id);
+    expect(await fiche(kenji, e.slug)).toEqual(NOCTURNE.exhibitors);
+    expect((await context(kenji, e.id)).json.exhibitors).toEqual(NOCTURNE.exhibitors);
+    expect((await call(kenji, "GET", "/me/applications")).json[0].arrival).toEqual(NOCTURNE.exhibitors);
+    // Véhicule vendu après la candidature : l'inscrit garde son créneau dans sa fiche.
+    await db.update(vehicles).set({ status: "sold" }).where(eq(vehicles.id, v.id));
+    expect(await fiche(kenji, e.slug)).toEqual(NOCTURNE.exhibitors);
+  });
+
+  it("refusée, retirée, expirée, annulée : la fiche et Sorties ne le donnent plus", async () => {
+    const e = await nocturne();
+    const kenji = await signUp("Kenji");
+    const v = await createVehicle(kenji.id, ref);
+    const appId = await applyWith(kenji, e.id, v.id);
+    for (const status of ["refused", "withdrawn", "expired", "cancelled"] as const) {
+      await db.update(applications).set({ status }).where(eq(applications.id, appId));
+      expect(await fiche(kenji, e.slug)).toBeNull();
+      const all = [
+        ...(await call(kenji, "GET", "/me/applications")).json,
+        ...(await call(kenji, "GET", "/me/applications?scope=past")).json,
+      ];
+      expect(leaks(all)).toBe(false);
+    }
+  });
+
+  it("membre de crew à confirmer : la fiche le donne (il coche « J'ai vu » à sa confirmation)", async () => {
+    const e = await nocturne();
+    const kenji = await signUp("Kenji");
+    const lea = await signUp("Lea");
+    const [vk, vl] = await Promise.all([createVehicle(kenji.id, ref), createVehicle(lea.id, ref)]);
+    const crew = await call(kenji, "POST", "/crews", { name: "Roussillon Drift", department: "66" });
+    expect((await call(lea, "POST", `/crews/${crew.json.id}/requests`, { message: null })).status).toBe(201);
+    expect((await call(kenji, "POST", `/crews/${crew.json.id}/requests/${lea.id}/accept`)).status).toBe(204);
+    expect(await fiche(lea, e.slug)).toBeNull();
+    const registered = await call(kenji, "POST", `/events/${e.id}/crew-applications`, {
+      crewId: crew.json.id,
+      members: [
+        { userId: kenji.id, vehicleId: vk.id },
+        { userId: lea.id, vehicleId: vl.id },
+      ],
+      rulesAccepted: true,
+      arrivalSeen: true,
+    });
+    expect(registered.status).toBe(201);
+    expect(await fiche(lea, e.slug)).toEqual(NOCTURNE.exhibitors);
+  });
+
+  it("organisation : la fiche et la page de l'organisateur ; apply-context sans véhicule refuse", async () => {
+    const e = await nocturne();
+    expect(await fiche(orga, e.slug)).toEqual(NOCTURNE.exhibitors);
+    expect((await call(orga, "GET", `/events/${e.id}`)).json.arrivals.exhibitors).toEqual(NOCTURNE.exhibitors);
+    expect((await context(orga, e.id)).status).toBe(409);
+  });
+
+  it("apply-context refuse quand on ne peut pas candidater : pas encore ouvert, verrouillé, banni, brouillon", async () => {
+    const kenji = await signUp("Kenji");
+    await createVehicle(kenji.id, ref);
+    const later = await nocturne();
+    await db
+      .update(events)
+      .set({ registrationsOpenAt: paris(10, 20, 10) })
+      .where(eq(events.id, later.id));
+    const notOpen = await context(kenji, later.id);
+    expect(notOpen.status).toBe(409);
+    expect(leaks(notOpen.json)).toBe(false);
+
+    const banned = await nocturne();
+    await db.insert(structureBans).values({ structureId, userId: kenji.id, createdBy: orga.id });
+    const refused = await context(kenji, banned.id);
+    expect(refused.status).toBe(403);
+    expect(leaks(refused.json)).toBe(false);
+    await db.delete(structureBans).where(eq(structureBans.userId, kenji.id));
+
+    const draft = await nocturne();
+    await db.update(events).set({ status: "draft" }).where(eq(events.id, draft.id));
+    expect((await context(kenji, draft.id)).status).toBe(404);
+
+    // Tour 2 (relecture Opus) : mêmes règles que la candidature : type de véhicule admis, compte non suspendu.
+    const motosOnly = await nocturne();
+    await db
+      .update(events)
+      .set({ admittedVehicleTypes: ["moto"] })
+      .where(eq(events.id, motosOnly.id));
+    const notAdmitted = await context(kenji, motosOnly.id);
+    expect(notAdmitted.status).toBe(409);
+    expect(notAdmitted.json.error.details.noVehicle).toBe(true);
+    expect(leaks(notAdmitted.json)).toBe(false);
+    const open = await nocturne();
+    await db
+      .update(profiles)
+      .set({ suspendedUntil: new Date(paris(10, 8, 10).getTime()) })
+      .where(eq(profiles.userId, kenji.id));
+    const suspended = await context(kenji, open.id);
+    expect(suspended.status).toBe(403);
+    expect(leaks(suspended.json)).toBe(false);
+    await db.update(profiles).set({ suspendedUntil: null }).where(eq(profiles.userId, kenji.id));
+
+    // À H-2 : la liste d'accès est figée.
+    const locked = await nocturne();
+    useClock(paris(10, 24, 18));
+    const res = await context(kenji, locked.id);
+    expect(res.status).toBe(423);
+    expect(leaks(res.json)).toBe(false);
+  });
+
+  it("événement privé : apply-context et l'invitation à soi, en attente ; jamais le lien public", async () => {
+    const e = await createEvent(structureId, {
+      startsAt: paris(10, 24, 19),
+      endsAt: paris(10, 24, 23, 30),
+      admission: "invite_only",
+    });
+    expect((await call(orga, "PATCH", `/events/${e.id}`, { arrivals: NOCTURNE })).status).toBe(200);
+    const kenji = await signUp("Kenji");
+    const car = await createVehicle(kenji.id, ref);
+    const outsider = await signUp("Nina");
+    await createVehicle(outsider.id, ref);
+    expect((await context(outsider, e.id)).status).toBe(403);
+
+    expect((await call(orga, "POST", `/events/${e.id}/invitations`, { pseudos: ["Kenji"] })).json.created).toBe(1);
+    const [row] = await db.select().from(eventInvitations).where(eq(eventInvitations.eventId, e.id));
+    // Le lien par jeton (anonyme ou non) ne donne pas le créneau.
+    const link = await call(null, "GET", `/invitation-evenement/${row?.token}`);
+    expect(link.status).toBe(200);
+    expect(link.json.event.arrivalExhibitors).toBeNull();
+    expect(leaks(link.json)).toBe(false);
+    expect((await call(kenji, "GET", `/invitation-evenement/${row?.token}`)).json.event.arrivalExhibitors).toBeNull();
+    // L'invitation en attente, à soi : le créneau pour la case « J'ai vu » de l'acceptation.
+    const mine = (await call(kenji, "GET", "/me/event-invitations")).json[0];
+    expect(mine.event.arrivalExhibitors).toEqual(NOCTURNE.exhibitors);
+    expect((await context(kenji, e.id)).json.exhibitors).toEqual(NOCTURNE.exhibitors);
+    expect(await fiche(kenji, e.slug)).toBeNull();
+    // Acceptée : la fiche le donne ; l'invitation (réponse du lien) n'en a plus besoin.
+    const accepted = await call(kenji, "POST", `/event-invitations/${mine.id}/accept`, {
+      vehicleId: car.id,
+      arrivalSeen: true,
+    });
+    expect(accepted.status).toBe(200);
+    expect(await fiche(kenji, e.slug)).toEqual(NOCTURNE.exhibitors);
+    const claimed = await call(kenji, "POST", `/invitation-evenement/${row?.token}/claim`);
+    expect(claimed.json.event.arrivalExhibitors).toBeNull();
   });
 });
 

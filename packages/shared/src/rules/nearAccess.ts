@@ -49,3 +49,19 @@ export function nearWeekday(startsAt: string | Date, timeZone = BUSINESS_TIMEZON
   const w = wallTime(new Date(startsAt), timeZone);
   return WEEKDAYS[new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay()] ?? "";
 }
+
+/** Lot M4 : Maps et Waze n'apparaissent qu'à l'approche, à partir de la veille (J-1, dès 0 h, heure de Paris). */
+export const DIRECTIONS_BEFORE_DAYS = 1;
+
+/**
+ * Lot M4 (correction de Damien, 23/10) : à J-6, ni Waze ni Maps ; on les propose de la veille jusqu'à la fin de
+ * l'événement (« Sur la carte » reste toujours là).
+ */
+export function directionsOpen(
+  startsAt: string | Date,
+  endsAt: string | Date,
+  now: Date,
+  timeZone = BUSINESS_TIMEZONE,
+) {
+  return calendarDaysBetween(now, new Date(startsAt), timeZone) <= DIRECTIONS_BEFORE_DAYS && now < new Date(endsAt);
+}

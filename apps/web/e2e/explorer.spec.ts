@@ -91,7 +91,8 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
   await expect(page.getByTestId("events-segment")).toBeVisible();
 
   // --- Événements : affinités, date, distance -------------------------------------------------------------------------
-  await page.goto("/app/explorer");
+  await // Lot M4, tour 2 : sans « Partout », l'Explorer part de la distance habituelle des préférences (50 km).
+  await page.goto("/app/explorer?rayon=partout");
   const firstTile = () => page.getByTestId("event-tile").first();
   await expect(page.getByTestId("events-list")).toBeVisible();
   await expect(firstTile()).toContainText("Rassemblement de Narbonne");
@@ -105,23 +106,23 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
   expect(titles.slice(0, carcassonne + 1)).not.toContain("Expo Rivesaltes");
 
   // Par date : l'ordre change, la distance n'a plus de pastille « organisateur suivi » en tête.
-  await page.goto("/app/explorer?segment=evenements&tri=date");
+  await page.goto("/app/explorer?segment=evenements&rayon=partout&tri=date");
   await expect(firstTile()).not.toContainText("Organisateur suivi");
 
   // Filtre département + format.
-  await page.goto("/app/explorer?segment=evenements&departement=11&tri=date");
+  await page.goto("/app/explorer?segment=evenements&rayon=partout&departement=11&tri=date");
   const aude = await page.getByTestId("event-tile").locator("h3").allTextContents();
   expect(aude.length).toBeGreaterThanOrEqual(2);
   expect(aude).toContain("Rassemblement de Narbonne");
   expect(aude).not.toContain("Expo Rivesaltes");
-  await page.goto("/app/explorer?segment=evenements&format=exhibition&tri=date");
+  await page.goto("/app/explorer?segment=evenements&rayon=partout&format=exhibition&tri=date");
   // Le format affiché sur la carte, pas le titre (le seed du lot 46 a un « Salon auto rétro » au format Exposition).
   const formats = await page.getByTestId("event-tile").locator(".w-card__format").allTextContents();
   expect(formats.length).toBeGreaterThan(0);
   for (const format of formats) expect(format).toMatch(/Exposition · \d/);
 
   // Distance depuis le secteur du profil (66) : un événement catalan avant Toulouse.
-  await page.goto("/app/explorer?segment=evenements&tri=distance");
+  await page.goto("/app/explorer?segment=evenements&rayon=partout&tri=distance");
   await expect(firstTile()).toContainText(/à \d+(,\d)? km/);
   const near = await page.getByTestId("event-tile").locator("h3").allTextContents();
   // Toulouse après Rivesaltes, ou au-delà de la première page quand les recettes ont ajouté des événements proches
@@ -138,7 +139,7 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
   expect(radius.length).toBeGreaterThan(0);
 
   // Carte : la page affiche la carte des événements localisés.
-  await page.goto("/app/explorer?segment=evenements&vue=carte");
+  await page.goto("/app/explorer?segment=evenements&rayon=partout&vue=carte");
   await expect(page.getByTestId("events-map")).toBeVisible();
   expect(Number(await page.getByTestId("events-map").getAttribute("data-count"))).toBeGreaterThan(5);
 
@@ -156,7 +157,7 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
     }),
   );
   const geo = await ctx.newPage();
-  await geo.goto("/app/explorer?segment=evenements&tri=distance");
+  await geo.goto("/app/explorer?segment=evenements&rayon=partout&tri=distance");
   await geo.getByTestId("use-position").click();
   await expect(geo).toHaveURL(/lat=43\.6&lng=1\.4/);
   await expect(geo.getByTestId("position-note")).toContainText("non enregistrée");
@@ -202,7 +203,7 @@ test("explorer : recherche, affinités, filtres, position, carte, pros, confiden
           ["01-resultats-supra", "/app/explorer?q=Supra"],
           ["02-resultats-rivesaltes", "/app/explorer?q=Rivesaltes"],
           ["03-evenements-affinites", "/app/explorer"],
-          ["04-evenements-carte", "/app/explorer?segment=evenements&vue=carte&tri=distance"],
+          ["04-evenements-carte", "/app/explorer?segment=evenements&rayon=partout&vue=carte&tri=distance"],
           ["05-pros", "/app/explorer?segment=pros&tri=distance"],
           ["06-personnes", "/app/explorer?segment=personnes&departement=66"],
         ] as const) {

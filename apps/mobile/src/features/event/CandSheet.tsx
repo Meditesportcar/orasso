@@ -4,8 +4,10 @@
 // d'arrivée » sur l'aplat crème (obligatoire quand il y a un créneau exposants), une précision facultative, l'aide
 // « Un empêchement ? », puis « Envoyer ma candidature ». À l'envoi : le O, « Candidature envoyée » et « Voir mes
 // sorties ». Gardés de l'ancien flux (docs/01, audit § 2) : la case du règlement, sur une ligne, et le choix du jour
-// d'un événement sur plusieurs jours, et la newsletter (case non cochée, docs/01). « Suivre la structure » n'est pas
-// coché d'office (le bouton « Suivre » de la fiche s'en charge ; écart à docs/01 consigné pour Damien).
+// d'un événement sur plusieurs jours, et la newsletter (case non cochée, docs/01).
+// Lot M4 (maquette 4.4, retour 24) : « Suivre <structure> » revient, cochée d'office (docs/01 l. 50 et Damien), juste
+// au-dessus de la newsletter (non cochée) ; le véhicule de la dernière candidature est présélectionné (« Dernière
+// utilisée ») ; fiches de véhicule de la maquette (photo carrée, nom entier, coche ronde).
 // Tour 2 (relectures) : le mode crew s'ouvre aussi seul (`mode="crew"`, bouton « Inscrire mon crew » de la fiche) pour un
 // chef qui a déjà candidaté ou qui n'a pas de véhicule ; sélecteur quand on dirige plusieurs crews ; lien vers le suivi
 // des confirmations (`/crew/inscription`) ; état remis à zéro à la fermeture.
@@ -49,10 +51,10 @@ import { NotificationAsk } from "@/ui/NotificationAsk";
 const { space1, space2, space3 } = tokens.spacing;
 const OPEN = ["pending", "accepted", "waitlisted", "offered"];
 
-/** « Exposants de 18 h 30 à 19 h 15, strict. Entrée côté capitainerie. » */
+/** « Exposants de 18 h 30 à 19 h 15, strict. Entrée côté capitainerie. » Lot M4 : jamais « conseillé » (Damien). */
 export function seenText(slot: ArrivalSlot): string {
   const when = slot.to ? `de ${arrivalTime(slot.from)} à ${arrivalTime(slot.to)}` : `dès ${arrivalTime(slot.from)}`;
-  return `Exposants ${when}, ${slot.strict ? "strict" : "conseillé"}.${slot.note ? ` ${slot.note}` : ""}`;
+  return `Exposants ${when}${slot.strict ? ", strict" : ""}.${slot.note ? ` ${slot.note}` : ""}`;
 }
 
 export function CandSheet({
@@ -64,6 +66,7 @@ export function CandSheet({
   soloAllowed = true,
   crewSlug,
   initialDay,
+  alreadyFollowing = false,
 }: {
   event: EventPublic;
   visible: boolean;
@@ -77,11 +80,13 @@ export function CandSheet({
   crewSlug?: string;
   /** Jour présélectionné (`?jour=` des liens du site). */
   initialDay?: string;
+  /** Lot M4 : la personne suit déjà la structure (la case « Suivre » n'a plus lieu d'être). */
+  alreadyFollowing?: boolean;
 }) {
   const { t } = useTheme();
   const c = t.color;
   const router = useRouter();
-  const { reload, markAnnounced } = useApplications();
+  const { reload, markAnnounced, upcoming, past } = useApplications();
   const vehicles = useApi(() => api.vehicles(), [visible], { enabled: visible, cacheKey: "vehicles" });
   const crews = useApi(() => api.myCrews(), [visible], { enabled: visible, cacheKey: "my-crews" });
   const led = (crews.data ?? []).filter((x) => x.role === "leader");
@@ -99,6 +104,7 @@ export function CandSheet({
   const [rules, setRules] = useState(false);
   const [note, setNote] = useState("");
   const [newsletter, setNewsletter] = useState(false);
+  const [followOn, setFollowOn] = useState(true);
   const [dayChoice, setDayChoice] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,12 +125,19 @@ export function CandSheet({
     setRules(false);
     setNote("");
     setNewsletter(false);
+    setFollowOn(true);
     setDayChoice(undefined);
     setError(null);
     setDone(null);
   }, [visible, openMode, soloAllowed]);
 
-  const slot = e.arrivals?.exhibitors ?? null;
+  // Tour 2 (relectures) : le créneau des exposants est privé ; la fiche ne le donne qu'aux inscrits. La feuille le lit
+  // à son ouverture (`apply-context`), seulement si l'on peut candidater maintenant ; jamais gardé en cache.
+  const context = useApi(() => api.applyContext(e.id), [e.id, visible], { enabled: visible });
+  const contextReady = context.data !== null;
+  const slot = context.data?.exhibitors ?? e.arrivals?.exhibitors ?? null;
+  // Sans véhicule, la feuille propose d'en ajouter un : ce refus-là ne s'affiche pas.
+  const contextError = context.error && !context.error.details?.noVehicle ? errorMessage(context.error) : null;
   const wanted = useMemo(() => new Set(e.criteria?.categoryIds ?? []), [e]);
   const eligible = useMemo(() => {
     const active = (vehicles.data ?? []).filter((v) => v.status === "active");
@@ -133,14 +146,24 @@ export function CandSheet({
     return [...active].sort((a, b) => Number(score(b)) - Number(score(a)));
   }, [vehicles.data, wanted]);
   const limit = e.maxVehiclesPerUser ?? 1;
-  // Par défaut, le premier véhicule qui a une photo (« Candidater avec ma Supra »).
+  // Lot M4 : le véhicule de la dernière candidature (s'il est encore au garage, avec une photo), sinon le premier qui a
+  // une photo. Le garage n'a pas de « favori » : la dernière utilisée en tient lieu (journal des choix).
+  const lastUsed = useMemo(() => {
+    const usable = new Set(eligible.filter((v) => v.photos.length > 0).map((v) => v.id));
+    const recent = [...(upcoming ?? []), ...(past ?? [])]
+      .filter((a) => a.vehicle && usable.has(a.vehicle.id))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    return recent?.vehicle?.id ?? null;
+  }, [eligible, upcoming, past]);
   const selected =
     picked !== null
       ? picked
-      : eligible
-          .filter((v) => v.photos.length > 0)
-          .slice(0, 1)
-          .map((v) => v.id);
+      : lastUsed
+        ? [lastUsed]
+        : eligible
+            .filter((v) => v.photos.length > 0)
+            .slice(0, 1)
+            .map((v) => v.id);
 
   // Plusieurs jours (lot 26) : « Tout l'événement » et/ou un jour, selon le mode d'accès de l'organisateur.
   const taken = (e.myApplications ?? []).filter((a) => OPEN.includes(a.status)).map((a) => a.eventDayId);
@@ -180,7 +203,9 @@ export function CandSheet({
   const chosenMembers = crewMembers.filter((m) => members[m.person.userId]);
   const leaderComes = chosenMembers.some((m) => m.isLeader);
   const needSeen = slot !== null && (mode === "solo" || leaderComes);
+  // Tant que le créneau n'est pas lu, on ne sait pas s'il faut cocher « J'ai vu » : pas d'envoi (sauf crew sans le chef).
   const ready =
+    (contextReady || (mode === "crew" && !leaderComes)) &&
     rules &&
     (!needSeen || seen) &&
     (mode === "solo" ? selected.length > 0 : chosenMembers.filter((m) => !m.isLeader).length > 0);
@@ -200,7 +225,7 @@ export function CandSheet({
         const apps: MyApplication[] = await api.apply(e.id, {
           vehicleIds: selected,
           rulesAccepted: true,
-          followStructure: false,
+          followStructure: followOn && !alreadyFollowing,
           newsletterOptIn: newsletter,
           // Accompagnants : absents de l'artefact, le champ n'est plus envoyé (relecture C2b).
           // Sans créneau exposants, la précision part comme mot pour l'équipe.
@@ -439,7 +464,12 @@ export function CandSheet({
                         router.push(`/vehicule/${v.id}`);
                       } else toggleVehicle(v.id);
                     }}
-                    style={[styles.candVeh, { backgroundColor: c.surface, borderColor: on ? c.accent : c.cardLine }]}
+                    style={[
+                      styles.candVeh,
+                      on
+                        ? { backgroundColor: c.ground, borderColor: c.accent, borderWidth: 2 }
+                        : { backgroundColor: c.surface, borderColor: c.line, borderWidth: 1.5 },
+                    ]}
                     testID="cand-vehicle"
                   >
                     <View style={styles.cvPh}>
@@ -450,10 +480,11 @@ export function CandSheet({
                       />
                     </View>
                     <View style={styles.grow}>
-                      <Text variant="posterS" color={c.ink}>
+                      {/* Nom entier, jamais coupé : il passe à la ligne. */}
+                      <Text variant="posterS" color={c.ink} style={styles.vehName}>
                         {v.label}
                       </Text>
-                      <Text variant="caption" color={c.inkMuted}>
+                      <Text variant="caption" color={c.inkMuted} style={styles.vehSmall}>
                         {noPhoto
                           ? "Ajoute au moins une photo pour candidater"
                           : [
@@ -463,8 +494,20 @@ export function CandSheet({
                               .filter(Boolean)
                               .join(" · ")}
                       </Text>
+                      {v.id === lastUsed ? (
+                        <View style={styles.fav} testID="cand-last-used">
+                          <Icon name="star" size={12} color={c.accentText} />
+                          <Text variant="caption" color={c.accentText} style={styles.favText}>
+                            Dernière utilisée
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
-                    {on ? <Icon name="check" size={20} color={c.accentText} /> : null}
+                    <View
+                      style={[styles.ck, on ? { backgroundColor: c.accent } : { borderWidth: 2, borderColor: c.line }]}
+                    >
+                      {on ? <Icon name="check" size={16} strokeWidth={3} color={c.accentInk} /> : null}
+                    </View>
                   </Pressable>
                 );
               })}
@@ -523,21 +566,23 @@ export function CandSheet({
             </Text>
           </Pressable>
 
+          {mode === "solo" && !alreadyFollowing ? (
+            <CaseRow
+              on={followOn}
+              onToggle={() => setFollowOn((f) => !f)}
+              title={`Suivre ${e.structure.name}`}
+              hint="Ses prochains événements dans ton fil"
+              testID="cand-follow"
+            />
+          ) : null}
           {mode === "solo" ? (
-            <Pressable
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: newsletter }}
-              aria-checked={newsletter}
-              accessibilityLabel="Recevoir la newsletter d'Orasso"
-              onPress={() => setNewsletter((n) => !n)}
-              style={styles.rulesRow}
+            <CaseRow
+              on={newsletter}
+              onToggle={() => setNewsletter((n) => !n)}
+              title="Recevoir la newsletter d'Orasso"
+              hint="Un e-mail de temps en temps, désinscription en un clic"
               testID="cand-newsletter"
-            >
-              <CheckBox on={newsletter} />
-              <Text variant="caption" color={c.ink} style={styles.grow}>
-                Recevoir la newsletter d'Orasso.
-              </Text>
-            </Pressable>
+            />
           ) : null}
 
           <TextField
@@ -556,9 +601,9 @@ export function CandSheet({
               Un empêchement ? Préviens depuis Sorties : ta place ira à la liste d'attente.
             </Text>
           </View>
-          {error ? (
-            <Text variant="caption" color={c.winText} accessibilityRole="alert">
-              {error}
+          {error || contextError ? (
+            <Text variant="caption" color={c.winText} accessibilityRole="alert" testID="cand-error">
+              {error ?? contextError}
             </Text>
           ) : null}
           <SmButton
@@ -578,6 +623,45 @@ export function CandSheet({
   );
 }
 
+/** `.cm-row` de la maquette 4.4 : une case à cocher sur une ligne de carte, un titre et une aide. */
+function CaseRow({
+  on,
+  onToggle,
+  title,
+  hint,
+  testID,
+}: {
+  on: boolean;
+  onToggle: () => void;
+  title: string;
+  hint: string;
+  testID: string;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: on }}
+      aria-checked={on}
+      accessibilityLabel={`${title}. ${hint}`}
+      onPress={onToggle}
+      style={[styles.caseRow, { backgroundColor: c.surface }]}
+      testID={testID}
+    >
+      <CheckBox on={on} />
+      <View style={styles.grow}>
+        <Text variant="bodyStrong" color={c.ink} style={styles.caseTitle}>
+          {title}
+        </Text>
+        <Text variant="caption" color={c.inkMuted} style={styles.caseHint}>
+          {hint}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "center", gap: space2 + 2 },
   headTitle: { flex: 1, fontSize: 18, lineHeight: 19 },
@@ -588,15 +672,17 @@ const styles = StyleSheet.create({
   dim: { opacity: 0.5 },
   strong: { fontFamily: "Archivo-ExtraBold" },
   cmRow: { flexDirection: "row", alignItems: "center", gap: space3, padding: space3, borderRadius: 14 },
-  candVeh: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space3,
-    padding: space2,
-    borderRadius: 16,
-    borderWidth: 2,
-  },
-  cvPh: { width: 96, height: 66, borderRadius: 10, overflow: "hidden" },
+  // `.cveh` (maquette 4.4) : photo carrée de 84 px, nom entier, coche ronde de 26 px.
+  candVeh: { flexDirection: "row", alignItems: "center", gap: space3, padding: space2, borderRadius: 16 },
+  cvPh: { width: 84, height: 84, borderRadius: 11, overflow: "hidden" },
+  vehName: { fontSize: 14, lineHeight: 15 },
+  vehSmall: { fontSize: 12, lineHeight: 16, marginTop: space1 },
+  fav: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: space1 },
+  favText: { fontSize: 11, lineHeight: 14, fontFamily: "Archivo-ExtraBold" },
+  ck: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  caseRow: { flexDirection: "row", alignItems: "center", gap: space2 + 2, padding: space3, borderRadius: 12 },
+  caseTitle: { fontSize: 13.5, lineHeight: 18, fontFamily: "Archivo-ExtraBold" },
+  caseHint: { fontSize: 11.5, lineHeight: 15 },
   seen: { flexDirection: "row", alignItems: "flex-start", gap: space3, padding: space3 + 2, borderRadius: 16 },
   seenCheck: { width: 26, height: 26, borderRadius: 8, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   rulesRow: { flexDirection: "row", alignItems: "center", gap: space3 },

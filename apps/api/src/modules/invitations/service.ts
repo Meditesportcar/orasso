@@ -93,13 +93,22 @@ function isRecipient(inv: Pick<InvitationRow, "userId" | "email">, v: Viewer): b
 
 const isSuspended = (v: Viewer) => Boolean(v.profile.suspendedUntil && v.profile.suspendedUntil > now());
 
-function brief(e: EventRow, s: StructureRow, days: { id: string; dayDate: string }[] = []): InvitationEventBrief {
+/**
+ * L'événement d'une invitation. `withSlot` (lot M4, tour 2) : le créneau strict des exposants, privé, n'est donné qu'au
+ * destinataire d'une invitation encore en attente (case « J'ai vu » de l'acceptation) ; jamais par le lien public.
+ */
+function brief(
+  e: EventRow,
+  s: StructureRow,
+  days: { id: string; dayDate: string }[] = [],
+  withSlot = false,
+): InvitationEventBrief {
   return {
     // Lot 26 : jours d'un événement sur plusieurs jours, pour choisir le sien à l'acceptation.
     days: days.length > 1 ? days.map((d) => ({ id: d.id, date: d.dayDate })) : [],
     dayAccess: days.length > 1 ? e.dayAccess : "whole",
     // Lot 47 : créneau des exposants, pour la case « J'ai vu » de l'acceptation.
-    arrivalExhibitors: arrivalsOf(e).exhibitors,
+    arrivalExhibitors: withSlot ? arrivalsOf(e).exhibitors : null,
     id: e.id,
     slug: e.slug,
     title: e.title,
@@ -437,13 +446,15 @@ async function receivedView(rows: InvitationRow[], ex: Executor = db): Promise<R
     const found = byEvent.get(r.eventId);
     if (!found) return [];
     const app = r.acceptedApplicationId ? appById.get(r.acceptedApplicationId) : undefined;
+    const status = displayStatus(r, found.e, t);
     return [
       {
         id: r.id,
-        status: displayStatus(r, found.e, t),
+        status,
         message: r.message,
         createdAt: r.createdAt.toISOString(),
-        event: brief(found.e, found.s, multiDay.get(found.e.id)?.days),
+        // Lot M4, tour 2 : le créneau des exposants pour l'acceptation seulement ; une fois acceptée, la fiche le donne.
+        event: brief(found.e, found.s, multiDay.get(found.e.id)?.days, status === "pending"),
         vehicle: r.vehicleId ? { id: r.vehicleId, label: labels.get(r.vehicleId) ?? "Véhicule" } : null,
         application: app ? { id: app.id, status: app.status } : null,
       },
@@ -873,6 +884,7 @@ export const invitationsService = {
     if (status !== "pending" && !mine) throw notFound(L.linkGone);
     return {
       status,
+      // Lot M4, tour 2 : le lien public ne donne jamais le créneau des exposants (on le lit une fois l'invitation à soi).
       event: brief(e, s, await daysRepo.list(e.id)),
       invitedBy: s.name,
       vehicle: inv.vehicleId ? { id: inv.vehicleId, label: labels.get(inv.vehicleId) ?? "Véhicule" } : null,

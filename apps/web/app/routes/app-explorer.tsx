@@ -1,4 +1,12 @@
-import { Button, Chip, Plate, SelectField, TextField } from "@orasso/design-system/web";
+import {
+  Button,
+  Chip,
+  departmentChoices,
+  departmentLabel,
+  Plate,
+  SelectField,
+  TextField,
+} from "@orasso/design-system/web";
 import {
   type Category,
   type CrewCard,
@@ -11,12 +19,14 @@ import {
   eventFormats,
   eventHints,
   explorerLabels,
+  explorerV2Labels,
   fromWallTime,
   gradeLabels,
   grades,
   hasPeopleSearchCriteria,
   type Page,
   type PeopleSearchPage,
+  type Preferences,
   type ProCard,
   proActivities,
   proActivityLabels,
@@ -53,7 +63,14 @@ type Segment = (typeof SEGMENTS)[number];
 const PAGE = 24;
 const MAP_PAGE = 100;
 const RADII = [10, 25, 50, 100, 200];
-const EVENT_SORTS: Record<string, EventSort> = { affinites: "affinity", date: "date", distance: "distance" };
+// Lot M4 (maquette 3.2, parité du site) : aussi « Nouveautés » et « Places restantes ».
+const EVENT_SORTS: Record<string, EventSort> = {
+  affinites: "affinity",
+  date: "date",
+  distance: "distance",
+  nouveautes: "recent",
+  places: "seats",
+};
 
 /** « 2026-10-17 » → instant de minuit (début) ou de 23 h 59 (fin) à Paris ; `null` si la date est illisible. */
 function dayBound(value: string, end: boolean): string | null {
@@ -87,8 +104,20 @@ export async function loader({ request }: Route.LoaderArgs) {
       : null;
   const radius = RADII.includes(Number(get("rayon"))) ? Number(get("rayon")) : null;
   const cursor = get("suite");
+  // Lot M4, tour 2 (décision de Damien du 23/10) : « Autour de… » comme l'appli. `autour` : `coin` (départements du
+  // compte), `moi` (la position de l'appareil, dans l'adresse seulement) ou un département (« Ailleurs… »). Sans
+  // choix : la position si elle est là, sinon le coin. Temporaire : rien n'est enregistré.
+  const autour = get("autour");
+  const aroundDept = (departments as readonly string[]).includes(autour) ? autour : null;
+  const around: "mine" | "me" | "dept" = aroundDept
+    ? "dept"
+    : autour === "coin"
+      ? "mine"
+      : position && (autour === "moi" || autour === "")
+        ? "me"
+        : "mine";
 
-  const base = { segment, q, vue, position, radius };
+  const base = { segment, q, vue, position, radius, around, aroundDept, wantedMe: autour === "moi" && !position };
   const empty = {
     results: null as SearchResults | null,
     events: null as Page<EventCard> | null,
@@ -113,6 +142,22 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   if (segment === "evenements") {
+    // Tour 2 (lot M6 fusionné) : « Tes préférences » : Mon coin, la distance habituelle (`rayon` absent ; `partout` =
+    // partout en France) et les types préférés (tant qu'aucun format n'est choisi). Rien n'est enregistré ici.
+    const prefsRes = await api<Preferences>(request, "/me/preferences");
+    const prefs = prefsRes.ok ? prefsRes.data : null;
+    const rayon = get("rayon");
+    // Une recherche par texte cherche partout (les préférences cadrent la découverte, pas une recherche).
+    const radiusFromPrefs = radius === null && rayon !== "partout" && prefs !== null && !q && around === "mine";
+    const eventsRadius = radius ?? (radiusFromPrefs ? (prefs?.radiusKm ?? null) : null);
+    const prefFormats =
+      !q &&
+      !url.searchParams.has("format") &&
+      prefs &&
+      prefs.eventFormats.length > 0 &&
+      prefs.eventFormats.length < eventFormats.length
+        ? prefs.eventFormats
+        : [];
     const filters = {
       format: (eventFormats as readonly string[]).includes(get("format")) ? get("format") : "",
       categoryId: /^[0-9a-f-]{36}$/i.test(get("categorie")) ? get("categorie") : "",
@@ -133,11 +178,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     const to = dayBound(filters.to, true);
     if (from) params.set("from", from);
     if (to) params.set("to", to);
-    if (radius) params.set("radiusKm", String(radius));
-    if (position) {
+    // Tour 2 : la distance de l'Explorer, ou « Partout en France » (aucun rayon) ; le point de départ choisi.
+    if (eventsRadius) params.set("radiusKm", String(eventsRadius));
+    else params.set("everywhere", "1");
+    if (!filters.format && prefFormats.length) params.set("formats", prefFormats.join(","));
+    if (position && around === "me") {
       params.set("lat", String(position.lat));
       params.set("lng", String(position.lng));
     }
+    if (aroundDept) params.set("around", aroundDept);
     if (cursor) params.set("cursor", cursor);
     const [events, categories] = await Promise.all([
       api<Page<EventCard>>(request, `/events?${params}`),
@@ -146,6 +195,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     return {
       ...base,
       ...empty,
+      radius: eventsRadius,
+      radiusFromPrefs,
+      coin: prefs?.departments ?? [],
+      fromPrefs: prefs !== null && (prefFormats.length > 0 || (radiusFromPrefs && eventsRadius !== null)),
+      prefsKnown: prefs !== null,
       filters,
       categories,
       events: events.ok ? events.data : { items: [], nextCursor: null },
@@ -230,6 +284,13 @@ function href(params: Record<string, string | number | null | undefined>): strin
 export default function Explorer({ loaderData, actionData }: Route.ComponentProps) {
   const { segment, q, vue, position, radius, filters, results, events, pros, people, categories, failed, crews } =
     loaderData;
+  const { around, aroundDept, wantedMe } = loaderData;
+  const prefsView = loaderData as {
+    radiusFromPrefs?: boolean;
+    coin?: string[];
+    fromPrefs?: boolean;
+    prefsKnown?: boolean;
+  };
   const busy = useNavigation().state !== "idle";
   const f = filters as Record<string, string>;
   const segments: { id: Segment; label: string }[] = [
@@ -239,7 +300,15 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
     { id: "personnes", label: explorerLabels.segmentPeople },
   ];
   // Réglages communs conservés d'un changement de vue à l'autre.
-  const keep = { segment, q, ...f, rayon: radius, lat: position?.lat, lng: position?.lng };
+  const autour = around === "dept" ? aroundDept : around === "me" ? "moi" : "coin";
+  // Tour 2 : la position ne reste dans l'adresse (et les champs cachés) que pour « Autour de moi ».
+  const usedPosition = around === "me" ? position : null;
+  // La distance habituelle des préférences ne s'écrit pas dans l'adresse (elle reste le point de départ).
+  const rayonParam = prefsView.radiusFromPrefs ? null : (radius ?? (prefsView.prefsKnown ? "partout" : null));
+  const keep = { segment, q, ...f, rayon: rayonParam, lat: usedPosition?.lat, lng: usedPosition?.lng, autour };
+  // Tour 2 : « Revenir à mon coin » : le point de départ, la distance et les types des préférences (position oubliée).
+  const home = href({ segment, q, vue });
+  const away = around !== "mine" || (prefsView.prefsKnown ? !prefsView.radiusFromPrefs : radius !== null);
   const withoutPosition = href({ ...keep, lat: null, lng: null, suite: null });
   const viewLinks = (
     <nav className="s-row" aria-label="Affichage">
@@ -251,7 +320,7 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
       </a>
     </nav>
   );
-  const positionNote = position ? (
+  const positionNote = usedPosition ? (
     <p className="o-t-caption s-muted" data-testid="position-note">
       {explorerLabels.usingPosition} · <a href={withoutPosition}>{explorerLabels.stopPosition}</a>
     </p>
@@ -315,8 +384,8 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
             <Form method="get" className="s-filters" id="explorer-form" data-testid="events-filters">
               <input type="hidden" name="segment" value="evenements" />
               <input type="hidden" name="vue" value={vue} />
-              {position && <input type="hidden" name="lat" value={position.lat} />}
-              {position && <input type="hidden" name="lng" value={position.lng} />}
+              {usedPosition && <input type="hidden" name="lat" value={usedPosition.lat} />}
+              {usedPosition && <input type="hidden" name="lng" value={usedPosition.lng} />}
               <TextField
                 label={explorerLabels.searchTitle}
                 name="q"
@@ -361,15 +430,32 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
                   { value: "affinites", label: explorerLabels.sortAffinity },
                   { value: "date", label: explorerLabels.sortDate },
                   { value: "distance", label: explorerLabels.sortDistance },
+                  { value: "nouveautes", label: explorerV2Labels.sorts.recent?.label ?? "Nouveautés" },
+                  { value: "places", label: explorerV2Labels.sorts.seats?.label ?? "Places restantes" },
+                ]}
+              />
+              {/* Tour 2 : « Autour de… » et la distance de l'Explorer, comme l'appli. */}
+              <SelectField
+                label={explorerV2Labels.aroundButton}
+                name="autour"
+                defaultValue={autour ?? "coin"}
+                data-testid="around-select"
+                options={[
+                  { value: "coin", label: explorerV2Labels.aroundMine },
+                  { value: "moi", label: explorerV2Labels.aroundMe },
+                  ...departmentChoices.map((d) => ({
+                    value: d.code,
+                    label: `${explorerV2Labels.aroundElsewhere} ${departmentLabel(d)}`,
+                  })),
                 ]}
               />
               <SelectField
-                label={explorerLabels.filterRadius}
+                label={explorerV2Labels.aroundDistance}
                 name="rayon"
-                defaultValue={radius ? String(radius) : ""}
+                defaultValue={radius ? String(radius) : "partout"}
                 options={[
-                  { value: "", label: explorerLabels.filterAll },
-                  ...RADII.map((r) => ({ value: String(r), label: `${r} km` })),
+                  { value: "partout", label: explorerV2Labels.everywhere },
+                  ...RADII.map((r) => ({ value: String(r), label: explorerV2Labels.aroundKm(r) })),
                 ]}
               />
               <Button type="submit" variant="secondary" icon="search">
@@ -382,6 +468,26 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
             <UsePosition formId="explorer-form" />
           </Plate>
           {positionNote}
+          <p className="o-t-caption s-muted" data-testid="around-line">
+            {around === "dept" && aroundDept
+              ? explorerV2Labels.fromDeptElsewhere(aroundDept)
+              : around === "me"
+                ? explorerV2Labels.fromPosition
+                : prefsView.coin?.length
+                  ? `${explorerV2Labels.aroundMine} (${prefsView.coin.join(", ")})`
+                  : explorerV2Labels.aroundMine}
+            {radius ? ` · ${explorerV2Labels.withinKm(radius)}` : ` · ${explorerV2Labels.everywhereLine}`}
+            {prefsView.fromPrefs && around === "mine" ? ` · ${explorerV2Labels.fromPrefs}` : ""}
+            {wantedMe ? ` · ${explorerLabels.usePosition}` : ""}
+            {away ? (
+              <>
+                {" · "}
+                <a href={home} data-testid="around-back">
+                  {explorerV2Labels.backHome}
+                </a>
+              </>
+            ) : null}
+          </p>
           {viewLinks}
           {events && events.items.length === 0 && !failed ? (
             <p className="s-notice" data-testid="events-empty">

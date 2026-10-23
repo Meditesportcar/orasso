@@ -26,6 +26,8 @@ export function UsePosition({ formId }: { formId: string }) {
           if (typeof value === "string" && value) params.set(key, value);
         }
         params.set("lat", String(lat));
+        // Lot M4, tour 2 : utiliser sa position, c'est choisir « Autour de moi » dans l'Explorer.
+        if (form.elements.namedItem("autour")) params.set("autour", "moi");
         params.set("lng", String(lng));
         params.delete("suite");
         navigate(`?${params}`);

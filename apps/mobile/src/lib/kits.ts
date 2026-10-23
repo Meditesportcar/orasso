@@ -2,7 +2,7 @@
 // consignes, dernière météo connue). Enregistré dès que la candidature est retenue, rafraîchi à chaque ouverture
 // de l'appli avec du réseau (donc la veille aussi), effacé à J+1 ou quand la place n'est plus valide.
 
-import type { EventOutlook, EventWeather, MyApplication } from "@orasso/shared";
+import type { ArrivalSlot, EventOutlook, EventWeather, MyApplication } from "@orasso/shared";
 import { api } from "./api";
 import { now as clockNow } from "./clock";
 import { jourJClosesAt } from "./jourj";
@@ -17,6 +17,11 @@ export type AccessKit = {
   status: MyApplication["status"];
   vehicleLabel: string | null;
   zone: { code: string; name: string } | null;
+  /**
+   * Lot M4, tour 2 : le créneau privé des exposants et sa consigne (« Entrée côté capitainerie »), gardés pour l'entrée
+   * sans réseau. Absent des kits enregistrés avant.
+   */
+  arrival?: ArrivalSlot | null;
   checkedInAt: string | null;
   /**
    * Lot 26 : jour choisi d'un événement sur plusieurs jours (`null` = tout l'événement), et l'événement est-il sur
@@ -124,6 +129,7 @@ export async function refreshKit(
     status: app.status,
     vehicleLabel: app.vehicle?.label ?? null,
     zone: app.zone,
+    arrival: app.arrival ?? null,
     checkedInAt: app.checkedInAt,
     day: app.day ? { date: app.day.date, startsAt: app.day.startsAt, endsAt: app.day.endsAt } : null,
     multiDay: (event.days?.length ?? 0) > 1,

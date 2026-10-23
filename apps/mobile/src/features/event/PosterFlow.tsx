@@ -6,6 +6,8 @@
 // Lot M7 (deux modes d'affichage) : c'est un écran du mode B. `band` est l'emplacement standard de l'en-tête de fiche :
 // une bande fixée en haut (l'organisateur de la fiche événement, dessinée par le lot M4), le ✕ à sa place habituelle ;
 // elle remplace la pastille O et le ✕ flottants. Le ✕ flottant a la cible tactile de 44 px des autres en-têtes.
+// Lot M4 (maquette 4.2) : la bande de l'organisateur garde son aplat (couleur de la barre, filet) sur toute la largeur,
+// le ✕ de l'en-tête de fiche à droite ; `heroFloat` se pose en haut de l'affiche quand la bande est là (le pavé J-x).
 import {
   Ground,
   Icon,
@@ -38,6 +40,7 @@ export function PosterFlow({
   testID,
   liftHero = false,
   band,
+  heroFloat,
 }: {
   /** La tête pleine largeur (affiche, photo) ; les boutons flottants se posent dessus. */
   hero: ReactNode;
@@ -51,6 +54,8 @@ export function PosterFlow({
   liftHero?: boolean;
   /** Lot M7 : bande fixe de l'en-tête de fiche (organisateur), à la place de la pastille O et du ✕ flottants. */
   band?: ReactNode;
+  /** Lot M4 : ce qui se pose en haut de l'affiche quand la bande est fixée (le pavé J-x). */
+  heroFloat?: ReactNode;
 }) {
   const { t } = useTheme();
   const focused = useIsFocused();
@@ -62,7 +67,17 @@ export function PosterFlow({
     <OliveActivityProvider active={focused}>
       <OverlayProvider>
         <Ground paused={!focused} style={styles.fill}>
-          {band ? <FicheHeader band={band} onClose={onClose} /> : null}
+          {band ? (
+            <View
+              style={[
+                styles.band,
+                { backgroundColor: t.color.bar, borderBottomColor: t.color.barEdge, boxShadow: t.shadow.shadowBarTop },
+              ]}
+              testID="org-band"
+            >
+              <FicheHeader band={band} onClose={onClose} />
+            </View>
+          ) : null}
           <KeyboardSafe style={styles.fill}>
             <ScrollView
               style={styles.fill}
@@ -88,7 +103,13 @@ export function PosterFlow({
             >
               <View style={[styles.hero, liftHero ? styles.heroLifted : null, { backgroundColor: t.color.bar }]}>
                 {hero}
-                {band ? null : (
+                {band ? (
+                  heroFloat ? (
+                    <View style={[styles.float, { top: 7 }]} pointerEvents="box-none">
+                      {heroFloat}
+                    </View>
+                  ) : null
+                ) : (
                   <View style={[styles.float, { top: insets.top + space3 + 2 }]} pointerEvents="box-none">
                     <View style={[styles.pill, { backgroundColor: `${t.color.night}99` }]}>
                       <Monogram size={32} tone="dark" />
@@ -127,6 +148,8 @@ export function PosterFlow({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  // Lot M4 : la bande de l'organisateur au-dessus de l'affiche (aplat de la barre, filet en bas).
+  band: { borderBottomWidth: 2, zIndex: 20 },
   content: { paddingBottom: space6 * 2 },
   hero: { width: "100%", position: "relative", overflow: "hidden" },
   // Lot M3 : sans découpe et au-dessus du corps, pour que l'affiche grandisse depuis sa place dans la liste.

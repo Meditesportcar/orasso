@@ -286,7 +286,7 @@ for (const home of HOMES) {
   });
 }
 
-test("accès flottant : visible dès J-7 sur Explorer, jamais sur Accueil, Sorties, Garage ni Profil, vers le jour J", async ({
+test("accès flottant : plus sur aucun onglet de l'exposant (Explorer, lot M4 ; Garage et Profil, lot M5)", async ({
   browser,
 }) => {
   test.setTimeout(480_000);
@@ -307,36 +307,20 @@ test("accès flottant : visible dès J-7 sur Explorer, jamais sur Accueil, Sorti
   for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, near.email);
-    // Explorer : la barre est là (une fois, au-dessus de la barre d'onglets). Lot M5 : plus au Garage ni au Profil.
-    for (const [tab, route] of [["Explorer", /\/explorer/]] as const) {
-      await page.getByRole("tab", { name: tab, exact: true }).click();
-      await expect(page).toHaveURL(route, { timeout: 30_000 });
-      const bar = page.getByTestId("next-access-bar");
-      await expect(bar).toHaveCount(1, { timeout: 30_000 });
-      await expect(bar).toContainText(near.event.title);
-      await expect(bar).toContainText("J-6");
-      // Lot C1 : la carte `.near` de l'artefact (« J-6 / sam. », titre, « Retenue · Sam. 24 · 18 h 30 », « QR »).
-      await expect(bar).toContainText(/(Dim|Lun|Mar|Mer|Jeu|Ven|Sam)\. \d{1,2} · /);
-      await expect(bar).toContainText("QR");
-    }
+    // Lot M4 (maquette 3.1) : plus sur l'Explorer, où flotte la bascule « Liste | Carte » ; lot M5 : plus au Garage ni
+    // au Profil. Accueil et Sorties ont déjà l'accès en tête (`.app.no-near`) : l'exposant n'a plus d'accès flottant.
     await page.getByRole("tab", { name: "Explorer", exact: true }).click();
+    await expect(page).toHaveURL(/\/explorer/, { timeout: 30_000 });
+    await expect(page.getByTestId("list-map-toggle")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
     await shot(page, `acces-flottant-explorer-${theme}`);
-    await expect(page.getByTestId("next-access-bar")).toBeVisible();
-    // Sans néon (le seul néon de l'écran est celui d'un bouton principal) : l'ombre portée --shadow-lg de l'artefact,
-    // sans halo moutarde.
-    const shadow = await page.getByTestId("next-access-bar").evaluate((el) => getComputedStyle(el).boxShadow);
-    expect(shadow).not.toContain("233, 184, 36");
-    // Masquée sur Accueil et Sorties (`.app.no-near` de l'artefact), et depuis le lot M5 sur Garage et Profil.
-    for (const tab of ["Accueil", "Sorties", "Garage", "Profil"]) {
+    for (const tab of ["Accueil", "Garage", "Profil", "Sorties"]) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
+      await page.waitForLoadState("networkidle").catch(() => undefined);
       await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
     }
-    await page.getByRole("tab", { name: "Explorer", exact: true }).click();
-    // Elle mène à l'écran du jour J de la candidature.
-    await page.getByTestId("next-access-bar").click();
-    await expect(page).toHaveURL(new RegExp(`/jour-j/${near.applicationId}`), { timeout: 30_000 });
-    // Sur l'écran du jour J : plus de barre d'onglets, donc plus d'accès flottant.
-    await expect(page.getByTestId("next-access-bar")).toBeHidden();
+    // L'accès reste dans Sorties : le ticket de la retenue mène à l'écran du jour J.
+    await expect(page.getByTestId("ticket-application").first()).toBeVisible({ timeout: 60_000 });
     await ctx.close();
   }
 

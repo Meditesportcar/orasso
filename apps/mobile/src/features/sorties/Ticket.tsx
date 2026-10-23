@@ -31,6 +31,8 @@ export type TicketProps = {
   /** Boutons et pastilles sous le texte. */
   children?: ReactNode;
   onPressTitle?: () => void;
+  /** Lot M4 (retour 27) : toucher le ticket ouvre la fiche de l'événement (les boutons gardent leur action). */
+  onPress?: () => void;
   /** Mis en retrait : sortie passée. */
   dim?: boolean;
   /** Le ticket mis en avant (`.tk.me`) : fond d'affiche. */
@@ -49,6 +51,7 @@ export function Ticket({
   notes,
   children,
   onPressTitle,
+  onPress,
   dim,
   highlight = false,
   staff = false,
@@ -88,9 +91,10 @@ export function Ticket({
           </View>
         ) : null}
         <Pressable
-          onPress={onPressTitle}
-          disabled={!onPressTitle}
-          accessibilityRole={onPressTitle ? "link" : undefined}
+          onPress={onPressTitle ?? onPress}
+          disabled={!(onPressTitle ?? onPress)}
+          accessibilityRole={onPressTitle || onPress ? "link" : undefined}
+          accessibilityLabel={onPressTitle || onPress ? `${title} : ouvrir la fiche` : undefined}
         >
           <Text variant="posterS" color={dim ? muted : ink} style={styles.title}>
             {title}
@@ -110,16 +114,32 @@ export function Ticket({
       </View>
     </>
   );
+  const ticket = highlight ? (
+    <View style={[styles.plate, { backgroundColor: c.poster, boxShadow: t.shadow.shadowCard }]} testID={testID}>
+      {content}
+    </View>
+  ) : (
+    <Plate style={[styles.plate, staff ? { borderWidth: 2, borderColor: c.ink } : null] as never} testID={testID}>
+      {content}
+    </Plate>
+  );
   return (
     <TicketPoster.Provider value={highlight}>
-      {highlight ? (
-        <View style={[styles.plate, { backgroundColor: c.poster, boxShadow: t.shadow.shadowCard }]} testID={testID}>
-          {content}
-        </View>
+      {onPress ? (
+        // Tour 2 (relecture Opus) : la zone tactile du ticket n'est pas un élément d'accessibilité ; sinon VoiceOver et
+        // TalkBack la lisent d'un bloc et les boutons (Mon accès, Se retirer, Voter) deviennent inaccessibles. Lecteur
+        // d'écran : le titre est le lien vers la fiche, chaque bouton reste atteignable seul.
+        <Pressable
+          onPress={onPress}
+          accessible={false}
+          importantForAccessibility="no"
+          style={({ pressed }) => (pressed ? styles.pressed : null)}
+          testID={testID ? `${testID}-open` : undefined}
+        >
+          {ticket}
+        </Pressable>
       ) : (
-        <Plate style={[styles.plate, staff ? { borderWidth: 2, borderColor: c.ink } : null] as never} testID={testID}>
-          {content}
-        </Plate>
+        ticket
       )}
     </TicketPoster.Provider>
   );
@@ -146,4 +166,5 @@ const styles = StyleSheet.create({
   title: { fontSize: 15, lineHeight: 16 },
   cap: { fontSize: 12.5, lineHeight: 17 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 },
+  pressed: { opacity: 0.92 },
 });

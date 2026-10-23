@@ -18,6 +18,8 @@ import {
 import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import {
+  applications,
+  eventDays,
   friendships,
   profileInterests,
   profiles,
@@ -29,6 +31,7 @@ import {
   vehicleModels,
   vehicles,
 } from "../../db/schema";
+import { now } from "../../lib/deps";
 import { resetRateLimits } from "../../lib/rateLimit";
 import { socialRepo } from "../social/repo";
 
@@ -255,6 +258,124 @@ describe("structures suivies (lot 44) : GET /events?followed=1", () => {
   });
 });
 
+// Lot M4 (maquette 3.2) : « Nouveautés » (publiés depuis peu d'abord) et « Places restantes » (le plus de places
+// exposants d'abord, sans limite en tête ; retenues et places offertes déduites).
+describe("tris de l'Explorer : GET /events?sort=recent | seats", () => {
+  it("ordonne par publication récente, puis par places restantes", async () => {
+    const owner = await person("Orga_Tri");
+    const s = await createStructure(owner.id);
+    const old = await createEvent(s.id, { title: "Ancien", capacity: 50, publishedAt: new Date(Date.now() - 9 * DAY) });
+    const fresh = await createEvent(s.id, { title: "Récent", capacity: 5, publishedAt: new Date(Date.now() - DAY) });
+    const open = await createEvent(s.id, {
+      title: "Sans limite",
+      capacity: null,
+      publishedAt: new Date(Date.now() - 5 * DAY),
+    });
+    const kenji = await person("Kenji_Tri");
+    for (let i = 0; i < 3; i++) {
+      const v = await createVehicle(kenji.id, ref);
+      await db.insert(applications).values({
+        eventId: fresh.id,
+        userId: kenji.id,
+        vehicleId: v.id,
+        status: i === 0 ? "offered" : "accepted",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+      });
+    }
+    for (const mode of MODES) {
+      const recent = await get(null, "/events?sort=recent", mode);
+      expect(recent.status).toBe(200);
+      expect(ids(recent.json.items)).toEqual([fresh, open, old].map((e) => e.slug));
+      const seats = await get(null, "/events?sort=seats", mode);
+      expect(ids(seats.json.items)).toEqual([open, old, fresh].map((e) => e.slug));
+      expect(seats.json.items[2].remaining).toBe(2);
+    }
+  });
+
+  // Tour 2 (relecture Codex) : même calcul par jour que le compteur affiché, et pagination stable.
+  const accept = async (eventId: string, n: number, eventDayId: string | null = null) => {
+    const who = await person(`Exp_${eventId.slice(0, 6)}_${eventDayId?.slice(0, 4) ?? "tout"}`);
+    for (let i = 0; i < n; i++) {
+      const v = await createVehicle(who.id, ref);
+      await db.insert(applications).values({
+        eventId,
+        userId: who.id,
+        vehicleId: v.id,
+        eventDayId,
+        status: "accepted",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+      });
+    }
+  };
+  const twoDays = async (eventId: string, startsAt: Date, capacity: number | null = null) => {
+    const days = await db
+      .insert(eventDays)
+      .values(
+        [0, 1].map((i) => ({
+          eventId,
+          dayDate: new Date(startsAt.getTime() + i * DAY).toISOString().slice(0, 10),
+          startsAt: new Date(startsAt.getTime() + i * DAY),
+          endsAt: new Date(startsAt.getTime() + i * DAY + 4 * 3_600_000),
+          capacity,
+        })),
+      )
+      .returning();
+    return days;
+  };
+
+  it("plusieurs jours : les places du meilleur jour, comme la carte (pas la capacité moins toutes les candidatures)", async () => {
+    const owner = await person("Orga_Jours");
+    const s = await createStructure(owner.id);
+    const startsAt = new Date(now().getTime() + 10 * DAY);
+    // 10 places par jour, 9 retenus le premier jour seulement : 10 places restent le second (affiché « 10 »).
+    const weekend = await createEvent(s.id, { title: "Week-end", capacity: 10, startsAt });
+    const [d1] = await twoDays(weekend.id, startsAt);
+    await accept(weekend.id, 9, d1?.id ?? null);
+    // Un jour, 5 places, aucune prise.
+    const single = await createEvent(s.id, {
+      title: "Un jour",
+      capacity: 5,
+      startsAt: new Date(startsAt.getTime() + DAY),
+    });
+    // Deux jours, 4 places, 2 inscrits à tout l'événement : 2 places chaque jour.
+    const both = await createEvent(s.id, {
+      title: "Deux jours",
+      capacity: 4,
+      startsAt: new Date(startsAt.getTime() + 2 * DAY),
+    });
+    await twoDays(both.id, new Date(startsAt.getTime() + 2 * DAY));
+    await accept(both.id, 2);
+    const res = await get(null, "/events?sort=seats");
+    expect(ids(res.json.items)).toEqual([weekend, single, both].map((e) => e.slug));
+    expect(res.json.items.map((x: { remaining: number }) => x.remaining)).toEqual([10, 5, 2]);
+  });
+
+  it("pagination par curseur : une inscription entre deux pages ne fait ni sauter ni répéter un événement", async () => {
+    const owner = await person("Orga_Pages");
+    const s = await createStructure(owner.id);
+    const startsAt = new Date(now().getTime() + 10 * DAY);
+    const a = await createEvent(s.id, { title: "A", capacity: 10, startsAt });
+    const b = await createEvent(s.id, { title: "B", capacity: 8, startsAt });
+    const c = await createEvent(s.id, { title: "C", capacity: 6, startsAt });
+    const d = await createEvent(s.id, { title: "D", capacity: 4, startsAt });
+    const first = await get(null, "/events?sort=seats&limit=2");
+    expect(ids(first.json.items)).toEqual([a.slug, b.slug]);
+    expect(first.json.nextCursor).toBeTruthy();
+    // B passe derrière C (8 → 3 places) entre les deux pages.
+    await accept(b.id, 5);
+    const second = await get(null, `/events?sort=seats&limit=2&cursor=${first.json.nextCursor}`);
+    // C n'est pas omis ; B peut revenir (l'appli l'écarte par son id), jamais un événement déjà passé devant.
+    expect(ids(second.json.items)).toEqual([c.slug, d.slug]);
+    const third = await get(null, `/events?sort=seats&limit=2&cursor=${second.json.nextCursor}`);
+    expect(ids(third.json.items)).toEqual([b.slug]);
+    expect(third.json.nextCursor).toBeNull();
+    // Un curseur illisible repart du début (B est maintenant dernier).
+    expect(ids((await get(null, "/events?sort=seats&limit=2&cursor=bidon")).json.items)).toEqual([a.slug, c.slug]);
+  });
+});
+
 describe("distance : GET /events?sort=distance", () => {
   it("part du centre du département du profil, du plus proche au plus loin, sans position les événements sans adresse passent après", async () => {
     const viewer = await person("Viewer_66", { departments: ["66"] });
@@ -287,6 +408,56 @@ describe("distance : GET /events?sort=distance", () => {
       expect(km[1]).toBeLessThan(km[2]);
       expect(km[3]).toBeNull();
     }
+  });
+
+  it("« Ailleurs… » (lot M4) : around=<département> part de son centre, sans toucher au profil ; sans rayon, partout", async () => {
+    const viewer = await person("Viewer_66", { departments: ["66"] });
+    const owner = await person("Orga_A");
+    const s = await createStructure(owner.id);
+    const paris = await createEvent(s.id, { title: "Paris", ...PARIS });
+    const rivesaltes = await createEvent(s.id, { title: "Rivesaltes", ...RIVESALTES });
+    for (const mode of MODES) {
+      const res = await get(viewer, "/events?sort=distance&around=75", mode);
+      expect(res.status).toBe(200);
+      expect(ids(res.json.items)).toEqual([paris.slug, rivesaltes.slug]);
+      expect(res.json.items[0].distanceKm).toBeLessThan(20);
+    }
+    // Rayon : seulement autour du centre choisi.
+    expect(ids((await get(viewer, "/events?sort=distance&around=75&radiusKm=50")).json.items)).toEqual([paris.slug]);
+    const [profile] = await db.select().from(profiles).where(eq(profiles.userId, viewer.id));
+    expect(profile?.departments).toEqual(["66"]);
+    expect((await get(viewer, "/events?around=999")).status).toBe(400);
+  });
+
+  it("formats des préférences (lot M4, tour 2) : plusieurs formats, `format` seul l'emporte", async () => {
+    const owner = await person("Orga_Formats");
+    const s = await createStructure(owner.id);
+    const expo = await createEvent(s.id, { title: "Expo", format: "exhibition" });
+    const rasso = await createEvent(s.id, { title: "Rasso", format: "gathering" });
+    await createEvent(s.id, { title: "Cars", format: "cars_and_coffee" });
+    expect(ids((await get(null, "/events?formats=exhibition,gathering")).json.items).sort()).toEqual(
+      [expo.slug, rasso.slug].sort(),
+    );
+    expect(ids((await get(null, "/events?formats=exhibition,gathering&format=exhibition")).json.items)).toEqual([
+      expo.slug,
+    ]);
+    expect((await get(null, "/events?formats=inconnu")).status).toBe(400);
+  });
+
+  it("« Partout en France » (lot M4, tour 2) : everywhere=1 enlève le rayon d'origine d'une position triée par date", async () => {
+    const viewer = await person("Viewer_66", { departments: ["66"] });
+    const owner = await person("Orga_A");
+    const s = await createStructure(owner.id);
+    const paris = await createEvent(s.id, { title: "Paris", ...PARIS });
+    const rivesaltes = await createEvent(s.id, { title: "Rivesaltes", ...RIVESALTES });
+    const at = `lat=${PERPIGNAN.lat}&lng=${PERPIGNAN.lng}`;
+    // Comportement d'origine (lot 29) : position et tri par date, 50 km.
+    expect(ids((await get(viewer, `/events?sort=date&${at}`)).json.items)).toEqual([rivesaltes.slug]);
+    expect(ids((await get(viewer, `/events?sort=date&${at}&everywhere=1`)).json.items).sort()).toEqual(
+      [paris.slug, rivesaltes.slug].sort(),
+    );
+    // Un rayon demandé s'applique comme avant.
+    expect(ids((await get(viewer, `/events?sort=distance&${at}&radiusKm=50`)).json.items)).toEqual([rivesaltes.slug]);
   });
 
   it("la position de l'appareil prime pour la requête et n'est enregistrée nulle part", async () => {
@@ -432,11 +603,8 @@ describe("événements jamais listés", () => {
     await createEvent(unverified.id, { title: "Non vérifié Rivesaltes" });
     await createEvent(suspended.id, { title: "Suspendu Rivesaltes" });
     await createEvent(deleted.id, { title: "Supprimé Rivesaltes" });
-    // Cinq jours avant l'horloge figée du fichier (17/10/2026), pas avant l'heure réelle : sinon il redevient « à venir ».
-    await createEvent(ok.id, {
-      title: "Passé Rivesaltes",
-      startsAt: fromWallTime({ year: 2026, month: 10, day: 12, hour: 15, minute: 0 }),
-    });
+    // Lot M4 : « passé » à l'heure de l'API (horloge figée du fichier), pas à l'heure réelle du PC.
+    await createEvent(ok.id, { title: "Passé Rivesaltes", startsAt: new Date(now().getTime() - 5 * DAY) });
 
     for (const path of [
       "/events?q=rivesaltes",

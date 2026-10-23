@@ -7,6 +7,7 @@ import sharp from "sharp";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  createEvent,
   createStructure,
   resetDb,
   signUp,
@@ -423,6 +424,109 @@ describe("organisateurs toujours joignables", () => {
     // Structure non vérifiée : on ne la contacte pas.
     const brouillon = await createStructure(damien.id, false);
     expect((await req(fan, "POST", `/structures/${brouillon.id}/conversation`)).status).toBe(404);
+  });
+});
+
+// Lot M4 : un message écrit depuis la fiche d'un événement porte son contexte, visible des deux côtés.
+describe("« À propos de » un événement", () => {
+  it("étiquette sur le message, des deux côtés ; refusée hors de la structure, sur un brouillon ou entre amis", async () => {
+    const damien = await signUp("Damien", { twoFactor: true });
+    const kenji = await signUp("Kenji");
+    const s = await createStructure(damien.id);
+    const other = await createStructure((await signUp("Autre", { twoFactor: true })).id);
+    const startsAt = fromWallTime({ year: 2026, month: 10, day: 24, hour: 19, minute: 0 });
+    const nocturne = await createEvent(s.id, { title: "Nocturne de Canet", startsAt });
+    const draft = await createEvent(s.id, { status: "draft" });
+    const elsewhere = await createEvent(other.id);
+    const id = (await req(kenji, "POST", `/structures/${s.id}/conversation`)).json.id as string;
+    const about = (aboutEventId: string, body = "Je peux venir avec une remorque ?") =>
+      req(kenji, "POST", `/conversations/${id}/messages`, { clientId: randomUUID(), body, aboutEventId }, "bearer");
+
+    const sent = await about(nocturne.id);
+    expect(sent.status).toBe(201);
+    const label = {
+      eventId: nocturne.id,
+      slug: nocturne.slug,
+      title: "Nocturne de Canet",
+      startsAt: startsAt.toISOString(),
+      city: nocturne.city,
+    };
+    expect(sent.json.about).toEqual(label);
+    expect((await req(damien, "GET", `/conversations/${id}/messages`)).json.items[0].about).toEqual(label);
+    expect((await req(kenji, "GET", `/conversations/${id}/messages`)).json.items[0].about).toEqual(label);
+    // Une réponse sans contexte n'en porte pas.
+    expect((await send(damien, id, "Oui, parking visiteurs")).json.about).toBeNull();
+
+    for (const bad of [draft.id, elsewhere.id, randomUUID()]) {
+      const refused = await about(bad);
+      expect(refused.status).toBe(400);
+      expect(refused.json.error.details.field).toBe("aboutEventId");
+    }
+    const lea = await signUp("Lea");
+    const direct = await directBetween(kenji, lea);
+    const between = await req(kenji, "POST", `/conversations/${direct}/messages`, {
+      clientId: randomUUID(),
+      body: "Tu viens ?",
+      aboutEventId: nocturne.id,
+    });
+    expect(between.status).toBe(400);
+  });
+
+  // Tour 2 (relecture Codex) : un événement privé sur invitation n'est jamais divulgué par l'étiquette.
+  it("événement sur invitation : refusé à un non-invité, filtré à la lecture et en temps réel pour chaque destinataire", async () => {
+    const damien = await signUp("Damien", { twoFactor: true });
+    const kenji = await signUp("Kenji");
+    const s = await createStructure(damien.id);
+    const prive = await createEvent(s.id, { title: "Soirée privée des membres", admission: "invite_only" });
+    const id = (await req(kenji, "POST", `/structures/${s.id}/conversation`)).json.id as string;
+    const leaks = (x: unknown) => JSON.stringify(x).includes("Soirée privée") || JSON.stringify(x).includes(prive.slug);
+
+    // L'expéditeur non invité : le même refus qu'un événement inconnu (rien sur son existence).
+    const refused = await req(kenji, "POST", `/conversations/${id}/messages`, {
+      clientId: randomUUID(),
+      body: "Je peux venir ?",
+      aboutEventId: prive.id,
+    });
+    expect(refused.status).toBe(400);
+    expect(refused.json.error.details.field).toBe("aboutEventId");
+    expect(leaks(refused.json)).toBe(false);
+
+    // L'organisation peut en parler (elle le voit) ; le destinataire non invité ne lit pas l'étiquette.
+    const received: string[] = [];
+    const socketK: RealtimeSocket = { userId: kenji.id, send: (d) => received.push(d) };
+    realtime.subscribe(`conversation:${id}`, socketK);
+    const fromOrga = await req(damien, "POST", `/conversations/${id}/messages`, {
+      clientId: randomUUID(),
+      body: "On en reparle bientôt",
+      aboutEventId: prive.id,
+    });
+    expect(fromOrga.status).toBe(201);
+    expect(fromOrga.json.about?.title).toBe("Soirée privée des membres");
+    expect((await req(damien, "GET", `/conversations/${id}/messages`)).json.items[0].about?.eventId).toBe(prive.id);
+    const kenjiPage = await req(kenji, "GET", `/conversations/${id}/messages`);
+    expect(kenjiPage.json.items[0].body).toBe("On en reparle bientôt");
+    expect(kenjiPage.json.items[0].about).toBeNull();
+    expect(leaks(kenjiPage.json)).toBe(false);
+    expect(received.some((d) => d.includes("message.new") && d.includes("On en reparle bientôt"))).toBe(true);
+    expect(leaks(received)).toBe(false);
+
+    // Invité (invitation en attente) : il lit l'étiquette, la reçoit en temps réel et peut en parler.
+    expect((await req(damien, "POST", `/events/${prive.id}/invitations`, { pseudos: ["Kenji"] })).json.created).toBe(1);
+    expect((await req(kenji, "GET", `/conversations/${id}/messages`)).json.items[0].about?.eventId).toBe(prive.id);
+    const invited = await req(kenji, "POST", `/conversations/${id}/messages`, {
+      clientId: randomUUID(),
+      body: "Merci pour l'invitation",
+      aboutEventId: prive.id,
+    });
+    expect(invited.status).toBe(201);
+    received.length = 0;
+    await req(damien, "POST", `/conversations/${id}/messages`, {
+      clientId: randomUUID(),
+      body: "Avec plaisir",
+      aboutEventId: prive.id,
+    });
+    expect(received.some((d) => d.includes("Avec plaisir") && d.includes("Soirée privée des membres"))).toBe(true);
+    realtime.unsubscribeAll(socketK);
   });
 });
 

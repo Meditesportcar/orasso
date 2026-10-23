@@ -116,6 +116,8 @@ export const CACHE_KEY_PREFIXES = [
   "home-",
   "event-draft-",
   "event-wizard-memo-",
+  // Lot M4 : la liste par défaut de l'Explorer, une par tri.
+  "explore-events.",
 ] as const;
 
 async function purgeLegacyCaches(): Promise<void> {

@@ -2,9 +2,12 @@
 // récurrence, publication, modification, statut Maintenu/Incertain, annulation, zones.
 import { randomBytes } from "node:crypto";
 import {
+  type ApplicationStatus,
+  type ApplyContext,
   addDays,
   BUSINESS_TIMEZONE,
   calendarDaysBetween,
+  canApply,
   type DaysError,
   departmentFromPostalCode,
   duplicateDates,
@@ -20,6 +23,8 @@ import {
   eventOutlookLabels,
   formatDayDate,
   fromWallTime,
+  invitationLabels,
+  isActiveStatus,
   isLocked,
   isMultiDay,
   localDate,
@@ -46,9 +51,11 @@ import {
   events,
   eventZones,
   orders,
+  structureBans,
   structureFollows,
   structureMembers,
   tickets,
+  vehicles,
 } from "../../db/schema";
 import { requireOrganizer, staffAccess } from "../../lib/access";
 import { deps, now } from "../../lib/deps";
@@ -64,11 +71,12 @@ import { type Tx, withTx } from "../../lib/tx";
 import { applicationsService } from "../applications/service";
 import { announcementsService } from "../communication/announcements";
 import { staffChatsService } from "../communication/staff-chats";
-import { assertCanSeeEvent } from "../invitations/access";
+import { assertCanSeeEvent, hasPendingInvitation } from "../invitations/access";
 import { decorateForMedia } from "../media/explore";
 import { notificationsService } from "../notifications/service";
 import { staffService } from "../staff/service";
 import { isFollowing, structureById } from "../structures/service";
+import { vehiclesRepo } from "../vehicles/repo";
 import { arrivalColumns, arrivalsOf, assertArrivals } from "./arrivals";
 import { card, type StructureRow } from "./card";
 import { dayInUse, daysRepo } from "./days";
@@ -77,7 +85,13 @@ import { scheduleEventJobs } from "./jobs";
 import { posterColumns, posterService, posterSettingsOf, samePoster } from "./poster/service";
 import { type EventRow, eventsRepo } from "./repo";
 
-async function publicView(e: EventRow, s: StructureRow, showInstructions: boolean): Promise<EventPublic> {
+/**
+ * Ce que la fiche montre au-delà du public : les consignes (retenus et organisation) et, depuis le lot M4, le créneau
+ * d'arrivée strict des exposants.
+ */
+type ViewRights = { instructions: boolean; exhibitorSlot: boolean };
+
+async function publicView(e: EventRow, s: StructureRow, rights: ViewRights): Promise<EventPublic> {
   const counters = await eventsRepo.counters(e);
   const t = now();
   // Plusieurs jours (lot 26) : jours avec leurs places ; un événement d'un jour n'en a pas et reste `whole`.
@@ -90,8 +104,9 @@ async function publicView(e: EventRow, s: StructureRow, showInstructions: boolea
     dayAccess: days.length ? e.dayAccess : "whole",
     ...card(e, s, counters.remaining),
     description: e.description,
-    // Lot 47 : créneaux d'arrivée, affiche générée (Post et Story), affiche perso de l'organisateur.
-    arrivals: arrivalsOf(e),
+    // Lot 47 : créneaux d'arrivée, affiche générée (Post et Story), affiche perso de l'organisateur. Lot M4 (correction
+    // de Damien) : le créneau des exposants est privé, jamais dans une réponse publique ni anonyme.
+    arrivals: rights.exhibitorSlot ? arrivalsOf(e) : { ...arrivalsOf(e), exhibitors: null },
     poster: postUrl && storyUrl && style ? { postUrl, storyUrl, style } : null,
     customPosterUrl: storage.url(e.posterKey),
     addressLine: e.addressLine,
@@ -112,10 +127,30 @@ async function publicView(e: EventRow, s: StructureRow, showInstructions: boolea
     lockAt: lockAt(e).toISOString(),
     isLocked: isLocked(e, t),
     rulesText: e.rulesText,
-    instructions: showInstructions ? e.instructions : null,
+    instructions: rights.instructions ? e.instructions : null,
     entranceNote: e.entranceNote,
     acceptedCount: counters.accepted,
   };
+}
+
+/**
+ * Un véhicule qui peut candidater à cet événement, avec les règles de la candidature (`applicationsService.apply`) :
+ * actif, sans transfert de plaque en cours, d'un type admis, avec au moins une photo.
+ */
+async function hasEligibleVehicle(userId: string, e: Pick<EventRow, "admittedVehicleTypes">) {
+  const garage = await vehiclesRepo.findFull(and(eq(vehicles.ownerId, userId), eq(vehicles.status, "active")));
+  return garage.some(
+    (x) => !x.pendingTransferId && e.admittedVehicleTypes.includes(x.vehicleType) && x.photos.length > 0,
+  );
+}
+
+/**
+ * Lot M4, tour 2 : le créneau strict des exposants n'appartient qu'à l'organisation (membres actifs de la structure,
+ * staff compris) et à qui a une candidature **en cours ou acceptée** avec un véhicule, membre de crew compris (à
+ * confirmer). Une candidature refusée, retirée, expirée ou annulée ne l'ouvre plus.
+ */
+function holdsExhibitorSlot(member: boolean, mine: { kind: string; status: ApplicationStatus }[]): boolean {
+  return member || mine.some((a) => a.kind === "vehicle" && isActiveStatus(a.status));
 }
 
 async function isMember(structureId: string, userId: string) {
@@ -279,7 +314,10 @@ export const eventsService = {
     const member = viewer ? await isMember(e.structureId, viewer.user.id) : false;
     await assertCanSeeEvent(e, viewer);
     const accepted = mine.some((a) => a.status === "accepted");
-    const view = await publicView(e, s, member || accepted);
+    // Lot M4, tour 2 : le créneau strict des exposants n'est donné qu'aux concernés (`holdsExhibitorSlot`). La feuille
+    // de candidature le lit à part, par `applyContext`, seulement si l'on peut candidater maintenant.
+    const exhibitorSlot = viewer !== null && holdsExhibitorSlot(member, mine);
+    const view = await publicView(e, s, { instructions: member || accepted, exhibitorSlot });
     if (!viewer) return view;
     const follower = await isFollowing(e.structureId, viewer.user.id);
     const full: EventPublic = {
@@ -295,6 +333,48 @@ export const eventsService = {
     return full;
   },
 
+  /**
+   * `GET /events/:id/apply-context` (lot M4, tour 2), lu à l'ouverture de la feuille de candidature : le créneau strict
+   * des exposants, pour la case « J'ai vu ». Seulement si la personne peut candidater **maintenant** : événement publié
+   * et non verrouillé, inscriptions ouvertes pour elle (avant-première comprise), invitation en attente si l'événement
+   * est privé, pas bannie par la structure, un véhicule actif au garage. Sinon, les mêmes refus que la candidature.
+   */
+  async applyContext(v: Viewer, eventId: string): Promise<ApplyContext> {
+    const e = await eventsRepo.byId(eventId);
+    if (e.status === "draft") throw notFound("Événement introuvable");
+    await assertCanSeeEvent(e, v);
+    if (e.admission === "invite_only" && !(await hasPendingInvitation(e.id, v))) {
+      throw new AppError(403, "invitation_required", invitationLabels.invitationRequired);
+    }
+    const t = now();
+    // Compte suspendu : lecture seule, aucune candidature (lot 32).
+    if (v.profile.suspendedUntil && v.profile.suspendedUntil > t) {
+      throw forbidden("Ton compte est suspendu : lecture seule.");
+    }
+    const applicant = { follower: await isFollowing(e.structureId, v.user.id), grade: v.profile.grade };
+    const check = canApply(e, applicant, t);
+    if (!check.ok) {
+      if (check.reason === "locked") throw new AppError(423, "locked", "Inscriptions closes");
+      if (check.reason === "not_open") {
+        throw conflict("conflict", "Les candidatures ne sont pas encore ouvertes pour toi", {
+          opensAt: registrationOpensAt(e, applicant).toISOString(),
+        });
+      }
+      throw conflict("conflict", "Événement annulé");
+    }
+    const banned = await db.query.structureBans.findFirst({
+      where: and(eq(structureBans.structureId, e.structureId), eq(structureBans.userId, v.user.id)),
+      columns: { id: true },
+    });
+    if (banned) throw forbidden("Tu ne peux pas candidater aux événements de cette structure");
+    if (!(await hasEligibleVehicle(v.user.id, e))) {
+      throw conflict("conflict", "Aucun véhicule de ton garage ne peut candidater à cet événement", {
+        noVehicle: true,
+      });
+    }
+    return { exhibitors: arrivalsOf(e).exhibitors };
+  },
+
   async getForOrganizer(v: Viewer, id: string): Promise<EventOrganizer> {
     const { e } = await organizerEvent(v, id);
     const s = await structureById(e.structureId);
@@ -304,7 +384,7 @@ export const eventsService = {
     });
     const settings = posterSettingsOf(e);
     return {
-      ...(await publicView(e, s, true)),
+      ...(await publicView(e, s, { instructions: true, exhibitorSlot: true })),
       zones: zones.map((z) => ({ id: z.id, code: z.code, name: z.name, capacity: z.capacity, position: z.position })),
       counters: await eventsRepo.counters(e),
       publishedAt: e.publishedAt?.toISOString() ?? null,

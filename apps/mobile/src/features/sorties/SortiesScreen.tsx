@@ -40,6 +40,7 @@ import { formatPrice } from "@/features/tickets/TicketsBlock";
 import { WithdrawSheet } from "@/features/WithdrawSheet";
 import { api } from "@/lib/api";
 import { useApplications } from "@/lib/applications";
+import { prefetchEvent } from "@/lib/eventPreview";
 import { dayCountdown, formatDayHour, formatDuration, formatShortDate } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { usePersona } from "@/lib/persona";
@@ -293,7 +294,11 @@ export function SortiesScreen() {
                 primary={app.id === firstAccepted}
                 highlight={app.id === meId}
                 primaryOffer={app.id === offerId}
-                onOpen={() => router.push(`/e/${app.event.slug}`)}
+                onOpen={() => {
+                  // Lot M4 : la fiche (« Ta place ») se lit dès le toucher, avant l'écran (fluidité du lot M3).
+                  prefetchEvent(app.event.slug);
+                  router.push(`/e/${app.event.slug}`);
+                }}
                 onJourJ={() => router.push(`/jour-j/${app.id}`)}
                 onVote={() => router.push(`/vote/${app.event.id}?titre=${encodeURIComponent(app.event.title)}`)}
                 onWithdraw={() => setWithdrawing(app)}
@@ -517,6 +522,7 @@ function ApplicationTicket({
       detail={detail.length ? upperFirst(detail.join(" · ")) : undefined}
       notes={notes}
       onPressTitle={onOpen}
+      onPress={onOpen}
     >
       {awaiting ? (
         <>
