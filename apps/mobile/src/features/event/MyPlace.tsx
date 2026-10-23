@@ -106,7 +106,7 @@ export function MyPlace({
                 : L.withdrawFree(formatDayHour(app.withdrawDeadline))
               : ""}
           </Text>
-          <SmallButton kind="g" icon="close" disabled={busy} onPress={onWithdraw} testID="my-place-withdraw">
+          <SmallButton kind="g" icon="close" disabled={busy} onPress={onWithdraw} onPoster testID="my-place-withdraw">
             {L.withdraw}
           </SmallButton>
         </View>

@@ -264,6 +264,10 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
       await expect(page.getByTestId("event-primary")).toHaveText(/Mon QR/);
       await audit(page);
       await shot(page, `fiche-inscrit-${theme}`);
+      await page.getByTestId("my-place").scrollIntoViewIfNeeded();
+      await shot(page, `fiche-inscrit-place-${theme}`);
+      await page.getByTestId("event-admission").scrollIntoViewIfNeeded();
+      await shot(page, `fiche-inscrit-lignes-${theme}`);
     }
 
     // 4. La conversation : l'étiquette « À propos de » l'événement, des deux côtés.

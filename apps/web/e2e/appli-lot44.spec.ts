@@ -161,10 +161,12 @@ test("fiche v2 : affiche, créneaux, actions selon le profil, fermé, pas encore
 }) => {
   test.setTimeout(600_000);
   mkdirSync(DIR, { recursive: true });
-  const noct = await apiCall<EventPublic>(null, "GET", `/events/by-slug/${NOCTURNE}`);
-  expect(noct.data.arrivals.exhibitors).not.toBeNull();
-  // Un événement complet (une place, prise par un autre exposant) et un pas encore ouvert, créés par l'organisateur.
+  // Lot M4 : le créneau des exposants est privé (absent de la fiche anonyme) ; l'organisation le lit.
   const orga = await login("damien@orasso.local");
+  const noct = await apiCall<EventPublic>(orga, "GET", `/events/by-slug/${NOCTURNE}`);
+  expect(noct.data.arrivals.exhibitors).not.toBeNull();
+  expect((await apiCall<EventPublic>(null, "GET", `/events/by-slug/${NOCTURNE}`)).data.arrivals.exhibitors).toBeNull();
+  // Un événement complet (une place, prise par un autre exposant) et un pas encore ouvert, créés par l'organisateur.
   const fullEvent = await createEvent(orga, { title: `Complet ${unique()}`, capacity: 1, admission: "open" });
   const other = await signUpApi(`Plein44_${unique()}`.slice(0, 24));
   await applyApi(other, fullEvent.id, await addVehicleApi(other, randomPlate()));
