@@ -2258,3 +2258,10 @@ Mesures sur le Xiaomi de Damien (Redmi Note 10 Pro, `adb -s cd0ba0d8`), enregist
 - **Mouvement réduit** : squelettes et affiche venue de la liste en fondu de 120 ms ; la courbe de l'affiche vient du jeton `bezier.park`.
 - Captures rangées dans `lot-m3-captures/` du relais : 12 paires avant/après (Accueil, Explorer, Sorties, Garage, Profil, fiche ; Béton et Sable, 390 px) et 4 paires « artefact | réel » (Explorer, fiche). Les écarts à l'artefact de l'Explorer et de la fiche existaient avant ce lot (même rendu avant et après) : ils relèvent du lot M4.
 - APK et mesures du tour 2 : faits par le coordinateur après la fusion (mémoire du PC saturée, consigne du 23/10).
+
+### Lot M3, tour 3 (vérification Codex) — 23/10/2026
+- **Vie privée** : `usePaged` passe par une garde de lecture (`lib/requestGate.ts`, pure et testée) : seule la dernière lecture compte, page suivante comprise, et seulement pour le compte qui l'a lancée. Au changement de compte, la liste affichée est vidée, les lectures en cours jetées, puis la liste du nouveau compte est relue. Test : une page tardive demandée par A, arrivée après la connexion de B, est jetée.
+- **`useApi`** : chaque lecture a un numéro ; seule la dernière met à jour le résultat, l'état de chargement et le cache (une réponse d'avant une suppression, arrivée après la relecture, est ignorée). La garde de compte existante reste.
+- **Tri** : au retour sur le tri, la file est relue tout de suite, puis toutes les minutes ; elle l'est aussi à chaque (ré)abonnement confirmé du canal temps réel (`useChannel`, troisième argument). `fill` ne se lance jamais deux fois en même temps.
+- **Une requête par changement de filtre** : la revalidation au retour sur l'écran ne part qu'à l'arrivée sur l'écran (plus à chaque nouvelle `reload`), jamais pendant le délai de frappe ni pendant une lecture (`shouldRevalidate`, testé).
+- Fichiers : `apps/mobile/src/lib/{requestGate.ts,requestGate.test.ts,useApi.ts}`, `apps/mobile/src/features/explorer/{usePaged.ts,usePaged.test.ts}`, `apps/mobile/src/features/orga/triage/Deck.tsx`.
