@@ -7,6 +7,7 @@ import { clearAccountQrSecret, saveAccountQrSecret } from "./accountQrStore";
 import { api, authApi } from "./api";
 import { ApiRequestError, setSessionToken } from "./http";
 import "./eventDraftStore"; // enregistre le nettoyage des fichiers de brouillon à chaque purge de compte
+import { resetAnnouncements } from "@/ui/Announce";
 import { clearEventPreviews } from "./eventPreview";
 import { clearKits } from "./kits";
 import { bindCacheScope, kvDel, kvGet, kvGetJson, kvSet, kvSetJson, purgeCaches } from "./kv";
@@ -165,6 +166,8 @@ async function clearSession() {
   ]);
   // Lot M3, tour 2 : les fiches lues d'avance et les aperçus ne survivent pas au compte.
   clearEventPreviews();
+  // Lot M6, tour 2 : les annonces en attente (bandeau) non plus.
+  resetAnnouncements();
 }
 
 export function useSession(): SessionValue {

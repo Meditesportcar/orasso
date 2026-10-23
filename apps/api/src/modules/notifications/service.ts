@@ -268,7 +268,9 @@ async function deliverOne(n: NotificationRow) {
     .filter((t): t is string => Boolean(t));
   let pushed = 0;
   if (tokens.length) {
-    const data = stripInternal(n.data);
+    // Lot M6, tour 2 : l'identifiant et le type voyagent avec le push, pour que l'appli ouverte l'annonce dans son bandeau
+    // avec la même clé que le temps réel (`notification-<id>`, jamais deux fois).
+    const data = { ...stripInternal(n.data), notificationId: n.id, notificationType: n.type };
     // Compte suspendu (lot 32, relecture) : pas d'aperçu de message sur l'écran verrouillé, il lit dans sa Boîte.
     const suspended = Boolean(profile?.suspendedUntil && profile.suspendedUntil > now());
     const body = suspended && n.type === "message_received" ? "Nouveau message" : n.body;

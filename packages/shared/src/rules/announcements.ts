@@ -25,9 +25,12 @@ export const announceToneOf = (type: string): AnnounceTone =>
 /**
  * Une notification reçue pendant l'utilisation devient-elle un bandeau ? Non pour l'actualité du Journal (jamais
  * poussée), ni pour « Retenue » : l'appli l'annonce elle-même dès que la candidature passe « retenue » (avec
- * l'événement, la date et le véhicule), une seule fois par candidature.
+ * l'événement, la date et le véhicule), une seule fois par candidature — sauf la candidature d'un prestataire
+ * (`screen: "provider_applications"`), absente de Sorties : elle s'annonce comme les autres notifications. Ni pour
+ * une notification que le serveur n'a pas livrée (`delivered: false` : type ou famille coupés, lot M6 tour 2).
  */
-export function notificationAnnounced(type: string): boolean {
+export function notificationAnnounced(type: string, opts: { screen?: unknown; delivered?: unknown } = {}): boolean {
+  if (opts.delivered === false) return false;
   if (journalOnlyNotificationTypes.includes(type)) return false;
-  return type !== "application_accepted";
+  return type !== "application_accepted" || opts.screen === "provider_applications";
 }

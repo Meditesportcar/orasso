@@ -42,16 +42,23 @@ export function announce(a: Announcement): void {
   emit();
 }
 
-const dropFirst = () => {
+/** Retire l'annonce affichée, seulement si c'est encore elle (un rappel en retard ne retire jamais celle d'après). */
+const drop = (id: string) => {
+  if (queue[0]?.id !== id) return;
   queue = queue.slice(1);
   emit();
 };
 
-/** Recette et tests : vide la file et l'historique. */
+/**
+ * Vide la file, l'historique et le ticket qui pulse (tour 2, vie privée) : appelé à la déconnexion et au changement de
+ * compte (clearSession) ; aucune annonce d'un compte ne s'affiche devant un autre.
+ */
 export function resetAnnouncements(): void {
   queue = [];
   seen.clear();
   emit();
+  pulsing = null;
+  for (const l of pulseListeners) l();
 }
 
 const subscribe = (l: () => void) => {
@@ -121,7 +128,7 @@ export function AnnounceHost() {
     () => null,
   );
   // La clé remonte le bandeau à chaque annonce (minuteur et animations repartent de zéro).
-  return current ? <Banner key={current.id} item={current} onDone={dropFirst} /> : null;
+  return current ? <Banner key={current.id} item={current} onDone={() => drop(current.id)} /> : null;
 }
 
 function Banner({ item, onDone }: { item: Announcement; onDone: () => void }) {

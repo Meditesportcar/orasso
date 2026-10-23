@@ -109,6 +109,9 @@ export const shareSheetLabels = {
   plateServer: "La photo garde la plaque floutée par Orasso.",
   plateFound: "Une plaque semble lisible sur l'affiche.",
   plateMask: "La masquer",
+  plateCheckingShort: "Vérification…",
+  shareAnyway: "Partager quand même",
+  shareAnywayConfirm: "Une plaque semble lisible sur l'affiche. La partager quand même ?",
   plateMasked: "Plaque masquée sur l'affiche.",
   /** Pied de l'affiche (texte rendu par l'API). */
   findIt: "Retrouve-la sur",

@@ -213,8 +213,8 @@ function Shell() {
       {/* Lot 32 : feuille « Signaler », une pour toute l'appli. */}
       {status === "in" ? <ReportSheetHost /> : null}
       {status === "in" ? <StaffBackground /> : null}
-      {/* Le bandeau d'annonce, au-dessus des écrans et de leurs feuilles. */}
-      <AnnounceHost />
+      {/* Le bandeau d'annonce, au-dessus des écrans et de leurs feuilles ; jamais sans session, remonté à chaque compte. */}
+      {status === "in" && me ? <AnnounceHost key={me.user.id} /> : null}
       {/* Lot 39 (V12) : la battle en tandem de 3 s à chaque lancement (fondu de 120 ms si animations réduites). Lot C3 :
           pas au premier lancement, où l'accueil (`/arrivee`, artefact `s-splash`) joue lui-même la battle autour du O. */}
       {/* Rien avant la lecture d'« onboarded » (pas d'éclair de l'ouverture au premier lancement, ni de l'écran ensuite). */}

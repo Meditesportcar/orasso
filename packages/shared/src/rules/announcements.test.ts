@@ -15,4 +15,10 @@ describe("bandeau d'annonce unique (lot M6)", () => {
     expect(notificationAnnounced("message_received")).toBe(true);
     expect(notificationAnnounced("offer_received")).toBe(true);
   });
+
+  it("tour 2 : un prestataire retenu est annoncé ; une notification non livrée ne l'est jamais", () => {
+    expect(notificationAnnounced("application_accepted", { screen: "provider_applications" })).toBe(true);
+    expect(notificationAnnounced("offer_received", { delivered: false })).toBe(false);
+    expect(notificationAnnounced("message_received", { delivered: true })).toBe(true);
+  });
 });

@@ -20,11 +20,11 @@ import {
   shareStyles,
 } from "@orasso/shared";
 import { useEffect, useRef, useState } from "react";
-import { Image, Platform, Share, StyleSheet, View } from "react-native";
+import { Alert, Image, Platform, Share, StyleSheet, View } from "react-native";
 import { siteUrl } from "@/api";
 import { Seg, SmButton } from "@/features/passionne/kit";
 import { errorMessage } from "@/lib/http";
-import { detectPlates } from "@/lib/plates/detect";
+import { detectSharePlates } from "@/lib/sharePlates";
 import {
   type PreparedShare,
   prepareShareImage,
@@ -44,6 +44,18 @@ const PREVIEW_WIDTH: Record<ShareFormat, number> = { story: 266, post: 300 };
 type PlateCheck = "checking" | "clear" | "server" | "found" | "masked";
 
 const keyOf = (format: ShareFormat, style: ShareStyle) => `${format}:${style}`;
+
+/** Partager malgré une plaque détectée : toujours confirmé (Damien : aucune plaque visible). */
+function confirmShareAnyway(go: () => void) {
+  if (Platform.OS === "web") {
+    if (typeof window !== "undefined" && window.confirm(L.shareAnywayConfirm)) go();
+    return;
+  }
+  Alert.alert(L.plateFound, L.shareAnywayConfirm, [
+    { text: "Annuler", style: "cancel" },
+    { text: L.shareAnyway, style: "destructive", onPress: go },
+  ]);
+}
 
 /**
  * La feuille repart de zéro quand le véhicule ou sa version change (relecture du lot 50) : après le floutage d'une
@@ -120,7 +132,7 @@ export function ShareBody({
         if (zone.length) return setChecks((all) => ({ ...all, [key]: "masked" }));
         setChecks((all) => ({ ...all, [key]: "checking" }));
         const size = SHARE_SIZES[format];
-        const plates = await detectPlates(p.uri, size.width, size.height).catch(() => null);
+        const plates = await detectSharePlates(p.uri, size.width, size.height).catch(() => null);
         if (cancelled) return;
         if (plates === null) setChecks((all) => ({ ...all, [key]: "server" }));
         else if (plates.length === 0) setChecks((all) => ({ ...all, [key]: "clear" }));
@@ -134,7 +146,8 @@ export function ShareBody({
     return () => {
       cancelled = true;
     };
-  }, [visible, key, vehicleId, version]);
+    // Tour 2 (point 2) : « La masquer » change `masks` et retire l'affiche : le rendu masqué repart.
+  }, [visible, key, vehicleId, version, masks]);
 
   function maskPlates() {
     const plates = found[key];
@@ -281,11 +294,6 @@ export function ShareBody({
             <Text variant="caption" color={check === "found" ? c.winText : c.inkMuted} style={styles.checkText}>
               {plateLine}
             </Text>
-            {check === "found" ? (
-              <SmButton kind="s" icon="eyeOff" onPress={maskPlates} testID="share-plate-mask">
-                {L.plateMask}
-              </SmButton>
-            ) : null}
           </View>
         ) : null}
       </View>
@@ -301,23 +309,47 @@ export function ShareBody({
           {showSafe ? L.hideSafe : L.showSafe}
         </SmButton>
       ) : null}
-      <View style={styles.row}>
+      {/* Tour 2 : une plaque détectée, le bouton principal est « La masquer » ; partager reste possible, confirmé. */}
+      {check === "found" ? (
+        <View style={styles.row}>
+          <SmButton kind="p" big icon="eyeOff" onPress={maskPlates} style={styles.grow} testID="share-plate-mask">
+            {L.plateMask}
+          </SmButton>
+          <SmButton
+            kind="s"
+            big
+            icon="share"
+            disabled={!current || busy !== null}
+            onPress={() => confirmShareAnyway(() => void send("share"))}
+            testID="share-anyway"
+          >
+            {L.shareAnyway}
+          </SmButton>
+        </View>
+      ) : null}
+      <View style={[styles.row, check === "found" ? styles.hidden : null]}>
         <SmButton
           kind="p"
           big
           icon="share"
-          disabled={!current || busy !== null}
+          disabled={!current || busy !== null || check === "checking" || check === "found"}
           onPress={() => void send("share")}
           style={styles.grow}
           testID="share-story"
         >
-          {busy === "share" ? L.loading : format === "story" ? L.story : L.post}
+          {busy === "share"
+            ? L.loading
+            : check === "checking"
+              ? L.plateCheckingShort
+              : format === "story"
+                ? L.story
+                : L.post}
         </SmButton>
         <SmButton
           kind="s"
           big
           icon="gallery"
-          disabled={!current || busy !== null}
+          disabled={!current || busy !== null || check === "checking" || check === "found"}
           onPress={() => void send("save")}
           accessibilityLabel={`${L.image} · ${shareFormatLabels[format]}`}
           testID="share-post"
@@ -385,5 +417,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: space2 },
   /** Le bouton « Copier le lien » : une icône seule, carré de 50 px (`.btn.btn-s` de la maquette). */
   square: { width: 50, paddingHorizontal: 0 },
+  hidden: { display: "none" },
   grow: { flex: 1, alignSelf: "stretch" },
 });
