@@ -3,12 +3,15 @@
 // tout ce qui attend une donnée montre un squelette à sa place, jamais un écran vide ; reduced motion = plaque fixe.
 // Le balayage passe par l'`Animated` natif de React Native (pilote natif) : il s'arrête net au démontage, sans écrire
 // sur une vue détruite quand la donnée arrive et que le squelette disparaît.
+// Tour 2 : pas de balayage dans un écran caché (onglet préchargé, appli en arrière-plan : `useOliveActive`) ; avec les
+// animations réduites, la plaque apparaît en fondu de 120 ms (`fast`) et reste fixe.
 
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, type LayoutChangeEvent, StyleSheet, View, type ViewStyle } from "react-native";
+import { Animated, Easing, type LayoutChangeEvent, StyleSheet, type ViewStyle } from "react-native";
 import { duration } from "../motion";
 import { tokens } from "../tokens";
 import { GradientFill } from "./Gradient";
+import { useOliveActive } from "./olive/shared";
 import { Brush } from "./Textures";
 import { useTheme } from "./theme";
 
@@ -26,8 +29,19 @@ export function Skeleton({ height, width, radius, style, testID }: SkeletonProps
   const { t, reducedMotion } = useTheme();
   const [w, setW] = useState(0);
   const sweep = useRef(new Animated.Value(0)).current;
+  const fade = useRef(new Animated.Value(reducedMotion ? 0 : 1)).current;
+  const active = useOliveActive();
   useEffect(() => {
-    if (reducedMotion || !w) return;
+    if (!reducedMotion) return;
+    Animated.timing(fade, {
+      toValue: 1,
+      duration: duration.fast,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start();
+  }, [reducedMotion, fade]);
+  useEffect(() => {
+    if (reducedMotion || !w || !active) return;
     const loop = Animated.loop(
       Animated.timing(sweep, {
         toValue: 1,
@@ -38,12 +52,12 @@ export function Skeleton({ height, width, radius, style, testID }: SkeletonProps
     );
     loop.start();
     return () => loop.stop();
-  }, [reducedMotion, w, sweep]);
+  }, [reducedMotion, w, sweep, active]);
   const band = Math.max(80, w * 0.45);
   const translateX = sweep.interpolate({ inputRange: [0, 1], outputRange: [-band, w + band] });
   const onLayout = (event: LayoutChangeEvent) => setW(Math.round(event.nativeEvent.layout.width));
   return (
-    <View
+    <Animated.View
       onLayout={onLayout}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
@@ -56,6 +70,7 @@ export function Skeleton({ height, width, radius, style, testID }: SkeletonProps
           borderRadius: radius ?? tokens.radius.radiusMd,
           backgroundColor: t.color.surface,
         },
+        { opacity: fade },
         style,
       ]}
     >
@@ -67,7 +82,7 @@ export function Skeleton({ height, width, radius, style, testID }: SkeletonProps
           />
         </Animated.View>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 

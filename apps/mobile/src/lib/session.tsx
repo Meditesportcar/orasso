@@ -7,6 +7,7 @@ import { clearAccountQrSecret, saveAccountQrSecret } from "./accountQrStore";
 import { api, authApi } from "./api";
 import { ApiRequestError, setSessionToken } from "./http";
 import "./eventDraftStore"; // enregistre le nettoyage des fichiers de brouillon à chaque purge de compte
+import { clearEventPreviews } from "./eventPreview";
 import { clearKits } from "./kits";
 import { bindCacheScope, kvDel, kvGet, kvGetJson, kvSet, kvSetJson, purgeCaches } from "./kv";
 import { realtime } from "./realtime";
@@ -162,6 +163,8 @@ async function clearSession() {
     purgeCaches(),
     purgeAllStaff(),
   ]);
+  // Lot M3, tour 2 : les fiches lues d'avance et les aperçus ne survivent pas au compte.
+  clearEventPreviews();
 }
 
 export function useSession(): SessionValue {
