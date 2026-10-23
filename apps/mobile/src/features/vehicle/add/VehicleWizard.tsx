@@ -52,6 +52,7 @@ import {
   stepIssue,
   stepOfError,
   stepToRevisit,
+  updateBody,
   withCover,
 } from "./model";
 import { SquareButton } from "./parts";
@@ -60,7 +61,7 @@ import { DoneView, type PhotoState, SendingView } from "./SendViews";
 import { type PhotoSource, StepPhotos } from "./StepPhotos";
 import { photoToFix, StepPlate } from "./StepPlate";
 import { StepCategories, StepIdentity, StepSpecs } from "./Steps";
-import { DraftIncomplete, newSendMemo, runSend, type SendApi } from "./send";
+import { DraftIncomplete, newSendMemo, photoPlan, runSend, type SendApi } from "./send";
 
 const { space2 } = tokens.spacing;
 
@@ -151,7 +152,11 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
 
   // Pendant l'import ou le recadrage d'une photo, « Continuer » attend (lot M1, tour 2, vie privée de la plaque).
   const importing = busy || cropBusy || phase === "crop";
-  const guarded = phase === "sending" || (phase !== "done" && !(!editing && draftIsEmpty(draft)));
+  // Brouillon à protéger : saisi (ajout), ou modifié (fiche existante : champ, photo ajoutée, retirée ou floutée).
+  const dirty = vehicle
+    ? Object.keys(updateBody(draft, vehicle)).length > 0 || photoPlan(draft, vehicle.photos, memo).length > 0
+    : !draftIsEmpty(draft);
+  const guarded = phase === "sending" || (phase !== "done" && dirty);
   const leave = () => {
     leaving.current = true;
     const action = pendingLeave.current;
@@ -386,7 +391,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
       title={phase === "sending" ? V.quitSendingTitle : V.quitTitle}
       body={phase === "sending" ? V.quitSendingBody : editing ? V.quitEditBody : V.quitBody}
       confirmLabel={V.quitConfirm}
-      confirmIcon="close"
+      confirmIcon="back"
       cancelLabel={V.quitKeep}
       onConfirm={() => {
         setQuitting(false);

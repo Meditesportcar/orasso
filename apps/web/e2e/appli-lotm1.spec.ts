@@ -149,8 +149,9 @@ for (const theme of ["beton", "sable"] as const) {
     await page.getByTestId("vehicle-step-back").click();
     await page.getByTestId("vehicle-step-back").click();
     await expect(page.getByText("Étape 1 sur 5 · Photos")).toBeVisible();
+    await page.getByTestId("vehicle-photo-more").click();
     const late = page.waitForEvent("filechooser");
-    await page.getByTestId("vehicle-photo-add").click();
+    await page.getByTestId("vehicle-sheet-gallery").click();
     const lateChooser = await late;
     await expect(page.getByTestId("vehicle-step-next")).toBeDisabled();
     await expect(page.getByTestId("vehicle-step-why")).toContainText("Import de la photo en cours");
