@@ -1,6 +1,8 @@
 // Écran de flux « à affiche » (lot C2b, prototype `s-event` et `s-crew`) : pas de barre du haut, la photo ou l'affiche
 // occupe toute la largeur en tête de la page, avec la pastille O et la croix flottantes (`.ev-float`) ; le contenu
 // remonte de 8 px sur l'image (`.ev-body`). Mêmes fond, zone des feuilles et action fixe en bas que `FlowScreen`.
+// Lot M3 : zone sûre de la barre d'état. Une bande de la couleur de la tête reste fixée sous l'heure et la batterie :
+// en défilant, l'affiche et le texte passent dessous, jamais sous les icônes d'Android (retour 20 de Damien).
 import {
   Ground,
   Icon,
@@ -28,6 +30,7 @@ export function PosterFlow({
   onClose,
   onRefresh,
   testID,
+  liftHero = false,
 }: {
   /** La tête pleine largeur (affiche, photo) ; les boutons flottants se posent dessus. */
   hero: ReactNode;
@@ -37,6 +40,8 @@ export function PosterFlow({
   onClose: () => void;
   onRefresh?: () => Promise<unknown>;
   testID?: string;
+  /** Lot M3 : la tête passe au-dessus du corps, sans découpe (affiche qui grandit depuis la liste). */
+  liftHero?: boolean;
 }) {
   const { t } = useTheme();
   const focused = useIsFocused();
@@ -71,7 +76,7 @@ export function PosterFlow({
                 ) : undefined
               }
             >
-              <View style={[styles.hero, { backgroundColor: t.color.bar }]}>
+              <View style={[styles.hero, liftHero ? styles.heroLifted : null, { backgroundColor: t.color.bar }]}>
                 {hero}
                 <View style={[styles.float, { top: insets.top + space3 + 2 }]} pointerEvents="box-none">
                   <View style={[styles.pill, { backgroundColor: `${t.color.night}99` }]}>
@@ -92,6 +97,11 @@ export function PosterFlow({
             </ScrollView>
             {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
           </KeyboardSafe>
+          <View
+            pointerEvents="none"
+            style={[styles.statusBar, { height: insets.top, backgroundColor: t.color.bar }]}
+            testID="status-bar-guard"
+          />
           {overlays}
           <OverlaySlot />
         </Ground>
@@ -104,6 +114,9 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { paddingBottom: space6 * 2 },
   hero: { width: "100%", position: "relative", overflow: "hidden" },
+  // Lot M3 : sans découpe et au-dessus du corps, pour que l'affiche grandisse depuis sa place dans la liste.
+  heroLifted: { overflow: "visible", zIndex: 1 },
+  statusBar: { position: "absolute", left: 0, right: 0, top: 0, zIndex: 10 },
   float: {
     position: "absolute",
     left: space3,

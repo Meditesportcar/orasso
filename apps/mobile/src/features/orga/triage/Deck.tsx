@@ -126,9 +126,16 @@ export function Deck({
 
   useEffect(() => {
     void fill();
+  }, [fill]);
+  // Lot M3, tour 2 : la relecture de la file toutes les minutes seulement tant que le tri est affiché. Tour 3 : au
+  // retour sur le tri, la file est relue tout de suite (ce qui est arrivé pendant l'absence), puis toutes les minutes
+  // (`fill` ne se lance pas deux fois en même temps).
+  useEffect(() => {
+    if (!focused) return;
+    void fill();
     const timer = setInterval(() => void fill(), 60_000);
     return () => clearInterval(timer);
-  }, [fill]);
+  }, [fill, focused]);
 
   // File presque vide : on va chercher la suite tout de suite (la suivante est déjà prête quand on décide).
   useEffect(() => {
@@ -153,16 +160,21 @@ export function Deck({
   }, [next]);
 
   // Temps réel : une candidature change de statut ailleurs (site, autre organisateur) ou arrive.
-  useChannel(focused ? `event:${eventId}:triage` : null, (event) => {
-    if (event.type !== "application.changed") return;
-    const p = event.payload as { applicationId?: string; status?: string };
-    if (!p.applicationId || !p.status) return;
-    dispatch({ type: "external", id: p.applicationId, status: p.status });
-    if (p.status === "pending") {
-      mayHaveMore.current = true;
-      fillSoon();
-    }
-  });
+  useChannel(
+    focused ? `event:${eventId}:triage` : null,
+    (event) => {
+      if (event.type !== "application.changed") return;
+      const p = event.payload as { applicationId?: string; status?: string };
+      if (!p.applicationId || !p.status) return;
+      dispatch({ type: "external", id: p.applicationId, status: p.status });
+      if (p.status === "pending") {
+        mayHaveMore.current = true;
+        fillSoon();
+      }
+    },
+    // Tour 3 : (ré)abonnement confirmé (retour sur le tri, reconnexion) : la file est relue, rien de manqué.
+    () => void fill(),
+  );
 
   // --- Envoyer les décisions armées -------------------------------------------------------------------------------
   const send = useCallback(

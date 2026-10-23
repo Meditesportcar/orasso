@@ -4,12 +4,16 @@
 // rectangle vide. Réutilisée par l'Explorer du média (lot 55) et la carte (aperçu sous l'épingle).
 import { Chip, Icon, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventCard, eventFormatLabels, explorerV2Labels as L, wallTime } from "@orasso/shared";
+import { useRef } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
+import type { PosterRect } from "@/lib/eventPreview";
 import { mediaSource } from "@/lib/media";
 import { cardPoster } from "./poster";
 
 const { space1, space2, space3 } = tokens.spacing;
+/** Lot M3, tour 2 : un appui tenu ce temps-là (sans défilement) lance la lecture de la fiche. */
+const PRESS_INTENT_MS = 90;
 const DAYS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."];
 const MONTHS = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
 
@@ -68,8 +72,44 @@ export function MinimalPoster({ event, big }: { event: Pick<EventCard, "format" 
   );
 }
 
-export function EventCardV2({ event, big = false, onPress }: { event: EventCard; big?: boolean; onPress: () => void }) {
+export function EventCardV2({
+  event,
+  big = false,
+  onPress,
+  onPressIn,
+}: {
+  event: EventCard;
+  big?: boolean;
+  /** Lot M3 : reçoit la place de l'affiche dans la fenêtre (transition vers l'en-tête de la fiche). */
+  onPress: (poster: PosterRect | null) => void;
+  /**
+   * Lot M3 : la fiche se charge dès le toucher. Tour 2 : seulement si le doigt reste posé `PRESS_INTENT_MS` sans
+   * partir en défilement (un défilement annule l'appui), pour ne pas lire chaque carte survolée.
+   */
+  onPressIn?: () => void;
+}) {
   const { t } = useTheme();
+  const posterRef = useRef<View>(null);
+  const intent = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressIn = () => {
+    if (!onPressIn) return;
+    intent.current = setTimeout(() => {
+      intent.current = null;
+      onPressIn();
+    }, PRESS_INTENT_MS);
+  };
+  const pressOut = () => {
+    if (intent.current) clearTimeout(intent.current);
+    intent.current = null;
+  };
+  const press = () => {
+    const node = posterRef.current;
+    if (!node?.measureInWindow) {
+      onPress(null);
+      return;
+    }
+    node.measureInWindow((x, y, width, height) => onPress(width > 0 ? { x, y, width, height } : null));
+  };
   const c = t.color;
   const stub = stubOf(event.startsAt);
   const seats = seatsOf(event);
@@ -159,7 +199,14 @@ export function EventCardV2({ event, big = false, onPress }: { event: EventCard;
   );
 
   return (
-    <Pressable accessibilityRole="link" accessibilityLabel={event.title} onPress={onPress} testID="event-row">
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={event.title}
+      onPress={press}
+      onPressIn={pressIn}
+      onPressOut={pressOut}
+      testID="event-row"
+    >
       <Plate style={[styles.card, big && styles.cardBig]}>
         {seats?.full ? (
           <View style={styles.flag}>
@@ -168,7 +215,9 @@ export function EventCardV2({ event, big = false, onPress }: { event: EventCard;
         ) : null}
         {big ? (
           <>
-            <View style={styles.posterBig}>{poster}</View>
+            <View ref={posterRef} collapsable={false} style={styles.posterBig}>
+              {poster}
+            </View>
             <View style={styles.bigBody}>
               {stubView}
               {main}
@@ -178,7 +227,9 @@ export function EventCardV2({ event, big = false, onPress }: { event: EventCard;
           <View style={styles.row}>
             {stubView}
             {main}
-            <View style={styles.poster}>{poster}</View>
+            <View ref={posterRef} collapsable={false} style={styles.poster}>
+              {poster}
+            </View>
           </View>
         )}
       </Plate>

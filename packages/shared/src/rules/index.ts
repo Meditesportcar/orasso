@@ -21,6 +21,7 @@ export * from "./nearAccess";
 export * from "./notifications";
 export * from "./password";
 export * from "./plateFrame";
+export * from "./plateNumber";
 export * from "./points";
 export * from "./poster";
 export * from "./pro";

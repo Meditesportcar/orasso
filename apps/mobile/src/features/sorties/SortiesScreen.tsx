@@ -51,6 +51,7 @@ import { TicketPulse } from "@/ui/Announce";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
+import { TICKET_BLOCKS, Waiting } from "@/ui/Waiting";
 import { ApplicationTag, Seg, SkewTag, SmallButton } from "./bits";
 import {
   arrivalPhrase,
@@ -318,7 +319,8 @@ export function SortiesScreen() {
           ))}
 
           {countUpcoming === 0 && loading ? (
-            <Muted variant="body">Chargement…</Muted>
+            // Lot M3 : squelettes des tickets pendant la première lecture (le cache des candidatures arrive d'abord).
+            <Waiting blocks={TICKET_BLOCKS} testID="sorties-loading" />
           ) : countUpcoming === 0 && !(invitations.data && invitations.data.length > 0) ? (
             <EmptyState
               title={sortiesLabels.emptyUpcomingTitle}
