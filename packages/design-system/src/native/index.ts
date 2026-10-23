@@ -26,6 +26,7 @@ export { Chip, type ChipProps, ChipRow } from "./Chip";
 export { type CounterItem, Counters, type CountersProps } from "./Counters";
 export { Cover, type CoverProps } from "./Cover";
 export { useFlowChrome, useTabBarHidden } from "./chrome";
+export { withAlpha } from "./color";
 export {
   CheckboxField,
   type CheckboxFieldProps,

@@ -8,6 +8,7 @@ import {
   createBody,
   type Draft,
   detectionUnavailable,
+  dimmedNote,
   draftFromVehicle,
   emptyDraft,
   filterRows,
@@ -17,11 +18,14 @@ import {
   needsPlateDecision,
   originCategories,
   photoPlan,
+  preparedCategory,
+  STEP,
   shortName,
   stepIssue,
   stepOfError,
   styleCategories,
   updateBody,
+  visibleStyles,
   withCover,
   yearChoices,
 } from "./model";
@@ -108,32 +112,57 @@ describe("catégories", () => {
   });
 });
 
+describe("styles (lot M1)", () => {
+  const rows = [
+    ...CATEGORIES,
+    cat("moto", { label: "Moto", eligible: false, refusal: "type" }),
+    cat("supercar", { label: "Supercar", eligible: false, refusal: "make" }),
+    cat("preparee", { label: "Préparée" }),
+  ];
+  it("cache ce qui n'a rien à voir avec ce véhicule, garde l'âge barré avec une phrase", () => {
+    expect(visibleStyles(rows).map((c) => c.slug)).toEqual(["sportive", "youngtimer", "ancienne", "preparee"]);
+    expect(dimmedNote(rows, 2021, "car")).toBe("Youngtimer et Ancienne sont grisées : ta voiture est de 2021.");
+    expect(dimmedNote(rows, 2021, "moto")).toMatch(/ta moto est de 2021/);
+    expect(dimmedNote(rows, undefined, "car")).toBeNull();
+    expect(preparedCategory(rows)?.slug).toBe("preparee");
+    expect(preparedCategory(CATEGORIES)).toBeNull();
+  });
+});
+
 describe("étapes", () => {
-  it("chaque étape dit ce qui manque", () => {
-    expect(stepIssue(0, emptyDraft())).toBe("Choisis la marque.");
-    expect(stepIssue(0, filled({ generationId: undefined }))).toMatch(/génération/);
-    expect(stepIssue(0, filled({ generationId: null }))).toBeNull();
-    expect(stepIssue(1, filled({ powerHp: "abc" }))).toMatch(/Puissance/);
-    expect(stepIssue(3, filled({ photos: [] }))).toMatch(/au moins une photo/);
-    expect(stepIssue(4, filled({ plate: "" }))).toMatch(/ancien véhicule/);
-    expect(stepIssue(4, filled({ plate: "", former: true }))).toBeNull();
-    const pending = filled({ photos: [{ key: "a", uri: "u", width: 1, height: 1, rects: [], detection: "pending" }] });
-    expect(stepIssue(4, pending)).toMatch(/cherche/);
+  it("suivent l'ordre de Damien : photos, plaque, marque et modèle, fiche technique, catégories", () => {
+    expect(STEP).toEqual({ photos: 0, plate: 1, identity: 2, specs: 3, categories: 4 });
   });
 
-  it("la carte se construit étape par étape", () => {
+  it("chaque étape dit ce qui manque", () => {
+    expect(stepIssue(STEP.identity, emptyDraft())).toBe("Choisis la marque.");
+    expect(stepIssue(STEP.identity, filled({ generationId: undefined }))).toMatch(/génération/);
+    expect(stepIssue(STEP.identity, filled({ generationId: null }))).toBeNull();
+    expect(stepIssue(STEP.specs, filled({ powerHp: "abc" }))).toMatch(/Puissance/);
+    expect(stepIssue(STEP.photos, filled({ photos: [] }))).toMatch(/au moins une photo/);
+    expect(stepIssue(STEP.plate, filled({ plate: "" }))).toMatch(/ancien véhicule/);
+    expect(stepIssue(STEP.plate, filled({ plate: "", former: true }))).toBeNull();
+    const pending = filled({ photos: [{ key: "a", uri: "u", width: 1, height: 1, rects: [], detection: "pending" }] });
+    expect(stepIssue(STEP.plate, pending)).toMatch(/cherche/);
+  });
+
+  it("la fiche se construit étape par étape : photo, plaque, modèle, fiche, catégories", () => {
     const ref = { make: toyota, model: supra, generation: a90, categories: CATEGORIES };
     const d = filled();
-    expect(liveCard(d, 0, ref)).toMatchObject({
+    expect(liveCard(d, STEP.photos, ref)).toMatchObject({
       name: "Toyota GR Supra",
       generation: "A90 · depuis 2019",
+      cover: "file:///a.jpg",
+      photos: 1,
+      plate: false,
       specs: null,
     });
-    expect(liveCard(d, 1, ref).specs).toBe("3.0 L6 turbo · 340 ch · 2021 · blanche");
-    expect(liveCard(d, 2, ref).categories).toEqual(["JDM", "Sportive"]);
-    expect(liveCard(d, 2, ref).cover).toBeNull();
-    expect(liveCard(d, 3, ref).cover).toBe("file:///a.jpg");
-    expect(liveCard(d, 4, ref).plate).toBe(true);
+    expect(liveCard(emptyDraft(), STEP.photos, {})).toMatchObject({ name: null, photos: 0, cover: null });
+    expect(liveCard(d, STEP.plate, ref).plate).toBe(true);
+    expect(liveCard(d, STEP.identity, ref).specs).toBeNull();
+    expect(liveCard(d, STEP.specs, ref).specs).toBe("3.0 L6 turbo · 340 ch · 2021 · blanche");
+    expect(liveCard(d, STEP.specs, ref).categories).toEqual([]);
+    expect(liveCard(d, STEP.categories, ref).categories).toEqual(["JDM", "Sportive"]);
     expect(shortName(ref, "car")).toBe("GR Supra");
     expect(shortName({}, "moto")).toBe("moto");
   });
@@ -153,6 +182,18 @@ describe("envoi", () => {
       color: null,
     });
     expect(createBody(filled({ former: true, status: "sold" })).status).toBe("sold");
+  });
+
+  it("description et préparation partent avec la fiche (lot M1)", () => {
+    const body = createBody(filled({ description: "  Sortie du dimanche.  ", preparation: ["wheels", "exhaust"] }));
+    expect(body.description).toBe("Sortie du dimanche.");
+    expect(body.preparation).toBe("Échappement · Jantes");
+    expect(createBody(filled()).preparation).toBeNull();
+    const before = { ...vehicleLike(), preparation: "Moteur · Freins\nReprog", description: "Ok" };
+    const d = draftFromVehicle(before);
+    expect(d.preparation).toEqual(["engine", "brakes"]);
+    expect(d.preparationNote).toBe("Reprog");
+    expect(updateBody(d, before)).toEqual({});
   });
 
   const vehicle = {
@@ -231,12 +272,14 @@ describe("relecture du lot 51", () => {
     expect(needsPlateDecision(local({ noPlate: true }))).toBe(false);
     expect(needsPlateDecision(local({ rects: [{ x: 0.1, y: 0.1, w: 0.2, h: 0.1 }] }))).toBe(false);
     expect(needsPlateDecision(local({ remoteId: "p1" }))).toBe(false);
-    expect(stepIssue(4, filled({ photos: [local({ noPlate: true }), local({ key: "m" })] }))).toMatch(/^Photo 2 :/);
+    expect(stepIssue(STEP.plate, filled({ photos: [local({ noPlate: true }), local({ key: "m" })] }))).toMatch(
+      /^Photo 2 :/,
+    );
   });
 
   it("plaque trop courte refusée avant l'envoi (normalizePlate)", () => {
-    expect(stepIssue(4, filled({ plate: "a-1" }))).toMatch(/invalide/);
-    expect(stepIssue(4, filled({ plate: "ab-1" }))).toBeNull();
+    expect(stepIssue(STEP.plate, filled({ plate: "a-1" }))).toMatch(/invalide/);
+    expect(stepIssue(STEP.plate, filled({ plate: "ab-1" }))).toBeNull();
   });
 
   it("sans détection possible, l'automatique n'a pas lieu d'être", () => {
@@ -259,13 +302,39 @@ describe("relecture du lot 51", () => {
       message,
       details: fields ? { fields } : undefined,
     });
-    expect(stepOfError(err(409, "plate_taken", "Plaque déjà enregistrée"))).toBe(4);
-    expect(stepOfError(err(400, "validation_error", "Données invalides", { plate: "Plaque obligatoire" }))).toBe(4);
-    expect(stepOfError(err(400, "validation_error", "Données invalides", { powerHp: "trop grand" }))).toBe(1);
-    expect(stepOfError(err(400, "validation_error", "Données invalides", { "categoryIds.0": "x" }))).toBe(2);
-    expect(stepOfError(err(415, "unsupported_media_type", "Image illisible"))).toBe(3);
+    expect(stepOfError(err(409, "plate_taken", "Plaque déjà enregistrée"))).toBe(STEP.plate);
+    expect(stepOfError(err(400, "validation_error", "Données invalides", { plate: "Plaque obligatoire" }))).toBe(
+      STEP.plate,
+    );
+    expect(stepOfError(err(400, "validation_error", "Données invalides", { powerHp: "trop grand" }))).toBe(STEP.specs);
+    expect(stepOfError(err(400, "validation_error", "Données invalides", { "categoryIds.0": "x" }))).toBe(
+      STEP.categories,
+    );
+    expect(stepOfError(err(415, "unsupported_media_type", "Image illisible"))).toBe(STEP.photos);
     expect(stepOfError(err(0, "network", "Pas de connexion"))).toBeNull();
     expect(stepOfError(err(500, "internal", "Erreur"))).toBeNull();
     expect(stepOfError(new Error("x"))).toBeNull();
   });
 });
+
+function vehicleLike(): VehicleFull {
+  return {
+    id: "v9",
+    vehicleType: "car",
+    makeId: "mk",
+    modelId: "md",
+    generationId: "gn",
+    year: 2021,
+    engine: null,
+    powerHp: null,
+    weightKg: null,
+    color: null,
+    plate: "AB-123-CD",
+    unregistered: false,
+    status: "active",
+    categories: [],
+    photos: [],
+    description: null,
+    preparation: null,
+  } as unknown as VehicleFull;
+}

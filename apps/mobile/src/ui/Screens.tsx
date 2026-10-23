@@ -131,7 +131,15 @@ export function FlowScreen({
   still,
   onRefresh,
   overlays,
-}: Common & { title: string; facts?: string; counter?: string; onClose: () => void }) {
+  header,
+}: Common & {
+  title: string;
+  facts?: string;
+  counter?: string;
+  onClose: () => void;
+  /** Lot M1 : zone fixe sous l'en-tête, qui ne défile pas (barre de progression, fiche en construction). */
+  header?: ReactNode;
+}) {
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   useFlowChrome(focused);
@@ -140,6 +148,7 @@ export function FlowScreen({
       <OverlayProvider>
         <Ground still={still} paused={!focused} style={styles.fill}>
           <AppBar kind="flow" title={title} facts={facts} counter={counter} onClose={onClose} safeTop={insets.top} />
+          {header ? <View style={styles.flowHeader}>{header}</View> : null}
           <KeyboardSafe style={styles.fill}>
             <Body onRefresh={onRefresh}>{children}</Body>
             {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
@@ -239,5 +248,6 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { paddingHorizontal: space4, paddingTop: space3, paddingBottom: space6 * 2, gap: space3 },
   footer: { paddingHorizontal: space4, paddingTop: space2, gap: space2 },
+  flowHeader: { paddingHorizontal: space4, gap: space3, paddingBottom: space2 },
   section: { marginTop: space3 },
 });

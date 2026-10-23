@@ -7,6 +7,7 @@ import type {
   VehicleCertification,
   VehicleCreate,
   VehicleDetail,
+  VehicleEngine,
   VehicleFull,
   VehicleGeneration,
   VehicleHistoryItem,
@@ -55,6 +56,9 @@ export const garageApi = {
   models: (makeId: string) => request<VehicleModel[]>(`/api/vehicle-reference/makes/${makeId}/models`),
   generations: (modelId: string) =>
     request<VehicleGeneration[]>(`/api/vehicle-reference/models/${modelId}/generations`),
+  /** Lot M1 : motorisations du catalogue Orasso d'une génération (puissance et poids remplis à l'ajout). */
+  engines: (generationId: string) =>
+    request<VehicleEngine[]>(`/api/vehicle-reference/generations/${generationId}/engines`),
   /** Catégories ; avec marque, type et année : chacune dit si elle convient et pourquoi sinon. */
   categories: (filter: { makeId?: string; vehicleType?: string; year?: number } = {}) =>
     request<CategoryOption[]>(`/api/vehicle-reference/categories${qs(filter)}`),

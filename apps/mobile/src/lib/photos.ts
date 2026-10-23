@@ -32,6 +32,36 @@ export async function pickPhotos(limit: number, crop?: [number, number]): Promis
   return converted;
 }
 
+/**
+ * Lot M1 : prendre une photo avec l'appareil (la grande case « Ajouter des photos »). Liste vide si l'accès est refusé
+ * ou la prise annulée. Pas de recadreur du système : l'appli recadre au carré avec son propre écran.
+ */
+export async function takePhoto(): Promise<PickedPhoto[]> {
+  const permission = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
+  if (permission && !permission.granted && Platform.OS !== "web") return [];
+  const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 1 });
+  if (result.canceled) return [];
+  return Promise.all(result.assets.slice(0, 1).map(toJpeg));
+}
+
+/** Côté du carré envoyé (lot M1) : assez pour l'affiche à partager (1080 px), sans peser pour rien. */
+const SQUARE_SIDE = 1600;
+
+/**
+ * Lot M1 : découpe le carré choisi (`crop` en pixels de la photo d'origine) et l'enregistre en JPEG, 1600 px au plus.
+ * C'est cette photo carrée qui part au serveur : la plaque est cherchée et masquée dessus.
+ */
+export async function cropSquare(
+  photo: PickedPhoto,
+  crop: { originX: number; originY: number; width: number; height: number },
+): Promise<PickedPhoto> {
+  const context = ImageManipulator.manipulate(photo.uri).crop(crop);
+  if (crop.width > SQUARE_SIDE) context.resize({ width: SQUARE_SIDE, height: SQUARE_SIDE });
+  const rendered = await context.renderAsync();
+  const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.88 });
+  return { uri: saved.uri, width: saved.width, height: saved.height };
+}
+
 async function toJpeg(asset: { uri: string; width: number; height: number }): Promise<PickedPhoto> {
   const context = ImageManipulator.manipulate(asset.uri);
   const longest = Math.max(asset.width, asset.height);

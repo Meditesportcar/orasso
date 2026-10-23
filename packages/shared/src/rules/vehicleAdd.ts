@@ -90,6 +90,23 @@ export const bodyColors: readonly BodyColor[] = [
   { name: "Chrome", family: "special", hex: "#d8dde2", hex2: "#7d858d", finish: "metal" },
 ];
 
+/** Lumière et ombre des pastilles (reflet du vernis, dégradé du métallisé) : données de rendu de la peinture. */
+export const BODY_COLOR_LIGHT = "#ffffff";
+export const BODY_COLOR_SHADE = "#000000";
+
+/** Mélange une teinte `#rrggbb` avec une autre (0 : la première, 1 : la seconde), pour les reflets des pastilles. */
+export function mixHex(a: string, b: string, k: number): string {
+  const p = (h: string) => [1, 3, 5].map((i) => Number.parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return `#${x
+    .map((v, i) =>
+      Math.round(v + ((y[i] ?? v) - v) * k)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
 /** La teinte du nuancier qui porte ce nom (sans casse ni accent, « Blanche » et « Blanc » se valent), ou null. */
 export function bodyColorByName(name: string | null | undefined): BodyColor | null {
   const key = foldColor(name ?? "");

@@ -1,28 +1,41 @@
-// Ajout et modification d'un véhicule en cinq étapes (lot 51, prototype `s-vadd`) : l'état du brouillon et ses règles,
-// sans React ni réseau (testé par `model.test.ts`). L'écran (`VehicleWizard.tsx`) affiche, ce module décide : étape
-// suivante permise ou non, carte qui se construit, origine déduite de la marque, corps envoyé à l'API, plan d'envoi des
-// photos avec les cadres de plaque.
+// Ajout et modification d'un véhicule en cinq étapes (lot 51, prototype `s-vadd` ; lot M1, maquettes 1.1 à 1.9) :
+// l'état du brouillon et ses règles, sans React ni réseau (testé par `model.test.ts`). L'écran (`VehicleWizard.tsx`)
+// affiche, ce module décide : étape suivante permise ou non, fiche qui se construit, origine déduite de la marque,
+// styles montrés ou grisés, corps envoyé à l'API, plan d'envoi des photos avec les cadres de plaque.
+// Lot M1 : nouvel ordre de Damien (retour 11) Photos → Plaque → Marque et modèle → Fiche technique → Catégories.
 import {
   type CategoryOption,
+  formatPreparation,
   vehicleWizardLabels as L,
   normalizePlate,
   type PlateRect,
+  parsePreparation,
+  vehicleAddLabels as V,
   type VehicleCreate,
   type VehicleFull,
   type VehicleGeneration,
   type VehicleMake,
   type VehicleModel,
+  type VehiclePreparation,
   type VehicleStatus,
   type VehicleType,
   type VehicleUpdate,
 } from "@orasso/shared";
 
+// Chemin relatif : Vitest (sans alias « @/ ») teste ce module.
+import type { SquareCrop } from "../../../lib/squareCrop";
+
 export const STEP_COUNT = 5;
+/** Index des étapes, dans l'ordre décidé par Damien (lot M1). */
+export const STEP = { photos: 0, plate: 1, identity: 2, specs: 3, categories: 4 } as const;
 export const MAX_PHOTOS = 8;
 export const MAX_CATEGORIES = 10;
 
 /** État du repérage automatique d'une photo locale. */
 export type Detection = "pending" | "found" | "none" | "unavailable";
+
+/** Recadrage carré (lot M1), normalisé 0–1 dans la photo d'origine : coin haut gauche et côté (en largeurs). */
+export type { SquareCrop };
 
 /** Une photo du brouillon : locale (choisie, pas encore envoyée) ou déjà en ligne (modification). */
 export type DraftPhoto = {
@@ -30,6 +43,11 @@ export type DraftPhoto = {
   uri: string;
   width: number;
   height: number;
+  /**
+   * Lot M1 : photo d'origine (avant le recadrage carré) et cadre choisi, pour recadrer de nouveau sans perte. La photo
+   * envoyée (`uri`) est le carré ; absent pour une photo déjà en ligne.
+   */
+  source?: { uri: string; width: number; height: number; crop: SquareCrop };
   /** Photo déjà envoyée (modification) : son identifiant ; absent pour une photo locale. */
   remoteId?: string;
   /** Plaque déjà floutée sur la photo en ligne (le flou est définitif). */
@@ -64,6 +82,15 @@ export type Draft = {
   photos: DraftPhoto[];
   blurMode: BlurMode;
   plate: string;
+  /** Lot M1 : description libre (obligatoire pour demander la certification). */
+  description: string;
+  /** Lot M1 : préparations choisies en pastilles, et la note libre d'une fiche d'avant. */
+  preparation: VehiclePreparation[];
+  preparationNote: string;
+  /** Motorisation du catalogue choisie ; `null` : « Autre motorisation » (saisie) ; absent : rien de choisi. */
+  engineId?: string | null;
+  /** Teinte saisie à la main (« Autre teinte »). */
+  colorCustom?: boolean;
   /** « C'est un ancien véhicule » : vendu, souvenir ou accidenté, plaque facultative. */
   former: boolean;
   status: VehicleStatus;
@@ -94,6 +121,9 @@ export const emptyDraft = (): Draft => ({
   photos: [],
   blurMode: "auto",
   plate: "",
+  description: "",
+  preparation: [],
+  preparationNote: "",
   former: false,
   status: "active",
   unregistered: false,
@@ -101,6 +131,7 @@ export const emptyDraft = (): Draft => ({
 
 /** Brouillon prérempli depuis une fiche existante (modification par les mêmes étapes). */
 export function draftFromVehicle(v: VehicleFull): Draft {
+  const prep = parsePreparation(v.preparation);
   return {
     vehicleType: v.vehicleType,
     makeId: v.makeId,
@@ -123,6 +154,9 @@ export function draftFromVehicle(v: VehicleFull): Draft {
     })),
     blurMode: "manual",
     plate: v.plate ?? "",
+    description: v.description ?? "",
+    preparation: prep.items,
+    preparationNote: prep.note,
     // Fiche existante : son numéro (ou son absence) est une saisie, jamais repréremplie (lot M2, tour 2).
     plateTouched: true,
     former: v.status !== "active",
@@ -189,6 +223,26 @@ export function keptCategories(ids: readonly string[], rows: readonly CategoryOp
   return [...origins, ...styles].slice(0, MAX_CATEGORIES);
 }
 
+/**
+ * Styles montrés à l'étape Catégories (maquette 1.7) : ceux qui n'ont rien à voir avec ce véhicule (« Moto » pour une
+ * voiture, réservés à d'autres marques) sont cachés ; ceux refusés pour l'âge restent, barrés et grisés.
+ */
+export const visibleStyles = (rows: readonly CategoryOption[]) =>
+  styleCategories(rows).filter((c) => c.refusal !== "type" && c.refusal !== "make");
+
+/** « Youngtimer et Ancienne sont grisées : ta voiture est de 2021. » (lot M1, une seule phrase sous les styles). */
+export function dimmedNote(rows: readonly CategoryOption[], year: number | undefined, type: VehicleType) {
+  if (!year) return null;
+  const labels = visibleStyles(rows)
+    .filter((c) => c.refusal === "age")
+    .map((c) => c.label);
+  return labels.length ? V.stylesDimmed(labels, V.vehicleNoun[type], year) : null;
+}
+
+/** Catégorie « Préparée » à cocher d'office quand une préparation est choisie (maquette 1.7), si elle convient. */
+export const preparedCategory = (rows: readonly CategoryOption[]) =>
+  rows.find((c) => c.slug === "preparee" && c.eligible) ?? null;
+
 /** « Youngtimer et Ancienne : grisées, ta voiture est de 2021. » (les catégories refusées pour l'âge). */
 export function ageNote(rows: readonly CategoryOption[], year: number | undefined): string | null {
   if (!year) return null;
@@ -208,24 +262,24 @@ function intIn(text: string, min: number, max: number): number | null | "invalid
   return Number.isInteger(n) && n >= min && n <= max ? n : "invalid";
 }
 
-/** Ce qui empêche de passer l'étape (index 0 à 4), ou null. */
+/** Ce qui empêche de passer l'étape (`STEP`, index 0 à 4), ou null. */
 export function stepIssue(step: number, d: Draft, currentYear = new Date().getFullYear()): string | null {
   switch (step) {
-    case 0:
+    case STEP.identity:
       if (!d.makeId) return "Choisis la marque.";
       if (!d.modelId) return "Choisis le modèle.";
       if (d.generationId === undefined) return "Choisis la génération (ou « Autre »).";
       return null;
-    case 1:
+    case STEP.specs:
       if (intIn(d.powerHp, 1, 2500) === "invalid") return "Puissance : un nombre entier de 1 à 2 500.";
       if (intIn(d.weightKg, 50, 40000) === "invalid") return "Poids : un nombre entier de 50 à 40 000.";
       if (d.year !== undefined && (d.year < 1885 || d.year > currentYear + 1)) return "Année hors limites.";
       return null;
-    case 2:
+    case STEP.categories:
       return null;
-    case 3:
-      return d.photos.length === 0 ? L.photoRequired : null;
-    case 4:
+    case STEP.photos:
+      return d.photos.length === 0 ? V.needPhoto : null;
+    case STEP.plate:
       if (d.photos.some((p) => p.detection === "pending")) return L.detecting;
       {
         // Relecture : aucune photo nouvelle ne part sans cadre, sauf confirmation explicite qu'elle ne montre pas de plaque.
@@ -253,6 +307,8 @@ export function firstIssue(d: Draft, upTo = STEP_COUNT): { step: number; issue: 
 
 export type LiveCard = {
   type: VehicleType;
+  /** Nombre de photos (« 2 photos » tant que la marque n'est pas choisie). */
+  photos: number;
   name: string | null;
   generation: string | null;
   specs: string | null;
@@ -281,14 +337,17 @@ export function liveCard(
     d.color && d.color !== "Autre" ? d.color.toLowerCase() : null,
   ].filter(Boolean);
   const byId = new Map((ref.categories ?? []).map((c) => [c.id, c.label]));
+  // Lot M1 : la photo d'abord, puis la plaque, le modèle, la fiche et les catégories (maquettes 1.1 à 1.7).
   return {
     type: d.vehicleType,
+    photos: d.photos.length,
     name: [make, model].filter(Boolean).join(" ") || null,
     generation: gen ? [gen.name, generationYears(gen)].filter(Boolean).join(" · ") : null,
-    specs: step >= 1 && specs.length ? specs.join(" · ") : null,
-    categories: step >= 2 ? d.categoryIds.map((id) => byId.get(id)).filter((x): x is string => Boolean(x)) : [],
-    cover: step >= 3 ? (d.photos[0]?.uri ?? null) : null,
-    plate: step >= 4,
+    specs: step >= STEP.specs && specs.length ? specs.join(" · ") : null,
+    categories:
+      step >= STEP.categories ? d.categoryIds.map((id) => byId.get(id)).filter((x): x is string => Boolean(x)) : [],
+    cover: d.photos[0]?.uri ?? null,
+    plate: step >= STEP.plate,
   };
 }
 
@@ -325,8 +384,8 @@ export function createBody(d: Draft): VehicleCreate {
     unregistered: d.unregistered,
     status: statusOf(d),
     statusNote: null,
-    description: null,
-    preparation: null,
+    description: d.description.trim() || null,
+    preparation: formatPreparation(d.preparation, d.preparationNote),
     categoryIds: d.categoryIds,
   };
 }
@@ -344,6 +403,8 @@ export function updateBody(d: Draft, v: VehicleFull): VehicleUpdate {
   if ((next.powerHp ?? null) !== v.powerHp) body.powerHp = next.powerHp ?? null;
   if ((next.weightKg ?? null) !== v.weightKg) body.weightKg = next.weightKg ?? null;
   if ((next.color ?? null) !== v.color) body.color = next.color ?? null;
+  if ((next.description ?? null) !== (v.description?.trim() || null)) body.description = next.description ?? null;
+  if ((next.preparation ?? null) !== (v.preparation?.trim() || null)) body.preparation = next.preparation ?? null;
   if (next.unregistered !== v.unregistered) body.unregistered = next.unregistered;
   if ((next.plate ?? null) !== (v.plate?.trim() || null)) {
     // Même plaque écrite autrement (« ab-123-cd ») : rien à changer, pas de transfert.
@@ -432,17 +493,17 @@ export function stepOfError(e: unknown): number | null {
   const fields = Object.keys((err.details?.fields as Record<string, unknown> | undefined) ?? {});
   const has = (...names: string[]) => fields.some((f) => names.some((n) => f === n || f.startsWith(`${n}.`)));
   if (err.code === "plate_taken" || has("plate", "unregistered", "status") || /plaque/i.test(err.message ?? ""))
-    return 4;
-  if (has("vehicleType", "makeId", "modelId", "generationId")) return 0;
-  if (has("year", "engine", "powerHp", "weightKg", "color")) return 1;
-  if (has("categoryIds")) return 2;
+    return STEP.plate;
+  if (has("vehicleType", "makeId", "modelId", "generationId")) return STEP.identity;
+  if (has("year", "engine", "powerHp", "weightKg", "color", "description", "preparation")) return STEP.specs;
+  if (has("categoryIds")) return STEP.categories;
   if (
     err.status === 413 ||
     err.status === 415 ||
     has("photo", "plateRects", "rects") ||
     /photo/i.test(err.message ?? "")
   ) {
-    return 3;
+    return STEP.photos;
   }
   return null;
 }

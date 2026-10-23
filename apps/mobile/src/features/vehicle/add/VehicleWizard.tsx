@@ -1,10 +1,17 @@
-// Ajouter ou modifier un véhicule en cinq étapes (lot 51, prototype `s-vadd`, ARCHITECTURE-DA-V2 § 3.6) : la carte se
-// construit en haut à chaque étape ; (1) type, marque › modèle › génération de la liste Orasso, (2) fiche technique,
-// (3) catégories, (4) photos, (5) plaque floutée et numéro privé. Envoi : création (ou modification), puis les photos une
-// à une avec leurs cadres de plaque (floutées par l'API, définitivement) ; la voiture avance autour du O et se gare à
-// 100 % ; la carte entre au garage. Fin : « Découvrir les événements autour de moi ».
-import { Button, Park, SendProgress, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { vehicleWizardLabels as L, type VehicleFull } from "@orasso/shared";
+// Ajouter ou modifier un véhicule en cinq étapes (lot 51, prototype `s-vadd` ; lot M1, maquettes 1.1 à 1.9 validées
+// par Damien le 23/10). Ordre de Damien : (1) photos au carré, recadrées avec notre écran, (2) plaque masquée et numéro
+// privé, (3) type, marque › modèle › génération de la liste Orasso, (4) fiche technique (motorisation du catalogue,
+// année, nuancier, description, préparation), (5) catégories, puis « Envoyer ». La fiche se construit en tête de chaque
+// étape, sous la barre de progression moutarde. Envoi : création (ou modification), puis les photos une à une avec
+// leurs cadres de plaque (floutées par l'API, définitivement) ; la voiture drifte autour du O, compacte, le
+// pourcentage à côté, et se gare à 100 % ; puis « au garage ». Fin : « Tes préférences » la première fois.
+import { Button, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  vehicleWizardLabels as L,
+  vehicleAddLabels as V,
+  type VehicleFull,
+  type VehiclePreparation,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -12,16 +19,16 @@ import { StyleSheet, View } from "react-native";
 import { ShareSheet } from "@/features/vehicle/ShareSheet";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
-import { CROP_VEHICLE, photoForm, pickPhotos } from "@/lib/photos";
+import { cropSquare, type PickedPhoto, photoForm, pickPhotos, takePhoto } from "@/lib/photos";
 import { detectPlateReadings } from "@/lib/plates/detect";
 import { useSession } from "@/lib/session";
+import { centerCrop, cropPixels, type SquareCrop } from "@/lib/squareCrop";
 import { useApi } from "@/lib/useApi";
-import { Muted } from "@/ui/Muted";
 import { waitUploadParked } from "@/ui/PhotoGrid";
 import { FlowScreen } from "@/ui/Screens";
+import { SquareCropper } from "@/ui/SquareCropper";
 import { LiveCard } from "./LiveCard";
 import {
-  ageNote,
   applyMode,
   type BlurMode,
   createBody,
@@ -35,6 +42,8 @@ import {
   MAX_PHOTOS,
   modelsForType,
   photoPlan,
+  preparedCategory,
+  STEP,
   STEP_COUNT,
   shortName,
   stepIssue,
@@ -42,30 +51,46 @@ import {
   updateBody,
   withCover,
 } from "./model";
+import { SquareButton } from "./parts";
 import { detectionPatch } from "./plateStep";
+import { DoneView, type PhotoState, SendingView } from "./SendViews";
+import { type PhotoSource, StepPhotos } from "./StepPhotos";
 import { StepPlate } from "./StepPlate";
-import { StepCategories, StepIdentity, StepPhotos, StepSpecs } from "./Steps";
+import { StepCategories, StepIdentity, StepSpecs } from "./Steps";
 
-const { space2, space3 } = tokens.spacing;
+const { space2 } = tokens.spacing;
 
-type Phase = "steps" | "sending" | "done";
+/**
+ * Lot M1 : après le premier véhicule, l'étape « Tes préférences » (route créée par le lot M6). Tant qu'elle n'existe
+ * pas sur cette branche : `null`, et le bouton principal ramène au garage.
+ */
+const PREFERENCES_ROUTE: string | null = null;
+
+type Phase = "steps" | "crop" | "sending" | "done";
 
 let photoSeq = 0;
 
 export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const { t } = useTheme();
   const router = useRouter();
-  const { refreshMe } = useSession();
+  const { refreshMe, me } = useSession();
   const editing = Boolean(vehicle);
+  // La première fois (aucun véhicule avant l'ajout) : « Tes préférences » à la fin.
+  const firstTime = useRef(!editing && (me?.counts.vehicles ?? 0) === 0).current;
   const [draft, setDraft] = useState<Draft>(() => (vehicle ? draftFromVehicle(vehicle) : emptyDraft()));
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState<number>(STEP.photos);
   const [phase, setPhase] = useState<Phase>("steps");
   const [progress, setProgress] = useState({ done: 0, total: 0, complete: false });
+  const [photoStates, setPhotoStates] = useState<Record<string, PhotoState>>({});
   const [error, setError] = useState<string | null>(null);
   // Lot M2 (retour 15) : le blocage de l'étape se relit à chaque changement, il disparaît dès que c'est réglé.
   const [issueShown, setIssueShown] = useState(false);
   const [saved, setSaved] = useState<VehicleFull | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // Recadrage : file des photos à cadrer (import) ou une seule (bouton Recadrer).
+  const [cropQueue, setCropQueue] = useState<string[]>([]);
+  const [cropBusy, setCropBusy] = useState(false);
   // Envoi interrompu (réseau) : on reprend sans recréer le véhicule ni renvoyer les photos déjà parties.
   const sent = useRef<{
     vehicleId: string | null;
@@ -106,6 +131,11 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const model = modelRows.find((m) => m.id === draft.modelId);
   const generation = generations.data?.find((g) => g.id === draft.generationId);
   const makeCountry = make && !make.isOther ? make.country : null;
+  // Lot M1 : motorisations du catalogue Orasso de la génération choisie.
+  const realGeneration = generation && !generation.isOther ? generation.id : null;
+  const engines = useApi(() => api.engines(realGeneration ?? ""), [realGeneration], {
+    enabled: Boolean(realGeneration),
+  });
 
   // Un modèle sans génération dans la liste : rien à choisir.
   useEffect(() => {
@@ -126,46 +156,118 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   }, [categories.data, makeCountry]);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/(tabs)/garage"));
-  const card = liveCard(draft, step, { make, model, generation, categories: categories.data ?? [] });
+  const card = liveCard(draft, editing ? STEP.categories : step, {
+    make,
+    model,
+    generation,
+    categories: categories.data ?? [],
+  });
 
-  // --- Photos et détection -------------------------------------------------------------------------------------------
+  // --- Photos, recadrage et détection ---------------------------------------------------------------------------------
   function updatePhoto(key: string, change: (p: DraftPhoto) => DraftPhoto) {
     setDraft((d) => ({ ...d, photos: d.photos.map((p) => (p.key === key ? change(p) : p)) }));
   }
 
-  async function addPhotos() {
-    setError(null);
-    try {
-      const picked = await pickPhotos(MAX_PHOTOS - draft.photos.length, CROP_VEHICLE);
-      const added: DraftPhoto[] = picked.map((p) => ({
-        key: `local-${photoSeq++}`,
-        uri: p.uri,
-        width: p.width,
-        height: p.height,
-        rects: [],
-        detection: "pending",
-      }));
-      setDraft((d) => ({ ...d, photos: [...d.photos, ...added].slice(0, MAX_PHOTOS) }));
-      // Repérage de la plaque sur l'appareil, photo par photo ; rien ne part au serveur.
-      for (const p of added) {
-        const found = await detectPlateReadings(p.uri, p.width, p.height).catch(() => null);
-        setDraft((d) => ({
-          ...d,
-          photos: d.photos.map((x) => (x.key === p.key ? { ...x, ...detectionPatch(x, found, d.blurMode) } : x)),
-        }));
-      }
+  /** Repérage de la plaque sur l'appareil (rien ne part au serveur) ; un résultat d'une ancienne photo est ignoré. */
+  async function detect(key: string, photo: PickedPhoto) {
+    const found = await detectPlateReadings(photo.uri, photo.width, photo.height).catch(() => null);
+    setDraft((d) => {
+      const photos = d.photos.map((x) =>
+        x.key === key && x.uri === photo.uri ? { ...x, ...detectionPatch(x, found, d.blurMode) } : x,
+      );
+      const next = { ...d, photos };
       // Relecture : aucune détection possible ici (web, Expo Go) → « À la main », sans promesse d'automatique.
-      setDraft((d) => (detectionUnavailable(d.photos) ? { ...d, blurMode: "manual" } : d));
+      return detectionUnavailable(next.photos) ? { ...next, blurMode: "manual" } : next;
+    });
+  }
+
+  /** Le carré choisi devient la photo envoyée : les cadres et la décision de plaque repartent de zéro. */
+  async function applyCrop(key: string, source: PickedPhoto, crop: SquareCrop) {
+    const square = await cropSquare(source, cropPixels(source.width, source.height, crop));
+    updatePhoto(key, (p) => ({
+      ...p,
+      uri: square.uri,
+      width: square.width,
+      height: square.height,
+      source: { ...source, crop },
+      rects: [],
+      detected: undefined,
+      readings: undefined,
+      noPlate: false,
+      detection: "pending",
+    }));
+    void detect(key, square);
+  }
+
+  async function addPhotos(from: PhotoSource) {
+    setError(null);
+    setBusy(true);
+    try {
+      const room = MAX_PHOTOS - draft.photos.length;
+      const picked = (from === "camera" ? await takePhoto() : await pickPhotos(room)).slice(0, room);
+      const added: { key: string; source: PickedPhoto; square: PickedPhoto; crop: SquareCrop }[] = [];
+      for (const p of picked) {
+        // Format maître carré (décision de Damien, retour 10) : carré centré d'abord, ajustable tout de suite.
+        const crop = centerCrop(p.width, p.height);
+        const square = await cropSquare(p, cropPixels(p.width, p.height, crop));
+        added.push({ key: `local-${photoSeq++}`, source: p, square, crop });
+      }
+      setDraft((d) => ({
+        ...d,
+        photos: [
+          ...d.photos,
+          ...added.map(
+            (a): DraftPhoto => ({
+              key: a.key,
+              uri: a.square.uri,
+              width: a.square.width,
+              height: a.square.height,
+              source: { ...a.source, crop: a.crop },
+              rects: [],
+              detection: "pending",
+            }),
+          ),
+        ].slice(0, MAX_PHOTOS),
+      }));
+      for (const a of added) void detect(a.key, a.square);
+      if (added.length) {
+        setCropQueue(added.map((a) => a.key));
+        setPhase("crop");
+      }
     } catch (e) {
       setError(errorMessage(e));
+    } finally {
+      setBusy(false);
     }
   }
+
+  const cropping = phase === "crop" ? draft.photos.find((p) => p.key === cropQueue[0] && p.source) : undefined;
+  // Photo retirée pendant le recadrage : on revient aux étapes.
+  useEffect(() => {
+    if (phase === "crop" && !cropping) setPhase("steps");
+  }, [phase, cropping]);
+  const nextCrop = () => {
+    setCropQueue((q) => {
+      const rest = q.slice(1);
+      if (!rest.length) setPhase("steps");
+      return rest;
+    });
+  };
 
   function setMode(mode: BlurMode) {
     setDraft((d) =>
       mode === "auto" && detectionUnavailable(d.photos)
         ? d
         : { ...d, blurMode: mode, photos: applyMode(d.photos, mode) },
+    );
+  }
+
+  /** Une préparation choisie coche « Préparée » (maquette 1.7), si la catégorie convient à ce véhicule. */
+  function onPreparation(items: VehiclePreparation[]) {
+    const prepared = preparedCategory(categories.data ?? []);
+    if (!items.length || !prepared) return;
+    setDraft((d) =>
+      d.categoryIds.includes(prepared.id) ? d : { ...d, categoryIds: [...d.categoryIds, prepared.id].slice(0, 10) },
     );
   }
 
@@ -227,6 +329,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
       const uploaded = s.uploaded;
       ops = ops.filter((op) => !s.done.has(opKey(op)));
       total = ops.length;
+      setProgress({ done: 0, total, complete: false });
       let n = 0;
       for (const op of ops) {
         if (op.kind === "remove") {
@@ -234,6 +337,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
         } else if (op.kind === "upload") {
           const photo = draft.photos.find((p) => p.key === op.key);
           if (photo) {
+            setPhotoStates((st) => ({ ...st, [op.key]: "sending" }));
             const form = await photoForm({ uri: photo.uri, width: photo.width, height: photo.height }, n);
             if (op.rects.length) form.append("plateRects", JSON.stringify(op.rects));
             const before = new Set(current.photos.map((p) => p.id));
@@ -243,6 +347,7 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
             const added = after.photos.find((p) => !before.has(p.id));
             if (added) uploaded.set(op.key, added.id);
             current = after;
+            setPhotoStates((st) => ({ ...st, [op.key]: "done" }));
           }
         } else {
           current = await api.blurVehiclePhoto(id, op.photoId, op.rects);
@@ -276,19 +381,59 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     }
   }
 
-  const sendingLabel =
-    progress.total > 0 ? L.uploading(Math.min(progress.done + 1, progress.total), progress.total) : L.saving;
+  const title = editing ? L.editTitle : L.title;
+  const bar = (pct: number) => <ProgressBar pct={pct} />;
 
   // --- Rendu ---------------------------------------------------------------------------------------------------------
+  if (phase === "crop" && cropping) {
+    const index = draft.photos.findIndex((p) => p.key === cropping.key);
+    const source = cropping.source as NonNullable<DraftPhoto["source"]>;
+    return (
+      <SquareCropper
+        key={cropping.key}
+        photo={source}
+        initial={source.crop}
+        subtitle={V.cropOf(index + 1, draft.photos.length)}
+        busy={cropBusy}
+        onCancel={() => {
+          setCropQueue([]);
+          setPhase("steps");
+        }}
+        onConfirm={async (crop) => {
+          const same =
+            Math.abs(crop.x - source.crop.x) < 1e-4 &&
+            Math.abs(crop.y - source.crop.y) < 1e-4 &&
+            Math.abs(crop.size - source.crop.size) < 1e-4;
+          if (!same) {
+            setCropBusy(true);
+            try {
+              await applyCrop(cropping.key, source, crop);
+            } catch (e) {
+              setError(errorMessage(e));
+            } finally {
+              setCropBusy(false);
+            }
+          }
+          nextCrop();
+        }}
+      />
+    );
+  }
+
   if (phase === "done" && saved) {
     const name = shortName({ make, model }, draft.vehicleType);
+    const full = liveCard(draft, STEP.categories, { make, model, generation, categories: categories.data ?? [] });
+    const doneTitle = editing ? L.doneTitleEdit : L.doneTitle(name);
+    const seeVehicle = editing || sent.current.pending;
     return (
       <FlowScreen
-        title={editing ? L.editTitle : L.title}
+        title={title}
+        facts={V.done}
+        header={bar(100)}
         onClose={() => router.replace(sent.current.pending ? `/vehicule/${saved.id}` : "/(tabs)/garage")}
         footer={
           <>
-            {editing || sent.current.pending ? (
+            {seeVehicle ? (
               <Button
                 variant="primary"
                 icon="next"
@@ -298,19 +443,35 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
               >
                 {L.seeVehicle}
               </Button>
+            ) : firstTime && PREFERENCES_ROUTE ? (
+              <Button
+                variant="primary"
+                icon="next"
+                onPress={() => router.replace(PREFERENCES_ROUTE as never)}
+                fullWidth
+                testID="vehicle-done-preferences"
+              >
+                {V.preferences}
+              </Button>
             ) : (
               <Button
                 variant="primary"
-                icon="explore"
-                onPress={() => router.replace("/(tabs)/explorer")}
+                icon="vehicle"
+                onPress={() => router.replace("/(tabs)/garage")}
                 fullWidth
-                testID="vehicle-done-explore"
+                testID="vehicle-done-garage"
               >
-                {L.explore}
+                {V.backToGarage}
               </Button>
             )}
-            <Button variant="secondary" icon="share" onPress={() => setShareOpen(true)} fullWidth>
-              {L.share}
+            <Button
+              variant="secondary"
+              icon="share"
+              onPress={() => setShareOpen(true)}
+              fullWidth
+              testID="vehicle-done-share"
+            >
+              {V.share}
             </Button>
           </>
         }
@@ -323,19 +484,14 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
           />
         }
       >
-        <Park>
-          <LiveCard
-            card={{
-              ...liveCard(draft, 4, { make, model, generation, categories: categories.data ?? [] }),
-              cover: saved.photos[0]?.url ?? null,
-            }}
-            remoteCover
-          />
-        </Park>
-        <Text variant="posterM" color={t.color.ink} accessibilityRole="header" testID="vehicle-done-title">
-          {editing ? L.doneTitleEdit : L.doneTitle(name)}
-        </Text>
-        <Muted variant="body">{L.doneText}</Muted>
+        <DoneView
+          title={doneTitle}
+          cover={saved.photos[0]?.url ?? null}
+          remoteCover
+          name={full.name ?? name}
+          specs={[full.generation?.split(" · ")[0], full.specs].filter(Boolean).join(" · ") || null}
+          categories={full.categories}
+        />
       </FlowScreen>
     );
   }
@@ -343,7 +499,9 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   if (phase === "sending") {
     return (
       <FlowScreen
-        title={editing ? L.editTitle : L.title}
+        title={title}
+        facts={V.sending}
+        header={bar(100)}
         onClose={close}
         footer={
           error ? (
@@ -358,87 +516,85 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
           ) : undefined
         }
       >
-        <Text variant="posterM" color={t.color.ink} accessibilityRole="header">
-          {L.parkingTitle}
-        </Text>
-        <Muted variant="body" accessibilityLiveRegion="polite" testID="vehicle-sending">
-          {sendingLabel}
-        </Muted>
-        <View style={styles.send}>
-          <SendProgress
-            size={200}
-            progress={progress.complete ? 1 : progress.total ? progress.done / progress.total : 0.1}
-          />
-        </View>
+        <SendingView
+          done={progress.done}
+          total={progress.total}
+          complete={progress.complete}
+          photos={draft.photos}
+          states={photoStates}
+        />
       </FlowScreen>
     );
   }
 
   const issue = stepIssue(step, draft);
   const shownError = error ?? (issueShown ? issue : null);
+  // Maquettes 1.1 et 1.5 : « Continuer » grisé tant qu'il n'y a pas de photo, ou que le choix n'est pas fait.
+  const blocked = Boolean(issue) && (step === STEP.photos || step === STEP.identity);
+  const last = step === STEP_COUNT - 1;
   return (
     <FlowScreen
-      title={editing ? L.editTitle : L.title}
-      facts={L.stepOf(step + 1, L.steps[step] ?? "")}
-      counter={`${step + 1}/${STEP_COUNT}`}
+      title={title}
+      facts={V.stepOf(step + 1, STEP_COUNT, V.steps[step] ?? "")}
       onClose={close}
+      header={
+        <>
+          {bar(((step + 1) / STEP_COUNT) * 100)}
+          <LiveCard card={card} remoteCover={Boolean(draft.photos[0]?.remoteId)} />
+        </>
+      }
       footer={
         <>
-          {shownError ? (
+          {shownError && !blocked ? (
             <Text variant="caption" color={t.color.winText} accessibilityRole="alert" testID="vehicle-step-error">
               {shownError}
             </Text>
           ) : null}
           <View style={styles.footer}>
-            <Button variant="secondary" icon="back" onPress={previous} testID="vehicle-step-back">
-              {step === 0 ? "Fermer" : "Retour"}
-            </Button>
+            <SquareButton
+              icon={step === 0 ? "close" : "back"}
+              label={step === 0 ? V.close : V.back}
+              onPress={previous}
+              testID="vehicle-step-back"
+            />
             <View style={styles.grow}>
               <Button
                 variant="primary"
-                icon={step === STEP_COUNT - 1 ? "check" : "next"}
+                icon={last ? (editing ? "check" : "upload") : "next"}
                 onPress={next}
+                disabled={blocked}
                 fullWidth
                 testID="vehicle-step-next"
                 accessibilityHint={issue ?? undefined}
               >
-                {step === STEP_COUNT - 1 ? (editing ? L.save : L.send) : L.next}
+                {last ? (editing ? L.save : V.send) : L.next}
               </Button>
             </View>
           </View>
+          {blocked && step === STEP.photos ? (
+            <Text variant="caption" color={t.color.inkMuted} style={styles.why} testID="vehicle-step-why">
+              {issue}
+            </Text>
+          ) : null}
         </>
       }
     >
-      <LiveCard card={card} remoteCover={Boolean(draft.photos[0]?.remoteId)} />
-      {step === 0 ? (
-        <StepIdentity
-          draft={draft}
-          patch={patch}
-          makes={makes.data ?? []}
-          models={modelRows}
-          generations={generations.data ?? []}
-        />
-      ) : null}
-      {step === 1 ? <StepSpecs draft={draft} patch={patch} generation={generation} /> : null}
-      {step === 2 ? (
-        <StepCategories
-          draft={draft}
-          patch={patch}
-          categories={categories.data ?? []}
-          make={make}
-          ageNote={ageNote(categories.data ?? [], draft.year)}
-        />
-      ) : null}
-      {step === 3 ? (
+      {step === STEP.photos ? (
         <StepPhotos
           draft={draft}
-          busy={false}
-          onAdd={() => void addPhotos()}
+          busy={busy}
+          onAdd={(from) => void addPhotos(from)}
           onRemove={(i) => setDraft((d) => ({ ...d, photos: d.photos.filter((_, j) => j !== i) }))}
           onCover={(i) => setDraft((d) => ({ ...d, photos: withCover(d.photos, i) }))}
+          onCrop={(i) => {
+            const key = draft.photos[i]?.key;
+            if (!key) return;
+            setCropQueue([key]);
+            setPhase("crop");
+          }}
         />
       ) : null}
-      {step === 4 ? (
+      {step === STEP.plate ? (
         <StepPlate
           draft={draft}
           patch={patch}
@@ -453,7 +609,43 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
           }}
         />
       ) : null}
+      {step === STEP.identity ? (
+        <StepIdentity
+          draft={draft}
+          patch={patch}
+          makes={makes.data ?? []}
+          models={modelRows}
+          generations={generations.data ?? []}
+        />
+      ) : null}
+      {step === STEP.specs ? (
+        <StepSpecs
+          draft={draft}
+          patch={patch}
+          generation={generation}
+          engines={realGeneration ? (engines.data ?? []) : []}
+          onPreparation={onPreparation}
+        />
+      ) : null}
+      {step === STEP.categories ? (
+        <StepCategories draft={draft} patch={patch} categories={categories.data ?? []} make={make} />
+      ) : null}
     </FlowScreen>
+  );
+}
+
+/** Barre de progression moutarde de la `.flowbar` (« Étape 3 sur 5 »), sous le titre, à gauche du ✕. */
+function ProgressBar({ pct }: { pct: number }) {
+  const { t } = useTheme();
+  return (
+    <View
+      style={[styles.track, { backgroundColor: t.color.line }]}
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(pct) }}
+      testID="vehicle-progress"
+    >
+      <View style={[styles.fill, { width: `${pct}%`, backgroundColor: t.color.accent }]} />
+    </View>
   );
 }
 
@@ -463,5 +655,7 @@ const opKey = (op: ReturnType<typeof photoPlan>[number]) =>
 const styles = StyleSheet.create({
   footer: { flexDirection: "row", gap: space2, alignItems: "center" },
   grow: { flex: 1 },
-  send: { alignItems: "center", paddingVertical: space3 },
+  why: { textAlign: "center" },
+  track: { height: 6, borderRadius: 3, overflow: "hidden", marginRight: 48, marginTop: -4 },
+  fill: { height: "100%", borderRadius: 3 },
 });
