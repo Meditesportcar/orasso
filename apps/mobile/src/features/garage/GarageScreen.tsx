@@ -1,6 +1,8 @@
-// Garage v2 (lot 51, prototype `s-garage` ; reproduit fidèlement au lot C2b) : grand titre « Mon garage · N
-// véhicules », la grande carte du premier véhicule, les autres en cartes horizontales, « Ajouter un véhicule · Marque,
-// photos, plaque floutée : deux minutes. » en pointillés, et une ligne « Archivés » en bas. Retirés (audit § 5.2) : les
+// Garage v2 (lot 51, prototype `s-garage` ; reproduit fidèlement au lot C2b ; lot M5 : maquette 7.1) : grand titre « Mon
+// garage · N véhicules », la mini-fiche du premier véhicule (elle ne prend plus tout l'écran : correction de Damien),
+// les autres en cartes horizontales à vignette carrée, « Ajouter un véhicule · Marque, photos, plaque floutée : deux
+// minutes. » en pointillés, « Pour ta … » (pros partenaires, sponsorisé lié au véhicule) et une ligne « Archivés » en
+// bas. Pas d'accès flottant ici (lot M5 : il n'a rien à faire au Garage). Retirés (audit § 5.2) : les
 // crews (Mon profil › Mon crew), les demandes de transfert de plaque (Boîte › Demandes). « Partager sa carte » ouvre
 // l'écran de flux `/vehicule/<id>/partager`. Un garage vide montre l'état vide du O.
 import { Button, EmptyState, Icon, Monogram, Text, tokens, useTheme } from "@orasso/design-system/native";
@@ -14,6 +16,7 @@ import { useApi } from "@/lib/useApi";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { GarageCard } from "./GarageCard";
+import { VehiclePros } from "./VehiclePros";
 
 const { space1, space3 } = tokens.spacing;
 
@@ -70,6 +73,8 @@ export function GarageScreen() {
           <Icon name="add" size={20} color={t.color.ink} />
         </Pressable>
       ) : null}
+
+      {active[0] ? <VehiclePros vehicleId={active[0].id} modelName={active[0].modelName} /> : null}
 
       {/* Archivés : une ligne en bas du Garage (audit § 5.2), la liste vit dans « Mes véhicules archivés ». */}
       {archived.length > 0 ? (
