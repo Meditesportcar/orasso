@@ -197,15 +197,16 @@ const HOMES = [
     kind: "exhibitor",
     email: "kenji@orasso.local",
     choose: null,
-    texts: [/^Salut Kenji$/i, "Mon accès", "Tes autres sorties", "Passeport Orasso"],
-    hero: true,
+    // Lot M5 : « Ta prochaine sortie » (tickets qui glissent) remplace la carte et « Tes autres sorties ».
+    texts: [/^Salut Kenji$/i, "Ta prochaine sortie", "Mon accès", "Passeport Orasso"],
+    hero: "ticket",
   },
   {
     kind: "visitor",
     email: "paul.photo@orasso.local",
     choose: null,
     texts: [/^Salut /i, "Mon billet", "Billet"],
-    hero: true,
+    hero: "ticket",
   },
   {
     kind: "pro",
@@ -219,21 +220,21 @@ const HOMES = [
       "Passionnés du coin",
       "Derniers scans",
     ],
-    hero: false,
+    hero: null,
   },
   {
     kind: "provider",
     email: "sofia@orasso.local",
     choose: "provider",
     texts: ["Mon accès prestataire", "Emplacement B2", "Message de l'organisateur", "Missions qui t'attendent"],
-    hero: true,
+    hero: "poster",
   },
   {
     kind: "media",
     email: "leo@orasso.local",
     choose: "media",
     texts: ["Accréditée", "Badge presse", "Mon badge presse", "Consignes de l'organisation"],
-    hero: true,
+    hero: "poster",
   },
 ] as const;
 
@@ -253,7 +254,16 @@ for (const home of HOMES) {
       for (const text of home.texts) {
         await expect(page.getByText(text).first(), `« ${String(text)} »`).toBeVisible({ timeout: 30_000 });
       }
-      if (home.hero) {
+      if (home.hero === "ticket") {
+        // Lot M5 (maquette 6.1) : le ticket de la prochaine sortie, affiche en portrait, « Sur la carte » à côté du
+        // geste ; ni Maps ni Waze (correction de Damien).
+        await expect(page.getByTestId("home-outing").first()).toBeVisible();
+        await expect(page.getByTestId("home-countdown").first()).toContainText(/J-\d+|Demain|Aujourd'hui|J\+\d+/);
+        await expect(page.getByTestId("home-on-map").first()).toBeVisible();
+        await expect(page.getByTestId("home-maps")).toHaveCount(0);
+        await expect(page.getByTestId("home-waze")).toHaveCount(0);
+      }
+      if (home.hero === "poster") {
         // Le compte à rebours et l'heure sont cernés sur la photo (huit copies + le texte), en haut à droite (lot C1).
         await expect(page.getByTestId("home-hero-art")).toBeVisible();
         await expect(page.getByTestId("home-countdown")).toContainText(/J-\d+|Demain|Aujourd'hui|J\+\d+/);
@@ -276,7 +286,9 @@ for (const home of HOMES) {
   });
 }
 
-test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, vers le jour J", async ({ browser }) => {
+test("accès flottant : visible dès J-7 sur Explorer, jamais sur Accueil, Sorties, Garage ni Profil, vers le jour J", async ({
+  browser,
+}) => {
   test.setTimeout(480_000);
   mkdirSync(DIR, { recursive: true });
   const damien = await login("damien@orasso.local");
@@ -295,12 +307,8 @@ test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, 
   for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, near.email);
-    // Explorer, Garage, Profil : la barre est là (une fois, au-dessus de la barre d'onglets).
-    for (const [tab, route] of [
-      ["Explorer", /\/explorer/],
-      ["Garage", /\/garage/],
-      ["Profil", /\/profil/],
-    ] as const) {
+    // Explorer : la barre est là (une fois, au-dessus de la barre d'onglets). Lot M5 : plus au Garage ni au Profil.
+    for (const [tab, route] of [["Explorer", /\/explorer/]] as const) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
       await expect(page).toHaveURL(route, { timeout: 30_000 });
       const bar = page.getByTestId("next-access-bar");
@@ -313,19 +321,17 @@ test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, 
     }
     await page.getByRole("tab", { name: "Explorer", exact: true }).click();
     await shot(page, `acces-flottant-explorer-${theme}`);
-    await page.getByRole("tab", { name: "Garage", exact: true }).click();
     await expect(page.getByTestId("next-access-bar")).toBeVisible();
-    await shot(page, `acces-flottant-garage-${theme}`);
     // Sans néon (le seul néon de l'écran est celui d'un bouton principal) : l'ombre portée --shadow-lg de l'artefact,
     // sans halo moutarde.
     const shadow = await page.getByTestId("next-access-bar").evaluate((el) => getComputedStyle(el).boxShadow);
     expect(shadow).not.toContain("233, 184, 36");
-    // Masquée sur Accueil et Sorties (`.app.no-near` de l'artefact).
-    for (const tab of ["Accueil", "Sorties"]) {
+    // Masquée sur Accueil et Sorties (`.app.no-near` de l'artefact), et depuis le lot M5 sur Garage et Profil.
+    for (const tab of ["Accueil", "Sorties", "Garage", "Profil"]) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
       await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
     }
-    await page.getByRole("tab", { name: "Garage", exact: true }).click();
+    await page.getByRole("tab", { name: "Explorer", exact: true }).click();
     // Elle mène à l'écran du jour J de la candidature.
     await page.getByTestId("next-access-bar").click();
     await expect(page).toHaveURL(new RegExp(`/jour-j/${near.applicationId}`), { timeout: 30_000 });
