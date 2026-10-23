@@ -4,8 +4,10 @@
 // rectangle vide. Réutilisée par l'Explorer du média (lot 55) et la carte (aperçu sous l'épingle).
 import { Chip, Icon, Photo, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type EventCard, eventFormatLabels, explorerV2Labels as L, wallTime } from "@orasso/shared";
+import { useRef } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 
+import type { PosterRect } from "@/lib/eventPreview";
 import { mediaSource } from "@/lib/media";
 import { cardPoster } from "./poster";
 
@@ -68,8 +70,29 @@ export function MinimalPoster({ event, big }: { event: Pick<EventCard, "format" 
   );
 }
 
-export function EventCardV2({ event, big = false, onPress }: { event: EventCard; big?: boolean; onPress: () => void }) {
+export function EventCardV2({
+  event,
+  big = false,
+  onPress,
+  onPressIn,
+}: {
+  event: EventCard;
+  big?: boolean;
+  /** Lot M3 : reçoit la place de l'affiche dans la fenêtre (transition vers l'en-tête de la fiche). */
+  onPress: (poster: PosterRect | null) => void;
+  /** Lot M3 : au premier contact du doigt (la fiche se charge dès le toucher). */
+  onPressIn?: () => void;
+}) {
   const { t } = useTheme();
+  const posterRef = useRef<View>(null);
+  const press = () => {
+    const node = posterRef.current;
+    if (!node?.measureInWindow) {
+      onPress(null);
+      return;
+    }
+    node.measureInWindow((x, y, width, height) => onPress(width > 0 ? { x, y, width, height } : null));
+  };
   const c = t.color;
   const stub = stubOf(event.startsAt);
   const seats = seatsOf(event);
@@ -159,7 +182,13 @@ export function EventCardV2({ event, big = false, onPress }: { event: EventCard;
   );
 
   return (
-    <Pressable accessibilityRole="link" accessibilityLabel={event.title} onPress={onPress} testID="event-row">
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={event.title}
+      onPress={press}
+      onPressIn={onPressIn}
+      testID="event-row"
+    >
       <Plate style={[styles.card, big && styles.cardBig]}>
         {seats?.full ? (
           <View style={styles.flag}>
@@ -168,7 +197,9 @@ export function EventCardV2({ event, big = false, onPress }: { event: EventCard;
         ) : null}
         {big ? (
           <>
-            <View style={styles.posterBig}>{poster}</View>
+            <View ref={posterRef} collapsable={false} style={styles.posterBig}>
+              {poster}
+            </View>
             <View style={styles.bigBody}>
               {stubView}
               {main}
@@ -178,7 +209,9 @@ export function EventCardV2({ event, big = false, onPress }: { event: EventCard;
           <View style={styles.row}>
             {stubView}
             {main}
-            <View style={styles.poster}>{poster}</View>
+            <View ref={posterRef} collapsable={false} style={styles.poster}>
+              {poster}
+            </View>
           </View>
         )}
       </Plate>

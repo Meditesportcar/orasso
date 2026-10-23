@@ -28,6 +28,7 @@ import { usePaged } from "@/features/explorer/usePaged";
 import { SmallButton } from "@/features/sorties/bits";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
+import { prefetchEvent, rememberEventCard } from "@/lib/eventPreview";
 import { useSession } from "@/lib/session";
 import { FlowScreen } from "@/ui/Screens";
 
@@ -188,7 +189,14 @@ function EventsMap({ initialQ, filters, onClose }: { initialQ: string; filters: 
           <ScrollView contentContainerStyle={styles.peekList} showsVerticalScrollIndicator={picked.length > 1}>
             {picked.map((e) => (
               <View key={e.id} style={[styles.peekCard, { boxShadow: t.shadow.shadowPoster }]}>
-                <EventCardV2 event={e} onPress={() => router.push(`/e/${e.slug}`)} />
+                <EventCardV2
+                  event={e}
+                  onPressIn={() => prefetchEvent(e.slug)}
+                  onPress={(r) => {
+                    rememberEventCard(e, r);
+                    router.push(`/e/${e.slug}`);
+                  }}
+                />
               </View>
             ))}
           </ScrollView>

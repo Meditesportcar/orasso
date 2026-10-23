@@ -60,6 +60,7 @@ export { Plate, type PlateProps } from "./Plate";
 export { PosterCard, type PosterCardProps, type PosterStatus } from "./PosterCard";
 export { NightScene, OrgLogo, type OrgLogoProps, PosterHero, type PosterHeroProps, Tag } from "./PosterHero";
 export { ScanResult, type ScanResultProps } from "./ScanResult";
+export { Skeleton, type SkeletonProps } from "./Skeleton";
 export { StatusBadge, type StatusBadgeProps } from "./StatusBadge";
 export { playScanSound, scanSoundFiles } from "./scanSounds";
 export {
