@@ -15,6 +15,7 @@ import {
   type PersonaKind,
   type PublicPreview,
   personaKindLabels,
+  preferencesLabels,
   profileVisibilities,
   profileVisibilityAlways,
   profileVisibilityLabels,
@@ -323,6 +324,10 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           <h2 id="secteur-titre" className="s-h2">
             Secteur et centres d'intérêt
           </h2>
+          <Button href="/app/preferences" variant="secondary" icon="next" data-testid="preferences-link">
+            {preferencesLabels.settingsRow}
+          </Button>
+          <p className="o-t-caption s-muted">{preferencesLabels.settingsRowCaption}</p>
           <DepartmentsField initial={settings.departments} />
           <label className="o-field">
             <span className="o-field__label o-t-label">Rayon des notifications</span>

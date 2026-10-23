@@ -15,14 +15,21 @@
   outline: none;
   transition: fill var(--timing-fast) var(--ease-inout);
 }
+/* Variante « Ton coin » (lot M6) : France pleine, frontières de la couleur de la carte (surface) qui la porte. */
+.o-france--land .o-france__dept {
+  fill: var(--dept-land);
+  stroke: var(--surface);
+}
 .o-france__dept:hover {
   fill: var(--line);
 }
 .o-france__dept.is-selected,
-.o-france__dept.is-selected:hover {
+.o-france__dept.is-selected:hover,
+.o-france--land .o-france__dept.is-selected {
   fill: var(--accent);
 }
-.o-france__dept.is-favorite {
+.o-france__dept.is-favorite,
+.o-france--land .o-france__dept.is-favorite {
   stroke: var(--ink);
   stroke-width: 2.5;
 }
@@ -39,7 +46,8 @@
   text-decoration: underline;
 }
 
-/* Liste des départements (chemin accessible de la carte) : un <details>, des cases de formulaire. */
+/* Liste des départements (chemin accessible de la carte). Sans JavaScript : un <details> de cases de formulaire.
+   Avec JavaScript (lot M6, maquette 8.2) : un bouton qui ouvre une fenêtre <dialog> (« Tes départements »). */
 .o-deptlist {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -70,4 +78,147 @@
   width: 20px;
   height: 20px;
   accent-color: var(--accent-text);
+}
+
+/* La fenêtre : feuille à 90 % de la hauteur sur téléphone, centrée sur grand écran. */
+.o-deptdlg {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100vw;
+  height: 90dvh;
+  margin: auto 0 0;
+  padding: var(--space-4);
+  border: 0;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sheet);
+  overflow: hidden;
+}
+.o-deptdlg[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.o-deptdlg::backdrop {
+  background: var(--scrim);
+}
+@media (min-width: 720px) {
+  .o-deptdlg {
+    width: min(560px, 92vw);
+    height: min(90dvh, 720px);
+    margin: auto;
+    border-radius: var(--radius-xl);
+  }
+}
+.o-deptdlg__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.o-deptdlg__head h2 {
+  margin: 0;
+}
+.o-deptdlg__search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  padding: 0 var(--space-3);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink-muted);
+}
+.o-deptdlg__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+.o-deptdlg__search:focus-within {
+  border-color: var(--accent-text);
+}
+.o-deptdlg__count {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  color: var(--ink-muted);
+}
+.o-deptdlg__list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.o-deptdlg__sep {
+  padding: var(--space-3) var(--space-1) var(--space-1);
+  color: var(--ink-muted);
+}
+.o-deptdlg__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: 0 var(--space-1);
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+/* La case réelle couvre toute la ligne (invisible) : clavier, lecteur d'écran et clic passent par elle. */
+.o-deptdlg__row input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.o-deptdlg__num {
+  min-width: 36px;
+  text-align: center;
+}
+.o-deptdlg__name {
+  flex: 1;
+  min-width: 0;
+}
+.o-deptdlg__fav {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: var(--space-2);
+  color: var(--accent-text);
+}
+.o-deptdlg__box {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: transparent;
+}
+.o-deptdlg__row input:checked ~ .o-deptdlg__box {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.o-deptdlg__row input:focus-visible ~ .o-deptdlg__box {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+.o-deptdlg__error {
+  margin: 0;
+  color: var(--win-text);
 }

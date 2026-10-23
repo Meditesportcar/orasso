@@ -12,16 +12,21 @@ export type FranceMapProps = {
   favorite?: string | null;
   onToggle: (code: string) => void;
   className?: string;
+  /**
+   * « Ton coin » (lot M6) : la France pleine (`dept-land`), frontières de la couleur de la carte qui la porte (`surface`).
+   * Par défaut : le dessin d'origine (repos `map-land-2`, frontières de la couleur du fond).
+   */
+  land?: boolean;
 };
 
-function FranceMapBase({ selected, favorite, onToggle, className }: FranceMapProps) {
+function FranceMapBase({ selected, favorite, onToggle, className, land }: FranceMapProps) {
   const chosen = new Set(selected);
   // Le favori est dessiné en dernier pour que son bord passe par-dessus ses voisins.
   const ordered = [...franceDepartments].sort((a, b) => Number(a.code === favorite) - Number(b.code === favorite));
   return (
     // biome-ignore lint/a11y/noSvgWithoutTitle: carte décorative, la liste est le chemin accessible
     <svg
-      className={cx("o-france", className)}
+      className={cx("o-france", land && "o-france--land", className)}
       viewBox={franceMapViewBox}
       aria-hidden="true"
       focusable="false"

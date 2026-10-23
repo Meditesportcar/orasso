@@ -1,8 +1,8 @@
 // Inscription ordinaire du site (lot 41) : les trois blocs du flux d'arrivée de l'appli, dans le même formulaire — le profil
 // (six tuiles), les départements (carte de France, crédit CC BY 4.0, liste des 101 départements) et le prénom et le nom
 // (obligatoires, privés). Tout est de vrais champs de formulaire : l'inscription marche sans JavaScript (tuiles = boutons
-// radio, liste = cases à cocher). Avec JavaScript, la carte et la liste se suivent et gardent l'ordre du choix
-// (`departmentOrder`) : le premier département est le favori.
+// radio, liste = cases à cocher). Avec JavaScript, la carte et la fenêtre « Tes départements » (lot M6) se suivent et gardent
+// l'ordre du choix (`departmentOrder`) : le premier département est le favori.
 import { Chip, DepartmentChecklist, FranceMap, FranceMapCredit, Icon, TextField } from "@orasso/design-system/web";
 import {
   arriveeLabels,
@@ -95,8 +95,8 @@ export function ArriveeFields({
         <p className="o-t-caption s-muted" data-testid="dept-why">
           {departmentWhy[profile]}
         </p>
-        <div className="arr-dept__map">
-          <FranceMap selected={departments} favorite={first ?? null} onToggle={toggle} />
+        <div className="arr-dept__map arr-dept__map--land">
+          <FranceMap land selected={departments} favorite={first ?? null} onToggle={toggle} />
           <FranceMapCredit />
         </div>
         <div className="arr-dept__chips" aria-live="polite" data-testid="dept-summary">
@@ -109,7 +109,15 @@ export function ArriveeFields({
             <span className="o-t-caption s-muted">{arriveeLabels.department.empty}</span>
           )}
         </div>
-        <DepartmentChecklist selected={departments} onToggle={toggle} summary={arriveeLabels.list.open} />
+        <DepartmentChecklist
+          selected={departments}
+          onValidate={(next) => {
+            setLimit(false);
+            setDepartments(next);
+          }}
+          summary={arriveeLabels.list.open}
+          favoriteTag={departmentFirstTag[profile]}
+        />
         <p
           className="o-t-caption s-muted"
           data-testid="dept-hint"
@@ -192,11 +200,19 @@ export function DepartmentsField({ initial }: { initial: string[] }) {
   };
   return (
     <div className="arr-dept">
-      <div className="arr-dept__map">
-        <FranceMap selected={list} favorite={list[0] ?? null} onToggle={toggle} />
+      <div className="arr-dept__map arr-dept__map--land">
+        <FranceMap land selected={list} favorite={list[0] ?? null} onToggle={toggle} />
         <FranceMapCredit />
       </div>
-      <DepartmentChecklist selected={list} onToggle={toggle} name="departmentBox" summary={arriveeLabels.list.open} />
+      <DepartmentChecklist
+        selected={list}
+        onValidate={(next) => {
+          setLimit(false);
+          setText(next.join(", "));
+        }}
+        name="departmentBox"
+        summary={arriveeLabels.list.open}
+      />
       {limit ? (
         <p className="s-error" role="alert">
           {arriveeLabels.errors.tooMany}

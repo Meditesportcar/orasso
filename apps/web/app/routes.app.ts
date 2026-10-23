@@ -25,6 +25,8 @@ export default [
     route("app/garage/nouveau", "routes/garage-nouveau.tsx"),
     route("app/garage/:id", "routes/garage-vehicule.tsx"),
     route("app/moi", "routes/moi.tsx"),
+    // Lot M6 : « Tes préférences » (types d'événements, distance, départements, « Te prévenir »), comme l'appli.
+    route("app/preferences", "routes/preferences.tsx"),
     route("app/securite", "routes/securite.tsx"),
     // Lot 32 : mes sanctions et la contestation (une seule fois par sanction).
     route("app/sanctions", "routes/sanctions.tsx"),
