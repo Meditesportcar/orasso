@@ -150,3 +150,121 @@
     transition: opacity 120ms linear;
   }
 }
+
+/* Lot M6 : bandeau d'annonce unique (maquette 9.1, parité de l'appli) : en haut, même place, ~4 s ; moutarde pour une
+   bonne nouvelle, sobre pour une information ; la barre du bas se vide en 4 s. Mouvement réduit : fondu de 120 ms. */
+.ann {
+  position: fixed;
+  z-index: 70;
+  top: calc(var(--space-2, 8px) + env(safe-area-inset-top, 0px));
+  left: 50%;
+  width: min(calc(100% - 20px), 440px);
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  border-radius: 18px;
+  background: var(--poster);
+  color: var(--poster-ink);
+  box-shadow: var(--shadow-poster);
+  overflow: hidden;
+  animation: ann-in 500ms var(--ease-park) both;
+}
+.ann__main {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 4px 13px 12px;
+  color: inherit;
+  text-decoration: none;
+}
+.ann__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--poster-ink) 14%, transparent);
+  color: var(--poster-ink);
+}
+.ann--good .ann__icon {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.ann__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.ann__title {
+  font-weight: 800;
+  font-size: 14.5px;
+}
+.ann__title--good {
+  font-stretch: 125%;
+  font-style: italic;
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 16px;
+  line-height: 1.05;
+}
+.ann__line {
+  color: var(--poster-muted);
+}
+.ann__close {
+  align-self: stretch;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--poster-muted);
+  cursor: pointer;
+}
+.ann__timer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--poster-muted);
+  transform-origin: 0 50%;
+  animation: ann-timer 4s linear both;
+}
+.ann--good .ann__timer {
+  background: var(--accent);
+}
+@keyframes ann-in {
+  from {
+    transform: translate(-50%, -120%);
+  }
+  70% {
+    transform: translate(-50%, 4px);
+  }
+  to {
+    transform: translate(-50%, 0);
+  }
+}
+@keyframes ann-timer {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ann {
+    animation: ann-fade 120ms linear both;
+  }
+  .ann__timer {
+    animation: none;
+  }
+}
+@keyframes ann-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

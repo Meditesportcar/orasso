@@ -16,6 +16,7 @@ import { formatDateTime } from "../lib/format";
 import { nearAccessOf } from "../lib/near-access";
 import { useChannel } from "../lib/useChannel";
 import "../styles/moderation.css";
+import { AnnounceBanner, announcementOf, useAnnouncements } from "../components/AnnounceBanner";
 import type { Route } from "./+types/app";
 
 // Espace connecté (lot C5, artefact DA v2) : la même barre que l'appli, celle de la casquette de base (exposant :
@@ -82,9 +83,15 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const { setDepartment } = useTheme();
   useEffect(() => setDepartment(loaderData.department), [loaderData.department, setDepartment]);
   // Boîte et Journal en direct (lot 18) : un message, une demande ou une notification recharge les compteurs.
+  // Lot M6 : une notification reçue s'annonce aussi dans le bandeau (même système que l'appli).
+  const announcements = useAnnouncements();
   useChannel(`user:${loaderData.userId}`, (m) => {
     if (m.type === "inbox.changed" || m.type === "conversation.updated" || m.type === "notification") {
       revalidator.revalidate();
+    }
+    if (m.type === "notification") {
+      const a = announcementOf(m.payload);
+      if (a) announcements.push(a);
     }
   });
   const tabs: TabItem[] = tabSets[loaderData.base === "visitor" ? "visitor" : "exhibitor"].map((tab) => ({
@@ -109,6 +116,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           inboxOn={tab === ""}
           inboxCount={loaderData.unreadInbox}
         />
+        <AnnounceBanner item={announcements.current} onDone={announcements.drop} />
         <div className={near ? "app__body app__body--near" : "app__body"}>
           {!loaderData.emailVerified && (
             <Form method="post" action="/app/moi" className="s-notice s-row s-row--between" data-testid="verify-banner">

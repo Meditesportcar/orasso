@@ -1,0 +1,83 @@
+import { mkdirSync } from "node:fs";
+import { expect, test } from "@playwright/test";
+import { auditPage } from "./audit";
+import {
+  addVehicleApi,
+  apiCall,
+  applyApi,
+  createEvent,
+  decideApi,
+  login,
+  loginInBrowser,
+  MOBILE,
+  randomPlate,
+  signUpApi,
+  unique,
+} from "./helpers";
+import { RELAIS } from "./relais";
+
+// Lot M6, côté site (parité de l'appli) : la page « Tes préférences » du compte (lue et enregistrée par l'API, mêmes
+// règles), et le bandeau d'annonce (une décision du tri reçue en direct : moutarde pour « Retenue », sobre pour la liste
+// d'attente). Captures à 390 et 1280 px. Lancer avec l'API et le site sur la base seedée.
+const DIR = `${RELAIS}/lot-m6-captures/apres`;
+
+test("site : Tes préférences enregistrées sur le compte", async ({ page }) => {
+  test.setTimeout(180_000);
+  const s = unique();
+  const email = `sprefs_${s}@e2e.orasso.test`;
+  const cookie = await signUpApi(`Sprefs_${s}`.slice(0, 24), email);
+  await page.setViewportSize(MOBILE);
+  await loginInBrowser(page, email, undefined, "/app/preferences");
+  await expect(page.getByRole("heading", { name: /Tes préférences/i })).toBeVisible({ timeout: 30_000 });
+  await page.getByLabel("Rassemblement").check();
+  await page.getByLabel("Nocturne").check();
+  await page.getByLabel(/Nouvelles des structures suivies/).uncheck();
+  const audit = await auditPage(page);
+  expect(audit.greens).toEqual([]);
+  expect(audit.horizontalScroll).toBe(false);
+  await page.getByRole("button", { name: /Enregistrer/ }).click();
+  await expect
+    .poll(async () =>
+      (await apiCall<{ eventFormats: string[] }>(cookie, "GET", "/me/preferences")).data.eventFormats.sort(),
+    )
+    .toEqual(["gathering", "night"]);
+  const after = await apiCall<{ notifications: Record<string, boolean>; seenAt: string | null }>(
+    cookie,
+    "GET",
+    "/me/preferences",
+  );
+  expect(after.data.notifications.followedNews).toBe(false);
+  expect(after.data.seenAt).not.toBeNull();
+});
+
+for (const [name, viewport] of [
+  ["390", MOBILE],
+  ["1280", { width: 1280, height: 900 }],
+] as const) {
+  test(`site : bandeau d'annonce d'une décision reçue en direct (${name} px)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    const damien = await login("damien@orasso.local");
+    const s = unique();
+    const email = `sband_${s}@e2e.orasso.test`;
+    const cookie = await signUpApi(`Sband_${s}`.slice(0, 24), email);
+    const vehicleId = await addVehicleApi(cookie, randomPlate());
+    const first = await createEvent(damien, { title: `Bandeau site ${s}` });
+    const second = await createEvent(damien, { title: `Bandeau site deux ${s}` });
+    const a1 = await applyApi(cookie, first.id, vehicleId);
+    const a2 = await applyApi(cookie, second.id, vehicleId);
+    await page.setViewportSize(viewport);
+    await loginInBrowser(page, email, undefined, "/app/sorties");
+    await page.waitForTimeout(2000);
+    await decideApi(damien, first.id, a1, "accept");
+    const good = page.getByTestId("announce-good");
+    await expect(good).toBeVisible({ timeout: 30_000 });
+    mkdirSync(DIR, { recursive: true });
+    await page.waitForTimeout(700);
+    await page.screenshot({ path: `${DIR}/55-site-annonce-retenue-${name}.png` });
+    await expect(good).toHaveCount(0, { timeout: 10_000 });
+    await decideApi(damien, second.id, a2, "waitlist");
+    await expect(page.getByTestId("announce-info")).toBeVisible({ timeout: 30_000 });
+    await page.waitForTimeout(700);
+    await page.screenshot({ path: `${DIR}/56-site-annonce-info-${name}.png` });
+  });
+}
