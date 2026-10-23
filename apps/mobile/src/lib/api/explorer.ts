@@ -13,24 +13,24 @@ type Around = { around?: string; everywhere?: "1" };
 
 export type ExploreEventsQuery = Position &
   Around & {
-  q?: string;
-  format?: string;
-  categoryId?: string;
-  department?: string;
-  /** Instants ISO. */
-  from?: string;
-  to?: string;
-  sort?: EventSort;
-  /** Lot 44 : seulement les structures suivies. */
-  followed?: "1";
-  structureId?: string;
-  /** Lot 55 (Explorer du média) : seulement les accréditations ouvertes ; région (code de `regions`). */
-  accreditationOpen?: "1";
-  region?: string;
-  scope?: "upcoming" | "past";
-  limit?: number;
-  cursor?: string;
-};
+    q?: string;
+    format?: string;
+    categoryId?: string;
+    department?: string;
+    /** Instants ISO. */
+    from?: string;
+    to?: string;
+    sort?: EventSort;
+    /** Lot 44 : seulement les structures suivies. */
+    followed?: "1";
+    structureId?: string;
+    /** Lot 55 (Explorer du média) : seulement les accréditations ouvertes ; région (code de `regions`). */
+    accreditationOpen?: "1";
+    region?: string;
+    scope?: "upcoming" | "past";
+    limit?: number;
+    cursor?: string;
+  };
 
 export type ExploreProsQuery = Position & {
   q?: string;
