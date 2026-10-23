@@ -448,13 +448,13 @@ test("fermeture : le ✕ d'un écran B ouvert depuis un onglet ramène à cet on
     await signIn(page, ACCOUNTS[kind]);
     await choose(page, kind);
     await page.getByRole("tab", { name: c.tab[0], exact: true }).first().click();
-    await expect(page).toHaveURL(new RegExp(`/${c.tab[1]}(?|$)`), { timeout: 30_000 });
+    await expect(page).toHaveURL(new RegExp(`/${c.tab[1]}(\\?|$)`), { timeout: 30_000 });
     await page.waitForTimeout(600);
     await c.open(page);
     await expect(page, `${kind} : page ouverte`).toHaveURL(c.page, { timeout: 30_000 });
     await modeB(page, `${kind} › fermeture`);
     await page.locator('[data-testid="appbar-close"], [data-testid="flow-close"]').first().click();
-    await expect(page, `${kind} : retour à l'onglet ${c.tab[0]}`).toHaveURL(new RegExp(`/${c.tab[1]}(?|$)`), {
+    await expect(page, `${kind} : retour à l'onglet ${c.tab[0]}`).toHaveURL(new RegExp(`/${c.tab[1]}(\\?|$)`), {
       timeout: 30_000,
     });
     await modeA(page, `${kind} › retour`);
