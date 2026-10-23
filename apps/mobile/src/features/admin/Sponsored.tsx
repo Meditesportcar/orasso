@@ -348,7 +348,7 @@ function SponsoredBody() {
 
 export function SponsoredScreen() {
   return (
-    <AdminGate title="Sponsorisés">
+    <AdminGate page title="Sponsorisés">
       <SponsoredBody />
     </AdminGate>
   );

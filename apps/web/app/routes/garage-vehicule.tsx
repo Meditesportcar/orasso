@@ -31,6 +31,10 @@ import { formatDateTime, formatDay } from "../lib/format";
 import { plateFields } from "../lib/vehicle-add";
 import type { Route } from "./+types/garage-vehicule";
 import "../styles/garage.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Véhicule · Orasso" }, { name: "robots", content: "noindex" }];
@@ -156,9 +160,7 @@ export default function VehiclePage({ loaderData, actionData }: Route.ComponentP
 
   return (
     <div className="s-stack" data-testid="vehicle-page">
-      <a href="/app/garage" className="o-t-meta">
-        ← Garage
-      </a>
+      <FicheBar heading={false} title="Mon véhicule" back="/app/garage" />
       <div className="g-hero">
         <h1 className="s-title g-name o-never-truncate" data-testid="vehicle-name">
           {v.label}

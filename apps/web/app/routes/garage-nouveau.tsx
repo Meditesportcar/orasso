@@ -48,6 +48,10 @@ import {
 } from "../lib/vehicle-add";
 import type { Route } from "./+types/garage-nouveau";
 import "../styles/garage.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Ajouter un véhicule · Orasso" }, { name: "robots", content: "noindex" }];
@@ -333,316 +337,318 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
     photoCount >= CERTIFICATION_MIN_PHOTOS ? V.certReady : photoCount ? V.certSome(photoCount) : V.certNone;
 
   return (
-    <div className="s-narrow s-stack">
-      <h1 className="s-title">{L.title}</h1>
-      <Form method="post" encType="multipart/form-data" className="s-form g-add" data-testid="vehicle-add-form">
-        {retour && <input type="hidden" name="retour" value={retour} />}
+    <>
+      <FicheBar title={L.title} back={retour ?? "/app/garage"} />
+      <div className="s-narrow s-stack">
+        <Form method="post" encType="multipart/form-data" className="s-form g-add" data-testid="vehicle-add-form">
+          {retour && <input type="hidden" name="retour" value={retour} />}
 
-        {/* 1 · Photos */}
-        <section className="s-stack g-section" data-testid="add-photos">
-          <h2 className="s-h2">{`1 · ${V.steps[0]}`}</h2>
-          <p className="o-t-body s-muted">{V.photosText}</p>
-          {PHOTO_SLOTS.map((suffix, i) =>
-            i === 0 || picked[i - 1] || picked[i] ? (
-              <PhotoWithPlate
-                key={suffix || "1"}
-                label={i === 0 ? "Photo" : V.photoN(i + 1)}
-                help={i === 0 ? SITE.photoHelp : SITE.photoMoreHelp}
-                error={i === 0 ? errors.photo : undefined}
-                required={i === 0 && active}
-                testId={i === 0 ? "new-plate-frame" : `new-plate-frame-${i + 1}`}
-                prepare={prepare}
-                suffix={suffix}
-                onPicked={(on) => setPicked((all) => all.map((v, j) => (j === i ? on : v)))}
-              />
-            ) : null,
-          )}
-          <div className="g-cert" data-testid="add-cert">
-            <span className="g-dots" aria-hidden="true">
-              {CERT_DOTS.map((n) => (
-                <span key={n} className={n <= photoCount ? "g-dot is-on" : "g-dot"} />
-              ))}
-            </span>
-            <p className="o-t-caption">
-              <strong>{V.certTitle}</strong> · {certNoun} {SITE.photoOnlyOne}
-            </p>
-          </div>
-        </section>
-
-        {/* 2 · Plaque */}
-        <section className="s-stack g-section" data-testid="add-plate">
-          <h2 className="s-h2">{`2 · ${V.steps[1]}`}</h2>
-          <TextField
-            label={L.plateNumber}
-            name="plate"
-            autoCapitalize="characters"
-            disabled={unregistered}
-            help={L.privacyNote}
-            error={errors.plate}
-          />
-          <CheckboxField
-            name="unregistered"
-            checked={unregistered}
-            onChange={(e) => setUnregistered(e.currentTarget.checked)}
-            label={L.unregistered}
-          />
-          <CheckboxField
-            name="former"
-            checked={former}
-            onChange={(e) => {
-              setFormer(e.currentTarget.checked);
-              if (!e.currentTarget.checked) setStatus(archiveStatusChoices[0]?.status ?? "keepsake");
-            }}
-            label={L.formerTitle}
-          />
-          <p className="o-t-caption s-muted">{L.formerText}</p>
-          {former && (
-            <div className="s-stack s-stack--tight" data-testid="add-former">
-              <SelectField
-                label={SITE.formerStatus}
-                name="status"
-                value={status}
-                onChange={(e) => setStatus(e.currentTarget.value)}
-                options={archiveStatusChoices.map((c) => ({ value: c.status, label: c.label }))}
-              />
-              <TextField label={SITE.statusNote} name="statusNote" maxLength={300} />
-              <p className="s-notice">{SITE.formerNotCertified}</p>
-            </div>
-          )}
-        </section>
-
-        {/* 3 · Marque et modèle */}
-        <section className="s-stack g-section" data-testid="add-identity">
-          <h2 className="s-h2">{`3 · ${V.steps[2]}`}</h2>
-          <fieldset className="g-types" data-testid="add-types">
-            <legend className="o-field__label o-t-label">{SITE.type}</legend>
-            {vehicleTypes.map((t) => (
-              <label key={t} className={type === t ? "g-opt g-type is-on" : "g-opt g-type"}>
-                <input
-                  type="radio"
-                  name="vehicleType"
-                  value={t}
-                  checked={type === t}
-                  onChange={() => {
-                    setType(t);
-                    setModelId("");
-                  }}
+          {/* 1 · Photos */}
+          <section className="s-stack g-section" data-testid="add-photos">
+            <h2 className="s-h2">{`1 · ${V.steps[0]}`}</h2>
+            <p className="o-t-body s-muted">{V.photosText}</p>
+            {PHOTO_SLOTS.map((suffix, i) =>
+              i === 0 || picked[i - 1] || picked[i] ? (
+                <PhotoWithPlate
+                  key={suffix || "1"}
+                  label={i === 0 ? "Photo" : V.photoN(i + 1)}
+                  help={i === 0 ? SITE.photoHelp : SITE.photoMoreHelp}
+                  error={i === 0 ? errors.photo : undefined}
+                  required={i === 0 && active}
+                  testId={i === 0 ? "new-plate-frame" : `new-plate-frame-${i + 1}`}
+                  prepare={prepare}
+                  suffix={suffix}
+                  onPicked={(on) => setPicked((all) => all.map((v, j) => (j === i ? on : v)))}
                 />
-                <Icon name={typeIcon[t]} size={22} />
-                <span className="o-t-body">{vehicleTypeLabels[t]}</span>
-              </label>
-            ))}
-          </fieldset>
-          {errors.vehicleType && <p className="s-error">{errors.vehicleType}</p>}
-          <SelectField
-            label={L.make}
-            name="makeId"
-            value={makeId}
-            onChange={(e) => setMakeId(e.currentTarget.value)}
-            placeholder="Choisir une marque"
-            options={sortedMakes.map((m) => ({ value: m.id, label: m.isOther ? L.other : m.name }))}
-            error={errors.makeId}
-          />
-          <SelectField
-            label={L.model}
-            name="modelId"
-            value={modelId}
-            onChange={(e) => setModelId(e.currentTarget.value)}
-            placeholder={makeId ? "Choisir un modèle" : "Choisis d'abord une marque"}
-            disabled={!makeId}
-            options={visibleModels.map((m) => ({ value: m.id, label: m.isOther ? L.other : m.name }))}
-            error={errors.modelId}
-          />
-          {generations.length > 0 && (
-            <SelectField
-              label={SITE.generation}
-              name="generationId"
-              value={generationId}
-              onChange={(e) => setGenerationId(e.currentTarget.value)}
-              placeholder={SITE.chooseGeneration}
-              options={sortRows(generations, false).map((g) => ({
-                value: g.id,
-                label: g.isOther ? L.other : [g.name, generationYearsText(g)].filter(Boolean).join(" · "),
-              }))}
-            />
-          )}
-        </section>
-
-        {/* 4 · Fiche technique */}
-        <section className="s-stack g-section" data-testid="add-specs">
-          <h2 className="s-h2">{`4 · ${V.steps[3]}`}</h2>
-          <p className="o-t-body s-muted">{V.specsText}</p>
-          <div className="s-stack s-stack--tight" data-testid="add-engine-fields">
-            <TextField
-              label={L.engine}
-              name="engine"
-              value={engine}
-              maxLength={VEHICLE_ENGINE_MAX}
-              help={V.engineHelp}
-              onChange={(e) => setEngine(e.currentTarget.value)}
-              error={errors.engine}
-            />
-            <div className="s-two">
-              <TextField
-                label={L.power}
-                name="powerHp"
-                inputMode="numeric"
-                maxLength={4}
-                value={powerHp}
-                help={V.powerHelp}
-                onChange={(e) => setPowerHp(e.currentTarget.value.replace(/\D/g, ""))}
-                error={errors.powerHp}
-              />
-              <TextField
-                label={L.weight}
-                name="weightKg"
-                inputMode="numeric"
-                maxLength={5}
-                value={weightKg}
-                help={V.weightHelp}
-                onChange={(e) => setWeightKg(e.currentTarget.value.replace(/\D/g, ""))}
-                error={errors.weightKg}
-              />
+              ) : null,
+            )}
+            <div className="g-cert" data-testid="add-cert">
+              <span className="g-dots" aria-hidden="true">
+                {CERT_DOTS.map((n) => (
+                  <span key={n} className={n <= photoCount ? "g-dot is-on" : "g-dot"} />
+                ))}
+              </span>
+              <p className="o-t-caption">
+                <strong>{V.certTitle}</strong> · {certNoun} {SITE.photoOnlyOne}
+              </p>
             </div>
-          </div>
-          {years.length > 0 ? (
-            <fieldset className="g-years" data-testid="add-years">
-              <legend className="o-field__label o-t-label">{V.year}</legend>
-              {years.map((y) => (
-                <label key={y} className={year === String(y) ? "g-opt g-pill is-on" : "g-opt g-pill"}>
+          </section>
+
+          {/* 2 · Plaque */}
+          <section className="s-stack g-section" data-testid="add-plate">
+            <h2 className="s-h2">{`2 · ${V.steps[1]}`}</h2>
+            <TextField
+              label={L.plateNumber}
+              name="plate"
+              autoCapitalize="characters"
+              disabled={unregistered}
+              help={L.privacyNote}
+              error={errors.plate}
+            />
+            <CheckboxField
+              name="unregistered"
+              checked={unregistered}
+              onChange={(e) => setUnregistered(e.currentTarget.checked)}
+              label={L.unregistered}
+            />
+            <CheckboxField
+              name="former"
+              checked={former}
+              onChange={(e) => {
+                setFormer(e.currentTarget.checked);
+                if (!e.currentTarget.checked) setStatus(archiveStatusChoices[0]?.status ?? "keepsake");
+              }}
+              label={L.formerTitle}
+            />
+            <p className="o-t-caption s-muted">{L.formerText}</p>
+            {former && (
+              <div className="s-stack s-stack--tight" data-testid="add-former">
+                <SelectField
+                  label={SITE.formerStatus}
+                  name="status"
+                  value={status}
+                  onChange={(e) => setStatus(e.currentTarget.value)}
+                  options={archiveStatusChoices.map((c) => ({ value: c.status, label: c.label }))}
+                />
+                <TextField label={SITE.statusNote} name="statusNote" maxLength={300} />
+                <p className="s-notice">{SITE.formerNotCertified}</p>
+              </div>
+            )}
+          </section>
+
+          {/* 3 · Marque et modèle */}
+          <section className="s-stack g-section" data-testid="add-identity">
+            <h2 className="s-h2">{`3 · ${V.steps[2]}`}</h2>
+            <fieldset className="g-types" data-testid="add-types">
+              <legend className="o-field__label o-t-label">{SITE.type}</legend>
+              {vehicleTypes.map((t) => (
+                <label key={t} className={type === t ? "g-opt g-type is-on" : "g-opt g-type"}>
                   <input
                     type="radio"
-                    name="year"
-                    value={y}
-                    checked={year === String(y)}
-                    data-testid={`add-year-${y}`}
-                    onChange={() => setYear(String(y))}
-                    onClick={() => year === String(y) && setYear("")}
+                    name="vehicleType"
+                    value={t}
+                    checked={type === t}
+                    onChange={() => {
+                      setType(t);
+                      setModelId("");
+                    }}
                   />
-                  <span className="o-t-body">{y}</span>
+                  <Icon name={typeIcon[t]} size={22} />
+                  <span className="o-t-body">{vehicleTypeLabels[t]}</span>
                 </label>
               ))}
             </fieldset>
-          ) : (
-            <TextField
-              label={V.year}
-              name="year"
-              inputMode="numeric"
-              maxLength={4}
-              value={year}
-              onChange={(e) => setYear(e.currentTarget.value)}
-              error={errors.year}
+            {errors.vehicleType && <p className="s-error">{errors.vehicleType}</p>}
+            <SelectField
+              label={L.make}
+              name="makeId"
+              value={makeId}
+              onChange={(e) => setMakeId(e.currentTarget.value)}
+              placeholder="Choisir une marque"
+              options={sortedMakes.map((m) => ({ value: m.id, label: m.isOther ? L.other : m.name }))}
+              error={errors.makeId}
             />
-          )}
-          {years.length > 0 && errors.year && <p className="s-error">{errors.year}</p>}
-          <ColorPicker
-            value={color}
-            custom={colorCustom}
-            onChange={(next, custom) => {
-              setColor(next);
-              setColorCustom(custom);
-            }}
-          />
-          {errors.color && <p className="s-error">{errors.color}</p>}
-          <TextAreaField
-            label={V.description}
-            name="description"
-            value={description}
-            maxLength={VEHICLE_DESCRIPTION_MAX}
-            placeholder={V.descriptionPlaceholder}
-            onChange={(e) => setDescription(e.currentTarget.value.slice(0, VEHICLE_DESCRIPTION_MAX))}
-            help={V.descriptionHint}
-            error={errors.description}
-          />
-          <p className="o-t-caption g-count" data-testid="add-description-count">
-            {V.descriptionCount(description.length, VEHICLE_DESCRIPTION_MAX)}
-          </p>
-          <fieldset className="g-pills" data-testid="add-preparation">
-            <legend className="o-field__label o-t-label">{V.preparation}</legend>
-            {vehiclePreparations.map((p) => (
-              <label key={p} className={preparation.includes(p) ? "g-opt g-pill is-on" : "g-opt g-pill"}>
-                <input
-                  type="checkbox"
-                  name="preparation"
-                  value={p}
-                  checked={preparation.includes(p)}
-                  data-testid={`add-prep-${p}`}
-                  onChange={() => togglePreparation(p)}
-                />
-                <span className="o-t-body">{vehiclePreparationLabels[p]}</span>
-              </label>
-            ))}
-          </fieldset>
-        </section>
+            <SelectField
+              label={L.model}
+              name="modelId"
+              value={modelId}
+              onChange={(e) => setModelId(e.currentTarget.value)}
+              placeholder={makeId ? "Choisir un modèle" : "Choisis d'abord une marque"}
+              disabled={!makeId}
+              options={visibleModels.map((m) => ({ value: m.id, label: m.isOther ? L.other : m.name }))}
+              error={errors.modelId}
+            />
+            {generations.length > 0 && (
+              <SelectField
+                label={SITE.generation}
+                name="generationId"
+                value={generationId}
+                onChange={(e) => setGenerationId(e.currentTarget.value)}
+                placeholder={SITE.chooseGeneration}
+                options={sortRows(generations, false).map((g) => ({
+                  value: g.id,
+                  label: g.isOther ? L.other : [g.name, generationYearsText(g)].filter(Boolean).join(" · "),
+                }))}
+              />
+            )}
+          </section>
 
-        {/* 5 · Catégories */}
-        <section className="s-stack g-section" data-testid="add-categories">
-          <h2 className="s-h2">{`5 · ${V.steps[4]}`}</h2>
-          {origins.map((o) => (
-            <div key={o.id} className="g-origin" data-testid="add-origin">
-              <input type="hidden" name="categoryIds" value={o.id} />
-              <Flag country={make?.country ?? null} />
-              <div className="g-origin__text">
-                <span className="o-t-body-strong">
-                  {V.originLine(o.label, make?.country ?? null, make?.name ?? "").title}
-                </span>
-                <span className="o-t-caption">
-                  {V.originLine(o.label, make?.country ?? null, make?.name ?? "").detail}
+          {/* 4 · Fiche technique */}
+          <section className="s-stack g-section" data-testid="add-specs">
+            <h2 className="s-h2">{`4 · ${V.steps[3]}`}</h2>
+            <p className="o-t-body s-muted">{V.specsText}</p>
+            <div className="s-stack s-stack--tight" data-testid="add-engine-fields">
+              <TextField
+                label={L.engine}
+                name="engine"
+                value={engine}
+                maxLength={VEHICLE_ENGINE_MAX}
+                help={V.engineHelp}
+                onChange={(e) => setEngine(e.currentTarget.value)}
+                error={errors.engine}
+              />
+              <div className="s-two">
+                <TextField
+                  label={L.power}
+                  name="powerHp"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={powerHp}
+                  help={V.powerHelp}
+                  onChange={(e) => setPowerHp(e.currentTarget.value.replace(/\D/g, ""))}
+                  error={errors.powerHp}
+                />
+                <TextField
+                  label={L.weight}
+                  name="weightKg"
+                  inputMode="numeric"
+                  maxLength={5}
+                  value={weightKg}
+                  help={V.weightHelp}
+                  onChange={(e) => setWeightKg(e.currentTarget.value.replace(/\D/g, ""))}
+                  error={errors.weightKg}
+                />
+              </div>
+            </div>
+            {years.length > 0 ? (
+              <fieldset className="g-years" data-testid="add-years">
+                <legend className="o-field__label o-t-label">{V.year}</legend>
+                {years.map((y) => (
+                  <label key={y} className={year === String(y) ? "g-opt g-pill is-on" : "g-opt g-pill"}>
+                    <input
+                      type="radio"
+                      name="year"
+                      value={y}
+                      checked={year === String(y)}
+                      data-testid={`add-year-${y}`}
+                      onChange={() => setYear(String(y))}
+                      onClick={() => year === String(y) && setYear("")}
+                    />
+                    <span className="o-t-body">{y}</span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : (
+              <TextField
+                label={V.year}
+                name="year"
+                inputMode="numeric"
+                maxLength={4}
+                value={year}
+                onChange={(e) => setYear(e.currentTarget.value)}
+                error={errors.year}
+              />
+            )}
+            {years.length > 0 && errors.year && <p className="s-error">{errors.year}</p>}
+            <ColorPicker
+              value={color}
+              custom={colorCustom}
+              onChange={(next, custom) => {
+                setColor(next);
+                setColorCustom(custom);
+              }}
+            />
+            {errors.color && <p className="s-error">{errors.color}</p>}
+            <TextAreaField
+              label={V.description}
+              name="description"
+              value={description}
+              maxLength={VEHICLE_DESCRIPTION_MAX}
+              placeholder={V.descriptionPlaceholder}
+              onChange={(e) => setDescription(e.currentTarget.value.slice(0, VEHICLE_DESCRIPTION_MAX))}
+              help={V.descriptionHint}
+              error={errors.description}
+            />
+            <p className="o-t-caption g-count" data-testid="add-description-count">
+              {V.descriptionCount(description.length, VEHICLE_DESCRIPTION_MAX)}
+            </p>
+            <fieldset className="g-pills" data-testid="add-preparation">
+              <legend className="o-field__label o-t-label">{V.preparation}</legend>
+              {vehiclePreparations.map((p) => (
+                <label key={p} className={preparation.includes(p) ? "g-opt g-pill is-on" : "g-opt g-pill"}>
+                  <input
+                    type="checkbox"
+                    name="preparation"
+                    value={p}
+                    checked={preparation.includes(p)}
+                    data-testid={`add-prep-${p}`}
+                    onChange={() => togglePreparation(p)}
+                  />
+                  <span className="o-t-body">{vehiclePreparationLabels[p]}</span>
+                </label>
+              ))}
+            </fieldset>
+          </section>
+
+          {/* 5 · Catégories */}
+          <section className="s-stack g-section" data-testid="add-categories">
+            <h2 className="s-h2">{`5 · ${V.steps[4]}`}</h2>
+            {origins.map((o) => (
+              <div key={o.id} className="g-origin" data-testid="add-origin">
+                <input type="hidden" name="categoryIds" value={o.id} />
+                <Flag country={make?.country ?? null} />
+                <div className="g-origin__text">
+                  <span className="o-t-body-strong">
+                    {V.originLine(o.label, make?.country ?? null, make?.name ?? "").title}
+                  </span>
+                  <span className="o-t-caption">
+                    {V.originLine(o.label, make?.country ?? null, make?.name ?? "").detail}
+                  </span>
+                </div>
+                <span title={V.originLocked} role="img" aria-label={V.originLocked}>
+                  <Icon name="lock" size={16} />
                 </span>
               </div>
-              <span title={V.originLocked} role="img" aria-label={V.originLocked}>
-                <Icon name="lock" size={16} />
-              </span>
-            </div>
-          ))}
-          <fieldset className="g-pills" data-testid="categories">
-            <legend className="o-field__label o-t-label">{SITE.styles}</legend>
-            {styles.map((c) => (
-              <label
-                key={c.id}
-                className={
-                  !c.eligible
-                    ? "g-opt g-pill is-off"
-                    : categoryIds.includes(c.id)
-                      ? "g-opt g-pill is-on"
-                      : "g-opt g-pill"
-                }
-                title={c.eligible ? undefined : (c.reason ?? undefined)}
-              >
-                <input
-                  type="checkbox"
-                  name="categoryIds"
-                  value={c.id}
-                  checked={c.eligible && categoryIds.includes(c.id)}
-                  disabled={!c.eligible}
-                  data-testid={c.eligible ? "add-style" : "add-style-off"}
-                  onChange={() => toggleStyle(c.id)}
-                />
-                <span className="o-t-body">{c.label}</span>
-              </label>
             ))}
-          </fieldset>
-          {note || preparedNote ? (
-            <p className="s-notice" data-testid="add-styles-note">
-              {[note, preparedNote ? V.preparedChecked : null].filter(Boolean).join(" ")}
-            </p>
-          ) : null}
-        </section>
+            <fieldset className="g-pills" data-testid="categories">
+              <legend className="o-field__label o-t-label">{SITE.styles}</legend>
+              {styles.map((c) => (
+                <label
+                  key={c.id}
+                  className={
+                    !c.eligible
+                      ? "g-opt g-pill is-off"
+                      : categoryIds.includes(c.id)
+                        ? "g-opt g-pill is-on"
+                        : "g-opt g-pill"
+                  }
+                  title={c.eligible ? undefined : (c.reason ?? undefined)}
+                >
+                  <input
+                    type="checkbox"
+                    name="categoryIds"
+                    value={c.id}
+                    checked={c.eligible && categoryIds.includes(c.id)}
+                    disabled={!c.eligible}
+                    data-testid={c.eligible ? "add-style" : "add-style-off"}
+                    onChange={() => toggleStyle(c.id)}
+                  />
+                  <span className="o-t-body">{c.label}</span>
+                </label>
+              ))}
+            </fieldset>
+            {note || preparedNote ? (
+              <p className="s-notice" data-testid="add-styles-note">
+                {[note, preparedNote ? V.preparedChecked : null].filter(Boolean).join(" ")}
+              </p>
+            ) : null}
+          </section>
 
-        {errors.form && (
-          <p className="s-error" role="alert">
-            {errors.form}
-          </p>
-        )}
-        <Button type="submit" icon="send" loading={busy} fullWidth>
-          {V.send}
-        </Button>
-        <Button variant="secondary" icon="back" href={retour ?? "/app/garage"} fullWidth>
-          Annuler
-        </Button>
-      </Form>
-      {cropFile && <SquareCrop file={cropFile} onDone={finishCrop} onCancel={() => finishCrop(null)} />}
-    </div>
+          {errors.form && (
+            <p className="s-error" role="alert">
+              {errors.form}
+            </p>
+          )}
+          <Button type="submit" icon="send" loading={busy} fullWidth>
+            {V.send}
+          </Button>
+          <Button variant="secondary" icon="back" href={retour ?? "/app/garage"} fullWidth>
+            Annuler
+          </Button>
+        </Form>
+        {cropFile && <SquareCrop file={cropFile} onDone={finishCrop} onCancel={() => finishCrop(null)} />}
+      </div>
+    </>
   );
 }
 

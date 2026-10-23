@@ -13,13 +13,14 @@ import {
   type VehiclePreparation,
 } from "@orasso/shared";
 import { randomUUID } from "expo-crypto";
-import { useNavigation, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { ConfirmSheet } from "@/features/orga/ConfirmSheet";
 import { ShareSheet } from "@/features/vehicle/ShareSheet";
 import { api } from "@/lib/api";
+import { appReturn } from "@/lib/closeTo";
 import { errorMessage } from "@/lib/http";
 import { cropSquare, type PickedPhoto, photoForm, pickPhotos, takePhoto } from "@/lib/photos";
 import { detectPlateReadings } from "@/lib/plates/detect";
@@ -78,6 +79,7 @@ let photoSeq = 0;
 export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
   const { t } = useTheme();
   const router = useRouter();
+  const { retour } = useLocalSearchParams<{ retour?: string }>();
   const { refreshMe, me } = useSession();
   const editing = Boolean(vehicle);
   // La première fois (aucun véhicule avant l'ajout) : « Tes préférences » à la fin.
@@ -162,7 +164,8 @@ export function VehicleWizard({ vehicle }: { vehicle?: VehicleFull }) {
     const action = pendingLeave.current;
     pendingLeave.current = null;
     if (action) return action();
-    return router.canGoBack() ? router.back() : router.replace("/(tabs)/garage");
+    // Lot M7 : le ✕ revient à l'écran d'origine (la pile), sinon au `?retour=` sûr, sinon au Garage.
+    return router.canGoBack() ? router.back() : router.replace((appReturn(retour) ?? "/(tabs)/garage") as never);
   };
   const close = () => (guarded ? setQuitting(true) : leave());
   // ✕, retour Android ou geste : même confirmation tant que le brouillon n'est pas vide ou que l'envoi tourne.

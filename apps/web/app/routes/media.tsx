@@ -29,6 +29,7 @@ import { Qr } from "../components/Qr";
 import { RotatingQr } from "../components/RotatingQr";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { formatDay, formatWhen } from "../lib/format";
+import { withRetour } from "../lib/retour";
 import { type CursorChunk, cursorParam, loadChunk, useCursorList } from "../lib/useCursorList";
 import "../styles/garage.css";
 import "../styles/media.css";
@@ -534,7 +535,7 @@ export default function Media({ loaderData, actionData }: Route.ComponentProps) 
           <Button variant="secondary" icon="profile" href="/app/media/nouveau">
             {L.casquetteEdit}
           </Button>
-          <Button variant="secondary" icon="eye" href={`/m/${p.id}`}>
+          <Button variant="secondary" icon="eye" href={withRetour(`/m/${p.id}`, "/app/media")}>
             Ma fiche
           </Button>
         </div>

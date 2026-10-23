@@ -3,17 +3,7 @@
 // « Billet OK » / « Déjà utilisé » / « Refusé »), et compteur d'entrées des visiteurs (+1, +10, −1). Tout marche sans
 // réseau : la liste des billets est sur le téléphone, chaque geste entre dans la file (idempotente) et part au retour
 // du réseau ; le serveur arbitre (un billet ne passe qu'une fois, le total est la somme de tous les téléphones).
-import {
-  AppBar,
-  Button,
-  Ground,
-  Plate,
-  ScanResult,
-  Text,
-  TextField,
-  tokens,
-  useTheme,
-} from "@orasso/design-system/native";
+import { Button, Ground, Plate, ScanResult, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { shopLabels } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
@@ -25,10 +15,12 @@ import { AlertSheet } from "@/features/staff/AlertSheet";
 import { recordAlert, recordIncident, recordTicketScan, recordVisitor } from "@/features/staff/actions";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock, resultProps, type ShownResult, ticketResultOf, vibrate } from "@/features/staff/result";
+import { RECETTE } from "@/lib/recette";
 import { ed25519Verify } from "@/lib/staff/crypto";
 import { decideTicketLocal, ScanGate, shopAccess, visitorTotals } from "@/lib/staff/model";
 import { clearWriteError, getWriteError, newId, trustedKeysNow } from "@/lib/staff/runtime";
 import { useStaffActions, useStaffEvent } from "@/lib/staff/useStaff";
+import { FicheHeader } from "@/ui/FicheHeader";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -73,7 +65,7 @@ export default function Boutique() {
 
   // Recette seulement (pas de caméra dans le navigateur de test) : injection d'une charge utile.
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!RECETTE) return;
     const g = globalThis as { __orassoTicketScan?: (p: string) => void };
     g.__orassoTicketScan = handle;
     return () => {
@@ -99,8 +91,7 @@ export default function Boutique() {
 
   return (
     <Ground animated={false} style={styles.fill}>
-      <AppBar
-        kind="flow"
+      <FicheHeader
         title={shopLabels.title}
         facts={
           state
@@ -110,7 +101,6 @@ export default function Boutique() {
         counter={tickets.length > 0 ? `${checked} / ${tickets.length}` : undefined}
         onClose={close}
         closeLabel="Quitter l'entrée visiteurs"
-        safeTop={insets.top}
       />
 
       <View style={[styles.camera, { backgroundColor: c.night, borderRadius: tokens.radius.radiusLg }]}>
@@ -164,7 +154,7 @@ export default function Boutique() {
         ) : null}
       </View>
 
-      {__DEV__ ? <DevInject onInject={handle} /> : null}
+      {RECETTE ? <DevInject onInject={handle} /> : null}
 
       <View style={[styles.actions, { paddingBottom: space3 + insets.bottom }]}>
         <Plate style={styles.counter} testID="visitor-counter">
@@ -247,7 +237,7 @@ export default function Boutique() {
           {...resultProps(result)}
           fullscreen
           onReturn={
-            __DEV__ && (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold
+            RECETTE && (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold
               ? undefined
               : () => {
                   setLast(result);

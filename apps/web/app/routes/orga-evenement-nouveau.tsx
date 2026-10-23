@@ -1,8 +1,12 @@
 import type { Category, StructureOrganizer, VehicleMake } from "@orasso/shared";
 
 import { EventWizard } from "../components/EventWizard";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import type { Route } from "./+types/orga-evenement-nouveau";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Nouvel événement · Orasso" }, { name: "robots", content: "noindex" }];
@@ -36,12 +40,7 @@ export default function NouvelEvenement({ loaderData }: Route.ComponentProps) {
   const { structure, categories, makes } = loaderData;
   return (
     <>
-      <div className="orga__head">
-        <div>
-          <div className="s-label o-t-label">Événements</div>
-          <h1 className="s-title">Nouvel événement</h1>
-        </div>
-      </div>
+      <FicheBar title="Nouvel événement" back={`/orga/${structure.slug}`} />
       <EventWizard
         structureId={structure.id}
         structureSlug={structure.slug}

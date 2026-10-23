@@ -164,7 +164,8 @@ export function EventPage({
 
   return (
     <FlowScreen
-      title={e?.title ?? orgaLabels.eventsTitle}
+      // Lot M7 : le titre de l'événement est dans la plaque d'en-tête ; l'en-tête de fiche ne le répète pas.
+      title="Événement"
       facts={structureName}
       onClose={() => (router.canGoBack() ? router.back() : router.replace("/evenements"))}
       onRefresh={reloadAll}
@@ -291,9 +292,7 @@ export function EventPage({
         </>
       }
     >
-      <Button variant="plate" icon="back" onPress={() => router.replace("/evenements")} fullWidth>
-        {orgaLabels.eventsBack}
-      </Button>
+      {/* Lot M7 : plus de bouton « Tous les événements » : le ✕ de l'en-tête de fiche est le seul retour. */}
       <OrgaFailure error={event.error} />
       {foreign ? <Notice tone="error">{orgaLabels.foreignEvent}</Notice> : null}
       {notice ? <Notice>{notice}</Notice> : null}

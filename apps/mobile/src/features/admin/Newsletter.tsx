@@ -394,7 +394,7 @@ function NewsletterBody() {
 
 export function NewsletterScreen() {
   return (
-    <AdminGate title={newsletterTexts.title}>
+    <AdminGate page title={newsletterTexts.title}>
       <NewsletterBody />
     </AdminGate>
   );

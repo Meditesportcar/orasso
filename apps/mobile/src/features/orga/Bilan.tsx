@@ -11,6 +11,7 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
+import { withReturn } from "@/lib/closeTo";
 import { formatDayHour } from "@/lib/format";
 import { errorMessage } from "@/lib/http";
 import { useApi } from "@/lib/useApi";
@@ -218,7 +219,7 @@ export function Bilan({ eventId }: { eventId: string }) {
             <Button
               variant="plate"
               icon="incident"
-              onPress={() => router.push("/notes")}
+              onPress={() => router.push(withReturn("/notes", `/evenement/${eventId}/bilan`) as never)}
               fullWidth
               testID="orga-report-notes"
             >

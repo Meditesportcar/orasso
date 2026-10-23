@@ -212,7 +212,7 @@ function BadgesBody() {
 
 export function BadgesScreen() {
   return (
-    <AdminGate title={AL.adminBadgesTitle}>
+    <AdminGate page title={AL.adminBadgesTitle}>
       <BadgesBody />
     </AdminGate>
   );
@@ -593,7 +593,7 @@ function DocumentRow({ id, name, meta }: { id: string; name: string; meta: strin
 
 export function StructureFileScreen() {
   return (
-    <AdminGate title="Structure">
+    <AdminGate page title="Structure">
       <StructureBody />
     </AdminGate>
   );

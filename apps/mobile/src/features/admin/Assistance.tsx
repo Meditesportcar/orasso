@@ -173,7 +173,7 @@ function AssistanceQueueBody() {
 
 export function AssistanceQueueScreen() {
   return (
-    <AdminGate title="Demandes d'aide">
+    <AdminGate page title="Demandes d'aide">
       <AssistanceQueueBody />
     </AdminGate>
   );

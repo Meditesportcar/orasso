@@ -3,11 +3,14 @@
 import { Button, Chip } from "@orasso/design-system/web";
 import type { MyTicket } from "@orasso/shared";
 import { data, Form, useNavigation } from "react-router";
-
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { Qr } from "../components/Qr";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatPrice, formatWhen } from "../lib/format";
 import type { Route } from "./+types/billets";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Mes billets · Orasso" }, { name: "robots", content: "noindex" }];
@@ -79,10 +82,7 @@ export default function Billets({ loaderData, actionData }: Route.ComponentProps
   const result = actionData as { error?: string; ok?: string } | undefined;
   return (
     <div className="s-stack">
-      <div className="s-head">
-        <div className="o-t-label s-label">Accès</div>
-        <h1 className="s-title">Mes billets</h1>
-      </div>
+      <FicheBar title="Mes billets" back="/app/sorties" />
       {reserved && (
         <p className="s-notice s-notice--ok" role="status" data-testid="reserved-notice">
           Réservation confirmée : ton billet et son QR sont ci-dessous.
@@ -116,9 +116,6 @@ export default function Billets({ loaderData, actionData }: Route.ComponentProps
           ))}
         </div>
       )}
-      <p className="o-t-caption s-muted">
-        <a href="/app/sorties">Retour à mes accès</a>
-      </p>
     </div>
   );
 }

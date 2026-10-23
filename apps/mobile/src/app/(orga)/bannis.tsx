@@ -6,7 +6,7 @@ import { OrgaGate } from "@/features/orga/OrgaGate";
 
 export default function Bannis() {
   return (
-    <OrgaGate title={orgaManageLabels.bansTitle}>
+    <OrgaGate page title={orgaManageLabels.bansTitle}>
       <BansScreen />
     </OrgaGate>
   );
