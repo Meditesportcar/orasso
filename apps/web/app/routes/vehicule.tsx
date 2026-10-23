@@ -40,7 +40,8 @@ export default function Vehicule({ loaderData, actionData }: Route.ComponentProp
   const full = "photos" in v ? v : null;
   return (
     <>
-      <FicheBar heading={false} title="Véhicule" back={loaderData.back} />
+      {/* Lot M7, tour 2 : avec photo, la carte du véhicule n'a pas de h1 ; l'en-tête de fiche le porte. */}
+      <FicheBar heading={Boolean(full?.photos[0])} title="Véhicule" back={loaderData.back} />
       <div className="s-narrow s-stack" data-testid="vehicule" data-detailed={v.detailed}>
         {full?.photos[0] ? (
           <VehicleCard
