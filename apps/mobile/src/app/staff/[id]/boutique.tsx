@@ -25,6 +25,7 @@ import { AlertSheet } from "@/features/staff/AlertSheet";
 import { recordAlert, recordIncident, recordTicketScan, recordVisitor } from "@/features/staff/actions";
 import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock, resultProps, type ShownResult, ticketResultOf, vibrate } from "@/features/staff/result";
+import { RECETTE } from "@/lib/recette";
 import { ed25519Verify } from "@/lib/staff/crypto";
 import { decideTicketLocal, ScanGate, shopAccess, visitorTotals } from "@/lib/staff/model";
 import { clearWriteError, getWriteError, newId, trustedKeysNow } from "@/lib/staff/runtime";
@@ -73,7 +74,7 @@ export default function Boutique() {
 
   // Recette seulement (pas de caméra dans le navigateur de test) : injection d'une charge utile.
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!RECETTE) return;
     const g = globalThis as { __orassoTicketScan?: (p: string) => void };
     g.__orassoTicketScan = handle;
     return () => {
@@ -164,7 +165,7 @@ export default function Boutique() {
         ) : null}
       </View>
 
-      {__DEV__ ? <DevInject onInject={handle} /> : null}
+      {RECETTE ? <DevInject onInject={handle} /> : null}
 
       <View style={[styles.actions, { paddingBottom: space3 + insets.bottom }]}>
         <Plate style={styles.counter} testID="visitor-counter">
@@ -247,7 +248,7 @@ export default function Boutique() {
           {...resultProps(result)}
           fullscreen
           onReturn={
-            __DEV__ && (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold
+            RECETTE && (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold
               ? undefined
               : () => {
                   setLast(result);

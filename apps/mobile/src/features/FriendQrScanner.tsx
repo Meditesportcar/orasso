@@ -5,9 +5,9 @@ import { socialLabels } from "@orasso/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
-
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
+import { RECETTE } from "@/lib/recette";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
@@ -70,7 +70,7 @@ export function FriendQrScanner({
 
   // Recette seulement (pas de caméra dans le navigateur de test) : injection d'une charge utile.
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!RECETTE) return;
     const g = globalThis as { __orassoFriendScan?: (p: string) => void };
     g.__orassoFriendScan = (payload) => void handle(payload);
     return () => {
@@ -121,7 +121,7 @@ export function FriendQrScanner({
           <Notice tone={outcome.state === "ok" ? "info" : "error"}>{outcome.text}</Notice>
         </View>
       ) : null}
-      {__DEV__ ? <DevInject onInject={(p) => void handle(p)} busy={busy} /> : null}
+      {RECETTE ? <DevInject onInject={(p) => void handle(p)} busy={busy} /> : null}
       <Button variant="secondary" icon="close" onPress={onClose} fullWidth>
         Fermer
       </Button>

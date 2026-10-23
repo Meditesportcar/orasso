@@ -15,6 +15,7 @@ import { AngledTag } from "@/features/pro/kit";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { type ProScan, proScanOf } from "@/lib/pro";
+import { RECETTE } from "@/lib/recette";
 import { useApi } from "@/lib/useApi";
 import { Avatar } from "@/ui/Avatar";
 import { Muted } from "@/ui/Muted";
@@ -70,7 +71,7 @@ export default function ProScanner() {
 
   // Recette seulement (pas de caméra dans le navigateur de test) : injection d'une charge utile.
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!RECETTE) return;
     const g = globalThis as { __orassoProScan?: (p: string) => void };
     g.__orassoProScan = (payload) => void handle(payload);
     return () => {
@@ -173,7 +174,7 @@ export default function ProScanner() {
             </>
           ) : null}
 
-          {__DEV__ ? <DevInject onInject={(p) => void handle(p)} busy={busy} /> : null}
+          {RECETTE ? <DevInject onInject={(p) => void handle(p)} busy={busy} /> : null}
         </>
       )}
     </TabScreen>

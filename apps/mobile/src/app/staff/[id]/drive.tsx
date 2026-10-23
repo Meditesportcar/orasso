@@ -32,6 +32,7 @@ import { SearchSheet } from "@/features/staff/SearchSheet";
 import { serverNow } from "@/lib/clock";
 import { recognizeText } from "@/lib/plates/mlkit";
 import { type PlateGroup, plateGroups } from "@/lib/plates/recognize";
+import { RECETTE } from "@/lib/recette";
 import { DriveGate, type DriveOutcome, driveOutcome } from "@/lib/staff/drive";
 import { counters } from "@/lib/staff/model";
 import { deleteLocalPhoto } from "@/lib/staff/photo";
@@ -276,7 +277,7 @@ export default function Drive() {
           fullscreen
           onReturn={
             // Recette : `__orassoScanHold` garde le résultat affiché le temps d'une capture d'écran.
-            __DEV__ && (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold
+            RECETTE && (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold
               ? undefined
               : () => {
                   setLast(result);
