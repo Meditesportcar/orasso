@@ -9,6 +9,7 @@ import {
   PRO_POSTS_PER_MONTH,
   postsRemaining,
   proSubscription,
+  shownDiscount,
 } from "./pro";
 import {
   PAYMENTS_OPEN_AT,
@@ -101,5 +102,14 @@ describe("billetterie", () => {
     expect(ticketingUpdateSchema.safeParse({ enabled: true, capacity: 100, priceCents: 50 }).success).toBe(false);
     expect(ticketingUpdateSchema.safeParse({ enabled: true, capacity: 0 }).success).toBe(false);
     expect(ticketCheckSchema.safeParse({ payload: "" }).success).toBe(false);
+  });
+});
+
+describe("shownDiscount (lot M5, « Pour ta … » du Garage)", () => {
+  it("la remise du grade, sinon celle du premier grade au-dessus, sinon rien", () => {
+    expect(shownDiscount({ route: 8, sport: 10 }, "route")).toEqual({ percent: 8, from: null });
+    expect(shownDiscount({ sport: 10, legende: 15 }, "route")).toEqual({ percent: 10, from: "sport" });
+    expect(shownDiscount({ rodage: 5 }, "sport")).toBeNull();
+    expect(shownDiscount({}, "rodage")).toBeNull();
   });
 });

@@ -5,6 +5,8 @@
 // toucher des étiquettes sont ceux du lot 59c (`ExplorerMap`, mode `fill`). Le segment Pros garde la carte d'Explorer
 // dans un écran de flux. Relecture du lot C2a : les filtres de la liste d'Explorer suivent (`filtres`, JSON) ; une pastille
 // de plusieurs événements les montre tous (aperçu qui défile) ; une erreur de chargement s'affiche avec « Réessayer ».
+// Lot M5 (tour 2) : `?event=<adresse>` (« Sur la carte » d'un ticket de l'Accueil) montre cet événement seul, lu par sa
+// page (l'API dit s'il est visible pour la personne : un événement sur invitation l'est pour ses invités), sans recherche.
 import { Icon, type IconName, Text, useTheme } from "@orasso/design-system/native";
 import { type EventCard, explorerV2Labels as L } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -30,17 +32,19 @@ import { api } from "@/lib/api";
 import { nowMs } from "@/lib/clock";
 import { prefetchEvent, rememberEventCard } from "@/lib/eventPreview";
 import { useSession } from "@/lib/session";
+import { useApi } from "@/lib/useApi";
 import { FlowScreen } from "@/ui/Screens";
 
 export default function Carte() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ segment?: string; q?: string; filtres?: string }>();
+  const params = useLocalSearchParams<{ segment?: string; q?: string; filtres?: string; event?: string }>();
   const q = typeof params.q === "string" ? params.q : "";
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
   // Un objet stable par valeur du paramètre : la liste ne se recharge pas à chaque rendu.
   const proFilters = useMemo(() => parseFilters(params.filtres, emptyProFilters), [params.filtres]);
   const eventFilters = useMemo(() => parseFilters(params.filtres, emptyEventFilters), [params.filtres]);
   if (params.segment === "pros") return <ProsMap q={q} filters={proFilters} onClose={close} />;
+  if (typeof params.event === "string" && params.event) return <EventFocusMap slug={params.event} onClose={close} />;
   return <EventsMap initialQ={q} filters={eventFilters} onClose={close} />;
 }
 
@@ -222,6 +226,72 @@ function EventsMap({ initialQ, filters, onClose }: { initialQ: string; filters: 
         <View style={[styles.empty, { top: insets.top + 76, backgroundColor: c.ground }]}>
           <Text variant="caption" color={c.inkMuted}>
             {L.emptyTitle}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** Un seul événement sur la carte (lot M5, tour 2) : son épingle, sa fiche en aperçu, ✕. Aucune recherche. */
+function EventFocusMap({ slug, onClose }: { slug: string; onClose: () => void }) {
+  const { t } = useTheme();
+  const c = t.color;
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const position = useExplorerPosition();
+  const event = useApi(() => api.eventBySlug(slug), [slug]);
+  const e = event.data;
+  const pins = useMemo(() => (e ? eventPins([e]) : []), [e]);
+  return (
+    <View style={[styles.fill, { backgroundColor: c.ground }]} testID="map-screen">
+      {e && pins.length ? (
+        <ExplorerMap
+          fill
+          reveal={false}
+          pins={pins}
+          me={position.position}
+          selectedId={e.id}
+          onSelect={() => undefined}
+        />
+      ) : null}
+      <View style={[styles.top, { top: insets.top + 12 }]} pointerEvents="box-none">
+        <View style={styles.fill} />
+        <MapButton icon="close" label="Fermer" size={38} onPress={onClose} testID="map-close" />
+      </View>
+      {e ? (
+        <View style={[styles.peek, { bottom: insets.bottom + 16 }]} testID="map-focus">
+          <View style={[styles.peekCard, { boxShadow: t.shadow.shadowPoster }]}>
+            <EventCardV2
+              event={e}
+              onPressIn={() => prefetchEvent(e.slug)}
+              onPress={(r) => {
+                rememberEventCard(e, r);
+                router.push(`/e/${e.slug}`);
+              }}
+            />
+          </View>
+        </View>
+      ) : null}
+      {event.error ? (
+        <View style={[styles.failed, { top: insets.top + 76, backgroundColor: c.ground }]} testID="map-error">
+          <Text variant="caption" color={c.ink}>
+            {event.error.message}
+          </Text>
+          <SmallButton icon="undo" onPress={() => void event.reload()}>
+            Réessayer
+          </SmallButton>
+        </View>
+      ) : !e ? (
+        <View style={[styles.empty, { top: insets.top + 76, backgroundColor: c.ground }]} testID="map-loading">
+          <Text variant="caption" color={c.inkMuted}>
+            {L.loading}
+          </Text>
+        </View>
+      ) : pins.length === 0 ? (
+        <View style={[styles.empty, { top: insets.top + 76, backgroundColor: c.ground }]} testID="map-no-place">
+          <Text variant="caption" color={c.inkMuted}>
+            Lieu pas encore placé sur la carte.
           </Text>
         </View>
       ) : null}

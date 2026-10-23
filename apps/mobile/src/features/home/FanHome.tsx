@@ -1,18 +1,18 @@
-// Accueil de l'exposant et du visiteur (lot 43 ; lot C2a : reconstruit d'après l'artefact DA v2 `s-home`). Pas de grand
-// titre : la salutation en tient lieu. Puis, dans cet ordre et seulement : la carte du prochain événement
-// (`.poster.hn`), la météo du jour J (`.wx`), « Tes autres sorties » en deux mini-tickets, le rappel « Tu es staff »
-// (exposant), « Autour du <département> ce mois-ci » en rail d'affiches, l'incitation Passeport avec ses tampons.
-// Retirés de l'Accueil (audit § 5.2, « chaque fonction à un seul endroit ») : blocs réglables et « Réorganiser »
-// (agenda = Sorties ; garage favori, lavage, carburant = Explorer › Pros), emplacement sponsorisé, tuile tuto,
-// carte « Termine ta fiche » (Mon profil seulement), bouton « Explorer les événements » (lien du rail).
-// La carte et les sorties viennent des candidatures gardées sur le téléphone (lisibles hors ligne) ; le reste vient de
+// Accueil de l'exposant et du visiteur (lot 43 ; lot C2a : reconstruit d'après l'artefact DA v2 `s-home` ; lot M5 :
+// haut fixe de la maquette 6.1). Pas de grand titre : la salutation en tient lieu. Puis, dans cet ordre et seulement :
+// « Ta prochaine sortie » (les tickets qui glissent au doigt, avec leurs points : chaque sortie a son affiche en portrait,
+// toucher = fiche de l'événement ; « Mon accès » et « Sur la carte » côte à côte ; ni Maps ni Waze ici, correction de
+// Damien), la météo du jour J (`.wx`, carte à part), le rappel « Tu es staff » (exposant), « Autour du <département> ce
+// mois-ci » en rail d'affiches avec une seule affiche sponsorisée en tête, l'incitation Passeport avec ses tampons.
+// Retirés : « Tes autres sorties » (elles sont dans le glissement, lot M5), les blocs réglables et « Réorganiser »
+// (l'accueil en widgets est gardé pour une mise à jour future), la tuile tuto, la carte « Termine ta fiche » (Mon profil).
+// Les sorties viennent des candidatures gardées sur le téléphone (lisibles hors ligne) et des billets ; le reste vient de
 // `GET /me/home?persona=`.
 
 import { Button, Plate, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   type HomeData,
   type HomeNudgeKind,
-  type HomeOrganizer,
   type HomeSponsored,
   homeLabels,
   homeProfileLabels,
@@ -38,15 +38,13 @@ import { useNow } from "@/lib/useNow";
 import { Notice } from "@/ui/Notice";
 import { TabScreen } from "@/ui/Screens";
 import { autoOpenKey, isDayJ } from "./autoOpen";
-import { Greet, MiniStrip, MiniTicket, Nudge, PosterRail, SecH, WeatherCard } from "./fanBlocks";
-import { HeroCard } from "./parts";
+import { Greet, Nudge, PosterRail, SecH, WeatherCard } from "./fanBlocks";
+import { NextOutings, type Outing } from "./NextOutings";
 import { homeRail, splitSponsored } from "./rail";
 import { todayLine } from "./today";
 
 const { space2, space3 } = tokens.spacing;
 const fileUrl = (url: string | null | undefined) => mediaSource(url)?.uri ?? null;
-/** Le logo de la structure vient aussi de l'API (URL relative). */
-const withLogo = (o: HomeOrganizer | null) => (o ? { ...o, logoUrl: fileUrl(o.logoUrl) } : null);
 const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
   weekday: "long",
   day: "numeric",
@@ -54,6 +52,9 @@ const DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
   hour: "numeric",
   timeZone: "Europe/Paris",
 });
+/** Tickets dans le glissement, au plus. */
+const MAX_OUTINGS = 6;
+const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 
 export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
   const { t } = useTheme();
@@ -96,32 +97,18 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     live.find((a) => a.status === "pending" || a.status === "waitlisted" || a.status === "offered");
   const next = exhibitor ? (data?.nextAccess ?? localNext ?? null) : null;
   const ticket = exhibitor ? null : (data?.nextTicket ?? null);
-  // « Tes autres sorties » : deux mini-tickets (artefact `.stat-strip`), sans la sortie de la carte.
-  // (ni un billet pour l'événement de la carte : l'exposant retenu qui a aussi un billet ne le voit pas deux fois).
-  const heroSlug = next?.event.slug ?? ticket?.event.slug;
-  const otherTickets = ticketsUpcoming(myTickets.data ?? [], now).filter(
-    (x) => x.id !== ticket?.id && x.event.slug !== heroSlug,
-  );
-  const others = [
-    ...live
-      .filter((a) => a.id !== next?.id)
-      .map((a) => ({ key: a.id, kind: "app" as const, app: a, startsAt: a.event.startsAt })),
-    ...otherTickets.map((x) => ({ key: x.id, kind: "ticket" as const, ticket: x, startsAt: x.event.startsAt })),
-  ]
-    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
-    .slice(0, 2);
   const nudge: HomeNudgeKind | null = data?.nudge ?? null;
   const profile = me?.profile;
   const name = profile?.firstName ?? profile?.pseudo ?? "";
   const department = profile?.departments[0];
   const staffNext = (staff.data ?? []).find((s) => new Date(s.event.endsAt) > now && s.presence !== "absent");
   const heroEvent = next?.event ?? ticket?.event ?? null;
-  // Rail « Autour du 66 ce mois-ci » : les événements proches du mois qui vient, sans celui de la carte.
+  // Rail « Autour du 66 ce mois-ci » : les événements proches du mois qui vient, sans celui du premier ticket.
   const rail = homeRail(data?.nearby?.events ?? [], sponsored, heroEvent?.slug, now);
   const stamps = (passport.data?.pages ?? []).flatMap((p) => p.stamps).slice(-3);
 
   // D34 : le jour J, le QR d'accès (ou le billet) s'affiche d'office à l'ouverture de l'Accueil, une fois par jour et par
-  // place (fermé, il ne revient pas en boucle ; il reste à un geste par la carte et l'accès flottant).
+  // place (fermé, il ne revient pas en boucle ; il reste à un geste par le ticket).
   const todayTarget =
     next && next.status === "accepted" && !next.checkedInAt && isDayJ(next.event, next.day, now)
       ? { key: next.id, href: `/jour-j/${next.id}` }
@@ -151,86 +138,120 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
     else goTab("profil");
   }
 
-  const hero = next ? (
-    <HeroCard
-      // Les fichiers de l'API sont relatifs à son hôte (`mediaSource`).
-      photoUrl={data?.nextAccess?.id === next.id ? fileUrl(data.nextAccess.photoUrl) : null}
-      posterUrl={data?.nextAccess?.id === next.id ? fileUrl(data.nextAccess.posterUrl) : null}
-      startsAt={next.event.startsAt}
-      countdown={dayCountdown(next.event.startsAt, now)}
-      hourLabel={homeProfileLabels.openingAt(formatHour(next.event.startsAt))}
-      title={next.event.title}
-      tags={
-        <>
-          <ApplicationTag app={next} onPoster />
-          {next.zone ? <SkewTag onPoster>{`Zone ${next.zone.code}`}</SkewTag> : null}
-        </>
-      }
-      organizer={withLogo(
-        next.organizer ?? (data?.nextAccess?.id === next.id ? data.nextAccess.organizer : null) ?? null,
-      )}
-      meta={[
-        ...(next.event.city ? [{ icon: "place" as const, text: next.event.city }] : []),
-        ...(arrivalPhrase(next.arrival)
-          ? [{ icon: "wait" as const, text: arrivalPhrase(next.arrival)?.replace(/^./, (c) => c.toUpperCase()) ?? "" }]
-          : []),
-      ]}
-      // D34 : le QR se consulte dès la validation ; une candidature pas encore retenue renvoie à son ticket.
-      action={
-        next.status === "accepted"
-          ? { label: homeProfileLabels.myAccess, icon: "qr", onPress: () => router.push(`/jour-j/${next.id}`) }
-          : { label: homeLabels.seeAccess, icon: "ticket", onPress: () => goTab("sorties") }
-      }
-      destination={{
-        lat: data?.nextAccess?.location?.lat ?? null,
-        lng: data?.nextAccess?.location?.lng ?? null,
-        addressLine: data?.nextAccess?.location?.addressLine,
-        city: next.event.city,
-        title: next.event.title,
-      }}
-      onMap={() => router.push(`/e/${next.event.slug}`)}
-    />
-  ) : ticket ? (
-    <HeroCard
-      photoUrl={fileUrl(ticket.photoUrl)}
-      posterUrl={fileUrl(ticket.posterUrl)}
-      startsAt={ticket.event.startsAt}
-      countdown={dayCountdown(ticket.event.startsAt, now)}
-      hourLabel={homeProfileLabels.openingAt(formatHour(ticket.event.startsAt))}
-      title={ticket.event.title}
-      tags={
-        <>
-          <SkewTag tone="acc" onPoster>
-            Billet
-          </SkewTag>
-          <SkewTag onPoster>
-            {ticket.priceCents == null ? "Entrée public · gratuite" : "Entrée public · payante"}
-          </SkewTag>
-        </>
-      }
-      organizer={withLogo(ticket.organizer)}
-      meta={[
-        ...(ticket.event.city ? [{ icon: "place" as const, text: ticket.event.city }] : []),
-        {
-          icon: "wait",
-          text: ticket.arrival
-            ? (arrivalPhrase(ticket.arrival) ?? "").replace(/^./, (c) => c.toUpperCase())
-            : homeProfileLabels.publicOpening(formatHour(ticket.event.startsAt)),
-        },
-      ]}
-      action={{ label: homeProfileLabels.myTicket, icon: "qr", onPress: () => router.push(`/billet/${ticket.id}`) }}
-      destination={{
-        lat: ticket.location?.lat ?? null,
-        lng: ticket.location?.lng ?? null,
-        addressLine: ticket.location?.addressLine,
-        city: ticket.event.city,
-        title: ticket.event.title,
-      }}
-      onMap={() => router.push(`/e/${ticket.event.slug}`)}
-    />
-  ) : null;
+  const openEvent = (slug: string) => router.push(`/e/${slug}`);
+  // « Sur la carte » = le plan (vocabulaire de Damien), sur cet événement précis (par son adresse, jamais par son titre :
+  // homonymes possibles, et l'Explorer ne liste pas les événements sur invitation). L'API dit s'il est visible.
+  const onMap = (slug: string) => () => router.push({ pathname: "/carte", params: { event: slug } } as never);
 
-  // Météo : celle du jour J de la carte (lieu, jour et heure), sinon celle du département.
+  /** Une candidature en ticket : son affiche, son statut, son arrivée, son geste. */
+  const appOuting = (a: MyApplication): Outing => {
+    const fromApi = data?.nextAccess?.id === a.id ? data.nextAccess : null;
+    const arrival = arrivalPhrase(fromApi?.arrival ?? a.arrival ?? null);
+    const accepted = a.status === "accepted";
+    return {
+      key: `app-${a.id}`,
+      title: a.event.title,
+      startsAt: a.event.startsAt,
+      countdown: dayCountdown(a.event.startsAt, now),
+      posterUrl: fileUrl(fromApi?.posterUrl ?? a.event.posterUrl ?? null),
+      tags: (
+        <>
+          <ApplicationTag app={a} onPoster />
+          {a.zone ? <SkewTag onPoster>{`Zone ${a.zone.code}`}</SkewTag> : null}
+        </>
+      ),
+      lines: [
+        ...(arrival ? [{ icon: "wait" as const, text: upper(arrival) }] : []),
+        ...(a.status === "waitlisted" ? [{ icon: "bell" as const, text: homeProfileLabels.waitlistLine }] : []),
+        ...(a.event.city ? [{ icon: "place" as const, text: a.event.city }] : []),
+      ],
+      // D34 : le QR se consulte dès la validation ; une candidature pas encore retenue renvoie à son ticket de Sorties.
+      action: accepted
+        ? {
+            kind: "access",
+            label: homeProfileLabels.myAccess,
+            icon: "qr",
+            onPress: () => router.push(`/jour-j/${a.id}`),
+            testID: "home-hero-action",
+          }
+        : a.status === "waitlisted"
+          ? null
+          : {
+              kind: "secondary",
+              label: homeProfileLabels.myApplication,
+              icon: "ticket",
+              onPress: () => goTab("sorties"),
+              testID: "home-outing-application",
+            },
+      onMap: accepted ? onMap(a.event.slug) : null,
+      onOpen: () => openEvent(a.event.slug),
+    };
+  };
+
+  // Les sorties du glissement : la prochaine (place retenue d'abord) puis les autres par date. Un billet n'est caché que
+  // si une place retenue donne déjà un accès au même événement (lot M5, tour 2) : en attente ou en liste d'attente, le
+  // billet reste, c'est lui qui fait entrer.
+  const apps = next ? [next, ...live.filter((a) => a.id !== next.id)] : live;
+  const accessSlugs = new Set(apps.filter((a) => a.status === "accepted").map((a) => a.event.slug));
+  const tickets = ticketsUpcoming(myTickets.data ?? [], now).filter(
+    (x) => x.id !== ticket?.id && !accessSlugs.has(x.event.slug),
+  );
+  const ticketOuting = (x: {
+    id: string;
+    priceCents: number | null;
+    event: { slug: string; title: string; startsAt: string; city: string | null; posterUrl?: string | null };
+    posterUrl?: string | null;
+    arrivalText?: string | null;
+  }): Outing => ({
+    key: `ticket-${x.id}`,
+    title: x.event.title,
+    startsAt: x.event.startsAt,
+    countdown: dayCountdown(x.event.startsAt, now),
+    posterUrl: fileUrl(x.posterUrl ?? x.event.posterUrl ?? null),
+    tags: (
+      <>
+        <SkewTag tone="acc" onPoster>
+          Billet
+        </SkewTag>
+        <SkewTag onPoster>{x.priceCents == null ? "Entrée gratuite" : "Entrée payante"}</SkewTag>
+      </>
+    ),
+    lines: [
+      ...(x.arrivalText ? [{ icon: "wait" as const, text: x.arrivalText }] : []),
+      ...(x.event.city ? [{ icon: "place" as const, text: x.event.city }] : []),
+    ],
+    action: {
+      kind: "access",
+      label: homeProfileLabels.myTicket,
+      icon: "qr",
+      onPress: () => router.push(`/billet/${x.id}`),
+      testID: "home-hero-action",
+    },
+    onMap: onMap(x.event.slug),
+    onOpen: () => openEvent(x.event.slug),
+  });
+  const outings: Outing[] = [
+    ...(ticket
+      ? [
+          ticketOuting({
+            ...ticket,
+            arrivalText: ticket.arrival
+              ? upper(arrivalPhrase(ticket.arrival) ?? "")
+              : homeProfileLabels.publicOpening(formatHour(ticket.event.startsAt)),
+          }),
+        ]
+      : []),
+    ...[
+      ...apps.slice(next ? 1 : 0).map((a) => ({ startsAt: a.event.startsAt, o: appOuting(a) })),
+      ...tickets.map((x) => ({ startsAt: x.event.startsAt, o: ticketOuting(x) })),
+    ]
+      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+      .map((x) => x.o),
+  ];
+  if (next) outings.unshift(appOuting(next));
+  const shown = outings.slice(0, MAX_OUTINGS);
+
+  // Météo : celle du jour J de la prochaine sortie (lieu, jour et heure), sinon celle du département.
   const weather = data?.weather ?? null;
   const weatherWhen =
     weather?.kind === "event"
@@ -248,62 +269,38 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
 
       <Greet line={todayLine(now, department ? `Dép. ${department}` : null)} name={name} />
 
-      {hero ??
-        (exhibitor && nudge === "add_vehicle" ? (
-          <NudgeCard kind={nudge} primary onAction={() => nudgeAction(nudge)} />
-        ) : (
-          <Plate style={styles.lead} testID="home-lead">
-            <Text variant="posterM" color={t.color.plateInk}>
-              Trouve ton prochain événement
-            </Text>
-            <Text variant="body" color={t.color.plateMuted}>
-              {exhibitor
-                ? "Rassemblements, expositions, cars & coffee : candidate avec l'un de tes véhicules."
-                : "Réserve ton entrée gratuite à un événement : ton billet apparaîtra ici."}
-            </Text>
-            <Button variant="primary" icon="explore" onPress={() => goTab("explorer")} fullWidth>
-              {homeLabels.explore}
-            </Button>
-          </Plate>
-        ))}
+      {shown.length > 0 ? (
+        <NextOutings
+          outings={shown}
+          header={(page, count) => (
+            <SecH
+              title={homeProfileLabels.nextOuting}
+              meta={count > 1 ? homeProfileLabels.outingOf(page + 1, count) : undefined}
+              testID="home-next-head"
+            />
+          )}
+        />
+      ) : exhibitor && nudge === "add_vehicle" ? (
+        <NudgeCard kind={nudge} primary onAction={() => nudgeAction(nudge)} />
+      ) : (
+        <Plate style={styles.lead} testID="home-lead">
+          <Text variant="posterM" color={t.color.plateInk}>
+            Trouve ton prochain événement
+          </Text>
+          <Text variant="body" color={t.color.plateMuted}>
+            {exhibitor
+              ? "Rassemblements, expositions, cars & coffee : candidate avec l'un de tes véhicules."
+              : "Réserve ton entrée gratuite à un événement : ton billet apparaîtra ici."}
+          </Text>
+          <Button variant="primary" icon="explore" onPress={() => goTab("explorer")} fullWidth>
+            {homeLabels.explore}
+          </Button>
+        </Plate>
+      )}
 
       {home.error && !data ? <Notice>{homeLabels.loadFailed}</Notice> : null}
 
       {weather ? <WeatherCard weather={weather} place={weatherPlace} when={weatherWhen} /> : null}
-
-      {others.length > 0 ? (
-        <>
-          <SecH
-            title={homeProfileLabels.otherOutings}
-            link={homeProfileLabels.seeAll}
-            onLink={() => goTab("sorties")}
-          />
-          <MiniStrip>
-            {others.map((o) =>
-              o.kind === "app" ? (
-                <MiniTicket
-                  key={o.key}
-                  testID="home-other-outing"
-                  tag={<ApplicationTag app={o.app} short />}
-                  title={o.app.event.title}
-                  caption={`${formatDay(o.app.event.startsAt)}${o.app.status === "waitlisted" ? " · si une place se libère" : ""}`}
-                  onPress={() => goTab("sorties")}
-                />
-              ) : (
-                <MiniTicket
-                  key={o.key}
-                  testID="home-other-outing"
-                  tag={<SkewTag tone="acc">Billet</SkewTag>}
-                  title={o.ticket.event.title}
-                  caption={`${formatDay(o.ticket.event.startsAt)} · ${o.ticket.priceCents == null ? "entrée libre, réservée" : "entrée réservée"}`}
-                  onPress={() => goTab("sorties")}
-                />
-              ),
-            )}
-            {others.length === 1 ? <View style={styles.fill} /> : null}
-          </MiniStrip>
-        </>
-      ) : null}
 
       {exhibitor && staffNext ? (
         <Nudge
@@ -327,7 +324,7 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
           />
           <PosterRail
             events={rail.events}
-            onOpen={(slug) => router.push(`/e/${slug}`)}
+            onOpen={openEvent}
             sponsored={rail.sponsored}
             onSponsored={(s) => {
               void api.sponsoredClick(s.id).catch(() => undefined);
@@ -362,7 +359,6 @@ export function FanHome({ variant }: { variant: "exhibitor" | "visitor" }) {
 }
 
 const styles = StyleSheet.create({
-  fill: { flex: 1 },
   lead: { gap: space2, padding: space3 },
   stamps: { flexDirection: "row" },
   stampOver: { marginLeft: -14 },

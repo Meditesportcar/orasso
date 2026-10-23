@@ -99,6 +99,48 @@ export function certificationEligibility(
   return { ok: missing.length === 0, missing };
 }
 
+/**
+ * Ce qui rend la certification impossible, et pas seulement « pas encore » (décision de Damien, 22/10) : un ancien
+ * véhicule (vendu, gardé en souvenir ou accidenté, statut autre que « actif ») ne peut pas être certifié.
+ */
+export const CERTIFICATION_IMPOSSIBLE: readonly CertificationMissing[] = ["status"];
+
+/**
+ * Ordre « ce qui manque en premier » de la ligne d'état (lot M5) : d'abord ce que la personne règle tout de suite dans
+ * la fiche (photos, description, catégorie), puis la plaque en transfert, enfin le grade (il vient avec les sorties).
+ */
+const LINE_ORDER: readonly CertificationMissing[] = ["photos", "description", "category", "plate", "grade"];
+
+/** La ligne d'état de la certification (Garage, page du véhicule, site) : un seul état, ce qui manque en premier. */
+export type CertificationLine =
+  | { kind: "certified" }
+  | { kind: "pending" }
+  | { kind: "impossible" }
+  | { kind: "ready" }
+  | { kind: "missing"; first: CertificationMissing; photosMissing: number; count: number };
+
+/**
+ * L'état à afficher, à partir de ce que l'API renvoie (`VehicleCertification.missing`) et du nombre de photos. Un ancien
+ * véhicule l'emporte sur tout (impossible, pas de demande) ; une certification acquise ou une demande en cours ensuite.
+ */
+export function certificationLine(
+  state: { certified: boolean; missing: readonly CertificationMissing[] },
+  photoCount: number,
+): CertificationLine {
+  if (state.missing.some((m) => CERTIFICATION_IMPOSSIBLE.includes(m))) return { kind: "impossible" };
+  if (state.certified || state.missing.includes("certified")) return { kind: "certified" };
+  if (state.missing.includes("pending")) return { kind: "pending" };
+  const open = LINE_ORDER.filter((m) => state.missing.includes(m));
+  const first = open[0];
+  if (!first) return { kind: "ready" };
+  return {
+    kind: "missing",
+    first,
+    photosMissing: Math.max(0, CERTIFICATION_MIN_PHOTOS - photoCount),
+    count: open.length,
+  };
+}
+
 /** Champs dont la modification fait perdre la certification (S38) : techniques, catégories et photos. */
 export type CertificationFields = {
   makeId: string;

@@ -1,17 +1,28 @@
 // Réglages, ouverts par les tuiles de Mon profil (lot 40, prototype `s-me` : « réglages en tuiles ») : chaque tuile a
 // son écran de flux, fait des sections de l'ancien écran Moi (`features/moi/`, inchangées). Notifications ;
 // Préférences (thème Béton / Sable / Automatique, « Réduire les animations », secteur, rayon, centres d'intérêt) ;
-// Sécurité ; Confidentialité (compte public ou privé, mes données, supprimer le compte) ; Mon profil public (photo,
-// pseudo, description, aperçu) ; Aide (sanctions, version).
-import { Button, Chip, ChipRow, Text, type ThemePreference, useTheme } from "@orasso/design-system/native";
-import { moderationLabels, tutoLabels, tutoProfileNames } from "@orasso/shared";
-import Constants from "expo-constants";
+// Compte (lot M5 : e-mail, mot de passe et appareils, mes sanctions ; `securite` y mène aussi) ; Confidentialité
+// (compte public ou privé, export de mes données, supprimer le compte) ; Mon profil public (photo, pseudo, description,
+// aperçu) ; Aide (lot M5, maquette 7.3 : tutos par casquette, questions fréquentes, nous écrire, version).
+import {
+  Button,
+  Chip,
+  ChipRow,
+  Plate,
+  Text,
+  type ThemePreference,
+  tokens,
+  useTheme,
+} from "@orasso/design-system/native";
+import { helpLabels, moderationLabels } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
+import { StyleSheet } from "react-native";
 import { ChangePasswordSheet } from "@/features/moi/ChangePasswordSheet";
 import { DataSection } from "@/features/moi/DataSection";
 import { DeleteAccountSheet } from "@/features/moi/DeleteAccountSheet";
 import { EmailBanner } from "@/features/moi/EmailBanner";
+import { HelpSection } from "@/features/moi/HelpSection";
 import { NotificationsSection } from "@/features/moi/NotificationsSection";
 import { PasskeysSheet } from "@/features/moi/PasskeysSheet";
 import { PointsSection } from "@/features/moi/PointsSection";
@@ -23,7 +34,6 @@ import { SessionsSheet } from "@/features/moi/SessionsSheet";
 import { TwoFactorSheet } from "@/features/moi/TwoFactorSheet";
 import { useSettings } from "@/features/moi/useSettings";
 import { VisibilitySection } from "@/features/moi/VisibilitySection";
-import { replayProfiles } from "@/features/tuto/model";
 import { useMotionPref } from "@/lib/motionPref";
 import { useSession } from "@/lib/session";
 import { Muted } from "@/ui/Muted";
@@ -33,7 +43,9 @@ import { FlowScreen, SectionTitle } from "@/ui/Screens";
 const SECTIONS = {
   notifications: "Notifications",
   preferences: "Préférences",
-  securite: "Sécurité",
+  compte: "Compte",
+  // Ancien chemin (lot 40) : même écran que Compte.
+  securite: "Compte",
   confidentialite: "Confidentialité",
   profil: "Mon profil public",
   aide: "Aide",
@@ -63,6 +75,7 @@ export default function Reglages() {
   return (
     <FlowScreen
       title={SECTIONS[section]}
+      facts={section === "aide" ? helpLabels.subtitle : undefined}
       onClose={() => (router.canGoBack() ? router.back() : router.replace("/moi"))}
       onRefresh={async () => {
         await Promise.all([refreshMe(), settings.reload()]);
@@ -119,10 +132,32 @@ export default function Reglages() {
         </>
       ) : null}
 
-      {section === "securite" ? (
+      {section === "compte" || section === "securite" ? (
         <>
           <EmailBanner />
+          {me ? (
+            <Plate style={styles.email} testID="compte-email">
+              <Text variant="label" color={t.color.plateMuted}>
+                E-mail
+              </Text>
+              <Text variant="bodyStrong" color={t.color.plateInk}>
+                {me.user.email}
+              </Text>
+            </Plate>
+          ) : null}
           <SecuritySection onOpen={setSheet} />
+          {/* Lot 32 : sanctions de la modération et contestation (lot M5 : ici, plus dans l'Aide). */}
+          <SectionTitle>{moderationLabels.mySanctions}</SectionTitle>
+          {me?.suspension ? <Notice>{moderationLabels.suspendedTitle}</Notice> : null}
+          <Button
+            variant="secondary"
+            icon="list"
+            fullWidth
+            onPress={() => router.push("/suspendu")}
+            testID="my-sanctions"
+          >
+            {me?.suspension?.canContest ? moderationLabels.contest : moderationLabels.mySanctions}
+          </Button>
         </>
       ) : null}
 
@@ -154,45 +189,11 @@ export default function Reglages() {
         </>
       ) : null}
 
-      {section === "aide" ? (
-        <>
-          {/* Lot 32 : sanctions de la modération et contestation. */}
-          <SectionTitle>{moderationLabels.mySanctions}</SectionTitle>
-          {me?.suspension ? <Notice>{moderationLabels.suspendedTitle}</Notice> : null}
-          <Button
-            variant="secondary"
-            icon="list"
-            fullWidth
-            onPress={() => router.push("/suspendu")}
-            testID="my-sanctions"
-          >
-            {me?.suspension?.canContest ? moderationLabels.contest : moderationLabels.mySanctions}
-          </Button>
-          {/* Lot 42 : « Revoir le tuto », un bouton par profil de la personne (profil choisi à l'arrivée, puis ses casquettes). */}
-          <SectionTitle>{tutoLabels.replay}</SectionTitle>
-          <Muted variant="body">{tutoLabels.replayHint}</Muted>
-          {replayProfiles(
-            (me?.personas ?? []).map((p) => p.kind),
-            me?.profile.mainProfile ?? null,
-          ).map((p) => (
-            <Button
-              key={p}
-              variant="plate"
-              icon="live"
-              fullWidth
-              onPress={() => router.push(`/tuto/${p}` as never)}
-              testID={`replay-tuto-${p}`}
-            >
-              {tutoProfileNames[p]}
-            </Button>
-          ))}
-          <SectionTitle>Nous écrire</SectionTitle>
-          <Muted variant="body">Une question, un souci : contact@orasso.fr</Muted>
-          <Text variant="caption" color={t.color.inkFaint}>
-            Orasso {Constants.expoConfig?.version ?? ""}
-          </Text>
-        </>
-      ) : null}
+      {section === "aide" ? <HelpSection /> : null}
     </FlowScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  email: { gap: tokens.spacing.space1, padding: tokens.spacing.space3 },
+});

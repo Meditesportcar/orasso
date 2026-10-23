@@ -167,7 +167,9 @@ export const smoke = {
    * Natif (lot C8, consigne de Damien : téléphones modestes) : un pool fixe de bouffées par voiture, recyclées, au lieu
    * des ~42 bouffées par seconde et par roue du canvas de l'artefact. Petit écran ou Android ancien : `low`.
    */
-  pool: { low: 6, high: 10 },
+  // Lot M5 (retour 23 : traînées très larges au milieu de l'écran sur le Xiaomi) : fumée du fond moins dense sur
+  // téléphone, 10 → 7 bouffées par voiture (6 → 4 sur un appareil modeste). Le moteur (`BattleLayer`) ne change pas.
+  pool: { low: 4, high: 7 },
   /** Autour du O, les voitures vont deux fois plus vite (un tour en 1,4 s) : plus de bouffées pour une traînée continue. */
   orbitPool: { low: 10, high: 16 },
   /** Échelle `k` des rayons de la fumée dans l'ouverture (artefact : `Drift` de l'accueil, k = 0,6). */

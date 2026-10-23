@@ -44,6 +44,11 @@ export const homeRoutes = new Hono<AppEnv>()
     await homeService.unsetFavorite(await requireUser(c), uuidParam(c, "id"));
     return c.body(null, 204);
   })
+  // Lot M5, tour 2 : l'emplacement du Garage est compté à sa première apparition à l'écran.
+  .post("/sponsored/:id/impression", async (c) => {
+    await sponsoredService.impression(await requireUser(c), uuidParam(c, "id"));
+    return c.body(null, 204);
+  })
   .post("/sponsored/:id/click", async (c) => {
     await sponsoredService.click(await requireUser(c), uuidParam(c, "id"));
     return c.body(null, 204);
