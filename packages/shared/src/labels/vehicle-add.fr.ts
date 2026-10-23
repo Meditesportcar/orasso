@@ -110,6 +110,16 @@ export const vehicleAddLabels = {
   preparation: "Préparation · plusieurs choix",
   // 5. Catégories (1.7)
   originLocked: "déduite de la marque, non modifiable",
+  /**
+   * Ligne d'origine (maquette 1.7) : « Japonaise », puis « JDM · déduit de Toyota » quand la catégorie d'origine porte
+   * un autre nom que le pays (sinon « Déduit de Toyota »).
+   */
+  originLine: (category: string, country: string | null, make: string) => {
+    const adjective = country ? (originAdjectives[country] ?? null) : null;
+    const deduced = `Déduit de ${make}`;
+    if (!adjective || adjective.toLowerCase() === category.toLowerCase()) return { title: category, detail: deduced };
+    return { title: adjective, detail: `${category} · déduit de ${make}` };
+  },
   stylesDimmed: (labels: string[], noun: string, year: number) =>
     labels.length > 1
       ? `${labels.slice(0, -1).join(", ")} et ${labels.at(-1)} sont grisées : ${noun} est de ${year}.`
@@ -137,6 +147,23 @@ export const vehicleAddLabels = {
   share: "Partager son affiche",
   certificationNote:
     "Il manque encore de quoi demander la certification : 3 photos et une description. Tu les ajoutes depuis sa fiche.",
+};
+
+/** Pays de la marque en adjectif (féminin : « une voiture japonaise »), pour la ligne d'origine. */
+export const originAdjectives: Record<string, string> = {
+  JP: "Japonaise",
+  DE: "Allemande",
+  FR: "Française",
+  IT: "Italienne",
+  US: "Américaine",
+  GB: "Britannique",
+  SE: "Suédoise",
+  KR: "Coréenne",
+  ES: "Espagnole",
+  CZ: "Tchèque",
+  NL: "Néerlandaise",
+  AT: "Autrichienne",
+  CN: "Chinoise",
 };
 
 export const drivetrainLabels: Record<VehicleDrivetrain, string> = {

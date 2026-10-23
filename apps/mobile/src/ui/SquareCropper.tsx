@@ -163,7 +163,7 @@ export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, b
             {subtitle}
           </Text>
         </View>
-        <Button variant="close" onPhoto label={V.cropCancel} onPress={onCancel} testID="crop-cancel" />
+        <ZoomButton icon="close" label={V.cropCancel} onPress={onCancel} size={38} testID="crop-cancel" />
       </View>
       <View
         style={[styles.stage, { height: stage ? stage * 1.04 : 360 }]}
@@ -177,7 +177,9 @@ export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, b
             <CropImage uri={photo.uri} width={imgW} height={imgH} zoom={zoom} tx={tx} ty={ty} />
             <FrameMask stage={stage} frame={frame} ink={c.nightInk} accent={c.accent} dim={withAlpha(c.night, 0.7)} />
             <View style={styles.badge} pointerEvents="none">
-              <Tag tone="acc">{V.cropBadge}</Tag>
+              <View>
+                <Tag tone="acc">{V.cropBadge}</Tag>
+              </View>
             </View>
           </>
         ) : null}
@@ -190,7 +192,7 @@ export function SquareCropper({ photo, initial, subtitle, onCancel, onConfirm, b
           </Text>
         </View>
         <View style={styles.zoom}>
-          <ZoomButton icon="close" label={V.zoomOut} onPress={() => press(-1)} testID="crop-zoom-out" />
+          <ZoomButton icon="minus" label={V.zoomOut} onPress={() => press(-1)} testID="crop-zoom-out" />
           <View style={[styles.track, { backgroundColor: withAlpha(c.nightInk, 0.18) }]}>
             <Animated.View style={[styles.trackFill, { backgroundColor: c.accent }, track]} />
             <Animated.View style={[styles.knob, { backgroundColor: c.nightInk }, knob]} />
@@ -369,12 +371,13 @@ function ZoomButton({
   size = 40,
   testID,
 }: {
-  icon: "close" | "add";
+  icon: "close" | "add" | "minus";
   label: string;
   onPress: () => void;
   size?: number;
   testID?: string;
 }) {
+  const { t } = useTheme();
   return (
     <Button
       variant="close"
@@ -383,7 +386,13 @@ function ZoomButton({
       label={label}
       onPress={onPress}
       testID={testID}
-      style={{ width: size, height: size, minHeight: size, borderRadius: tokens.radius.radiusMd }}
+      style={{
+        width: size,
+        height: size,
+        minHeight: size,
+        borderRadius: tokens.radius.radiusMd,
+        backgroundColor: withAlpha(t.color.nightInk, 0.1),
+      }}
     />
   );
 }
@@ -409,7 +418,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  badge: { position: "absolute", top: space3, left: 0, right: 0, alignItems: "center" },
+  badge: { position: "absolute", top: space3, left: 0, right: 0, flexDirection: "row", justifyContent: "center" },
   dim: { position: "absolute" },
   frame: { position: "absolute", borderWidth: 2, borderRadius: 4 },
   thirdV: { position: "absolute", top: 0, bottom: 0, width: 1 },

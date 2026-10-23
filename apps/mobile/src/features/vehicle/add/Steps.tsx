@@ -398,26 +398,29 @@ export function StepCategories({
   return (
     <>
       <StepHead title={L.categoriesTitle} text={L.categoriesText} />
-      {origins.map((o) => (
-        <View
-          key={o.id}
-          style={[styles.origin, { backgroundColor: c.surface }]}
-          accessible
-          accessibilityLabel={`${o.label}, ${L.deducedFrom(make?.name ?? "")}, ${V.originLocked}`}
-          testID="vehicle-origin"
-        >
-          <Flag country={make?.country ?? null} />
-          <View style={styles.grow}>
-            <Text variant="bodyStrong" color={c.ink}>
-              {o.label}
-            </Text>
-            <Text variant="caption" color={c.inkMuted}>
-              {L.deducedFrom(make?.name ?? "")}
-            </Text>
+      {origins.map((o) => {
+        const line = V.originLine(o.label, make?.country ?? null, make?.name ?? "");
+        return (
+          <View
+            key={o.id}
+            style={[styles.origin, { backgroundColor: c.surface }]}
+            accessible
+            accessibilityLabel={`${line.title}, ${line.detail}, ${V.originLocked}`}
+            testID="vehicle-origin"
+          >
+            <Flag country={make?.country ?? null} />
+            <View style={styles.grow}>
+              <Text variant="bodyStrong" color={c.ink}>
+                {line.title}
+              </Text>
+              <Text variant="caption" color={c.inkMuted}>
+                {line.detail}
+              </Text>
+            </View>
+            <Icon name="lock" size={16} color={c.inkMuted} />
           </View>
-          <Icon name="lock" size={16} color={c.inkMuted} />
-        </View>
-      ))}
+        );
+      })}
       <FieldLabel>{L.styles}</FieldLabel>
       <View style={styles.pills}>
         {styles2.map((s) => (

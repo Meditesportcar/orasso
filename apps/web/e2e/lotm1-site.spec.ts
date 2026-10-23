@@ -105,8 +105,8 @@ test("ajout complet d'un véhicule sur le site, photo carrée, fiche technique e
   await page.getByTestId("add-prep-wheels").check();
 
   // 5 · Catégories : origine déduite de la marque, « Préparée » cochée d'office par la préparation.
-  await expect(page.getByTestId("add-origin")).toContainText("JDM");
-  await expect(page.getByTestId("add-origin")).toContainText("Déduit de Toyota");
+  await expect(page.getByTestId("add-origin")).toContainText("Japonaise");
+  await expect(page.getByTestId("add-origin")).toContainText("JDM · déduit de Toyota");
   await expect(page.getByTestId("categories").getByRole("checkbox", { name: "Préparée" })).toBeChecked();
   await expect(page.getByTestId("add-styles-note")).toContainText("Préparée est cochée");
   const audit = await auditPage(page);

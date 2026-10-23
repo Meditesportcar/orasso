@@ -30,6 +30,8 @@ export const CATEGORY_RULES: Record<string, Rule> = {
   },
   moto: { types: ["moto"] },
   utilitaire: { types: ["truck"] },
+  // Lot M1 (retour 07, consigne de Damien) : « 4x4 » n'est pas proposé à une voiture.
+  "4x4": { types: ["truck"] },
 };
 
 export async function applyCategoryRules(ex: Executor = db): Promise<number> {

@@ -629,8 +629,12 @@ export default function GarageNouveau({ loaderData, actionData }: Route.Componen
               <input type="hidden" name="categoryIds" value={o.id} />
               <Flag country={make?.country ?? null} />
               <div className="g-origin__text">
-                <span className="o-t-body-strong">{o.label}</span>
-                <span className="o-t-caption">{L.deducedFrom(make?.name ?? "")}</span>
+                <span className="o-t-body-strong">
+                  {V.originLine(o.label, make?.country ?? null, make?.name ?? "").title}
+                </span>
+                <span className="o-t-caption">
+                  {V.originLine(o.label, make?.country ?? null, make?.name ?? "").detail}
+                </span>
               </div>
               <span title={V.originLocked} role="img" aria-label={V.originLocked}>
                 <Icon name="lock" size={16} />

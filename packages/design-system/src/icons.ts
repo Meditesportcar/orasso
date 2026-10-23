@@ -160,6 +160,7 @@ export const iconShapes = {
   // Lot M1 (ajout de véhicule, maquettes 1.1 à 1.7) : symboles de l'artefact DA v2 tels quels.
   moto: [c(5.5, 16, 3.5), c(18.5, 16, 3.5), p("M5.5 16l4-7h5l4 7M9.5 9H7M14 6h3l1.5 3")], // type moto (`s-vadd`)
   crop: [p("M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14")], // recadrer, `#i-crop`
+  minus: [p("M5 12h14")], // dézoomer (le pendant de `add`)
   trash: [p("M4 7h16M9 7V4h6v3M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13")], // supprimer une photo, `#i-trash`
   // Puissance (`#i-bolt`) : motorisation, style Sportive et préparation Moteur ; l'éclair « express » reste réservé.
   power: [p("M13 2L4 14h7l-1 8 9-12h-7z")],
