@@ -11,7 +11,7 @@ import {
 import { desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { conversationParticipants, conversations, events, messages, profiles } from "../../db/schema";
+import { conversationParticipants, conversations, events, messages, profiles, user } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { AppError, forbidden, notFound } from "../../lib/errors";
@@ -19,6 +19,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import type { Executor, Tx } from "../../lib/tx";
+import { canSeeEvent, type SeeingUser } from "../invitations/access";
 import { isSecondFactor } from "../security/passkey";
 import { type ConversationRow, type KindRules, type Reader, rulesOf } from "./access";
 
@@ -118,22 +119,48 @@ export const isMySide = (m: Pick<MessageRow, "senderId" | "asStructure">, reader
 
 type SenderProfile = { userId: string; pseudo: string; avatarKey: string | null; deletedAt: Date | null } | null;
 
-/** Lot M4 : les événements dont parlent des messages (« À propos de »), par identifiant. */
+/**
+ * Lot M4 : les événements dont parlent des messages (« À propos de »), par identifiant, **tels que `reader` peut les
+ * voir** (tour 2) : un événement privé sur invitation n'apparaît qu'à ses ayants droit (`canSeeEvent`) ; pour les
+ * autres, l'étiquette est absente, sans rien de l'événement (ni titre, ni date, ni ville, ni lien).
+ */
 export async function aboutsOf(
   ex: Executor,
   rows: Pick<MessageRow, "aboutEventId">[],
+  reader: SeeingUser,
 ): Promise<Map<string, MessageAbout>> {
   const ids = [...new Set(rows.map((r) => r.aboutEventId).filter((id): id is string => Boolean(id)))];
   const out = new Map<string, MessageAbout>();
   if (!ids.length) return out;
   const found = await ex
-    .select({ id: events.id, slug: events.slug, title: events.title, startsAt: events.startsAt, city: events.city })
+    .select({
+      id: events.id,
+      slug: events.slug,
+      title: events.title,
+      startsAt: events.startsAt,
+      city: events.city,
+      structureId: events.structureId,
+      admission: events.admission,
+      status: events.status,
+    })
     .from(events)
     .where(inArray(events.id, ids));
   for (const e of found) {
+    if (e.status === "draft" || !(await canSeeEvent(e, reader, ex))) continue;
     out.set(e.id, { eventId: e.id, slug: e.slug, title: e.title, startsAt: e.startsAt.toISOString(), city: e.city });
   }
   return out;
+}
+
+/** Les lecteurs d'une conversation tels que `canSeeEvent` les attend (compte et adresse confirmée). */
+export async function seeingUsersOf(ex: Executor, readers: Reader[]): Promise<Map<string, SeeingUser>> {
+  const ids = [...new Set(readers.map((r) => r.userId))];
+  if (!ids.length) return new Map();
+  const rows = await ex
+    .select({ id: user.id, email: user.email, emailVerified: user.emailVerified })
+    .from(user)
+    .where(inArray(user.id, ids));
+  return new Map(rows.map((u) => [u.id, { user: u }]));
 }
 
 export function serializeMessage(

@@ -29,6 +29,7 @@ import { realtime } from "../../lib/realtime";
 import type { Viewer } from "../../lib/session";
 import { storage } from "../../lib/storage";
 import { type Tx, withTx } from "../../lib/tx";
+import { canSeeEvent } from "../invitations/access";
 import { notificationsService } from "../notifications/service";
 import { profilesRepo } from "../profiles/repo";
 import { uploadsService } from "../uploads/service";
@@ -49,6 +50,7 @@ import {
   refreshPreview,
   requireAccess,
   resolveAccess,
+  seeingUsersOf,
   senderProfiles,
   serializeMessage,
   twoFactorOk,
@@ -294,7 +296,8 @@ export const messagingService = {
       page.map((m) => m.senderId),
     );
     const readBy = q.before ? null : await this.readByOf(access, page);
-    const abouts = await aboutsOf(db, page);
+    // Tour 2 : « À propos de » filtré pour la personne qui lit (événement privé : ses ayants droit seulement).
+    const abouts = await aboutsOf(db, page, v);
     return {
       items: page.map((m) =>
         serializeMessage(
@@ -357,7 +360,7 @@ export const messagingService = {
     const replay = async (row: MessageRow) => {
       if (row.senderId !== v.user.id) throw conflict("conflict", "Identifiant de message déjà utilisé");
       return {
-        message: serializeMessage(row, senderOf(v), v.user.id, null, await aboutsOf(db, [row])),
+        message: serializeMessage(row, senderOf(v), v.user.id, null, await aboutsOf(db, [row], v)),
         created: false,
       };
     };
@@ -369,13 +372,20 @@ export const messagingService = {
     const block = await writeBlockOf(db, actor, access);
     if (block) throw writeBlockError(block);
     // Lot M4 : « À propos de » un événement de la structure de cette conversation, publié ou annulé (jamais un brouillon).
+    // Tour 2 : un événement privé seulement si l'expéditeur peut le voir ; sinon le même refus (rien sur son existence).
     if (input.aboutEventId) {
       const [about] = await db
-        .select({ structureId: events.structureId, status: events.status })
+        .select({ id: events.id, structureId: events.structureId, status: events.status, admission: events.admission })
         .from(events)
         .where(eq(events.id, input.aboutEventId));
       const conv = access.conversation;
-      if (conv.kind !== "organizer" || !about || about.structureId !== conv.structureId || about.status === "draft") {
+      if (
+        conv.kind !== "organizer" ||
+        !about ||
+        about.structureId !== conv.structureId ||
+        about.status === "draft" ||
+        !(await canSeeEvent(about, v))
+      ) {
         throw validation(messagingLabels.aboutEventNotHere, { field: "aboutEventId" });
       }
     }
@@ -442,11 +452,28 @@ export const messagingService = {
       for (const r of recipients) await ensureParticipant(tx, id, r.userId, r.side);
       await pushTo(tx, access, row, v, recipients);
       after(() => notificationsService.kick());
-      const abouts = await aboutsOf(tx, [row]);
+      const abouts = await aboutsOf(tx, [row], v);
+      // Tour 2 : le temps réel suit la même règle que la lecture ; chaque destinataire reçoit l'étiquette seulement s'il
+      // peut voir l'événement (deux envois : avec, et sans).
+      const seeing = new Set<string>();
+      if (row.aboutEventId) {
+        const people = await seeingUsersOf(tx, access.readers);
+        for (const r of access.readers) {
+          const who = people.get(r.userId);
+          if (who && (await aboutsOf(tx, [row], who)).size > 0) seeing.add(r.userId);
+        }
+      }
       after(() => {
-        publishToConversation(id, access.readers, "message.new", {
-          message: serializeMessage(row, senderOf(v), null, null, abouts),
-        });
+        const withAbout = access.readers.filter((r) => seeing.has(r.userId));
+        const without = access.readers.filter((r) => !seeing.has(r.userId));
+        if (withAbout.length) {
+          publishToConversation(id, withAbout, "message.new", {
+            message: serializeMessage(row, senderOf(v), null, null, abouts),
+          });
+        }
+        if (without.length) {
+          publishToConversation(id, without, "message.new", { message: serializeMessage(row, senderOf(v), null) });
+        }
         announce(
           id,
           access.readers.map((r) => r.userId),
