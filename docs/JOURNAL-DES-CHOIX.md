@@ -2248,3 +2248,59 @@ Mesures sur le Xiaomi de Damien (Redmi Note 10 Pro, `adb -s cd0ba0d8`), enregist
 - **Listes virtualisées** : non faites. L'Explorer est paginé (20 cartes, « Voir plus ») dans la zone qui défile de `TabScreen` ; passer en `FlatList` demande de refaire ce gabarit d'écran, que le prochain lot socle (« deux modes d'affichage ») touche. Laissé à ce lot.
 - Paires de captures avant/après (390 px, Béton et Sable, web de recette) : Accueil, Explorer, Sorties, Garage, Profil, fiche. Une régression vue et corrigée (le fondu bas de l'affiche de la fiche passait sous l'affiche) ; les autres écarts sont des données (heure du compte à rebours, ordre des étiquettes d'un véhicule, événements créés par une autre recette).
 - Fichiers : `packages/design-system/src/native/{Skeleton.tsx,olive/BattleLayer.tsx,index.ts}`, `apps/mobile/src/{ui/Waiting.tsx,ui/PersonaTabs.tsx,ui/Screens.tsx,lib/useApi.ts,lib/eventPreview.ts,features/explorer/{usePaged.ts,EventsSegment.tsx,EventCardV2.tsx},features/event/{EventHero.tsx,PosterFlow.tsx,EventFacts.tsx},features/sorties/SortiesScreen.tsx,features/nav/swipe.ts,app/e/[slug].tsx,app/carte.tsx}`.
+
+## Lot M7 : socle « deux modes d'affichage » — 23/10/2026
+
+Règle de Damien (23/10, TRANSVERSE) : (A) navigation = bande ORASSO en haut (logo, Recherche, Boîte, pastille de casquette) et barre d'onglets en bas ; (B) fiche, plein écran, parcours = en-tête de fiche (retour, titre ou bande de l'organisateur), jamais de barre d'onglets. Recettes `apps/web/e2e/appli-lotm7.spec.ts` (appli) et `apps/web/e2e/lotm7.spec.ts` (site) ; captures avant/après dans `relais/orasso/lot-m7-captures/` (`avant`, `apres`, `site-avant`, `site-apres`).
+- **Un seul moyen de déclarer le mode (appli).** Une route d'un groupe d'onglets rendue par `TabScreen` (ou `TabStage`, page sans zone qui défile : le Tri) est en mode A ; tout le reste passe par `FlowScreen` / `PosterFlow`, dont l'en-tête est `FicheHeader` (mode B). Un `TabScreen` rendu hors d'un groupe d'onglets (garde d'une page sortie du groupe, écran d'attente) passe de lui-même en mode B : aucune page sans bande, aucune bande en double. Plus aucun écran ne compose sa bande (le Tri posait `TopBar` + `TabTitle` lui-même).
+- **La bande est posée par le groupe, affichée par chaque page (choix).** `PersonaTabs` fournit `TabBandProvider` : casquette, compteurs de la Boîte (une seule lecture du résumé de la Boîte de la structure au lieu d'une par onglet préchargé) et gestes, identiques d'un onglet à l'autre ; la bande ne saute donc pas au glissement (elle est hors de `SwipeEntry`, seule la page glisse). Elle reste dessinée dans chaque page plutôt qu'une fois au-dessus du navigateur d'onglets, parce qu'une feuille doit la couvrir (règle du socle C1) : une feuille vit dans l'écran, sous un élément posé au-dessus du navigateur ; la mettre au-dessus aurait demandé un portail pour toutes les feuilles (contextes de l'écran perdus) ou un voile synchronisé. Coût au repos : rien de plus (ni ombre, ni flou, ni `mixBlendMode`).
+- **Le ✕ reste à droite (écart volontaire à la lettre « retour, puis titre »).** L'artefact (D33) dessine l'en-tête de fiche en `.flowbar` (titre, ✕ en dernier) et la fiche en `.ev-float` (pastille O à gauche, ✕ à droite) ; les écrans B de l'appli le suivent déjà. Le retour est donc toujours en haut à droite, 38 px et 3 px de marge d'appui (44 px), y compris le ✕ flottant de `PosterFlow` (marge ajoutée). Le ✕ de l'en-tête reste en haut quand le titre passe à la ligne (il se recentrait) ; le titre n'est jamais coupé (il passe à la ligne).
+- **Emplacement de la bande d'organisateur (pour M4).** `PosterFlow` et `FlowScreen` acceptent `band` : une bande fixe dans l'en-tête de fiche, ✕ à sa place ; avec elle, la pastille O et le ✕ flottants disparaissent. M7 ne dessine pas la bande.
+- **Écarts corrigés (appli).** Boîte de la structure (`/boite/orga`) : bande dont le ✕ sortait de l'écran à 390 px, sans barre → mode B ; Créer ma fiche pro (`/pro-nouvelle`) : bande sans barre ni retour → mode B ; Publier (`/publier`, pro) : parcours affiché comme un onglet → mode B ; mode staff (scan, drive, liste, entrée visiteurs) et conversation : en-tête posé à la main → `FicheHeader` ; gardes de l'organisateur des pages masquées en mode B (bannissements, modèles, notes) : écran d'attente en mode A → mode B. Garage, Profil et les autres onglets avaient déjà la bande dans l'appli : les remarques 7.1 et 7.2 de Damien portaient sur les maquettes.
+- **Listes virtualisées.** `TabStage` permet maintenant à un onglet d'être une `FlatList` sous la bande commune (le titre en en-tête de liste) ; non appliqué à l'Explorer (lot M4) ni ailleurs.
+- **Site (« le site raccord »).** Espace du compte (`/app`) : onglets (Accueil, Explorer, Sorties, Garage ou Passeport, Profil) en mode A ; fiches et parcours en mode B par `export const handle = ficheHandle` et `FicheBar` (titre, ✕ vers l'écran d'où l'on vient d'ordinaire, sans JavaScript aussi) à la place de leur titre et des liens « ← Garage », « ← Mon compte », « Retour à mes accès », « ← Passeport », « ← Boîte » : le layout retire alors la bande, la barre d'onglets et l'accès flottant. Espace organisateur : la création et la modification d'un événement retirent la barre latérale. Les autres pages des espaces organisateur, pro et administration gardent leur barre latérale (c'est la navigation de ces outils de gestion ; une page d'événement s'y range sous « Cet événement ») ; le site public garde son en-tête partout (artefact `s-web-*`). Les alertes du compte (e-mail à confirmer, suspension, double authentification) restent au-dessus de l'en-tête de fiche. Le ✕ du site en flux prenait l'encre de barre (clair sur clair en Sable) : il reprend le fond de carte et l'encre de l'artefact (`AppBar.css`, Candidater compris).
+- Fichiers : `packages/design-system/src/native/AppBar.tsx`, `packages/design-system/src/web/components/AppBar.css`, `apps/mobile/src/ui/{TopBar,Screens,FicheHeader,PersonaTabs}.tsx`, `apps/mobile/src/features/{orga/triage/TriageScreen,orga/Inbox,orga/OrgaGate,pro/FicheForm,event/PosterFlow}.tsx`, `apps/mobile/src/app/{(orga)/{bannis,modeles,notes},(pro)/publier,boite/[id],staff/[id]/{scan,drive,liste,boutique}}.tsx`, `apps/web/app/{components/FicheBar.tsx,layouts/{app,orga}.tsx,styles/site.css}` et 21 routes du site.
+
+### Lot M7 — inventaire des routes de l'appli (mode, en-tête avant, écart)
+
+| Route (`apps/mobile/src/app/`) | Casquette | Mode | En-tête avant M7 | Écart corrigé |
+|---|---|---|---|---|
+| `(tabs)/explorer, sorties, accueil, garage, profil` | exposant | A | bande (dans chaque écran, `TabScreen`) + barre | bande posée par le groupe |
+| `(visitor)/explorer, sorties, accueil, passeport, profil` | visiteur | A | idem | idem |
+| `(orga)/evenements, direct, equipe, structure` | organisateur | A | idem | idem |
+| `(orga)/tri` | organisateur | A | `TopBar` + `TabTitle` posés par l'écran | `TabStage` |
+| `(orga)/bannis, modeles, notes` | organisateur | B | en-tête de fiche, sans barre ; attente en A | attente en B (`OrgaGate page`) |
+| `(pro)/scanner, fiche, accueil, stats, profil`, `(pro)/modifier` (segment de Ma fiche) | pro | A | bande + barre | bande posée par le groupe |
+| `(pro)/publier` | pro | B | bande + barre (onglet Ma fiche allumé) | mode B |
+| `(provider)/missions, candidatures, accueil, vitrine, profil` | prestataire | A | bande + barre | bande posée par le groupe |
+| `(media)/explorer, presse, accueil, contenus, profil` | média | A | bande + barre | idem |
+| `(admin)/administration, signalements, registres, gestion` | admin | A | bande + barre | idem |
+| `(admin)/…` 20 pages masquées (vérification, sanctions, utilisateurs…) | admin | B | `AdminPage` = en-tête de fiche, sans barre | — |
+| `e/[slug]`, `crew/[slug]`, `vehicule/[id]` | toutes | B | `PosterFlow` (pastille O, ✕ flottant) | ✕ à 44 px ; emplacement `band` (M4) |
+| `vehicule/nouveau`, `vehicule/[id]/modifier`, `vehicule/[id]/partager`, `v/[id]`, `u/[pseudo]`, `o/[slug]`, `p/[slug]`, `providers/[id]` | toutes | B | `FlowScreen` | — |
+| `reglages/[section]`, `amis`, `billets`, `billet/[id]`, `vehicules-archives`, `mon-passeport`, `crew/nouveau`, `crew/inscription`, `ami/[token]`, `recap/[id]`, `vote/[id]`, `structure/nouvelle`, `prestataire/nouveau`, `media/nouveau`, `media/modifier`, `verification-email`, `suspendu`, `+not-found` | toutes | B | `FlowScreen` | — |
+| `recherche` | pro, prestataire, média, orga, admin | B | `FlowScreen` | — (exposant, visiteur : redirigé vers l'Explorer, A) |
+| `pro-nouvelle` | toutes | B | bande sans barre ni retour | mode B |
+| `boite/orga` | organisateur | B | bande (Boîte allumée), ✕ hors écran à 390 px, sans barre | mode B |
+| `evenement/[id]` (+ `bilan`, `billetterie`, `inviter`, `modifier`), `nouvel-evenement` | organisateur | B | `FlowScreen` ; attente de la garde : bande sans barre | attente en B (gabarit hors groupe) |
+| `jour-j/[id]`, `stand/[id]` | participant | B (plein écran) | `FlowScreen` | — |
+| `staff/[id]` (entrée, placement, discussion) | staff | B (plein écran) | `FlowScreen` | — |
+| `staff/[id]/scan, drive, liste, boutique`, `boite/[id]` | staff, toutes | B | `AppBar flow` posé par l'écran | `FicheHeader` |
+| `carte` | toutes | B (plein écran) | plan plein écran, ✕ flottant | — (fichier du lot M3/M4) |
+| `boite/index` | toutes | feuille | feuille au-dessus des deux bandes | — |
+| `arrivee/*`, `auth`, `tuto/[profile]` | arrivée | B (plein écran) | barre de progression et ✕ propres (artefact `s-profil`, `s-dept`, `s-nom`) | — (arrivée : lot M6) |
+| `index`, `acces`, `moi`, `candidater/[slug]`, `_ds` | — | redirection, recette | — | — |
+
+### Lot M7 — inventaire des routes connectées du site
+
+| Route (`apps/web/app/`) | Mode | En-tête avant M7 | Écart corrigé |
+|---|---|---|---|
+| `/app`, `/app/explorer`, `/app/sorties`, `/app/garage`, `/app/passeport`, `/app/moi`, `/app/media` | A | bande + barre d'onglets | — |
+| `/app/garage/:id`, `/app/garage/nouveau`, `/u/:pseudo`, `/v/:id`, `/c/:slug`, `/providers/:id`, `/m/:id` | B | bande + barre (+ « ← Garage ») | `FicheBar`, ni bande ni barre |
+| `/app/securite`, `/app/sanctions`, `/app/billets`, `/app/amis`, `/app/crews`, `/app/vote/:slug`, `/app/recap/:id`, `/app/boite/:id` | B | bande + barre (+ liens « ← … ») | idem |
+| `/app/structure/nouvelle`, `/app/pro/nouvelle`, `/app/prestataire`, `/app/media/nouveau` | B | bande + barre | idem |
+| `/app/boite`, `/app/boite/demandes`, `/app/journal` | feuille | bande (Boîte allumée) + barre | — |
+| `/orga/:s` (événements, structure, staff, communication, pages d'un événement) | navigation d'outil | barre latérale | — |
+| `/orga/:s/nouvel-evenement`, `/orga/:s/e/:id/modifier` | B | barre latérale + titre | `FicheBar`, barre latérale retirée |
+| `/pro/:pro/*`, `/admin/*` | navigation d'outil | barre latérale | — |
+| site public (`/`, `/evenements`, `/e/:slug`, `/o/:slug`, `/p/:slug`…) | en-tête du site | en-tête public (artefact `s-web-*`) | — ; `/e/:slug/candidater` garde son en-tête de flux |
