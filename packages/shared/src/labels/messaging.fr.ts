@@ -40,6 +40,8 @@ export const messagingLabels = {
   yourMessage: "Ton message",
   sent: "Message envoyé : la réponse arrivera dans ta Boîte.",
   openConversation: "Ouvrir la conversation",
+  /** Tour 2 : envoi sans réponse (réseau) : le même message repart, sans doublon. */
+  sendPending: "Le message n'est peut-être pas parti : « Envoyer » le renvoie tel quel, sans doublon.",
   aboutEventNotHere: "Cet événement n'est pas organisé par cette structure",
   structureSuspended: "Cette structure est suspendue.",
   contactRequest: "Demande de contact",

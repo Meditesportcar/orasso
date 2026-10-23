@@ -1,5 +1,6 @@
 import { Button, Chip } from "@orasso/design-system/web";
 import { type ConversationSummary, messagingLabels } from "@orasso/shared";
+import { useEffect, useState } from "react";
 import { Form, useActionData, useNavigation } from "react-router";
 
 import { formatDay, formatTime } from "../lib/format";
@@ -21,7 +22,16 @@ export function ContactOrganizer({
   about?: { eventId: string; title: string; when: string; structureName: string };
 }) {
   const busy = useNavigation().state !== "idle";
-  const action = useActionData() as { messageError?: string | null } | undefined;
+  const action = useActionData() as
+    | { messageError?: string | null; pending?: { clientId: string; body: string } | null }
+    | undefined;
+  // Tour 2 : un identifiant par message, créé par la page et gardé jusqu'à la confirmation (l'envoi suivant d'une
+  // réponse perdue repart avec lui). Sans JavaScript, le serveur en crée un.
+  const pending = action?.pending ?? null;
+  const [clientId, setClientId] = useState("");
+  useEffect(() => {
+    setClientId((current) => pending?.clientId ?? (current || crypto.randomUUID()));
+  }, [pending?.clientId]);
   if (!connected) {
     return (
       <Button variant="secondary" icon="chat" href={`/connexion?retour=${encodeURIComponent(retour)}`} fullWidth>
@@ -35,6 +45,7 @@ export function ContactOrganizer({
         <input type="hidden" name="intent" value="contact_organizer" />
         <input type="hidden" name="structureId" value={structureId} />
         <input type="hidden" name="aboutEventId" value={about.eventId} />
+        <input type="hidden" name="clientId" value={clientId} />
         <strong>{messagingLabels.writeTo(about.structureName)}</strong>
         <div className="s-about" data-testid="write-about">
           <small className="o-t-label">{messagingLabels.aboutEvent}</small>
@@ -45,7 +56,22 @@ export function ContactOrganizer({
         <label className="o-t-label" htmlFor="write-body">
           {messagingLabels.yourMessage}
         </label>
-        <textarea id="write-body" name="body" className="s-textarea" rows={3} maxLength={2000} required />
+        <textarea
+          key={pending?.clientId ?? "new"}
+          id="write-body"
+          name="body"
+          className="s-textarea"
+          rows={3}
+          maxLength={2000}
+          required
+          defaultValue={pending?.body}
+          readOnly={Boolean(pending)}
+        />
+        {pending ? (
+          <p className="o-t-caption s-muted" data-testid="write-pending">
+            {messagingLabels.sendPending}
+          </p>
+        ) : null}
         <Button type="submit" variant="secondary" icon="send" loading={busy} fullWidth data-testid="contact-organizer">
           Envoyer
         </Button>

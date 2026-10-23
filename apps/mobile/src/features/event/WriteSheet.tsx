@@ -4,14 +4,16 @@
 import { Text, TextField, useTheme } from "@orasso/design-system/native";
 import { type EventPublic, messagingLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { AboutCard } from "@/features/boite/AboutCard";
 import { SmButton } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
-import { errorMessage } from "@/lib/http";
+import { ApiRequestError, errorMessage } from "@/lib/http";
 import { AppSheet } from "@/ui/AppSheet";
+
+import { type Draft, sendOnce } from "./sendOnce";
 
 function clientId(): string {
   const c = globalThis.crypto as Crypto | undefined;
@@ -37,11 +39,17 @@ export function WriteSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  // Tour 2 : le message en attente de confirmation (même identifiant, même texte à chaque essai) ; le champ est figé
+  // tant que l'issue d'un envoi est inconnue (réponse perdue).
+  const pending = useRef<{ draft: Draft | null }>({ draft: null });
+  const [locked, setLocked] = useState(false);
   useEffect(() => {
     if (!visible) return;
     setBody("");
     setError(null);
     setSent(null);
+    pending.current = { draft: null };
+    setLocked(false);
   }, [visible]);
 
   async function send() {
@@ -49,11 +57,18 @@ export function WriteSheet({
     setError(null);
     try {
       const { id } = await api.contactStructure(e.structure.id);
-      await api.sendMessage(id, { clientId: clientId(), body: body.trim(), aboutEventId: e.id });
+      await sendOnce(
+        pending.current,
+        body.trim(),
+        clientId,
+        (d) => api.sendMessage(id, { clientId: d.clientId, body: d.body, aboutEventId: e.id }).then(() => undefined),
+        (err) => (err instanceof ApiRequestError ? err.status : 0),
+      );
       setSent(id);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
+      setLocked(pending.current.draft !== null);
       setBusy(false);
     }
   }
@@ -98,8 +113,14 @@ export function WriteSheet({
               onChangeText={setBody}
               multiline
               maxLength={2000}
+              editable={!locked}
               testID="write-body"
             />
+            {locked ? (
+              <Text variant="caption" color={t.color.inkMuted} testID="write-pending">
+                {messagingLabels.sendPending}
+              </Text>
+            ) : null}
             {error ? (
               <Text variant="caption" color={t.color.winText} accessibilityRole="alert">
                 {error}
