@@ -64,7 +64,15 @@ export const sponsoredService = {
    * jour) : un nouveau chargement de l'Accueil rend le même emplacement sans rien compter (table `sponsored_daily_seen`),
    * et le plafond du jour est respecté de façon atomique au moment de compter.
    */
-  async select(v: Viewer, interests: string[]): Promise<HomeSponsored | null> {
+  async select(
+    v: Viewer,
+    interests: string[],
+    /**
+     * Lot M5 (« Pour ta … » du Garage) : seulement un emplacement ciblé sur une catégorie (`interests` = celles du
+     * véhicule), jamais un emplacement ouvert à tous, qui ne serait pas « lié au véhicule ».
+     */
+    opts: { targetedOnly?: boolean } = {},
+  ): Promise<HomeSponsored | null> {
     const t = now();
     if (proVisibility(null, null, t).hidden.promotion) return null;
     // Lot 33 : interrupteur de l'administration.
@@ -98,6 +106,7 @@ export const sponsoredService = {
       .where(and(eq(sponsoredDailySeen.day, today), inArray(sponsoredDailySeen.placementId, ids)));
     const seenIds = new Set(seen.filter((s) => s.hash === userHash(v.user.id, s.id, today)).map((s) => s.id));
     const candidates = rows.flatMap((r) => {
+      if (opts.targetedOnly && r.placement.categoryIds.length === 0) return [];
       const m = placementMatch(target(r.placement), {
         today,
         sector: v.profile.departments,

@@ -1,5 +1,17 @@
-import type { CertificationLostReason, CertificationStatus, ShareFormat, ShareStyle } from "../garage";
-import type { CategoryRefusal, CertificationMissing } from "../rules/garage";
+import {
+  CERTIFICATION_MIN_PHOTOS,
+  type CertificationLostReason,
+  type CertificationStatus,
+  type ShareFormat,
+  type ShareStyle,
+} from "../garage";
+import { gradeLabels } from "../grades";
+import {
+  type CategoryRefusal,
+  CERTIFICATION_MIN_GRADE,
+  type CertificationLine,
+  type CertificationMissing,
+} from "../rules/garage";
 
 // Garage et certification (lot 31).
 
@@ -76,6 +88,56 @@ export const certificationConditions: { key: Exclude<CertificationMissing, "pend
     { key: "description", label: "Une description" },
     { key: "category", label: "Au moins une catégorie" },
   ];
+
+/**
+ * Ligne d'état de la certification (lot M5, maquette 7.1) : un titre qui dit d'abord ce qui manque, et le détail en
+ * une ligne (photos, description, grade). Un ancien véhicule ne peut pas être certifié : la ligne le dit, sans bouton.
+ */
+export const certificationLineLabels = {
+  title: "Certification",
+  headline(line: CertificationLine): string {
+    switch (line.kind) {
+      case "certified":
+        return "Certifié Orasso";
+      case "pending":
+        return "Demande en cours d'examen";
+      case "impossible":
+        return "Certification impossible";
+      case "ready":
+        return "Prête : tu peux la demander";
+      case "missing": {
+        const first =
+          line.first === "photos"
+            ? `il manque ${line.photosMissing} photo${line.photosMissing > 1 ? "s" : ""}`
+            : line.first === "description"
+              ? "il manque la description"
+              : line.first === "category"
+                ? "il manque une catégorie"
+                : line.first === "plate"
+                  ? "plaque en attente de transfert"
+                  : `il faut le grade ${gradeLabels[CERTIFICATION_MIN_GRADE]}`;
+        return `Certification : ${first}`;
+      }
+    }
+  },
+  /** « 2 sur 3 photos · description ✓ · grade Sport ✓ » ; pour un ancien véhicule, la raison. */
+  detail(
+    line: CertificationLine,
+    facts: { photoCount: number; missing: readonly CertificationMissing[]; certifiedAt?: string | null },
+  ): string {
+    if (line.kind === "impossible")
+      return "Un ancien véhicule (vendu, souvenir ou accidenté) ne peut pas être certifié.";
+    if (line.kind === "certified")
+      return "Elle se perd si la fiche technique change, ou après six mois sans événement.";
+    if (line.kind === "pending") return "L'équipe Orasso vérifie la fiche à la main.";
+    const ok = (key: CertificationMissing) => (facts.missing.includes(key) ? "✗" : "✓");
+    return [
+      `${Math.min(facts.photoCount, CERTIFICATION_MIN_PHOTOS)} sur ${CERTIFICATION_MIN_PHOTOS} photos`,
+      `description ${ok("description")}`,
+      `grade ${gradeLabels[CERTIFICATION_MIN_GRADE]} ${ok("grade")}`,
+    ].join(" · ");
+  },
+};
 
 export const shareFormatLabels: Record<ShareFormat, string> = {
   story: "Story (9:16)",
