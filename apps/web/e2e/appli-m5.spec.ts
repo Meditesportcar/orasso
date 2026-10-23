@@ -1,6 +1,17 @@
 import { mkdirSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { addVehicleApi, login, MOBILE, randomPlate, SEED_PASSWORD, signUpApi, unique } from "./helpers";
+import {
+  addVehicleApi,
+  apiCall,
+  applyApi,
+  createEvent,
+  login,
+  MOBILE,
+  randomPlate,
+  SEED_PASSWORD,
+  signUpApi,
+  unique,
+} from "./helpers";
 import { RELAIS } from "./relais";
 
 // Lot M5 (mise au point Exposant, 23/10/2026), côté appli (version web de recette) : Accueil (haut fixe, sorties qui
@@ -241,6 +252,100 @@ test.describe("le lot M5 à l'écran", () => {
     await go(page, "/sorties");
     await expect(page.getByText("Rien de prévu").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.locator('[data-testid="empty-road"], line[stroke-dasharray="10 8"]')).toHaveCount(1);
+    await ctx.close();
+  });
+});
+
+test.describe("lot M5, tour 2", () => {
+  test.skip(PHASE === "avant", "Captures d'avant seulement");
+
+  /** Un compte neuf (exposant), son véhicule, et son mot de passe du seed pour l'appli. */
+  async function fresh(prefix: string) {
+    const pseudo = `${prefix}_${unique()}`.slice(0, 24);
+    const email = `${pseudo.toLowerCase()}@e2e.orasso.test`;
+    const cookie = await signUpApi(pseudo, email);
+    const vehicleId = await addVehicleApi(cookie, randomPlate());
+    return { pseudo, email, cookie, vehicleId };
+  }
+
+  test("Accueil : candidature en attente et billet valide au même événement, le billet et son QR restent", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const damien = await login("damien@orasso.local");
+    const event = await createEvent(damien, { title: `Billet M5 ${unique()}`, publicAccess: "free_reservation" });
+    const opened = await apiCall(damien, "PUT", `/events/${event.id}/ticketing`, { enabled: true, capacity: null });
+    expect(opened.status, JSON.stringify(opened.data)).toBe(200);
+    const u = await fresh("M5billet");
+    await applyApi(u.cookie, event.id, u.vehicleId);
+    const reserved = await apiCall(u.cookie, "POST", `/events/${event.id}/tickets/reserve`, { quantity: 1 });
+    expect(reserved.status, JSON.stringify(reserved.data)).toBe(201);
+    const { ctx, page } = await open(browser, "beton");
+    await signIn(page, u.email);
+    const tickets = page.getByTestId("home-outing").filter({ hasText: event.title });
+    // La candidature en attente et le billet : deux tickets, et « Mon billet » mène au QR du billet.
+    await expect(tickets).toHaveCount(2, { timeout: 30_000 });
+    const billet = tickets.filter({ hasText: "Billet" });
+    await expect(billet).toHaveCount(1);
+    await expect(billet.getByRole("button", { name: "Mon billet" })).toBeVisible();
+    await ctx.close();
+  });
+
+  test("« Sur la carte » ouvre l'événement précis, même sur invitation", async ({ browser }) => {
+    test.setTimeout(300_000);
+    const damien = await login("damien@orasso.local");
+    const event = await createEvent(damien, { title: `Privé M5 ${unique()}`, admission: "invite_only" });
+    const u = await fresh("M5carte");
+    const sent = await apiCall(damien, "POST", `/events/${event.id}/invitations`, { pseudos: [u.pseudo] });
+    expect(sent.status, JSON.stringify(sent.data)).toBeLessThan(300);
+    const mine = await apiCall<{ id: string; event: { id: string } }[]>(u.cookie, "GET", "/me/event-invitations");
+    const invitation = mine.data.find((i) => i.event.id === event.id);
+    expect(invitation, "invitation reçue").toBeTruthy();
+    const accepted = await apiCall(u.cookie, "POST", `/event-invitations/${invitation?.id}/accept`, {
+      vehicleId: u.vehicleId,
+      arrivalSeen: true,
+    });
+    expect(accepted.status, JSON.stringify(accepted.data)).toBeLessThan(300);
+    const { ctx, page } = await open(browser, "sable");
+    await signIn(page, u.email);
+    const ticket = page.getByTestId("home-outing").filter({ hasText: event.title });
+    await expect(ticket).toBeVisible({ timeout: 30_000 });
+    await ticket.getByTestId("home-on-map").click();
+    await page.waitForURL(new RegExp(`/carte\\?event=${event.slug}`), { timeout: 60_000 });
+    await expect(page.getByTestId("map-focus")).toContainText(event.title, { timeout: 30_000 });
+    await expect(page.getByTestId("map-q")).toHaveCount(0);
+    mkdirSync(DIR, { recursive: true });
+    await page.screenshot({ path: `${DIR}/carte-evenement-prive-sable.png` });
+    await ctx.close();
+  });
+
+  test("Garage sans département : pas de pros de toute la France, une phrase pour choisir son coin", async ({
+    browser,
+  }) => {
+    test.setTimeout(300_000);
+    const u = await fresh("M5coin");
+    const emptied = await apiCall(u.cookie, "PATCH", "/me/settings", { departments: [] });
+    test.skip(emptied.status >= 300, "le réglage refuse un secteur vide : rien à vérifier côté appli");
+    const { ctx, page } = await open(browser, "beton");
+    await signIn(page, u.email);
+    await go(page, "/garage");
+    await expect(page.getByTestId("garage-mini")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("garage-pros-item")).toHaveCount(0);
+    await ctx.close();
+  });
+
+  test("Profil et Aide : cibles d'au moins 44 px, même nom de casquette sur la carte de tuto", async ({ browser }) => {
+    test.setTimeout(300_000);
+    const { ctx, page } = await open(browser, "beton");
+    await signIn(page, "kenji@orasso.local");
+    await go(page, "/profil");
+    for (const id of ["profil-passport", "profil-points-history", "profil-create", "casquette-staff-request"]) {
+      const box = await page.getByTestId(id).boundingBox();
+      expect(box?.height ?? 0, id).toBeGreaterThanOrEqual(44);
+    }
+    await expect(page.getByTestId("casquette-fan")).toContainText("Passionné");
+    await go(page, "/reglages/aide");
+    await expect(page.getByTestId("replay-tuto-exhibitor")).toContainText("Passionné", { timeout: 30_000 });
     await ctx.close();
   });
 });
