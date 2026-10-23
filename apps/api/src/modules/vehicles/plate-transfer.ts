@@ -5,6 +5,8 @@
 import {
   type AdminDecision,
   type AdminPlateTransfer,
+  formatPlate,
+  normalizePlate,
   type OutgoingPlateTransferView,
   PLATE_TRANSFER_DELAY_DAYS,
   type PlateTransferView,
@@ -12,7 +14,7 @@ import {
 import { and, asc, count, desc, eq, gte, inArray, lte, ne, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { adminAuditLog, plateTransferRequests, profiles, vehicles } from "../../db/schema";
+import { adminAuditLog, plateNormalizationConflicts, plateTransferRequests, profiles, vehicles } from "../../db/schema";
 import { requirePlatformRole } from "../../lib/access";
 import { deps, now } from "../../lib/deps";
 import { AppError, conflict, notFound } from "../../lib/errors";
@@ -119,7 +121,21 @@ async function applyAccepted(tx: Tx, transfer: TransferRow, decidedBy: string | 
     return;
   }
   const [holder] = await tx.select().from(vehicles).where(eq(vehicles.id, transfer.fromVehicleId)).for("update");
-  if (holder && holder.status === "active" && holder.plateNormalized === transfer.plateNormalized) {
+  // Lot M2, tour 3 : un détenteur listé en conflit porte encore l'ancienne forme ; la forme voulue lui est réservée.
+  // Tour 4 : seulement si la plaque du véhicule donne encore cette forme (une réservation périmée ne compte pas).
+  const reserved =
+    holder &&
+    holder.plateNormalized !== transfer.plateNormalized &&
+    normalizePlate(holder.plate ?? "") === transfer.plateNormalized
+      ? await tx.query.plateNormalizationConflicts.findFirst({
+          where: and(
+            eq(plateNormalizationConflicts.vehicleId, holder.id),
+            eq(plateNormalizationConflicts.wantedNormalized, transfer.plateNormalized),
+          ),
+        })
+      : undefined;
+  if (holder && holder.status === "active" && (holder.plateNormalized === transfer.plateNormalized || reserved)) {
+    if (reserved) await tx.delete(plateNormalizationConflicts).where(eq(plateNormalizationConflicts.id, reserved.id));
     await tx
       .update(vehicles)
       .set({
@@ -221,7 +237,7 @@ async function viewOf(t: TransferRow, holderVehicleId: string): Promise<PlateTra
     id: t.id,
     status: t.status,
     createdAt: t.createdAt.toISOString(),
-    plate: holder?.plate ?? t.plateNormalized,
+    plate: formatPlate(holder?.plate ?? t.plateNormalized),
     requesterPseudo: requester?.pseudo ?? "Membre",
     holderVehicleId,
     holderVehicleLabel: (await labelOf(holderVehicleId)) ?? "Véhicule",

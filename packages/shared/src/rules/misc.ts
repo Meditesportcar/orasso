@@ -16,10 +16,7 @@ export function gradeFor(points: number, thresholds: Record<Grade, number> = GRA
   return result;
 }
 
-/** Plaque normalisée : majuscules d'abord, puis lettres et chiffres seuls (correction du coordinateur, 15/10). */
-export function normalizePlate(plate: string): string {
-  return plate.toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
+// `normalizePlate` (forme unique d'une plaque) vit dans `plateNumber.ts` depuis le lot M2, tour 2.
 
 /** Éligibilité d'un véhicule à une catégorie d'après son âge (youngtimer ≥ 20 ans, ancienne ≥ 30 ans). */
 export function categoryAllowedForYear(minVehicleAge: number | null, year: number | null, now: Date): boolean {

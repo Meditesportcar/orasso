@@ -1,9 +1,11 @@
 // Détection de plaque sur l'appareil (lot 51, ARCHITECTURE-DA-V2 § 5.6, H3) : ML Kit lit le texte de la photo choisie,
-// on garde les blocs dont le texte ressemble à une plaque française (SIV « AB-123-CD », FNI « 1234 AB 66 ») et on
-// propose leurs rectangles, agrandis de 15 %, normalisés 0–1, orientés comme la plaque (coins de ML Kit, lot 59c). Rien
-// ne part au serveur : la personne confirme le cadre et seul le rectangle est envoyé avec la photo, qui est floutée par
-// l'API. Web et Expo Go : pas de ML Kit, `null` (l'écran passe « À la main »).
-import type { PlateRect } from "@orasso/shared";
+// on garde les blocs dont le texte ressemble à une plaque française (SIV « AB-123-CD », FNI « 1234 AB 66 », et depuis
+// le lot M2 W garage « W-623-AX », WW provisoire, diplomatiques) et on propose leurs rectangles, agrandis de 15 %,
+// normalisés 0–1, orientés comme la plaque (coins de ML Kit, lot 59c). Rien ne part au serveur : la personne confirme
+// le cadre et seul le rectangle est envoyé avec la photo, qui est floutée par l'API. Web et Expo Go : pas de ML Kit,
+// `null` (l'écran passe « À la main »). Filet de sécurité (lot M2) : une ligne qui a l'allure d'une plaque sans format
+// reconnu est signalée « probable », jamais appliquée d'office (ni cadre, ni numéro) : la personne vérifie.
+import { formatPlate, type PlateRect, plateKind } from "@orasso/shared";
 
 import { recognizeText, type TextCorners, type TextFrame, type TextLineResult } from "./mlkit";
 import { normalizePlateText, plateReadings } from "./recognize";
@@ -15,21 +17,84 @@ export const PLATE_GROW = 0.15;
 export { normalizePlateText };
 
 /**
- * Le texte normalisé ressemble-t-il à une plaque ? SIV (7 caractères) ou FNI (5 à 10), confusions tolérées. Le « F »
- * de la bande européenne et le département à droite d'une plaque SIV sont admis autour.
+ * Une lecture de plaque : le numéro (normalisé), le nombre de caractères relus (O → 0…), s'il est valide en lecture
+ * stricte (`plateKind`), les bandes retirées autour (« F » à gauche, département à droite), et s'il est ambigu (une
+ * autre lecture aussi bonne donne un autre numéro : on ne le propose pas).
  */
-export function looksLikePlate(raw: string): boolean {
+export type PlateRead = {
+  plate: string;
+  fixes: number;
+  valid: boolean;
+  stripped: number;
+  tier: number;
+  ambiguous: boolean;
+};
+
+const TRAILING_DEPT = /(\d{2,3}|2[AB])$/;
+
+/** Bande « F » lue comme telle : un « F » de tête suivi d'un séparateur (mot à part, tiret), comme `normalizePlate`. */
+const BAND_PREFIX = /^\s*F[\s\-.·]+/i;
+
+/**
+ * Classement des lectures (lot M2) : la plus fidèle d'abord, puis valide, puis le découpage préféré (`tier` : avec une
+ * bande lue à part, sans le « F » ; sinon le texte entier avant la bande collée), puis la plus complète.
+ */
+const byQuality = (a: Omit<PlateRead, "ambiguous">, b: Omit<PlateRead, "ambiguous">) =>
+  a.fixes - b.fixes || Number(b.valid) - Number(a.valid) || a.tier - b.tier || b.stripped - a.stripped;
+
+/**
+ * Meilleure lecture d'un texte qui ressemble à une plaque, ou `null`. SIV, W garage, WW, FNI ou diplomatique,
+ * confusions tolérées ; la bande « F » et le département autour sont essayés retirés. Une FNI lue exactement passe
+ * devant une SIV obtenue en relisant des caractères (« 256 BB 88 » n'est pas « ZS-688-BB »). Tour 3 : comme
+ * `normalizePlate`, un « F » séparé du reste est une bande (« F W 623 AX » → W garage) ; collé, il fait d'abord partie
+ * du numéro (« FW 123 AB » → SIV de série FW).
+ */
+export function readPlate(raw: string): PlateRead | null {
   const s = normalizePlateText(raw);
-  if (s.length < 5) return false;
-  const candidates = new Set([s]);
-  if (s.startsWith("F") && s.length > 7) candidates.add(s.slice(1));
-  for (const c of [...candidates]) {
-    if (c.length === 9 || c.length === 10) candidates.add(c.slice(0, 7)); // « GA662KS66 », « GA662KS974 »
+  if (s.length < 5) return null;
+  const noF = s.startsWith("F") && s.length >= 6 ? s.slice(1) : null;
+  const band = Boolean(noF) && BAND_PREFIX.test(raw);
+  // [texte, bandes retirées, découpage] ; un département ne se retire qu'autour d'une plaque récente (SIV, W garage,
+  // WW) : il fait partie du numéro d'une FNI ou d'une diplomatique.
+  const bases: [string, number, number][] = band
+    ? [[noF as string, 1, 0]]
+    : [[s, 0, 0], ...(noF ? ([[noF, 1, 1]] as [string, number, number][]) : [])];
+  const candidates: [string, number, number, boolean][] = bases.map(([c, n, t]) => [c, n, t, false]);
+  for (const [c, n, t] of bases) {
+    if (TRAILING_DEPT.test(c) && c.length >= 8) candidates.push([c.replace(TRAILING_DEPT, ""), n + 1, t, true]);
   }
-  for (const c of candidates) {
-    if (plateReadings(c, "wide").length > 0) return true;
-  }
-  return false;
+  const reads = candidates
+    .flatMap(([c, stripped, tier, dept]) =>
+      plateReadings(c, "wide")
+        .filter((r) => !dept || r.siv)
+        .map((r) => ({ plate: r.plate, fixes: r.fixes, valid: plateKind(r.plate) !== null, stripped, tier })),
+    )
+    .sort(byQuality);
+  const [best] = reads;
+  if (!best) return null;
+  const ambiguous = reads.some((r) => r.plate !== best.plate && byQuality(r, best) === 0);
+  return { ...best, ambiguous };
+}
+
+/** Le numéro lu (voir `readPlate`), ou `null`. */
+export const plateReadingOf = (raw: string): string | null => readPlate(raw)?.plate ?? null;
+
+/** Le texte normalisé ressemble-t-il à une plaque ? (voir `readPlate`) */
+export const looksLikePlate = (raw: string): boolean => readPlate(raw) !== null;
+
+/** Filet de sécurité : proportions (largeur / hauteur) d'une ligne lue sur une plaque (520 × 110 mm, texte ≈ 5:1). */
+export const PROBABLE_RATIO = { min: 2.5, max: 9 } as const;
+
+/**
+ * Lot M2, filet de sécurité : une ligne de 5 à 9 lettres et chiffres (les deux présents), dans un rectangle aux
+ * proportions d'une plaque, est une plaque probable même sans format reconnu (plaque étrangère, lecture abîmée).
+ */
+export function probablePlate(text: string, frame: TextFrame | undefined): string | null {
+  if (!frame || frame.height <= 0) return null;
+  const s = normalizePlateText(text);
+  if (s.length < 5 || s.length > 9 || !/[0-9]/.test(s) || !/[A-Z]/.test(s)) return null;
+  const ratio = frame.width / frame.height;
+  return ratio >= PROBABLE_RATIO.min && ratio <= PROBABLE_RATIO.max ? s : null;
 }
 
 /** Union de cadres en pixels. */
@@ -155,46 +220,155 @@ export function frameCovers(rect: PlateRect, width: number, height: number, poin
 }
 
 /**
- * Rectangles des plaques repérées dans les lignes lues. Dans chaque ligne, on essaie les suites de 1 à 4 mots
- * consécutifs (une plaque est souvent lue en trois mots) ; la suite la plus longue qui ressemble à une plaque gagne.
+ * Une plaque repérée : son cadre, sa lecture (voir `PlateRead`), et `probable` si elle ne vient que du filet de
+ * sécurité (sans format reconnu) ou d'une lecture trop relue (`MAX_SURE_FIXES`) : elle n'est alors jamais appliquée d'office,
+ * ni comme cadre de floutage, ni comme numéro ; l'écran la signale « à vérifier » (maquette à venir).
  */
-export function platesFromLines(lines: TextLineResult[], imageWidth: number, imageHeight: number): PlateRect[] {
-  const found: { frame: TextFrame; corners: TextCorners[] }[] = [];
+export type FoundPlate = PlateRead & {
+  rect: PlateRect;
+  probable: boolean;
+  /** Surface du cadre (0–1). */
+  area: number;
+};
+
+/**
+ * Plaques repérées dans les lignes lues. Dans chaque ligne, on essaie toutes les suites de 1 à 5 mots consécutifs
+ * (une plaque est souvent lue en trois mots, plus la bande « F » et le département) et on garde la meilleure lecture
+ * (`readPlate`), à qualité égale la suite la plus longue (le cadre couvre toute la plaque) ; à défaut la ligne
+ * entière, puis le filet de sécurité (`probablePlate`). Les plaques reconnues passent devant les probables. Quatre au
+ * plus.
+ */
+export function findPlates(lines: TextLineResult[], imageWidth: number, imageHeight: number): FoundPlate[] {
+  const found: (PlateRead & { frame: TextFrame; corners: TextCorners[]; probable: boolean })[] = [];
   for (const line of lines) {
     const words = line.elements.filter((e) => e.frame);
-    let matched = false;
-    for (let size = Math.min(4, words.length); size >= 1 && !matched; size--) {
+    // Tour 3 : toutes les lectures de la ligne, avec leur place (mots `start` à `end`, exclus).
+    const reads: (PlateRead & { start: number; end: number })[] = [];
+    for (let size = Math.min(5, words.length); size >= 1; size--) {
       for (let start = 0; start + size <= words.length; start++) {
-        const run = words.slice(start, start + size);
-        if (looksLikePlate(run.map((w) => w.text).join(""))) {
-          const corners = run.flatMap((w) => (w.corners?.length === 4 ? [w.corners] : []));
-          found.push({
-            frame: union(run.map((w) => w.frame as TextFrame)),
-            corners: corners.length === run.length ? corners : [],
-          });
-          matched = true;
-          break;
-        }
+        const read = readPlate(
+          words
+            .slice(start, start + size)
+            .map((w) => w.text)
+            .join(" "),
+        );
+        if (read) reads.push({ ...read, start, end: start + size });
       }
     }
-    if (!matched && line.frame && looksLikePlate(line.text))
-      found.push({ frame: line.frame, corners: line.corners?.length === 4 ? [line.corners] : [] });
+    // Tour 4 : les lectures se rangent en groupes de suites qui se chevauchent ; deux groupes disjoints sont deux
+    // détections (« AB-123-CD PORSCHE 911 TURBO » : la plaque sûre garde son cadre, « 911 TUR 80 » reste à part).
+    // Dans un groupe, la plaque est la plus longue suite lue (à longueur égale, la mieux lue) : une sous-suite
+    // (« 123 CD 66 » dans « A8 123 CD 66 ») ne réduit jamais le cadre ; le cadre couvre l'union du groupe, et une
+    // concurrente mieux lue qui donne un autre numéro rend la plaque ambiguë (pas de numéro).
+    const groups: (typeof reads)[] = [];
+    for (const r of [...reads].sort((a, b) => a.start - b.start || b.end - a.end)) {
+      const last = groups.at(-1);
+      if (last && r.start < Math.max(...last.map((x) => x.end))) last.push(r);
+      else groups.push([r]);
+    }
+    for (const group of groups) {
+      const primary = [...group].sort((a, b) => b.end - b.start - (a.end - a.start) || byQuality(a, b))[0];
+      if (!primary) continue;
+      const start = Math.min(...group.map((r) => r.start));
+      const end = Math.max(...group.map((r) => r.end));
+      const run = words.slice(start, end);
+      const rival = group.some(
+        (r) =>
+          r.plate !== primary.plate &&
+          (r.fixes < primary.fixes || (r.fixes === primary.fixes && r.valid && !primary.valid)),
+      );
+      const corners = run.flatMap((w) => (w.corners?.length === 4 ? [w.corners] : []));
+      const { start: _s, end: _e, ...read } = primary;
+      found.push({
+        ...read,
+        ambiguous: read.ambiguous || rival,
+        frame: union(run.map((w) => w.frame as TextFrame)),
+        corners: corners.length === run.length ? corners : [],
+        // Sûre si l'une des lectures du groupe l'est : le cadre (union) est alors appliqué.
+        probable: group.every((r) => r.fixes > MAX_SURE_FIXES),
+      });
+    }
+    if (groups.length) continue;
+    if (!line.frame) continue;
+    const corners = line.corners?.length === 4 ? [line.corners] : [];
+    const read = readPlate(line.text);
+    if (read) found.push({ ...read, frame: line.frame, corners, probable: read.fixes > MAX_SURE_FIXES });
+    else {
+      const probable = probablePlate(line.text, line.frame);
+      if (probable) {
+        found.push({
+          plate: probable,
+          fixes: 0,
+          valid: false,
+          stripped: 0,
+          tier: 0,
+          ambiguous: false,
+          frame: line.frame,
+          corners,
+          probable: true,
+        });
+      }
+    }
   }
-  return found
-    .slice(0, 4)
-    .map(
-      (f) =>
-        (f.corners.length ? orientedPlateRect(f.corners, imageWidth, imageHeight) : null) ??
-        toPlateRect(f.frame, imageWidth, imageHeight),
-    );
+  found.sort((a, b) => Number(a.probable) - Number(b.probable));
+  return found.slice(0, 4).map(({ frame, corners, ...read }) => {
+    const rect =
+      (corners.length ? orientedPlateRect(corners, imageWidth, imageHeight) : null) ??
+      toPlateRect(frame, imageWidth, imageHeight);
+    return { ...read, rect, area: Math.round(rect.w * rect.h * 10000) / 10000 };
+  });
 }
 
 /**
- * Propose les plaques d'une photo locale. `null` : pas de détection possible ici (web, Expo Go, erreur de ML Kit) ;
- * tableau vide : aucune plaque repérée.
+ * Au-delà de ce nombre de caractères relus, une lecture n'est plus sûre : « 911 TURBO » se relit en FNI « 911 TUR 80 »
+ * (deux corrections). Elle devient probable : signalée, jamais appliquée d'office.
  */
-export async function detectPlates(uri: string, width: number, height: number): Promise<PlateRect[] | null> {
+export const MAX_SURE_FIXES = 1;
+
+/** Les plaques à appliquer d'office (cadres de floutage) : jamais celles du filet de sécurité. */
+export const surePlates = <T extends { probable: boolean }>(found: readonly T[]): T[] =>
+  found.filter((f) => !f.probable);
+
+/** Rectangles des plaques reconnues dans les lignes lues (voir `findPlates`), sans les probables. */
+export function platesFromLines(lines: TextLineResult[], imageWidth: number, imageHeight: number): PlateRect[] {
+  return surePlates(findPlates(lines, imageWidth, imageHeight)).map((f) => f.rect);
+}
+
+/** Écart de surface sous lequel deux plaques différentes, aussi bien lues, sont jugées ambiguës. */
+const AREA_TIE = 1.5;
+
+/**
+ * Lot M2, tour 2 : numéro à préremplir d'après les plaques repérées (une ou plusieurs photos), au format lisible
+ * (« W-623-AX »), ou `null`. Jamais une plaque probable ni une lecture ambiguë. Classement : la lecture la plus
+ * fidèle, puis valide en lecture stricte, puis le plus grand cadre (la voiture photographiée). Deux plaques différentes
+ * aussi bien lues et de tailles voisines : rien (la personne tape le numéro).
+ */
+export function suggestedPlate(
+  found: readonly Pick<FoundPlate, "plate" | "fixes" | "valid" | "ambiguous" | "probable" | "area">[],
+): string | null {
+  const ranked = found
+    .filter((f) => !f.probable)
+    .sort((a, b) => a.fixes - b.fixes || Number(b.valid) - Number(a.valid) || b.area - a.area);
+  const [best] = ranked;
+  if (!best || best.ambiguous) return null;
+  const rival = ranked.find(
+    (f) => f.plate !== best.plate && f.fixes === best.fixes && f.valid === best.valid && best.area < f.area * AREA_TIE,
+  );
+  return rival ? null : formatPlate(best.plate);
+}
+
+/**
+ * Propose les plaques d'une photo locale, avec leur lecture. `null` : pas de détection possible ici (web, Expo Go,
+ * erreur de ML Kit) ; tableau vide : aucune plaque repérée.
+ */
+export async function detectPlateReadings(uri: string, width: number, height: number): Promise<FoundPlate[] | null> {
   if (width <= 0 || height <= 0) return null;
   const lines = await recognizeText(uri);
-  return lines ? platesFromLines(lines, width, height) : null;
+  return lines ? findPlates(lines, width, height) : null;
+}
+
+/** Les cadres des plaques reconnues seuls (photo ajoutée après coup, contenus des médias) : jamais les probables. */
+export async function detectPlates(uri: string, width: number, height: number): Promise<PlateRect[] | null> {
+  const found = await detectPlateReadings(uri, width, height);
+  return found ? surePlates(found).map((f) => f.rect) : null;
 }

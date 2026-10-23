@@ -1,5 +1,6 @@
 // Analyseur unique des plaques lues par ML Kit (lots 48 et 51, unifiés à la relecture du lot 48). SIV « AA-123-AA »,
-// FNI « 1234 AB 12 » (Corse « 2A » / « 2B », outre-mer sur 3 chiffres), séparateurs espace ou tiret facultatifs.
+// FNI « 1234 AB 12 » (Corse « 2A » / « 2B », outre-mer sur 3 chiffres), et depuis le lot M2 W garage « W-623-AX »,
+// WW provisoire « WW-123-AB » et diplomatiques « 12 CD 345 » ; séparateurs espace ou tiret facultatifs.
 // Chaque caractère est relu selon sa place (lettre ou chiffre) :
 // - lecture **stricte** (accueil drive, lot 48) : seules les confusions O/0, I/1, B/8 sont relues, et une SIV ne
 //   contient ni I, ni O, ni U ; chaque découpage possible donne une variante, la liste du téléphone tranche (hachage) ;
@@ -17,14 +18,24 @@ const CONFUSIONS: Record<Tolerance, { digit: Record<string, string>; letter: Rec
   },
 };
 
-type Cls = "L" | "D" | "C";
-
-/** Formes : L lettre, D chiffre, C département corse (« A » ou « B » après le « 2 »). */
+/**
+ * Formes : L lettre, D chiffre, C département corse (« A » ou « B » après le « 2 ») ; une minuscule est une lettre
+ * imposée (« w » : le W des plaques garage, « c », « d », « m », « k » : les plaques diplomatiques).
+ */
 const SIV = "LLDDDLL";
 const FNI: string[] = [];
 for (let d = 1; d <= 4; d++) {
   for (let l = 1; l <= 3; l++) {
     for (const dept of ["DD", "DDD", "DC"]) FNI.push(`${"D".repeat(d)}${"L".repeat(l)}${dept}`);
+  }
+}
+/** Lot M2 : W garage (W-623-AX) et WW provisoire (WW-123-AB), lus comme une SIV. */
+const W_SHAPES = ["wDDDLL", "wwDDDLL"];
+/** Lot M2 : diplomatiques, code du pays (1 à 3 chiffres), CD / CMD / C / K, numéro (1 à 4 chiffres). */
+const DIPLOMATIC: string[] = [];
+for (let a = 1; a <= 3; a++) {
+  for (const mark of ["cd", "cmd", "c", "k"]) {
+    for (let b = 1; b <= 4; b++) DIPLOMATIC.push(`${"D".repeat(a)}${mark}${"D".repeat(b)}`);
   }
 }
 
@@ -43,8 +54,12 @@ function read(s: string, shape: string, tolerance: Tolerance): string | null {
   let out = "";
   for (let i = 0; i < s.length; i++) {
     const ch = s[i] as string;
-    const cls = shape[i] as Cls;
-    if (cls === "D") {
+    const cls = shape[i] as string;
+    if (cls !== cls.toUpperCase()) {
+      const want = cls.toUpperCase();
+      if (ch === want || letter[ch] === want) out += want;
+      else return null;
+    } else if (cls === "D") {
       if (/[0-9]/.test(ch)) out += ch;
       else if (digit[ch]) out += digit[ch];
       else return null;
@@ -77,6 +92,7 @@ function fixes(raw: string, plate: string): number {
   return n;
 }
 
+/** `siv` : forme d'une plaque récente (SIV, W garage, WW), classée devant les autres. */
 export type PlateReading = { plate: string; siv: boolean; fixes: number };
 
 /** Les lectures possibles d'un groupe de caractères déjà normalisé (sans séparateur). */
@@ -86,6 +102,14 @@ export function plateReadings(raw: string, tolerance: Tolerance = "strict"): Pla
   const out: PlateReading[] = [];
   const siv = read(raw, SIV, tolerance);
   if (siv && (!strict || validSiv(siv))) out.push({ plate: siv, siv: true, fixes: fixes(raw, siv) });
+  for (const shape of W_SHAPES) {
+    const w = read(raw, shape, tolerance);
+    if (w && !out.some((c) => c.plate === w)) out.push({ plate: w, siv: true, fixes: fixes(raw, w) });
+  }
+  for (const shape of DIPLOMATIC) {
+    const dip = read(raw, shape, tolerance);
+    if (dip && !out.some((c) => c.plate === dip)) out.push({ plate: dip, siv: false, fixes: fixes(raw, dip) });
+  }
   for (const shape of FNI) {
     const fni = read(raw, shape, tolerance);
     if (fni && (!strict || validFni(fni)) && !out.some((c) => c.plate === fni)) {
