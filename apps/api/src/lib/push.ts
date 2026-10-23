@@ -7,6 +7,9 @@ import { env } from "../env";
 import { now } from "./deps";
 
 export type PushMessage = { to: string; title: string; body: string; data?: Record<string, unknown> };
+
+/** Durée de vie d'un push chez Expo / Firebase / APNs : au-delà, non délivré (l'historique reste dans la Boîte). */
+const PUSH_TTL_S = 6 * 3600;
 type Ticket = { status: "ok" | "error"; details?: { error?: string } };
 
 /** La session qui a inscrit l'appareil existe encore et n'a pas expiré (lot M6, tour 4). */
@@ -70,7 +73,9 @@ export const push = {
             "content-type": "application/json",
             ...(env.EXPO_ACCESS_TOKEN ? { authorization: `Bearer ${env.EXPO_ACCESS_TOKEN}` } : {}),
           },
-          body: JSON.stringify(batch.map((m) => ({ ...m, sound: "default" }))),
+          // `ttl` : un push non délivré dans les 6 h est abandonné (un téléphone déconnecté hors ligne ne reçoit pas, au
+          // retour du réseau, ceux restés en file ; relecture du lot M6, tour 4).
+          body: JSON.stringify(batch.map((m) => ({ ttl: PUSH_TTL_S, ...m, sound: "default" }))),
         });
         const { data } = (await res.json()) as { data?: Ticket[] };
         const dead: string[] = [];

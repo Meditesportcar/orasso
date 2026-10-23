@@ -248,6 +248,7 @@ export function leavePush({ withSession }: { withSession: boolean }): Promise<vo
   setPushAccount(null);
   if (Platform.OS === "web") return Promise.resolve();
   return serial(async () => {
+    await clearShownNotifications();
     const pending = await readPending();
     // Le jeton se lit avant la désinscription du système (le redemander après réinscrirait l'appareil).
     const token = await knownToken();
@@ -259,6 +260,19 @@ export function leavePush({ withSession }: { withSession: boolean }): Promise<vo
     if (token && !retired) tokens.push(token);
     await savePending({ tokens, native });
   });
+}
+
+/**
+ * Les notifications déjà reçues du compte (aperçus de messages compris) quittent le centre de notifications et l'écran
+ * verrouillé, et la pastille de l'icône repart à zéro (relecture du lot M6, tour 4). Jamais bloquant pour la sortie.
+ */
+async function clearShownNotifications(): Promise<void> {
+  try {
+    await Notifications.dismissAllNotificationsAsync();
+    await Notifications.setBadgeCountAsync(0);
+  } catch {
+    // Module natif absent ou refus du système : la déconnexion continue.
+  }
 }
 
 /** Rejoue le retrait en attente : au lancement, au retour au premier plan, chaque minute appli ouverte. */
