@@ -14,7 +14,7 @@ import {
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
-import { devices, type NotificationData, notifications, profiles, user } from "../../db/schema";
+import { type NotificationData, notifications, profiles, user } from "../../db/schema";
 import { env } from "../../env";
 import { now } from "../../lib/deps";
 import { type MailContent, mail, renderMail } from "../../lib/mail";
@@ -257,16 +257,8 @@ async function deliverOne(n: NotificationRow) {
   // Chaque famille et chaque type peuvent être coupés, sauf `staff` et `account` ; la notification reste au Journal.
   if (!shouldDeliver(profile?.notificationPrefs, profile?.mutedTypes, n.type)) return;
 
-  const tokens = (
-    banned
-      ? []
-      : await db
-          .select({ token: devices.expoPushToken })
-          .from(devices)
-          .where(and(eq(devices.userId, n.userId), isNull(devices.revokedAt), isNotNull(devices.expoPushToken)))
-  )
-    .map((d) => d.token)
-    .filter((t): t is string => Boolean(t));
+  // Lot M6, tour 4 : seulement les appareils dont la session d'inscription vit encore (`push.tokensOf`).
+  const tokens = banned ? [] : await push.tokensOf(n.userId);
   let pushed = 0;
   if (tokens.length) {
     // Lot M6, tour 2 : l'identifiant et le type voyagent avec le push, pour que l'appli ouverte l'annonce dans son bandeau

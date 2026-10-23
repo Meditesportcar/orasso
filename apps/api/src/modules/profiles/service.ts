@@ -211,7 +211,8 @@ export const profilesService = {
     return storage.url(key) ?? "";
   },
 
-  async registerDevice(v: Viewer, input: DeviceRegister) {
+  /** `sessionId` : la session qui inscrit l'appareil (lot M6, tour 4) ; sa fin coupe les push de cet appareil. */
+  async registerDevice(v: Viewer, input: DeviceRegister, sessionId: string | null) {
     return withTx(async (tx) => {
       // Un jeton push appartient à un seul compte : il passe au dernier connecté sur l'appareil.
       if (input.expoPushToken) await tx.delete(devices).where(eq(devices.expoPushToken, input.expoPushToken));
@@ -219,6 +220,7 @@ export const profilesService = {
         .insert(devices)
         .values({
           userId: v.user.id,
+          sessionId,
           platform: input.platform,
           expoPushToken: input.expoPushToken ?? null,
           name: input.name,
@@ -243,6 +245,18 @@ export const profilesService = {
       .update(devices)
       .set({ revokedAt: now(), expoPushToken: null })
       .where(and(eq(devices.userId, v.user.id), eq(devices.expoPushToken, input.expoPushToken)));
+  },
+
+  /**
+   * Lot M6, tour 4 : retrait sans session, sur preuve du jeton push lui-même (déconnexion hors ligne rejouée par le
+   * téléphone après l'expiration ou la révocation de sa session). Le jeton est retiré de tout compte ; la réponse est la
+   * même qu'il soit connu ou non (rien n'est révélé).
+   */
+  async forgetPushToken(input: DeviceUnregister) {
+    await db
+      .update(devices)
+      .set({ revokedAt: now(), expoPushToken: null })
+      .where(eq(devices.expoPushToken, input.expoPushToken));
   },
 
   async revokeDevice(v: Viewer, id: string) {

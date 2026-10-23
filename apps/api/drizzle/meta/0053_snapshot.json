@@ -1,5 +1,5 @@
 {
-  "id": "b2f8bbd6-96a1-425d-b526-4b7474a7e48e",
+  "id": "529674ff-b76f-4dfd-9f85-9df9ad12e110",
   "prevId": "f0efa041-9e63-4312-a00b-2d42c16b5139",
   "version": "7",
   "dialect": "postgresql",
@@ -8997,6 +8997,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -9051,6 +9057,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "devices_session_id_idx": {
+          "name": "devices_session_id_idx",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -9065,6 +9086,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "devices_session_id_session_id_fk": {
+          "name": "devices_session_id_session_id_fk",
+          "tableFrom": "devices",
+          "tableTo": "session",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },

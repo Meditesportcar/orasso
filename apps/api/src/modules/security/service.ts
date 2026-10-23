@@ -7,6 +7,7 @@ import { db } from "../../db/client";
 import { knownLogins, passkey, profiles, session, twoFactor, user, verification } from "../../db/schema";
 import { now } from "../../lib/deps";
 import { notFound } from "../../lib/errors";
+import { push } from "../../lib/push";
 import { withTx } from "../../lib/tx";
 import { notificationsService } from "../notifications/service";
 import { securityMails } from "./mails";
@@ -148,6 +149,8 @@ export const securityService = {
     await db
       .delete(session)
       .where(and(eq(session.userId, userId), keepToken ? ne(session.token, keepToken) : undefined));
+    // Lot M6, tour 4 : les appareils de ces sessions quittent les push du compte.
+    await push.forgetStale(userId);
   },
 
   /** Le compte a-t-il déjà un second facteur (TOTP activé ou au moins une clé d'accès) ? */
@@ -235,15 +238,21 @@ export const securityService = {
       .where(and(eq(session.id, sessionId), eq(session.userId, userId)))
       .returning({ id: session.id });
     if (!deleted.length) throw notFound("Session introuvable");
+    // Lot M6, tour 4 : l'appareil déconnecté à distance quitte aussi les push du compte.
+    await push.forgetStale(userId);
   },
 
-  /** Tâche hebdomadaire `security.purge-known-logins` : connexions connues de plus d'un an. */
+  /**
+   * Tâche hebdomadaire `security.purge-known-logins` : connexions connues de plus d'un an. Lot M6, tour 4 : aussi les
+   * jetons push des sessions expirées (ceux d'un compte qui ne reçoit rien ne sont jamais relus à l'envoi).
+   */
   async purgeKnownLogins() {
     const limit = new Date(now().getTime() - KNOWN_LOGIN_RETENTION_MS);
     const rows = await db
       .delete(knownLogins)
       .where(lt(knownLogins.lastSeenAt, limit))
       .returning({ u: knownLogins.userId });
+    await push.forgetStale();
     return rows.length;
   },
 };

@@ -106,6 +106,11 @@ export const rateRules = {
   mediaView: { max: 30, windowMs: 3_600_000, message: "Trop d'actions sur ce contenu." },
   /** Prix du public (lot 49) : une voix modifiable, pas un bouton qu'on martèle. */
   audienceVote: { max: 20, windowMs: 60_000, message: "Trop de votes : réessaie dans une minute." },
+  /**
+   * Lot M6, tour 4 : retrait d'un jeton push sans session (déconnexion hors ligne rejouée), par adresse. Un téléphone
+   * le rejoue quelques fois ; 30 laisse passer plusieurs téléphones derrière une même adresse d'opérateur.
+   */
+  pushTokenForget: { max: 30, windowMs: 3_600_000, message: "Trop de retraits : réessaie dans une heure." },
 } satisfies Record<string, RateRule>;
 
 export type RateRuleName = keyof typeof rateRules;

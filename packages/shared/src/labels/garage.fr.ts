@@ -184,6 +184,10 @@ export const shareSheetLabels = {
   shareAnyway: "Partager quand même",
   shareAnywayConfirm: "Une plaque semble lisible sur l'affiche. La partager quand même ?",
   plateMasked: "Plaque masquée sur l'affiche.",
+  // Tour 4 : la vérification n'a pas répondu à temps ; rien à masquer sans plaque repérée.
+  plateSlow: "La plaque n'a pas pu être vérifiée sur l'affiche.",
+  plateRetry: "Vérifier à nouveau",
+  shareUncheckedConfirm: "La plaque n'a pas pu être vérifiée sur l'affiche. La partager quand même ?",
   /** Pied de l'affiche (texte rendu par l'API). */
   findIt: "Retrouve-la sur",
   certifiedSeal: "Véhicule certifié · Orasso",

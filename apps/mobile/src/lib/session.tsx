@@ -11,7 +11,7 @@ import { resetAnnouncements } from "@/ui/Announce";
 import { clearEventPreviews } from "./eventPreview";
 import { clearKits } from "./kits";
 import { bindCacheScope, kvDel, kvGet, kvGetJson, kvSet, kvSetJson, purgeCaches } from "./kv";
-import { unregisterThisDevice } from "./push";
+import { leavePush, registerThisDevice, setPushAccount, watchPendingPush } from "./push";
 import { realtime } from "./realtime";
 import { purgeAllStaff } from "./staff/runtime";
 
@@ -51,12 +51,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const fresh = await api.me();
       // Les caches de lecture passent sous ce compte avant que les écrans ne les lisent.
       await bindCacheScope(fresh.user.id);
+      setPushAccount(fresh.user.id);
       setMe(fresh);
       setOffline(false);
       void kvSetJson(ME_KEY, fresh);
       return fresh;
     } catch (error) {
       if (error instanceof ApiRequestError && error.status === 401) {
+        // Lot M6, tour 4 : session révoquée ou expirée, l'appareil quitte aussi les push du compte.
+        await leavePush({ withSession: false });
         await clearSession();
         setStatus("out");
         setMe(null);
@@ -66,6 +69,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const cached = await kvGetJson<Me>(ME_KEY);
       if (cached) {
         await bindCacheScope(cached.user.id);
+        setPushAccount(cached.user.id);
         setMe(cached);
         setOffline(true);
       }
@@ -77,6 +81,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    // Lot M6, tour 4 : un retrait push resté en attente (déconnexion sans réseau) se rejoue dès que possible.
+    watchPendingPush();
     (async () => {
       const token = await kvGet(TOKEN_KEY);
       if (!token) {
@@ -126,8 +132,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       signUp: async (input) => open(await authApi.signUp(input)),
       signOut: async () => {
-        // Lot M6, tour 3 : l'appareil quitte les push de ce compte tant que la session est valide.
-        await unregisterThisDevice();
+        // Lot M6, tours 3 et 4 : l'appareil quitte les push de ce compte (système et API), tant que la session est
+        // valide ; sans réseau, le retrait reste en attente et se rejoue.
+        await leavePush({ withSession: true });
         try {
           await authApi.signOut();
         } catch {
@@ -141,6 +148,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       adoptToken: async (token) => {
         setSessionToken(token);
         await kvSet(TOKEN_KEY, token);
+        // Lot M6, tour 4 : l'ancienne session est révoquée et l'inscription push avec elle : on la refait sur la nouvelle.
+        void registerThisDevice();
       },
     }),
     [status, me, offline, open, loadMe],
@@ -156,6 +165,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
  */
 async function clearSession() {
   setSessionToken(null);
+  setPushAccount(null);
   realtime.stop();
   await Promise.all([
     kvDel(TOKEN_KEY),

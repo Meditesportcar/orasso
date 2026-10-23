@@ -5,7 +5,7 @@ import { rateLimit } from "./rateLimit";
 import type { Viewer } from "./session";
 
 /** Adresse du visiteur (posée par nginx / le rendu serveur du site), sinon un repère commun. */
-const visitorOf = (c: { req: { header(name: string): string | undefined } }) => {
+export const visitorOf =(c: { req: { header(name: string): string | undefined } }) => {
   const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
   if (!ip) return "direct";
   // IPv6 : un visiteur dispose d'un préfixe /64 entier ; on compte par préfixe, pas par adresse.

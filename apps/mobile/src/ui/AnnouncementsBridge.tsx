@@ -5,7 +5,7 @@
 // - toute notification reçue pendant l'utilisation (canal temps réel `user:<id>`) : liste d'attente, refus, place
 //   libérée, message, demande, accréditation, certification… ; toucher ouvre son écran (même chemin que la notification
 //   du système). Hors de l'appli, le push du système reste ; dans l'appli, plus de bannière du système en double.
-import { announceToneOf, notificationAnnounced, pushIsForAccount } from "@orasso/shared";
+import { announceToneOf, notificationAnnounced } from "@orasso/shared";
 import * as Notifications from "expo-notifications";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
@@ -14,6 +14,7 @@ import { Platform } from "react-native";
 import { useApplications } from "@/lib/applications";
 import { formatDay } from "@/lib/format";
 import { appLinkOf } from "@/lib/links";
+import { receivedPush } from "@/lib/push";
 import { useChannel } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { announce, pulseTicket } from "./Announce";
@@ -86,8 +87,6 @@ export function AnnouncementsBridge({
   };
   const latest = useRef(announceNotification);
   latest.current = announceNotification;
-  const userIdRef = useRef(me?.user.id);
-  userIdRef.current = me?.user.id;
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
 
@@ -104,16 +103,14 @@ export function AnnouncementsBridge({
   useEffect(() => {
     if (Platform.OS === "web") return;
     const sub = Notifications.addNotificationReceivedListener((received) => {
-      const content = received.request.content;
-      const data = (content.data ?? {}) as Record<string, unknown>;
-      const id = typeof data.notificationId === "string" ? data.notificationId : received.request.identifier;
-      const type = typeof data.notificationType === "string" ? data.notificationType : "";
-      // Tour 3 (vie privée) : un push n'est annoncé que pour le compte ouvert (destinataire opaque, recipient).
-      if (!type || !pushIsForAccount(data.recipient, userIdRef.current)) return;
+      // Tours 3 et 4 (vie privée) : un push n'est annoncé que pour le compte ouvert (destinataire opaque, recipient),
+      // même contrôle que l'affichage du système appli ouverte (`lib/push.ts`).
+      const push = receivedPush(received.request);
+      if (!push) return;
       // Tour 3 (point 4) : une décision du tri (« Retenue » compris) recharge les candidatures, comme le temps réel ;
       // « Retenue ! » s'annonce alors une seule fois (candidatures déjà annoncées gardées sur l'appareil).
-      if (type.startsWith("application_") || type.startsWith("offer_")) void reloadRef.current();
-      latest.current({ id, type, title: content.title ?? "", body: content.body ?? null, data });
+      if (push.reloadApplications) void reloadRef.current();
+      latest.current(push);
     });
     return () => sub.remove();
   }, []);

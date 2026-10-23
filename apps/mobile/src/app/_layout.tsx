@@ -34,7 +34,7 @@ import { appLinkOf, teamRequestTarget } from "@/lib/links";
 import { MotionPrefProvider, parseReduceMotion, REDUCE_MOTION_KEY } from "@/lib/motionPref";
 import { PersonaProvider, usePersona } from "@/lib/persona";
 import { misplacedTarget } from "@/lib/personaModel";
-import { registerThisDevice } from "@/lib/push";
+import { notificationTapAction, registerThisDevice } from "@/lib/push";
 import { initSentry } from "@/lib/sentry";
 import { SessionProvider, useSession } from "@/lib/session";
 import { AnnounceHost } from "@/ui/Announce";
@@ -60,7 +60,7 @@ function Shell() {
   useEffect(() => {
     setPosition(firstDepartment ? profilePosition([firstDepartment]) : null);
   }, [firstDepartment, setPosition]);
-  const { persona, backToBase, choose, entries } = usePersona();
+  const { persona, backToBase, choose, entries, goTab } = usePersona();
   const router = useRouter();
   const segments = useSegments();
   const navigation = useRootNavigationState();
@@ -123,10 +123,12 @@ function Shell() {
     router.push("/suspendu");
   }, [status, me?.suspension, router, navigation?.key]);
 
-  // Appareil enregistré auprès de l'API dès que le compte est ouvert (utile aux notifications et au staff).
+  // Appareil enregistré auprès de l'API dès que le compte est ouvert (utile aux notifications et au staff), et de nouveau
+  // si un autre compte s'ouvre (tour 4 : l'inscription push suit la session).
+  const accountId = me?.user.id;
   useEffect(() => {
-    if (status === "in") void registerThisDevice();
-  }, [status]);
+    if (status === "in" && accountId) void registerThisDevice();
+  }, [status, accountId]);
 
   // Cible d'une notification média reçue avant le chargement des casquettes (démarrage à froid), ouverte dès qu'elles sont là.
   const pendingMedia = useRef<string | null>(null);
@@ -177,13 +179,31 @@ function Shell() {
     },
     [router, backToBase, choose, entries],
   );
+  // Lot M6, tour 4 (vie privée) : une notification d'un autre compte (reçue avant la déconnexion) ouvre l'Accueil, sans
+  // rien de son contenu ; touchée avant la lecture de la session (démarrage à froid), elle attend cette lecture.
+  const pendingTap = useRef<Record<string, unknown> | null>(null);
+  const onTap = useCallback(
+    (data: Record<string, unknown>) => {
+      const action = notificationTapAction(data, status);
+      if (action === "wait") pendingTap.current = data;
+      else if (action === "open") openNotification(data);
+      else if (action === "home") goTab("accueil");
+    },
+    [status, openNotification, goTab],
+  );
+  useEffect(() => {
+    if (status === "loading" || !pendingTap.current) return;
+    const data = pendingTap.current;
+    pendingTap.current = null;
+    onTap(data);
+  }, [status, onTap]);
   useEffect(() => {
     if (Platform.OS === "web") return;
     const sub = Notifications.addNotificationResponseReceivedListener((response) =>
-      openNotification(response.notification.request.content.data),
+      onTap((response.notification.request.content.data ?? {}) as Record<string, unknown>),
     );
     return () => sub.remove();
-  }, [openNotification]);
+  }, [onTap]);
 
   return (
     <View style={[styles.fill, { backgroundColor: ground }]}>

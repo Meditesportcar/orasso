@@ -33,6 +33,7 @@ import {
   sendShareImage,
 } from "@/lib/shareVehicle";
 import { AppSheet } from "@/ui/AppSheet";
+import { PLATE_CHECK_TIMEOUT_MS, type PlateCheck, plateGate } from "./sharePlateGate";
 import { shareSheetKey } from "./shareSheetKey";
 
 const { space1, space2 } = tokens.spacing;
@@ -40,18 +41,16 @@ const { space1, space2 } = tokens.spacing;
 /** Largeur de l'aperçu (maquette `.aff` : 266 px en story, 300 px en post). */
 const PREVIEW_WIDTH: Record<ShareFormat, number> = { story: 266, post: 300 };
 
-/** État du filet de sécurité pour l'affiche affichée. */
-type PlateCheck = "checking" | "clear" | "server" | "found" | "masked";
-
 const keyOf = (format: ShareFormat, style: ShareStyle) => `${format}:${style}`;
 
-/** Partager malgré une plaque détectée : toujours confirmé (Damien : aucune plaque visible). */
-function confirmShareAnyway(go: () => void) {
+/** Partager malgré une plaque détectée ou non vérifiée : toujours confirmé (Damien : aucune plaque visible). */
+function confirmShareAnyway(go: () => void, unchecked = false) {
+  const message = unchecked ? L.shareUncheckedConfirm : L.shareAnywayConfirm;
   if (Platform.OS === "web") {
-    if (typeof window !== "undefined" && window.confirm(L.shareAnywayConfirm)) go();
+    if (typeof window !== "undefined" && window.confirm(message)) go();
     return;
   }
-  Alert.alert(L.plateFound, L.shareAnywayConfirm, [
+  Alert.alert(unchecked ? L.plateSlow : L.plateFound, message, [
     { text: "Annuler", style: "cancel" },
     { text: L.shareAnyway, style: "destructive", onPress: go },
   ]);
@@ -144,21 +143,28 @@ export function ShareBody({
   const checksRef = useRef(checks);
   checksRef.current = checks;
   const shownUri = current?.uri;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: l'état de la vérification est lu par `checksRef` (pas de boucle)
+  /** Tour 4 : « Vérifier à nouveau » relance la vérification de la variante affichée. */
+  const [attempt, setAttempt] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: l'état de la vérification est lu par `checksRef` (pas de boucle) ; `attempt` relance
   useEffect(() => {
     if (!visible || !shownUri) return;
     const done = checksRef.current[key];
-    if (done && done !== "checking") return;
+    if (done && done !== "checking" && done !== "slow") return;
     if ((masks[key] ?? []).length) {
       setChecks((all) => ({ ...all, [key]: "masked" }));
       return;
     }
     let cancelled = false;
     setChecks((all) => ({ ...all, [key]: "checking" }));
+    // Tour 4 : au-delà du délai, plus « en cours » mais « pas vérifiée » ; un résultat tardif s'applique encore.
+    const timer = setTimeout(() => {
+      if (!cancelled) setChecks((all) => (all[key] === "checking" ? { ...all, [key]: "slow" } : all));
+    }, PLATE_CHECK_TIMEOUT_MS);
     const size = SHARE_SIZES[format];
     void detectSharePlates(shownUri, size.width, size.height)
       .catch(() => null)
       .then((plates) => {
+        clearTimeout(timer);
         if (cancelled) return;
         if (plates === null) setChecks((all) => ({ ...all, [key]: "server" }));
         else if (plates.length === 0) setChecks((all) => ({ ...all, [key]: "clear" }));
@@ -169,15 +175,16 @@ export function ShareBody({
       });
     return () => {
       cancelled = true;
-      // Interrompue : plus « en cours », elle repartira au retour.
+      clearTimeout(timer);
+      // Interrompue (ou trop longue) : plus « en cours », elle repartira au retour.
       setChecks((all) => {
-        if (all[key] !== "checking") return all;
+        if (all[key] !== "checking" && all[key] !== "slow") return all;
         const next = { ...all };
         delete next[key];
         return next;
       });
     };
-  }, [visible, key, shownUri, masks]);
+  }, [visible, key, shownUri, masks, attempt]);
 
   function maskPlates() {
     const plates = found[key];
@@ -230,17 +237,20 @@ export function ShareBody({
   const width = PREVIEW_WIDTH[format];
   const height = Math.round((width * SHARE_SIZES[format].height) / SHARE_SIZES[format].width);
   const safe = format === "story" && showSafe;
-  const plateLine =
-    check === "checking"
-      ? L.plateChecking
-      : check === "clear"
-        ? L.plateClear
-        : check === "server"
-          ? L.plateServer
-          : check === "masked"
-            ? L.plateMasked
-            : check === "found"
-              ? L.plateFound
+  // Tour 4 : pas encore d'état = en cours ; le partage direct n'est possible qu'après une vérification aboutie.
+  const { checking, blocked } = plateGate(check, Boolean(current));
+  const plateLine = checking
+    ? L.plateChecking
+    : check === "clear"
+      ? L.plateClear
+      : check === "server"
+        ? L.plateServer
+        : check === "masked"
+          ? L.plateMasked
+          : check === "found"
+            ? L.plateFound
+            : check === "slow"
+              ? L.plateSlow
               : null;
 
   return (
@@ -322,12 +332,8 @@ export function ShareBody({
         </View>
         {plateLine ? (
           <View style={styles.check} testID="share-plate-check" accessibilityLiveRegion="polite">
-            <Icon
-              name={check === "found" ? "alert" : "shield"}
-              size={16}
-              color={check === "found" ? c.winText : c.accentText}
-            />
-            <Text variant="caption" color={check === "found" ? c.winText : c.inkMuted} style={styles.checkText}>
+            <Icon name={blocked ? "alert" : "shield"} size={16} color={blocked ? c.winText : c.accentText} />
+            <Text variant="caption" color={blocked ? c.winText : c.inkMuted} style={styles.checkText}>
               {plateLine}
             </Text>
           </View>
@@ -363,19 +369,44 @@ export function ShareBody({
           </SmButton>
         </View>
       ) : null}
-      <View style={[styles.row, check === "found" ? styles.hidden : null]}>
+      {/* Tour 4 : vérification trop longue ; rien à masquer sans plaque repérée : la refaire, ou partager, confirmé. */}
+      {check === "slow" ? (
+        <View style={styles.row}>
+          <SmButton
+            kind="p"
+            big
+            icon="shield"
+            onPress={() => setAttempt((n) => n + 1)}
+            style={styles.grow}
+            testID="share-plate-retry"
+          >
+            {L.plateRetry}
+          </SmButton>
+          <SmButton
+            kind="s"
+            big
+            icon="share"
+            disabled={!current || busy !== null}
+            onPress={() => confirmShareAnyway(() => void send("share"), true)}
+            testID="share-anyway"
+          >
+            {L.shareAnyway}
+          </SmButton>
+        </View>
+      ) : null}
+      <View style={[styles.row, blocked ? styles.hidden : null]}>
         <SmButton
           kind="p"
           big
           icon="share"
-          disabled={!current || busy !== null || check === "checking" || check === "found"}
+          disabled={!current || busy !== null || checking || blocked}
           onPress={() => void send("share")}
           style={styles.grow}
           testID="share-story"
         >
           {busy === "share"
             ? L.loading
-            : check === "checking"
+            : checking
               ? L.plateCheckingShort
               : format === "story"
                 ? L.story
@@ -385,7 +416,7 @@ export function ShareBody({
           kind="s"
           big
           icon="gallery"
-          disabled={!current || busy !== null || check === "checking" || check === "found"}
+          disabled={!current || busy !== null || checking || blocked}
           onPress={() => void send("save")}
           accessibilityLabel={`${L.image} · ${shareFormatLabels[format]}`}
           testID="share-post"
