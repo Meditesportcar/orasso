@@ -3,7 +3,7 @@ import { shouldDeliver } from "@orasso/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { call, createEvent, createStructure, resetDb, signUp } from "../../../test/helpers";
+import { call, createEvent, createStructure, resetDb, seedReference, signUp } from "../../../test/helpers";
 import { db, pool } from "../../db/client";
 import { profiles } from "../../db/schema";
 
@@ -16,14 +16,16 @@ beforeEach(async () => {
 });
 
 describe("Tes préférences", () => {
-  it("lit les réglages du compte, puis enregistre types, distance, départements et notifications", async () => {
+  it("lit les réglages du compte, puis enregistre coin, distance, types, centres d'intérêt et interrupteur", async () => {
+    const ref = await seedReference();
     const u = await signUp("Prefs");
     const first = await call(u, "GET", "/me/preferences");
     expect(first.status).toBe(200);
     expect(first.json).toMatchObject({
       eventFormats: [],
       radiusKm: 50,
-      notifications: { newEvents: true, freedSpots: true, followedNews: true },
+      interests: [],
+      newEvents: true,
       seenAt: null,
     });
 
@@ -31,25 +33,46 @@ describe("Tes préférences", () => {
       eventFormats: ["gathering", "night", "night"],
       radiusKm: 60,
       departments: ["66", "11"],
-      notifications: { followedNews: false },
+      interests: [ref.jdm.id, ref.jdm.id],
+      newEvents: false,
     });
     expect(saved.status).toBe(200);
     expect(saved.json).toMatchObject({
       eventFormats: ["gathering", "night"],
       radiusKm: 60,
       departments: ["66", "11"],
-      notifications: { newEvents: true, freedSpots: true, followedNews: false },
+      interests: [ref.jdm.id],
+      newEvents: false,
     });
     expect(saved.json.seenAt).toEqual(expect.any(String));
-    // Les notifications passent par les types coupés du compte (mêmes règles que les réglages).
+    // L'interrupteur passe par les types coupés du compte (le même réglage que l'écran Notifications).
     const [row] = await db.select().from(profiles).where(eq(profiles.userId, u.id));
-    expect(row?.mutedTypes).toContain("new_event_followed");
-    expect((await call(u, "GET", "/me/settings")).json.radiusKm).toBe(60);
+    expect(row?.mutedTypes).toContain("event_nearby_interest");
+    const settings = (await call(u, "GET", "/me/settings")).json;
+    expect(settings.radiusKm).toBe(60);
+    expect(settings.interests).toEqual([ref.jdm.id]);
+    expect(settings.mutedTypes).toContain("event_nearby_interest");
 
-    // Rétablir une notification la retire des types coupés ; la date de première visite ne bouge plus.
-    const again = await call(u, "PATCH", "/me/preferences", { notifications: { followedNews: true } });
-    expect(again.json.notifications.followedNews).toBe(true);
+    // Rétablir l'interrupteur retire le type des types coupés ; la date de première visite ne bouge plus.
+    const again = await call(u, "PATCH", "/me/preferences", { newEvents: true });
+    expect(again.json.newEvents).toBe(true);
     expect(again.json.seenAt).toBe(saved.json.seenAt);
+    // Un envoi qui ne parle pas des centres d'intérêt les laisse tels quels.
+    expect(again.json.interests).toEqual([ref.jdm.id]);
+  });
+
+  it("« Partout en France » : la distance est null, enregistrée et relue, puis un nombre la remplace", async () => {
+    const u = await signUp("Partout");
+    const everywhere = await call(u, "PATCH", "/me/preferences", { radiusKm: null });
+    expect(everywhere.status).toBe(200);
+    expect(everywhere.json.radiusKm).toBeNull();
+    expect((await call(u, "GET", "/me/preferences")).json.radiusKm).toBeNull();
+    expect((await call(u, "GET", "/me/settings")).json.radiusKm).toBeNull();
+    // Un enregistrement qui ne parle pas de distance la laisse « Partout ».
+    expect((await call(u, "PATCH", "/me/preferences", { eventFormats: ["night"] })).json.radiusKm).toBeNull();
+    const [row] = await db.select().from(profiles).where(eq(profiles.userId, u.id));
+    expect(row?.radiusKm).toBeNull();
+    expect((await call(u, "PATCH", "/me/preferences", { radiusKm: 120 })).json.radiusKm).toBe(120);
   });
 
   it("« Passer » : un envoi vide marque l'étape comme vue", async () => {
@@ -60,38 +83,32 @@ describe("Tes préférences", () => {
     expect(res.json.eventFormats).toEqual([]);
   });
 
-  it("refuse un type inconnu, une distance hors du curseur, un département inconnu ; exige un compte", async () => {
+  it("refuse un type inconnu, une distance hors du curseur, un département ou un centre d'intérêt inconnu ; exige un compte", async () => {
     const u = await signUp("Refus");
     expect((await call(u, "PATCH", "/me/preferences", { eventFormats: ["track_day"] })).status).toBe(400);
     expect((await call(u, "PATCH", "/me/preferences", { radiusKm: 250 })).status).toBe(400);
+    expect((await call(u, "PATCH", "/me/preferences", { radiusKm: 300 })).status).toBe(400);
     expect((await call(u, "PATCH", "/me/preferences", { radiusKm: 5 })).status).toBe(400);
     expect((await call(u, "PATCH", "/me/preferences", { departments: ["99"] })).status).toBe(400);
+    expect(
+      (await call(u, "PATCH", "/me/preferences", { interests: ["00000000-0000-4000-8000-000000000000"] })).status,
+    ).toBe(400);
+    expect((await call(u, "PATCH", "/me/settings", { radiusKm: 250 })).status).toBe(400);
     expect((await call(null, "GET", "/me/preferences")).status).toBe(401);
   });
 
-  it("un rayon de compte plus large que le curseur est renvoyé tel quel, jamais réécrit (lot M6, tour 2)", async () => {
-    const u = await signUp("Large");
-    await db.update(profiles).set({ radiusKm: 300 }).where(eq(profiles.userId, u.id));
-    expect((await call(u, "GET", "/me/preferences")).json.radiusKm).toBe(300);
-    // Un enregistrement qui ne parle pas de distance la laisse à 300 km.
-    const saved = await call(u, "PATCH", "/me/preferences", { eventFormats: ["night"] });
-    expect(saved.json.radiusKm).toBe(300);
-    const [row] = await db.select().from(profiles).where(eq(profiles.userId, u.id));
-    expect(row?.radiusKm).toBe(300);
-  });
-
-  it("un interrupteur est allumé seulement si la famille est active ET le type non coupé", async () => {
+  it("l'interrupteur est allumé seulement si la famille est active ET le type non coupé", async () => {
     const u = await signUp("Famille");
-    // « Événements » coupée en famille : « Nouveaux événements » et « Actualité suivie » sont éteints.
+    // « Événements » coupée en famille : « Nouveaux événements » est éteint.
     await call(u, "PATCH", "/me/settings", {
       notificationPrefs: { application: true, event: false, social: true, grade: true },
     });
     const first = await call(u, "GET", "/me/preferences");
-    expect(first.json.notifications).toEqual({ newEvents: false, freedSpots: true, followedNews: false });
+    expect(first.json.newEvents).toBe(false);
 
-    // Rallumer « Nouveaux événements » : la famille revient, mais pas les autres types réglables de la famille.
-    const again = await call(u, "PATCH", "/me/preferences", { notifications: { newEvents: true } });
-    expect(again.json.notifications).toEqual({ newEvents: true, freedSpots: true, followedNews: false });
+    // Rallumer l'interrupteur : la famille revient, mais pas les autres types réglables de la famille.
+    const again = await call(u, "PATCH", "/me/preferences", { newEvents: true });
+    expect(again.json.newEvents).toBe(true);
     const [row] = await db.select().from(profiles).where(eq(profiles.userId, u.id));
     expect(row?.notificationPrefs.event).toBe(true);
     expect(row?.mutedTypes).toContain("new_event_followed");
@@ -100,9 +117,11 @@ describe("Tes préférences", () => {
     expect(shouldDeliver(row?.notificationPrefs, row?.mutedTypes, "new_event_followed")).toBe(false);
     expect(shouldDeliver(row?.notificationPrefs, row?.mutedTypes, "event_updated")).toBe(false);
 
-    // Couper un type ne touche pas la famille ; les deux d'une même famille dans un seul envoi.
-    const both = await call(u, "PATCH", "/me/preferences", { notifications: { newEvents: false, followedNews: true } });
-    expect(both.json.notifications).toEqual({ newEvents: false, freedSpots: true, followedNews: true });
+    // Couper l'interrupteur ne touche pas la famille.
+    const off = await call(u, "PATCH", "/me/preferences", { newEvents: false });
+    expect(off.json.newEvents).toBe(false);
+    const [after] = await db.select().from(profiles).where(eq(profiles.userId, u.id));
+    expect(after?.notificationPrefs.event).toBe(true);
   });
 });
 

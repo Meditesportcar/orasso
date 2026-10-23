@@ -49,7 +49,8 @@ export const profiles = pgTable(
     bio: text("bio"),
     visibility: profileVisibilityEnum("visibility").notNull().default("public"),
     departments: text("departments").array().notNull().default(sql`'{}'::text[]`),
-    radiusKm: smallint("radius_km").notNull().default(50),
+    /** Distance habituelle (10 à 200 km) autour du coin (départements) ; null = partout en France (lot M6, tour 2). */
+    radiusKm: smallint("radius_km").default(50),
     /** Lot M6 (« Tes préférences ») : types d'événements préférés (`EventFormat`, validés par l'API) ; vide = tous. */
     preferredFormats: text("preferred_formats").array().notNull().default(sql`'{}'::text[]`),
     /** Lot M6 : l'étape « Tes préférences » a été vue (validée ou passée) ; null = jamais, l'appli la propose une fois. */

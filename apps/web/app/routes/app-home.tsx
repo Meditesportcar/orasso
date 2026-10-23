@@ -51,7 +51,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const lat = num(url.searchParams.get("lat"));
   const lng = num(url.searchParams.get("lng"));
   const params = new URLSearchParams();
-  if (rayon !== undefined && rayon >= 10 && rayon <= 300) params.set("radiusKm", String(Math.round(rayon)));
+  if (rayon !== undefined && rayon >= 10 && rayon <= 200) params.set("radiusKm", String(Math.round(rayon)));
   if (lat !== undefined && lng !== undefined) {
     params.set("lat", String(lat));
     params.set("lng", String(lng));
@@ -73,7 +73,7 @@ export async function action({ request }: Route.ActionArgs) {
   // même si l'enregistrement est refusé à un compte suspendu).
   if (form.get("intent") === "radius") {
     const km = Math.round(Number(form.get("rayon")));
-    if (!Number.isFinite(km) || km < 10 || km > 300) return data({ error: homeLabels.saveFailed }, { status: 400 });
+    if (!Number.isFinite(km) || km < 10 || km > 200) return data({ error: homeLabels.saveFailed }, { status: 400 });
     await api(request, "/me/settings", { method: "PATCH", json: { radiusKm: km } });
     const params = new URLSearchParams({ rayon: String(km) });
     const lat = num(String(form.get("lat") ?? "") || null);

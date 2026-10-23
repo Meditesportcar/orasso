@@ -9,15 +9,16 @@ const form = (entries: [string, string][]) => {
 };
 
 describe("formulaire « Tes préférences »", () => {
-  it("types, distance, départements et interrupteurs deviennent le corps du PATCH", () => {
+  it("coin, distance, types, centres d'intérêt et interrupteur deviennent le corps du PATCH", () => {
     const res = parsePreferencesForm(
       form([
         ["eventFormat", "night"],
         ["eventFormat", "gathering"],
         ["radiusKm", "60"],
         ["departments", "66, 11 ; 2a"],
+        ["interest", "cat-1"],
+        ["interest", "cat-2"],
         ["notify_newEvents", "on"],
-        ["notify_followedNews", "on"],
       ]),
     );
     expect(res).toEqual({
@@ -26,16 +27,17 @@ describe("formulaire « Tes préférences »", () => {
         eventFormats: ["gathering", "night"],
         radiusKm: 60,
         departments: ["66", "11", "2A"],
-        notifications: { newEvents: true, freedSpots: false, followedNews: true },
+        interests: ["cat-1", "cat-2"],
+        newEvents: true,
       },
     });
   });
 
-  it("aucune case cochée : tous les types (liste vide), tous les interrupteurs coupés", () => {
+  it("aucune case cochée : tous les types et aucun centre d'intérêt (listes vides), interrupteur coupé", () => {
     const res = parsePreferencesForm(form([["radiusKm", "50"]]));
     expect(res).toMatchObject({
       ok: true,
-      update: { eventFormats: [], departments: [], notifications: { newEvents: false, freedSpots: false } },
+      update: { eventFormats: [], departments: [], interests: [], newEvents: false },
     });
   });
 
@@ -50,6 +52,16 @@ describe("formulaire « Tes préférences »", () => {
     expect(radius("abc")).toBe(50);
   });
 
+  it("« Partout en France » envoie null, quelle que soit la position du curseur", () => {
+    const res = parsePreferencesForm(
+      form([
+        ["everywhere", "on"],
+        ["radiusKm", "80"],
+      ]),
+    );
+    expect(res).toMatchObject({ ok: true, update: { radiusKm: null } });
+  });
+
   it("refuse un département inconnu et plus de 20 départements, en français", () => {
     expect(parsePreferencesForm(form([["departments", "66, 99X"]]))).toEqual({
       ok: false,
@@ -62,22 +74,35 @@ describe("formulaire « Tes préférences »", () => {
     });
   });
 
-  it("la distance du compte (jusqu'à 300 km) n'est renvoyée que si le curseur a bougé", () => {
-    const update = (radiusKm: string, radiusInitial: string) => {
-      const res = parsePreferencesForm(
-        form([
-          ["radiusKm", radiusKm],
-          ["radiusInitial", radiusInitial],
-        ]),
-      );
+  it("la distance du compte n'est renvoyée que si elle a changé (curseur ou « Partout en France »)", () => {
+    const update = (fields: [string, string][], radiusInitial: string) => {
+      const res = parsePreferencesForm(form([...fields, ["radiusInitial", radiusInitial]]));
       return res.ok ? res.update : null;
     };
-    // Compte à 300 km, curseur resté en butée à 200 : rien n'est envoyé.
-    expect(update("200", "300")).not.toHaveProperty("radiusKm");
-    expect(update("60", "60")).not.toHaveProperty("radiusKm");
-    // Curseur bougé : la nouvelle valeur part.
-    expect(update("120", "300")).toMatchObject({ radiusKm: 120 });
-    expect(update("70", "60")).toMatchObject({ radiusKm: 70 });
+    expect(update([["radiusKm", "60"]], "60")).not.toHaveProperty("radiusKm");
+    // Compte « Partout en France », case restée cochée : rien n'est envoyé.
+    expect(
+      update(
+        [
+          ["everywhere", "on"],
+          ["radiusKm", "50"],
+        ],
+        "everywhere",
+      ),
+    ).not.toHaveProperty("radiusKm");
+    // Curseur bougé : la nouvelle valeur part ; case décochée sur un compte « Partout » : le curseur part.
+    expect(update([["radiusKm", "70"]], "60")).toMatchObject({ radiusKm: 70 });
+    expect(update([["radiusKm", "50"]], "everywhere")).toMatchObject({ radiusKm: 50 });
+    // Case cochée sur un compte à 60 km : null part.
+    expect(
+      update(
+        [
+          ["everywhere", "on"],
+          ["radiusKm", "60"],
+        ],
+        "60",
+      ),
+    ).toMatchObject({ radiusKm: null });
   });
 
   it("sans JavaScript, les cases `departmentBox` font foi, y compris tout décocher", () => {

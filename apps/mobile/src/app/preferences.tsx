@@ -1,9 +1,11 @@
-// « Tes préférences » (lot M6, maquette 8.3, retour 19) : écran plein écran (mode B, en-tête de fiche, sans barre
-// d'onglets). Première fois (`?premiere=1`, après l'ajout du premier véhicule, lot M1) : dernière étape de l'arrivée,
-// « Découvrir les événements » enregistre et ouvre l'Explorer déjà filtré, ✕ « Passer » marque l'étape comme vue sans
-// rien changer. Ensuite, rouverte depuis Profil › Préférences : « Enregistrer » puis retour. Types d'événements
-// (plusieurs choix), distance autour de toi (10 à 200 km), départements (la feuille de « Ton coin »), notifications
-// « pour toi ». Tout est rangé sur le compte par l'API (`PATCH /me/preferences`).
+// « Tes préférences » (lot M6, maquette 8.3, retour 19) : LA page de ce qu'on veut voir, à l'arrivée et dans les réglages
+// (plein écran, mode B, en-tête de fiche, sans barre d'onglets). Première fois (`?premiere=1`, après l'ajout du premier
+// véhicule, lot M1) : dernière étape de l'arrivée, « Découvrir les événements » enregistre et ouvre l'Explorer déjà
+// filtré, ✕ « Passer » marque l'étape comme vue sans rien changer. Ensuite, rouverte depuis Profil : « Enregistrer »
+// puis retour. Dans l'ordre : ton coin (départements), la distance habituelle (10 à 200 km ou « Partout en France »),
+// les types d'événements, les centres d'intérêt, un seul interrupteur « Me prévenir des nouveaux événements dans mon
+// coin » (le réglage de l'écran Notifications). Tout est rangé sur le compte par l'API (`PATCH /me/preferences`) ; seuls
+// les champs touchés sont envoyés, et une réponse tardive ne défait jamais ce que la personne vient de régler.
 import { Chip, franceDepartmentByCode, Text, tokens, useTheme } from "@orasso/design-system/native";
 import {
   arriveeLabels,
@@ -15,19 +17,20 @@ import {
   newEventsCaption,
   overseasDepartmentNames,
   PREFERENCE_RADIUS,
-  type PreferenceNotification,
-  preferenceNotificationLabels,
-  preferenceNotifications,
+  preferenceNewEventsLabel,
   travelTimeLabel,
 } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { DepartmentSheet } from "@/features/arrivee/DepartmentSheet";
 import { SmButton } from "@/features/passionne/kit";
+import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/http";
 import { EXPLORER_ROUTE, usePreferences } from "@/lib/preferences";
+import { mergeFresh, type PreferencesDraft, patchOf, type TouchedFields } from "@/lib/preferencesDraft";
+import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { FlowScreen } from "@/ui/Screens";
 import { Slider } from "@/ui/Slider";
@@ -36,12 +39,7 @@ const { space3 } = tokens.spacing;
 
 const nameOf = (code: string) => franceDepartmentByCode[code]?.name ?? overseasDepartmentNames[code] ?? code;
 
-type Draft = {
-  eventFormats: EventFormat[];
-  radiusKm: number;
-  departments: string[];
-  notifications: Record<PreferenceNotification, boolean>;
-};
+type Draft = PreferencesDraft;
 
 export default function TesPreferences() {
   const { t } = useTheme();
@@ -50,21 +48,23 @@ export default function TesPreferences() {
   const { premiere } = useLocalSearchParams<{ premiere?: string }>();
   const first = premiere === "1";
   const { preferences, error: loadError, save } = usePreferences();
+  const categories = useApi(() => api.categories(), [], { cacheKey: "categories" });
   const [draft, setDraft] = useState<Draft | null>(null);
+  // Les champs que la personne a touchés : une réponse fraîche (après le cache) ne les écrase pas, et seuls eux partent.
+  const touched = useRef<TouchedFields>({});
+  // Dernière distance choisie au curseur : « Partout en France » la met de côté, la décocher la rend.
+  const lastKm = useRef(50);
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // La copie de travail part des préférences du compte, une fois lues.
+  // La copie de travail part des préférences du compte (le cache d'abord, puis la réponse fraîche) : les champs non
+  // touchés suivent la valeur la plus récente, les champs touchés gardent le choix de la personne.
   useEffect(() => {
-    if (!preferences || draft) return;
-    setDraft({
-      eventFormats: preferences.eventFormats,
-      radiusKm: clampPreferenceRadius(preferences.radiusKm),
-      departments: preferences.departments,
-      notifications: preferences.notifications,
-    });
-  }, [preferences, draft]);
+    if (!preferences) return;
+    if (!touched.current.radiusKm) lastKm.current = clampPreferenceRadius(preferences.radiusKm);
+    setDraft((d) => mergeFresh(d, touched.current, preferences));
+  }, [preferences]);
 
   const leave = () => {
     if (first) router.replace(EXPLORER_ROUTE as never);
@@ -76,7 +76,7 @@ export default function TesPreferences() {
     setBusy(true);
     setError(null);
     try {
-      await save(skip || !draft ? {} : draft);
+      await save(skip || !draft ? {} : patchOf(draft, touched.current));
       leave();
     } catch (e) {
       setError(errorMessage(e));
@@ -86,14 +86,12 @@ export default function TesPreferences() {
   }
 
   const close = () => (first ? void submit(true) : leave());
-  const set = (patch: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...patch } : d));
-  const toggleFormat = (f: EventFormat) =>
-    draft &&
-    set({
-      eventFormats: draft.eventFormats.includes(f)
-        ? draft.eventFormats.filter((x) => x !== f)
-        : [...draft.eventFormats, f],
-    });
+  const set = (patch: Partial<Draft>) => {
+    for (const k of Object.keys(patch) as (keyof Draft)[]) touched.current[k] = true;
+    setDraft((d) => (d ? { ...d, ...patch } : d));
+  };
+  const toggleIn = <T,>(list: T[], item: T) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
+  const everywhere = draft?.radiusKm === null;
 
   return (
     <FlowScreen
@@ -149,52 +147,6 @@ export default function TesPreferences() {
       ) : (
         <>
           <Text variant="label" color={c.inkMuted}>
-            {L.types}
-          </Text>
-          {/* Maquette 8.3 (`.pchips`) : les types passent à la ligne, tous visibles. */}
-          <View style={styles.pchips} accessibilityLabel={L.types}>
-            {eventFormats.map((f) => (
-              <Chip
-                key={f}
-                selected={draft.eventFormats.includes(f)}
-                onPress={() => {
-                  toggleFormat(f);
-                }}
-                accessibilityRole="toggle"
-              >
-                {eventFormatLabels[f]}
-              </Chip>
-            ))}
-          </View>
-
-          <Text variant="label" color={c.inkMuted}>
-            {L.distance}
-          </Text>
-          <View style={[styles.card, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}>
-            <View style={styles.rv}>
-              <Text variant="numberNarrow" color={c.ink} style={styles.km} testID="pref-radius">
-                {`${draft.radiusKm}`}
-                <Text variant="numberNarrow" color={c.ink} style={styles.kmUnit}>
-                  {" km"}
-                </Text>
-              </Text>
-              <Text variant="caption" color={c.inkMuted}>
-                {travelTimeLabel(draft.radiusKm)}
-              </Text>
-            </View>
-            <Slider
-              label={L.distance}
-              value={draft.radiusKm}
-              min={PREFERENCE_RADIUS.min}
-              max={PREFERENCE_RADIUS.max}
-              step={PREFERENCE_RADIUS.step}
-              format={(v) => `${v} km`}
-              onChange={(v) => set({ radiusKm: v })}
-              onCommit={(v) => set({ radiusKm: v })}
-            />
-          </View>
-
-          <Text variant="label" color={c.inkMuted}>
             {L.departments}
           </Text>
           <View style={styles.dsel} testID="pref-departments">
@@ -227,39 +179,121 @@ export default function TesPreferences() {
           </View>
 
           <Text variant="label" color={c.inkMuted}>
+            {L.distance}
+          </Text>
+          <View style={[styles.card, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}>
+            <View style={styles.rv}>
+              <Text variant="numberNarrow" color={c.ink} style={styles.km} testID="pref-radius">
+                {everywhere ? L.everywhereShort : `${draft.radiusKm}`}
+                {everywhere ? null : (
+                  <Text variant="numberNarrow" color={c.ink} style={styles.kmUnit}>
+                    {" km"}
+                  </Text>
+                )}
+              </Text>
+              <Text variant="caption" color={c.inkMuted}>
+                {draft.radiusKm === null ? L.everywhereCaption : travelTimeLabel(draft.radiusKm)}
+              </Text>
+            </View>
+            {/* « Partout en France » : le curseur est grisé et ne répond plus ; décocher rend la dernière distance. */}
+            <View style={everywhere ? styles.sliderOff : undefined} pointerEvents={everywhere ? "none" : "auto"}>
+              <Slider
+                label={L.distance}
+                value={draft.radiusKm ?? lastKm.current}
+                min={PREFERENCE_RADIUS.min}
+                max={PREFERENCE_RADIUS.max}
+                step={PREFERENCE_RADIUS.step}
+                format={(v) => `${v} km`}
+                onChange={(v) => {
+                  lastKm.current = v;
+                  set({ radiusKm: v });
+                }}
+                onCommit={(v) => {
+                  lastKm.current = v;
+                  set({ radiusKm: v });
+                }}
+              />
+            </View>
+            <View style={styles.everywhere} testID="pref-everywhere">
+              <Chip
+                selected={everywhere}
+                onPress={() => set({ radiusKm: everywhere ? lastKm.current : null })}
+                accessibilityRole="toggle"
+              >
+                {L.everywhere}
+              </Chip>
+            </View>
+          </View>
+
+          <Text variant="label" color={c.inkMuted}>
+            {L.types}
+          </Text>
+          {/* Maquette 8.3 (`.pchips`) : les types passent à la ligne, tous visibles. */}
+          <View style={styles.pchips} accessibilityLabel={L.types}>
+            {eventFormats.map((f: EventFormat) => (
+              <Chip
+                key={f}
+                selected={draft.eventFormats.includes(f)}
+                onPress={() => set({ eventFormats: toggleIn(draft.eventFormats, f) })}
+                accessibilityRole="toggle"
+              >
+                {eventFormatLabels[f]}
+              </Chip>
+            ))}
+          </View>
+
+          <Text variant="label" color={c.inkMuted}>
+            {L.interests}
+          </Text>
+          {categories.data ? (
+            <View style={styles.pchips} accessibilityLabel={L.interests} testID="pref-interests">
+              {categories.data.map((cat) => (
+                <Chip
+                  key={cat.id}
+                  selected={draft.interests.includes(cat.id)}
+                  onPress={() => set({ interests: toggleIn(draft.interests, cat.id) })}
+                  accessibilityRole="toggle"
+                >
+                  {cat.label}
+                </Chip>
+              ))}
+            </View>
+          ) : (
+            <Text variant="caption" color={c.inkMuted}>
+              {L.interestsLoading}
+            </Text>
+          )}
+
+          <Text variant="label" color={c.inkMuted}>
             {L.notify}
           </Text>
           <View style={[styles.setlist, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}>
-            {preferenceNotifications.map((k, i) => {
-              const on = draft.notifications[k];
-              const label = preferenceNotificationLabels[k];
-              return (
-                <Pressable
-                  key={k}
-                  onPress={() => set({ notifications: { ...draft.notifications, [k]: !on } })}
-                  accessibilityRole="switch"
-                  accessibilityState={{ checked: on }}
-                  aria-checked={on}
-                  accessibilityLabel={label.title}
-                  testID={`pref-notify-${k}`}
-                  style={[styles.swrow, i > 0 ? { borderTopWidth: 1, borderTopColor: c.plateLine } : null]}
-                >
-                  <View style={styles.swText}>
-                    <Text variant="bodyStrong" color={c.ink}>
-                      {label.title}
-                    </Text>
-                    <Text variant="caption" color={c.inkMuted}>
-                      {k === "newEvents" ? newEventsCaption(draft.radiusKm) : label.caption}
-                    </Text>
-                  </View>
-                  <View style={[styles.switch, { backgroundColor: on ? c.accent : c.plateLine }]}>
-                    <View
-                      style={[styles.knob, { backgroundColor: c.surface, transform: [{ translateX: on ? 20 : 0 }] }]}
-                    />
-                  </View>
-                </Pressable>
-              );
-            })}
+            <Pressable
+              onPress={() => set({ newEvents: !draft.newEvents })}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: draft.newEvents }}
+              aria-checked={draft.newEvents}
+              accessibilityLabel={preferenceNewEventsLabel.title}
+              testID="pref-notify-newEvents"
+              style={styles.swrow}
+            >
+              <View style={styles.swText}>
+                <Text variant="bodyStrong" color={c.ink}>
+                  {preferenceNewEventsLabel.title}
+                </Text>
+                <Text variant="caption" color={c.inkMuted}>
+                  {newEventsCaption(draft.radiusKm)}
+                </Text>
+              </View>
+              <View style={[styles.switch, { backgroundColor: draft.newEvents ? c.accent : c.plateLine }]}>
+                <View
+                  style={[
+                    styles.knob,
+                    { backgroundColor: c.surface, transform: [{ translateX: draft.newEvents ? 20 : 0 }] },
+                  ]}
+                />
+              </View>
+            </Pressable>
           </View>
           {error ? (
             <Text variant="caption" color={c.winText} accessibilityRole="alert">
@@ -279,6 +313,8 @@ const styles = StyleSheet.create({
   pchips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   h1: { fontSize: 30, lineHeight: 30 },
   card: { borderRadius: 18, padding: 14, gap: 10 },
+  sliderOff: { opacity: 0.4 },
+  everywhere: { flexDirection: "row" },
   rv: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
   km: { fontSize: 46, lineHeight: 48 },
   kmUnit: { fontSize: 18 },

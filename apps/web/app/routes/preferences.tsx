@@ -1,5 +1,6 @@
 import { Button, CheckboxField } from "@orasso/design-system/web";
 import {
+  type Category,
   clampPreferenceRadius,
   eventFormatLabels,
   eventFormats,
@@ -7,8 +8,7 @@ import {
   newEventsCaption,
   PREFERENCE_RADIUS,
   type Preferences,
-  preferenceNotificationLabels,
-  preferenceNotifications,
+  preferenceNewEventsLabel,
   travelTimeLabel,
 } from "@orasso/shared";
 import { useState } from "react";
@@ -16,19 +16,23 @@ import { data, Form, redirect, useNavigation } from "react-router";
 
 import { DepartmentsField } from "../components/ArriveeFields";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
-import { parsePreferencesForm } from "../lib/preferences";
+import { parsePreferencesForm, radiusInitialValue } from "../lib/preferences";
 import type { Route } from "./+types/preferences";
 
-// « Tes préférences » sur le site (lot M6, comme l'appli) : types d'événements, distance autour de soi, départements,
-// les trois interrupteurs « Te prévenir ». Un formulaire posté : marche sans JavaScript.
+// « Tes préférences » sur le site (lot M6, comme l'appli, la seule page de ce qu'on veut voir) : ton coin
+// (départements), la distance habituelle (ou « Partout en France »), les types d'événements, les centres d'intérêt, un
+// seul interrupteur « Me prévenir des nouveaux événements dans mon coin ». Un formulaire posté : marche sans JavaScript.
 export function meta() {
   return [{ title: `${L.title} · Orasso` }, { name: "robots", content: "noindex" }];
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireMe(request);
-  const preferences = await apiOrThrow<Preferences>(request, "/me/preferences");
-  return { preferences, saved: new URL(request.url).searchParams.get("fait") === "1" };
+  const [preferences, categories] = await Promise.all([
+    apiOrThrow<Preferences>(request, "/me/preferences"),
+    apiOrThrow<Category[]>(request, "/vehicle-reference/categories"),
+  ]);
+  return { preferences, categories, saved: new URL(request.url).searchParams.get("fait") === "1" };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -40,11 +44,12 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function PreferencesPage({ loaderData, actionData }: Route.ComponentProps) {
-  const { preferences, saved } = loaderData;
+  const { preferences, categories, saved } = loaderData;
   const busy = useNavigation().state !== "idle";
-  // La vraie distance du compte (jusqu'à 300 km) : le curseur s'arrête à 200 mais l'écran dit la vérité ; elle n'est
-  // renvoyée que si le curseur bouge (`radiusInitial`, voir `parsePreferencesForm`).
-  const [radius, setRadius] = useState(preferences.radiusKm);
+  // La distance n'est renvoyée que si elle change (`radiusInitial`, voir `parsePreferencesForm`) ; « Partout en
+  // France » grise le curseur (sans JavaScript, il reste réglable et la case décide).
+  const [radius, setRadius] = useState(clampPreferenceRadius(preferences.radiusKm));
+  const [everywhere, setEverywhere] = useState(preferences.radiusKm === null);
   return (
     <div className="s-narrow s-stack" data-testid="preferences">
       <h1 className="s-title">{L.title}</h1>
@@ -63,6 +68,48 @@ export default function PreferencesPage({ loaderData, actionData }: Route.Compon
         </section>
 
         <fieldset className="s-fieldset">
+          <legend className="s-label o-t-label">{L.departments}</legend>
+          <DepartmentsField initial={preferences.departments} />
+        </fieldset>
+
+        <div className="o-field">
+          <label htmlFor="pref-radius-range" className="o-field__label o-t-label">
+            {L.distance}
+          </label>
+          <span className="pref-radius" data-testid="pref-radius">
+            {everywhere ? (
+              <b className="o-t-number-narrow pref-radius__km">{L.everywhereShort}</b>
+            ) : (
+              <>
+                <b className="o-t-number-narrow pref-radius__km">{`${radius}`}</b>
+                <span className="o-t-body"> km</span>
+                <span className="o-t-caption s-muted pref-radius__time">{travelTimeLabel(radius)}</span>
+              </>
+            )}
+          </span>
+          <input type="hidden" name="radiusInitial" value={radiusInitialValue(preferences.radiusKm)} />
+          <input
+            id="pref-radius-range"
+            type="range"
+            className="s-range"
+            name="radiusKm"
+            min={PREFERENCE_RADIUS.min}
+            max={PREFERENCE_RADIUS.max}
+            step={PREFERENCE_RADIUS.step}
+            value={radius}
+            disabled={everywhere}
+            onChange={(e) => setRadius(Number(e.currentTarget.value))}
+          />
+          <CheckboxField
+            name="everywhere"
+            data-testid="pref-everywhere"
+            label={L.everywhere}
+            defaultChecked={preferences.radiusKm === null}
+            onChange={(e) => setEverywhere(e.currentTarget.checked)}
+          />
+        </div>
+
+        <fieldset className="s-fieldset">
           <legend className="s-label o-t-label">{L.types}</legend>
           <div className="s-checklist" data-testid="pref-formats">
             {eventFormats.map((f) => (
@@ -77,54 +124,34 @@ export default function PreferencesPage({ loaderData, actionData }: Route.Compon
           </div>
         </fieldset>
 
-        <label className="o-field">
-          <span className="o-field__label o-t-label">{L.distance}</span>
-          <span className="pref-radius" data-testid="pref-radius">
-            <b className="o-t-number-narrow pref-radius__km">{`${radius}`}</b>
-            <span className="o-t-body"> km</span>
-            <span className="o-t-caption s-muted pref-radius__time">{travelTimeLabel(radius)}</span>
-          </span>
-          <input type="hidden" name="radiusInitial" value={preferences.radiusKm} />
-          <input
-            type="range"
-            className="s-range"
-            name="radiusKm"
-            min={PREFERENCE_RADIUS.min}
-            max={PREFERENCE_RADIUS.max}
-            step={PREFERENCE_RADIUS.step}
-            value={clampPreferenceRadius(radius)}
-            onChange={(e) => setRadius(Number(e.currentTarget.value))}
-          />
-        </label>
-
         <fieldset className="s-fieldset">
-          <legend className="s-label o-t-label">{L.departments}</legend>
-          <DepartmentsField initial={preferences.departments} />
+          <legend className="s-label o-t-label">{L.interests}</legend>
+          <div className="s-checklist" data-testid="pref-interests">
+            {categories.map((c) => (
+              <CheckboxField
+                key={c.id}
+                name="interest"
+                value={c.id}
+                label={c.label}
+                defaultChecked={preferences.interests.includes(c.id)}
+              />
+            ))}
+          </div>
         </fieldset>
 
         <fieldset className="s-fieldset">
           <legend className="s-label o-t-label">{L.notify}</legend>
-          <div className="s-stack s-stack--tight">
-            {preferenceNotifications.map((k) => {
-              const label = preferenceNotificationLabels[k];
-              return (
-                <CheckboxField
-                  key={k}
-                  name={`notify_${k}`}
-                  data-testid={`pref-notify-${k}`}
-                  defaultChecked={preferences.notifications[k]}
-                  label={
-                    <>
-                      <strong>{label.title}</strong>
-                      <span className="o-t-caption s-muted pref-caption">
-                        {k === "newEvents" ? newEventsCaption(radius) : label.caption}
-                      </span>
-                    </>
-                  }
-                />
-              );
-            })}
-          </div>
+          <CheckboxField
+            name="notify_newEvents"
+            data-testid="pref-notify-newEvents"
+            defaultChecked={preferences.newEvents}
+            label={
+              <>
+                <strong>{preferenceNewEventsLabel.title}</strong>
+                <span className="o-t-caption s-muted pref-caption">{newEventsCaption(everywhere ? null : radius)}</span>
+              </>
+            }
+          />
         </fieldset>
 
         {actionData?.error ? (

@@ -99,9 +99,9 @@ export function NearbyBlock({
           name="rayon"
           type="range"
           min={10}
-          max={300}
+          max={200}
           step={10}
-          defaultValue={nearby.radiusKm}
+          defaultValue={nearby.radiusKm ?? 200}
           aria-label={homeLabels.radiusLabel}
           data-testid="home-radius"
         />

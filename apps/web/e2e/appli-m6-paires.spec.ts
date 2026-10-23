@@ -175,7 +175,7 @@ for (const theme of THEMES) {
     await ctx.close();
   });
 
-  test(`Réglages Préférences et Tes préférences (${theme})`, async ({ browser }) => {
+  test(`Réglages Apparence et Tes préférences (${theme})`, async ({ browser }) => {
     test.setTimeout(240_000);
     const { ctx, page } = await open(browser, theme);
     await signIn(page, "kenji@orasso.local");

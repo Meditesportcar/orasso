@@ -119,7 +119,8 @@ test("Tes préférences : première fois après le premier véhicule, rangées s
   await expect(page.getByText("Dernière étape · 30 secondes")).toBeVisible();
   await page.getByRole("button", { name: "Rassemblement" }).click();
   await page.getByRole("button", { name: "Nocturne" }).click();
-  await page.getByTestId("pref-notify-followedNews").click();
+  await page.getByTestId("pref-everywhere").click();
+  await page.getByTestId("pref-notify-newEvents").click();
   await clean(page);
   await page.getByTestId("preferences-submit").click();
   await page.waitForURL(/explorer/, { timeout: 30_000 });
@@ -127,13 +128,16 @@ test("Tes préférences : première fois après le premier véhicule, rangées s
   const after = await apiCall<{
     eventFormats: string[];
     seenAt: string | null;
-    notifications: Record<string, boolean>;
+    radiusKm: number | null;
+    newEvents: boolean;
   }>(cookie, "GET", "/me/preferences");
   expect(after.data.eventFormats.sort()).toEqual(["gathering", "night"]);
   expect(after.data.seenAt).not.toBeNull();
-  expect(after.data.notifications.followedNews).toBe(false);
+  // « Partout en France » = pas de limite de distance ; l'interrupteur unique est coupé.
+  expect(after.data.radiusKm).toBeNull();
+  expect(after.data.newEvents).toBe(false);
 
-  // Ensuite : Profil › Préférences › « Tes préférences » (mode modification).
+  // Ensuite : Profil › Apparence › « Tes préférences » (mode modification).
   await go(page, "/reglages/preferences");
   await page.getByTestId("reglage-tes-preferences").click();
   await page.waitForURL(/\/preferences$/);

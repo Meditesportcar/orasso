@@ -214,6 +214,7 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await expect(page.getByTestId("casquette-staff")).toBeVisible();
     for (const id of [
       "reglage-notifications",
+      "reglage-tes-preferences-tuile",
       "reglage-preferences",
       "reglage-securite",
       "reglage-confidentialite",
@@ -234,7 +235,7 @@ test("Mon profil, le hub : en-tête, saison, passeport, crew, casquettes, Créer
     await page.getByTestId("profil-account-qr").click();
     await expect(page.getByText("Mon QR de compte").last()).toBeVisible();
     await shot(page, `profil-qr-${theme}`);
-    // Préférences : thème Béton / Sable / Automatique et « Réduire les animations ».
+    // Apparence (clé de route `preferences`) : thème Béton / Sable / Automatique et « Réduire les animations ».
     await page.goto("/reglages/preferences");
     await afterOpening(page);
     await expect(page.getByText("Automatique", { exact: true })).toBeVisible({ timeout: 30_000 });

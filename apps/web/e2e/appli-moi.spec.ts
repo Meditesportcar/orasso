@@ -54,9 +54,15 @@ const SECTION_OF: Record<string, string> = {
   "notif-family-event": "notifications",
   "visibility-public": "confidentialite",
   "moi-data": "confidentialite",
-  "moi-sector": "preferences",
   "moi-security": "securite",
 };
+
+/** Lot M6, tour 2 : le secteur, la distance et les centres d'intérêt sont dans « Tes préférences » (`/preferences`). */
+async function openPreferences(page: Page) {
+  await page.goto("/preferences");
+  await page.getByTestId("pref-departments").waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(3500);
+}
 
 /** Ouvre le réglage qui contient l'élément, le fait défiler (zone qui défile) puis le place en haut pour la capture. */
 async function reveal(page: Page, testId: string) {
@@ -137,9 +143,12 @@ test("Moi : profil, aperçu public, notifications, public / privé, secteur, ray
     .toBe(false);
 
   // Compte privé → aperçu réduit (ni description, ni secteur).
-  await reveal(page, "moi-sector");
-  await page.getByLabel("Ajouter un département").fill("11");
-  await page.getByRole("button", { name: "Ajouter ce département" }).click();
+  await openPreferences(page);
+  await page.getByTestId("pref-departments-edit").click();
+  await page.getByTestId("department-search").fill("11");
+  await page.getByTestId("deptrow-11").click();
+  await page.getByTestId("department-validate").click();
+  await page.getByTestId("preferences-submit").click();
   await expect
     .poll(async () => (await apiCall<{ departments: string[] }>(cookie, "GET", "/me/settings")).data.departments)
     .toContain("11");
@@ -163,17 +172,18 @@ test("Moi : profil, aperçu public, notifications, public / privé, secteur, ray
     .toBe("public");
 
   // Rayon : un appui au milieu du curseur.
-  await reveal(page, "moi-sector");
-  const slider = page.getByRole("slider", { name: "Rayon des notifications" });
+  await openPreferences(page);
+  const slider = page.getByRole("slider", { name: "Distance habituelle" });
   const box = await slider.boundingBox();
   if (!box) throw new Error("curseur introuvable");
   await page.mouse.click(box.x + box.width * 0.5, box.y + 20);
+  await shot(page, "05-moi-secteur-sable");
+  await page.getByTestId("preferences-submit").click();
   await expect
     .poll(async () => (await apiCall<{ radiusKm: number }>(cookie, "GET", "/me/settings")).data.radiusKm, {
       timeout: 15_000,
     })
-    .toBeGreaterThan(100);
-  await shot(page, "05-moi-secteur-sable");
+    .toBeGreaterThan(90);
 
   // Sécurité : appareils (cet appareil), secret du QR, mot de passe, double authentification.
   await reveal(page, "moi-security");
@@ -240,7 +250,7 @@ test("Moi : profil, aperçu public, notifications, public / privé, secteur, ray
   await shot(page2, "02-moi-notifications-beton");
   await reveal(page2, "visibility-public");
   await shot(page2, "04-moi-public-prive-beton");
-  await reveal(page2, "moi-sector");
+  await openPreferences(page2);
   await shot(page2, "05-moi-secteur-beton");
   await reveal(page2, "moi-security");
   await shot(page2, "06-moi-securite-beton");

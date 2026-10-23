@@ -1,5 +1,5 @@
 {
-  "id": "f0109fae-416b-498b-97a4-a56ad66983df",
+  "id": "b2f8bbd6-96a1-425d-b526-4b7474a7e48e",
   "prevId": "f0efa041-9e63-4312-a00b-2d42c16b5139",
   "version": "7",
   "dialect": "postgresql",
@@ -9207,7 +9207,7 @@
           "name": "radius_km",
           "type": "smallint",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "default": 50
         },
         "preferred_formats": {

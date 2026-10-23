@@ -31,7 +31,10 @@ test("site : Tes préférences enregistrées sur le compte", async ({ page }) =>
   await expect(page.getByRole("heading", { name: /Tes préférences/i })).toBeVisible({ timeout: 30_000 });
   await page.getByLabel("Rassemblement").check();
   await page.getByLabel("Nocturne").check();
-  await page.getByLabel(/Nouvelles des structures suivies/).uncheck();
+  await page.getByLabel(/Me prévenir des nouveaux événements dans mon coin/).uncheck();
+  // « Partout en France » : plus de limite de distance (null), le curseur est grisé.
+  await page.getByLabel("Partout en France").check();
+  await expect(page.getByTestId("pref-radius")).toContainText("Partout");
   const audit = await auditPage(page);
   expect(audit.greens).toEqual([]);
   expect(audit.horizontalScroll).toBe(false);
@@ -41,12 +44,13 @@ test("site : Tes préférences enregistrées sur le compte", async ({ page }) =>
       (await apiCall<{ eventFormats: string[] }>(cookie, "GET", "/me/preferences")).data.eventFormats.sort(),
     )
     .toEqual(["gathering", "night"]);
-  const after = await apiCall<{ notifications: Record<string, boolean>; seenAt: string | null }>(
+  const after = await apiCall<{ newEvents: boolean; radiusKm: number | null; seenAt: string | null }>(
     cookie,
     "GET",
     "/me/preferences",
   );
-  expect(after.data.notifications.followedNews).toBe(false);
+  expect(after.data.newEvents).toBe(false);
+  expect(after.data.radiusKm).toBeNull();
   expect(after.data.seenAt).not.toBeNull();
 });
 
@@ -83,7 +87,7 @@ for (const [name, viewport] of [
 }
 
 // Sans JavaScript, la liste des départements est une vraie liste de cases (`departmentBox`) : ce qu'on coche, y compris
-// « tout décocher », est enregistré tel quel par /app/preferences ; la distance du compte (300 km) n'est pas réécrite.
+// « tout décocher », est enregistré tel quel par /app/preferences ; la distance du compte (150 km) n'est pas réécrite.
 test.describe("site sans JavaScript : Tes préférences", () => {
   test.use({ javaScriptEnabled: false });
 
@@ -94,12 +98,12 @@ test.describe("site sans JavaScript : Tes préférences", () => {
     const s = unique();
     const email = `snojs_${s}@e2e.orasso.test`;
     const cookie = await signUpApi(`Snojs_${s}`.slice(0, 24), email);
-    // Le compte a une distance plus large que le curseur (jusqu'à 300 km, comptes anciens) : posée par l'API des réglages.
-    await apiCall(cookie, "PATCH", "/me/settings", { radiusKm: 300 });
+    // Le compte a une distance réglée : posée par l'API des réglages (le formulaire sans JavaScript ne la réécrit pas).
+    await apiCall(cookie, "PATCH", "/me/settings", { radiusKm: 150 });
     await page.setViewportSize(MOBILE);
     await loginInBrowser(page, email, undefined, "/app/preferences");
     await expect(page.getByRole("heading", { name: /Tes préférences/i })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId("pref-radius")).toContainText("300");
+    await expect(page.getByTestId("pref-radius")).toContainText("150");
 
     // Les cases sont dans un <details> : on l'ouvre, on coche le 34 et on décoche le 66.
     await page.getByTestId("department-details").locator("summary").click();
@@ -109,7 +113,7 @@ test.describe("site sans JavaScript : Tes préférences", () => {
     await expect(page.getByTestId("preferences-saved")).toBeVisible({ timeout: 30_000 });
     const one = await apiCall<{ departments: string[]; radiusKm: number }>(cookie, "GET", "/me/preferences");
     expect(one.data.departments).toEqual(["34"]);
-    expect(one.data.radiusKm).toBe(300);
+    expect(one.data.radiusKm).toBe(150);
 
     // Tout décocher : liste vide enregistrée.
     await page.getByTestId("department-details").locator("summary").click();
@@ -118,6 +122,6 @@ test.describe("site sans JavaScript : Tes préférences", () => {
     await expect(page.getByTestId("preferences-saved")).toBeVisible({ timeout: 30_000 });
     const none = await apiCall<{ departments: string[]; radiusKm: number }>(cookie, "GET", "/me/preferences");
     expect(none.data.departments).toEqual([]);
-    expect(none.data.radiusKm).toBe(300);
+    expect(none.data.radiusKm).toBe(150);
   });
 });

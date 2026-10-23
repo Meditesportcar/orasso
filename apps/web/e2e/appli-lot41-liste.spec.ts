@@ -104,22 +104,23 @@ test("profil pro sans fiche : carte « Termine ta fiche » (Accueil, Mon profil)
   await expect(page.getByRole("tab", { name: "Passeport" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("pending-pro").filter({ visible: true })).toContainText("Termine ta fiche");
 
-  // Mon profil : la même carte ; le secteur (deux touchers rapides, le dernier gagne, rien de faux ensuite).
-  await page.goto("/reglages/preferences");
+  // Tes préférences : le coin (trois touchers rapides dans la feuille, le dernier gagne), puis « Enregistrer ».
+  await page.goto("/preferences");
   await skipOpening(page);
-  await expect(page.getByTestId("moi-sector")).toBeVisible({ timeout: 30_000 });
-  await page.getByTestId("department-list-toggle").click();
-  await page.getByTestId("deptrow-11").click();
-  await page.getByTestId("deptrow-34").click();
-  await page.getByTestId("deptrow-11").click();
+  await expect(page.getByTestId("pref-departments")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("pref-departments-edit").click();
+  for (const code of ["11", "34", "11"]) {
+    await page.getByTestId("department-search").fill(code);
+    await page.getByTestId(`deptrow-${code}`).click();
+  }
+  await page.getByTestId("department-validate").click();
+  await page.getByTestId("preferences-submit").click();
   const cookie = await login(email);
   await expect
     .poll(async () => (await apiCall<{ departments: string[] }>(cookie, "GET", "/me/settings")).data.departments, {
       timeout: 30_000,
     })
     .toEqual(["66", "34"]);
-  await expect(page.getByTestId("deptrow-34")).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByTestId("deptrow-11")).toHaveAttribute("aria-checked", "false");
 
   await page.goto("/");
   await skipOpening(page);

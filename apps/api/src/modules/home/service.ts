@@ -76,8 +76,9 @@ export const homeService = {
 
     // Rayon : celui du profil ; `?radiusKm=` ne sert qu'à cet affichage (une lecture n'écrit pas : le curseur enregistre par
     // `PATCH /me/settings`, et un compte suspendu, en lecture seule, voit quand même le rayon qu'il règle).
-    let radiusKm: number = q.radiusKm ?? v.profile.radiusKm;
-    radiusKm = Math.min(HOME_RADIUS.max, Math.max(HOME_RADIUS.min, radiusKm));
+    // `null` (profil « Partout en France », sans `?radiusKm=`) = pas de limite de distance, toujours depuis le coin.
+    let radiusKm: number | null = q.radiusKm ?? v.profile.radiusKm;
+    if (radiusKm !== null) radiusKm = Math.min(HOME_RADIUS.max, Math.max(HOME_RADIUS.min, radiusKm));
 
     const widgets = normalizeHomeWidgets(v.profile.homeWidgets);
     const shown = new Set<HomeWidgetId>(visibleHomeWidgets(widgets));
@@ -180,7 +181,7 @@ export const homeService = {
   async nearby(
     v: Viewer,
     q: HomeQuery,
-    radiusKm: number,
+    radiusKm: number | null,
     located: ReturnType<typeof resolvePosition>,
     upcomingPromise: Promise<MyApplication[]>,
   ): Promise<NonNullable<HomeData["nearby"]>> {
@@ -190,7 +191,7 @@ export const homeService = {
       limit: Math.min(20, HOME_NEARBY_LIMIT + mine.size),
       scope: "upcoming",
       sort: "affinity",
-      radiusKm,
+      ...(radiusKm === null ? {} : { radiusKm }),
       lat: q.lat,
       lng: q.lng,
     };

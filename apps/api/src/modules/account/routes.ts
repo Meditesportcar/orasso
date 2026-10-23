@@ -33,8 +33,8 @@ export const accountRoutes = new Hono<AppEnv>()
     const v = await requireUser(c);
     return c.json(await accountService.updateSettings(v, await body(c, accountSettingsSchema)));
   })
-  // Lot M6 : « Tes préférences » (types d'événements, distance, départements, notifications), lues par l'Explorer.
-  .get("/me/preferences", async (c) => c.json(preferencesService.get(await requireUser(c))))
+  // Lot M6 : « Tes préférences » (ton coin, distance, types d'événements, centres d'intérêt, interrupteur), lues par l'Explorer.
+  .get("/me/preferences", async (c) => c.json(await preferencesService.get(await requireUser(c))))
   .patch("/me/preferences", async (c) => {
     const v = await requireUser(c);
     return c.json(await preferencesService.update(v, await body(c, preferencesUpdateSchema)));

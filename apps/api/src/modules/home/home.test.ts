@@ -332,7 +332,11 @@ describe("GET /me/home : agrégation", () => {
     expect((await req(u, "GET", "/me/home")).json.nearby.radiusKm).toBe(50);
     expect((await req(u, "PATCH", "/me/settings", { radiusKm: 150 })).status).toBe(200);
     expect((await req(u, "GET", "/me/home")).json.nearby.radiusKm).toBe(150);
-    const wide = await req(u, "GET", "/me/home?radiusKm=300");
+    // Au-delà de 200 km : refusé. « Partout en France » (`null`) : plus de limite, toujours depuis le coin enregistré.
+    expect((await req(u, "PATCH", "/me/settings", { radiusKm: 250 })).status).toBe(400);
+    expect((await req(u, "PATCH", "/me/settings", { radiusKm: null })).status).toBe(200);
+    const wide = await req(u, "GET", "/me/home");
+    expect(wide.json.nearby).toMatchObject({ radiusKm: null, source: "sector" });
     expect(titles(wide.json)).toContain("Toulouse");
 
     // Candidat à Canet : il ne lui est plus suggéré.
@@ -354,7 +358,7 @@ describe("GET /me/home : agrégation", () => {
   it("rayon hors bornes : 400 ; compte suspendu : le rayon sert à l'affichage, PATCH refusé", async () => {
     const u = await user("Rayon_Home");
     expect((await req(u, "GET", "/me/home?radiusKm=5")).status).toBe(400);
-    expect((await req(u, "GET", "/me/home?radiusKm=301")).status).toBe(400);
+    expect((await req(u, "GET", "/me/home?radiusKm=201")).status).toBe(400);
     expect((await req(u, "GET", "/me/home?radiusKm=abc")).status).toBe(400);
     await db
       .update(profiles)

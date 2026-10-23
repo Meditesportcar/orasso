@@ -6,7 +6,7 @@
 // (Garage seulement), l'aide « Appui long sur le logo », « Devenir staff » (= ligne « Où je suis staff » sans mission) et
 // le bouton « Mon profil de base » (= la ligne de casquette).
 import { initialsOf, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { gradeLabels, passportScreenTexts } from "@orasso/shared";
+import { gradeLabels, passportScreenTexts, preferencesLabels } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -53,13 +53,7 @@ export function ProfilScreen() {
   const crew = crews.data?.[0];
   const lastStamps = (passport.data?.pages.flatMap((p) => p.stamps) ?? []).slice(-3);
   const theme = preference === "sable" ? "Sable" : preference === "auto" ? "Automatique" : "Béton";
-  const preferencesCaption = [
-    `Thème ${theme}`,
-    department ? `${department} favori` : null,
-    profile ? `rayon ${profile.radiusKm} km` : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  const preferencesCaption = `Thème ${theme}`;
 
   return (
     <TabScreen
@@ -203,8 +197,15 @@ export function ProfilScreen() {
           testID="reglage-notifications"
         />
         <SettingTile
+          icon="explore"
+          title={preferencesLabels.settingsRow}
+          caption={department ? `${department} favori, distance, types` : "Ton coin, distance, types"}
+          onPress={() => router.push("/preferences")}
+          testID="reglage-tes-preferences-tuile"
+        />
+        <SettingTile
           icon="gear"
-          title="Préférences"
+          title="Apparence"
           caption={preferencesCaption}
           onPress={() => router.push("/reglages/preferences")}
           testID="reglage-preferences"

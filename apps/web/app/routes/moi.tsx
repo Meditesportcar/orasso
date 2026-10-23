@@ -1,11 +1,7 @@
 import { Button, CheckboxField, Chip, Icon, TextField } from "@orasso/design-system/web";
 import {
   type AccountSettings,
-  departments as allDepartments,
-  arriveeLabels,
-  type Category,
   gradeLabels,
-  MAX_DEPARTMENTS,
   moderationLabels,
   mutableTypesByFamily,
   type NotificationFamily,
@@ -23,27 +19,26 @@ import {
 } from "@orasso/shared";
 import { data, Form, redirect, useNavigation } from "react-router";
 
-import { DepartmentsField } from "../components/ArriveeFields";
 import { TextAreaField } from "../components/Fields";
+import { ThemeSwitch } from "../components/SiteChrome";
 import { api, apiOrThrow, requireMe, withCookies } from "../lib/api.server";
-import { readDepartmentsField } from "../lib/departments";
 import type { Route } from "./+types/moi";
 
 // Mon compte sur le site (lot 15, ARCHITECTURE-SUITE § 1.6) : profil, aperçu public, notifications par type, compte
-// public ou privé, secteur, centres d'intérêt, rayon, sécurité, suppression du compte.
+// public ou privé, apparence (thème ; le coin, la distance et les centres d'intérêt sont dans « Tes préférences »,
+// `/app/preferences`), sécurité, suppression du compte.
 export function meta() {
   return [{ title: "Mon compte · Orasso" }, { name: "robots", content: "noindex" }];
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
   const me = await requireMe(request);
-  const [settings, preview, categories] = await Promise.all([
+  const [settings, preview] = await Promise.all([
     apiOrThrow<AccountSettings>(request, "/me/settings"),
     apiOrThrow<PublicPreview>(request, "/me/public-preview"),
-    apiOrThrow<Category[]>(request, "/vehicle-reference/categories"),
   ]);
   const url = new URL(request.url);
-  return { me, settings, preview, categories, saved: url.searchParams.get("fait") };
+  return { me, settings, preview, saved: url.searchParams.get("fait") };
 }
 
 const MUTABLE = mutableTypesByFamily();
@@ -61,14 +56,6 @@ export async function action({ request }: Route.ActionArgs) {
     return redirect("/app/moi?fait=profil");
   }
   if (intent === "settings") {
-    const depts = readDepartmentsField(form);
-    const unknown = depts.filter((d) => !(allDepartments as readonly string[]).includes(d));
-    if (unknown.length) {
-      return data({ scope: "settings", error: `Département inconnu : ${unknown.join(", ")}` }, { status: 400 });
-    }
-    if (new Set(depts).size > MAX_DEPARTMENTS) {
-      return data({ scope: "settings", error: arriveeLabels.errors.tooMany }, { status: 400 });
-    }
     const prefs = Object.fromEntries(
       (["application", "event", "social", "grade"] as const).map((f) => [f, form.get(`fam_${f}`) === "on"]),
     ) as Record<"application" | "event" | "social" | "grade", boolean>;
@@ -79,9 +66,6 @@ export async function action({ request }: Route.ActionArgs) {
         notificationPrefs: prefs,
         mutedTypes,
         visibility: String(form.get("visibility") ?? "public"),
-        departments: [...new Set(depts)],
-        radiusKm: Number(form.get("radiusKm") ?? 50),
-        interests: form.getAll("interests").map(String),
       },
     });
     if (!res.ok) return data({ scope: "settings", error: res.error.message }, { status: res.status });
@@ -127,7 +111,7 @@ const SAVED: Record<string, string> = {
 };
 
 export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
-  const { me, settings, preview, categories, saved } = loaderData;
+  const { me, settings, preview, saved } = loaderData;
   const busy = useNavigation().state !== "idle";
   const err = (scope: string) => (actionData?.scope === scope ? actionData.error : null);
   // Mes casquettes (lot C5, artefact `s-profil`) : le seul endroit du site d'où l'on passe à une autre casquette.
@@ -318,45 +302,15 @@ export default function Moi({ loaderData, actionData }: Route.ComponentProps) {
           <p className="o-t-caption s-muted">{profileVisibilityAlways}</p>
         </section>
 
-        <section className="s-section" aria-labelledby="secteur-titre">
-          <h2 id="secteur-titre" className="s-h2">
-            Secteur et centres d'intérêt
+        <section className="s-section" aria-labelledby="apparence-titre" data-testid="appearance">
+          <h2 id="apparence-titre" className="s-h2">
+            Apparence
           </h2>
+          <ThemeSwitch />
           <Button href="/app/preferences" variant="secondary" icon="next" data-testid="preferences-link">
             {preferencesLabels.settingsRow}
           </Button>
           <p className="o-t-caption s-muted">{preferencesLabels.settingsRowCaption}</p>
-          <DepartmentsField initial={settings.departments} />
-          <label className="o-field">
-            <span className="o-field__label o-t-label">Rayon des notifications</span>
-            <input
-              type="range"
-              className="s-range"
-              name="radiusKm"
-              min={10}
-              max={300}
-              step={10}
-              defaultValue={settings.radiusKm}
-              aria-describedby="rayon-aide"
-            />
-            <span className="o-field__help o-t-caption" id="rayon-aide">
-              {settings.radiusKm} km autour du centre de ton premier département (10 à 300 km)
-            </span>
-          </label>
-          <fieldset className="s-fieldset">
-            <legend className="s-label o-t-label">Centres d'intérêt</legend>
-            <div className="s-checklist">
-              {categories.map((c) => (
-                <CheckboxField
-                  key={c.id}
-                  name="interests"
-                  value={c.id}
-                  label={c.label}
-                  defaultChecked={settings.interests.includes(c.id)}
-                />
-              ))}
-            </div>
-          </fieldset>
         </section>
         {err("settings") && (
           <p className="s-error" role="alert">

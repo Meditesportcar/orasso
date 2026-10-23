@@ -93,14 +93,15 @@ export function NearbyWidget({
 }) {
   const { t } = useTheme();
   const router = useRouter();
-  const [shown, setShown] = useState<number>(nearby.radiusKm);
-  useEffect(() => setShown(nearby.radiusKm), [nearby.radiusKm]);
+  // `radiusKm: null` = « Partout en France » (réglé dans « Tes préférences ») : le curseur part de sa butée.
+  const [shown, setShown] = useState<number>(nearby.radiusKm ?? HOME_RADIUS.max);
+  useEffect(() => setShown(nearby.radiusKm ?? HOME_RADIUS.max), [nearby.radiusKm]);
   return (
     <>
       <SectionTitle>{homeWidgetTitles.nearby}</SectionTitle>
       <Plate style={styles.stack} testID="widget-nearby">
         <Text variant="meta" color={t.color.plateMuted} testID="nearby-radius">
-          {homeLabels.radius(shown)}
+          {homeLabels.radius(nearby.radiusKm === null && shown === HOME_RADIUS.max ? null : shown)}
         </Text>
         <Slider
           value={shown}
@@ -139,7 +140,9 @@ export function NearbyWidget({
           ))
         ) : (
           <Text variant="body" color={t.color.plateMuted}>
-            {nearby.source === null ? homeLabels.nearbyNoPlace : homeLabels.nearbyEmpty(shown)}
+            {nearby.source === null
+              ? homeLabels.nearbyNoPlace
+              : homeLabels.nearbyEmpty(nearby.radiusKm === null ? null : shown)}
           </Text>
         )}
         {position.position ? (

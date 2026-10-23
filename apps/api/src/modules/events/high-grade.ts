@@ -51,7 +51,8 @@ export const highGradePreview = {
         );
       const targets = candidates.filter((c) => {
         const home = profilePosition(c.departments);
-        return home !== null && distanceKm(home, position) <= c.radiusKm;
+        // Rayon null = partout en France (pas de limite) ; sinon la distance se mesure depuis le coin enregistré (départements), jamais du GPS.
+        return c.radiusKm === null || (home !== null && distanceKm(home, position) <= c.radiusKm);
       });
       if (!targets.length) return 0;
       await notificationsService.notifyMany(

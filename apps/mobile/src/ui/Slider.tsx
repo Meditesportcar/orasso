@@ -1,4 +1,4 @@
-// Curseur à pas (rayon des notifications, 10 à 300 km). Ni gestes natifs ni bibliothèque : un PanResponder suffit, et il
+// Curseur à pas (distance habituelle, 10 à 200 km). Ni gestes natifs ni bibliothèque : un PanResponder suffit, et il
 // marche pareil sur téléphone et dans le navigateur (recette). Accessible : « réglable », +/− au lecteur d'écran.
 // Posé sur une plaque graphite (jetons plate-*).
 import { Text, tokens, useTheme } from "@orasso/design-system/native";

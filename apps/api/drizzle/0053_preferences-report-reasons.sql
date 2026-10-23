@@ -7,5 +7,7 @@ ALTER TYPE "public"."report_reason" ADD VALUE 'copyright';--> statement-breakpoi
 ALTER TYPE "public"."report_reason" ADD VALUE 'fake_pro';--> statement-breakpoint
 ALTER TYPE "public"."report_reason" ADD VALUE 'discount_not_applied';--> statement-breakpoint
 ALTER TYPE "public"."report_reason" ADD VALUE 'fake_reviews';--> statement-breakpoint
+ALTER TABLE "profiles" ALTER COLUMN "radius_km" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "profiles" ADD COLUMN "preferred_formats" text[] DEFAULT '{}'::text[] NOT NULL;--> statement-breakpoint
-ALTER TABLE "profiles" ADD COLUMN "preferences_seen_at" timestamp with time zone;
+ALTER TABLE "profiles" ADD COLUMN "preferences_seen_at" timestamp with time zone;--> statement-breakpoint
+UPDATE "profiles" SET "radius_km" = NULL WHERE "radius_km" > 200;

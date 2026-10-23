@@ -3,7 +3,7 @@
 // départements) et pour la pastille « Filtres » (`preferenceFilterCount`). La fin de l'ajout du premier véhicule (lot M1)
 // passe par `routeAfterFirstVehicle` : la route `/preferences?premiere=1` si l'étape n'a jamais été vue, sinon
 // l'Explorer.
-import { type Preferences, type PreferencesUpdate, shouldAskPreferences } from "@orasso/shared";
+import { isEverywhere, type Preferences, type PreferencesUpdate, shouldAskPreferences } from "@orasso/shared";
 import { useCallback } from "react";
 
 import { api } from "./api";
@@ -14,7 +14,11 @@ export const PREFERENCES_ROUTE = "/preferences";
 export const PREFERENCES_FIRST_ROUTE = "/preferences?premiere=1";
 export const EXPLORER_ROUTE = "/(tabs)/explorer";
 
-/** Lecture des préférences (et `save` : enregistre puis met à jour la copie affichée). */
+/**
+ * Lecture des préférences (et `save` : enregistre puis met à jour la copie affichée). `everywhere` = « Partout en
+ * France » (distance `null`) : la valeur que lit le sélecteur « Autour de… » de l'Explorer (lot M4), qui ne modifie
+ * jamais les préférences.
+ */
 export function usePreferences() {
   const query = useApi(() => api.preferences(), [], { cacheKey: "preferences" });
   const { setData } = query;
@@ -26,7 +30,15 @@ export function usePreferences() {
     },
     [setData],
   );
-  return { preferences: query.data, loading: query.loading, error: query.error, reload: query.reload, save };
+  const everywhere = isEverywhere(query.data);
+  return {
+    preferences: query.data,
+    everywhere,
+    loading: query.loading,
+    error: query.error,
+    reload: query.reload,
+    save,
+  };
 }
 
 /**

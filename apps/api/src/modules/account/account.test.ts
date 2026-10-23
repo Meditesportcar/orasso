@@ -438,6 +438,34 @@ describe("« près de chez toi » : types d'événements choisis (lot M6)", () =
   });
 });
 
+describe("« près de chez toi » : distance habituelle", () => {
+  it("« Partout en France » (rayon null) prévient aussi loin du coin ; sinon la distance du coin décide", async () => {
+    const ref = await seedReference();
+    const orga = await signUp("Orga_Rayon");
+    const s = await createStructure(orga.id);
+    const partout = await signUp("Partout_59");
+    const limite = await signUp("Limite_59");
+    for (const [u, radiusKm] of [
+      [partout, null],
+      [limite, 100],
+    ] as const) {
+      await db
+        .update(profiles)
+        .set({ departments: ["59"], radiusKm })
+        .where(eq(profiles.userId, u.id));
+      await db.insert(profileInterests).values({ userId: u.id, categoryId: ref.jdm.id });
+    }
+    const e = await createEvent(s.id, {
+      lat: 42.69,
+      lng: 2.9,
+      criteria: { categoryIds: [ref.jdm.id], makeIds: [], countries: [], text: null },
+    });
+    expect(await nearbyService.notifyNearby(e.id)).toBe(1);
+    const sent = await db.query.notifications.findMany({ where: eq(notifications.type, "event_nearby_interest") });
+    expect(sent.map((n) => n.userId)).toEqual([partout.id]);
+  });
+});
+
 describe("« près de chez toi » : exclusions", () => {
   it("bannis, structure suspendue ou supprimée, événement passé : personne", async () => {
     const ref = await seedReference();
