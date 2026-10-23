@@ -1,5 +1,8 @@
 // Créneaux d'arrivée de la fiche v2 (lot 44, `s-event` ; données du lot 47) : deux plaques distinctes, exposants (avec
 // véhicule, sur l'aplat de l'affiche) et public, l'horaire en grands chiffres, Strict ou Conseillé, la note.
+// Lot M4 (correction de Damien) : le créneau strict des exposants est privé (il vit dans « Ta place » et la feuille de
+// candidature), et aucun horaire « conseillé » n'est affiché : la fiche publique ne garde que l'arrivée stricte du
+// public et la précision pour l'entrée.
 import { Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
 import { type ArrivalSlot, type Arrivals, eventPageLabels as L } from "@orasso/shared";
 import { StyleSheet, View } from "react-native";
@@ -50,14 +53,16 @@ function Slot({ title, slot, mine }: { title: string; slot: ArrivalSlot; mine: b
 /** `entranceNote` : la précision pour l'entrée saisie dans l'assistant (lot 53), sous les créneaux. */
 export function ArrivalSlots({ arrivals, entranceNote }: { arrivals: Arrivals; entranceNote?: string | null }) {
   const { t } = useTheme();
-  if (!arrivals.exhibitors && !arrivals.public && !entranceNote) return null;
+  const pub = arrivals.public?.strict ? arrivals.public : null;
+  if (!pub && !entranceNote) return null;
   return (
     <View style={styles.wrap} testID="arrival-slots">
       <SecHead title={L.arrivals} />
-      <View style={styles.row}>
-        {arrivals.exhibitors ? <Slot title={L.arrivalExhibitors} slot={arrivals.exhibitors} mine /> : null}
-        {arrivals.public ? <Slot title={L.arrivalPublic} slot={arrivals.public} mine={false} /> : null}
-      </View>
+      {pub ? (
+        <View style={styles.row}>
+          <Slot title={L.arrivalPublic} slot={pub} mine={false} />
+        </View>
+      ) : null}
       {entranceNote ? (
         <View style={[styles.entrance, { backgroundColor: t.color.surface }]} testID="arrival-entrance">
           <Text variant="label" color={t.color.inkMuted}>
