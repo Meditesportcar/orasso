@@ -1,4 +1,12 @@
-import { Button, Chip, Plate, SelectField, TextField } from "@orasso/design-system/web";
+import {
+  Button,
+  Chip,
+  departmentChoices,
+  departmentLabel,
+  Plate,
+  SelectField,
+  TextField,
+} from "@orasso/design-system/web";
 import {
   type Category,
   type CrewCard,
@@ -94,8 +102,20 @@ export async function loader({ request }: Route.LoaderArgs) {
       : null;
   const radius = RADII.includes(Number(get("rayon"))) ? Number(get("rayon")) : null;
   const cursor = get("suite");
+  // Lot M4, tour 2 (décision de Damien du 23/10) : « Autour de… » comme l'appli. `autour` : `coin` (départements du
+  // compte), `moi` (la position de l'appareil, dans l'adresse seulement) ou un département (« Ailleurs… »). Sans
+  // choix : la position si elle est là, sinon le coin. Temporaire : rien n'est enregistré.
+  const autour = get("autour");
+  const aroundDept = (departments as readonly string[]).includes(autour) ? autour : null;
+  const around: "mine" | "me" | "dept" = aroundDept
+    ? "dept"
+    : autour === "coin"
+      ? "mine"
+      : position && (autour === "moi" || autour === "")
+        ? "me"
+        : "mine";
 
-  const base = { segment, q, vue, position, radius };
+  const base = { segment, q, vue, position, radius, around, aroundDept, wantedMe: autour === "moi" && !position };
   const empty = {
     results: null as SearchResults | null,
     events: null as Page<EventCard> | null,
@@ -140,11 +160,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     const to = dayBound(filters.to, true);
     if (from) params.set("from", from);
     if (to) params.set("to", to);
+    // Tour 2 : la distance de l'Explorer, ou « Partout en France » (aucun rayon) ; le point de départ choisi.
     if (radius) params.set("radiusKm", String(radius));
-    if (position) {
+    else params.set("everywhere", "1");
+    if (position && around === "me") {
       params.set("lat", String(position.lat));
       params.set("lng", String(position.lng));
     }
+    if (aroundDept) params.set("around", aroundDept);
     if (cursor) params.set("cursor", cursor);
     const [events, categories] = await Promise.all([
       api<Page<EventCard>>(request, `/events?${params}`),
@@ -237,6 +260,7 @@ function href(params: Record<string, string | number | null | undefined>): strin
 export default function Explorer({ loaderData, actionData }: Route.ComponentProps) {
   const { segment, q, vue, position, radius, filters, results, events, pros, people, categories, failed, crews } =
     loaderData;
+  const { around, aroundDept, wantedMe } = loaderData;
   const busy = useNavigation().state !== "idle";
   const f = filters as Record<string, string>;
   const segments: { id: Segment; label: string }[] = [
@@ -246,7 +270,11 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
     { id: "personnes", label: explorerLabels.segmentPeople },
   ];
   // Réglages communs conservés d'un changement de vue à l'autre.
-  const keep = { segment, q, ...f, rayon: radius, lat: position?.lat, lng: position?.lng };
+  const autour = around === "dept" ? aroundDept : around === "me" ? "moi" : "coin";
+  const keep = { segment, q, ...f, rayon: radius, lat: position?.lat, lng: position?.lng, autour };
+  // Tour 2 : « Revenir à mon coin » (point de départ et distance remis, position oubliée).
+  const home = href({ ...keep, autour: "coin", rayon: null, lat: null, lng: null, suite: null });
+  const away = around !== "mine" || radius !== null;
   const withoutPosition = href({ ...keep, lat: null, lng: null, suite: null });
   const viewLinks = (
     <nav className="s-row" aria-label="Affichage">
@@ -372,13 +400,28 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
                   { value: "places", label: explorerV2Labels.sorts.seats?.label ?? "Places restantes" },
                 ]}
               />
+              {/* Tour 2 : « Autour de… » et la distance de l'Explorer, comme l'appli. */}
               <SelectField
-                label={explorerLabels.filterRadius}
+                label={explorerV2Labels.aroundButton}
+                name="autour"
+                defaultValue={autour ?? "coin"}
+                data-testid="around-select"
+                options={[
+                  { value: "coin", label: explorerV2Labels.aroundMine },
+                  { value: "moi", label: explorerV2Labels.aroundMe },
+                  ...departmentChoices.map((d) => ({
+                    value: d.code,
+                    label: `${explorerV2Labels.aroundElsewhere} ${departmentLabel(d)}`,
+                  })),
+                ]}
+              />
+              <SelectField
+                label={explorerV2Labels.aroundDistance}
                 name="rayon"
                 defaultValue={radius ? String(radius) : ""}
                 options={[
-                  { value: "", label: explorerLabels.filterAll },
-                  ...RADII.map((r) => ({ value: String(r), label: `${r} km` })),
+                  { value: "", label: explorerV2Labels.everywhere },
+                  ...RADII.map((r) => ({ value: String(r), label: explorerV2Labels.aroundKm(r) })),
                 ]}
               />
               <Button type="submit" variant="secondary" icon="search">
@@ -391,6 +434,23 @@ export default function Explorer({ loaderData, actionData }: Route.ComponentProp
             <UsePosition formId="explorer-form" />
           </Plate>
           {positionNote}
+          <p className="o-t-caption s-muted" data-testid="around-line">
+            {around === "dept" && aroundDept
+              ? explorerV2Labels.fromDeptElsewhere(aroundDept)
+              : around === "me"
+                ? explorerV2Labels.fromPosition
+                : explorerV2Labels.aroundMine}
+            {radius ? ` · ${explorerV2Labels.withinKm(radius)}` : ` · ${explorerV2Labels.everywhereLine}`}
+            {wantedMe ? ` · ${explorerLabels.usePosition}` : ""}
+            {away ? (
+              <>
+                {" · "}
+                <a href={home} data-testid="around-back">
+                  {explorerV2Labels.backHome}
+                </a>
+              </>
+            ) : null}
+          </p>
           {viewLinks}
           {events && events.items.length === 0 && !failed ? (
             <p className="s-notice" data-testid="events-empty">
