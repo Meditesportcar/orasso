@@ -1,6 +1,22 @@
 # Avancement
 
-À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 22/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+À lire au début de chaque session, à mettre à jour à la fin. Mis à jour le 23/10/2026. L'historique détaillé lot par lot est dans `ARCHITECTURE.md` (§ 7, paragraphes « État après le lot NN »), dans `docs/JOURNAL-DES-CHOIX.md` et dans le relais du coordinateur (`C:\Users\Dams\.claude\relais\orasso\JOURNAL.md`, plan du chantier : `PLAN-DA-V2.md`, conception : `ARCHITECTURE-DA-V2.md`).
+
+## État au 23/10/2026 : mise au point « Exposant » en ligne (lots M1 à M7)
+
+- **En ligne sur dev.orasso.fr** : `main` = `integration` = **`95b2ee23`** (poussé). Migrations jusqu'à `0055_message-about-event` (0052 plaques, 0053 clé d'envoi et tout-terrain, 0054 préférences et motifs de signalement, 0055 « À propos de » des messages).
+- **APK** : `Orasso APK/Orasso-2026-10-23-e24c4d20-mise-au-point-exposant.apk` sur le Drive ; installé sur le Xiaomi de Damien (il démarre, aucun plantage). Même code applicatif que `95b2ee23` (les commits suivants ne changent que des recettes).
+- **Ce que contient la mise au point** (retours de Damien sur la partie Exposant, maquettes validées le 23/10, relais `validation-maquettes-2026-10-23.md`) :
+  - M1 : ajout de véhicule refait, avec photos au carré, étape Plaque sûre (refus par l'API de toute photo sans décision sur la plaque), motorisation, puissance et poids en saisie libre (décision de Damien : pas de catalogue), nuancier, 4x4 pour les tout-terrain.
+  - M2 : plaque à forme unique, floutage sûr et pré-remplissage.
+  - M3 : fluidité. Sur le Xiaomi, l'ouverture d'une fiche passe de 6,4 s à 1,2 s, avec cache par compte.
+  - M4 : Explorer (« Autour de… », préférences), fiche avec la bande organisateur fixe et « Ta place », horaire exposant privé, Mon QR épuré (sans logo O pour l'instant).
+  - M5 : Accueil, Garage en mini-fiche, Profil, Aide.
+  - M6 : « Ton coin », « Tes préférences » (seule page de réglage de l'exploration), affiche à partager, bandeau d'annonces unique, signalement par type, notifications push liées au compte et à la session.
+  - M7 : deux modes d'affichage, navigation (bande ORASSO) ou fiche (en-tête avec ✕).
+- **Recettes** : la série complète de l'appli se fait sur la **version web compilée** (`node scripts/appli-compilee.mjs`, voir plus bas), 23 % plus rapide et beaucoup moins gourmande en RAM que Metro. Grosse vérification du 23/10 : API 1002/1002, site vert, appli 168/173. Les échecs restants sont listés dans `lots/c7-finitions.md` du relais.
+- **Suite** : retours de Damien sur cet APK, puis finitions C7, recette finale (lot 58), puis analyse des autres profils (organisateur, staff, pro…) avec Damien.
+- **Reprendre** par le dernier « POINT DE REPRISE » du journal du relais (`~/.claude/relais/orasso/JOURNAL.md`).
 
 ## État au 22/10/2026 : v2 conforme à l'artefact, en ligne ; phase des retours de Damien
 
