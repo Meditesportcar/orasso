@@ -248,6 +248,10 @@ export function leavePush({ withSession }: { withSession: boolean }): Promise<vo
   setPushAccount(null);
   if (Platform.OS === "web") return Promise.resolve();
   return serial(async () => {
+    // Les notifications déjà reçues du compte (aperçus de messages compris) quittent le centre de notifications et
+    // l'écran verrouillé, et la pastille de l'icône repart à zéro (relecture du tour 4).
+    await Notifications.dismissAllNotificationsAsync().catch(() => undefined);
+    await Notifications.setBadgeCountAsync(0).catch(() => undefined);
     const pending = await readPending();
     // Le jeton se lit avant la désinscription du système (le redemander après réinscrirait l'appareil).
     const token = await knownToken();
