@@ -96,7 +96,7 @@ type Start = { dx: number; dy: number; scale: number };
 const styles = StyleSheet.create({
   // Pas de découpe : l'affiche part de sa place dans la liste, souvent sous l'en-tête.
   hero: { width: "100%" },
-  poster: { width: "100%", aspectRatio: 4 / 5, overflow: "hidden", zIndex: 2 },
+  poster: { width: "100%", aspectRatio: 4 / 5, overflow: "hidden" },
   // Avant la mesure (une image au plus) : l'affiche ne se montre pas en grand avant de partir de la liste.
   waiting: { opacity: 0 },
   fade: { position: "absolute", left: 0, right: 0, bottom: 0, height: "14%" },
