@@ -322,6 +322,9 @@ describe("tous les formats français et filet de sécurité (lot M2)", () => {
       [["AB", "123", "CD", "PORSCHE", "911", "TURBO"], 0, 3, "AB-123-CD"],
       [["GT3", "RS", "FT-340-NC"], 2, 3, "FT-340-NC"],
       [["W-623-AX", "350Z", "NISMO", "LE", "MANS", "24"], 0, 1, "W-623-AX"],
+      // Tour 5 : une lecture probable (« CD 66 911 ») ne relie pas la plaque au badge « 911 TURBO ».
+      [["AB", "123", "CD", "66", "911", "TURBO"], 0, 4, "AB-123-CD"],
+      [["F", "AB", "123", "CD", "66", "911", "TURBO"], 0, 5, "AB-123-CD"],
     ];
     for (const [texts, from, to, number] of cases) {
       let x = 50;
