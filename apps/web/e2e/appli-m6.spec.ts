@@ -323,3 +323,28 @@ test("tour 2 : les annonces en attente d'un compte ne s'affichent jamais devant 
     await page.waitForTimeout(1000);
   }
 });
+
+test("tour 3 : vérification de plaque interrompue par un changement de style, reprise au retour, partage débloqué", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const kenji = await login("kenji@orasso.local");
+  const vehicles = await apiCall<{ id: string; status: string }[]>(kenji, "GET", "/me/vehicles");
+  const vehicle = vehicles.data.find((v) => v.status === "active");
+  // Détection simulée lente (recette seulement) : aucune plaque, réponse après 4 s.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __orassoFakePlates: unknown; __orassoFakePlatesDelayMs: number };
+    w.__orassoFakePlates = [];
+    w.__orassoFakePlatesDelayMs = 4000;
+  });
+  await open(page);
+  await signIn(page, "kenji@orasso.local");
+  await go(page, `/vehicule/${vehicle?.id}/partager`);
+  await expect(page.getByTestId("share-plate-check")).toContainText("Vérification", { timeout: 60_000 });
+  await expect(page.getByTestId("share-story")).toBeDisabled();
+  // Changement de style pendant la vérification, puis retour sur Nuit avant la fin.
+  await page.getByText("Sable", { exact: true }).first().click();
+  await page.getByText("Nuit", { exact: true }).first().click();
+  await expect(page.getByTestId("share-plate-check")).toContainText("rien de lisible", { timeout: 60_000 });
+  await expect(page.getByTestId("share-story")).toBeEnabled();
+});

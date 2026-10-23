@@ -25,6 +25,7 @@ export * from "./plateNumber";
 export * from "./points";
 export * from "./poster";
 export * from "./pro";
+export * from "./pushRecipient";
 export * from "./quietHours";
 export * from "./recurrence";
 export * from "./registrationBlock";

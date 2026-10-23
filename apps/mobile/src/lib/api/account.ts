@@ -26,6 +26,9 @@ export const accountApi = {
     name?: string | null;
     appVersion?: string | null;
   }) => request<{ id: string }>("/api/me/devices", { method: "POST", body }),
+  /** Lot M6, tour 3 : retire le jeton push de cet appareil pour le compte connecté (déconnexion). */
+  unregisterDevice: (body: { expoPushToken: string }) =>
+    request<unknown>("/api/me/devices/unregister", { method: "POST", body }),
   notifications: (cursor?: string) =>
     request<Page<NotificationItem>>(`/api/me/notifications${qs({ limit: 30, cursor })}`),
   markNotificationsRead: () => request<unknown>("/api/me/notifications/read", { method: "POST", body: { all: true } }),

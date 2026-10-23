@@ -8,6 +8,7 @@ import {
   type NotificationType,
   notificationTypes,
   pushOnlyNotificationTypes,
+  pushRecipientId,
   shouldDeliver,
 } from "@orasso/shared";
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
@@ -270,7 +271,13 @@ async function deliverOne(n: NotificationRow) {
   if (tokens.length) {
     // Lot M6, tour 2 : l'identifiant et le type voyagent avec le push, pour que l'appli ouverte l'annonce dans son bandeau
     // avec la même clé que le temps réel (`notification-<id>`, jamais deux fois).
-    const data = { ...stripInternal(n.data), notificationId: n.id, notificationType: n.type };
+    // Tour 3 : `recipient` = identifiant opaque du compte ; l'appli n'annonce rien si ce n'est pas le compte ouvert.
+    const data = {
+      ...stripInternal(n.data),
+      notificationId: n.id,
+      notificationType: n.type,
+      recipient: pushRecipientId(n.userId),
+    };
     // Compte suspendu (lot 32, relecture) : pas d'aperçu de message sur l'écran verrouillé, il lit dans sa Boîte.
     const suspended = Boolean(profile?.suspendedUntil && profile.suspendedUntil > now());
     const body = suspended && n.type === "message_received" ? "Nouveau message" : n.body;

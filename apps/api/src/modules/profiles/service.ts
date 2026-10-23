@@ -1,5 +1,11 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
-import { type DeviceRegister, defaultNotificationPrefs, type Me, type ProfileUpdate } from "@orasso/shared";
+import {
+  type DeviceRegister,
+  type DeviceUnregister,
+  defaultNotificationPrefs,
+  type Me,
+  type ProfileUpdate,
+} from "@orasso/shared";
 import { and, count, eq, gt, inArray, isNull } from "drizzle-orm";
 
 import { db } from "../../db/client";
@@ -226,6 +232,17 @@ export const profilesService = {
 
   listDevices(v: Viewer) {
     return profilesRepo.activeDevices(v.user.id);
+  },
+
+  /**
+   * Lot M6, tour 3 (vie privée) : à la déconnexion de l'appli, le jeton push de ce téléphone est retiré pour ce compte.
+   * Idempotent : un jeton inconnu ou déjà retiré ne répond pas d'erreur.
+   */
+  async unregisterDevice(v: Viewer, input: DeviceUnregister) {
+    await db
+      .update(devices)
+      .set({ revokedAt: now(), expoPushToken: null })
+      .where(and(eq(devices.userId, v.user.id), eq(devices.expoPushToken, input.expoPushToken)));
   },
 
   async revokeDevice(v: Viewer, id: string) {

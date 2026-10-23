@@ -11,8 +11,13 @@ type Detected = Awaited<ReturnType<typeof detectPlates>>;
 
 export async function detectSharePlates(uri: string, width: number, height: number): Promise<Detected> {
   if (RECETTE && Platform.OS === "web") {
-    const fake = (globalThis as { __orassoFakePlates?: Detected }).__orassoFakePlates;
-    if (fake !== undefined) return fake;
+    const g = globalThis as { __orassoFakePlates?: Detected; __orassoFakePlatesDelayMs?: number };
+    const fake = g.__orassoFakePlates;
+    if (fake !== undefined) {
+      // Une détection lente (recette du tour 3 : changer de style pendant la vérification).
+      if (g.__orassoFakePlatesDelayMs) await new Promise((r) => setTimeout(r, g.__orassoFakePlatesDelayMs));
+      return fake;
+    }
   }
   return detectPlates(uri, width, height);
 }

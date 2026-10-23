@@ -117,7 +117,9 @@ export function ShareBody({
     [],
   );
 
-  // L'affiche choisie : rendue par l'API une fois, gardée tant que l'écran est ouvert ; puis le filet de sécurité.
+  // Tour 3 (point 2) : le rendu et la vérification de la plaque sont deux étapes séparées. 1) Le rendu : l'affiche choisie,
+  // demandée une fois à l'API et gardée tant que l'écran est ouvert (« La masquer » change `masks` et retire l'affiche :
+  // le rendu masqué repart).
   // biome-ignore lint/correctness/useExhaustiveDependencies: `prepared` est lu pour ne pas redemander une affiche déjà rendue
   useEffect(() => {
     if (!visible || prepared[key]) return;
@@ -126,13 +128,37 @@ export function ShareBody({
     setLoading(true);
     setError(null);
     prepareShareImage(vehicleId, format, style, version, zone)
-      .then(async (p) => {
+      .then((p) => {
         if (cancelled) return releasePrepared(p);
         setPrepared((all) => ({ ...all, [key]: p }));
-        if (zone.length) return setChecks((all) => ({ ...all, [key]: "masked" }));
-        setChecks((all) => ({ ...all, [key]: "checking" }));
-        const size = SHARE_SIZES[format];
-        const plates = await detectSharePlates(p.uri, size.width, size.height).catch(() => null);
+      })
+      .catch((e) => !cancelled && setError(errorMessage(e)))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, key, vehicleId, version, masks]);
+
+  // 2) La vérification : pour l'affiche affichée, si elle n'a pas encore de résultat. Interrompue (changement de style
+  // ou de format), elle s'efface et reprend au retour sur cette variante : le partage ne reste jamais bloqué.
+  const checksRef = useRef(checks);
+  checksRef.current = checks;
+  const shownUri = current?.uri;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: l'état de la vérification est lu par `checksRef` (pas de boucle)
+  useEffect(() => {
+    if (!visible || !shownUri) return;
+    const done = checksRef.current[key];
+    if (done && done !== "checking") return;
+    if ((masks[key] ?? []).length) {
+      setChecks((all) => ({ ...all, [key]: "masked" }));
+      return;
+    }
+    let cancelled = false;
+    setChecks((all) => ({ ...all, [key]: "checking" }));
+    const size = SHARE_SIZES[format];
+    void detectSharePlates(shownUri, size.width, size.height)
+      .catch(() => null)
+      .then((plates) => {
         if (cancelled) return;
         if (plates === null) setChecks((all) => ({ ...all, [key]: "server" }));
         else if (plates.length === 0) setChecks((all) => ({ ...all, [key]: "clear" }));
@@ -140,14 +166,18 @@ export function ShareBody({
           setFound((all) => ({ ...all, [key]: plates }));
           setChecks((all) => ({ ...all, [key]: "found" }));
         }
-      })
-      .catch((e) => !cancelled && setError(errorMessage(e)))
-      .finally(() => !cancelled && setLoading(false));
+      });
     return () => {
       cancelled = true;
+      // Interrompue : plus « en cours », elle repartira au retour.
+      setChecks((all) => {
+        if (all[key] !== "checking") return all;
+        const next = { ...all };
+        delete next[key];
+        return next;
+      });
     };
-    // Tour 2 (point 2) : « La masquer » change `masks` et retire l'affiche : le rendu masqué repart.
-  }, [visible, key, vehicleId, version, masks]);
+  }, [visible, key, shownUri, masks]);
 
   function maskPlates() {
     const plates = found[key];

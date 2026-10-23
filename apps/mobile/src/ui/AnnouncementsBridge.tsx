@@ -5,7 +5,7 @@
 // - toute notification reçue pendant l'utilisation (canal temps réel `user:<id>`) : liste d'attente, refus, place
 //   libérée, message, demande, accréditation, certification… ; toucher ouvre son écran (même chemin que la notification
 //   du système). Hors de l'appli, le push du système reste ; dans l'appli, plus de bannière du système en double.
-import { announceToneOf, notificationAnnounced } from "@orasso/shared";
+import { announceToneOf, notificationAnnounced, pushIsForAccount } from "@orasso/shared";
 import * as Notifications from "expo-notifications";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
@@ -86,6 +86,10 @@ export function AnnouncementsBridge({
   };
   const latest = useRef(announceNotification);
   latest.current = announceNotification;
+  const userIdRef = useRef(me?.user.id);
+  userIdRef.current = me?.user.id;
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
 
   useChannel(me ? `user:${me.user.id}` : null, (event) => {
     // Une décision du tri : les candidatures se rechargent tout de suite (le « Retenue ! » part de là).
@@ -104,7 +108,11 @@ export function AnnouncementsBridge({
       const data = (content.data ?? {}) as Record<string, unknown>;
       const id = typeof data.notificationId === "string" ? data.notificationId : received.request.identifier;
       const type = typeof data.notificationType === "string" ? data.notificationType : "";
-      if (!type) return;
+      // Tour 3 (vie privée) : un push n'est annoncé que pour le compte ouvert (destinataire opaque, recipient).
+      if (!type || !pushIsForAccount(data.recipient, userIdRef.current)) return;
+      // Tour 3 (point 4) : une décision du tri (« Retenue » compris) recharge les candidatures, comme le temps réel ;
+      // « Retenue ! » s'annonce alors une seule fois (candidatures déjà annoncées gardées sur l'appareil).
+      if (type.startsWith("application_") || type.startsWith("offer_")) void reloadRef.current();
       latest.current({ id, type, title: content.title ?? "", body: content.body ?? null, data });
     });
     return () => sub.remove();

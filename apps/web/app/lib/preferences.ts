@@ -30,11 +30,15 @@ export function parsePreferencesForm(form: FormData): PreferencesParse {
   // La distance n'est envoyée que si la personne l'a changée (`radiusInitial` = la valeur du compte à l'ouverture) :
   // un enregistrement qui ne parle pas de distance ne la réécrit jamais.
   const everywhere = form.get("everywhere") === "on";
-  const radius = Number(form.get("radiusKm"));
-  const wanted = everywhere ? null : clampPreferenceRadius(Number.isFinite(radius) ? radius : 50);
   const initialRaw = form.get("radiusInitial");
   const initial =
     initialRaw === null ? undefined : initialRaw === "everywhere" ? null : clampPreferenceRadius(Number(initialRaw));
+  // Curseur absent ou vide (sans JavaScript, ou case « Partout » décochée sur un curseur grisé) : on garde la valeur
+  // affichée (la distance du compte, sinon la valeur de départ du curseur), jamais 0 ni la plus petite distance.
+  const rawRadius = form.get("radiusKm");
+  const typed = rawRadius === null || String(rawRadius).trim() === "" ? Number.NaN : Number(rawRadius);
+  const shown = clampPreferenceRadius(initial ?? null);
+  const wanted = everywhere ? null : clampPreferenceRadius(Number.isFinite(typed) ? typed : shown);
   const moved = initial === undefined || wanted !== initial;
   return {
     ok: true,

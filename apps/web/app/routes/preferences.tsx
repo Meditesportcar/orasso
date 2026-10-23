@@ -11,7 +11,7 @@ import {
   preferenceNewEventsLabel,
   travelTimeLabel,
 } from "@orasso/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { data, Form, redirect, useNavigation } from "react-router";
 
 import { DepartmentsField } from "../components/ArriveeFields";
@@ -54,6 +54,10 @@ export default function PreferencesPage({ loaderData, actionData }: Route.Compon
   // France » grise le curseur (sans JavaScript, il reste réglable et la case décide).
   const [radius, setRadius] = useState(clampPreferenceRadius(preferences.radiusKm));
   const [everywhere, setEverywhere] = useState(preferences.radiusKm === null);
+  // Le curseur n'est grisé qu'avec JavaScript : un champ désactivé n'est pas envoyé, et sans JavaScript la personne
+  // doit pouvoir décocher « Partout » et régler la distance dans le même envoi.
+  const [scripted, setScripted] = useState(false);
+  useEffect(() => setScripted(true), []);
   return (
     <>
       <FicheBar title={L.title} facts={L.editFacts} back="/app/moi" />
@@ -106,7 +110,7 @@ export default function PreferencesPage({ loaderData, actionData }: Route.Compon
               max={PREFERENCE_RADIUS.max}
               step={PREFERENCE_RADIUS.step}
               value={radius}
-              disabled={everywhere}
+              disabled={scripted && everywhere}
               onChange={(e) => setRadius(Number(e.currentTarget.value))}
             />
             <CheckboxField

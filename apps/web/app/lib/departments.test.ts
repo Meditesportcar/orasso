@@ -26,6 +26,29 @@ describe("champ « Départements » du site", () => {
     expect(readDepartmentsField(form([marker, ["departments", "66"]]))).toEqual([]);
   });
 
+  it("sans JavaScript : l'ordre enregistré est conservé (favori en tête), décochés retirés, nouveaux à la fin", () => {
+    const base: [string, string][] = [
+      ["departmentBoxes", "1"],
+      ["departmentInitial", "66,11,2A"],
+    ];
+    // Les cases arrivent dans l'ordre de la liste (11, 2A, 66) : rien modifié → ordre inchangé, le favori 66 reste premier.
+    expect(
+      readDepartmentsField(form([...base, ["departmentBox", "11"], ["departmentBox", "2A"], ["departmentBox", "66"]])),
+    ).toEqual(["66", "11", "2A"]);
+    // 11 décoché, 09 et 34 ajoutés : ils passent derrière, dans l'ordre reçu.
+    expect(
+      readDepartmentsField(
+        form([
+          ...base,
+          ["departmentBox", "09"],
+          ["departmentBox", "2A"],
+          ["departmentBox", "34"],
+          ["departmentBox", "66"],
+        ]),
+      ),
+    ).toEqual(["66", "2A", "09", "34"]);
+  });
+
   it("avec JavaScript (`departmentBoxOrder`) : le texte fait foi, même vide", () => {
     const js: [string, string][] = [
       ["departmentBoxes", "1"],

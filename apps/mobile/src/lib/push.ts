@@ -60,6 +60,20 @@ export async function registerThisDevice(): Promise<void> {
   }
 }
 
+/**
+ * Lot M6, tour 3 (vie privée) : à la déconnexion (et avant d'ouvrir un autre compte), l'appareil se désinscrit des push
+ * du compte : l'API retire son jeton (POST /me/devices/unregister). À appeler tant que la session est encore valide.
+ * Sans jeton (web, Expo Go, autorisation refusée) : rien à retirer.
+ */
+export async function unregisterThisDevice(): Promise<void> {
+  try {
+    const token = await pushToken();
+    if (token) await api.unregisterDevice({ expoPushToken: token });
+  } catch {
+    // Hors ligne : le destinataire opaque du push (recipient) empêche quand même toute annonce à un autre compte.
+  }
+}
+
 /** Demande l'autorisation (fenêtre du système) puis enregistre l'appareil avec son jeton. */
 export async function askNotificationPermission(): Promise<PermissionState> {
   if (Platform.OS === "web") return "undetermined";

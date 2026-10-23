@@ -55,6 +55,12 @@ export const deviceRegisterSchema = z.object({
 });
 export type DeviceRegister = z.infer<typeof deviceRegisterSchema>;
 
+/** Lot M6, tour 3 : retirer le jeton push d'un appareil pour le compte connecté (déconnexion de l'appli). */
+export const deviceUnregisterSchema = z.object({
+  expoPushToken: z.string().regex(/^Expo(nent)?PushToken\[.+\]$/),
+});
+export type DeviceUnregister = z.infer<typeof deviceUnregisterSchema>;
+
 export type Membership = {
   structureId: string;
   structureSlug: string;

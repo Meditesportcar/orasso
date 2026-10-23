@@ -124,4 +124,24 @@ test.describe("site sans JavaScript : Tes préférences", () => {
     expect(none.data.departments).toEqual([]);
     expect(none.data.radiusKm).toBe(150);
   });
+
+  // Lot M6, tour 3 : compte « Partout en France », case décochée sans JavaScript. Le curseur n'est pas grisé (sans
+  // JavaScript) : sa valeur affichée (50) est enregistrée, jamais 0 ni une erreur silencieuse.
+  test("décocher « Partout en France » enregistre la distance affichée", async ({ page }) => {
+    test.setTimeout(180_000);
+    const s = unique();
+    const email = `snojs2_${s}@e2e.orasso.test`;
+    const cookie = await signUpApi(`Snojs2_${s}`.slice(0, 24), email);
+    await apiCall(cookie, "PATCH", "/me/settings", { radiusKm: null });
+    await page.setViewportSize(MOBILE);
+    await loginInBrowser(page, email, undefined, "/app/preferences");
+    await expect(page.getByRole("heading", { name: /Tes préférences/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("pref-radius")).toContainText("Partout");
+    await expect(page.locator("#pref-radius-range")).toBeEnabled();
+    await page.getByLabel("Partout en France").uncheck();
+    await page.getByRole("button", { name: /Enregistrer/ }).click();
+    await expect(page.getByTestId("preferences-saved")).toBeVisible({ timeout: 30_000 });
+    const after = await apiCall<{ radiusKm: number | null }>(cookie, "GET", "/me/preferences");
+    expect(after.data.radiusKm).toBe(50);
+  });
 });

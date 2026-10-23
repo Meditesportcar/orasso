@@ -11,6 +11,7 @@ import { resetAnnouncements } from "@/ui/Announce";
 import { clearEventPreviews } from "./eventPreview";
 import { clearKits } from "./kits";
 import { bindCacheScope, kvDel, kvGet, kvGetJson, kvSet, kvSetJson, purgeCaches } from "./kv";
+import { unregisterThisDevice } from "./push";
 import { realtime } from "./realtime";
 import { purgeAllStaff } from "./staff/runtime";
 
@@ -125,6 +126,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       signUp: async (input) => open(await authApi.signUp(input)),
       signOut: async () => {
+        // Lot M6, tour 3 : l'appareil quitte les push de ce compte tant que la session est valide.
+        await unregisterThisDevice();
         try {
           await authApi.signOut();
         } catch {

@@ -1,4 +1,4 @@
-import { deviceRegisterSchema, profileUpdateSchema, pseudoSchema } from "@orasso/shared";
+import { deviceRegisterSchema, deviceUnregisterSchema, profileUpdateSchema, pseudoSchema } from "@orasso/shared";
 import { Hono } from "hono";
 import sharp from "sharp";
 
@@ -44,6 +44,10 @@ export const profilesRoutes = new Hono<AppEnv>()
   .post("/me/devices", async (c) => {
     const v = await requireUser(c);
     return c.json(await profilesService.registerDevice(v, await body(c, deviceRegisterSchema)), 201);
+  })
+  .post("/me/devices/unregister", async (c) => {
+    await profilesService.unregisterDevice(await requireUser(c), await body(c, deviceUnregisterSchema));
+    return c.body(null, 204);
   })
   .delete("/me/devices/:id", async (c) => {
     await profilesService.revokeDevice(await requireUser(c), uuidParam(c, "id"));

@@ -214,6 +214,8 @@ export function DepartmentsField({ initial }: { initial: string[] }) {
       ) : null}
       {/* Marqueur lu par `readDepartmentsField` : sans JavaScript, les cases `departmentBox` font foi. */}
       <input type="hidden" name="departmentBoxes" value="1" />
+      {/* Ordre enregistré (favori en tête) : sans JavaScript, les cases sont dans l'ordre de la liste, pas dans le sien. */}
+      <input type="hidden" name="departmentInitial" value={initial.join(",")} />
       <TextField
         label="Départements"
         name="departments"

@@ -48,7 +48,7 @@ describe("formulaire « Tes préférences »", () => {
     };
     expect(radius("5")).toBe(10);
     expect(radius("300")).toBe(200);
-    expect(radius("")).toBe(10);
+    expect(radius("")).toBe(50);
     expect(radius("abc")).toBe(50);
   });
 
@@ -103,6 +103,23 @@ describe("formulaire « Tes préférences »", () => {
         "60",
       ),
     ).toMatchObject({ radiusKm: null });
+  });
+
+  it("« Partout » décoché avec un curseur absent ou vide : la valeur affichée est gardée, jamais 0 ni 10", () => {
+    const update = (fields: [string, string][], radiusInitial?: string) => {
+      const res = parsePreferencesForm(form(radiusInitial ? [...fields, ["radiusInitial", radiusInitial]] : fields));
+      return res.ok ? res.update : null;
+    };
+    // Compte « Partout » : la valeur affichée par le curseur est celle de départ (50).
+    expect(update([], "everywhere")).toMatchObject({ radiusKm: 50 });
+    expect(update([["radiusKm", ""]], "everywhere")).toMatchObject({ radiusKm: 50 });
+    // Compte à 120 km, curseur absent : la distance du compte, donc rien n'est réécrit.
+    expect(update([], "120")).not.toHaveProperty("radiusKm");
+    expect(update([["radiusKm", " "]], "120")).not.toHaveProperty("radiusKm");
+    // Sans `radiusInitial` (appel direct) : la valeur de départ.
+    expect(update([])).toMatchObject({ radiusKm: 50 });
+    // Curseur réglé en même temps que la case décochée (sans JavaScript) : la valeur réglée part.
+    expect(update([["radiusKm", "90"]], "everywhere")).toMatchObject({ radiusKm: 90 });
   });
 
   it("sans JavaScript, les cases `departmentBox` font foi, y compris tout décocher", () => {
