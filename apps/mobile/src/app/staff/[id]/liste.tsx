@@ -2,7 +2,7 @@
 // plaque », filtres Tous / Arrivés / Attendus / Sans scan, « Pointer », pointage rapide par plaque après coup (« Tape
 // les 3 premiers caractères de la plaque, valide, suivant »), coordonnées pour le super staff seulement. Hors ligne.
 
-import { AppBar, Button, Chip, Ground, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
+import { Button, Chip, Ground, Plate, Text, TextField, tokens, useTheme } from "@orasso/design-system/native";
 import { type AccessListEntry, checkinStaffRoles, eventDaysLabels, formatDayDate } from "@orasso/shared";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
@@ -21,6 +21,7 @@ import {
   searchLocal,
 } from "@/lib/staff/model";
 import { useStaffEvent } from "@/lib/staff/useStaff";
+import { FicheHeader } from "@/ui/FicheHeader";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { Segments } from "@/ui/Segments";
@@ -89,12 +90,10 @@ export default function StaffList() {
 
   return (
     <Ground animated={false} style={styles.fill}>
-      <AppBar
-        kind="flow"
+      <FicheHeader
         title={state ? `Liste · ${state.meta.title}` : "Liste"}
         facts={count ? `${count.arrived} arrivés · ${count.expected - count.arrived} attendus` : undefined}
         onClose={close}
-        safeTop={insets.top}
       />
       {state === null ? (
         <View style={styles.pad}>

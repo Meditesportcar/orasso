@@ -3,6 +3,9 @@
 // remonte de 8 px sur l'image (`.ev-body`). Mêmes fond, zone des feuilles et action fixe en bas que `FlowScreen`.
 // Lot M3 : zone sûre de la barre d'état. Une bande de la couleur de la tête reste fixée sous l'heure et la batterie :
 // en défilant, l'affiche et le texte passent dessous, jamais sous les icônes d'Android (retour 20 de Damien).
+// Lot M7 (deux modes d'affichage) : c'est un écran du mode B. `band` est l'emplacement standard de l'en-tête de fiche :
+// une bande fixée en haut (l'organisateur de la fiche événement, dessinée par le lot M4), le ✕ à sa place habituelle ;
+// elle remplace la pastille O et le ✕ flottants. Le ✕ flottant a la cible tactile de 44 px des autres en-têtes.
 import {
   Ground,
   Icon,
@@ -17,10 +20,13 @@ import { type ReactNode, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { FicheHeader } from "@/ui/FicheHeader";
 import { KeyboardSafe } from "@/ui/KeyboardSafe";
 import { OverlayProvider, OverlaySlot } from "@/ui/Overlay";
 
 const { space2, space3, space4, space6 } = tokens.spacing;
+/** Cible de 44 px autour du ✕ de 38 px, comme celui de l'en-tête de fiche. */
+const CLOSE_SLOP = { top: 3, bottom: 3, left: 3, right: 3 };
 
 export function PosterFlow({
   hero,
@@ -31,6 +37,7 @@ export function PosterFlow({
   onRefresh,
   testID,
   liftHero = false,
+  band,
 }: {
   /** La tête pleine largeur (affiche, photo) ; les boutons flottants se posent dessus. */
   hero: ReactNode;
@@ -42,6 +49,8 @@ export function PosterFlow({
   testID?: string;
   /** Lot M3 : la tête passe au-dessus du corps, sans découpe (affiche qui grandit depuis la liste). */
   liftHero?: boolean;
+  /** Lot M7 : bande fixe de l'en-tête de fiche (organisateur), à la place de la pastille O et du ✕ flottants. */
+  band?: ReactNode;
 }) {
   const { t } = useTheme();
   const focused = useIsFocused();
@@ -53,6 +62,7 @@ export function PosterFlow({
     <OliveActivityProvider active={focused}>
       <OverlayProvider>
         <Ground paused={!focused} style={styles.fill}>
+          {band ? <FicheHeader band={band} onClose={onClose} /> : null}
           <KeyboardSafe style={styles.fill}>
             <ScrollView
               style={styles.fill}
@@ -78,30 +88,35 @@ export function PosterFlow({
             >
               <View style={[styles.hero, liftHero ? styles.heroLifted : null, { backgroundColor: t.color.bar }]}>
                 {hero}
-                <View style={[styles.float, { top: insets.top + space3 + 2 }]} pointerEvents="box-none">
-                  <View style={[styles.pill, { backgroundColor: `${t.color.night}99` }]}>
-                    <Monogram size={32} tone="dark" />
+                {band ? null : (
+                  <View style={[styles.float, { top: insets.top + space3 + 2 }]} pointerEvents="box-none">
+                    <View style={[styles.pill, { backgroundColor: `${t.color.night}99` }]}>
+                      <Monogram size={32} tone="dark" />
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Fermer"
+                      onPress={onClose}
+                      hitSlop={CLOSE_SLOP}
+                      style={[styles.close, { backgroundColor: `${t.color.night}8c` }]}
+                      testID="flow-close"
+                    >
+                      <Icon name="close" size={20} color={t.color.nightInk} />
+                    </Pressable>
                   </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Fermer"
-                    onPress={onClose}
-                    style={[styles.close, { backgroundColor: `${t.color.night}8c` }]}
-                    testID="flow-close"
-                  >
-                    <Icon name="close" size={20} color={t.color.nightInk} />
-                  </Pressable>
-                </View>
+                )}
               </View>
               <View style={styles.body}>{children}</View>
             </ScrollView>
             {footer ? <View style={[styles.footer, { paddingBottom: space3 + insets.bottom }]}>{footer}</View> : null}
           </KeyboardSafe>
-          <View
-            pointerEvents="none"
-            style={[styles.statusBar, { height: insets.top, backgroundColor: t.color.bar }]}
-            testID="status-bar-guard"
-          />
+          {band ? null : (
+            <View
+              pointerEvents="none"
+              style={[styles.statusBar, { height: insets.top, backgroundColor: t.color.bar }]}
+              testID="status-bar-guard"
+            />
+          )}
           {overlays}
           <OverlaySlot />
         </Ground>

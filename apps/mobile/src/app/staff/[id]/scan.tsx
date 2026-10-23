@@ -6,7 +6,6 @@
 // `decideLocal` ; un code périmé est refusé « Code périmé : demande à la personne de rafraîchir son écran ».
 
 import {
-  AppBar,
   Button,
   Ground,
   Plate,
@@ -42,6 +41,7 @@ import { ed25519Verify } from "@/lib/staff/crypto";
 import { counters, decideLocal, ScanGate } from "@/lib/staff/model";
 import { clearWriteError, getWriteError, newId, trustedKeysNow } from "@/lib/staff/runtime";
 import { useStaffEvent } from "@/lib/staff/useStaff";
+import { FicheHeader } from "@/ui/FicheHeader";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -227,14 +227,12 @@ export default function Scan() {
 
   return (
     <Ground animated={false} style={styles.fill}>
-      <AppBar
-        kind="flow"
+      <FicheHeader
         title="Accueil et scan"
         facts={state ? `Liste à jour ${clock(state.meta.syncedAt)} · hors ligne OK` : "Liste absente : synchronise"}
         counter={count ? `${count.arrived} / ${count.expected}` : undefined}
         onClose={close}
         closeLabel="Quitter le scan"
-        safeTop={insets.top}
       />
 
       {/* Lot 48 : l'accueil drive (la caméra lit la plaque) en tête de l'écran de scan. */}

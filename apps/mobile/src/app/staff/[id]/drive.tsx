@@ -6,7 +6,6 @@
 // Web (recette) : la plaque se tape au clavier à la place de la caméra.
 
 import {
-  AppBar,
   Button,
   Ground,
   Icon,
@@ -37,6 +36,7 @@ import { counters } from "@/lib/staff/model";
 import { deleteLocalPhoto } from "@/lib/staff/photo";
 import { newId } from "@/lib/staff/runtime";
 import { useStaffEvent } from "@/lib/staff/useStaff";
+import { FicheHeader } from "@/ui/FicheHeader";
 
 const { space1, space2, space3 } = tokens.spacing;
 /** Une photo toutes les 900 ms quand aucune lecture n'est en cours (docs : résultat en une seconde). */
@@ -163,14 +163,12 @@ export default function Drive() {
 
   return (
     <Ground animated={false} style={styles.fill}>
-      <AppBar
-        kind="flow"
+      <FicheHeader
         title={L.title}
         facts={state ? `Liste à jour ${clock(state.meta.syncedAt)}` : "Liste absente : synchronise"}
         counter={count ? `${count.arrived} entrés` : undefined}
         onClose={close}
         closeLabel="Quitter l'accueil drive"
-        safeTop={insets.top}
       />
 
       {/* Artefact `.offl` : pastille « hors ligne » cerclée de moutarde. */}
