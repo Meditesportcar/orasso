@@ -12,10 +12,10 @@ import {
   gradeLabels,
   adminAppLabels as L,
   type PointKind,
+  personReportReasons,
   platformRoleLabels,
   pointKindLabels,
   reportReasonLabels,
-  reportReasons,
   type SanctionKind,
   sanctionKindLabels,
   sanctionKinds,
@@ -142,7 +142,7 @@ function UserBody() {
   const [points, setPoints] = useState("");
   const [pointsIssue, setPointsIssue] = useState<string | undefined>();
   const [kind, setKind] = useState<SanctionKind>(sanctionKinds[0]);
-  const [motive, setMotive] = useState<(typeof reportReasons)[number]>(reportReasons[0]);
+  const [motive, setMotive] = useState<(typeof personReportReasons)[number]>(personReportReasons[0]);
   const u: AdminUserDetail | null = user.data;
   const self = Boolean(u && me?.user.id === u.id);
   const deleted = Boolean(u?.deletedAt);
@@ -374,8 +374,8 @@ function UserBody() {
                     <SelectField
                       label="Motif"
                       value={motive}
-                      onValueChange={(v) => setMotive(v as (typeof reportReasons)[number])}
-                      options={reportReasons.map((r) => ({ value: r, label: reportReasonLabels[r] }))}
+                      onValueChange={(v) => setMotive(v as (typeof personReportReasons)[number])}
+                      options={personReportReasons.map((r) => ({ value: r, label: reportReasonLabels[r] }))}
                     />
                     <Button
                       variant="plate"
