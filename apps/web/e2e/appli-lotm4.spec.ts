@@ -352,7 +352,8 @@ test("Lot M4 : candidature, Mon QR, créneau privé, « À propos de »", async 
     await goto(page, `/e/${open6.slug}`);
     await expect(page.getByTestId("org-write")).toBeVisible({ timeout: 30_000 });
     await page.getByTestId("org-write").click();
-    await expect(page).toHaveURL(/\/auth/, { timeout: 30_000 });
+    // Comme « Suivre » : l'inscription (l'arrivée), puis retour à la fiche.
+    await expect(page).toHaveURL(/\/(auth|arrivee)\b.*next=%2Fe%2F/, { timeout: 30_000 });
     await ctx.close();
   }
 });
