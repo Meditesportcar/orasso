@@ -37,6 +37,16 @@ export function shouldRevalidate(
   return s.error !== null || (s.lastOk > 0 && now - s.lastOk > STALE_MS);
 }
 
+/**
+ * Lot M4, tour 2 : la page suivante s'ajoute sans doublon (même `id`). Un tri dont la valeur bouge (« Places
+ * restantes ») peut renvoyer un événement déjà vu dont la valeur a baissé entre deux pages.
+ */
+export function appendUnique<T>(current: readonly T[], next: readonly T[]): T[] {
+  const idOf = (x: T) => (x as { id?: unknown } | null)?.id;
+  const seen = new Set<unknown>(current.map(idOf).filter((id) => id !== undefined));
+  return [...current, ...next.filter((x) => idOf(x) === undefined || !seen.has(idOf(x)))];
+}
+
 export function usePaged<T>(
   fetchPage: (cursor: string | undefined) => Promise<Page<T>>,
   deps: readonly unknown[],
@@ -145,7 +155,7 @@ export function usePaged<T>(
     try {
       const page = await fetchRef.current(cursor);
       if (!ticket.current()) return;
-      setItems((current) => [...(current ?? []), ...page.items]);
+      setItems((current) => appendUnique(current ?? [], page.items));
       setCursor(page.nextCursor);
     } catch (e) {
       if (ticket.current()) setError(errorMessage(e));

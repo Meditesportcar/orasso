@@ -6,7 +6,7 @@ vi.mock("@/lib/http", () => ({ errorMessage: String }));
 vi.mock("@/lib/kv", () => ({ cacheGetJson: async () => null, cacheSetJson: async () => {}, cacheScope: () => "a" }));
 vi.mock("@/lib/requestGate", () => ({ createRequestGate: () => ({}) }));
 
-import { STALE_MS, shouldRevalidate } from "./usePaged";
+import { appendUnique, STALE_MS, shouldRevalidate } from "./usePaged";
 
 const base = { busy: false, pending: false, enabled: true, error: null, lastOk: 1000 };
 
@@ -20,5 +20,15 @@ describe("revalidation de la liste (lot M3, tour 3)", () => {
     expect(shouldRevalidate(base, 1001 + STALE_MS)).toBe(true);
     expect(shouldRevalidate(base, 1000 + STALE_MS)).toBe(false);
     expect(shouldRevalidate({ ...base, lastOk: 0 }, 1000 + STALE_MS * 2)).toBe(false);
+  });
+});
+
+describe("page suivante sans doublon (lot M4, tour 2)", () => {
+  it("un événement déjà vu (sa valeur de tri a baissé entre deux pages) n'est pas répété", () => {
+    const a = { id: "A" };
+    const b = { id: "B" };
+    const c = { id: "C" };
+    expect(appendUnique([a, b], [c, b])).toEqual([a, b, c]);
+    expect(appendUnique([], [a])).toEqual([a]);
   });
 });

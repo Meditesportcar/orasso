@@ -19,6 +19,7 @@ import { app } from "../../app";
 import { db, pool } from "../../db/client";
 import {
   applications,
+  eventDays,
   friendships,
   profileInterests,
   profiles,
@@ -290,6 +291,88 @@ describe("tris de l'Explorer : GET /events?sort=recent | seats", () => {
       expect(ids(seats.json.items)).toEqual([open, old, fresh].map((e) => e.slug));
       expect(seats.json.items[2].remaining).toBe(2);
     }
+  });
+
+  // Tour 2 (relecture Codex) : même calcul par jour que le compteur affiché, et pagination stable.
+  const accept = async (eventId: string, n: number, eventDayId: string | null = null) => {
+    const who = await person(`Exp_${eventId.slice(0, 6)}_${eventDayId?.slice(0, 4) ?? "tout"}`);
+    for (let i = 0; i < n; i++) {
+      const v = await createVehicle(who.id, ref);
+      await db.insert(applications).values({
+        eventId,
+        userId: who.id,
+        vehicleId: v.id,
+        eventDayId,
+        status: "accepted",
+        rulesAcceptedAt: new Date(),
+        followStructure: false,
+      });
+    }
+  };
+  const twoDays = async (eventId: string, startsAt: Date, capacity: number | null = null) => {
+    const days = await db
+      .insert(eventDays)
+      .values(
+        [0, 1].map((i) => ({
+          eventId,
+          dayDate: new Date(startsAt.getTime() + i * DAY).toISOString().slice(0, 10),
+          startsAt: new Date(startsAt.getTime() + i * DAY),
+          endsAt: new Date(startsAt.getTime() + i * DAY + 4 * 3_600_000),
+          capacity,
+        })),
+      )
+      .returning();
+    return days;
+  };
+
+  it("plusieurs jours : les places du meilleur jour, comme la carte (pas la capacité moins toutes les candidatures)", async () => {
+    const owner = await person("Orga_Jours");
+    const s = await createStructure(owner.id);
+    const startsAt = new Date(now().getTime() + 10 * DAY);
+    // 10 places par jour, 9 retenus le premier jour seulement : 10 places restent le second (affiché « 10 »).
+    const weekend = await createEvent(s.id, { title: "Week-end", capacity: 10, startsAt });
+    const [d1] = await twoDays(weekend.id, startsAt);
+    await accept(weekend.id, 9, d1?.id ?? null);
+    // Un jour, 5 places, aucune prise.
+    const single = await createEvent(s.id, {
+      title: "Un jour",
+      capacity: 5,
+      startsAt: new Date(startsAt.getTime() + DAY),
+    });
+    // Deux jours, 4 places, 2 inscrits à tout l'événement : 2 places chaque jour.
+    const both = await createEvent(s.id, {
+      title: "Deux jours",
+      capacity: 4,
+      startsAt: new Date(startsAt.getTime() + 2 * DAY),
+    });
+    await twoDays(both.id, new Date(startsAt.getTime() + 2 * DAY));
+    await accept(both.id, 2);
+    const res = await get(null, "/events?sort=seats");
+    expect(ids(res.json.items)).toEqual([weekend, single, both].map((e) => e.slug));
+    expect(res.json.items.map((x: { remaining: number }) => x.remaining)).toEqual([10, 5, 2]);
+  });
+
+  it("pagination par curseur : une inscription entre deux pages ne fait ni sauter ni répéter un événement", async () => {
+    const owner = await person("Orga_Pages");
+    const s = await createStructure(owner.id);
+    const startsAt = new Date(now().getTime() + 10 * DAY);
+    const a = await createEvent(s.id, { title: "A", capacity: 10, startsAt });
+    const b = await createEvent(s.id, { title: "B", capacity: 8, startsAt });
+    const c = await createEvent(s.id, { title: "C", capacity: 6, startsAt });
+    const d = await createEvent(s.id, { title: "D", capacity: 4, startsAt });
+    const first = await get(null, "/events?sort=seats&limit=2");
+    expect(ids(first.json.items)).toEqual([a.slug, b.slug]);
+    expect(first.json.nextCursor).toBeTruthy();
+    // B passe derrière C (8 → 3 places) entre les deux pages.
+    await accept(b.id, 5);
+    const second = await get(null, `/events?sort=seats&limit=2&cursor=${first.json.nextCursor}`);
+    // C n'est pas omis ; B peut revenir (l'appli l'écarte par son id), jamais un événement déjà passé devant.
+    expect(ids(second.json.items)).toEqual([c.slug, d.slug]);
+    const third = await get(null, `/events?sort=seats&limit=2&cursor=${second.json.nextCursor}`);
+    expect(ids(third.json.items)).toEqual([b.slug]);
+    expect(third.json.nextCursor).toBeNull();
+    // Un curseur illisible repart du début (B est maintenant dernier).
+    expect(ids((await get(null, "/events?sort=seats&limit=2&cursor=bidon")).json.items)).toEqual([a.slug, c.slug]);
   });
 });
 
