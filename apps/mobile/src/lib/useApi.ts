@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiRequestError, mutationCount } from "./http";
 import { accountGuard, cacheGetJson, cacheScope, cacheSetJson } from "./kv";
+import { createRequestGate } from "./requestGate";
 
 type Options = {
   /** Mémorise la réponse dans le trousseau (profil, candidatures) : visible hors ligne. */
@@ -78,6 +79,9 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
 
   // Lecture en cours : le nombre de modifications envoyées à son départ (`null` = aucune lecture en cours).
   const inFlight = useRef<number | null>(null);
+  // Tour 3 : seule la dernière lecture met à jour le résultat et le cache (une réponse d'avant une suppression, arrivée
+  // après la relecture, est ignorée).
+  const gate = useRef(createRequestGate(cacheScope)).current;
   const reload = useCallback(async (): Promise<T | null> => {
     if (!enabled) return null;
     const started = mutationCount();
@@ -85,26 +89,27 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
     // Compte du départ : une réponse qui arrive après un changement de compte est jetée (état, cache), même si
     // l'écran est resté monté d'un compte à l'autre.
     const guard = accountGuard();
+    const ticket = gate.start();
     try {
       const fresh = await fetcherRef.current();
       if (!alive.current) return fresh;
-      if (!guard.current()) return null;
+      if (!guard.current() || !ticket.latest()) return null;
       setData(fresh);
       setError(null);
       setOffline(false);
       if (cacheKey) void cacheSetJson(cacheKey, fresh, guard.scope);
       return fresh;
     } catch (e) {
-      if (!alive.current || !guard.current()) return null;
+      if (!alive.current || !guard.current() || !ticket.latest()) return null;
       const err = e instanceof ApiRequestError ? e : new ApiRequestError(0, "network", "Pas de connexion");
       setError(err);
       if (err.isNetwork) setOffline(true);
       return null;
     } finally {
       if (inFlight.current === started) inFlight.current = null;
-      if (alive.current) setLoading(false);
+      if (alive.current && ticket.latest()) setLoading(false);
     }
-  }, [enabled, cacheKey, ...deps]);
+  }, [enabled, cacheKey, gate, ...deps]);
 
   // Premier chargement au montage (et à chaque changement de dépendances), focus ou pas.
   useEffect(() => {

@@ -1,5 +1,5 @@
 // Sérialiseurs par audience (ARCHITECTURE.md § 5.2) : la plaque ne sort que pour le propriétaire et l'organisateur.
-import type { VehicleBrief, VehicleFull, VehiclePublic } from "@orasso/shared";
+import { formatPlate, type VehicleBrief, type VehicleFull, type VehiclePublic } from "@orasso/shared";
 
 import { storage } from "../../lib/storage";
 import type { VehicleWithAll } from "./repo";
@@ -50,7 +50,8 @@ export function vehiclePublic(v: VehicleWithAll): VehiclePublic {
 export function vehicleFull(v: VehicleWithAll): VehicleFull {
   return {
     ...vehiclePublic(v),
-    plate: v.plate,
+    // Lot M2 : toujours lisible (« AE-665-GH »), y compris pour une fiche saisie avant la normalisation.
+    plate: v.plate ? formatPlate(v.plate) : null,
     unregistered: v.unregistered,
     archivedAt: v.archivedAt?.toISOString() ?? null,
     statusNote: v.statusNote,

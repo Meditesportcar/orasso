@@ -39,6 +39,10 @@ export function PhotoWithPlate({
 }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => () => (url ? URL.revokeObjectURL(url) : undefined), [url]);
+  // Lot M2, tour 2 (parité avec l'appli) : « Envoyer sans flouter » se confirme sur la photo, dans une boîte simple ;
+  // décocher ne demande rien.
+  const [noPlate, setNoPlate] = useState(false);
+  const confirm = useRef<HTMLDialogElement>(null);
   return (
     <>
       <FileField
@@ -51,6 +55,7 @@ export function PhotoWithPlate({
         onChange={(e) => {
           const file = e.currentTarget.files?.[0];
           setUrl(file ? URL.createObjectURL(file) : null);
+          setNoPlate(false);
         }}
       />
       {url ? (
@@ -58,8 +63,47 @@ export function PhotoWithPlate({
           <div className="o-t-label">{L.blurAction}</div>
           <PlateFrame key={url} src={url} alt="Photo choisie" initial={[]} testId={testId} />
           <label className="g-noplate o-t-body">
-            <input type="checkbox" name="noPlate" data-testid="site-no-plate" /> {L.noPlate}
+            <input
+              type="checkbox"
+              name="noPlate"
+              data-testid="site-no-plate"
+              checked={noPlate}
+              onChange={(e) => {
+                if (!e.currentTarget.checked) setNoPlate(false);
+                else confirm.current?.showModal();
+              }}
+            />{" "}
+            {L.noPlate}
           </label>
+          <dialog
+            ref={confirm}
+            className="mod-dialog"
+            aria-labelledby="noplate-confirm-title"
+            data-testid="site-no-plate-confirm"
+          >
+            <div className="s-stack">
+              <h2 id="noplate-confirm-title" className="s-h2">
+                {L.noPlateConfirmTitle}
+              </h2>
+              <p className="o-t-body">{L.noPlateConfirmBody}</p>
+              <img src={url} alt="Ta prise de vue, à vérifier" className="g-noplate__photo" />
+              <Button
+                variant="secondary"
+                icon="check"
+                fullWidth
+                data-testid="site-no-plate-yes"
+                onClick={() => {
+                  setNoPlate(true);
+                  confirm.current?.close();
+                }}
+              >
+                {L.noPlateConfirm}
+              </Button>
+              <Button variant="plate" icon="close" fullWidth onClick={() => confirm.current?.close()}>
+                Annuler
+              </Button>
+            </div>
+          </dialog>
         </section>
       ) : null}
     </>

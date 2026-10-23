@@ -10,7 +10,8 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { errorMessage } from "@/lib/http";
-import { accountGuard, cacheGetJson, cacheSetJson } from "@/lib/kv";
+import { cacheGetJson, cacheScope, cacheSetJson } from "@/lib/kv";
+import { createRequestGate } from "@/lib/requestGate";
 
 export type Paged<T> = {
   items: T[] | null;
@@ -24,6 +25,18 @@ export type Paged<T> = {
 /** Au-delà, la liste affichée est revalidée au retour sur l'écran. */
 export const STALE_MS = 60_000;
 
+/**
+ * Retour sur l'écran ou du réseau : relire une liste en échec ou ancienne, jamais pendant une lecture en cours ni
+ * pendant le délai de frappe d'un changement de filtre (qui lancera sa propre lecture : une seule requête).
+ */
+export function shouldRevalidate(
+  s: { busy: boolean; pending: boolean; enabled: boolean; error: string | null; lastOk: number },
+  now: number,
+): boolean {
+  if (s.busy || s.pending || !s.enabled) return false;
+  return s.error !== null || (s.lastOk > 0 && now - s.lastOk > STALE_MS);
+}
+
 export function usePaged<T>(
   fetchPage: (cursor: string | undefined) => Promise<Page<T>>,
   deps: readonly unknown[],
@@ -35,7 +48,10 @@ export function usePaged<T>(
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const request = useRef(0);
+  // Tour 3 : seule la dernière lecture compte, et seulement pour le compte qui l'a lancée (page suivante comprise).
+  const gate = useRef(createRequestGate(cacheScope)).current;
+  // Debounce en attente : le retour sur l'écran ne double pas la lecture d'un changement de filtre.
+  const pending = useRef(false);
   const fetchRef = useRef(fetchPage);
   fetchRef.current = fetchPage;
   // La réponse fraîche est arrivée pour ces réglages : le cache ne la remplace plus.
@@ -58,33 +74,48 @@ export function usePaged<T>(
     };
   }, [cacheKey]);
 
+  // Changement de compte : la liste de l'ancien compte disparaît, ses lectures en cours sont jetées.
+  const account = cacheScope();
+  const previousAccount = useRef(account);
+  useEffect(() => {
+    if (previousAccount.current === account) return;
+    previousAccount.current = account;
+    gate.invalidate();
+    setItems(null);
+    setCursor(null);
+    setError(null);
+  }, [account, gate]);
+
   const reload = useCallback(async () => {
     if (!enabled) return;
-    const id = ++request.current;
-    const guard = accountGuard();
+    const ticket = gate.start();
+    const scope = cacheScope();
     busy.current = true;
     try {
       const page = await fetchRef.current(undefined);
-      if (id !== request.current || !guard.current()) return;
+      if (!ticket.current()) return;
       fresh.current = true;
       lastOk.current = Date.now();
-      if (cacheKey) void cacheSetJson(cacheKey, page, guard.scope);
+      if (cacheKey) void cacheSetJson(cacheKey, page, scope);
       setItems(page.items);
       setCursor(page.nextCursor);
       setError(null);
     } catch (e) {
-      if (id === request.current) setError(errorMessage(e));
+      if (ticket.current()) setError(errorMessage(e));
     } finally {
-      if (id === request.current) busy.current = false;
+      if (ticket.latest()) busy.current = false;
     }
-  }, [enabled, cacheKey]);
+  }, [enabled, cacheKey, gate]);
 
   // Retour sur l'écran : revalide une lecture en échec ou ancienne (jamais pendant une lecture en cours).
   const revalidate = useCallback(() => {
-    if (busy.current || !enabled) return;
-    if (error || (lastOk.current > 0 && Date.now() - lastOk.current > STALE_MS)) void reload();
+    const state = { busy: busy.current, pending: pending.current, enabled, error, lastOk: lastOk.current };
+    if (shouldRevalidate(state, Date.now())) void reload();
   }, [enabled, error, reload]);
-  useFocusEffect(revalidate);
+  // Tour 3 : seulement à l'arrivée sur l'écran (pas à chaque nouvelle `reload` d'un changement de filtre).
+  const revalidateRef = useRef(revalidate);
+  revalidateRef.current = revalidate;
+  useFocusEffect(useCallback(() => revalidateRef.current(), []));
   // Retour du réseau : même règle.
   const network = useNetworkState();
   const online = network.isConnected !== false && network.isInternetReachable !== false;
@@ -94,26 +125,34 @@ export function usePaged<T>(
     wasOnline.current = online;
   }, [online, revalidate]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `account` relance la lecture après un changement de compte.
   useEffect(() => {
-    const timer = setTimeout(() => void reload(), debounceMs);
-    return () => clearTimeout(timer);
-  }, [reload, debounceMs, ...deps]);
+    pending.current = true;
+    const timer = setTimeout(() => {
+      pending.current = false;
+      void reload();
+    }, debounceMs);
+    return () => {
+      pending.current = false;
+      clearTimeout(timer);
+    };
+  }, [reload, debounceMs, account, ...deps]);
 
   const loadMore = useCallback(async () => {
     if (!cursor) return;
-    const id = request.current;
+    const ticket = gate.follow();
     setLoadingMore(true);
     try {
       const page = await fetchRef.current(cursor);
-      if (id !== request.current) return;
+      if (!ticket.current()) return;
       setItems((current) => [...(current ?? []), ...page.items]);
       setCursor(page.nextCursor);
     } catch (e) {
-      setError(errorMessage(e));
+      if (ticket.current()) setError(errorMessage(e));
     } finally {
       setLoadingMore(false);
     }
-  }, [cursor]);
+  }, [cursor, gate]);
 
   return { items, hasMore: cursor !== null, loadingMore, error, reload, loadMore };
 }

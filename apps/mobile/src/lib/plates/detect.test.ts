@@ -3,10 +3,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   detectPlates,
+  findPlates,
   looksLikePlate,
   normalizePlateText,
   orientedPlateRect,
+  plateReadingOf,
   platesFromLines,
+  probablePlate,
+  readPlate,
+  suggestedPlate,
   toPlateRect,
 } from "./detect";
 import type { TextFrame, TextLineResult } from "./mlkit";
@@ -225,5 +230,190 @@ describe("plaque penchée au bord de la photo : toute la plaque visible reste da
 
   it("au milieu, le cadre reste orienté", () => {
     expect(detect(500, 400, 30).angle).toBe(30);
+  });
+});
+
+describe("tous les formats français et filet de sécurité (lot M2)", () => {
+  it("W garage, WW provisoire et diplomatiques sont reconnus, avec leur lecture", () => {
+    const cases: [string, string][] = [
+      ["W-623-AX", "W623AX"], // la Nissan de Damien (retour 11)
+      ["W 623 AX", "W623AX"],
+      ["W-6Z3-AX", "W623AX"], // Z lu pour 2
+      ["WW-123-AB", "WW123AB"],
+      ["FT-340-NC", "FT340NC"], // la BMW (retour 12)
+      ["1234 AB 66", "1234AB66"],
+      ["12 CD 3456", "12CD3456"],
+      ["6 CMD 15", "6CMD15"],
+      ["F GA-662-KS 66", "GA662KS"],
+      ["GA-662-KS 974", "GA662KS"],
+      ["F W 623 AX 66", "W623AX"],
+    ];
+    for (const [text, reading] of cases) {
+      expect(looksLikePlate(text), text).toBe(true);
+      expect(plateReadingOf(text), text).toBe(reading);
+    }
+  });
+
+  it("une FNI lue exactement passe devant une SIV obtenue en relisant (« 256 BB 88 »)", () => {
+    expect(readPlate("256 BB 88")).toMatchObject({ plate: "256BB88", fixes: 0, valid: true, ambiguous: false });
+  });
+
+  it("la plaque W garage lue en trois mots donne un cadre et un numéro prérempli", () => {
+    const lines = [
+      line([
+        ["W", frame(400, 600, 30, 40)],
+        ["623", frame(440, 600, 80, 40)],
+        ["AX", frame(530, 600, 60, 40)],
+      ]),
+    ];
+    const found = findPlates(lines, 1000, 1000);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ plate: "W623AX", probable: false, ambiguous: false });
+    expect(suggestedPlate(found)).toBe("W-623-AX");
+  });
+
+  it("bande « F » et département lus en mots à part : W garage, cadre sur toute la plaque (Codex)", () => {
+    const lines = [
+      line([
+        ["F", frame(380, 600, 15, 40)],
+        ["W", frame(400, 600, 30, 40)],
+        ["623", frame(440, 600, 80, 40)],
+        ["AX", frame(530, 600, 60, 40)],
+        ["66", frame(600, 600, 20, 40)],
+      ]),
+    ];
+    const [plate] = findPlates(lines, 1000, 1000);
+    expect(plate?.plate).toBe("W623AX");
+    expect(suggestedPlate([plate!])).toBe("W-623-AX");
+    // Cadre des cinq mots (380 → 620), agrandi de 15 %.
+    expect(plate?.rect.w).toBeCloseTo(0.276, 3);
+  });
+
+  it("tour 3 : une sous-suite mieux lue ne réduit jamais le cadre et rend le numéro ambigu (« A8 123 CD 66 »)", () => {
+    const words = (texts: string[]) => {
+      let x = 300;
+      return texts.map((t): [string, TextFrame] => {
+        const f = frame(x, 600, t.length * 20, 40);
+        x += t.length * 20 + 10;
+        return [t, f];
+      });
+    };
+    for (const texts of [
+      ["A8", "123", "CD", "66"],
+      ["F", "A8", "123", "CD", "66"],
+    ]) {
+      const ws = words(texts);
+      const [plate, ...rest] = findPlates([line(ws)], 1000, 1000);
+      expect(rest, texts.join(" ")).toEqual([]);
+      expect(plate).toMatchObject({ plate: "AB123CD", ambiguous: true, probable: false });
+      expect(suggestedPlate([plate!]), texts.join(" ")).toBeNull();
+      // Cadre : toute la ligne, du premier au dernier mot (agrandi de 15 %), jamais la seule sous-suite.
+      const left = ws[0]![1].left;
+      const right = ws.at(-1)![1].left + ws.at(-1)![1].width;
+      expect(plate!.rect.x).toBeLessThanOrEqual(left / 1000);
+      expect(plate!.rect.x + plate!.rect.w).toBeGreaterThanOrEqual(right / 1000);
+    }
+  });
+
+  it("tour 4 : plaque et texte de carrosserie sur une ligne : la plaque sûre garde son cadre, à part", () => {
+    const cases: [string[], number, number, string][] = [
+      // [mots, premier et dernier mot de la plaque (exclu), numéro]
+      [["AB-123-CD", "PORSCHE", "911", "TURBO"], 0, 1, "AB-123-CD"],
+      [["AB", "123", "CD", "PORSCHE", "911", "TURBO"], 0, 3, "AB-123-CD"],
+      [["GT3", "RS", "FT-340-NC"], 2, 3, "FT-340-NC"],
+      [["W-623-AX", "350Z", "NISMO", "LE", "MANS", "24"], 0, 1, "W-623-AX"],
+      // Tour 5 : une lecture probable (« CD 66 911 ») ne relie pas la plaque au badge « 911 TURBO ».
+      [["AB", "123", "CD", "66", "911", "TURBO"], 0, 4, "AB-123-CD"],
+      [["F", "AB", "123", "CD", "66", "911", "TURBO"], 0, 5, "AB-123-CD"],
+    ];
+    for (const [texts, from, to, number] of cases) {
+      let x = 50;
+      const ws = texts.map((t): [string, TextFrame] => {
+        const f = frame(x, 600, t.length * 18, 40);
+        x += t.length * 18 + 12;
+        return [t, f];
+      });
+      const lines = [line(ws)];
+      const found = findPlates(lines, 1000, 1000);
+      const sure = found.filter((f) => !f.probable);
+      expect(sure, texts.join(" ")).toHaveLength(1);
+      expect(suggestedPlate(found), texts.join(" ")).toBe(number);
+      // Le cadre couvre la plaque, sans déborder sur le mot suivant.
+      const rect = platesFromLines(lines, 1000, 1000);
+      expect(rect, texts.join(" ")).toHaveLength(1);
+      const left = ws[from]![1].left;
+      const right = ws[to - 1]![1].left + ws[to - 1]![1].width;
+      expect(rect[0]!.x, texts.join(" ")).toBeLessThanOrEqual(left / 1000);
+      expect(rect[0]!.x + rect[0]!.w, texts.join(" ")).toBeGreaterThanOrEqual(right / 1000);
+      const next = ws[to]?.[1];
+      if (next) expect(rect[0]!.x + rect[0]!.w, texts.join(" ")).toBeLessThan((next.left + next.width / 2) / 1000);
+    }
+  });
+
+  it("tour 3 : « F » lu à part = bande (W garage) ; collé = SIV de série FW", () => {
+    expect(plateReadingOf("F W 123 AB")).toBe("W123AB");
+    expect(plateReadingOf("F W 123 AB 66")).toBe("W123AB");
+    expect(plateReadingOf("FW 123 AB")).toBe("FW123AB");
+    expect(plateReadingOf("FW-123-AB 66")).toBe("FW123AB");
+    expect(plateReadingOf("F FW 123 AB 66")).toBe("FW123AB");
+  });
+
+  it("numéro prérempli : la lecture exacte d'abord, le plus grand cadre ensuite, rien s'il y a ambiguïté", () => {
+    const at = (plate: string, fixes: number, area: number) => ({
+      plate,
+      fixes,
+      valid: true,
+      ambiguous: false,
+      probable: false,
+      area,
+    });
+    expect(suggestedPlate([at("ZS688BB", 4, 0.02), at("256BB88", 0, 0.01)])).toBe("256 BB 88");
+    expect(suggestedPlate([at("AB123CD", 0, 0.02), at("GA662KS", 0, 0.005)])).toBe("AB-123-CD");
+    expect(suggestedPlate([at("AB123CD", 0, 0.02), at("GA662KS", 0, 0.018)])).toBeNull();
+    expect(suggestedPlate([at("AB123CD", 0, 0.02), at("AB123CD", 0, 0.018)])).toBe("AB-123-CD");
+    expect(suggestedPlate([{ ...at("AB123CD", 0, 0.02), ambiguous: true }])).toBeNull();
+  });
+
+  it("filet de sécurité : 5 à 9 lettres et chiffres dans un rectangle de plaque = plaque probable, jamais appliquée", () => {
+    expect(probablePlate("M AB 1234", frame(0, 0, 250, 50))).toBe("MAB1234"); // plaque allemande, 5:1
+    expect(probablePlate("M AB 1234", frame(0, 0, 100, 100))).toBeNull(); // carré : pas une plaque
+    expect(probablePlate("TOYOTA", frame(0, 0, 250, 50))).toBeNull(); // pas de chiffre
+    expect(probablePlate("2026", frame(0, 0, 250, 50))).toBeNull(); // trop court, pas de lettre
+    expect(probablePlate("ABCDEF1234", frame(0, 0, 400, 50))).toBeNull(); // 10 caractères
+    const lines = [line([["M-AB-1234", frame(300, 500, 250, 50)]]), line([["GA-662-KS", frame(300, 800, 250, 50)]])];
+    const found = findPlates(lines, 1000, 1000);
+    expect(found.map((f) => [f.plate, f.probable])).toEqual([
+      ["GA662KS", false],
+      ["MAB1234", true],
+    ]);
+    expect(platesFromLines(lines, 1000, 1000)).toHaveLength(1); // seul le cadre de la plaque reconnue
+    expect(suggestedPlate(found)).toBe("GA-662-KS");
+    expect(suggestedPlate(found.slice(1))).toBeNull(); // une probable seule ne préremplit rien
+    expect(suggestedPlate([])).toBeNull();
+  });
+
+  it("faux positifs : badges et inscriptions de carrosserie ne deviennent ni cadre ni numéro", () => {
+    const badges = [
+      "GT3 RS",
+      "RS6 AVANT",
+      "C63 AMG",
+      "LE MANS 24",
+      "AMG GT63S",
+      "GTI16V",
+      "BMW320D",
+      "24H LEMANS",
+      "911 TURBO",
+      "RASSO 2026",
+    ];
+    for (const text of badges) {
+      const lines = [line([[text, frame(300, 500, 250, 50)]])]; // proportions d'une plaque (5:1)
+      const found = findPlates(lines, 1000, 1000);
+      expect(platesFromLines(lines, 1000, 1000), text).toEqual([]);
+      expect(suggestedPlate(found), text).toBeNull();
+      expect(
+        found.every((f) => f.probable),
+        text,
+      ).toBe(true);
+    }
   });
 });

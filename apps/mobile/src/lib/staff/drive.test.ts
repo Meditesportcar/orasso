@@ -6,6 +6,7 @@ import {
   type AccessListEntry,
   base64UrlEncode,
   expiredScanLabel,
+  normalizePlate,
   rotatingCodeAt,
   type StaffSync,
 } from "@orasso/shared";
@@ -163,6 +164,13 @@ describe("accueil drive", () => {
     expect(driveLookup(s, extractPlates("F GA-662-KS 66")).map((m) => m.entry.pseudo)).toEqual(["Pilote_1"]);
     expect(driveLookup(s, ["ZZ999ZZ"])).toEqual([]);
     expect(JSON.stringify([...s.entries.values()])).not.toContain("GA662KS");
+  });
+
+  it("lot M2 : W garage et WW provisoire, saisis n'importe comment, retrouvés par la plaque lue", () => {
+    // Hachage du serveur : forme unique de la saisie (`normalizePlate`, comme l'API).
+    const s = stateWith([entry(1, normalizePlate("f w 623 ax 66")), entry(2, normalizePlate("ww-123 ab"))]);
+    expect(driveLookup(s, extractPlates("F W-623-AX 66")).map((m) => m.entry.pseudo)).toEqual(["Pilote_1"]);
+    expect(driveLookup(s, extractPlates("F WW-123-AB 66")).map((m) => m.entry.pseudo)).toEqual(["Pilote_2"]);
   });
 
   it("OK moutarde, déjà entré crème, refusé rouge", () => {
