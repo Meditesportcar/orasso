@@ -1,21 +1,21 @@
-// Mon profil, le hub (lot 40, prototype `s-me` ; reproduit fidèlement au lot C2b) : pas de grand titre, l'en-tête
-// `.me-head` en tient lieu (avatar incliné, pseudo, grade en étiquette, Mon QR de compte), la carte de saison (qui ouvre
-// l'historique des points), les invitations Mon passeport (trois tampons) et Mon crew, Mes casquettes en lignes `.cap`,
-// Créer, puis les réglages en tuiles (chacune ouvre `reglages/<section>`), Aide et Se déconnecter.
-// Retirés (audit § 5.2) : la ligne « Historique des points » (= toucher la carte de saison), « Mes véhicules archivés »
-// (Garage seulement), l'aide « Appui long sur le logo », « Devenir staff » (= ligne « Où je suis staff » sans mission) et
-// le bouton « Mon profil de base » (= la ligne de casquette).
-import { initialsOf, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { gradeLabels, passportScreenTexts } from "@orasso/shared";
+// Mon profil, le hub (lot 40, prototype `s-me` ; lot C2b ; lot M5 : maquette 7.2 « Mon profil désencombré »). Pas de
+// grand titre : l'en-tête compact en tient lieu (avatar, pseudo, grade, département, « Mon QR de compte » en icône ;
+// « Ma fiche » pour le pro). Puis « Ma saison » (points et passeport en un seul bloc), le crew en une ligne, « Changer de
+// casquette » (une phrase claire, chaque casquette avec son icône, son nom simple et ce qu'elle ouvre, l'active marquée ;
+// le staff n'y est que si la personne a des missions), « Devenir organisateur ou pro », « Rejoindre une équipe staff »,
+// puis les réglages en lignes groupées : Compte (e-mail, mot de passe, sanctions), Notifications, Confidentialité
+// (profil public, export des données, suppression), Préférences, Mon profil public, Amis et crews, Aide, Se déconnecter.
+// Plus d'accès flottant ici (retour 31).
+import { Icon, Tag, Text, tokens, useTheme } from "@orasso/design-system/native";
+import { capLabels, gradeLabels, passportScreenTexts } from "@orasso/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { AccountQrSheet } from "@/features/AccountQrSheet";
 import { PendingCard } from "@/features/arrivee/PendingCard";
 import { EmailBanner } from "@/features/moi/EmailBanner";
 import { StaffRequestSheet } from "@/features/moi/StaffRequestSheet";
-import { CrewDot, Nudge, SmButton, TagWin } from "@/features/passionne/kit";
-import { Stamp } from "@/features/passport/Stamp";
+import { TagWin } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { usePersona } from "@/lib/persona";
 import { isBaseKind, personaKindLabels, tabHref } from "@/lib/personaModel";
@@ -24,17 +24,28 @@ import { useApi } from "@/lib/useApi";
 import { TabScreen } from "@/ui/Screens";
 import { SecHead } from "@/ui/SecHead";
 
-import { CreateSheet, HeadAvatar, HubRow, PersonaRows, RowIcon, SeasonCard, SettingTile } from "./parts";
+import {
+  CapRows,
+  CreateSheet,
+  CrewLine,
+  HeadAvatar,
+  HubRow,
+  LinkRow,
+  RowIcon,
+  SeasonBlock,
+  SetList,
+  SetRow,
+} from "./parts";
 
 const { space1, space2, space3 } = tokens.spacing;
 
-const visibilityCaption = { public: "Profil public, nom privé", private: "Profil privé, nom privé" } as const;
+const visibilityCaption = { public: "Profil public", private: "Profil privé" } as const;
 
 export function ProfilScreen() {
   const { t, preference } = useTheme();
   const router = useRouter();
   const { me, refreshMe, signOut } = useSession();
-  const { persona, active } = usePersona();
+  const { persona, active, entries } = usePersona();
   const [sheet, setSheet] = useState<"qr" | "create" | "staff" | null>(null);
   const close = () => setSheet(null);
   const base = isBaseKind(persona.kind);
@@ -51,15 +62,15 @@ export function ProfilScreen() {
   const profile = me?.profile;
   const department = profile?.departments[0];
   const crew = crews.data?.[0];
-  const lastStamps = (passport.data?.pages.flatMap((p) => p.stamps) ?? []).slice(-3);
   const theme = preference === "sable" ? "Sable" : preference === "auto" ? "Automatique" : "Béton";
   const preferencesCaption = [
     `Thème ${theme}`,
     department ? `${department} favori` : null,
-    profile ? `rayon ${profile.radiusKm} km` : null,
+    profile ? `${profile.radiusKm} km` : null,
   ]
     .filter(Boolean)
     .join(", ");
+  const qrLabel = persona.kind === "pro" ? "Ma fiche" : "Mon QR de compte";
 
   return (
     <TabScreen
@@ -84,7 +95,7 @@ export function ProfilScreen() {
       <EmailBanner />
       <PendingCard where="profil" />
 
-      {/* En-tête `.me-head` : avatar incliné, pseudo, grade en étiquette, puis Mon QR de compte (Ma fiche pour le pro). */}
+      {/* En-tête compact `.mh` : avatar, pseudo, grade et département ; le QR de compte (Ma fiche pour le pro) en icône. */}
       <View style={styles.head} testID="profil-head">
         <HeadAvatar
           url={base ? profile?.avatarUrl : active.logoUrl}
@@ -104,77 +115,41 @@ export function ProfilScreen() {
               {base ? (department ? `Département ${department}` : "Passionné") : active.label}
             </Text>
           </View>
-          {persona.kind === "pro" ? (
-            <SmButton kind="s" icon="briefcase" onPress={() => router.navigate("/(pro)/fiche")}>
-              Ma fiche
-            </SmButton>
-          ) : (
-            <SmButton kind="s" icon="qr" onPress={() => setSheet("qr")} testID="profil-account-qr">
-              Mon QR de compte
-            </SmButton>
-          )}
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={qrLabel}
+          onPress={() => (persona.kind === "pro" ? router.navigate("/(pro)/fiche") : setSheet("qr"))}
+          testID="profil-account-qr"
+          hitSlop={6}
+          style={({ pressed }) => [
+            styles.qrb,
+            { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard },
+            pressed && styles.pressed,
+          ]}
+        >
+          <Icon name={persona.kind === "pro" ? "briefcase" : "qr"} size={22} color={t.color.ink} />
+        </Pressable>
       </View>
 
+      {/* « Ma saison » : points et passeport en un seul bloc (maquette 7.2). */}
       {base && profile ? (
-        <SeasonCard
+        <SeasonBlock
           points={profile.pointsSeason}
           grade={gradeLabels[profile.grade]}
           data={points.data ?? null}
-          onPress={() => router.push("/reglages/points")}
+          stamps={passport.data ? passportScreenTexts.tile(passport.data.total, passport.data.rare) : null}
+          onPassport={() => router.navigate((tabHref(persona.kind, "passeport") ?? "/mon-passeport") as never)}
+          onHistory={() => router.push("/reglages/points")}
         />
       ) : null}
 
-      {/* `.nudge` Mon passeport : le compte des tampons et les trois derniers, qui se chevauchent. */}
+      {/* Le crew en une ligne. */}
       {base ? (
-        <Nudge
-          onPress={() => router.navigate((tabHref(persona.kind, "passeport") ?? "/mon-passeport") as never)}
-          testID="profil-passport"
-          accessibilityLabel={passportScreenTexts.tileTitle}
-          trailing={
-            lastStamps.length > 0 ? (
-              <View style={styles.stamps}>
-                {lastStamps.map((s, i) => (
-                  <View key={s.id} style={i > 0 ? styles.stampOver : null}>
-                    <Stamp stamp={s} size={58} />
-                  </View>
-                ))}
-              </View>
-            ) : undefined
-          }
-        >
-          <Text variant="label" color={t.color.inkMuted}>
-            {passportScreenTexts.tileTitle}
-          </Text>
-          <Text variant="bodyStrong" color={t.color.ink} style={styles.nudgeStrong}>
-            {passport.data
-              ? passportScreenTexts.tile(passport.data.total, passport.data.rare)
-              : "Tes tampons d'événements"}
-          </Text>
-        </Nudge>
-      ) : null}
-
-      {/* `.nudge` Mon crew : rond moutarde aux initiales, nom et membres. */}
-      {base ? (
-        <Nudge
+        <CrewLine
+          crew={crew ? { name: crew.name, membersCount: crew.membersCount } : null}
           onPress={() => router.push(crew ? `/crew/${crew.slug}` : "/crew/nouveau")}
-          testID="profil-crew"
-          accessibilityLabel={crew ? `Mon crew, ${crew.name}` : "Mon crew, crée ou rejoins un crew"}
-        >
-          <View style={styles.crewRow}>
-            <CrewDot initials={crew ? initialsOf(crew.name).slice(0, 2) : "+"} size={46} />
-            <View style={styles.crewText}>
-              <Text variant="label" color={t.color.inkMuted}>
-                Mon crew
-              </Text>
-              <Text variant="bodyStrong" color={t.color.ink} style={styles.nudgeStrong}>
-                {crew
-                  ? `${crew.name} · ${crew.membersCount} membre${crew.membersCount > 1 ? "s" : ""}`
-                  : "Crée ou rejoins un crew"}
-              </Text>
-            </View>
-          </View>
-        </Nudge>
+        />
       ) : null}
 
       {base && archived > 0 ? (
@@ -187,89 +162,96 @@ export function ProfilScreen() {
         />
       ) : null}
 
-      <SecHead title="Mes casquettes" hint="Une barre d'onglets par casquette" />
-      <PersonaRows staffEvents={staff.data ?? []} onStaffRequest={() => setSheet("staff")} />
-      <SmButton kind="k" big wide icon="add" onPress={() => setSheet("create")} testID="profil-create">
-        Créer
-      </SmButton>
+      <SecHead title={capLabels.title} />
+      <Text variant="body" color={t.color.inkMuted} style={styles.capsay} testID="casquettes-intro">
+        {capLabels.intro(entries.map((e) => e.kind))}
+      </Text>
+      <CapRows staffEvents={staff.data ?? []} />
+      <View style={styles.links}>
+        <LinkRow icon="add" label={capLabels.become} onPress={() => setSheet("create")} testID="profil-create" />
+        <LinkRow
+          icon="staff"
+          label={capLabels.joinTeam}
+          onPress={() => setSheet("staff")}
+          testID="casquette-staff-request"
+        />
+      </View>
 
       <SecHead title="Réglages" />
-      <View style={styles.tiles}>
-        <SettingTile
+      <SetList>
+        <SetRow
+          first
+          icon="profile"
+          title="Compte"
+          caption="E-mail, mot de passe, appareils, mes sanctions"
+          onPress={() => router.push("/reglages/compte")}
+          testID="reglage-compte"
+        />
+        <SetRow
           icon="bell"
           title="Notifications"
           caption="Candidatures, jour J, messages"
           onPress={() => router.push("/reglages/notifications")}
           testID="reglage-notifications"
         />
-        <SettingTile
+        <SetRow
+          icon="lock"
+          title="Confidentialité"
+          caption={`${profile ? visibilityCaption[profile.visibility] : "Profil public"}, export de mes données, suppression`}
+          onPress={() => router.push("/reglages/confidentialite")}
+          testID="reglage-confidentialite"
+        />
+        <SetRow
           icon="gear"
           title="Préférences"
           caption={preferencesCaption}
           onPress={() => router.push("/reglages/preferences")}
           testID="reglage-preferences"
         />
-        <SettingTile
-          icon="shield"
-          title="Sécurité"
-          caption="Mot de passe, appareils"
-          onPress={() => router.push("/reglages/securite")}
-          testID="reglage-securite"
+        <SetRow
+          icon="eye"
+          title="Mon profil public"
+          caption="Photo, pseudo, description : ce que voient les autres"
+          onPress={() => router.push("/reglages/profil")}
+          testID="reglage-profil"
         />
-        <SettingTile
-          icon="lock"
-          title="Confidentialité"
-          caption={profile ? visibilityCaption[profile.visibility] : "Profil public, nom privé"}
-          onPress={() => router.push("/reglages/confidentialite")}
-          testID="reglage-confidentialite"
-        />
-        <SettingTile
+        <SetRow
           icon="staff"
           title="Amis et crews"
           caption={crew ? `Amis, crew ${crew.name}` : "Tes amis et tes crews"}
           onPress={() => router.push("/amis")}
           testID="reglage-amis"
         />
-        <SettingTile
-          icon="profile"
-          title="Mon profil public"
-          caption="Ce que voient les autres"
-          onPress={() => router.push("/reglages/profil")}
-          testID="reglage-profil"
+        <SetRow
+          icon="help"
+          title="Aide"
+          caption="Tutos, questions fréquentes, nous écrire"
+          onPress={() => router.push("/reglages/aide")}
+          testID="profil-help"
         />
-      </View>
-      {/* « Revoir le tuto » est dans l'Aide (lot 42). */}
-      <View style={styles.footerRow}>
-        <SmButton kind="g" icon="help" onPress={() => router.push("/reglages/aide")} testID="profil-help">
-          Aide
-        </SmButton>
-        <SmButton
-          kind="g"
+        <SetRow
           icon="logout"
+          title="Se déconnecter"
+          tone="out"
           onPress={async () => {
             await signOut();
             router.replace("/auth");
           }}
           testID="profil-sign-out"
-        >
-          Se déconnecter
-        </SmButton>
-      </View>
+        />
+      </SetList>
     </TabScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: "row", alignItems: "center", gap: space3 + 2 },
-  headText: { flex: 1, gap: space1 + 2, alignItems: "flex-start" },
-  pseudo: { fontSize: 26, lineHeight: 25 },
+  head: { flexDirection: "row", alignItems: "center", gap: space3 },
+  headText: { flex: 1, minWidth: 0, gap: space1 + 1 },
+  pseudo: { fontSize: 22, lineHeight: 23 },
   headTags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space1 + 2 },
   headCaption: { flexShrink: 1 },
-  nudgeStrong: { marginTop: space1 },
-  stamps: { flexDirection: "row", paddingLeft: space3 + 2 },
-  stampOver: { marginLeft: -14 },
-  crewRow: { flexDirection: "row", alignItems: "center", gap: space3 },
-  crewText: { flex: 1, minWidth: 0 },
-  tiles: { flexDirection: "row", flexWrap: "wrap", gap: space2 },
-  footerRow: { flexDirection: "row", justifyContent: "space-between", gap: space2 },
+  qrb: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  pressed: { opacity: 0.8 },
+  capsay: { fontSize: 13.5, lineHeight: 19 },
+  links: { gap: space2 },
 });

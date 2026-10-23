@@ -1,15 +1,24 @@
-// Morceaux de Mon profil (lot 40, prototype `s-me` ; reproduits fidèlement au lot C2b) : les casquettes `.cap`, la
-// feuille « Créer » `sh-create`, la carte de saison `.grade`, les tuiles de réglages `.mtile` et l'en-tête `.me-head`.
-import { Icon, type IconName, OrgLogo, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
-import { adminAppLabels, gradeLabels, type MyPoints, type MyStaffEvent, mediaAppLabels } from "@orasso/shared";
+// Morceaux de Mon profil (lot 40, prototype `s-me` ; lot C2b ; lot M5 : maquette 7.2 « Mon profil désencombré »).
+// L'en-tête compact (avatar, pseudo, grade, QR de compte en icône), « Ma saison » (points et passeport en un bloc), le
+// crew en une ligne, « Changer de casquette » (une phrase, chaque casquette avec son icône, son nom simple et ce qu'elle
+// ouvre, l'active marquée), la feuille « Créer » et les réglages en lignes groupées (`.setlist` de la maquette).
+import { Icon, type IconName, initialsOf, OrgLogo, Photo, Text, tokens, useTheme } from "@orasso/design-system/native";
+import {
+  adminAppLabels,
+  capLabels,
+  gradeLabels,
+  type MyPoints,
+  type MyStaffEvent,
+  mediaAppLabels,
+} from "@orasso/shared";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Num } from "@/features/passionne/kit";
+import { CrewDot, Num } from "@/features/passionne/kit";
 import { api } from "@/lib/api";
 import { mediaSource } from "@/lib/media";
 import { usePersona } from "@/lib/persona";
-import { type AppPersonaEntry, isActive, personaKindLabels, personaOfEntry, tabHref } from "@/lib/personaModel";
+import { type AppPersonaEntry, isActive, personaOfEntry, tabHref } from "@/lib/personaModel";
 import { useApi } from "@/lib/useApi";
 import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
@@ -92,28 +101,39 @@ function EntryLogo({ entry }: { entry: AppPersonaEntry }) {
   return <OrgLogo name={entry.label} logoUrl={mediaSource(entry.logoUrl)?.uri ?? null} size={44} />;
 }
 
-/** Le nom d'une casquette dans la liste (prototype `s-me`). */
-function titleOf(entry: AppPersonaEntry): string {
-  if (entry.kind === "fan") return "Passionné · exposant";
-  if (entry.kind === "visitor") return "Profil visiteur";
-  return `${personaKindLabels[entry.kind]} · ${entry.label}`;
+/** Le nom simple d'une casquette (maquette 7.2) : « Passionné », « Organisateur · MéditeSportCar ». */
+export function capName(entry: AppPersonaEntry): string {
+  const name = capLabels.name[entry.kind] ?? entry.kind;
+  if (entry.kind === "fan" || entry.kind === "visitor" || entry.kind === "admin") return name;
+  return `${name} · ${entry.label}`;
 }
 
-const kindIcon: Partial<Record<AppPersonaEntry["kind"], IconName>> = { fan: "vehicle", visitor: "profile" };
+const kindIcon: Partial<Record<AppPersonaEntry["kind"], IconName>> = {
+  fan: "vehicle",
+  visitor: "profile",
+  admin: "shield",
+};
+
+/** `.on-t` : « ✓ Active » en moutarde, à droite de la casquette active. */
+function ActiveMark() {
+  const { t } = useTheme();
+  return (
+    <View style={styles.onT} testID="casquette-active">
+      <Icon name="check" size={14} color={t.color.accentText} />
+      <Text variant="label" color={t.color.accentText} style={styles.onTText}>
+        {capLabels.active}
+      </Text>
+    </View>
+  );
+}
 
 /**
- * « Mes casquettes » : une ligne `.cap` par casquette (l'appui change de barre d'onglets, la session reste la même),
- * puis les accès rapides de la casquette active seulement (prototype : `data-only` du profil affiché), et la ligne
- * « Où je suis staff » (le staff n'est pas une casquette). Sans mission de staff, la ligne ouvre la demande à
- * rejoindre une équipe (l'ancienne ligne « Devenir staff d'une structure », audit § 5.2).
+ * « Changer de casquette » (maquette 7.2, correction de Damien) : une ligne par casquette (l'appui change de barre
+ * d'onglets, la session reste la même), avec ce qu'elle ouvre ; sous l'active, ses accès rapides. Le staff n'est pas
+ * une casquette de l'API : il apparaît ici seulement quand la personne a des missions (plus de « Où je suis staff » en
+ * double avec Sorties › Staff).
  */
-export function PersonaRows({
-  staffEvents,
-  onStaffRequest,
-}: {
-  staffEvents: MyStaffEvent[];
-  onStaffRequest: () => void;
-}) {
+export function CapRows({ staffEvents }: { staffEvents: MyStaffEvent[] }) {
   const { t } = useTheme();
   const router = useRouter();
   const { persona, entries, choose, base } = usePersona();
@@ -128,31 +148,25 @@ export function PersonaRows({
     const next = personaOfEntry(entry);
     choose(next, tabHref(entry.kind, route) ?? undefined);
   };
+  const staffWhere = [...new Set(staffEvents.map((s) => s.structure.name))].slice(0, 2).join(", ");
 
   return (
     <View style={styles.caps}>
       {entries.map((entry) => {
         const active = isActive(persona, entry);
-        const caption = entry.assisted
-          ? adminAppLabels.assistanceBannerReadOnly
-          : active
-            ? entry.kind === "visitor"
-              ? "Actif en ce moment"
-              : "Active en ce moment"
-            : entry.kind === "organizer" && entry.badge > 0
-              ? "Candidatures à trier"
-              : personaKindLabels[entry.kind];
+        const caption = entry.assisted ? adminAppLabels.assistanceBannerReadOnly : (capLabels.opens[entry.kind] ?? "");
         const icon = kindIcon[entry.kind];
+        const name = capName(entry);
         return (
           <View key={`${entry.kind}:${entry.id}`} style={styles.caps}>
             <HubRow
               lead={icon ? <RowIcon name={icon} /> : <EntryLogo entry={entry} />}
-              title={titleOf(entry)}
+              title={name}
               caption={caption}
               selected={active}
               trailing={
                 active ? (
-                  <Icon name="check" size={20} color={t.color.accentText} />
+                  <ActiveMark />
                 ) : entry.badge > 0 ? (
                   <View style={[styles.cnt, { backgroundColor: t.color.accent }]}>
                     <Text variant="label" color={t.color.accentInk} style={styles.cntText}>
@@ -164,7 +178,7 @@ export function PersonaRows({
               onPress={() => {
                 if (!active) choose(personaOfEntry(entry));
               }}
-              accessibilityLabel={`${titleOf(entry)}, ${active ? "casquette active" : personaKindLabels[entry.kind]}`}
+              accessibilityLabel={`${name}, ${active ? "casquette active" : caption}`}
               testID={`casquette-${entry.kind}`}
             />
             {active && entry.kind === "visitor" ? (
@@ -225,34 +239,50 @@ export function PersonaRows({
           </View>
         );
       })}
-      <HubRow
-        lead={<RowIcon name="qr" />}
-        title="Où je suis staff"
-        caption={
-          staffEvents.length > 0
-            ? staffEvents
-                .slice(0, 2)
-                .map((s) => `${s.event.title} · ${s.structure.name}`)
-                .join(" · ")
-            : "Aucun événement pour l'instant"
-        }
-        onPress={() => {
-          const first = staffEvents[0];
-          if (staffEvents.length === 0) choose(base, `${tabHref(base.kind, "sorties") ?? "/"}`);
-          else if (staffEvents.length === 1 && first) router.push(`/staff/${first.event.id}`);
-          else choose(base, `${tabHref(base.kind, "sorties") ?? "/"}`);
-        }}
-        testID="casquette-staff"
-      />
-      {/* Relecture C2b : rejoindre une équipe reste possible, avec ou sans mission en cours. */}
-      <HubRow
-        lead={<RowIcon name="staff" />}
-        title="Rejoindre une équipe"
-        caption="Devenir staff d'une structure"
-        onPress={onStaffRequest}
-        testID="casquette-staff-request"
-      />
+      {staffEvents.length > 0 ? (
+        <HubRow
+          lead={<RowIcon name="qr" />}
+          title={capLabels.name.staff ?? "Staff"}
+          caption={`${capLabels.opens.staff}${staffWhere ? ` · ${staffWhere}` : ""}`}
+          onPress={() => {
+            const first = staffEvents[0];
+            if (staffEvents.length === 1 && first) router.push(`/staff/${first.event.id}`);
+            else choose(base, `${tabHref(base.kind, "sorties") ?? "/"}`);
+          }}
+          testID="casquette-staff"
+        />
+      ) : null}
     </View>
+  );
+}
+
+/** `.linkrow` de la maquette : un lien discret « + Devenir organisateur ou pro ». */
+export function LinkRow({
+  icon,
+  label,
+  onPress,
+  testID,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  testID?: string;
+}) {
+  const { t } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      testID={testID}
+      hitSlop={6}
+      style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
+    >
+      <Icon name={icon} size={16} color={t.color.accentText} />
+      <Text variant="bodyStrong" color={t.color.accentText} style={styles.linkText}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -343,96 +373,196 @@ export function CreateSheet({ visible, onClose }: { visible: boolean; onClose: (
 }
 
 /**
- * Carte de saison `.grade` : « Saison 2026 » et le prochain grade, les points en chiffres étroits 34 px, la jauge rouge
- * de 10 px. Toucher la carte ouvre l'historique des points (audit § 5.1 : plus de ligne « Historique » à part).
+ * « Ma saison » (maquette 7.2) : points et passeport en un seul bloc. En tête, la saison et les tampons ; les points en
+ * chiffres étroits et le prochain grade ; la jauge ; en pied, le passeport et l'historique des points.
  */
-export function SeasonCard({
+export function SeasonBlock({
   points,
   grade,
   data,
-  onPress,
+  stamps,
+  onPassport,
+  onHistory,
 }: {
   points: number;
   grade: string;
   data: MyPoints | null;
-  onPress: () => void;
+  /** « 9 tampons, dont 1 rare » ; `null` tant que le passeport n'est pas lu. */
+  stamps: string | null;
+  onPassport: () => void;
+  onHistory: () => void;
 }) {
   const { t } = useTheme();
+  const c = t.color;
   const next = data?.next;
   const ratio = next && next.threshold > 0 ? Math.min(1, points / next.threshold) : 1;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${data ? data.season.name : "Saison"}, ${points} points, ${grade}. Historique des points`}
-      onPress={onPress}
-      style={[styles.season, { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard }]}
+    <View
+      style={[styles.season, { backgroundColor: c.surface, boxShadow: t.shadow.shadowCard }]}
       testID="profil-season"
+      accessibilityLabel={`${data ? data.season.name : "Saison"}, ${points} points, ${grade}`}
     >
       <View style={styles.between}>
-        <Text variant="label" color={t.color.inkMuted}>
-          {data ? data.season.name : "Saison"}
+        <Text variant="label" color={c.inkMuted}>
+          {data ? `Ma ${data.season.name.toLowerCase()}` : "Ma saison"}
         </Text>
-        <Text variant="caption" color={t.color.inkMuted}>
-          {next ? `${gradeLabels[next.grade]} à ${next.threshold.toLocaleString("fr-FR")} pts` : "Grade maximal"}
-        </Text>
+        {stamps ? (
+          <Text variant="caption" color={c.inkMuted} style={styles.shrink}>
+            {stamps}
+          </Text>
+        ) : null}
       </View>
       <View style={styles.between}>
         <View style={styles.points}>
           <Num size={34}>{points.toLocaleString("fr-FR")}</Num>
           <Num size={16}>pts</Num>
         </View>
-        <Text variant="caption" color={t.color.inkMuted}>
-          {`Grade ${grade}`}
+        <Text variant="caption" color={c.inkMuted} style={styles.shrink}>
+          {next ? `${gradeLabels[next.grade]} à ${next.threshold.toLocaleString("fr-FR")} pts` : `Grade ${grade}`}
         </Text>
       </View>
       <View
-        style={[styles.track, { backgroundColor: t.color.line }]}
+        style={[styles.track, { backgroundColor: c.line }]}
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: 100, now: Math.round(ratio * 100) }}
       >
-        <View style={[styles.fill, { width: `${Math.round(ratio * 100)}%`, backgroundColor: t.color.win }]} />
+        <View style={[styles.fill, { width: `${Math.round(ratio * 100)}%`, backgroundColor: c.accent }]} />
       </View>
+      <View style={styles.seasonFoot}>
+        <Pressable
+          accessibilityRole="link"
+          onPress={onPassport}
+          testID="profil-passport"
+          hitSlop={6}
+          style={styles.footLink}
+        >
+          <Text variant="caption" color={c.ink} style={styles.footText}>
+            Mon passeport
+          </Text>
+          <Icon name="next" size={14} color={c.ink} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="link"
+          onPress={onHistory}
+          testID="profil-points-history"
+          hitSlop={6}
+          style={styles.footLink}
+        >
+          <Text variant="caption" color={c.ink} style={styles.footText}>
+            Historique des points
+          </Text>
+          <Icon name="next" size={14} color={c.ink} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/** Le crew en une ligne (`.lrow`) : rond aux initiales, nom et membres, ou « Crée ou rejoins un crew ». */
+export function CrewLine({
+  crew,
+  onPress,
+}: {
+  crew: { name: string; membersCount: number } | null;
+  onPress: () => void;
+}) {
+  const { t } = useTheme();
+  const c = t.color;
+  const title = crew ? crew.name : "Crée ou rejoins un crew";
+  const caption = crew
+    ? `Ton crew · ${crew.membersCount} membre${crew.membersCount > 1 ? "s" : ""}`
+    : "Sortir à plusieurs, s'inscrire ensemble";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={crew ? `Mon crew, ${crew.name}` : "Mon crew, crée ou rejoins un crew"}
+      onPress={onPress}
+      testID="profil-crew"
+      style={({ pressed }) => [
+        styles.lrow,
+        { backgroundColor: c.surface, borderColor: c.cardLine },
+        pressed && styles.pressed,
+      ]}
+    >
+      <CrewDot initials={crew ? initialsOf(crew.name).slice(0, 2) : "+"} size={38} />
+      <View style={styles.text}>
+        <Text variant="bodyStrong" color={c.ink} style={styles.rowTitle}>
+          {title}
+        </Text>
+        <Text variant="caption" color={c.inkMuted} style={styles.rowCaption}>
+          {caption}
+        </Text>
+      </View>
+      <Icon name="next" size={20} color={c.ink} />
     </Pressable>
   );
 }
 
-/** Une tuile de réglage `.mtile` : pictogramme, titre 800, ce qu'elle règle en casse normale. */
-export function SettingTile({
+/** Réglages en lignes groupées (`.setlist` / `.setrow` de la maquette 7.2). */
+export function SetList({ children }: { children: ReactNode }) {
+  const { t } = useTheme();
+  return (
+    <View
+      style={[styles.setList, { backgroundColor: t.color.surface, boxShadow: t.shadow.shadowCard }]}
+      testID="profil-settings"
+    >
+      {children}
+    </View>
+  );
+}
+
+export function SetRow({
   icon,
   title,
   caption,
   onPress,
+  first,
+  tone,
   testID,
 }: {
   icon: IconName;
   title: string;
-  caption: string;
+  caption?: string;
   onPress: () => void;
+  first?: boolean;
+  /** `out` : Se déconnecter, en rouge, sans chevron. */
+  tone?: "out";
   testID?: string;
 }) {
   const { t } = useTheme();
+  const c = t.color;
+  const ink = tone === "out" ? c.winText : c.ink;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${title}, ${caption}`}
+      accessibilityLabel={caption ? `${title}, ${caption}` : title}
       onPress={onPress}
-      style={[styles.tile, { backgroundColor: t.color.surface, borderColor: t.color.cardLine }]}
       testID={testID}
+      style={({ pressed }) => [
+        styles.setRow,
+        !first && { borderTopWidth: 1, borderTopColor: c.line },
+        pressed && styles.pressed,
+      ]}
     >
-      <Icon name={icon} size={24} color={t.color.ink} />
-      <Text variant="bodyStrong" color={t.color.ink} style={styles.tileTitle}>
-        {title}
-      </Text>
-      <Text variant="caption" color={t.color.inkMuted} style={styles.tileCaption}>
-        {caption}
-      </Text>
+      <Icon name={icon} size={20} color={tone === "out" ? c.winText : c.inkMuted} />
+      <View style={styles.text}>
+        <Text variant="bodyStrong" color={ink} style={styles.setTitle}>
+          {title}
+        </Text>
+        {caption ? (
+          <Text variant="caption" color={c.inkMuted} style={styles.setCaption}>
+            {caption}
+          </Text>
+        ) : null}
+      </View>
+      {tone === "out" ? null : <Icon name="next" size={16} color={c.inkMuted} />}
     </Pressable>
   );
 }
 
 /**
- * Avatar de l'en-tête `.me-av` : carré de 84 px, rayon 22, incliné de −6°, fond rouge (photo du compte si elle existe),
- * initiale en Archivo large italique 34 px.
+ * Avatar de l'en-tête compact `.mh .me-av` (maquette 7.2) : carré de 62 px, rayon 18, incliné de −6°, fond rouge (photo
+ * du compte si elle existe), initiale en Archivo large italique.
  */
 export function HeadAvatar({ url, name }: { url?: string | null; name: string }) {
   const { t } = useTheme();
@@ -477,6 +607,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   cntText: { fontSize: 12, letterSpacing: 0 },
+  onT: { flexDirection: "row", alignItems: "center", gap: 4 },
+  onTText: { fontSize: 11, lineHeight: 14 },
+  linkRow: { flexDirection: "row", alignItems: "center", gap: space1 + 2, alignSelf: "flex-start", paddingVertical: 4 },
+  linkText: { fontSize: 13.5, lineHeight: 18, fontWeight: "800" },
+  pressed: { opacity: 0.8 },
   sheetTitle: { fontSize: 18, lineHeight: 19 },
   opt: {
     flexDirection: "row",
@@ -487,31 +622,37 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   optIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  season: { gap: space1 + 2, padding: space3 + 2, borderRadius: radiusLg },
+  season: { gap: space2, padding: space3 + 2, borderRadius: radiusLg },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space2 },
+  shrink: { flexShrink: 1, textAlign: "right" },
   points: { flexDirection: "row", alignItems: "baseline", gap: space1 },
   track: { height: 10, borderRadius: 5, overflow: "hidden", flexDirection: "row" },
   fill: { height: 10, borderRadius: 5 },
-  tile: {
-    width: "48%",
-    flexGrow: 1,
-    gap: space2,
-    padding: space3 + 2,
-    minHeight: 104,
-    borderRadius: radiusLg,
+  seasonFoot: { flexDirection: "row", flexWrap: "wrap", columnGap: space3 + 4, rowGap: space1 },
+  footLink: { flexDirection: "row", alignItems: "center", gap: 4 },
+  footText: { fontSize: 12.5, lineHeight: 17, fontWeight: "700" },
+  lrow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space3,
+    paddingVertical: space2 + 2,
+    paddingHorizontal: space3,
+    borderRadius: 16,
     borderWidth: 1,
   },
-  tileTitle: { fontFamily: "Archivo-ExtraBold", fontSize: 14.5 },
-  tileCaption: { fontSize: 12, lineHeight: 15.6 },
+  setList: { borderRadius: 18, overflow: "hidden" },
+  setRow: { flexDirection: "row", alignItems: "center", gap: space3, paddingVertical: 13, paddingHorizontal: 14 },
+  setTitle: { fontSize: 14.5, lineHeight: 19, fontWeight: "800" },
+  setCaption: { fontSize: 12, lineHeight: 16 },
   meAv: {
-    width: 84,
-    height: 84,
-    borderRadius: 22,
+    width: 62,
+    height: 62,
+    borderRadius: 18,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
     transform: [{ skewX: "-6deg" }],
   },
-  meAvImg: { width: 84, height: 84 },
-  meAvText: { fontSize: 34, lineHeight: 36, transform: [{ skewX: "6deg" }] },
+  meAvImg: { width: 62, height: 62 },
+  meAvText: { fontSize: 26, lineHeight: 28, transform: [{ skewX: "6deg" }] },
 });
