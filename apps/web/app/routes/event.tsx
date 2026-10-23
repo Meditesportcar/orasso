@@ -727,11 +727,7 @@ function EventPage({
               })}
               {mySlot && (
                 <p className="o-t-caption" data-testid="my-place-arrival">
-                  <strong>
-                    {arrivalLabel(mySlot)
-                      .replace(/^Arrivée /, "Arrivée exposants ")
-                      .replace(/ \(conseillé\)$/, "")}
-                  </strong>
+                  <strong>{arrivalLabel(mySlot).replace(/^Arrivée /, "Arrivée exposants ")}</strong>
                   {mySlot.note ? ` · ${mySlot.note}` : ""}
                 </p>
               )}

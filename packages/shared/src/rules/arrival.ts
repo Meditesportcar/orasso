@@ -29,11 +29,13 @@ export function arrivalTime(value: string): string {
   return m[2] === "00" ? `${h} h` : `${h} h ${m[2]}`;
 }
 
-/** « Arrivée 18 h 30 – 19 h 15 (strict) » ou « Arrivée dès 19 h 30 (conseillé) ». */
+/**
+ * « Arrivée 18 h 30 – 19 h 15 (strict) » ou « Arrivée dès 19 h 30 ». Lot M4, tour 2 : plus d'horaire « conseillé »
+ * nulle part (correction de Damien) : candidature, crew, invitation, consignes, aperçu de l'assistant.
+ */
 export function arrivalLabel(slot: ArrivalSlot): string {
-  const suffix = slot.strict ? arrivalTexts.strictSuffix : arrivalTexts.advisedSuffix;
   const when = slot.to ? `${arrivalTime(slot.from)} – ${arrivalTime(slot.to)}` : `dès ${arrivalTime(slot.from)}`;
-  return `Arrivée ${when} (${suffix})`;
+  return slot.strict ? `Arrivée ${when} (${arrivalTexts.strictSuffix})` : `Arrivée ${when}`;
 }
 
 /** Un créneau dure au plus 12 h : une fin « avant » le début passe minuit (23:30 – 00:30), au-delà c'est une erreur. */

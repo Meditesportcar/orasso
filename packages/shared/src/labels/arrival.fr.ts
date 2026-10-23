@@ -15,9 +15,8 @@ export const arrivalTexts = {
   seenLabel: "J'ai vu le créneau d'arrivée.",
   noteLabel: "Une note pour l'équipe (facultatif)",
   notePlaceholder: "J'arriverai vers 19 h 30 à cause du travail",
-  /** Suffixe du libellé : « (strict) » ou « (conseillé) ». */
+  /** Suffixe du libellé d'un créneau strict : « (strict) ». Lot M4 : jamais « (conseillé) » (correction de Damien). */
   strictSuffix: "strict",
-  advisedSuffix: "conseillé",
 } as const;
 
 /** Problèmes de saisie des créneaux (`validateArrivals`), affichés tels quels dans l'assistant et renvoyés par l'API. */

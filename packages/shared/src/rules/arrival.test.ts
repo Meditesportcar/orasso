@@ -24,10 +24,9 @@ const nocturne: Arrivals = {
 describe("arrivalLabel", () => {
   it("écrit le créneau comme le prototype", () => {
     expect(arrivalLabel(nocturne.exhibitors!)).toBe("Arrivée 18 h 30 – 19 h 15 (strict)");
-    expect(arrivalLabel(nocturne.public!)).toBe("Arrivée dès 19 h 30 (conseillé)");
-    expect(arrivalLabel({ from: "19:00", to: "23:00", strict: false, note: null })).toBe(
-      "Arrivée 19 h – 23 h (conseillé)",
-    );
+    // Lot M4 : jamais « conseillé ».
+    expect(arrivalLabel(nocturne.public!)).toBe("Arrivée dès 19 h 30");
+    expect(arrivalLabel({ from: "19:00", to: "23:00", strict: false, note: null })).toBe("Arrivée 19 h – 23 h");
   });
 
   it("formate une heure murale", () => {
