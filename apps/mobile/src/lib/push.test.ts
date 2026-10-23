@@ -13,6 +13,8 @@ const sim = vi.hoisted(() => ({
     getPermissionsAsync: vi.fn(),
     getExpoPushTokenAsync: vi.fn(),
     unregisterForNotificationsAsync: vi.fn(),
+    dismissAllNotificationsAsync: vi.fn(async () => undefined),
+    setBadgeCountAsync: vi.fn(async () => true),
     requestPermissionsAsync: vi.fn(),
   },
   api: { registerDevice: vi.fn(), unregisterDevice: vi.fn(), forgetPushToken: vi.fn() },
