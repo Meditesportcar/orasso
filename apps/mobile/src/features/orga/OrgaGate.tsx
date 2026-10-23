@@ -18,7 +18,7 @@ import { useSession } from "@/lib/session";
 import { useApi } from "@/lib/useApi";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
-import { TabScreen } from "@/ui/Screens";
+import { FlowScreen, TabScreen } from "@/ui/Screens";
 
 type OrgaValue = { structureId: string; structureName: string };
 const OrgaContext = createContext<OrgaValue | null>(null);
@@ -80,31 +80,75 @@ export function OrgaFailure({ error }: { error: unknown }) {
 }
 
 /**
+ * Écran d'attente ou d'erreur de la garde. Lot M7 : celui d'une page masquée du groupe qui est en mode B (`page` :
+ * bannissements, modèles, notes) en garde l'en-tête de fiche ; sinon le gabarit d'onglet (mode B de lui-même hors du
+ * groupe d'onglets).
+ */
+function GateScreen({
+  title,
+  facts,
+  page,
+  children,
+}: {
+  title: string;
+  facts?: string;
+  page: boolean;
+  children: ReactNode;
+}) {
+  const router = useRouter();
+  if (!page) {
+    return (
+      <TabScreen title={title} facts={facts}>
+        {children}
+      </TabScreen>
+    );
+  }
+  return (
+    <FlowScreen
+      title={title}
+      facts={facts}
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/(orga)/equipe"))}
+    >
+      {children}
+    </FlowScreen>
+  );
+}
+
+/**
  * `GET /me` dit « double authentification exigée » même quand l'API est réglée pour la laisser passer (développement,
  * `DEV_SKIP_2FA`) : on demande donc à l'API elle-même, par un appel léger (le résumé de la Boîte, protégé comme toutes
  * les routes de l'espace). Refus pour double authentification → l'écran qui explique quoi faire ; sinon l'espace s'ouvre.
  */
-function TwoFactorProbe({ title, children }: { title: string; children: ReactNode }) {
+function TwoFactorProbe({ title, page, children }: { title: string; page: boolean; children: ReactNode }) {
   const { structureId, structureName } = useOrga();
   const probe = useApi(() => api.orgInboxSummary(structureId), [structureId]);
   if (isTwoFactorError(probe.error)) {
     return (
-      <TabScreen title={title} facts={structureName}>
+      <GateScreen title={title} facts={structureName} page={page}>
         <TwoFactorGate />
-      </TabScreen>
+      </GateScreen>
     );
   }
   if (!probe.data && !probe.error) {
     return (
-      <TabScreen title={title} facts={structureName}>
+      <GateScreen title={title} facts={structureName} page={page}>
         <Muted variant="body">Chargement…</Muted>
-      </TabScreen>
+      </GateScreen>
     );
   }
   return <>{children}</>;
 }
 
-export function OrgaGate({ title, children }: { title: string; children: ReactNode }) {
+export function OrgaGate({
+  title,
+  page = false,
+  children,
+}: {
+  title: string;
+  /** Lot M7 : page masquée du groupe en mode B (en-tête de fiche) : ses écrans d'attente le gardent. */
+  page?: boolean;
+  children: ReactNode;
+}) {
   const { persona, active, ready } = usePersona();
   const { me } = useSession();
   // Hors casquette Organisateur : aucun appel, aucune donnée. Les pages sorties du groupe (orga) au lot C4a (page d'un
@@ -113,14 +157,20 @@ export function OrgaGate({ title, children }: { title: string; children: ReactNo
   if (persona.kind !== "organizer") return ready ? <Redirect href={landingOf(persona) as never} /> : null;
   if (active.kind !== "organizer" || active.id !== persona.structureId) {
     return (
-      <TabScreen title={title}>
+      <GateScreen title={title} page={page}>
         <Notice tone="error">{orgaLabels.noStructure}</Notice>
-      </TabScreen>
+      </GateScreen>
     );
   }
   return (
     <OrgaContext.Provider value={{ structureId: persona.structureId, structureName: active.label }}>
-      {me?.twoFactorRequired ? <TwoFactorProbe title={title}>{children}</TwoFactorProbe> : children}
+      {me?.twoFactorRequired ? (
+        <TwoFactorProbe title={title} page={page}>
+          {children}
+        </TwoFactorProbe>
+      ) : (
+        children
+      )}
     </OrgaContext.Provider>
   );
 }

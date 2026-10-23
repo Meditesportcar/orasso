@@ -392,6 +392,21 @@
 .app__bar .o-appbar__count {
   box-shadow: none;
 }
+/* Lot M7 : fiche ou parcours (mode B) : ni bande ni barre d'onglets, l'en-tête de fiche ouvre la page. */
+.app__body--fiche {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-12);
+}
+/* L'en-tête de fiche s'aligne sur la colonne de la page (le corps a déjà sa marge de 16 px). */
+.fiche-bar {
+  padding-inline: 0;
+}
+/* Au-dessus d'une page étroite (carte de 520 px), l'en-tête prend sa largeur : titre et ✕ alignés sur la carte. */
+.fiche-bar:has(+ .s-narrow) {
+  width: 100%;
+  max-width: 520px;
+  margin-inline: auto;
+}
 /* Place de l'accès flottant : le bas de la page ne passe pas dessous. */
 .app__body--near {
   padding-bottom: calc(var(--bar-tabs) + var(--space-12) + 72px);
@@ -582,6 +597,10 @@
   background: var(--night);
   color: var(--accent);
   font-weight: 800;
+}
+/* Lot M7 : un parcours de l'espace (création d'un événement) retire la barre latérale (mode B). */
+.orga__side[hidden] {
+  display: none;
 }
 .orga__content {
   flex: 999 1 560px;

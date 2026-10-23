@@ -7,7 +7,7 @@ import { OrgaGate } from "@/features/orga/OrgaGate";
 
 export default function Notes() {
   return (
-    <OrgaGate title={orgaManageLabels.notesScreenTitle}>
+    <OrgaGate page title={orgaManageLabels.notesScreenTitle}>
       <NotesScreen />
     </OrgaGate>
   );

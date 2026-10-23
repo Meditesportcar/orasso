@@ -13,7 +13,6 @@ import {
   templateKindLabels,
   templateKinds,
 } from "@orasso/shared";
-import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -26,6 +25,7 @@ import { AppSheet } from "@/ui/AppSheet";
 import { Muted } from "@/ui/Muted";
 import { Notice } from "@/ui/Notice";
 import { FlowScreen, SectionTitle } from "@/ui/Screens";
+import { useCloseTo } from "@/ui/useCloseTo";
 import { ConfirmSheet } from "./ConfirmSheet";
 import { OrgaFailure, useOrga } from "./OrgaGate";
 
@@ -193,7 +193,6 @@ function TemplateCard({
 }
 
 export function TemplatesScreen() {
-  const router = useRouter();
   const { structureId, structureName } = useOrga();
   const templates = useApi(() => api.templates(structureId), [structureId]);
   const [editing, setEditing] = useState<Editing>(null);
@@ -203,7 +202,8 @@ export function TemplatesScreen() {
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/(orga)/equipe"));
+  // Lot M7, tour 2 : le ✕ revient à l'écran qui a ouvert la page (le retour des onglets mènerait aux Événements).
+  const close = useCloseTo("/boite/orga");
   const all = templates.data?.items ?? [];
   const orasso = all.filter((x) => x.orasso);
   const mine = all.filter((x) => !x.orasso);

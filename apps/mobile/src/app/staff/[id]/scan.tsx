@@ -6,7 +6,6 @@
 // `decideLocal` ; un code périmé est refusé « Code périmé : demande à la personne de rafraîchir son écran ».
 
 import {
-  AppBar,
   Button,
   Ground,
   Plate,
@@ -38,10 +37,12 @@ import { IncidentSheet } from "@/features/staff/IncidentSheet";
 import { clock, pointedResult, resultOf, resultProps, type ShownResult, vibrate } from "@/features/staff/result";
 import { SearchSheet } from "@/features/staff/SearchSheet";
 import { serverNow } from "@/lib/clock";
+import { RECETTE } from "@/lib/recette";
 import { ed25519Verify } from "@/lib/staff/crypto";
 import { counters, decideLocal, ScanGate } from "@/lib/staff/model";
 import { clearWriteError, getWriteError, newId, trustedKeysNow } from "@/lib/staff/runtime";
 import { useStaffEvent } from "@/lib/staff/useStaff";
+import { FicheHeader } from "@/ui/FicheHeader";
 
 const { space2, space3 } = tokens.spacing;
 
@@ -160,7 +161,7 @@ export default function Scan() {
 
   // Recette seulement (pas de caméra dans le navigateur de test) : injection d'une charge utile.
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!RECETTE) return;
     const g = globalThis as {
       __orassoScan?: (p: string) => void;
       __orassoScanTimings?: number[];
@@ -227,14 +228,12 @@ export default function Scan() {
 
   return (
     <Ground animated={false} style={styles.fill}>
-      <AppBar
-        kind="flow"
+      <FicheHeader
         title="Accueil et scan"
         facts={state ? `Liste à jour ${clock(state.meta.syncedAt)} · hors ligne OK` : "Liste absente : synchronise"}
         counter={count ? `${count.arrived} / ${count.expected}` : undefined}
         onClose={close}
         closeLabel="Quitter le scan"
-        safeTop={insets.top}
       />
 
       {/* Lot 48 : l'accueil drive (la caméra lit la plaque) en tête de l'écran de scan. */}
@@ -348,7 +347,7 @@ export default function Scan() {
         ) : null}
       </View>
 
-      {__DEV__ ? <DevInject onInject={handle} lastMs={lastMs} /> : null}
+      {RECETTE ? <DevInject onInject={handle} lastMs={lastMs} /> : null}
 
       <View style={[styles.actions, { paddingBottom: space3 + insets.bottom }]}>
         <View style={styles.row}>
@@ -389,7 +388,7 @@ export default function Scan() {
           fullscreen
           onReturn={
             // Recette : `__orassoScanHold` garde le résultat affiché le temps d'une capture d'écran.
-            __DEV__ && (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold
+            RECETTE && (globalThis as { __orassoScanHold?: boolean }).__orassoScanHold
               ? undefined
               : () => {
                   setLast(result);

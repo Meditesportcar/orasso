@@ -10,7 +10,8 @@ import {
   type StructurePublic,
   type StructureSuspensionReason,
 } from "@orasso/shared";
-import { Form, Outlet, useLocation, useParams } from "react-router";
+import { Form, Outlet, useLocation, useMatches, useParams } from "react-router";
+import { isFiche } from "../components/FicheBar";
 import { TwoFactorNotice } from "../components/TwoFactorNotice";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import { now as clockNow } from "../lib/clock";
@@ -20,6 +21,8 @@ import "../styles/admin.css";
 import "../styles/after-event.css";
 
 // Espace organisateur : Sable imposé (docs/03), barre latérale, réservé aux membres de la structure.
+// Lot M7 (deux modes d'affichage) : la barre latérale est la navigation de l'espace ; un parcours (création ou
+// modification d'un événement, route qui déclare `handle = ficheHandle`) la retire et n'a que son en-tête de fiche.
 export async function loader({ request, params }: Route.LoaderArgs) {
   const me = await requireMe(request);
   const membership = me.memberships.find((m) => m.structureSlug === params.structure && m.status === "active");
@@ -83,13 +86,14 @@ export default function OrgaLayout({ loaderData }: Route.ComponentProps) {
   const { structure, isOrganizer, canCheckTickets, twoFactorHint, pseudo, badge, assistance } = loaderData;
   const { pathname } = useLocation();
   const { eventId } = useParams();
+  const fiche = isFiche(useMatches());
   const base = `/orga/${structure.slug}`;
   const eventBase = eventId ? `${base}/e/${eventId}` : null;
   return (
     // Lot 38 (DA v2, H2) : le thème n'est plus imposé (Sable) ; il suit le choix de l'utilisateur, Béton par défaut.
     <Ground variant="site" fixed>
       <div className="orga">
-        <nav className="orga__side" aria-label="Espace organisateur" data-bar>
+        <nav className="orga__side" aria-label="Espace organisateur" data-bar hidden={fiche}>
           <div className="orga__brand">
             <Monogram size={32} />
           </div>

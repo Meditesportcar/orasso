@@ -121,7 +121,7 @@ function UsersBody() {
 
 export function UsersScreen() {
   return (
-    <AdminGate title={L.registryUsers}>
+    <AdminGate page title={L.registryUsers}>
       <UsersBody />
     </AdminGate>
   );
@@ -446,7 +446,7 @@ function UserBody() {
 
 export function UserFileScreen() {
   return (
-    <AdminGate title={L.registryUsers}>
+    <AdminGate page title={L.registryUsers}>
       <UserBody />
     </AdminGate>
   );

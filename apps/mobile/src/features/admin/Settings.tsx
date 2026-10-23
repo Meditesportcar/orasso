@@ -506,7 +506,7 @@ function SettingsBody() {
 
 export function SettingsScreen() {
   return (
-    <AdminGate title={adminTexts.settingsTitle}>
+    <AdminGate page title={adminTexts.settingsTitle}>
       <SettingsBody />
     </AdminGate>
   );

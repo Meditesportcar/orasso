@@ -60,6 +60,11 @@ export type AppBarProps = {
    */
   kind: "tab" | "flow" | "home" | "page";
   title?: string;
+  /**
+   * Lot M7, tour 2 : balise du titre en flux. `h1` par défaut ; `p` quand la page porte déjà son propre titre (le nom
+   * d'un véhicule, d'un profil) : un seul `h1` par page.
+   */
+  titleAs?: "h1" | "p";
   /** Ligne de faits sous le titre (Tri, Scan, Direct) : « Nocturne de Canet · MéditeSportCar · J-2 ». */
   facts?: ReactNode;
   /** Écran de flux : compteur de contexte (« 62 / 116 »). */
@@ -103,6 +108,7 @@ export type AppBarProps = {
 export function AppBar({
   kind,
   title,
+  titleAs = "h1",
   facts,
   counter,
   onSearch,
@@ -171,7 +177,11 @@ export function AppBar({
         <span className="o-appbar__spacer" />
       ) : (
         <div className="o-appbar__heading">
-          <h1 className={cx("o-appbar__title o-t-title", facts && "has-facts")}>{title}</h1>
+          {titleAs === "p" ? (
+            <p className={cx("o-appbar__title o-t-title", facts && "has-facts")}>{title}</p>
+          ) : (
+            <h1 className={cx("o-appbar__title o-t-title", facts && "has-facts")}>{title}</h1>
+          )}
           {facts && <div className="o-appbar__facts o-t-label">{facts}</div>}
         </div>
       )}

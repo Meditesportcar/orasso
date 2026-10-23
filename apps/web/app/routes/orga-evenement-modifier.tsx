@@ -9,8 +9,12 @@ import {
 } from "@orasso/shared";
 
 import { EventWizard } from "../components/EventWizard";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import { api, apiOrThrow, requireMe } from "../lib/api.server";
 import type { Route } from "./+types/orga-evenement-modifier";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta() {
   return [{ title: "Modifier l'événement · Orasso" }, { name: "robots", content: "noindex" }];
@@ -54,12 +58,7 @@ export default function ModifierEvenement({ loaderData }: Route.ComponentProps) 
   const { structure, event, categories, makes, initialStep, stepWanted } = loaderData;
   return (
     <>
-      <div className="orga__head">
-        <div>
-          <div className="s-label o-t-label">Modifier</div>
-          <h1 className="s-title">{event.title}</h1>
-        </div>
-      </div>
+      <FicheBar title={event.title} facts="Modifier" back={`/orga/${structure.slug}/e/${event.id}`} />
       <EventWizard
         key={event.id}
         structureId={structure.id}

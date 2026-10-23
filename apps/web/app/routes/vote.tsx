@@ -14,10 +14,14 @@ import {
 import { useEffect, useState } from "react";
 import { data, Form, useNavigation } from "react-router";
 
-import { api, apiOrThrow, requireMe } from "../lib/api.server";
+import { api, apiOrThrow, requireMe, safeReturn } from "../lib/api.server";
 import { useLiveRevalidate } from "../lib/useLiveRevalidate";
 import "../styles/passport.css";
+import { FicheBar, ficheHandle } from "../components/FicheBar";
 import type { Route } from "./+types/vote";
+
+// Lot M7 : fiche ou parcours, mode B (en-tête de fiche, sans bande ni barre d'onglets).
+export const handle = ficheHandle;
 
 export function meta({ loaderData: d }: Route.MetaArgs) {
   return [
@@ -27,6 +31,8 @@ export function meta({ loaderData: d }: Route.MetaArgs) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  // Lot M7, tour 2 : le ✕ revient à l'écran d'origine (`?retour=`, chemin interne seulement).
+  const back = safeReturn(new URL(request.url).searchParams.get("retour"), "/app/sorties");
   await requireMe(request);
   const event = await apiOrThrow<EventPublic>(request, `/events/by-slug/${encodeURIComponent(params.slug)}`);
   const [board, mine] = await Promise.all([
@@ -46,7 +52,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     cursor = res.data.next;
   }
   candidates.sort((a, b) => a.applicationId.localeCompare(b.applicationId));
-  return { event: { id: event.id, slug: event.slug, title: event.title }, board, mine, candidates };
+  return {
+    back,
+    event: { id: event.id, slug: event.slug, title: event.title },
+    board,
+    mine,
+    candidates,
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -93,13 +105,7 @@ export default function Vote({ loaderData, actionData }: Route.ComponentProps) {
 
   return (
     <div className="s-stack" data-testid="vote" data-live={connected ? "on" : "off"}>
-      <a href="/app/passeport" className="o-t-meta">
-        ← Passeport
-      </a>
-      <div className="s-head">
-        <div className="o-t-label s-label">{event.title}</div>
-        <h1 className="s-title">{audiencePrizeTexts.title}</h1>
-      </div>
+      <FicheBar title={audiencePrizeTexts.title} facts={event.title} back={loaderData.back} />
       <p className="s-lead">
         {board.settled
           ? voteScreenTexts.results
