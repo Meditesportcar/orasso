@@ -22,7 +22,12 @@ const read = (plate: string, over: Partial<PlateReading> = {}): PlateReading => 
   area: 0.01,
   ...over,
 });
-const found = (plate: string, over: Partial<PlateReading> = {}) => ({ ...read(plate, over), rect, stripped: 0 });
+const found = (plate: string, over: Partial<PlateReading> = {}) => ({
+  ...read(plate, over),
+  rect,
+  stripped: 0,
+  tier: 0,
+});
 
 /** Un passage sur l'étape : le préremplissage s'applique, comme l'effet de `StepPlate` au montage. */
 const visit = (d: Draft): Draft => ({ ...d, ...(prefillPatch(d) ?? {}) });

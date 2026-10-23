@@ -45,3 +45,13 @@ export function neighbourRoute(
   if (!next || tabIds.indexOf(id) < 0) return null;
   return Object.keys(routes).find((name) => routes[name] === next) ?? null;
 }
+
+/** Ordre de préchargement : les onglets les plus proches de l'onglet ouvert d'abord. */
+export function preloadOrder(names: readonly string[], current: string | undefined): string[] {
+  const from = Math.max(0, current ? names.indexOf(current) : 0);
+  return names
+    .map((name, i) => ({ name, d: Math.abs(i - from) }))
+    .filter((x) => x.name !== current)
+    .sort((a, b) => a.d - b.d)
+    .map((x) => x.name);
+}

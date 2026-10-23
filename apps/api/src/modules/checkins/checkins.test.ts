@@ -307,6 +307,22 @@ describe("pointage manuel et par plaque", () => {
     expect(found.text).not.toContain(kenji.plate.replaceAll("-", ""));
   });
 
+  it("lot M2, tour 4 : deux pass retenus sous la même plaque (un jour) → ambiguë, rien n'est pointé", async () => {
+    const [kenji, lea] = [people[0]!, people[1]!];
+    const kApp = await db.query.applications.findFirst({ where: eq(applications.id, kenji.applicationId) });
+    const lApp = await db.query.applications.findFirst({ where: eq(applications.id, lea.applicationId) });
+    const kVehicle = await db.query.vehicles.findFirst({ where: eq(vehicles.id, kApp!.vehicleId!) });
+    // Le véhicule de Léa porte la même clé (gardé en souvenir : la contrainte d'unicité ne vise que les actifs).
+    await db
+      .update(vehicles)
+      .set({ status: "keepsake", plateNormalized: kVehicle!.plateNormalized })
+      .where(eq(vehicles.id, lApp!.vehicleId!));
+    const res = await call(theo, "POST", `/events/${eventId}/checkins/by-plates`, { plates: [kenji.plate] });
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ matched: [], unmatched: [], ambiguous: [kenji.plate] });
+    expect(await db.query.checkins.findMany({ where: eq(checkins.eventId, eventId) })).toEqual([]);
+  });
+
   it("direct de l'équipe organisatrice : arrivés / attendus, staff présent", async () => {
     await checkinsService.receiveBatch(julieV, eventId, {
       deviceId: julieDevice,

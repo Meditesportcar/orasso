@@ -13,7 +13,7 @@ import {
   type VehicleUpdate,
   vehiclePlateIssue,
 } from "@orasso/shared";
-import { and, count, desc, eq, max, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, max, ne } from "drizzle-orm";
 import sharp from "sharp";
 
 import { db } from "../../db/client";
@@ -21,6 +21,7 @@ import {
   applications,
   checkins,
   events,
+  plateNormalizationConflicts,
   vehicleCategories,
   vehicleGenerations,
   vehicleModels,
@@ -71,17 +72,28 @@ export async function checkReference(
   }
 }
 
-/** Véhicule actif qui porte déjà cette plaque (hors le véhicule en cours de modification). */
+/**
+ * Véhicule actif qui porte déjà cette plaque (hors le véhicule en cours de modification). Lot M2, tour 3 : la forme
+ * voulue d'un véhicule listé en conflit (`plate_normalization_conflicts`) lui est réservée : un autre compte qui saisit
+ * cette plaque passe par une demande de transfert, sans créer de doublon.
+ */
 async function plateHolder(ex: Executor, plateNormalized: string | null, exceptVehicleId?: string) {
   if (!plateNormalized) return null;
+  const except = exceptVehicleId ? ne(vehicles.id, exceptVehicleId) : undefined;
   const holder = await ex.query.vehicles.findFirst({
-    where: and(
-      eq(vehicles.plateNormalized, plateNormalized),
-      eq(vehicles.status, "active"),
-      exceptVehicleId ? ne(vehicles.id, exceptVehicleId) : undefined,
-    ),
+    where: and(eq(vehicles.plateNormalized, plateNormalized), eq(vehicles.status, "active"), except),
   });
-  return holder ?? null;
+  if (holder) return holder;
+  const [reserved] = await ex
+    .select({ vehicle: vehicles })
+    .from(plateNormalizationConflicts)
+    .innerJoin(vehicles, eq(vehicles.id, plateNormalizationConflicts.vehicleId))
+    .where(
+      and(eq(plateNormalizationConflicts.wantedNormalized, plateNormalized), eq(vehicles.status, "active"), except),
+    )
+    .orderBy(asc(plateNormalizationConflicts.createdAt))
+    .limit(1);
+  return reserved?.vehicle ?? null;
 }
 
 /**
@@ -281,7 +293,19 @@ export const vehiclesService = {
     if (merged.unregistered) merged.plate = null;
     const plateIssue = vehiclePlateIssue(merged);
     if (plateIssue) throw validation(plateIssue, { field: "plate" });
-    const plateNormalized = pending ? null : merged.plate ? normalizePlate(merged.plate) : null;
+    // Lot M2, tour 3 : la clé n'est recalculée que si la plaque change (numéro, « non immatriculé », statut). Un véhicule
+    // listé en conflit garde ainsi sa clé quand on modifie sa couleur ou ses photos.
+    const plateTouched =
+      (input.plate !== undefined && normalizePlate(input.plate ?? "") !== normalizePlate(current.plate ?? "")) ||
+      (input.unregistered !== undefined && input.unregistered !== current.unregistered) ||
+      merged.status !== current.status;
+    const plateNormalized = pending
+      ? null
+      : !plateTouched
+        ? current.plateNormalized
+        : merged.plate
+          ? normalizePlate(merged.plate)
+          : null;
     const referenceChanged = Boolean(
       input.makeId || input.modelId || input.generationId !== undefined || input.vehicleType,
     );
@@ -358,6 +382,11 @@ export const vehiclesService = {
           current.status === "active" &&
           current.plateNormalized &&
           (merged.status !== "active" || plateNormalized !== current.plateNormalized);
+        // Lot M2, tour 4 : la plaque change (ou le véhicule quitte sa plaque) : sa ligne de conflit est périmée, retirée
+        // avant toute libération (une réservation périmée n'est pas une preuve de détention).
+        if (nextPlateNormalized !== current.plateNormalized || merged.status !== current.status) {
+          await tx.delete(plateNormalizationConflicts).where(eq(plateNormalizationConflicts.vehicleId, id));
+        }
         if (leftPlate) await plateTransferService.plateReleased(tx, id);
         // La certification se perd quand un champ technique, une catégorie ou une photo change (S38), pas pour la
         // description, la préparation, la couleur ou le statut.

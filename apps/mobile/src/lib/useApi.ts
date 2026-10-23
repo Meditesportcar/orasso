@@ -1,9 +1,12 @@
 // Chargement d'une donnée de l'API : affiche tout de suite la dernière valeur connue (mémoire, ou cache du trousseau
 // si `cacheKey` est donné), recharge au retour sur l'écran, garde la valeur en cas de panne réseau.
+// Lot M3 (fluidité) : charge dès le montage, même hors focus (onglets voisins préchargés par la barre de pages) ; le
+// retour sur l'écran recharge en arrière-plan, sauf si une lecture est encore en cours et qu'aucune modification n'a
+// été envoyée depuis son départ (tour 2 : jamais d'état périmé après une suppression, une candidature…).
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiRequestError } from "./http";
+import { ApiRequestError, mutationCount } from "./http";
 import { accountGuard, cacheGetJson, cacheScope, cacheSetJson } from "./kv";
 
 type Options = {
@@ -24,6 +27,14 @@ export type ApiState<T> = {
   reload: () => Promise<T | null>;
   setData: (value: T | null) => void;
 };
+
+/**
+ * Retour sur l'écran : recharger, sauf si une lecture est en cours (`inFlight` = modifications comptées à son départ)
+ * et qu'aucune modification n'est partie depuis.
+ */
+export function shouldReloadOnFocus(inFlight: number | null, mutations: number): boolean {
+  return inFlight === null || inFlight !== mutations;
+}
 
 export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], options: Options = {}): ApiState<T> {
   const { cacheKey, enabled = true, refreshMs } = options;
@@ -65,8 +76,12 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
     };
   }, [cacheKey, account]);
 
+  // Lecture en cours : le nombre de modifications envoyées à son départ (`null` = aucune lecture en cours).
+  const inFlight = useRef<number | null>(null);
   const reload = useCallback(async (): Promise<T | null> => {
     if (!enabled) return null;
+    const started = mutationCount();
+    inFlight.current = started;
     // Compte du départ : une réponse qui arrive après un changement de compte est jetée (état, cache), même si
     // l'écran est resté monté d'un compte à l'autre.
     const guard = accountGuard();
@@ -86,13 +101,19 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: readonly unknown[], o
       if (err.isNetwork) setOffline(true);
       return null;
     } finally {
+      if (inFlight.current === started) inFlight.current = null;
       if (alive.current) setLoading(false);
     }
   }, [enabled, cacheKey, ...deps]);
 
+  // Premier chargement au montage (et à chaque changement de dépendances), focus ou pas.
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
   useFocusEffect(
     useCallback(() => {
-      void reload();
+      if (shouldReloadOnFocus(inFlight.current, mutationCount())) void reload();
       if (!refreshMs) return undefined;
       const timer = setInterval(() => void reload(), refreshMs);
       return () => clearInterval(timer);

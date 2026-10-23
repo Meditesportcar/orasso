@@ -66,3 +66,18 @@ describe("forme unique : bande « F » et département retirés (lot M2, tour 2)
     expect(normalizePlate("M AB 1234")).toBe("MAB1234");
   });
 });
+
+describe("SIV de série « FW » ou W garage avec sa bande : la saisie départage (lot M2, tour 3)", () => {
+  it.each([
+    ["FW-123-AB", "FW123AB"],
+    ["FW-123-AB 66", "FW123AB"],
+    ["F W 123 AB", "W123AB"],
+    ["F W 123 AB 66", "W123AB"],
+    ["F FW-123-AB 66", "FW123AB"],
+    ["FW123AB", "FW123AB"],
+    ["F-W-123-AB", "W123AB"],
+    ["FAB123CD66", "AB123CD"],
+  ])("%s → %s", (raw, stored) => {
+    expect(normalizePlate(raw)).toBe(stored);
+  });
+});

@@ -59,10 +59,18 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
   return data;
 }
 
+/**
+ * Lot M3, tour 2 : nombre de modifications envoyées (toute requête autre que GET), lu par `useApi` : une lecture
+ * partie avant une modification ne compte pas comme fraîche au retour sur l'écran.
+ */
+let mutations = 0;
+export const mutationCount = () => mutations;
+
 export async function requestWithHeaders<T>(
   path: string,
   { method = "GET", body, form, timeout = 15_000, headers: extra, cookies = false }: Options = {},
 ): Promise<{ data: T; headers: Headers }> {
+  if (method !== "GET") mutations++;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   const headers: Record<string, string> = { ...extra };

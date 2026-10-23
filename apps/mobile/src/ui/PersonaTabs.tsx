@@ -4,13 +4,15 @@
 // barre. Le conteneur porte le glissement entre onglets (`useTabSwipe`, lot 40).
 // Lot C1 (artefact DA v2) : la barre flotte au-dessus du contenu (`.tabbar` absolue, 10 px des bords) ; elle se retire,
 // avec l'accès flottant, sur un écran de flux et sous une feuille ouverte (`useTabBarHidden`).
+// Lot M3 (fluidité) : les onglets de la barre sont préchargés un à un après l'ouverture (`navigation.preload`, voisins
+// d'abord) : au premier passage, l'onglet est déjà monté, ses données lues (cache d'abord) ; un onglet reste monté.
 import { TabBar, type TabItem, tabSets, useTabBarHidden } from "@orasso/design-system/native";
 import { Tabs } from "expo-router";
-import { type ComponentProps, type ReactNode, useCallback, useMemo, useRef } from "react";
+import { type ComponentProps, type ReactNode, useCallback, useEffect, useMemo, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { neighbourRoute } from "@/features/nav/swipe";
+import { neighbourRoute, preloadOrder } from "@/features/nav/swipe";
 import { TabSwipeContext, useTabSwipe } from "@/features/nav/useTabSwipe";
 import { NextAccessBar } from "@/features/sorties/NextAccessBar";
 import { personaTabSets, personaTabs } from "@/lib/personaModel";
@@ -18,6 +20,9 @@ import { personaTabSets, personaTabs } from "@/lib/personaModel";
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 type Navigator = { current: string | undefined; navigate: (route: string) => void };
 const NO_EXTRA: Record<string, string> = {};
+/** Préchargement des onglets : après l'ouverture (la page affichée peint d'abord), puis un onglet à la fois. */
+const PRELOAD_FIRST_MS = 600;
+const PRELOAD_STEP_MS = 300;
 
 function PersonaTabBar({
   state,
@@ -35,6 +40,31 @@ function PersonaTabBar({
   // Le glissement a besoin de l'onglet courant et de la navigation du groupe : la barre les lui prête.
   navigator.current = { current, navigate: (route) => navigation.navigate(route) };
   const hidden = useTabBarHidden();
+  // Lot M3 : précharge les onglets de la barre (une seule fois, à l'ouverture du groupe).
+  const preloadRef = useRef({
+    navigation,
+    names: tabs.map((tab) => Object.keys(routes).find((n) => routes[n] === tab.id)),
+    current,
+  });
+  preloadRef.current = { navigation, names: preloadRef.current.names, current };
+  useEffect(() => {
+    const { names, current: opened } = preloadRef.current;
+    const queue = preloadOrder(
+      names.filter((n) => n !== undefined),
+      opened,
+    );
+    let timer: ReturnType<typeof setTimeout>;
+    const step = () => {
+      const next = queue.shift();
+      if (!next) return;
+      if (next !== preloadRef.current.current) preloadRef.current.navigation.preload(next);
+      timer = setTimeout(step, PRELOAD_STEP_MS);
+    };
+    // Téléphone seulement : sur le web de recette, un onglet préchargé reste dans la page (deux Explorer, par exemple).
+    if (Platform.OS === "web") return undefined;
+    timer = setTimeout(step, PRELOAD_FIRST_MS);
+    return () => clearTimeout(timer);
+  }, []);
   // Lot C1, tour 2 : masquée sans être démontée (l'accès flottant garde ses données) ; `display: none` plutôt que
   // l'opacité : sur le web, les zones d'appui des onglets restaient actives sous une feuille.
   return (
