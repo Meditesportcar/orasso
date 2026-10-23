@@ -80,8 +80,7 @@ export async function seedMissingCategories() {
  * Idempotente : ne fait rien si la table n'est pas vide, ce qui complète aussi une base déjà semée.
  */
 export async function seedEngines() {
-  const [existing] = await db.select({ n: sql<number>`count(*)::int` }).from(t.vehicleEngines);
-  if (existing && existing.n > 0) return;
+  // Ligne par ligne : une motorisation déjà là (même génération, même nom) n'est ni recréée ni modifiée.
   const rows = await db
     .select({
       id: t.vehicleGenerations.id,
@@ -97,8 +96,16 @@ export async function seedEngines() {
     const generationId = ids.get(key);
     return generationId ? engines.map((e, position) => ({ generationId, ...e, position })) : [];
   });
-  for (let i = 0; i < values.length; i += 500) await db.insert(t.vehicleEngines).values(values.slice(i, i + 500));
-  console.log(`Motorisations : ${values.length} sur ${new Set(values.map((v) => v.generationId)).size} générations.`);
+  let added = 0;
+  for (let i = 0; i < values.length; i += 500) {
+    const inserted = await db
+      .insert(t.vehicleEngines)
+      .values(values.slice(i, i + 500))
+      .onConflictDoNothing({ target: [t.vehicleEngines.generationId, t.vehicleEngines.name] })
+      .returning({ id: t.vehicleEngines.id });
+    added += inserted.length;
+  }
+  if (added) console.log(`Motorisations : ${added} ajoutées (${values.length} dans le catalogue).`);
 }
 
 // --- Référentiel véhicules (+ « Autre » à chaque niveau) -------------------------------------------------------
