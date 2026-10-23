@@ -208,7 +208,8 @@ for (const theme of ["beton", "sable"] as Theme[]) {
     await expect(page.getByText("1 véhicule").first()).toBeVisible();
     await expect(page.getByTestId("garage-card-name")).toHaveText("Toyota Supra Mk5");
     await expect(page.getByText("3.0 L6 turbo · 2021 · blanche").first()).toBeVisible();
-    await expect(page.getByText("Partager sa carte").first()).toBeVisible();
+    // Lot M5 : vocabulaire de Damien (« carte » = le plan) ; la mini-fiche dit « Partager ».
+    await expect(page.getByTestId("garage-share")).toBeVisible();
     await expect(page.getByText("Marque, photos, plaque floutée : deux minutes.").first()).toBeVisible();
     await checkDesign(page);
     await shot(page, "07-garage", theme);

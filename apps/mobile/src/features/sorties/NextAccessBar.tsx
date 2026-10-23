@@ -1,7 +1,7 @@
 // Accès flottant (lot 43 ; lot C1 : `.near` de l'artefact DA v2). Une carte affiche (crème en Béton, noire en Sable)
 // posée au-dessus de la barre d'onglets flottante : « J-6 / sam. », le titre en italique, la ligne « Retenue · Sam. 24 ·
 // 18 h 30 » et le bouton moutarde « QR », qui ouvre l'écran du jour J. Masquée sur Accueil et Sorties (l'accès y est
-// déjà en tête) et sur tout écran de flux. Elle apparaît de J-7 à J+1 pour un accès (candidature retenue, billet, mission staff,
+// déjà en tête), sur le Garage et le Profil (lot M5) et sur tout écran de flux. Elle apparaît de J-7 à J+1 pour un accès (candidature retenue, billet, mission staff,
 // accréditation) ; jamais sur l'écran du jour J ni en mode staff (ce sont des écrans plein cadre, hors de la barre
 // d'onglets). Aucun néon : le seul de l'écran est celui de son bouton principal.
 //
@@ -21,8 +21,13 @@ import { usePersona } from "@/lib/persona";
 import { useNow } from "@/lib/useNow";
 import { type AccessItem, applicationAccesses, barDay, nextAccessOf, staffAccesses, ticketAccesses } from "./model";
 
-/** Onglets où l'artefact ne montre pas l'accès flottant (`.app.no-near`). Lot M4 : ni l'Explorer, où flotte la bascule « Liste | Carte » (maquette 3.1). */
-const NO_NEAR = new Set(["home", "outings", "explore"]);
+/**
+ * Onglets sans accès flottant : ceux où l'artefact ne le montre pas (`.app.no-near` : Accueil et Sorties, l'accès y
+ * est déjà en tête), depuis le lot M4 l'Explorer (la bascule « Liste | Carte » y flotte, maquette 3.1), et depuis le
+ * lot M5 le Garage et le Profil (retours 30 et 31 : il n'y a rien à faire). L'exposant ne l'a donc plus sur aucun de
+ * ses onglets ; le visiteur (Passeport), le prestataire et le média le gardent sur les leurs.
+ */
+const NO_NEAR = new Set(["home", "outings", "explore", "garage", "profile"]);
 
 /** Nature de l'accès, en tête de la ligne d'information. */
 const KIND_LABEL: Record<AccessItem["kind"], string> = {

@@ -71,7 +71,7 @@ function activeTab(pathname: string): string {
   if (pathname.startsWith("/app/explorer")) return "explore";
   if (pathname.startsWith("/app/garage")) return "garage";
   if (pathname.startsWith("/app/passeport")) return "passport";
-  return /^\/app\/(moi|securite|sanctions|amis|crews|media|prestataire|structure|pro)(\/|$)/.test(pathname)
+  return /^\/app\/(moi|securite|sanctions|aide|amis|crews|media|prestataire|structure|pro)(\/|$)/.test(pathname)
     ? "profile"
     : "home";
 }
@@ -96,7 +96,9 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const tab = raw === "" || tabs.some((t) => t.id === raw) ? raw : "profile";
   // Écrans de flux (création, vote, récap : `.is-flow` de l'artefact) : ni accès flottant ni place réservée.
   const isFlow = /\/(nouveau|nouvelle)(\/|$)|^\/app\/(vote|recap)\//.test(pathname);
-  const near = loaderData.near && !isFlow && tab !== "home" && tab !== "outings" ? loaderData.near : null;
+  // Lot M5 (retours 30 et 31, comme l'appli) : pas d'accès flottant non plus au Garage ni au Profil.
+  const near =
+    loaderData.near && !isFlow && !["home", "outings", "garage", "profile"].includes(tab) ? loaderData.near : null;
   return (
     <Ground variant="site" animated fixed>
       <div className="app">

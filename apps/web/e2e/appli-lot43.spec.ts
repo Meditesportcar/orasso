@@ -197,15 +197,16 @@ const HOMES = [
     kind: "exhibitor",
     email: "kenji@orasso.local",
     choose: null,
-    texts: [/^Salut Kenji$/i, "Mon accès", "Tes autres sorties", "Passeport Orasso"],
-    hero: true,
+    // Lot M5 : « Ta prochaine sortie » (tickets qui glissent) remplace la carte et « Tes autres sorties ».
+    texts: [/^Salut Kenji$/i, "Ta prochaine sortie", "Mon accès", "Passeport Orasso"],
+    hero: "ticket",
   },
   {
     kind: "visitor",
     email: "paul.photo@orasso.local",
     choose: null,
     texts: [/^Salut /i, "Mon billet", "Billet"],
-    hero: true,
+    hero: "ticket",
   },
   {
     kind: "pro",
@@ -219,21 +220,21 @@ const HOMES = [
       "Passionnés du coin",
       "Derniers scans",
     ],
-    hero: false,
+    hero: null,
   },
   {
     kind: "provider",
     email: "sofia@orasso.local",
     choose: "provider",
     texts: ["Mon accès prestataire", "Emplacement B2", "Message de l'organisateur", "Missions qui t'attendent"],
-    hero: true,
+    hero: "poster",
   },
   {
     kind: "media",
     email: "leo@orasso.local",
     choose: "media",
     texts: ["Accréditée", "Badge presse", "Mon badge presse", "Consignes de l'organisation"],
-    hero: true,
+    hero: "poster",
   },
 ] as const;
 
@@ -253,7 +254,16 @@ for (const home of HOMES) {
       for (const text of home.texts) {
         await expect(page.getByText(text).first(), `« ${String(text)} »`).toBeVisible({ timeout: 30_000 });
       }
-      if (home.hero) {
+      if (home.hero === "ticket") {
+        // Lot M5 (maquette 6.1) : le ticket de la prochaine sortie, affiche en portrait, « Sur la carte » à côté du
+        // geste ; ni Maps ni Waze (correction de Damien).
+        await expect(page.getByTestId("home-outing").first()).toBeVisible();
+        await expect(page.getByTestId("home-countdown").first()).toContainText(/J-\d+|Demain|Aujourd'hui|J\+\d+/);
+        await expect(page.getByTestId("home-on-map").first()).toBeVisible();
+        await expect(page.getByTestId("home-maps")).toHaveCount(0);
+        await expect(page.getByTestId("home-waze")).toHaveCount(0);
+      }
+      if (home.hero === "poster") {
         // Le compte à rebours et l'heure sont cernés sur la photo (huit copies + le texte), en haut à droite (lot C1).
         await expect(page.getByTestId("home-hero-art")).toBeVisible();
         await expect(page.getByTestId("home-countdown")).toContainText(/J-\d+|Demain|Aujourd'hui|J\+\d+/);
@@ -276,7 +286,9 @@ for (const home of HOMES) {
   });
 }
 
-test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, vers le jour J", async ({ browser }) => {
+test("accès flottant : plus sur aucun onglet de l'exposant (Explorer, lot M4 ; Garage et Profil, lot M5)", async ({
+  browser,
+}) => {
   test.setTimeout(480_000);
   mkdirSync(DIR, { recursive: true });
   const damien = await login("damien@orasso.local");
@@ -295,46 +307,20 @@ test("accès flottant : visible dès J-7 sur tous les onglets, absent au-delà, 
   for (const theme of THEMES) {
     const { ctx, page } = await open(browser, theme);
     await signIn(page, near.email);
-    // Lot M4 (maquette 3.1) : plus sur l'Explorer, où flotte la bascule « Liste | Carte ».
+    // Lot M4 (maquette 3.1) : plus sur l'Explorer, où flotte la bascule « Liste | Carte » ; lot M5 : plus au Garage ni
+    // au Profil. Accueil et Sorties ont déjà l'accès en tête (`.app.no-near`) : l'exposant n'a plus d'accès flottant.
     await page.getByRole("tab", { name: "Explorer", exact: true }).click();
     await expect(page).toHaveURL(/\/explorer/, { timeout: 30_000 });
     await expect(page.getByTestId("list-map-toggle")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
-    // Garage, Profil : la barre est là (une fois, au-dessus de la barre d'onglets).
-    for (const [tab, route] of [
-      ["Garage", /\/garage/],
-      ["Profil", /\/profil/],
-    ] as const) {
-      await page.getByRole("tab", { name: tab, exact: true }).click();
-      await expect(page).toHaveURL(route, { timeout: 30_000 });
-      const bar = page.getByTestId("next-access-bar");
-      await expect(bar).toHaveCount(1, { timeout: 30_000 });
-      await expect(bar).toContainText(near.event.title);
-      await expect(bar).toContainText("J-6");
-      // Lot C1 : la carte `.near` de l'artefact (« J-6 / sam. », titre, « Retenue · Sam. 24 · 18 h 30 », « QR »).
-      await expect(bar).toContainText(/(Dim|Lun|Mar|Mer|Jeu|Ven|Sam)\. \d{1,2} · /);
-      await expect(bar).toContainText("QR");
-    }
-    await page.getByRole("tab", { name: "Explorer", exact: true }).click();
     await shot(page, `acces-flottant-explorer-${theme}`);
-    await page.getByRole("tab", { name: "Garage", exact: true }).click();
-    await expect(page.getByTestId("next-access-bar")).toBeVisible();
-    await shot(page, `acces-flottant-garage-${theme}`);
-    // Sans néon (le seul néon de l'écran est celui d'un bouton principal) : l'ombre portée --shadow-lg de l'artefact,
-    // sans halo moutarde.
-    const shadow = await page.getByTestId("next-access-bar").evaluate((el) => getComputedStyle(el).boxShadow);
-    expect(shadow).not.toContain("233, 184, 36");
-    // Masquée sur Accueil et Sorties (`.app.no-near` de l'artefact).
-    for (const tab of ["Accueil", "Sorties"]) {
+    for (const tab of ["Accueil", "Garage", "Profil", "Sorties"]) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
+      await page.waitForLoadState("networkidle").catch(() => undefined);
       await expect(page.getByTestId("next-access-bar")).toHaveCount(0);
     }
-    await page.getByRole("tab", { name: "Garage", exact: true }).click();
-    // Elle mène à l'écran du jour J de la candidature.
-    await page.getByTestId("next-access-bar").click();
-    await expect(page).toHaveURL(new RegExp(`/jour-j/${near.applicationId}`), { timeout: 30_000 });
-    // Sur l'écran du jour J : plus de barre d'onglets, donc plus d'accès flottant.
-    await expect(page.getByTestId("next-access-bar")).toBeHidden();
+    // L'accès reste dans Sorties : le ticket de la retenue mène à l'écran du jour J.
+    await expect(page.getByTestId("ticket-application").first()).toBeVisible({ timeout: 60_000 });
     await ctx.close();
   }
 

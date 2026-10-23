@@ -46,9 +46,9 @@ test("appli, casquette Pro : scanner le QR de compte, remise selon le grade, pub
     await page.getByRole("button", { name: "Me connecter" }).click();
     await page.waitForURL(/accueil/, { timeout: 30_000 });
 
-    // Moi → Mes casquettes → Pro.
+    // Moi → Changer de casquette → Pro (lot M5 : « Mes casquettes » devient « Changer de casquette »).
     await page.goto("/moi");
-    await expect(page.getByText("Mes casquettes")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Changer de casquette")).toBeVisible({ timeout: 30_000 });
     await shot(page, `01-moi-casquettes-${theme}`);
     await page.getByTestId("casquette-pro").click();
     // Lot 43 : la casquette Pro s'ouvre sur son Accueil ; le Scanner est un onglet de sa barre.

@@ -20,6 +20,7 @@ export * from "./labels/event-editor.fr";
 export * from "./labels/events.fr";
 export * from "./labels/explorer.fr";
 export * from "./labels/garage.fr";
+export * from "./labels/help.fr";
 export * from "./labels/home.fr";
 export * from "./labels/invitations.fr";
 export * from "./labels/media.fr";

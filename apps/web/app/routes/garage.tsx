@@ -1,18 +1,29 @@
-import { Button, Chip, Plate, TextField, VehicleCard } from "@orasso/design-system/web";
+import { Button, Chip, Icon, Plate, TextField, VehicleCard } from "@orasso/design-system/web";
 import {
   type AccountQrSecret,
+  certificationLine,
+  certificationLineLabels,
   crewLabels,
+  gradeLabels,
+  homeLabels,
   type MyCrew,
   type PlateTransferView,
   plateTransferLabels,
+  proActivityLabels,
+  type VehicleDetail,
   type VehicleFull,
+  type VehiclePro,
+  type VehiclePros,
   type VehicleStatus,
+  vehicleProsLabels,
   vehicleStatusLabels,
 } from "@orasso/shared";
+import { useEffect, useRef, useState } from "react";
 import { data, Form, useNavigation } from "react-router";
 
 import { AccountQr } from "../components/AccountQr";
 import { CrewLogo } from "../components/Crews";
+import { apiFetch } from "../lib/api.client";
 import { api, apiOrThrow } from "../lib/api.server";
 import { formatDateTime } from "../lib/format";
 import type { Route } from "./+types/garage";
@@ -44,8 +55,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     api<AccountQrSecret>(request, "/me/account-qr-secret"),
   ]);
   const photoRefused = new URL(request.url).searchParams.get("photo") === "refusee";
+  const active = vehicles.filter((v) => v.status === "active");
+  // Lot M5 (parité de la maquette 7.1) : la ligne de certification de chaque véhicule actif et « Pour ta … » du premier
+  // (pros partenaires, sponsorisé lié au véhicule : compté par l'API quand elle le renvoie, la page l'affiche toujours).
+  const [details, pros] = await Promise.all([
+    Promise.all(active.map((v) => api<VehicleDetail>(request, `/me/vehicles/${v.id}`))),
+    active[0] ? api<VehiclePros>(request, `/me/vehicles/${active[0].id}/pros`) : Promise.resolve(null),
+  ]);
+  const certs: Record<string, { cert: VehicleDetail["certification"]; photos: number }> = {};
+  for (const d of details) if (d.ok) certs[d.data.id] = { cert: d.data.certification, photos: d.data.photos.length };
   return {
-    vehicles: vehicles.filter((v) => v.status === "active"),
+    vehicles: active,
+    certs,
+    pros: pros?.ok ? pros.data : null,
     archived: vehicles.filter((v) => v.status !== "active"),
     incoming: transfers.ok ? transfers.data.incoming : [],
     crews: crews.ok ? crews.data : [],
@@ -78,7 +100,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Garage({ loaderData, actionData }: Route.ComponentProps) {
-  const { vehicles, archived, incoming, crews, photoRefused, qrSecret } = loaderData;
+  const { vehicles, archived, incoming, crews, photoRefused, qrSecret, certs, pros } = loaderData;
   const busy = useNavigation().state !== "idle";
   return (
     <div className="s-stack">
@@ -166,6 +188,7 @@ export default function Garage({ loaderData, actionData }: Route.ComponentProps)
                 }
               />
             </a>
+            <CertLine vehicleId={v.id} state={certs[v.id]} />
             {v.photos.length === 0 && (
               <Form method="post" encType="multipart/form-data" className="s-form">
                 <input type="hidden" name="vehicleId" value={v.id} />
@@ -184,6 +207,10 @@ export default function Garage({ loaderData, actionData }: Route.ComponentProps)
           </div>
         ))}
       </div>
+
+      {pros && vehicles[0] && (pros.sponsored || pros.pros.length > 0 || pros.needsPlace) && (
+        <VehicleProsBlock key={pros.vehicleId} pros={pros} modelName={vehicles[0].modelName} />
+      )}
 
       {archived.length > 0 && (
         <details className="g-archived" data-testid="garage-archived">
@@ -209,5 +236,136 @@ export default function Garage({ loaderData, actionData }: Route.ComponentProps)
         </details>
       )}
     </div>
+  );
+}
+
+/** Ligne d'état de la certification (lot M5) : ce qui manque en premier ; le détail est sur la page du véhicule. */
+function CertLine({
+  vehicleId,
+  state,
+}: {
+  vehicleId: string;
+  state: { cert: VehicleDetail["certification"]; photos: number } | undefined;
+}) {
+  if (!state) return null;
+  const { cert, photos } = state;
+  const line = certificationLine(cert, photos);
+  const body = (
+    <>
+      <Icon name={line.kind === "impossible" ? "lock" : "shield"} size={18} />
+      <span className="g-certline__text">
+        <strong>{certificationLineLabels.headline(line)}</strong>
+        <span className="o-t-caption">
+          {certificationLineLabels.detail(line, { photoCount: photos, missing: cert.missing })}
+        </span>
+      </span>
+    </>
+  );
+  // Ancien véhicule : la ligne le dit, sans lien vers une demande.
+  return line.kind === "impossible" ? (
+    <div className="g-certline" data-testid="certification-line">
+      {body}
+    </div>
+  ) : (
+    <a className="g-certline" href={`/app/garage/${vehicleId}#certification`} data-testid="certification-line">
+      {body}
+      <Icon name="next" size={16} />
+    </a>
+  );
+}
+
+const discountText = (d: VehiclePro["discount"]) =>
+  d ? `−${d.percent} %${d.from ? ` dès ${gradeLabels[d.from]}` : ""}` : null;
+
+/** « Pour ta … » (lot M5, maquette 7.1) : le sponsorisé lié au véhicule en tête, puis les pros partenaires proches. */
+/**
+ * Compte l'affichage du sponsorisé à sa première apparition à l'écran (lot M5, tour 2 : la page du Garage ne le compte
+ * plus au chargement) ; plafond atteint ou emplacement arrêté, il disparaît. Sans JavaScript : rien n'est compté.
+ */
+function useSponsoredImpression(id: string | null) {
+  const ref = useRef<HTMLLIElement>(null);
+  const [refused, setRefused] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!id || !el || typeof IntersectionObserver === "undefined") return;
+    let done = false;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (done || !entries.some((e) => e.isIntersecting)) return;
+        done = true;
+        io.disconnect();
+        void apiFetch(`/sponsored/${id}/impression`, { method: "POST" }).then((r) => {
+          if (!r.ok && (r.status === 409 || r.status === 404)) setRefused(true);
+        });
+      },
+      { threshold: 0.5 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [id]);
+  return { ref, refused };
+}
+
+function VehicleProsBlock({ pros, modelName }: { pros: VehiclePros; modelName: string }) {
+  const seen = useSponsoredImpression(pros.sponsored?.id ?? null);
+  const s = seen.refused ? null : pros.sponsored;
+  const lineOf = (p: VehiclePro) =>
+    [
+      p.activities
+        .slice(0, 2)
+        .map((a) => proActivityLabels[a])
+        .join(", "),
+      p.city,
+      typeof p.distanceKm === "number" ? `${Math.round(p.distanceKm)} km` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  return (
+    <section className="s-section s-stack s-stack--tight" aria-labelledby="pros-titre" data-testid="garage-pros">
+      <div className="s-row s-row--between">
+        <h2 id="pros-titre" className="s-h2">
+          Pour ta {modelName}
+        </h2>
+        <span className="o-t-meta">{vehicleProsLabels.partners}</span>
+      </div>
+      {pros.needsPlace && (
+        <p className="s-muted" data-testid="garage-pros-needs-place">
+          {vehicleProsLabels.needsPlace} <a href="/app/moi#secteur-titre">{vehicleProsLabels.needsPlaceLink}</a>
+        </p>
+      )}
+      <ul className="g-pros">
+        {s && (
+          <li ref={seen.ref}>
+            <a
+              className="g-pro g-pro--sponsored"
+              href={s.linkUrl}
+              target="_blank"
+              rel="noopener noreferrer sponsored"
+              onClick={() => void apiFetch(`/sponsored/${s.id}/click`, { method: "POST" })}
+              data-testid="garage-pros-sponsored"
+            >
+              <span className="g-pro__text">
+                <span className="o-t-label">{homeLabels.sponsored}</span>
+                <strong>{s.pro.name}</strong>
+                <span className="o-t-caption">{[s.title, s.city].filter(Boolean).join(" · ")}</span>
+              </span>
+              {discountText(s.discount) && <span className="g-pro__rm">{discountText(s.discount)}</span>}
+            </a>
+          </li>
+        )}
+        {pros.pros.map((p) => (
+          <li key={p.slug}>
+            <a className="g-pro" href={`/p/${p.slug}`} data-testid="garage-pros-item">
+              <span className="g-pro__text">
+                <strong>{p.name}</strong>
+                <span className="o-t-caption">{lineOf(p)}</span>
+              </span>
+              {discountText(p.discount) && <span className="g-pro__rm">{discountText(p.discount)}</span>}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p className="o-t-caption s-muted">{vehicleProsLabels.qrHint}</p>
+    </section>
   );
 }
